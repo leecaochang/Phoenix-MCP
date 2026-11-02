@@ -229,6 +229,93 @@ async def test_child_device_removal_uses_child_ownership(
     hook.assert_awaited_once()
 
 
+@pytest.fixture
+def part_env(hass: HomeAssistant, removal_env) -> dict:
+    """A child device of the removal device, with one entity of its own."""
+    part = dr.async_get(hass).async_get_or_create_child(
+        config_entry_id=removal_env["owner"].entry_id,
+        identifiers={(removal_env["owner"].domain, "removal-part")},
+        name="Removal part",
+        parent_device_id=removal_env["device"].id,
+    )
+    part_entity = _add_owner_entity(
+        hass, removal_env["owner"], part.id, "removal-part-entity"
+    )
+    return {**removal_env, "part": part, "part_entity": part_entity}
+
+
+@pytest.mark.usefixtures("requires_child_devices")
+async def test_parent_removal_covers_child_devices(hass: HomeAssistant, part_env):
+    device_id = part_env["device"].id
+    data = await _data(hass)
+    hook = AsyncMock(return_value=True)
+    with patch(
+        "custom_components.phoenix_mcp.mcp_view._async_device_removal_hook",
+        AsyncMock(return_value=hook),
+    ):
+        context = await _resolve_device_removal_context(
+            {"device_id": device_id}, _access_key(device_id), hass
+        )
+        assert not isinstance(context, tuple)
+        assert context.part_device_ids == [part_env["part"].id]
+        assert context.child_device_ids == []
+        assert context.affected_entity_ids == sorted(
+            [part_env["entity_id"], part_env["part_entity"]]
+        )
+        content, outcome, _ = await _call_tool(
+            "remove_device", {"device_id": device_id}, _access_key(device_id), hass, data
+        )
+
+    assert outcome == "allowed"
+    assert dr.async_get(hass).async_get(part_env["part"].id) is None
+    version = data.versions.list_for("device", device_id)[0]
+    assert version.before["child_devices_removed_with_device"] == [part_env["part"].id]
+
+
+@pytest.mark.usefixtures("requires_child_devices")
+async def test_parent_removal_refuses_unwritable_child_device(
+    hass: HomeAssistant, part_env
+):
+    device_id = part_env["device"].id
+    key = _access_key(device_id)
+    key.permissions.devices[part_env["part"].id] = PermissionNode(state="RED")
+    hook = AsyncMock(return_value=True)
+    with patch(
+        "custom_components.phoenix_mcp.mcp_view._async_device_removal_hook",
+        AsyncMock(return_value=hook),
+    ):
+        content, outcome, _ = await _call_tool(
+            "remove_device", {"device_id": device_id}, key, hass, await _data(hass)
+        )
+
+    assert outcome == "denied"
+    assert "child devices" in content["content"][0]["text"]
+    assert part_env["part"].id not in content["content"][0]["text"]
+    hook.assert_not_awaited()
+    assert dr.async_get(hass).async_get(part_env["part"].id) is not None
+
+
+@pytest.mark.usefixtures("requires_child_devices")
+async def test_parent_removal_honours_child_entity_mesa(hass: HomeAssistant, part_env):
+    device_id = part_env["device"].id
+    data = await _data(hass, "enforced")
+    data.mesa.store.set(
+        part_env["part_entity"], _profile(part_env["part_entity"], "read_only")
+    )
+    hook = AsyncMock(return_value=True)
+    with patch(
+        "custom_components.phoenix_mcp.mcp_view._async_device_removal_hook",
+        AsyncMock(return_value=hook),
+    ):
+        content, outcome, _ = await _call_tool(
+            "remove_device", {"device_id": device_id}, _access_key(device_id), hass, data
+        )
+
+    assert outcome == "denied"
+    assert "read_only" in content["content"][0]["text"]
+    hook.assert_not_awaited()
+
+
 async def test_multi_owner_requires_selection_and_removes_only_selected_owner(
     hass: HomeAssistant, removal_env
 ):
@@ -591,3 +678,10 @@ async def test_cancelled_removal_never_runs_later_cleanup(hass, removal_env, pha
             await task
     assert dr.async_get(hass).async_get(device_id) is not None
     assert called_hook.await_count == (1 if phase == "hook" else 0)
+
+
+def test_owner_summary_title_gets_the_list_integrations_scrub():
+    from custom_components.phoenix_mcp.mcp_view import _device_owner_summary
+
+    owner = MockConfigEntry(domain="test_integration", entry_id="titled", title="NAS at http://10.0.0.5:5000")
+    assert _device_owner_summary(owner)["title"] == "NAS at <redacted-url>"

@@ -10,15 +10,38 @@ from .const import (
     HELPER_TEMPLATE_MAX_CHARS, HELPER_TEMPLATE_MAX_DEPTH, HELPER_TEMPLATE_MAX_NODES,
     HELPER_TEMPLATE_NODE_TYPES, HELPER_TEMPLATE_PURE_FILTERS,
     HELPER_TEMPLATE_PURE_FUNCTIONS, HELPER_TEMPLATE_PURE_TESTS,
-    HELPER_TEMPLATE_STATE_FUNCTIONS, HELPER_TEMPLATE_STATE_PROPERTIES, HELPER_TEMPLATE_TIME_ATTRIBUTES,
-    HELPER_TEMPLATE_TIME_FUNCTIONS, HELPER_TEMPLATE_TIME_METHODS,
+    HELPER_TEMPLATE_STATE_FUNCTIONS, HELPER_TEMPLATE_STATE_PROPERTIES, HELPER_TEMPLATE_STRING_METHODS,
+    HELPER_TEMPLATE_TIME_ATTRIBUTES, HELPER_TEMPLATE_TIME_FUNCTIONS, HELPER_TEMPLATE_TIME_METHODS,
 )
 from .policy_engine import _ENTITY_ID_RE, is_sensitive_key
 from .schema_compat import schema_engine
 
+# Names a template may not assign, so a local can never stand in for a lookup or a checked function.
+_RESERVED_NAMES = HELPER_TEMPLATE_STATE_FUNCTIONS | HELPER_TEMPLATE_PURE_FUNCTIONS | {"states", "loop"}
+
 
 class HelperScopeError(PermissionError):
     """The complete future dependency set cannot be established safely."""
+
+
+def _names(values: frozenset[str]) -> str:
+    return ", ".join(sorted(values))
+
+
+def scope_refusal(construct: str) -> str:
+    """The refusal for one construct, naming it and listing what is allowed, from the enforced sets."""
+    return (
+        f"Helper template dependencies cannot be safely established: {construct} is not supported. "
+        "Reference entities directly with literal IDs, such as states('sensor.x'), is_state('sensor.x', 'on') "
+        "or states.sensor.x.state; computed or broad lookups, macros and includes are refused. "
+        f"Allowed state functions: {_names(HELPER_TEMPLATE_STATE_FUNCTIONS)}. "
+        f"Functions: {_names(HELPER_TEMPLATE_PURE_FUNCTIONS)}. "
+        f"Filters: {_names(HELPER_TEMPLATE_PURE_FILTERS)}. "
+        f"Tests: {_names(HELPER_TEMPLATE_PURE_TESTS)}. "
+        f"String methods, not on a states.* path: {_names(HELPER_TEMPLATE_STRING_METHODS)}. "
+        f"Date and time methods: {_names(HELPER_TEMPLATE_TIME_METHODS)}. "
+        "Statements: if, set, and for over a checked expression."
+    )
 
 
 def template_entities(source: str) -> set[str]:
@@ -26,24 +49,27 @@ def template_entities(source: str) -> set[str]:
 
     Only direct literal state lookups and explicit pure operations are accepted.
     Aliases, computed lookups, domain iteration, includes, macros and unknown
-    functions or filters raise HelperScopeError, so no unreviewed dependency can
-    slip in. A source with no template markers has none.
+    functions or filters raise HelperScopeError naming the construct, so no
+    unreviewed dependency can slip in. Names the template assigns itself with
+    set or for are allowed; their values are checked like any other expression.
+    A source with no template markers has none.
     """
     if not any(marker in source for marker in ("{{", "{%", "{#")):
         return set()
-    refusal = (
-        "Helper template dependencies cannot be safely established. Use direct "
-        "literal entity references and supported pure expressions; computed or "
-        "broad queries, aliases and indirect calls are not supported."
-    )
     if len(source) > HELPER_TEMPLATE_MAX_CHARS:
-        raise HelperScopeError(refusal)
+        raise HelperScopeError(scope_refusal(f"a template longer than {HELPER_TEMPLATE_MAX_CHARS} characters"))
     try:
         tree = Environment().parse(source)
-    except (TemplateSyntaxError, RecursionError, ValueError, OverflowError) as exc:
-        raise HelperScopeError(refusal) from exc
+    except TemplateSyntaxError as exc:
+        raise HelperScopeError(scope_refusal(f"a template that does not parse ({exc.message})")) from exc
+    except (RecursionError, ValueError, OverflowError) as exc:
+        raise HelperScopeError(scope_refusal("a template this large or deeply nested")) from exc
     found: set[str] = set()
+    assigned: set[str] = set()
     count = 0
+
+    def refuse(construct: str) -> HelperScopeError:
+        return HelperScopeError(scope_refusal(construct))
 
     def time_value(node: nodes.Node) -> bool:
         if not isinstance(node, nodes.Call):
@@ -54,10 +80,10 @@ def template_entities(source: str) -> set[str]:
                 and node.node.attr in HELPER_TEMPLATE_TIME_METHODS
                 and time_value(node.node.node))
 
-    def entity(node: nodes.Node) -> None:
+    def entity(node: nodes.Node, function: str) -> None:
         if (not isinstance(node, nodes.Const) or not isinstance(node.value, str)
                 or not _ENTITY_ID_RE.fullmatch(node.value)):
-            raise HelperScopeError(refusal)
+            raise refuse(f"'{function}' without a literal entity ID")
         found.add(node.value)
 
     def attribute(node: nodes.Node | None) -> None:
@@ -75,7 +101,7 @@ def template_entities(source: str) -> set[str]:
 
     def state_path(node: nodes.Node, depth: int = 0) -> list[str] | None:
         if depth > HELPER_TEMPLATE_MAX_DEPTH:
-            raise HelperScopeError(refusal)
+            raise refuse("a template this deeply nested")
         if isinstance(node, nodes.Name) and node.name == "states":
             return []
         if isinstance(node, (nodes.Getattr, nodes.Getitem)):
@@ -87,24 +113,40 @@ def template_entities(source: str) -> set[str]:
             elif isinstance(node.arg, nodes.Const) and isinstance(node.arg.value, str):
                 part = node.arg.value
             else:
-                raise HelperScopeError(refusal)
+                raise refuse("a computed states[...] lookup")
             if part.startswith("_"):
-                raise HelperScopeError(refusal)
+                raise refuse(f"the private attribute '{part}'")
             return [*prefix, part]
         return None
+
+    def targets(node: nodes.Node) -> None:
+        """Record the names a set or for assigns; anything but plain names is refused."""
+        names = node.items if isinstance(node, nodes.Tuple) else [node]
+        for name in names:
+            if not isinstance(name, nodes.Name):
+                raise refuse("an assignment to anything but a plain name")
+            if name.name in _RESERVED_NAMES or name.name.startswith("_"):
+                raise refuse(f"assigning to the reserved name '{name.name}'")
+            assigned.add(name.name)
 
     def visit(node: nodes.Node, depth: int = 0) -> None:
         nonlocal count
         count += 1
-        if (count > HELPER_TEMPLATE_MAX_NODES or depth > HELPER_TEMPLATE_MAX_DEPTH
-                or type(node).__name__ not in HELPER_TEMPLATE_NODE_TYPES):
-            raise HelperScopeError(refusal)
+        if count > HELPER_TEMPLATE_MAX_NODES or depth > HELPER_TEMPLATE_MAX_DEPTH:
+            raise refuse("a template this large or deeply nested")
+        if type(node).__name__ not in HELPER_TEMPLATE_NODE_TYPES:
+            raise refuse(f"the {type(node).__name__} construct")
+        if isinstance(node, (nodes.Assign, nodes.AssignBlock, nodes.For)):
+            targets(node.target)
+            for child in node.iter_child_nodes(exclude=("target",)):
+                visit(child, depth + 1)
+            return
         if isinstance(node, (nodes.Getattr, nodes.Getitem)):
             path = state_path(node)
             if path is not None:
                 candidate = path[0] if path and "." in path[0] else ".".join(path[:2])
                 if not _ENTITY_ID_RE.fullmatch(candidate):
-                    raise HelperScopeError(refusal)
+                    raise refuse(f"the broad lookup states.{'.'.join(path)}" if path else "the whole states object")
                 suffix = path[1:] if "." in path[0] else path[2:]
                 if suffix and suffix[0] == "attributes":
                     if len(suffix) < 2:
@@ -117,53 +159,63 @@ def template_entities(source: str) -> set[str]:
                 return
             if (isinstance(node, nodes.Getattr)
                     and not (time_value(node.node) and node.attr in HELPER_TEMPLATE_TIME_ATTRIBUTES)):
-                raise HelperScopeError(refusal)
+                raise refuse(f"the attribute '{node.attr}'")
         if isinstance(node, nodes.Name):
-            raise HelperScopeError(refusal)
+            if node.ctx == "load" and node.name in assigned:
+                return
+            raise refuse(f"the name '{node.name}'")
         if isinstance(node, nodes.Call):
             if node.dyn_args is not None or node.dyn_kwargs is not None:
-                raise HelperScopeError(refusal)
+                raise refuse("a call with *args or **kwargs")
             if isinstance(node.node, nodes.Getattr):
-                if node.node.attr not in HELPER_TEMPLATE_TIME_METHODS or not time_value(node.node.node):
-                    raise HelperScopeError(refusal)
-                visit(node.node.node, depth + 1)
+                receiver, method = node.node.node, node.node.attr
+                if method in HELPER_TEMPLATE_TIME_METHODS and time_value(receiver):
+                    pass
+                elif method in HELPER_TEMPLATE_STRING_METHODS:
+                    # A state object's own methods stay out of reach; its value read with states() does not.
+                    if state_path(receiver) is not None:
+                        raise refuse(f"the method '{method}' on a states.* path")
+                else:
+                    raise refuse(f"the method '{method}'")
+                visit(receiver, depth + 1)
                 name = ""
             elif isinstance(node.node, nodes.Name):
                 name = node.node.name
             else:
-                raise HelperScopeError(refusal)
+                raise refuse("an indirect call")
             if name in HELPER_TEMPLATE_STATE_FUNCTIONS:
                 first = node.args[0] if node.args else next(
                     (kw.value for kw in node.kwargs if kw.key == "entity_id"), None)
                 if first is None:
-                    raise HelperScopeError(refusal)
-                entity(first)
+                    raise refuse(f"'{name}' without a literal entity ID")
+                entity(first, name)
                 if name in ("state_attr", "is_state_attr"):
                     attribute_argument(node, 1)
             elif name and name not in HELPER_TEMPLATE_PURE_FUNCTIONS:
-                raise HelperScopeError(refusal)
+                raise refuse(f"the function '{name}'")
             for child in [*node.args, *node.kwargs]:
                 visit(child, depth + 1)
             return
         if isinstance(node, (nodes.Filter, nodes.Test)):
-            allowed = HELPER_TEMPLATE_PURE_FILTERS if isinstance(node, nodes.Filter) else HELPER_TEMPLATE_PURE_TESTS
+            kind = "filter" if isinstance(node, nodes.Filter) else "test"
+            allowed = HELPER_TEMPLATE_PURE_FILTERS if kind == "filter" else HELPER_TEMPLATE_PURE_TESTS
             if node.dyn_args is not None or node.dyn_kwargs is not None:
-                raise HelperScopeError(refusal)
+                raise refuse(f"a {kind} with *args or **kwargs")
             if node.name in HELPER_TEMPLATE_STATE_FUNCTIONS:
                 if node.node is None:
-                    raise HelperScopeError(refusal)
-                entity(node.node)
+                    raise refuse(f"the {kind} '{node.name}' without a literal entity ID")
+                entity(node.node, node.name)
                 if node.name in ("state_attr", "is_state_attr"):
                     attribute_argument(node, 0)
             elif node.name not in allowed:
-                raise HelperScopeError(refusal)
+                raise refuse(f"the {kind} '{node.name}'")
         for child in node.iter_child_nodes():
             visit(child, depth + 1)
 
     try:
         visit(tree)
     except RecursionError as exc:
-        raise HelperScopeError(refusal) from exc
+        raise refuse("a template this large or deeply nested") from exc
     return found
 
 

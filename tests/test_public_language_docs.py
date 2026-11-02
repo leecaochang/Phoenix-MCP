@@ -80,13 +80,7 @@ def test_readme_editions_and_switchers_match_shipped_catalogs() -> None:
 def test_english_public_docs_list_every_shipped_language() -> None:
     names = _documented_names()
     readme = (REPO / "README.md").read_text(encoding="utf-8")
-    install = (REPO / "docs" / "install.html").read_text(encoding="utf-8")
-    panel = (REPO / "docs" / "panel.html").read_text(encoding="utf-8")
+    install = (REPO / "frontend_src" / "guide" / "topics" / "en" / "topic.install.md").read_text(encoding="utf-8")
 
     assert f"The panel currently supports {names}." in readme
-    assert f"The panel currently supports {names}." in install
-    assert (
-        "Phoenix MCP ships English, Spanish, French, Italian, German, Dutch, Polish, Russian, "
-        "Simplified Chinese (<code>zh-Hans</code>), Traditional Chinese "
-        "(<code>zh-Hant</code>), Korean, Japanese, Swedish, Danish, Norwegian, and Finnish."
-    ) in panel
+    assert f"The panel speaks {len(_shipped_codes())} languages." in install

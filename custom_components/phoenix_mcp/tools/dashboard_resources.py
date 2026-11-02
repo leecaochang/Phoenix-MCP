@@ -443,7 +443,7 @@ def restore_receipt_diff(target: dict, snapshot: dict) -> dict:
     """The review diff for restoring one resource snapshot."""
     label = str((snapshot.get("resource") or target.get("resource") or {}).get("url") or snapshot.get("resource_id"))
     return {
-        "kind": "config_diff", "summary": "Restore dashboard resource",
+        "kind": "config_diff", **diff_summary_fields("restore.dashboard_resource", url=label),
         "target": {"type": "dashboard_resource", "id": (target.get("resource") or {}).get("id"), "label": label},
         "before": json.dumps(target.get("resource"), indent=2) if target.get("exists") else None,
         "after": json.dumps(snapshot.get("resource"), indent=2) if snapshot.get("exists") else None,

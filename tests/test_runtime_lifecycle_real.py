@@ -148,7 +148,7 @@ async def test_real_entry_reload_has_stable_routes_and_deletion_retires_credenti
         ai_task_enabled=True, ai_task_access_key_id=access_key.id,
         ai_task_provider_id=account, ai_task_model="example")
     resources = len(list(hass.http.app.router.resources()))
-    watched = ("entity_registry_updated", "device_registry_updated", "area_registry_updated", "automation_reloaded", "homeassistant_stop")
+    watched = ("entity_registry_updated", "device_registry_updated", "area_registry_updated", "label_registry_updated", "automation_reloaded", "homeassistant_stop")
     expected_listeners = None
     for _ in range(3):
         previous = hass.data[DOMAIN]
@@ -180,6 +180,31 @@ async def test_real_entry_reload_has_stable_routes_and_deletion_retires_credenti
     secrets = await _get_secret_store(hass)
     assert secrets.list_instances() == []
     assert secrets.resolve(account) is None
+
+
+async def test_registry_changes_drop_the_cached_permission_tree(hass, enable_custom_integrations):
+    """Entity, device, area and label changes each make the next tree request rebuild it."""
+    from homeassistant.helpers import area_registry as ar, label_registry as lr
+
+    entry, data = await _setup_runtime(hass)
+    try:
+        def change_area():
+            ar.async_get(hass).async_create("Tree cache area")
+
+        def change_label():
+            lr.async_get(hass).async_create("Tree cache label")
+
+        def fire(event):
+            return lambda: hass.bus.async_fire(event, {"action": "update"})
+
+        for change in (change_area, change_label, fire("entity_registry_updated"), fire("device_registry_updated")):
+            data.entity_tree_cache = {}
+            data.entity_tree_cache_valid = True
+            change()
+            await hass.async_block_till_done()
+            assert data.entity_tree_cache_valid is False
+    finally:
+        assert await hass.config_entries.async_unload(entry.entry_id)
 
 
 async def test_idle_usage_ticks_do_not_write_and_changed_usage_flushes_once(hass, enable_custom_integrations, monkeypatch):
@@ -330,3 +355,72 @@ async def test_unload_cancels_inflight_mesa_priming(hass, enable_custom_integrat
         assert completed == []
     finally:
         release.set()
+
+
+async def test_sweep_records_an_expired_approval_in_the_audit_log(hass, enable_custom_integrations):
+    """Expiry found by the sweep is audited like expiry found at approve time."""
+    from pytest_homeassistant_custom_component.common import async_fire_time_changed
+    from custom_components.phoenix_mcp.approvals import async_create_pending_approval
+    from custom_components.phoenix_mcp.const import APPROVAL_SWEEP_INTERVAL
+
+    entry, data = await _setup_runtime(hass)
+    try:
+        access_key, _ = await data.store.async_create_access_key("sweeper", "admin")
+        async with data.store.async_lock:
+            approval = await async_create_pending_approval(
+                data.store, access_key_id=access_key.id, access_key_name=access_key.name,
+                tool_name="restart_ha", cap_name="cap_restart", args={}, diff={}, request_id="rid-sweep",
+            )
+            rows = data.store.get_pending_approvals()
+            for row in rows:
+                if row["id"] == approval.id:
+                    row["expires_at"] = (utcnow() - timedelta(minutes=1)).isoformat()
+            data.store.set_pending_approvals(rows)
+        async_fire_time_changed(hass, utcnow() + APPROVAL_SWEEP_INTERVAL + timedelta(seconds=1))
+        # The interval job runs as a background task.
+        await hass.async_block_till_done(wait_background_tasks=True)
+        audited = [e for e in data.audit.query(limit=50) if e.method == "approval/expired"]
+        assert [e.resource for e in audited] == [f"approval:restart_ha:{approval.id}"]
+        assert audited[0].request_id == "rid-sweep" and audited[0].outcome == "denied"
+    finally:
+        assert await hass.config_entries.async_unload(entry.entry_id)
+
+
+async def test_an_entity_rename_carries_its_grant_over(hass, enable_custom_integrations):
+    """Renaming an entity in Home Assistant keeps its per-key grant."""
+    from homeassistant.helpers import entity_registry as er
+
+    entry, data = await _setup_runtime(hass)
+    try:
+        registry = er.async_get(hass)
+        entity = registry.async_get_or_create("light", "test", "rename-me", suggested_object_id="before")
+        access_key, _ = await data.store.async_create_access_key("renamer", "admin")
+        await data.store.async_patch_permission_node(access_key.id, "entities", entity.entity_id, "GREEN", hint="desk")
+        earlier = await data.versions.record(
+            resource_type="entity", resource_id="light.before", action="edit",
+            before={"name": None}, after={"name": "Desk"},
+        )
+        registry.async_update_entity(entity.entity_id, new_entity_id="light.after")
+        await hass.async_block_till_done(wait_background_tasks=True)
+        nodes = data.store.get_access_key_by_id(access_key.id).permissions.entities
+        assert "light.before" not in nodes
+        assert (nodes["light.after"].state, nodes["light.after"].hint) == ("GREEN", "desk")
+        # Its Changes history moves with it.
+        assert [r.id for r in data.versions.list_for("entity", "light.after")] == [earlier.id]
+        assert data.versions.list_for("entity", "light.before") == []
+    finally:
+        assert await hass.config_entries.async_unload(entry.entry_id)
+
+
+async def test_setup_refuses_a_home_assistant_older_than_the_minimum(hass, enable_custom_integrations, caplog, monkeypatch):
+    """A manual install skips HACS's version check; setup says why it stops."""
+    from homeassistant import const as ha_const
+
+    monkeypatch.setattr(ha_const, "__version__", "2025.1.0")
+    assert await async_setup_component(hass, "homeassistant", {})
+    entry = MockConfigEntry(domain=DOMAIN, unique_id=DOMAIN, title="Phoenix MCP")
+    entry.add_to_hass(hass)
+    assert not await hass.config_entries.async_setup(entry.entry_id)
+    assert entry.state is ConfigEntryState.SETUP_ERROR
+    assert "needs Home Assistant 2026.7.0 or newer, and this is 2025.1.0" in caplog.text
+    assert DOMAIN not in hass.data

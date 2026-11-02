@@ -1,8 +1,11 @@
-import React from "react";
+import React, { useContext } from "react";
 import type { CapMode, CapName, CapTier, AccessKeyRecord, PatchAccessKeyBody } from "../types";
 import { api } from "../api";
 import { t } from "../i18n";
 import { tRich } from "../i18n/rich";
+import { DisplayModeContext } from "../ui/ActionButton";
+import { Icon } from "../ui/Icon";
+import { capabilityGuide } from "../guide/targets";
 
 export interface EsphomeAvailability {
   integration: boolean;
@@ -31,6 +34,8 @@ interface CapDef {
   descriptionKey: string;
   tier: CapTier;
   confirmAvailable: boolean;
+  /** Its description warns of a risk; in icons-only mode, where descriptions are hidden, the row is marked. */
+  warns?: boolean;
 }
 
 const CAPS: CapDef[] = [
@@ -110,6 +115,7 @@ const CAPS: CapDef[] = [
     descriptionKey: "caps.cap_automation_write.description",
     tier: "config_write",
     confirmAvailable: true,
+    warns: true,
   },
   {
     key: "cap_script_write",
@@ -117,6 +123,7 @@ const CAPS: CapDef[] = [
     descriptionKey: "caps.cap_script_write.description",
     tier: "config_write",
     confirmAvailable: true,
+    warns: true,
   },
   {
     key: "cap_blueprint_write",
@@ -150,6 +157,13 @@ const CAPS: CapDef[] = [
     key: "cap_physical_control",
     labelKey: "caps.cap_physical_control.label",
     descriptionKey: "caps.cap_physical_control.description",
+    tier: "system",
+    confirmAvailable: true,
+  },
+  {
+    key: "cap_notify",
+    labelKey: "caps.cap_notify.label",
+    descriptionKey: "caps.cap_notify.description",
     tier: "system",
     confirmAvailable: true,
   },
@@ -243,6 +257,7 @@ const CAPS: CapDef[] = [
     descriptionKey: "caps.cap_esphome_flash.description",
     tier: "system",
     confirmAvailable: true,
+    warns: true,
   },
   {
     key: "cap_yaml_edit",
@@ -250,6 +265,7 @@ const CAPS: CapDef[] = [
     descriptionKey: "caps.cap_yaml_edit.description",
     tier: "system",
     confirmAvailable: true,
+    warns: true,
   },
 ];
 
@@ -273,6 +289,16 @@ const MODE_LABEL_KEYS: Record<CapMode, string> = {
   confirm: "caps.modeConfirm",
 };
 
+/** A capability's name and a mode's label as the matrix shows them, for lists that describe a change. */
+export function capLabel(cap: CapName): string {
+  const def = CAPS.find((c) => c.key === cap);
+  return def ? t(def.labelKey) : cap;
+}
+
+export function capModeLabel(mode: string): string {
+  return mode in MODE_LABEL_KEYS ? t(MODE_LABEL_KEYS[mode as CapMode]) : mode;
+}
+
 const MODE_DESC_KEYS: Record<CapMode, string> = {
   deny: "caps.modeDescDeny",
   allow: "caps.modeDescAllow",
@@ -280,12 +306,16 @@ const MODE_DESC_KEYS: Record<CapMode, string> = {
 };
 
 export function CapabilityMatrix({ accessKey, onUpdate, esphome }: Props) {
-  const [saving, setSaving] = React.useState<CapName | null>(null);
+  // The rows saving now. The API queues one key's changes in order, so a click on
+  // another row is saved after it rather than dropped.
+  const [saving, setSaving] = React.useState<ReadonlySet<CapName>>(() => new Set());
   const [error, setError] = React.useState<string | null>(null);
+  // Descriptions show in icons-and-text mode; in icons-only mode they are in Help (user, 2026-10-28).
+  const iconsOnly = useContext(DisplayModeContext) === "icons";
 
   async function setMode(cap: CapName, mode: CapMode) {
-    if (saving !== null || accessKey[cap] === mode) return;
-    setSaving(cap);
+    if (saving.has(cap) || accessKey[cap] === mode) return;
+    setSaving((prev) => new Set(prev).add(cap));
     setError(null);
     try {
       const body = { [cap]: mode } as unknown as PatchAccessKeyBody;
@@ -294,7 +324,7 @@ export function CapabilityMatrix({ accessKey, onUpdate, esphome }: Props) {
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : t("caps.updateFailed"));
     } finally {
-      setSaving(null);
+      setSaving((prev) => { const next = new Set(prev); next.delete(cap); return next; });
     }
   }
 
@@ -312,7 +342,7 @@ export function CapabilityMatrix({ accessKey, onUpdate, esphome }: Props) {
     <div className="capability-matrix">
       {error && <div className="banner banner-error mb-8">{error}</div>}
       {accessKey.pass_through && (
-        <div className="amber-block mb-8">
+        <div className="amber-block mb-8" data-guide="topic.passThrough">
           <p>
             {tRich("caps.passThroughNotice", { strong: (c) => <strong>{c}</strong> })}
           </p>
@@ -326,24 +356,25 @@ export function CapabilityMatrix({ accessKey, onUpdate, esphome }: Props) {
             <div className="cap-tier-header">{t(TIER_LABEL_KEYS[tier])}</div>
             {items.map((cap) => {
               const current = accessKey[cap.key];
-              const isSaving = saving === cap.key;
+              const isSaving = saving.has(cap.key);
               const notice = cap.key === "cap_esphome_yaml" || cap.key === "cap_esphome_flash"
                 ? esphomeNotice(esphome) : null;
               return (
-                <div key={cap.key} className="cap-row">
-                  <div className="cap-row-label">
+                <div key={cap.key} className="cap-row" data-guide={capabilityGuide(cap.key)}>
+                  <div className="cap-row-label" data-help={cap.descriptionKey}>
                     <div className="cap-row-name">
                       {t(cap.labelKey)}
+                      {iconsOnly && cap.warns && <Icon name="warning" size={14} className="cap-row-warning" />}
                       {notice && (
-                        <span
-                          className="badge badge-amber cap-row-badge"
-                          title={t("caps.esphomeBadgeTitle")}
-                        >
+                        <span className="phx-outcome cap-row-notice" title={t("caps.esphomeBadgeTitle")}>
+                          <Icon name="info" size={14} />
                           {notice}
                         </span>
                       )}
                     </div>
-                    <div className="cap-row-desc">{t(cap.descriptionKey)}</div>
+                    {iconsOnly
+                      ? <span className="sr-only">{t(cap.descriptionKey)}</span>
+                      : <div className="cap-row-desc">{t(cap.descriptionKey)}</div>}
                   </div>
                   <div className="cap-row-modes" role="group" aria-label={t(cap.labelKey)} aria-busy={isSaving}>
                     <ModeRadio
@@ -405,6 +436,7 @@ function ModeRadio({ cap, mode, current, onSelect, disabled, busy, unavailable }
       onClick={() => { if (!busy && !disabled) onSelect(cap, mode); }}
       className={`mode-radio mode-${mode}${checked ? " mode-radio-checked" : ""}${unavailable ? " mode-radio-unavailable" : ""}`}
       title={unavailable ? t("caps.confirmUnavailable") : t(MODE_DESC_KEYS[mode])}
+      data-help={unavailable ? "caps.confirmUnavailable" : MODE_DESC_KEYS[mode]}
     >
       <span className="mode-radio-dot" />
       <span className="mode-radio-label">{t(MODE_LABEL_KEYS[mode])}</span>

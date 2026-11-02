@@ -65,6 +65,6 @@ it("follows a change made elsewhere but never overwrites an unsaved draft", () =
   fireEvent.change(field(), { target: { value: "My unsaved edit." } });
   fireEvent.click(screen.getByRole("button", { name: "external" }));
   expect(field().value).toBe("My unsaved edit.");
-  fireEvent.click(screen.getByRole("button", { name: "Discard changes" }));
+  fireEvent.click(screen.getByRole("button", { name: "Discard Changes" }));
   expect(field().value).toBe("Changed elsewhere.");
 });

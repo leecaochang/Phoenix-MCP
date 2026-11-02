@@ -139,6 +139,7 @@ KNOWN_IMPORTS: dict[str, dict[str, str]] = {
         "EVENT_HOMEASSISTANT_STARTED": "0.0.0",
         "EVENT_HOMEASSISTANT_STOP": "0.0.0",
         "MATCH_ALL": "0.0.0",
+        "STATE_UNAVAILABLE": "0.0.0",
         "UnitOfTime": "0.0.0",
         "__version__": "0.0.0",
     },
@@ -154,6 +155,8 @@ KNOWN_IMPORTS: dict[str, dict[str, str]] = {
         "Event": "0.0.0",
         "HomeAssistant": "0.0.0",
         "State": "0.0.0",
+        # Verified absent in 2024.5.0, present in 2024.10.0.
+        "async_get_hass_or_none": "2024.10.0",
         "callback": "0.0.0",
         "valid_entity_id": "0.0.0",
     },
@@ -180,6 +183,9 @@ KNOWN_IMPORTS: dict[str, dict[str, str]] = {
         "issue_registry": "0.0.0",
         # Verified absent in 2024.2.5, present in 2024.3.0.
         "label_registry": "2024.3.0",
+        # The llm.API extension point the Assist bridge subclasses at import.
+        # Verified present in 2026.7.0; its first release was not checked.
+        "llm": "2026.7.0",
         "sun": "0.0.0",
         # Module and async_get_translations verified in the 2025.2.0 source.
         "translation": "2025.2.0",
@@ -198,8 +204,15 @@ KNOWN_IMPORTS: dict[str, dict[str, str]] = {
         "async_track_state_change_event": "0.0.0",
         "async_track_time_interval": "0.0.0",
     },
+    "homeassistant.helpers.network": {
+        "get_url": "0.0.0",
+    },
     "homeassistant.helpers.storage": {
         "Store": "0.0.0",
+    },
+    "homeassistant.helpers.template": {
+        # Core's template-syntax predicate, verified in 2026.7.0 and long older.
+        "is_template_string": "0.0.0",
     },
     "homeassistant.helpers.service": {
         # Present in 2024.1.0, older than any claimed floor.
@@ -215,6 +228,11 @@ KNOWN_IMPORTS: dict[str, dict[str, str]] = {
         # used, far older than any claimed floor.
         "slugify": "0.0.0",
     },
+    "homeassistant.util.async_": {
+        # Core's thread-to-loop helper, used by sync worker-thread code across
+        # core for far longer than any claimed floor.
+        "run_callback_threadsafe": "0.0.0",
+    },
     "homeassistant.util.color": {
         # Named-color catalog verified in 2024.5.0 util/color.py.
         "COLORS": "0.0.0",
@@ -222,6 +240,8 @@ KNOWN_IMPORTS: dict[str, dict[str, str]] = {
     },
     "homeassistant.util.dt": {
         "as_utc": "0.0.0",
+        # The accessor that replaced reading DEFAULT_TIME_ZONE directly, in 2024.6.0.
+        "get_default_time_zone": "2024.6.0",
         "parse_datetime": "0.0.0",
         "utcnow": "0.0.0",
     },
@@ -406,9 +426,7 @@ def test_the_floor_is_stated_identically_everywhere() -> None:
         f"The README badge does not read {major_minor}+."
     )
 
-    for page, needle in (
-        ("index.html", f"HA {major_minor}+"),
-        ("install.html", f"{MIN_HA_VERSION} or later"),
-    ):
-        html = (ROOT / "docs" / page).read_text(encoding="utf-8")
-        assert needle in html, f"docs/{page} does not state the floor as {needle!r}."
+    install = (ROOT / "frontend_src" / "guide" / "topics" / "en" / "topic.install.md").read_text(encoding="utf-8")
+    assert f"Home Assistant {MIN_HA_VERSION} or newer" in install, (
+        f"The Guide's install page does not state the floor as {MIN_HA_VERSION}."
+    )

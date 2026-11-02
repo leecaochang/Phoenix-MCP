@@ -17,6 +17,7 @@ vi.mock("../api", () => ({
   api: {
     getEntityTree: vi.fn().mockResolvedValue({}),
     getSettings: vi.fn().mockResolvedValue({ mesa_mode: "advisory" }),
+    listAccessKeys: vi.fn().mockResolvedValue([]),
     createAccessKey: (...a: unknown[]) => createAccessKey(...a),
     patchAccessKey: (...a: unknown[]) => patchAccessKey(...a),
   },
@@ -25,7 +26,7 @@ vi.mock("../api", () => ({
 vi.mock("../components/EntityTree", () => ({ EntityTree: () => null }));
 
 import { OnboardingWizard } from "../views/OnboardingWizard";
-import { AccessKeyCreateModal } from "../components/AccessKeyCreateModal";
+import { AccessKeyCreateForm } from "../components/AccessKeyCreate";
 
 const RECORD = {
   id: "t1",
@@ -51,7 +52,7 @@ describe("access key creation announces phx-access-keys-changed", () => {
 
   it("dispatches once the access key exists, so every host refreshes its list", async () => {
     render(
-      <AccessKeyCreateModal
+      <AccessKeyCreateForm
         existingNames={[]}
         onCreated={() => {}}
         onClose={() => {}}
@@ -71,11 +72,12 @@ describe("access key creation announces phx-access-keys-changed", () => {
 
   it("uses the access-key example when creating from the wizard", async () => {
     render(<OnboardingWizard onCancel={() => {}} onFinish={() => {}} />);
+    fireEvent.click(screen.getByRole("button", { name: /^Connect an External App/ }));
     fireEvent.click(screen.getByRole("button", { name: "Next" }));
     const input = screen.getByPlaceholderText("my_access_key");
     expect(input).toHaveValue("my_access_key");
     expect(screen.queryByDisplayValue("test_access_key")).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Create access key" }));
+    fireEvent.click(screen.getByRole("button", { name: "Create Access Key" }));
     await waitFor(() => expect(createAccessKey).toHaveBeenCalledWith({
       name: "my_access_key", expires_at: undefined, pass_through: false,
     }));

@@ -8,50 +8,63 @@
    Design tokens - light mode (default)
    ============================================================ */
 :host {
-  --phx-bg:           #fafafa;
+  --phx-bg:           #f3f3f3;
   --phx-surface:      #ffffff;
-  --phx-surface-2:    #f4f4f5;
-  /* Light-mode text-bearing tokens sit one shade darker than the classic
-     amber-600/zinc-500 palette so small text hits WCAG 4.5:1 on every
-     surface it is used on (white, surface-2, and the translucent tint
-     backgrounds). Dark mode has its own ramp below and already passes. */
-  --phx-accent:       #b45309;
-  --phx-accent-hov:   #92400e;
-  --phx-accent-lt:    #faf3e8;
+  --phx-surface-2:    #f5f5f5;
+  /* Neutral chrome: the accent is ink, and color appears only where it
+     carries meaning (success, error, warning, read). Light greys follow Home
+     Assistant's light theme; every text-bearing token holds WCAG 4.5:1 on each
+     surface and status tint, and focus rings and field borders hold 3:1. */
+  --phx-accent:       #141414;
+  --phx-accent-hov:   #3a3a3a;
+  --phx-accent-lt:    #ebebeb;
   --phx-accent-fg:    #ffffff;
-  --phx-text:         #18181b;
-  --phx-text-2:       #52525b;
-  --phx-border:       #e4e4e7;
-  --phx-divider:      #f1f1f2;
-  --phx-success:      #0d5228;
-  --phx-success-bg:   rgba(22,163,74,0.1);
-  --phx-error:        #991b1b;
-  --phx-error-bg:     rgba(220,38,38,0.1);
-  --phx-warning:      #92400e;
-  --phx-warning-bg:   rgba(217,119,6,0.1);
-  --phx-info:         #52525b;
-  --phx-info-bg:      rgba(113,113,122,0.10);
-  --phx-shadow:       0 1px 3px rgba(24,24,27,0.08), 0 1px 2px rgba(24,24,27,0.05);
-  --phx-shadow-md:    0 4px 16px rgba(24,24,27,0.1), 0 2px 6px rgba(24,24,27,0.06);
-  --phx-shadow-lg:    0 8px 32px rgba(0,0,0,0.18);
-  --phx-radius:       12px;
-  --phx-radius-sm:    8px;
-  --phx-radius-xs:    6px;
+  --phx-text:         #141414;
+  --phx-text-2:       #5e5e5e;
+  /* The select arrow in --phx-text-2; an image cannot read a variable, so each theme names it. */
+  --phx-chevron:      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%235e5e5e' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+  --phx-mono:         ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  --phx-border:       #e1e1e1;
+  --phx-divider:      #ececec;
+  --phx-success:      #257343;
+  --phx-success-bg:   rgba(37,115,67,0.10);
+  --phx-error:        #ad333a;
+  --phx-error-bg:     rgba(173,51,58,0.10);
+  --phx-warning:      #865c00;
+  --phx-warning-bg:   rgba(134,92,0,0.10);
+  --phx-info:         #5e5e5e;
+  --phx-info-bg:      rgba(0,0,0,0.06);
+  --phx-shadow:       none;
+  --phx-shadow-md:    0 1px 2px rgba(0,0,0,0.06), 0 8px 24px rgba(0,0,0,0.08);
+  --phx-shadow-lg:    0 12px 32px rgba(0,0,0,0.16);
+  --phx-radius:       8px;
+  --phx-radius-sm:    6px;
+  --phx-radius-xs:    4px;
   /* Semantic z-index scale: sticky detail header < tab bar < dropdown < modal. */
   --phx-z-sticky:     10;
   --phx-z-tabbar:     20;
   --phx-z-dropdown:   30;
   --phx-z-modal:      100;
   --phx-z-agentcli:   200;
-  --phx-grey-tint:    rgba(0,0,0,0.07);
-  --phx-hover:        #eeeef1;
-  --phx-purple:       #52525b;
-  --phx-purple-bg:    rgba(113,113,122,0.10);
-  /* Agent Chat window: a shade darker than --phx-surface so the floating
-     window reads as a distinct layer over the Phoenix MCP panel behind it, not a
-     seamless continuation of it. */
-  --phx-agentcli-surface:  #d4d4d8;
-  --phx-agentcli-titlebar: #c6c6cb;
+  --phx-z-toast:      210;
+  /* The Guide floats over the windows, below menus and dialogs. */
+  --phx-z-guide:      90;
+  --phx-grey-tint:    rgba(0,0,0,0.06);
+  --phx-hover:        #efefef;
+  /* A chosen row: clearly darker than hover, and still 4.5:1 for secondary text. */
+  --phx-selected:     #dcdcdc;
+  /* Agent Chat window surfaces. The floating window is set apart from the
+     panel behind it by its hairline border and shadow, not by a darker fill. */
+  --phx-agentcli-surface:  #ffffff;
+  --phx-agentcli-titlebar: #f5f5f5;
+  --phx-font:         "Phoenix Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --phx-raised:       #ffffff;
+  --phx-line-strong:  #c4c4c4;
+  --phx-field-border: #8a8a8a;
+  --phx-focus:        #141414;
+  --phx-accent-wash:  rgba(0,0,0,0.04);
+  --phx-read:         #175fb0;
+  --phx-read-bg:      rgba(23,95,176,0.10);
 
   /* Native controls (selects, scrollbars) render from the browser's
      color-scheme, which they would otherwise inherit from the HA page;
@@ -66,7 +79,8 @@
   touch-action: pan-y;
   background: var(--phx-bg);
   color: var(--phx-text);
-  font-family: var(--ha-font-family-body, Roboto, Noto, sans-serif);
+  font-family: var(--phx-font);
+  font-feature-settings: "cv11";
   font-size: 14px;
   line-height: 1.5;
 }
@@ -77,70 +91,83 @@
    the class at all and silently misbehaves. */
 @media (prefers-color-scheme: dark) {
   :host(:not(.phx-theme-light)) {
-    --phx-bg:           #18181b;
-    --phx-surface:      #27272a;
-    --phx-surface-2:    #1e1e21;
-    --phx-accent:       #f59e0b;
-    --phx-accent-hov:   #fbbf24;
-    --phx-accent-lt:    #3d2806;
-    --phx-accent-fg:    #18181b;
-    --phx-text:         #fafafa;
-    --phx-text-2:       #a1a1aa;
-    --phx-border:       #3f3f46;
-    --phx-divider:      #27272a;
-    --phx-success:      #4ade80;
-    --phx-success-bg:   rgba(74,222,128,0.12);
-    --phx-error:        #f87171;
-    --phx-error-bg:     rgba(248,113,113,0.12);
-    --phx-warning:      #fbbf24;
-    --phx-warning-bg:   rgba(251,191,36,0.12);
-    --phx-info:         #a1a1aa;
-    --phx-info-bg:      rgba(161,161,170,0.12);
-    --phx-shadow:       0 1px 3px rgba(0,0,0,0.4), 0 1px 2px rgba(0,0,0,0.3);
-    --phx-shadow-md:    0 4px 16px rgba(0,0,0,0.5), 0 2px 6px rgba(0,0,0,0.4);
-    --phx-shadow-lg:    0 8px 32px rgba(0,0,0,0.6);
+    --phx-bg:           #111111;
+    --phx-surface:      #1c1c1c;
+    --phx-surface-2:    #232323;
+    --phx-accent:       #e1e1e1;
+    --phx-accent-hov:   #ffffff;
+    --phx-accent-lt:    #323232;
+    --phx-accent-fg:    #111111;
+    --phx-text:         #e1e1e1;
+    --phx-text-2:       #9b9b9b;
+    --phx-chevron:      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%239b9b9b' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+    --phx-border:       #333333;
+    --phx-divider:      #262626;
+    --phx-success:      #85daa0;
+    --phx-success-bg:   rgba(133,218,160,0.12);
+    --phx-error:        #ff9b9f;
+    --phx-error-bg:     rgba(255,155,159,0.12);
+    --phx-warning:      #f2cc75;
+    --phx-warning-bg:   rgba(242,204,117,0.12);
+    --phx-info:         #9b9b9b;
+    --phx-info-bg:      rgba(255,255,255,0.06);
+    --phx-shadow:       none;
+    --phx-shadow-md:    0 1px 2px rgba(0,0,0,0.3), 0 8px 24px rgba(0,0,0,0.45);
+    --phx-shadow-lg:    0 12px 32px rgba(0,0,0,0.6);
     --phx-grey-tint:    rgba(255,255,255,0.08);
-    --phx-hover:        rgba(255,255,255,0.06);
-    --phx-purple:       #a1a1aa;
-    --phx-purple-bg:    rgba(161,161,170,0.12);
-    /* Agent Chat window: a shade lighter than --phx-surface for the same
-       reason as the light-mode value above, mirrored for dark mode. */
-    --phx-agentcli-surface:  #323238;
-    --phx-agentcli-titlebar: #2b2b30;
+    --phx-hover:        #2a2a2a;
+    --phx-selected:     #323232;
+    /* Dark greys follow Home Assistant's default dark theme. */
+    --phx-agentcli-surface:  #1c1c1c;
+    --phx-agentcli-titlebar: #232323;
+    --phx-raised:       #242424;
+    --phx-line-strong:  #4a4a4a;
+    --phx-field-border: #737373;
+    --phx-focus:        #e1e1e1;
+    --phx-accent-wash:  rgba(255,255,255,0.04);
+    --phx-read:         #89baff;
+    --phx-read-bg:      rgba(137,186,255,0.12);
     color-scheme: dark;
   }
 }
 
 /* Forced dark (overrides system light preference) */
 :host(.phx-theme-dark) {
-  --phx-bg:           #18181b;
-  --phx-surface:      #27272a;
-  --phx-surface-2:    #1e1e21;
-  --phx-accent:       #f59e0b;
-  --phx-accent-hov:   #fbbf24;
-  --phx-accent-lt:    #3d2806;
-  --phx-accent-fg:    #18181b;
-  --phx-text:         #fafafa;
-  --phx-text-2:       #a1a1aa;
-  --phx-border:       #3f3f46;
-  --phx-divider:      #27272a;
-  --phx-success:      #4ade80;
-  --phx-success-bg:   rgba(74,222,128,0.12);
-  --phx-error:        #f87171;
-  --phx-error-bg:     rgba(248,113,113,0.12);
-  --phx-warning:      #fbbf24;
-  --phx-warning-bg:   rgba(251,191,36,0.12);
-  --phx-info:         #a1a1aa;
-  --phx-info-bg:      rgba(161,161,170,0.12);
-  --phx-shadow:       0 1px 3px rgba(0,0,0,0.4), 0 1px 2px rgba(0,0,0,0.3);
-  --phx-shadow-md:    0 4px 16px rgba(0,0,0,0.5), 0 2px 6px rgba(0,0,0,0.4);
-  --phx-shadow-lg:    0 8px 32px rgba(0,0,0,0.6);
+  --phx-bg:           #111111;
+  --phx-surface:      #1c1c1c;
+  --phx-surface-2:    #232323;
+  --phx-accent:       #e1e1e1;
+  --phx-accent-hov:   #ffffff;
+  --phx-accent-lt:    #323232;
+  --phx-accent-fg:    #111111;
+  --phx-text:         #e1e1e1;
+  --phx-text-2:       #9b9b9b;
+  --phx-chevron:      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%239b9b9b' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+  --phx-border:       #333333;
+  --phx-divider:      #262626;
+  --phx-success:      #85daa0;
+  --phx-success-bg:   rgba(133,218,160,0.12);
+  --phx-error:        #ff9b9f;
+  --phx-error-bg:     rgba(255,155,159,0.12);
+  --phx-warning:      #f2cc75;
+  --phx-warning-bg:   rgba(242,204,117,0.12);
+  --phx-info:         #9b9b9b;
+  --phx-info-bg:      rgba(255,255,255,0.06);
+  --phx-shadow:       none;
+  --phx-shadow-md:    0 1px 2px rgba(0,0,0,0.3), 0 8px 24px rgba(0,0,0,0.45);
+  --phx-shadow-lg:    0 12px 32px rgba(0,0,0,0.6);
   --phx-grey-tint:    rgba(255,255,255,0.08);
-  --phx-hover:        rgba(255,255,255,0.06);
-  --phx-purple:       #a1a1aa;
-  --phx-purple-bg:    rgba(161,161,170,0.12);
-  --phx-agentcli-surface:  #323238;
-  --phx-agentcli-titlebar: #2b2b30;
+  --phx-hover:        #2a2a2a;
+  --phx-selected:     #323232;
+  --phx-agentcli-surface:  #1c1c1c;
+  --phx-agentcli-titlebar: #232323;
+  --phx-raised:       #242424;
+  --phx-line-strong:  #4a4a4a;
+  --phx-field-border: #737373;
+  --phx-focus:        #e1e1e1;
+  --phx-accent-wash:  rgba(255,255,255,0.04);
+  --phx-read:         #89baff;
+  --phx-read-bg:      rgba(137,186,255,0.12);
   color-scheme: dark;
 }
 
@@ -150,7 +177,7 @@
 * { box-sizing: border-box; }
 
 *:focus-visible {
-  outline: 2px solid var(--phx-accent);
+  outline: 2px solid var(--phx-focus);
   outline-offset: 2px;
 }
 .input:focus-visible { outline: none; }
@@ -181,6 +208,7 @@
    Shell
    ============================================================ */
 .phx-shell {
+  position: relative;
   display: flex;
   flex-direction: column;
   height: 100%;
@@ -211,54 +239,664 @@
 }
 .phx-header-title {
   font-size: 17px;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--phx-text);
   margin-left: 8px;
   letter-spacing: -0.01em;
 }
 
 /* ============================================================
-   Tab bar
+   Workspace toolbar
    ============================================================ */
-.phx-tabs {
+/* The shell lays out around the toolbar: docked to an edge, or floating over the workspace. */
+.phx-shell[data-toolbar] { position: relative; }
+.phx-shell[data-toolbar="bottom"] { flex-direction: column-reverse; }
+.phx-shell[data-toolbar="left"] { flex-direction: row; }
+.phx-shell[data-toolbar="right"] { flex-direction: row-reverse; }
+
+.phx-toolbar {
+  /* The companion app's status-bar inset (HA's inherited property) pads a top toolbar clear of it. */
+  --phx-toolbar-safe-top: var(--safe-area-inset-top, env(safe-area-inset-top, 0px));
+  z-index: var(--phx-z-tabbar);
+  /* The grip, then the body holding the main row and the tools row; upright, the grip sits on top. */
   display: flex;
+  flex-direction: row;
   align-items: stretch;
-  background: var(--phx-surface);
-  border-bottom: 2px solid var(--phx-border);
-  padding: 0;
+  gap: 6px;
   flex-shrink: 0;
+  margin: 8px 8px 0;
+  padding: 6px;
+  background: var(--phx-raised);
+  border: 1px solid var(--phx-border);
+  border-radius: var(--phx-radius);
 }
-.phx-tab {
-  padding: 0 20px;
-  height: 50px;
-  border: none;
-  border-bottom: 3px solid transparent;
-  margin-bottom: -2px;
-  background: none;
-  cursor: pointer;
-  font-size: 12px;
-  font-weight: 700;
-  color: var(--phx-text-2);
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  transition: color 0.15s, border-color 0.15s, background 0.15s;
-  white-space: nowrap;
-  flex-shrink: 0;
+.phx-toolbar[data-dock="top"] { margin-top: calc(8px + var(--phx-toolbar-safe-top)); }
+.phx-toolbar[data-dock="bottom"] { margin: 0 8px 8px; }
+.phx-toolbar[data-dock="left"] { margin: 8px 0 8px 8px; }
+.phx-toolbar[data-dock="right"] { margin: 8px 8px 8px 0; }
+.phx-toolbar[data-orient="vertical"] { flex-direction: column; }
+.phx-toolbar-body { display: flex; flex-direction: column; gap: 6px; flex: 1; min-width: 0; }
+.phx-toolbar[data-orient="vertical"] .phx-toolbar-body { flex-direction: row; align-items: flex-start; }
+.phx-toolbar[data-dock="right"] .phx-toolbar-body { flex-direction: row-reverse; }
+.phx-toolbar[data-dock="floating"] {
+  position: absolute;
+  margin: 0;
+  /* Its own full size wherever it sits: placed near the right edge it would otherwise shrink and drop its
+     text. The toolbar then moves itself left or up until it fits inside the panel. */
+  width: max-content;
+  max-width: calc(100% - 16px);
+  background: color-mix(in srgb, var(--phx-raised) 90%, transparent);
+  backdrop-filter: blur(12px);
+  box-shadow: var(--phx-shadow-lg);
+}
+.phx-toolbar-main { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; min-width: 0; }
+.phx-toolbar[data-orient="vertical"] .phx-toolbar-main { flex-direction: column; flex-wrap: nowrap; }
+.phx-toolbar-nav,
+.phx-toolbar-group { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+.phx-toolbar[data-orient="vertical"] .phx-toolbar-nav,
+.phx-toolbar[data-orient="vertical"] .phx-toolbar-group { flex-direction: column; align-items: stretch; }
+.phx-toolbar-nav + .phx-toolbar-group { margin-inline-start: auto; }
+.phx-toolbar[data-orient="vertical"] .phx-toolbar-nav + .phx-toolbar-group { margin: 6px 0 0; }
+
+.phx-toolbar-button,
+.phx-toolbar-handle {
+  position: relative;
   display: inline-flex;
   align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: 36px;
+  height: 36px;
+  padding: 0 10px;
+  border: 1px solid var(--phx-border);
+  border-radius: var(--phx-radius-sm);
+  background: var(--phx-surface);
+  color: var(--phx-text);
+  font: 500 13px var(--phx-font);
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
 }
-.phx-tab:hover { color: var(--phx-accent); background: var(--phx-hover); }
-.phx-tab.active { color: var(--phx-accent); border-bottom-color: var(--phx-accent); }
-.phx-tab-doclink { text-decoration: none; gap: 6px; }
-.phx-tab-extlink { opacity: 0.7; flex-shrink: 0; }
-.phx-tab-badge {
-  display: inline-flex; align-items: center; justify-content: center;
-  margin-left: 8px; padding: 0 6px; min-width: 18px; height: 18px;
-  border-radius: 9px; background: var(--phx-error, #d32f2f); color: var(--phx-accent-fg);
-  font-size: 10px; font-weight: 700; letter-spacing: 0;
-  line-height: 1;
+.phx-toolbar-button:hover { background: var(--phx-hover); }
+.phx-toolbar-button:disabled { opacity: 0.45; cursor: default; }
+.phx-toolbar-button.is-current {
+  background: var(--phx-accent);
+  border-color: var(--phx-accent);
+  color: var(--phx-accent-fg);
 }
-.phx-tab-spacer { flex: 1; }
+.phx-toolbar-button.is-active,
+.phx-toolbar-button[aria-pressed="true"] { background: var(--phx-accent-lt); }
+.phx-toolbar-button.is-danger { color: var(--phx-error); }
+/* The grip runs the full height of both rows, or the full width of both columns standing upright. */
+.phx-toolbar-handle { min-width: 24px; width: 24px; height: auto; min-height: 36px; padding: 0; border-color: transparent; background: transparent; color: var(--phx-text-2); cursor: grab; }
+.phx-toolbar[data-orient="vertical"] .phx-toolbar-handle { width: auto; min-width: 36px; height: 24px; min-height: 24px; }
+.phx-toolbar-plain { border-color: transparent; background: transparent; color: var(--phx-text-2); }
+.phx-toolbar-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: var(--phx-error);
+  color: var(--phx-accent-fg);
+  font-size: 11px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+/* Agent Chat: a 2 px outline drawn inside the border, so the button keeps its size. */
+.phx-toolbar-chat { border-color: var(--phx-text); box-shadow: inset 0 0 0 1px var(--phx-text); }
+.phx-toolbar-warning { border-color: var(--phx-error); background: var(--phx-error-bg); color: var(--phx-error); }
+.phx-toolbar-warning:hover { background: var(--phx-error-bg); }
+
+/* Icons only: labels stay available to assistive technology and as tooltips. */
+.phx-toolbar[data-mode="icons"] .phx-toolbar-button { width: 36px; padding: 0; }
+.phx-toolbar[data-mode="icons"] .phx-toolbar-label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+.phx-toolbar[data-mode="icons"] .phx-toolbar-badge { position: absolute; top: 1px; right: 1px; min-width: 16px; height: 16px; font-size: 10px; }
+/* Icons and text along the top or bottom, or floating: each label sits under its icon, and the workspaces and
+   each window's tools share one width per group, set by the widest label, so the rows read evenly. Agent Chat,
+   Documentation and Workspace Options keep their own widths. Phones keep plain wrapping. */
+.phx-env-desktop .phx-toolbar[data-mode="icon-text"][data-orient="horizontal"] :is(.phx-toolbar-nav, .phx-tool-group) {
+  display: inline-grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+}
+.phx-env-desktop .phx-toolbar[data-mode="icon-text"][data-orient="horizontal"] .phx-toolbar-button {
+  flex-direction: column;
+  gap: 1px;
+  height: auto;
+  min-height: 40px;
+  padding: 3px 6px;
+  font-size: 11px;
+  line-height: 13px;
+}
+.phx-env-desktop .phx-toolbar[data-mode="icon-text"][data-orient="horizontal"] .phx-toolbar-badge { position: absolute; top: 2px; right: 2px; min-width: 16px; height: 16px; font-size: 10px; }
+/* The fit rule (shell/toolbarFit.ts): the main row stays on one line by taking text away in steps,
+   phx-fit-1 first. The toolbar's data-fit holds the step. */
+.phx-env-desktop .phx-toolbar[data-mode="icon-text"][data-fit="1"] .phx-toolbar-main .phx-fit-1,
+.phx-env-desktop .phx-toolbar[data-mode="icon-text"][data-fit="2"] .phx-toolbar-main :is(.phx-fit-1, .phx-fit-2),
+.phx-env-desktop .phx-toolbar[data-mode="icon-text"][data-fit="3"] .phx-toolbar-main :is(.phx-fit-1, .phx-fit-2, .phx-fit-3),
+.phx-env-desktop .phx-toolbar[data-mode="icon-text"][data-fit="4"] .phx-toolbar-main :is(.phx-fit-1, .phx-fit-2, .phx-fit-3, .phx-fit-4) {
+  width: 36px;
+  min-width: 36px;
+  padding: 0;
+}
+.phx-env-desktop .phx-toolbar[data-mode="icon-text"][data-fit="1"] .phx-toolbar-main .phx-fit-1 .phx-toolbar-label,
+.phx-env-desktop .phx-toolbar[data-mode="icon-text"][data-fit="2"] .phx-toolbar-main :is(.phx-fit-1, .phx-fit-2) .phx-toolbar-label,
+.phx-env-desktop .phx-toolbar[data-mode="icon-text"][data-fit="3"] .phx-toolbar-main :is(.phx-fit-1, .phx-fit-2, .phx-fit-3) .phx-toolbar-label,
+.phx-env-desktop .phx-toolbar[data-mode="icon-text"][data-fit="4"] .phx-toolbar-main :is(.phx-fit-1, .phx-fit-2, .phx-fit-3, .phx-fit-4) .phx-toolbar-label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* One row (user, 2026-11-01): the tools follow the workspaces after a separator, and Agent Chat, Documentation,
+   Workspace Options and the toolbar's own buttons keep the end of the row. The main row lends its items to the
+   one row; the toolbar sets data-rows only while everything fits (shell/toolbarFit.ts). */
+.phx-toolbar[data-rows="1"] .phx-toolbar-body { flex-direction: row; flex-wrap: wrap; align-items: center; gap: 4px; }
+.phx-toolbar[data-rows="1"] .phx-toolbar-main { display: contents; }
+.phx-toolbar[data-rows="1"] .phx-toolbar-tools { order: 2; margin-inline-start: 2px; padding: 0 0 0 6px; border-top: none; border-inline-start: 1px solid var(--phx-border); }
+.phx-toolbar[data-rows="1"] .phx-toolbar-group { order: 3; }
+.phx-toolbar[data-rows="1"] .phx-toolbar-options { order: 4; }
+
+/* The second row: tools for the visible workspace, grouped with separator bars. */
+.phx-toolbar-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--phx-border);
+}
+.phx-toolbar[data-orient="vertical"] .phx-toolbar-tools { flex-direction: column; align-items: stretch; padding: 0 0 0 6px; border-top: none; border-left: 1px solid var(--phx-border); }
+.phx-toolbar[data-dock="right"] .phx-toolbar-tools { padding: 0 6px 0 0; border-left: none; border-right: 1px solid var(--phx-border); }
+.phx-tool-group { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+.phx-tool-group + .phx-tool-group { padding-inline-start: 6px; border-inline-start: 1px solid var(--phx-border); }
+.phx-toolbar[data-orient="vertical"] .phx-tool-group { flex-direction: column; align-items: stretch; }
+.phx-toolbar[data-orient="vertical"] .phx-tool-group + .phx-tool-group { padding: 6px 0 0; border-inline-start: none; border-top: 1px solid var(--phx-border); }
+/* Docked at a side with icons and text: every button in both columns shares one width, set by the widest
+   label, with icon and text from the start edge like Home Assistant's sidebar. The main column matches the
+   tools column's separator (6 px padding and a 1 px line) so the buttons come out equal. */
+.phx-env-desktop .phx-toolbar[data-mode="icon-text"][data-orient="vertical"] .phx-toolbar-body {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  align-items: start;
+}
+.phx-env-desktop .phx-toolbar[data-mode="icon-text"][data-orient="vertical"] .phx-toolbar-main { align-items: stretch; }
+/* Icons and text standing upright: smaller text and a lower, tighter button than icons only. */
+.phx-env-desktop .phx-toolbar[data-mode="icon-text"][data-orient="vertical"] .phx-toolbar-button { justify-content: flex-start; height: 32px; padding: 0 8px; font-size: 11px; }
+.phx-env-desktop .phx-toolbar[data-mode="icon-text"][data-orient="vertical"]:not([data-dock="right"]) .phx-toolbar-main:not(:only-child) { padding-inline-end: 7px; }
+.phx-env-desktop .phx-toolbar[data-mode="icon-text"][data-dock="right"] .phx-toolbar-main { order: 2; }
+.phx-env-desktop .phx-toolbar[data-mode="icon-text"][data-dock="right"] .phx-toolbar-main:not(:only-child) { padding-inline-start: 7px; }
+
+.phx-env-mobile .phx-toolbar { margin: calc(4px + var(--phx-toolbar-safe-top)) 4px 0; padding: 4px; }
+
+/* ============================================================
+   Workspaces
+   ============================================================ */
+.phx-workspaces {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 8px;
+}
+.phx-env-mobile .phx-workspaces { overflow-y: auto; padding: 8px 8px 16px; touch-action: pan-y; }
+/* Every window's content starts the same distance below its title bar. */
+.phx-window-body > :is(.view-root, .phx-list-view, .phx-log-view) { padding-top: 12px; }
+.phx-workspace-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  height: 100%;
+  padding: 24px;
+  color: var(--phx-text-2);
+  text-align: center;
+}
+.phx-workspace-empty-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
+/* Toasts near the bottom of the panel, above every window; the empty live region stays for screen readers. */
+.phx-toasts {
+  position: absolute;
+  left: 50%;
+  bottom: 16px;
+  transform: translateX(-50%);
+  z-index: var(--phx-z-toast);
+  max-width: min(520px, calc(100% - 32px));
+  pointer-events: none;
+}
+.phx-toast {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 6px 6px 14px;
+  border-radius: var(--phx-radius);
+  background: var(--phx-text);
+  color: var(--phx-surface);
+  font-size: 13px;
+  box-shadow: var(--phx-shadow-lg);
+  pointer-events: auto;
+}
+.phx-toast-text { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.phx-toast-dismiss {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: none;
+  border-radius: var(--phx-radius-sm);
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+.phx-toast-dismiss:hover { background: color-mix(in srgb, var(--phx-surface) 18%, transparent); }
+.phx-toast-dismiss:focus-visible { outline-color: var(--phx-surface); }
+
+/* The Help window: short help for the control under the pointer or in focus. */
+.phx-window-body[data-phx-window="help"] { padding-bottom: 8px; }
+.phx-help-text { margin: 8px 0 0; font-size: 13px; line-height: 1.5; color: var(--phx-text); }
+.phx-help-text.is-idle { color: var(--phx-text-2); }
+
+/* The Guide: a window of its own outside the workspace, fixed on screen. */
+.phx-guide {
+  position: fixed;
+  z-index: var(--phx-z-guide);
+  display: flex;
+  flex-direction: column;
+  min-width: 320px;
+  min-height: 280px;
+  background: var(--phx-surface);
+  border: 1px solid var(--phx-border);
+  border-radius: var(--phx-radius);
+  box-shadow: var(--phx-shadow-lg);
+}
+.phx-guide-titlebar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 36px;
+  padding: 0 4px;
+  border-bottom: 1px solid var(--phx-border);
+  cursor: move;
+  user-select: none;
+  touch-action: none;
+}
+/* Pinned beside the wizard: it cannot be moved. */
+.phx-guide.is-pinned .phx-guide-titlebar { cursor: default; padding: 0 8px; }
+/* Folded into its title bar, or maximized over the workspace area, where it does not move. */
+.phx-guide.is-folded { min-height: 0; }
+.phx-guide.is-folded .phx-guide-titlebar { border-bottom: 0; }
+.phx-guide.is-maximized .phx-guide-titlebar { cursor: default; }
+/* Maximized, the text keeps a readable line length instead of running across the screen. */
+.phx-guide.is-maximized .phx-guide-body > * { max-width: 760px; }
+/* Popped out: it fills its own browser window, which the browser moves and sizes. */
+.phx-guide.is-popped { position: static; width: 100%; height: 100%; min-width: 0; min-height: 0; border: 0; border-radius: 0; box-shadow: none; }
+/* Its title bar matches Agent Chat's popped-out window: the same padding, button and icon sizes. */
+.phx-guide.is-popped .phx-guide-titlebar { cursor: default; height: auto; gap: 2px; padding: 4px 6px; }
+.phx-guide.is-popped .phx-window-controls { gap: 2px; }
+.phx-guide.is-popped .phx-window-control { width: 28px; height: 24px; border-radius: var(--phx-radius-xs); }
+.phx-guide-title { flex: 1; min-width: 0; margin: 0 0 0 4px; font-size: 13px; font-weight: 600; }
+.phx-guide-body { flex: 1; min-height: 0; overflow: auto; padding: 12px 16px 16px; }
+.phx-guide-topic { font-size: 13px; line-height: 1.55; overflow-wrap: anywhere; }
+.phx-guide-topic h3 { margin: 0 0 8px; font-size: 15px; font-weight: 600; }
+.phx-guide-topic p, .phx-guide-topic ul, .phx-guide-topic ol, .phx-guide-topic blockquote { margin: 0 0 10px; }
+.phx-guide-topic ul, .phx-guide-topic ol { padding-left: 20px; }
+.phx-guide-topic li + li { margin-top: 4px; }
+.phx-guide-topic a { color: var(--phx-accent); text-decoration: underline; text-underline-offset: 2px; }
+.phx-guide-missing { color: var(--phx-error); }
+/* Breadcrumbs: the pages above this one in Contents (user, 2026-11-01). */
+.phx-guide-crumbs { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 4px; margin: 0 0 4px; font-size: 12px; color: var(--phx-text-2); }
+.phx-guide-crumb { display: inline-flex; align-items: center; gap: 4px; }
+.phx-guide-crumb-sep { color: var(--phx-text-2); flex: none; }
+/* Sections: the one the reader selected is marked until something else is (user, 2026-11-01). */
+.phx-guide-topic h4 { margin: 18px 0 6px; font-size: 14px; font-weight: 600; }
+.phx-guide-topic h5 { margin: 14px 0 4px; font-size: 13px; font-weight: 600; }
+.phx-guide-section { margin: 0 -8px; padding: 0 8px; border-left: 2px solid transparent; border-radius: var(--phx-radius-xs); transition: background 0.2s; }
+.phx-guide-section.is-target { background: var(--phx-accent-lt); border-left-color: var(--phx-accent); }
+.phx-guide-section.is-target .phx-guide-section.is-target { background: none; }
+/* Contents and Search, folded at the top of every page. */
+.phx-guide-tools { margin: 0 0 10px; font-size: 12px; color: var(--phx-text-2); }
+.phx-guide-tools > summary { cursor: pointer; width: fit-content; }
+.phx-guide-tools-links { display: flex; gap: 12px; margin-top: 6px; }
+.phx-guide-tool { padding: 0; border: none; background: none; color: var(--phx-accent); font: inherit; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
+.phx-guide-contents { list-style: none; margin: 0; padding-left: 0; }
+.phx-guide-contents .phx-guide-contents { padding-left: 16px; }
+.phx-guide-contents li { margin: 4px 0 0; }
+.phx-guide-search { width: 100%; margin: 0 0 10px; }
+.phx-guide-results { list-style: none; margin: 0; padding: 0; }
+.phx-guide-results li + li { margin-top: 10px; }
+.phx-guide-snippet { margin: 2px 0 0; color: var(--phx-text-2); font-size: 12px; }
+.phx-guide-note { margin: 0; color: var(--phx-text-2); }
+/* The title takes the room, so a window's controls sit at the right of its title bar. */
+.phx-phone-title .phx-window-title-text { flex: 1; }
+.phx-guide-phone .phx-phone-body { padding: 0 12px 12px; }
+
+/* The Notifications window: this session's notices, newest first. */
+.phx-notifications { list-style: none; margin: 0; padding: 0; }
+.phx-notification {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--phx-border);
+}
+.phx-notification:last-child { border-bottom: none; }
+.phx-notification-text { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.phx-notification-text p { margin: 0; }
+.phx-notification-text time { display: block; margin-top: 2px; font-size: 12px; color: var(--phx-text-2); }
+.phx-notifications-empty { margin: 12px 0 0; color: var(--phx-text-2); }
+.phx-attention.phx-attention-window { margin: 0; border: none; border-radius: 0; padding: 0; }
+
+/* Narrow screens: the workspace's windows as one stack. */
+.phx-phone-stack { display: flex; flex-direction: column; gap: 8px; }
+.phx-phone-window {
+  background: var(--phx-surface);
+  border: 1px solid var(--phx-border);
+  border-radius: var(--phx-radius);
+  overflow-wrap: anywhere;
+}
+.phx-phone-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 40px;
+  padding: 0 8px;
+  border-bottom: 1px solid var(--phx-border);
+}
+.phx-phone-title h2 { margin: 0; font-size: 14px; font-weight: 600; }
+.phx-phone-window:has(> .phx-phone-body[hidden]) .phx-phone-title { border-bottom: none; }
+.phx-phone-body { padding: 0 12px 12px; }
+.phx-phone-body[hidden] { display: none; }
+
+/* ============================================================
+   Menus
+   ============================================================ */
+.phx-menu {
+  position: fixed;
+  z-index: var(--phx-z-modal);
+  min-width: 200px;
+  max-width: min(320px, calc(100vw - 16px));
+  padding: 4px;
+  background: var(--phx-raised);
+  color: var(--phx-text);
+  border: 1px solid var(--phx-line-strong);
+  border-radius: var(--phx-radius);
+  box-shadow: var(--phx-shadow-lg);
+  font: 400 13px var(--phx-font);
+}
+.phx-menu:focus { outline: none; }
+.phx-menu-item { display: flex; align-items: center; gap: 4px; padding: 6px 10px; border-radius: var(--phx-radius-xs); cursor: default; }
+.phx-menu-item:hover,
+.phx-menu-item:focus { background: var(--phx-hover); outline: none; }
+.phx-menu-item:focus-visible { box-shadow: inset 0 0 0 2px var(--phx-focus); }
+.phx-menu-item[aria-disabled="true"] { color: var(--phx-text-2); opacity: 0.55; }
+.phx-menu-item[aria-disabled="true"]:hover { background: transparent; }
+/* A disabled item with its reason: the label dims, the reason stays readable. */
+.phx-menu-item.has-note[aria-disabled="true"] { opacity: 1; align-items: flex-start; }
+.phx-menu-item.has-note .phx-menu-label { opacity: 0.55; }
+.phx-menu-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.phx-menu-note { font-size: 12px; line-height: 1.35; color: var(--phx-text-2); white-space: normal; }
+.phx-menu-separator { height: 1px; margin: 4px 6px; background: var(--phx-border); }
+.phx-menu-check { display: inline-flex; justify-content: center; width: 16px; flex: none; }
+
+/* Log Details: the record selected in a log. */
+.phx-log-details { padding-top: 8px; }
+.phx-log-details-bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
+.phx-log-details-bar .audit-section-title { margin: 0; }
+.phx-log-details-nav { display: flex; gap: 4px; }
+/* A window's own action buttons follow the toolbar's display mode. */
+.phx-action { display: inline-flex; align-items: center; gap: 6px; }
+.phx-action.is-icon-only { padding-inline: 8px; }
+/* Icons and text: smaller text and less padding than a plain button, so a row of them stays compact. */
+.phx-action:not(.is-icon-only) { gap: 4px; padding: 3px 7px; }
+.phx-action:not(.is-icon-only) > span { font-size: 11px; }
+.phx-window-empty { margin: 16px 0; color: var(--phx-text-2); }
+/* Access Keys: the key list and the archived keys on the configurable table, status and mode as icon and words. */
+.access-key-status-expired { color: var(--phx-warning); }
+.access-key-status-revoked { color: var(--phx-error); }
+.access-key-mode-pass-through > svg { color: var(--phx-warning); }
+
+/* Log Details: a record's heading, compact fields, then its larger evidence. */
+.phx-log-record { display: flex; flex-direction: column; gap: 12px; }
+.phx-log-record-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.phx-log-record-head h4 { margin: 0; font-size: 14px; font-weight: 600; overflow-wrap: anywhere; }
+.phx-log-record-head p { margin: 2px 0 0; }
+.phx-log-fields { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 10px 16px; margin: 0; }
+.phx-log-field dt { font-size: 12px; color: var(--phx-text-2); }
+.phx-log-field dd { margin: 2px 0 0; overflow-wrap: anywhere; }
+.phx-log-mono { font-family: var(--phx-mono); font-size: 12px; }
+.phx-log-section-title { margin: 0 0 4px; font-size: 12px; font-weight: 600; color: var(--phx-text-2); }
+.phx-log-record .audit-payload-section { border-bottom: none; padding: 0; }
+
+/* An outcome as a semantic icon and readable words. */
+.phx-outcome { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.phx-outcome .conversation-icon { width: 16px; height: 16px; flex: none; }
+
+/* The configurable table: native table, fixed layout, scrolling sideways inside its window. */
+.phx-table-wrap { position: relative; overflow-x: auto; }
+/* A folded section right after a table draws the rule under it; the last row adds none. */
+.phx-table-wrap:has(+ .phx-disclosure) tbody tr:last-child > td { border-bottom: none; }
+/* A log fills its window: filters and search on top, the table scrolling in both directions with its
+   headers held at the top, and the count and Load More always in view below it. */
+.phx-window-body > :is(.phx-log-view, .phx-list-view) { display: flex; flex-direction: column; box-sizing: border-box; height: 100%; }
+.phx-log-view > .conversation-list { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; }
+:is(.phx-log-view, .phx-list-view) .phx-table-wrap { flex: 1 1 auto; min-height: 120px; overflow: auto; }
+/* Wrappers that group controls for the Guide only; what they hold keeps its place in the layout. */
+.approvals-table, .changes-table, .mesa-table, .log-group { display: contents; }
+
+/* Approvals: the list with its Show menu and search, Review, and Request Details. */
+.phx-window-actions { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 8px; }
+/* An action closing a run of settings: on the right, clear of the setting above it (user, 2026-10-31). */
+.phx-window-actions-end { justify-content: flex-end; margin-top: 12px; }
+.phx-table th.phx-table-pick,
+.phx-table td.phx-table-pick { width: 36px; padding: 0; text-align: center; }
+.phx-table-pick input { margin: 0; cursor: pointer; }
+.approval-status-pending { color: var(--phx-warning); }
+.approval-status-approved { color: var(--phx-success); }
+:is(.approval-status-rejected, .approval-status-failed) { color: var(--phx-error); }
+:is(.approval-status-expired, .approval-status-cancelled, .approval-status-processing) { color: var(--phx-text-2); }
+.phx-review { display: flex; flex-direction: column; gap: 12px; padding-top: 12px; }
+.phx-review-title { margin: 0; font-size: 15px; font-weight: 600; overflow-wrap: anywhere; }
+.phx-review-context { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 16px; margin: 4px 0 0; color: var(--phx-text-2); font-size: 13px; }
+.phx-review-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.phx-review .approval-reject-row.phx-review-reason { flex-direction: row; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0; }
+.phx-review-reason .approval-reason-input { flex: 1 1 220px; min-width: 0; }
+.phx-review-body { margin: 0; color: var(--phx-text-2); line-height: 1.5; }
+.phx-review-outcome { display: flex; align-items: flex-start; gap: 8px; margin: 0; padding: 10px 12px; border: 1px solid var(--phx-border); border-radius: var(--phx-radius-sm); line-height: 1.5; }
+.phx-review-outcome > span { color: var(--phx-text); }
+.phx-request-details { display: flex; flex-direction: column; gap: 8px; padding-top: 12px; }
+.phx-request-section { border: 1px solid var(--phx-border); border-radius: var(--phx-radius-sm); }
+.phx-request-section > summary { padding: 8px 12px; font-weight: 600; font-size: 13px; cursor: pointer; }
+.phx-request-section-body { padding: 0 12px 12px; }
+.phx-request-title { margin: 0 0 8px; font-size: 13px; font-weight: 600; overflow-wrap: anywhere; }
+
+/* Changes: the list's compact item cell and change actions. */
+.change-item { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.change-item > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Inline confirmations: what the action does, an optional acknowledgement, then
+   Confirm and Cancel. They wrap inside narrow windows. */
+/* A plain UI2 box (user, 2026-10-28): the window's surface and a hairline, no coloured accents; only a danger button is red. */
+.phx-inline-confirm { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-bottom: 12px; padding: 10px 12px; border: 1px solid var(--phx-border); border-radius: var(--phx-radius-sm); background: var(--phx-surface); }
+.phx-inline-confirm-body { flex: 1 1 260px; min-width: 0; font-size: 13px; line-height: 1.5; color: var(--phx-text-2); }
+.phx-inline-confirm-body strong { color: var(--phx-text); font-weight: 600; }
+.phx-inline-confirm-body p { margin: 0; }
+.phx-inline-confirm-body > * + * { margin-top: 6px; }
+.phx-inline-confirm-ack { flex: 1 1 100%; padding: 8px 0 0; border-top: 1px solid var(--phx-divider); border-bottom: none; }
+.phx-inline-confirm > .banner { flex: 1 1 100%; margin: 0; }
+.phx-inline-confirm-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.phx-inline-confirm-title { flex: 1 1 100%; font-size: 14px; font-weight: 600; }
+
+/* Settings windows: native field rows, folded sections, local tabs, Find Setting. */
+.phx-settings > * + * { margin-top: 12px; }
+/* One rhythm for every Settings row (user, 2026-10-31): a row of any kind (switch, dropdown or number
+   field) is 12px above and below with no margin, so neighbours are always 24px apart, and a group's rule
+   or a folded section's sits between rows with no margin of its own. */
+.phx-settings :is(.toggle-row, .phx-setting-checks > .toggle-row) { padding: 12px 0; margin: 0; }
+.phx-settings :is(.field, .agentcli-settings-field, .conversation-limit):has(> input[type="number"]) { padding: 12px 0; margin: 0; }
+.phx-settings :is(.settings-divider, .phx-setting-checks, .phx-disclosure, .phx-retention) { margin: 0; }
+.phx-settings .phx-retention-fields { gap: 0; }
+/* The kill switch's red frame pads it while it is on. */
+.phx-settings .kill-switch-active > .toggle-row { padding: 0; }
+.phx-settings-intro { margin: 0 0 8px; }
+.phx-settings-form > .banner { margin: 8px 0; }
+.phx-settings-section > .phx-section-title { margin-top: 4px; }
+.phx-disclosure { border-top: 1px solid var(--phx-divider); }
+.phx-disclosure > summary { padding: 12px 0; cursor: pointer; font-size: 13px; font-weight: 600; overflow-wrap: anywhere; }
+.phx-disclosure > summary:focus-visible { outline: 2px solid var(--phx-focus); outline-offset: 2px; border-radius: var(--phx-radius-xs); }
+.phx-disclosure-body { padding: 0 0 12px; }
+/* An account's options: what the last action found, hidden while there is none, then the actions.
+   AI Providers opens them in a row under the account's own, joined to it by the row's grey
+   (user, 2026-10-31); a decision account opens them under its choice. */
+.phx-provider-account {
+  display: flex; flex-direction: column; gap: 8px;
+  padding: 10px 12px; border: 1px solid var(--phx-border); border-radius: var(--phx-radius-sm); background: var(--phx-surface);
+}
+.phx-provider-account > .phx-provider-info:empty { display: none; }
+.phx-provider-info > p { margin: 0; }
+.phx-provider-account .agentcli-account-actions,
+.phx-provider-account .agentcli-settings-model-edit { margin: 0; }
+.phx-table tbody tr.phx-table-detail > td { padding: 0 10px 10px; white-space: normal; overflow: visible; background: var(--phx-accent-lt); }
+.phx-table tbody tr.phx-table-detail > td > * {
+  position: sticky; left: 10px; box-sizing: border-box; max-width: calc(var(--phx-table-visible, 100%) - 20px);
+}
+.phx-action.phx-action-danger { color: var(--phx-error); }
+.phx-local-tabs { display: flex; flex-wrap: wrap; gap: 2px; border-bottom: 1px solid var(--phx-border); }
+.phx-local-tab { margin-bottom: -1px; padding: 6px 12px; border: 1px solid transparent; border-radius: var(--phx-radius-sm) var(--phx-radius-sm) 0 0; background: none; color: var(--phx-text-2); font: 500 13px var(--phx-font); cursor: pointer; }
+.phx-local-tab:hover { color: var(--phx-text); }
+.phx-local-tab[aria-selected="true"] { border-color: var(--phx-border); border-bottom-color: var(--phx-surface); background: var(--phx-surface); color: var(--phx-text); }
+.phx-local-tab:focus-visible { outline: 2px solid var(--phx-focus); outline-offset: -2px; }
+.phx-setting-checks { border-bottom: 1px solid var(--phx-divider); }
+.phx-setting-checks > .toggle-row { padding: 8px 0; border-bottom: none; }
+/* A group ending its section, or followed by a folded section (which draws its own rule) or by
+   the action it chooses for, ends without a rule (user, 2026-10-31). */
+.phx-setting-checks:is(:last-child, :has(+ .phx-disclosure, + .phx-window-actions, + .settings-divider)) { border-bottom: none; }
+/* Audit and Conversation recording side by side once the window has 620 px inside, stacked below that. */
+.phx-settings { container-type: inline-size; }
+.phx-settings-columns { display: grid; grid-template-columns: minmax(0, 1fr); gap: 4px 24px; }
+@container (min-width: 620px) { .phx-settings-columns { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } }
+.phx-retention { margin: 8px 0 0; padding: 0; border: none; min-width: 0; }
+.phx-retention-fields { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; }
+.phx-retention-fields .conversation-limit { margin: 0; }
+.conversation-storage { margin: 12px 0 0; }
+.phx-wipe-scopes { margin: 0 0 12px; padding-left: 20px; font-size: 13px; }
+.phx-setting-found { border-radius: var(--phx-radius-xs); box-shadow: 0 0 0 2px var(--phx-focus); transition: box-shadow 0.2s; }
+@media (prefers-reduced-motion: reduce) { .phx-setting-found { transition: none; } }
+.phx-find-setting {
+  position: fixed; z-index: var(--phx-z-modal); display: flex; flex-direction: column; gap: 6px;
+  width: min(360px, calc(100vw - 16px)); padding: 8px; box-sizing: border-box;
+  background: var(--phx-raised); color: var(--phx-text); border: 1px solid var(--phx-line-strong);
+  border-radius: var(--phx-radius); box-shadow: var(--phx-shadow-lg); font: 400 13px var(--phx-font);
+}
+.phx-find-setting-field { display: flex; align-items: center; gap: 6px; color: var(--phx-text-2); }
+.phx-find-setting-field .input { flex: 1; min-width: 0; }
+.phx-find-setting-results { display: flex; flex-direction: column; max-height: min(360px, 60vh); overflow-y: auto; }
+.phx-find-result { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; padding: 6px 8px; border: none; border-radius: var(--phx-radius-xs); background: none; color: inherit; font: inherit; text-align: start; cursor: pointer; }
+.phx-find-result small { color: var(--phx-text-2); font-size: 12px; }
+.phx-find-result:hover, .phx-find-result:focus { background: var(--phx-hover); outline: none; }
+.phx-find-result:focus-visible { box-shadow: inset 0 0 0 2px var(--phx-focus); }
+.phx-find-setting-empty { margin: 4px 8px; color: var(--phx-text-2); }
+
+/* Agent Chat's window in My Workspace: Chat draws into the slot; while it is closed, a way to open it shows instead. */
+.phx-window-body[data-phx-window="agentChat"] { height: 100%; padding: 0; }
+.phx-chat-dock { position: relative; height: 100%; min-height: 240px; }
+.phx-chat-dock-slot { position: absolute; inset: 0; }
+.phx-chat-dock-slot:empty { display: none; }
+.phx-chat-dock-slot:not(:empty) + .phx-chat-dock-empty { display: none; }
+.phx-chat-dock-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; height: 100%; color: var(--phx-text-2); }
+.phx-chat-dock-empty p { margin: 0; }
+.phx-phone-empty { padding: 24px 16px; }
+.change-action-create { color: var(--phx-success); }
+.change-action-delete { color: var(--phx-error); }
+.change-action-rollback { color: var(--phx-warning); }
+.phx-table { table-layout: fixed; width: 100%; border-collapse: collapse; font-size: 13px; }
+/* Column headers stay at the top of their window while the rows scroll under them. */
+.phx-table th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  padding: 0;
+  background: var(--phx-surface);
+  text-align: left;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--phx-text-2);
+  border-bottom: 1px solid var(--phx-border);
+  user-select: none;
+}
+.phx-table th.is-dragged { opacity: 0.45; }
+.phx-th { display: flex; align-items: center; min-width: 0; }
+.phx-th-label {
+  display: flex; align-items: center; gap: 4px; flex: 1; min-width: 0;
+  padding: 8px 4px 8px 10px; border: none; background: none;
+  color: inherit; font: inherit; text-align: left; cursor: pointer; touch-action: none;
+}
+.phx-th-label:hover { color: var(--phx-text); }
+.phx-th-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.phx-th-menu {
+  display: inline-flex; align-items: center; justify-content: center; flex: none;
+  width: 24px; height: 24px; margin-right: 6px; padding: 0;
+  border: none; border-radius: var(--phx-radius-sm); background: transparent; color: var(--phx-text-2); cursor: pointer;
+  opacity: 0;
+}
+.phx-table th:hover .phx-th-menu, .phx-th-menu:focus-visible, .phx-th-menu.is-active { opacity: 1; }
+.phx-th-menu:hover { background: var(--phx-hover); color: var(--phx-text); }
+@media (hover: none) { .phx-th-menu { opacity: 1; } }
+.phx-th-resize { position: absolute; top: 0; right: -4px; z-index: 1; width: 8px; height: 100%; cursor: col-resize; touch-action: none; }
+.phx-th-resize::after { content: ""; position: absolute; top: 25%; bottom: 25%; left: 3px; width: 2px; border-radius: 1px; background: var(--phx-divider); }
+.phx-th-resize:hover::after, .phx-th-resize:focus-visible::after { background: var(--phx-text-2); }
+.phx-table-drop { position: absolute; top: 0; width: 2px; height: 100%; margin-left: -1px; background: var(--phx-accent); pointer-events: none; }
+.phx-table td {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--phx-divider);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+.phx-table tbody tr[tabindex] { cursor: pointer; }
+.phx-table tbody tr[tabindex]:hover > td { background: var(--phx-hover); }
+/* The chosen row is marked by its grey alone (user, 2026-10-26): no border, and while the user
+   moves with the keys a row under a still pointer is not highlighted as well. */
+.phx-table tbody tr.is-selected > td { background: var(--phx-selected); }
+.phx-table tbody tr:focus-visible { outline: none; }
+.phx-table-wrap[data-keyboard] tbody tr[tabindex]:not(.is-selected):hover > td { background: transparent; }
+.phx-cell-mono { font-family: var(--phx-mono); font-size: 12px; }
+.phx-table-empty { padding: 16px 10px; color: var(--phx-text-2); }
+.phx-table-footer { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 16px; padding: 8px 2px 0; }
+.phx-table-footer > .btn { margin-left: auto; }
+
+/* Filters open in a panel above a log; while closed, a line says how many are active. */
+.phx-filters { padding: 4px 0 8px; }
+.phx-filters[hidden] { display: none; }
+
+/* Access Keys: the selected key's windows below the key list. */
+.phx-window-pad { padding-top: 12px; }
+.phx-window-pad > .tree-header-actions { margin-bottom: 12px; }
+.phx-section-title { margin: 0 0 8px; font-size: 13px; font-weight: 600; }
+.phx-key-settings-section + .phx-key-settings-section { margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--phx-border); }
+.access-keys-list .access-key-name-input { border-color: var(--phx-field-border); }
+@media (pointer: coarse) {
+  .phx-menu-item { padding: 12px 12px; }
+  .phx-toolbar-button { height: 40px; }
+  .phx-toolbar-icon-only { width: 40px; }
+}
+
 
 .phx-header-actions {
   display: flex;
@@ -278,7 +916,7 @@
   background: var(--phx-error-bg);
   color: var(--phx-error);
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: 0.02em;
   white-space: nowrap;
 }
@@ -287,7 +925,6 @@
 
 /* Forced wrap point for the mobile two-row tab bar (see the max-width: 700px
    block below). Inert here: nowrap means it never actually causes a break. */
-.phx-tabs-break { display: none; }
 
 /* ============================================================
    Main content
@@ -313,11 +950,10 @@
 }
 .card-header {
   font-size: 11px;
-  font-weight: 700;
+  font-weight: 600;
   margin: 0 0 16px 0;
   color: var(--phx-text-2);
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
+
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -346,10 +982,9 @@
 /* Small subheading that introduces the collapsed Advanced cluster. */
 .advanced-section-label {
   font-size: 11px;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--phx-text-2);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
+
   margin: 4px 2px 8px;
 }
 
@@ -369,10 +1004,9 @@
   padding: 0;
   cursor: pointer;
   font-size: 11px;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--phx-text-2);
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
+
   text-align: left;
 }
 .collapsible-header:hover { color: var(--phx-text); }
@@ -399,16 +1033,9 @@
 }
 .collapsible-body { margin-top: 16px; }
 
-
 /* Effective resolved control_mode/enforcement panel in the MESA entity editor. */
-.mesa-effective { margin: 0 0 14px; padding: 8px 10px; border: 1px solid var(--phx-border); border-radius: var(--phx-radius-sm); background: var(--phx-surface-2, var(--phx-surface)); font-size: 12px; color: var(--phx-text-2); }
-.mesa-effective-title { font-weight: 600; margin-right: 8px; font-size: 12px; }
-.mesa-effective code { color: var(--phx-text); }
-.mesa-effective em { font-style: normal; }
-.mesa-effective-note { margin-top: 6px; color: var(--phx-warning, var(--phx-text)); }
 
 /* Small "MESA" tag on an audit row whose action was waved through under advisory. */
-.mesa-advisory-badge { margin-left: 6px; background: var(--phx-surface-2, var(--phx-surface)); color: var(--phx-text-2); border: 1px solid var(--phx-border); }
 
 /* ============================================================
    Buttons
@@ -419,6 +1046,7 @@
   justify-content: center;
   gap: 6px;
   padding: 8px 16px;
+  min-height: 36px;
   border: none;
   border-radius: var(--phx-radius-sm);
   cursor: pointer;
@@ -430,10 +1058,6 @@
   font-family: inherit;
 }
 .btn:disabled, .btn[aria-disabled="true"] { opacity: 0.45; cursor: not-allowed; }
-/* Swaps a button's label for a shorter one on narrow screens (see the
-   max-width: 600px block), same full/short pattern as .audit-time-full. */
-.btn-label-short { display: none; }
-.btn-label-full  { display: inline; }
 .btn-primary { background: var(--phx-accent); color: var(--phx-accent-fg); }
 .btn-primary:hover:not(:disabled):not([aria-disabled="true"]) { background: var(--phx-accent-hov); box-shadow: var(--phx-shadow-md); }
 .btn-danger { background: var(--phx-error); color: var(--phx-accent-fg); }
@@ -441,7 +1065,7 @@
 .btn-outline {
   background: transparent;
   color: var(--phx-accent);
-  border: 1.5px solid var(--phx-accent);
+  border: 1px solid var(--phx-line-strong);
 }
 .btn-outline:hover:not(:disabled):not([aria-disabled="true"]) { background: var(--phx-accent-lt); }
 .btn-text {
@@ -459,10 +1083,15 @@
   border: 1px solid var(--phx-border);
 }
 .btn-ghost:hover:not(:disabled):not([aria-disabled="true"]) { background: var(--phx-surface-2); color: var(--phx-text); }
-.btn-sm { padding: 6px 12px; font-size: 12px; }
+.btn-sm { min-height: 26px; padding: 4px 10px; font-size: 12px; }
 .btn-icon { padding: 6px 8px; }
+/* Compact controls keep a comfortable target on touch screens. */
+@media (pointer: coarse) {
+  .btn { min-height: 44px; }
+  .btn-sm { min-height: 36px; }
+}
 .btn-warning { background: var(--phx-warning); color: var(--phx-accent-fg); }
-.btn-warning:hover:not(:disabled):not([aria-disabled="true"]) { background: var(--phx-accent-hov); }
+.btn-warning:hover:not(:disabled):not([aria-disabled="true"]) { opacity: 0.85; box-shadow: var(--phx-shadow-md); }
 .btn-text-danger { color: var(--phx-error); }
 .btn-text-warning { color: var(--phx-warning); }
 .btn-text-danger:hover:not(:disabled):not([aria-disabled="true"]) { background: var(--phx-error-bg); }
@@ -479,27 +1108,6 @@
 .btn-header-action { padding: 7.5px 20px; }
 
 /* ============================================================
-   Badges
-   ============================================================ */
-.badge {
-  display: inline-flex;
-  align-items: center;
-  padding: 3px 9px;
-  border-radius: 20px;
-  font-size: 11px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  white-space: nowrap;
-}
-.badge-blue   { background: var(--phx-info-bg);    color: var(--phx-info); }
-.badge-amber  { background: var(--phx-warning-bg); color: var(--phx-warning); }
-.badge-green  { background: var(--phx-success-bg); color: var(--phx-success); }
-.badge-red    { background: var(--phx-error-bg);   color: var(--phx-error); }
-.badge-grey   { background: var(--phx-grey-tint);   color: var(--phx-text-2); }
-.badge-purple { background: var(--phx-purple-bg);   color: var(--phx-purple); }
-
-/* ============================================================
    Tables
    ============================================================ */
 .data-table { width: 100%; border-collapse: collapse; }
@@ -507,9 +1115,8 @@
   text-align: left;
   padding: 10px 12px;
   font-size: 11px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
+  font-weight: 600;
+
   color: var(--phx-text-2);
   border-bottom: 2px solid var(--phx-border);
   white-space: nowrap;
@@ -527,7 +1134,7 @@
   display: inline-flex; align-items: center; gap: 6px; border: none; background: none;
   padding: 0; color: inherit; font: inherit; text-align: left; cursor: pointer;
 }
-.row-link-btn:hover { color: var(--phx-accent); }
+.row-link-btn:hover { color: var(--phx-accent); text-decoration: underline; text-underline-offset: 2px; }
 .row-link-btn-stack { flex-direction: column; align-items: flex-start; max-width: 100%; }
 .sort-arrow { display: inline-block; margin-left: 3px; font-size: 9px; opacity: 0.35; }
 .sort-arrow.active { opacity: 1; }
@@ -540,10 +1147,6 @@
 .data-table tbody tr { transition: background 0.12s; }
 .data-table tbody tr.clickable { cursor: pointer; }
 .data-table tbody tr.clickable:hover { background: var(--phx-hover); }
-.data-table tbody tr.pass-through-row { background: var(--phx-accent-lt); }
-.data-table tbody tr.pass-through-row.clickable:hover { background: var(--phx-accent-lt); }
-.audit-table tbody tr:nth-child(even) { background: var(--phx-surface-2); }
-.audit-table tbody tr:nth-child(even).clickable:hover { background: var(--phx-hover); }
 
 /* ============================================================
    Inputs and selects
@@ -556,7 +1159,7 @@
 }
 .input {
   padding: 9px 12px;
-  border: 1.5px solid var(--phx-border);
+  border: 1px solid var(--phx-field-border);
   border-radius: var(--phx-radius-sm);
   background: var(--phx-surface);
   color: var(--phx-text);
@@ -572,13 +1175,24 @@
 .input.error { border-color: var(--phx-error); }
 .field-error { font-size: 12px; color: var(--phx-error); }
 select.input {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2371717a' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+  background-image: var(--phx-chevron);
   background-repeat: no-repeat;
   background-position: right 10px center;
   padding-right: 32px;
   cursor: pointer;
 }
 .input-auto { flex: 0 0 auto; width: auto; }
+/* Every dropdown is one width and every number field another (user, 2026-10-31): a dropdown
+   takes a third of the row it sits in, which is the window's width less its padding, but
+   never so little that a short choice is cut nor more than a long one needs; a number field
+   fits six digits and its arrows. Agent Chat's own compact controls keep their sizes. */
+select.input:not(.agentcli-select) { flex: 0 0 auto; width: clamp(10rem, 33%, 18rem); max-width: 100%; min-width: 0; }
+input.input[type="number"]:not(.agentcli-number) { flex: 0 0 auto; width: 7rem; max-width: 100%; }
+/* A number field sits on its name's line, at the right, as every setting's control does (user, 2026-10-31). */
+:is(.field, .agentcli-settings-field, .conversation-limit):has(> input[type="number"]) {
+  display: flex; flex-direction: row; align-items: center; justify-content: space-between; gap: 12px;
+}
+:is(.field, .agentcli-settings-field, .conversation-limit):has(> input[type="number"]) > input { margin-left: auto; align-self: center; }
 
 /* ============================================================
    Toggle switches
@@ -596,7 +1210,7 @@ select.input {
 .toggle-switch-track {
   position: absolute;
   inset: 0;
-  background: var(--phx-border);
+  background: var(--phx-field-border);
   border-radius: 24px;
   transition: background 0.2s;
   pointer-events: none;
@@ -608,7 +1222,7 @@ select.input {
   width: 18px;
   left: 3px;
   top: 3px;
-  background: #fff;
+  background: var(--phx-accent-fg);
   border-radius: 50%;
   transition: transform 0.2s;
   box-shadow: var(--phx-shadow);
@@ -629,43 +1243,32 @@ select.input {
   border-bottom: 1px solid var(--phx-divider);
 }
 .toggle-row:last-child { border-bottom: none; }
+/* In Settings a group's rows run on without rules; rules mark groups and folded sections (user, 2026-10-31). */
+.phx-settings .toggle-row { border-bottom: none; }
+/* A folded section or a divider draws its own rule above it, so the row before it does not add a second. */
+.toggle-row:has(+ .phx-disclosure, + .settings-divider) { border-bottom: none; }
 .toggle-label { display: flex; flex-direction: column; gap: 3px; flex: 1; min-width: 0; }
 .toggle-label span, .toggle-label > label { font-size: 14px; font-weight: 500; }
+/* A switch's name flips it (ui/toggleNames.ts), so the name is only as wide as its text. */
+.toggle-label > span:not(.sr-only), .toggle-label > label { align-self: flex-start; max-width: 100%; }
+.toggle-row:has(.toggle-switch) > .toggle-label > span:not(.sr-only), .toggle-label > label { cursor: pointer; }
 .toggle-label small { font-size: 12px; color: var(--phx-text-2); line-height: 1.4; }
-.toggle-label-master { font-weight: 700; }
+.toggle-label-master { font-weight: 600; }
 
-/* Access key notes: help copy, a resizable multiline field and a footer that
-   keeps the counter and the save actions on one line until it wraps. */
-.access-key-notes-help { margin: 0 0 8px; font-size: 12px; color: var(--phx-text-2); line-height: 1.4; }
+/* Access key Guidance: a resizable multiline field, the one-line caution under it, and a footer
+   that keeps the counter and the save actions on one line until it wraps. */
 .access-key-notes-input { display: block; min-height: 120px; resize: vertical; line-height: 1.45; }
 .access-key-notes-footer { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; margin-top: 8px; }
 .access-key-notes-count { font-size: 12px; color: var(--phx-text-2); font-variant-numeric: tabular-nums; }
 .access-key-notes-count.field-error { color: var(--phx-error); }
 .access-key-notes-actions { display: flex; gap: 8px; margin-left: auto; }
 .toggle-row-plain { border: none; padding: 0; }
-.toggle-row-greyed { opacity: 0.45; pointer-events: none; }
-/* Select-backed settings need the full line length for explanatory copy. The
-   label and help therefore form one block above the control, while switch rows
-   keep their compact side-by-side relationship. */
-.toggle-row-stacked-control { flex-direction: column; align-items: stretch; gap: 8px; }
-.toggle-row-stacked-control > .input { align-self: flex-start; max-width: 100%; }
-@media (min-width: 901px) {
-  .toggle-row-stacked-control {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(220px, 320px);
-    column-gap: 24px;
-    align-items: start;
-  }
-  .toggle-row-stacked-control > .toggle-label { grid-column: 1; }
-  .toggle-row-stacked-control > .input {
-    grid-column: 2;
-    width: 100%;
-    min-width: 0;
-  }
-}
-@media (max-width: 900px) {
-  .toggle-row-stacked-control > .input { width: 100%; }
-}
+.toggle-row-flat { border-bottom: none; }
+/* A greyed row's controls are disabled; it still takes the pointer so Help can explain it. */
+.toggle-row-greyed { opacity: 0.45; }
+/* Select-backed settings: the name on the left and the dropdown on the right, as a switch's
+   row is; what a setting does is in Help. */
+.toggle-row-stacked-control > .input { margin-left: auto; }
 
 /* Theme toggle segmented control */
 .theme-toggle {
@@ -724,54 +1327,24 @@ select.input {
 }
 /* Wider dialog for side-by-side diffs (approval review). */
 .modal-wide { max-width: 920px; }
-.modal-title { font-size: 18px; font-weight: 700; margin: 0 0 20px 0; color: var(--phx-text); }
-.modal-title-error { color: var(--phx-error); }
+/* The UI2 dialog heading (user, 2026-10-28): weights stay within 400 to 600, no colour. */
+.modal-title { font-size: 16px; font-weight: 600; margin: 0 0 12px 0; color: var(--phx-text); }
 .modal-body-text { margin: 0 0 16px; color: var(--phx-text-2); line-height: 1.5; }
 .modal-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; margin-top: 20px; flex-wrap: wrap; }
-/* Keep approval execution inside one stable button box. On iOS a label-width
-   change plus the disabled opacity transition can leave the old button tile
-   painted beside the new one inside a fixed modal. The spinner slot exists in
-   both states, so neither the text nor geometry changes when execution starts. */
-.approval-approve-btn { min-width: 124px; white-space: nowrap; }
-.approval-approve-btn::after {
-  content: "";
-  width: 12px;
-  height: 12px;
-  flex: 0 0 12px;
-  border: 2px solid currentColor;
-  border-top-color: transparent;
-  border-radius: 50%;
-  opacity: 0;
-}
-.approval-approve-btn[aria-busy="true"] { opacity: 1; cursor: wait; }
-.approval-approve-btn[aria-busy="true"]::after {
-  opacity: 1;
-  animation: agentcli-spin 0.8s linear infinite;
-}
-@media (prefers-reduced-motion: reduce) {
-  .approval-approve-btn[aria-busy="true"]::after { animation: none; }
-}
 
 /* ============================================================
    Warning / info blocks
    ============================================================ */
+/* Access Keys' cautions are the same plain box as an inline confirmation. */
 .amber-block {
-  background: var(--phx-warning-bg);
-  border: 1px solid var(--phx-warning);
+  border: 1px solid var(--phx-border);
+  background: var(--phx-surface);
   border-radius: var(--phx-radius-sm);
-  padding: 14px 16px;
+  padding: 10px 12px;
   margin: 12px 0;
 }
-.amber-block p { margin: 0; font-size: 13px; line-height: 1.5; }
-.amber-block strong { color: var(--phx-warning); }
-.pass-through-header-banner {
-  background: var(--phx-warning-bg);
-  border: 1px solid var(--phx-warning);
-  border-radius: var(--phx-radius-sm);
-  padding: 12px 16px;
-  margin-bottom: 14px;
-}
-.pass-through-header-banner p { margin: 3px 0; font-size: 13px; }
+.amber-block p { margin: 0; font-size: 13px; line-height: 1.5; color: var(--phx-text-2); }
+.amber-block strong { color: var(--phx-text); font-weight: 600; }
 
 /* ============================================================
    Banners
@@ -785,9 +1358,15 @@ select.input {
 .mesa-resolution-warnings li { margin-top: 4px; line-height: 1.45; }
 .banner-info  { background: var(--phx-info-bg);    border-color: var(--phx-info);    color: var(--phx-text); }
 .banner-error { background: var(--phx-error-bg);   border-color: var(--phx-error);   color: var(--phx-error); }
-.mesa-notice { display: flex; align-items: flex-start; gap: 12px; overflow-wrap: anywhere; }
+.mesa-notice {
+  display: flex; align-items: flex-start; gap: 12px; overflow-wrap: anywhere;
+  border: 1px solid var(--phx-border); border-radius: var(--phx-radius-sm);
+  background: var(--phx-surface); padding: 12px; line-height: 1.5;
+}
+.mesa-notice-icon { flex: none; color: var(--phx-warning, var(--phx-text)); margin-top: 2px; }
 .mesa-notice-content { flex: 1; min-width: 0; }
-.mesa-notice-dismiss { flex: none; min-width: 32px; min-height: 32px; }
+.mesa-notice-status { margin: 8px 0 0; font-size: 12px; color: var(--phx-text-2); }
+.mesa-notice-actions { margin-top: 10px; }
 .mesa-notice p { margin: 6px 0 0; }
 .mesa-notice p:first-child { margin-top: 0; }
 .mesa-notice-details { margin-top: 8px; }
@@ -807,8 +1386,6 @@ select.input {
 /* ============================================================
    Timestamps
    ============================================================ */
-.audit-time-short { display: none; }
-.audit-time-full  { display: inline; }
 
 /* ============================================================
    Two-column layout
@@ -829,27 +1406,9 @@ select.input {
   .two-col > *:last-child  { order: 1; }
 }
 
-/* Settings two-column layout */
-.settings-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 0 16px;
-  align-items: start;
-}
-.settings-grid > * { min-width: 0; }
-@media (max-width: 768px) {
-  .settings-grid { grid-template-columns: 1fr; }
-}
-
 /* ============================================================
    Responsive / mobile
    ============================================================ */
-/* Two-row tab bar: row 1 is Access keys/Approvals/Changes plus whichever of the
-   Agent Chat button / kill-switch banner is showing (both must stay visible
-   without scrolling); row 2 is MESA/Audit Log/Settings plus Documentation.
-   The split point is fixed by .phx-tabs-break, not by wherever content
-   happens to overflow. DOM order is untouched (desktop reading order); see
-   the comment in index.tsx. */
 @media (max-width: 700px) {
   /* The companion app exposes its measured status-bar inset through HA's
      inherited custom property. Use it as the sticky stopping edge, not as
@@ -873,13 +1432,7 @@ select.input {
     background: var(--phx-surface);
     pointer-events: none;
   }
-  .phx-tabs { flex-wrap: wrap; }
-  .phx-tab-row1 { order: 1; }
   .phx-header-actions { order: 2; margin-left: auto; padding: 0; flex-shrink: 0; }
-  .phx-tabs-break { display: block; order: 3; flex: 0 0 100%; height: 0; }
-  .phx-tab-row2 { order: 4; }
-  .phx-tab-doclink { order: 5; }
-  .phx-tab-spacer { display: none; }
 }
 
 @media (max-width: 600px) {
@@ -889,8 +1442,6 @@ select.input {
      instead of just clipping locally. */
   .phx-content { padding: 0 10px 16px; overflow-x: hidden; }
   .card { padding: 14px; overflow-x: hidden; }
-  .phx-tab { padding: 0 12px; font-size: 11px; letter-spacing: 0.04em; }
-  .phx-tab-row1 { padding: 0 9px; }
   .phx-header-action-label { display: none; }
 
   .card-header-stack { flex-direction: column; align-items: stretch; gap: 8px; }
@@ -909,64 +1460,28 @@ select.input {
   .filter-row-refresh { order: 2; flex-shrink: 0; }
   .filter-row-right { order: 3; flex-basis: 100%; flex-wrap: wrap; }
 
-  .btn-label-full { display: none; }
-  .btn-label-short { display: inline; }
-
-  /* MESA toolbar: two .filter-row-right groups (Add area/integration/domain/
-     entity profile, then Import/Export/Refresh). The generic rule above
-     forces each onto its own full-width row in DOM order, stacking the
-     compact icon row at the very bottom; the compound selectors below
-     (higher specificity, so they win regardless of source order) reorder
-     it instead: icons form their own row 1 (always narrow, right-aligned
-     to match the rest of the panel's icon rows), and the shortened
-     add-profile labels above form an even 2-column grid below it rather
-     than an uneven wrap. */
-  .filter-row-right.mesa-toolbar-tools {
-    order: 1; flex-basis: auto; flex-wrap: nowrap; margin-left: auto;
-  }
-  .filter-row-right.mesa-toolbar-add {
-    order: 2; flex-basis: 100%; flex-wrap: nowrap;
-    display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
-  }
-  .mesa-toolbar-add .btn { width: 100%; }
-
-  .tree-badge, .tree-effective, .tree-hint-link { display: none; }
+  .tree-badge, .tree-effective, .tree-hint-btn { display: none; }
   .tree-children { margin-left: 9px; padding-left: 6px; }
   .tree-node { gap: 6px; }
 
-  .access-key-table th:nth-child(4), .access-key-table th:nth-child(5),
-  .access-key-table th:nth-child(6), .access-key-table th:nth-child(7),
-  .access-key-table td:nth-child(4), .access-key-table td:nth-child(5),
-  .access-key-table td:nth-child(6), .access-key-table td:nth-child(7) { display: none; }
-  .access-key-table th, .access-key-table td { padding: 6px 4px; }
-  .access-key-table td:nth-child(1) { word-break: break-all; }
 
-  .archived-table th:nth-child(4), .archived-table th:nth-child(5), .archived-table th:nth-child(7),
-  .archived-table td:nth-child(4), .archived-table td:nth-child(5), .archived-table td:nth-child(7) { display: none; }
-  .archived-table th, .archived-table td { padding: 6px 4px; }
-  .archived-table td:nth-child(1) { word-break: break-all; }
+  
 
-  .audit-table { table-layout: fixed; }
-  .audit-table th:nth-child(1), .audit-table th:nth-child(4),
-  .audit-table th:nth-child(5), .audit-table th:nth-child(7),
-  .audit-table td:nth-child(1), .audit-table td:nth-child(4),
-  .audit-table td:nth-child(5), .audit-table td:nth-child(7) { display: none; }
-  .audit-table th, .audit-table td { padding: 6px 2px; }
   /* Time (.audit-time-short, e.g. "7/11, 2:30 PM") was cut down too far
      chasing room for IP; both are similar length, so give them comparable
      width instead of starving one for the other. */
-  .audit-table th:nth-child(2), .audit-table td:nth-child(2) { width: 28%; }
-  .audit-table th:nth-child(3), .audit-table td:nth-child(3) { width: 33%; }
-  .audit-table th:nth-child(6), .audit-table td:nth-child(6) { width: 39%; }
-  .audit-table td:nth-child(3) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .audit-time-full { display: none; }
-  .audit-time-short { display: inline; white-space: nowrap; }
+
+  
+
+  
+
+  
 
   .access-key-detail-sticky { margin: 0 -10px; padding: 12px 10px 10px; }
   .access-key-card-body { flex-direction: column; }
   .access-key-card-actions { min-width: auto; width: 100%; flex-direction: row; flex-wrap: wrap; }
   .access-key-action-btn { flex: 1; min-width: 120px; }
-  .btn, .phx-tab, .reload-btn, .perm-btn, .tree-expand, .theme-toggle-btn { min-height: 44px; }
+  .btn, .perm-btn, .tree-expand, .theme-toggle-btn { min-height: 44px; }
   .perm-btn { min-width: 36px; }
 }
 
@@ -974,7 +1489,7 @@ select.input {
    Permission state colors
    ============================================================ */
 .state-GREY   { color: var(--phx-text-2); }
-.state-YELLOW { color: var(--phx-warning); }
+.state-YELLOW { color: var(--phx-read); }
 .state-GREEN  { color: var(--phx-success); }
 .state-RED    { color: var(--phx-error); }
 
@@ -996,7 +1511,7 @@ select.input {
   background: none;
   cursor: pointer;
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--phx-text-2);
   transition: background 0.12s, color 0.12s;
   min-width: 28px;
@@ -1005,19 +1520,24 @@ select.input {
 .perm-btn:last-child { border-right: none; }
 .perm-btn:hover { background: var(--phx-hover); }
 .perm-btn.active-GREY   { background: var(--phx-grey-tint);     color: var(--phx-text-2); }
-.perm-btn.active-YELLOW { background: var(--phx-warning-bg);   color: var(--phx-warning); }
+.perm-btn.active-YELLOW { background: var(--phx-read-bg);      color: var(--phx-read); }
 .perm-btn.active-GREEN  { background: var(--phx-success-bg);   color: var(--phx-success); }
 .perm-btn.active-RED    { background: var(--phx-error-bg);     color: var(--phx-error); }
 
 /* ============================================================
    Entity tree
    ============================================================ */
-.tree-filter { margin-bottom: 12px; display: flex; gap: 8px; }
+/* The tree's filter row: Select By and its value selector, the text filter, Reload. */
+.tree-filter { margin-bottom: 12px; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.tree-filter > .input:not(.tree-filter-select) { flex: 1 1 200px; min-width: 0; }
+.tree-filter-note { flex: 1 1 100%; font-size: 12px; color: var(--phx-text-2); }
+/* Filter's controls, grouped for the Guide only: they stay items of the filter row. */
+.tree-select-by { display: contents; }
 .tree-node { display: flex; align-items: center; gap: 8px; padding: 4px 6px; border-radius: var(--phx-radius-xs); transition: background 0.12s; }
 .tree-node:hover { background: var(--phx-hover); }
 .tree-node-revealed { background: var(--phx-accent-lt); box-shadow: 0 0 0 1.5px var(--phx-accent); animation: tree-reveal-flash 1.2s ease-out; }
 @keyframes tree-reveal-flash {
-  0%   { background: var(--phx-warning-bg); box-shadow: 0 0 0 2px var(--phx-accent); }
+  0%   { background: var(--phx-selected); box-shadow: 0 0 0 2px var(--phx-accent); }
   100% { background: var(--phx-accent-lt);  box-shadow: 0 0 0 1.5px var(--phx-accent); }
 }
 .tree-expand {
@@ -1047,7 +1567,7 @@ select.input {
 .tree-device-name:hover { color: var(--phx-accent); }
 .tree-device-id {
   min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-  color: var(--phx-text-2); font-family: var(--phx-mono, "Roboto Mono", monospace); font-size: 11px;
+  color: var(--phx-text-2); font-family: var(--phx-mono); font-size: 11px;
   cursor: text; user-select: text;
 }
 .tree-entity-id { font-size: 12px; color: var(--phx-text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
@@ -1056,26 +1576,32 @@ select.input {
 .tree-children { margin-left: 14px; padding-left: 8px; border-left: 1px solid var(--phx-border); }
 /* Device entities align with 1st-level (deviceless) entities: no extra indent. */
 .tree-children-flat { margin: 0; padding: 0; }
-.tree-badge { font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 4px; flex-shrink: 0; }
+.tree-badge { font-size: 10px; font-weight: 600; padding: 1px 6px; border-radius: 4px; flex-shrink: 0; }
 .tree-badge-dynamic { background: var(--phx-info-bg);    color: var(--phx-info); }
 .tree-badge-risk    { background: var(--phx-error-bg);   color: var(--phx-error); }
 .tree-badge-ghost   { background: var(--phx-warning-bg); color: var(--phx-warning); }
 .tree-stale-devices { border-top: 1px solid var(--phx-border); margin-block-start: 14px; padding-block-start: 12px; }
 .tree-stale-title {
-  color: var(--phx-text-2); text-transform: uppercase; letter-spacing: 0.08em;
-  margin: 0 6px 4px; font-size: 11px; font-weight: 700;
+  color: var(--phx-text-2);
+  margin: 0 6px 4px; font-size: 11px; font-weight: 600;
 }
 .tree-stale-note { color: var(--phx-text-2); margin: 0 6px 8px; font-size: 12px; }
 .tree-stale-device-row { background: var(--phx-surface-2); }
 .tree-empty { color: var(--phx-text-2); margin: 20px 6px; text-align: center; font-size: 13px; }
-.tree-hint-link { font-size: 11px; color: var(--phx-accent); cursor: pointer; background: none; border: none; padding: 0; text-decoration: underline; white-space: nowrap; }
-.tree-perm-error { font-size: 11px; font-weight: 700; color: var(--phx-error); white-space: nowrap; flex-shrink: 0; cursor: help; }
-.hint-modal-entity { font-family: var(--phx-mono, monospace); font-size: 12px; color: var(--phx-text-2); margin: 0 0 12px; }
-.hint-modal-error { color: var(--phx-error); font-size: 12px; margin: 8px 0 0; text-align: center; }
-.hint-modal-caution { font-size: 12px; color: var(--phx-text-2); margin: 6px 0 0; line-height: 1.4; }
-.hint-scope { display: flex; align-items: center; justify-content: center; gap: 10px; margin: 14px 0 6px; font-size: 13px; color: var(--phx-text-2); }
+/* The hint button: muted while the entity has no hint, accented once it has one. */
+.tree-hint-btn { display: inline-flex; align-items: center; gap: 4px; padding: 2px 6px; border: 1px solid transparent; border-radius: var(--phx-radius-xs); background: none; color: var(--phx-text-2); font-size: 12px; white-space: nowrap; cursor: pointer; }
+.tree-hint-btn:hover, .tree-hint-btn[aria-expanded="true"] { border-color: var(--phx-border); color: var(--phx-text); }
+.tree-hint-btn.has-hint { color: var(--phx-accent); }
+/* The hint editor opens under its entity's row, inside the tree. */
+.tree-hint-editor { display: flex; flex-direction: column; gap: 8px; margin: 4px 0 10px 24px; padding: 10px 12px; border: 1px solid var(--phx-border); border-radius: var(--phx-radius-sm); background: var(--phx-surface-2); }
+.tree-hint-editor-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; font-size: 13px; }
+.tree-hint-editor-head code { font-size: 12px; color: var(--phx-text-2); overflow-wrap: anywhere; }
+.tree-hint-editor-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.tree-hint-error { color: var(--phx-error); font-size: 12px; margin: 0; }
+.tree-perm-error { font-size: 11px; font-weight: 600; color: var(--phx-error); white-space: nowrap; flex-shrink: 0; cursor: help; }
+.hint-scope { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; font-size: 13px; color: var(--phx-text-2); }
 .hint-scope-active { color: var(--phx-text); font-weight: 600; }
-.hint-scope-note { font-size: 12px; color: var(--phx-text-2); margin: 0 0 4px; text-align: center; }
+.hint-scope-side { cursor: pointer; }
 
 /* ============================================================
    Loading spinner
@@ -1093,92 +1619,51 @@ select.input {
    ============================================================ */
 /* Wrap on narrow screens; a nowrap+hidden combo clipped the trailing
    controls entirely once the inputs hit their min-width. */
+/* Every window's filters sit in .phx-filters with one or more .filter-row children, so the
+   gap under the title bar and between rows is the same everywhere (user, 2026-10-29). */
 .filter-row { display: flex; gap: 8px; margin-bottom: 14px; flex-wrap: wrap; align-items: center; }
-.filter-row .input:not(.input-auto) { flex: 1 1 0; min-width: 80px; width: auto; }
+.filter-row input[type="search"] { flex: 1 1 180px; min-width: 0; }
+.filter-row .input:not(.input-auto):not(select):not([type="number"]) { flex: 1 1 0; min-width: 80px; width: auto; }
 .filter-row .input-auto { flex: 0 0 auto; }
 .filter-row-right { display: flex; gap: 8px; align-items: center; flex-shrink: 0; }
 /* Audit filters: Source input + its Refresh button, grouped as one flex item so
    they can be forced onto a shared row on mobile (see the 600px block)
    instead of Refresh wrapping onto its own row below every other filter. */
-.audit-source-row { display: flex; gap: 8px; flex: 1 1 0; min-width: 80px; }
-.audit-source-row .input { flex: 1 1 0; min-width: 0; }
+
 /* Placed after the base rule above (not in the earlier shared 600px block)
    so this equal-specificity flex-basis override actually wins the cascade
    tie on source order, the same bug already hit once this session. */
-@media (max-width: 600px) { .audit-source-row { flex-basis: 100%; } }
 
 /* ============================================================
    Section header
    ============================================================ */
 .section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
-.section-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--phx-text-2); }
+.section-title { font-size: 11px; font-weight: 600; color: var(--phx-text-2); }
 
 /* ============================================================
    Access key display (rotated modal)
    ============================================================ */
 .access-key-display {
-  font-family: "Roboto Mono", monospace; font-size: 13px;
+  font-family: var(--phx-mono); font-size: 13px;
   background: var(--phx-surface-2); border: 1.5px solid var(--phx-border);
   border-radius: var(--phx-radius-sm); padding: 14px; word-break: break-all;
   user-select: all; margin: 14px 0; line-height: 1.6;
 }
 
 /* ============================================================
-   Outcome coloring and badges
-   ============================================================ */
-.outcome-allowed       { color: var(--phx-success); font-weight: 600; }
-.outcome-denied        { color: var(--phx-error);   font-weight: 600; }
-.outcome-not_found     { color: var(--phx-text-2);  font-weight: 500; }
-.outcome-rate_limited  { color: var(--phx-warning); font-weight: 600; }
-.outcome-not_implemented { color: var(--phx-info);  font-weight: 500; }
-.outcome-invalid_request { color: var(--phx-text-2); font-weight: 500; }
-.outcome-pending_approval { color: var(--phx-warning); font-weight: 600; }
-
-.outcome-badge { display: inline-block; padding: 2px 9px; border-radius: 20px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; }
-.outcome-badge.outcome-allowed       { background: var(--phx-success-bg); }
-.outcome-badge.outcome-denied        { background: var(--phx-error-bg); }
-.outcome-badge.outcome-not_found     { background: var(--phx-grey-tint); }
-.outcome-badge.outcome-rate_limited  { background: var(--phx-warning-bg); }
-.outcome-badge.outcome-not_implemented { background: var(--phx-info-bg); }
-.outcome-badge.outcome-invalid_request { background: var(--phx-grey-tint); }
-.outcome-badge.outcome-pending_approval { background: var(--phx-warning-bg); }
-
-/* ============================================================
    Permission summary
    ============================================================ */
-.perm-summary { font-family: "Roboto Mono", monospace; font-size: 12px; }
+.perm-summary { font-family: var(--phx-mono); font-size: 12px; }
 .perm-summary-row { display: flex; align-items: center; justify-content: space-between; padding: 3px 0; border-bottom: 1px solid var(--phx-divider); }
 .perm-summary-row:last-child { border-bottom: none; }
-.perm-summary-table { display: block; width: 100%; border-collapse: collapse; font-size: 12px; font-family: "Roboto Mono", monospace; }
-.perm-summary-table thead,
-.perm-summary-table tbody { display: block; width: 100%; }
-.perm-summary-table tr { display: grid; grid-template-columns: 86px minmax(0, 3fr) minmax(0, 2fr) 80px; width: 100%; }
-.perm-summary-th { min-width: 0; cursor: pointer; user-select: none; color: var(--phx-text-2); white-space: nowrap; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; padding: 6px 8px; border-bottom: 2px solid var(--phx-border); text-align: left; }
-.perm-summary-th.active { color: var(--phx-accent); }
-.perm-summary-arrow { font-size: 9px; opacity: 0.35; }
-.perm-summary-arrow.active { opacity: 1; }
-.perm-summary-tr { border-bottom: 1px solid var(--phx-divider); }
-.perm-summary-td         { min-width: 0; padding: 5px 8px; white-space: nowrap; }
-.perm-summary-td-name    { min-width: 0; padding: 5px 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.perm-summary-td-id      { min-width: 0; padding: 5px 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--phx-text-2); }
-/* The clickable class lands on the inner <button> (see PermissionSummary.tsx),
-   not the <td>, so the pointer cursor must target the button directly; native
-   <button> elements do not get cursor:pointer for free. */
-.perm-summary-name-text.clickable,
-.perm-summary-td-id button.clickable { cursor: pointer; }
 .perm-summary-empty { color: var(--phx-text-2); font-size: 13px; margin: 0; }
 
-.perm-type-badge { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 600; white-space: nowrap; color: var(--phx-text-2); }
-.perm-type-badge::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
-.perm-type-domain { color: var(--phx-accent); }
-.perm-type-device { color: var(--phx-text-2); }
-.perm-type-entity { color: var(--phx-text-2); }
 
 /* ============================================================
    Permission simulator
    ============================================================ */
 .epe-card { height: 280px; overflow: hidden; }
-.sim-path { font-size: 13px; background: var(--phx-surface-2); border-radius: var(--phx-radius-sm); padding: 12px 14px; font-family: "Roboto Mono", monospace; margin-top: 10px; border: 1px solid var(--phx-border); }
+.sim-path { font-size: 13px; background: var(--phx-surface-2); border-radius: var(--phx-radius-sm); padding: 12px 14px; font-family: var(--phx-mono); margin-top: 10px; border: 1px solid var(--phx-border); }
 .sim-step { margin: 2px 0; }
 .sim-loading { font-size: 12px; color: var(--phx-text-2); margin-top: 6px; }
 .sim-resolution-level { color: var(--phx-text-2); }
@@ -1217,10 +1702,7 @@ select.input {
 /* ============================================================
    Audit detail modal rows
    ============================================================ */
-.detail-row { display: flex; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--phx-divider); }
-.detail-label { width: 90px; flex-shrink: 0; font-size: 12px; font-weight: 600; color: var(--phx-text-2); padding-top: 1px; }
-.detail-value { font-size: 13px; word-break: break-all; }
-.detail-value-mono { font-size: 13px; word-break: break-all; font-family: monospace; }
+
 .audit-payload-section { display: flex; flex-direction: column; gap: 4px; padding: 6px 0; border-bottom: 1px solid var(--phx-divider); }
 
 /* ============================================================
@@ -1228,11 +1710,10 @@ select.input {
    ============================================================ */
 .audit-section-title { margin-bottom: 12px; }
 .audit-empty { color: var(--phx-text-2); font-size: 13px; }
-.audit-cell-reqid    { font-family: monospace; font-size: 11px; color: var(--phx-text-2); }
-.audit-cell-method   { font-family: monospace; font-size: 12px; }
-.audit-cell-resource { font-family: monospace; font-size: 12px; max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.audit-cell-source   { font-family: monospace; font-size: 12px; }
-.audit-cell-source.audit-source-name { font-family: inherit; }
+.audit-cell-reqid    { font-family: var(--phx-mono); font-size: 11px; color: var(--phx-text-2); }
+
+.audit-cell-source   { font-family: var(--phx-mono); font-size: 12px; }
+.audit-cell-source .audit-source-name { font-family: inherit; }
 
 /* ============================================================
    Access key list
@@ -1240,7 +1721,18 @@ select.input {
 .access-key-list-actions { display: flex; gap: 8px; }
 .access-key-table-empty { text-align: center; color: var(--phx-text-2); padding: 24px; }
 .access-key-name { font-weight: 600; }
-.row-actions { display: flex; gap: 4px; }
+/* Only as wide as its buttons: a click beside them, even in the same cell, cancels a confirmation. */
+.row-actions { display: inline-flex; gap: 4px; vertical-align: middle; }
+/* A row's actions keep their names, and Confirm sits beside Cancel on the row's own line:
+   their column is sized for the pair in icons-and-text mode (user, 2026-10-30). */
+.phx-table td.phx-td-actions { overflow: visible; }
+/* Import lines up with its heading, and Import, Cancel and the switch share one height. */
+.phx-inline-panel .mesa-import { padding: 10px 12px 12px; }
+.mesa-import-actions { align-items: center; }
+/* The switch sits in the button row, so it drops the divider a settings list gives it. */
+.mesa-import-actions .mesa-import-replace { border: 0; padding: 0; gap: 10px; margin-inline-end: 4px; }
+.mesa-import-browse { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.mesa-import-filename { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; color: var(--phx-text-2); }
 
 /* Whole-row click for the access key and audit tables, kept accessible. The Name/
    Access key cell holds a real <button> (so the row is reachable by Tab and
@@ -1277,11 +1769,17 @@ select.input {
 /* ============================================================
    Access key create modal
    ============================================================ */
+/* Create Access Key, in place at the top of the Access Keys window. */
+/* Part of the window, like its other sections: no box of its own, a divider below (user, 2026-10-28). */
+.phx-inline-form { margin-bottom: 12px; padding: 0 0 12px; border-bottom: 1px solid var(--phx-divider); }
+.phx-inline-form-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.access-key-create-fields { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 10px 16px; }
+.access-key-create-fields > .field { margin: 0; }
+.access-key-create-name { flex: 0 1 280px; min-width: 180px; }
+.access-key-create-number { flex: 0 1 250px; min-width: 160px; }
 .access-key-create-expiry-row { display: flex; gap: 8px; }
-.access-key-create-expiry-value { width: 80px; }
-.access-key-create-rate-section { margin-top: 14px; }
-.access-key-create-rate-fields { display: flex; gap: 12px; flex-wrap: wrap; }
-.access-key-create-rate-field { margin: 0; flex: 1; }
+.access-key-create-pt { justify-content: flex-start; gap: 10px; margin-top: 10px; padding: 0; border-bottom: none; }
+.access-key-create-pt .toggle-label { flex: 0 1 auto; }
 
 /* ============================================================
    Access key detail - sticky layout
@@ -1326,7 +1824,7 @@ select.input {
 .access-key-card-icon { width: 28px; height: 28px; border-radius: 6px; flex-shrink: 0; }
 .access-key-card-name {
   font-size: 18px;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--phx-accent-hov);
   min-width: 0;
   overflow: hidden;
@@ -1348,6 +1846,7 @@ select.input {
 .access-key-name-input:focus { outline: none; border-color: var(--phx-accent); background: var(--phx-surface); }
 .access-key-name-input:disabled, .access-key-name-input[aria-disabled="true"] { opacity: 0.65; cursor: default; }
 .access-key-name-error { font-size: 11px; font-weight: 400; color: var(--phx-error); padding: 0 6px; }
+.access-key-rename-error { margin: 0; }
 
 /* Access key settings presets (workspace model) */
 .preset-list { display: flex; flex-direction: column; gap: 8px; }
@@ -1379,68 +1878,17 @@ select.input {
 .preset-create-row .input { flex: 1; }
 .preset-empty { font-size: 13px; color: var(--phx-text-2); margin: 0; }
 .preset-hint { font-size: 12px; color: var(--phx-text-2); }
-.preset-modal-section { margin-bottom: 12px; }
-.preset-modal-section p { margin: 0 0 6px; font-size: 13px; }
+.preset-state-modified { color: var(--phx-warning); }
+.preset-confirm-section p { margin: 0 0 4px; }
 .preset-diff-list {
   margin: 0;
   padding-left: 18px;
   font-size: 12.5px;
-  font-family: var(--phx-mono, monospace);
+  font-family: var(--phx-mono);
   color: var(--phx-text-2);
 }
 .preset-diff-list li { margin: 2px 0; }
-.modal-check {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 13px;
-  margin: 10px 0 4px;
-  cursor: pointer;
-}
-
-/* MESA profile suggestions (Suggested profiles card on the MESA tab) */
-.mesa-suggestions { margin-bottom: 16px; }
-.mesa-suggest-toolbar { display: flex; align-items: center; gap: 8px; }
-.mesa-suggest-toggle {
-  display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0;
-  background: none; border: none; cursor: pointer; padding: 4px 0;
-  font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em;
-  color: var(--phx-text-2); text-align: left;
-}
-.mesa-suggest-toggle:hover { color: var(--phx-text); }
-.mesa-suggest-body { margin-top: 12px; }
-.mesa-suggest-count { margin-left: 0; }
-.mesa-suggest-sub { font-size: 12.5px; color: var(--phx-text-2); margin: 0 0 12px; line-height: 1.5; }
-.mesa-suggest-empty { font-size: 13px; color: var(--phx-text-2); margin: 0; }
-.mesa-suggest-row { align-items: flex-start; margin-bottom: 8px; }
-.mesa-suggest-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
-.mesa-suggest-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.mesa-suggest-head code { font-size: 12.5px; }
-.mesa-suggest-badges { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.mesa-suggest-reason { font-size: 12.5px; color: var(--phx-text-2); line-height: 1.5; }
-.mesa-suggest-footer {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 12.5px;
-  color: var(--phx-text-2);
-  margin-top: 4px;
-}
-@media (max-width: 600px) {
-  /* Suggested profiles row: was a single flex row (text left, Apply/Review/
-     Dismiss right, .preset-row-actions never shrinks) so on a narrow screen
-     the fixed-width button group and the shrunk text sat on top of each
-     other. Stacked instead: id, then its badges, then the reason, then the
-     buttons on their own row, right-aligned. Scoped to .mesa-suggest-row so
-     the unrelated access-key-settings-presets rows (also .preset-row) are
-     untouched. Placed here, after the base rules above, because the base
-     .mesa-suggest-row/-head align-items rules are equal specificity and
-     would otherwise win the cascade tie by winning on source order (the
-     bug behind this not having taken effect the first time). */
-  .mesa-suggest-row { flex-direction: column; align-items: stretch; }
-  .mesa-suggest-head { flex-direction: column; align-items: flex-start; gap: 6px; }
-  .mesa-suggest-row .preset-row-actions { align-self: flex-end; margin-left: 0; }
-}
+/* MESA Suggested Profiles: the chosen suggestion's reason under the list, and the dismissed count. */
 .access-key-card-badges {
   display: flex;
   gap: 6px;
@@ -1465,10 +1913,9 @@ select.input {
 }
 .access-key-meta-label {
   font-size: 11px;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--phx-text-2);
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
+
   white-space: nowrap;
 }
 .access-key-meta-value { font-size: 13px; color: var(--phx-text); }
@@ -1499,27 +1946,17 @@ select.input {
 /* ============================================================
    Pass-through notice
    ============================================================ */
-.pass-through-convert-card { margin: 0; }
-.pass-through-convert-body { margin: 0 0 12px; }
-.pass-through-actions { display: flex; gap: 8px; }
 
 /* ============================================================
    Area picker
    ============================================================ */
-.area-picker-summary { font-size: 13px; color: var(--phx-text-2); margin: 0 0 12px; }
-.area-picker-progress { font-size: 13px; margin: 0; }
-.integration-selection-details { margin: 0 0 14px; color: var(--phx-text-2); font-size: 13px; }
-.integration-selection-details > span { display: block; margin-bottom: 4px; font-size: 12px; font-weight: 600; }
-.integration-selection-details > p { margin: 8px 0 12px; }
-.integration-entry-id { display: block; overflow-wrap: anywhere; user-select: text; color: var(--phx-text); font-family: var(--phx-mono, ui-monospace, monospace); font-size: 12px; }
-.integration-selection-details .banner { margin-bottom: 10px; }
 
 /* ============================================================
    Rate limit config
    ============================================================ */
-.rate-limit-row { display: flex; gap: 12px; }
-.rate-limit-row .field { flex: 1 1 0; margin: 0; }
-.rate-limit-disabled-text { margin: 8px 0 0; font-size: 12px; color: var(--phx-text-2); }
+/* The two limits are rows like the settings above them (user, 2026-10-31). */
+.rate-limit-row { display: flex; flex-direction: column; }
+.rate-limit-row .field { margin: 0; padding: 12px 0; }
 
 /* ============================================================
    Settings
@@ -1527,7 +1964,7 @@ select.input {
 .settings-divider { border: none; border-top: 1px solid var(--phx-divider); margin: 10px 0; }
 .settings-toggle-mt { margin-top: 8px; }
 .settings-info-list { display: flex; flex-direction: column; gap: 10px; font-size: 14px; }
-.settings-info-link { color: var(--phx-accent); }
+.settings-info-link { color: var(--phx-accent); text-decoration: underline; text-underline-offset: 2px; }
 .settings-info-note { font-size: 13px; color: var(--phx-text-2); }
 .settings-danger-header { color: var(--phx-error); }
 .settings-version { text-align: right; font-size: 11px; color: var(--phx-text-2); margin-top: 8px; opacity: 0.6; }
@@ -1556,8 +1993,6 @@ select.input {
 
 /* white-space: nowrap because a translated label is longer than "Reload" and
    the flex row was wrapping it onto two lines (live-reported in zh-Hans). */
-.reload-btn { background: none; border: 1px solid var(--phx-border); border-radius: var(--phx-radius-xs); cursor: pointer; padding: 4px 8px; font-size: 12px; color: var(--phx-text-2); transition: background 0.12s; white-space: nowrap; flex-shrink: 0; }
-.reload-btn:hover { background: var(--phx-surface-2); }
 
 /* ============================================================
    Persona Picker
@@ -1565,6 +2000,10 @@ select.input {
 .persona-picker { display: flex; flex-direction: column; gap: 12px; }
 .persona-helper { font-size: 12px; color: var(--phx-text-2); margin: 0 0 4px 0; }
 .persona-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 8px; }
+/* Names only, in icons-only mode: still large buttons, just shorter. */
+.persona-grid.is-compact { grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); }
+.persona-grid.is-compact .persona-card { justify-content: center; min-height: 44px; }
+.persona-grid.is-compact .persona-card-label { margin-bottom: 0; }
 .persona-card {
   text-align: left; padding: 10px 12px; border: 1px solid var(--phx-border);
   border-radius: var(--phx-radius-sm); background: var(--phx-surface);
@@ -1592,7 +2031,7 @@ select.input {
 .cap-tier-group { border: 1px solid var(--phx-border); border-radius: var(--phx-radius-sm); overflow: hidden; }
 .cap-tier-header {
   background: var(--phx-surface-2); padding: 6px 12px;
-  font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em;
+  font-size: 11px;
   font-weight: 600; color: var(--phx-text-2);
   border-bottom: 1px solid var(--phx-border);
 }
@@ -1604,7 +2043,8 @@ select.input {
 .cap-row:first-of-type { border-top: none; }
 .cap-row-label { flex: 1 1 auto; min-width: 0; }
 .cap-row-name { font-weight: 500; font-size: 13px; }
-.cap-row-badge { margin-left: 8px; vertical-align: middle; }
+.cap-row-notice { margin-inline-start: 8px; color: var(--phx-text-2); font-size: 12px; font-weight: 400; vertical-align: middle; }
+.cap-row-warning { margin-inline-start: 6px; vertical-align: -2px; color: var(--phx-warning); }
 .cap-row-desc { font-size: 11px; color: var(--phx-text-2); margin-top: 2px; line-height: 1.4; }
 .cap-row-modes { display: flex; gap: 4px; flex-shrink: 0; }
 .mode-radio {
@@ -1634,44 +2074,9 @@ select.input {
 .mode-radio-checked .mode-radio-dot { background: currentColor; }
 .mode-radio-label { line-height: 1; }
 
-/* ============================================================
-   Approvals View
-   ============================================================ */
-.approvals-view { display: flex; flex-direction: column; gap: 12px; }
-.approvals-toolbar {
-  display: flex; align-items: center; justify-content: space-between; gap: 12px;
-  flex-wrap: wrap; margin-bottom: 14px;
-}
-.approvals-tabs { display: flex; gap: 4px; }
-.approvals-toolbar > .diff-mode-toggle { margin: 0; }
-.approvals-tab {
-  background: none; border: none; padding: 8px 16px; cursor: pointer;
-  font-size: 13px; color: var(--phx-text-2); border-bottom: 2px solid transparent;
-  font-family: inherit;
-}
-.approvals-tab:hover { color: var(--phx-text); }
-.approvals-tab.active { color: var(--phx-text); border-bottom-color: var(--phx-accent); font-weight: 600; }
 .approvals-empty { padding: 32px; text-align: center; color: var(--phx-text-2); font-size: 13px; }
-.approvals-list { display: flex; flex-direction: column; border-top: 1px solid var(--phx-border); }
-.approvals-list > :nth-child(even), .approval-history-row:nth-child(even) { background: var(--phx-surface-2); }
-.approvals-list > :not(:last-child) { border-bottom: 1px solid var(--phx-divider); }
-.approvals-filters input[type="search"] { min-width: 180px; }
 
-/* Batch approve: the tick column plus the select-all / run bar above the list. */
-/* "N others are waiting" inside the detail modal, shown only on the notification
-   deep-link path. Wraps rather than shrinking the button, since the sentence
-   grows with the count and translations run longer than the English. */
-.approval-others-banner {
-  display: flex; align-items: center; justify-content: space-between;
-  gap: 12px; flex-wrap: wrap;
-}
-.approvals-batch-bar {
-  display: flex; align-items: center; justify-content: space-between; gap: 12px;
-  padding: 8px 12px; margin-bottom: 8px;
-  border: 1px solid var(--phx-border); border-radius: var(--phx-radius-sm);
-  background: var(--phx-surface-2);
-}
-.approvals-batch-all { display: flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer; }
+/* Batch approval: what one run did, above the list. */
 .approvals-batch-result {
   display: flex; align-items: center; justify-content: space-between; gap: 12px;
   padding: 10px 12px; margin-bottom: 8px; font-size: 13px;
@@ -1680,218 +2085,52 @@ select.input {
 .approvals-batch-result.is-ok { border-color: var(--phx-green, var(--phx-accent)); }
 .approvals-batch-result.is-error { border-color: var(--phx-red, var(--phx-border)); }
 .approvals-batch-result-text { display: flex; flex-direction: column; gap: 2px; }
-/* The checkbox sits OUTSIDE the card button (a checkbox inside a <button> is
-   invalid and its click would also open the detail modal), so the row is the
-   flex parent and the card takes the remaining width. */
-.approval-card-row { display: flex; align-items: flex-start; gap: 10px; padding-left: 12px; }
-.approval-card-check { margin-top: 14px; flex: 0 0 auto; cursor: pointer; }
-.approval-card-check:disabled { cursor: default; opacity: 0.4; }
-.approval-card-row .approval-card { flex: 1 1 auto; min-width: 0; }
+
 @media (max-width: 600px) {
-  .approvals-batch-bar { flex-direction: column; align-items: stretch; }
-  .approvals-toolbar { align-items: flex-start; gap: 10px; }
-  .approvals-toolbar > .diff-mode-toggle { align-self: flex-start; margin: 0; }
-  .approvals-filters.filter-row input[type="search"] { min-width: 0; }
-  .approvals-filters-history.filter-row input[type="search"] { flex: 1 1 100%; }
-  .approvals-filters .input-auto { flex: 1; }
-  /* The normal pending review has exactly three actions. Keep those together
-     as one touch row and use the established short-label span for Approve.
-     Card previews can add a fourth error-rejection action, so that variant
-     deliberately retains the generic wrapping behavior. */
   .modal-wide { padding: 20px; }
-  .approval-modal-actions-compact {
-    display: grid;
-    grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr) minmax(0, 0.85fr);
-    gap: 4px;
-    width: 100%;
-  }
-  .approval-modal-actions-compact .btn { min-width: 0; width: 100%; padding-inline: 8px; overflow: hidden; }
-  .approval-modal-actions-compact .approval-action-label {
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  /* A desktop card puts title and status metadata on one line. The timestamp is
-     intentionally non-shrinking there, so on a phone it collides with a long
-     tool name. Give each group its own row and let both wrap within the card. */
-  .approval-card-header { align-items: stretch; flex-direction: column; gap: 6px; }
-  .approval-card-title { width: 100%; flex-wrap: wrap; row-gap: 2px; }
-  .approval-card-tool { min-width: 0; overflow-wrap: anywhere; }
-  .approval-card-meta { width: 100%; justify-content: space-between; flex-wrap: wrap; row-gap: 4px; }
-  .approval-card-time { margin-left: auto; text-align: right; }
 }
 
-.approval-card {
-  text-align: left; padding: 10px 12px; border: none;
-  border-radius: 0; background: none;
-  cursor: pointer; transition: background 0.12s;
-  font-family: inherit; color: inherit; width: 100%;
-}
-.approval-card:hover { background: var(--phx-hover); }
-.approval-card-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.approval-card-title { display: flex; gap: 8px; align-items: baseline; min-width: 0; }
-.approval-card-access-key { font-weight: 600; font-size: 13px; }
-.approval-card-tool { font-family: monospace; font-size: 12px; color: var(--phx-text-2); }
-.approval-card-meta { display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--phx-text-2); flex-shrink: 0; }
-.approval-card-summary { font-size: 13px; color: var(--phx-text); margin-top: 6px; }
-.approval-card-reason { font-size: 11px; color: var(--phx-text-2); margin-top: 4px; font-style: italic; }
-.approval-card-time { font-size: 11px; }
-
-/* Compact history rows (resolved approvals are read-only records) */
-.approval-history { border-top: 1px solid var(--phx-border); }
-.approval-history-row {
-  display: grid; grid-template-columns: 190px 250px 150px minmax(0, 1fr) max-content;
-  align-items: center; gap: 10px; width: 100%;
-  padding: 8px 12px; background: none; border: none;
-  border-bottom: 1px solid var(--phx-border); cursor: pointer; text-align: left;
-  font-size: 13px; color: var(--phx-text);
-}
-.approval-history-row:last-child { border-bottom: none; }
-.approval-history-row:hover { background: var(--phx-hover); }
-.approval-history-row > .badge { justify-self: start; }
-.approval-history-tool { font-size: 12px; color: var(--phx-text-2); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.approval-history-access-key { font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.approval-history-note { color: var(--phx-text-2); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.approval-history-time { font-size: 11px; color: var(--phx-text-2); white-space: nowrap; }
 .approval-history-more { display: flex; justify-content: center; margin-top: 10px; }
-@media (max-width: 760px) {
-  .approval-history-row { grid-template-columns: 180px minmax(0, 1fr) 140px minmax(0, 1.4fr); }
-  .approval-history-time { display: none; }
-}
-@media (max-width: 600px) {
-  .approval-history-row { grid-template-columns: max-content minmax(0, 1fr) max-content; }
-  .approval-history-access-key, .approval-history-tool { display: none; }
-}
 
 .approval-detail-meta {
   display: grid; grid-template-columns: max-content 1fr; gap: 4px 12px;
   margin: 12px 0; font-size: 12px;
 }
-.approval-detail-tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--phx-border); margin-top: 12px; }
+
 .approval-detail-tab {
   background: none; border: none; padding: 6px 12px; cursor: pointer;
   font-size: 13px; color: var(--phx-text-2); border-bottom: 2px solid transparent;
   font-family: inherit;
 }
 .approval-detail-tab.active { color: var(--phx-text); border-bottom-color: var(--phx-accent); font-weight: 600; }
-.approval-detail-body { padding: 12px 0; min-height: 120px; max-height: 50vh; overflow: auto; }
-.approval-detail-viewbar { display: flex; justify-content: flex-end; margin: -8px -8px 4px 0; }
-
-/* Friendly approval Summary. The border-only nodes read as one decision flow,
-   not a stack of dashboard cards, while the connector preserves sequence. */
-.approval-summary-timeline { display: flex; flex-direction: column; }
-.approval-summary-node {
-  border: 1px solid var(--phx-border); border-radius: var(--phx-radius-sm);
-  background: var(--phx-surface); padding: 18px 20px;
-}
-.approval-summary-proposal { background: var(--phx-surface-2); }
-.approval-summary-title { margin: 0 0 8px; line-height: 1.3; text-wrap: balance; }
-.approval-summary-body { margin: 0; color: var(--phx-text-2); font-size: 14px; line-height: 1.55; overflow-wrap: anywhere; }
-.approval-summary-connector { width: 2px; height: 24px; margin-inline: auto; background: var(--phx-border); }
-.approval-summary-command { display: flex; flex-direction: column; gap: 14px; }
-.approval-summary-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
-.approval-summary-actions .btn-text:first-child { margin-right: auto; }
-.approval-summary-status { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.approval-summary-status.is-approved { background: var(--phx-success-bg); }
-.approval-summary-status.is-failed,
-.approval-summary-status.is-rejected { background: var(--phx-error-bg); }
-.approval-summary-status-text { display: flex; align-items: center; gap: 10px; color: var(--phx-text-2); font-size: 12px; flex-wrap: wrap; }
-.approval-summary-result { padding-block: 16px; }
-.approval-summary-close { margin-top: 12px; }
-.approval-summary-timeline > .approval-others-banner { margin: 12px 0 0; }
-.approval-summary-command .approval-reject-row { margin: 0; }
-@media (max-width: 520px) {
-  .approval-summary-node { padding: 16px; }
-  .approval-summary-actions { align-items: stretch; flex-direction: column; }
-  .approval-summary-actions .btn { width: 100%; }
-  .approval-summary-actions .btn-text:first-child { margin-right: 0; }
-  .approval-summary-status { align-items: flex-start; flex-direction: column; }
-  .approval-summary-status .btn { align-self: flex-end; }
-}
 
 /* Raw-text line diff (configuration.yaml / scoped file version snapshots). */
 .raw-diff { white-space: pre; }
 .raw-diff .diff-line { display: block; padding: 0 4px; min-height: 1.4em; }
-.raw-diff .diff-remove { background: rgba(229, 57, 53, 0.18); }
-.raw-diff .diff-add { background: rgba(67, 160, 71, 0.20); }
+.raw-diff .diff-remove { background: var(--phx-error-bg); }
+.raw-diff .diff-add { background: var(--phx-success-bg); }
 .approval-diff-label { font-size: 12px; font-weight: 600; color: var(--phx-text-2); }
 
-/* Configuration changes (version history) tab */
-.changes-toolbar input[type="search"] { min-width: 180px; }
-.changes-table { table-layout: fixed; font-size: 13px; }
-.changes-table th:first-child { width: 108px; }
-.changes-table .changes-col-type { width: 180px; }
-.changes-table .changes-col-who { width: 130px; }
-.changes-table .changes-col-when { width: 150px; }
-.changes-table tbody tr:nth-child(even) { background: var(--phx-surface-2); }
-.changes-table tbody tr.clickable:hover { background: var(--phx-hover); }
-.changes-name { font-weight: 600; overflow-wrap: anywhere; }
-/* One-line what-changed description under the resource name in the list, and
-   inline in the detail head. */
-.changes-summary { display: block; font-size: 12px; font-weight: 400; color: var(--phx-text-2); overflow-wrap: anywhere; }
-.change-detail-summary { font-size: 12px; color: var(--phx-text-2); }
-.changes-col-type { overflow-wrap: anywhere; }
-.changes-col-who { color: var(--phx-text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.changes-col-when { font-size: 12px; color: var(--phx-text-2); }
-@media (max-width: 860px) and (min-width: 641px) {
-  .changes-col-who { display: none; }
-  .changes-table .changes-col-type { width: 150px; }
-}
-@media (max-width: 640px) {
-  .changes-col-type, .changes-col-who { display: none; }
-  .changes-table .changes-col-when { width: 120px; }
-  .changes-table th, .changes-table td { padding: 10px 8px; }
-  .changes-table th:first-child { width: 90px; }
-  .changes-toolbar.filter-row input[type="search"] { flex: 1 1 100%; min-width: 0; }
-  .changes-toolbar .input.input-auto { flex: 1 1 30%; min-width: 0; }
-}
-@media (max-width: 480px) {
-  .changes-col-when { display: none; }
-}
-
-.change-detail-bar { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
-.change-restore-note code { font-size: 12px; }
-.change-detail-head {
-  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
-  padding-bottom: 12px; margin-bottom: 14px; border-bottom: 1px solid var(--phx-border);
-}
-.change-detail-name { font-size: 15px; }
-.change-detail-type { font-size: 12px; color: var(--phx-text-2); }
-.change-detail-when, .change-detail-by { font-size: 12px; color: var(--phx-text-2); }
-.change-detail-by { margin-left: auto; }
-
-.change-detail-body { display: grid; grid-template-columns: 220px 1fr; gap: 16px; align-items: start; }
-.change-timeline { display: flex; flex-direction: column; gap: 2px; }
-.change-timeline-row {
-  display: grid; grid-template-columns: 64px 1fr; align-items: center; gap: 8px; width: 100%;
-  padding: 7px 10px; background: none; border: 1px solid transparent;
-  border-radius: var(--phx-radius-xs); cursor: pointer; text-align: left;
-  font-size: 12px; color: var(--phx-text); font-family: inherit;
-}
-.change-timeline-row:hover { background: var(--phx-surface-2); }
-.change-timeline-row.active { background: var(--phx-surface-2); border-color: var(--phx-border); cursor: default; }
-.change-timeline-row .badge { justify-self: start; }
-.change-timeline-when { color: var(--phx-text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* Comparison: the saved Before and After fill the window, which scrolls as one. */
+.change-detail-body { min-width: 0; }
 
 .change-diff-wrap { min-width: 0; }
-.change-diff-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
-/* flex: 1 makes the hint absorb the free space, so every trailing control
-   (Diff|Preview switch, layout toggle) clusters together at the right edge
-   instead of space-between spreading them across the row. */
-.change-diff-hint { font-size: 12px; color: var(--phx-text-2); min-width: 0; flex: 1 1 auto; }
-.change-restore-actions { display: flex; gap: 8px; margin-top: 10px; }
+/* The view controls sit together on the left, with no hint beside them (user, 2026-10-27); Comparison puts
+   Restore at the right end. */
+.change-diff-toolbar { display: flex; align-items: center; justify-content: flex-start; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
+.change-diff-toolbar-end { margin-left: auto; display: inline-flex; }
+
 .yaml-diff-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; min-width: 0; }
 .yaml-diff-cols.stacked { grid-template-columns: 1fr; }
 .yaml-pane-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; min-height: 28px; }
 .yaml-diff-col { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .yaml-pre {
   background: var(--phx-surface-2); padding: 10px 12px; border-radius: var(--phx-radius-xs);
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; line-height: 1.45;
+  font-family: var(--phx-mono); font-size: 12px; line-height: 1.45;
   overflow: auto; white-space: pre; margin: 0; max-height: 60vh; border: 1px solid var(--phx-border);
 }
 .yaml-pre-empty { color: var(--phx-text-2); font-style: italic; }
-/* Changes > Review ONLY, never the approval modal (which owns its own scroll
+/* Changes > Review ONLY, never a dialog (which owns its own scroll
    container and would grow past the viewport). Both panes give up their own
    max-height so the PAGE is the single scroller: with each pane scrolling
    internally, comparing side-by-side means dragging two boxes into alignment by
@@ -1968,15 +2207,8 @@ select.input {
    how a pane renders, which a narrow viewport does not settle for you. */
 .diff-code-toggle[aria-pressed="true"] { color: var(--phx-accent); background: var(--phx-surface-2); }
 @media (max-width: 800px) {
-  .change-detail-body { grid-template-columns: 1fr; }
-  .change-timeline { flex-direction: row; flex-wrap: wrap; }
   .yaml-diff-cols { grid-template-columns: 1fr; }
-  /* Pending approvals stack Before and After on mobile. Let both panes and the
-     detail tab grow to their full content height so the review modal is the
-     only vertical scroller, matching the already-expanded History review. */
-  .approval-detail-body-pending { max-height: none; overflow: visible; }
-  .approval-detail-body-pending .yaml-pre { max-height: none; }
-  .approval-detail-body-pending .yaml-editor { --code-mirror-max-height: none; }
+
   /* Below this width .yaml-diff-cols is always forced to one column above,
      so the side-by-side/stacked toggle has nothing left to switch. */
   .diff-layout-toggle { display: none; }
@@ -1990,12 +2222,13 @@ select.input {
 }
 .diff-mode-btn + .diff-mode-btn { border-left: 1px solid var(--phx-border); }
 .diff-mode-btn.active { color: var(--phx-accent); background: var(--phx-accent-lt); cursor: default; }
+.diff-mode-btn.has-icon { display: inline-flex; align-items: center; gap: 4px; }
+.diff-mode-btn.has-icon > span { font-size: 11px; }
 .diff-mode-btn:disabled { opacity: 0.45; cursor: default; }
 .diff-mode-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
 .dash-preview { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
 .dash-preview-tabs { display: flex; gap: 4px; flex-wrap: wrap; border-bottom: 1px solid var(--phx-border); }
 .dash-preview-note { font-size: 12px; color: var(--phx-text-2); font-style: italic; padding: 12px; margin: 0; }
-.dash-preview-disclaimer { font-size: 11px; color: var(--phx-text-2); }
 .dash-preview-scroll {
   overflow: auto; max-height: 45vh; padding: 10px;
   border: 1px solid var(--phx-border); border-radius: var(--phx-radius-xs); background: var(--phx-surface-2);
@@ -2003,11 +2236,16 @@ select.input {
 /* Backstop to the inert property set on this wrapper; scrolling still works
    because hit-testing falls through to the .dash-preview-scroll parent. */
 .dash-preview-cards { pointer-events: none; }
+/* A previewed dashboard sits on a page of its own colour inside a clear frame, so its edges show. */
+.dash-preview .dash-preview-scroll { background: var(--phx-bg); border-color: var(--phx-line-strong); }
+/* In Comparison and Review the whole dashboard shows at its full height and the window scrolls, not a box inside it. */
+.change-comparison .dash-preview-scroll,
+.phx-review-change .dash-preview-scroll { max-height: none; overflow: visible; }
 .dash-preview-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px; align-items: start; }
 .dash-preview-section-title { font-size: 12px; font-weight: 600; color: var(--phx-text-2); margin: 12px 0 6px; }
 .dash-preview-cards > .dash-preview-section-title:first-child { margin-top: 0; }
 .dash-preview-grid + .dash-preview-grid { margin-top: 12px; }
-.dash-preview-card-error {
+.dash-preview-card-error, .dash-preview-placeholder {
   border: 1px dashed var(--phx-border); border-radius: var(--phx-radius-xs);
   padding: 10px; font-size: 12px; color: var(--phx-text-2); font-style: italic;
 }
@@ -2018,52 +2256,80 @@ select.input {
   border: 1px solid var(--phx-error); border-radius: var(--phx-radius-xs);
   background: var(--phx-error-bg);
 }
-.dash-preview-error-head { font-size: 12px; color: var(--phx-text); }
-.dash-preview-error-item { display: flex; flex-direction: column; gap: 4px; }
-.dash-preview-error-meta { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.dash-preview-error-meta code { font-size: 12px; color: var(--phx-text-2); }
-.dash-preview-error-msg {
-  margin: 0; padding: 8px 10px; user-select: text;
-  background: var(--phx-surface); border: 1px solid var(--phx-border); border-radius: var(--phx-radius-xs);
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; line-height: 1.45;
-  white-space: pre-wrap; word-break: break-word;
-  /* Explicit: the wrapper pins inherited color to HA's --primary-text-color
-     for the CARD content; this panel is Phoenix MCP chrome on a Phoenix MCP background, so
-     inheriting that (light text from a dark dashboard theme, on Phoenix MCP light's
-     white surface) was near-illegible. Every Phoenix-chrome element inside the
-     preview must set its own color for this reason. */
-  color: var(--phx-text);
+.dash-preview-error-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+.dash-preview-error-head { margin: 0; font-size: 12px; color: var(--phx-text); }
+/* One list the operator can select or copy whole. Explicit colours: the wrapper pins inherited
+   color to HA's --primary-text-color for the CARD content; this panel is Phoenix MCP chrome on a
+   Phoenix MCP background, so inheriting that (light text from a dark dashboard theme, on Phoenix
+   MCP light's white surface) was near-illegible. Every Phoenix-chrome element inside the preview
+   must set its own color for this reason. */
+.dash-preview-error-list {
+  margin: 0; padding-left: 18px; user-select: text; color: var(--phx-text);
+  font-size: 12px; line-height: 1.5; overflow-wrap: anywhere;
 }
+.dash-preview-error-list code { font-size: 12px; color: var(--phx-text-2); }
+.dash-preview-error-msg { white-space: pre-wrap; }
 /* Safe: the panel renders in its own shadow root, so this cannot leak into HA.
    Cards pick up HA's active theme (HA's CSS custom properties inherit into the
    shadow root from the page), which may differ from a forced Phoenix MCP panel theme. */
-hui-card { display: block; min-width: 0; }
+hui-card, .dash-preview-card-slot { display: block; min-width: 0; }
 @media (max-width: 800px) { .dash-preview-grid { grid-template-columns: 1fr; } }
 
 .approval-summary-line { margin: 4px 0 8px 0; font-size: 13px; }
 .approval-reject-row { display: flex; flex-direction: column; gap: 4px; margin-top: 12px; }
 .approval-reason-label { font-size: 11px; color: var(--phx-text-2); }
 .approval-reason-input {
-  padding: 6px 10px; border: 1px solid var(--phx-border);
+  padding: 6px 10px; border: 1px solid var(--phx-field-border);
   border-radius: var(--phx-radius-xs); font-size: 13px; font-family: inherit;
   background: var(--phx-surface); color: var(--phx-text);
 }
 
+/* Home Assistant is away: one notice over the panel while it comes back. */
+/* Over the panel only, not Home Assistant's sidebar, which stays usable during the wait (user, 2026-11-01). */
+.phx-offline {
+  position: absolute; inset: 0; z-index: var(--phx-z-modal);
+  display: flex; align-items: center; justify-content: center;
+  background: color-mix(in srgb, var(--phx-bg) 72%, transparent);
+}
+.phx-offline-box {
+  display: flex; flex-direction: column; align-items: center; gap: 10px;
+  max-width: 360px; padding: 24px 28px; text-align: center;
+  background: var(--phx-surface); border: 1px solid var(--phx-border);
+  border-radius: var(--phx-radius); box-shadow: var(--phx-shadow-lg);
+}
+.phx-offline-spinner {
+  width: 24px; height: 24px; border-radius: 50%;
+  border: 2px solid var(--phx-border); border-top-color: var(--phx-text-2);
+  animation: phx-offline-spin 0.9s linear infinite;
+}
+@keyframes phx-offline-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .phx-offline-spinner { animation-duration: 2.4s; } }
+.phx-offline-title { margin: 0; font-size: 16px; font-weight: 600; color: var(--phx-text); }
+/* Agent Chat floats over every page, so it says so in its own window. */
+.agentcli-offline { display: flex; align-items: center; gap: 8px; padding: 8px 10px; font-size: 12px;
+  color: var(--phx-text-2); border-top: 1px solid var(--phx-border); }
+
+.phx-offline-body { margin: 0; font-size: 13px; color: var(--phx-text-2); }
+
 /* Onboarding wizard */
 .wizard-hero { text-align: center; padding: 40px 24px; }
-.wizard-hero-title { font-size: 22px; font-weight: 700; color: var(--phx-text); margin-bottom: 10px; }
+.wizard-hero-title { font-size: 22px; font-weight: 600; color: var(--phx-text); margin-bottom: 10px; }
 .wizard-hero-sub { font-size: 14px; color: var(--phx-text-2); max-width: 520px; margin: 0 auto 20px; }
 .wizard-hero-actions { display: flex; justify-content: center; }
 
-/* Center the wizard both axes; margin:auto is scroll-safe for tall steps. */
+/* Center the wizard both axes; margin:auto is scroll-safe for tall steps.
+   With the Guide pinned beside it, room on the right is kept for the Guide, so
+   the pair is centred together: GUIDE_BESIDE_WIDTH plus its gap and margin, less
+   the 40px the card leaves empty inside its column. */
 .wizard-root { display: flex; min-height: 100%; }
 .wizard-center { margin: auto; width: 100%; max-width: 760px; }
+.wizard-root.is-guided { padding-right: 384px; }
 
 .wizard-stepper { display: flex; gap: 6px; list-style: none; padding: 0; margin: 0 0 16px 0; flex-wrap: wrap; justify-content: center; }
 .wizard-step { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--phx-text-2); opacity: 0.7; }
 .wizard-step-num {
   display: inline-flex; align-items: center; justify-content: center;
-  width: 20px; height: 20px; border-radius: 50%; font-size: 11px; font-weight: 700;
+  width: 20px; height: 20px; border-radius: 50%; font-size: 11px; font-weight: 600;
   background: var(--phx-border); color: var(--phx-text-2);
 }
 .wizard-step + .wizard-step::before { content: ""; }
@@ -2073,14 +2339,14 @@ hui-card { display: block; min-width: 0; }
 .wizard-step-done .wizard-step-num { background: var(--phx-success); color: var(--phx-accent-fg); }
 
 .wizard-body { max-width: 720px; }
-.wizard-title { font-size: 18px; font-weight: 700; margin: 0 0 6px 0; color: var(--phx-text); }
+.wizard-title { font-size: 18px; font-weight: 600; margin: 0 0 6px 0; color: var(--phx-text); }
 .wizard-sub { font-size: 13px; color: var(--phx-text-2); margin: 0 0 16px 0; }
 .wizard-hint { font-size: 12px; color: var(--phx-text-2); margin-top: 4px; }
+.wizard-hint-warning { color: var(--phx-warning); }
 .wizard-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 20px; flex-wrap: wrap; }
 .wizard-connect-status { margin-top: 14px; font-size: 13px; color: var(--phx-text-2); }
-.wizard-connect-status-ok { color: var(--phx-accent); font-weight: 700; }
+.wizard-connect-status-ok { color: var(--phx-success); font-weight: 600; }
 /* Stable width so the label flip Copy -> Copied! never reflows the button. */
-.wizard-copy-btn { min-width: 78px; }
 
 .connect-field { display: flex; align-items: center; gap: 8px; margin: 8px 0; flex-wrap: nowrap; }
 .connect-field-label { font-size: 12px; font-weight: 600; color: var(--phx-text-2); min-width: 90px; }
@@ -2107,6 +2373,8 @@ hui-card { display: block; min-width: 0; }
   background: var(--phx-surface); cursor: pointer;
 }
 .wizard-choice:hover { background: var(--phx-surface-2); border-color: var(--phx-accent); }
+.wizard-choice.is-chosen { border-color: var(--phx-accent); box-shadow: inset 0 0 0 1px var(--phx-accent); }
+.wizard-choice > svg { margin-bottom: 8px; color: var(--phx-text-2); }
 .wizard-choice strong { display: block; margin-bottom: 4px; }
 .wizard-choice small { color: var(--phx-text-2); line-height: 1.4; }
 @media (max-width: 600px) {
@@ -2118,19 +2386,19 @@ hui-card { display: block; min-width: 0; }
 .connect-skill-section { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--phx-border); }
 
 .command-block { margin: 12px 0; }
-.command-block-title { font-size: 12px; font-weight: 700; color: var(--phx-text); margin-bottom: 2px; }
+.command-block-title { font-size: 12px; font-weight: 600; color: var(--phx-text); margin-bottom: 2px; }
 .command-block .wizard-hint { display: block; margin-bottom: 6px; }
 /* Every value (URL, access key, command, JSON, header field) renders as a full-width
-   box with the Copy button pinned inside at the top-right. */
+   box with its Copy button beside the value, never over it (user, 2026-10-28). */
 .command-field { margin: 8px 0; }
 .command-field-label { font-size: 12px; font-weight: 600; color: var(--phx-text-2); margin-bottom: 3px; }
-.command-block-codewrap { position: relative; border: 1px solid var(--phx-border); border-radius: var(--phx-radius-sm); overflow: hidden; background: var(--phx-surface-2, var(--phx-surface)); }
-.command-block-code { margin: 0; padding: 10px 96px 10px 10px; font-size: 12px; line-height: 1.5; overflow-x: auto; white-space: pre; color: var(--phx-text); background: transparent; }
-.command-block-input { width: 100%; box-sizing: border-box; border: none; outline: none; background: transparent; color: var(--phx-text); font-family: var(--phx-mono, monospace); font-size: 12px; padding: 10px 96px 10px 10px; }
-.command-copy { position: absolute; top: 7px; right: 7px; z-index: 1; }
+.command-block-codewrap { display: flex; align-items: flex-start; gap: 8px; padding-right: 6px; border: 1px solid var(--phx-border); border-radius: var(--phx-radius-sm); overflow: hidden; background: var(--phx-surface-2, var(--phx-surface)); }
+.command-block-code { flex: 1 1 auto; min-width: 0; margin: 0; padding: 10px; font-size: 12px; line-height: 1.5; overflow-x: auto; white-space: pre; color: var(--phx-text); background: transparent; }
+.command-block-input { flex: 1 1 auto; min-width: 0; box-sizing: border-box; border: none; outline: none; background: transparent; color: var(--phx-text); font-family: var(--phx-mono); font-size: 12px; padding: 10px; }
+.command-copy { flex: none; margin-top: 5px; }
 
 .connect-details { margin: 12px 0; }
-.connect-details > summary { cursor: pointer; font-weight: 700; font-size: 13px; color: var(--phx-accent); padding: 6px 0; }
+.connect-details > summary { cursor: pointer; font-weight: 600; font-size: 13px; color: var(--phx-text); padding: 6px 0; }
 
 /* MESA profile editor + previews */
 .mesa-editor-body { display: flex; flex-direction: column; gap: 2px; max-height: 60vh; overflow-y: auto; }
@@ -2138,41 +2406,13 @@ hui-card { display: block; min-width: 0; }
 .mesa-explain summary { cursor: pointer; color: var(--phx-text-2); font-weight: 600; }
 .mesa-preview-block { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--phx-border); }
 .mesa-preview-warnings { margin: 6px 0 0 0; padding-left: 18px; font-size: 12px; color: var(--phx-text-2); }
-.mesa-scope-note { font-size: 12px; color: var(--phx-text-2); margin: 0 0 10px 0; }
 
 /* MESA profile editor: tidy two-column form, fuzzy key search, inline help */
 .mesa-editor-body .field { margin-bottom: 14px; }
-.mesa-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 16px; }
+.mesa-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 0 16px; }
 .mesa-field-label {
   display: flex; align-items: center; gap: 6px;
   font-size: 12px; font-weight: 600; color: var(--phx-text-2);
-}
-.help-tip {
-  display: inline-flex; align-items: center; justify-content: center;
-  width: 14px; height: 14px; border-radius: 50%; flex: 0 0 auto;
-  background: var(--phx-border); color: var(--phx-text-2);
-  font-size: 10px; font-weight: 700; line-height: 1; cursor: help;
-  text-transform: none; letter-spacing: 0;
-}
-.help-tip:hover, .help-tip:focus-visible { background: var(--phx-accent); color: #fff; outline: none; }
-/* Same muted treatment as the inline-help .help-tip above, on purpose: these
-   are help affordances, not warnings, and a saturated yellow badge repeated on
-   every card read as a row of alerts. Theme tokens rather than fixed hexes, so
-   it follows dark mode instead of staying bright on a dark surface. It keeps a
-   slightly larger box than .help-tip because it is a real link, so it needs a
-   comfortable hit target, and it takes --phx-text rather than the muted
-   --phx-text-2 for the glyph: the circle reads the same, but --phx-text-2 on
-   this background is 4.4:1, just under the contrast floor for text. */
-.docs-help-link {
-  display: inline-flex; align-items: center; justify-content: center;
-  width: 16px; height: 16px; margin-left: 6px; border-radius: 50%; flex: 0 0 auto;
-  background: var(--phx-border); color: var(--phx-text);
-  font-size: 11px; font-weight: 700; line-height: 1;
-  text-decoration: none; cursor: pointer;
-}
-.docs-help-link:hover, .docs-help-link:focus-visible {
-  background: var(--phx-accent); color: #fff;
-  outline: 2px solid var(--phx-accent); outline-offset: 1px;
 }
 .combo { position: relative; }
 .combo-list {
@@ -2197,7 +2437,7 @@ hui-card { display: block; min-width: 0; }
   position: relative;
   display: flex; flex-wrap: wrap; gap: 6px; align-items: center;
   padding: 6px 8px; min-height: 40px; cursor: text;
-  border: 1.5px solid var(--phx-border); border-radius: var(--phx-radius-sm);
+  border: 1px solid var(--phx-field-border); border-radius: var(--phx-radius-sm);
   background: var(--phx-surface);
 }
 .tag-input:focus-within { border-color: var(--phx-accent); box-shadow: 0 0 0 3px var(--phx-accent-lt); }
@@ -2232,10 +2472,9 @@ hui-card { display: block; min-width: 0; }
 .tag-suggest-ns::after { content: "\203a"; margin-left: 6px; opacity: 0.6; }
 .tag-suggest-qual { color: var(--phx-text); font-weight: 600; }
 .tag-input-note { font-size: 12px; color: var(--phx-text-2); margin-top: 5px; }
-.mesa-taglabel-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .link-btn {
   border: none; background: none; cursor: pointer; padding: 0;
-  color: var(--phx-accent); font-size: 12px; font-weight: 600; font-family: inherit;
+  color: var(--phx-accent); font-size: 12px; font-weight: 600; font-family: inherit; text-decoration: underline; text-underline-offset: 2px;
 }
 .link-btn:hover { text-decoration: underline; }
 .tag-reco { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0 0 8px 0; }
@@ -2245,19 +2484,11 @@ hui-card { display: block; min-width: 0; }
   display: inline-flex; align-items: center; justify-content: center;
   min-width: 18px; height: 18px; padding: 0 5px; flex: 0 0 auto;
   border: 1px solid var(--phx-border); border-radius: 9px; background: var(--phx-surface);
-  color: var(--phx-text-2); font-size: 10px; font-weight: 700; line-height: 1; cursor: pointer;
-  text-transform: uppercase; letter-spacing: 0.04em;
+  color: var(--phx-text-2); font-size: 10px; font-weight: 600; line-height: 1; cursor: pointer;
 }
 .mesa-link:hover { border-color: var(--phx-accent); color: var(--phx-accent); background: var(--phx-accent-lt); }
 .mesa-link-exists { border-color: var(--phx-accent); color: var(--phx-accent); }
-.perm-summary-name-wrap { display: flex; align-items: center; gap: 6px; min-width: 0; }
-.perm-summary-name-text,
-.perm-summary-td-id button {
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0;
-  border: none; background: none; padding: 0; color: inherit; font: inherit; text-align: left;
-}
-.perm-summary-name-text:disabled,
-.perm-summary-td-id button:disabled { color: inherit; opacity: 1; }
+.perm-summary-name-wrap { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
 .sim-mesa-row { display: flex; align-items: center; gap: 6px; margin-top: 8px; font-size: 12px; color: var(--phx-text-2); }
 .tag-reco-chip {
   display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px;
@@ -2266,66 +2497,43 @@ hui-card { display: block; min-width: 0; }
 }
 .tag-reco-chip:hover { border-color: var(--phx-accent); border-style: solid; background: var(--phx-hover); }
 
-/* MESA list: summary filter chips, search, and domain groups */
-.mesa-controls { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; justify-content: space-between; margin-bottom: 12px; }
-.mesa-summary { display: flex; flex-wrap: wrap; gap: 6px; }
-.mesa-chip {
-  display: inline-flex; align-items: center; gap: 6px; padding: 4px 11px;
-  border-radius: 14px; border: 1.5px solid var(--phx-border); background: var(--phx-surface);
-  color: var(--phx-text); font-size: 12px; font-weight: 600; cursor: pointer;
-  transition: border-color 0.12s, background 0.12s;
-}
-.mesa-chip:hover { border-color: var(--phx-accent); }
-.mesa-chip-active { border-color: var(--phx-accent); background: var(--phx-accent-lt); }
-.mesa-chip-count { font-size: 11px; color: var(--phx-text-2); background: var(--phx-surface-2); padding: 0 6px; border-radius: 8px; }
-.mesa-chip-active .mesa-chip-count { color: var(--phx-accent); }
-.mesa-search { max-width: 260px; flex: 1 1 180px; }
-.mesa-groups { display: flex; flex-direction: column; gap: 10px; }
-.mesa-group { padding: 0; overflow: hidden; }
-.mesa-group-header {
-  display: flex; align-items: center; gap: 8px; width: 100%;
-  padding: 9px 14px; background: var(--phx-surface-2); border: none;
-  border-bottom: 1px solid var(--phx-border); cursor: pointer;
-  font-size: 13px; color: var(--phx-text); text-align: left;
-}
-.mesa-group-header:hover { background: var(--phx-hover); }
-.mesa-group-count { margin-left: auto; font-size: 11px; color: var(--phx-text-2); background: var(--phx-surface); padding: 1px 8px; border-radius: 8px; }
-/* Fixed layout + shared widths so every domain group's columns line up.  The
-   mode column is deliberately generous: localized vendor and mode badges can
-   wrap between badges, while long tag lists use the remaining space. */
-.mesa-group .data-table { table-layout: fixed; }
-.mesa-group .data-table td { vertical-align: middle; overflow: hidden; }
-.mesa-group .data-table td:nth-child(2) { width: 260px; }
-.mesa-group .data-table td:nth-child(3) { width: 22%; }
+/* MESA Profiles: the name with its control mode and ID under it; control modes in their meaning colors. */
+.mesa-control-autonomous { color: var(--phx-success); }
+.mesa-control-confirm { color: var(--phx-warning); }
+.mesa-control-read_only { color: var(--phx-read); }
+.mesa-control-prohibited { color: var(--phx-error); }
+.mesa-control { max-width: 100%; }
+.mesa-control > svg { flex: none; }
+.mesa-control > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+/* Profile Editor as a window: the target and its actions, then the form. */
+.mesa-editor-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px; margin-bottom: 12px; }
+.mesa-editor-target { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; margin: 0; font-size: 14px; font-weight: 400; min-width: 0; }
+.mesa-editor-target strong { font-weight: 600; overflow-wrap: anywhere; }
+.mesa-editor-target code { font-size: 12px; color: var(--phx-text-2); overflow-wrap: anywhere; }
+.mesa-editor-scope { font-size: 12px; color: var(--phx-text-2); }
+.mesa-findings { display: flex; flex-direction: column; gap: 12px; }
+.mesa-findings > .banner, .mesa-findings > .mesa-notice { margin: 0; }
+.mesa-orphan-group + .mesa-orphan-group { margin-top: 8px; }
+/* Import opens in place at the top of Profiles, framed like an inline confirmation. */
+.phx-inline-panel { border: 1px solid var(--phx-border); border-radius: var(--phx-radius-sm); background: var(--phx-surface); margin-block-end: 12px; }
+.phx-inline-panel-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 12px 0; }
+.phx-inline-panel-head .phx-section-title { margin: 0; }
+/* A window with nothing to show says so, and offers the way out of it. */
+.phx-window-nothing { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; }
+.phx-window-nothing p { margin: 0; }
+/* The suggested tags open from a button at the end of the tag input. */
+.mesa-tag-row { display: flex; align-items: flex-start; gap: 8px; }
+.mesa-tag-row > :first-child { flex: 1 1 auto; min-width: 0; }
+.mesa-import { display: flex; flex-direction: column; gap: 10px; }
+.mesa-import .field, .mesa-import p { margin: 0; }
+.mesa-import-summary { margin-top: 8px; }
+.mesa-import-result { border-top: 1px solid var(--phx-divider); padding-top: 10px; }
 .mesa-identity { display: inline-flex; flex-direction: column; align-items: flex-start; gap: 2px; min-width: 0; max-width: 100%; vertical-align: top; }
-.mesa-identity-name { font-size: 13px; font-weight: 700; color: var(--phx-text); overflow-wrap: anywhere; }
+.mesa-identity-name { font-size: 13px; font-weight: 600; color: var(--phx-text); overflow-wrap: anywhere; }
 .mesa-identity-id { font-size: 13px; overflow-wrap: anywhere; white-space: normal; }
 .mesa-identity .mesa-identity-secondary { font-size: 11px; color: var(--phx-text-2); }
 .mesa-notice-identities { margin: 6px 0; padding-left: 20px; }
 .mesa-notice-identities li, .mesa-notice-details li { margin-top: 4px; }
-.mesa-row-modes { white-space: normal; }
-.mesa-row-modes .badge + .badge { margin-left: 6px; }
-.mesa-row-tags { font-size: 12px; color: var(--phx-text-2); white-space: normal; overflow-wrap: anywhere; }
-@media (max-width: 600px) { .mesa-search { max-width: none; } }
-
-@media (max-width: 600px) {
-  /* Existing profiles list: the 3 table columns (name/id, mode badges, tags)
-     were squeezed by table-layout:fixed's column widths above. Collapsed to
-     name/id + badges sharing a line (id/name flexes and truncates, badges
-     hug the right edge), then tags on their own full-width line below.
-     Placed after the desktop rules above so the equal-specificity width
-     overrides win on source order without needing !important. */
-  .mesa-profile-table, .mesa-profile-table tbody { display: block; width: 100%; }
-  .mesa-profile-table tr {
-    display: flex; flex-wrap: wrap; align-items: flex-start; column-gap: 10px;
-    padding: 8px 0; border-top: 1px solid var(--phx-border);
-  }
-  .mesa-profile-table tr:first-child { border-top: none; }
-  .mesa-profile-table td { display: block; padding: 0; }
-  .mesa-profile-table td:first-child { flex: 1 1 auto; min-width: 0; }
-  .mesa-group .mesa-profile-table td.mesa-row-modes { width: auto; flex: 0 0 auto; margin-left: auto; text-align: right; }
-  .mesa-group .mesa-profile-table td.mesa-row-tags { width: auto; flex: 0 0 100%; margin-top: 6px; }
-}
 
 /* ---------------------------------------------------------------------------
    agentCLI floating chat window
@@ -2417,11 +2625,27 @@ hui-card { display: block; min-width: 0; }
 }
 .agentcli-window.agentcli-maximized .agentcli-titlebar,
 .agentcli-window.agentcli-popped-out .agentcli-titlebar { cursor: default; }
+/* Docked in My Workspace: the workspace window gives size and place, and its title bar names, moves and closes Chat,
+   so Chat's own bar keeps only its menu and pop-out. */
+.agentcli-window.agentcli-docked {
+  position: absolute;
+  inset: 0;
+  z-index: auto;
+  width: auto;
+  height: auto;
+  min-width: 0;
+  min-height: 0;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+}
+.agentcli-window.agentcli-docked .agentcli-titlebar { cursor: default; justify-content: flex-end; padding: 2px 6px; }
+.agentcli-window.agentcli-docked .agentcli-title { display: none; }
 .agentcli-titlebar {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 8px 10px;
+  padding: 4px 6px 4px 12px;
   background: var(--phx-agentcli-titlebar);
   border-bottom: 1px solid var(--phx-border);
   cursor: move;
@@ -2432,17 +2656,21 @@ hui-card { display: block; min-width: 0; }
 /* The title art sets the titlebar's minimum content height. */
 .agentcli-title-icon { width: 22px; height: 22px; flex-shrink: 0; border-radius: 4px; }
 .agentcli-window.agentcli-minimized .agentcli-title-icon { width: 16px; height: 16px; border-radius: 3px; }
-.agentcli-titlebar-actions { display: flex; align-items: center; gap: 4px; }
+.agentcli-titlebar-actions { display: flex; align-items: center; gap: 2px; }
 .agentcli-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   border: none;
   background: transparent;
   color: var(--phx-text-2);
   cursor: pointer;
   font-size: 15px;
   line-height: 1;
-  padding: 2px 6px;
+  padding: 4px 6px;
   border-radius: var(--phx-radius-xs);
 }
+.agentcli-icon-btn svg { display: block; }
 .agentcli-icon-btn:hover { background: var(--phx-hover); color: var(--phx-text); }
 .agentcli-pop-btn {
   display: inline-flex;
@@ -2450,24 +2678,9 @@ hui-card { display: block; min-width: 0; }
   justify-content: center;
   padding: 3px 6px;
 }
-.agentcli-pop-btn svg {
-  display: block;
-  width: 16px;
-  height: 16px;
-  fill: currentColor;
-}
-.agentcli-gear-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 2px 7px;
-}
-.agentcli-gear-btn svg {
-  display: block;
-  width: 18px;
-  height: 18px;
-  fill: currentColor;
-}
+.agentcli-pop-btn svg { display: block; width: 16px; height: 16px; }
+.agentcli-menu-btn { padding: 4px 6px; }
+.agentcli-menu-btn.is-active { background: var(--phx-hover); color: var(--phx-text); }
 
 .agentcli-popout-error {
   padding: 8px 10px;
@@ -2478,45 +2691,63 @@ hui-card { display: block; min-width: 0; }
   line-height: 1.4;
 }
 
-.agentcli-gear {
-  position: absolute;
-  top: 40px; right: 8px;
-  z-index: 1;
-  background: var(--phx-surface);
-  border: 1px solid var(--phx-border);
-  border-radius: var(--phx-radius-sm);
-  box-shadow: var(--phx-shadow-lg);
-  padding: 10px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  min-width: 180px;
-}
-.agentcli-gear-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  font-size: 13px;
-}
-.agentcli-gear-row select.agentcli-select, .agentcli-gear-row input[type="number"] { width: 90px; }
 .agentcli-select {
   font-size: 12px;
   padding: 6px 28px 6px 8px;
 }
-.agentcli-gear-clear { align-self: stretch; }
 
-.agentcli-controls {
+/* The connection: a line naming it, with a disclosure triangle that opens compact fields below. */
+.agentcli-connection { flex: none; border-bottom: 1px solid var(--phx-border); }
+.agentcli-connection-head {
   display: flex;
-  gap: 8px;
-  padding: 8px 10px;
-  border-bottom: 1px solid var(--phx-border);
+  align-items: center;
+  gap: 4px;
+  min-height: 30px;
+  padding: 4px 12px 4px 4px;
+  color: var(--phx-text-2);
+  font-size: 12px;
+  overflow: hidden;
 }
-.agentcli-control { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
-.agentcli-control > span {
-  font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--phx-text-2);
+.agentcli-connection-toggle {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--phx-radius-sm);
+  background: transparent;
+  color: var(--phx-text-2);
+  cursor: pointer;
 }
-.agentcli-control select.agentcli-select { width: 100%; min-width: 0; }
+.agentcli-connection-toggle:hover { background: var(--phx-hover); color: var(--phx-text); }
+.agentcli-connection-label { color: var(--phx-text); font-weight: 500; }
+.agentcli-connection-summary { display: flex; align-items: baseline; min-width: 0; overflow: hidden; white-space: nowrap; }
+.agentcli-connection-key { color: var(--phx-text); font-weight: 500; flex: none; }
+.agentcli-connection-rest { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: pre; }
+/* Access Key and Provider, then Model, Thinking and Temperature: one line while both rows fit,
+   otherwise the second row drops below the first. Neither row ever wraps inside itself: the
+   fields narrow instead, so the fields are never more than two rows (user, 2026-10-29). */
+.agentcli-controls { display: flex; flex-wrap: wrap; gap: 6px 8px; padding: 8px 12px 10px; }
+.agentcli-controls[hidden] { display: none; }
+.agentcli-control-row { display: flex; gap: 8px; flex: 1 1 auto; min-width: min(100%, 230px); }
+.agentcli-control-row:has(> :nth-child(3)) { min-width: min(100%, 345px); }
+.agentcli-control { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.agentcli-control > span { font-size: 11px; color: var(--phx-text-2); }
+.agentcli-control .agentcli-select { width: 100%; min-width: 0; }
+/* A number field has no arrow of its own to leave room for: its spinner sits at the edge. */
+.agentcli-control .agentcli-number { padding-inline-end: 4px; }
+.agentcli-connection-note { flex: 1 1 100%; font-size: 12px; color: var(--phx-text-2); }
+/* Compact fields for a mouse; touch keeps full-size targets, and phones 16 px text so the browser does not zoom. */
+@media (pointer: fine) {
+  .agentcli-controls .agentcli-select { height: 28px; min-height: 28px; padding-top: 0; padding-bottom: 0; font-size: 12px; }
+}
+/* Only a touch screen zooms on a small field, and the pop-out window is a narrow page of its own. */
+@media (max-width: 700px) and (pointer: coarse) {
+  .agentcli-controls .agentcli-select { font-size: 16px; }
+}
 
 .agentcli-body {
   flex: 1 1 auto;
@@ -2546,17 +2777,24 @@ hui-card { display: block; min-width: 0; }
   font-size: var(--phx-agentcli-text-size, 13px);
 }
 .agentcli-msg-assistant {
-  background: var(--phx-surface-2);
   align-self: flex-start;
   max-width: 95%;
+  padding-left: 2px;
   font-size: var(--phx-agentcli-text-size, 13px);
 }
-/* Optional per-message time (gear toggle). Inherits the bubble's text color at
-   reduced opacity so it reads on both bubble backgrounds without new vars. */
-.agentcli-ts {
+/* Under a message: Copy, and the time when timestamps are on. Copy stays quiet
+   until the message is pointed at or focused; touch screens always show it. */
+.agentcli-msg-meta {
   display: flex; align-items: center; gap: 4px;
-  font-size: 10px; opacity: 0.6; margin-top: 3px; user-select: none;
+  margin-top: 3px; color: var(--phx-text-2); user-select: none;
 }
+.agentcli-msg-user .agentcli-msg-meta { justify-content: flex-end; }
+.agentcli-ts { font-size: 10px; }
+.agentcli-msg-meta .agentcli-copy-btn { opacity: 0; }
+.agentcli-msg:hover .agentcli-copy-btn,
+.agentcli-msg:focus-within .agentcli-copy-btn,
+.agentcli-copy-btn.is-copied { opacity: 1; }
+@media (hover: none) { .agentcli-msg-meta .agentcli-copy-btn { opacity: 0.85; } }
 .agentcli-copy-btn {
   display: inline-flex; align-items: center; justify-content: center;
   width: 22px; height: 22px; margin: -2px 0; padding: 3px;
@@ -2567,7 +2805,7 @@ hui-card { display: block; min-width: 0; }
 .agentcli-copy-btn:hover { background: var(--phx-hover); opacity: 1; }
 .agentcli-copy-btn:focus-visible { outline: 2px solid var(--phx-accent); outline-offset: 1px; }
 .agentcli-copy-btn.is-copied { color: var(--phx-accent); opacity: 1; }
-.agentcli-copy-btn svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.agentcli-copy-btn svg { width: 14px; height: 14px; }
 .agentcli-thinking { font-size: 0.92em; color: var(--phx-text-2); margin-bottom: 6px; }
 .agentcli-thinking-body {
   margin: 4px 0 0;
@@ -2590,7 +2828,7 @@ hui-card { display: block; min-width: 0; }
 .agentcli-msg-assistant .agentcli-md h5,
 .agentcli-msg-assistant .agentcli-md h6 { font-size: 1.08em; }
 .agentcli-md code {
-  font-family: var(--phx-mono, "Roboto Mono", monospace); font-size: 12px;
+  font-family: var(--phx-mono); font-size: 12px;
   background: var(--phx-grey-tint); padding: 1px 4px; border-radius: 4px;
 }
 .agentcli-msg-assistant .agentcli-md code { font-size: 0.92em; }
@@ -2600,7 +2838,7 @@ hui-card { display: block; min-width: 0; }
   overscroll-behavior: contain;
 }
 .agentcli-md pre code { background: none; padding: 0; }
-.agentcli-md a { color: var(--phx-accent); }
+.agentcli-md a { color: var(--phx-accent); text-decoration: underline; text-underline-offset: 2px; }
 .agentcli-md blockquote {
   margin: 0 0 8px; padding-left: 10px; border-left: 3px solid var(--phx-border); color: var(--phx-text-2);
 }
@@ -2636,11 +2874,11 @@ hui-card { display: block; min-width: 0; }
   display: inline-flex; align-items: center; justify-content: center; cursor: pointer;
   border-radius: 50%; border: 1px solid var(--phx-border); background: var(--phx-surface); color: var(--phx-text);
 }
-.agentcli-attachment-remove svg { width: 14px; height: 14px; fill: currentColor; }
+.agentcli-attachment-remove svg { width: 14px; height: 14px; }
 .agentcli-attachment-note { font-size: 0.85em; color: var(--phx-text-2); }
 .agentcli-attachment-error { font-size: 0.85em; color: var(--phx-error); }
 .agentcli-attach-btn { padding: 0 8px; }
-.agentcli-attach-btn svg { width: 18px; height: 18px; fill: currentColor; }
+.agentcli-attach-btn svg { width: 18px; height: 18px; }
 .agentcli-attach-btn[aria-disabled="true"] { opacity: 0.5; }
 /* Live progress from a held tool (a firmware build). Visible regardless of the
    verbose toggle, since during a multi-minute call it is the only sign of life. */
@@ -2657,12 +2895,20 @@ hui-card { display: block; min-width: 0; }
   .agentcli-progress-dot { animation: none; opacity: 0.8; }
 }
 .agentcli-approval {
-  border: 1px solid var(--phx-accent);
-  border-radius: var(--phx-radius-sm);
-  padding: 8px 10px;
-  background: var(--phx-accent-lt);
+  border-top: 1px solid var(--phx-divider);
+  border-bottom: 1px solid var(--phx-divider);
+  padding: 10px 2px;
   font-size: var(--phx-agentcli-text-size, 13px);
 }
+/* Approve is green and Reject red, as on the request in Approvals. */
+.agentcli-approve, .agentcli-reject, .phx-decision-approve, .phx-decision-reject { gap: 4px; border: 1px solid; }
+:is(.agentcli-approve, .phx-decision-approve) { background: var(--phx-success-bg); border-color: var(--phx-success); color: var(--phx-success); }
+:is(.agentcli-reject, .phx-decision-reject) { background: var(--phx-error-bg); border-color: var(--phx-error); color: var(--phx-error); }
+:is(.agentcli-approve, .phx-decision-approve:not([aria-busy="true"])):hover { background: var(--phx-success); color: var(--phx-accent-fg); }
+:is(.agentcli-reject, .phx-decision-reject:not([aria-busy="true"])):hover,
+.phx-decision-reject[aria-pressed="true"] { background: var(--phx-error); color: var(--phx-accent-fg); }
+/* A decision that is running, or a request whose action runs elsewhere, stays visible but inert. */
+:is(.phx-decision-approve, .phx-decision-reject)[aria-busy="true"] { cursor: wait; opacity: 0.55; }
 .agentcli-approval-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
 .agentcli-approval-status { margin-top: 4px; font-size: inherit; color: var(--phx-text-2); }
 /* The admin's rejection reason or the executor's failure detail; selectable so
@@ -2673,7 +2919,6 @@ hui-card { display: block; min-width: 0; }
   font-size: 0.92em; color: var(--phx-text-2); font-style: italic;
   border-left: 2px solid var(--phx-border); padding: 2px 0 2px 8px; white-space: pre-line;
 }
-.agentcli-gear-note { font-size: 12px; color: var(--phx-text-2); }
 .agentcli-unsafe {
   font-size: 0.92em; color: var(--phx-warning); background: var(--phx-warning-bg); border: 1px solid var(--phx-warning);
   border-radius: var(--phx-radius-xs); padding: 4px 8px; margin-bottom: 6px;
@@ -2684,12 +2929,12 @@ hui-card { display: block; min-width: 0; }
   gap: 6px;
   padding: 8px 10px;
   border-top: 1px solid var(--phx-border);
-  align-items: stretch;
+  align-items: flex-end;
 }
 /* The preview strip above already draws the divider. */
 .agentcli-attachments + .agentcli-input { border-top: none; }
-/* Send/Cancel matches the textarea height in the same row. */
-.agentcli-input > button { align-self: stretch; display: inline-flex; align-items: center; justify-content: center; }
+/* Attach, Send and Stop sit at the bottom of the row, square, beside the message box. */
+.agentcli-input > button { display: inline-flex; align-items: center; justify-content: center; width: 36px; min-height: 36px; padding: 0; }
 .agentcli-cancel-btn { background: var(--phx-surface); border-color: var(--phx-error); color: var(--phx-error); }
 
 /* The "continue?" checkpoint bar, shown above the composer when a turn paused
@@ -2701,7 +2946,7 @@ hui-card { display: block; min-width: 0; }
   gap: 8px;
   padding: 8px 10px;
   border-top: 1px solid var(--phx-border);
-  background: var(--phx-accent-wash, rgba(217, 119, 6, 0.08));
+  background: var(--phx-accent-wash);
 }
 .agentcli-continue-text { flex: 1; font-size: 13px; color: var(--phx-text-2); }
 .agentcli-cancel-btn:hover { background: var(--phx-error); color: var(--phx-accent-fg); }
@@ -2714,7 +2959,7 @@ hui-card { display: block; min-width: 0; }
   min-height: calc(2.8em + 14px);
   max-height: calc(8.4em + 14px);
   padding: 6px 8px;
-  border: 1px solid var(--phx-border);
+  border: 1px solid var(--phx-field-border);
   border-radius: var(--phx-radius-sm);
   background: var(--phx-surface);
   color: var(--phx-text);
@@ -2783,75 +3028,42 @@ hui-card { display: block; min-width: 0; }
 .agentcli-resize-sw { bottom: -3px; left: -3px; width: 12px; height: 12px; cursor: nesw-resize; }
 
 /* agentCLI settings card */
-.agentcli-settings-providers { display: flex; flex-direction: column; gap: 8px; }
-/* The card is a row: everything readable on the left, the actions anchored to the
-   BOTTOM right. Aligning them to the model line instead left the icons floating at
-   different heights from card to card, since some carry a status line or a warning
-   underneath and some do not. Wraps on a narrow panel so the icons drop below the
-   text rather than squeezing it. */
-.agentcli-settings-provider {
-  border: 1px solid var(--phx-border); border-radius: var(--phx-radius-sm); padding: 8px 10px;
-  display: flex; align-items: flex-end; justify-content: space-between;
-  gap: 10px; flex-wrap: wrap;
-}
-.agentcli-settings-provider-main { flex: 1 1 240px; min-width: 0; }
-.agentcli-settings-provider-head { display: flex; align-items: center; justify-content: space-between; }
 .agentcli-badge { font-size: 11px; color: var(--phx-text-2); border: 1px solid var(--phx-border); border-radius: 999px; padding: 1px 8px; }
 .agentcli-badge.ok { color: var(--phx-accent); border-color: var(--phx-accent); }
-.agentcli-settings-model { display: block; margin-top: 6px; font-size: 12px; color: var(--phx-text-2); }
 .agentcli-settings-form { display: flex; flex-direction: column; gap: 6px; margin-top: 6px; }
 .agentcli-settings-form .banner-error { white-space: pre-line; }
 .agentcli-settings-form input {
   font: inherit; font-size: 13px; padding: 6px 8px;
-  border: 1px solid var(--phx-border); border-radius: var(--phx-radius-sm);
+  border: 1px solid var(--phx-field-border); border-radius: var(--phx-radius-sm);
   background: var(--phx-surface); color: var(--phx-text);
 }
 .agentcli-settings-field { display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
 .agentcli-settings-field > span { color: var(--phx-text-2); font-weight: 600; }
-.agentcli-settings-field > input,
-.agentcli-settings-field > select { width: 100%; min-width: 0; }
+.agentcli-settings-field > input:not([type="number"]) { width: 100%; min-width: 0; }
+.agentcli-settings-field > :is(select, input[type="number"]) { align-self: flex-start; }
 .agentcli-settings-form-actions { display: flex; gap: 6px; }
+.agentcli-add { display: contents; }
 .agentcli-add-row { display: flex; gap: 8px; align-items: center; margin-bottom: 10px; }
-.agentcli-add-row select { flex: 0 1 auto; }
 .agentcli-add-form { border: 1px dashed var(--phx-border); border-radius: var(--phx-radius-sm); padding: 10px; margin-bottom: 10px; }
 .agentcli-settings-hint { font-size: 12px; color: var(--phx-text-2); }
 
 /* Routing keeps switches and accounts visible; connection timing expands in place. */
 .command-routing-settings .agentcli-settings-hint { line-height: 1.5; }
-.routing-account-choice { display: flex; align-items: center; gap: 10px; min-width: 0; cursor: pointer; color: var(--phx-text); }
+.routing-account-choice { display: inline-flex; max-width: 100%; align-items: center; gap: 10px; min-width: 0; cursor: pointer; color: var(--phx-text); }
 .routing-account-choice input[type="radio"] { accent-color: var(--phx-accent); flex: none; }
 .routing-account-choice > span { min-width: 0; overflow-wrap: anywhere; }
 .routing-provider-section .agentcli-add-row { margin-top: 12px; }
-.routing-disclosure { border-top: 1px solid var(--phx-divider); margin-top: 12px; }
+/* No Decision Provider and the accounts are one radio group; an account's options open under it. */
+.routing-choices { display: flex; flex-direction: column; gap: 8px; }
+.routing-choice > .phx-provider-account { margin: 8px 0 0 24px; }
+.routing-disclosure { margin-top: 12px; }
 .routing-disclosure > summary { padding: 14px 0; cursor: pointer; font-size: 13px; font-weight: 600; overflow-wrap: anywhere; }
 .routing-disclosure > summary:hover { color: var(--phx-accent); }
 .routing-disclosure > summary:focus-visible { outline: 2px solid var(--phx-accent); outline-offset: 2px; border-radius: 4px; }
 .routing-disclosure > .agentcli-settings-hint:first-of-type { margin-top: 0; }
 
-/* These were once .agentcli-icon-btn, which the chat window's TITLEBAR buttons
-   have used since long before. Defined later, they silently won, and the
-   titlebar's gear/minimize/maximize/close picked up a border and a fixed box.
-   A shared prefix is not a namespace; put the surface in the name.
-
-   Square icon actions on a provider account. Four labelled buttons plus a status
-   line had grown into more than a card can carry, so the actions became icons and
-   the status moved onto the tooltip of the button it belongs to. Every one keeps
-   a real accessible name; the icon is decoration, never the label. */
-.agentcli-account-actions { display: flex; align-items: center; gap: 4px; flex: none; }
-.agentcli-account-btn {
-  display: inline-flex; align-items: center; justify-content: center;
-  width: 28px; height: 28px; padding: 0; cursor: pointer;
-  border: 1px solid var(--phx-border); border-radius: var(--phx-radius-sm);
-  background: var(--phx-surface); color: var(--phx-text-2);
-}
-.agentcli-account-btn:hover:not(:disabled):not([aria-disabled="true"]) { color: var(--phx-text); border-color: var(--phx-text-2); }
-.agentcli-account-btn:disabled { opacity: 0.4; cursor: default; }
-/* Destructive, so it reads as different BEFORE it is hovered: an icon row is
-   scanned, and a delete that looks like its neighbours is a delete that gets
-   clicked by mistake. */
-.agentcli-account-btn.is-danger { color: var(--phx-error); border-color: var(--phx-error); }
-.agentcli-account-btn.is-danger:hover:not(:disabled):not([aria-disabled="true"]) { background: var(--phx-error-bg); color: var(--phx-error); }
-.agentcli-account-btn.is-busy { opacity: 0.6; }
+/* A provider account's actions: labelled buttons below its model line. */
+.agentcli-account-actions { margin: 8px 0 0; }
 .agentcli-settings-probe-opt {
   display: flex; align-items: center; gap: 8px; min-width: 0;
   color: var(--phx-text-2); line-height: 1.4;
@@ -2875,7 +3087,7 @@ hui-card { display: block; min-width: 0; }
   width: 15px; height: 15px; margin-left: 6px; padding: 0; cursor: pointer;
   border: 1px solid var(--phx-error); border-radius: 50%;
   background: none; color: var(--phx-error);
-  font-size: 10px; font-weight: 700; line-height: 1; vertical-align: middle;
+  font-size: 10px; font-weight: 600; line-height: 1; vertical-align: middle;
 }
 .agentcli-warn-badge:hover { background: var(--phx-error-bg); }
 
@@ -2885,31 +3097,30 @@ hui-card { display: block; min-width: 0; }
 .agentcli-settings-model-edit {
   display: flex; flex-direction: column; align-items: flex-start; gap: 8px; margin-top: 6px;
 }
-.agentcli-settings-model-edit > select,
-.agentcli-settings-model-row select { width: 320px; max-width: 100%; min-width: 0; }
 .agentcli-settings-model-actions {
   display: flex; align-items: center; gap: 12px; width: 100%; flex-wrap: wrap;
 }
 .agentcli-settings-model-actions > .agentcli-settings-probe-opt { flex: 1 1 280px; }
+/* In Settings a row's buttons sit beside it, along the bottom of its field (user, 2026-10-31). */
+.agentcli-add-inline { display: flex; align-items: flex-end; gap: 8px; flex-wrap: wrap; width: 100%; }
+.agentcli-add-inline > :is(.agentcli-settings-field, .agentcli-settings-model-row) { flex: 1 1 220px; min-width: 0; }
 .agentcli-settings-model-row {
   display: flex; flex-direction: column; align-items: flex-start; gap: 4px;
   font-size: 13px;
 }
 .agentcli-settings-model-row > span { color: var(--phx-text-2); font-weight: 600; }
-@media (max-width: 900px) {
-  .agentcli-settings-model-edit > select,
-  .agentcli-settings-model-row select { width: 100%; }
-}
-/* Post-create "how do you want to use this access key" choice list. */
-.post-create-choices { display: flex; flex-direction: column; gap: 10px; margin: 10px 0; }
+/* Post-create "how will you use this access key" choices: plain rows with an icon, in the UI2 style (user, 2026-10-28). */
+.post-create-choices { display: flex; flex-direction: column; margin: 0; border: 1px solid var(--phx-border); border-radius: var(--phx-radius-sm); overflow: hidden; }
 .post-create-choice {
-  display: flex; flex-direction: column; gap: 3px; text-align: left; width: 100%;
-  border: 1px solid var(--phx-border); background: var(--phx-surface);
-  border-radius: var(--phx-radius-sm); padding: 12px 14px; cursor: pointer;
-  transition: background 0.15s, border-color 0.15s;
+  display: flex; align-items: flex-start; gap: 12px; text-align: left; width: 100%;
+  border: none; border-top: 1px solid var(--phx-divider); background: var(--phx-surface); color: var(--phx-text);
+  padding: 12px 14px; cursor: pointer; font: inherit;
 }
-.post-create-choice:hover { background: var(--phx-accent-lt); border-color: var(--phx-accent); }
-.post-create-choice-title { font-size: 14px; font-weight: 600; color: var(--phx-accent); }
+.post-create-choice:first-child { border-top: none; }
+.post-create-choice:hover { background: var(--phx-hover); }
+.post-create-choice-icon { flex: none; margin-top: 1px; color: var(--phx-text-2); }
+.post-create-choice-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.post-create-choice-title { font-size: 14px; font-weight: 500; }
 .post-create-choice-sub { font-size: 12px; color: var(--phx-text-2); line-height: 1.4; }
 
 /* Energy approval preview. Renders the preferences themselves rather than a
@@ -2920,7 +3131,7 @@ hui-card { display: block; min-width: 0; }
 .energy-preview { display: flex; flex-direction: column; gap: 16px; }
 .energy-preview-section { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .energy-preview-heading {
-  font-size: 11px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase;
+  font-size: 11px; font-weight: 600;
   color: var(--phx-text-2); margin-bottom: 4px;
 }
 .energy-preview-empty { color: var(--phx-text-2); font-style: italic; font-size: 13px; }
@@ -2929,8 +3140,8 @@ hui-card { display: block; min-width: 0; }
   padding: 5px 8px 5px 22px; border-radius: var(--phx-radius-xs); position: relative; min-width: 0;
 }
 .energy-preview-row::before {
-  position: absolute; left: 8px; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-weight: 700;
+  position: absolute; left: 8px; font-family: var(--phx-mono);
+  font-weight: 600;
 }
 .energy-preview-row.is-added { background: var(--phx-success-bg); }
 .energy-preview-row.is-added::before { content: "+"; color: var(--phx-success); }
@@ -2940,7 +3151,7 @@ hui-card { display: block; min-width: 0; }
 .energy-preview-row.is-changed::before { content: "-"; color: var(--phx-error); }
 .energy-preview-name { font-size: 13px; font-weight: 500; overflow-wrap: anywhere; }
 .energy-preview-stat {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px;
+  font-family: var(--phx-mono); font-size: 12px;
   color: var(--phx-text-2); overflow-wrap: anywhere;
 }
 .approval-preview-toolbar { display: flex; justify-content: flex-end; margin-bottom: 10px; }
@@ -2960,7 +3171,7 @@ hui-card { display: block; min-width: 0; }
 .diff-line-marker { display: inline-block; width: 1.25em; user-select: none; }
 
 /* Conversation evidence: readable prose with progressively disclosed details. */
-.conversation-event-heading, .conversation-footer {
+.conversation-event-heading {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
@@ -2970,15 +3181,11 @@ hui-card { display: block; min-width: 0; }
 .conversation-secondary, .conversation-event time { color: var(--phx-text-2); font-size: 13px; }
 .conversation-toolbar input[type="search"] { min-width: 180px; }
 .conversation-list { border-top: 1px solid var(--phx-border); }
-.conversation-entry:nth-child(even) > summary { background: var(--phx-surface-2); }
-.conversation-entry + .conversation-entry { border-top: 1px solid var(--phx-border); }
-.conversation-entry > summary { padding: 10px 12px; cursor: pointer; display: flex; gap: 12px; align-items: baseline; }
-.conversation-entry > summary::before { content: ""; width: 0; height: 0; border-top: 5px solid transparent; border-bottom: 5px solid transparent; border-left: 6px solid currentColor; flex: 0 0 0; }
-.conversation-entry[open] > summary::before { transform: rotate(90deg); }
-.conversation-entry > summary:focus-visible { outline: 2px solid var(--phx-accent); outline-offset: -2px; }
-.conversation-entry > summary::-webkit-details-marker { display: none; }
-.conversation-entry > summary:hover { background: var(--phx-hover); }
-.conversation-summary { display: grid; gap: 3px; flex: 1; min-width: 0; }
+
+/* An expanded conversation is framed, so where it ends and the next record begins is unmistakable. */
+
+.conversation-clear-confirm { margin-bottom: 12px; }
+
 .conversation-summary-title { font-size: 14px; font-weight: 600; overflow-wrap: anywhere; }
 .conversation-status { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; white-space: nowrap; }
 .conversation-detail { padding: 0 24px 24px 40px; }
@@ -2988,9 +3195,9 @@ hui-card { display: block; min-width: 0; }
 .conversation-evidence { display: flex; align-items: flex-start; flex-wrap: wrap; gap: 4px 8px; }
 .conversation-evidence-content { flex: 1; min-width: 0; }
 .conversation-copy.btn-icon { flex: 0 0 28px; width: 28px; height: 28px; padding: 4px; color: var(--phx-text-2); }
-.conversation-copy svg { width: 18px; height: 18px; fill: currentColor; }
+.conversation-copy svg { width: 18px; height: 18px; }
 .conversation-copy-feedback { flex-basis: 100%; }
-.conversation-evidence pre { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; background: var(--phx-surface-2); border-radius: var(--phx-radius-xs); padding: 12px; font-family: "Roboto Mono", monospace; font-size: 13px; }
+.conversation-evidence pre { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; background: var(--phx-surface-2); border-radius: var(--phx-radius-xs); padding: 12px; font-family: var(--phx-mono); font-size: 13px; }
 .conversation-evidence > span { font-size: 12px; color: var(--phx-text-2); }
 .conversation-detail details > summary { display: list-item; list-style-type: disclosure-closed; cursor: pointer; color: var(--phx-accent); padding: 6px 0; }
 .conversation-detail details[open] > summary { list-style-type: disclosure-open; }
@@ -3000,9 +3207,11 @@ hui-card { display: block; min-width: 0; }
 .conversation-event-body { min-width: 0; }
 .conversation-event-error { background: var(--phx-error-bg); }
 .conversation-error-message { margin: 8px 0; }
-.conversation-icon { width: 20px; height: 20px; flex: 0 0 20px; fill: currentColor; }
+.conversation-icon { width: 20px; height: 20px; flex: 0 0 20px; }
 .conversation-signal-neutral { color: var(--phx-text-2); }
 .conversation-signal-success { color: var(--phx-success); }
+/* In a log's rows success is the routine case, so it stays ink and only exceptions carry color; Log Details keeps the green. */
+.phx-table .conversation-signal-success { color: inherit; }
 .conversation-signal-warning { color: var(--phx-warning); }
 .conversation-signal-error { color: var(--phx-error); }
 .conversation-outcome { font-size: 13px; }
@@ -3015,7 +3224,7 @@ hui-card { display: block; min-width: 0; }
 .conversation-event time { font-variant-numeric: tabular-nums; }
 .conversation-event p { margin: 4px 0; }
 .conversation-technical { margin-top: 24px; }
-.conversation-footer { margin-top: 16px; }
+
 .conversation-empty { padding: 32px 24px; }
 .conversation-empty h3 { margin: 0 0 8px; }
 .conversation-turn + .conversation-turn { border-top: 1px solid var(--phx-border); }
@@ -3026,16 +3235,15 @@ hui-card { display: block; min-width: 0; }
 .conversation-route-inline .conversation-event-heading time { display: none; }
 .conversation-route-inline .conversation-event-heading strong { font-weight: 400; font-size: 13px; }
 .conversation-nested { padding-left: 12px; }
-.conversation-limit { display: grid; grid-template-columns: 1fr 90px; align-items: center; gap: 10px; margin: 12px 0; }
+.conversation-limit { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 10px; margin: 12px 0; }
 @media (max-width: 600px) {
-  .conversation-entry > summary { padding: 10px 8px; gap: 8px; flex-wrap: wrap; }
-  .conversation-summary { flex-basis: calc(100% - 24px); }
+
+  
   .conversation-status { margin-left: 16px; }
   .conversation-detail { padding: 0 14px 20px; }
   .conversation-nested { padding-left: 0; list-style: none; }
   .conversation-nested .conversation-event { padding-right: 0; padding-left: 24px; }
   .conversation-nested .conversation-event > .conversation-icon { left: 0; }
-  .conversation-toolbar .input.input-auto { min-width: 0; flex: 1 1 40%; }
   .conversation-toolbar.filter-row input[type="search"] { flex: 1 1 100%; min-width: 0; }
 }
 
@@ -3047,16 +3255,23 @@ hui-card { display: block; min-width: 0; }
 .phx-attention-toggle:hover { background: var(--phx-hover); }
 .phx-attention-count { margin-inline-start: 8px; color: var(--phx-text-2); font-variant-numeric: tabular-nums; }
 .phx-attention-body { padding: 0 16px 16px; }
-.phx-attention-refresh { display: flex; align-items: baseline; gap: 16px; justify-content: space-between; }
-.phx-attention p { max-width: 70ch; line-height: 1.5; margin-block: 8px; }
-.phx-attention-item { padding-block: 16px; border-block-start: 1px solid var(--phx-border); }
-.phx-attention-item:last-child { padding-block-end: 0; }
-.phx-attention h3 { font-size: 14px; margin: 0; }
-.phx-attention-meta { color: var(--phx-text-2); font-size: 13px; }
-.phx-attention-details { margin-block: 12px; }
-.phx-attention-details summary { cursor: pointer; color: var(--phx-text-2); }
-.phx-attention-details code { display: block; margin-block-start: 8px; }
-.phx-attention-actions { display: flex; align-items: center; gap: 12px 20px; flex-wrap: wrap; margin-block-start: 16px; }
-.phx-attention-actions label { display: flex; align-items: center; gap: 8px; min-height: 44px; cursor: pointer; }
-.phx-attention-actions input { accent-color: var(--phx-accent); width: 18px; height: 18px; }
-@media (max-width: 600px) { .phx-attention-item > p:not(.phx-attention-meta) { font-size: 16px; } .phx-attention-actions .btn { min-height: 44px; } }
+.phx-attention-list { display: flex; flex-direction: column; gap: 12px; }
+.phx-attention-intro { margin: 0; font-size: 13px; color: var(--phx-text-2); }
+.phx-attention-item { border: 1px solid var(--phx-border); border-radius: var(--phx-radius-sm); background: var(--phx-surface); padding: 12px; }
+.phx-attention-item-title { display: flex; align-items: center; gap: 6px; margin: 0; font-size: 14px; font-weight: 600; color: var(--phx-text); }
+/* The one window that asks the operator to act marks each item with the warning sign, not a tinted fill. */
+.phx-attention-item-title > svg { flex: none; color: var(--phx-warning); }
+.phx-attention-help { margin: 6px 0 0; font-size: 13px; color: var(--phx-text-2); max-width: 70ch; }
+.phx-attention-ref { font-size: 12px; color: var(--phx-text-2); overflow-wrap: anywhere; }
+.phx-attention-meta { margin: 4px 0 0; color: var(--phx-text-2); font-size: 12px; }
+/* The reference and Mark Reviewed share the last row, the reference giving up width first. */
+.phx-attention-actions { display: flex; align-items: center; justify-content: space-between; gap: 8px 16px; flex-wrap: wrap; margin-block-start: 12px; }
+.phx-attention-actions .phx-attention-ref { flex: 1 1 160px; min-width: 0; }
+.phx-attention-buttons { display: flex; gap: 6px; flex-wrap: wrap; }
+.phx-attention-meta .stat-label { margin-inline-end: 2px; }
+
+/* F6 lands on the toolbar, the Guide, a phone window or Agent Chat itself: show where focus went. */
+.phx-toolbar:focus-visible,
+section.phx-guide:focus-visible,
+.phx-phone-body:focus-visible,
+.agentcli-window:focus-visible { outline: 2px solid var(--phx-focus); outline-offset: -2px; }

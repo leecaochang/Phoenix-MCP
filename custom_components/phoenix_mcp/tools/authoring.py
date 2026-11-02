@@ -43,13 +43,16 @@ from homeassistant.util.yaml import dump as _yaml_dump, load_yaml as _load_yaml
 from homeassistant.helpers import entity_registry as er
 from homeassistant.core import HomeAssistant
 
-from ..authoring_validation import authoring_input_error, validation_message
+from ..authoring_validation import async_validation_message, authoring_input_error, validation_message
 from ..const import CAP_DENY, DOMAIN, TRACE_SCOPE_MAX_DEPTH
 from ..data import PhoenixData
 from ..entity_registration import async_observe_registration
-from ..helpers import content_hash, dict_arg, diff_summary_fields as _summary, effective_cap, str_arg, _strict_phoenix_log_text
-from ..tool_common import _CAP_FORBIDDEN_MESSAGE, _cas_conflict, _gate, _record_version, _tool_error, _tool_success, _truncate
-from ..policy_engine import Permission, filter_entities_for_access_key, resolve
+from ..helpers import content_hash, dict_arg, diff_summary_fields as _summary, effective_cap, str_arg, str_list_arg, _strict_phoenix_log_text
+from ..tool_common import (
+    _CAP_FORBIDDEN_MESSAGE, _cas_conflict, _gate, _record_version, _tool_error, _tool_refused_before_write,
+    _tool_success, _truncate, fitted_list, longest_fitting,
+)
+from ..policy_engine import Permission, filter_entities_for_access_key, resolve, resolve_read
 from ..request_authority import AuthorityChangedError, check_request_authority
 from ..access_key_store import AccessKeyRecord
 from .. import yaml_includes
@@ -64,7 +67,7 @@ _SCRIPT_LOCK_KEY = f"{DOMAIN}_script_lock"
 
 
 async def _finish_entity_write(
-    hass: HomeAssistant, access_key: AccessKeyRecord, *, domain: Literal["scene", "script"],
+    hass: HomeAssistant, access_key: AccessKeyRecord, *, domain: Literal["automation", "scene", "script"],
     storage_id: str, config: dict, tool_name: str,
 ) -> tuple[dict, str, str]:
     """Reload a saved, versioned write and report observation separately.
@@ -114,9 +117,12 @@ async def _finish_entity_write(
         )
         body["registration"] = {"status": "observation_failed", "entity_id": None, "state_present": None}
     check_request_authority()
-    if domain == "script":
+    if domain == "automation":
+        # Automation results have always named the entity at the top level.
+        body["entity_id"] = body["registration"]["entity_id"]
+    if domain in ("automation", "script"):
         from .discovery import reference_warnings  # noqa: PLC0415
-        if warnings := reference_warnings(hass, access_key, "script", config):
+        if warnings := reference_warnings(hass, access_key, domain, config):
             body["warnings"] = warnings
     status = body["registration"]["status"]
     if status == "timed_out":
@@ -269,31 +275,155 @@ def _delete_cas_conflict(
     return _cas_conflict(expected, current, tool_name)
 
 
+# Trigger fields that say when an automation runs; anything else (a webhook id is a
+# credential) stays in get_automation.
+_TRIGGER_SUMMARY_KEYS = ("at", "event", "offset", "hours", "minutes", "seconds", "entity_id",
+                         "from", "to", "above", "below", "for", "event_type")
+_AUTOMATION_QUERY_MATCHES = 3
+
+
+def _automation_triggers(config: dict) -> list[dict]:
+    """Each trigger's type and the fields that say when it fires."""
+    raw = config.get("triggers", config.get("trigger")) or []
+    summary = []
+    for trigger in raw if isinstance(raw, list) else [raw]:
+        if isinstance(trigger, dict):
+            kind = trigger.get("trigger", trigger.get("platform"))
+            summary.append({"trigger": kind, **{key: trigger[key] for key in _TRIGGER_SUMMARY_KEYS if key in trigger}})
+    return summary
+
+
+def _query_matches(config: Any, needle: str) -> list[dict]:
+    """The first configuration values containing needle, with where they sit."""
+    found: list[dict] = []
+
+    def walk(node: Any, path: list) -> None:
+        if len(found) >= _AUTOMATION_QUERY_MATCHES:
+            return
+        if isinstance(node, dict):
+            for key, value in node.items():
+                walk(value, [*path, key])
+        elif isinstance(node, list):
+            for index, value in enumerate(node):
+                walk(value, [*path, index])
+        elif needle in str(node).lower() or (path and needle in str(path[-1]).lower()):
+            found.append({"path": path, "value": str(node)[:200]})
+
+    walk(config, [])
+    return found
+
+
 async def _tool_list_automations(
     args: dict, access_key: AccessKeyRecord, hass: HomeAssistant
 ) -> tuple[dict, str, str]:
-    """MCP tool: list accessible automation.* entities with their editable id."""
+    """MCP tool: list accessible automation.* entities with their editable id.
+
+    With trigger or query it reads every configuration once, so "which automations
+    run at a fixed time" or "which ones notify my phone" is one call instead of one
+    get_automation per automation, and needs the capability get_automation needs.
+    A blueprint automation's triggers live in its blueprint, so it is named rather
+    than silently left out of a trigger search.
+    """
+    tool = "list_automations"
     if effective_cap(access_key, "cap_registry_read") == CAP_DENY:
-        return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "list_automations"
+        return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", tool
+    raw_triggers, query = args.get("trigger"), args.get("query")
+    if raw_triggers not in (None, "", []) and not isinstance(raw_triggers, str) and not (
+            isinstance(raw_triggers, list) and all(isinstance(item, str) for item in raw_triggers)):
+        return _tool_error("trigger must be a trigger type or a list of them."), "invalid_request", tool
+    if query is not None and (not isinstance(query, str) or len(query) > 200):
+        return _tool_error("query must be text of at most 200 characters."), "invalid_request", tool
+    wanted = {item.strip().lower() for item in ([raw_triggers] if isinstance(raw_triggers, str) else raw_triggers or [])
+              if item.strip()}
+    needle = (query or "").strip().lower()
+    searching = bool(wanted or needle)
+    configs: dict[str, dict] = {}
+    unreadable: list[str] = []
+    if searching:
+        if effective_cap(access_key, "cap_automation_write") == CAP_DENY:
+            return _tool_error(
+                "trigger and query read automation configurations, which this access key cannot do."
+            ), "denied", tool
+        found = await hass.async_add_executor_job(
+            yaml_includes.read_all_entries, hass.config.config_dir, "automation")
+        configs = {str(config.get("id")): config for config in found.entries
+                   if isinstance(config, dict) and config.get("id") is not None}
+        unreadable = list(found.unreadable)
     items: list[dict] = []
+    blueprints: list[str] = []
     for e in filter_entities_for_access_key(hass.states.async_all(), access_key, hass):
         if not e["entity_id"].startswith("automation."):
             continue
         attrs = e.get("attributes", {})
-        items.append({
+        item = {
             "entity_id": e["entity_id"],
             "alias": attrs.get("friendly_name"),
             "automation_id": attrs.get("id"),
             "state": e.get("state"),
-        })
+            # Which ran today, or not for a month, is then this one listing.
+            "last_triggered": attrs.get("last_triggered"),
+        }
+        if searching:
+            config = configs.get(str(attrs.get("id")))
+            if config is None:
+                continue
+            if "use_blueprint" in config and wanted:
+                blueprints.append(e["entity_id"])
+                continue
+            triggers = _automation_triggers(config)
+            if wanted and not wanted & {str(trigger["trigger"]).lower() for trigger in triggers}:
+                continue
+            if needle and needle not in json.dumps(config, default=str).lower():
+                continue
+            item["triggers"] = triggers
+            if needle:
+                item["matches"] = _query_matches(config, needle)
+        items.append(item)
     items.sort(key=lambda a: a["entity_id"])
-    return _tool_success(json.dumps({"count": len(items), "automations": items}, default=str)), "allowed", "list_automations"
+
+    def build(count: int) -> dict:
+        body: dict[str, Any] = {"count": count, "automations": items[:count]}
+        if count < len(items):
+            body["not_listed"] = [item["entity_id"] for item in items[count:]]
+            body["warnings"] = ["The result is full: narrow trigger or query to list the rest."]
+        if blueprints:
+            body["blueprint_automations"] = blueprints
+            body.setdefault("warnings", []).append(
+                "blueprint_automations take their triggers from a blueprint; read them with get_automation.")
+        if unreadable:
+            body["not_searched"] = unreadable
+        return body
+
+    return _tool_success(json.dumps(longest_fitting(build, len(items)), default=str)), "allowed", tool
+
+
+def _automation_not_found(
+    hass: HomeAssistant, access_key: AccessKeyRecord, requested: str, automation_id: str
+) -> str:
+    """Why no stored configuration was found, said plainly for an automation the caller can see.
+
+    A YAML automation without an id: has no stored id, so its entity ID cannot
+    be resolved to an entry, and one defined outside the automation files
+    Phoenix edits (a package) has an id but no entry here; a bare "not found"
+    sent agents looking for an id that cannot exist. Only an entity this access
+    key can read is explained, so the text never confirms one it cannot.
+    """
+    if (requested.startswith("automation.") and hass.states.get(requested) is not None
+            and resolve_read(requested, access_key, hass) in (Permission.READ, Permission.WRITE)):
+        if automation_id == requested:
+            return (f"{requested} is a YAML automation without an id:, so it has no stored configuration this "
+                    "tool can read or edit. get_relationships still shows what it references; giving it an id: in "
+                    "YAML makes it readable here.")
+        return (f"{requested} has id '{automation_id}', but its configuration is not in the automation files "
+                "Phoenix edits (for example it is in a package), so this tool cannot read or edit it.")
+    return f"No automation found with id '{automation_id}'."
 
 
 async def _tool_get_automation(
     args: dict, access_key: AccessKeyRecord, hass: HomeAssistant
 ) -> tuple[dict, str, str]:
     """MCP tool: read one automation's current stored config, with a content_hash."""
+    requested = str(args.get("automation_id") or "").strip()
     args = _with_stored_id(hass, args, "automation")
     if effective_cap(access_key, "cap_automation_write") == CAP_DENY:
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "get_automation"
@@ -302,7 +432,8 @@ async def _tool_get_automation(
         return _tool_error("automation_id is required."), "invalid_request", "get_automation"
     config = await _read_config_entry(hass, "automation", automation_id)
     if config is None:
-        return _tool_error(f"No automation found with id '{automation_id}'."), "not_found", f"automation:{automation_id}"
+        return (_tool_error(_automation_not_found(hass, access_key, requested, automation_id)), "not_found",
+                f"automation:{automation_id}")
     return _config_read_response("automation_id", automation_id, config, f"automation:{automation_id}")
 
 
@@ -330,14 +461,16 @@ async def _config_validation_error(
     error; calling it a validation failure would send the agent to rewrite a
     config that was never the problem.
     """
+    domain = "automation" if "automation" in tool_name else "script"
     try:
         if await validator(hass, config_key, config) is None:
             return _tool_error(invalid_message), "invalid_request", tool_name
     except vol.Invalid as exc:
-        domain = "automation" if "automation" in tool_name else "script"
-        return _tool_error(validation_message(domain, exc)), "invalid_request", tool_name
+        # Names a trigger or condition key Core has not registered, with its closest matches.
+        return _tool_error(await async_validation_message(hass, domain, config, exc)), "invalid_request", tool_name
     except HomeAssistantError:
-        return _tool_error(invalid_message), "invalid_request", tool_name
+        # Core raises this for a condition whose integration does not exist (a typo in its domain).
+        return _tool_error(await async_validation_message(hass, domain, config)), "invalid_request", tool_name
     except Exception as exc:
         _LOGGER.error("%s config validation raised an unexpected error:\n%s", tool_name, "".join(format_tb(exc.__traceback__)))
         return _tool_error("Internal error validating this config."), "invalid_request", tool_name
@@ -365,10 +498,21 @@ def _automation_argument_error(args: dict, *, create: bool) -> str | None:
     return " ".join(findings) if findings else None
 
 
+def _op_refusal(op: yaml_includes.OpResult) -> dict:
+    """Return a failed operation's tool error.
+
+    yaml_includes returns every conflict before it writes, so a conflict is a
+    refusal before any write.
+    """
+    if op.error_kind == "conflict":
+        return _tool_refused_before_write(op.error_text)
+    return _tool_error(op.error_text)
+
+
 def _automation_op_error(op: yaml_includes.OpResult, tool_name: str) -> tuple[dict, str, str]:
     """Map identity and storage refusals to the existing tool envelope."""
     outcome = "invalid_request" if op.error_kind in ("conflict", "io_error") else "denied"
-    return _tool_error(op.error_text), outcome, tool_name
+    return _op_refusal(op), outcome, tool_name
 
 
 async def _editor_file_refusal(
@@ -443,23 +587,6 @@ async def _tool_create_automation(
     return await _execute_create_automation(args, access_key, hass, data)
 
 
-def _automation_receipt(
-    hass: HomeAssistant, access_key: AccessKeyRecord, automation_id: str, config: dict, tool_name: str,
-) -> tuple[dict, str, str]:
-    """Name the saved automation's id and entity, and flag unresolvable references.
-
-    The reload above is blocking and in-process, so the entity is registered by now.
-    """
-    from .discovery import reference_warnings  # noqa: PLC0415
-
-    entity_id = _authoring_entity_id(hass, "automation", automation_id)
-    visible = entity_id is not None and resolve(entity_id, access_key, hass) in (Permission.READ, Permission.WRITE)
-    body: dict[str, Any] = {"automation_id": automation_id, "entity_id": entity_id if visible else None, "config": config}
-    if warnings := reference_warnings(hass, access_key, "automation", config):
-        body["warnings"] = warnings
-    return _tool_success(json.dumps(body, indent=2, default=str)), "allowed", tool_name
-
-
 async def _execute_create_automation(
     args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData
 ) -> tuple[dict, str, str]:
@@ -498,7 +625,6 @@ async def _execute_create_automation(
             )
             if not op.ok:
                 return _automation_op_error(op, "create_automation")
-        await hass.services.async_call("automation", "reload", blocking=True)
     except AuthorityChangedError:
         raise
     except Exception:
@@ -509,7 +635,9 @@ async def _execute_create_automation(
         data, access_key, resource_type="automation", resource_id=automation_id,
         action="create", before=None, after=config, alias=config.get("alias"),
     )
-    return _automation_receipt(hass, access_key, automation_id, config, "create_automation")
+    return await _finish_entity_write(
+        hass, access_key, domain="automation", storage_id=automation_id, config=config, tool_name="create_automation",
+    )
 
 
 async def _tool_edit_automation(
@@ -573,7 +701,6 @@ async def _execute_edit_automation(
             if not op.ok:
                 return _automation_op_error(op, "edit_automation")
             before_cfg = op.before
-        await hass.services.async_call("automation", "reload", blocking=True)
     except AuthorityChangedError:
         raise
     except Exception:
@@ -584,7 +711,9 @@ async def _execute_edit_automation(
         data, access_key, resource_type="automation", resource_id=automation_id,
         action="edit", before=before_cfg, after=config, alias=config.get("alias"),
     )
-    return _automation_receipt(hass, access_key, automation_id, config, "edit_automation")
+    return await _finish_entity_write(
+        hass, access_key, domain="automation", storage_id=automation_id, config=config, tool_name="edit_automation",
+    )
 
 
 async def _tool_delete_automation(
@@ -596,6 +725,7 @@ async def _tool_delete_automation(
     client_ip: str | None = None,
 ) -> tuple[dict, str, str]:
     """MCP tool: permanently delete a UI automation."""
+    requested = str_arg(args.get("automation_id")).strip()
     args = _with_stored_id(hass, args, "automation")
     if effective_cap(access_key, "cap_automation_write") == CAP_DENY:
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "delete_automation"
@@ -604,7 +734,8 @@ async def _tool_delete_automation(
         return _tool_error("automation_id is required."), "invalid_request", "delete_automation"
     args, current = await _bind_delete_args(args, hass, "automation", automation_id)
     if current is None:
-        return _tool_error(f"No automation found with id '{automation_id}'."), "denied", "delete_automation"
+        return (_tool_error(_automation_not_found(hass, access_key, requested, automation_id)), "denied",
+                "delete_automation")
     refused = await _editor_file_refusal(hass, "automation", automation_id, "delete_automation", create=False)
     if refused is not None:
         return refused
@@ -667,7 +798,7 @@ async def _execute_delete_automation(
                 await hass.async_add_executor_job(_write_automations_yaml, path, filtered)
             elif not op.ok:
                 outcome = "invalid_request" if op.error_kind == "conflict" else "denied"
-                return _tool_error(op.error_text), outcome, "delete_automation"
+                return _op_refusal(op), outcome, "delete_automation"
             else:
                 removed = op.before
         await hass.services.async_call("automation", "reload", blocking=True)
@@ -684,7 +815,7 @@ async def _execute_delete_automation(
         action="delete", before=removed, after=None,
         alias=removed.get("alias") if isinstance(removed, dict) else None,
     )
-    return _tool_success(f"Automation '{automation_id}' deleted successfully."), "allowed", "delete_automation"
+    return await _deletion_receipt(hass, "automation", automation_id, "delete_automation")
 
 
 async def _tool_list_scripts(
@@ -706,7 +837,7 @@ async def _tool_list_scripts(
             "state": e.get("state"),
         })
     items.sort(key=lambda s: s["entity_id"])
-    return _tool_success(json.dumps({"count": len(items), "scripts": items}, default=str)), "allowed", "list_scripts"
+    return _tool_success(json.dumps(fitted_list(items, "scripts"), default=str)), "allowed", "list_scripts"
 
 
 async def _tool_get_script(
@@ -992,7 +1123,7 @@ async def _execute_delete_script(
                 await hass.async_add_executor_job(_write_scripts_yaml, path, scripts)
             elif not op.ok:
                 outcome = "invalid_request" if op.error_kind == "conflict" else "denied"
-                return _tool_error(op.error_text), outcome, "delete_script"
+                return _op_refusal(op), outcome, "delete_script"
             else:
                 before_cfg = op.before
         await hass.services.async_call("script", "reload", blocking=True)
@@ -1009,7 +1140,7 @@ async def _execute_delete_script(
         action="delete", before=before_cfg, after=None,
         alias=before_cfg.get("alias") if isinstance(before_cfg, dict) else None,
     )
-    return _tool_success(f"Script '{script_id}' deleted successfully."), "allowed", "delete_script"
+    return await _deletion_receipt(hass, "script", script_id, "delete_script")
 
 
 # HA-COUPLING POINT. From HA 2026.7 hass.data[DATA_TRACE][key] is a TraceBuckets
@@ -1126,16 +1257,122 @@ def _empty_trace_diagnosis(hass: HomeAssistant, entity_id: str, trace_key: str) 
             "the most recent runs, as many as the stored_traces trace option allows (default 5).")
 
 
+def _run_error(short: dict, trace: Any) -> str | None:
+    """The error a run recorded, as Home Assistant's trace view shows it.
+
+    An exception is on the run itself. A stop with an error, or a check that could
+    not be evaluated, ends the run as aborted with the error on its last step; a
+    condition that was simply false ends it the same way without one.
+    """
+    if short.get("error") is not None:
+        return str(short["error"])
+    extended = getattr(trace, "as_extended_dict", None)
+    if short.get("script_execution") != "aborted" or not callable(extended):
+        return None
+    detail = extended()
+    steps = (detail.get("trace") or {}).get(detail.get("last_step")) or []
+    error = steps[-1].get("error") if steps and isinstance(steps[-1], dict) else None
+    return None if error is None else str(error)
+
+
+def _trace_run(short: dict, error: str | None) -> dict:
+    """One run in the overview: when it started, how it ended, and its error."""
+    run = {
+        "run_id": short.get("run_id"),
+        "start": (short.get("timestamp") or {}).get("start"),
+        "execution": short.get("script_execution"),
+        "last_step": short.get("last_step"),
+    }
+    if error is not None:
+        run["error"] = error
+    return run
+
+
+async def _restore_saved_traces(hass: HomeAssistant) -> None:
+    """Load the traces Home Assistant saved before its last restart.
+
+    The trace component restores them only when traces are first listed through
+    its own API; until then the runs before a restart look like no runs at all.
+    Restoring is idempotent, the same call the trace view makes.
+    """
+    from homeassistant.components.trace.const import DATA_TRACE_STORE  # noqa: PLC0415
+
+    if DATA_TRACE_STORE in hass.data:
+        from homeassistant.components.trace.util import async_restore_traces  # noqa: PLC0415
+
+        await async_restore_traces(hass)
+
+
+def _trace_overview(access_key: AccessKeyRecord, hass: HomeAssistant) -> tuple[dict, str, str]:
+    """Every readable automation and script with retained runs, in one call.
+
+    "Did any automation fail this week" otherwise takes one call per automation.
+    Each row counts the retained runs by how they ended and lists the runs that
+    recorded an error; rows with errors come first. Not-triggered evaluations are
+    counted apart, since they are not runs. Runs past what one result holds are
+    named in not_listed.
+    """
+    from homeassistant.components.trace.const import DATA_TRACE  # noqa: PLC0415
+
+    owners = {
+        (entry.domain, entry.unique_id): entry.entity_id
+        for entry in er.async_get(hass).entities.values()
+        if entry.domain in ("automation", "script") and entry.unique_id is not None
+    }
+    rows: list[dict[str, Any]] = []
+    for trace_key, bucket in hass.data.get(DATA_TRACE, {}).items():
+        domain, _, item_id = str(trace_key).partition(".")
+        entity_id = owners.get((domain, item_id))
+        if entity_id is None or resolve(entity_id, access_key, hass) not in (Permission.READ, Permission.WRITE):
+            continue
+        traces = [(trace.as_short_dict(), trace) for trace in _traces_for_automation(bucket)]
+        runs = sorted(((short, _run_error(short, trace)) for short, trace in traces if not short.get("not_triggered")),
+                      key=lambda run: str((run[0].get("timestamp") or {}).get("start") or ""), reverse=True)
+        skipped = len(traces) - len(runs)
+        if not runs and not skipped:
+            continue
+        outcomes: dict[str, int] = {}
+        for short, _error in runs:
+            outcome = str(short.get("script_execution") or short.get("state") or "unknown")
+            outcomes[outcome] = outcomes.get(outcome, 0) + 1
+        row: dict[str, Any] = {"entity_id": entity_id, "runs": len(runs), "outcomes": outcomes}
+        if runs:
+            row["last"] = _trace_run(*runs[0])
+        if errors := [_trace_run(short, error) for short, error in runs if error is not None]:
+            row["errors"] = errors
+        if skipped:
+            row["not_triggered"] = skipped
+        rows.append(_scope_trace(row, access_key, hass))
+    rows.sort(key=lambda row: str((row.get("last") or {}).get("start") or ""), reverse=True)
+    rows.sort(key=lambda row: "errors" not in row)
+
+    def build(count: int) -> dict:
+        body: dict[str, Any] = {"count": count, "with_errors": sum("errors" in row for row in rows[:count]),
+                                "items": rows[:count]}
+        if count < len(rows):
+            body["not_listed"] = [row["entity_id"] for row in rows[count:]]
+            body["warnings"] = ["The result is full: read the not_listed ones by automation_id."]
+        if DATA_TRACE not in hass.data:
+            body["warnings"] = [*body.get("warnings", []),
+                                "The trace component is not loaded; trace history is unavailable."]
+        return body
+
+    return _tool_success(json.dumps(longest_fitting(build, len(rows)), default=str)), "allowed", "get_automation_traces"
+
+
 async def _tool_get_automation_traces(
     args: dict, access_key: AccessKeyRecord, hass: HomeAssistant
 ) -> tuple[dict, str, str]:
-    """MCP tool: execution traces for an accessible automation or script."""
+    """MCP tool: execution traces for an accessible automation or script, or an overview of all."""
     if effective_cap(access_key, "cap_traces") == CAP_DENY:
         return _tool_error("Forbidden."), "denied", "get_automation_traces"
 
     raw = str(args.get("automation_id") or args.get("entity_id") or "").strip()
+    if not raw and args.get("run_id"):
+        return _tool_error("run_id needs automation_id."), "invalid_request", "get_automation_traces"
+    await _restore_saved_traces(hass)
     if not raw:
-        return _tool_error("Missing required argument: automation_id"), "invalid_request", "get_automation_traces"
+        return _trace_overview(access_key, hass)
 
     entity_id, trace_key = _resolve_trace_target(raw, hass)
     # Scope: nonexistent and inaccessible look identical (no oracle).
@@ -1202,21 +1439,35 @@ def _valid_scene_config(config: Any) -> bool:
 async def _tool_list_scenes(
     args: dict, access_key: AccessKeyRecord, hass: HomeAssistant
 ) -> tuple[dict, str, str]:
-    """MCP tool: list accessible scene.* entities with their editable scene id."""
+    """MCP tool: list accessible scene.* entities with their editable scene id.
+
+    entity_id keeps the scenes that include any of those entities, so "which
+    scenes use the studio lights" needs no get_scene per scene. Only members
+    this access key can read are matched or listed, so a hidden member answers
+    exactly like an entity no scene uses.
+    """
     if effective_cap(access_key, "cap_registry_read") == CAP_DENY:
         return _tool_error("Forbidden."), "denied", "list_scenes"
+    wanted = {item.strip() for item in str_list_arg(args.get("entity_id")) if item.strip()}
     scenes: list[dict] = []
     for e in filter_entities_for_access_key(hass.states.async_all(), access_key, hass):
         if not e["entity_id"].startswith("scene."):
             continue
         attrs = e.get("attributes", {})
-        scenes.append({
+        row = {
             "entity_id": e["entity_id"],
             "name": attrs.get("friendly_name"),
             "scene_id": attrs.get("id"),
-        })
+        }
+        if wanted:
+            members = [member for member in attrs.get("entity_id") or () if isinstance(member, str)
+                       and resolve_read(member, access_key, hass) in (Permission.READ, Permission.WRITE)]
+            if not wanted & set(members):
+                continue
+            row["members"] = members
+        scenes.append(row)
     scenes.sort(key=lambda s: s["entity_id"])
-    return _tool_success(json.dumps({"count": len(scenes), "scenes": scenes}, default=str)), "allowed", "list_scenes"
+    return _tool_success(json.dumps(fitted_list(scenes, "scenes"), default=str)), "allowed", "list_scenes"
 
 
 async def _tool_get_scene(
@@ -1247,6 +1498,8 @@ async def _scene_write(
     """Shared create/edit body: validate, scope-check members, write scenes.yaml, reload."""
     if not _valid_scene_config(config):
         return _tool_error("config must include a non-empty 'name' and a non-empty 'entities' map."), "invalid_request", tool_name
+    if yaml_includes.contains_tag_strings(config):
+        return _tool_error(yaml_includes.TAG_STRING_REFUSAL), "invalid_request", tool_name
     bad = _unwritable_scene_members(config, access_key, hass)
     if bad:
         return _tool_error("Scene references entities this access key cannot write: " + ", ".join(bad)), "denied", tool_name
@@ -1334,6 +1587,8 @@ def _scene_write_precheck(args: dict, tool_name: str, *, require_id: bool) -> tu
         return _tool_error("config must be an object."), "invalid_request", tool_name
     if not _valid_scene_config(config):
         return _tool_error("config must include a non-empty 'name' and a non-empty 'entities' map."), "invalid_request", tool_name
+    if yaml_includes.contains_tag_strings(config):
+        return _tool_error(yaml_includes.TAG_STRING_REFUSAL), "invalid_request", tool_name
     return None
 
 
@@ -1501,7 +1756,7 @@ async def _execute_delete_scene(
                 )
                 if not op.ok:
                     outcome = "invalid_request" if op.error_kind == "conflict" else "denied"
-                    return _tool_error(op.error_text), outcome, "delete_scene"
+                    return _op_refusal(op), outcome, "delete_scene"
                 existing = op.before
         await hass.services.async_call("scene", "reload", blocking=True)
         # Reloading scenes.yaml does not remove the scene's entity-registry entry.
@@ -1521,7 +1776,7 @@ async def _execute_delete_scene(
         action="delete", before=existing, after=None,
         alias=existing.get("name") if isinstance(existing, dict) else None,
     )
-    return _tool_success(f"Scene '{scene_id}' deleted successfully."), "allowed", "delete_scene"
+    return await _deletion_receipt(hass, "scene", scene_id, "delete_scene")
 
 
 def _build_diff_create_automation(args: dict, access_key: AccessKeyRecord, hass: HomeAssistant) -> dict:
@@ -1536,6 +1791,20 @@ def _build_diff_create_automation(args: dict, access_key: AccessKeyRecord, hass:
                     "target_semantics": "future_native_execution",
                     "target_membership": "may_change", "runtime_authority": "Home Assistant"},
     }
+
+
+async def _deletion_receipt(hass: HomeAssistant, domain: str, item_id: str, tool_name: str) -> tuple[dict, str, str]:
+    """Read a deletion back after the reload: no stored entry and no entity left."""
+    stored = await _read_config_entry(hass, domain, item_id)
+    remains = _authoring_entity_id(hass, domain, item_id) is not None
+    verified = stored is None and not remains
+    body: dict[str, Any] = {"deleted": True, f"{domain}_id": item_id, "verified": verified,
+                            "message": f"{domain.capitalize()} '{item_id}' deleted successfully."}
+    if not verified:
+        body["message"] = (f"{domain.capitalize()} '{item_id}' was removed from its file, but "
+                           + ("its configuration still reads back" if stored is not None else "its entity is still present")
+                           + "; inspect it before retrying, and do not repeat the delete.")
+    return _tool_success(json.dumps(body)), "allowed", tool_name
 
 
 def _authoring_entity_id(hass: HomeAssistant, domain: str, entry_id: str) -> str | None:

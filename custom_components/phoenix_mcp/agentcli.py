@@ -22,6 +22,7 @@ import binascii
 import dataclasses
 import codecs
 from contextlib import aclosing
+from contextvars import ContextVar
 from copy import deepcopy
 import functools
 import hashlib
@@ -39,10 +40,10 @@ from dataclasses import dataclass
 from typing import Any, AsyncGenerator, AsyncIterator, Awaitable, Callable, cast
 from urllib.parse import urlparse, urlunparse
 
-from aiohttp import ClientError, ClientSession, ClientTimeout, web
+from aiohttp import ClientError, ClientSession, ClientTimeout, SocketTimeoutError, web
 
 from .routing_statistics import tracked_turn, provider_events, voice_result, untracked_turn
-from .conversation_log import record_rejected_tool, sanitized
+from .conversation_log import record_event, record_rejected_tool, sanitized
 
 from .view_base import PhoenixView
 from homeassistant.core import HomeAssistant, callback
@@ -56,6 +57,7 @@ from .audit import generate_request_id
 from .agent_recovery import RecoveryRequired, dispatch_agent_tool, recovery_turn, tool_is_read_only
 from .approvals import (
     REASON_AGENT_CHAT_ENDED,
+    REASON_AGENT_CHAT_WAIT_TIMED_OUT,
     STATUS_APPROVED,
     STATUS_CANCELLED,
     STATUS_FAILED,
@@ -100,6 +102,10 @@ from .const import (
     AGENTCLI_KIMI_CHINA_BASE_URL,
     AGENTCLI_ZAI_CHINA_BASE_URL,
     AGENTCLI_MIMO_TOKEN_PLAN_BASE_URL,
+    AGENTCLI_MIMO_TOKEN_PLAN_SGP_BASE_URL,
+    AGENTCLI_MIMO_TOKEN_PLAN_AMS_BASE_URL,
+    AGENTCLI_MINIMAX_CHINA_BASE_URL,
+    AGENTCLI_OPENAI_REGION_PREFIXES,
     AGENTCLI_MISTRAL_EU_BASE_URL,
     AGENTCLI_MISTRAL_US_BASE_URL,
     AGENTCLI_OPENAI_US_BASE_URL,
@@ -120,6 +126,8 @@ from .const import (
     AGENTCLI_ZAI_BASE_URL,
     AGENTCLI_ZAI_CODING_BASE_URL,
     AGENTCLI_DEEPSEEK_MAX_TOKENS,
+    AGENTCLI_NVIDIA_MAX_TOKENS,
+    AGENTCLI_PROMPT_CHARS_PER_TOKEN,
     AGENTCLI_DEFAULT_EFFORT,
     AGENTCLI_DEFAULT_MAX_TOKENS,
     AGENTCLI_EFFORT_LEVELS,
@@ -128,9 +136,14 @@ from .const import (
     AGENTCLI_MAX_STREAM_BYTES,
     AGENTCLI_MAX_TOOL_CALL_CORRECTIONS,
     AGENTCLI_MAX_TOOLS_PER_REQUEST,
+    AGENTCLI_LOAD_TOOLS_NAME,
     AGENTCLI_MAX_TURN_OUTPUT_BYTES,
     AGENTCLI_PROVIDER_DETAIL_CHARS,
+    AGENTCLI_PROVIDER_ERROR_BYTES,
     AGENTCLI_STREAM_READ_TIMEOUT_SECONDS,
+    AGENTCLI_RETRY_FIRST_REPLY_SECONDS,
+    VOICE_FIRST_REPLY_SECONDS,
+    AGENTCLI_STATUS_INTERVAL_SECONDS,
     AGENTCLI_SECRETS_STORAGE_KEY,
     AGENTCLI_SECRETS_STORAGE_VERSION,
     AGENTCLI_TOOL_RESULT_MAX_CHARS,
@@ -144,8 +157,9 @@ from .const import (
 )
 from .data import PhoenixData
 from .model_selection import effective_model
-from .helpers import get_client_ip, access_key_has_write_scope, voice_text
+from .helpers import LocalizedReason, get_client_ip, access_key_has_write_scope, voice_text
 from .access_key_store import AccessKeyRecord
+from .tool_loading import ToolLoader
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -156,10 +170,6 @@ _PROBE_TIMEOUT = ClientTimeout(total=10, connect=5, sock_connect=5)
 _IMAGE_PROBE_TIMEOUT = ClientTimeout(total=90, connect=5, sock_connect=5)
 # How many distinct model ids an account remembers having seen listed.
 _MODEL_SEEN_LIMIT = 1000
-# OpenAI models that rejected the forced `reasoning_effort: none` of a tool turn
-# (non-reasoning or older models). Process-local: a restart re-learns it with one
-# retried request.
-_OPENAI_NO_EFFORT_NONE: set[str] = set()
 # Providers that require (or reward) the assistant's reasoning_content being sent
 # back verbatim with its tool calls on the next round. Kimi's thinking models and
 # Qwen's preserve_thinking models take it the same way; others use the field for
@@ -256,6 +266,9 @@ EV_INVALID_TOOLS = "invalid_tool_calls"
 # consumer keeps the newest event's numbers rather than summing events. Counts
 # are exact from the provider; Phoenix MCP never estimates tokens itself.
 EV_USAGE = "usage_update"
+# A temporary failure before any output is about to be retried: attempt is the
+# next attempt's number and detail the provider's own sentence, when it sent one.
+EV_RETRYING = "retrying"
 
 
 # --------------------------------------------------------------------------- #
@@ -425,10 +438,22 @@ _MISTRAL_ENDPOINTS = (
     ProviderChoice("eu", "Europe", "settings.agentcliRegionEu", AGENTCLI_MISTRAL_EU_BASE_URL),
     ProviderChoice("us", "United States", "settings.agentcliRegionUs", AGENTCLI_MISTRAL_US_BASE_URL),
 )
+_OPENAI_REGION_NAMES = {
+    "ae": ("United Arab Emirates", "settings.agentcliRegionAe"), "au": ("Australia", "settings.agentcliRegionAu"),
+    "ca": ("Canada", "settings.agentcliRegionCa"), "jp": ("Japan", "settings.agentcliRegionJp"),
+    "in": ("India", "settings.agentcliRegionIn"), "sg": ("Singapore", "settings.agentcliSingapore"),
+    "kr": ("South Korea", "settings.agentcliRegionKr"), "gb": ("United Kingdom", "settings.agentcliRegionGb"),
+}
 _OPENAI_ENDPOINTS = (
     ProviderChoice(*_GLOBAL, AGENTCLI_OPENAI_BASE_URL),
     ProviderChoice("us", "United States", "settings.agentcliRegionUs", AGENTCLI_OPENAI_US_BASE_URL),
     ProviderChoice("eu", "Europe", "settings.agentcliRegionEu", AGENTCLI_OPENAI_EU_BASE_URL),
+    *(ProviderChoice(prefix, *_OPENAI_REGION_NAMES[prefix], f"https://{prefix}.api.openai.com/v1")
+      for prefix in AGENTCLI_OPENAI_REGION_PREFIXES),
+)
+_MINIMAX_ENDPOINTS = (
+    ProviderChoice(*_GLOBAL, AGENTCLI_MINIMAX_BASE_URL),
+    ProviderChoice("china", "China", "settings.agentcliRegionChina", AGENTCLI_MINIMAX_CHINA_BASE_URL),
 )
 _GROK_ENDPOINTS = (
     ProviderChoice(*_GLOBAL, AGENTCLI_GROK_BASE_URL),
@@ -436,7 +461,12 @@ _GROK_ENDPOINTS = (
 )
 _MIMO_ENDPOINTS = (
     ProviderChoice("payg", "Pay as you go", "settings.agentcliMimoPayg", AGENTCLI_MIMO_BASE_URL),
-    ProviderChoice("token_plan", "Token Plan", "settings.agentcliMimoTokenPlan", AGENTCLI_MIMO_TOKEN_PLAN_BASE_URL),
+    ProviderChoice("token_plan", "Token Plan (China)", "settings.agentcliMimoTokenPlan", AGENTCLI_MIMO_TOKEN_PLAN_BASE_URL),
+    # A Token Plan key works only on the host its subscription page names.
+    ProviderChoice("token_plan_sgp", "Token Plan (Singapore)", "settings.agentcliMimoTokenPlanSingapore",
+                   AGENTCLI_MIMO_TOKEN_PLAN_SGP_BASE_URL),
+    ProviderChoice("token_plan_ams", "Token Plan (Europe)", "settings.agentcliMimoTokenPlanEurope",
+                   AGENTCLI_MIMO_TOKEN_PLAN_AMS_BASE_URL),
 )
 _OPENCODE_ENDPOINTS = (
     ProviderChoice("zen", "Zen (legacy)", "settings.agentcliOpenCodeZen", AGENTCLI_OPENCODE_BASE_URL),
@@ -494,12 +524,13 @@ PROVIDER_DEFINITIONS: dict[str, ProviderDefinition] = {
         _definition("claude", "Anthropic", AGENTCLI_CLAUDE_BASE_URL, adapter="anthropic"),
         _definition("deepseek", "DeepSeek", AGENTCLI_DEEPSEEK_BASE_URL, include_usage=True, reasoning="deepseek"),
         _definition(
-            "chatgpt", "OpenAI", AGENTCLI_OPENAI_BASE_URL, include_usage=True, model_filter="openai",
+            "chatgpt", "OpenAI", AGENTCLI_OPENAI_BASE_URL, adapter="openai_responses", include_usage=True,
+            model_filter="openai",
             fields=(_region_field(_OPENAI_ENDPOINTS), _API_KEY_FIELD), endpoints=_OPENAI_ENDPOINTS,
             max_tools=AGENTCLI_MAX_TOOLS_PER_REQUEST,
         ),
         _definition("gemini", "Gemini", AGENTCLI_GEMINI_BASE_URL, reasoning="gemini", model_filter="gemini",
-                    tool_stream="gemini"),
+                    tool_stream="gemini", max_tools=AGENTCLI_MAX_TOOLS_PER_REQUEST),
         _definition(
             "grok", "Grok", AGENTCLI_GROK_BASE_URL,
             fields=(_region_field(_GROK_ENDPOINTS), _API_KEY_FIELD), endpoints=_GROK_ENDPOINTS,
@@ -509,9 +540,11 @@ PROVIDER_DEFINITIONS: dict[str, ProviderDefinition] = {
         _definition(
             "kimi", "Kimi", AGENTCLI_KIMI_BASE_URL, include_usage=True, reasoning="kimi",
             fields=(_region_field(_KIMI_ENDPOINTS), _API_KEY_FIELD), endpoints=_KIMI_ENDPOINTS,
+            max_tools=AGENTCLI_MAX_TOOLS_PER_REQUEST,
         ),
         _definition("meta", "Meta", AGENTCLI_META_BASE_URL, reasoning="meta", model_filter="meta"),
-        _definition("minimax", "MiniMax", AGENTCLI_MINIMAX_BASE_URL, adapter="anthropic"),
+        _definition("minimax", "MiniMax", AGENTCLI_MINIMAX_BASE_URL, adapter="anthropic",
+                    fields=(_region_field(_MINIMAX_ENDPOINTS), _API_KEY_FIELD), endpoints=_MINIMAX_ENDPOINTS),
         _definition(
             "mistral", "Mistral AI", AGENTCLI_MISTRAL_BASE_URL, reasoning="mistral", model_filter="mistral",
             fields=(_region_field(_MISTRAL_ENDPOINTS), _API_KEY_FIELD), endpoints=_MISTRAL_ENDPOINTS,
@@ -535,7 +568,10 @@ PROVIDER_DEFINITIONS: dict[str, ProviderDefinition] = {
         ),
         _definition("ollama_cloud", "Ollama (cloud)", AGENTCLI_OLLAMA_CLOUD_BASE_URL, include_usage=True, reasoning="ollama", ollama="cloud"),
         _definition("ollama", "Ollama (local)", "", fields=(_OLLAMA_URL_FIELD,), include_usage=True, reasoning="ollama", ollama="local"),
-        _definition("openrouter", "OpenRouter", AGENTCLI_OPENROUTER_BASE_URL, include_usage=True, reasoning="probed_effort", model_filter="openrouter"),
+        # OpenRouter forwards the tools array to the routed provider, and OpenAI's
+        # models behind it refuse more than 128.
+        _definition("openrouter", "OpenRouter", AGENTCLI_OPENROUTER_BASE_URL, include_usage=True, reasoning="probed_effort",
+                    model_filter="openrouter", max_tools=AGENTCLI_MAX_TOOLS_PER_REQUEST),
         _definition(
             "together", "Together", AGENTCLI_TOGETHER_BASE_URL,
             model_filter="together", models_shape="list",
@@ -1038,14 +1074,36 @@ def _error_envelope(text: str) -> dict | None:
     return obj if isinstance(obj, dict) else None
 
 
+def _detail_text(value: Any) -> str:
+    """A validation detail as one sentence: a string, or a list of {msg, loc} items.
+
+    Mistral and Fireworks answer HTTP 422 with FastAPI-style `detail` lists, which
+    Mistral nests inside `message`.
+    """
+    if isinstance(value, str):
+        return value.strip()
+    if isinstance(value, dict):
+        return _detail_text(value.get("detail"))
+    if isinstance(value, list):
+        parts = []
+        for item in value[:5]:
+            if isinstance(item, dict) and isinstance(item.get("msg"), str):
+                loc = item.get("loc")
+                field = ".".join(str(p) for p in loc if p != "body") if isinstance(loc, list) else ""
+                parts.append(f"{field}: {item['msg']}" if field else item["msg"])
+        return "; ".join(parts)
+    return ""
+
+
 def _envelope_message(obj: dict | None) -> str:
     """The provider's human sentence from an error envelope, unclipped, or ""."""
     if obj is None:
         return ""
     err = obj.get("error")
     for message in ((err.get("message") if isinstance(err, dict) else err), obj.get("message"), obj.get("detail")):
-        if isinstance(message, str) and message.strip():
-            return message.strip()
+        text = _detail_text(message)
+        if text:
+            return text
     return ""
 
 
@@ -1079,18 +1137,21 @@ def _parse_provider_error(text: str) -> tuple[str, str | None]:
     return _envelope_message(obj) or (text or "").strip(), (codes[0] if codes else None)
 
 
-def _provider_error_detail(text: str) -> str:
+def _provider_error_detail(text: str, api_key: str | None = None) -> str:
     """The provider's own error sentence for an administrator, or "".
 
     Only the message inside a JSON error envelope qualifies; a proxy's HTML page
-    or another unstructured body is not shown. The sentence is clipped and then
-    scrubbed like conversation-log text, so a key, bearer token or address a
-    provider echoes is redacted. It reaches the admin panel, the conversation
-    log and the Home Assistant log, never a model, Voice or AI Task.
+    or another unstructured body is not shown. The configured key is removed
+    verbatim first, since key formats differ by provider, then the sentence is
+    clipped and scrubbed like conversation-log text, so a key, bearer token or
+    address a provider echoes is redacted. It reaches the admin panel, the
+    conversation log and the Home Assistant log, never a model, Voice or AI Task.
     """
     message = _envelope_message(_error_envelope(text))
     if not message:
         return ""
+    if api_key:
+        message = message.replace(api_key, "<redacted>")
     clipped = " ".join(message.split())[:AGENTCLI_PROVIDER_DETAIL_CHARS]
     try:
         return str(sanitized(clipped, max_bytes=8 * AGENTCLI_PROVIDER_DETAIL_CHARS, hide_ip=True))
@@ -1135,6 +1196,41 @@ _QWEN_BILLING = (frozenset({"arrearage", "allocationquota.freetieronly", "prepai
                             "postpaidbilloverdue", "budgetlimitexceeded"}), ("free allocated quota exceeded",))
 # OpenRouter's one temporary 402: requests already in flight hold the budget.
 _OPENROUTER_IN_FLIGHT = "openrouter_in_flight_budget"
+# Quota windows and plan limits a provider sends as HTTP 429 that no short retry
+# clears (Z.ai window, weekly/monthly, fair-use and spend-cap limits; TokenHub's
+# daily token cap). The provider's own sentence, which names the reset, is kept.
+_PROVIDER_NON_RETRYABLE: dict[str, frozenset[str]] = {
+    "zai": frozenset({"1308", "1310", "1313", "1316", "1317", "1318", "1319", "1320", "1321"}),
+    "tencent": frozenset({"429004"}),
+}
+# Refusals of this request that the status alone misnames: Z.ai's model outside
+# the plan, and OpenCode's free models, which answer only OpenCode's own app.
+_PROVIDER_REJECTED: dict[str, frozenset[str]] = {
+    "zai": frozenset({"1311"}),
+    "opencode": frozenset({"freetiererror"}),
+}
+_RETRY_DELAY = re.compile(r"(\d{1,6})(?:\.\d+)?s")
+
+
+def _google_quota(envelope: dict | None) -> tuple[int | None, bool]:
+    """Google's RetryInfo delay and whether a QuotaFailure names a daily quota.
+
+    Gemini reports which quota ran out in `error.details`; a per-day quota is not
+    cleared by any short retry.
+    """
+    err = envelope.get("error") if isinstance(envelope, dict) else None
+    details = err.get("details") if isinstance(err, dict) else None
+    delay, daily = None, False
+    for item in details if isinstance(details, list) else []:
+        if not isinstance(item, dict):
+            continue
+        match = _RETRY_DELAY.fullmatch(str(item.get("retryDelay") or ""))
+        if match:
+            delay = int(match.group(1))
+        for violation in item.get("violations") or [] if isinstance(item.get("violations"), list) else []:
+            if isinstance(violation, dict) and "PerDay" in str(violation.get("quotaId") or ""):
+                daily = True
+    return delay, daily
 
 
 def _billing_refusal(kind: str, status: int, codes: list[str], message: str) -> bool:
@@ -1166,7 +1262,9 @@ def _http_failure_code(status: int, server_error: str = "upstream") -> str:
     return server_error
 
 
-def _http_failure(kind: str, status: int, text: str, *, code: str, retryable: bool, **extra: Any) -> dict:
+def _http_failure(
+    kind: str, status: int, text: str, *, code: str, retryable: bool, api_key: str | None = None, **extra: Any,
+) -> dict:
     """One EV_ERROR for a non-200 provider answer, with the administrator-only detail.
 
     Billing refusals override the status classification (_billing_refusal). The
@@ -1175,13 +1273,21 @@ def _http_failure(kind: str, status: int, text: str, *, code: str, retryable: bo
     """
     envelope = _error_envelope(text)
     codes = _provider_error_codes(envelope)
+    delay, daily = _google_quota(envelope) if kind == "gemini" else (None, False)
     if _billing_refusal(kind, status, codes, _envelope_message(envelope)):
         code, retryable = "quota", False
     elif kind == "openrouter" and _OPENROUTER_IN_FLIGHT in codes:
         code, retryable = "rate_limit", True
-    elif codes and codes[0] in _NON_RETRYABLE_ERROR_CODES:
+    elif _PROVIDER_REJECTED.get(kind, frozenset()) & set(codes):
+        code, retryable = "provider_rejected", False
+    elif (codes and codes[0] in _NON_RETRYABLE_ERROR_CODES) or daily or (
+            _PROVIDER_NON_RETRYABLE.get(kind, frozenset()) & set(codes)):
         retryable = False
-    detail = _provider_error_detail(text)
+    if delay is not None and status in (429, 503):
+        given = extra.get("rate_limit")
+        limits: dict = given if isinstance(given, dict) else {}
+        extra["rate_limit"] = {**limits, "retry_after_seconds": limits.get("retry_after_seconds", delay)}
+    detail = _provider_error_detail(text, api_key)
     machine = next((c for c in codes if re.fullmatch(r"[a-z0-9_.:-]{1,64}", c)), None)
     _LOGGER.log(
         logging.DEBUG if retryable else logging.WARNING,
@@ -1244,6 +1350,9 @@ def _rate_limit_headers(headers: Any, fields: tuple[tuple[str, str], ...]) -> di
     return out
 
 
+# Statuses that name a temporary condition on every provider: a request timeout,
+# a rate limit, server and gateway failures, and Anthropic's overload.
+_RETRYABLE_STATUSES = frozenset({408, 429, 500, 502, 503, 504, 529})
 # Account and request problems retrying cannot change, besides billing (see
 # _billing_refusal), so surface them immediately instead of spending the
 # connect-retry window (see _stream_turn_resilient) hammering them.
@@ -1282,6 +1391,16 @@ async def _retry_transient(attempt: Callable[[], Awaitable[Any]]) -> Any:
                 await asyncio.sleep(_VALIDATE_RETRY_BACKOFF_SECONDS)
     assert last is not None
     raise last
+
+
+async def _error_body(resp: Any) -> str:
+    """The start of a provider's error body; a huge or endless body is never buffered."""
+    raw = bytearray()
+    async for chunk in resp.content.iter_chunked(4096):
+        raw.extend(chunk)
+        if len(raw) >= AGENTCLI_PROVIDER_ERROR_BYTES:
+            break
+    return bytes(raw[:AGENTCLI_PROVIDER_ERROR_BYTES]).decode("utf-8", errors="replace")
 
 
 async def _sse_lines(resp: Any) -> AsyncIterator[str]:
@@ -1333,6 +1452,8 @@ def _provider_failure(code: str, *, retryable: bool = True) -> dict:
         "provider_incomplete": "The provider response ended without a complete message. No tool from this response was run.",
         "provider_blocked": "The provider blocked this response. It will not be retried.",
         "provider_transient": "The provider is temporarily unavailable.",
+        "provider_context_limit": "The conversation is too long for this model's context window. No tool from this response was run.",
+        "bad_tool_call": "The model produced an invalid tool call. No tool from this response was run.",
     }
     return _norm(EV_ERROR, status=200, code=code, message=messages[code],
                  retryable=retryable, diagnostic={"category": code})
@@ -1353,6 +1474,27 @@ def _total_provider_response(parse: Callable) -> Callable:
     return guarded
 
 
+# HTTP classes that name a temporary condition when a provider reports an error
+# inside an already-started stream. TokenHub uses six-digit codes whose first
+# three digits are the status (429006, 502001); OpenRouter sends the bare status.
+_TRANSIENT_STREAM_STATUSES = frozenset({"408", "429", "500", "502", "503", "504", "529"})
+_TRANSIENT_STREAM_CODES = frozenset({
+    "overloaded_error", "rate_limit_error", "server_error", "internal_server_error", "rate_limit_exceeded",
+    # OpenRouter's typed categories (error.metadata.error_type).
+    "provider_unavailable", "provider_overloaded", "timeout", "server", "rate_limit",
+})
+
+
+def _transient_stream_error(error: dict) -> bool:
+    """Whether an error object inside a 200 stream names a temporary condition."""
+    code = str(error.get("code") or error.get("type") or "").strip().lower()
+    given = error.get("metadata")
+    metadata: dict = given if isinstance(given, dict) else {}
+    return (code in _TRANSIENT_STREAM_CODES
+            or (re.fullmatch(r"\d{3}(?:\d{3})?", code) is not None and code[:3] in _TRANSIENT_STREAM_STATUSES)
+            or str(metadata.get("error_type") or "").strip().lower() in _TRANSIENT_STREAM_CODES)
+
+
 def _provider_object(payload: str) -> dict:
     obj = json.loads(payload)
     if not isinstance(obj, dict):
@@ -1364,11 +1506,13 @@ def _provider_object(payload: str) -> dict:
         {*_NON_RETRYABLE_ERROR_CODES, *_DEFAULT_BILLING_CODES, "content_filter", "content_policy_violation"}
     ):
         raise _ProviderResponseError("provider_blocked", retryable=False)
-    if isinstance(error, dict) and str(error.get("code") or error.get("type")) in {
-        "overloaded_error", "rate_limit_error", "server_error", "internal_server_error",
-        "rate_limit_exceeded", "429", "500", "503", "529",
-    }:
+    if isinstance(error, dict) and _transient_stream_error(error):
         raise _ProviderResponseError("provider_transient")
+    if isinstance(error, dict) and error.get("code") == "tool_use_failed":
+        # Groq validates a generated call itself and streams this in place of it
+        # (an undeclared tool, unparseable arguments). The model erred, not a
+        # policy: nothing ran, and a fresh sample usually succeeds.
+        raise _ProviderResponseError("bad_tool_call")
     if error:
         # Unknown HTTP-200 errors are deliberate upstream refusals, not a reason
         # to replay a request. The content itself must never become diagnostics.
@@ -1544,6 +1688,59 @@ def _tool_limit_problem(provider: Any, tools: list) -> dict | None:
     }
 
 
+def _tool_loader(provider: Any, catalog: list[dict]) -> ToolLoader | None:
+    """Tool-level loading when this provider's tools-array cap is below the catalog."""
+    definition = PROVIDER_DEFINITIONS.get(str(getattr(provider, "kind", "")))
+    return ToolLoader.plan(catalog, definition.max_tools if definition is not None else None)
+
+
+def _local_tool_results(
+    loader: ToolLoader | None, tool_calls: list[dict], data: PhoenixData,
+) -> tuple[list[dict | None], list[dict]]:
+    """Answer load_tools and calls to undeclared deferred tools without dispatching them.
+
+    Returns one slot per call, holding its local result or None, and the calls
+    left for review and dispatch. Neither kind reaches the dispatcher, so
+    neither can start a write.
+    """
+    if loader is None:
+        return [None] * len(tool_calls), tool_calls
+    slots: list[dict | None] = []
+    dispatch: list[dict] = []
+    for tc in tool_calls:
+        name = str(tc.get("name") or "")[:MAX_TOOL_NAME_LENGTH]
+        args = tc.get("input") or {}
+        if name == AGENTCLI_LOAD_TOOLS_NAME:
+            text, is_error = loader.load(args)
+            record_event(data, "tool_call", {"name": name, "arguments": args})
+            record_event(data, "tool_result", {"result": {"content": [{"type": "text", "text": text}], "isError": is_error}},
+                         outcome="invalid_request" if is_error else "allowed")
+        elif (refusal := loader.blocked(name)) is not None:
+            record_rejected_tool(tc.get("id"), name, args, reason=refusal, stage="tool_loading")
+            text, is_error = refusal, True
+        else:
+            loader.use(name)
+            slots.append(None)
+            dispatch.append(tc)
+            continue
+        slots.append({"tool_use_id": tc.get("id"), "tool_name": name, "result_text": text, "is_error": is_error})
+    return slots, dispatch
+
+
+def _merged_results(slots: list[dict | None], dispatched: list[dict]) -> list[dict]:
+    """Every call's result in call order, local ones in their own places."""
+    remaining = iter(dispatched)
+    return [slot if slot is not None else next(remaining) for slot in slots]
+
+
+def _silent_stream_error() -> dict:
+    """The provider connected but sent nothing within the read bound: stalled, not unreachable."""
+    seconds = AGENTCLI_STREAM_READ_TIMEOUT_SECONDS
+    return _norm(EV_ERROR, status=0, code="provider_silent", retryable=True,
+                 message=f"The provider sent nothing for {seconds}s, so the request was stopped.",
+                 message_params={"seconds": seconds})
+
+
 def _invalid_tools_error(message: str = "The model produced an invalid tool call.") -> dict:
     """The terminal form of EV_INVALID_TOOLS, for a loop that cannot hand it back."""
     return _norm(EV_ERROR, status=0, code="bad_tool_call", message=message, retryable=True,
@@ -1599,9 +1796,8 @@ def _apply_claude_options(body: dict, options: dict, kind: str = "claude") -> No
 
     Claude takes the full surface (adaptive thinking with a display mode plus an
     output_config effort). MiniMax's Anthropic-compatible API turns thinking on
-    via `{type: adaptive}` and takes `output_config.effort` only on its newest
-    model; the effort is not sent, and a model that always thinks simply
-    ignores the toggle.
+    via `{type: adaptive}` and takes `output_config.effort` only on
+    MiniMax-M3.1-Flash, which is sent when the panel chose a level.
     """
     body["max_tokens"] = int(options.get("max_tokens") or AGENTCLI_DEFAULT_MAX_TOKENS)
     thinking = options.get("thinking", True)
@@ -1618,6 +1814,25 @@ def _apply_claude_options(body: dict, options: dict, kind: str = "claude") -> No
         effort = options.get("effort", AGENTCLI_DEFAULT_EFFORT)
         if effort in AGENTCLI_EFFORT_LEVELS:
             body["output_config"] = {"effort": effort}
+    elif (kind == "minimax" and thinking and options.get("effort") in AGENTCLI_EFFORT_LEVELS
+          and re.match(r"minimax-m3\.1", str(body.get("model") or ""), re.I)):
+        # Only MiniMax-M3.1-Flash takes an effort (default max); the panel offers
+        # the control for that model alone, and Voice sends none.
+        body["output_config"] = {"effort": options["effort"]}
+
+
+# The output cap every Anthropic-format model has accepted; the fallback for a
+# model that refuses AGENTCLI_DEFAULT_MAX_TOKENS.
+_LEGACY_MAX_TOKENS = 8192
+
+
+def _use_smaller_output(body: dict) -> None:
+    """Retry at the legacy output cap, keeping a fixed thinking budget below it."""
+    body["max_tokens"] = _LEGACY_MAX_TOKENS
+    thinking = body.get("thinking")
+    if isinstance(thinking, dict) and thinking.get("type") == "enabled":
+        budget = min(_LEGACY_MAX_TOKENS // 2, 16000)
+        body["thinking"] = {"type": "enabled", "budget_tokens": budget}
 
 
 def _thinking_type(body: dict) -> str:
@@ -1644,29 +1859,52 @@ def _use_enabled_thinking(body: dict) -> None:
     body.pop("output_config", None)
 
 
+_CACHE_MARKER = {"cache_control": {"type": "ephemeral"}}
+
+
+def _cache_marked_message(message: dict) -> dict | None:
+    """Copy one message with a cache breakpoint on its last markable block, or None.
+
+    Anthropic refuses a breakpoint on a thinking block or an empty text block.
+    """
+    content = message.get("content")
+    if isinstance(content, str):
+        return {**message, "content": [{"type": "text", "text": content, **_CACHE_MARKER}]} if content else None
+    if not isinstance(content, list):
+        return None
+    for i in range(len(content) - 1, -1, -1):
+        block = content[i]
+        if (isinstance(block, dict) and block.get("type") not in ("thinking", "redacted_thinking")
+                and not (block.get("type") == "text" and not block.get("text"))):
+            return {**message, "content": [*content[:i], {**block, **_CACHE_MARKER}, *content[i + 1:]]}
+    return None
+
+
 def _cache_marked(system_prompt: str, messages: list[dict]) -> tuple[Any, list[dict]]:
     """Add Anthropic prompt-cache breakpoints (Claude only, never MiniMax).
 
-    Two ephemeral markers: one on the system block, which caches the stable
-    prefix (the tools array plus the system prompt, both large and unchanged
-    across turns unless the access key's caps change), and one on the last message
-    block, so each agentic-loop iteration and each later turn reuses the prior
-    message history instead of re-billing it. Markers go on copies only; the
-    stored transcript round-trips through the browser and must stay clean.
+    Up to three ephemeral markers: one closing the system block, which caches the
+    tools array plus the system prompt (large, and unchanged across turns unless
+    the access key's caps change); one on the message before the operator's
+    latest message, which ends the history the next turn sends again unchanged;
+    and one on the last message block, so each agentic-loop iteration reuses the
+    prior message history instead of re-billing it. The middle marker exists
+    because the latest operator message carries the turn's time note
+    (_with_time_context), so no later prefix of this turn recurs in the next one.
+    Markers go on copies only; the stored transcript round-trips through the
+    browser and must stay clean.
     """
-    marker = {"cache_control": {"type": "ephemeral"}}
-    system = [{"type": "text", "text": system_prompt, **marker}]
+    system = [{"type": "text", "text": system_prompt, **_CACHE_MARKER}]
     if not messages:
         return system, messages
-    last = messages[-1]
-    content = last.get("content")
-    if isinstance(content, str) and content:
-        marked = {**last, "content": [{"type": "text", "text": content, **marker}]}
-    elif isinstance(content, list) and content:
-        marked = {**last, "content": [*content[:-1], {**content[-1], **marker}]}
-    else:
-        return system, messages
-    return system, [*messages[:-1], marked]
+    marked = list(messages)
+    operator = _operator_message_index(messages)
+    if operator:
+        if (history := _cache_marked_message(messages[operator - 1])) is not None:
+            marked[operator - 1] = history
+    if (last := _cache_marked_message(messages[-1])) is not None:
+        marked[-1] = last
+    return system, marked
 
 
 _SCHEMA_COMBINATORS = ("anyOf", "oneOf", "allOf")
@@ -1841,24 +2079,24 @@ class ClaudeProvider:
         async def _probe() -> tuple[bool, str]:
             async with session.get(
                 f"{self.cfg.base_url}/v1/models",
-                headers=self._headers(), timeout=_PROBE_TIMEOUT,
+                headers=self._headers(), timeout=_PROBE_TIMEOUT, allow_redirects=False,
             ) as resp:
                 if resp.status == 200:
                     return True, ""
                 if resp.status in (401, 403):
-                    return False, "API key rejected."
+                    return False, LocalizedReason("API key rejected.", "providerKeyRejected")
                 if self.kind == "minimax":
                     # MiniMax's Anthropic-compatible base may not expose /v1/models;
                     # a non-auth error there does not mean the key is bad. Soft-accept
                     # (a real problem surfaces on the first message with a clean error).
                     return True, ""
-                return False, f"Provider returned HTTP {resp.status}."
+                return False, LocalizedReason(f"Provider returned HTTP {resp.status}.", "providerHttpStatus", status=resp.status)
         try:
             return await _retry_transient(_probe)
         except ValueError:
-            return False, "Invalid provider connection settings."
+            return False, LocalizedReason("Invalid provider connection settings.", "providerSettingsInvalid")
         except (ClientError, asyncio.TimeoutError) as exc:
-            return False, f"Could not reach the provider: {exc}"
+            return False, LocalizedReason(f"Could not reach the provider: {exc}", "providerUnreachable", detail=str(exc))
 
     async def list_models(self, session: ClientSession) -> list[str]:
         fallback = list(AGENTCLI_MINIMAX_MODELS) if self.kind == "minimax" \
@@ -1872,7 +2110,7 @@ class ClaudeProvider:
                 params = {"limit": "1000", **({"after_id": after_id} if after_id else {})}
                 async with session.get(
                     f"{self.cfg.base_url}/v1/models", headers=self._headers(),
-                    params=params, timeout=_PROBE_TIMEOUT,
+                    params=params, timeout=_PROBE_TIMEOUT, allow_redirects=False,
                 ) as resp:
                     if resp.status != 200:
                         break
@@ -1913,7 +2151,7 @@ class ClaudeProvider:
             async with session.post(f"{self.cfg.base_url}/v1/messages", headers=self._headers(), json=body,
                                     timeout=_IMAGE_PROBE_TIMEOUT, allow_redirects=False) as resp:
                 if resp.status != 200:
-                    return resp.status, _parse_provider_error((await resp.text())[:4000])[0]
+                    return resp.status, _parse_provider_error(await _error_body(resp))[0]
                 data = await resp.json(content_type=None)
         except (ClientError, asyncio.TimeoutError, ValueError):
             return None, ""
@@ -1980,7 +2218,7 @@ class ClaudeProvider:
             _cache_marked(system_prompt, messages) if self.kind == "claude"
             else (system_prompt, messages)
         )
-        body = {
+        body: dict[str, Any] = {
             "model": self.cfg.model,
             "system": system,
             "messages": messages,
@@ -1991,13 +2229,13 @@ class ClaudeProvider:
         if self.cfg.model in _CLAUDE_NO_ADAPTIVE:
             _use_enabled_thinking(body)
         try:
-            for attempt in range(2):
+            for attempt in range(3):
                 async with session.post(
                     f"{self.cfg.base_url}/v1/messages", headers=self._headers(),
-                    json=body, timeout=_CHAT_TIMEOUT,
+                    json=body, timeout=_CHAT_TIMEOUT, allow_redirects=False,
                 ) as resp:
                     if resp.status != 200:
-                        text = (await resp.text())[:4000]
+                        text = await _error_body(resp)
                         msg = _parse_provider_error(text)[0]
                         if (attempt == 0 and resp.status == 400
                                 and _thinking_type(body) == "adaptive"
@@ -2007,16 +2245,24 @@ class ClaudeProvider:
                             _CLAUDE_NO_ADAPTIVE.add(self.cfg.model)
                             _use_enabled_thinking(body)
                             continue
+                        if (attempt < 2 and resp.status == 400 and "max_tokens" in msg.lower()
+                                and body["max_tokens"] > _LEGACY_MAX_TOKENS):
+                            # An older model with a smaller output range.
+                            _use_smaller_output(body)
+                            continue
                         rate_limit = (_rate_limit_headers(resp.headers, _RETRY_AFTER_HEADER_FIELDS)
-                                      if resp.status == 429 else {})
+                                      if resp.status in (429, 503, 529) else {})
                         yield _http_failure(self.kind, resp.status, text, code=_http_failure_code(resp.status),
-                                            retryable=resp.status in (429, 500, 502, 503, 504, 529),
+                                            retryable=resp.status in _RETRYABLE_STATUSES,
+                                            api_key=self.cfg.api_key,
                                             refused=_refused_option(resp.status, msg, body),
                                             **({"rate_limit": rate_limit} if rate_limit else {}))
                         return
                     async for ev in self._parse(resp):
                         yield ev
                     return
+        except SocketTimeoutError:
+            yield _silent_stream_error()
         except (ClientError, asyncio.TimeoutError):
             yield _norm(EV_ERROR, status=0, code="network", message="Provider connection failed.", retryable=True)
 
@@ -2033,7 +2279,7 @@ class ClaudeProvider:
         parsed_tools: list[dict] = []
         # message_start reports the call's input tokens; the closing
         # message_delta reports the final cumulative output tokens.
-        input_tokens = 0
+        input_tokens = cache_read = cache_write = 0
         async for line in _sse_lines(resp):
             if not line.startswith("data:"):
                 if line.lstrip().startswith(("{", "[")):
@@ -2061,7 +2307,11 @@ class ClaudeProvider:
                     blocks[idx] = {"type": "tool_use", "id": cb.get("id"), "name": cb.get("name"), "input": {}}
                     tool_json[idx] = json.dumps(initial_input) if initial_input else ""
                 elif cb.get("type") == "thinking":
-                    blocks[idx] = {"type": "thinking", "thinking": ""}
+                    blocks[idx] = {"type": "thinking", "thinking": "", "signature": ""}
+                elif cb.get("type") == "redacted_thinking":
+                    if not isinstance(cb.get("data"), str):
+                        raise _ProviderResponseError()
+                    blocks[idx] = {"type": "redacted_thinking", "data": cb["data"]}
                 else:
                     blocks[idx] = {"type": "text", "text": ""}
             elif etype == "content_block_delta":
@@ -2075,7 +2325,14 @@ class ClaudeProvider:
                     blocks[idx]["text"] = blocks[idx].get("text", "") + delta.get("text", "")
                     yield _norm(EV_TEXT, text=delta.get("text", ""))
                 elif dtype == "thinking_delta":
+                    if not isinstance(delta.get("thinking", ""), str) or blocks[idx].get("type") != "thinking":
+                        raise _ProviderResponseError()
+                    blocks[idx]["thinking"] += delta.get("thinking", "")
                     yield _norm(EV_THINKING, text=delta.get("thinking", ""))
+                elif dtype == "signature_delta":
+                    if not isinstance(delta.get("signature"), str) or blocks[idx].get("type") != "thinking":
+                        raise _ProviderResponseError()
+                    blocks[idx]["signature"] += delta["signature"]
                 elif dtype == "input_json_delta":
                     tool_json[idx] = tool_json.get(idx, "") + delta.get("partial_json", "")
             elif etype == "content_block_stop":
@@ -2092,13 +2349,12 @@ class ClaudeProvider:
                 if usage:
                     # Context actually sent = fresh input + cache writes + cache
                     # reads (all three are prompt tokens on the wire).
-                    input_tokens = (
-                        _usage_int(usage.get("input_tokens"))
-                        + _usage_int(usage.get("cache_creation_input_tokens"))
-                        + _usage_int(usage.get("cache_read_input_tokens"))
-                    )
+                    cache_read = _usage_int(usage.get("cache_read_input_tokens"))
+                    cache_write = _usage_int(usage.get("cache_creation_input_tokens"))
+                    input_tokens = _usage_int(usage.get("input_tokens")) + cache_write + cache_read
                     yield _norm(EV_USAGE, input_tokens=input_tokens,
-                                output_tokens=_usage_int(usage.get("output_tokens")))
+                                output_tokens=_usage_int(usage.get("output_tokens")),
+                                cache_read_tokens=cache_read, cache_write_tokens=cache_write)
             elif etype == "message_delta":
                 sr = ev.get("delta", {}).get("stop_reason")
                 if sr:
@@ -2107,7 +2363,8 @@ class ClaudeProvider:
                 usage = ev.get("usage") or {}
                 if "output_tokens" in usage:
                     yield _norm(EV_USAGE, input_tokens=input_tokens,
-                                output_tokens=_usage_int(usage.get("output_tokens")))
+                                output_tokens=_usage_int(usage.get("output_tokens")),
+                                cache_read_tokens=cache_read, cache_write_tokens=cache_write)
             elif etype == "message_stop":
                 saw_stop = True
                 break
@@ -2128,6 +2385,8 @@ class ClaudeProvider:
             raise _ProviderResponseError("provider_incomplete", retryable=stop_reason != "max_tokens")
         if stop_reason in ("refusal", "content_filter"):
             raise _ProviderResponseError("provider_blocked", retryable=False)
+        if stop_reason == "model_context_window_exceeded":
+            raise _ProviderResponseError("provider_context_limit", retryable=False)
         if stop_reason not in ("end_turn", "tool_use", "max_tokens", "stop_sequence"):
             raise _ProviderResponseError()
         if stop_reason == "tool_use" and not parsed_tools:
@@ -2159,14 +2418,22 @@ class ClaudeProvider:
             raise _ProviderResponseError()
         for tool in parsed_tools:
             blocks[tool["_block_index"]]["input"] = tool["input"]
-        # Assemble the assistant message in block order; drop thinking blocks from
-        # the persisted history (they are display-only and Anthropic re-derives).
+        # Assemble the assistant message in block order. A tool round keeps its
+        # thinking blocks, signature included and unmodified: the API requires
+        # them back with the tool results, and on models using a fixed thinking
+        # budget it refuses the next request without them. A final answer drops
+        # them, and the chat view strips them once the next user message
+        # arrives (decision_history.without_thinking), so finished turns stay
+        # plain history.
         content = []
         for idx in order:
             blk = blocks.get(idx)
             if not blk:
                 continue
-            if blk["type"] == "text" and blk.get("text"):
+            if blk["type"] in ("thinking", "redacted_thinking"):
+                if parsed_tools:
+                    content.append(dict(blk))
+            elif blk["type"] == "text" and blk.get("text"):
                 content.append({"type": "text", "text": blk["text"]})
             elif blk["type"] == "tool_use":
                 content.append({"type": "tool_use", "id": blk["id"], "name": blk["name"], "input": blk["input"]})
@@ -2325,17 +2592,22 @@ _IMAGE_REFUSAL = re.compile(
 )
 
 
+# A refusal of the request as sent: 400, or 422 where a provider validates the
+# body separately (NVIDIA, Mistral, DeepSeek, xAI, Fireworks, Cerebras).
+_REFUSAL_STATUSES = frozenset({400, 422})
+
+
 def _refused_option(status: int, message: str, sent: dict) -> str | None:
     """The request key a provider just refused, when it named one of ours.
 
     Bounded three ways, because a wrong answer here disables a control the
-    operator was using. It must be a 400 (a refusal, not an outage or a quota);
+    operator was using. It must be a 400 or 422 (a refusal, not an outage or a quota);
     the key must be one whose refusal has a single unambiguous consequence; and
     Phoenix must have ACTUALLY SENT it in this request. That last guard is what
     stops an error mentioning "temperature" for some unrelated reason from
     teaching Phoenix that temperature is unsupported.
     """
-    if status != 400 or not message:
+    if status not in _REFUSAL_STATUSES or not message:
         return None
     low = message.lower()
     if _IMAGE_REFUSAL.search(low) and any(
@@ -2363,22 +2635,29 @@ def _refused_option(status: int, message: str, sent: dict) -> str | None:
 def _effort_probe_body(kind: str, level: str) -> dict | None:
     """The request fragment that carries an effort level for this backend.
 
-    None for a backend with no effort control at all, which is then not probed
-    (MiniMax takes an adaptive object with no level vocabulary). The aggregators
+    None for a backend with no effort control at all, which is then not probed.
+    The aggregators
     (OpenRouter, NVIDIA NIM) ARE probed: what they pass through varies per model,
     but a probe runs against the one selected model, so that variation is exactly
     what it handles.
 
-    DeepSeek's fragment carries the thinking toggle too, because it only reads
-    the effort when thinking is enabled: probing the level alone would test
-    nothing and answer 200 for every value.
+    DeepSeek's and Z.ai's fragments carry the thinking toggle too, because they
+    only read the effort when thinking is enabled: probing the level alone would
+    test nothing and answer 200 for every value.
     """
     if kind == "claude":
         return {"output_config": {"effort": level}}
-    if kind == "deepseek":
+    if kind == "minimax":
+        # Only MiniMax-M3.1-Flash reads the effort; it documents a 400 for an
+        # unknown level, so the two-stage probe is meaningful there.
+        return {"thinking": {"type": "adaptive"}, "output_config": {"effort": level}}
+    if kind in ("deepseek", "zai"):
         return {"thinking": {"type": "enabled"}, "reasoning_effort": level}
+    if kind == "openrouter":
+        # The nested object carries every level, including max.
+        return {"reasoning": {"effort": level}}
     if kind in (
-        "chatgpt", "grok", "gemini", "kimi", "meta", "mistral", "openrouter",
+        "chatgpt", "grok", "gemini", "kimi", "meta", "mistral",
         "nvidia", "opencode", "tencent", "ollama", "ollama_cloud", "groq", "together", "cerebras",
         "fireworks",
     ):
@@ -2433,7 +2712,7 @@ async def async_probe_vision(session: ClientSession, cfg: ProviderConfig) -> boo
     stripes = _probe_stripes()
     status, text = await build_provider(cfg).probe_image(session, _stripe_png(stripes), _PROBE_IMAGE_QUESTION)
     _LOGGER.debug("Image check for %s %s answered %s with %d characters", cfg.kind, cfg.model, status, len(text))
-    if status == 400 and _IMAGE_REFUSAL.search(text.lower()):
+    if status in _REFUSAL_STATUSES and _IMAGE_REFUSAL.search(text.lower()):
         return False
     if status != 200:
         return None
@@ -2448,27 +2727,21 @@ async def async_probe_capabilities(
 ) -> tuple[dict, int, bool]:
     """What this model's API actually accepts, established by asking it.
 
-    Returns (capabilities, calls_made, answered). A value is omitted rather than
-    guessed when it could not be established, so a partial or failed probe
-    narrows nothing.
-
-    `answered` is False when the control request below did not answer 200. A key
-    with no credit, a revoked key, a refused model or an unreachable host answers
-    every question the same way, and reporting that as "this provider does not
+    Returns (capabilities, calls_made, answered). A value that could not be
+    established is omitted, never guessed, so a partial or failed probe narrows
+    nothing. `answered` is False when the control request did not answer 200: a
+    key with no credit, a revoked key, a refused model or an unreachable host
+    answers every question alike, and reporting that as "this provider does not
     validate its options" would blame the provider for an account problem.
 
-    TWO STAGES, and the order is the whole method. Stage one sends a
-    deliberately INVALID effort: a 400 proves the server validates the field.
-    Only then does stage two walk the real levels, where a 200 is meaningful.
-    Without stage one, a server that ignores an unknown parameter answers 200 to
-    every level, which reads as "supports all five". A 400 is informative; a 200
-    on its own never is.
-
-    Both stages need a CONTROL first: the same minimal request with no option
-    must answer 200. Without it, a model the endpoint refuses outright (wrong
-    id, wrong plan, an unrelated request rule) answers 400 to everything, and
-    those 400s would be recorded as refused options. A refused control
-    establishes nothing and reports the provider as not answering.
+    TWO STAGES, and the order is the whole method. Stage one sends a deliberately
+    INVALID effort: a 400 proves the server validates the field. Only then does
+    stage two walk the real levels, where a 200 is meaningful; a server that
+    ignores an unknown parameter answers 200 to every level. Both stages need a
+    CONTROL first, the same minimal request with no option answering 200: a model
+    the endpoint refuses outright (wrong id, wrong plan, an unrelated rule)
+    answers 400 to everything, and those 400s would read as refused options. A
+    refused control establishes nothing and reports the provider as not answering.
     """
     provider = build_provider(cfg)
     caps: dict = {}
@@ -2480,10 +2753,10 @@ async def async_probe_capabilities(
     if fragment is not None:
         status = await provider.probe_option(session, fragment)
         calls += 1
-        # Only a 400 is evidence. Unreachable (None) says nothing, and a 200
-        # means the field is ignored or leniently defaulted, which are
-        # indistinguishable and equally useless.
-        if status == 400:
+        # Only a refusal (400 or 422) is evidence. Unreachable (None) says
+        # nothing, and a 200 means the field is ignored or leniently defaulted,
+        # which are indistinguishable and equally useless.
+        if status in _REFUSAL_STATUSES:
             levels = []
             for level in AGENTCLI_EFFORT_LEVEL_ORDER:
                 if calls >= AGENTCLI_PROBE_MAX_CALLS:
@@ -2508,7 +2781,7 @@ async def async_probe_capabilities(
         # accepted temperature may still be ignored.
         status = await provider.probe_option(session, {"temperature": 0.7})
         calls += 1
-        if status == 400:
+        if status in _REFUSAL_STATUSES:
             caps["temperature"] = False
 
     return caps, calls, True
@@ -2534,13 +2807,22 @@ def _openrouter_capabilities(data: list[dict]) -> dict[str, dict]:
             modalities = m.get("input_modalities")
         if not model_id or (not isinstance(params, list) and not isinstance(modalities, list)):
             continue
-        row: dict[str, bool] = {}
+        row: dict[str, Any] = {}
         if isinstance(params, list):
             row.update({
                 "tools": "tools" in params,
                 "thinking": "reasoning" in params,
                 "temperature": "temperature" in params,
             })
+        # The catalog lists each model's reasoning levels; a mandatory reasoner
+        # cannot take "none". This settles what the probe could only guess.
+        reasoning = m.get("reasoning")
+        efforts = reasoning.get("supported_efforts") if isinstance(reasoning, dict) else None
+        if isinstance(reasoning, dict) and isinstance(efforts, list):
+            levels = [level for level in AGENTCLI_EFFORT_LEVEL_ORDER if level in efforts
+                      and not (level == "none" and reasoning.get("mandatory") is True)]
+            if levels:
+                row["effort_levels"] = levels
         if isinstance(modalities, list):
             row["vision"] = any(
                 isinstance(item, str) and item.lower() in {"image", "image_url"}
@@ -2582,11 +2864,21 @@ async def _ollama_capabilities(
         caps = body.get("capabilities") if isinstance(body, dict) else None
         if not isinstance(caps, list):
             return None
-        return name, {
+        row: dict[str, Any] = {
             "tools": "tools" in caps,
             "thinking": "thinking" in caps,
             "vision": "vision" in caps,
         }
+        # A model with reasoning levels lists them (false means it can be turned
+        # off, which the panel's own Off covers). Ollama answers an unknown level
+        # with the default rather than a refusal, so a probe cannot learn them.
+        thinking = body.get("thinking")
+        values = thinking.get("values") if isinstance(thinking, dict) else None
+        if isinstance(values, list):
+            levels = [level for level in AGENTCLI_EFFORT_LEVEL_ORDER if level != "none" and level in values]
+            if levels:
+                row["effort_levels"] = levels
+        return name, row
 
     pairs = await asyncio.gather(*(_one(m) for m in models))
     return dict(p for p in pairs if p is not None)
@@ -2600,6 +2892,13 @@ async def _ollama_capabilities(
 _OPENCODE_OTHER_ENDPOINT_RE = re.compile(
     r"^(?:gpt|grok|claude|gemini|jev|muse|qwen)", re.I,
 )
+# Mistral AI's model families, whose replies OpenCode forwards in Mistral's content shape.
+_MISTRAL_FAMILY_RE = re.compile(r"^(?:mistral|magistral|ministral|devstral|codestral)-", re.I)
+
+
+# OpenCode's free models answer only OpenCode's own app; any other client gets
+# HTTP 403 FreeTierError, so they are never offered or chosen automatically.
+_OPENCODE_FREE_RE = re.compile(r"^big-pickle$|-free$")
 
 
 def _filter_opencode_models(models: list[str], *, verified_only: bool = False) -> list[str]:
@@ -2608,19 +2907,20 @@ def _filter_opencode_models(models: list[str], *, verified_only: bool = False) -
                   else AGENTCLI_OPENCODE_LEGACY_CHAT_EXCEPTIONS)
     return sorted(
         m for m in models
-        if m in known_chat or (not verified_only and not _OPENCODE_OTHER_ENDPOINT_RE.match(m)
-                               and not _NON_CHAT_MODEL_RE.search(m))
+        if not _OPENCODE_FREE_RE.search(m)
+        and (m in known_chat or (not verified_only and not _OPENCODE_OTHER_ENDPOINT_RE.match(m)
+                                 and not _NON_CHAT_MODEL_RE.search(m)))
     )
 
 
 def _filter_meta_models(models: list[str]) -> list[str]:
-    """Keep Meta's chat models: the Muse Spark text line, without its data-sharing tier.
+    """Keep Meta's chat models: the Muse Wonder and Spark text lines, without the data-sharing tier.
 
     Meta serves image, voice and segmentation models under the same key, and a
     `-contributor` model trains on the prompts it receives, which must be an
     explicit operator choice rather than something a listing offers.
     """
-    chat = sorted(m for m in models if m.lower().startswith("muse-spark")
+    chat = sorted(m for m in models if m.lower().startswith(("muse-spark", "muse-wonder"))
                   and "contributor" not in m.lower())
     return chat or sorted(models)
 
@@ -2696,6 +2996,16 @@ class OpenAICompatProvider:
     def _unsupported_model_api(self) -> bool:
         return self._is_opencode_console and self.cfg.model not in AGENTCLI_OPENCODE_CHAT_MODELS
 
+    @property
+    def _mistral_content(self) -> bool:
+        """Whether replies use Mistral's typed content parts, which carry its reasoning.
+
+        OpenCode forwards a Mistral model's replies in Mistral's own shape, so the
+        model family decides it there, not the provider kind.
+        """
+        return self.definition.model_filter == "mistral" or (
+            self.kind == "opencode" and bool(_MISTRAL_FAMILY_RE.match(self.cfg.model)))
+
     def _model_fallback(self) -> list[str]:
         return [self.cfg.model] if self.cfg.model and not self._unsupported_model_api else []
 
@@ -2734,6 +3044,7 @@ class OpenAICompatProvider:
         messages.append(assistant_msg)
 
     def append_tool_results(self, messages: list[dict], results: list[dict]) -> None:
+        parts: list[dict] = []
         for r in results:
             message = {
                 "role": "tool",
@@ -2747,10 +3058,10 @@ class OpenAICompatProvider:
                 del message["name"]
             messages.append(message)
             if self.cfg.vision is True and r.get("images"):
-                parts: list[dict] = [{
+                parts.append({
                     "type": "text",
-                    "text": "The tool returned the following image for visual inspection.",
-                }]
+                    "text": f"The tool call {r['tool_use_id']} returned the following image for visual inspection.",
+                })
                 for image in r["images"]:
                     data_uri = f"data:{image['mime_type']};base64,{image['data']}"
                     parts.append({
@@ -2762,7 +3073,10 @@ class OpenAICompatProvider:
                             else {"url": data_uri}
                         ),
                     })
-                messages.append({"role": "user", "content": parts})
+        # Images go in one user message after EVERY tool result: the API requires
+        # all of a turn's tool messages to follow its assistant message directly.
+        if parts:
+            messages.append({"role": "user", "content": parts})
 
     async def validate(self, session: ClientSession) -> tuple[bool, str]:
         async def _probe() -> tuple[bool, str]:
@@ -2772,49 +3086,52 @@ class OpenAICompatProvider:
                     if resp.status == 200:
                         return True, ""
                     if resp.status in (401, 403):
-                        return False, "API key rejected."
+                        return False, LocalizedReason("API key rejected.", "providerKeyRejected")
                     label = "Ollama Cloud" if self._is_ollama_cloud else "Ollama"
-                    return False, f"{label} returned HTTP {resp.status}."
+                    return False, LocalizedReason(f"{label} returned HTTP {resp.status}.", "providerNamedHttpStatus", provider=label, status=resp.status)
             async with session.get(self._models_url(), headers=self._headers(),
                                    timeout=_PROBE_TIMEOUT, allow_redirects=False) as resp:
                 if resp.status == 200:
                     return True, ""
                 if resp.status in (401, 403):
-                    return False, "API key rejected."
+                    return False, LocalizedReason("API key rejected.", "providerKeyRejected")
                 if self.definition.validation_error == "fireworks" and resp.status == 412:
-                    return False, (
+                    return False, LocalizedReason(
                         "Fireworks reports that this account is not active for API inference. "
                         "Check the account status and confirm that billing or free-trial credits "
-                        "are activated."
+                        "are activated.",
+                        "providerFireworksInactive",
                     )
                 if self.definition.validation_error == "qwen_openai" and resp.status == 404:
-                    return False, (
+                    return False, LocalizedReason(
                         "Qwen returned HTTP 404. Phoenix uses the OpenAI-compatible Chat "
                         "Completions endpoint; enter that Base URL, not the "
-                        "Anthropic-compatible /apps/anthropic URL."
+                        "Anthropic-compatible /apps/anthropic URL.",
+                        "providerQwenWrongEndpoint",
                     )
-                return False, f"Provider returned HTTP {resp.status}."
+                return False, LocalizedReason(f"Provider returned HTTP {resp.status}.", "providerHttpStatus", status=resp.status)
         try:
             return await _retry_transient(_probe)
         except ValueError:
-            return False, "Invalid provider connection settings."
+            return False, LocalizedReason("Invalid provider connection settings.", "providerSettingsInvalid")
         except (ClientError, asyncio.TimeoutError) as exc:
             if self._is_ollama_local:
                 # Newlines are preserved in the panel (the banner uses
                 # white-space: pre-line), so keep this as a short lead plus a
                 # scannable checklist rather than one dense paragraph.
-                return False, (
+                return False, LocalizedReason(
                     f"Could not reach Ollama at {self.cfg.base_url}.\n"
                     f"({exc})\n\n"
                     "Phoenix MCP connects from the Home Assistant server, not your browser, so "
                     "Ollama must be reachable from that host:\n"
                     "- Ollama is running and bound to a reachable interface (OLLAMA_HOST=0.0.0.0).\n"
                     "- The firewall allows the Ollama port (default 11434).\n"
-                    "- 'localhost' here means the HA server, not your PC."
+                    "- 'localhost' here means the HA server, not your PC.",
+                    "providerOllamaUnreachable", url=self.cfg.base_url, detail=str(exc),
                 )
             if self._is_ollama_cloud:
-                return False, f"Could not reach Ollama Cloud at {self.cfg.base_url}. ({exc})"
-            return False, f"Could not reach the provider: {exc}"
+                return False, LocalizedReason(f"Could not reach Ollama Cloud at {self.cfg.base_url}. ({exc})", "providerOllamaCloudUnreachable", url=self.cfg.base_url, detail=str(exc))
+            return False, LocalizedReason(f"Could not reach the provider: {exc}", "providerUnreachable", detail=str(exc))
 
     async def list_models(self, session: ClientSession) -> list[str]:
         try:
@@ -2893,7 +3210,7 @@ class OpenAICompatProvider:
             async with session.post(self._chat_url(), headers=self._headers(), json=body,
                                     timeout=_IMAGE_PROBE_TIMEOUT, allow_redirects=False) as resp:
                 if resp.status != 200:
-                    return resp.status, _parse_provider_error((await resp.text())[:4000])[0]
+                    return resp.status, _parse_provider_error(await _error_body(resp))[0]
                 data = await resp.json(content_type=None)
         except (ClientError, asyncio.TimeoutError, ValueError):
             return None, ""
@@ -2916,7 +3233,9 @@ class OpenAICompatProvider:
         # OpenAI's reasoning models reject max_tokens, and Meta deprecates it.
         token_limit = ("max_completion_tokens" if self.kind in ("mimo", "chatgpt", "meta")
                        else "max_tokens")
-        body = {"model": self.cfg.model, token_limit: 1, "stream": False,
+        # DashScope's stream-only models refuse a non-streamed call outright,
+        # which would read as a refused control; only the status matters here.
+        body = {"model": self.cfg.model, token_limit: 1, "stream": self.kind == "qwen",
                 "messages": [{"role": "user", "content": "hi"}], **extra}
         try:
             async with session.post(self._chat_url(), headers=self._headers(), json=body,
@@ -3000,7 +3319,6 @@ class OpenAICompatProvider:
         #     no established level omits the field and uses the model's default.
         thinking_on = False
         reasoning_model = False
-        effort_forced = False
         if self.definition.reasoning == "deepseek":
             if thinking is not None:
                 body["thinking"] = {"type": "enabled" if thinking else "disabled"}
@@ -3017,24 +3335,18 @@ class OpenAICompatProvider:
                 # output appears or does not at any effort level, run to run.
                 # Only the invalid-value probe settles it.
                 body["reasoning_effort"] = effort
-            # DeepSeek's undocumented default output cap can truncate a large tool
-            # call (a whole-dashboard write) mid-JSON. 32K only ever raises the
-            # ceiling; see const.py. Other kinds deliberately get no max_tokens
-            # (OpenAI reasoning models reject the field).
-            body["max_tokens"] = AGENTCLI_DEEPSEEK_MAX_TOKENS
+            # With thinking off, DeepSeek's 8K default can truncate a large tool
+            # call mid-JSON; with thinking on (its default) the defaults are
+            # larger than any cap Phoenix would set. See const.py.
+            if thinking is False:
+                body["max_tokens"] = AGENTCLI_DEEPSEEK_MAX_TOKENS
         elif self.definition.reasoning == "effort":
-            # OpenAI and xAI both take a top-level reasoning_effort on chat
-            # completions; sending it marks a reasoning turn (skip temperature).
-            # A model that does not accept the level returns a clean error.
-            if self.kind == "chatgpt" and tools and self.cfg.model not in _OPENAI_NO_EFFORT_NONE:
-                # Chat Completions cannot combine tool calling with a reasoning
-                # effort other than "none" on current OpenAI models, and a newer
-                # model's default effort is not "none". Send "none" for tool turns;
-                # a model that rejects the field (older or non-reasoning models)
-                # is retried once without it below and remembered.
-                body["reasoning_effort"] = "none"
-                effort_forced = True
-            elif effort:
+            # xAI (and OpenAI's Chat Completions, which Phoenix now uses only for
+            # probes; turns go through OpenAIResponsesProvider) take a top-level
+            # reasoning_effort; sending it marks a reasoning turn (skip
+            # temperature). A model that does not accept the level returns a
+            # clean error.
+            if effort:
                 body["reasoning_effort"] = effort
                 reasoning_model = True
         elif self.definition.reasoning == "gemini":
@@ -3066,8 +3378,12 @@ class OpenAICompatProvider:
             # OpenAI shape, so `reasoning_effort` is the candidate, and the probe
             # is what confirms it: if the aggregator does not validate the field,
             # no levels are established, the panel offers none, and this branch
-            # never fires. The wrong guess costs nothing.
-            if effort:
+            # never fires. The wrong guess costs nothing. OpenRouter's nested
+            # `reasoning` object carries every level its catalog lists, max
+            # included, which its top-level reasoning_effort does not.
+            if effort and self.kind == "openrouter":
+                body["reasoning"] = {"effort": effort}
+            elif effort:
                 body["reasoning_effort"] = effort
         elif self.definition.reasoning == "meta":
             # Meta's Model API takes a top-level reasoning_effort (minimal/low/
@@ -3082,11 +3398,21 @@ class OpenAICompatProvider:
             if effort:
                 body["reasoning_effort"] = effort
         elif self.definition.reasoning == "zai":
+            # GLM-5.2 and later take reasoning_effort (default max) beside the
+            # thinking switch; "none" there means thinking off.
+            if effort == "none":
+                thinking = False
+            elif effort:
+                body["reasoning_effort"] = effort
             if thinking is not None:
                 body["thinking"] = {"type": "enabled" if thinking else "disabled"}
+                if thinking and tools:
+                    # Preserved thinking: keep earlier rounds' reasoning_content
+                    # (replayed below) instead of discarding it. It is off by
+                    # default on the standard API and lives inside `thinking`.
+                    body["thinking"]["clear_thinking"] = False
             if tools:
                 body["tool_stream"] = True
-                body["clear_thinking"] = False
         elif self.definition.reasoning == "mimo":
             if thinking is not None:
                 body["thinking"] = {"type": "enabled" if thinking else "disabled"}
@@ -3115,36 +3441,80 @@ class OpenAICompatProvider:
                 body["temperature"] = float(temp)
             except (TypeError, ValueError):
                 pass
+            # Mistral treats temperature 0 as greedy sampling and refuses it unless
+            # top_p is 1; the refusal names only top_p, so it cannot be learned.
+            if self._mistral_content and body.get("temperature") == 0:
+                body["top_p"] = 1
+        if self.kind == "nvidia":
+            body["max_tokens"] = AGENTCLI_NVIDIA_MAX_TOKENS
         show_thinking = bool(options.get("show_thinking"))
+        # A local Ollama server silently drops the start of a prompt longer than the
+        # context it loaded the model with: the system prompt and tool rules first.
+        prompt_tokens = (_estimated_prompt_tokens(body) if self._is_ollama_local else 0)
+        loaded = await self._loaded_context(session) if prompt_tokens else None
+        if (problem := _ollama_context_problem(prompt_tokens, loaded)) is not None:
+            yield problem
+            return
         try:
             for attempt in range(2):
                 async with session.post(self._chat_url(), headers=self._headers(), json=body,
                                         timeout=_CHAT_TIMEOUT, allow_redirects=False) as resp:
                     if resp.status != 200:
-                        text = (await resp.text())[:4000]
+                        text = await _error_body(resp)
                         msg = _parse_provider_error(text)[0]
-                        if (attempt == 0 and effort_forced and resp.status == 400
-                                and "reasoning_effort" in msg.lower()):
-                            _OPENAI_NO_EFFORT_NONE.add(self.cfg.model)
-                            body.pop("reasoning_effort", None)
+                        if (attempt == 0 and self.kind == "nvidia" and resp.status in _REFUSAL_STATUSES
+                                and "max_tokens" in msg.lower()):
+                            # This model's range is below Phoenix's cap: use its own default.
+                            body.pop("max_tokens", None)
                             continue
                         # Ollama commonly 500s on an unknown/hallucinated tool name.
                         code = _http_failure_code(resp.status, "ollama_backend" if self._is_ollama else "upstream")
-                        retryable = resp.status in (429, 500, 502, 503)
+                        retryable = resp.status in _RETRYABLE_STATUSES
                         rate_limit = _rate_limit_headers(
                             resp.headers,
                             _MISTRAL_RATE_LIMIT_HEADER_FIELDS if self.definition.model_filter == "mistral"
                             else _RETRY_AFTER_HEADER_FIELDS,
-                        ) if resp.status == 429 else {}
+                        ) if resp.status in (429, 503, 529) else {}
                         yield _http_failure(self.kind, resp.status, text, code=code, retryable=retryable,
-                                            refused=_refused_option(resp.status, msg, body),
+                                            api_key=self.cfg.api_key, refused=_refused_option(resp.status, msg, body),
                                             **({"rate_limit": rate_limit} if rate_limit else {}))
                         return
+                    checked = not prompt_tokens or loaded is not None
                     async for ev in self._parse(resp, show_thinking):
+                        if not checked and ev.get("type") in (EV_TOOL, EV_DONE, EV_INVALID_TOOLS):
+                            # The model was loaded by this request: now its context is
+                            # known, and no call from a cut-off prompt may run.
+                            checked = True
+                            problem = _ollama_context_problem(prompt_tokens, await self._loaded_context(session))
+                            if problem is not None:
+                                yield problem
+                                return
                         yield ev
                     return
+        except SocketTimeoutError:
+            yield _silent_stream_error()
         except (ClientError, asyncio.TimeoutError):
             yield _norm(EV_ERROR, status=0, code="network", message="Provider connection failed.", retryable=True)
+
+    async def _loaded_context(self, session: ClientSession) -> int | None:
+        """The context length a local Ollama server loaded this model with, or None.
+
+        Read from /api/ps, which lists only loaded models; None when the model is
+        not loaded or the server does not say, so nothing is refused on a guess.
+        """
+        try:
+            async with session.get(f"{self.cfg.base_url}/api/ps", timeout=_PROBE_TIMEOUT,
+                                   allow_redirects=False) as resp:
+                if resp.status != 200:
+                    return None
+                data = await resp.json(content_type=None)
+        except (ClientError, asyncio.TimeoutError, ValueError):
+            return None
+        for row in data.get("models") or [] if isinstance(data, dict) else []:
+            if isinstance(row, dict) and self.cfg.model in (row.get("name"), row.get("model")):
+                length = row.get("context_length")
+                return length if type(length) is int and length > 0 else None
+        return None
 
     @_total_provider_response
     async def _parse(self, resp: Any, show_thinking: bool) -> AsyncIterator[dict]:
@@ -3205,8 +3575,11 @@ class OpenAICompatProvider:
             if isinstance(usage, dict):
                 pt = _usage_int(usage.get("prompt_tokens"))
                 ct = _usage_int(usage.get("completion_tokens"))
+                details = usage.get("prompt_tokens_details")
+                cached = _usage_int(details.get("cached_tokens")) if isinstance(details, dict) else 0
+                cached = cached or _usage_int(usage.get("prompt_cache_hit_tokens"))
                 if pt or ct:
-                    yield _norm(EV_USAGE, input_tokens=pt, output_tokens=ct)
+                    yield _norm(EV_USAGE, input_tokens=pt, output_tokens=ct, cache_read_tokens=cached)
             choices = chunk.get("choices")
             if not isinstance(choices, list):
                 raise _ProviderResponseError()
@@ -3233,10 +3606,10 @@ class OpenAICompatProvider:
                 yield _norm(EV_THINKING, text=reasoning)
             content = delta.get("content")
             if content is not None and not isinstance(content, str) and not (
-                self.definition.model_filter == "mistral" and isinstance(content, list)
+                self._mistral_content and isinstance(content, list)
             ):
                 raise _ProviderResponseError()
-            if self.definition.model_filter == "mistral" and isinstance(content, list):
+            if self._mistral_content and isinstance(content, list):
                 for block in content:
                     if not isinstance(block, dict):
                         continue
@@ -3257,7 +3630,7 @@ class OpenAICompatProvider:
                         seg = str(block["text"])
                         text_parts.append(seg)
                         yield _norm(EV_TEXT, text=seg)
-            elif self.definition.model_filter == "mistral" and isinstance(content, str) \
+            elif self._mistral_content and isinstance(content, str) \
                     and content and mistral_content_parts:
                 # Mistral may switch from structured ThinkChunk content to
                 # ordinary string deltas for the answer. Materialize those as
@@ -3313,6 +3686,12 @@ class OpenAICompatProvider:
             if choice.get("finish_reason"):
                 finish = choice["finish_reason"]
                 saw_finish = True
+        if finish in _FINISH_FAILURES:
+            code, retryable = _FINISH_FAILURES[finish]
+            raise _ProviderResponseError(code, retryable=retryable)
+        if finish == "repetition_truncation":
+            # MiMo cut a degenerate repetition short: the output stopped early.
+            finish = "length"
         if gemini and finish == "stop" and calls:
             # Gemini ends a tool-call response with "stop" rather than "tool_calls".
             finish = "tool_calls"
@@ -3364,7 +3743,7 @@ class OpenAICompatProvider:
         # turn ("invalid message content type: <nil>"). An empty string is valid
         # for OpenAI/DeepSeek/Gemini too, so this is safe across all of them.
         answer_text = "".join(text_parts)
-        if self.kind == "mistral" and mistral_content_parts:
+        if self._mistral_content and mistral_content_parts:
             assistant_content: str | list[dict] = mistral_content_parts
         else:
             assistant_content = answer_text
@@ -3449,6 +3828,274 @@ class OpenAICompatProvider:
         yield _norm(EV_DONE, stop_reason=_norm_stop(finish), assistant_msg=assistant_msg)
 
 
+def _estimated_prompt_tokens(body: dict) -> int:
+    """A conservative token estimate for the messages and tools of one request.
+
+    Calibrated on a local Ollama against Phoenix's real requests (see
+    AGENTCLI_PROMPT_CHARS_PER_TOKEN): the estimate errs low, so one above the
+    context means the prompt really does not fit.
+    """
+    size = len(json.dumps(body.get("messages") or [], ensure_ascii=False))
+    size += len(json.dumps(body.get("tools") or [], ensure_ascii=False))
+    return int(size / AGENTCLI_PROMPT_CHARS_PER_TOKEN)
+
+
+def _ollama_context_problem(prompt_tokens: int, context: int | None) -> dict | None:
+    """The refusal for a prompt longer than the loaded Ollama context, or None."""
+    if context is None or prompt_tokens <= context:
+        return None
+    suggested = 1 << max(prompt_tokens * 5 // 4, 1).bit_length()
+    params = {"needed": prompt_tokens, "context": context, "suggested": suggested}
+    return _norm(EV_ERROR, status=0, code="ollama_context_too_small", retryable=False, message_params=params,
+                 message=(f"Phoenix's prompt is about {prompt_tokens} tokens, but the Ollama server loaded this "
+                          f"model with a context of {context} tokens, so it would silently drop the start of the "
+                          f"prompt. Set OLLAMA_CONTEXT_LENGTH (or the model's num_ctx) to at least {suggested}."))
+
+
+# OpenAI model families that reason by default and refuse a sampling temperature
+# unless their effort is "none".
+_OPENAI_REASONING_MODEL_RE = re.compile(r"^(?:o\d|gpt-5|gpt-6)", re.I)
+
+
+class _TranslatedStream:
+    """A response-like object whose body is a sequence of pre-built SSE frames."""
+
+    def __init__(self, frames: AsyncIterator[dict]) -> None:
+        self.content = self
+        self._frames = frames
+
+    async def iter_chunked(self, _size: int) -> AsyncIterator[bytes]:
+        async for frame in self._frames:
+            yield f"data: {json.dumps(frame)}\n\n".encode()
+
+
+def _responses_tools(tools: list[dict]) -> list[dict]:
+    """Chat Completions function tools in the Responses API's flat shape.
+
+    `strict` is sent as false: Responses otherwise tries to make every schema
+    strict, which Phoenix's published schemas are not written for.
+    """
+    out = []
+    for tool in tools:
+        fn = tool.get("function") if isinstance(tool, dict) else None
+        if isinstance(fn, dict):
+            out.append({"type": "function", "name": fn.get("name"), "description": fn.get("description", ""),
+                        "parameters": fn.get("parameters") or {"type": "object", "properties": {}},
+                        "strict": False})
+    return out
+
+
+def _responses_content(content: Any) -> Any:
+    """A user message's Chat Completions content as Responses input parts."""
+    if not isinstance(content, list):
+        return content if isinstance(content, str) else ""
+    parts = []
+    for part in content:
+        if not isinstance(part, dict):
+            continue
+        if part.get("type") == "text":
+            parts.append({"type": "input_text", "text": str(part.get("text") or "")})
+        elif part.get("type") == "image_url":
+            image = part.get("image_url")
+            url = image.get("url") if isinstance(image, dict) else image
+            if isinstance(url, str):
+                parts.append({"type": "input_image", "image_url": url, "detail": "auto"})
+    return parts
+
+
+def _responses_input(messages: list[dict]) -> list[dict]:
+    """Chat Completions history as Responses input items.
+
+    An assistant message that carries the response's own output items (a tool
+    loop still in progress) replays them unchanged and in order, as the API
+    requires for reasoning; only call arguments Phoenix replaced (an
+    unparseable call answered with "{}") are taken from the message.
+    """
+    items: list[dict] = []
+    for message in messages:
+        if not isinstance(message, dict):
+            continue
+        role = message.get("role")
+        if role == "user":
+            items.append({"role": "user", "content": _responses_content(message.get("content"))})
+        elif role in ("system", "developer"):
+            items.append({"role": role, "content": _responses_content(message.get("content"))})
+        elif role == "tool":
+            items.append({"type": "function_call_output", "call_id": message.get("tool_call_id"),
+                          "output": str(message.get("content") or "")})
+        elif role == "assistant":
+            calls = [call for call in message.get("tool_calls") or [] if isinstance(call, dict)]
+            arguments = {call.get("id"): (call.get("function") or {}).get("arguments") for call in calls}
+            replay = message.get("response_items")
+            if isinstance(replay, list) and replay:
+                for item in replay:
+                    if isinstance(item, dict) and item.get("type") == "function_call" and item.get("call_id") in arguments:
+                        item = {**item, "arguments": arguments[item["call_id"]]}
+                    if isinstance(item, dict):
+                        items.append(item)
+                continue
+            text = message.get("content")
+            if isinstance(text, str) and text:
+                items.append({"role": "assistant", "content": text})
+            for call in calls:
+                fn = call.get("function") or {}
+                items.append({"type": "function_call", "call_id": call.get("id"), "name": fn.get("name"),
+                              "arguments": fn.get("arguments") or "{}"})
+    return items
+
+
+class OpenAIResponsesProvider(OpenAICompatProvider):
+    """OpenAI through the Responses API, which current models need for agent turns.
+
+    From GPT-5.4, Chat Completions combines tools only with reasoning effort
+    "none", and some models (GPT-6 Astra, GPT-6.1 Sol) take tools only here.
+    History stays in the Chat Completions shape the rest of Phoenix uses; this
+    adapter converts it per request and translates the event stream back into
+    Chat Completions chunks for the shared parser. Requests are stateless
+    (`store: false`), so a tool loop's reasoning returns as the encrypted output
+    items carried on the assistant message (`response_items`), which
+    decision_history.without_thinking removes once the turn is over. Probes,
+    validation and the model list keep using the inherited Chat Completions calls.
+    """
+
+    async def stream_turn(
+        self, session: ClientSession, *, system_prompt: str, messages: list[dict],
+        tools: list[dict], options: dict,
+    ) -> AsyncIterator[dict]:
+        body: dict[str, Any] = {
+            "model": self.cfg.model,
+            "instructions": system_prompt,
+            "input": _responses_input(messages),
+            "tools": _responses_tools(tools),
+            "stream": True,
+            "store": False,
+            "include": ["reasoning.encrypted_content"],
+            "stream_options": {"include_obfuscation": False},
+        }
+        effort = options.get("effort")
+        show_thinking = bool(options.get("show_thinking"))
+        if effort:
+            body["reasoning"] = {"effort": effort, **({"summary": "auto"} if show_thinking else {})}
+        temp = options.get("temperature")
+        reasoning = effort not in (None, "none") or (effort is None and _OPENAI_REASONING_MODEL_RE.match(self.cfg.model))
+        if temp is not None and not reasoning:
+            try:
+                body["temperature"] = float(temp)
+            except (TypeError, ValueError):
+                pass
+        # The fields a refusal can name, under the keys refusal learning knows.
+        sent = {**body, **({"reasoning_effort": effort} if effort else {})}
+        try:
+            async with session.post(f"{self.cfg.base_url}/responses", headers=self._headers(), json=body,
+                                    timeout=_CHAT_TIMEOUT, allow_redirects=False) as resp:
+                if resp.status != 200:
+                    text = await _error_body(resp)
+                    msg = _parse_provider_error(text)[0]
+                    rate_limit = (_rate_limit_headers(resp.headers, _RETRY_AFTER_HEADER_FIELDS)
+                                  if resp.status in (429, 503, 529) else {})
+                    yield _http_failure(self.kind, resp.status, text, code=_http_failure_code(resp.status),
+                                        retryable=resp.status in _RETRYABLE_STATUSES, api_key=self.cfg.api_key,
+                                        refused=_refused_option(resp.status, msg.replace("reasoning.effort",
+                                                                                         "reasoning_effort"), sent),
+                                        **({"rate_limit": rate_limit} if rate_limit else {}))
+                    return
+                items: dict[int, dict] = {}
+                async for ev in self._parse(_TranslatedStream(self._chunks(resp, items)), show_thinking):
+                    if ev.get("type") in (EV_DONE, EV_INVALID_TOOLS) and isinstance(ev.get("assistant_msg"), dict):
+                        replay = [items[index] for index in sorted(items)]
+                        if ev["assistant_msg"].get("tool_calls") and replay:
+                            ev = {**ev, "assistant_msg": {**ev["assistant_msg"], "response_items": replay}}
+                    yield ev
+        except SocketTimeoutError:
+            yield _silent_stream_error()
+        except (ClientError, asyncio.TimeoutError):
+            yield _norm(EV_ERROR, status=0, code="network", message="Provider connection failed.", retryable=True)
+
+    async def _chunks(self, resp: Any, items: dict[int, dict]) -> AsyncIterator[dict]:
+        """Responses stream events as the Chat Completions chunks _parse reads."""
+        calls = 0
+        async for line in _sse_lines(resp):
+            if not line.startswith("data:"):
+                if line.lstrip().startswith(("{", "[")):
+                    _provider_object(line)
+                    raise _ProviderResponseError()
+                continue
+            payload = line[5:].strip()
+            if not payload:
+                continue
+            if payload == "[DONE]":
+                return
+            event = _provider_object(payload)
+            etype = event.get("type")
+            if etype == "response.output_text.delta":
+                if not isinstance(event.get("delta"), str):
+                    raise _ProviderResponseError()
+                yield {"choices": [{"delta": {"content": event["delta"]}}]}
+            elif etype == "response.reasoning_summary_text.delta":
+                if isinstance(event.get("delta"), str):
+                    yield {"choices": [{"delta": {"reasoning": event["delta"]}}]}
+            elif etype == "response.refusal.delta":
+                raise _ProviderResponseError("provider_blocked", retryable=False)
+            elif etype == "response.output_item.done":
+                item, index = event.get("item"), event.get("output_index")
+                if not isinstance(item, dict) or type(index) is not int or index < 0 or index in items:
+                    raise _ProviderResponseError()
+                items[index] = item
+                if item.get("type") == "function_call":
+                    if not isinstance(item.get("arguments"), str):
+                        record_rejected_tool(item.get("call_id"), item.get("name"), item.get("arguments"),
+                                             reason="The provider must send tool arguments as JSON text.")
+                        raise _ProviderResponseError()
+                    yield {"choices": [{"delta": {"tool_calls": [{
+                        "index": calls, "id": item.get("call_id"), "type": "function",
+                        "function": {"name": item.get("name"), "arguments": item["arguments"]},
+                    }]}}]}
+                    calls += 1
+            elif etype in ("response.completed", "response.incomplete"):
+                given = event.get("response")
+                response: dict = given if isinstance(given, dict) else {}
+                usage = response.get("usage")
+                if isinstance(usage, dict):
+                    details = usage.get("input_tokens_details")
+                    yield {"choices": [], "usage": {
+                        "prompt_tokens": usage.get("input_tokens"), "completion_tokens": usage.get("output_tokens"),
+                        "prompt_tokens_details": {"cached_tokens": details.get("cached_tokens")
+                                                  if isinstance(details, dict) else 0},
+                    }}
+                if etype == "response.completed":
+                    finish = "tool_calls" if calls else "stop"
+                else:
+                    details = response.get("incomplete_details")
+                    reason = details.get("reason") if isinstance(details, dict) else None
+                    if reason == "content_filter":
+                        raise _ProviderResponseError("provider_blocked", retryable=False)
+                    if reason != "max_output_tokens":
+                        raise _ProviderResponseError("provider_incomplete", retryable=False)
+                    finish = "length"
+                yield {"choices": [{"delta": {}, "finish_reason": finish}]}
+                return
+            elif etype in ("response.failed", "error"):
+                given = event.get("response")
+                failed: dict = given if isinstance(given, dict) else {}
+                error = failed.get("error") if etype == "response.failed" else event
+                if isinstance(error, dict) and _transient_stream_error(error):
+                    raise _ProviderResponseError("provider_transient")
+                raise _ProviderResponseError("provider_blocked", retryable=False)
+
+
+# Documented finish reasons that end a response without a usable answer. A
+# context overflow resent unchanged overflows again; an upstream fault may pass.
+_FINISH_FAILURES: dict[str, tuple[str, bool]] = {
+    "sensitive": ("provider_blocked", False),
+    "model_context_window_exceeded": ("provider_context_limit", False),
+    "model_length": ("provider_context_limit", False),
+    "insufficient_system_resource": ("provider_transient", True),
+    "network_error": ("provider_transient", True),
+    "aborted": ("provider_transient", True),
+    "error": ("provider_transient", True),
+}
+
+
 def _norm_stop(raw: str) -> str:
     """Normalize provider stop reasons to end_turn / tool_use / max_tokens / error."""
     return {
@@ -3465,6 +4112,8 @@ def build_provider(cfg: ProviderConfig) -> ClaudeProvider | OpenAICompatProvider
         raise ValueError("Decision accounts cannot provide conversation or AI Task responses.")
     if definition.adapter == "anthropic":
         return ClaudeProvider(cfg)
+    if definition.adapter == "openai_responses":
+        return OpenAIResponsesProvider(cfg)
     return OpenAICompatProvider(cfg)
 
 
@@ -3518,20 +4167,6 @@ def build_agent_tool_list(access_key: AccessKeyRecord, data: PhoenixData, surfac
     # Chat already supplies current local time in every turn's system context.
     return deepcopy([tool for tool in tools if surface != "chat"
                      or tool.get("name") not in ("llm__GetDateTime", "GetDateTime")])
-
-
-def catalog_payload_metrics(access_key: AccessKeyRecord, data: PhoenixData) -> dict[str, int]:
-    """Return deterministic byte metrics for the access key's announced catalog."""
-    tools = build_mcp_tool_list(access_key, data)
-    canonical = json.dumps(tools, sort_keys=True, separators=(",", ":")).encode()
-    claude = ClaudeProvider(ProviderConfig("claude", "metrics", "")).format_tools(tools)
-    openai = OpenAICompatProvider(ProviderConfig("chatgpt", "metrics", "")).format_tools(tools)
-    return {
-        "tool_count": len(tools),
-        "canonical_bytes": len(canonical),
-        "claude_bytes": len(json.dumps(claude, sort_keys=True, separators=(",", ":")).encode()),
-        "openai_bytes": len(json.dumps(openai, sort_keys=True, separators=(",", ":")).encode()),
-    }
 
 
 def _clip_display(text: str) -> str:
@@ -3739,12 +4374,29 @@ _AGENTCLI_LOCAL_TIME_FIELDS: dict[str, frozenset[str]] = {
     "get_state": frozenset({"last_changed", "last_updated", "last_reported"}),
     "get_history": frozenset({
         "start", "end", "when", "last_changed", "last_updated", "last_reported",
-        "first_transition", "last_transition", "first_entered", "last_entered",
+        "first_transition", "last_transition", "first_entered", "last_entered", "recorded_from",
     }),
     "get_statistics": frozenset({"start", "end", "last_reset"}),
     "get_logbook": frozenset({"start_time", "end_time", "when"}),
     "recent_activity": frozenset({"when"}),
     "get_automation_traces": frozenset({"start", "finish"}),
+    "list_automations": frozenset({"last_triggered"}),
+    "get_todo_items": frozenset({"due"}),
+    "set_todo_item": frozenset({"due"}),
+    "get_energy_config": frozenset({"start", "end"}),
+    "get_logs": frozenset({
+        "since", "until", "first_occurred", "latest_occurred", "earliest_first_occurred", "read_at",
+    }),
+    "get_phoenix_diagnostics": frozenset({
+        "since", "until", "first_occurred", "latest_occurred", "earliest_first_occurred", "read_at",
+    }),
+}
+
+# Result times a read asks the model to send back as a query bound. Agent Chat
+# states them in Home Assistant's zone (the same instant), so a value echoed
+# unchanged meets the wall-time rule for query arguments.
+_AGENTCLI_LOCAL_RESUME_FIELDS: dict[str, frozenset[str]] = {
+    "get_logbook": frozenset({"older_end_time"}),
 }
 
 
@@ -3773,11 +4425,14 @@ def _agentcli_add_local_time_fields(
     """Add local companions without changing canonical tool-result timestamps.
 
     This is an Agent Chat-only presentation layer. Cursor values deliberately get
-    no companion because they are opaque protocol inputs for a subsequent call.
+    no companion because they are opaque protocol inputs for a subsequent call;
+    resume times are restated in the local zone instead.
     """
     fields = _AGENTCLI_LOCAL_TIME_FIELDS.get(tool_name)
-    if fields is None:
+    resume = _AGENTCLI_LOCAL_RESUME_FIELDS.get(tool_name, frozenset())
+    if fields is None and not resume:
         return text
+    fields = fields or frozenset()
     try:
         payload = json.loads(text)
     except (TypeError, ValueError):
@@ -3790,6 +4445,9 @@ def _agentcli_add_local_time_fields(
             return value
         augmented: dict[str, Any] = {}
         for key, item in value.items():
+            if key in resume:
+                augmented[key] = _agentcli_local_time(item, local_tz) or item
+                continue
             augmented[key] = add_companions(item)
             companion = _agentcli_local_time(item, local_tz) if key in fields else None
             companion_key = f"{key}_local"
@@ -3840,36 +4498,44 @@ def _agentcli_add_resource_match_guidance(
     return f"{text}\n\nPhoenix Agent Chat factual guard: {guidance}"
 
 
+# Every absolute time argument a read takes, so the wall-time rule the prompt
+# states holds for each tool it names. Every tool reads a time without an offset
+# as Home Assistant local time; calendar reads also keep accepting the offsets
+# events carry, so they are not policed here.
 _AGENTCLI_LOCAL_QUERY_FIELDS: dict[str, frozenset[str]] = {
     "get_history": frozenset({"start_time", "end_time"}),
     "get_statistics": frozenset({"start_time", "end_time"}),
     "get_logbook": frozenset({"start_time", "end_time"}),
+    "compare_states": frozenset({"t1", "t2"}),
+    "get_logs": frozenset({"since", "until"}),
+    "get_phoenix_diagnostics": frozenset({"since", "until"}),
+    "get_energy_config": frozenset({"start_time", "end_time"}),
 }
 
 
-def _agentcli_prepare_time_args(
+def _agentcli_time_arg_error(
     tool_name: str, args: dict[str, Any], local_tz: tzinfo,
-) -> tuple[dict[str, Any], str | None]:
-    """Apply HA's zone to naive Agent Chat ranges and reject manual shifting."""
-    fields = _AGENTCLI_LOCAL_QUERY_FIELDS.get(tool_name)
-    if fields is None:
-        return args, None
-    prepared = dict(args)
-    for field in fields:
-        value = prepared.get(field)
-        if not isinstance(value, str):
+) -> str | None:
+    """Refuse a query time the model shifted into another zone itself.
+
+    A wall time without an offset passes unchanged, since the tool reads it as
+    HA local time. A value already carrying HA's own offset for that instant,
+    such as a _local result value sent back, is exact and passes too; any other
+    offset is refused as a shift the model made itself.
+    """
+    for field in _AGENTCLI_LOCAL_QUERY_FIELDS.get(tool_name, ()):
+        value = args.get(field)
+        parsed = dt_util.parse_datetime(value) if isinstance(value, str) else None
+        if parsed is None or parsed.tzinfo is None or parsed.utcoffset() is None:
             continue
-        parsed = dt_util.parse_datetime(value)
-        if parsed is None:
-            continue
-        if parsed.tzinfo is not None and parsed.utcoffset() is not None:
-            return args, (
+        if parsed.astimezone(local_tz).utcoffset() != parsed.utcoffset():
+            return (
                 f"Agent Chat {field} must be a Home Assistant local wall time without "
-                "a timezone suffix, or a relative time. Pass the operator's intended "
-                "clock time directly; Phoenix applies the configured time zone."
+                "a timezone suffix, a relative time, or a _local value copied unchanged "
+                "from a result. Pass the operator's intended clock time directly; "
+                "Phoenix applies the configured time zone."
             )
-        prepared[field] = parsed.replace(tzinfo=local_tz).isoformat()
-    return prepared, None
+    return None
 
 
 def dispatch_tool_result(response: dict | None) -> dict:
@@ -3952,6 +4618,19 @@ def execution_failure_text(approval: Any) -> str | None:
     if not isinstance(tool_result, dict):
         return None
     return _flatten_text(tool_result.get("content", [])).strip() or None
+
+
+def refused_before_write(approval: Any) -> bool:
+    """Whether an approved action's executor refused before it could write anything.
+
+    The approve path persists the flag only for a tool_common.RefusedBeforeWrite
+    result, so the failure has no outcome to reconcile. Anything else, including
+    a record without the flag, keeps the unknown-outcome handling.
+    """
+    result = getattr(approval, "result", None)
+    return (getattr(approval, "status", None) == STATUS_FAILED
+            and getattr(approval, "rejected_reason", None) == "execution_failed"
+            and isinstance(result, dict) and result.get("refused_before_write") is True)
 
 
 def _resolved_result(status: str, applied_result: dict | None, approval: Any = None) -> dict:
@@ -4089,7 +4768,22 @@ async def _dispatch_with_progress(emit: Any, tool_id: Any, coro: Any) -> Any:
                 pass
 
 
-async def _cancel_agent_approval(hass: HomeAssistant, data: PhoenixData, approval_id: str) -> Any:
+def _review_stop_error(reason: str, data: PhoenixData) -> dict:
+    """The chat error for a tool review that stopped the turn, naming what stopped it."""
+    if reason == "cancelled":
+        return {"code": "cancelled", "message": "Cancelled."}
+    if reason in {"catalog_changed", "context_changed"}:
+        return {"code": "review_changed", "message": (
+            "The access key's tools or the conversation changed while the tool call was reviewed, "
+            "so nothing was run. Send the request again.")}
+    if _kill_switch_on(data):
+        return {"code": "kill_switch", "message": "The kill switch is on, so the agent stopped. Nothing more was run."}
+    return {"code": "unauthorized", "message": "This access key is no longer authorized."}
+
+
+async def _cancel_agent_approval(
+    hass: HomeAssistant, data: PhoenixData, approval_id: str, reason: str = REASON_AGENT_CHAT_ENDED,
+) -> Any:
     """Cancel only abandoned pending work whose executor has never been claimed."""
     async with data.store.async_lock:
         record = get_approval(data.store, approval_id)
@@ -4099,7 +4793,7 @@ async def _cancel_agent_approval(hass: HomeAssistant, data: PhoenixData, approva
             return None
         resolved = await async_update_approval_status(
             data.store, approval_id, status=STATUS_CANCELLED,
-            rejected_reason=REASON_AGENT_CHAT_ENDED,
+            rejected_reason=reason,
         )
     if resolved is not None and resolved.status == STATUS_CANCELLED:
         dismiss_approval_notification(hass, approval_id)
@@ -4142,7 +4836,10 @@ async def _await_agent_approval(
     if latest is None:
         return _resolved_result(STATUS_PENDING, None)
     if latest.status == STATUS_PENDING:
-        resolved = await _cancel_agent_approval(hass, data, approval_id)
+        # cancel_task is always done here (the finally cancels it), so the event
+        # decides. A chat that ended outranks a wait that ran out at the same time.
+        reason = REASON_AGENT_CHAT_ENDED if cancel.is_set() else REASON_AGENT_CHAT_WAIT_TIMED_OUT
+        resolved = await _cancel_agent_approval(hass, data, approval_id, reason)
         if resolved is not None and resolved.status == STATUS_CANCELLED:
             return _resolved_result(STATUS_CANCELLED, None, resolved)
         # In-progress, or an admin resolved it in the race: re-read the true outcome.
@@ -4269,20 +4966,74 @@ _AGENTCLI_ADDENDUM = (
 )
 
 
+# The per-turn time note opens with this. It rides on the operator's latest
+# message rather than the system prompt: the prompt cache is a prefix, so a
+# changing line ahead of the history would re-bill the whole history every turn.
+_TIME_CONTEXT_LEAD = "\n\n[Phoenix note: Home Assistant's local time zone is "
+
+
 def _agentcli_time_context(hass: HomeAssistant) -> str:
-    """Tell Agent Chat how to present Home Assistant timestamps locally."""
+    """State Home Assistant's zone and the current local time for one chat turn."""
     now = dt_util.now()
     offset = now.strftime("%z")
     offset_label = f"UTC{offset[:3]}:{offset[3:]}" if len(offset) == 5 else "UTC"
     return (
-        "\n\nHome Assistant's local time zone is "
-        f"{hass.config.time_zone} ({offset_label}). The current local date and time at the "
-        f"start of this turn is {now.strftime('%Y-%m-%d %H:%M:%S')}. Common temporal tool "
+        _TIME_CONTEXT_LEAD
+        + f"{hass.config.time_zone} ({offset_label}). The current local date and time at the "
+        f"start of this turn is {now.strftime('%Y-%m-%d %H:%M:%S')}.]"
+    )
+
+
+def _operator_message_index(messages: list[dict]) -> int | None:
+    """Index of the latest message the operator wrote, skipping tool-result messages."""
+    for i in range(len(messages) - 1, -1, -1):
+        message = messages[i]
+        if not isinstance(message, dict) or message.get("role") != "user":
+            continue
+        content = message.get("content")
+        if isinstance(content, str):
+            return i
+        if isinstance(content, list) and not any(
+                isinstance(block, dict) and block.get("type") == "tool_result" for block in content):
+            return i
+    return None
+
+
+def _with_time_context(messages: list[dict], index: int | None, note: str) -> list[dict]:
+    """Copy messages with the turn's time note appended to the operator message at index.
+
+    The stored transcript stays clean; only the request copy carries the note.
+    """
+    if index is None:
+        return messages
+    message = messages[index]
+    content = message.get("content")
+    if isinstance(content, str):
+        stamped = {**message, "content": content + note}
+    elif isinstance(content, list):
+        stamped = {**message, "content": [*content, {"type": "text", "text": note.lstrip("\n")}]}
+    else:
+        return messages
+    return [*messages[:index], stamped, *messages[index + 1:]]
+
+
+def _agentcli_time_guidance() -> str:
+    """Tell Agent Chat how to present Home Assistant timestamps locally.
+
+    Unchanged between turns, so it stays in the cached system prompt; the clock
+    itself is the note _agentcli_time_context adds to the operator's message.
+    """
+    *leading, last = sorted(_AGENTCLI_LOCAL_QUERY_FIELDS)
+    tools = f"{', '.join(leading)} and {last}"
+    return (
+        "\n\nThe operator's latest message ends with a Phoenix note giving Home Assistant's "
+        "local time zone and the current local date and time at the start of the turn. Phoenix "
+        "adds that note; the operator did not write it, so do not answer or quote it. Common temporal tool "
         "results preserve their canonical timestamps and add authoritative companion fields "
         "whose names end in _local. Use the _local value when reasoning or reporting; never "
-        "calculate a local value from its canonical counterpart. For get_history, "
-        "get_statistics, and get_logbook absolute time arguments, send the intended Home "
-        "Assistant wall time without a timezone suffix, for example 2026-08-14T05:00:00. "
+        f"calculate a local value from its canonical counterpart. For {tools} absolute "
+        "time arguments, send the intended Home Assistant wall time without a timezone "
+        "suffix, for example 2026-08-14T05:00:00. "
         "Phoenix applies the configured zone; do not shift the window yourself. State dates "
         "and times matter-of-factly. Do not mention local time, UTC, offsets, or conversion "
         "unless the operator explicitly asks."
@@ -4337,6 +5088,7 @@ async def _stream_turn_resilient(
     cancel: asyncio.Event,
     dispatch_started: bool = False,
     write_started: bool = False,
+    first_reply_seconds: float | None = None,
 ) -> AsyncIterator[dict]:
     """provider.stream_turn wrapped with a bounded retry for a transient connection failure.
 
@@ -4347,10 +5099,19 @@ async def _stream_turn_resilient(
     already-streamed output) or once a tool dispatch has started; a mid-stream or
     non-retryable error passes straight through. Every other event is yielded
     unchanged.
+
+    first_reply_seconds bounds the wait for the first attempt's first event too;
+    past it the call ends as provider_slow, not retried. A surface with someone
+    waiting on a reply (Voice) sets it; the others keep only the silent-stream bound.
     """
     loop_time = asyncio.get_running_loop().time
-    deadline = loop_time() + _CONNECT_RETRY_WINDOW_SECONDS
+    started = loop_time()
+    deadline = started + _CONNECT_RETRY_WINDOW_SECONDS
     attempt = 0
+    # The provider's own account of the failure that started the retries, which
+    # the final error keeps: the retry's own failure is often a bare timeout.
+    first_detail = ""
+    backoff = _CONNECT_RETRY_BACKOFF_SECONDS
     while not cancel.is_set():
         attempt += 1
         produced = False
@@ -4358,49 +5119,144 @@ async def _stream_turn_resilient(
         events = _cancelable_provider_events(provider_events(provider.stream_turn(
             session, system_prompt=system_prompt, messages=messages, tools=tools, options=options,
         ), config=getattr(provider, "cfg", None), messages=messages), cancel)
-        async with aclosing(events):
-            async for ev in events:
-                etype = ev.get("type")
-                if (etype == EV_ERROR and not produced and not dispatch_started and ev.get("retryable")
-                        and attempt < _CONNECT_RETRY_MAX_ATTEMPTS and not cancel.is_set()
-                        and loop_time() + _CONNECT_RETRY_BACKOFF_SECONDS < deadline):
-                    retry = True
-                    break
-                if etype == EV_ERROR and dispatch_started:
-                    ev = _after_dispatch_failure(ev, write_started)
-                if etype == EV_ERROR and attempt > 1:
-                    detail = str(ev.get("message") or "").strip()
-                    seconds = int(_CONNECT_RETRY_WINDOW_SECONDS)
-                    explicit_rate_limit = (
-                        ev.get("status") == 429 and ev.get("code") == "rate_limit"
-                    )
-                    if explicit_rate_limit:
-                        code = "provider_rate_limit_exhausted"
-                        message = (
-                            f"The provider's rate limit remained exceeded after retrying for about "
-                            f"{seconds}s. Provider detail: {detail}"
-                        )
-                    else:
-                        code = "provider_retry_exhausted"
-                        message = (
-                            f"Could not reach the provider after retrying for about "
-                            f"{seconds}s. {detail}"
-                        )
-                    ev = {
-                        **ev,
-                        "code": code,
-                        "message": message.strip(),
-                        "message_params": {"seconds": seconds, "detail": detail},
-                    }
-                if etype in (EV_TEXT, EV_THINKING, EV_TOOL, EV_DONE, EV_INVALID_TOOLS):
-                    produced = True
-                yield ev
+        # The deadline only covers the wait for a retry's (or a bounded surface's)
+        # first event, during which this generator is awaiting the provider, never
+        # suspended at a yield.
+        first_reply = asyncio.timeout(None)
+        limit = AGENTCLI_RETRY_FIRST_REPLY_SECONDS if attempt > 1 else first_reply_seconds
+        if attempt > 1 and first_reply_seconds is not None:
+            limit = min(AGENTCLI_RETRY_FIRST_REPLY_SECONDS, first_reply_seconds)
+        try:
+            async with first_reply, aclosing(events):
+                if limit is not None:
+                    first_reply.reschedule(loop_time() + limit)
+                async for ev in events:
+                    first_reply.reschedule(None)
+                    etype = ev.get("type")
+                    # A provider that names its own wait (Retry-After, Google's
+                    # RetryInfo) is retried only after it, and only when that fits
+                    # the window; an earlier retry is refused again.
+                    wait = _CONNECT_RETRY_BACKOFF_SECONDS
+                    named = (ev.get("rate_limit") or {}).get("retry_after_seconds") if etype == EV_ERROR else None
+                    if isinstance(named, int) and named > wait:
+                        wait = float(named)
+                    if (etype == EV_ERROR and not produced and not dispatch_started and ev.get("retryable")
+                            and attempt < _CONNECT_RETRY_MAX_ATTEMPTS and not cancel.is_set()
+                            and loop_time() + wait < deadline):
+                        retry = True
+                        backoff = wait
+                        first_detail = first_detail or _failure_detail(ev)
+                        yield {"type": EV_RETRYING, "attempt": attempt + 1, "status": ev.get("status"),
+                               "detail": _failure_detail(ev), "detail_code": _failure_detail_code(ev)}
+                        break
+                    if etype == EV_ERROR and dispatch_started:
+                        ev = _after_dispatch_failure(ev, write_started)
+                    if etype == EV_ERROR and attempt > 1:
+                        ev = _retry_exhausted(ev, int(loop_time() - started), first_detail)
+                    if etype in (EV_TEXT, EV_THINKING, EV_TOOL, EV_DONE, EV_INVALID_TOOLS):
+                        produced = True
+                    yield ev
+        except TimeoutError:
+            if not first_reply.expired():
+                raise
+            if attempt == 1:
+                slow = {"type": EV_ERROR, "status": 0, "code": "provider_slow", "retryable": False,
+                        "message": f"The provider sent no reply within {limit:g}s."}
+                yield _after_dispatch_failure(slow, write_started) if dispatch_started else slow
+                return
+            stalled = {"type": EV_ERROR, "status": 0, "code": "network", "retryable": True,
+                       "message": f"The provider sent no reply within {limit:g}s."}
+            yield _retry_exhausted(stalled, int(loop_time() - started), first_detail)
+            return
         if not retry or cancel.is_set():
             return
         try:
-            await asyncio.wait_for(cancel.wait(), timeout=_CONNECT_RETRY_BACKOFF_SECONDS)
+            await asyncio.wait_for(cancel.wait(), timeout=backoff)
         except asyncio.TimeoutError:
             pass
+
+
+def _failure_detail(ev: dict) -> str:
+    """The provider's own sentence about a failure, or Phoenix's description of it."""
+    return str(ev.get("provider_detail") or ev.get("message") or "").strip()
+
+
+def _failure_detail_code(ev: dict) -> str:
+    """The code behind _failure_detail when that detail is Phoenix's own English.
+
+    The panel translates the detail through this code; a provider's own sentence
+    has no code here, so it shows verbatim.
+    """
+    return "" if str(ev.get("provider_detail") or "").strip() else str(ev.get("code") or "")
+
+
+def _retry_exhausted(ev: dict, seconds: int, first_detail: str) -> dict:
+    """The final error after retrying: the real time spent and, kept, the failure that started it."""
+    detail = str(ev.get("message") or "").strip()
+    if ev.get("status") == 429 and ev.get("code") == "rate_limit":
+        code = "provider_rate_limit_exhausted"
+        message = f"The provider's rate limit remained exceeded after retrying for about {seconds}s. Provider detail: {detail}"
+    else:
+        code = "provider_retry_exhausted"
+        message = f"The provider did not answer after retrying for about {seconds}s. {detail}"
+    extra = {"provider_detail": first_detail} if first_detail and not ev.get("provider_detail") else {}
+    return {**ev, **extra, "code": code, "message": message.strip(),
+            "message_params": {"seconds": seconds, "detail": detail, "detail_code": str(ev.get("code") or "")}}
+
+
+class _CallStatus:
+    """Agent Chat's status line for one model call, in place of a bare spinner.
+
+    Built only from facts the loop observes: the provider, the turn's step and
+    tools run so far, how long nothing has been shown, a model that is thinking,
+    and a retry with the provider's own sentence. While nothing is visible it is
+    refreshed every AGENTCLI_STATUS_INTERVAL_SECONDS.
+    """
+
+    def __init__(self, emit: Callable[[str, dict], Awaitable[None]], provider: Any, *, step: int, tools: int) -> None:
+        definition = PROVIDER_DEFINITIONS.get(str(getattr(provider, "kind", "")))
+        self._emit = emit
+        self._fields: dict[str, Any] = {
+            "provider": definition.label if definition is not None else str(getattr(provider, "kind", "")),
+            "step": step, "tools": tools,
+        }
+        self._time = asyncio.get_running_loop().time
+        self._since = self._time()
+        self._phase = "waiting"
+        self._shown = False
+        self._ticker: asyncio.Task | None = None
+
+    async def start(self) -> None:
+        await self._send()
+        self._ticker = asyncio.create_task(self._tick())
+
+    def stop(self) -> None:
+        if self._ticker is not None:
+            self._ticker.cancel()
+
+    async def observe(self, ev: dict) -> None:
+        etype = ev.get("type")
+        if etype in (EV_TEXT, EV_TOOL, EV_DONE):
+            # The reply or a tool line now speaks for itself.
+            self._shown = True
+        elif etype == EV_THINKING and self._phase != "thinking":
+            self._phase = "thinking"
+            await self._send()
+        elif etype == EV_RETRYING:
+            self._since, self._phase = self._time(), "waiting"
+            self._fields.update(attempt=ev.get("attempt"), detail=ev.get("detail") or "",
+                                detail_code=ev.get("detail_code") or "")
+            await self._send(retrying=True)
+
+    async def _send(self, retrying: bool = False) -> None:
+        await self._emit("status", {**self._fields, "phase": "retrying" if retrying else self._phase,
+                                    "seconds": int(self._time() - self._since)})
+
+    async def _tick(self) -> None:
+        while True:
+            await asyncio.sleep(AGENTCLI_STATUS_INTERVAL_SECONDS)
+            if not self._shown:
+                await self._send()
 
 
 @dataclasses.dataclass
@@ -4416,6 +5272,8 @@ class _ModelCallResult:
     usage_output: int
     context_tokens: int
     focus_declined: bool
+    # (cache read, cache write) prompt tokens, included in usage_input.
+    usage_cache: tuple[int, int] = (0, 0)
     # The EV_INVALID_TOOLS event when the response's tool arguments did not parse.
     invalid_tools: dict | None = None
 
@@ -4508,9 +5366,11 @@ async def _consume_model_stream(
     usage_done_input: int,
     usage_done_output: int,
     context_tokens: int,
+    usage_done_cache: tuple[int, int] = (0, 0),
     detect_focus_refusal: bool = False,
     dispatch_started: bool = False,
     write_started: bool = False,
+    status: dict | None = None,
 ) -> _ModelCallResult:
     """Drain one model call's normalized event stream into a result.
 
@@ -4527,76 +5387,89 @@ async def _consume_model_stream(
     errored = False
     saw_text = False
     usage_cur_input = usage_cur_output = 0
+    usage_cur_cache = (0, 0)
     focus = _FocusPrefixBuffer(enabled=detect_focus_refusal)
     focus_event_emitted = False
-
-    async for ev in _stream_turn_resilient(
-        provider, session, system_prompt=system, messages=messages,
-        tools=tools, options=options, cancel=cancel, dispatch_started=dispatch_started,
-        write_started=write_started,
-    ):
-        etype = ev["type"]
-        if etype == EV_TEXT:
-            visible = focus.feed(ev["text"])
-            if focus.declined and not focus_event_emitted:
-                await emit("focus_declined", {})
-                focus_event_emitted = True
-            if visible:
-                saw_text = True
-                await emit("assistant_delta", {"text": visible})
-        elif etype == EV_THINKING:
-            await emit("thinking_delta", {"text": ev["text"]})
-        elif etype == EV_TOOL:
-            tool_calls.append(ev)
-        elif etype == EV_INVALID_TOOLS:
-            invalid_tools = ev
-        elif etype == EV_USAGE:
-            usage_cur_input = _usage_int(ev.get("input_tokens"))
-            usage_cur_output = _usage_int(ev.get("output_tokens"))
-            if usage_cur_input:
-                context_tokens = usage_cur_input
-            await emit("usage", {
-                "input_tokens": usage_done_input + usage_cur_input,
-                "output_tokens": usage_done_output + usage_cur_output,
-                "context_tokens": context_tokens,
-            })
-        elif etype == EV_DONE:
-            stop_reason = ev["stop_reason"]
-            assistant_msg = ev["assistant_msg"]
-            if detect_focus_refusal and assistant_msg is not None:
-                assistant_msg, message_declined = _strip_focus_marker_message(assistant_msg)
-                focus.declined = focus.declined or message_declined
-                if message_declined and not focus.decided:
-                    focus.pending = ""
-                    focus.decided = True
+    line = _CallStatus(emit, provider, **status) if status is not None else None
+    if line is not None:
+        await line.start()
+    try:
+        async for ev in _stream_turn_resilient(
+            provider, session, system_prompt=system, messages=messages,
+            tools=tools, options=options, cancel=cancel, dispatch_started=dispatch_started,
+            write_started=write_started,
+        ):
+            if line is not None:
+                await line.observe(ev)
+            etype = ev["type"]
+            if etype == EV_TEXT:
+                visible = focus.feed(ev["text"])
                 if focus.declined and not focus_event_emitted:
                     await emit("focus_declined", {})
                     focus_event_emitted = True
-        elif etype == EV_ERROR:
-            await emit("error", {"code": ev.get("code"), "message": ev.get("message"),
-                                 "retryable": ev.get("retryable", False),
-                                 **({"outcome": "outcome_unknown"} if ev.get("outcome") == "outcome_unknown" else {}),
-                                 **({"diagnostic": ev["diagnostic"]} if ev.get("diagnostic") else {}),
-                                 **({"message_params": ev["message_params"]}
-                                    if ev.get("message_params") else {}),
-                                 # The provider's own error sentence, already
-                                 # clipped and scrubbed by the adapter. The
-                                 # admin panel and conversation log show it.
-                                 **({"provider_detail": ev["provider_detail"]}
-                                    if ev.get("provider_detail") else {}),
-                                 **({"provider_code": ev["provider_code"]}
-                                    if ev.get("provider_code") else {}),
-                                 # The adapter has already reduced response headers
-                                 # to a strict allowlist of safe numeric quota
-                                 # fields. Preserve that structured snapshot
-                                 # through the provider-to-SSE translation.
-                                 **({"rate_limit": ev["rate_limit"]}
-                                    if ev.get("rate_limit") else {}),
-                                 # Which of Phoenix's own request keys the provider
-                                 # refused, when it named one. The layer holding the
-                                 # store records it; nothing down here can.
-                                 **({"refused": ev["refused"]} if ev.get("refused") else {})})
-            errored = True
+                if visible:
+                    saw_text = True
+                    await emit("assistant_delta", {"text": visible})
+            elif etype == EV_THINKING:
+                await emit("thinking_delta", {"text": ev["text"]})
+            elif etype == EV_TOOL:
+                tool_calls.append(ev)
+            elif etype == EV_INVALID_TOOLS:
+                invalid_tools = ev
+            elif etype == EV_USAGE:
+                usage_cur_input = _usage_int(ev.get("input_tokens"))
+                usage_cur_output = _usage_int(ev.get("output_tokens"))
+                usage_cur_cache = (_usage_int(ev.get("cache_read_tokens")), _usage_int(ev.get("cache_write_tokens")))
+                if usage_cur_input:
+                    context_tokens = usage_cur_input
+                await emit("usage", {
+                    "input_tokens": usage_done_input + usage_cur_input,
+                    "output_tokens": usage_done_output + usage_cur_output,
+                    "context_tokens": context_tokens,
+                    # Parts of input_tokens: read from and written to the provider's prompt cache.
+                    "cache_read_tokens": usage_done_cache[0] + usage_cur_cache[0],
+                    "cache_write_tokens": usage_done_cache[1] + usage_cur_cache[1],
+                })
+            elif etype == EV_DONE:
+                stop_reason = ev["stop_reason"]
+                assistant_msg = ev["assistant_msg"]
+                if detect_focus_refusal and assistant_msg is not None:
+                    assistant_msg, message_declined = _strip_focus_marker_message(assistant_msg)
+                    focus.declined = focus.declined or message_declined
+                    if message_declined and not focus.decided:
+                        focus.pending = ""
+                        focus.decided = True
+                    if focus.declined and not focus_event_emitted:
+                        await emit("focus_declined", {})
+                        focus_event_emitted = True
+            elif etype == EV_ERROR:
+                await emit("error", {"code": ev.get("code"), "message": ev.get("message"),
+                                     "retryable": ev.get("retryable", False),
+                                     **({"outcome": "outcome_unknown"} if ev.get("outcome") == "outcome_unknown" else {}),
+                                     **({"diagnostic": ev["diagnostic"]} if ev.get("diagnostic") else {}),
+                                     **({"message_params": ev["message_params"]}
+                                        if ev.get("message_params") else {}),
+                                     # The provider's own error sentence, already
+                                     # clipped and scrubbed by the adapter. The
+                                     # admin panel and conversation log show it.
+                                     **({"provider_detail": ev["provider_detail"]}
+                                        if ev.get("provider_detail") else {}),
+                                     **({"provider_code": ev["provider_code"]}
+                                        if ev.get("provider_code") else {}),
+                                     # The adapter has already reduced response headers
+                                     # to a strict allowlist of safe numeric quota
+                                     # fields. Preserve that structured snapshot
+                                     # through the provider-to-SSE translation.
+                                     **({"rate_limit": ev["rate_limit"]}
+                                        if ev.get("rate_limit") else {}),
+                                     # Which of Phoenix's own request keys the provider
+                                     # refused, when it named one. The layer holding the
+                                     # store records it; nothing down here can.
+                                     **({"refused": ev["refused"]} if ev.get("refused") else {})})
+                errored = True
+    finally:
+        if line is not None:
+            line.stop()
 
     trailing = focus.finish()
     if focus.declined and not focus_event_emitted:
@@ -4612,6 +5485,7 @@ async def _consume_model_stream(
         usage_input=usage_cur_input, usage_output=usage_cur_output,
         context_tokens=context_tokens,
         focus_declined=focus.declined,
+        usage_cache=usage_cur_cache,
         invalid_tools=invalid_tools,
     )
 
@@ -4625,6 +5499,22 @@ class _ToolBatchResult:
     stop_turn: bool
     authority_lost: bool
     write_started: bool = False
+    # A call's outcome could not be established; the turn must end with a
+    # recovery barrier instead of another model round.
+    outcome_unknown: bool = False
+
+
+# The answers a round records when one call's outcome is unknown. The turn ends
+# there, so the model reads them only on a later turn, after Needs Attention
+# was reviewed.
+_UNKNOWN_OUTCOME_RESULT = (
+    "Outcome unknown: this action may have been applied in full, in part, or not at all, and Phoenix "
+    "MCP stopped the turn. Do not repeat it. Check its effect in Home Assistant first."
+)
+_NOT_RUN_AFTER_UNKNOWN = (
+    "Not run: an earlier call in this response has an unknown outcome, so the turn stopped before this "
+    "call. Send it again only if it is still needed after that outcome is checked."
+)
 
 
 async def _run_tool_batch(
@@ -4643,7 +5533,9 @@ async def _run_tool_batch(
     EVERY tool_use id gets a result even when nothing was dispatched: Anthropic
     requires each one answered in the next message, so a blocked call still
     appends a synthetic error rather than being skipped. That is why this drains
-    the whole batch instead of returning early.
+    the whole batch instead of returning early. An unknown outcome stops the
+    batch but still answers the uncertain call and every call after it, because
+    the returned conversation is what the browser sends on the next turn.
 
     The access key is re-resolved per call (_current_dispatch_access_key), so a mid-turn
     revoke, expiry, kill switch or cap narrowing is honored BEFORE any side
@@ -4656,6 +5548,9 @@ async def _run_tool_batch(
     stop_turn = False
     authority_lost = False
     write_started = False
+    outcome_unknown = False
+    # The approved executor's own error, when that is what made the outcome unknown.
+    unknown_reason: str | None = None
 
     for tc in tool_calls:
         name = str(tc.get("name") or "")[:MAX_TOOL_NAME_LENGTH]
@@ -4667,7 +5562,8 @@ async def _run_tool_batch(
                 reason: str | None = "Cancelled by the operator; not run."
             else:
                 authority_lost = True
-                reason = "This access key is no longer authorized; not run."
+                reason = ("Phoenix MCP was stopped by its kill switch; not run." if _kill_switch_on(data)
+                          else "This access key is no longer authorized; not run.")
             results.append({"tool_use_id": tc.get("id"), "tool_name": name,
                             "result_text": reason, "is_error": True})
             continue
@@ -4681,12 +5577,9 @@ async def _run_tool_batch(
                             "result_text": "Cancelled by the operator; not run.",
                             "is_error": True})
             continue
-        if isinstance(args, dict):
-            args, time_error = _agentcli_prepare_time_args(
-                name, args, dt_util.now().tzinfo or dt_util.UTC,
-            )
-        else:
-            time_error = None
+        time_error = _agentcli_time_arg_error(
+            name, args, dt_util.now().tzinfo or dt_util.UTC,
+        ) if isinstance(args, dict) else None
         if time_error is not None:
             await emit("tool_result", {
                 "id": tc.get("id"), "name": name,
@@ -4708,12 +5601,15 @@ async def _run_tool_batch(
                     client_ip=client_ip, base_url=base_url, request_id=dispatch_request_id,
                 ),
             )
-        except BaseException:
+        except BaseException as exc:
             # Creation may have saved a queue entry before dispatch was interrupted.
             for saved in data.store.get_pending_approvals():
                 if saved.get("access_key_id") == access_key_id and saved.get("request_id") == dispatch_request_id:
                     await _cancel_agent_approval(hass, data, saved["id"])
-            raise
+            if not isinstance(exc, RecoveryRequired):
+                raise
+            outcome_unknown = True
+            break
         result = dispatch_tool_result(resp_msg)
         if outcome in ("denied", "invalid_request") and (resp_msg or {}).get("error", {}).get("code") == -32000:
             authority_lost = stop_turn = True
@@ -4745,20 +5641,28 @@ async def _run_tool_batch(
             # typed rejection reason, or the executor's error when an
             # approval executed but failed (status "execution_failed").
             resolved_record = get_approval(data.store, pending["approval_id"])
-            reason = None
+            reason = failure = None
             if resolved_record is not None:
-                reason = execution_failure_text(resolved_record) \
-                    or getattr(resolved_record, "rejected_reason", None)
+                failure = execution_failure_text(resolved_record)
+                reason = failure or getattr(resolved_record, "rejected_reason", None)
             await emit("approval_resolved", {
                 "approval_id": pending["approval_id"],
                 "status": status,
                 "reason": _clip_display(reason) if reason else None,
+                # The executor's own text is English for the agent; the panel
+                # shows its localized form, as the Approvals window does.
+                **({"reason_kind": "execution"} if failure else {}),
             })
-            if status in (STATUS_FAILED, "execution_failed"):
+            refused = refused_before_write(resolved_record)
+            if status in (STATUS_FAILED, "execution_failed") and not refused:
                 # The executor may have applied part of the approved action.
                 # Do not let the next model round turn its error into a replay.
-                raise RecoveryRequired("An approved action has an uncertain outcome.")
-            if status in (STATUS_APPROVED, STATUS_REJECTED):
+                unknown_reason = execution_failure_text(resolved_record) if resolved_record else None
+                outcome_unknown = True
+                break
+            # A refusal before writing reaches the model with the executor's
+            # reason (see _resolved_result), so it can re-read and propose again.
+            if status in (STATUS_APPROVED, STATUS_REJECTED) or refused:
                 human_resolved = True
         is_error = bool(result.get("isError"))
         content = result.get("content", [])
@@ -4782,10 +5686,21 @@ async def _run_tool_batch(
         results.append({"tool_use_id": tc.get("id"), "tool_name": name,
                         "result_text": model_text, "images": images, "is_error": is_error})
 
+    if outcome_unknown:
+        # Every earlier call appended its result, so the uncertain call is the
+        # first one left unanswered and the rest never started.
+        uncertain = _UNKNOWN_OUTCOME_RESULT + (
+            f" The executor reported: {_clip_display(unknown_reason)}" if unknown_reason else "")
+        for index, tc in enumerate(tool_calls[len(results):]):
+            results.append({"tool_use_id": tc.get("id"),
+                            "tool_name": str(tc.get("name") or "")[:MAX_TOOL_NAME_LENGTH],
+                            "result_text": _NOT_RUN_AFTER_UNKNOWN if index else uncertain,
+                            "is_error": True})
+
     return _ToolBatchResult(
         results=results, human_resolved=human_resolved,
         stop_turn=stop_turn, authority_lost=authority_lost,
-        write_started=write_started,
+        write_started=write_started, outcome_unknown=outcome_unknown,
     )
 
 
@@ -4807,8 +5722,12 @@ async def async_run_agent_turn(
     detail_level: str = DETAIL_LEVEL_CONCISE,
     home_focused: bool = False,
     routing_language: object = None,
+    account: tuple[str, str | None] | None = None,
 ) -> list[dict]:
     """Run one user turn to completion, streaming SSE events. Returns updated messages.
+
+    account is the chat's provider account and model, which a Home Companion
+    request runs on in place of the Voice settings.
 
     The loop body is three phases: drain one model call (_consume_model_stream),
     decide whether to keep the assistant message against the turn output budget,
@@ -4819,7 +5738,7 @@ async def async_run_agent_turn(
     await data.agent_recovery.reconcile(data.store, access_key.id)
     if data.agent_recovery.blocks(access_key.id):
         await emit("error", {"code": "outcome_unknown", "retryable": False,
-                             "message": "An earlier action outcome is unknown. Check Phoenix MCP > Needs attention before continuing."})
+                             "message": "An earlier action outcome is unknown. Check the Needs Attention window of the Phoenix MCP panel before continuing."})
         await emit("messages", {"messages": messages})
         await emit("done", {"stop_reason": "error"})
         return messages
@@ -4839,8 +5758,10 @@ async def async_run_agent_turn(
             await emit("messages", {"messages": messages})
             await emit("done", {"stop_reason": "error"})
             return messages
+        usage = HeadlessUsage()
         task = asyncio.create_task(async_delegate(hass, data, access_key, request, routing_language, base_url,
-                                                   style=conversation_style, detail=detail_level))
+                                                   style=conversation_style, detail=detail_level, usage=usage,
+                                                   account=account))
         stopped = asyncio.create_task(cancel.wait())
         try:
             done, _ = await asyncio.wait({task, stopped}, return_when=asyncio.FIRST_COMPLETED)
@@ -4850,6 +5771,8 @@ async def async_run_agent_turn(
                 await emit("error", {"code": "cancelled", "message": voice_text(routing_language, "local_cancelled") + " " + voice_text(routing_language, "companion_unverified")})
             else:
                 report = await task
+                if (frame := usage.frame()) is not None:
+                    await emit("usage", frame)
                 messages.append({"role": "assistant", "content": report["message"]})
                 if report["status"] in HOME_COMPANION_REPORT_STATUSES:
                     await emit("assistant_delta", {"text": report["message"]})
@@ -4876,17 +5799,27 @@ async def async_run_agent_turn(
 
     from .mcp_view import _build_instructions  # noqa: PLC0415
 
+    agent_tools = build_agent_tool_list(access_key, data, "chat")
+    loader = _tool_loader(provider, agent_tools)
     system = (
         _build_instructions(access_key, data, base_url, hass)
-        + _agentcli_time_context(hass)
         + _conversation_behavior_prompt(
             conversation_style, detail_level, home_focused=home_focused,
         )
         + _AGENTCLI_ADDENDUM
         + _home_focus_output_contract(home_focused)
+        + (loader.directory() if loader is not None else "")
+        + _agentcli_time_guidance()
     )
-    agent_tools = build_agent_tool_list(access_key, data, "chat")
-    tools = provider.format_tools(agent_tools)
+    # The clock goes on the operator's message in each request copy, after the
+    # history the next turn re-sends, so that history stays a cached prefix.
+    operator = _operator_message_index(messages)
+    time_note = _agentcli_time_context(hass)
+    if operator is None:
+        system += time_note
+    declared = loader.round_tools() if loader is not None else agent_tools
+    tools = provider.format_tools(declared)
+    tools_key = tuple(tool["name"] for tool in declared)
     if (too_many := _tool_limit_problem(provider, tools)) is not None:
         await emit("error", too_many)
         await emit("messages", {"messages": messages})
@@ -4928,9 +5861,13 @@ async def async_run_agent_turn(
     # last-known context size (the newest call's input tokens).
     usage_done_input = usage_done_output = 0
     usage_cur_input = usage_cur_output = 0
+    usage_done_cache = (0, 0)
     context_tokens = 0
     # Rounds spent handing malformed tool-call JSON back to the model.
     corrections = 0
+    # Model calls and tools run this turn, for the status line; unlike iterations,
+    # never reset by an approval.
+    step = tools_run = 0
     while True:
         if iterations >= max_iterations:
             # Pause at the checkpoint rather than stopping dead: the loop has
@@ -4944,13 +5881,18 @@ async def async_run_agent_turn(
         if cancel.is_set():
             await emit("error", {"code": "cancelled", "message": "Cancelled."})
             break
+        step += 1
+        if loader is not None:
+            definitions = loader.round_tools()
+            if (key := tuple(tool["name"] for tool in definitions)) != tools_key:
+                tools, tools_key = provider.format_tools(definitions), key
         call = await _consume_model_stream(
-            provider, session, system=system, messages=messages, tools=tools,
-            options=options, cancel=cancel, emit=emit,
+            provider, session, system=system, messages=_with_time_context(messages, operator, time_note),
+            tools=tools, options=options, cancel=cancel, emit=emit,
             usage_done_input=usage_done_input, usage_done_output=usage_done_output,
-            context_tokens=context_tokens,
+            context_tokens=context_tokens, usage_done_cache=usage_done_cache,
             detect_focus_refusal=home_focused, dispatch_started=dispatch_started,
-            write_started=write_started,
+            write_started=write_started, status={"step": step, "tools": tools_run},
         )
         flush_assistant()
         tool_calls = call.tool_calls
@@ -4964,6 +5906,7 @@ async def async_run_agent_turn(
         # a partial call still consumed the tokens it reported).
         usage_done_input += usage_cur_input
         usage_done_output += usage_cur_output
+        usage_done_cache = (usage_done_cache[0] + call.usage_cache[0], usage_done_cache[1] + call.usage_cache[1])
         usage_cur_input = usage_cur_output = 0
         if errored:
             # An upstream error is already emitted to the browser. Mark the
@@ -5013,36 +5956,48 @@ async def async_run_agent_turn(
         if stop_reason != "tool_use":
             break
 
+        proposed = tool_calls
+        slots, tool_calls = _local_tool_results(loader, proposed, data)
+        for tc, slot in zip(proposed, slots):
+            if slot is not None:
+                await emit("tool_call", {"id": tc.get("id"), "name": slot["tool_name"], "arguments": tc.get("input") or {}})
+                await emit("tool_result", {"id": tc.get("id"), "name": slot["tool_name"], "is_error": slot["is_error"],
+                                           "summary": _clip_display(slot["result_text"])})
+        if not tool_calls:
+            # Only loads and refusals this round: nothing was dispatched.
+            provider.append_tool_results(messages, _merged_results(slots, []))
+            continue
         review = await async_review_tools(hass, data, review_state, surface="chat",
             language=routing_language, messages=messages, calls=tool_calls, system=system,
             remaining_rounds=max_iterations - iterations, cancel=cancel, announced_tools=agent_tools)
         if review.action != "continue":
-            provider.append_tool_results(messages, withheld_results(tool_calls, review))
+            provider.append_tool_results(messages, _merged_results(slots, withheld_results(tool_calls, review)))
             if review.action == "stop":
-                await emit("error", {"code": "cancelled" if review.reason == "cancelled" else "unauthorized",
-                                    "message": "Tool selection stopped because cancellation or authority changed."})
+                await emit("error", _review_stop_error(review.reason, data))
                 turn_errored = True
                 break
             continue
         dispatch_started = True
-        try:
-            batch = await _run_tool_batch(
-                tool_calls, hass=hass, data=data, access_key_id=access_key_id,
-                client_ip=client_ip, base_url=base_url, emit=emit, cancel=cancel,
-            )
-        except RecoveryRequired:
-            await emit("error", {"code": "outcome_unknown", "retryable": False,
-                                 "message": "An action outcome is unknown. Check Phoenix MCP > Needs attention before retrying."})
-            turn_errored = True
-            stop_reason = "error"
-            break
-        results = batch.results
+        batch = await _run_tool_batch(
+            tool_calls, hass=hass, data=data, access_key_id=access_key_id,
+            client_ip=client_ip, base_url=base_url, emit=emit, cancel=cancel,
+        )
+        results = _merged_results(slots, batch.results)
+        tools_run += len(tool_calls)
         write_started = write_started or batch.write_started
         human_resolved = batch.human_resolved
         stop_turn = batch.stop_turn
         authority_lost = batch.authority_lost
         if results:
             provider.append_tool_results(messages, results)
+        if batch.outcome_unknown:
+            # Appended above first, so the conversation handed back to the
+            # browser stays valid for the provider once the barrier is reviewed.
+            await emit("error", {"code": "outcome_unknown", "retryable": False,
+                                 "message": "An action outcome is unknown. Check the Needs Attention window of the Phoenix MCP panel before retrying."})
+            turn_errored = True
+            stop_reason = "error"
+            break
         # A human approved or rejected an action this round: reset the runaway
         # guard, since a human is actively gating the loop.
         if human_resolved:
@@ -5051,8 +6006,13 @@ async def async_run_agent_turn(
         # batch was completed with synthetic results (protocol-safe); end the
         # turn rather than looping into more denied dispatches.
         if authority_lost:
-            await emit("error", {"code": "unauthorized",
-                                 "message": "This access key is no longer authorized."})
+            # The kill switch is not the key's fault; say which one stopped the turn.
+            if _kill_switch_on(data):
+                await emit("error", {"code": "kill_switch",
+                                     "message": "The kill switch is on, so the agent stopped. Nothing more was run."})
+            else:
+                await emit("error", {"code": "unauthorized",
+                                     "message": "This access key is no longer authorized."})
             break
         if stop_turn:
             # Defence in depth with no observable effect today, so no test can
@@ -5095,6 +6055,13 @@ async def async_run_agent_turn(
 
 
 _HEADLESS_PROVIDER_ERROR = "the language model could not be reached"
+_FINAL_ROUND_SYSTEM = (
+    "\nThis is the final response round. No further tools are available. "
+    "Return the required final answer using only the results already received. "
+    "Distinguish an accepted device command from a verified physical state. "
+    "If the results are insufficient, explain what is known and what is missing. "
+    "Do not claim that no action occurred when a control tool already ran."
+)
 
 # How a headless turn ended. A CODE, not a sentence, because the two surfaces
 # render it very differently: voice speaks it, in the CONVERSATION's language via
@@ -5107,6 +6074,43 @@ TURN_OUTPUT_LIMIT = "output_limit"
 TURN_EXHAUSTED = "exhausted"
 TURN_AUTHORITY_LOST = "authority_lost"
 TURN_TRUNCATED = "truncated"
+
+
+@dataclasses.dataclass
+class HeadlessUsage:
+    """Provider-reported tokens over a headless turn's model calls.
+
+    A provider's usage report is cumulative within one call, so each call keeps
+    only its latest report and the totals add the calls together. Context is the
+    newest call's input, as in Agent Chat's own footer.
+    """
+
+    calls: list[tuple[int, int, int, int]] = dataclasses.field(default_factory=list)
+
+    def start_call(self) -> None:
+        self.calls.append((0, 0, 0, 0))
+
+    def report(self, ev: dict) -> None:
+        if not self.calls:
+            self.start_call()
+        self.calls[-1] = (_usage_int(ev.get("input_tokens")), _usage_int(ev.get("output_tokens")),
+                          _usage_int(ev.get("cache_read_tokens")), _usage_int(ev.get("cache_write_tokens")))
+
+    def frame(self) -> dict | None:
+        """The Agent Chat usage frame, or None when the provider reported nothing."""
+        if not any(any(call) for call in self.calls):
+            return None
+        return {
+            "input_tokens": sum(call[0] for call in self.calls),
+            "output_tokens": sum(call[1] for call in self.calls),
+            "context_tokens": next((call[0] for call in reversed(self.calls) if call[0]), 0),
+            "cache_read_tokens": sum(call[2] for call in self.calls),
+            "cache_write_tokens": sum(call[3] for call in self.calls),
+        }
+
+
+# Set by a caller that shows a headless turn's usage (Home Companion in Agent Chat).
+headless_usage: ContextVar[HeadlessUsage | None] = ContextVar("phoenix_headless_usage", default=None)
 
 
 @dataclasses.dataclass
@@ -5128,6 +6132,9 @@ class _HeadlessTurnResult:
     review_urls: list[str]
     outcome: str = TURN_OK
     detail: str = ""
+    # The provider error's code, so a spoken reply can choose its own sentence
+    # instead of reading out the English detail.
+    detail_code: str = ""
     focus_declined: bool = False
     blocked_by_prior_action: bool = False
     recovery_turn_id: str = ""
@@ -5151,6 +6158,7 @@ async def _run_headless_turn(
     routing_language: object = None,
     reserve_final_round: bool = False,
     response_only: bool = False,
+    first_reply_seconds: float | None = None,
 ) -> _HeadlessTurnResult:
     """Run one headless model/tool turn to completion.
 
@@ -5181,7 +6189,12 @@ async def _run_headless_turn(
     from .home_companion import is_companion
     review_state = None if is_companion(access_key) else create_review_state(data, access_key, routing_surface)
     agent_tools = build_agent_tool_list(access_key, data, routing_surface)
-    tools = provider.format_tools(agent_tools)
+    loader = _tool_loader(provider, agent_tools)
+    if loader is not None:
+        system += loader.directory()
+    declared = loader.round_tools() if loader is not None else agent_tools
+    tools = provider.format_tools(declared)
+    tools_key = tuple(tool["name"] for tool in declared)
     if (too_many := _tool_limit_problem(provider, tools)) is not None:
         return _HeadlessTurnResult("", [], outcome=TURN_PROVIDER_ERROR, detail=too_many["message"])
     messages: list[dict] = [{"role": "user", "content": seed}]
@@ -5209,22 +6222,22 @@ async def _run_headless_turn(
     write_started = False
 
     format_corrections = 0
-    count_report_only = False
+    report_only = False
     from .const import HOME_COMPANION_MAX_FORMAT_CORRECTIONS, HOME_COMPANION_FORMAT_ERROR_CODES
     for iteration in range(max_iterations):
-        from .home_companion import check_turn_context, internal_turn, ambiguous_control, count_source
-        final_round = response_only or count_report_only or (reserve_final_round and iteration == max_iterations - 1)
+        from .home_companion import append_fitting_results, check_turn_context, internal_turn, ambiguous_control, count_source
+        final_round = response_only or report_only or (reserve_final_round and iteration == max_iterations - 1)
         round_system = system
         if final_round:
-            round_system += (
-                "\nThis is the final response round. No further tools are available. "
-                "Return the required final answer using only the results already received. "
-                "Distinguish an accepted device command from a verified physical state. "
-                "If the results are insufficient, explain what is known and what is missing. "
-                "Do not claim that no action occurred when a control tool already ran."
-            )
+            round_system += _FINAL_ROUND_SYSTEM
         if not check_turn_context(access_key, round_system, messages):
             return _HeadlessTurnResult("", review_urls, outcome=TURN_OUTPUT_LIMIT)
+        if (usage := headless_usage.get()) is not None:
+            usage.start_call()
+        if loader is not None and not final_round:
+            definitions = loader.round_tools()
+            if (key := tuple(tool["name"] for tool in definitions)) != tools_key:
+                tools, tools_key = provider.format_tools(definitions), key
         tool_calls: list[dict] = []
         assistant_msg: dict | None = None
         invalid: dict | None = None
@@ -5234,7 +6247,7 @@ async def _run_headless_turn(
         async for ev in _stream_turn_resilient(
             provider, session, system_prompt=round_system, messages=messages,
             tools=[] if final_round else tools, options={}, cancel=cancel, dispatch_started=dispatch_started,
-            write_started=write_started,
+            write_started=write_started, first_reply_seconds=first_reply_seconds,
         ):
             etype = ev["type"]
             if etype == EV_INVALID_TOOLS:
@@ -5253,6 +6266,9 @@ async def _run_headless_turn(
                 call_text += ev["text"]
             elif etype == EV_TOOL:
                 tool_calls.append(ev)
+            elif etype == EV_USAGE:
+                if usage is not None:
+                    usage.report(ev)
             elif etype == EV_DONE:
                 stop_reason = ev["stop_reason"]
                 assistant_msg = ev["assistant_msg"]
@@ -5275,6 +6291,7 @@ async def _run_headless_turn(
                     detail=(voice_text(routing_language, "model_api_unsupported")
                             if ev.get("code") == "model_api_unsupported"
                             else str(ev.get("message") or _HEADLESS_PROVIDER_ERROR)),
+                    detail_code=str(ev.get("code") or ""),
                     focus_declined=focus_declined,
                 )
         if correct_format:
@@ -5314,15 +6331,15 @@ async def _run_headless_turn(
             # another batch and leave no round for reporting its outcome.
             return _HeadlessTurnResult("", review_urls, outcome=TURN_EXHAUSTED)
         if stop_reason != "tool_use":
-            from .home_companion import invalid_count_report
-            if (not write_started and invalid_count_report(access_key, final_text)
+            from .home_companion import invalid_read_report
+            if (not write_started and invalid_read_report(access_key, final_text)
                     and format_corrections < HOME_COMPANION_MAX_FORMAT_CORRECTIONS
                     and iteration < max_iterations - 1):
                 format_corrections += 1
-                count_report_only = True
+                report_only = True
                 messages.append({'role': 'user', 'content': (
                     'Your final report did not pass validation. Return exactly one JSON object '
-                    'with status and a nonempty message. For a count, copy the unchanged server-provided read_answer reference '
+                    'with status and a nonempty message; an answer already written belongs in message. For a count, copy the unchanged server-provided read_answer reference '
                     'from the received search result. Do not invent a count or source index. '
                     'Do not repeat discovery or run a control. Keep the original task and restrictions unchanged.')})
                 final_text = ''
@@ -5358,12 +6375,13 @@ async def _run_headless_turn(
         # The answer is the model's LAST text (after tools resolve), not the
         # intermediate "let me check..." text before a tool round; reset it here.
         final_text = ""
-        if review_state is not None:
+        slots, tool_calls = _local_tool_results(loader, tool_calls, data)
+        if review_state is not None and tool_calls:
             review = await async_review_tools(hass, data, review_state, surface=routing_surface,
                 language=routing_language, messages=messages, calls=tool_calls, system=system,
                 remaining_rounds=max_iterations - iteration - 1, announced_tools=agent_tools)
             if review.action != "continue":
-                provider.append_tool_results(messages, withheld_results(tool_calls, review))
+                provider.append_tool_results(messages, _merged_results(slots, withheld_results(tool_calls, review)))
                 if review.action == "stop":
                     return _HeadlessTurnResult("", review_urls, outcome=TURN_AUTHORITY_LOST)
                 continue
@@ -5440,7 +6458,9 @@ async def _run_headless_turn(
                 "images": _extract_image_blocks(content),
                 "is_error": bool(result.get("isError")),
             })
-        provider.append_tool_results(messages, results)
+        # Measured against the longer final-round prompt, which the next round may use.
+        append_fitting_results(access_key, system + _FINAL_ROUND_SYSTEM, messages, _merged_results(slots, results),
+                               provider.append_tool_results)
 
     if authority_lost:
         # Reported ahead of exhaustion: a turn can hit both (authority lost in the
@@ -5542,6 +6562,10 @@ async def async_run_voice_turn(
         ),
         seed=user_text, client_ip=VOICE_AGENT_CLIENT_IP, max_iterations=max_iterations,
         detect_focus_refusal=home_focused, routing_surface="voice", routing_language=language,
+        # A local Ollama server's first reply includes loading the model and
+        # reading the whole prompt on the operator's own hardware, which can take
+        # minutes; only the silent-stream bound applies there.
+        first_reply_seconds=None if getattr(provider, "kind", "") == "ollama" else VOICE_FIRST_REPLY_SECONDS,
     )
     voice_result(turn.outcome, bool(turn.review_urls), bool(turn.text.strip()))
     # Never raise at a microphone: every ending becomes something sayable, in the
@@ -5550,7 +6574,14 @@ async def async_run_voice_turn(
     if turn.outcome == TURN_OUTCOME_UNKNOWN:
         return voice_text(language, "prior_action_unresolved" if turn.blocked_by_prior_action else "outcome_unknown")
     if turn.outcome == TURN_PROVIDER_ERROR:
-        return turn.text.strip() or voice_text(language, "provider_error", reason=turn.detail)
+        if turn.text.strip():
+            return turn.text.strip()
+        # The detail is English for the Conversations log and AI Task; speak a
+        # sentence of the conversation's own language instead.
+        if turn.detail_code == "provider_slow":
+            return voice_text(language, "provider_slow")
+        return voice_text(language, "model_api_unsupported" if turn.detail_code == "model_api_unsupported"
+                          else "provider_unavailable")
     if turn.outcome == TURN_OUTPUT_LIMIT:
         return turn.text.strip() or voice_text(language, "output_limit")
     if turn.outcome == TURN_AUTHORITY_LOST:
@@ -5577,7 +6608,8 @@ async def async_run_voice_turn(
         # the reply as markdown). Absolute when a base URL is known so it clicks from
         # anywhere; the review_url is already a same-origin path like /phoenix-mcp/approvals/id.
         links = [f"{base_url}{u}" if base_url else u for u in turn.review_urls]
-        joined = " ".join(f"[Approve in the Phoenix MCP panel]({href})" for href in links)
+        label = voice_text(language, "approval_link")
+        joined = " ".join(f"[{label}]({href})" for href in links)
         answer = f"{answer}\n\n{joined}"
     return answer
 
@@ -5685,7 +6717,7 @@ async def async_run_ai_task(
     # deliberately English, like the rest of the agent-facing error text.
     if turn.outcome == TURN_OUTCOME_UNKNOWN:
         if turn.blocked_by_prior_action:
-            raise AiTaskError("This task was not executed because an earlier action has an unresolved outcome. Check Phoenix MCP > Needs attention before trying again.")
+            raise AiTaskError("This task was not executed because an earlier action has an unresolved outcome. Check the Needs Attention window of the Phoenix MCP panel before trying again.")
         raise AiTaskError("An action outcome is unknown. Reconcile Home Assistant and approval results before retrying.")
     if turn.outcome == TURN_PROVIDER_ERROR:
         raise AiTaskError(turn.detail)
@@ -5730,6 +6762,11 @@ def _zero_inline_wait(access_key: AccessKeyRecord) -> AccessKeyRecord:
         return dataclasses.replace(access_key, confirm_inline_wait_seconds=0)
     except (TypeError, ValueError):
         return access_key
+
+
+def _kill_switch_on(data: PhoenixData) -> bool:
+    """Whether the runtime kill switch is what stopped a turn."""
+    return bool(data.store.get_settings().kill_switch)
 
 
 def _current_dispatch_access_key(data: PhoenixData, access_key_id: str) -> AccessKeyRecord | None:
@@ -5788,7 +6825,11 @@ class PhoenixAgentCliChatView(PhoenixView):
         # bearer-authed), so it must enforce the same invariants that gate every
         # MCP request: shutdown, the runtime kill switch, and access key validity.
         settings = data.store.get_settings()
-        if not data.ready or data.shutting_down or settings.kill_switch:
+        if data.shutting_down:
+            return _err("service_unavailable", "Home Assistant is shutting down.", 503, rid, key="serviceStopping")
+        if not data.ready:
+            return _err("service_unavailable", "Phoenix MCP setup is not complete.", 503, rid, key="setupIncomplete")
+        if settings.kill_switch:
             return _err(
                 "service_unavailable", "Phoenix MCP is disabled (kill switch).", 503, rid,
                 key="serviceDisabled",
@@ -5857,6 +6898,9 @@ class PhoenixAgentCliChatView(PhoenixView):
                     key="nothingToContinue",
                 )
         else:
+            # A finished turn's tool-loop thinking blocks are no longer needed.
+            from .decision_history import without_thinking
+            messages = without_thinking(messages)
             user_text = str(body.get("user") or "")
             if not user_text.strip() and not images:
                 return _err(
@@ -5933,6 +6977,7 @@ class PhoenixAgentCliChatView(PhoenixView):
                 detail_level=settings.agentcli_detail_level,
                 home_focused=settings.agentcli_home_focused,
                 routing_language=body.get("language") if body.get("continue") is not True else None,
+                account=(instance_id, body.get("model") or None),
             )
         except Exception:  # noqa: BLE001 - never leak internals to the client
             _LOGGER.exception("agentCLI turn failed")
@@ -6109,15 +7154,16 @@ def _build_setup_provider(cfg: ProviderConfig):
 
 async def _checked_decision_models(provider, session, model: object, rid: str) -> tuple[list[str], web.Response | None]:
     """Require a real advertised model before persisting a decision account."""
-    from .decision_provider import DecisionError
+    from .decision_provider import DecisionError, decision_error_reason
 
     if not isinstance(model, str) or not model.strip() or len(model) > 200:
         return [], _err("invalid_request", "A model is required.", 400, rid, key="providerModelRequired")
     try:
         models = await provider.list_models(session)
     except DecisionError as error:
+        reason = decision_error_reason(str(error))
         return [], _err("invalid_request", "Could not load decision provider models.", 400, rid,
-                       key="providerConnectionFailed", params={"detail": str(error)})
+                       key=reason.key, params=reason.params or None)
     if model.strip() not in models:
         return [], _err("invalid_request", "Choose a model returned by this provider.", 400, rid,
                        key="providerModelNotListed")
@@ -6181,6 +7227,9 @@ class PhoenixAgentCliProvidersView(PhoenixView):
         else:
             ok, reason = await provider.validate(session)
             if not ok:
+                if isinstance(reason, LocalizedReason):
+                    return _err("invalid_request", f"Connection failed: {reason}", 400, rid,
+                                key=reason.key, params=reason.params or None)
                 return _err(
                     "invalid_request", f"Connection failed: {reason}", 400, rid,
                     key="providerConnectionFailed", params={"detail": reason},
@@ -6237,7 +7286,7 @@ class PhoenixAgentCliProviderView(PhoenixView):
             return body
         if unknown := set(body) - {"model", "auto"}:
             fields = ", ".join(sorted(unknown))
-            return _err("invalid_request", f"Unknown field(s): {fields}.", 400, rid,
+            return _err("invalid_request", f"The request contains fields Phoenix does not recognize: {fields}.", 400, rid,
                         key="unknownFields", params={"fields": fields})
         auto = body.get("auto")
         if auto is not None and not isinstance(auto, bool):
@@ -6257,7 +7306,7 @@ class PhoenixAgentCliProviderView(PhoenixView):
         if auto is True and record and provider_purpose(record.get("kind", "")) == "decision":
             # Decision accounts are qualified against exact model ids.
             return _err("invalid_request", "Decision accounts need an explicit model.", 400, rid,
-                        key="providerModelRequired")
+                        key="decisionModelRequired")
         if record and provider_purpose(record.get("kind", "")) == "decision":
             cfg = store.resolve(instance_id, purpose="decision")
             if cfg is None:
@@ -6637,6 +7686,8 @@ class PhoenixAgentCliProbeView(PhoenixView):
         provider = _build_setup_provider(probe)
         ok, reason = await provider.validate(session)
         if not ok:
+            if isinstance(reason, LocalizedReason):
+                return _ok(ProbeConfigError(reason, reason.key, reason.params or None).payload(), request_id=rid)
             if reason:
                 return _ok(
                     {

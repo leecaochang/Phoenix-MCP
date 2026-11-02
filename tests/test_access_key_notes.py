@@ -233,8 +233,11 @@ def test_the_primer_carries_framed_notes_redacted_to_the_current_scope(home):
     assert "light.kitchen" in primer
     assert "lock.front_door" not in primer and "<redacted-entity>" in primer
     assert "hunter2" not in primer
-    # The usage-guide link stays last.
-    assert primer.rstrip().endswith("configuration work).")
+    # The usage-guide link precedes the notes, which end the primer: a client that
+    # clips server instructions (Claude Code keeps 4,096 characters) loses only
+    # the end of the notes, never the link.
+    assert primer.index("configuration work).") < primer.index("<administrator_notes>")
+    assert primer.rstrip().endswith("</administrator_notes>")
 
     # Narrowing the scope later hides an ID the notes name, without editing them.
     key.permissions.entities.pop("light.kitchen")
@@ -424,3 +427,17 @@ async def test_notes_that_ask_for_more_change_no_enforcement(home, mcp_env):
         "domain": "lock", "service": "unlock", "entity_id": "lock.front_door"}})
     assert unlock["result"].get("isError") is True
     assert home.states.get("lock.front_door").state == "locked"
+
+
+def test_every_surface_says_when_to_orient_the_same_way(home):
+    """Told to orient first, models spent a get_capability_summary call before every read question."""
+    from custom_components.phoenix_mcp.const import ORIENTATION_GUIDANCE
+    from custom_components.phoenix_mcp.skill_view import PHOENIX_SKILL_MARKDOWN
+    from custom_components.phoenix_mcp.tool_defs import _SYSTEM_TOOL_DEFS, _ENTITY_TOOL_DEFS
+
+    descriptions = {d["name"]: d["description"] for d in (*_ENTITY_TOOL_DEFS, *_SYSTEM_TOOL_DEFS)}
+    primer = mcp_view._build_instructions(_scoped(notes=None), _settings_data(), BASE, home)
+    for surface in (primer, PHOENIX_SKILL_MARKDOWN, descriptions["get_capability_summary"]):
+        assert ORIENTATION_GUIDANCE in surface
+    for surface in (primer, PHOENIX_SKILL_MARKDOWN, *descriptions.values()):
+        assert "session start" not in surface and "get_capability_summary first" not in surface

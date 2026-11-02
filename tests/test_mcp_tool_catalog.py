@@ -32,6 +32,21 @@ _DESTRUCTIVE_BY_NAME_EXTRA = {"restart_ha"}
 _OPEN_WORLD_EXPECTED = {"list_blueprints", "get_blueprint"}
 
 
+def _catalog_payload_metrics(access_key, data) -> dict[str, int]:
+    """Deterministic byte metrics for the access key's announced catalog, per wire format."""
+    import json
+
+    tools = agentcli.build_mcp_tool_list(access_key, data)
+
+    def size(value) -> int:
+        return len(json.dumps(value, sort_keys=True, separators=(",", ":")).encode())
+
+    claude = agentcli.ClaudeProvider(agentcli.ProviderConfig("claude", "metrics", "")).format_tools(tools)
+    openai = agentcli.OpenAICompatProvider(agentcli.ProviderConfig("chatgpt", "metrics", "")).format_tools(tools)
+    return {"tool_count": len(tools), "canonical_bytes": size(tools), "claude_bytes": size(claude), "openai_bytes": size(openai)}
+
+
+
 def _static_defs() -> list[dict]:
     return [
         *mcp_view._ENTITY_TOOL_DEFS,
@@ -186,31 +201,31 @@ def test_catalog_payload_metrics_cover_representative_profiles_and_provider_wire
         "announce_all": announce_all,
     }
     metrics = {
-        name: agentcli.catalog_payload_metrics(access_key, _make_data(access_key))
+        name: _catalog_payload_metrics(access_key, _make_data(access_key))
         for name, access_key in profiles.items()
     }
     assert metrics == {
         "read_only": {
-            "tool_count": 51,
-            "canonical_bytes": 50665,
-            "claude_bytes": 45401,
-            "openai_bytes": 46880,
+            "tool_count": 54,
+            "canonical_bytes": 64250,
+            "claude_bytes": 58677,
+            "openai_bytes": 60243,
         },
         "write_capable": {
-            "tool_count": 97,
-            "canonical_bytes": 111060,
-            "claude_bytes": 100321,
-            "openai_bytes": 103134,
+            "tool_count": 100,
+            "canonical_bytes": 126018,
+            "claude_bytes": 115092,
+            "openai_bytes": 117992,
         },
         "announce_all": {
-            "tool_count": 159,
-            "canonical_bytes": 175559,
-            "claude_bytes": 158577,
-            "openai_bytes": 163188,
+            "tool_count": 168,
+            "canonical_bytes": 199517,
+            "claude_bytes": 181601,
+            "openai_bytes": 186473,
         },
     }
-    assert metrics["announce_all"]["tool_count"] == len(_static_defs()) == 159
-    assert mcp_view.tool_catalog_counts()["total"] == 165
+    assert metrics["announce_all"]["tool_count"] == len(_static_defs()) == 168
+    assert mcp_view.tool_catalog_counts()["total"] == 174
 
 
 def test_every_public_parameter_has_a_description():
@@ -300,6 +315,66 @@ async def test_announcement_mirrors_agree_across_esphome_availability(integratio
     assert not (bucketed & (builder_tools if not builder else set())), (
         "a hidden tool must never be bucketed as usable"
     )
+
+
+def test_esphome_persona_fits_the_provider_tool_cap():
+    """An ESPHome persona key with write scope stays within the tools-array cap.
+
+    OpenAI, Groq, Mistral and Z.ai refuse a turn above AGENTCLI_MAX_TOOLS_PER_REQUEST,
+    and every ESPHome tool lands in this persona's list once the Device Builder is
+    present. A new ESPHome tool that pushes it over would make the persona built
+    for ESPHome work unusable on those providers.
+    """
+    from unittest.mock import patch
+
+    from custom_components.phoenix_mcp.personas import get_persona_caps
+    from tests.test_mcp_view import _make_data, _make_hass, _make_access_key
+
+    access_key, _ = _make_access_key()
+    for cap, mode in (get_persona_caps(const.PERSONA_ESPHOME) or {}).items():
+        setattr(access_key, cap, mode)
+    access_key.permissions = PermissionTree(domains={"light": PermissionNode(state="GREEN")})
+    data = _make_data(access_key)
+    hass = _make_hass(data)
+    hass.config.components = {"esphome"}
+    data.hass = hass
+    with patch("custom_components.phoenix_mcp.tools.esphome._esphome_dashboard", return_value=object()), \
+            patch.object(hass.config_entries, "async_entries", return_value=[]):
+        names = {t["name"] for t in agentcli.build_mcp_tool_list(access_key, data)}
+    assert {"get_esphome_history", "analyze_esphome_memory", "check_esphome_connectivity"} <= names
+    assert len(names) <= const.AGENTCLI_MAX_TOOLS_PER_REQUEST
+
+
+@pytest.mark.parametrize("surface", ["chat", "voice"])
+def test_the_largest_catalog_loads_within_every_capped_provider(surface):
+    """Tool-level loading must leave room for any one deferred group under the smallest cap.
+
+    The worst case grants every capability, satisfies every system requirement
+    and enables MESA. Past this bound a capped provider could not load some group
+    whole, and if the starting set alone outgrew the cap every turn would be
+    refused, so a new tool must join a deferred group or leave room.
+    """
+    from unittest.mock import patch
+
+    from custom_components.phoenix_mcp.tool_loading import ToolLoader
+    from tests.test_mcp_view import _make_data, _make_hass, _make_access_key
+
+    access_key, _ = _make_access_key()
+    for cap in const.CAPABILITY_NAMES:
+        setattr(access_key, cap, const.CAP_ALLOW)
+    access_key.permissions = PermissionTree(domains={"light": PermissionNode(state="GREEN")})
+    data = _make_data(access_key)
+    data.hass = _make_hass(data)
+    data.mesa = object()
+    with patch.object(mcp_view, "_requires_satisfied", return_value=True):
+        catalog = agentcli.build_agent_tool_list(access_key, data, surface)
+    limit = min(d.max_tools for d in agentcli.PROVIDER_DEFINITIONS.values() if d.max_tools)
+    loader = ToolLoader(catalog, limit)
+
+    assert len(catalog) > limit, "the worst case no longer needs loading; this bound is then vacuous"
+    assert {tool["name"] for tool in catalog}.isdisjoint({const.AGENTCLI_LOAD_TOOLS_NAME})
+    assert set(loader.groups) == set(const.AGENTCLI_DEFERRED_TOOL_GROUPS)
+    assert max(len(names) for names in loader.groups.values()) <= loader.capacity
 
 
 # ---------------------------------------------------------------------------
@@ -592,3 +667,84 @@ def test_recognize_intent_is_visible_with_search_or_config_read():
     assert "recognize_intent" not in mcp_view._EXECUTOR_REGISTRY
     assert definition["annotations"]["readOnlyHint"] is True
     assert "agent_id" not in definition["inputSchema"]["properties"]
+
+
+def test_set_questions_are_steered_to_one_summary_call():
+    """The load-bearing wording that turns a set question into one get_history call.
+
+    Live, models listed every matching entity before summarizing until the tool
+    they start with said to skip that listing; both halves of the route stay pinned.
+    """
+    defs = {definition["name"]: definition for definition in _all_defs()}
+    search = defs["search_entities"]["description"]
+    assert "skip this listing" in search and "these filters as select" in search
+    history = defs["get_history"]
+    assert "select may name them by search_entities filters" in history["description"]
+    assert set(history["inputSchema"]["properties"]["select"]["properties"]) == {
+        "query", "domain", "device_class", "integration", "radio", "power", "area", "include_diagnostic"}
+
+
+def _announcement_key(*, tree: PermissionTree | None = None, pass_through: bool = False, **caps) -> AccessKeyRecord:
+    """An access key with only the given capabilities and permission tree."""
+    return AccessKeyRecord(
+        id="t1", name="t", access_key_hash="x", created_at=utcnow(), created_by="u",
+        permissions=tree or PermissionTree(), pass_through=pass_through, **caps,
+    )
+
+
+def _announced(name: str, access_key: AccessKeyRecord) -> bool:
+    """tools/list's decision for one tool, with write scope computed as tools/list computes it."""
+    from custom_components.phoenix_mcp.helpers import access_key_has_write_scope
+
+    return mcp_view._tool_is_announced(_by_name()[name], access_key, access_key_has_write_scope(access_key), None)
+
+
+async def _summary_tools(access_key: AccessKeyRecord) -> dict:
+    """The tools section get_capability_summary returns for this access key."""
+    import json
+
+    content, outcome, _ = await mcp_view._tool_get_capability_summary({}, access_key, None, SimpleNamespace(mesa=None))
+    assert outcome == "allowed"
+    return json.loads(content["content"][0]["text"])["tools"]
+
+
+async def test_firmware_install_is_announced_only_with_both_esphome_capabilities():
+    """Installing needs the flash and the authoring capability; either one denied hides the tool."""
+    name = "install_esphome_firmware"
+    both = _announcement_key(cap_esphome_flash="allow", cap_esphome_yaml="allow")
+    assert _announced(name, both)
+    assert name in (await _summary_tools(both))["usable"]
+    for denied in ("cap_esphome_flash", "cap_esphome_yaml"):
+        access_key = _announcement_key(**{"cap_esphome_flash": "allow", "cap_esphome_yaml": "allow", denied: "deny"})
+        assert not _announced(name, access_key), denied
+        assert name in (await _summary_tools(access_key))["unavailable"], denied
+
+
+_POSITION_TOOLS = [_public_name("HassSetPosition"), _public_name("HassStopMoving")]
+_GREEN_COVERS = PermissionTree(domains={"cover": PermissionNode(state="GREEN")})
+
+
+@pytest.mark.parametrize(("profile", "access_key", "announced"), [
+    ("physical denied", _announcement_key(tree=_GREEN_COVERS, cap_physical_control="deny"), False),
+    ("no write scope", _announcement_key(cap_physical_control="allow"), False),
+    ("GREEN grant", _announcement_key(tree=_GREEN_COVERS, cap_physical_control="allow"), True),
+    ("pass-through", _announcement_key(pass_through=True, cap_physical_control="allow"), True),
+])
+async def test_position_and_stop_tools_need_physical_control_and_write_scope(profile, access_key, announced):
+    """Set-position and stop-moving are announced only with cap_physical_control and write scope together."""
+    tools = await _summary_tools(access_key)
+    for name in _POSITION_TOOLS:
+        assert _announced(name, access_key) is announced, (profile, name)
+        assert (name in tools["usable"]) is announced, (profile, name)
+        assert (name in tools["unavailable"]) is not announced, (profile, name)
+
+
+@pytest.mark.parametrize(("mode", "announced"), [("allow", True), ("deny", False)])
+async def test_broadcast_is_announced_by_its_capability_without_write_scope(mode, announced):
+    """Broadcast follows cap_broadcast alone; an access key with no write scope still sees it when allowed."""
+    name = _public_name("HassBroadcast")
+    access_key = _announcement_key(cap_broadcast=mode)
+    tools = await _summary_tools(access_key)
+    assert _announced(name, access_key) is announced
+    assert (name in tools["usable"]) is announced
+    assert (name in tools["unavailable"]) is not announced

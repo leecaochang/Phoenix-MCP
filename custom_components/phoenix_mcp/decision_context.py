@@ -20,7 +20,7 @@ from .const import (
     DECISION_CONTEXT_EXECUTION_LANGUAGES, DECISION_FOLLOWUP_EXECUTION_MODELS, MAX_SEARCH_QUERY_LEN,
 )
 from .decision_history import history_texts, structured_context_history
-from .decision_provider import DecisionError, DecisionProvider, confident_choice
+from .decision_provider import DecisionError, DecisionProvider, confident_choice, revision_admitted
 from .helpers import redact_inaccessible_entity_ids_in_text, redact_secrets_in_text
 
 _LOGGER = logging.getLogger(__name__)
@@ -243,10 +243,10 @@ async def _async_review_context(hass: Any, data: Any, access_key: Any, sentence:
                 from .agentcli import decision_account_fingerprint
                 from .command_execution import _capture_plan
                 if (not context_execution_eligible(hass, data, lang)
-                        or answer["model"] not in DECISION_CONTEXT_EXECUTION_MODELS.get((cfg.kind, cfg.base_url, cfg.model), ())):
+                        or not revision_admitted(DECISION_CONTEXT_EXECUTION_MODELS, cfg, answer["model"])):
                     return result("context_unverified", answer)
-                if decision_candidate and (source_plan is None or source_plan["decision_batch"]["model"] != answer["model"] or answer["model"] not in
-                        DECISION_FOLLOWUP_EXECUTION_MODELS.get((cfg.kind, cfg.base_url, cfg.model), ())):
+                if decision_candidate and (source_plan is None or source_plan["decision_batch"]["model"] != answer["model"]
+                                           or not revision_admitted(DECISION_FOLLOWUP_EXECUTION_MODELS, cfg, answer["model"])):
                     return result("context_unverified", answer)
                 plan = source_plan if source_plan is not None else _capture_plan(hass, data, current, proposal, ingress="chat")
                 account_digest = decision_account_fingerprint(hass, account)

@@ -179,6 +179,13 @@ def test_layout_containment_violation(tmp_path):
     assert layout.error == yi.MSG_OUTSIDE_CONFIG.format(domain="automation")
 
 
+def test_layout_refuses_an_embedded_nul_as_outside_config(tmp_path):
+    """realpath raises on NUL, so the jail must refuse it instead of letting it escape as an error."""
+    write(tmp_path, "configuration.yaml", 'automation: !include "automations.yaml\\0../x"\n')
+    layout = yi.resolve_domain_layout(str(tmp_path), "automation")
+    assert layout.error == yi.MSG_OUTSIDE_CONFIG.format(domain="automation")
+
+
 def test_layout_shape_mismatch(tmp_path):
     write(tmp_path, "configuration.yaml", "script: !include_dir_merge_list scripts\n")
     layout = yi.resolve_domain_layout(str(tmp_path), "script")

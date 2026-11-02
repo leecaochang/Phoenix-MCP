@@ -150,7 +150,7 @@ def fault_log_page(snapshot, access_key, hass, *, search, order, limit, cursor):
     }
     body = {
         "source": source, "filters": {"search": search, "order": order},
-        "crash_recorded": None, "count": 0, "matched_blocks": 0,
+        "crash_recorded": None, "count": 0, "total": 0, "matched_blocks": 0,
         "has_more": False, "next_cursor": None, "entries": [],
     }
     if snapshot.status == "unavailable":
@@ -207,7 +207,7 @@ def fault_log_page(snapshot, access_key, hass, *, search, order, limit, cursor):
         entries.append(entry)
         size += entry_size
     next_offset = offset + len(entries)
-    body.update(entries=entries, count=len(entries), matched_blocks=len(matched),
+    body.update(entries=entries, count=len(entries), total=len(matched), matched_blocks=len(matched),
                 has_more=next_offset < len(matched))
     if body["has_more"]:
         payload = base64.urlsafe_b64encode(json.dumps(

@@ -327,7 +327,8 @@ class TestUserServiceDispatch:
              "service_data": {"timings": [1, 2, 3], "repeats": 2}},
             _access_key(), hass)
         assert outcome == "allowed"
-        assert _json(content) == {"success": True}
+        # A device action changes no entity, so there is nothing to read back.
+        assert _json(content)["success"] is True and _json(content)["verified"] is None
         assert len(calls) == 1
         # Target flattening must NOT apply: the device-declared schema has no
         # entity_id field and voluptuous would reject the call outright.
@@ -523,7 +524,7 @@ class TestDeviceYamlRead:
         # A fully denied access key must learn nothing about the file or its payload.
         assert "rf-blaster1" not in content["content"][0]["text"]
 
-    async def test_credentials_masked_and_hash_is_of_raw_bytes(self, hass, esphome_dir):
+    async def test_credentials_masked_and_hash_is_of_the_masked_text(self, hass, esphome_dir):
         content, outcome, _ = await _call(
             "get_esphome_yaml", {"file": "rf-blaster1.yaml"}, _yaml_access_key(), hass)
         assert outcome == "allowed"
@@ -531,7 +532,10 @@ class TestDeviceYamlRead:
         assert "REALAPIKEY123456=" not in content["content"][0]["text"]
         assert "realotapassword" not in content["content"][0]["text"]
         assert body["redacted_paths"] == ["api.encryption.key", "ota[0].password"]
-        assert body["content_hash"] == content_hash(DEVICE_YAML)
+        # A hash of the raw bytes beside text that differs only in its
+        # credentials would let a weak inline password be guessed offline.
+        assert body["content_hash"] == content_hash(body["content"])
+        assert body["content_hash"] != content_hash(DEVICE_YAML)
         # Formatting and tag references survive, so the masked text still reads
         # as the operator wrote it.
         assert "# Enable Home Assistant API" in body["content"]
@@ -752,7 +756,7 @@ class TestDeviceYamlHistory:
         read, outcome, _ = await _call(
             "get_esphome_yaml", {"file": "rf-blaster1.yaml"}, _yaml_access_key(), hass)
         assert outcome == "allowed"
-        assert _json(read)["content_hash"] == content_hash(DEVICE_YAML)
+        assert _json(read)["content_hash"] == content_hash(_json(read)["content"])
         assert "REALAPIKEY123456=" not in read["content"][0]["text"]
 
 
@@ -821,7 +825,8 @@ class TestScopedEsphomeInventory:
         entry.data = {"device_name": "private"}
         content, _, _ = await _call("search_esphome_yaml", {"query": "needle", "limit": 1}, _yaml_access_key(), hass)
         body = _json(content)
-        assert body["count"] == 2
+        # count is this page and total every scoped match, as on every paged read.
+        assert (body["count"], body["total"], body["has_more"]) == (1, 2, True)
         assert body["next_offset"] == 1
         assert body["matches"][0]["file"] == "a.yaml"
         content, _, _ = await _call("search_esphome_yaml", {"query": "needle", "case_sensitive": True}, _yaml_access_key(), hass)
@@ -847,7 +852,7 @@ class TestScopedEsphomeInventory:
         assert _json(content)["incomplete"] is True
 
     @pytest.mark.parametrize("args", [{"query": []}, {"query": "x", "context_lines": True},
-                                      {"query": "x", "case_sensitive": "false"}, {"query": "x" * 201}])
+                                      {"query": "x", "case_sensitive": "maybe"}, {"query": "x" * 201}])
     async def test_search_rejects_malformed_arguments(self, hass, args):
         _, outcome, _ = await _call("search_esphome_yaml", args, _yaml_access_key(), hass)
         assert outcome == "invalid_request"
@@ -860,20 +865,28 @@ class TestScopedEsphomeInventory:
         jobs = [
             {"job_id": "hidden", "configuration": "private.yaml", "status": "failed"},
             {"job_id": "old", "configuration": "rf-blaster1.yaml", "status": "completed", "created_at": "2026-09-01"},
-            {"job_id": "new", "configuration": "rf-blaster1.yaml", "status": "failed", "created_at": "2026-09-02",
-             "output": ["REALAPIKEY123456="], "error": "housepassword1", "port": "192.168.1.10"},
+            # The Device Builder 1.25.0 record shape: job_type and completed_at,
+            # plus fields the projection must never carry.
+            {"job_id": "new", "configuration": "rf-blaster1.yaml", "job_type": "compile", "status": "failed",
+             "created_at": "2026-09-02", "started_at": "2026-09-02T00:00:01", "completed_at": "2026-09-02T00:01:00",
+             "output": ["REALAPIKEY123456="], "error": "housepassword1", "port": "192.168.1.10",
+             "skip_bootloader": True, "failure_reason": "", "remote_peer": "PRIVATE"},
             {"job_id": "escape", "configuration": "../private.yaml", "status": "failed"},
         ]
         (content, outcome, _), builder = await _inventory_call(hass, "list_esphome_jobs", {"limit": 1}, jobs)
         assert outcome == "allowed"
         body = _json(content)
-        assert body["count"] == 2
-        assert body["jobs"][0]["job_id"] == "new"
+        assert (body["count"], body["total"], body["has_more"]) == (1, 2, True)
+        assert body["jobs"][0] == {
+            "file": "rf-blaster1.yaml", "job_id": "new", "status": "failed", "job_type": "compile",
+            "created_at": "2026-09-02", "started_at": "2026-09-02T00:00:01",
+            "completed_at": "2026-09-02T00:01:00",
+        }
         assert body["next_offset"] == 1
-        assert "error" not in body["jobs"][0]
         assert builder.await_args.args[2] == "firmware/get_jobs"
         (content, _, _), _builder = await _inventory_call(hass, "list_esphome_jobs", {"status": "completed"}, jobs)
-        assert _json(content)["count"] == 1
+        last = _json(content)
+        assert last["count"] == 1 and last["has_more"] is False and "next_offset" not in last
 
     async def test_device_projection_importable_scope_and_network_confidentiality(self, hass, esphome_dir, esphome_entries):
         entry = _esphome_entry(hass, esphome_entries, entity_ids=("light.private",),

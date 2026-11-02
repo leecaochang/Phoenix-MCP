@@ -14,6 +14,7 @@ determinism.
 from __future__ import annotations
 
 import asyncio
+from types import SimpleNamespace
 import json
 import textwrap
 import uuid
@@ -36,8 +37,10 @@ from custom_components.phoenix_mcp.mcp_view import (
 )
 from custom_components.phoenix_mcp.helpers import content_hash
 from custom_components.phoenix_mcp.access_key_store import PermissionNode, PermissionTree, AccessKeyRecord
+from custom_components.phoenix_mcp.tool_common import RefusedBeforeWrite
 from custom_components.phoenix_mcp.tools import authoring
 from custom_components.phoenix_mcp.tools.authoring import (
+    _automation_op_error,
     _build_diff_create_script,
     _build_diff_delete_automation,
     _execute_delete_automation,
@@ -90,6 +93,9 @@ class ApprovalStore:
 
     def set_pending_approvals(self, approvals: list) -> None:
         self.pending = approvals
+
+    def get_settings(self):
+        return SimpleNamespace(mesa_mode="off", notify_on_approval=True)
 
 
 def _approval_data() -> tuple[PhoenixData, ApprovalStore]:
@@ -809,6 +815,91 @@ class TestTagHandling:
         assert _text(content) == yi.MSG_INCLUDE_REFUSAL.format(name="automations.yaml")
 
 
+TAG_TEXTS = ["!secret wifi", "!include x.yaml"]
+
+
+def _with_tag_text(domain: str, body: dict, tag: str) -> dict:
+    """The body with tag display text nested where Home Assistant's schema accepts any value."""
+    body = dict(body)
+    if domain == "scene":
+        body["entities"] = {"light.kitchen": {"state": "on", "note": tag}}
+    else:
+        step = {"service": "homeassistant.toggle", "entity_id": "input_boolean.x", "data": {"note": tag}}
+        body["action" if domain == "automation" else "sequence"] = [step]
+    return body
+
+
+def _seed_editor_entry(base: Path, domain: str) -> None:
+    """An editor-file layout holding one entry "ui" that the editor itself wrote."""
+    write(base, "configuration.yaml", f"{domain}: !include {EDITOR[domain]}\n")
+    write(base, EDITOR[domain], _entries_text(domain, {"ui": _body(domain, "UI")}))
+
+
+class TestTagTextInWrites:
+    """A config carrying tag display text is refused on every write path.
+
+    Tag text cannot be written back as a real tag, so a create or edit naming it
+    never reaches the Confirm gate and never changes a byte, before approval or
+    after it. The same call without the tag text still passes these checks.
+    """
+
+    @pytest.mark.parametrize("domain", DOMAINS)
+    @pytest.mark.parametrize("operation", ["create", "edit"])
+    @pytest.mark.parametrize("tag", TAG_TEXTS)
+    async def test_tag_text_is_refused_before_an_approval_exists(
+        self, hass, kitchen_env, domain, operation, tag,
+    ):
+        """Tag text anywhere in config is refused ahead of the gate; the tag-free call is queued."""
+        env = kitchen_env
+        _seed_editor_entry(env, domain)
+        tool = f"{operation}_{domain}"
+        data, store = _approval_data()
+        access_key = _confirm_key()
+        clean = _tool_args(env, domain, operation, "ui", "UI")
+        tagged = dict(clean, config=_with_tag_text(domain, clean["config"], tag))
+        before = snapshot(env)
+
+        with _gate_spy() as gate:
+            content, outcome, _ = await _call_tool(tool, tagged, access_key, hass, data)
+            assert outcome == "invalid_request"
+            assert yi.TAG_STRING_REFUSAL in _text(content)
+            gate.assert_not_called()
+            assert store.pending == []
+            assert snapshot(env) == before
+
+            _, outcome, _ = await _call_tool(tool, clean, access_key, hass, data)
+            assert outcome == "pending_approval"
+            gate.assert_awaited_once()
+        assert [approval["tool_name"] for approval in store.pending] == [tool]
+        assert snapshot(env) == before
+
+    @pytest.mark.parametrize("domain", DOMAINS)
+    @pytest.mark.parametrize("operation", ["create", "edit"])
+    async def test_approved_tag_text_is_refused_without_writing(self, hass, kitchen_env, domain, operation):
+        """The approved executor refuses tag text itself and records no version; the tag-free call applies."""
+        env = kitchen_env
+        _seed_editor_entry(env, domain)
+        tool = f"{operation}_{domain}"
+        data, versions = _data()
+        access_key = _access_key(
+            tree=_scene_tree(), cap_automation_write="allow", cap_script_write="allow",
+            cap_scene_write="allow", cap_registry_read="allow",
+        )
+        clean = _tool_args(env, domain, operation, "ui", "UI")
+        tagged = dict(clean, config=_with_tag_text(domain, clean["config"], "!secret wifi"))
+        before = snapshot(env)
+
+        content, outcome, _ = await async_execute_approved_tool(tool, tagged, access_key, hass, data)
+        assert outcome == "invalid_request"
+        assert yi.TAG_STRING_REFUSAL in _text(content)
+        assert snapshot(env) == before
+        assert versions.list_for(domain, "ui") == []
+
+        content, outcome, _ = await async_execute_approved_tool(tool, clean, access_key, hass, data)
+        assert outcome == "allowed", _text(content)
+        assert changed_files(before, snapshot(env)) == {EDITOR[domain]}
+
+
 class TestApprovalReplay:
     async def test_execute_edit_automation_standalone(self, hass, env):
         """Approval replay runs _execute_X directly; it must behave identically.
@@ -871,6 +962,7 @@ class TestApprovalReplay:
         )
         assert outcome == "invalid_request"
         assert "expected_hash no longer matches" in _text(content)
+        assert isinstance(content, RefusedBeforeWrite)  # checked before anything was removed
         assert "Replacement" in (env / "automations.yaml").read_text(encoding="utf-8")
 
         content, outcome, _ = await _execute_delete_automation(
@@ -926,6 +1018,7 @@ class TestApprovalReplay:
         )
         assert outcome == "invalid_request"
         assert "expected_hash no longer matches" in _text(content)
+        assert isinstance(content, RefusedBeforeWrite)  # checked before anything was removed
         assert "Replacement" in read(env, "scripts.yaml")
 
     async def test_stale_scene_delete_replay_is_refused(self, hass, kitchen_env):
@@ -966,4 +1059,14 @@ class TestApprovalReplay:
         )
         assert outcome == "invalid_request"
         assert "expected_hash no longer matches" in _text(content)
+        assert isinstance(content, RefusedBeforeWrite)  # checked before anything was removed
         assert "Replacement" in read(env, "scenes.yaml")
+
+
+@pytest.mark.parametrize(("kind", "marked"), [("conflict", True), ("io_error", False), ("refused", False)])
+def test_only_an_automation_conflict_is_marked_as_refused_before_writing(kind, marked):
+    # yaml_includes returns conflicts before it writes; an I/O error may follow
+    # a partial write, and other refusals already have a known outcome.
+    content, _, _ = _automation_op_error(yi.OpResult(ok=False, error_kind=kind, message="m"), "edit_automation")
+    assert isinstance(content, RefusedBeforeWrite) is marked
+    assert content == {"content": [{"type": "text", "text": "m"}], "isError": True}

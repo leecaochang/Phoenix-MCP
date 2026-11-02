@@ -16,10 +16,14 @@ from __future__ import annotations
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from datetime import datetime
+import json
 import time
-from typing import Any
+from typing import TYPE_CHECKING, Any, cast
 
 from .recorder_queries import ceil_us, from_us
+
+if TYPE_CHECKING:
+    from homeassistant.core import State
 
 Row = tuple[int, str]
 # fetch(after_us, before_us, limit, include_start_state) -> ascending rows.
@@ -46,6 +50,37 @@ def read_state_change_page(
         hass, from_us(after_us), from_us(before_us), entity_id, True, False, limit, include_start_state,
     ).get(entity_id, [])
     return [(ceil_us(state.last_updated_timestamp), state.state) for state in states]
+
+
+def read_attribute_change_page(
+    hass: Any, entity_id: str, attribute: str, after_us: int, before_us: int, limit: int,
+    include_start_state: bool,
+) -> list[Row]:
+    """One ascending page of one attribute's values. Recorder executor only.
+
+    An attribute-only update (a thermostat's hvac_action going from heating to
+    idle in the same heat mode) never reaches read_state_change_page, so this
+    reads every recorded update with its attributes, inside (after, before) and
+    with the same start row, and keeps the first `limit`. A row without the
+    attribute counts under the entity's state, such as unavailable.
+    """
+    from homeassistant.components.recorder import history
+
+    # Without minimal_response every row is a full State; only that mode
+    # returns compressed dict rows.
+    states = cast("list[State]", history.get_significant_states(
+        hass, from_us(after_us), from_us(before_us), [entity_id], None,
+        include_start_time_state=include_start_state, significant_changes_only=False,
+        minimal_response=False, no_attributes=False,
+    ).get(entity_id, []))
+    rows: list[Row] = []
+    # As in Core's change query, the start row comes on top of the limit.
+    start = int(bool(states) and include_start_state and ceil_us(states[0].last_updated_timestamp) <= after_us)
+    for state in states[:start + limit]:
+        value = state.attributes.get(attribute, state.state)
+        rows.append((ceil_us(state.last_updated_timestamp),
+                     value if isinstance(value, str) else json.dumps(value, sort_keys=True, default=str)))
+    return rows
 
 
 def group_cut(rows: list[Row]) -> int | None:
@@ -222,11 +257,46 @@ def _percent(duration: int, recorded: int) -> float | None:
     return round(duration * 100 / recorded, 2) if recorded else None
 
 
+def compact_summary_row(body: dict[str, Any]) -> dict[str, Any]:
+    """One entity of a multi-entity summary: its totals without the shared ranges.
+
+    The ranges are the same for every entity in the call, so they are stated once
+    by the caller. Durations, entry counts and the last entry per state are what
+    "which of these did not do X" needs; an incomplete row keeps its reasons, a
+    row with nothing recorded before the range says when its record begins (so
+    "home since at least then" needs no further read), and a scan that hit its
+    budget keeps the cursor to continue that entity alone.
+    """
+    row: dict[str, Any] = {"entity_id": body["entity_id"], "complete": body["complete"]}
+    if body["incomplete_reasons"]:
+        row["incomplete_reasons"] = body["incomplete_reasons"]
+    if body["state_at_start"] is None and body["recorded_range"] is not None:
+        row["recorded_from"] = body["recorded_range"]["start"]
+    row.update(
+        state_at_start=body["state_at_start"], state_at_end=body["state_at_end"],
+        transitions=body["transitions"], last_transition=body["last_transition"],
+        states=[{"state": item["state"], "entered": item["entered"], "last_entered": item["last_entered"],
+                 "duration_seconds": item["duration_seconds"]} for item in body["states"]],
+    )
+    if body["other_states"]:
+        row["other_states"] = {key: body["other_states"][key] for key in ("count", "entered", "duration_seconds")}
+    if body["unrecorded_seconds"]:
+        row["unrecorded_seconds"] = body["unrecorded_seconds"]
+    if body["has_more"]:
+        row["next_cursor"] = body["next_cursor"]
+    return row
+
+
 def summary_body(
     entity_id: str, requested: tuple[datetime, datetime], summary: StateSummary, *,
-    max_states: int, retention: dict[str, Any], warnings: list[str],
+    max_states: int, retention: dict[str, Any], warnings: list[str], continued: bool = False,
 ) -> dict[str, Any]:
-    """The summary response; durations and percentages cover recorded time only."""
+    """The summary response; durations and percentages cover recorded time only.
+
+    A page continued from a cursor totals only its own covered_range, and a page
+    that stopped at its budget names the unread rest, so neither page's totals
+    can be read as the requested range's.
+    """
     recorded_start = summary.recorded_start_us
     recorded = summary.end_us - recorded_start if recorded_start is not None else 0
     ranked = sorted(summary.totals.items(), key=lambda item: (-item[1].duration_us, item[0]))
@@ -242,7 +312,13 @@ def summary_body(
     if summary.next_cursor_us is not None:
         reasons.append("scan_limit")
         warnings.append(
-            "The scan stopped at its budget. Continue with next_cursor as cursor and add each page's durations and transitions."
+            "The scan stopped at its budget. Continue with next_cursor as cursor and add each page's durations and "
+            "transitions. state_at_end is the state at next_cursor."
+        )
+    if continued:
+        warnings.append(
+            "This page continues from cursor, so its durations, transitions and percentages cover only covered_range. "
+            "Add them to the earlier pages' totals for the requested range."
         )
     if summary.simultaneous:
         warnings.append(
@@ -267,6 +343,9 @@ def summary_body(
         "mode": "summary",
         "requested_range": {"start": requested[0].isoformat(), "end": requested[1].isoformat()},
         "covered_range": {"start": _iso(summary.start_us), "end": _iso(summary.end_us)},
+        **({"unread_range": {"start": _iso(summary.next_cursor_us), "end": requested[1].isoformat()}}
+           if summary.next_cursor_us is not None else {}),
+        "continuation": continued,
         "recorded_range": (
             {"start": _iso(recorded_start), "end": _iso(summary.end_us)} if recorded_start is not None else None
         ),

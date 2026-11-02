@@ -200,6 +200,42 @@ class TestDualCapabilityGate:
                 _access_key(cap_script_write="deny"), hass, _data()[0])
         assert outcome == "allowed"
 
+    @pytest.mark.parametrize("tool", ["create_blueprint", "edit_blueprint", "delete_blueprint", "restore"])
+    @pytest.mark.parametrize(("blueprint_mode", "domain_mode", "gated_on"), [
+        ("allow", "allow", "cap_blueprint_write"),
+        ("confirm", "allow", "cap_blueprint_write"),
+        ("allow", "confirm", "cap_automation_write"),
+        ("confirm", "confirm", "cap_blueprint_write"),
+    ])
+    async def test_confirm_on_either_capability_gates_the_write(
+        self, hass, bp_env, tool, blueprint_mode, domain_mode, gated_on,
+    ):
+        """A blueprint edit rewires every consumer, so Confirm on the domain cap must not be bypassed."""
+        from custom_components.phoenix_mcp.tools import recovery
+        _write_existing(bp_env)
+        access_key = _access_key(cap_blueprint_write=blueprint_mode, cap_automation_write=domain_mode)
+        pending = ({"content": [{"type": "text", "text": "pending"}]}, "pending_approval", "a1")
+        gate = AsyncMock(return_value=pending)
+        if tool == "restore":
+            record = {"id": "r1", "before": {"schema": 1, "domain": "automation", "path": "author/existing.yaml",
+                                             "exists": True, "content": VALID.replace("Test Blueprint", "Old")}}
+            receipt, _, _ = await recovery._tool_restore_blueprint_configuration(
+                {}, record, "before", access_key, hass, MagicMock(), "", None)
+            bound = {key: _json(receipt)[key] for key in ("snapshot_digest", "target_fingerprint")}
+            with patch.object(recovery, "_gate", new=gate):
+                result = await recovery._tool_restore_blueprint_configuration(
+                    bound, record, "before", access_key, hass, MagicMock(), "", None)
+        else:
+            args = {"domain": "automation", "path": "author/existing.yaml"}
+            if tool != "delete_blueprint":
+                args["content"] = VALID.replace("light.kitchen", "light.porch")
+            if tool == "create_blueprint":
+                args["path"] = "author/new.yaml"
+            with patch.object(blueprint_tools, "_gate", new=gate):
+                result = await _call(tool, args, access_key, hass, _data()[0])
+        assert result == pending
+        assert gate.await_args.args[0] == gated_on
+
     async def test_denied_access_key_learns_nothing_about_its_payload(self, hass, bp_env):
         """The cap-deny check runs before validation, so nothing is echoed back."""
         content, outcome, _ = await _call(
@@ -221,7 +257,6 @@ class TestPathJail:
             ".hidden/x.yaml",
             "author/.hidden.yaml",
             "author/notes.txt",
-            "author/noext",
             "",
             "   ",
         ],
@@ -335,11 +370,27 @@ class TestCreate:
         assert outcome == "invalid_request"
         assert "already exists" in _text(content)
 
-    async def test_yaml_suffix_added_by_ha_is_not_our_concern(self, hass, bp_env):
-        # An explicit .yaml/.yml is required, so HA's suffix fallback never fires.
+    @pytest.mark.parametrize(("path", "stored"), [
+        ("author/nosuffix", "author/nosuffix.yaml"),
+        ("blueprints/automation/author/prefixed.yaml", "author/prefixed.yaml"),
+    ])
+    async def test_suffix_and_config_relative_prefix_name_the_same_file(self, hass, bp_env, path, stored):
+        # As HA's own blueprint save does, a missing suffix becomes .yaml.
+        data, _versions = _data()
+        with _patch_ws(return_value={"overrides_existing": False}) as ws, _patch_consumers([]):
+            content, outcome, resource = await _call(
+                "create_blueprint",
+                {"domain": "automation", "path": path, "content": VALID},
+                _access_key(), hass, data)
+        assert outcome == "allowed", _text(content)
+        assert resource == f"blueprint:automation/{stored}"
+        assert ws.await_args.args[2]["path"] == stored
+
+    @pytest.mark.parametrize("path", ["author/notes.txt", "../escape", "author/.hidden"])
+    async def test_other_extensions_and_escapes_stay_refused(self, hass, bp_env, path):
         _, outcome, _ = await _call(
             "create_blueprint",
-            {"domain": "automation", "path": "author/nosuffix", "content": VALID},
+            {"domain": "automation", "path": path, "content": VALID},
             _access_key(), hass)
         assert outcome == "invalid_request"
 
@@ -406,7 +457,7 @@ class TestDelete:
                 _access_key(), hass, data)
         assert outcome == "allowed"
         assert ws.await_args.args[1] == "blueprint/delete"
-        assert _json(content)["deleted"] is True
+        assert _json(content)["deleted"] is True and _json(content)["verified"] is True
         assert isinstance(_json(content).get("recovery_id"), str)
         rec = versions.list_recent()[0]
         assert rec.action == "delete"
@@ -449,7 +500,7 @@ class TestApprovalDiff:
             diff = await blueprint_tools._build_diff_blueprint(
                 {"domain": "automation", "path": "author/existing.yaml", "content": VALID},
                 hass, "edit")
-        assert "3 will be reloaded" in diff["summary"]
+        assert "to be reloaded: 3" in diff["summary"]
         assert diff["preview"]["used_by_count"] == 3
         assert diff["preview"]["used_by"] == ["automation.a", "automation.b", "automation.c"]
         assert "Test Blueprint" in diff["before"]

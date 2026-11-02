@@ -10,6 +10,8 @@ work unchanged.
 
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import json
 import uuid
 from unittest.mock import MagicMock
@@ -29,6 +31,7 @@ from custom_components.phoenix_mcp.tools.lovelace import (
     _execute_dashboard_card,
 )
 from custom_components.phoenix_mcp.access_key_store import PermissionNode, PermissionTree, AccessKeyRecord
+from custom_components.phoenix_mcp.tool_common import RefusedBeforeWrite
 from custom_components.phoenix_mcp.version_store import VersionStore
 from custom_components.phoenix_mcp.ws_dispatch import async_get_lovelace_config, async_save_lovelace_config
 
@@ -97,7 +100,7 @@ class TestAddDashboardCard:
         stored = await async_get_lovelace_config(h, None)
         assert stored["views"][0]["cards"] == [CARD_A, CARD_B, NEW_CARD]
         body = _json(content)
-        assert body["saved"] is True and body["op"] == "add"
+        assert body["saved"] is True and body["op"] == "add" and body["verified"] is True
         # The result hash matches the new layout, so card ops can be chained
         # without re-reading.
         assert body["content_hash"] == content_hash(stored)
@@ -108,6 +111,11 @@ class TestAddDashboardCard:
         # The full-layout snapshot cannot say which card moved, so the record's
         # summary carries the op context for the Changes list.
         assert hist[0].summary == f"added {NEW_CARD['type']} (view 0)"
+        # The panel rebuilds that location in the reader's language from these,
+        # rather than showing the English "view 0".
+        assert hist[0].summary_params["view_index"] == 0
+        assert hist[0].summary_params["card_type"] == NEW_CARD["type"]
+        assert "card_index" not in hist[0].summary_params
 
     async def test_position_inserts(self, hass, lovelace_env):
         h, _light = lovelace_env
@@ -188,6 +196,37 @@ class TestCardOpValidationBeforeGate:
             "add_dashboard_card", {"view_index": 0, "card": NEW_CARD}, _access_key(), h, _data()[0])
         assert outcome == "invalid_request"
 
+    async def test_strategy_section_rejected_for_every_op(self, hass, lovelace_env):
+        # The frontend replaces a strategy section's stored fields with the
+        # generated config, so a card saved there would never display. A stored
+        # cards list (legal, just ignored) must not make edit/delete addressable.
+        h, _light = lovelace_env
+        layout = {"views": [{"type": "sections", "sections": [
+            {"type": "grid", "cards": [CARD_A]},
+            {"strategy": {"type": "common-controls"}, "cards": [CARD_A]},
+        ]}]}
+        await _seed(h, layout)
+        before = await async_get_lovelace_config(h, None)
+        for name, args in (
+            ("add_dashboard_card", {"view_index": 0, "section_index": 1, "card": NEW_CARD}),
+            ("edit_dashboard_card", {"view_index": 0, "section_index": 1, "card_index": 0, "card": NEW_CARD}),
+            ("delete_dashboard_card", {"view_index": 0, "section_index": 1, "card_index": 0}),
+        ):
+            data, versions = _data()
+            content, outcome, _ = await _call(name, args, _access_key(cap_lovelace_write="confirm"), h, data)
+            assert outcome == "invalid_request", name
+            assert "section is strategy-generated" in content["content"][0]["text"], name
+            data.store.set_pending_approvals.assert_not_called()
+            assert versions.list_for("dashboard", "lovelace") == []
+        assert await async_get_lovelace_config(h, None) == before
+        # Positive control: the ordinary section next to it still takes the card.
+        _, outcome, _ = await _call(
+            "add_dashboard_card", {"view_index": 0, "section_index": 0, "card": NEW_CARD}, _access_key(), h, _data()[0])
+        assert outcome == "allowed"
+        saved = await async_get_lovelace_config(h, None)
+        assert saved["views"][0]["sections"][0]["cards"] == [CARD_A, NEW_CARD]
+        assert saved["views"][0]["sections"][1] == layout["views"][0]["sections"][1]
+
     async def test_autogen_dashboard_steers_to_set_dashboard_config(self, hass, lovelace_env):
         # Card ops need a stored base layout; a fresh default dashboard has none.
         # The message must NAME the addressed dashboard: an agent that drops
@@ -224,6 +263,9 @@ class TestCardOpValidationBeforeGate:
             def set_pending_approvals(self, v: list) -> None:
                 self._p = v
 
+            def get_settings(self):
+                return SimpleNamespace(mesa_mode="off", notify_on_approval=True)
+
         h, _light = lovelace_env
         await _seed(h)
         data, _v = _data()
@@ -252,6 +294,25 @@ class TestEditDeleteDashboardCard:
         assert stored["views"][0]["cards"] == [CARD_A, NEW_CARD]
         hist = versions.list_for("dashboard", "lovelace")
         assert hist[0].before["views"][0]["cards"][1] == CARD_B
+
+    async def test_whole_float_indexes_read_as_integers_after_the_capability_check(self, hass, lovelace_env):
+        # A client that sends every number as a float gets what every other tool gives it.
+        h, _light = lovelace_env
+        await _seed(h)
+        _, outcome, _ = await _call(
+            "edit_dashboard_card", {"view_index": 0.0, "card_index": 1.0, "card": NEW_CARD},
+            _access_key(), h, _data()[0])
+        assert outcome == "allowed"
+        assert (await async_get_lovelace_config(h, None))["views"][0]["cards"] == [CARD_A, NEW_CARD]
+        content, outcome, _ = await _call(
+            "edit_dashboard_card", {"view_index": "first", "card_index": 1, "card": NEW_CARD},
+            _access_key(), h, _data()[0])
+        assert outcome == "invalid_request" and content["content"][0]["text"] == "view_index must be an integer."
+        # A denied access key still learns nothing about its arguments.
+        content, outcome, _ = await _call(
+            "edit_dashboard_card", {"view_index": "first", "card": NEW_CARD},
+            _access_key(cap_lovelace_write="deny"), h, _data()[0])
+        assert outcome == "denied" and "view_index" not in content["content"][0]["text"]
 
     async def test_delete_removes_card(self, hass, lovelace_env):
         h, _light = lovelace_env
@@ -323,10 +384,13 @@ class TestCardOpCas:
         data, _v = _data()
         stale_hash = content_hash(await async_get_lovelace_config(h, None))
         await async_save_lovelace_config(h, None, {"views": [{"cards": []}]})  # drift
-        _, outcome, _ = await _execute_dashboard_card(
+        content, outcome, _ = await _execute_dashboard_card(
             {"view_index": 0, "card": NEW_CARD, "expected_hash": stale_hash},
             "add", "add_dashboard_card", access_key, h, data)
         assert outcome == "invalid_request"
+        # Refused before writing, so an approved run reports a known failure.
+        assert isinstance(content, RefusedBeforeWrite)
+        assert (await async_get_lovelace_config(h, None)) == {"views": [{"cards": []}]}
 
     async def test_executor_revalidates_bounds_without_hash(self, hass, lovelace_env):
         # No expected_hash: the executor still re-resolves the target, so an

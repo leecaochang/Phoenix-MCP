@@ -30,9 +30,15 @@ from custom_components.phoenix_mcp.const import CATALOGS_DIR
 
 
 @pytest.fixture(autouse=True)
-def _reload_shipped_catalogs():
-    """Catalogs are loaded once into memory, so a test that swaps the directory reloads after."""
+def _reload_shipped_catalogs(monkeypatch):
+    """Catalogs are loaded once into memory, so a test that swaps the directory reloads after.
+
+    The swap is undone first: monkeypatch may tear down after this fixture (an
+    earlier autouse fixture can request it), and reloading while it still points
+    at a test folder leaves the next test on this worker with fake catalogs.
+    """
     yield
+    monkeypatch.undo()
     helpers.load_catalogs()
 
 
@@ -146,6 +152,71 @@ def test_backend_rendered_strings_use_the_same_locale_mapping(tmp_path, monkeypa
     assert helpers.voice_text("zh-HK", "unavailable") == "繁體中文語音"
 
 
+class _GermanConfig:
+    language = "de-DE"
+
+
+class _GermanHass:
+    config = _GermanConfig()
+
+
+@pytest.mark.parametrize(
+    "translated",
+    [
+        "Schlüssel {name} hat sein Limit erreicht.",   # renamed the placeholder
+        "Ein Schlüssel hat sein Limit erreicht.",      # dropped it
+        "Schlüssel '{access_key}' {extra}",            # invented a second one
+        "Schlüssel '{access_key' am Limit.",           # stray brace: does not parse
+        "Schlüssel '{access_key!z}' am Limit.",        # parses, cannot format
+    ],
+)
+def test_backend_rendered_mismatch_keeps_the_english(tmp_path, monkeypatch, translated) -> None:
+    """Notification and voice text fall back like the panel, rather than raising.
+
+    These render after an approval is saved and inside voice error handling, so an
+    exception there would leave a pending approval with no notification.
+    """
+    _fake_catalogs(
+        tmp_path,
+        monkeypatch,
+        de={
+            "notification": {"rate_limit.message": translated},
+            "voice": {"local_state": translated.replace("access_key", "state")},
+        },
+    )
+    assert helpers.notification_text(_GermanHass(), "rate_limit.message", access_key="k1") == (
+        "Phoenix MCP: access key 'k1' has hit its rate limit."
+    )
+    assert helpers.voice_text("de", "local_state", state="an") == "The state is an."
+
+
+def test_backend_rendered_matching_translation_is_used(tmp_path, monkeypatch) -> None:
+    """The guard above must not be refusing everything."""
+    _fake_catalogs(
+        tmp_path,
+        monkeypatch,
+        de={
+            "notification": {"rate_limit.message": "Schlüssel '{access_key}' am Limit."},
+            "voice": {"local_state": "Der Zustand ist {state}."},
+        },
+    )
+    assert helpers.notification_text(_GermanHass(), "rate_limit.message", access_key="k1") == (
+        "Schlüssel 'k1' am Limit."
+    )
+    assert helpers.voice_text("de", "local_state", state="an") == "Der Zustand ist an."
+
+
+def test_unparseable_panel_translation_keeps_the_english(tmp_path, monkeypatch) -> None:
+    """A stray brace drops that one string instead of failing the whole catalog."""
+    _fake_catalogs(
+        tmp_path,
+        monkeypatch,
+        en={"panel": {"greet": "Hello {name}", "other": "Other"}},
+        de={"panel": {"greet": "Hallo {name", "other": "Andere"}},
+    )
+    assert helpers.panel_catalog("de-DE") == {"greet": "Hello {name}", "other": "Andere"}
+
+
 def test_only_the_panel_section_is_served() -> None:
     """notification and voice are backend-rendered and never reach the browser."""
     catalog = helpers.panel_catalog("en")
@@ -196,6 +267,8 @@ async def _get(language: str):
 
 
 async def test_endpoint_serves_the_catalog() -> None:
+    # Another test may have loaded an empty catalog folder; use the shipped one.
+    helpers.load_catalogs()
     resp = await _get("en")
     assert resp.status == 200
     body = json.loads(resp.text)
@@ -216,3 +289,26 @@ async def test_endpoint_404s_when_the_catalog_cannot_be_read(tmp_path, monkeypat
     helpers.load_catalogs()
     resp = await _get("en")
     assert resp.status == 404
+
+
+async def test_endpoint_serves_the_catalog_while_setup_is_incomplete() -> None:
+    """The panel needs its strings to say setup is incomplete; other admin views refuse."""
+    from custom_components.phoenix_mcp.admin_view import PhoenixAdminSettingsView
+    from custom_components.phoenix_mcp.const import RUNTIME_READY_KEY
+
+    # The previous test points CATALOGS_DIR at an empty folder; this one needs
+    # the shipped catalogs whatever order the file runs in.
+    helpers.load_catalogs()
+    view = PhoenixAdminCatalogView()
+    view.hass = MagicMock()
+    view.hass.data = {RUNTIME_READY_KEY: False}
+    view.hass.async_add_executor_job = AsyncMock(side_effect=lambda fn, *args: fn(*args))
+    resp = await view.get(_admin_request(), language="en")
+    assert resp.status == 200
+    assert json.loads(resp.text)["resources"]["common.loading"]
+    # Still admin-only before setup finishes.
+    assert (await view.get(_admin_request(is_admin=False), language="en")).status == 403
+    # Positive control: an ordinary admin view still waits for setup.
+    settings = PhoenixAdminSettingsView()
+    settings.hass = view.hass
+    assert (await settings.get(_admin_request())).status == 503

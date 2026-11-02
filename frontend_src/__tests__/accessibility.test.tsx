@@ -1,12 +1,32 @@
 /** Focused accessibility regressions for custom Phoenix MCP panel controls. */
-import { describe, it, expect } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { describe, it, expect, vi } from "vitest";
+import { render, screen, fireEvent, within } from "@testing-library/react";
 import { PermissionSelector } from "../components/PermissionSelector";
 import { TagInput } from "../components/TagInput";
-import { AuditTable } from "../components/AuditTable";
-import { AccessKeyCreateModal } from "../components/AccessKeyCreateModal";
+import { AuditView } from "../views/AuditView";
+import { LogDetailsContent, LogSelection, LogSelectionContext } from "../shell/logDetails";
+import { api } from "../api";
+import { AccessKeyCreateForm } from "../components/AccessKeyCreate";
 import { Loading } from "../components/common";
 import type { AuditEntry } from "../types";
+
+vi.mock("../api", async (original) => {
+  const real = await original<typeof import("../api")>();
+  return { ...real, api: { ...real.api, getAudit: vi.fn() } };
+});
+
+/** The Audit Log with Log Details beside it, as in the Logs workspace. */
+async function auditLog(entries: AuditEntry[]) {
+  vi.mocked(api.getAudit).mockResolvedValue({ entries, total: entries.length });
+  const view = render(
+    <LogSelectionContext.Provider value={new LogSelection()}>
+      <AuditView accessKeys={[{ id: "tok-1", name: "demo" } as never]} /><LogDetailsContent />
+    </LogSelectionContext.Provider>,
+  );
+  await screen.findAllByRole("row", { name: /Audit entry:/ });
+  const details = () => view.container.querySelector<HTMLElement>(".phx-log-details");
+  return { ...view, details };
+}
 
 describe("accessibility regressions", () => {
   it("names permission selectors and each permission button", () => {
@@ -20,6 +40,8 @@ describe("accessibility regressions", () => {
 
     expect(screen.getByRole("group", { name: "Permission for light.kitchen" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Read and write, selected/ })).toHaveAttribute("aria-pressed", "true");
+    // Each button names the entity, not just its own letter.
+    expect(screen.getByRole("button", { name: /^Permission for light\.kitchen: Read and write/ })).toBeInTheDocument();
   });
 
   it("connects the tag combobox to its active suggestion", () => {
@@ -40,7 +62,7 @@ describe("accessibility regressions", () => {
     expect(screen.getByRole("listbox")).toHaveAttribute("id", combo.getAttribute("aria-controls"));
   });
 
-  it("opens audit row details from a named button", () => {
+  it("opens audit entry details from a named row", async () => {
     const entry: AuditEntry = {
       request_id: "req-1",
       timestamp: "2026-06-30T00:00:00Z",
@@ -54,20 +76,14 @@ describe("accessibility regressions", () => {
       payload: null,
     };
 
-    render(
-      <AuditTable
-        entries={[entry]}
-        accessKeyNames={{ "tok-1": "demo" }}
-      />,
-    );
+    const log = await auditLog([entry]);
+    fireEvent.click(screen.getByRole("row", { name: /Audit entry: Allowed, demo/ }));
 
-    fireEvent.click(screen.getAllByRole("button", { name: /Open audit entry Allowed for demo/ })[0]);
-
-    expect(screen.getByRole("dialog")).toBeInTheDocument();
-    expect(screen.getByText("Audit Entry")).toBeInTheDocument();
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(within(log.details()!).getByText("Audit Entry")).toBeInTheDocument();
   });
 
-  it("uses arrows to scan audit entries in their visible sort order", () => {
+  it("uses arrows to scan audit entries in their visible sort order", async () => {
     const older: AuditEntry = {
       request_id: "req-older",
       timestamp: "2026-06-29T00:00:00Z",
@@ -81,18 +97,20 @@ describe("accessibility regressions", () => {
       payload: null,
     };
     const newer: AuditEntry = { ...older, request_id: "req-newer", timestamp: "2026-06-30T00:00:00Z", resource: "/api/newer" };
-    render(<AuditTable entries={[older, newer]} />);
-    fireEvent.click(screen.getAllByRole("button", { name: /Open audit entry Allowed for demo/ })[0]);
-    expect(screen.getByRole("dialog")).toHaveTextContent("/api/newer");
+    const log = await auditLog([newer, older]);
+    const rows = screen.getAllByRole("row", { name: /Audit entry: Allowed, demo/ });
+    fireEvent.click(rows[0]);
+    expect(log.details()).toHaveTextContent("/api/newer");
 
-    fireEvent.keyDown(document, { key: "ArrowDown" });
-    expect(screen.getByRole("dialog")).toHaveTextContent("/api/older");
-    expect(screen.getByRole("dialog")).not.toHaveTextContent("/api/newer");
-    fireEvent.keyDown(document, { key: "ArrowUp" });
-    expect(screen.getByRole("dialog")).toHaveTextContent("/api/newer");
+    fireEvent.keyDown(rows[0], { key: "ArrowDown" });
+    expect(log.details()).toHaveTextContent("/api/older");
+    expect(log.details()).not.toHaveTextContent("/api/newer");
+    expect(document.activeElement).toBe(rows[1]);
+    fireEvent.keyDown(rows[1], { key: "ArrowUp" });
+    expect(log.details()).toHaveTextContent("/api/newer");
   });
 
-  it("keeps approval lifecycle rows distinct when they share a request id", () => {
+  it("keeps approval lifecycle rows distinct when they share a request id", async () => {
     const approved: AuditEntry = {
       request_id: "approve-request",
       timestamp: "2026-08-29T07:00:00Z",
@@ -110,17 +128,17 @@ describe("accessibility regressions", () => {
       timestamp: "2026-08-29T07:00:01Z",
       method: "approval/executed",
     };
-    render(<AuditTable entries={[approved, executed]} />);
+    const log = await auditLog([executed, approved]);
 
-    fireEvent.click(screen.getAllByRole("button", {
-      name: /Open audit entry Allowed for admin/,
-    })[0]);
-    expect(screen.getByRole("dialog")).toHaveTextContent("approval/executed");
-    fireEvent.keyDown(document, { key: "ArrowDown" });
-    expect(screen.getByRole("dialog")).toHaveTextContent("approval/approved");
+    const rows = screen.getAllByRole("row", { name: /Audit entry: Allowed, admin/ });
+    expect(rows).toHaveLength(2);
+    fireEvent.click(rows[0]);
+    expect(log.details()).toHaveTextContent("approval/executed");
+    fireEvent.keyDown(rows[0], { key: "ArrowDown" });
+    expect(log.details()).toHaveTextContent("approval/approved");
   });
 
-  it("wires the whole row as a single accessible click target, not one per cell", () => {
+  it("wires the whole row as a single accessible click target, not one per cell", async () => {
     // Mouse clicks anywhere in the row reach the <tr> onClick by bubbling, which
     // jsdom hit-testing cannot exercise. This checks the accessible part: exactly
     // one focusable control per row (no per-cell tab stops) and the .row-open
@@ -138,20 +156,16 @@ describe("accessibility regressions", () => {
       payload: null,
     };
 
-    const { container } = render(
-      <AuditTable
-        entries={[entry]}
-        accessKeyNames={{ "tok-1": "demo" }}
-      />,
-    );
+    await auditLog([entry]);
 
-    expect(screen.getAllByRole("button", { name: /Open audit entry/ })).toHaveLength(1);
-    expect(container.querySelector("tr.clickable button.row-open")).not.toBeNull();
+    const row = screen.getByRole("row", { name: /Audit entry:/ });
+    expect(row).toHaveAttribute("tabindex", "0");
+    expect(row.querySelectorAll("button, a, input, [tabindex]")).toHaveLength(0);
   });
 
   it("associates the access-key-name validation error with the input", () => {
     render(
-      <AccessKeyCreateModal
+      <AccessKeyCreateForm
         existingNames={[]}
         onCreated={() => undefined}
         onClose={() => undefined}

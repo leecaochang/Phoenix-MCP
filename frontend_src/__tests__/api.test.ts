@@ -604,7 +604,17 @@ it("refuses malformed approval rows before the review view consumes them", async
 
 it.each([401, 404, 413, 504])("preserves HTTP %s for a non-JSON error", async status => {
   globalThis.fetch = vi.fn().mockResolvedValue({ ok: false, status, statusText: "Gateway failure", json: async () => { throw new SyntaxError(); } });
-  await expect(api.listAccessKeys()).rejects.toMatchObject({ status, code: "parse_error", message: "Gateway failure" });
+  // The status survives; the proxy's English reason phrase does not reach the panel.
+  const error = (await api.listAccessKeys().catch((e: unknown) => e)) as { status: number; code: string; message: string };
+  expect(error).toMatchObject({ status, code: "parse_error" });
+  expect(error.message).not.toContain("Gateway failure");
+});
+
+it("reports an unreachable server in the panel's words, not the browser's", async () => {
+  globalThis.fetch = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
+  const error = (await api.listAccessKeys().catch((e: unknown) => e)) as { status: number; code: string; message: string };
+  expect(error).toMatchObject({ status: 0, code: "unreachable" });
+  expect(error.message).not.toContain("Failed to fetch");
 });
 
 it("accepts the access key audit endpoint's list envelope", async () => {

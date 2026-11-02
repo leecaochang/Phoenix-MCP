@@ -4,7 +4,7 @@
       "already_configured": "Phoenix MCP är redan konfigurerad."
     },
     "create_entry": {
-      "default": "Använd Phoenix MCP-panelen för att hantera dina åtkomstnycklar"
+      "default": "Använd Phoenix MCP-panelen i sidofältet för att hantera dina åtkomstnycklar. Panelen visas bara för administratörer."
     },
     "step": {
       "user": {
@@ -15,11 +15,27 @@
   "entity": {
     "sensor": {
       "status": {
+        "name": "Status",
         "state": {
           "active": "Aktiv",
           "expired": "Utgången",
           "revoked": "Återkallad"
         }
+      },
+      "request_count": {
+        "name": "Antal begäranden"
+      },
+      "denied_count": {
+        "name": "Antal nekade"
+      },
+      "rate_limit_hits": {
+        "name": "Hastighetsbegränsning nådd"
+      },
+      "last_access": {
+        "name": "Senaste åtkomst"
+      },
+      "expires_in": {
+        "name": "Upphör om"
       }
     }
   },

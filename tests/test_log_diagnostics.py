@@ -298,23 +298,34 @@ async def test_search_runs_after_scrubbing_and_cannot_probe_raw_credentials():
 
 
 @pytest.mark.asyncio
-async def test_naive_and_timezone_aware_iso_bounds_share_utc_semantics():
+async def test_a_bound_without_an_offset_is_home_assistant_local_time():
+    from zoneinfo import ZoneInfo
+    from homeassistant.util import dt as dt_util
+
     access_key, _ = _make_access_key(cap_log_read="allow")
-    entry = make_log_entry(created=1_700_000_000)
+    entry = make_log_entry(created=1_700_000_000)  # 2023-11-14T22:13:20Z
     hass, data = _hass_with_entries(access_key, [entry])
-    body, _result, outcome = await _call(
-        "get_logs",
-        {
-            "since": "2023-11-14T22:00:00",
-            "until": "2023-11-14T23:00:00Z",
-        },
-        access_key=access_key,
-        hass=hass,
-        data=data,
-    )
+    original = dt_util.get_default_time_zone()
+    dt_util.set_default_time_zone(ZoneInfo("Asia/Bangkok"))
+    try:
+        body, _result, outcome = await _call(
+            "get_logs",
+            {"since": "2023-11-15T05:00:00", "until": "2023-11-14T23:00:00Z"},
+            access_key=access_key, hass=hass, data=data,
+        )
+        later_clock, _result, _outcome = await _call(
+            "get_logs",
+            {"since": "2023-11-14T22:20:00", "until": "2023-11-14T23:00:00Z"},
+            access_key=access_key, hass=hass, data=data,
+        )
+    finally:
+        dt_util.set_default_time_zone(original)
     assert outcome == "allowed"
     assert body["count"] == 1
     assert body["filters"]["since"] == "2023-11-14T22:00:00+00:00"
+    # 22:20 read as UTC would start after the 22:13Z entry; as Bangkok time it is 15:20Z.
+    assert later_clock["count"] == 1
+    assert later_clock["filters"]["since"] == "2023-11-14T15:20:00+00:00"
 
 
 @pytest.mark.asyncio
@@ -829,8 +840,16 @@ async def test_detail_capability_denial_precedes_argument_validation_even_in_pas
 
 
 @pytest.mark.asyncio
+async def test_an_empty_placeholder_for_a_key_get_logs_does_not_take_is_absent():
+    access_key, _ = _make_access_key(cap_log_read="allow")
+    for placeholder in (None, []):
+        body, result, outcome = await _call("get_logs", {"detail_ref": placeholder}, access_key=access_key)
+        assert outcome == "allowed" and "detail_ref" in body["arguments_adjusted"][0]
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("args", [
-    {"detail_ref": None}, {"detail_ref": []}, {"detail_ref": "x" * 64},
+    {"detail_ref": "x" * 64},
     {"detail_field": "exception"}, {"detail_offset": 0}, {"message_index": 0},
     {"detail_ref": "a" * 64, "limit": 1}, {"detail_ref": "a" * 64, "search": "x"},
     {"detail_ref": "a" * 64, "cursor": "x"}, {"detail_ref": "a" * 64, "detail_field": []},
@@ -879,3 +898,16 @@ async def test_detail_authority_changes_during_collection_block_disclosure(chang
                                              access_key=access_key, hass=hass, data=data)
     assert outcome == "denied" and result["isError"]
     assert "must-not-disclose" not in json.dumps(error)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("level", ["INFO", "debug"])
+async def test_a_debug_level_points_get_logs_at_the_source_that_holds_it(level):
+    access_key, _ = _make_access_key(cap_log_read="allow")
+    access_key.cap_diagnostics = "allow"
+    body, _result, outcome = await _call("get_logs", {"level": level}, access_key=access_key)
+    assert outcome == "invalid_request"
+    assert "set_integration_log_level" in body and "source integration_debug" in body
+    assert "cannot be read through this tool" not in body
+    body, _result, _outcome = await _call("get_phoenix_diagnostics", {"level": level}, access_key=access_key)
+    assert "cannot be read through this tool" in body

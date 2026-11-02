@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import copy
 import json
+import logging
 import re
 from typing import Any, TypeGuard
 
@@ -39,7 +40,7 @@ from ..const import (
     REDACTION_SENTINEL,
 )
 from ..data import PhoenixData
-from ..tool_contracts import normalize_tool_args, unknown_argument_error
+from ..tool_contracts import handler_arguments, normalize_tool_args
 from ..tool_input import nested_argument_error
 from ..helpers import (
     content_hash,
@@ -62,6 +63,7 @@ from ..tool_common import (
     _gate,
     _record_version,
     _tool_error,
+    _tool_refused_before_write,
     _tool_success,
     _truncate,
     redaction_sentinel_path,
@@ -69,6 +71,7 @@ from ..tool_common import (
 )
 from ..ws_dispatch import (
     WsCommandNotDispatchedError,
+    WsCommandRefusedError,
     WsDashboardNotFoundError,
     WsDispatchError,
     WsYamlDashboardError,
@@ -77,6 +80,8 @@ from ..ws_dispatch import (
     async_save_lovelace_config,
     async_ws_command,
 )
+
+_LOGGER = logging.getLogger(__name__)
 
 
 def _dashboard_layout_snapshot(url_path: str | None, config: dict | None) -> dict:
@@ -106,6 +111,17 @@ async def _dashboard_registry_snapshot(hass: HomeAssistant, dashboard_id: str) -
     }) or {}
 
 
+def dashboard_registry_refused(exc: WsDispatchError) -> bool:
+    """Whether a dashboard registry command failed without changing anything.
+
+    Core's dashboard collection answers invalid_format only from the checks it
+    runs before storing (a url_path without a hyphen, a schema error), so that
+    refusal is proof nothing changed; any other failure may have landed.
+    """
+    return isinstance(exc, WsCommandNotDispatchedError) or (
+        isinstance(exc, WsCommandRefusedError) and exc.code == "invalid_format")
+
+
 async def _recoverable_dashboard_registry_write(
     *, dashboard_id: str, before: dict, operation: str, command: str,
     payload: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData,
@@ -115,8 +131,11 @@ async def _recoverable_dashboard_registry_write(
     resource = f"dashboard_registry:{dashboard_id}"
     try:
         async with recovery.resource(resource):
+            # Core pops allow_single_word on create and never stores it, so it is
+            # an instruction, not a field the readback can show.
             expected_row = None if command.endswith("/delete") else {
-                **(before.get("dashboard") or {}), **{k: v for k, v in payload.items() if k != "dashboard_id"},
+                **(before.get("dashboard") or {}),
+                **{k: v for k, v in payload.items() if k not in ("dashboard_id", "allow_single_word")},
             }
             rid = await recovery.begin(resource, operation, access_key.id, before, expected={
                 **before, "exists": expected_row is not None, "dashboard": expected_row,
@@ -130,7 +149,7 @@ async def _recoverable_dashboard_registry_write(
                 try:
                     result = await async_ws_command(hass, command, payload)
                 except WsDispatchError as exc:
-                    await recovery.mark(rid, "not_applied" if isinstance(exc, WsCommandNotDispatchedError) else "unknown", error="command_rejected")
+                    await recovery.mark(rid, "not_applied" if dashboard_registry_refused(exc) else "unknown", error="command_rejected")
                     return _tool_error(f"Dashboard registry operation failed: {exc}"), "invalid_request", operation
                 try:
                     after = await _dashboard_registry_snapshot(hass, dashboard_id)
@@ -554,9 +573,9 @@ async def _tool_edit_dashboard(
     """MCP tool: edit a dashboard (Confirm-gated)."""
     if effective_cap(access_key, "cap_lovelace_write") == CAP_DENY:
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "edit_dashboard"
-    error = unknown_argument_error("edit_dashboard", args)
+    args, error = handler_arguments("edit_dashboard", args)
     if error:
-        return _tool_error(error), "invalid_request", "edit_dashboard"
+        return _tool_refused_before_write(error), "invalid_request", "edit_dashboard"
     if error := nested_argument_error("edit_dashboard", args):
         return _tool_error(error), "invalid_request", "edit_dashboard"
     blocked = await _gate(
@@ -600,9 +619,9 @@ async def _tool_delete_dashboard(
     """MCP tool: delete a dashboard (Confirm-gated)."""
     if effective_cap(access_key, "cap_lovelace_write") == CAP_DENY:
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "delete_dashboard"
-    error = unknown_argument_error("delete_dashboard", args)
+    args, error = handler_arguments("delete_dashboard", args)
     if error:
-        return _tool_error(error), "invalid_request", "delete_dashboard"
+        return _tool_refused_before_write(error), "invalid_request", "delete_dashboard"
     blocked = await _gate(
         "cap_lovelace_write", access_key, hass, data,
         tool_name="delete_dashboard", args=args, request_id=request_id,
@@ -760,7 +779,7 @@ async def _tool_get_dashboard_config(
     tool = "get_dashboard_config"
     if effective_cap(access_key, "cap_lovelace_write") == CAP_DENY:
         return _tool_error("Forbidden."), "denied", tool
-    error = unknown_argument_error(tool, args)
+    args, error = handler_arguments(tool, args)
     if error:
         return _tool_error(error), "invalid_request", tool
     refusal = _url_path_refusal(args, tool)
@@ -875,8 +894,10 @@ async def _build_diff_set_dashboard_config(args: dict, access_key: AccessKeyReco
         if current is not None:
             # Redact out-of-scope entity ids the same way get_dashboard_config does.
             before = _truncate(json.dumps(filter_service_response(current, access_key, hass), indent=2, default=str))
-    except Exception:  # noqa: BLE001 - diagnostic only; a new/auto dashboard has no before
-        pass
+    except WsDashboardNotFoundError:
+        pass  # a new dashboard has no before
+    except Exception:  # noqa: BLE001 - diagnostic only; the tool refused an unreadable one before gating
+        _LOGGER.warning("Could not read dashboard %s for its approval preview", label, exc_info=True)
     return {
         "kind": "yaml_diff",
         **_summary("set_dashboard_config", label=label),
@@ -934,24 +955,25 @@ async def _tool_set_dashboard_config(
     """MCP tool: replace a dashboard's view/card layout (Confirm-gated)."""
     if effective_cap(access_key, "cap_lovelace_write") == CAP_DENY:
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "set_dashboard_config"
-    error = unknown_argument_error("set_dashboard_config", args)
+    args, error = handler_arguments("set_dashboard_config", args)
     if error:
-        return _tool_error(error), "invalid_request", "set_dashboard_config"
+        return _tool_refused_before_write(error), "invalid_request", "set_dashboard_config"
     pre = _dashboard_write_precheck(args, "set_dashboard_config")
     if pre is not None:
         return pre
+    url_path = str(args.get("url_path") or "").strip() or None
+    try:
+        current = await async_get_lovelace_config(hass, url_path)
+    except WsDashboardNotFoundError:
+        current = None  # genuinely absent: any expected_hash conflicts
+    except WsDispatchError as exc:
+        # An unreadable lovelace must not be mistaken for an absent dashboard:
+        # the CAS guard would pass against a phantom None, and the approval
+        # would present the replacement as a new dashboard.
+        return _tool_error(
+            f"Could not read dashboard: {exc}"
+        ), "invalid_request", "set_dashboard_config"
     if args.get("expected_hash"):
-        url_path = str(args.get("url_path") or "").strip() or None
-        try:
-            current = await async_get_lovelace_config(hass, url_path)
-        except WsDashboardNotFoundError:
-            current = None  # genuinely absent: any expected_hash conflicts
-        except WsDispatchError as exc:
-            # An unreadable lovelace must not be mistaken for an absent dashboard;
-            # doing so would let the CAS guard pass against a phantom None.
-            return _tool_error(
-                f"Could not read dashboard: {exc}"
-            ), "invalid_request", "set_dashboard_config"
         conflict = _cas_conflict(args.get("expected_hash"), current, "set_dashboard_config")
         if conflict is not None:
             return conflict
@@ -1000,7 +1022,8 @@ async def _execute_set_dashboard_config(
         action="edit" if before is not None else "create",
         before=before, after=config, alias=url_path or "(default)",
     )
-    body: dict[str, Any] = {"url_path": url_path, "saved": True, **recovery_receipt}
+    # The saved layout is read back before this point; a mismatch returns status partial instead.
+    body: dict[str, Any] = {"url_path": url_path, "saved": True, "verified": True, **recovery_receipt}
     warnings = await _card_warnings(config, data, hass)
     if warnings:
         body["warnings"] = warnings
@@ -1117,6 +1140,10 @@ def _resolve_dashboard_cards(
         section = sections[section_index]
         if not isinstance(section, dict):
             return None, "The target section is not a mapping."
+        # The frontend replaces a strategy section's stored fields with the
+        # generated config, so a card stored there would never show.
+        if "strategy" in section:
+            return None, "The target section is strategy-generated; it has no editable card list."
         cards = section.setdefault("cards", [])
     else:
         if section_index is not None:
@@ -1278,9 +1305,9 @@ async def _tool_dashboard_card(
     """
     if effective_cap(access_key, "cap_lovelace_write") == CAP_DENY:
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", tool_name
-    error = unknown_argument_error(tool_name, args)
+    args, error = handler_arguments(tool_name, args)
     if error:
-        return _tool_error(error), "invalid_request", tool_name
+        return _tool_refused_before_write(error), "invalid_request", tool_name
     current = await _dashboard_card_current(args, hass, tool_name)
     if isinstance(current, tuple):
         return current
@@ -1319,21 +1346,31 @@ async def _execute_dashboard_card(
     raw_card = args.get("card")
     # None, not {}: a delete op has no card, and the diff must show no `after`.
     card = raw_card if isinstance(raw_card, dict) else None
-    subject = (card or prior or {}).get("type") or "card"
+    card_type = (card or prior or {}).get("type")
+    subject = card_type or "card"
+    # The English `where` and `subject` are the stored record. The indices and
+    # card type travel as their own params so the panel can rebuild the location
+    # from the translated loc.* parts instead of showing this English.
+    location: dict[str, Any] = {"view_index": args.get("view_index")}
     parts = [_version_summary("loc.view", index=args.get("view_index"))["summary"]]
     if args.get("section_index") is not None:
+        location["section_index"] = args.get("section_index")
         parts.append(_version_summary("loc.section", index=args.get("section_index"))["summary"])
     if op != "add":
+        location["card_index"] = args.get("card_index")
         parts.append(_version_summary("loc.card", index=args.get("card_index"))["summary"])
+    if isinstance(card_type, str) and card_type:
+        location["card_type"] = card_type
     await _record_version(
         data, access_key, resource_type="dashboard", resource_id=resource_id,
         action="edit", before=current, after=new_config, alias=url_path or "(default)",
         summary=_version_summary(
             _CARD_OP_VERSION_KEYS[op], subject=subject, where=", ".join(str(x) for x in parts),
+            **location,
         ),
     )
     body: dict[str, Any] = {
-        "url_path": url_path, "saved": True, **recovery_receipt, "op": op,
+        "url_path": url_path, "saved": True, "verified": True, **recovery_receipt, "op": op,
         "view_index": args.get("view_index"),
         # Unlike a whole-blob replace (which must be re-read and merged after a
         # conflict), a card op is structural, so the resulting layout's hash is
@@ -1570,7 +1607,7 @@ async def _execute_patch_dashboard(
         summary=summary,
     )
     body: dict[str, Any] = {
-        "url_path": url_path, "saved": True, **recovery_receipt, "changes": applied,
+        "url_path": url_path, "saved": True, "verified": True, **recovery_receipt, "changes": applied,
         # Structural like the card ops, so the resulting hash is safe to hand back
         # and the agent can chain further patches without another read.
         "content_hash": content_hash(new_config),

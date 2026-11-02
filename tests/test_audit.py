@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import uuid
 from datetime import datetime, timezone
 
@@ -425,6 +426,31 @@ class TestRedactionSettings:
         assert entry.resource == "[redacted]"
         assert entry.client_ip == "[redacted]"
 
+    def test_log_client_ip_false_keeps_phoenixs_own_surfaces(self):
+        """They name no one, and without them every internal row looks like a network one."""
+        log = AuditLog()
+        s = _settings(log_client_ip=False)
+        for source in ("agentcli", "voice", "assist", "ai_task", "home_companion"):
+            _record(log, client_ip=source, settings=s)
+        assert [e.client_ip for e in log._log] == ["agentcli", "voice", "assist", "ai_task", "home_companion"]
+
+    def test_log_entity_names_false_hides_entity_ids_in_the_payload(self):
+        """Tool arguments and MESA rows carry entity IDs too."""
+        log = AuditLog()
+        payload = {"arguments": {"entity_id": "lock.front_door", "target": {"entity_id": ["light.a"]}},
+                   "entities": [{"id": "x"}], "service": "light.turn_on"}
+        log.record(request_id="r", access_key_id="k", access_key_name="n", method="tools/call",
+                   resource="lock.front_door", outcome="allowed", client_ip="", settings=_settings(log_entity_names=False),
+                   payload=payload)
+        stored = json.loads(list(log._log)[0].payload)
+        assert "lock.front_door" not in json.dumps(stored) and "light.a" not in json.dumps(stored)
+        assert stored["arguments"]["entity_id"] == "[redacted]"
+        # A service name looks like an entity ID but is not one, and stays.
+        assert stored["service"] == "light.turn_on"
+        log.record(request_id="r", access_key_id="k", access_key_name="n", method="tools/call",
+                   resource="x", outcome="allowed", client_ip="", settings=_settings(), payload=payload)
+        assert "lock.front_door" in list(log._log)[1].payload
+
     def test_redaction_applied_before_storage(self):
         """Original values must not be recoverable from the log after redaction."""
         log = AuditLog()
@@ -718,6 +744,79 @@ class TestPayloadRedaction:
         assert "50" in stored
 
 
+class TestDeviceCodeRedaction:
+    """Audit payloads hide device codes as the Conversation Log does (2026-11-01).
+
+    The general secret redaction kept a disarm `code` and a PIN, so they were
+    saved in the audit log and returned by the admin audit route.
+    """
+
+    @staticmethod
+    def _stored(name: str, arguments: dict) -> str:
+        log = AuditLog()
+        log.record(
+            request_id=generate_request_id(), access_key_id="t", access_key_name="n",
+            method=name, resource="alarm_control_panel.home", outcome="allowed",
+            client_ip="1.2.3.4", settings=_settings(),
+            payload={"name": name, "arguments": arguments},
+        )
+        return log.query()[0].payload
+
+    def test_service_call_code_is_hidden_and_the_rest_kept(self):
+        stored = self._stored("call_service", {
+            "domain": "alarm_control_panel", "service": "alarm_disarm",
+            "target": {"entity_id": "alarm_control_panel.home"}, "service_data": {"code": "4321"},
+        })
+        assert "4321" not in stored
+        assert "alarm_disarm" in stored and "alarm_control_panel.home" in stored
+
+    def test_pin_psk_and_encryption_key_are_hidden_anywhere(self):
+        stored = self._stored("set_esphome_config", {"pin": "2468", "wifi": {"psk": "wifi-secret"}, "encryption_key": "abcdef"})
+        assert "2468" not in stored and "wifi-secret" not in stored and "abcdef" not in stored
+
+    def test_a_spoken_code_in_free_text_is_hidden(self):
+        stored = self._stored("home_request", {"request": "disarm the alarm, the code is 4321"})
+        assert "4321" not in stored
+        assert "disarm the alarm" in stored
+
+    def test_an_error_code_outside_a_device_call_stays_readable(self):
+        stored = self._stored("report_issue", {"code": "bad_tool_call_retry"})
+        assert "bad_tool_call_retry" in stored
+
+    def test_a_value_that_is_not_json_keeps_its_text(self):
+        when = datetime(2026, 11, 1, 12, 0, tzinfo=timezone.utc)
+        stored = self._stored("mesa:enforcement_decision", {"at": when})
+        assert "2026-11-01" in stored
+
+
+async def test_saved_payloads_with_device_codes_are_scrubbed_at_load_and_saved(hass):
+    from homeassistant.helpers.storage import Store
+
+    from custom_components.phoenix_mcp.const import AUDIT_STORAGE_VERSION
+
+    backing = Store(hass, 1, "phoenix_test_scrub_audit")
+    legacy = '{"name": "call_service", "arguments": {"service_data": {"code": "4321"}}}'
+    clipped = '{"name": "call_service", "arguments": {"service_data": {"code": "8765", "x": "' + "y" * 2100
+    clipped = clipped[:2048] + "...[truncated]"
+    plain = '{"name": "HassTurnOn", "arguments": {"entity_id": "light.kitchen"}}'
+    rows = [
+        {"request_id": rid, "timestamp": "2026-11-01T00:00:00+00:00", "access_key_id": "t", "access_key_name": "n",
+         "method": "call_service", "resource": "r", "outcome": "allowed", "client_ip": "", "payload": payload}
+        for rid, payload in (("legacy", legacy), ("clipped", clipped), ("plain", plain))
+    ]
+    await backing.async_save({"version": AUDIT_STORAGE_VERSION, "entries": rows})
+
+    loaded = AuditLog(store=backing)
+    await loaded.async_load()
+    by_id = {e.request_id: e.payload for e in loaded.query(limit=10)}
+    assert "4321" not in by_id["legacy"]
+    assert "8765" not in by_id["clipped"]
+    assert by_id["plain"] == plain
+
+    on_disk = await Store(hass, 1, "phoenix_test_scrub_audit").async_load()
+    assert "4321" not in str(on_disk) and "8765" not in str(on_disk)
+
+
 async def test_restore_origin_survives_persistence_without_relaxing_payload_scrubbing(hass):
     from homeassistant.helpers.storage import Store
 
@@ -738,3 +837,19 @@ async def test_restore_origin_survives_persistence_without_relaxing_payload_scru
     assert entry["originating_access_key_id"] == "source-identity"
     assert "private-payload" not in entry["payload"]
     assert "private-key" not in entry["payload"]
+
+
+class TestRequestIdFilter:
+    """Needs Attention links to one request, so the filter is exact (user, 2026-10-29)."""
+
+    def test_returns_only_that_request_and_counts_it(self):
+        log = AuditLog()
+        for rid in ("req-a", "req-b", "req-a"):
+            log.record(request_id=rid, access_key_id="t1", access_key_name="a", method="POST",
+                       resource="tool:add_dashboard_card", outcome="allowed", client_ip="",
+                       settings=_settings())
+        entries = log.query(request_id="req-a")
+        assert [e.request_id for e in entries] == ["req-a", "req-a"]
+        assert log.count(request_id="req-a") == 2
+        assert log.query(request_id="req-") == []
+        assert log.count(request_id="nope") == 0

@@ -36,6 +36,7 @@ export interface CapabilityFlagsMap {
   cap_traces: CapMode;
   cap_diagnostics: CapMode;
   cap_broadcast: CapMode;
+  cap_notify: CapMode;
   cap_service_response: CapMode;
   cap_automation_write: CapMode;
   cap_script_write: CapMode;
@@ -194,6 +195,10 @@ export interface GlobalSettings {
   voice_agent_pipeline_id?: string | null;
   // Read-only: whether the running HA exposes the Assist pipeline seam (one-click).
   voice_agent_pipeline_supported?: boolean;
+  /** Computed: the Phoenix-created pipeline is Home Assistant's preferred assistant. */
+  voice_agent_pipeline_preferred?: boolean;
+  /** Only on the save that tore the assistant down: Home Assistant kept it as its only assistant. */
+  voice_agent_pipeline_kept?: boolean;
   // Phoenix MCP AI Task entity: Phoenix MCP registered as an HA AITaskEntity running its own model
   // on the chosen access key's scope. Independent of the voice agent and the bridge.
   ai_task_enabled?: boolean;
@@ -462,6 +467,8 @@ export interface EntityInfo {
 
 export interface DeviceInfo {
   device_id: string;
+  /** Main parent of a child device; its permission node applies to the child. */
+  parent_device_id?: string | null;
   name: string;
   area_id: string | null;
   area_name: string | null;
@@ -485,22 +492,10 @@ export interface IntegrationPermissionOption {
   registry_only_deviceless_count: number;
   required_domain_ids: string[];
   shared_device_count: number;
-}
-
-export interface BulkPermissionSummary {
-  selector_type: "area" | "label" | "integration";
-  selector_id: string;
-  state: NodeState;
-  device_count: number;
-  entity_count: number;
-  registry_only_deviceless_count: number;
-  required_domain_ids: string[];
-  shared_device_count: number;
-}
-
-export interface BulkPermissionResult {
-  permissions: PermissionTree;
-  summary: BulkPermissionSummary;
+  /** The devices the entry owns. */
+  device_ids: string[];
+  /** The entry's live, enabled entities without a device. */
+  entity_ids: string[];
 }
 
 export interface ResolutionStep {
@@ -567,6 +562,7 @@ export interface PatchAccessKeyBody {
   cap_physical_control?: CapMode;
   cap_service_response?: CapMode;
   cap_broadcast?: CapMode;
+  cap_notify?: CapMode;
   cap_search?: CapMode;
   cap_registry_read?: CapMode;
   cap_traces?: CapMode;
@@ -604,6 +600,8 @@ export interface AuditQueryParams {
   ip?: string;
   method?: string;
   resource?: string;
+  /** One request, exactly: Needs Attention links to its audit entry. */
+  request_id?: string;
   /** ISO timestamp: only entries at or after this time. */
   since?: string;
 }
@@ -718,7 +716,9 @@ export type VersionResourceType =
   | "file"
   | "config_entry"
   | "area"
-  | "floor";
+  | "floor"
+  | "label"
+  | "category";
 
 export interface VersionSummary {
   id: string;
@@ -755,6 +755,8 @@ export interface VersionRecord {
   summary?: string | null;
   summary_key?: string | null;
   summary_params?: Record<string, string | number> | null;
+  /** Per side, why Restore would be refused whatever the item holds now (a reason slug), or null. */
+  restore_refusals?: { before?: string | null; after?: string | null };
 }
 
 export interface VersionListResponse {

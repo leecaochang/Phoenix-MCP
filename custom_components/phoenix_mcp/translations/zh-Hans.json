@@ -4,7 +4,7 @@
       "already_configured": "Phoenix MCP 已配置。"
     },
     "create_entry": {
-      "default": "请在 Phoenix MCP 面板中管理您的访问密钥"
+      "default": "请在侧边栏的 Phoenix MCP 面板中管理您的访问密钥。此面板仅向管理员显示。"
     },
     "step": {
       "user": {
@@ -41,11 +41,27 @@
   "entity": {
     "sensor": {
       "status": {
+        "name": "状态",
         "state": {
           "active": "有效",
           "expired": "已过期",
           "revoked": "已吊销"
         }
+      },
+      "request_count": {
+        "name": "请求数"
+      },
+      "denied_count": {
+        "name": "拒绝数"
+      },
+      "rate_limit_hits": {
+        "name": "触发速率限制次数"
+      },
+      "last_access": {
+        "name": "上次访问"
+      },
+      "expires_in": {
+        "name": "距过期"
       }
     }
   }

@@ -19,7 +19,7 @@ import os
 from homeassistant.core import HomeAssistant
 
 from ..const import CAP_DENY, FILESYSTEM_ALLOWED_DIRS
-from ..tool_contracts import unknown_argument_error
+from ..tool_contracts import handler_arguments
 from ..helpers import content_hash, effective_cap, str_arg
 from ..tool_common import _read_text_capped, _tool_error, _tool_success, _usable_path_arg
 from ..access_key_store import AccessKeyRecord
@@ -66,7 +66,7 @@ async def _tool_list_files(
     """MCP tool: list files in an allowed config directory."""
     if effective_cap(access_key, "cap_filesystem") == CAP_DENY:
         return _tool_error("Forbidden."), "denied", "list_files"
-    error = unknown_argument_error("list_files", args)
+    args, error = handler_arguments("list_files", args)
     if error:
         return _tool_error(error), "invalid_request", "list_files"
     path = str_arg(args.get("path"))
@@ -85,7 +85,7 @@ async def _tool_read_file(
     """MCP tool: read a UTF-8 text file from an allowed config directory."""
     if effective_cap(access_key, "cap_filesystem") == CAP_DENY:
         return _tool_error("Forbidden."), "denied", "read_file"
-    error = unknown_argument_error("read_file", args)
+    args, error = handler_arguments("read_file", args)
     if error:
         return _tool_error(error), "invalid_request", "read_file"
     path = str_arg(args.get("path"))
@@ -94,6 +94,9 @@ async def _tool_read_file(
         return _tool_error("File not found."), "not_found", path
     try:
         content = await hass.async_add_executor_job(_read_text_capped, target)
+    except UnicodeDecodeError:
+        # A ValueError too, so it is caught first: a binary file is not oversized.
+        return _tool_error("File is not UTF-8 text, so it cannot be read."), "invalid_request", path
     except ValueError:
         return _tool_error("File exceeds the maximum readable size."), "invalid_request", path
     except OSError:
@@ -190,7 +193,7 @@ async def _tool_get_yaml_config(
     """MCP tool: read a YAML config file, or one key inside it."""
     if effective_cap(access_key, "cap_yaml_edit") == CAP_DENY:
         return _tool_error("Forbidden."), "denied", "get_yaml_config"
-    error = unknown_argument_error("get_yaml_config", args)
+    args, error = handler_arguments("get_yaml_config", args)
     if error:
         return _tool_error(error), "invalid_request", "get_yaml_config"
     resolved = await hass.async_add_executor_job(_resolve_yaml_read_path, hass, args.get("file"))
@@ -211,6 +214,8 @@ async def _tool_get_yaml_config(
         return _tool_success(json.dumps(body)), "allowed", "get_yaml_config"
     try:
         content = await hass.async_add_executor_job(_read_text_capped, path)
+    except UnicodeDecodeError:
+        return _tool_error(f"{rel} is not UTF-8 text, so it cannot be read."), "invalid_request", "get_yaml_config"
     except ValueError:
         return _tool_error(f"{rel} exceeds the maximum readable size."), "invalid_request", "get_yaml_config"
     except OSError:

@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, waitFor, within } from "@testing-library/react";
-import { ApprovalsView } from "../views/ApprovalsView";
+import { act, fireEvent, waitFor, within } from "@testing-library/react";
 import { api } from "../api";
+import type { ApprovalsScope } from "../shell/approvals";
+import { listRows, renderApprovals, reviewWindow } from "./approvals_harness";
 import type { ApprovalRecord } from "../types";
 import {
   AGENTCHAT_REVIEW_DECIDED_EVENT,
@@ -24,7 +25,7 @@ function record(over: Partial<ApprovalRecord> = {}): ApprovalRecord {
     diff: { kind: "system_action", summary: "Restart Home Assistant", summary_key: "diff.restart_ha", summary_params: {} },
     status: "pending",
     created_at: "2026-08-13T04:00:00Z",
-    expires_at: "2026-08-13T05:00:00Z",
+    expires_at: "2099-08-13T05:00:00Z",
     resolved_at: null,
     approved_by_user_id: null,
     rejected_reason: null,
@@ -35,76 +36,113 @@ function record(over: Partial<ApprovalRecord> = {}): ApprovalRecord {
   };
 }
 
-async function open(recordValue = record(), tab: "pending" | "history" = "pending") {
+/** Show the request in Review, choosing it from the list. */
+async function open(recordValue = record(), scope: ApprovalsScope = "pending") {
   vi.mocked(api.listApprovals).mockResolvedValue({ approvals: [recordValue], total: 1, limit: 50, offset: 0 });
-  const view = render(<ApprovalsView tab={tab} onTabChange={() => {}} />);
+  const view = renderApprovals({ scope });
   fireEvent.click((await view.findAllByText("Restart Home Assistant"))[0]);
-  await view.findByRole("dialog");
+  await waitFor(() => expect(view.container.querySelector(".phx-review")).toBeTruthy());
   return view;
 }
 
-describe("approval Summary modal", () => {
+const details = () => within(document.querySelector<HTMLElement>('section[aria-label="Request Details window"]')!);
+
+describe("Review and Request Details", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     localStorage.clear();
   });
 
-  it("filters pending rows from the list header and refreshes without remounting its controls", async () => {
+  it("filters the list by search and updates itself without remounting its controls", async () => {
     vi.mocked(api.listApprovals).mockResolvedValue({ approvals: [record()], total: 1, limit: 50, offset: 0 });
-    const view = render(<ApprovalsView tab="pending" onTabChange={() => {}} />);
+    const view = renderApprovals();
     await view.findByText("Restart Home Assistant");
     const search = view.getByRole("searchbox");
+    // A word has to appear as it was typed; its letters in order are not enough (user, 2026-10-29).
     fireEvent.change(search, { target: { value: "rst hm" } });
+    expect(view.queryByText("Restart Home Assistant")).toBeNull();
+    fireEvent.change(search, { target: { value: "home restart" } });
     expect(view.getByText("Restart Home Assistant")).toBeVisible();
     fireEvent.change(search, { target: { value: "unmatched-value" } });
     expect(view.queryByText("Restart Home Assistant")).toBeNull();
     expect(view.getByText("No approvals match your search.")).toBeVisible();
-    fireEvent.click(view.getByRole("button", { name: "Refresh" }));
-    await waitFor(() => expect(api.listApprovals).toHaveBeenCalledTimes(2));
+    // The list updates itself, so there is no Refresh button (user, 2026-10-29).
+    expect(view.queryByRole("button", { name: "Refresh Approvals" })).toBeNull();
     expect(view.getByRole("searchbox")).toBe(search);
   });
 
-  it("opens uncluttered and mounts technical Details only on request", async () => {
+  it("empties Review and Request Details when the list is told to show other requests", async () => {
     const view = await open();
-    expect(await view.findByText("Home Assistant will be briefly unavailable while it restarts.")).toBeTruthy();
-    expect(view.queryByText("Capability")).toBeNull();
-    expect(view.container.querySelector("#approval-detail-tab-diff")).toBeNull();
-
-    fireEvent.click(within(view.getByRole("dialog")).getByRole("button", { name: "Details" }));
-    expect(await view.findByText("Capability")).toBeTruthy();
-    expect(view.container.querySelector("#approval-detail-tab-diff")).toBeTruthy();
-    expect(localStorage.getItem("phx-approval-default-view")).toBeNull();
-
-    fireEvent.click(within(view.getByRole("dialog")).getByRole("button", { name: "Summary" }));
-    expect(view.container.querySelector("#approval-detail-tab-diff")).toBeNull();
+    expect(reviewWindow().querySelector(".phx-review")).toBeTruthy();
+    expect(details().queryByText("Select a request to see its details.")).toBeNull();
+    // Showing another set of requests leaves nothing chosen in the list (user, 2026-10-29).
+    vi.mocked(api.listApprovals).mockResolvedValue({ approvals: [], total: 0, limit: 50, offset: 0 });
+    fireEvent.change(view.getByLabelText("Show"), { target: { value: "history" } });
+    await waitFor(() => expect(reviewWindow().querySelector(".phx-review")).toBeNull());
+    expect(details().getByText("Select a request to see its details.")).toBeVisible();
   });
 
-  it.each([
-    ["pending", "approval-detail-body approval-detail-body-pending"],
-    ["history", "approval-detail-body"],
-  ] as const)("marks only %s review details for mobile single-scroll layout", async (tab, expectedClass) => {
-    const approval = record(tab === "history"
-      ? { status: "approved", resolved_at: "2026-08-13T04:05:00Z" }
-      : {});
-    const view = await open(approval, tab);
-    const dialog = within(view.getByRole("dialog"));
-    fireEvent.click(dialog.getByRole("button", { name: "Details" }));
-    expect(dialog.getByRole("tabpanel")).toHaveClass(...expectedClass.split(" "));
-    if (tab === "history") {
-      expect(dialog.getByRole("tabpanel")).not.toHaveClass("approval-detail-body-pending");
+  it("updates itself while it is shown, in every scope (user, 2026-10-29)", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      vi.mocked(api.listApprovals).mockResolvedValue({ approvals: [record()], total: 1, limit: 50, offset: 0 });
+      const view = renderApprovals();
+      await view.findByText("Restart Home Assistant");
+      const first = vi.mocked(api.listApprovals).mock.calls.length;
+      await act(async () => { await vi.advanceTimersByTimeAsync(10_000); });
+      expect(vi.mocked(api.listApprovals).mock.calls.length).toBeGreaterThan(first);
+
+      // History updates too, and a failed update keeps what is shown.
+      fireEvent.change(view.getByRole("combobox"), { target: { value: "history" } });
+      await waitFor(() => expect(vi.mocked(api.listApprovals).mock.lastCall?.[0]?.status).toBeUndefined());
+      const before = vi.mocked(api.listApprovals).mock.calls.length;
+      vi.mocked(api.listApprovals).mockRejectedValueOnce(new Error("NetworkError"));
+      await act(async () => { await vi.advanceTimersByTimeAsync(10_000); });
+      expect(vi.mocked(api.listApprovals).mock.calls.length).toBeGreaterThan(before);
+      expect(view.queryByText("NetworkError")).toBeNull();
+    } finally {
+      vi.useRealTimers();
     }
   });
 
-  it("expands and focuses rejection, while allowing an empty reason", async () => {
+  it("shows the summary in Review and the technical detail in Request Details, building inputs only on request", async () => {
+    await open();
+    expect(within(reviewWindow()).getByText("Home Assistant will be briefly unavailable while it restarts.")).toBeTruthy();
+    expect(within(reviewWindow()).queryByText("Capability")).toBeNull();
+    expect(details().getByText("Capability")).toBeTruthy();
+    expect(details().getByText("cap_restart")).toBeTruthy();
+    // Inputs can be large (a whole dashboard): built only when opened.
+    expect(details().queryByText(/technical/)).toBeNull();
+    const inputs = details().getByText("Arguments").closest("details")!;
+    inputs.open = true;
+    fireEvent(inputs, new Event("toggle"));
+    expect(await details().findByText(/technical/)).toBeTruthy();
+  });
+
+  it("asks for an optional reason inside Review, focused, and allows an empty one", async () => {
     vi.mocked(api.rejectApproval).mockResolvedValue(record({ status: "rejected" }));
     const view = await open();
     fireEvent.click(view.getByRole("button", { name: "Reject" }));
     const input = await view.findByLabelText("Optional reason");
     expect(document.activeElement).toBe(input);
-    expect(view.queryByRole("button", { name: "Approve and execute" })).toBeNull();
-    expect(view.getByRole("button", { name: "Cancel" })).toBeTruthy();
-    fireEvent.click(view.getByRole("button", { name: "Reject" }));
+    expect(view.getByRole("button", { name: "Reject" })).toHaveAttribute("aria-pressed", "true");
+    // Approve stays where it is but cannot be pressed while a rejection is being written.
+    expect(view.getByRole("button", { name: "Approve" })).toHaveAttribute("aria-disabled", "true");
+    expect(view.getByRole("button", { name: "Cancel Rejection" })).toBeTruthy();
+    fireEvent.click(view.getByRole("button", { name: "Confirm Rejection" }));
     await waitFor(() => expect(api.rejectApproval).toHaveBeenCalledWith("appr_summary", {}));
+  });
+
+  it("Cancel Rejection and Escape leave the request pending", async () => {
+    const view = await open();
+    fireEvent.click(view.getByRole("button", { name: "Reject" }));
+    fireEvent.click(await view.findByRole("button", { name: "Cancel Rejection" }));
+    expect(view.queryByLabelText("Optional reason")).toBeNull();
+    fireEvent.click(view.getByRole("button", { name: "Reject" }));
+    fireEvent.keyDown(await view.findByLabelText("Optional reason"), { key: "Escape" });
+    expect(view.queryByLabelText("Optional reason")).toBeNull();
+    expect(api.rejectApproval).not.toHaveBeenCalled();
+    expect(view.getByRole("button", { name: "Approve" })).not.toHaveAttribute("aria-disabled", "true");
   });
 
   it.each(["approve", "reject"] as const)("signals Agent Chat after a successful %s", async (action) => {
@@ -116,10 +154,10 @@ describe("approval Summary modal", () => {
     try {
       const view = await open();
       if (action === "approve") {
-        fireEvent.click(view.getByRole("button", { name: "Approve and execute" }));
+        fireEvent.click(view.getByRole("button", { name: "Approve" }));
       } else {
         fireEvent.click(view.getByRole("button", { name: "Reject" }));
-        fireEvent.click(await view.findByRole("button", { name: "Reject" }));
+        fireEvent.click(await view.findByRole("button", { name: "Confirm Rejection" }));
       }
       await waitFor(() => expect(decided).toHaveBeenCalledOnce());
       expect(decided.mock.results[0].value).toBe("appr_summary");
@@ -128,41 +166,23 @@ describe("approval Summary modal", () => {
     }
   });
 
-  it.each([
-    ["Summary", "Approve and execute", "Approving..."],
-    ["Details", "Approve and execute", "Approving..."],
-  ] as const)("keeps the %s approval button label and geometry stable while busy", async (viewName, label, busyLabel) => {
+  it("keeps the Approve button and its label while busy, then shows the outcome in place", async () => {
     let finish!: (value: ApprovalRecord) => void;
     vi.mocked(api.approveApproval).mockReturnValue(new Promise((resolve) => { finish = resolve; }));
     const view = await open();
-    const dialog = within(view.getByRole("dialog"));
-    if (viewName === "Details") fireEvent.click(dialog.getByRole("button", { name: "Details" }));
-
-    const approve = dialog.getByRole("button", { name: label });
-    if (viewName === "Details") {
-      expect(approve.closest(".modal-actions")).toHaveClass("approval-modal-actions-compact");
-      expect(approve.querySelector(".btn-label-short")).toHaveTextContent("Approve");
-      expect(approve.closest(".modal-actions")?.children).toHaveLength(3);
-    }
+    const approve = view.getByRole("button", { name: "Approve" });
     fireEvent.click(approve);
     await waitFor(() => expect(approve).toHaveAttribute("aria-busy", "true"));
-    expect(approve).toHaveTextContent(label);
-    expect(approve).toHaveAttribute("aria-label", busyLabel);
+    expect(approve).toHaveTextContent("Approve");
+    fireEvent.click(approve);
+    expect(api.approveApproval).toHaveBeenCalledOnce();
 
     finish(record({ status: "approved", resolved_at: "2026-08-13T04:05:00Z" }));
-    await waitFor(() => expect(view.queryByRole("dialog")).toBeNull());
+    expect(await within(reviewWindow()).findByText("The request completed successfully.")).toBeTruthy();
+    expect(view.queryByRole("button", { name: "Approve" })).toBeNull();
   });
 
-  it("persists only the toolbar default", async () => {
-    vi.mocked(api.listApprovals).mockResolvedValue({ approvals: [record()], total: 1, limit: 50, offset: 0 });
-    const view = render(<ApprovalsView tab="pending" onTabChange={() => {}} />);
-    fireEvent.click(await view.findByRole("button", { name: "Details", pressed: false }));
-    expect(localStorage.getItem("phx-approval-default-view")).toBe("details");
-    fireEvent.click((await view.findAllByText("Restart Home Assistant"))[0]);
-    expect(await view.findByText("Capability")).toBeTruthy();
-  });
-
-  it("uses friendly titles in History before the modal opens", async () => {
+  it("uses friendly titles in History, with the technical summary in Request Details", async () => {
     const resolved = record({
       status: "approved",
       resolved_at: "2026-08-13T04:05:00Z",
@@ -175,16 +195,15 @@ describe("approval Summary modal", () => {
       },
     });
     vi.mocked(api.listApprovals).mockResolvedValue({ approvals: [resolved], total: 1, limit: 50, offset: 0 });
-    const view = render(<ApprovalsView tab="history" onTabChange={() => {}} />);
+    const view = renderApprovals({ scope: "history" });
     expect(await view.findByText("Update a card on dashboard 'Home'")).toBeTruthy();
     expect(view.queryByText("Replace card 2 on dashboard 'Home' (view 0)")).toBeNull();
 
-    fireEvent.click(view.getByRole("button", { name: "Details", pressed: false }));
-    expect(await view.findByText("Replace card 2 on dashboard 'Home' (view 0)")).toBeTruthy();
-    expect(view.queryByText("Update a card on dashboard 'Home'")).toBeNull();
+    fireEvent.click(listRows()[0]);
+    expect(await details().findByText("Replace card 2 on dashboard 'Home' (view 0)")).toBeTruthy();
   });
 
-  it("uses friendly titles in Pending before the modal opens", async () => {
+  it("uses friendly titles in Pending", async () => {
     const pending = record({
       tool_name: "edit_dashboard_card",
       diff: {
@@ -195,7 +214,7 @@ describe("approval Summary modal", () => {
       },
     });
     vi.mocked(api.listApprovals).mockResolvedValue({ approvals: [pending], total: 1, limit: 50, offset: 0 });
-    const view = render(<ApprovalsView tab="pending" onTabChange={() => {}} />);
+    const view = renderApprovals();
     expect(await view.findByText("Update a card on dashboard 'Home'")).toBeTruthy();
     expect(view.queryByText("Replace card 2 on dashboard 'Home' (view 0)")).toBeNull();
   });
@@ -205,25 +224,25 @@ describe("approval Summary modal", () => {
     ["rejected", "not now", null, "The request was rejected and was not run. Reason: not now"],
     ["expired", null, null, "The request expired and was not run."],
     ["cancelled", "admin_cancelled", null, "The request was cancelled and was not run. Reason: Cancelled by admin"],
-    ["failed", "execution_failed", { tool_result: { content: [{ type: "text", text: "Forbidden." }] } }, "The request was approved, but execution failed. Error: The action could not be completed. Open Details to review the executor error."],
+    ["failed", "execution_failed", { tool_result: { content: [{ type: "text", text: "Forbidden." }] } }, "The request was approved but did not complete. Error: The action could not be completed. Request Details shows the full error under Result."],
     ["failed", "execution_interrupted", null, "Execution was interrupted and the change may have been applied. Verify the current state before requesting it again."],
   ] as const)("shows a friendly %s outcome", async (status, rejectedReason, result, expected) => {
     const resolved = record({ status, rejected_reason: rejectedReason, result, resolved_at: "2026-08-13T04:05:00Z" });
-    const view = await open(resolved, "history");
-    expect(await view.findByText(expected)).toBeTruthy();
-    expect(view.queryByText("Raw args")).toBeNull();
+    await open(resolved, "history");
+    expect(await within(reviewWindow()).findByText(expected)).toBeTruthy();
+    expect(within(reviewWindow()).queryByRole("button", { name: "Approve" })).toBeNull();
   });
 
-  it.each(["pending", "history"] as const)("uses arrows to scan the visible %s list", async (tab) => {
+  it.each(["pending", "history"] as const)("uses arrows in the %s list to move Review through it", async (scope) => {
     const first = record({
-      id: `${tab}_first`,
-      status: tab === "pending" ? "pending" : "approved",
-      resolved_at: tab === "pending" ? null : "2026-08-13T04:05:00Z",
+      id: `${scope}_first`,
+      status: scope === "pending" ? "pending" : "approved",
+      resolved_at: scope === "pending" ? null : "2026-08-13T04:05:00Z",
     });
     const second = record({
-      id: `${tab}_second`,
-      status: tab === "pending" ? "pending" : "approved",
-      resolved_at: tab === "pending" ? null : "2026-08-13T04:06:00Z",
+      id: `${scope}_second`,
+      status: scope === "pending" ? "pending" : "approved",
+      resolved_at: scope === "pending" ? null : "2026-08-13T04:06:00Z",
       tool_name: "reconfigure_zigbee_device",
       diff: {
         kind: "system_action",
@@ -233,13 +252,14 @@ describe("approval Summary modal", () => {
       },
     });
     vi.mocked(api.listApprovals).mockResolvedValue({ approvals: [first, second], total: 2, limit: 50, offset: 0 });
-    const view = render(<ApprovalsView tab={tab} onTabChange={() => {}} />);
+    const view = renderApprovals({ scope });
     fireEvent.click((await view.findAllByText("Restart Home Assistant"))[0]);
-    await view.findByRole("dialog");
+    await waitFor(() => expect(within(reviewWindow()).getByRole("heading", { name: "Restart Home Assistant" })).toBeTruthy());
 
-    fireEvent.keyDown(document, { key: "ArrowDown" });
-    expect(await within(view.getByRole("dialog")).findByText("Reconfigure (re-interview) Zigbee device Fitness PIR ZB")).toBeTruthy();
-    fireEvent.keyDown(document, { key: "ArrowUp" });
-    expect(await within(view.getByRole("dialog")).findByText("Restart Home Assistant")).toBeTruthy();
+    fireEvent.keyDown(listRows()[0], { key: "ArrowDown" });
+    expect(await within(reviewWindow()).findByRole("heading", { name: "Reconfigure (re-interview) Zigbee device Fitness PIR ZB" })).toBeTruthy();
+    expect(listRows()[1]).toHaveFocus();
+    fireEvent.keyDown(listRows()[1], { key: "ArrowUp" });
+    expect(await within(reviewWindow()).findByRole("heading", { name: "Restart Home Assistant" })).toBeTruthy();
   });
 });

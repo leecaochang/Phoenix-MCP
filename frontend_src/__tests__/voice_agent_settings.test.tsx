@@ -6,6 +6,7 @@ const getAgentCliProviders = vi.fn();
 const getAgentCliModels = vi.fn();
 const createVoiceAgentPipeline = vi.fn();
 const deleteVoiceAgentPipeline = vi.fn();
+const setVoiceAgentPreferred = vi.fn();
 
 vi.mock("../api", () => ({
   api: {
@@ -14,7 +15,14 @@ vi.mock("../api", () => ({
     getAgentCliModels: (...a: unknown[]) => getAgentCliModels(...a),
     createVoiceAgentPipeline: (...a: unknown[]) => createVoiceAgentPipeline(...a),
     deleteVoiceAgentPipeline: (...a: unknown[]) => deleteVoiceAgentPipeline(...a),
+    setVoiceAgentPreferred: (...a: unknown[]) => setVoiceAgentPreferred(...a),
   },
+}));
+
+const notify = vi.fn();
+vi.mock("../ui/notify", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../ui/notify")>()),
+  useNotify: () => notify,
 }));
 
 import { VoiceAgentSettings } from "../components/VoiceAgentSettings";
@@ -39,10 +47,14 @@ const FULL = {
   voice_agent_model: "claude-opus-4-8",
 };
 
-function renderCard(s: GlobalSettings, onChange = vi.fn()) {
-  render(<VoiceAgentSettings settings={s} onChange={onChange} saving={false} />);
-  return { onChange };
+function renderCard(s: GlobalSettings, onChange = vi.fn(), onRefresh = vi.fn().mockResolvedValue(undefined)) {
+  render(<VoiceAgentSettings settings={s} onChange={onChange} saving={false} onRefresh={onRefresh} />);
+  return { onChange, onRefresh };
 }
+
+const checkbox = (name: string) => screen.getByRole("checkbox", { name }) as HTMLInputElement;
+const ASSIST = "Assist setup";
+const PREFERRED = "Make Phoenix MCP my preferred assistant";
 
 describe("VoiceAgentSettings", () => {
   beforeEach(() => {
@@ -52,11 +64,11 @@ describe("VoiceAgentSettings", () => {
     getAgentCliModels.mockResolvedValue({ models: ["claude-opus-4-8", "claude-sonnet-5"] });
     createVoiceAgentPipeline.mockResolvedValue({ pipeline_id: "pl1", name: "Phoenix MCP", preferred: true });
     deleteVoiceAgentPipeline.mockResolvedValue({ ok: true });
+    setVoiceAgentPreferred.mockResolvedValue({ pipeline_id: "pl1", preferred: true });
   });
 
-  it("renders the card and toggles enable", async () => {
+  it("renders the settings and toggles enable", async () => {
     const { onChange } = renderCard(settings());
-    expect(screen.getByText("Voice Agent")).toBeTruthy();
     fireEvent.click(screen.getByLabelText("Enable Phoenix MCP voice agent"));
     expect(onChange).toHaveBeenCalledWith("voice_agent_enabled", true);
     await waitFor(() => expect(listAccessKeys).toHaveBeenCalled());
@@ -117,50 +129,139 @@ describe("VoiceAgentSettings", () => {
     await waitFor(() => expect(getAgentCliProviders).toHaveBeenCalledTimes(2));
   });
 
-  it("opens the setup modal when enabling with no pipeline yet", async () => {
-    renderCard(settings());
+  it("applies enabling directly, without offering a setup dialog", async () => {
+    const { onChange } = renderCard(settings());
     fireEvent.click(screen.getByLabelText("Enable Phoenix MCP voice agent"));
-    expect(screen.getByText("Set up the Phoenix MCP voice assistant")).toBeTruthy();
+    expect(onChange).toHaveBeenCalledExactlyOnceWith("voice_agent_enabled", true);
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(createVoiceAgentPipeline).not.toHaveBeenCalled();
   });
 
-  it("shows a setup button when fully configured and creates a preferred pipeline by default", async () => {
-    renderCard(settings(FULL));
-    const setupBtn = screen.getByRole("button", { name: "Set up Phoenix MCP assistant" });
-    expect((setupBtn as HTMLButtonElement).disabled).toBe(false);
-    fireEvent.click(setupBtn);
-    // Modal open; preferred defaults on; "Set up automatically" enabled.
-    const autoBtn = screen.getByRole("button", { name: "Set up automatically" });
-    expect((autoBtn as HTMLButtonElement).disabled).toBe(false);
-    fireEvent.click(autoBtn);
-    await waitFor(() => expect(createVoiceAgentPipeline).toHaveBeenCalledWith(true));
+  it("sets up the assistant from its own switch, without making it preferred", async () => {
+    const { onRefresh } = renderCard(settings(FULL));
+    const assist = checkbox(ASSIST);
+    expect(assist).not.toBeChecked();
+    expect(assist).toBeEnabled();
+    // Preferred needs the assistant.
+    expect(checkbox(PREFERRED)).toBeDisabled();
+    fireEvent.click(assist);
+    await waitFor(() => expect(createVoiceAgentPipeline).toHaveBeenCalledExactlyOnceWith(false));
+    await waitFor(() => expect(onRefresh).toHaveBeenCalled());
+    expect(screen.queryByRole("dialog")).toBeNull();
   });
 
-  it("disables the setup button until fully configured", () => {
+  it("keeps assistant setup unavailable until fully configured", () => {
     renderCard(settings({ voice_agent_enabled: true }));  // enabled but no access key/provider/model
-    expect((screen.getByRole("button", { name: "Set up Phoenix MCP assistant" }) as HTMLButtonElement).disabled).toBe(true);
+    expect(checkbox(ASSIST)).toBeDisabled();
+    expect(screen.getByText("Select an access key, provider, and model first.")).toBeTruthy();
   });
 
-  it("shows a remove button and deletes the pipeline after confirming", async () => {
-    renderCard(settings({ ...FULL, voice_agent_pipeline_id: "pl1" }));
-    fireEvent.click(screen.getByRole("button", { name: "Remove Phoenix MCP assistant" }));
-    // Confirm modal appears; deletion happens only after confirming.
+  it("removes the assistant directly when its switch is turned off", async () => {
+    const { onRefresh } = renderCard(settings({ ...FULL, voice_agent_pipeline_id: "pl1" }));
+    expect(checkbox(ASSIST)).toBeChecked();
+    fireEvent.click(checkbox(ASSIST));
+    await waitFor(() => expect(deleteVoiceAgentPipeline).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(onRefresh).toHaveBeenCalled());
+    expect(createVoiceAgentPipeline).not.toHaveBeenCalled();
+    expect(notify).toHaveBeenCalledWith("Phoenix MCP assistant removed from Home Assistant");
+  });
+
+  it("does not report the assistant removed when Home Assistant keeps it", async () => {
+    deleteVoiceAgentPipeline.mockResolvedValue({ ok: true, kept: true });
+    const { onRefresh } = renderCard(settings({ ...FULL, voice_agent_pipeline_id: "pl1" }));
+    fireEvent.click(checkbox(ASSIST));
+    await waitFor(() => expect(onRefresh).toHaveBeenCalled());
+    expect(notify).toHaveBeenCalledTimes(1);
+    expect(notify).not.toHaveBeenCalledWith("Phoenix MCP assistant removed from Home Assistant");
+  });
+
+  it("says Home Assistant kept its only assistant when Voice is turned off", async () => {
+    const onSave = vi.fn().mockResolvedValue({ ...settings(), voice_agent_pipeline_kept: true });
+    render(<VoiceAgentSettings settings={settings({ ...FULL, voice_agent_pipeline_id: "pl1" })} onChange={vi.fn()} onSave={onSave}
+      saving={false} onRefresh={vi.fn().mockResolvedValue(undefined)} />);
+    fireEvent.click(screen.getByLabelText("Enable Phoenix MCP voice agent"));
+    await waitFor(() => expect(notify).toHaveBeenCalledTimes(1));
+    // One save, which removes the assistant itself; no separate removal call.
+    expect(onSave).toHaveBeenCalledExactlyOnceWith({ voice_agent_enabled: false });
     expect(deleteVoiceAgentPipeline).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole("button", { name: "Remove assistant" }));
-    await waitFor(() => expect(deleteVoiceAgentPipeline).toHaveBeenCalled());
+    expect(notify).toHaveBeenCalledWith(expect.stringContaining("Home Assistant kept its assistant"));
   });
 
-  it("hides the one-click setup when the HA seam is unsupported", () => {
+  it("reports the assistant removed when turning Voice off removed it", async () => {
+    const onSave = vi.fn().mockResolvedValue(settings());
+    render(<VoiceAgentSettings settings={settings({ ...FULL, voice_agent_pipeline_id: "pl1" })} onChange={vi.fn()} onSave={onSave}
+      saving={false} onRefresh={vi.fn().mockResolvedValue(undefined)} />);
+    fireEvent.click(screen.getByLabelText("Enable Phoenix MCP voice agent"));
+    await waitFor(() => expect(notify).toHaveBeenCalledWith("Voice agent disabled, and its Home Assistant assistant removed"));
+  });
+
+  it("reports nothing when the save that turns Voice off fails", async () => {
+    const onSave = vi.fn().mockResolvedValue(null);
+    const onRefresh = vi.fn().mockResolvedValue(undefined);
+    render(<VoiceAgentSettings settings={settings({ ...FULL, voice_agent_pipeline_id: "pl1" })} onChange={vi.fn()} onSave={onSave}
+      saving={false} onRefresh={onRefresh} />);
+    fireEvent.click(screen.getByLabelText("Enable Phoenix MCP voice agent"));
+    await waitFor(() => expect(onSave).toHaveBeenCalled());
+    expect(notify).not.toHaveBeenCalled();
+    expect(onRefresh).not.toHaveBeenCalled();
+    expect(deleteVoiceAgentPipeline).not.toHaveBeenCalled();
+  });
+
+  it("shows Home Assistant's actual preference and sets or clears it, keeping the assistant", async () => {
+    const { onRefresh } = renderCard(settings({ ...FULL, voice_agent_pipeline_id: "pl1", voice_agent_pipeline_preferred: false }));
+    expect(checkbox(PREFERRED)).not.toBeChecked();
+    expect(checkbox(PREFERRED)).toBeEnabled();
+    fireEvent.click(checkbox(PREFERRED));
+    await waitFor(() => expect(setVoiceAgentPreferred).toHaveBeenCalledExactlyOnceWith(true));
+    await waitFor(() => expect(onRefresh).toHaveBeenCalledTimes(1));
+    // The switch follows the settings it was given, not the click.
+    expect(checkbox(PREFERRED)).not.toBeChecked();
+  });
+
+  it("clears the preference without removing the assistant", async () => {
+    renderCard(settings({ ...FULL, voice_agent_pipeline_id: "pl1", voice_agent_pipeline_preferred: true }));
+    expect(checkbox(PREFERRED)).toBeChecked();
+    fireEvent.click(checkbox(PREFERRED));
+    await waitFor(() => expect(setVoiceAgentPreferred).toHaveBeenCalledExactlyOnceWith(false));
+    expect(deleteVoiceAgentPipeline).not.toHaveBeenCalled();
+  });
+
+  it("does not claim a preference without the assistant", () => {
+    renderCard(settings({ ...FULL, voice_agent_pipeline_id: null, voice_agent_pipeline_preferred: true }));
+    expect(checkbox(PREFERRED)).not.toBeChecked();
+    expect(checkbox(PREFERRED)).toBeDisabled();
+  });
+
+  it("reports a refused preference change and still shows the saved state", async () => {
+    setVoiceAgentPreferred.mockRejectedValueOnce(new Error("The Phoenix MCP assistant is the only one, so Home Assistant keeps it preferred."));
+    const { onRefresh } = renderCard(settings({ ...FULL, voice_agent_pipeline_id: "pl1", voice_agent_pipeline_preferred: true }));
+    fireEvent.click(checkbox(PREFERRED));
+    expect(await screen.findByRole("alert")).toHaveTextContent("only one, so Home Assistant keeps it preferred");
+    await waitFor(() => expect(onRefresh).toHaveBeenCalled());
+    expect(checkbox(PREFERRED)).toBeChecked();
+  });
+
+  it("hides assistant setup and preference when the HA seam is unsupported", () => {
     renderCard(settings({ ...FULL, voice_agent_pipeline_supported: false }));
-    expect(screen.queryByRole("button", { name: "Set up Phoenix MCP assistant" })).toBeNull();
+    expect(screen.queryByRole("checkbox", { name: ASSIST })).toBeNull();
+    expect(screen.queryByRole("checkbox", { name: PREFERRED })).toBeNull();
   });
 
-  it("confirms before disabling when a pipeline exists", () => {
-    const { onChange } = renderCard(settings({ ...FULL, voice_agent_pipeline_id: "pl1" }));
+  it("disables directly when an assistant exists, then reads the settings again", async () => {
+    const onChange = vi.fn().mockResolvedValue(true);
+    const { onRefresh } = renderCard(settings({ ...FULL, voice_agent_pipeline_id: "pl1" }), onChange);
     fireEvent.click(screen.getByLabelText("Enable Phoenix MCP voice agent"));  // toggle off
-    expect(onChange).not.toHaveBeenCalledWith("voice_agent_enabled", false);
-    expect(screen.getByText("Disable the Phoenix MCP voice agent?")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Disable and remove assistant" }));
-    expect(onChange).toHaveBeenCalledWith("voice_agent_enabled", false);
+    expect(onChange).toHaveBeenCalledExactlyOnceWith("voice_agent_enabled", false);
+    expect(screen.queryByRole("dialog")).toBeNull();
+    await waitFor(() => expect(onRefresh).toHaveBeenCalled());
+  });
+
+  it("does not read the settings again when disabling failed", async () => {
+    const onChange = vi.fn().mockResolvedValue(false);
+    const { onRefresh } = renderCard(settings({ ...FULL, voice_agent_pipeline_id: "pl1" }), onChange);
+    fireEvent.click(screen.getByLabelText("Enable Phoenix MCP voice agent"));
+    await waitFor(() => expect(onChange).toHaveBeenCalled());
+    expect(onRefresh).not.toHaveBeenCalled();
   });
 
   it("does not expose internal decision review for any access key", async () => {
@@ -176,13 +277,13 @@ describe("VoiceAgentSettings", () => {
 });
 
 describe("VoiceAgentSettings layout", () => {
-  it("puts routing statistics at the bottom of the card", async () => {
+  it("puts routing statistics at the bottom of the tab", async () => {
     listAccessKeys.mockResolvedValue([{ id: "tok-1", name: "voice-access-key" }]);
     getAgentCliProviders.mockResolvedValue({ instances: [] });
     const { container } = render(<VoiceAgentSettings settings={settings(FULL)} onChange={vi.fn()} saving={false} />);
-    await screen.findByText("Routing statistics");
+    await screen.findByText("Routing Statistics");
     const stats = container.querySelector("details") as HTMLElement;
-    expect(stats.textContent).toContain("Routing statistics");
-    expect((stats.closest(".card") as HTMLElement).lastElementChild).toBe(stats);
+    expect(stats.textContent).toContain("Routing Statistics");
+    expect((stats.closest(".phx-settings-form") as HTMLElement).lastElementChild).toBe(stats);
   });
 });

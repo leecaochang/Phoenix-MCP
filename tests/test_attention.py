@@ -84,6 +84,23 @@ async def test_calendar_and_mesa_items_do_not_expose_payloads(attention_env, has
     data.calendar_writes.save.assert_awaited_once()
 
 
+async def test_an_interrupted_agent_calendar_write_is_listed_once(attention_env, hass):
+    """The calendar item, which says what changed, stands for the agent row of the same call."""
+    client, data, access_key = attention_env
+    await data.agent_recovery.begin(access_key.id, "create_calendar_event", "req-cal")
+    data.agent_recovery.interrupted("req-cal")
+    # An unresolved row blocks its key, so the unrelated call comes from another.
+    other, _ = await data.store.async_create_access_key("Other access key", "admin")
+    await data.agent_recovery.begin(other.id, "call_service", "req-other")
+    data.agent_recovery.interrupted("req-other")
+    data.calendar_writes = CalendarWriteJournal(hass)
+    data.calendar_writes.records = [{"receipt_id": "r", "request_id": "req-cal", "entity_id": "calendar.test",
+                                    "access_key_id": access_key.id, "operation": "create",
+                                    "created_at": "2026-10-03T00:00:00Z", "status": "outcome_unknown", "requested": {}}]
+    items = (await (await client.get("/api/phoenix-mcp/admin/attention")).json())["items"]
+    assert [(row["kind"], row["id"]) for row in items] == [("agent", "req-other"), ("calendar", "r")]
+
+
 async def test_unreadable_calendar_history_is_not_an_empty_list(attention_env, hass):
     client, data, _ = attention_env
     data.calendar_writes = CalendarWriteJournal(hass)

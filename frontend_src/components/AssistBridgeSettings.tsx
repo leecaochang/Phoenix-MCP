@@ -2,9 +2,9 @@ import { BusySelect } from "./BusyButton";
 import { useEffect, useState } from "react";
 import type { GlobalSettings, AccessKeyRecord } from "../types";
 import { api } from "../api";
-import { DocsHelpLink } from "./common";
 import { t } from "../i18n";
-import { tRich } from "../i18n/rich";
+import { tPlain } from "../i18n/rich";
+import { SettingLabel, helpRow } from "../ui/SettingLabel";
 
 // Assist tool-provider card ("Phoenix MCP (scoped)"). Binds ONE access key whose scoped tools
 // Phoenix MCP hands to a conversation agent supplied by another integration (OpenAI,
@@ -29,25 +29,12 @@ export function AssistBridgeSettings({
   }, []);
 
   return (
-    <div className="card">
-      <h3 className="card-header">
-        {t("settings.assistCard")}
-        <DocsHelpLink path="connect.html#assist-tool-provider" label={t("settings.assistCard")} />
-      </h3>
-      <p className="agentcli-settings-hint">
-        {tRich("settings.assistIntro", { strong: (c) => <strong>{c}</strong> })}
-      </p>
-      <div className="toggle-row toggle-row-stacked-control">
-        <div className="toggle-label">
+    <div className="phx-settings-form" data-help-text={tPlain("settings.assistIntro")}>
+      <div className="toggle-row toggle-row-stacked-control" {...helpRow(tPlain("settings.assistBoundHelp"))}>
+        <SettingLabel help={tPlain("settings.assistBoundHelp")}>
           <span>{t("settings.assistBoundAccessKey")}</span>
-          <small>
-            {supported ? (
-              tRich("settings.assistBoundHelp", { strong: (c) => <strong>{c}</strong> })
-            ) : (
-              <em>{t("settings.assistUnsupported")}</em>
-            )}
-          </small>
-        </div>
+          {!supported && <small><em>{t("settings.assistUnsupported")}</em></small>}
+        </SettingLabel>
         <BusySelect
           aria-label={t("settings.assistBoundAccessKeyAria")}
           className="input input-auto"

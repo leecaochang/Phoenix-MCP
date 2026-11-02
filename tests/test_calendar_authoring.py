@@ -90,7 +90,7 @@ async def test_create_uid_readback_and_durable_receipt(calendar_env):
     result = await call(calendar_env, 'create_calendar_event', CREATE)
     assert result[1] == 'allowed'
     body = payload(result)
-    assert body['status'] == 'applied' and body['after']['uid']
+    assert body['status'] == 'applied' and body['after']['uid'] and body['verified'] is True
     assert body['before'] is None
     receipt = await call(calendar_env, 'get_calendar_write', {'entity_id': 'calendar.test', 'receipt_id': body['receipt_id']})
     assert payload(receipt)['after']['uid'] == body['after']['uid']
@@ -108,27 +108,40 @@ async def test_patch_preserves_omissions_and_null_clears(calendar_env):
     assert body['before']['description'] == 'Original'
     assert body['after']['description'] == 'Original'
     assert body['after'].get('location', '') == ''
-    assert body['after']['uid'] == args['uid']
+    assert body['after']['uid'] == args['uid'] and body['verified'] is True
 
 
 async def test_replace_clears_optional_fields_and_delete_keeps_uid(calendar_env):
     await call(calendar_env, 'create_calendar_event', CREATE)
     result = await call(calendar_env, 'update_calendar_event', {**await selection(calendar_env), 'mode': 'replace', 'event': {'summary': 'Replaced', 'start': '2026-10-02', 'end': '2026-10-03'}})
     assert result[1] == 'allowed'
-    assert payload(result)['after'].get('description', '') == ''
+    assert payload(result)['after'].get('description', '') == '' and payload(result)['verified'] is True
     result = await call(calendar_env, 'delete_calendar_event', await selection(calendar_env))
     assert result[1] == 'allowed'
-    assert payload(result)['before']['uid'] and payload(result)['after'] is None
+    # A delete is confirmed by the event no longer reading back, so null after is success here.
+    assert payload(result)['before']['uid'] and payload(result)['after'] is None and payload(result)['verified'] is True
     assert calendar_env[3].events == []
 
 
-@pytest.mark.parametrize('event', [None, [], {'summary': True, 'start': '2026-10-02', 'end': '2026-10-03'}, {'summary': 'x', 'start': '2026-10-02T12:00:00', 'end': '2026-10-02T13:00:00'}, {'summary': 'x', 'start': '2026-10-02', 'end': '2026-10-02'}, {'summary': 'x', 'start': '2026-10-02', 'end': '2026-10-03', 'rrule': 'FREQ=HOURLY'}])
+@pytest.mark.parametrize('event', [None, [], {'summary': True, 'start': '2026-10-02', 'end': '2026-10-03'}, {'summary': 'x', 'start': '2026-10-02T12:00:00', 'end': '2026-10-02T13:00:00+00:00'}, {'summary': 'x', 'start': '2026-10-02', 'end': '2026-10-02'}, {'summary': 'x', 'start': '2026-10-02', 'end': '2026-10-03', 'rrule': 'FREQ=HOURLY'}])
 async def test_invalid_event_refuses_before_approval(calendar_env, event):
     calendar_env[2].cap_calendar_write = 'confirm'
     result = await call(calendar_env, 'create_calendar_event', {**CREATE, 'event': event})
     assert result[1] == 'invalid_request'
     assert not calendar_env[1].store.get_pending_approvals()
     assert not calendar_env[3].calls
+
+
+
+async def test_a_time_without_an_offset_is_home_assistant_local_time(calendar_env):
+    """As HA's own calendar websocket schema reads it (as_local_timezone)."""
+    from homeassistant.util import dt as dt_util
+    event = {'summary': 'x', 'start': '2026-10-02T12:00:00', 'end': '2026-10-02T13:00:00'}
+    result = await call(calendar_env, 'create_calendar_event', {**CREATE, 'event': event})
+    assert result[1] == 'allowed', result
+    created = calendar_env[3].events[0]
+    assert created.start == dt_util.as_local(dt_util.parse_datetime('2026-10-02T12:00:00'))
+    assert created.start.utcoffset() == dt_util.get_default_time_zone().utcoffset(created.start.replace(tzinfo=None))
 
 
 async def test_capability_deny_survives_passthrough(calendar_env):
@@ -461,3 +474,129 @@ async def test_calendar_preparation_exits_retain_only_not_applied_receipts(calen
     rows = await tools.CalendarWriteJournal(hass).load()
     assert [row["status"] for row in rows] == ["not_applied"]
     assert not any(domain == DOMAIN and issue.startswith("calendar_recovery_") for domain, issue in ir.async_get(hass).issues)
+
+
+class _ReadCalendar(CalendarEntity):
+    """A read-only calendar with fixed events, or one that never answers."""
+
+    def __init__(self, entity_id, events, *, hang=False):
+        self.entity_id = entity_id
+        self._events = events
+        self._hang = hang
+
+    async def async_get_events(self, hass, start_date, end_date):
+        if self._hang:
+            raise TimeoutError
+        return list(self._events)
+
+
+@pytest.fixture
+async def calendars_env(hass):
+    from datetime import datetime, timedelta, timezone
+    from custom_components.phoenix_mcp.access_key_store import PermissionNode, PermissionTree
+    store = AccessKeyStore(hass, AsyncMock())
+    access_key, _ = await store.async_create_access_key('calendars-tests', 'admin', rate_limit_requests=0)
+    access_key.permissions = PermissionTree(domains={"calendar": PermissionNode(state="GREEN")},
+                                            entities={"calendar.secret": PermissionNode(state="RED")})
+    data = PhoenixData(store=store, rate_limiter=RateLimiter(), audit=AuditLog())
+    hass.data[DOMAIN] = data
+    day = datetime(2026, 10, 26, tzinfo=timezone.utc)
+    entities = {
+        # Different offsets and an all-day event: start order must compare real instants.
+        "calendar.home": _ReadCalendar("calendar.home", [
+            CalendarEvent(summary="Dentist", start=day + timedelta(hours=9), end=day + timedelta(hours=10)),
+            CalendarEvent(summary="Holiday", start=date(2026, 10, 27), end=date(2026, 10, 28))]),
+        "calendar.work": _ReadCalendar("calendar.work", [
+            CalendarEvent(summary="Standup", start=(day + timedelta(hours=8)).astimezone(timezone(timedelta(hours=7))),
+                          end=(day + timedelta(hours=8, minutes=15)).astimezone(timezone(timedelta(hours=7))))]),
+        "calendar.secret": _ReadCalendar("calendar.secret", [
+            CalendarEvent(summary="Hidden", start=day, end=day + timedelta(hours=1))]),
+        "calendar.slow": _ReadCalendar("calendar.slow", [], hang=True),
+    }
+    registry = er.async_get(hass)
+    for entity_id in entities:
+        registry.async_get_or_create('calendar', 'local_calendar', entity_id, suggested_object_id=entity_id.split('.')[1])
+        hass.states.async_set(entity_id, 'off')
+    hass.data[DATA_COMPONENT] = SimpleNamespace(get_entity=entities.get)
+    return hass, data, access_key, entities
+
+
+WINDOW = {"start_time": "2026-10-25T00:00:00+00:00", "end_time": "2026-10-30T00:00:00+00:00"}
+
+
+async def test_every_readable_calendar_in_one_call_in_start_order(calendars_env):
+    body = payload(await call(calendars_env, 'get_calendar_events', dict(WINDOW)))
+    assert body["calendars"] == ["calendar.home", "calendar.slow", "calendar.work"]
+    assert [(event["calendar"], event["summary"]) for event in body["events"]] == [
+        ("calendar.work", "Standup"), ("calendar.home", "Dentist"), ("calendar.home", "Holiday")]
+    assert body["unreadable"] == [{"calendar": "calendar.slow", "reason": "The calendar did not answer in time."}]
+    assert "Hidden" not in json.dumps(body) and "not_found" not in body
+
+
+async def test_a_merged_event_keeps_its_single_calendar_hash(calendars_env):
+    merged = payload(await call(calendars_env, 'get_calendar_events', {**WINDOW, "entity_id": ["calendar.home"]}))
+    single = payload(await call(calendars_env, 'get_calendar_events', {**WINDOW, "entity_id": "calendar.home"}))
+    assert [event["content_hash"] for event in merged["events"]] == [event["content_hash"] for event in single["events"]]
+
+
+async def test_a_listed_calendar_out_of_scope_is_not_found(calendars_env):
+    body = payload(await call(calendars_env, 'get_calendar_events', {**WINDOW, "entity_id": ["calendar.work", "calendar.secret"]}))
+    assert body["not_found"] == ["calendar.secret"] and [event["summary"] for event in body["events"]] == ["Standup"]
+
+
+async def test_a_page_past_one_result_continues_without_skipping(calendars_env):
+    from unittest.mock import patch
+    from custom_components.phoenix_mcp import tool_common
+    from custom_components.phoenix_mcp.conversation_log import json_size
+    args = {**WINDOW, "entity_id": ["calendar.home", "calendar.work"]}
+    whole = json_size((await call(calendars_env, 'get_calendar_events', dict(args)))[0]['content'][0]['text'])
+    with patch.object(tool_common, "TOOL_RESULT_MAX_BYTES", whole - 1):
+        first = payload(await call(calendars_env, 'get_calendar_events', dict(args)))
+        rest = payload(await call(calendars_env, 'get_calendar_events', {**args, "offset": first["next_offset"]}))
+    assert first["has_more"] is True and first["next_offset"] == first["count"] < 3
+    assert [event["summary"] for event in first["events"] + rest["events"]] == ["Standup", "Dentist", "Holiday"]
+
+
+async def test_a_calendar_out_of_scope_is_never_asked_for_events(calendars_env):
+    _hass, _data, _key, entities = calendars_env
+    asked: list[str] = []
+    for entity in entities.values():
+        original = entity.async_get_events
+
+        async def recording(hass, start, end, _entity=entity, _original=original):
+            asked.append(_entity.entity_id)
+            return await _original(hass, start, end)
+
+        entity.async_get_events = recording
+    await call(calendars_env, 'get_calendar_events', {**WINDOW, "entity_id": ["calendar.secret", "calendar.work"]})
+    assert asked == ["calendar.work"]
+
+
+async def test_now_starts_a_window(calendars_env):
+    # Models send "now" for the current time as readily as an amount ago.
+    result = await call(calendars_env, 'get_calendar_events', {"start_time": "now", "entity_id": ["calendar.work"]})
+    assert result[1] == "allowed", result
+
+
+async def test_a_field_the_calendar_drops_or_an_unread_write_is_not_claimed(calendar_env, monkeypatch):
+    await call(calendar_env, 'create_calendar_event', CREATE)
+    entity = calendar_env[3]
+    original = entity.async_update_event
+
+    async def drop_description(uid, event, **selectors):
+        await original(uid, {key: value for key, value in event.items() if key != 'description'}, **selectors)
+    monkeypatch.setattr(entity, 'async_update_event', drop_description)
+    result = await call(calendar_env, 'update_calendar_event', {**await selection(calendar_env), 'mode': 'patch', 'event': {'description': 'New'}})
+    assert result[1] == 'allowed' and payload(result)['status'] == 'applied' and payload(result)['verified'] is False
+
+    readable = entity.async_get_events
+
+    async def unreadable_once_deleted(hass, start_date, end_date):
+        if not entity.events:
+            raise RuntimeError('read failed')
+        return await readable(hass, start_date, end_date)
+    selected = await selection(calendar_env)
+    monkeypatch.setattr(entity, 'async_get_events', unreadable_once_deleted)
+    result = await call(calendar_env, 'delete_calendar_event', selected)
+    # Applied, but the read-back failed: unconfirmed rather than a success or a failure.
+    assert payload(result)['status'] == 'applied' and payload(result)['verified'] is None

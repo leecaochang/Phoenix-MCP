@@ -6,7 +6,19 @@
 // are restricted to http(s) or root-relative with double quotes percent-encoded.
 // It is intentionally small: it covers the common Markdown an assistant emits
 // (headings, emphasis, code, lists, links, blockquotes, tables) and renders
-// anything it does not recognise as plain text.
+// anything it does not recognise as plain text. The Guide also turns
+// `guide:<topic id>`, `guide:<topic id>#<section>` and `guide:#<section>` links
+// into in-panel links (`guideLinks`).
+
+export interface MarkdownOptions {
+  /** Render `[text](guide:<topic id>#<section>)` as a link the Guide follows itself. */
+  guideLinks?: boolean;
+}
+/**
+ * A `guide:` link: a topic id (letters, digits, dot, dash and underscore), a
+ * section anchor (lower-case words joined by dashes), or both.
+ */
+const GUIDE_TOPIC_RE = /^guide:([A-Za-z0-9][A-Za-z0-9._-]*)?(?:#([a-z0-9]+(?:-[a-z0-9]+)*))?$/;
 
 // Non-text control characters (keep tab \x09, newline \x0A, carriage return
 // \x0D). Built via RegExp() with escaped strings so no literal control bytes
@@ -51,7 +63,7 @@ function esc(s: string): string {
 // character or end-of-string. This mirrors the GFM rule that emphasis markers
 // flanked by alphanumerics on the inside edge do not delimit, so intra-word
 // underscores (the common case) stay literal.
-function inline(s: string): string {
+function inline(s: string, opts: MarkdownOptions = {}): string {
   s = s.replace(/`([^`]+)`/g, (_m, c) => `<code>${c}</code>`);
   s = s.replace(/(^|[^\w*])\*\*(\S(?:[^*]*?\S)?)\*\*(?!\w)/g, "$1<strong>$2</strong>");
   s = s.replace(/(^|[^\w_])__(\S(?:[^_]*?\S)?)__(?!\w)/g, "$1<strong>$2</strong>");
@@ -65,6 +77,12 @@ function inline(s: string): string {
     if (/^(https?:\/\/|\/(?![\/\\]))/i.test(url)) {
       const safe = url.replace(/"/g, "%22");
       return `<a href="${safe}" target="_blank" rel="noopener noreferrer">${text}</a>`;
+    }
+    const topic = opts.guideLinks ? GUIDE_TOPIC_RE.exec(url) : null;
+    if (topic && (topic[1] || topic[2])) {
+      const to = topic[1] ? ` data-guide-topic="${topic[1]}"` : "";
+      const at = topic[2] ? ` data-guide-anchor="${topic[2]}"` : "";
+      return `<a href="#" class="phx-guide-link"${to}${at}>${text}</a>`;
     }
     return text;
   });
@@ -83,17 +101,17 @@ function splitTableRow(line: string): string[] {
   if (s.endsWith("|")) s = s.slice(0, -1);
   return s.split("|").map((c) => c.trim());
 }
-function renderTable(header: string[], rows: string[][]): string {
-  const th = header.map((h) => `<th>${inline(esc(h))}</th>`).join("");
+function renderTable(header: string[], rows: string[][], opts: MarkdownOptions): string {
+  const th = header.map((h) => `<th>${inline(esc(h), opts)}</th>`).join("");
   const body = rows.map((r) => {
     const cells: string[] = [];
-    for (let i = 0; i < header.length; i++) cells.push(`<td>${inline(esc(r[i] ?? ""))}</td>`);
+    for (let i = 0; i < header.length; i++) cells.push(`<td>${inline(esc(r[i] ?? ""), opts)}</td>`);
     return `<tr>${cells.join("")}</tr>`;
   }).join("");
   return `<table><thead><tr>${th}</tr></thead><tbody>${body}</tbody></table>`;
 }
 
-export function renderMarkdown(src: string): string {
+export function renderMarkdown(src: string, opts: MarkdownOptions = {}): string {
   if (!src) return "";
   const lines = stripControlChars(src).replace(/\r\n/g, "\n").split("\n");
   const out: string[] = [];
@@ -104,7 +122,7 @@ export function renderMarkdown(src: string): string {
 
   const closeList = () => { if (listType) { out.push(`</${listType}>`); listType = null; } };
   const flushPara = () => {
-    if (para.length) { out.push(`<p>${inline(esc(para.join(" ")))}</p>`); para = []; }
+    if (para.length) { out.push(`<p>${inline(esc(para.join(" ")), opts)}</p>`); para = []; }
   };
 
   for (let li = 0; li < lines.length; li++) {
@@ -128,7 +146,7 @@ export function renderMarkdown(src: string): string {
         if (/^\s*$/.test(r) || !r.includes("|")) break;
         rows.push(splitTableRow(r));
       }
-      out.push(renderTable(header, rows));
+      out.push(renderTable(header, rows, opts));
       li = j - 1;
       continue;
     }
@@ -136,18 +154,18 @@ export function renderMarkdown(src: string): string {
     if (/^\s*$/.test(line)) { flushPara(); closeList(); continue; }
 
     const h = line.match(/^(#{1,6})\s+(.*)$/);
-    if (h) { flushPara(); closeList(); const lvl = h[1].length; out.push(`<h${lvl}>${inline(esc(h[2]))}</h${lvl}>`); continue; }
+    if (h) { flushPara(); closeList(); const lvl = h[1].length; out.push(`<h${lvl}>${inline(esc(h[2]), opts)}</h${lvl}>`); continue; }
 
     if (/^(-{3,}|\*{3,}|_{3,})\s*$/.test(line)) { flushPara(); closeList(); out.push("<hr />"); continue; }
 
     const bq = line.match(/^>\s?(.*)$/);
-    if (bq) { flushPara(); closeList(); out.push(`<blockquote>${inline(esc(bq[1]))}</blockquote>`); continue; }
+    if (bq) { flushPara(); closeList(); out.push(`<blockquote>${inline(esc(bq[1]), opts)}</blockquote>`); continue; }
 
     const ul = line.match(/^\s*[-*+]\s+(.*)$/);
-    if (ul) { flushPara(); if (listType !== "ul") { closeList(); out.push("<ul>"); listType = "ul"; } out.push(`<li>${inline(esc(ul[1]))}</li>`); continue; }
+    if (ul) { flushPara(); if (listType !== "ul") { closeList(); out.push("<ul>"); listType = "ul"; } out.push(`<li>${inline(esc(ul[1]), opts)}</li>`); continue; }
 
     const ol = line.match(/^\s*\d+\.\s+(.*)$/);
-    if (ol) { flushPara(); if (listType !== "ol") { closeList(); out.push("<ol>"); listType = "ol"; } out.push(`<li>${inline(esc(ol[1]))}</li>`); continue; }
+    if (ol) { flushPara(); if (listType !== "ol") { closeList(); out.push("<ol>"); listType = "ol"; } out.push(`<li>${inline(esc(ol[1]), opts)}</li>`); continue; }
 
     closeList();
     para.push(line);

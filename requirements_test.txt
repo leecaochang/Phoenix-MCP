@@ -6,7 +6,7 @@
 # pinning PHACC pins the primary test stack; deeper transitive packages can
 # still float within the ranges their dependents allow.
 #
-#   PHACC 0.13.371 pins homeassistant==2026.10.0.
+#   PHACC 0.13.374 pins homeassistant==2026.10.3.
 #   Python: 3.14
 #
 # This is a TEST pin only. hacs.json and const.MIN_HA_VERSION declare the
@@ -21,7 +21,7 @@
 #   # then pip freeze the two lines back into this file)
 #   venv/bin/python -m pytest
 
-pytest-homeassistant-custom-component==0.13.371
+pytest-homeassistant-custom-component==0.13.374
 
 # Dependencies of HA's `conversation` component, needed by the Phoenix MCP voice-agent
 # tests (voice_agent.py imports homeassistant.components.conversation). PHACC does
@@ -38,7 +38,7 @@ jsonschema==4.26.0
 PyTurboJPEG==1.8.3
 
 # Real integration setup/reload tests; matches the pinned HA frontend manifest.
-home-assistant-frontend==20260930.2
+home-assistant-frontend==20260930.5
 
 # Native Local Calendar update and recurrence regression tests; matches pinned HA.
 ical==14.3.0

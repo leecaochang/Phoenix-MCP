@@ -161,6 +161,22 @@ async def test_agent_template_restore_is_owner_scoped_and_rechecks_target(hass):
     assert body["status"] == "needs_confirmation"
     assert body["adapter"]["type"] == "sensor"
 
+    # Empty receipt fields are placeholders: the receipt comes back, not "changed".
+    placeholder, outcome, _ = await _call_tool(
+        "restore_configuration", {"recovery_id": recovery_id, "side": "before",
+                                  "snapshot_digest": "", "target_fingerprint": ""},
+        access_key, hass, runtime,
+    )
+    assert outcome == "allowed"
+    assert json.loads(placeholder["content"][0]["text"]) == body
+    half, outcome, _ = await _call_tool(
+        "restore_configuration", {"recovery_id": recovery_id, "side": "before",
+                                  "snapshot_digest": body["snapshot_digest"], "target_fingerprint": ""},
+        access_key, hass, runtime,
+    )
+    assert outcome == "invalid_request"
+    assert "Send both snapshot_digest and target_fingerprint" in half["content"][0]["text"]
+
     stranger = _template_agent(domain)
     result, outcome, _ = await _call_tool(
         "restore_configuration", {"recovery_id": recovery_id, "side": "before"},
@@ -427,14 +443,14 @@ async def test_invalid_template_settings_do_not_create_recovery_barrier(hass):
     assert entry.options["state"] == "{{ 8 }}"
 
 
-def test_numeric_version_is_not_a_helper_entity_reference():
+async def test_numeric_version_is_not_a_helper_entity_reference(hass):
     """Update version strings coexist with recursively scoped entity targets."""
     from custom_components.phoenix_mcp.tools.helper import _entities_in_options
 
     assert _entities_in_options({
         "installed_version": "1.0", "latest_version": "2.0",
         "install": [{"target": {"entity_id": "update.firmware"}}],
-    }) == {"update.firmware"}
+    }, er.async_get(hass)) == {"update.firmware"}
 
 
 async def test_template_storage_failure_prevents_removal(hass):
@@ -604,6 +620,39 @@ async def test_admin_recovery_requires_ha_admin_and_keeps_active_records(hass):
     assert runtime.config_recovery.get(rid)["reviewed_by"] == "admin"
 
 
+@pytest.mark.parametrize(("active", "key"), [
+    (True, "adminError.recoveryOperationActive"),
+    (False, "adminError.recoveryReviewBeforeRestoring"),
+])
+async def test_admin_restore_refusal_names_active_or_unreviewed_record(hass, hass_admin_user, active, key):
+    """Restore of a still-active record answers recoveryOperationActive; an inactive unreviewed one, recoveryReviewBeforeRestoring."""
+    from homeassistant.components.http.const import KEY_AUTHENTICATED, KEY_HASS_USER
+    from custom_components.phoenix_mcp.admin_view import PhoenixAdminConfigurationRecoveryRecordView
+    from custom_components.phoenix_mcp.const import DOMAIN
+    runtime = data()
+    hass.data[DOMAIN] = runtime
+    rid = await runtime.config_recovery.begin("helper:test", "delete", "t", {"name": "safe"})
+    if active:
+        # Verified but still running: activity alone blocks the restore.
+        await runtime.config_recovery.mark(rid, "verified")
+    else:
+        runtime.config_recovery.leave(rid)
+    values = {KEY_HASS_USER: hass_admin_user, KEY_AUTHENTICATED: True, "phoenix_mcp_rid": "request"}
+    request = MagicMock()
+    request.get.side_effect = lambda k, default=None: values.get(k, default)
+    request.__getitem__.side_effect = values.__getitem__
+    view = PhoenixAdminConfigurationRecoveryRecordView()
+    view.hass = hass
+    with patch("custom_components.phoenix_mcp.admin_view._read_body",
+               new=AsyncMock(return_value={"action": "restore", "side": "before"})), \
+         patch("custom_components.phoenix_mcp.mcp_view.async_restore_version", new=AsyncMock()) as restore:
+        response = await view.post(request, recovery_id=rid)
+    assert response.status == 409
+    assert json.loads(response.text)["message_key"] == key
+    restore.assert_not_awaited()
+    assert [r["active"] for r in runtime.config_recovery.records() if r["id"] == rid] == [active]
+
+
 @pytest.mark.parametrize("change_on_call", [1, 2])
 async def test_template_change_during_form_preparation_never_submits(hass, change_on_call):
     from custom_components.phoenix_mcp.tools import helper
@@ -666,3 +715,42 @@ async def test_recovery_scans_run_outside_event_loop_and_preserve_owned_copies(h
     assert restored.get(rid)["before"]["content"].startswith("harmless file content")
     assert restored.get(rid)["source"]["content"] == "observed"
     assert restored.get(rid)["observations"] == {"state": "verified"}
+
+
+def test_recovery_refusals_name_their_own_operator_text():
+    """Each refusal an administrator can act on maps to its own translated message.
+
+    The text is matched exactly, so a reworded refusal would drop out of the map
+    and fall back to the general message: every mapped sentence must still be
+    the message of a ConfigurationRecoveryError some module raises.
+    """
+    import ast
+    from pathlib import Path
+
+    from custom_components.phoenix_mcp import config_recovery
+
+    root = Path(config_recovery.__file__).parent
+    raised = set()
+    for path in [*root.glob("*.py"), *root.glob("tools/*.py")]:
+        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+            if (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+                    and node.func.id == "ConfigurationRecoveryError" and node.args
+                    and isinstance(node.args[0], ast.Constant) and isinstance(node.args[0].value, str)):
+                raised.add(node.args[0].value)
+    assert raised, "no ConfigurationRecoveryError messages were found"
+    for message, key in config_recovery._OPERATOR_KEYS.items():
+        assert message in raised, message
+        assert config_recovery.recovery_error_key(message) == key
+    assert config_recovery.recovery_error_key("Unsupported Template creation form.") == "recoveryBlocked"
+
+
+def test_template_refusal_reaches_the_panel_without_its_json():
+    """A Template refusal that applied nothing is shown as its sentence, never the agent's JSON object."""
+    from custom_components.phoenix_mcp.admin_view import _recovery_refusal
+
+    detail = json.dumps({"error": "Template references are outside current write authority.",
+                         "recovery_id": "r1", "replacement_entry_id": None,
+                         "status": "not_applied", "retry_safe": False})
+    assert _recovery_refusal(detail) == "Template references are outside current write authority."
+    assert _recovery_refusal("This version is too large to restore inline.") is None
+    assert _recovery_refusal(json.dumps({"status": "partial"})) is None

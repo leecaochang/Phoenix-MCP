@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import hashlib
 import json
 import secrets
@@ -1279,7 +1281,7 @@ async def test_tools_call_get_state_not_found_entity_same_response_as_denied():
 
 # --- get_state field projection ---
 
-from custom_components.phoenix_mcp.mcp_view import (  # noqa: E402
+from custom_components.phoenix_mcp.tool_common import (  # noqa: E402
     _normalize_fields,
     _select_state_fields,
     _lean_state,
@@ -1966,6 +1968,30 @@ async def test_authoring_validator_drift_is_not_reported_as_invalid_config():
     text = result["result"]["content"][0]["text"]
     assert "Internal error" in text
     assert "trigger, condition" not in text
+
+
+@pytest.mark.asyncio
+async def test_a_full_approval_queue_is_said_plainly_not_an_internal_error():
+    """The 101st pending approval for a key reached the agent as an internal error."""
+    from custom_components.phoenix_mcp import mcp_view
+    from custom_components.phoenix_mcp.approvals import PendingApprovalCapacityError
+
+    access_key, _ = _make_access_key(cap_automation_write="allow")
+    data = _make_data(access_key)
+    hass = _make_hass(data)
+
+    async def _full(*_a, **_k):
+        raise PendingApprovalCapacityError("full")
+
+    with patch.object(mcp_view, "_call_tool", _full):
+        result, _m, _r, outcome = await _dispatch_mcp(
+            "tools/call", 7, {"name": "create_automation", "arguments": {}},
+            access_key, hass, data, "127.0.0.1", base_url="http://homeassistant.local",
+        )
+
+    assert outcome == "denied"
+    text = result["result"]["content"][0]["text"]
+    assert "waiting for approval" in text and "Internal error" not in text
 
 
 @pytest.mark.asyncio
@@ -2886,6 +2912,9 @@ async def test_turn_on_confirm_creates_real_approval_then_executor_actuates(hass
         def set_pending_approvals(self, v: list) -> None:
             self._p = v
 
+        def get_settings(self):
+            return SimpleNamespace(mesa_mode="off", notify_on_approval=True)
+
     access_key = _make_physical_access_key("confirm")
     store = _ApprStore()
     from custom_components.phoenix_mcp.access_key_store import GlobalSettings
@@ -3101,53 +3130,66 @@ async def test_a_mesa_confirm_honours_the_inline_wait_like_a_capability_confirm(
 def _resolved_approval(status, *, tool_result=None):
     from types import SimpleNamespace
     return SimpleNamespace(
-        id="appr-7", status=status, tool_name="call_service",
+        id="appr-7", status=status, tool_name="call_service", access_key_id="key-7",
         created_at=None, expires_at=None, resolved_at=None,
         result={"tool_result": tool_result} if tool_result is not None else None,
         rejected_reason=None,
     )
 
 
-def test_polling_an_approved_action_carries_the_operator_accepted_note():
+async def _poll_approval(record):
+    """get_approval_status for one of the polling key's own approvals."""
+    from types import SimpleNamespace
+    from custom_components.phoenix_mcp.mcp_view import _tool_get_approval_status
+
+    data = MagicMock()
+    data.agent_recovery.reconcile = AsyncMock()
+    with patch("custom_components.phoenix_mcp.approvals.get_approval", return_value=record):
+        out, outcome, _ = await _tool_get_approval_status(
+            {"approval_id": record.id}, SimpleNamespace(id="key-7"), MagicMock(), data)
+    assert outcome == "allowed"
+    return [c.get("text") for c in out["content"]]
+
+
+async def test_polling_an_approved_action_carries_the_operator_accepted_note():
     """The operator-accepted note must reach agents that POLL.
 
     Not just those that wait inline: every approval outliving the inline window
     resolves by polling, and those are the slow ones an agent is most likely to
     re-propose.
     """
-    from custom_components.phoenix_mcp.mcp_view import _approval_status_result
     from custom_components.phoenix_mcp.tool_common import _OPERATOR_ACCEPTED_NOTE
     from custom_components.phoenix_mcp.approvals import STATUS_APPROVED
 
-    record = _resolved_approval(STATUS_APPROVED, tool_result={"content": [{"type": "text", "text": "{}"}]})
-    out = _approval_status_result(record, resolved=True)
+    texts = await _poll_approval(
+        _resolved_approval(STATUS_APPROVED, tool_result={"content": [{"type": "text", "text": "{}"}]}))
 
-    texts = [c.get("text") for c in out["content"]]
     assert _OPERATOR_ACCEPTED_NOTE in texts
     # The status body is still the first item, so existing readers are unaffected.
-    assert json.loads(texts[0])["status"] == STATUS_APPROVED
+    body = json.loads(texts[0])
+    assert body["status"] == STATUS_APPROVED and body["resolved"] is True
 
 
-def test_polling_a_rejection_carries_no_acceptance_note():
+async def test_polling_a_rejection_carries_no_acceptance_note():
     """Nothing was accepted, so saying otherwise would be a lie the agent acts on."""
-    from custom_components.phoenix_mcp.mcp_view import _approval_status_result
     from custom_components.phoenix_mcp.tool_common import _OPERATOR_ACCEPTED_NOTE
     from custom_components.phoenix_mcp.approvals import STATUS_REJECTED
 
-    out = _approval_status_result(_resolved_approval(STATUS_REJECTED), resolved=True)
-
-    assert all(c.get("text") != _OPERATOR_ACCEPTED_NOTE for c in out["content"])
+    assert _OPERATOR_ACCEPTED_NOTE not in await _poll_approval(_resolved_approval(STATUS_REJECTED))
 
 
-def test_polling_an_approval_that_never_ran_carries_no_note():
+async def test_polling_an_approval_that_never_ran_carries_no_note():
     """Approved but with no stored result: there is no landed change to accept."""
-    from custom_components.phoenix_mcp.mcp_view import _approval_status_result
     from custom_components.phoenix_mcp.tool_common import _OPERATOR_ACCEPTED_NOTE
     from custom_components.phoenix_mcp.approvals import STATUS_APPROVED
 
-    out = _approval_status_result(_resolved_approval(STATUS_APPROVED), resolved=True)
+    assert _OPERATOR_ACCEPTED_NOTE not in await _poll_approval(_resolved_approval(STATUS_APPROVED))
 
-    assert all(c.get("text") != _OPERATOR_ACCEPTED_NOTE for c in out["content"])
+
+async def test_polling_a_pending_approval_is_unresolved():
+    from custom_components.phoenix_mcp.approvals import STATUS_PENDING
+
+    assert json.loads((await _poll_approval(_resolved_approval(STATUS_PENDING)))[0])["resolved"] is False
 
 
 # --- stale-tool-list advisory (soft tools/list_changed) ---
@@ -3219,6 +3261,27 @@ async def test_stale_advisory_fires_once_per_epoch_and_resets_on_list():
     assert access_key.tools_list_version == access_key.settings_version
     assert access_key.id not in data.stale_tools_advised
     assert not _has_advisory(await _dt_call(access_key, hass, data, 8))
+
+
+@pytest.mark.asyncio
+async def test_a_change_that_keeps_the_tool_list_is_not_advised_as_a_reconnect():
+    """Allow to Confirm keeps the announced tools, as the panel says."""
+    access_key, _ = _make_access_key(cap_restart="allow")
+    data = _make_data(access_key)
+    hass = _make_hass(data)
+    await _dispatch_mcp("tools/list", 1, {}, access_key, hass, data, "127.0.0.1",
+                        base_url="http://homeassistant.local")
+
+    access_key.cap_restart = "confirm"
+    access_key.settings_version += 1
+    text = " ".join(c.get("text", "") for c in await _dt_call(access_key, hass, data, 2))
+    assert "Your tools are the same" in text and "reconnect" not in text
+
+    # Deny takes the tool away: that list is stale, so the reconnect is advised.
+    access_key.cap_restart = "deny"
+    access_key.settings_version += 1
+    text = " ".join(c.get("text", "") for c in await _dt_call(access_key, hass, data, 3))
+    assert "reconnect" in text
 
 
 def _has_catalog_advisory(content) -> bool:
@@ -3716,6 +3779,9 @@ async def test_no_target_reload_pending_under_confirm(hass):
         def set_pending_approvals(self, v: list) -> None:
             self._p = v
 
+        def get_settings(self):
+            return SimpleNamespace(mesa_mode="off", notify_on_approval=True)
+
     called: list = []
 
     async def _reload_handler(call):
@@ -4033,7 +4099,8 @@ async def test_wait_for_many_refuses_another_access_keys_approval(hass):
         {"approval_ids": ["appr-nope"]}, access_key, hass, data)
 
     assert outcome_theirs == outcome_ghost == "not_found"
-    assert theirs == ghost
+    # Identical apart from echoing the caller's own id back.
+    assert json.dumps(theirs).replace("appr-1", "<id>") == json.dumps(ghost).replace("appr-nope", "<id>")
 
 
 @pytest.mark.asyncio
@@ -4161,8 +4228,9 @@ async def test_single_id_wait_still_returns_the_full_result(hass):
     access_key = _make_physical_access_key("confirm")
     access_key.id = "tid"
 
+    # The retired single id is read as a one-item approval_ids list, the plural form.
     content, outcome, _r = await _tool_wait_for_approval({"approval_id": "appr-1"}, access_key, hass, data)
-    assert outcome == "invalid_request" and content["isError"] is True
+    assert outcome != "invalid_request" and not content.get("isError")
 
 
 @pytest.mark.asyncio
@@ -4215,7 +4283,7 @@ async def test_single_id_form_is_untouched(hass):
 
     content, outcome, _r = await _tool_wait_for_approval(
         {"approval_id": "appr-1"}, access_key, hass, data)
-    assert outcome == "invalid_request" and content["isError"] is True
+    assert outcome != "invalid_request" and not content.get("isError")
 
 
 @pytest.mark.parametrize("domain,service", [("notify", "persistent_notification"), ("persistent_notification", "create"), ("logbook", "log")])

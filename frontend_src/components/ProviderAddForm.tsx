@@ -1,5 +1,9 @@
-import { BusyButton, BusyInput, BusySelect } from "./BusyButton";
-import { useEffect, useRef, useState } from "react";
+import { BusyInput, BusySelect } from "./BusyButton";
+import { ActionButton } from "../ui/ActionButton";
+import type { IconName } from "../ui/Icon";
+import { helpRow } from "../ui/SettingLabel";
+import { useClickAway } from "../ui/useClickAway";
+import { Fragment, useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 import { api, localizedApiMessage } from "../api";
 import { t } from "../i18n";
 import type {
@@ -27,6 +31,8 @@ const EMPTY_FORM: FormState = {
 
 export interface ProviderAddFormProps {
   providerTypes: AgentCliProviderType[];
+  /** Catalog key of what the finishing button does, shown in the Help window; adding the account when not given. */
+  completeHelp?: string;
   disabled?: boolean;
   allowCapabilityProbe?: boolean;
   requireModel?: boolean;
@@ -35,8 +41,23 @@ export interface ProviderAddFormProps {
   allowAutomatic?: boolean;
   idPrefix?: string;
   completeLabel: string;
-  addingLabelKey: string;
+  completeIcon?: IconName;
+  /** The "Adding {name}" line over the form; none when left out. */
+  addingLabelKey?: string;
+  /**
+   * The Settings layout (user, 2026-10-31): the buttons sit beside the last field and
+   * beside the model, none in inverse colours, the provider's notes read in Help, and a
+   * click anywhere else cancels. The wizard keeps the full form.
+   */
+  compact?: boolean;
   onActiveChange?: (active: boolean) => void;
+  /**
+   * The form is shown on request (Settings' Add Account, user 2026-10-31): Cancel, a
+   * finished account and a click elsewhere close it, and the provider list takes the focus
+   * when it opens. A click on `opener`, the control that shows it, leaves that to the control.
+   */
+  onClose?: () => void;
+  opener?: RefObject<HTMLElement | null>;
   onCreated: (instance: AgentCliInstance, probe: boolean) => Promise<void> | void;
 }
 
@@ -56,8 +77,8 @@ function initialValues(provider: AgentCliProviderType): Record<string, string> {
 }
 
 export function ProviderAddForm({
-  providerTypes, disabled, completeLabel, addingLabelKey, onActiveChange, onCreated,
-  allowCapabilityProbe = true, requireModel = false, allowAutomatic = false, idPrefix = "agentcli-add",
+  providerTypes, completeHelp = "settings.addDoneHelp", disabled, completeLabel, completeIcon = "check", addingLabelKey, onActiveChange, onClose, opener, onCreated,
+  allowCapabilityProbe = true, requireModel = false, allowAutomatic = false, idPrefix = "agentcli-add", compact = false,
 }: ProviderAddFormProps) {
   const [pickerValue, setPickerValue] = useState("");
   const [adding, setAdding] = useState<AgentCliProviderType | null>(null);
@@ -66,8 +87,11 @@ export function ProviderAddForm({
   useEffect(() => () => { generation.current++; }, []);
   const pickerRef = useRef<HTMLSelectElement>(null);
   const firstFieldRef = useRef<HTMLInputElement | HTMLSelectElement>(null);
+  const rootRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => { onActiveChange?.(adding !== null); }, [adding, onActiveChange]);
+  const closable = onClose !== undefined;
+  useEffect(() => { if (closable) pickerRef.current?.focus(); }, [closable]);
   useEffect(() => {
     if (adding) window.requestAnimationFrame(() => firstFieldRef.current?.focus());
   }, [adding]);
@@ -85,7 +109,8 @@ export function ProviderAddForm({
     setPickerValue("");
     setAdding(null);
     setForm(EMPTY_FORM);
-    if (focus) window.requestAnimationFrame(() => pickerRef.current?.focus());
+    if (onClose) onClose();
+    else if (focus) window.requestAnimationFrame(() => pickerRef.current?.focus());
   };
 
   const setValue = (id: string, value: string) => {
@@ -156,6 +181,8 @@ export function ProviderAddForm({
     }
   };
 
+  useClickAway(rootRef, () => reset(false), compact && (adding !== null || closable) && !form.validating && !form.saving, opener, "click");
+
   // An empty model is a valid choice only where "Automatic" is offered.
   const modelMissing = requireModel && !(allowAutomatic && form.model === "") && !form.models.includes(form.model);
 
@@ -185,12 +212,71 @@ export function ProviderAddForm({
   };
 
 
+  const actionClass = compact ? "btn btn-outline btn-sm" : "btn btn-primary btn-sm";
+  const cancel = <ActionButton icon="undo" label={t("settings.cancel")} help="help.providerCancel" className="btn btn-outline btn-sm" busy={form.saving} onClick={() => reset()} />;
+  const validateActions = (
+    <div className="agentcli-settings-form-actions">
+      <ActionButton icon="probe" label={t("settings.agentcliValidate")} help="settings.validateHelp" className={actionClass}
+        busy={form.validating || form.saving} onClick={() => void validate()} />
+      {cancel}
+    </div>
+  );
+  const completeActions = (
+    <div className="agentcli-settings-form-actions">
+      <ActionButton icon={completeIcon} label={completeLabel} help={completeHelp} className={actionClass}
+        busy={form.saving || Boolean(disabled)} disabled={modelMissing} onClick={() => void complete()} />
+      {cancel}
+    </div>
+  );
+  // A provider's note on getting its key right; in Settings it reads in Help.
+  const note = adding?.kind === "tencent" ? t("settings.agentcliTencentHint") : adding?.kind === "mimo" ? t("settings.agentcliMiMoHint") : null;
+  /** In Settings, a row's buttons sit beside it rather than under it. */
+  const inline = (row: ReactNode, actions: ReactNode) => <div className="agentcli-add-inline">{row}{actions}</div>;
+  const probeLabel = compact ? t("settings.agentcliVerifyOptions") : t("settings.agentcliProbeOnAdd");
+  const probeToggle = allowCapabilityProbe && (
+    <div className="agentcli-settings-probe-opt" {...(compact ? helpRow(t("settings.agentcliProbeOnAdd")) : {})}>
+      <label className="toggle-switch" htmlFor="agentcli-add-probe-on-save">
+        <BusyInput
+          id="agentcli-add-probe-on-save"
+          busy={form.saving}
+          type="checkbox"
+          checked={form.probe}
+          onChange={(event) => setForm((current) => ({ ...current, probe: event.target.checked }))}
+        />
+        <span className="toggle-switch-track" />
+      </label>
+      <label className="agentcli-settings-probe-copy" htmlFor="agentcli-add-probe-on-save">
+        {probeLabel}
+        {compact && <span className="sr-only">{t("settings.agentcliProbeOnAdd")}</span>}
+      </label>
+    </div>
+  );
+  const modelRow = (
+    <label className="agentcli-settings-model-row" htmlFor={`${idPrefix}-model`}>
+      <span>{t("settings.agentcliSelectModel")}</span>
+      <BusySelect
+        id={`${idPrefix}-model`}
+        className="input input-auto"
+        data-help="settings.addModelHelp"
+        value={form.model}
+        busy={form.saving} disabled={!form.models.length && !allowAutomatic}
+        onChange={(event) => setForm((current) => ({ ...current, model: event.target.value }))}
+      >
+        {allowAutomatic && <option value="">{t("settings.agentcliModelAuto")}</option>}
+        {form.models.length
+          ? form.models.map((model) => <option key={model} value={model}>{model}</option>)
+          : !allowAutomatic && <option value="">{t("settings.agentcliNoModels")}</option>}
+      </BusySelect>
+    </label>
+  );
+
   return (
-    <>
+    <div ref={rootRef} className="agentcli-add">
       <div className="agentcli-add-row">
         <BusySelect
           ref={pickerRef}
           className="input input-auto"
+          data-help="settings.addProviderTypeHelp"
           value={pickerValue}
           busy={Boolean(disabled)} disabled={adding !== null || providerTypes.length === 0}
           onChange={(event) => selectProvider(event.target.value)}
@@ -204,15 +290,16 @@ export function ProviderAddForm({
       </div>
 
       {adding && (
-        <div className="agentcli-settings-form agentcli-add-form">
-          <div className="agentcli-settings-hint">
-            {t(addingLabelKey, { name: providerLabel(adding), label: providerLabel(adding) })}
-          </div>
-          {adding.kind === "tencent" && <div className="agentcli-settings-hint">{t("settings.agentcliTencentHint")}</div>}
-          {adding.kind === "mimo" && <div className="agentcli-settings-hint">{t("settings.agentcliMiMoHint")}</div>}
+        <div className={`agentcli-settings-form agentcli-add-form${compact ? " is-compact" : ""}`} {...(compact ? helpRow(note) : {})}>
+          {addingLabelKey && (
+            <div className="agentcli-settings-hint">
+              {t(addingLabelKey, { name: providerLabel(adding), label: providerLabel(adding) })}
+            </div>
+          )}
+          {note && (compact ? <span className="sr-only">{note}</span> : <div className="agentcli-settings-hint">{note}</div>)}
           {adding.fields.map((field, index) => {
             const id = `${idPrefix}-${adding.kind}-${field.id}`;
-            return (
+            const row = (
               <label className="agentcli-settings-field" htmlFor={id} key={field.id}>
                 <span>{fieldLabel(field)}</span>
                 {field.type === "choice" ? (
@@ -237,6 +324,7 @@ export function ProviderAddForm({
                     id={id}
                     ref={index === 0 ? (element) => { firstFieldRef.current = element; } : undefined}
                     type={field.type === "secret" ? "password" : "url"}
+                    data-help={field.type === "secret" && !note ? "settings.apiKeyHelp" : undefined}
                     placeholder={field.placeholder ?? fieldLabel(field)}
                     value={form.values[field.id] ?? ""}
                     busy={form.validating || form.saving}
@@ -247,6 +335,10 @@ export function ProviderAddForm({
                 )}
               </label>
             );
+            // Validate and Cancel beside the last field, the API key on most providers.
+            return compact && !form.validated && index === adding.fields.length - 1
+              ? <Fragment key={field.id}>{inline(row, validateActions)}</Fragment>
+              : row;
           })}
           {form.validating && (
             <div className="agentcli-settings-hint" role="status">
@@ -261,82 +353,23 @@ export function ProviderAddForm({
               {form.error}
             </div>
           )}
-          {form.validated && (
-            <label className="agentcli-settings-model-row" htmlFor={`${idPrefix}-model`}>
-              <span>{t("settings.agentcliSelectModel")}</span>
-              <BusySelect
-                id={`${idPrefix}-model`}
-                className="input input-auto"
-                value={form.model}
-                busy={form.saving} disabled={!form.models.length && !allowAutomatic}
-                onChange={(event) => setForm((current) => ({ ...current, model: event.target.value }))}
-              >
-                {allowAutomatic && <option value="">{t("settings.agentcliModelAuto")}</option>}
-                {form.models.length
-                  ? form.models.map((model) => <option key={model} value={model}>{model}</option>)
-                  : !allowAutomatic && <option value="">{t("settings.agentcliNoModels")}</option>}
-              </BusySelect>
-            </label>
-          )}
-          {form.validated && (
-            <div className="agentcli-settings-model-actions">
-              {allowCapabilityProbe && <div className="agentcli-settings-probe-opt">
-                <label className="toggle-switch" htmlFor="agentcli-add-probe-on-save">
-                  <BusyInput
-                    id="agentcli-add-probe-on-save"
-                    busy={form.saving}
-                    type="checkbox"
-                    checked={form.probe}
-                    onChange={(event) => setForm((current) => ({ ...current, probe: event.target.checked }))}
-                  />
-                  <span className="toggle-switch-track" />
-                </label>
-                <label className="agentcli-settings-probe-copy" htmlFor="agentcli-add-probe-on-save">
-                  {t("settings.agentcliProbeOnAdd")}
-                </label>
-              </div>}
-              <div className="agentcli-settings-form-actions">
-                <BusyButton
-                  type="button"
-                  className="btn btn-primary btn-sm"
-                  busy={form.saving || Boolean(disabled)} disabled={modelMissing}
-                  onClick={() => void complete()}
-                >
-                  {completeLabel}
-                </BusyButton>
-                <BusyButton
-                  type="button"
-                  className="btn btn-sm"
-                  busy={form.saving}
-                  onClick={() => reset()}
-                >
-                  {t("settings.cancel")}
-                </BusyButton>
+          {compact ? (
+            form.validated && <>
+              {inline(modelRow, completeActions)}
+              {probeToggle}
+            </>
+          ) : <>
+            {form.validated && modelRow}
+            {form.validated && (
+              <div className="agentcli-settings-model-actions">
+                {probeToggle}
+                {completeActions}
               </div>
-            </div>
-          )}
-          {!form.validated && (
-            <div className="agentcli-settings-form-actions">
-              <BusyButton
-                type="button"
-                className="btn btn-primary btn-sm"
-                busy={form.validating || form.saving}
-                onClick={() => void validate()}
-              >
-                {t("settings.agentcliValidate")}
-              </BusyButton>
-              <BusyButton
-                type="button"
-                className="btn btn-sm"
-                busy={form.saving}
-                onClick={() => reset()}
-              >
-                {t("settings.cancel")}
-              </BusyButton>
-            </div>
-          )}
+            )}
+            {!form.validated && validateActions}
+          </>}
         </div>
       )}
-    </>
+    </div>
   );
 }

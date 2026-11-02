@@ -9,12 +9,19 @@ text and diagnostics payloads.
 
 from __future__ import annotations
 
-import pytest
+import sys
+import types
 
+import pytest
+from homeassistant.components import network
+from homeassistant.components.network.models import Adapter, IPv4ConfiguredAddress, IPv6ConfiguredAddress
+
+from custom_components.phoenix_mcp import helpers
 from custom_components.phoenix_mcp.const import DOMAIN, ACCESS_KEY_PREFIX
 from custom_components.phoenix_mcp.helpers import (
     _PHOENIX_LOGGER_PREFIXES,
     _scrub_log_text,
+    _strict_diagnostic_text,
     redact_diagnostics,
     redact_secrets_in_text,
 )
@@ -154,3 +161,99 @@ def test_redact_diagnostics_scrubs_topology_in_dict_keys():
     }
     # A sensitive-named key still redacts its value (key name is a harmless label).
     assert redact_diagnostics({"password": "hunter2"}) == {"password": "<redacted>"}
+
+
+_PRIVATE_SHAPES = {
+    "nas.home.lan": "<redacted-host>",
+    "NAS.Home.LAN:5000 is up": "<redacted-host>:5000 is up",
+    "machine.tail1234.ts.net": "<redacted-host>",
+    "192-168-1-5.0123456789abcdef.plex.direct:32400": "<redacted-host>:32400",
+    "peer 100.101.102.103 joined": "peer <redacted-ip> joined",
+    "100.64.0.1": "<redacted-ip>",
+    "100.127.255.254": "<redacted-ip>",
+    "host='192.168.1.5'": "host='<redacted-ip>'",
+}
+# Values that only resemble the new shapes and must stay readable.
+_LOOKALIKES = (
+    "wlan0", "sports.net", "4.8.0.1", "2026.10.3", "100.63.255.255", "100.128.0.1",
+    "lan", "ts.net", "plex.direct", "nas.home.lan.example.com",
+)
+
+
+async def test_private_hostnames_and_the_shared_range_are_scrubbed(hass):
+    for text, expected in _PRIVATE_SHAPES.items():
+        assert redact_diagnostics(text) == expected, text
+        assert _strict_diagnostic_text(text) == expected, text
+    for text in _LOOKALIKES:
+        assert redact_diagnostics(text) == text, text
+        assert _strict_diagnostic_text(text) == text, text
+    assert redact_diagnostics({"nas.home.lan": "reachable"}) == {"<redacted-host>": "reachable"}
+
+
+def _adapter(name: str, ipv4: list[str], ipv6: list[str]) -> Adapter:
+    return Adapter(
+        name=name, index=1, enabled=True, auto=True, default=name == "eth0",
+        ipv4=[IPv4ConfiguredAddress(address=a, network_prefix=24) for a in ipv4],
+        ipv6=[IPv6ConfiguredAddress(address=a, flowinfo=0, scope_id=0, network_prefix=64) for a in ipv6],
+    )
+
+
+@pytest.fixture
+async def instance(hass, monkeypatch):
+    """An instance with a single-label internal URL, a public external URL and two adapters.
+
+    The test harness already replaces the network integration's adapter lookup
+    with a fixed list; this replaces it at the same seam with these adapters.
+    """
+    await hass.config.async_update(
+        internal_url="http://homeassistant:8123", external_url="https://myhome.duckdns.org:8123")
+    adapters = [_adapter("eth0", ["203.0.113.7"], ["2001:db8::7"]), _adapter("lo", ["127.0.0.1"], ["::1"])]
+    monkeypatch.setattr(network, "async_get_loaded_adapters", lambda _hass: adapters)
+    return hass
+
+
+async def test_the_instances_own_identifiers_are_scrubbed_by_exact_value(instance):
+    text = "reached myhome.duckdns.org:8123 from 203.0.113.7 and [2001:db8::7]:8123"
+    expected = "reached <redacted-host>:8123 from <redacted-ip> and [<redacted-ip>]:8123"
+    assert redact_diagnostics(text) == expected
+    assert _strict_diagnostic_text(text) == expected
+    assert redact_diagnostics({"MyHome.DuckDNS.org": "ok"}) == {"<redacted-host>": "ok"}
+    # Loopback and the single-label internal name stay readable, and a known
+    # value inside a longer hostname or address is a different identifier.
+    for kept in ("homeassistant:8123", "::1 up", "notmyhome.duckdns.org", "myhome.duckdns.org.example.com",
+                 "203.0.113.70", "203.0.113.7.sslip.io", "2001:db8::70", "version 2026.10.3"):
+        assert redact_diagnostics(kept) == kept, kept
+
+
+async def test_identifiers_are_read_again_on_every_call(instance):
+    assert redact_diagnostics("myhome.duckdns.org") == "<redacted-host>"
+    await instance.config.async_update(external_url="https://ha.example.net")
+    assert redact_diagnostics("myhome.duckdns.org") == "myhome.duckdns.org"
+    assert redact_diagnostics("ha.example.net") == "<redacted-host>"
+
+
+async def test_the_cloud_remote_host_is_scrubbed(hass, monkeypatch):
+    # The installed cloud component cannot import here (its TTS dependency is
+    # missing), so get_url's own cloud lookup reaches this stand-in module.
+    cloud = types.ModuleType("homeassistant.components.cloud")
+    cloud.CloudNotAvailable = type("CloudNotAvailable", (Exception,), {})
+    cloud.async_remote_ui_url = lambda hass: "https://abcdefgh.ui.nabu.casa"
+    monkeypatch.setitem(sys.modules, "homeassistant.components.cloud", cloud)
+    hass.config.components.add("cloud")
+    assert redact_diagnostics("remote abcdefgh.ui.nabu.casa") == "remote <redacted-host>"
+
+
+async def test_a_failed_identifier_read_never_fails_the_scrub(instance, monkeypatch):
+    def broken(*_args, **_kwargs):
+        raise RuntimeError("read failed")
+
+    monkeypatch.setattr(helpers, "get_url", broken)
+    monkeypatch.setattr(network, "async_get_loaded_adapters", broken)
+    assert redact_diagnostics("myhome.duckdns.org and nas.home.lan") == "myhome.duckdns.org and <redacted-host>"
+
+
+async def test_off_the_event_loop_no_identifiers_are_added(instance):
+    # Every caller scrubs on the event loop; an executor thread has no Home
+    # Assistant context, so only the pattern-based scrub applies there.
+    out = await instance.async_add_executor_job(redact_diagnostics, "myhome.duckdns.org via nas.home.lan")
+    assert out == "myhome.duckdns.org via <redacted-host>"

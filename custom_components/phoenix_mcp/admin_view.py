@@ -55,10 +55,13 @@ from .const import (
     PRESET_NAME_MAX_LENGTH,
     RUNTIME_READY_KEY,
     ACCESS_KEY_NAME_REGEX,
+    DEFAULT_RATE_LIMIT_BURST,
+    MAX_PRESETS_PER_ACCESS_KEY,
+    DEFAULT_RATE_LIMIT_REQUESTS,
 )
 from .data import PhoenixData
-from .device_semantics import device_registry_snapshot, effective_entity_area_id
-from .helpers import cancel_expiry_timer, panel_catalog
+from .device_semantics import device_authority_chain, device_registry_snapshot, effective_entity_area_id
+from .helpers import LocalizedReason, cancel_expiry_timer, panel_catalog
 from .locales import canonical_language
 from .policy_engine import (
     Permission,
@@ -71,15 +74,27 @@ from .policy_engine import (
 from .const import TOOL_ROUTING_MODES, TOOL_ROUTING_SETTINGS
 from .access_key_store import (
     valid_command_routing_languages,
+    KEEP_HINT,
     NotesError,
     PermissionNode,
     PermissionTree,
+    PresetLimitError,
+    PresetNameTakenError,
     VALID_NODE_STATES,
     access_key_name_slug,
     normalize_notes,
 )
 
 _LOGGER = logging.getLogger(__name__)
+
+
+def _tool_text(tool_result: dict) -> str:
+    """A tool result's text content, joined."""
+    return " ".join(
+        item.get("text", "")
+        for item in tool_result.get("content", [])
+        if isinstance(item, dict) and item.get("type") == "text"
+    ).strip()
 
 
 def _unverified_restore(tool_result: dict) -> bool:
@@ -94,6 +109,33 @@ def _unverified_restore(tool_result: dict) -> bool:
         if isinstance(body, dict) and body.get("status") in ("partial", "unknown"):
             return True
     return False
+
+
+def _recovery_refusal(detail: str) -> str | None:
+    """The refusal text inside a recovery executor's JSON error, or None for plain text.
+
+    Template restoration reports a refusal that applied nothing as a JSON object
+    with an `error` string, which the agent reads whole; the panel shows only
+    the refusal, never the object.
+    """
+    try:
+        body = json.loads(detail)
+    except (TypeError, ValueError):
+        return None
+    if isinstance(body, dict) and isinstance(body.get("error"), str) and body["error"]:
+        return body["error"]
+    return None
+
+
+# Restore refusals async_restore_version itself raises, by their exact agent text.
+_RESTORE_NO_CONFIG_SIDE = "This version has no configuration to restore on that side."
+_RESTORE_YAML_TAGS = (
+    "This version contains YAML tags such as !secret or !include and "
+    "cannot be restored automatically. Re-create it manually."
+)
+_RESTORE_HELPER_NOT_VERIFIED = (
+    "Helper restoration was not verified. Inspect configuration recovery before retrying."
+)
 
 
 def _err(
@@ -152,6 +194,20 @@ def require_admin(method: Callable) -> Callable:
     Generates a per-request ID, stashes it on the request object as 'phoenix_mcp_rid',
     and logs every admin API call so the ID can be correlated with response headers.
     """
+    return _admin_only(method, ready_required=True)
+
+
+def require_admin_before_ready(method: Callable) -> Callable:
+    """require_admin for a view that must answer while setup is still running.
+
+    Only for data that depends on nothing setup builds after the catalogs load,
+    such as the panel's own strings: without them the panel cannot even say
+    that setup is incomplete. Authentication and the admin check are unchanged.
+    """
+    return _admin_only(method, ready_required=False)
+
+
+def _admin_only(method: Callable, *, ready_required: bool) -> Callable:
     @functools.wraps(method)
     async def wrapper(self, request: web.Request, **kwargs: Any) -> web.Response:
         request_id = str(uuid.uuid4())
@@ -163,7 +219,7 @@ def require_admin(method: Callable) -> Callable:
         if not user or not user.is_admin:
             _LOGGER.info("Admin %s %s forbidden rid=%s", request.method, request.path, request_id)
             return _err("forbidden", "Admin access required.", 403, request_id, key="adminRequired")
-        if self.hass.data.get(RUNTIME_READY_KEY, True) is False:
+        if ready_required and self.hass.data.get(RUNTIME_READY_KEY, True) is False:
             return _err(
                 "service_unavailable",
                 "Phoenix MCP setup is not complete.",
@@ -237,8 +293,8 @@ async def _read_body(
     return parsed
 
 
-_DOMAIN_RE = re.compile(r"^[a-z][a-z0-9_]*$")
-_ENTITY_RE = re.compile(r"^[a-z][a-z0-9_]*\.[a-z0-9_]+$")
+_DOMAIN_RE = re.compile(r"^[a-z][a-z0-9_]*\Z")
+_ENTITY_RE = re.compile(r"^[a-z][a-z0-9_]*\.[a-z0-9_]+\Z")
 _MAX_NODE_ID_LEN = 255
 _INJECTION_CHARS = frozenset("<>\"'&;")
 
@@ -314,20 +370,15 @@ def _validate_permission_tree_body(body: dict, rid: str) -> web.Response | None:
                 )
             state = value.get("state", "GREY")
             if state not in VALID_NODE_STATES:
-                return _err(
-                    "invalid_request",
-                    f"Invalid state {state!r} for {node_type[:-1]} {key!r}. "
-                    f"Valid states: {sorted(VALID_NODE_STATES)}.",
-                    400,
-                    rid,
-                    key="permissionStateInvalid",
-                    params={
-                        "state": state,
-                        "node_type": node_type[:-1],
-                        "node": key,
-                        "states": ", ".join(sorted(VALID_NODE_STATES)),
-                    },
-                )
+                message = (f"Invalid state {state!r} for {node_type[:-1]} {key!r}. "
+                           f"Valid states: {sorted(VALID_NODE_STATES)}.")
+                params = {"state": state, "node": key, "states": ", ".join(sorted(VALID_NODE_STATES))}
+                # One message per node type, so a translated message never carries an English noun.
+                if node_type == "domains":
+                    return _err("invalid_request", message, 400, rid, key="permissionStateInvalidDomain", params=params)
+                if node_type == "devices":
+                    return _err("invalid_request", message, 400, rid, key="permissionStateInvalidDevice", params=params)
+                return _err("invalid_request", message, 400, rid, key="permissionStateInvalidEntity", params=params)
             hint = value.get("hint")
             if hint is not None:
                 if not isinstance(hint, str):
@@ -347,6 +398,8 @@ def _build_entity_tree(hass: HomeAssistant) -> dict:
     """Build a domain-keyed tree of enabled entities outside BLOCKED_DOMAINS and Phoenix's own.
 
     Pulls from the entity, device, and area registries (all in-memory dicts).
+    A child device's row names its main parent, and the parent has a row, possibly
+    without entities, in every domain where one of its parts appears.
     Synchronous; never performs I/O. The result is cached in
     PhoenixData.entity_tree_cache and invalidated on registry change events.
     """
@@ -360,6 +413,28 @@ def _build_entity_tree(hass: HomeAssistant) -> dict:
     label_reg = lr.async_get(hass)
 
     tree: dict[str, dict] = {}
+
+    def device_row(device_id: str) -> dict[str, Any]:
+        device = device_snapshot.get(device_id)
+        if device is None:
+            return {
+                "device_id": device_id,
+                "parent_device_id": None,
+                "name": device_id,
+                "area_id": None,
+                "area_name": None,
+                "entities": [],
+            }
+        area_id = device_snapshot.effective_area_id(device_id)
+        area = area_reg.async_get_area(area_id) if area_id else None
+        return {
+            "device_id": device_id,
+            "parent_device_id": device_snapshot.child_parent_id(device_id),
+            "name": device.name_by_user or device.name or device_id,
+            "area_id": area_id,
+            "area_name": area.name if area else None,
+            "entities": [],
+        }
 
     for entry in entity_reg.entities.values():
         if entry.disabled_by is not None:
@@ -420,33 +495,40 @@ def _build_entity_tree(hass: HomeAssistant) -> dict:
         if entry.device_id:
             device_id = entry.device_id
             if device_id not in tree[domain]["devices"]:
-                device = device_snapshot.get(device_id)
-                if device:
-                    d_area_id = device_snapshot.effective_area_id(device_id)
-                    d_area_name = None
-                    if d_area_id:
-                        da = area_reg.async_get_area(d_area_id)
-                        d_area_name = da.name if da else None
-                    tree[domain]["devices"][device_id] = {
-                        "device_id": device_id,
-                        "name": device.name_by_user or device.name or device_id,
-                        "area_id": d_area_id,
-                        "area_name": d_area_name,
-                        "entities": [],
-                    }
-                else:
-                    tree[domain]["devices"][device_id] = {
-                        "device_id": device_id,
-                        "name": device_id,
-                        "area_id": None,
-                        "area_name": None,
-                        "entities": [],
-                    }
+                tree[domain]["devices"][device_id] = device_row(device_id)
             tree[domain]["devices"][device_id]["entities"].append(entity_id)
         else:
             tree[domain]["deviceless_entities"].append(entity_id)
 
         tree[domain]["entity_details"][entity_id] = entity_info
+
+    # Entities Home Assistant runs without a registry entry (YAML without a
+    # unique_id, for example) resolve like any deviceless entity, so they appear
+    # and can be granted one by one, not only through their domain.
+    for entity_id in hass.states.async_entity_ids():
+        domain = entity_id.split(".")[0]
+        if domain in BLOCKED_DOMAINS or entity_reg.async_get(entity_id) is not None:
+            continue
+        state = hass.states.get(entity_id)
+        domain_tree = tree.setdefault(domain, {"devices": {}, "deviceless_entities": [], "entity_details": {}})
+        domain_tree["deviceless_entities"].append(entity_id)
+        domain_tree["entity_details"][entity_id] = {
+            "entity_id": entity_id,
+            "friendly_name": (state.attributes.get("friendly_name") or state.name) if state else None,
+            "device_id": None,
+            "area_id": None,
+            "area_name": None,
+            "labels": [],
+        }
+
+    # A child device's main parent governs it, so it gets a row in every domain
+    # where its parts appear, even when it has no entities there or anywhere.
+    # Without it, a parent's node could only show as an unmatched device.
+    for domain_tree in tree.values():
+        devices = domain_tree["devices"]
+        for parent_id in {row["parent_device_id"] for row in list(devices.values())}:
+            if parent_id is not None and parent_id not in devices:
+                devices[parent_id] = device_row(parent_id)
 
     # Zone, tag, and person creation require inherited domain WRITE scope because
     # their entity IDs do not exist until Home Assistant creates them. Keep all
@@ -564,13 +646,14 @@ def _build_resolution_path(entity_id: str, access_key: Any, hass: HomeAssistant)
     domain_node = access_key.permissions.domains.get(domain)
     path.append({"level": f"domain:{domain}", "state": domain_node.state if domain_node else "GREY"})
 
-    if entry and entry.device_id:
-        device = dr_reg.async_get(entry.device_id)
+    # Outermost first: a child device's main parent sits above the child.
+    for device_id in reversed(device_authority_chain(hass, entry.device_id if entry else None) or ()):
+        device = dr_reg.async_get(device_id)
         if device:
-            device_name = device.name_by_user or device.name or entry.device_id
+            device_name = device.name_by_user or device.name or device_id
         else:
-            device_name = entry.device_id
-        device_node = access_key.permissions.devices.get(entry.device_id)
+            device_name = device_id
+        device_node = access_key.permissions.devices.get(device_id)
         path.append({"level": f"device:{device_name}", "state": device_node.state if device_node else "GREY"})
 
     entity_node = access_key.permissions.entities.get(entity_id)
@@ -589,11 +672,21 @@ class PhoenixAdminInfoView(PhoenixView):
     @require_admin
     async def get(self, request: web.Request) -> web.Response:
         from .mcp_view import tool_catalog_counts  # noqa: PLC0415 - avoid import cycle
+        from .const import (  # noqa: PLC0415
+            HOME_COMPANION_CONTROL_DOMAINS, HOME_COMPANION_READ_DOMAINS, HOME_COMPANION_SENSOR_CLASSES,
+        )
         return _ok({
             "version": PHOENIX_VERSION,
             "min_ha_version": MIN_HA_VERSION,
             "github_url": GITHUB_URL,
             "tool_count": tool_catalog_counts(),
+            # What a Home Companion key can reach whatever the permission tree says,
+            # so the tree and Permissions Summary can show what the resolver allows.
+            "home_companion_reach": {
+                "control_domains": sorted(HOME_COMPANION_CONTROL_DOMAINS),
+                "read_domains": sorted(HOME_COMPANION_READ_DOMAINS),
+                "sensor_classes": sorted(HOME_COMPANION_SENSOR_CLASSES),
+            },
         }, request_id=request["phoenix_mcp_rid"])
 
 
@@ -616,7 +709,7 @@ class PhoenixAdminCatalogView(PhoenixView):
     name = "api:phoenix-mcp:admin:catalog"
     requires_auth = True
 
-    @require_admin
+    @require_admin_before_ready
     async def get(self, request: web.Request, language: str) -> web.Response:
         resources = await self.hass.async_add_executor_job(panel_catalog, language)
         if not resources:
@@ -703,10 +796,11 @@ class PhoenixAdminAccessKeysView(PhoenixView):
         name = body.get("name")
         if not name or not isinstance(name, str):
             return _err("invalid_request", "name is required.", 400, rid, key="nameRequired")
-        if not ACCESS_KEY_NAME_REGEX.match(name):
+        if not ACCESS_KEY_NAME_REGEX.fullmatch(name):
             return _err(
-                "invalid_request", "name does not match required pattern.", 400, rid,
-                key="accessKeyNamePattern",
+                "invalid_request",
+                "name must be 3-32 characters: letters, numbers, hyphens, or underscores.",
+                400, rid, key="accessKeyNameLengthPattern", params={"min": 3, "max": 32},
             )
         pass_through = body.get("pass_through", False)
         if not isinstance(pass_through, bool):
@@ -742,13 +836,16 @@ class PhoenixAdminAccessKeysView(PhoenixView):
             # one poisoned record aborts the whole integration). Normalize to
             # UTC; a naive input is treated as HA's configured local time.
             expires_at = as_utc(expires_at)
+            # A key that is already expired would be archived on its first use.
+            if expires_at <= utcnow():
+                return _err("invalid_request", "expires_at must be in the future.", 400, rid, key="expiresInPast")
 
         # Strict: int() would silently accept True (as 1), 1.75 (as 1), and
         # "12" (as 12), which contradicts the error message and the documented
         # contract. Same test as confirm_inline_wait_seconds; bool is excluded
         # explicitly because it is a subclass of int.
-        rate_limit_requests = body.get("rate_limit_requests", 60)
-        rate_limit_burst = body.get("rate_limit_burst", 10)
+        rate_limit_requests = body.get("rate_limit_requests", DEFAULT_RATE_LIMIT_REQUESTS)
+        rate_limit_burst = body.get("rate_limit_burst", DEFAULT_RATE_LIMIT_BURST)
         if not all(
             isinstance(v, int) and not isinstance(v, bool)
             for v in (rate_limit_requests, rate_limit_burst)
@@ -833,7 +930,7 @@ def _validated_access_key_patch(
         fields = ", ".join(unknown)
         return {}, _err(
             "invalid_request",
-            f"Unknown field(s): {fields}.",
+            f"The request contains fields Phoenix does not recognize: {fields}.",
             400,
             rid,
             key="unknownFields",
@@ -844,7 +941,7 @@ def _validated_access_key_patch(
         new_name = body["name"]
         if not new_name or not isinstance(new_name, str):
             return {}, _err("invalid_request", "name is required.", 400, rid, key="nameRequired")
-        if not ACCESS_KEY_NAME_REGEX.match(new_name):
+        if not ACCESS_KEY_NAME_REGEX.fullmatch(new_name):
             return {}, _err(
                 "invalid_request",
                 "name must be 3-32 characters: letters, numbers, hyphens, or underscores.",
@@ -916,6 +1013,18 @@ def _validated_access_key_patch(
 
     if "persona" in patchable and patchable["persona"] not in PERSONA_NAMES:
         return {}, _err("invalid_request", "Unknown persona.", 400, rid, key="unknownPersona")
+
+    # A Home Companion key never uses pass-through or announces every tool: the
+    # store turns both off. Asking for either is refused rather than answered
+    # with a success that changed nothing.
+    from .const import PERSONA_HOME_COMPANION  # noqa: PLC0415
+    if patchable.get("persona", access_key.persona) == PERSONA_HOME_COMPANION and (
+        patchable.get("pass_through") is True or patchable.get("announce_all_tools") is True
+    ):
+        return {}, _err(
+            "invalid_request", "A Home Companion key can't use pass-through or announce all tools.",
+            400, rid, key="companionSettingRefused",
+        )
 
     if "notes" in patchable:
         try:
@@ -1209,6 +1318,11 @@ class PhoenixAdminAccessKeyPresetsView(PhoenixView):
         async with data.store.async_lock:
             try:
                 updated = await data.store.async_add_preset(access_key_id, name)
+            except PresetLimitError as exc:
+                return _err("invalid_request", str(exc), 400, rid,
+                            key="presetLimitReached", params={"max": MAX_PRESETS_PER_ACCESS_KEY})
+            except PresetNameTakenError as exc:
+                return _err("invalid_request", str(exc), 400, rid, key="presetNameTaken")
             except ValueError as exc:
                 return _err(
                     "invalid_request", str(exc), 400, rid,
@@ -1439,6 +1553,10 @@ class PhoenixAdminPermissionIntegrationOptionsView(PhoenixView):
                 "title": selection["title"],
                 "device_count": len(selection["device_ids"]),
                 "deviceless_entity_count": len(selection["entity_ids"]),
+                # The members themselves, so the panel's Select By filter can
+                # narrow the permissions tree to this entry without a grant.
+                "device_ids": sorted(selection["device_ids"]),
+                "entity_ids": selection["entity_ids"],
                 "registry_only_deviceless_count": selection[
                     "registry_only_deviceless_count"
                 ],
@@ -1511,10 +1629,13 @@ class PhoenixAdminPermissionBulkSelectView(PhoenixView):
             ):
                 nodes = getattr(permissions, node_type)
                 for node_id in node_ids:
-                    if state == "GREY":
+                    # Selecting by area, label or integration changes states, never hints.
+                    existing = nodes.get(node_id)
+                    kept = existing.hint if existing else None
+                    if state == "GREY" and not kept:
                         nodes.pop(node_id, None)
                     else:
-                        nodes[node_id] = PermissionNode(state=state)
+                        nodes[node_id] = PermissionNode(state=state, hint=kept)
             updated = await data.store.async_set_permissions(access_key_id, permissions)
             if updated is None:
                 return _err("not_found", "Access key not found.", 404, rid, key="accessKeyNotFound")
@@ -1603,13 +1724,14 @@ async def _patch_permission_node(
             params={"states": ", ".join(sorted(VALID_NODE_STATES))},
         )
 
-    hint = body.get("hint")
-    if hint is not None and not isinstance(hint, str):
+    # A body without "hint" changes the state and keeps the node's hint; null clears it.
+    hint = body.get("hint") if "hint" in body else KEEP_HINT
+    if hint is not KEEP_HINT and hint is not None and not isinstance(hint, str):
         return _err(
             "invalid_request", "hint must be a string.", 400, rid,
             key="hintString",
         )
-    if hint is not None and len(hint) > 200:
+    if isinstance(hint, str) and len(hint) > 200:
         return _err(
             "invalid_request", "hint must be 200 characters or fewer.", 400, rid,
             key="hintTooLong", params={"max": 200},
@@ -1701,28 +1823,16 @@ class PhoenixAdminScopeView(PhoenixView):
         readable: list[str] = []
         writable: list[str] = []
 
-        if access_key.pass_through:
-            # Fast path: pass_through access keys have WRITE on everything except BLOCKED_DOMAINS
-            # and Phoenix MCP platform entities. Avoids an O(n) resolve() call per entity.
-            registry = er_mod.async_get(hass)
-            for state in all_states:
-                eid = state.entity_id
-                if eid.split(".")[0] in BLOCKED_DOMAINS:
-                    continue
-                entry = registry.async_get(eid)
-                if entry is not None and entry.platform == DOMAIN:
-                    continue
+        # resolve() for pass-through keys too, so a key limited to Assist-exposed
+        # entities lists only what its agent can actually reach.
+        for state in all_states:
+            eid = state.entity_id
+            perm = resolve(eid, access_key, hass)
+            if perm == Permission.WRITE:
                 readable.append(eid)
                 writable.append(eid)
-        else:
-            for state in all_states:
-                eid = state.entity_id
-                perm = resolve(eid, access_key, hass)
-                if perm == Permission.WRITE:
-                    readable.append(eid)
-                    writable.append(eid)
-                elif perm == Permission.READ:
-                    readable.append(eid)
+            elif perm == Permission.READ:
+                readable.append(eid)
 
         # capability_flags reports raw stored values, without the pass_through OR
         # adjustments applied by _build_server_info / _build_context_json: this is a
@@ -2027,6 +2137,7 @@ class PhoenixAdminAuditView(PhoenixView):
         ip_filter = request.query.get("ip")
         method_filter = request.query.get("method")
         resource_filter = request.query.get("resource")
+        request_id_filter = request.query.get("request_id")
         since_raw = request.query.get("since")
         since_filter = parse_datetime(since_raw) if since_raw else None
         if since_raw and since_filter is None:
@@ -2045,6 +2156,7 @@ class PhoenixAdminAuditView(PhoenixView):
             "client_ip": ip_filter,
             "method": method_filter,
             "resource": resource_filter,
+            "request_id": request_id_filter,
             "since": since_filter,
         }
         total = data.audit.count(**filter_kwargs)
@@ -2076,7 +2188,7 @@ def _settings_response(settings, hass=None) -> dict:
     from .ai_task import ai_task_supported  # noqa: PLC0415
     from .assist_api import assist_api_supported  # noqa: PLC0415
     from .tools.esphome import esphome_availability  # noqa: PLC0415
-    from .voice_agent import assist_pipeline_supported  # noqa: PLC0415
+    from .voice_agent import assist_pipeline_preferred, assist_pipeline_supported  # noqa: PLC0415
 
     from .agentcli import loaded_decision_account
     from .tool_routing import qualified_languages
@@ -2086,6 +2198,9 @@ def _settings_response(settings, hass=None) -> dict:
     body["tool_routing_qualified_languages"] = qualified_languages(cfg)
     body["assist_api_supported"] = assist_api_supported()
     body["voice_agent_pipeline_supported"] = assist_pipeline_supported()
+    body["voice_agent_pipeline_preferred"] = (
+        assist_pipeline_preferred(hass, settings.voice_agent_pipeline_id) if hass else False
+    )
     body["ai_task_supported"] = ai_task_supported()
     esphome = esphome_availability(hass)
     body["esphome_integration"] = esphome.integration
@@ -2202,7 +2317,7 @@ async def _validated_settings_patch(
         fields = ", ".join(unknown)
         return {}, _err(
             "invalid_request",
-            f"Unknown field(s): {fields}.",
+            f"The request contains fields Phoenix does not recognize: {fields}.",
             400,
             rid,
             key="unknownFields",
@@ -2252,25 +2367,28 @@ async def _validated_settings_patch(
             )
     if "command_routing_languages" in patchable and not valid_command_routing_languages(patchable["command_routing_languages"]):
         return {}, _err("invalid_request", "Invalid command routing languages.", 400, rid,
-                        key="routingPreviewInvalid")
+                        key="routingLanguagesInvalid")
     if "command_routing_timeout_ms" in patchable:
         value = patchable["command_routing_timeout_ms"]
         if (type(value) is not int or not
                 COMMAND_ROUTING_TIMEOUT_MIN_MS <= value <= COMMAND_ROUTING_TIMEOUT_MAX_MS):
             return {}, _err(
                 "invalid_request", "Invalid recognition time budget.", 400, rid,
-                key="routingPreviewInvalid",
+                key="conversationLimitInvalid", params={"field": "command_routing_timeout_ms",
+                "min": COMMAND_ROUTING_TIMEOUT_MIN_MS, "max": COMMAND_ROUTING_TIMEOUT_MAX_MS},
             )
 
     if "decision_timeout_ms" in patchable:
         value = patchable["decision_timeout_ms"]
         if type(value) is not int or not DECISION_TIMEOUT_MIN_MS <= value <= DECISION_TIMEOUT_MAX_MS:
-            return {}, _err("invalid_request", "Invalid decision time budget.", 400, rid, key="routingPreviewInvalid")
+            return {}, _err("invalid_request", "Invalid decision time budget.", 400, rid, key="conversationLimitInvalid",
+                            params={"field": "decision_timeout_ms", "min": DECISION_TIMEOUT_MIN_MS, "max": DECISION_TIMEOUT_MAX_MS})
 
     if 'decision_request_budget' in patchable:
         value = patchable['decision_request_budget']
         if type(value) is not int or not 0 <= value <= DECISION_REQUEST_BUDGET_MAX:
-            return {}, _err('invalid_request', 'Invalid decision request limit.', 400, rid, key='routingPreviewInvalid')
+            return {}, _err('invalid_request', 'Invalid decision request limit.', 400, rid, key='conversationLimitInvalid',
+                            params={'field': 'decision_request_budget', 'min': 0, 'max': DECISION_REQUEST_BUDGET_MAX})
 
     for key, (lo, hi) in CONVERSATION_LOG_LIMITS.items():
         if key in patchable and (type(patchable[key]) is not int or not lo <= patchable[key] <= hi):
@@ -2373,7 +2491,7 @@ async def _validated_settings_patch(
         provider_store = await _get_secret_store(hass)
         if not account or provider_store.resolve(account, purpose="decision") is None:
             return {}, _err("invalid_request", "Choose a decision provider account.", 400, rid,
-                            key="configuredProviderRequired", params={"field": "decision_provider_id"})
+                            key="decisionProviderRequired")
     if any(patchable.get(key) == "advise" for key in TOOL_ROUTING_SETTINGS.values()):
         from .tool_routing import qualified_languages
         from .agentcli import _get_secret_store
@@ -2400,12 +2518,15 @@ async def _apply_settings_side_effects(
     patchable: dict,
     updated: Any,
     old_kill_switch: bool,
-) -> None:
+) -> bool:
     """Run the live re-syncs a settings change implies, in order.
 
     Each block is keyed on the settings that actually moved, so an unrelated
     patch is inert. Order matters where noted; everything else is independent.
+    Returns whether a voice assistant this change tore down is still in Home
+    Assistant (its only one), so the panel does not report it removed.
     """
+    voice_assistant_kept = False
     from .conversation_log import recorder
     recorder(data)
     await data.conversations.async_save()
@@ -2450,7 +2571,7 @@ async def _apply_settings_side_effects(
         )
         if not fully and now.voice_agent_pipeline_id is not None:
             from .voice_agent import async_remove_assist_pipeline  # noqa: PLC0415
-            await async_remove_assist_pipeline(hass, data)
+            voice_assistant_kept = await async_remove_assist_pipeline(hass, data)
 
     # Add/remove the Phoenix MCP AI Task entity to match its config (it exists only while
     # fully configured), so it appears in HA's AI Task picker only when usable.
@@ -2470,6 +2591,8 @@ async def _apply_settings_side_effects(
         # next full HA page load (already-open tabs are unaffected).
         from .panel import async_sync_agentchat_inject  # noqa: PLC0415
         await async_sync_agentchat_inject(hass)
+
+    return voice_assistant_kept
 
 
 class PhoenixAdminRoutingStatisticsView(PhoenixView):
@@ -2610,6 +2733,7 @@ class PhoenixAdminSettingsView(PhoenixView):
 
             async with data.store.async_lock:
                 data.decision_shadow.cancel()
+                settings_before = data.store.get_settings()
                 old_kill_switch = data.store.get_settings().kill_switch
                 old_presets_enabled = data.store.get_settings().access_key_presets_enabled
                 updated = await data.store.async_patch_settings(**patchable)
@@ -2620,11 +2744,15 @@ class PhoenixAdminSettingsView(PhoenixView):
                     if seeded:
                         _LOGGER.info("Access key presets enabled; seeded a default preset on %d access key(s)", seeded)
 
-            await _apply_settings_side_effects(
+            voice_assistant_kept = await _apply_settings_side_effects(
                 self.hass, data, patchable, updated, old_kill_switch,
             )
 
         user = request[KEY_HASS_USER]
+        # The change that turns logging off is recorded under the settings it
+        # replaced, so the log says when it went quiet, and the row names what
+        # changed. Field names only: values can be secret.
+        logging_on = not updated.disable_all_logging and updated.log_allowed
         data.audit.record(
             request_id=rid,
             access_key_id="admin",
@@ -2633,9 +2761,13 @@ class PhoenixAdminSettingsView(PhoenixView):
             resource=request.path,
             outcome="allowed",
             client_ip=request.remote or "",
-            settings=updated,
+            settings=updated if logging_on else settings_before,
+            payload={"changed": sorted(patchable)},
         )
-        return _ok(_settings_response(updated, self.hass), request_id=rid)
+        body = _settings_response(updated, self.hass)
+        if voice_assistant_kept:
+            body["voice_agent_pipeline_kept"] = True
+        return _ok(body, request_id=rid)
 
 
 class PhoenixAdminVoiceAgentPipelineView(PhoenixView):
@@ -2680,10 +2812,10 @@ class PhoenixAdminVoiceAgentPipelineView(PhoenixView):
                 )
         except VoicePipelineError as err:
             _LOGGER.warning("Assist pipeline setup failed", exc_info=True)
-            return _err(
-                "invalid_request", str(err), 400, rid,
-                key="assistPipelineFailed",
-            )
+            # Each cause carries its own message key; an unexpected one keeps the general message.
+            reason = err.args[0] if err.args and isinstance(err.args[0], LocalizedReason) else LocalizedReason(
+                str(err) or "Could not create the Phoenix MCP Assist pipeline.", "assistPipelineFailed")
+            return _err("invalid_request", str(reason), 400, rid, key=reason.key)
         _audit_admin(self.hass, request, rid, "voice_agent_pipeline")
         return _ok(result, request_id=rid)
 
@@ -2693,9 +2825,48 @@ class PhoenixAdminVoiceAgentPipelineView(PhoenixView):
         data: PhoenixData = self.hass.data[DOMAIN]
         from .voice_agent import async_remove_assist_pipeline  # noqa: PLC0415
         async with data.settings_update_lock:
-            await async_remove_assist_pipeline(self.hass, data)
+            kept = await async_remove_assist_pipeline(self.hass, data)
         _audit_admin(self.hass, request, rid, "voice_agent_pipeline")
-        return _ok({"ok": True}, request_id=rid)
+        # kept: Home Assistant still has the pipeline (its only one, or deletion failed).
+        return _ok({"ok": True, "kept": kept}, request_id=rid)
+
+
+class PhoenixAdminVoiceAgentPreferredView(PhoenixView):
+    """POST/DELETE /api/phoenix-mcp/admin/voice_agent/pipeline/preferred.
+
+    POST makes the Phoenix-created Assist pipeline Home Assistant's preferred
+    assistant; DELETE stops it being preferred while keeping it. The settings
+    response reports the current state as voice_agent_pipeline_preferred.
+    Admin session auth only.
+    """
+
+    url = "/api/phoenix-mcp/admin/voice_agent/pipeline/preferred"
+    name = "api:phoenix-mcp:admin:voice_agent:pipeline:preferred"
+    requires_auth = True
+
+    async def _change(self, request: web.Request, preferred: bool) -> web.Response:
+        rid = request["phoenix_mcp_rid"]
+        data: PhoenixData = self.hass.data[DOMAIN]
+        from .voice_agent import async_set_assist_pipeline_preferred, VoicePipelineError  # noqa: PLC0415
+        try:
+            async with data.settings_update_lock:
+                result = await async_set_assist_pipeline_preferred(self.hass, data, preferred=preferred)
+        except VoicePipelineError as err:
+            _LOGGER.warning("Assist pipeline preference change failed", exc_info=True)
+            # Each cause carries its own message key; an unexpected one keeps the general message.
+            reason = err.args[0] if err.args and isinstance(err.args[0], LocalizedReason) else LocalizedReason(
+                str(err) or "Could not change the preferred assistant.", "assistantPreferredFailed")
+            return _err("invalid_request", str(reason), 400, rid, key=reason.key)
+        _audit_admin(self.hass, request, rid, "voice_agent_pipeline")
+        return _ok(result, request_id=rid)
+
+    @require_admin
+    async def post(self, request: web.Request) -> web.Response:
+        return await self._change(request, True)
+
+    @require_admin
+    async def delete(self, request: web.Request) -> web.Response:
+        return await self._change(request, False)
 
 
 class PhoenixAdminAiTaskPreferredView(PhoenixView):
@@ -2741,10 +2912,10 @@ class PhoenixAdminAiTaskPreferredView(PhoenixView):
             return _ok(result, request_id=rid)
         except AiTaskSetupError as err:
             _LOGGER.warning("AI Task preferred setup failed", exc_info=True)
-            return _err(
-                "invalid_request", str(err),
-                400, rid, key="aiTaskPreferredFailed",
-            )
+            # Each cause carries its own message key; an unexpected one keeps the general message.
+            reason = err.args[0] if err.args and isinstance(err.args[0], LocalizedReason) else LocalizedReason(
+                str(err) or "Could not configure the preferred AI Task entity.", "aiTaskPreferredFailed")
+            return _err("invalid_request", str(reason), 400, rid, key=reason.key)
 
     @require_admin
     async def delete(self, request: web.Request) -> web.Response:
@@ -2872,6 +3043,7 @@ class PhoenixAdminWipeView(PhoenixView):
                             data.store, REASON_WIPED,
                         )
                         active_slugs = [access_key_name_slug(t.name) for t in data.store.list_access_keys()]
+                        settings_before = data.store.get_settings()
                         await data.store.async_wipe()
                 finally:
                     data.core_wipe_in_progress = False
@@ -2899,12 +3071,19 @@ class PhoenixAdminWipeView(PhoenixView):
             # access keys, there are no valid sensors left regardless.
             data.access_key_id_sensors.clear()
 
-            # Settings were reset, so the voice agent and AI Task are not
-            # configured; re-sync both (they may have been active before the wipe).
-            if data.async_sync_voice_agent is not None:
-                data.async_sync_voice_agent()
-            if data.async_sync_ai_task is not None:
-                data.async_sync_ai_task()
+            # Every setting is back at its default. Apply each one that moved the way a
+            # settings change would, so what runs matches what Settings shows: a MESA
+            # mode left Off while Settings read Advisory skipped privacy and read-only
+            # rules. This also re-syncs the Voice Agent and AI Task (no longer
+            # configured), the Assist API after a kill switch, the audit log size and
+            # save timer, and the in-context modules.
+            settings_after = data.store.get_settings()
+            reset = {
+                key: value for key, value in settings_after.to_dict().items()
+                if getattr(settings_before, key, value) != value
+            }
+            if reset:
+                await _apply_settings_side_effects(hass, data, reset, settings_after, settings_before.kill_switch)
 
         if wipe_providers:
             from .agentcli import async_wipe_agentcli_secrets
@@ -3242,6 +3421,7 @@ async def _resolve_approval(
 ) -> web.Response:
     """Reject or cancel a pending approval. Idempotent on already-resolved records."""
     from .approvals import (  # noqa: PLC0415
+        STATUS_EXPIRED,
         dismiss_approval_notification,
         fire_approval_resolved_event,
         get_approval,
@@ -3270,18 +3450,23 @@ async def _resolve_approval(
                 409, rid,
                 key="approvalExecutionInterrupted",
             )
+        # An overdue record has already timed out, as Approve and the sweep
+        # treat it, so it closes as expired rather than as the operator's choice.
+        if record.expires_at <= utcnow():
+            terminal_status = STATUS_EXPIRED
+            auto_reason = None
         from .config_reconciliation import is_recovery_approval, acknowledge_recovery
         if terminal_status == "rejected" and is_recovery_approval(record, data):
-            from .config_recovery import ConfigurationRecoveryError
+            from .config_recovery import ConfigurationRecoveryError, recovery_error_key
             try:
                 await acknowledge_recovery(record, user.id, hass, data, rejected=True)
             except ConfigurationRecoveryError as exc:
-                return _err("conflict", str(exc), 409, rid, key="recoveryBlocked")
+                return _err("conflict", str(exc), 409, rid, key=recovery_error_key(str(exc)))
         updated = await async_update_approval_status(
             data.store,
             approval_id,
             status=terminal_status,
-            approved_by_user_id=user.id,
+            approved_by_user_id=None if terminal_status == STATUS_EXPIRED else user.id,
             rejected_reason=auto_reason,
         )
     if updated is None:
@@ -3415,8 +3600,8 @@ async def _approve_approval(hass: HomeAssistant, request: web.Request, approval_
             )
             closed_method = "approval/expired"
             closed_response = _err(
-                "conflict", "Approval was already resolved.", 409, rid,
-                key="approvalAlreadyResolved",
+                "conflict", "This request expired before it was approved, so nothing was run.", 409, rid,
+                key="approvalExpired",
             )
         else:
             access_key = _restore_access_key(user.id) if recovery_request else data.store.get_access_key_by_id(record.access_key_id)
@@ -3541,8 +3726,9 @@ async def _approve_approval(hass: HomeAssistant, request: web.Request, approval_
                                 except AuthorityChangedError:
                                     # This check precedes the executor. A removed or
                                     # inactive requester cannot have caused effects.
-                                    tool_result = {"isError": True, "content": [{"type": "text", "text":
-                                        "Requester authority changed. No action was dispatched."}]}
+                                    from .tool_common import _tool_refused_before_write
+                                    tool_result = _tool_refused_before_write(
+                                        "Requester authority changed. No action was dispatched.")
                                     outcome, _resource = "denied", record.tool_name
                                 else:
                                     tool_result, outcome, _resource = await async_execute_approved_tool(
@@ -3639,7 +3825,12 @@ async def _approve_approval(hass: HomeAssistant, request: web.Request, approval_
             )
 
         is_error = bool(tool_result.get("isError"))
-        saved_result = {"tool_result": tool_result, "outcome": outcome}
+        saved_result: dict[str, Any] = {"tool_result": tool_result, "outcome": outcome}
+        from .tool_common import RefusedBeforeWrite
+        if isinstance(tool_result, RefusedBeforeWrite):
+            # Persisted because the type does not survive storage. Server-owned:
+            # executor text cannot set a key at this level.
+            saved_result["refused_before_write"] = True
         final_status = STATUS_FAILED if is_error else STATUS_APPROVED
         auto_reason = "execution_failed" if is_error else None
         audit_outcome: Outcome = "allowed" if final_status == STATUS_APPROVED else "denied"
@@ -3837,6 +4028,8 @@ class PhoenixAdminMesaProfileView(PhoenixView):
         runtime, err = _mesa_runtime(self.hass, rid)
         if err is not None:
             return err
+        if not _ENTITY_RE.match(entity_id):
+            return _err("invalid_request", "Invalid entity ID format.", 400, rid, key="badEntityId")
         stored = runtime.store.get(entity_id)
         effective = runtime.store.get_effective(entity_id)
         explanation = runtime.resolver.explain(entity_id)
@@ -3902,6 +4095,8 @@ class PhoenixAdminMesaProfileView(PhoenixView):
         runtime, err = _mesa_runtime(self.hass, rid)
         if err is not None:
             return err
+        if not _ENTITY_RE.match(entity_id):
+            return _err("invalid_request", "Invalid entity ID format.", 400, rid, key="badEntityId")
         async with runtime.lock:
             runtime.store.delete(entity_id)
             await runtime.async_save()
@@ -4358,11 +4553,12 @@ class PhoenixAdminMesaDefaultsView(PhoenixView):
         body = await _read_body(request, rid)
         if isinstance(body, web.Response):
             return body
+        from .mesa_core.exceptions import MesaValidationError  # noqa: PLC0415
         try:
             async with runtime.lock:
                 runtime.store.set_deployment_defaults(body)
                 await runtime.async_save()
-        except (ValueError, KeyError) as exc:
+        except (MesaValidationError, ValueError, KeyError, TypeError) as exc:
             return _err(
                 "invalid_request", f"Invalid deployment defaults: {exc}", 400, rid,
                 key="deploymentDefaultsInvalid", params={"detail": str(exc)},
@@ -4390,10 +4586,9 @@ class PhoenixAdminMesaIssuesView(PhoenixView):
             return err
         refresh = request.query.get("refresh")
         if refresh == "suggestions":
-            # Scoped: the Suggestions card's own Rescan button. Trigger issues
-            # and orphans are independent, separately-surfaced signals; a
-            # suggestions-only rescan must not silently recompute (and
-            # potentially change) that unrelated banner.
+            # Scoped: the panel's quiet background read. Rescan and the reload
+            # after a profile save, delete or import ask for the full recompute
+            # below, so orphans and trigger findings follow them.
             from .mesa_suggestions import refresh_suggestions  # noqa: PLC0415
 
             refresh_suggestions(self.hass, runtime)
@@ -4457,16 +4652,22 @@ class PhoenixAdminAttentionView(PhoenixView):
         rid = request["phoenix_mcp_rid"]
         data: PhoenixData = self.hass.data[DOMAIN]
         items = []
+        agent_items = []
         for row in data.agent_recovery.admin_records():
             access_key = data.store.get_access_key_by_id(row["access_key_id"])
-            items.append({"id": row["request_id"], "kind": "agent", "tool": row["tool"],
-                          "access_key_name": access_key.name if access_key else row["access_key_id"],
-                          "started_at": row["started_at"], "dispatch_result": row["dispatch_result"]})
+            agent_items.append({"id": row["request_id"], "kind": "agent", "tool": row["tool"],
+                                "access_key_name": access_key.name if access_key else row["access_key_id"],
+                                "started_at": row["started_at"], "dispatch_result": row["dispatch_result"]})
+        # A calendar write the calendar journal records says more than the same
+        # call's agent row (what it changed, with a snapshot), so the agent row
+        # gives way to it, whatever its review state.
+        calendar_requests: set[str] = set()
         journal = data.calendar_writes
         if journal is not None:
             try:
                 async with journal.lock:
                     rows = await journal.load()
+                    calendar_requests = {row["request_id"] for row in rows if isinstance(row.get("request_id"), str)}
                     for row in rows:
                         if row["status"] != "outcome_unknown" or row["receipt_id"] in journal.active:
                             continue
@@ -4478,6 +4679,7 @@ class PhoenixAdminAttentionView(PhoenixView):
                                       "dispatch_result": "unknown"})
             except Exception:
                 items.append({"id": "calendar_storage", "kind": "calendar_storage"})
+        items[:0] = [item for item in agent_items if item["id"] not in calendar_requests]
         if data.mesa_setup_failed:
             items.append({"id": "mesa", "kind": "mesa"})
         return _ok({"items": items}, request_id=rid)
@@ -4535,7 +4737,7 @@ class PhoenixAdminConfigurationRecoveryView(PhoenixView):
         try:
             records = data.config_recovery.records()
         except ConfigurationRecoveryError:
-            return _err("service_unavailable", "Configuration recovery storage could not be loaded.", 503, request["phoenix_mcp_rid"], key="recoveryBlocked")
+            return _err("service_unavailable", "Configuration recovery storage could not be loaded.", 503, request["phoenix_mcp_rid"], key="recoveryStorageUnavailable")
         return _ok({"records": records}, request_id=request["phoenix_mcp_rid"])
 
 
@@ -4549,7 +4751,7 @@ class PhoenixAdminConfigurationRecoveryRecordView(PhoenixView):
     @require_admin
     async def post(self, request: web.Request, recovery_id: str) -> web.Response:
         from types import SimpleNamespace
-        from .config_recovery import ConfigurationRecoveryError
+        from .config_recovery import ConfigurationRecoveryError, recovery_error_key
         from .mcp_view import async_restore_version
         from .template_recovery import template_snapshot
 
@@ -4561,7 +4763,7 @@ class PhoenixAdminConfigurationRecoveryRecordView(PhoenixView):
             return body
         record = data.config_recovery.get(recovery_id)
         if record is None:
-            return _err("not_found", "Recovery record not found.", 404, rid, key="recoveryBlocked")
+            return _err("not_found", "Recovery record not found.", 404, rid, key="recoveryNotFound")
         action = body.get("action")
         try:
             if action == "inspect":
@@ -4592,13 +4794,13 @@ class PhoenixAdminConfigurationRecoveryRecordView(PhoenixView):
                 await data.config_recovery.reviewed(recovery_id, user.id, delete=action == "delete")
                 result = {"status": action}
             elif action == "restore":
-                if record["phase"] not in ("verified", "not_applied", "reviewed") or any(
-                    item["id"] == recovery_id and item["active"] for item in data.config_recovery.records()
-                ):
+                if any(item["id"] == recovery_id and item["active"] for item in data.config_recovery.records()):
+                    raise ConfigurationRecoveryError("The configuration operation is still active.")
+                if record["phase"] not in ("verified", "not_applied", "reviewed"):
                     raise ConfigurationRecoveryError("Review the inactive recovery record before restoring it.")
                 side = body.get("side")
                 if side not in ("before", "source") or not isinstance(record.get(side), dict):
-                    return _err("invalid_request", "Select an available before or source snapshot.", 400, rid, key="recoveryBlocked")
+                    return _err("invalid_request", "Select an available before or source snapshot.", 400, rid, key="recoverySideRequired")
                 snapshot = record[side]
                 if snapshot.get("snapshot_type") == "storage_helper":
                     resource_type = "helper"
@@ -4617,16 +4819,16 @@ class PhoenixAdminConfigurationRecoveryRecordView(PhoenixView):
                     )
                     return _ok({"result": restored, "outcome": outcome}, request_id=rid)
                 else:
-                    return _err("invalid_request", "This recovery artifact requires manual restoration.", 400, rid, key="recoveryBlocked")
+                    return _err("invalid_request", "This recovery artifact requires manual restoration.", 400, rid, key="recoveryManualOnly")
                 restored, outcome, _ = await async_restore_version(SimpleNamespace(
                     before=snapshot, after=None, resource_type=resource_type,
                     resource_id=resource_id,
                 ), user.id, self.hass, data, "before")
                 result = {"result": restored, "outcome": outcome}
             else:
-                return _err("invalid_request", "Unknown recovery action.", 400, rid, key="recoveryBlocked")
+                return _err("invalid_request", "Unknown recovery action.", 400, rid, key="recoveryUnknownAction")
         except ConfigurationRecoveryError as exc:
-            return _err("conflict", str(exc), 409, rid, key="recoveryBlocked")
+            return _err("conflict", str(exc), 409, rid, key=recovery_error_key(str(exc)))
         data.audit.record(request_id=rid, access_key_id="admin", access_key_name=f"admin:{user.id}",
                           method=f"config_recovery/{action}", resource=recovery_id,
                           outcome=result.get("outcome", "allowed"),
@@ -4677,8 +4879,8 @@ class PhoenixAdminVersionsView(PhoenixView):
 
 _ESPHOME_VERSION_WITHHELD = (
     "# Phoenix MCP withheld this snapshot: its credentials could not be located, "
-    "because the content does not parse as YAML. The stored version is intact and "
-    "can still be restored."
+    "because the content does not parse as YAML. The stored version is unchanged; "
+    "read the file in the ESPHome dashboard."
 )
 
 
@@ -4738,9 +4940,16 @@ class PhoenixAdminVersionView(PhoenixView):
                 "not_found", "Version not found.", 404, rid,
                 key="versionNotFound",
             )
+        from .mcp_view import restore_refusal  # noqa: PLC0415
+
         body = record.to_dict()
         if record.resource_type == "esphome_yaml":
             body = await _mask_esphome_version(self.hass, body)
+        # Sides Restore would refuse whatever the item holds now, with the reason,
+        # so Changes says why instead of offering a choice that fails.
+        body["restore_refusals"] = {
+            side: restore_refusal(record, side, self.hass) for side in ("before", "after")
+        }
         return _ok(body, request_id=rid)
 
 
@@ -4780,6 +4989,22 @@ class PhoenixAdminVersionRestoreView(PhoenixView):
                 "invalid_request", "side must be 'before' or 'after'.", 400, rid,
                 key="restoreSideInvalid",
             )
+        expected_latest = body.get("expected_latest_id")
+        if expected_latest is not None and not isinstance(expected_latest, str):
+            return _err(
+                "invalid_request", "expected_latest_id must be a string or null.", 400, rid,
+                key="stringOrNull", params={"field": "expected_latest_id"},
+            )
+        # The caller's view of the item: when another change landed after it chose
+        # Restore, it would be restoring over something it has not seen.
+        if expected_latest is not None:
+            history = data.versions.list_for(record.resource_type, record.resource_id)
+            if (history[0].id if history else None) != expected_latest:
+                return _err(
+                    "stale_version",
+                    "This item has changed since you chose to restore it. Review the comparison and try again.",
+                    409, rid, key="restoreStale",
+                )
         try:
             tool_result, _outcome, _resource = await async_restore_version(record, user.id, self.hass, data, side)
         except Exception:  # noqa: BLE001
@@ -4801,39 +5026,46 @@ class PhoenixAdminVersionRestoreView(PhoenixView):
             client_ip="",
             settings=data.store.get_settings(),
         )
-        if is_error:
-            # Relay the executor's OWN reason: it names the exact cause (a version
-            # too large to restore, or one holding configuration file text),
-            # which a fixed string would hide. This is an
-            # admin-only surface authenticated by an HA session, so there is no
-            # caller to keep in the dark, unlike the access-key-facing tools where
-            # uniform messages are what prevent an oracle.
-            detail = " ".join(
-                item.get("text", "")
-                for item in tool_result.get("content", [])
-                if isinstance(item, dict) and item.get("type") == "text"
-            ).strip()
-            if detail:
-                return _err(
-                    "invalid_request", detail, 400, rid, passthrough=True,
-                )
-            return _err(
-                "invalid_request",
-                "Restore could not be applied to the current configuration.",
-                400, rid, key="restoreNotApplicable",
-            )
         # A dispatched restore whose readback did not confirm the chosen version
-        # comes back as a successful tool result carrying status partial or
-        # unknown. It is not a restore, and the change may still have landed;
+        # reports status partial or unknown, as a success or (a recreated helper)
+        # as an error. It is not a restore, and the change may still have landed;
         # the recovery sweep raises an Approvals request if it still differs.
         # The executors' messages are agent text, so the panel gets its own.
-        if _unverified_restore(tool_result):
+        if _unverified_restore(tool_result) or (is_error and _tool_text(tool_result) == _RESTORE_HELPER_NOT_VERIFIED):
             return _err(
                 "restore_unverified",
                 "The restore was submitted, but the configuration read back afterwards does not match the "
                 "chosen version, so it may be only partly applied. Phoenix rechecks it and asks for review "
                 "in Approvals if it still differs. Check the current configuration before restoring again.",
                 409, rid, key="restoreUnverified",
+            )
+        if is_error:
+            # Relay the executor's OWN reason: it names the exact cause (a version
+            # too large to restore, or one holding configuration file text),
+            # which a fixed string would hide. This is an
+            # admin-only surface authenticated by an HA session, so there is no
+            # caller to keep in the dark, unlike the access-key-facing tools where
+            # uniform messages are what prevent an oracle. The restore refusals
+            # Phoenix knows are translated; any other executor text is agent
+            # English, so the panel labels it as the tool's own report.
+            detail = _tool_text(tool_result)
+            if detail == _RESTORE_NO_CONFIG_SIDE:
+                return _err("invalid_request", detail, 400, rid, key="restoreNoConfigSide")
+            if detail == _RESTORE_YAML_TAGS:
+                return _err("invalid_request", detail, 400, rid, key="restoreYamlTags")
+            refusal = _recovery_refusal(detail)
+            if refusal is not None:
+                from .config_recovery import recovery_error_key  # noqa: PLC0415
+                return _err("invalid_request", refusal, 400, rid, key=recovery_error_key(refusal))
+            if detail:
+                return _err(
+                    "invalid_request", detail, 400, rid,
+                    key="restoreToolReported", params={"detail": detail},
+                )
+            return _err(
+                "invalid_request",
+                "Restore could not be applied to the current configuration.",
+                400, rid, key="restoreNotApplicable",
             )
         return _ok({
             "restored": True,
@@ -5188,6 +5420,7 @@ ALL_ADMIN_VIEWS: list[type[PhoenixView]] = [
     PhoenixAdminCommandPreviewView,
     PhoenixAdminRoutingStatisticsView,
     PhoenixAdminVoiceAgentPipelineView,
+    PhoenixAdminVoiceAgentPreferredView,
     PhoenixAdminAiTaskPreferredView,
     PhoenixAdminWipeView,
     PhoenixAdminApprovalsView,

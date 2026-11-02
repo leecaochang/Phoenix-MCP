@@ -143,3 +143,128 @@ async def test_representative_correction_in_two_calls(hass, domain, broken, fixe
     assert first.get("isError") or json.loads(first["content"][0]["text"])["valid"] is False
     assert json.loads(results[1]["content"][0]["text"])["valid"] is True
     assert len(results) == 2
+
+
+async def _core_rejection(hass, domain, config):
+    """Run Core's own validator on a config it must reject and project the failure."""
+    from homeassistant.components.automation.config import (
+        async_validate_config_item as automation_validator,
+    )
+    from homeassistant.components.script.config import (
+        async_validate_config_item as script_validator,
+    )
+    from homeassistant.exceptions import HomeAssistantError
+
+    from custom_components.phoenix_mcp.authoring_validation import (
+        async_validation_message,
+    )
+
+    validator = automation_validator if domain == "automation" else script_validator
+    try:
+        await validator(hass, "phoenix_mcp_validate", config)
+    except vol.Invalid as err:
+        return await async_validation_message(hass, domain, config, err), err
+    except HomeAssistantError as err:
+        return await async_validation_message(hass, domain, config), err
+    pytest.fail("Core accepted a config the test expects it to reject")
+
+
+@pytest.fixture
+async def core_keys(hass):
+    """Load integrations whose real trigger and condition platforms register keys."""
+    from homeassistant.setup import async_setup_component
+
+    for integration in ("homeassistant", "schedule", "battery", "light"):
+        assert await async_setup_component(hass, integration, {})
+    return hass
+
+
+@pytest.mark.parametrize(("domain", "config", "site", "expected"), [
+    ("automation", {"triggers": [{"trigger": "battery.low"}], "actions": []},
+     'config.triggers[0].trigger "battery.low"', ["battery.became_low", "battery.no_longer_low"]),
+    ("automation", {"triggers": [{"trigger": "schedule.turned_on"}], "actions": []},
+     'config.triggers[0].trigger "schedule.turned_on"', ["schedule.block_started", "schedule.block_ended"]),
+    # Core renames the legacy root key in the caller's dict before it fails.
+    ("automation", {"trigger": {"platform": "schedule.turned_on"}, "action": []},
+     'config.triggers[0].platform "schedule.turned_on"', ["schedule.block_started", "schedule.block_ended"]),
+    ("automation", {"triggers": [], "conditions": [{"condition": "or", "conditions": [{"condition": "battery.is_lo"}]}], "actions": []},
+     'config.conditions[0].conditions[0].condition "battery.is_lo"', ["battery.is_low"]),
+    ("script", {"sequence": [{"if": [{"condition": "battery.low"}], "then": []}]},
+     'config.sequence[0].if[0].condition "battery.low"', ["battery.is_low"]),
+    ("script", {"sequence": [{"wait_for_trigger": [{"trigger": "schedule.turned_on"}]}]},
+     'config.sequence[0].wait_for_trigger[0].trigger "schedule.turned_on"', ["schedule.block_started"]),
+])
+async def test_unknown_key_ranks_same_domain_matches_first(core_keys, domain, config, site, expected):
+    text, _ = await _core_rejection(core_keys, domain, config)
+    kind = "condition" if site.endswith('condition "battery.is_lo"') or ".if[" in site else "trigger"
+    assert f"{site} is not a {kind} key this Home Assistant has registered." in text
+    matches = json.loads(text.split("closest_matches: ", 1)[1].split("].", 1)[0] + "]")
+    assert matches[:len(expected)] == expected
+    # Lookalikes from other domains, such as light.turned_on, never outrank the domain's own keys.
+    domain_prefix = expected[0].split(".")[0] + "."
+    assert all(m.startswith(domain_prefix) for m in matches[:len(expected)])
+
+
+@pytest.mark.parametrize(("config", "site", "expected"), [
+    ({"triggers": [{"trigger": "lights.turned_on"}], "actions": []}, 'config.triggers[0].trigger "lights.turned_on"', "light.turned_on"),
+    # Core raises HomeAssistantError, not vol.Invalid, for a condition whose domain does not exist.
+    ({"triggers": [], "actions": [{"condition": "batery.is_low"}]}, 'config.actions[0].condition "batery.is_low"', "battery.is_low"),
+])
+async def test_unknown_key_with_only_a_cross_domain_match(core_keys, config, site, expected):
+    text, _ = await _core_rejection(core_keys, "automation", config)
+    assert site + " is not a" in text
+    matches = json.loads(text.split("closest_matches: ", 1)[1].split("].", 1)[0] + "]")
+    assert matches[0] == expected
+    assert all(m.split(".")[0] == expected.split(".")[0] for m in matches)
+
+
+async def test_unknown_key_without_a_close_match_omits_closest_matches(core_keys):
+    text, _ = await _core_rejection(core_keys, "automation", {"triggers": [{"trigger": "zzqx.qqqq"}], "actions": []})
+    assert 'config.triggers[0].trigger "zzqx.qqqq" is not a trigger key this Home Assistant has registered.' in text
+    assert "closest_matches" not in text
+
+
+async def test_registered_and_unprovable_keys_are_left_untouched(core_keys):
+    """Valid keys, legacy names, and a key from an installed but unloaded integration add nothing."""
+    config = {
+        "triggers": [{"trigger": "state", "entity_id": "light.kitchen"}, {"platform": "time", "at": "12:00:00"},
+                     {"trigger": "schedule.block_started"}, {"trigger": "zwave_js.value_updated"}],
+        "conditions": [{"condition": "and", "conditions": [{"condition": "state", "entity_id": "light.kitchen", "state": "on"}]},
+                       {"condition": "battery.is_low"}, "{{ true }}"],
+        "actions": [{"delay": "not a duration"}],
+    }
+    text, err = await _core_rejection(core_keys, "automation", config)
+    assert text == validation_message("automation", err)
+    assert "registered" not in text and "closest_matches" not in text
+
+
+async def test_unknown_key_message_carries_no_validator_text_or_config_values(core_keys):
+    config = {
+        "alias": "token=secret",
+        "triggers": [{"trigger": "battery.low", "entity_id": "sensor.hidden_vault", "for": "token=secret"},
+                     {"trigger": "Token=Secret.low"}],
+        "actions": [{"action": "light.turn_on", "target": {"entity_id": "light.hidden_vault"}}],
+    }
+    text, err = await _core_rejection(core_keys, "automation", config)
+    assert str(err) and str(err) not in text
+    assert "Invalid trigger" not in text and "specified" not in text
+    assert "secret" not in text.lower() and "hidden_vault" not in text
+    # The only echoed caller value is a key in Core's own key syntax.
+    assert '"battery.low"' in text
+    assert "config.triggers[1].trigger is not a trigger key" in text
+
+
+async def test_unreadable_key_registry_degrades_to_plain_projection(core_keys):
+    config = {"triggers": [{"trigger": "battery.low"}], "actions": []}
+    with patch("homeassistant.helpers.trigger.async_get_all_descriptions", AsyncMock(side_effect=RuntimeError("boom"))):
+        text, err = await _core_rejection(core_keys, "automation", config)
+    assert text == validation_message("automation", err)
+
+
+def test_legacy_key_sets_match_core_alias_tables():
+    from homeassistant.helpers import condition, trigger
+
+    from custom_components.phoenix_mcp import authoring_validation
+
+    assert authoring_validation._LEGACY_TRIGGER_KEYS == set(trigger._PLATFORM_ALIASES)
+    assert authoring_validation._BUILTIN_CONDITION_KEYS == set(condition._PLATFORM_ALIASES)

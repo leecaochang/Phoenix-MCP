@@ -154,7 +154,7 @@ def test_count_detail_describes_scope_instead_of_one_arbitrary_search_row(style)
     reports = [build_report('completed', 'There are 999 bulbs.', evidence, 'en',
                             style=style, detail=detail)
                for detail in ['concise', 'balanced', 'detailed']]
-    assert all('44 matching light entities' in report['message'] for report in reports)
+    assert all('light entities' in report['message'] and ': 44' in report['message'] for report in reports)
     assert all('Tall Lamp' not in report['message'] and '999' not in report['message'] for report in reports)
     assert 'groups' not in reports[0]['message']
     assert 'groups' in reports[1]['message']
@@ -171,7 +171,7 @@ def test_count_kind_comes_from_the_selected_admitted_search(domain,kind):
                          {'domain':selected_domain})
     assert evidence.select_read_answer({'kind':'count','source':1})
     report = build_report('completed','7 sensors',evidence,'en',detail='concise')
-    assert f'7 matching {kind}' in report['message']
+    assert f'{kind}' in report['message'] and ': 7' in report['message']
 
 
 def test_concise_success_omits_advisory_without_omitting_required_next_steps():
@@ -205,10 +205,10 @@ def test_room_readback_distinguishes_confirmed_lights_from_unavailable_exception
     assert 'do not resend' in report['message'] and 'Repairs' not in report['message']
     assert 'final device states were not verified' not in report['message']
     if detail == 'concise':
-        assert report['message'].startswith('Turned off 6 lights in Steve Office.')
+        assert report['message'].startswith('Turned off lights in Steve Office (6).')
         assert 'light.room_' not in report['message']
     else:
-        assert 'requested settings for 6 of 7 targets' in report['message']
+        assert 'requested settings: 6 of 7' in report['message']
 
 
 def test_room_summary_requires_a_shared_canonical_area_for_every_summarized_target():
@@ -222,7 +222,7 @@ def test_room_summary_requires_a_shared_canonical_area_for_every_summarized_targ
         assert 'Visible light.one, Visible light.two' in message
         assert 'in Office' not in message
     evidence.areas = dict.fromkeys(ids, 'Office')
-    assert build_report('completed', '', evidence, 'en', detail='concise')['message'] == 'Turned on 2 lights in Office.'
+    assert build_report('completed', '', evidence, 'en', detail='concise')['message'] == 'Turned on lights in Office (2).'
 
 
 def test_mismatch_missing_read_and_bounded_exception_names_do_not_disappear():
@@ -283,3 +283,61 @@ def test_malformed_timer_receipt_never_claims_acceptance(slots):
         'data': {'success': [], 'failed': []}, 'speech_slots': slots}))
     report = build_report('completed', 'Done.', evidence, 'en')
     assert report['execution'] == 'uncertain' and report['verification'] == 'not_verified'
+
+
+def search(evidence):
+    evidence.observe('search_entities','allowed',result({'entities':[
+        {'entity_id':'binary_sensor.gate','state':'off','friendly_name':'Gate'},
+        {'entity_id':'binary_sensor.door','state':'on','friendly_name':'Door'}],'total':2}),{'domain':'binary_sensor'})
+
+
+@pytest.mark.parametrize('read', [None, 'get_state', 'get_history', 'get_statistics', 'compare_states'])
+def test_states_found_on_the_way_answer_only_a_plain_state_question(read):
+    # A question about the past is answered by the model's reading of the history,
+    # not by the current states of the entities the search found first.
+    evidence=ResponseEvidence()
+    search(evidence)
+    if read == 'get_state':
+        evidence.observe(read,'allowed',result({'entity_id':'binary_sensor.door','state':'on','attributes':{'friendly_name':'Door'}}))
+    elif read:
+        evidence.observe(read,'allowed',result({'entities':[{'entity_id':'binary_sensor.gate','count':0}]}))
+    report=build_report('completed','The gate sensor has not triggered this week.',evidence,'en')
+    assert report['status']=='completed' and report['execution']=='not_attempted'
+    if read is None:
+        assert 'Gate: off; Door: on' in report['message'] and 'not triggered' not in report['message']
+    elif read == 'get_state':
+        # Only the state the model chose to read, not every row its search found.
+        assert 'Door: on' in report['message'] and 'Gate' not in report['message']
+    else:
+        assert report['message']=='The gate sensor has not triggered this week.'
+
+
+@pytest.mark.parametrize('proposed', [False, True])
+def test_a_read_only_clarification_keeps_the_models_question_before_the_guidance(proposed):
+    evidence=ResponseEvidence()
+    search(evidence)
+    evidence.control_proposed=proposed
+    question='Thermostat Temperature reads 71.6 °F but has no room. Is that the living room sensor?'
+    report=build_report('clarification_needed',question,evidence,'en')
+    assert report['status']=='clarification_needed' and report['next_step']=='full_request'
+    assert 'complete request' in report['message']
+    if proposed:
+        # A device command was proposed: only Phoenix's own guidance and candidates are reported.
+        assert question not in report['message'] and 'Matches include: Gate, Door' in report['message']
+    else:
+        assert report['message'].startswith(question) and 'Matches include' not in report['message']
+    # The model cannot turn a reply without any read into its own clarification.
+    report=build_report('completed','I turned everything on.',ResponseEvidence(),'en')
+    assert report['status']=='clarification_needed' and 'turned' not in report['message']
+
+
+@pytest.mark.parametrize('history', [False, True])
+def test_a_count_reference_answers_only_a_counting_question(history):
+    evidence=ResponseEvidence()
+    search(evidence)
+    if history:
+        evidence.observe('get_history','allowed',result({'entities':[{'entity_id':'binary_sensor.gate','transitions':0}]}))
+    assert evidence.select_read_answer({'kind':'count','source':0})
+    report=build_report('completed','The gate sensor never triggered this week.',evidence,'en')
+    assert ('never triggered' in report['message']) is history
+    assert ('scope: 2.' in report['message']) is not history

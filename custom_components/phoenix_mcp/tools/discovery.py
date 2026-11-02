@@ -22,7 +22,7 @@ tool surface through _tool_gate_map, so it belongs with the registry that owns i
 from __future__ import annotations
 
 import asyncio
-from datetime import timedelta
+from datetime import datetime, timedelta
 from typing import Any
 import dataclasses
 import difflib
@@ -41,34 +41,39 @@ from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers import floor_registry as fr
 from homeassistant.helpers import issue_registry as ir
+from homeassistant.helpers import label_registry as lr
 from homeassistant.core import HomeAssistant, valid_entity_id
 from homeassistant.util.dt import as_utc, parse_datetime, utcnow
 
 import voluptuous as vol
 from homeassistant.exceptions import HomeAssistantError
 
-from ..authoring_validation import authoring_input_error, validation_message
-from ..const import CAP_ALLOW, CAP_CONFIRM, CAP_DENY, DEVICE_LIST_DEFAULT_LIMIT, DEVICE_LIST_MAX_LIMIT, DUAL_GATE_SERVICES, MAX_COMPARE_LIST_VALUES, MAX_COMPARE_VALUE_CHARS, MAX_DANGLING_PATHS, MAX_CONFIG_CHECK_MESSAGES, MAX_SEARCH_QUERY_LEN, MAX_SEARCH_MEMBERS, MAX_SEARCH_MEMBER_CHECKS, MAX_SEARCH_MEMBER_ID_LEN, MESA_MODE_OFF, NO_TARGET_SERVICES, PHYSICAL_GATE_DOMAINS, RUNTIME_SERVICE_GUIDANCE, SCRIPT_ENTITY_SERVICES, SEARCH_FUZZY_MATCH_CUTOFF, SERVICE_FIELDS_MAX, SERVICE_FIELD_MAX_DESCRIPTION, SERVICE_FIELD_MAX_OPTIONS, REFERENCE_WARNING_MAX
+from ..authoring_validation import async_validation_message, authoring_input_error
+from ..const import CAP_ALLOW, CAP_CONFIRM, CAP_DENY, DEVICE_LIST_DEFAULT_LIMIT, DEVICE_LIST_MAX_LIMIT, DUAL_GATE_SERVICES, MAX_COMPARE_LIST_VALUES, MAX_COMPARE_VALUE_CHARS, MAX_DANGLING_PATHS, MAX_CONFIG_CHECK_MESSAGES, MAX_SEARCH_QUERY_LEN, MAX_SEARCH_MEMBERS, MAX_SEARCH_MEMBER_CHECKS, MAX_SEARCH_MEMBER_ID_LEN, MESA_MODE_OFF, STORAGE_HELPER_TYPES, NO_TARGET_SERVICES, PHYSICAL_GATE_DOMAINS, RUNTIME_SERVICE_GUIDANCE, SCRIPT_ENTITY_SERVICES, SEARCH_ENTITIES_MAX_LIMIT, SEARCH_FUZZY_MATCH_CUTOFF, SEARCH_POWER_TYPES, SEARCH_RADIO_TYPES, SERVICE_FIELDS_MAX, SERVICE_FIELD_MAX_DESCRIPTION, SERVICE_FIELD_MAX_OPTIONS, REFERENCE_WARNING_MAX
 from ..consumer_identity import ConsumerIdentityIndex, IDENTITY_COVERAGE
 from ..household_authority import household_admin_access
 from ..data import PhoenixData
 from ..device_semantics import (
     DeviceRegistrySnapshot,
+    device_authority_chain,
     device_entry_value,
     device_registry_snapshot,
+    effective_entity_area_id,
     entity_name_source,
 )
-from ..service_targets import secondary_target_error, unsupported_secondary_targets
-from ..tool_contracts import normalize_tool_args
+from ..service_targets import secondary_target_error, template_fields, template_fields_error, unsupported_secondary_targets
+from ..tool_contracts import normalize_tool_args, state_projection
 from ..mesa import async_semantic_moments, build_expand_target, entity_control_mode, evaluate_service_entities
 from ..mesa_core.trigger_validator import entities_by_role
 from ..mesa_tools import MESA_TOOLS_CAP, authored_restrictions
 from ..helpers import effective_cap, entity_hint_for_agent, parse_time_param as _parse_time_param, redact_diagnostics as _redact_diagnostics, redact_inaccessible_entity_ids_in_text, sanitize_service_data as _sanitize_service_data, str_arg, str_list_arg
 from .esphome import _ESPHOME_DOMAIN, _esphome_action_signature, _esphome_actions_for_entity, esphome_availability
-from ..tool_common import _resolve_area_id, _tool_error, _tool_success, offset_page
+from ..tool_common import _project_state, _resolve_area_id, _tool_error, _tool_success, fitted_offset_page, longest_fitting, offset_page
 from ..ws_dispatch import WsDispatchError, async_get_lovelace_config, async_ws_command
-from ..policy_engine import _ENTITY_ID_RE, EntityCreationNotPermitted, Permission, assist_expose_check, device_config_entry_ids, device_registry_entity_ids, esphome_entry_writable, filter_entities_for_access_key, filter_service_response, physical_gate_applies, resolve_config_entry_registry_access, resolve_device_registry_access, resolve_esphome_user_service, resolve_read, resolve_registry_access, resolve_service_targets, service_target_binding_valid, scrub_sensitive_attributes
+from ..policy_engine import _ENTITY_ID_RE, Permission, assist_expose_check, device_config_entry_ids, device_registry_entity_ids, esphome_entry_writable, filter_entities_for_access_key, filter_service_response, physical_gate_applies, resolve_config_entry_registry_access, resolve_device_registry_access, resolve_esphome_user_service, resolve_read, resolve_registry_access, resolve_service_targets, service_target_binding_valid, scrub_sensitive_attributes
 from ..proxy_diagnostics import device_bluetooth_scanners, rf_capabilities
+from ..radio import device_radio_types
+from ..recorder_queries import iso_utc, state_timestamp
 from ..request_authority import check_request_authority
 from ..access_key_store import AccessKeyRecord
 from .. import yaml_includes
@@ -221,6 +226,22 @@ _SERVICE_FIELDS = frozenset({"service", "perform_action", "action"})
 def _in_service_field(path: list) -> bool:
     """Whether a walked value sits where a SERVICE name goes rather than an id."""
     return bool(path) and path[-1] in _SERVICE_FIELDS
+
+
+# The script domain's own services, which name a verb rather than a script.
+_SCRIPT_SERVICES = frozenset({"script.turn_on", "script.turn_off", "script.toggle", "script.reload"})
+
+
+def _script_calls(config: Any) -> set[str]:
+    """Scripts a configuration runs by name (`action: script.greet`).
+
+    Running a script IS its entity id, so an automation calling one uses it even
+    though no `entity_id:` names it; missing this would report the script unused.
+    """
+    hits: list[tuple[list, str]] = []
+    _entity_id_strings(config, [], hits)
+    return {eid for path, eid in hits
+            if _in_service_field(path) and eid.startswith("script.") and eid not in _SCRIPT_SERVICES}
 
 
 def _dangling_candidates(
@@ -445,16 +466,28 @@ def _merge_graph_hits(
     consumers: list[dict],
     hits: set[tuple[str, str, str]],
 ) -> None:
-    """Merge graph-only consumers without weakening detailed YAML roles."""
+    """Merge graph-only consumers without weakening detailed YAML roles.
+
+    A UI helper's entity (a group helper, say) belongs to the config entry the
+    body scan already found, so its graph hit joins that consumer, which then
+    names the entity, rather than listing the same helper twice.
+    """
     by_key = {
         (consumer["kind"], str(consumer["id"])): consumer
         for consumer in consumers if "entity_id" not in consumer
     }
     by_entity = {consumer["entity_id"]: consumer for consumer in consumers if "entity_id" in consumer}
+    by_entry = {str(consumer["id"]): consumer for consumer in consumers if consumer["kind"] == "config_entry"}
+    registry = er.async_get(hass)
     for kind, graph_entity_id, target_entity_id in sorted(hits):
         consumer_id, name = _graph_consumer_identity(hass, kind, graph_entity_id)
         key = (kind, consumer_id)
         consumer = by_entity.get(graph_entity_id) or by_key.get(key)
+        registry_entry = registry.async_get(graph_entity_id)
+        if consumer is None and registry_entry is not None and registry_entry.config_entry_id in by_entry:
+            consumer = by_entry[registry_entry.config_entry_id]
+            consumer.setdefault("entity_id", graph_entity_id)
+            by_entity[graph_entity_id] = consumer
         if consumer is None:
             consumer = {
                 "kind": kind,
@@ -532,6 +565,11 @@ def _scan_relationships(
                             "name": entry["name"], "typed": True, "service": False, **evidence})
                 if eid in scope:
                     _record(entry, eid, role)
+        for eid in _script_calls(cfg):
+            _note(eid, {"kind": "automation", "id": entry["id"],
+                        "name": entry["name"], "typed": True, "service": True, **evidence})
+            if eid in scope:
+                _record(entry, eid, "action")
         if entry["entities"]:
             consumers.append(entry)
 
@@ -540,6 +578,7 @@ def _scan_relationships(
             continue
         found: set[str] = set()
         _collect_entity_id_values(cfg, found)
+        found |= _script_calls(cfg)
         entry = _consumer("script", script_id, cfg.get("alias"))
         for eid in found:
             _note(eid, {"kind": "script", "id": script_id, "name": entry["name"],
@@ -691,24 +730,6 @@ def _intent_slots(result: Any) -> dict[str, Any]:
         name: _intent_slot_value(entity)
         for name, entity in getattr(result, "entities", {}).items()
     }
-
-
-def _intent_unmatched_slots(result: Any) -> dict[str, Any]:
-    """Return HA's best unmatched slot guesses, excluding missing context."""
-    unmatched: dict[str, Any] = {}
-    for entity in getattr(result, "unmatched_entities_list", []):
-        name = getattr(entity, "name", None)
-        if not isinstance(name, str) or not name:
-            continue
-        text = getattr(entity, "text", None)
-        if text is not None:
-            if text != "<missing>":
-                unmatched[name] = text
-            continue
-        value = getattr(entity, "value", None)
-        if value is not None:
-            unmatched[name] = value
-    return unmatched
 
 
 def _intent_source(result: Any) -> str:
@@ -992,6 +1013,7 @@ async def _tool_list_devices(
     filters = {key: args.get(key) for key in ("area", "integration", "query")}
     if any(value is not None and not isinstance(value, str) for value in filters.values()):
         return _tool_error("area, integration and query must be strings."), "invalid_request", "list_devices"
+    has_area = args.get("has_area")
     area = (filters["area"] or "").strip().lower()
     integration = (filters["integration"] or "").strip().lower()
     query = (filters["query"] or "").strip().lower()
@@ -1010,6 +1032,8 @@ async def _tool_list_devices(
             continue
         if area_ids is not None and device_snapshot.effective_area_id(device.id) not in area_ids:
             continue
+        if has_area is not None and (device_snapshot.effective_area_id(device.id) is not None) != has_area:
+            continue
         if integration and not any(
             (entry := hass.config_entries.async_get_entry(entry_id)) is not None and entry.domain == integration
             for entry_id in device_config_entry_ids(device)
@@ -1026,7 +1050,8 @@ async def _tool_list_devices(
     if isinstance(paged, str):
         return _tool_error(paged), "invalid_request", "list_devices"
     page, envelope = paged
-    return _tool_success(json.dumps({**envelope, "devices": page}, default=str)), "allowed", "list_devices"
+    body = fitted_offset_page(page, envelope, lambda rows, env: {**env, "devices": rows})
+    return _tool_success(json.dumps(body, default=str)), "allowed", "list_devices"
 
 
 async def _tool_get_device(
@@ -1109,6 +1134,10 @@ def _device_list_projection(
     ) not in (Permission.READ, Permission.WRITE):
         via_device_id = None
         parent_device_id = None
+    # The row already names its area by ID; the name is that same area's label,
+    # which "which devices are in the kitchen" is asked in.
+    area_id = snapshot.effective_area_id(device.id)
+    area = ar.async_get(hass).async_get_area(area_id) if area_id else None
     return {
         "device_id": device.id,
         "name": device.name_by_user or device.name,
@@ -1116,7 +1145,8 @@ def _device_list_projection(
         "name_by_user": device.name_by_user,
         "manufacturer": device_entry_value(device, "manufacturer"),
         "model": device_entry_value(device, "model"),
-        "area_id": snapshot.effective_area_id(device.id),
+        "area_id": area_id,
+        "area": area.name if area is not None else None,
         "disabled_by": _registry_value(device.disabled_by),
         "labels": sorted(device.labels),
         "accessible_entity_count": len(
@@ -1129,7 +1159,11 @@ def _device_list_projection(
 
 
 def _device_config_entry_summaries(device: Any, hass: HomeAssistant) -> list[dict]:
-    """Allowlisted, non-secret summaries of a device's owners."""
+    """Allowlisted, non-secret summaries of a device's owners.
+
+    Titles get the same scrub as list_integrations: integrations often title an
+    entry by its host address or URL.
+    """
     summaries: list[dict] = []
     for entry_id in device_config_entry_ids(device):
         entry = hass.config_entries.async_get_entry(entry_id)
@@ -1138,7 +1172,7 @@ def _device_config_entry_summaries(device: Any, hass: HomeAssistant) -> list[dic
         summaries.append({
             "entry_id": entry.entry_id,
             "domain": entry.domain,
-            "title": entry.title,
+            "title": _redact_diagnostics(entry.title),
             "disabled_by": _registry_value(entry.disabled_by),
             "supports_remove_device": entry.supports_remove_device,
         })
@@ -1167,41 +1201,96 @@ def _area_name_for_entity(eid: str, registry: Any, dev_reg: Any, area_reg: Any) 
     return area.name if area is not None else area_id
 
 
+# Where else a query word may be found beside the entity's own names, so
+# "kitchen", "upstairs", "ikea" or a label find what the home calls by that word.
+_SEARCH_CONTEXT_FIELDS = ("area", "floor", "label", "device", "manufacturer", "model")
+# A word found only in that context weighs less than one in the entity's name,
+# so "kitchen" still lists the Kitchen light before everything in the Kitchen.
+_SEARCH_CONTEXT_WEIGHT = 0.3
+
+
+def _search_context(
+    entry: Any, area_name: str | None, snapshot: DeviceRegistrySnapshot, area_reg: Any, floor_reg: Any, label_reg: Any,
+) -> dict[str, str]:
+    """The lowercased words an entity is known by beyond its own names: its area, floor, labels and device."""
+    context: dict[str, str] = {}
+    if area_name:
+        context["area"] = area_name.lower()
+    area_id = effective_entity_area_id(entry, snapshot) if entry is not None else None
+    area = area_reg.async_get_area(area_id) if area_id else None
+    floor = floor_reg.async_get_floor(area.floor_id) if area is not None and area.floor_id else None
+    if floor is not None:
+        context["floor"] = floor.name.lower()
+    device = snapshot.get(entry.device_id) if entry is not None and entry.device_id else None
+    label_ids = set(getattr(entry, "labels", None) or ()) | set(getattr(device, "labels", None) or ())
+    names = [label.name for label_id in sorted(label_ids) if (label := label_reg.async_get_label(label_id)) is not None]
+    if names:
+        context["label"] = " ".join(names).lower()
+    if device is not None:
+        for key, value in (("device", device.name_by_user or device.name),
+                           ("manufacturer", device_entry_value(device, "manufacturer")),
+                           ("model", device_entry_value(device, "model"))):
+            if isinstance(value, str) and value:
+                context[key] = value.lower()
+    return context
+
+
 def _rank_search_matches(matches: list[dict], query: str) -> list[dict]:
     """Token-AND filter + relevance rank for a search_entities query.
 
-    Keeps only rows whose entity_id/friendly_name contains every query token (so
+    Keeps only rows where every query token appears in the entity_id, friendly
+    name or aliases, or in the area, floor, label or device it belongs to (so
     multi-word queries work, unlike a single substring test), and orders by an
     IDF-weighted score so the most relevant rows lead and survive truncation.
-    Rarer query terms weigh more; exact and prefix/word-start matches get a bonus.
+    Rarer query terms weigh more; exact and prefix/word-start matches get a bonus,
+    and a token found only in that context weighs less. A row matched through
+    context says where in matched.
     """
     access_keys = [t for t in query.split() if t]
     if not access_keys:
         return matches
     docs = [f"{m['entity_id']} {(m.get('friendly_name') or '')} {' '.join(m.get('_aliases', ()))}".lower() for m in matches]
+    contexts = [m.get("_context") or {} for m in matches]
     n = len(docs) or 1
-    df = {t: sum(1 for d in docs if t in d) for t in set(access_keys)}
+    df = {t: sum(1 for d, c in zip(docs, contexts) if t in d or any(t in v for v in c.values())) for t in set(access_keys)}
     full = " ".join(access_keys)
     scored: list[tuple[float, str, dict]] = []
-    for m, doc in zip(matches, docs):
-        if any(t not in doc for t in access_keys):
-            continue
-        eid = m["entity_id"].lower()
-        obj = eid.split(".")[-1]
-        fname = (m.get("friendly_name") or "").lower()
-        aliases = [alias.lower() for alias in m.get("_aliases", ())]
-        score = 0.0
+    for m, doc, context in zip(matches, docs, contexts):
+        found_in: set[str] = set()
         for t in access_keys:
-            score += math.log(1 + n / (1 + df.get(t, 0)))
-            if t == eid or t == fname or t in aliases:
-                score += 5.0
-            elif obj.startswith(t) or any(w.startswith(t) for name in (fname, *aliases) for w in name.split()):
-                score += 2.0
-        if full in (eid, fname, obj, *aliases):
-            score += 10.0
-        scored.append((score, m["entity_id"], m))
+            if t not in doc:
+                fields = {field for field in _SEARCH_CONTEXT_FIELDS if t in context.get(field, "")}
+                if not fields:
+                    break
+                found_in |= fields
+        else:
+            if found_in:
+                m["matched"] = [field for field in _SEARCH_CONTEXT_FIELDS if field in found_in]
+            scored.append((_search_score(m, doc, access_keys, df, n, full), m["entity_id"], m))
     scored.sort(key=lambda s: (-s[0], s[1]))
     return [m for _, _, m in scored]
+
+
+def _search_score(m: dict, doc: str, access_keys: list[str], df: dict[str, int], n: int, full: str) -> float:
+    """IDF-weighted relevance of one row whose tokens all matched; context-only tokens weigh less."""
+    eid = m["entity_id"].lower()
+    obj = eid.split(".")[-1]
+    fname = (m.get("friendly_name") or "").lower()
+    aliases = [alias.lower() for alias in m.get("_aliases", ())]
+    score = 0.0
+    for t in access_keys:
+        weight = math.log(1 + n / (1 + df.get(t, 0)))
+        if t not in doc:
+            score += weight * _SEARCH_CONTEXT_WEIGHT
+            continue
+        score += weight
+        if t == eid or t == fname or t in aliases:
+            score += 5.0
+        elif obj.startswith(t) or any(w.startswith(t) for name in (fname, *aliases) for w in name.split()):
+            score += 2.0
+    if full in (eid, fname, obj, *aliases):
+        score += 10.0
+    return score
 
 
 def _fuzzy_search_matches(matches: list[dict], query: str) -> list[dict]:
@@ -1241,14 +1330,85 @@ class _SearchFilters:
 
     query: str
     domains: set[str] | None
-    device_class: Any
+    device_classes: set[str] | None
+    integrations: set[str] | None
+    radios: set[str] | None
+    power: str | None
     state: Any
     area: str
+    has_area: bool | None
     want_unavailable: bool
     stale_threshold: float | None
     limit: int
     offset: int
     registry_state: str
+
+
+def _entity_radio_types(entry: Any, cache: dict[str, set[str]], hass: HomeAssistant) -> set[str]:
+    """The radio types of an entity's device, or of its main parent for a child device."""
+    device_id = getattr(entry, "device_id", None)
+    if not device_id:
+        return set()
+    if device_id not in cache:
+        registry = dr.async_get(hass)
+        found: set[str] = set()
+        for chain_id in device_authority_chain(hass, device_id) or (device_id,):
+            device = registry.async_get(chain_id)
+            if device is not None:
+                found |= device_radio_types(device)
+        cache[device_id] = found
+    return cache[device_id]
+
+
+def _device_reports_battery(entry: Any, cache: dict[str, bool], access_key: AccessKeyRecord,
+                            hass: HomeAssistant, expose: Any) -> bool:
+    """Whether an entity's device, or its main parent, runs on a battery the access key can read about.
+
+    A battery level or low-battery entity is the only power evidence Home Assistant
+    records. Only a diagnostic one counts: integrations mark a battery that keeps
+    the device running as diagnostic, while a car's or a home storage system's
+    battery is the product's main reading. One the access key cannot read never
+    counts, so the filter cannot reveal it exists.
+    """
+    device_id = getattr(entry, "device_id", None)
+    if not device_id:
+        return False
+    if device_id not in cache:
+        registry = er.async_get(hass)
+        found = False
+        for chain_id in device_authority_chain(hass, device_id) or (device_id,):
+            for sibling in er.async_entries_for_device(registry, chain_id, include_disabled_entities=True):
+                state = hass.states.get(sibling.entity_id)
+                device_class = (sibling.device_class or sibling.original_device_class
+                                or (state.attributes.get("device_class") if state is not None else None))
+                if (device_class == "battery" and sibling.entity_category == er.EntityCategory.DIAGNOSTIC
+                        and resolve_registry_access(sibling.entity_id, access_key, hass) in (Permission.READ, Permission.WRITE)
+                        and (expose is None or expose(sibling.entity_id))):
+                    found = True
+                    break
+            if found:
+                break
+        cache[device_id] = found
+    return cache[device_id]
+
+
+def _search_names(value: Any) -> set[str] | None:
+    """One name or several for a multi-valued filter, None when unset.
+
+    Several values are sometimes sent as one comma-separated string, or as a
+    JSON array inside a string, instead of an array.
+    """
+    if isinstance(value, str):
+        text = value.strip()
+        if text.startswith("["):
+            try:
+                decoded = json.loads(text)
+            except ValueError:
+                decoded = None
+            if isinstance(decoded, list) and all(isinstance(item, str) for item in decoded):
+                return {item.strip() for item in decoded if item.strip()} or None
+        return {part.strip() for part in text.split(",") if part.strip()} or None
+    return set(str_list_arg(value)) or None
 
 
 def _parse_search_args(args: dict) -> _SearchFilters:
@@ -1259,13 +1419,7 @@ def _parse_search_args(args: dict) -> _SearchFilters:
     # event loop. A real query is short; the cap only clips a pathological one.
     query = str(args.get("query") or args.get("name") or "").strip().lower()[:MAX_SEARCH_QUERY_LEN]
 
-    raw_domains = args.get("domain")
-    if isinstance(raw_domains, str):
-        # Several domains are sometimes sent as one comma-separated string
-        # instead of an array.
-        domains = [d.strip() for d in raw_domains.split(",") if d.strip()]
-    else:
-        domains = str_list_arg(raw_domains)
+    domains = _search_names(args.get("domain"))
 
     stale_threshold: float | None = None
     stale_hours = args.get("stale_hours")
@@ -1286,13 +1440,17 @@ def _parse_search_args(args: dict) -> _SearchFilters:
 
     return _SearchFilters(
         query=query,
-        domains=set(domains) or None,
-        device_class=args.get("device_class") or None,
+        domains=domains,
+        device_classes=_search_names(args.get("device_class")),
+        integrations=_search_names(args.get("integration")),
+        radios=_search_names(args.get("radio")),
+        power=str(args["power"]).strip().lower() if args.get("power") not in (None, "") else None,
         state=args.get("state") or None,
         area=str(args.get("area") or "").strip().lower(),
+        has_area=args.get("has_area"),
         want_unavailable=bool(args.get("unavailable")),
         stale_threshold=stale_threshold,
-        limit=max(1, min(limit, 500)),
+        limit=max(1, min(limit, SEARCH_ENTITIES_MAX_LIMIT)),
         offset=max(0, offset),
         registry_state=str(args.get("registry_state") or "enabled").strip().lower(),
     )
@@ -1429,14 +1587,32 @@ async def _tool_search_entities(
     include_membership = args.get("include_membership", False)
     if not isinstance(include_membership, bool):
         return _tool_error("include_membership must be a boolean."), "invalid_request", "search_entities"
+    projection = args.get("projection")
+    if projection is not None:
+        if not isinstance(projection, dict):
+            return _tool_error("projection must be an object."), "invalid_request", "search_entities"
+        fields, detailed, error = state_projection(projection)
+        if error:
+            return _tool_error(error), "invalid_request", "search_entities"
 
-    raw_domain = args.get("domain")
-    if raw_domain not in (None, "") and not isinstance(raw_domain, str) and not (
-        isinstance(raw_domain, list) and all(isinstance(item, str) for item in raw_domain)
-    ):
-        # Dropping a malformed filter would silently search every domain.
-        return _tool_error("domain must be a string or an array of strings."), "invalid_request", "search_entities"
+    if args.get("power") not in (None, "") and not isinstance(args.get("power"), str):
+        return _tool_error("power must be a string."), "invalid_request", "search_entities"
+    for name in ("domain", "device_class", "integration", "radio"):
+        raw = args.get(name)
+        if raw not in (None, "") and not isinstance(raw, str) and not (
+            isinstance(raw, list) and all(isinstance(item, str) for item in raw)
+        ):
+            # Dropping a malformed filter would silently search everything.
+            return _tool_error(f"{name} must be a string or an array of strings."), "invalid_request", "search_entities"
     f = _parse_search_args(args)
+    if f.radios is not None and not f.radios <= set(SEARCH_RADIO_TYPES):
+        return _tool_error(
+            "radio must be one or more of: " + ", ".join(SEARCH_RADIO_TYPES) + "."
+        ), "invalid_request", "search_entities"
+    if f.power is not None and f.power not in SEARCH_POWER_TYPES:
+        return _tool_error(
+            "power must be battery. Home Assistant records a battery reading but no mains or other power source."
+        ), "invalid_request", "search_entities"
     if f.registry_state not in {"enabled", "disabled", "all"}:
         return _tool_error(
             "registry_state must be one of: enabled, disabled, all."
@@ -1446,10 +1622,18 @@ async def _tool_search_entities(
     dev_reg = dr.async_get(hass)
     area_reg = ar.async_get(hass)
     now = utcnow()
+    # Only a query reads an entity's area, floor, label and device words.
+    context_registries = ((device_registry_snapshot(hass), area_reg, fr.async_get(hass), lr.async_get(hass))
+                          if f.query else None)
 
     expose = assist_expose_check(access_key, hass)
     area_ids = _search_area_ids(hass, f.area) if f.area else None
     matches: list[dict] = []
+    # Oldest last_changed among readable candidates: a restart resets them all,
+    # which is the horizon a stale_hours search cannot see past.
+    oldest_change: datetime | None = None
+    radio_cache: dict[str, set[str]] = {}
+    battery_cache: dict[str, bool] = {}
     for eid in _search_candidate_ids(f.registry_state, hass, registry):
         perm = resolve_registry_access(eid, access_key, hass)
         if perm not in (Permission.READ, Permission.WRITE):
@@ -1474,7 +1658,13 @@ async def _tool_search_entities(
         device_class = attrs.get("device_class") or (
             (entry.device_class or entry.original_device_class) if entry is not None else None
         )
-        if f.device_class is not None and device_class != f.device_class:
+        if f.device_classes is not None and device_class not in f.device_classes:
+            continue
+        if f.integrations is not None and (entry is None or entry.platform not in f.integrations):
+            continue
+        if f.radios is not None and not f.radios & _entity_radio_types(entry, radio_cache, hass):
+            continue
+        if f.power is not None and not _device_reports_battery(entry, battery_cache, access_key, hass, expose):
             continue
         state_val = e.get("state")
         if f.state is not None and state_val != f.state:
@@ -1484,11 +1674,16 @@ async def _tool_search_entities(
         area_name = _area_name_for_entity(eid, registry, dev_reg, area_reg)
         if area_ids is not None and _resolve_area_id(entry, dev_reg) not in area_ids:
             continue
+        if f.has_area is not None and (_resolve_area_id(entry, dev_reg) is not None) != f.has_area:
+            continue
+        last_changed = None
         if f.stale_threshold is not None:
             # State.as_dict() (scrub_sensitive_attributes' input) serializes
             # last_changed as an ISO string, not a datetime, so parse it before
             # subtracting.
             last_changed = parse_datetime(e.get("last_changed") or "")
+            if last_changed is not None and (oldest_change is None or last_changed < oldest_change):
+                oldest_change = last_changed
             if last_changed is None or (now - last_changed).total_seconds() < f.stale_threshold * 3600:
                 continue
         row = {
@@ -1499,6 +1694,8 @@ async def _tool_search_entities(
             "area": area_name,
             "device_class": device_class,
         }
+        if last_changed is not None:
+            row["last_changed"] = iso_utc(last_changed)
         if entry is not None and (entry.disabled_by is not None or state is None):
             row["registry_state"] = (
                 "disabled" if entry.disabled_by is not None else "enabled"
@@ -1509,6 +1706,10 @@ async def _tool_search_entities(
         aliases = [alias for alias in (getattr(entry, "aliases", None) or ()) if isinstance(alias, str)]
         if aliases:
             row["_aliases"] = aliases
+        if context_registries is not None:
+            row["_context"] = _search_context(entry, area_name, *context_registries)
+        if projection is not None and state is not None:
+            row["_scrubbed"] = e
         matches.append(row)
 
     fuzzy_fallback = False
@@ -1531,8 +1732,20 @@ async def _tool_search_entities(
     end = f.offset + f.limit
     has_more = len(matches) > end
     results = matches[f.offset:end]
+    # Counted over every match the key can read, like total, so "how many of each
+    # kind" needs no paging and reveals nothing total does not.
+    domains: dict[str, int] = {}
+    for row in matches:
+        domain = row["entity_id"].split(".", 1)[0]
+        domains[domain] = domains.get(domain, 0) + 1
+    by_domain = dict(sorted(domains.items(), key=lambda item: (-item[1], item[0])))
     for row in results:
         row.pop("_aliases", None)
+        row.pop("_context", None)
+        if "_scrubbed" in row:
+            # The returned page carries get_state's projection, so the current
+            # values need no follow-up read.
+            row.update(_project_state(row.pop("_scrubbed"), fields, detailed))
 
     _annotate_search_rows(results, registry, data, access_key, hass)
     if include_membership:
@@ -1540,14 +1753,29 @@ async def _tool_search_entities(
         for row in results:
             row.update(_search_membership(row["entity_id"], access_key, hass, expose, budget))
 
-    body = {"count": len(results), "total": len(matches), "offset": f.offset, "truncated": has_more,
-            "has_more": has_more, "entities": results}
-    if has_more:
-        body["next_offset"] = end
-    if fuzzy_fallback:
-        # Signal that these are approximate (typo-tolerant) matches, not exact,
-        # so the agent knows the query did not match any entity literally.
-        body["fuzzy_fallback"] = True
+    def build(count: int) -> dict[str, Any]:
+        # A page that would not fit one result ends early and continues where it stopped.
+        more = has_more or count < len(results)
+        page: dict[str, Any] = {"count": count, "total": len(matches),
+                                **({"by_domain": by_domain} if len(by_domain) > 1 else {}),
+                                "offset": f.offset, "truncated": more, "has_more": more, "entities": results[:count]}
+        if more:
+            page["next_offset"] = f.offset + count
+        if fuzzy_fallback:
+            # Signal that these are approximate (typo-tolerant) matches, not exact,
+            # so the agent knows the query did not match any entity literally.
+            page["fuzzy_fallback"] = True
+        if f.stale_threshold is not None:
+            page["oldest_last_changed"] = iso_utc(oldest_change) if oldest_change is not None else None
+            if oldest_change is not None and (now - oldest_change).total_seconds() < f.stale_threshold * 3600:
+                page["warnings"] = [
+                    f"No entity searched has a last_changed before {iso_utc(oldest_change)}. Home Assistant resets "
+                    "last_changed when it restarts, so entities unchanged since before then cannot be found this way. "
+                    "Use get_history with mode summary to check a longer period."
+                ]
+        return page
+
+    body = longest_fitting(build, len(results))
     return _tool_success(json.dumps(body, default=str)), "allowed", "search_entities"
 
 
@@ -1564,18 +1792,23 @@ async def _tool_get_overview(
     accessible = filter_entities_for_access_key(hass.states.async_all(), access_key, hass)
     by_domain: dict[str, int] = {}
     by_area: dict[str, int] = {}
-    unavailable = 0
+    unavailable = unknown = 0
     for e in accessible:
         eid = e["entity_id"]
         by_domain[eid.split(".")[0]] = by_domain.get(eid.split(".")[0], 0) + 1
-        if e.get("state") in ("unavailable", "unknown"):
+        # unknown is normal for a never-pressed button, a scene or an event, so
+        # it is counted apart from entities that are actually unavailable.
+        if e.get("state") == "unavailable":
             unavailable += 1
+        elif e.get("state") == "unknown":
+            unknown += 1
         area_name = _area_name_for_entity(eid, registry, dev_reg, area_reg) or "(no area)"
         by_area[area_name] = by_area.get(area_name, 0) + 1
 
     body = {
         "total_accessible_entities": len(accessible),
         "unavailable_count": unavailable,
+        "unknown_count": unknown,
         "by_domain": dict(sorted(by_domain.items())),
         "by_area": dict(sorted(by_area.items())),
     }
@@ -1743,6 +1976,7 @@ async def _tool_find_available_actions(
     physical_ok = effective_cap(access_key, "cap_physical_control") != CAP_DENY
     restart_ok = effective_cap(access_key, "cap_restart") != CAP_DENY
     yaml_edit_ok = effective_cap(access_key, "cap_yaml_edit") != CAP_DENY
+    notify_ok = effective_cap(access_key, "cap_notify") != CAP_DENY
 
     actions: list[dict] = []
     for svc in sorted(hass.services.async_services().get(domain, {}).keys()):
@@ -1764,6 +1998,8 @@ async def _tool_find_available_actions(
             available, reason = False, "requires physical control capability"
         elif key in DUAL_GATE_SERVICES and not restart_ok:
             available, reason = False, "requires restart capability"
+        elif domain == "notify" and not notify_ok:
+            available, reason = False, "requires notifications capability"
         entry = {"service": f"{domain}.{svc}", "available": available}
         if guidance := RUNTIME_SERVICE_GUIDANCE.get(key):
             entry["description"] = guidance
@@ -1948,6 +2184,9 @@ async def _tool_get_repairs(
         })
     body = {
         "count": len(projected),
+        "total": len(matches),
+        "has_more": len(matches) > limit,
+        # Earlier names for total and has_more, kept for existing callers.
         "matching_count": len(matches),
         "truncated": len(matches) > limit,
         "issues": projected,
@@ -1962,14 +2201,6 @@ async def _tool_get_repairs(
 # ---------------------------------------------------------------------------
 # Tool "requires" preconditions (ESPHome availability)
 # ---------------------------------------------------------------------------
-
-
-
-
-
-
-
-
 
 
 def _requires_satisfied(tool_def: dict, hass: HomeAssistant) -> bool:
@@ -1992,20 +2223,6 @@ def _requires_unavailable_reason(tool_def: dict) -> str:
     if tool_def.get("requires") == "esphome_builder":
         return "The ESPHome Device Builder add-on is not available."
     return "The ESPHome integration is not set up."
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 _CHECK_LOCATION_RE = re.compile(r" at (?P<file>[A-Za-z0-9_][A-Za-z0-9_./-]{0,199}\.ya?ml), line (?P<line>\d{1,7})")
@@ -2072,11 +2289,12 @@ _SCOPE_NOT_FOUND = (
 
 @dataclasses.dataclass(frozen=True)
 class _Scope:
-    """One resolved selector and the accessible entity ids it names."""
+    """One resolved selector, its value or values, and the accessible entity ids they name."""
 
     selector: str
-    value: str
+    value: str | list[str]
     entity_ids: set[str]
+    not_found: list[str]
 
 
 def _relationship_scope(
@@ -2094,7 +2312,10 @@ def _relationship_scope(
     which entities an indirect reference names. `integration` is not an HA target
     selector, so it reads the registry's own platform field.
     """
-    given = [s for s in _RELATIONSHIP_SELECTORS if str_arg(args.get(s)).strip()]
+    def given_value(raw: Any) -> bool:
+        return bool(str_arg(raw).strip()) if not isinstance(raw, list) else bool(raw)
+
+    given = [s for s in _RELATIONSHIP_SELECTORS if given_value(args.get(s))]
     if len(given) != 1:
         return (
             _tool_error(
@@ -2105,32 +2326,43 @@ def _relationship_scope(
             "invalid_request", "get_relationships",
         )
     selector = given[0]
-    value = str_arg(args.get(selector)).strip()
+    raw = args.get(selector)
+    # Several values are one scope: every helper type, or every script, in one call.
+    values = [str_arg(item).strip() for item in raw] if isinstance(raw, list) else [str_arg(raw).strip()]
+    if not all(values) or len(values) > SEARCH_ENTITIES_MAX_LIMIT:
+        return _tool_error(
+            f"A scope id list takes 1 to {SEARCH_ENTITIES_MAX_LIMIT} non-empty strings."
+        ), "invalid_request", "get_relationships"
+    value: str | list[str] = values if isinstance(raw, list) else values[0]
 
+    # Each value's candidates, so a list scope can name the values that cover
+    # nothing readable, hidden and missing alike, instead of narrowing silently.
+    per_value: dict[str, list[str]] = {}
     if selector == "entity_id":
-        candidates = [value]
+        per_value = {name: [name] for name in values}
     elif selector == "integration":
-        candidates = [
-            e.entity_id for e in er.async_get(hass).entities.values()
-            if e.platform == value and e.disabled_by is None
-        ]
+        for entry in er.async_get(hass).entities.values():
+            if entry.platform in values and entry.disabled_by is None:
+                per_value.setdefault(entry.platform, []).append(entry.entity_id)
     elif selector == "area":
-        area = _resolve_area(hass, value)
-        candidates = build_expand_target(hass)("area_id", area.id) if area is not None else []
+        for name in values:
+            area = _resolve_area(hass, name)
+            per_value[name] = build_expand_target(hass)("area_id", area.id) if area is not None else []
     else:
         kind = "device_id" if selector == "device_id" else "label_id"
-        candidates = build_expand_target(hass)(kind, value)
+        per_value = {name: build_expand_target(hass)(kind, name) for name in values}
 
     scope = {
-        eid for eid in candidates
+        eid for candidates in per_value.values() for eid in candidates
         if resolve_read(eid, access_key, hass) in (Permission.READ, Permission.WRITE)
     }
     if not scope:
         # Byte-identical for "does not exist" and "not in your tree"; the
         # single-entity form uses the standard "Entity not found.".
         message = "Entity not found." if selector == "entity_id" else _SCOPE_NOT_FOUND
-        return _tool_error(message), "not_found", f"{selector}:{value}"
-    return _Scope(selector, value, scope)
+        return _tool_error(message), "not_found", f"{selector}:{','.join(values)}"
+    not_found = [name for name in values if not set(per_value.get(name, ())) & scope]
+    return _Scope(selector, value, scope, not_found)
 
 
 async def _relationship_dashboards(
@@ -2181,13 +2413,14 @@ def _relationship_config_entries(hass: HomeAssistant) -> list[dict]:
     """Snapshot config-entry payloads on the event loop for the executor to walk.
 
     The entries hold credentials; only entity ids are ever read back out of
-    `payload`, and only ids already in the caller's scope reach a response.
+    `payload`, and only ids already in the caller's scope reach a response. The
+    title becomes a consumer name, so it gets list_integrations' scrub.
     """
     return [
         {
             "entry_id": entry.entry_id,
             "domain": entry.domain,
-            "title": entry.title,
+            "title": _redact_diagnostics(entry.title),
             "payload": {"data": dict(entry.data), "options": dict(entry.options)},
         }
         for entry in hass.config_entries.async_entries()
@@ -2268,6 +2501,7 @@ async def _tool_get_relationships(
     if isinstance(resolved, tuple):
         return resolved
     selector, value, scope = resolved.selector, resolved.value, resolved.entity_ids
+    scope_not_found = resolved.not_found if isinstance(value, list) else None
 
     searched = ["automation", "script", "scene", "group"]
     not_searched: list[dict] = []
@@ -2310,17 +2544,34 @@ async def _tool_get_relationships(
         if hass.states.get(eid) is None and registry.async_get(eid) is None
     ]
 
-    body: dict[str, Any] = {
-        "scope": {"selector": selector, "value": value,
-                  "entity_ids": sorted(scope), "count": len(scope)},
-        "consumers": consumers,
-        "consumer_count": len(consumers),
-        "dangling_references": dangling,
-        "searched": searched,
-    }
-    if not_searched:
-        body["not_searched"] = not_searched
-    if selector == "entity_id":
+    # What no searched consumer touches: removal candidates, which not_searched qualifies.
+    touched = {item["entity_id"] for consumer in consumers for item in consumer["entities"]}
+
+    def build(count: int) -> dict[str, Any]:
+        # Consumers are the work list, so they fill the result before dangling references.
+        listed, dead = consumers[:count], dangling[:max(0, count - len(consumers))]
+        body: dict[str, Any] = {
+            "scope": {"selector": selector, "value": value,
+                      "entity_ids": sorted(scope), "count": len(scope),
+                      **({"not_found": scope_not_found} if scope_not_found is not None else {})},
+            "consumers": listed,
+            "consumer_count": len(consumers),
+            "unreferenced": sorted(scope - touched),
+            "dangling_references": dead,
+            "searched": searched,
+        }
+        if len(listed) < len(consumers):
+            body["consumers_not_listed"] = len(consumers) - len(listed)
+        if len(dead) < len(dangling):
+            body["dangling_not_listed"] = len(dangling) - len(dead)
+        if len(listed) < len(consumers) or len(dead) < len(dangling):
+            body["warnings"] = ["The result is full: narrow the scope to list the rest."]
+        if not_searched:
+            body["not_searched"] = not_searched
+        return body
+
+    body = longest_fitting(build, len(consumers) + len(dangling))
+    if selector == "entity_id" and isinstance(value, str):
         # Only meaningful for a single automation or script: what IT references.
         references, references_not_searched = await hass.async_add_executor_job(
             _forward_references_details, hass, value,
@@ -2333,7 +2584,8 @@ async def _tool_get_relationships(
         ]
         if references_not_searched:
             body["references_not_searched"] = references_not_searched
-    return _tool_success(json.dumps(body, default=str)), "allowed", f"{selector}:{value}"
+    label = ",".join(value) if isinstance(value, list) else value
+    return _tool_success(json.dumps(body, default=str)), "allowed", f"{selector}:{label}"
 
 
 async def _tool_describe_entity(
@@ -2405,6 +2657,9 @@ async def _tool_describe_entity(
             "name_source": entity_name_source(hass, entry),
         }
 
+    if (defined_by := await _entity_definition(entry, state, access_key, hass)) is not None:
+        body["defined_by"] = defined_by
+
     # The spoken names HA matches this entity by, RESOLVED: the entity's own name
     # appears as the name itself, not as the registry sentinel that stands for it,
     # because a caller compares this list against a failing voice command.
@@ -2428,6 +2683,51 @@ async def _tool_describe_entity(
     return _tool_success(json.dumps(body, default=str)), "allowed", entity_id
 
 
+async def _entity_definition(
+    entry: er.RegistryEntry | None, state: Any, access_key: AccessKeyRecord, hass: HomeAssistant,
+) -> dict[str, Any] | None:
+    """Where an entity is defined, and the tool that reads that definition.
+
+    A Template helper and a template written in YAML look alike from the
+    registry, so without this a caller searches YAML for a helper created in the
+    UI. A helper's entry id is shown only to a key that can list helpers, which
+    shows it too; a tool is named only when this key may call it. An entity with
+    no registry entry, such as the home zone, is left undescribed.
+    """
+    if entry is None:
+        return None
+    from .helper import _helper_config_entry  # noqa: PLC0415 - helper imports this module
+
+    def tool(name: str, cap: str) -> dict[str, str]:
+        return {"read_with": name} if effective_cap(access_key, cap) != CAP_DENY else {}
+
+    can_list = effective_cap(access_key, "cap_registry_read") != CAP_DENY
+    if entry.config_entry_id:
+        helper = await _helper_config_entry(hass, entry.config_entry_id)
+        if helper is None:
+            config_entry = hass.config_entries.async_get_entry(entry.config_entry_id)
+            return {"kind": "integration", "integration": config_entry.domain if config_entry else entry.platform}
+        return {"kind": "ui_helper", "helper_type": helper.domain, "title": helper.title,
+                **({"entry_id": helper.entry_id} if can_list else {}), **tool("get_helper_settings", "cap_helper_write")}
+    attributes = getattr(state, "attributes", {}) or {}
+    # HA marks a storage helper editable and a YAML one not; tags exist only in
+    # storage and carry no such flag.
+    stored = attributes.get("editable") is True or entry.domain == "tag"
+    if entry.domain in STORAGE_HELPER_TYPES and entry.platform == entry.domain and stored:
+        return {"kind": "storage_helper", "helper_type": entry.domain,
+                **({"helper_id": entry.unique_id} if can_list else {}), **tool("list_helpers", "cap_registry_read")}
+    # Automations, scripts and scenes live in YAML too, but each has its own reader.
+    reader = _YAML_READERS.get(entry.domain, ("get_yaml_config", "cap_yaml_edit"))
+    return {"kind": "yaml", **tool(*reader)}
+
+
+_YAML_READERS = {
+    "automation": ("get_automation", "cap_automation_write"),
+    "script": ("get_script", "cap_script_write"),
+    "scene": ("get_scene", "cap_scene_write"),
+}
+
+
 async def _tool_get_audit_summary(
     args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData
 ) -> tuple[dict, str, str]:
@@ -2445,9 +2745,9 @@ async def _tool_get_audit_summary(
 
     items = []
     for e in entries:
-        item = {
+        item: dict[str, Any] = {
             "request_id": e.request_id,
-            "timestamp": e.timestamp,
+            "timestamp": e.timestamp.isoformat(),
             "method": e.method,
             "resource": e.resource,
             "outcome": e.outcome,
@@ -2636,23 +2936,19 @@ async def _tool_compare_state(
     if not args.get("t1"):
         return _tool_error("Missing required argument: t1"), "invalid_request", "compare_states"
     try:
-        t1 = _parse_time_param(args["t1"])
-        if t1.tzinfo is None or t1.utcoffset() is None:
-            raise ValueError
-        t1 = as_utc(t1)
-    except ValueError:
-        return _tool_error("Invalid t1 format."), "invalid_request", "compare_states"
+        t1 = as_utc(_parse_time_param(args["t1"]))
+    except ValueError as err:
+        return _tool_error(f"Invalid t1 format. {err}"), "invalid_request", "compare_states"
     t2 = utcnow()
     if args.get("t2"):
         try:
-            t2 = _parse_time_param(args["t2"])
-            if t2.tzinfo is None or t2.utcoffset() is None:
-                raise ValueError
-            t2 = as_utc(t2)
-        except ValueError:
-            return _tool_error("Invalid t2 format."), "invalid_request", "compare_states"
+            t2 = as_utc(_parse_time_param(args["t2"]))
+        except ValueError as err:
+            return _tool_error(f"Invalid t2 format. {err}"), "invalid_request", "compare_states"
     if t1 >= t2:
-        return _tool_error("t1 must be earlier than t2."), "invalid_request", "compare_states"
+        return _tool_error(
+            "t1 must be earlier than t2. A relative time such as 7d means 7 days ago."
+        ), "invalid_request", "compare_states"
 
     comparisons: list[dict] = []
     if accessible:
@@ -2669,9 +2965,13 @@ async def _tool_compare_state(
             dicts2 = [s.as_dict() if hasattr(s, "as_dict") else s for s in at_t2.get(eid, [])]
             s1 = dicts1[-1].get("state") if dicts1 else None
             s2 = dicts2[-1].get("state") if dicts2 else None
-            comparisons.append({"entity_id": eid, "state_at_t1": s1, "state_at_t2": s2, "changed": s1 != s2})
+            # Two snapshots only; with either side unrecorded the answer is unknown, not a change.
+            changed = None if s1 is None or s2 is None else s1 != s2
+            comparisons.append({"entity_id": eid, "state_at_t1": s1, "state_at_t2": s2, "changed": changed})
 
-    body = {"t1": t1, "t2": t2, "comparisons": comparisons}
+    # Named like get_state's list: hidden and missing alike, never silently dropped.
+    body = {"t1": t1.isoformat(), "t2": t2.isoformat(), "comparisons": comparisons,
+            "not_found": [eid for eid in ids if eid not in accessible]}
     return _tool_success(json.dumps(body, default=str)), "allowed", "compare_states"
 
 
@@ -2784,11 +3084,12 @@ async def _tool_compare_entities(
         # Both sides answer with the same body whether the entity is absent or
         # merely out of scope, and the resource names the tool rather than the
         # id, so a refusal is not an existence oracle.
+        not_found = _tool_error(f"Entity not found: {json.dumps(eid[:80])}."), "not_found", "compare_entities"
         if resolve_read(eid, access_key, hass) not in (Permission.READ, Permission.WRITE):
-            return _tool_error("Entity not found."), "not_found", "compare_entities"
+            return not_found
         state = hass.states.get(eid)
         if state is None:
-            return _tool_error("Entity not found."), "not_found", "compare_entities"
+            return not_found
         states.append(scrub_sensitive_attributes(state))
 
     # Scrubbing runs before the diff, so an attribute Phoenix strips from a
@@ -2863,28 +3164,43 @@ async def _tool_recent_activity(
     changes: list[dict] = []
     if accessible_ids:
         try:
-            result = await _history_states(hass, start, end, accessible_ids, include_start=False)
+            # The state at the window start lets a row that repeats the state, as
+            # Home Assistant writes at every restart, be told from a change.
+            result = await _history_states(hass, start, end, accessible_ids, include_start=True)
         except Exception:  # noqa: BLE001
             _LOGGER.warning("recent_activity history failed", exc_info=True)
             return _tool_error("History call failed."), "invalid_request", "recent_activity"
         for eid, states in result.items():
             dicts = [s.as_dict() if hasattr(s, "as_dict") else s for s in states]
-            if not dicts:
+            previous: Any = None
+            moments = []
+            for index, row in enumerate(dicts):
+                stamp = state_timestamp(row)
+                # The start row is the state already in effect, not a change; an
+                # entity first recorded inside the window does count.
+                if (row.get("state") != previous if index else stamp is not None and stamp > start):
+                    moments.append(stamp)
+                previous = row.get("state")
+            if not moments:
                 continue
-            last = dicts[-1]
             changes.append({
                 "entity_id": eid,
-                "state": last.get("state"),
-                "when": last.get("last_changed") or last.get("last_updated"),
-                "changes_in_window": len(dicts),
+                "state": previous,
+                "when": iso_utc(moments[-1]) if moments[-1] is not None else None,
+                "changes_in_window": len(moments),
             })
     changes.sort(key=lambda c: str(c["when"] or ""), reverse=True)
     body = {
         "window_minutes": minutes,
         "count": min(len(changes), limit),
+        "total": len(changes),
+        "has_more": len(changes) > limit,
         "truncated": len(changes) > limit,
         "changes": changes[:limit],
     }
+    if len(changes) > limit:
+        # This read has no offset: the newest changes lead, so a shorter window reads the rest.
+        body["warnings"] = [f"More entities changed than limit {limit}; raise limit or shorten minutes."]
     return _tool_success(json.dumps(body, default=str)), "allowed", "recent_activity"
 
 
@@ -2922,6 +3238,8 @@ async def _tool_dry_run_service(
             "invalid_request",
             "dry_run_service",
         )
+    if templated := template_fields(args.get("service_data")):
+        return _tool_error(template_fields_error(templated)), "invalid_request", "dry_run_service"
     # Sanitised exactly as the real call sanitises it, so the preview predicts
     # the call that would actually run rather than the one the caller wrote.
     service_data = _sanitize_service_data(args.get("service_data"))
@@ -2968,18 +3286,17 @@ async def _tool_dry_run_service(
             }
             return _tool_success(json.dumps(body, default=str)), "allowed", "dry_run_service"
 
-    try:
-        if not any((args.get("entity_id"), args.get("device_id"), args.get("area_id"))):
-            return (
-                _tool_error("An explicit entity_id, device_id, or area_id target is required."),
-                "invalid_request", "dry_run_service",
-            )
-        permitted, requested = resolve_service_targets(
-            entity_id=args.get("entity_id"), device_id=args.get("device_id"),
-            area_id=args.get("area_id"), service_domain=domain, access_key=access_key, hass=hass,
+    if not any((args.get("entity_id"), args.get("device_id"), args.get("area_id"))):
+        return (
+            _tool_error("An explicit entity_id, device_id, or area_id target is required."),
+            "invalid_request", "dry_run_service",
         )
-    except EntityCreationNotPermitted:
-        permitted, requested = [], 0
+    # Counts cover only entities the key can see, so a hidden target and a
+    # missing one preview identically.
+    permitted, requested = resolve_service_targets(
+        entity_id=args.get("entity_id"), device_id=args.get("device_id"),
+        area_id=args.get("area_id"), service_domain=domain, access_key=access_key, hass=hass,
+    )
 
     if not service_target_binding_valid(domain, service, permitted, hass):
         permitted = []
@@ -2994,6 +3311,8 @@ async def _tool_dry_run_service(
     predicted: str
     if physical_gate and effective_cap(access_key, "cap_physical_control") != CAP_ALLOW:
         predicted = _cap_outcome(effective_cap(access_key, "cap_physical_control"))
+    elif domain == "notify" and effective_cap(access_key, "cap_notify") != CAP_ALLOW:
+        predicted = _cap_outcome(effective_cap(access_key, "cap_notify"))
     elif not permitted:
         predicted = "denied"
     else:
@@ -3099,10 +3418,10 @@ async def _tool_validate_config(
             errors.append("Config failed schema validation.")
     except vol.Invalid as exc:
         valid = False
-        errors.append(validation_message(cfg_type, exc))
+        errors.append(await async_validation_message(hass, cfg_type, config, exc))
     except HomeAssistantError:
         valid = False
-        errors.append(validation_message(cfg_type))
+        errors.append(await async_validation_message(hass, cfg_type, config))
     except Exception:
         _LOGGER.error("Config validation raised an unexpected internal error")
         return _tool_error("Internal error validating this config."), "invalid_request", "validate_automation_or_script"

@@ -217,7 +217,7 @@ describe("Agent Chat image attachments", () => {
     ["custom", NO_VISION, "This model does not accept images."],
   ])("blocks images for a %s access key when the model or persona cannot take them", async (persona, instance, reason) => {
     const { textarea } = await openWindow(instance, { ...KEY, persona } as AccessKeyRecord);
-    const attach = screen.getByRole("button", { name: "Attach image" });
+    const attach = screen.getByRole("button", { name: "Attach Image" });
     expect(attach).toHaveAttribute("aria-disabled", "true");
     expect(attach).toHaveAttribute("title", reason);
 
@@ -237,7 +237,7 @@ describe("Agent Chat image attachments", () => {
     await waitFor(() => expect(agentCliChat).toHaveBeenCalled());
     expect(document.querySelector(".agentcli-attachment-list")).toBeNull();
 
-    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    fireEvent.click(screen.getByRole("button", { name: "Stop" }));
     await waitFor(() => expect(document.querySelector(".agentcli-attachment-list img"))
       .toHaveAttribute("alt", "Attached image shot.png"));
     expect(textarea.value).toBe("look");

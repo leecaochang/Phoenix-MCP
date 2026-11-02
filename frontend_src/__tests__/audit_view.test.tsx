@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, fireEvent, waitFor, within } from "@testing-library/react";
 import { AuditView } from "../views/AuditView";
+import { LogDetailsContent, LogSelection, LogSelectionContext } from "../shell/logDetails";
 import { api } from "../api";
 import type { AuditEntry } from "../types";
 
@@ -46,7 +47,7 @@ describe("AuditView", () => {
       method: undefined, resource: undefined, ip: undefined,
       limit: 100, offset: 0,
     });
-    expect(queryByText("Load more")).toBeTruthy();
+    expect(queryByText("Load More")).toBeTruthy();
   });
 
   it("Load more appends the next page at the accumulated offset", async () => {
@@ -57,12 +58,12 @@ describe("AuditView", () => {
     const { findByText, getByText, queryByText } = render(<AuditView accessKeys={[]} />);
     await findByText("first");
 
-    fireEvent.click(getByText("Load more"));
+    fireEvent.click(getByText("Load More"));
     await findByText("second");
 
     expect(api.getAudit).toHaveBeenLastCalledWith(expect.objectContaining({ offset: 1, limit: 100 }));
     // Both pages of a two-total feed are now shown, so Load more disappears.
-    expect(queryByText("Load more")).toBeNull();
+    expect(queryByText("Load More")).toBeNull();
   });
 
   it("changing a dropdown filter reloads from offset 0 with the filter applied", async () => {
@@ -127,17 +128,23 @@ describe("AuditView", () => {
       total: 4,
     });
 
-    const { findByText, getByRole, getByText } = render(<AuditView accessKeys={[]} />);
-    await findByText("Agent Chat");
-
+    const selection = new LogSelection();
+    const { findByRole, getByRole, getByText } = render(
+      <LogSelectionContext.Provider value={selection}><AuditView accessKeys={[]} /><LogDetailsContent /></LogSelectionContext.Provider>,
+    );
+    // Every column shows by default (user, 2026-10-27), Source included.
+    await findByRole("button", { name: "Time Column Options" });
     expect(getByRole("columnheader", { name: /Source/ })).toBeTruthy();
+    expect(getByText("Agent Chat")).toBeTruthy();
     expect(getByText("Assist Tool Provider")).toBeTruthy();
     expect(getByText("Voice Agent")).toBeTruthy();
     expect(getByText("AI Task")).toBeTruthy();
+    // Choosing the entry shows it in Log Details, with the source by its friendly name.
     fireEvent.click(getByText("Agent Chat"));
-    expect(within(getByRole("dialog")).getByText("Source")).toBeTruthy();
-    expect(within(getByRole("dialog")).getByText("Agent Chat")).toBeTruthy();
-    expect(within(getByRole("dialog")).queryByText("agentcli")).toBeNull();
+    const details = document.querySelector<HTMLElement>(".phx-log-details")!;
+    expect(within(details).getByText("Source")).toBeTruthy();
+    expect(within(details).getByText("Agent Chat")).toBeTruthy();
+    expect(within(details).queryByText("agentcli")).toBeNull();
   });
 
   it("filters a friendly Agent Chat source name using the stored marker", async () => {
@@ -155,18 +162,53 @@ describe("AuditView", () => {
     vi.useRealTimers();
   });
 
+  it("counts a time window back from each load, not from when it was chosen", async () => {
+    vi.mocked(api.getAudit).mockResolvedValue({ entries: [], total: 0 });
+    const { getByLabelText } = render(<AuditView accessKeys={[]} />);
+    fireEvent.change(getByLabelText("Filter by time window"), { target: { value: "24h" } });
+    await waitFor(() => expect(api.getAudit).toHaveBeenLastCalledWith(expect.objectContaining({ since: expect.any(String) })));
+    const first = Date.parse(vi.mocked(api.getAudit).mock.lastCall![0]!.since!);
+    await new Promise((r) => setTimeout(r, 15));
+    fireEvent.click(getByLabelText("Refresh audit log"));
+    await waitFor(() => expect(Date.parse(vi.mocked(api.getAudit).mock.lastCall![0]!.since!)).toBeGreaterThan(first));
+    expect(vi.mocked(api.getAudit).mock.lastCall![0]).not.toHaveProperty("windowMs");
+  });
+
+  it("matches the Resource filter typed as shown against the stored resource", async () => {
+    vi.useFakeTimers();
+    vi.mocked(api.getAudit).mockResolvedValue({ entries: [], total: 0 });
+    const { getByLabelText } = render(<AuditView accessKeys={[]} />);
+    await vi.waitFor(() => expect(api.getAudit).toHaveBeenCalledTimes(1));
+    fireEvent.change(getByLabelText("Filter by resource"), { target: { value: "approval:MESA-gated action:" } });
+    vi.advanceTimersByTime(300);
+    await vi.waitFor(() =>
+      expect(api.getAudit).toHaveBeenLastCalledWith(expect.objectContaining({ resource: "approval:call_service_mesa_approved:" })),
+    );
+    vi.useRealTimers();
+  });
+
+  it("Clear Filters clears the request id filter too", async () => {
+    vi.mocked(api.getAudit).mockResolvedValue({ entries: [], total: 0 });
+    const { getByLabelText, getByRole } = render(<AuditView accessKeys={[]} />);
+    fireEvent.change(getByLabelText("Filter by request ID"), { target: { value: "rid-1" } });
+    await waitFor(() => expect(api.getAudit).toHaveBeenLastCalledWith(expect.objectContaining({ request_id: "rid-1" })));
+    fireEvent.click(getByRole("button", { name: "Clear Filters" }));
+    await waitFor(() => expect(api.getAudit).toHaveBeenLastCalledWith(expect.objectContaining({ request_id: undefined })));
+    expect((getByLabelText("Filter by request ID") as HTMLInputElement).value).toBe("");
+  });
+
   it("reports a failed read instead of an empty log, and recovers on refresh", async () => {
     vi.mocked(api.getAudit)
       .mockRejectedValueOnce(new Error("Server error"))
       .mockResolvedValueOnce({ entries: [entry()], total: 1 });
     const { findByRole, queryByText, getByLabelText, findByText } = render(<AuditView accessKeys={[]} />);
 
-    expect((await findByRole("alert")).textContent).toBe("Could not load the audit log. Refresh to try again.");
+    expect((await findByRole("alert")).textContent).toBe("Could not load the audit log. The log tries again every 5 seconds; while updates are paused, press Refresh.");
     expect(queryByText("No audit entries found.")).toBeNull();
 
     fireEvent.click(getByLabelText("Refresh audit log"));
     await findByText("create_automation");
-    expect(queryByText("Could not load the audit log. Refresh to try again.")).toBeNull();
+    expect(queryByText("Could not load the audit log. The log tries again every 5 seconds; while updates are paused, press Refresh.")).toBeNull();
   });
 
   it("keeps the rows already shown when a later page fails", async () => {
@@ -175,10 +217,10 @@ describe("AuditView", () => {
       .mockRejectedValueOnce(new Error("Server error"));
     const { findByText, findByRole, getByText } = render(<AuditView accessKeys={[]} />);
     await findByText("create_automation");
-    fireEvent.click(getByText("Load more"));
+    fireEvent.click(getByText("Load More"));
     await findByRole("alert");
     expect(getByText("create_automation")).toBeTruthy();
-    expect(getByText("Load more")).toBeTruthy();
+    expect(getByText("Load More")).toBeTruthy();
   });
 
   it("offers no Load more while a filter change is loading its first page", async () => {
@@ -187,11 +229,11 @@ describe("AuditView", () => {
       .mockResolvedValueOnce({ entries: [entry({ outcome: "allowed" })], total: 5 })
       .mockReturnValueOnce(next.promise);
     const { findByText, queryByText, getByLabelText } = render(<AuditView accessKeys={[]} />);
-    await findByText("Load more");
+    await findByText("Load More");
     fireEvent.change(getByLabelText("Filter by outcome"), { target: { value: "denied" } });
     await waitFor(() => expect(api.getAudit).toHaveBeenCalledTimes(2));
-    expect(queryByText("Load more")).toBeNull();
+    expect(queryByText("Load More")).toBeNull();
     next.resolve({ entries: [entry({ request_id: "r9", outcome: "denied" })], total: 1 });
-    await waitFor(() => expect(queryByText("Load more")).toBeNull());
+    await waitFor(() => expect(queryByText("Load More")).toBeNull());
   });
 });

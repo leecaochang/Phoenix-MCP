@@ -22,12 +22,14 @@ import { localeNumber, localePluralCategory, setFormatLocale, validFormatLocale 
 // adopt the locale below without a cycle.
 export {
   compareStrings,
+  foldForSearch,
   getFormatLocale,
   localeCompactNumber,
   localeClock,
   localeDate,
   localeDateTime,
   localeDateTimeShort,
+  localeFileSize,
   localeNumber,
   localePluralCategory,
   setFormatLocale,
@@ -174,6 +176,35 @@ export function isI18nReady(): boolean {
   return ready;
 }
 
+// Scripts written right to left. No shipped catalog uses one today, but Home
+// Assistant itself may run in one, and its document direction must not leak
+// into a Phoenix root showing a left-to-right catalog.
+const RTL_LANGUAGES = new Set(["ar", "fa", "he", "ur", "yi"]);
+const languageRoots = new Set<HTMLElement>();
+
+function applyLanguage(root: HTMLElement): void {
+  const language = loaded ?? "en";
+  root.lang = language;
+  root.dir = RTL_LANGUAGES.has(language.split("-")[0]) ? "rtl" : "ltr";
+}
+
+/**
+ * Keep a Phoenix root's lang and dir on the catalog it displays, not on Home
+ * Assistant's document. Screen readers pick their voice, and browsers pick CJK
+ * glyph forms and hyphenation, from lang; dir decides the layout direction.
+ */
+export function registerLanguageRoot(root: HTMLElement): void {
+  languageRoots.add(root);
+  applyLanguage(root);
+}
+
+function applyLanguageToRoots(): void {
+  for (const root of languageRoots) {
+    if (root.isConnected) applyLanguage(root);
+    else languageRoots.delete(root);
+  }
+}
+
 /** Collapse a nested catalog object into dotted keys. */
 export function flattenCatalog(obj: unknown, prefix = ""): Record<string, string> {
   const out: Record<string, string> = {};
@@ -196,6 +227,7 @@ export function primeTranslations(catalog: unknown, language = "en"): void {
   strings = flattenCatalog(catalog);
   loaded = resolved;
   requested = resolved;
+  applyLanguageToRoots();
   setFormatLocale({}, resolved);
   requestGeneration += 1;
   ready = true;
@@ -240,6 +272,7 @@ export async function loadTranslations(hass: any, language: string): Promise<boo
     if (generation === requestGeneration && next) {
       strings = next;
       loaded = resolved;
+      applyLanguageToRoots();
     }
   } catch (e) {
     retryAfter.set(resolved, Date.now() + CATALOG_RETRY_MS);
@@ -248,7 +281,9 @@ export async function loadTranslations(hass: any, language: string): Promise<boo
     }
   } finally {
     if (generation === requestGeneration) {
-      setFormatLocale(hass, formattingLocale, resolved);
+      // Plural grammar follows the catalog actually installed, which is still
+      // the previous one when this language's fetch failed.
+      setFormatLocale(hass, formattingLocale, loaded ?? resolved);
       ready = true;
     }
   }
@@ -283,8 +318,15 @@ export function hasMessage(key: string): boolean {
   return key in strings;
 }
 
-/** The stored template for a key, or the key itself when it is missing. */
+/**
+ * The stored template for a key, or the key itself when it is missing.
+ *
+ * A label map indexed by a backend value this bundle does not know yields
+ * undefined at runtime despite its type; that renders as empty text instead of
+ * throwing inside interpolate.
+ */
 export function rawMessage(key: string): string {
+  if (typeof key !== "string") return "";
   return strings[key] ?? key;
 }
 
@@ -305,8 +347,12 @@ export function t(key: string, params?: Params): string {
  * to the template as {count}.
  */
 export function tn(base: string, count: number, params?: Params): string {
+  return t(tnKey(base, count), { count, ...params });
+}
+
+/** The catalog key tn() would use, for a plural sentence rendered by tRich or chosen by the backend. */
+export function tnKey(base: string, count: number): string {
   const category = localePluralCategory(count);
   const keys = [`${base}.${category}`, `${base}.other`, `${base}.one`];
-  const key = keys.find((candidate) => hasMessage(candidate)) ?? keys[0];
-  return t(key, { count, ...params });
+  return keys.find((candidate) => hasMessage(candidate)) ?? keys[0];
 }

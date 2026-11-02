@@ -153,7 +153,8 @@ def test_every_template_is_reachable() -> None:
     computed_prefixes = (
         "location.", "blueprint.", "dashboard.", "dashboard_card.", "dashboard_resource.", "hass_turn.",
         "patch_dashboard.", "patch.", "edit_energy_config.",
-        "entity.", "device.",
+        "entity.", "device.", "label.", "category.",
+        "zigbee_binding.devices.", "zigbee_group.named.",
     )
     named = _keys_named_in_source() | set(_CARD_OP_VERSION_KEYS.values())
     orphans = [
@@ -191,7 +192,7 @@ def test_every_template_formats_with_its_own_placeholders() -> None:
 def test_version_summary_builds_the_changes_line() -> None:
     """The Changes tab's one-liner, end to end."""
     assert version_summary_fields("cards.was", count=25, before=24) == {
-        "summary": "25 cards (was 24)",
+        "summary": "cards: 25 (was 24)",
         "summary_key": "version.cards.was",
         "summary_params": {"count": 25, "before": 24},
     }

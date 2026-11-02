@@ -1,4 +1,4 @@
-"""Real HTTP regressions for abandoned reviews and authority loss after writes."""
+"""Real HTTP and dispatcher regressions for abandoned reviews, authority loss after writes and unknown-outcome barriers."""
 from __future__ import annotations
 
 import asyncio
@@ -271,9 +271,11 @@ async def test_real_json_disconnect_preserves_only_legacy_dispatch(hass, socket_
                 "jsonrpc": "2.0", "method": "notifications/initialized"})
             assert response.status == 202
             await response.read()
-        body = {"jsonrpc": "2.0", "id": 7, "method": "ping", "params": {}}
+        # 2026-07-28 has no ping, so the modern era probes with tools/list.
+        method = "tools/list" if era == "modern" else "ping"
+        body = {"jsonrpc": "2.0", "id": 7, "method": method, "params": {}}
         if era == "modern":
-            headers.update({"MCP-Protocol-Version": "2026-07-28", "Mcp-Method": "ping"})
+            headers.update({"MCP-Protocol-Version": "2026-07-28", "Mcp-Method": method})
             body["params"] = {"_meta": {
                 "io.modelcontextprotocol/protocolVersion": "2026-07-28",
                 "io.modelcontextprotocol/clientCapabilities": {},
@@ -540,3 +542,62 @@ async def test_emit_failure_after_pending_review_still_closes_it(hass):
     pending = data.store.get_pending_approvals()
     assert pending
     assert get_approval(data.store, pending[0]["id"]).status == "cancelled"
+
+
+@pytest.mark.parametrize("refusal", ["stale_hash", "unknown_argument", "dispatcher_argument"])
+async def test_agent_refusal_before_writing_leaves_no_barrier(hass, refusal):
+    # A stale expected_hash refused pre-gate, an unknown argument refused by the
+    # tool's own first check, and one refused by the dispatcher before any
+    # handler runs. None could write, so the agent loop gets the error back with
+    # no outcome to reconcile.
+    from custom_components.phoenix_mcp.agent_recovery import dispatch_agent_tool
+    from custom_components.phoenix_mcp.helpers import content_hash
+    from custom_components.phoenix_mcp.ws_dispatch import async_get_lovelace_config, async_save_lovelace_config
+
+    assert await async_setup_component(hass, "lovelace", {"lovelace": {}})
+    data, access_key, _ = await _environment(hass)
+    access_key.cap_lovelace_write = "confirm"
+    layout = {"views": [{"title": "V", "cards": [{"type": "markdown", "content": "a"}]}]}
+    await async_save_lovelace_config(hass, None, layout)
+    arguments = {"view_index": 0, "card_index": 0, "card": {"type": "markdown", "content": "b"},
+                 # Read before someone else changed the dashboard.
+                 "expected_hash": content_hash({"views": []})}
+    if refusal == "unknown_argument":
+        arguments.update(expected_hash=content_hash(layout), colour="red")
+    name = "edit_dashboard_card"
+    if refusal == "dispatcher_argument":
+        name, arguments = "restart_ha", {"colour": "red"}
+    body, _, _, outcome = await dispatch_agent_tool(
+        mcp_view._dispatch_mcp, hass=hass, data=data, access_key=access_key, name=name,
+        arguments=arguments, tool_id=1, request_id="refused", client_ip="agentcli", base_url="")
+    assert outcome == "invalid_request"
+    assert body["result"]["isError"] is True
+    assert set(body["result"]) == {"content", "isError"}  # the marker adds nothing on the wire
+    assert ("expected_hash no longer matches" in json.dumps(body)) is (refusal == "stale_hash")
+    assert data.agent_recovery.records(access_key.id) == []
+    assert not data.agent_recovery.blocks(access_key.id)
+    assert not data.store.get_pending_approvals()
+    assert await async_get_lovelace_config(hass, None) == layout
+
+
+@pytest.mark.parametrize("result", ["unmarked", "copied"])
+async def test_agent_write_error_without_the_marker_keeps_the_barrier(hass, result):
+    # A handler error after the handler ran may follow a partial write, and a
+    # copy that drops the marker's type proves nothing either: both fail closed.
+    from custom_components.phoenix_mcp.agent_recovery import RecoveryRequired, dispatch_agent_tool
+    from custom_components.phoenix_mcp.tool_common import _tool_error, _tool_refused_before_write
+
+    data, access_key, _ = await _environment(hass)
+    text = "Failed to save dashboard config: connection lost."
+    error = _tool_error(text) if result == "unmarked" else dict(_tool_refused_before_write(text))
+
+    async def handler(*args, **kwargs):
+        return error, "invalid_request", "call_service"
+
+    with patch.dict(mcp_view._TOOL_HANDLERS, {"call_service": (handler, (), {})}), \
+            pytest.raises(RecoveryRequired):
+        await dispatch_agent_tool(
+            mcp_view._dispatch_mcp, hass=hass, data=data, access_key=access_key, name="call_service",
+            arguments=_write()["params"]["arguments"], tool_id=1, request_id="uncertain",
+            client_ip="agentcli", base_url="")
+    assert data.agent_recovery.blocks(access_key.id)

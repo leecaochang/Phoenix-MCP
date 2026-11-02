@@ -5,6 +5,7 @@ const SOURCE_LABEL_KEYS: Record<string, string> = {
   assist: "settings.assistCard",
   voice: "settings.voiceCard",
   ai_task: "settings.aiTaskCard",
+  home_companion: "personas.home_companion.label",
 };
 
 /** Present internal request surfaces by their operator-facing product names. */

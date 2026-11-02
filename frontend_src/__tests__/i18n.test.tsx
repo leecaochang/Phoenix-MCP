@@ -14,7 +14,7 @@ import {
   tn,
 } from "../i18n";
 import { tRich } from "../i18n/rich";
-import { diffSummary } from "../views/ApprovalsView";
+import { diffSummary } from "../utils/approval_text";
 
 // Every test that replaces the catalog must put the real one back, or it leaks
 // into the rest of the suite (setup.ts primes it once, globally).
@@ -86,9 +86,9 @@ describe("tn", () => {
 
   it("renders shipped Russian and Polish forms for representative counts", () => {
     primeTranslations(ru.panel, "ru");
-    expect(tn("approvals.othersPending", 21)).toBe("Ещё 21 одобрение ожидает проверки.");
-    expect(tn("approvals.othersPending", 22)).toBe("Ещё 22 одобрения ожидают проверки.");
-    expect(tn("approvals.othersPending", 25)).toBe("Ещё 25 одобрений ожидают проверки.");
+    expect(tn("mesa.countDevice", 21)).toBe("Устройство: 21");
+    expect(tn("mesa.countDevice", 22)).toBe("Устройства: 22");
+    expect(tn("mesa.countDevice", 25)).toBe("Устройств: 25");
 
     primeTranslations(pl.panel, "pl");
     expect(tn("selectBy.entities", 2)).toBe("2 encje");
@@ -399,9 +399,10 @@ it("backs off failed catalog requests across repeated HA updates, then retries",
   vi.useRealTimers();
 });
 
-it("covers Polish few and many categories in selection warnings", () => {
+it("covers Polish few and many categories in Select By group counts", () => {
   primeTranslations(pl.panel, "pl");
-  expect(tn("selectBy.sharedDeviceWarning", 2)).toContain("2 wybrane urządzenia są współdzielone");
-  expect(tn("selectBy.sharedDeviceWarning", 5)).toContain("5 wybranych urządzeń jest współdzielonych");
-  expect(tn("selectBy.willSet", 3, { state: "Odczyt" })).not.toContain("selectBy");
+  expect(tn("selectBy.entities", 2)).toBe("2 encje");
+  expect(tn("selectBy.entities", 5)).toBe("5 encji");
+  expect(tn("selectBy.resources", 3)).toBe("3 zasoby");
+  expect(tn("selectBy.resources", 12)).toBe("12 zasobów");
 });

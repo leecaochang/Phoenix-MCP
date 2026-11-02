@@ -8,6 +8,7 @@ not_found for a missing device and an inaccessible one.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 import json
 import uuid
 from types import SimpleNamespace
@@ -489,6 +490,13 @@ class TestGetDevice:
             "supports_remove_device": None,
         }]
 
+    async def test_owner_title_gets_the_list_integrations_scrub(self, hass, reg_env):
+        device = reg_env["hub"]
+        entry = hass.config_entries.async_get_entry("e1")
+        hass.config_entries.async_update_entry(entry, title="Hub 192.168.1.50 http://hub.local/admin")
+        content, _, _ = await _call("get_device", {"device_id": device.id}, _access_key(), hass)
+        assert _result_json(content)["config_entries"][0]["title"] == "Hub <redacted-ip> <redacted-url>"
+
     async def test_missing_device_not_found(self, hass, reg_env):
         content, outcome, _ = await _call("get_device", {"device_id": "does_not_exist"}, _access_key(), hass)
         assert outcome == "not_found"
@@ -616,8 +624,28 @@ class TestSearchEntities:
         content, outcome, _ = await _call(
             "search_entities", {"query": "kitchen", "stale_hours": 0}, _access_key(), hass)
         assert outcome == "allowed"
-        ids = [e["entity_id"] for e in _result_json(content)["entities"]]
+        body = _result_json(content)
+        ids = [e["entity_id"] for e in body["entities"]]
         assert ids == ["light.kitchen"]
+        # Each row shows the time it was judged by, and nothing is beyond the horizon.
+        assert body["entities"][0]["last_changed"] == hass.states.get("light.kitchen").last_changed.isoformat()
+        assert "warnings" not in body
+
+    async def test_stale_hours_past_every_last_changed_names_the_restart_horizon(self, hass, reg_env):
+        # Just after a restart every last_changed is recent, so an empty result must
+        # not read as "nothing has been quiet".
+        content, outcome, _ = await _call("search_entities", {"stale_hours": 72}, _access_key(), hass)
+        body = _result_json(content)
+        oldest = min(hass.states.get(eid).last_changed for eid in ("light.kitchen", "light.bedroom", "zone.home"))
+        assert outcome == "allowed" and body["entities"] == []
+        assert body["oldest_last_changed"] == oldest.isoformat()
+        assert "resets last_changed when it restarts" in body["warnings"][0]
+        assert "mode summary" in body["warnings"][0]
+
+    async def test_no_stale_hours_adds_no_stale_fields(self, hass, reg_env):
+        content, _, _ = await _call("search_entities", {"query": "kitchen"}, _access_key(), hass)
+        body = _result_json(content)
+        assert "oldest_last_changed" not in body and "last_changed" not in body["entities"][0]
 
     async def test_control_mode_annotated_when_non_default(self, hass, reg_env):
         data = MagicMock()
@@ -862,6 +890,156 @@ class TestDescribeRegistryOnlyEntity:
         assert outcome == "not_found"
 
 
+@pytest.fixture
+def radio_env(hass: HomeAssistant):
+    """One binary sensor per way a device connects, with identifiers as each integration records them."""
+    dev_reg, ent_reg = dr.async_get(hass), er.async_get(hass)
+    entries = {}
+    for domain in ("zha", "mqtt", "zwave_js", "matter", "xiaomi_ble", "esphome"):
+        entries[domain] = MockConfigEntry(domain=domain, entry_id=f"radio-{domain}")
+        entries[domain].add_to_hass(hass)
+    devices = {
+        "zha_leak": ("zha", {("zha", "00:11:22:33:44:55:66:77")}, set()),
+        "z2m_door": ("mqtt", {("mqtt", "zigbee2mqtt_0x00124b0012345678")}, set()),
+        "z2m_bridge": ("mqtt", {("mqtt", "zigbee2mqtt_bridge_0x00124b002e1e03c7")}, set()),
+        "mqtt_strimmer": ("mqtt", {("mqtt", "strimmer_1")}, set()),
+        "zwave_motion": ("zwave_js", {("zwave_js", "3967712345-12")}, set()),
+        "matter_contact": ("matter", {("matter", "deviceid_0000000000000001-0000000000000005-MatterNodeDevice")}, set()),
+        "ble_plant": ("xiaomi_ble", {("xiaomi_ble", "AA:BB:CC:DD:EE:FF")}, {(dr.CONNECTION_BLUETOOTH, "AA:BB:CC:DD:EE:FF")}),
+        "wifi_plug": ("esphome", {("esphome", "plug")}, {(dr.CONNECTION_NETWORK_MAC, "11:22:33:44:55:66")}),
+    }
+    for name, (domain, identifiers, connections) in devices.items():
+        device = dev_reg.async_get_or_create(config_entry_id=entries[domain].entry_id, identifiers=identifiers,
+                                             connections=connections, name=name)
+        entity = ent_reg.async_get_or_create("binary_sensor", domain, name, config_entry=entries[domain],
+                                             device_id=device.id, suggested_object_id=name)
+        hass.states.async_set(entity.entity_id, "off", {"device_class": "door" if "door" in name else "moisture"})
+        if name == "z2m_door" and _CHILD_DEVICES:
+            # A child device takes its parent's radio.
+            child = dev_reg.async_get_or_create_child(config_entry_id=entries["mqtt"].entry_id,
+                                                      identifiers={("mqtt", "z2m_door_l2")}, parent_device_id=device.id)
+            part = ent_reg.async_get_or_create("binary_sensor", "mqtt", "z2m_door_l2", config_entry=entries["mqtt"],
+                                               device_id=child.id, suggested_object_id="z2m_door_l2")
+            hass.states.async_set(part.entity_id, "off", {"device_class": "door"})
+    return hass
+
+
+# Child devices arrived in Home Assistant 2026.9; on earlier releases radio_env has no z2m_door_l2.
+_CHILD_DEVICES = hasattr(dr.DeviceRegistry, "async_get_or_create_child")
+_PART = ["z2m_door_l2"] if _CHILD_DEVICES else []
+
+
+def _radio_key() -> AccessKeyRecord:
+    return _access_key(permissions=PermissionTree(domains={"binary_sensor": PermissionNode(state="GREEN")}))
+
+
+class TestSearchByRadioAndIntegration:
+    @pytest.mark.parametrize(("radio", "expected"), [
+        ("zigbee", {"zha_leak", "z2m_door", *_PART}),
+        ("zwave", {"zwave_motion"}),
+        ("matter", {"matter_contact"}),
+        ("bluetooth", {"ble_plant"}),
+        (["zwave", "bluetooth"], {"zwave_motion", "ble_plant"}),
+    ])
+    async def test_radio_reads_the_device_registry(self, hass, radio_env, radio, expected):
+        # Zigbee covers ZHA and Zigbee2MQTT but not the bridge or other MQTT devices.
+        content, outcome, _ = await _call("search_entities", {"radio": radio}, _radio_key(), hass)
+        assert outcome == "allowed"
+        assert {row["entity_id"].split(".")[1] for row in _result_json(content)["entities"]} == expected
+
+    @pytest.mark.usefixtures("requires_child_devices")
+    async def test_a_child_device_is_read_without_core_compatibility_reports(self, hass, radio_env):
+        # connections is a deprecated shim on a child device; reading it reports
+        # usage and stops working in a later Home Assistant release.
+        with patch("homeassistant.helpers.device_registry.report_usage") as report:
+            content, outcome, _ = await _call("search_entities", {"radio": "bluetooth"}, _radio_key(), hass)
+        assert outcome == "allowed" and _result_json(content)["total"] == 1
+        report.assert_not_called()
+
+    async def test_integration_is_the_provider_not_the_radio(self, hass, radio_env):
+        content, _, _ = await _call("search_entities", {"integration": "mqtt"}, _radio_key(), hass)
+        ids = {row["entity_id"].split(".")[1] for row in _result_json(content)["entities"]}
+        assert ids == {"z2m_door", *_PART, "z2m_bridge", "mqtt_strimmer"}
+
+    @pytest.mark.parametrize("device_class", [["door", "window"], "door,window", '["door", "window"]'])
+    async def test_device_class_accepts_several(self, hass, radio_env, device_class):
+        content, _, _ = await _call("search_entities", {"radio": "zigbee", "device_class": device_class}, _radio_key(), hass)
+        ids = {row["entity_id"].split(".")[1] for row in _result_json(content)["entities"]}
+        assert ids == {"z2m_door", *_PART}
+
+    @pytest.mark.parametrize(("args", "message"), [
+        ({"radio": "thread"}, "radio must be one or more of: zigbee, zwave, matter, bluetooth."),
+        ({"radio": ["zigbee", 7]}, "radio must be a string or an array of strings."),
+        ({"integration": {"name": "mqtt"}}, "integration must be a string or an array of strings."),
+        ({"device_class": 3}, "device_class must be a string or an array of strings."),
+    ])
+    async def test_a_malformed_filter_is_refused_not_dropped(self, hass, radio_env, args, message):
+        content, outcome, _ = await _call("search_entities", args, _radio_key(), hass)
+        assert outcome == "invalid_request" and content["content"][0]["text"] == message
+
+
+def _add_battery(hass, device_name: str, domain: str = "sensor", diagnostic: bool = True) -> str:
+    """A battery entity on one radio_env device, as integrations register them."""
+    dev_reg, ent_reg = dr.async_get(hass), er.async_get(hass)
+    # Before 2026.9 the registry's devices are a mapping of id to entry.
+    entries = dev_reg.devices.values() if isinstance(dev_reg.devices, Mapping) else dev_reg.devices
+    device = next(d for d in entries if d.name == device_name)
+    entry = ent_reg.async_get_or_create(domain, "test", f"{device_name}_battery", device_id=device.id,
+                                        suggested_object_id=f"{device_name}_battery",
+                                        original_device_class="battery",
+                                        entity_category=er.EntityCategory.DIAGNOSTIC if diagnostic else None)
+    hass.states.async_set(entry.entity_id, "80" if domain == "sensor" else "off", {"device_class": "battery"})
+    return entry.entity_id
+
+
+class TestSearchByPower:
+    @pytest.fixture
+    def power_env(self, radio_env):
+        hass = radio_env
+        _add_battery(hass, "zha_leak")
+        _add_battery(hass, "z2m_door", "binary_sensor")
+        hidden = _add_battery(hass, "mqtt_strimmer")
+        # A battery that is the device's main reading, as on a car or a home storage system.
+        _add_battery(hass, "wifi_plug", diagnostic=False)
+        return hass, hidden
+
+    def _key(self, hidden: str) -> AccessKeyRecord:
+        return _access_key(permissions=PermissionTree(
+            domains={"binary_sensor": PermissionNode(state="GREEN"), "sensor": PermissionNode(state="GREEN")},
+            entities={hidden: PermissionNode(state="RED")}))
+
+    async def test_battery_selects_devices_with_a_readable_battery_entity(self, power_env):
+        hass, hidden = power_env
+        content, outcome, _ = await _call("search_entities", {"power": "battery", "domain": "binary_sensor"},
+                                          self._key(hidden), hass)
+        ids = {row["entity_id"].split(".")[1] for row in _result_json(content)["entities"]}
+        # A child device counts with its main device; a device whose only battery
+        # entity the key cannot read is left out, so the hidden entity stays unrevealed;
+        # a battery that is the device's main reading does not make it battery powered.
+        assert outcome == "allowed" and ids == {"zha_leak", "z2m_door", *_PART, "z2m_door_battery"}
+
+    async def test_battery_combines_with_radio_and_drops_diagnostics_in_a_summary_select(self, power_env):
+        hass, hidden = power_env
+        content, _, _ = await _call("search_entities", {"power": "battery", "radio": "zwave"}, self._key(hidden), hass)
+        assert _result_json(content)["total"] == 0
+        from custom_components.phoenix_mcp.mcp_view import _resolve_select
+        data = MagicMock()
+        data.mesa = None
+        chosen, selection = await _resolve_select({"power": "battery", "radio": "zigbee"}, "get_history",
+                                                  self._key(hidden), hass, data)
+        assert [eid.split(".")[1] for eid in chosen] == ["z2m_door", *_PART, "zha_leak"]
+        assert selection["select"] == {"power": "battery", "radio": "zigbee"}
+
+    @pytest.mark.parametrize(("power", "message"), [
+        ("mains", "power must be battery. Home Assistant records a battery reading but no mains or other power source."),
+        (["battery"], "power must be a string."),
+    ])
+    async def test_an_unknown_power_source_is_refused(self, power_env, power, message):
+        hass, hidden = power_env
+        content, outcome, _ = await _call("search_entities", {"power": power}, self._key(hidden), hass)
+        assert outcome == "invalid_request" and content["content"][0]["text"] == message
+
+
 class TestGetOverview:
     async def test_deny_without_cap(self, hass, reg_env):
         _, outcome, _ = await _call("get_overview", {}, _access_key(cap_search="deny"), hass)
@@ -875,7 +1053,16 @@ class TestGetOverview:
         assert body["by_domain"] == {"light": 2, "zone": 1}
         assert body["by_area"] == {"(no area)": 1, "Bedroom": 1, "Kitchen": 1}
         assert body["unavailable_count"] == 0
+        assert body["unknown_count"] == 0
         assert "mesa_mode" not in body  # mesa disabled in this data mock
+
+    async def test_unknown_is_counted_apart_from_unavailable(self, hass, reg_env):
+        # A never-pressed button or an idle event entity reads unknown; that is not an outage.
+        hass.states.async_set("light.kitchen", "unknown", {})
+        hass.states.async_set("light.bedroom", "unavailable", {})
+        content, _, _ = await _call("get_overview", {}, _access_key(), hass)
+        body = _result_json(content)
+        assert body["unavailable_count"] == 1 and body["unknown_count"] == 1
 
     async def test_mesa_mode_present_when_active(self, hass, reg_env):
         data = MagicMock()
@@ -1365,7 +1552,8 @@ class TestSearchMembership:
                 assert all("is_group" not in row and "member_entity_ids" not in row
                            for row in _result_json(content)["entities"])
 
-    @pytest.mark.parametrize("value", [None, 1, 0, "true", [], {}])
+    # A read takes "true" as true and an empty placeholder as not given.
+    @pytest.mark.parametrize("value", [1, 0, "yes", {}])
     async def test_argument_validation_and_capability_precedence(self, hass, reg_env, value):
         args = {"include_membership": value}
         assert (await _call("search_entities", args, _access_key(), hass))[1] == "invalid_request"
@@ -1491,3 +1679,62 @@ class TestSearchMembership:
         assert all("member_entity_ids" not in row for row in rows if row["is_group"] is None)
         hass.states.async_set("light.kitchen", "on", {"entity_id": ["light." + "x" * MAX_SEARCH_MEMBER_ID_LEN]})
         assert _search_membership("light.kitchen", _access_key(), hass, None, [4096]) == {"is_group": None}
+
+
+@pytest.fixture
+def definition_env(hass: HomeAssistant):
+    """One entity defined each way: a UI Template helper, storage and YAML helpers, an integration, an automation."""
+    ent_reg = er.async_get(hass)
+    template = MockConfigEntry(domain="template", title="Server Room AC Not On 10min", entry_id="01TEMPLATEHELPER")
+    template.add_to_hass(hass)
+    integration = MockConfigEntry(domain="hue", entry_id="hue-entry")
+    integration.add_to_hass(hass)
+    rows = {
+        "binary_sensor.ac_not_on": ("binary_sensor", "template", "01TEMPLATEHELPER", template, {}),
+        "input_boolean.guest": ("input_boolean", "input_boolean", "guest", None, {"editable": True}),
+        "input_boolean.yaml_flag": ("input_boolean", "input_boolean", "yaml_flag", None, {"editable": False}),
+        "light.hue_lamp": ("light", "hue", "lamp-1", integration, {}),
+        "automation.wake": ("automation", "automation", "1700", None, {"id": "1700"}),
+        "tag.front_door": ("tag", "tag", "front_door", None, {"tag_id": "front_door"}),
+    }
+    for entity_id, (domain, platform, unique_id, entry, attrs) in rows.items():
+        ent_reg.async_get_or_create(domain, platform, unique_id, config_entry=entry,
+                                    suggested_object_id=entity_id.split(".")[1])
+        hass.states.async_set(entity_id, "on", attrs)
+    hass.states.async_set("binary_sensor.unregistered", "on")
+    return hass
+
+
+def _definition_key(**caps) -> AccessKeyRecord:
+    return _access_key(permissions=PermissionTree(domains={
+        domain: PermissionNode(state="GREEN") for domain in ("binary_sensor", "input_boolean", "light", "automation", "tag")}),
+        **{"cap_helper_write": "allow", "cap_yaml_edit": "allow", "cap_automation_write": "allow", **caps})
+
+
+class TestDescribeEntityDefinedBy:
+    @pytest.mark.parametrize(("entity_id", "expected"), [
+        ("binary_sensor.ac_not_on", {"kind": "ui_helper", "helper_type": "template", "title": "Server Room AC Not On 10min",
+                                     "entry_id": "01TEMPLATEHELPER", "read_with": "get_helper_settings"}),
+        ("input_boolean.guest", {"kind": "storage_helper", "helper_type": "input_boolean", "helper_id": "guest",
+                                 "read_with": "list_helpers"}),
+        ("input_boolean.yaml_flag", {"kind": "yaml", "read_with": "get_yaml_config"}),
+        ("light.hue_lamp", {"kind": "integration", "integration": "hue"}),
+        ("automation.wake", {"kind": "yaml", "read_with": "get_automation"}),
+        # Tags exist only in storage and carry no editable flag.
+        ("tag.front_door", {"kind": "storage_helper", "helper_type": "tag", "helper_id": "front_door",
+                            "read_with": "list_helpers"}),
+    ])
+    async def test_says_where_an_entity_is_defined_and_what_reads_it(self, definition_env, entity_id, expected):
+        content, outcome, _ = await _call("describe_entity", {"entity_id": entity_id}, _definition_key(), definition_env)
+        assert outcome == "allowed" and _result_json(content)["defined_by"] == expected
+
+    async def test_a_tool_or_id_the_key_cannot_use_is_left_out(self, definition_env):
+        content, _, _ = await _call("describe_entity", {"entity_id": "binary_sensor.ac_not_on"},
+                                    _definition_key(cap_helper_write="deny", cap_registry_read="deny"), definition_env)
+        assert _result_json(content)["defined_by"] == {"kind": "ui_helper", "helper_type": "template",
+                                                       "title": "Server Room AC Not On 10min"}
+
+    async def test_an_entity_without_a_registry_entry_is_not_guessed(self, definition_env):
+        content, outcome, _ = await _call("describe_entity", {"entity_id": "binary_sensor.unregistered"},
+                                          _definition_key(), definition_env)
+        assert outcome == "allowed" and "defined_by" not in _result_json(content)

@@ -1026,7 +1026,7 @@ class TestEntityRegistryWrite:
         eid, _area = env
         data, versions = _data()
         res = _text((await _call_tool("delete_entity", {"entity_id": eid}, self._access_key_rw(), hass, data))[0])
-        assert res["deleted"] is True
+        assert res["deleted"] is True and res["verified"] is True
         assert er.async_get(hass).async_get(eid) is None
         hist = versions.list_for("entity", eid)
         assert hist[0].action == "delete"
@@ -1086,9 +1086,9 @@ class TestVersionChangeSummary:
             {"cards": [{"type": "a"}, {"type": "x"}]},
             {"sections": [{"cards": [{"type": "b"}, {"type": "c"}]}]},
         ]}
-        assert _summary_text(_version_change_summary("dashboard", before, after)) == "4 cards (was 3)"
+        assert _summary_text(_version_change_summary("dashboard", before, after)) == "cards: 4 (was 3)"
         assert _version_change_summary("dashboard", before, after)["summary_key"] == "version.cards.was"
-        assert _summary_text(_version_change_summary("dashboard", after, after)) == "4 cards"
+        assert _summary_text(_version_change_summary("dashboard", after, after)) == "cards: 4"
         assert _version_change_summary("dashboard", None, {"strategy": {}}) is None
 
     def test_raw_content_size_movement(self):

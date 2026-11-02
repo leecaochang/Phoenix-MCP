@@ -15,6 +15,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from homeassistant.core import HomeAssistant
 from homeassistant.const import UnitOfTemperature
+from homeassistant.helpers import entity_registry as er
 from homeassistant.setup import async_setup_component
 from homeassistant.util.dt import utcnow
 
@@ -80,7 +81,7 @@ class TestCreateHelper:
             "create_helper", {"helper_type": "input_boolean", "config": {"name": "Guest mode"}}, _access_key(), hass)
         assert outcome == "allowed"
         body = _json(content)
-        assert body["helper"]["name"] == "Guest mode"
+        assert body["helper"]["name"] == "Guest mode" and body["verified"] is True
         helper_id = body["helper"]["id"]
         await hass.async_block_till_done()
         # The returned id must map to a real entity, not just "some input_boolean
@@ -92,6 +93,18 @@ class TestCreateHelper:
         assert entity_id is not None
         assert hass.states.get(entity_id) is not None
         assert hass.states.get(entity_id).attributes.get("friendly_name") == "Guest mode"
+
+    @pytest.mark.parametrize(("rows", "verified"), [([], False), (None, None)])
+    async def test_a_create_that_does_not_read_back_is_not_claimed(self, hass, helper_env, hass_admin_user,
+                                                                  rows, verified):
+        # Missing from storage after HA reported it created is false; unreadable storage is unknown.
+        from custom_components.phoenix_mcp.tools import helper as helper_module
+        with patch.object(helper_module, "_storage_helper_rows", AsyncMock(return_value=rows)):
+            content, outcome, _ = await _call(
+                "create_helper", {"helper_type": "input_boolean", "config": {"name": "Porch"}}, _access_key(), hass)
+        body = _json(content)
+        assert outcome == "allowed" and body["verified"] is verified and body["helper"]["name"] == "Porch"
+        assert ("note" in body) is (verified is False)
 
     async def test_bad_type(self, hass, helper_env, hass_admin_user):
         _, outcome, _ = await _call(
@@ -317,6 +330,28 @@ class TestConfigFlowHelperCreation:
             finally:
                 await hass.config_entries.async_remove(entry_id)
 
+    @pytest.mark.parametrize("spelling", ["entity_id", "upper", "registry_id"])
+    async def test_red_source_is_refused_in_every_spelling_the_selector_accepts(
+        self, hass: HomeAssistant, hass_admin_user, spelling,
+    ):
+        """The entity selector lowercases IDs and resolves registry IDs, so each binds the RED entity."""
+        entry = er.async_get(hass).async_get_or_create(
+            "sensor", "test", "secret_power", suggested_object_id="secret_power")
+        hass.states.async_set("sensor.secret_power", "1234.5", {"unit_of_measurement": "W"})
+        ref = {"entity_id": "sensor.secret_power", "upper": "SENSOR.SECRET_POWER",
+               "registry_id": entry.id}[spelling]
+        tree = PermissionTree(domains={"sensor": PermissionNode(state="GREEN")},
+                              entities={"sensor.secret_power": PermissionNode(state="RED")})
+        content, outcome, _ = await _call(
+            "create_helper",
+            {"helper_type": "min_max", "flow_steps": [{"step_id": "user", "data": {
+                "name": "Probe", "entity_ids": [ref], "type": "max", "round_digits": 2}}]},
+            _access_key(permissions=tree), hass,
+        )
+        assert outcome == "denied", content
+        assert "outside this access key's write scope" in content["content"][0]["text"]
+        assert not hass.config_entries.async_entries("min_max")
+
     async def test_out_of_scope_source_is_rejected_before_approval(
         self, hass: HomeAssistant, hass_admin_user,
     ):
@@ -460,9 +495,9 @@ class TestEditHelperKeepsUnnamedFields:
             "name": "Guest", "icon": "mdi:sofa", "initial": True}}, _access_key(), hass))[0])
         hid = created["helper"]["id"]
         await hass.async_block_till_done()
-        _, outcome, _ = await _call("edit_helper", {
+        content, outcome, _ = await _call("edit_helper", {
             "helper_type": "input_boolean", "helper_id": hid, "config": {"name": "Visitor"}}, _access_key(), hass)
-        assert outcome == "allowed"
+        assert outcome == "allowed" and _json(content)["verified"] is True
         stored = await self._stored(hass, "input_boolean", hid)
         assert stored == {"id": hid, "name": "Visitor", "icon": "mdi:sofa", "initial": True}
 
@@ -564,9 +599,9 @@ class TestEditDeleteHelper:
         await hass.async_block_till_done()  # let the helper entity register
         entity_id = er.async_get(hass).async_get_entity_id("input_boolean", "input_boolean", hid)
         assert entity_id is not None
-        _, outcome, _ = await _call(
+        content, outcome, _ = await _call(
             "delete_helper", {"helper_type": "input_boolean", "helper_id": hid}, _access_key(), hass)
-        assert outcome == "allowed"
+        assert outcome == "allowed" and _json(content)["deleted"] is True and _json(content)["verified"] is True
         await hass.async_block_till_done()
         # Registry integrity: the entry and its live state are both gone.
         assert er.async_get(hass).async_get_entity_id("input_boolean", "input_boolean", hid) is None

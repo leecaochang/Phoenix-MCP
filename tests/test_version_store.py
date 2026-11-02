@@ -165,6 +165,24 @@ async def test_eviction_is_per_resource():
     assert len(store.list_for("automation", "b")) == 2
 
 
+@pytest.mark.asyncio
+async def test_rename_joins_one_history_under_the_cap():
+    """A renamed entity keeps one history; only that type and id move."""
+    store = VersionStore()
+    old = [await _rec(store, rt="entity", rid="light.a", after={"n": i}) for i in range(MAX_VERSIONS_PER_RESOURCE - 1)]
+    new = [await _rec(store, rt="entity", rid="light.b", after={"n": i}) for i in range(2)]
+    other = await _rec(store, rt="automation", rid="light.a")
+    assert await store.async_rename_resource("entity", "light.a", "light.b") == MAX_VERSIONS_PER_RESOURCE - 1
+    joined = store.list_for("entity", "light.b")
+    # The oldest record goes, as it would had every change been made under the new id.
+    assert len(joined) == MAX_VERSIONS_PER_RESOURCE
+    assert store.get(old[0].id) is None
+    assert joined[0].id == new[1].id
+    assert store.list_for("entity", "light.a") == []
+    assert store.list_for("automation", "light.a") == [other]
+    assert await store.async_rename_resource("entity", "light.a", "light.c") == 0
+
+
 # ---------------------------------------------------------------------------
 # Validation
 # ---------------------------------------------------------------------------

@@ -13,6 +13,8 @@ import path from "node:path";
 
 const CSS = fs.readFileSync(
   path.join(__dirname, "..", "phoenix-mcp-panel.css"), "utf8");
+const DOCK_CSS = fs.readFileSync(
+  path.join(__dirname, "..", "shell", "dock", "dock.css"), "utf8");
 
 /** Strip @media / @supports bodies: a class restated inside one is a responsive
  *  override, which is the normal way to write them and not a collision. */
@@ -65,7 +67,12 @@ describe("panel stylesheet", () => {
     expect(CSS).toMatch(/@media\s*\(max-width:\s*700px\)[\s\S]*?\.phx-topbar\s*\{[^}]*--phx-topbar-safe-top:\s*var\(--safe-area-inset-top,\s*env\(safe-area-inset-top,\s*0px\)\);[^}]*top:\s*var\(--phx-topbar-safe-top\);/s);
     expect(CSS).toMatch(/\.phx-topbar::before\s*\{[^}]*position:\s*absolute;[^}]*bottom:\s*100%;[^}]*height:\s*var\(--phx-topbar-safe-top\);[^}]*background:\s*var\(--phx-surface\);/s);
     expect(CSS).not.toMatch(/\.phx-topbar\s*\{[^}]*padding-top:/s);
-    expect(CSS).not.toMatch(/\.phx-tabs\s*\{[^}]*position:\s*sticky;/s);
+  });
+
+  it("keeps the workspace toolbar clear of the companion app's status bar", () => {
+    expect(CSS).toMatch(/\.phx-toolbar\s*\{[^}]*--phx-toolbar-safe-top:\s*var\(--safe-area-inset-top,\s*env\(safe-area-inset-top,\s*0px\)\);/s);
+    expect(CSS).toMatch(/\.phx-toolbar\[data-dock="top"\]\s*\{[^}]*margin-top:\s*calc\(8px \+ var\(--phx-toolbar-safe-top\)\)/s);
+    expect(CSS).toMatch(/\.phx-env-mobile \.phx-toolbar\s*\{[^}]*margin:\s*calc\(4px \+ var\(--phx-toolbar-safe-top\)\)/s);
   });
 
   it("contains chat transcript overscroll inside the floating window", () => {
@@ -92,10 +99,27 @@ describe("panel stylesheet", () => {
     expect(CSS).toMatch(/\.btn-sm\s*\{[^}]*font-size:\s*12px;/s);
   });
 
-  it("stacks select-backed setting help above its control", () => {
-    expect(CSS).toMatch(/\.toggle-row-stacked-control\s*\{[^}]*flex-direction:\s*column;[^}]*align-items:\s*stretch;/s);
-    expect(CSS).toMatch(/@media\s*\(min-width:\s*901px\)[\s\S]*?\.toggle-row-stacked-control\s*\{[^}]*display:\s*grid;[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\)\s+minmax\(220px,\s*320px\);/s);
-    expect(CSS).toMatch(/@media\s*\(max-width:\s*900px\)[\s\S]*?\.toggle-row-stacked-control\s*>\s*\.input\s*\{[^}]*width:\s*100%;/s);
+  it("puts a select-backed setting's dropdown to the right of its name", () => {
+    expect(CSS).toMatch(/\.toggle-row-stacked-control\s*>\s*\.input\s*\{[^}]*margin-left:\s*auto;/s);
+    expect(CSS).not.toMatch(/\.toggle-row-stacked-control\s*\{/);
+  });
+
+  it("gives every dropdown one width and every number field another", () => {
+    // A third of the row within bounds, and six digits with their arrows (user, 2026-10-31).
+    expect(CSS).toMatch(/select\.input:not\(\.agentcli-select\)\s*\{[^}]*width:\s*clamp\(10rem,\s*33%,\s*18rem\);/s);
+    expect(CSS).toMatch(/input\.input\[type="number"\]:not\(\.agentcli-number\)\s*\{[^}]*width:\s*7rem;/s);
+    // No other rule gives a dropdown or number field in a window a width of its own.
+    const widths = [...CSS.matchAll(/([^{}]+)\{([^}]*)\}/g)]
+      .filter(([, selector, body]) => /\bselect\b|type="number"|-select\b|expiry-value/.test(selector) && /(^|[;\s])width:/.test(body))
+      .map(([, selector]) => selector.trim())
+      // Agent Chat's compact controls, the two rules themselves, and rules that leave number fields out.
+      .filter((selector) => !/agentcli-(select|number|control)|^select\.input:not|^input\.input\[type="number"\]:not|:not\(\[type="number"\]\)/.test(selector));
+    expect(widths).toEqual([]);
+  });
+
+  it("covers only the panel while Home Assistant is away, leaving its sidebar usable", () => {
+    expect(CSS).toMatch(/\.phx-offline\s*\{[^}]*position:\s*absolute;[^}]*inset:\s*0;/s);
+    expect(CSS).not.toMatch(/\.phx-offline\s*\{[^}]*position:\s*fixed/s);
   });
 
   it("contains modal boundary overscroll", () => {
@@ -108,39 +132,40 @@ describe("panel stylesheet", () => {
     expect(CSS).toMatch(/\.theme-toggle-btn\s*\{[^}]*white-space:\s*nowrap;/s);
   });
 
-  it("bounds Agent Chat provider model selects without constraining compact screens", () => {
-    expect(CSS).toMatch(/\.agentcli-settings-model-edit\s*>\s*select,\s*\.agentcli-settings-model-row\s+select\s*\{[^}]*width:\s*320px;[^}]*max-width:\s*100%;[^}]*min-width:\s*0;/s);
-    expect(CSS).toMatch(/@media\s*\(max-width:\s*900px\)[\s\S]*?\.agentcli-settings-model-edit\s*>\s*select,\s*\.agentcli-settings-model-row\s+select\s*\{[^}]*width:\s*100%;/s);
+  it("keeps long localized change text inside the Changes windows", () => {
+    // Each line under an item's name stays in its cell instead of widening the column.
+    expect(CSS).toMatch(/\.change-item\s*\{[^}]*min-width:\s*0;/s);
+    expect(CSS).toMatch(/\.change-item\s*>\s*span\s*\{[^}]*text-overflow:\s*ellipsis;[^}]*white-space:\s*nowrap;/s);
+    // Inline confirmations, such as Restore in a narrow Comparison, wrap.
+    expect(CSS).toMatch(/\.phx-inline-confirm\s*\{[^}]*flex-wrap:\s*wrap;/s);
+    expect(CSS).toMatch(/\.phx-inline-confirm-actions\s*\{[^}]*flex-wrap:\s*wrap;/s);
   });
 
-  it("keeps long localized change types inside their own column", () => {
-    expect(CSS).toMatch(/\.changes-table\s*\{[^}]*table-layout:\s*fixed;/s);
-    expect(CSS).toMatch(/\.changes-table\s+\.changes-col-type\s*\{[^}]*width:\s*180px;/s);
-    expect(CSS).toMatch(/\.changes-col-type\s*\{[^}]*overflow-wrap:\s*anywhere;/s);
-    expect(CSS).toMatch(/@media\s*\(max-width:\s*860px\)\s*and\s*\(min-width:\s*641px\)[\s\S]*?\.changes-col-who\s*\{[^}]*display:\s*none;/);
+  it("keeps long localized approval text inside the Approvals windows", () => {
+    // Every window's filters share one shape, so the search gives way to the choices
+    // beside it instead of pushing them out of the window (user, 2026-10-29).
+    expect(CSS).toMatch(/\.filter-row\s*\{[^}]*flex-wrap:\s*wrap;/s);
+    expect(CSS).toMatch(/\.filter-row\s+input\[type="search"\]\s*\{[^}]*min-width:\s*0;/s);
+    // A long request title wraps in Review and in Request Details.
+    expect(CSS).toMatch(/\.phx-review-title\s*\{[^}]*overflow-wrap:\s*anywhere;/s);
+    expect(CSS).toMatch(/\.phx-request-title\s*\{[^}]*overflow-wrap:\s*anywhere;/s);
   });
 
-  it("keeps localized approval-history columns aligned without overflowing", () => {
-    expect(CSS).toMatch(/\.approval-history-row\s*\{[^}]*display:\s*grid;[^}]*grid-template-columns:\s*190px\s+250px\s+150px\s+minmax\(0,\s*1fr\)\s+max-content;/s);
-    expect(CSS).toMatch(/\.approval-history-row\s*>\s*\.badge\s*\{[^}]*justify-self:\s*start;/s);
-    expect(CSS).toMatch(/\.approval-history-tool\s*\{[^}]*min-width:\s*0;[^}]*text-overflow:\s*ellipsis;/s);
-    expect(CSS).toMatch(/@media\s*\(max-width:\s*600px\)[\s\S]*?\.approval-history-row\s*\{[^}]*grid-template-columns:\s*max-content\s+minmax\(0,\s*1fr\)\s+max-content;/);
+  it("wraps the rejection reason row in a narrow Review", () => {
+    expect(CSS).toMatch(/\.phx-review\s+\.approval-reject-row\.phx-review-reason\s*\{[^}]*flex-wrap:\s*wrap;/s);
+    expect(CSS).toMatch(/\.phx-review-reason\s+\.approval-reason-input\s*\{[^}]*min-width:\s*0;/s);
   });
 
-  it("uses only the review modal scroller for pending approval diffs on mobile", () => {
-    expect(CSS).toMatch(/@media\s*\(max-width:\s*800px\)[\s\S]*?\.approval-detail-body-pending\s*\{[^}]*max-height:\s*none;[^}]*overflow:\s*visible;/s);
-    expect(CSS).toMatch(/@media\s*\(max-width:\s*800px\)[\s\S]*?\.approval-detail-body-pending\s+\.yaml-pre\s*\{[^}]*max-height:\s*none;/s);
-    expect(CSS).toMatch(/@media\s*\(max-width:\s*800px\)[\s\S]*?\.approval-detail-body-pending\s+\.yaml-editor\s*\{[^}]*--code-mirror-max-height:\s*none;/s);
-  });
-
-  it("keeps localized MESA mode badges visible", () => {
-    expect(CSS).toMatch(/\.mesa-group\s+\.data-table\s+td:nth-child\(2\)\s*\{[^}]*width:\s*260px;/s);
-    expect(CSS).toMatch(/\.mesa-row-modes\s*\{[^}]*white-space:\s*normal;/s);
+  it("keeps long localized MESA names and modes inside their column, and the editor grid responsive", () => {
+    // Every table cell clips rather than widening its column; MESA's lists rely on it.
+    expect(CSS).toMatch(/\.phx-table\s+td\s*\{[^}]*text-overflow:\s*ellipsis;/s);
+    expect(CSS).toMatch(/\.mesa-grid\s*\{[^}]*grid-template-columns:\s*repeat\(auto-fill,/s);
   });
 
   it("never defines the same class in two separate blocks", () => {
     const seen = new Map<string, number>();
-    for (const cls of definedClasses(CSS)) seen.set(cls, (seen.get(cls) ?? 0) + 1);
+    // The panel and window stylesheets share one shadow root, so they are checked together.
+    for (const cls of definedClasses(CSS + "\n" + DOCK_CSS)) seen.set(cls, (seen.get(cls) ?? 0) + 1);
     const duplicated = [...seen.entries()].filter(([, n]) => n > 1).map(([c]) => c).sort();
     expect(duplicated).toEqual([]);
   });

@@ -1,13 +1,9 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
-import {
-  friendlyApprovalSummary,
-  rememberApprovalView,
-  storedApprovalView,
-} from "../utils/approval_summary";
+import { describe, expect, it } from "vitest";
+import { friendlyApprovalSummary } from "../utils/approval_summary";
 
 describe("friendly approval summary", () => {
   it.each([
-    ["exact", "This approval covers the entities listed in Details. Changed targets require a new request."],
+    ["exact", "This approval covers the entities listed below. Changed targets require a new request."],
     ["future_native_execution", "Home Assistant resolves future targets when this configuration runs. Membership may change, and later execution is outside Phoenix permission and MESA checks."],
     ["dynamic_accessible_devices", "Accessible devices are resolved again at execution and may have changed."],
   ])("explains %s target semantics on named script summaries", (semantics, explanation) => {
@@ -49,7 +45,7 @@ describe("friendly approval summary", () => {
       "diff.dashboard_card.edit.section",
       { card_index: 4, label: "dashboard-steve", view_index: 0, section_index: 5 },
       "Update a card on dashboard 'dashboard-steve'",
-      "This will update the Home Assistant dashboard configuration. Open Details to review the exact proposed change.",
+      "This will update the Home Assistant dashboard configuration.",
     ],
   ])("renders %s without parsing YAML", (summaryKey, summaryParams, title, body) => {
     expect(friendlyApprovalSummary({ summary_key: summaryKey, summary_params: summaryParams })).toEqual({ title, body });
@@ -142,7 +138,7 @@ describe("friendly approval summary", () => {
       target: { type: "script", id: "approval_summary_smoke_test", label: "Approval Summary Smoke Test" },
     })).toEqual({
       title: "Create script 'Approval Summary Smoke Test'",
-      body: "This will add script 'Approval Summary Smoke Test' to Home Assistant. Open Details to review its configuration.",
+      body: "This will add script 'Approval Summary Smoke Test' to Home Assistant. Review its configuration below.",
     });
   });
 
@@ -222,31 +218,5 @@ describe("friendly approval summary", () => {
         label: "Front door NFC",
       },
     }).title).toBe("Create tag helper 'Front door NFC'");
-  });
-});
-
-describe("approval Summary preference", () => {
-  afterEach(() => {
-    vi.restoreAllMocks();
-    localStorage.clear();
-  });
-
-  it("defaults missing and invalid values to Summary", () => {
-    localStorage.clear();
-    expect(storedApprovalView()).toBe("summary");
-    localStorage.setItem("phx-approval-default-view", "preview");
-    expect(storedApprovalView()).toBe("summary");
-  });
-
-  it("stores Details per browser", () => {
-    rememberApprovalView("details");
-    expect(storedApprovalView()).toBe("details");
-  });
-
-  it("defaults to Summary when storage is blocked", () => {
-    vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => { throw new Error("blocked"); });
-    expect(storedApprovalView()).toBe("summary");
-    vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => { throw new Error("blocked"); });
-    expect(() => rememberApprovalView("details")).not.toThrow();
   });
 });

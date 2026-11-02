@@ -5,12 +5,13 @@ from __future__ import annotations
 import base64
 import hashlib
 import hmac
+import ipaddress
 import json
 import logging
 import math
 import re
 import string
-from collections.abc import Awaitable, Callable, Collection, Iterator
+from collections.abc import Awaitable, Callable, Collection, Iterable, Iterator
 from functools import lru_cache
 import time
 from dataclasses import dataclass
@@ -20,10 +21,12 @@ from pathlib import PurePosixPath
 from typing import TYPE_CHECKING, Any
 
 from aiohttp import web
-from homeassistant.core import HomeAssistant, callback
+import yarl
+from homeassistant.core import HomeAssistant, async_get_hass_or_none, callback
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.event import async_call_later
-from homeassistant.util.dt import parse_datetime, utcnow
+from homeassistant.helpers.network import get_url
+from homeassistant.util.dt import get_default_time_zone, parse_datetime, utcnow
 
 from .const import (
     LOG_DETAIL_STALE_MESSAGE,
@@ -47,12 +50,12 @@ from .const import (
 )
 from .policy_engine import (
     Permission,
+    RelativeTimeError,
     assist_expose_check,
     get_effective_hint,
     is_sensitive_key,
     parse_relative_time,
     resolve,
-    resolve_registry_access,
     template_blocklist_vars,
 )
 from .locales import canonical_language
@@ -94,27 +97,6 @@ def build_permitted_states(access_key: AccessKeyRecord, hass: HomeAssistant) -> 
         for s in hass.states.async_all()
         if resolve(s.entity_id, access_key, hass) in (Permission.READ, Permission.WRITE)
         and (expose is None or expose(s.entity_id))
-    }
-
-
-def build_permitted_entity_ids(access_key: AccessKeyRecord, hass: HomeAssistant) -> set:
-    """Return the entity IDs accessible to an access key, including registry-only entities.
-
-    Unlike build_permitted_states, this unions live states with the entity registry
-    so history and statistics can query recorder data for entities that are offline
-    or disabled. Also applies use_assist_exposure filtering for pass_through access keys.
-    """
-    from homeassistant.helpers import entity_registry as er_mod
-
-    registry = er_mod.async_get(hass)
-    candidate_ids: set[str] = {s.entity_id for s in hass.states.async_all()}
-    candidate_ids.update(entry.entity_id for entry in registry.entities.values())
-
-    expose = assist_expose_check(access_key, hass)
-    return {
-        eid for eid in candidate_ids
-        if resolve_registry_access(eid, access_key, hass) in (Permission.READ, Permission.WRITE)
-        and (expose is None or expose(eid))
     }
 
 
@@ -252,19 +234,35 @@ def content_hash(content: str | bytes | dict | list) -> str:
     return hashlib.sha256(raw).hexdigest()
 
 
+TIME_INPUT_FORMS = (
+    "Use an ISO 8601 time (2026-10-24T08:00:00; without an offset it is Home Assistant "
+    "local time), a date, now, or a relative amount ago such as 30min, 24h, 7d, 2w or 1mo "
+    "(+7d is 7 days ahead)."
+)
+
+
 def parse_time_param(value: str) -> datetime:
-    """Parse a relative time string or ISO timestamp. Raises ValueError for unknown formats."""
+    """Parse a relative time, ISO timestamp or date into an aware datetime.
+
+    A time or date without an offset is Home Assistant local time, as Home
+    Assistant's own dt_util.as_utc reads it, so every tool gives it one meaning.
+    Raises ValueError with a client-safe message naming the accepted forms.
+    """
     # HA's parse_datetime regex-matches its argument, so a non-string reaches it
     # as a TypeError rather than the ValueError every caller here handles.
     if not isinstance(value, str):
-        raise ValueError(f"Unrecognized time format: {value!r}")
+        raise ValueError(f"Unrecognized time format. {TIME_INPUT_FORMS}")
     try:
         return parse_relative_time(value)
+    except RelativeTimeError:
+        raise
     except ValueError:
         pass
-    dt = parse_datetime(value)
+    dt = parse_datetime(value.strip())
     if dt is None:
-        raise ValueError(f"Unrecognized time format: {value!r}")
+        raise ValueError(f"Unrecognized time format: {value!r}. {TIME_INPUT_FORMS}")
+    if dt.tzinfo is None or dt.utcoffset() is None:
+        dt = dt.replace(tzinfo=get_default_time_zone())
     return dt
 
 
@@ -822,8 +820,9 @@ def redact_structure(obj: Any, _depth: int = 0) -> Any:
     A dict value whose key name is sensitive (is_sensitive_key) becomes
     "<redacted>"; string values are scrubbed for secret-valued config lines and
     embedded credentials (redact_secrets_in_text). Other scalars pass through
-    unchanged. Used for audit payloads and the admin-facing copy of approval
-    args so secrets are never serialised verbatim. Recursion is depth-bounded so
+    unchanged. Used for the admin-facing copy of approval args so secrets are
+    never serialised verbatim; audit payloads use the Conversation Log's
+    stricter sanitizer, which also hides device codes. Recursion is depth-bounded so
     a pathologically nested payload cannot raise RecursionError on the logging
     path; subtrees past the limit collapse to "<redacted>".
     """
@@ -856,7 +855,14 @@ _PRIVATE_IPV4_RE = re.compile(
     r"|169\.254\.\d{1,3}\.\d{1,3}"                   # link-local 169.254.0.0/16
     r"|192\.168\.\d{1,3}\.\d{1,3}"                   # 192.168.0.0/16
     r"|172\.(?:1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}"  # 172.16.0.0/12
+    r"|100\.(?:6[4-9]|[7-9]\d|1[01]\d|12[0-7])\.\d{1,3}\.\d{1,3}"  # shared/Tailscale 100.64.0.0/10
     r")\b"
+)
+# Hostnames that only name private infrastructure: a .lan LAN name, a Tailscale
+# MagicDNS name, and a plex.direct name, whose first label encodes the address.
+# At least one label must precede the suffix, so wlan0 and sports.net stay.
+_PRIVATE_HOST_RE = re.compile(
+    r"(?<![\w.-])(?:[a-z0-9-]+\.)+(?:lan|ts\.net|plex\.direct)(?![\w-]|\.[\w-])", re.IGNORECASE
 )
 # Link-local (fe80::/10) and unique-local (fc00::/7) IPv6.
 _PRIVATE_IPV6_RE = re.compile(
@@ -871,9 +877,80 @@ _UNIX_PATH_RE = re.compile(r"(?<![\w/])/(?:[\w.\-]+/)+[\w.\-]+")
 _WIN_PATH_RE = re.compile(r"\b[A-Za-z]:\\(?:[\w.\-]+\\?){2,}")
 
 
-def _scrub_network_topology(text: str) -> str:
-    """Replace LAN IPs, bare URLs, and absolute filesystem paths with placeholders."""
+# Exact-value (host, address) patterns for this instance's own identifiers.
+_IdentifierPatterns = tuple[re.Pattern[str] | None, re.Pattern[str] | None]
+
+
+@lru_cache(maxsize=8)
+def _exact_identifier_patterns(hosts: tuple[str, ...], addresses: tuple[str, ...]) -> _IdentifierPatterns:
+    """Compile exact-value patterns that never match inside a longer hostname or address."""
+    def alternation(values: Iterable[str]) -> str:
+        return "|".join(re.escape(value) for value in sorted(values, key=len, reverse=True))
+
+    host_re = (re.compile(rf"(?<![\w.-])(?:{alternation(hosts)})(?![\w-]|\.[\w-])", re.IGNORECASE)
+               if hosts else None)
+    ipv4 = [value for value in addresses if ":" not in value]
+    ipv6 = [value for value in addresses if ":" in value]
+    parts = [rf"(?<![\w.-])(?:{alternation(ipv4)})(?![\w-]|\.[\w-])"] if ipv4 else []
+    if ipv6:
+        parts.append(rf"(?<![\w:.])(?:{alternation(ipv6)})(?![\w:]|\.\w)")
+    address_re = re.compile("|".join(parts), re.IGNORECASE) if parts else None
+    return host_re, address_re
+
+
+def _instance_identifier_patterns(hass: HomeAssistant | None) -> _IdentifierPatterns:
+    """This instance's own URL hosts and interface addresses as exact-value patterns.
+
+    Read from Home Assistant on each call: the internal, external and Cloud URL
+    hosts and every network adapter address. Loopback addresses and single-label
+    names stay readable. Any failed read leaves that value out and never raises,
+    so a scrub cannot fail the tool. Event loop only; without hass nothing is added.
+    """
+    if hass is None:
+        return None, None
+    values: set[str] = set()
+    for options in ({"allow_external": False, "allow_cloud": False},
+                    {"allow_internal": False, "allow_cloud": False},
+                    {"require_cloud": True}):
+        try:
+            values.add(str(yarl.URL(get_url(hass, allow_ip=True, **options)).host or ""))
+        except Exception:
+            continue
+    try:
+        from homeassistant.components.network import async_get_loaded_adapters
+        for adapter in async_get_loaded_adapters(hass):
+            for entry in (*(adapter.get("ipv4") or ()), *(adapter.get("ipv6") or ())):
+                values.add(str(entry.get("address") or ""))
+    except Exception:
+        _LOGGER.debug("Network adapters are unavailable to the diagnostics scrub", exc_info=True)
+    hosts: set[str] = set()
+    addresses: set[str] = set()
+    for value in values:
+        value = value.strip("[]").lower()
+        try:
+            address = ipaddress.ip_address(value)
+        except ValueError:
+            if "." in value.strip("."):
+                hosts.add(value.rstrip("."))
+            continue
+        if not (address.is_loopback or address.is_unspecified):
+            addresses.add(address.compressed)
+    return _exact_identifier_patterns(tuple(sorted(hosts)), tuple(sorted(addresses)))
+
+
+def _scrub_network_topology(text: str, identifiers: _IdentifierPatterns | None = None) -> str:
+    """Replace LAN IPs and hosts, bare URLs, this instance's identifiers and absolute paths.
+
+    `identifiers` lets a caller scrubbing many strings read them once; without
+    it they are read from the Home Assistant instance running this event loop.
+    """
     text = _BARE_URL_RE.sub("<redacted-url>", text)
+    host_re, address_re = identifiers or _instance_identifier_patterns(async_get_hass_or_none())
+    if host_re is not None:
+        text = host_re.sub("<redacted-host>", text)
+    if address_re is not None:
+        text = address_re.sub("<redacted-ip>", text)
+    text = _PRIVATE_HOST_RE.sub("<redacted-host>", text)
     text = _PRIVATE_IPV4_RE.sub("<redacted-ip>", text)
     text = _PRIVATE_IPV6_RE.sub("<redacted-ip>", text)
     text = _WIN_PATH_RE.sub("<redacted-path>", text)
@@ -881,33 +958,37 @@ def _scrub_network_topology(text: str) -> str:
     return text
 
 
-def _scrub_diagnostic_str(text: str) -> str:
+def _scrub_diagnostic_str(text: str, identifiers: _IdentifierPatterns | None = None) -> str:
     """Full diagnostic-string scrub: embedded credentials/JWTs then network topology."""
-    return _scrub_network_topology(redact_secrets_in_text(text) or "")
+    return _scrub_network_topology(redact_secrets_in_text(text) or "", identifiers)
 
 
-def redact_diagnostics(obj: Any, _depth: int = 0) -> Any:
+def redact_diagnostics(obj: Any, _depth: int = 0, _identifiers: _IdentifierPatterns | None = None) -> Any:
     """redact_structure plus a conservative network-topology scrub for diagnostics.
 
-    Each string is also scrubbed for private/loopback/link-local IPs, bare URLs
-    and absolute paths. Integration-defined payloads are free-form, so dict KEYS
-    get the same string scrub as values (an integration may key its health data by
+    Each string is also scrubbed for private/loopback/link-local/shared IPs, LAN,
+    Tailscale and plex.direct hostnames, this instance's own URL hosts and
+    interface addresses (read once per call), bare URLs and absolute paths.
+    Integration-defined payloads are free-form, so dict KEYS get the same string
+    scrub as values (an integration may key its health data by
     a URL, LAN IP or path); a sensitive-named key still redacts its value.
     cap_diagnostics is an elevated read, so some over-redaction is acceptable; the
     diagnostic shape is preserved.
     """
     if _depth > 25:
         return "<redacted>"
+    if _identifiers is None:
+        _identifiers = _instance_identifier_patterns(async_get_hass_or_none())
     if isinstance(obj, dict):
         return {
-            (_scrub_diagnostic_str(k) if isinstance(k, str) else k):
-                "<redacted>" if is_sensitive_key(k) else redact_diagnostics(v, _depth + 1)
+            (_scrub_diagnostic_str(k, _identifiers) if isinstance(k, str) else k):
+                "<redacted>" if is_sensitive_key(k) else redact_diagnostics(v, _depth + 1, _identifiers)
             for k, v in obj.items()
         }
     if isinstance(obj, list):
-        return [redact_diagnostics(item, _depth + 1) for item in obj]
+        return [redact_diagnostics(item, _depth + 1, _identifiers) for item in obj]
     if isinstance(obj, str):
-        return _scrub_diagnostic_str(obj)
+        return _scrub_diagnostic_str(obj, _identifiers)
     return obj
 
 
@@ -999,6 +1080,7 @@ class LogEntryPage:
             "source": self.source,
             "filters": self.filters,
             "count": len(self.entries),
+            "total": self.matched_buckets,
             "matched_buckets": self.matched_buckets,
             "has_more": self.has_more,
             "next_cursor": self.next_cursor,
@@ -1868,16 +1950,59 @@ def voice_text(language: object, key: str, **params: object) -> str:
     return _localized(VOICE_TEMPLATES, "voice", key, language, params)
 
 
+# The list separator spoken replies use between names. CJK text joins with the
+# ideographic comma; every other shipped language uses a comma and a space.
+_SPOKEN_LIST_SEPARATORS = {"ja": "、", "zh-Hans": "、", "zh-Hant": "、"}
+
+
+def spoken_list(items: Iterable[str], language: object) -> str:
+    """Join names for a spoken reply with the language's own separator."""
+    return _SPOKEN_LIST_SEPARATORS.get(canonical_language(language), ", ").join(items)
+
+
+def spoken_sentences(parts: Iterable[str], language: object) -> str:
+    """Join whole sentences: CJK sentences end in an ideographic full stop and take no space."""
+    return ("" if canonical_language(language) in _SPOKEN_LIST_SEPARATORS else " ").join(parts)
+
+
+class LocalizedReason(str):
+    """English operator text that also names its adminError catalog key.
+
+    A str, so every caller that compares, logs or returns the English keeps
+    working; an admin response sends `key` and `params` so the panel shows the
+    reader's language instead.
+    """
+
+    key: str
+    params: dict[str, str | int]
+
+    def __new__(cls, text: str, key: str, **params: str | int) -> LocalizedReason:
+        reason = super().__new__(cls, text)
+        reason.key = key
+        reason.params = params
+        return reason
+
+
 def _localized(
     templates: dict[str, str], section: str, key: str, language: object, params: dict
 ) -> str:
-    """Resolve one backend-rendered string, falling back to its English template."""
+    """Resolve one backend-rendered string, falling back to its English template.
+
+    The same backstop panel_catalog applies: a translation is used only when it
+    names exactly the English template's placeholders and formats cleanly. These
+    strings render after an approval is saved and inside voice error handling, so
+    a hand-edited catalog must cost the translation, never raise.
+    """
     template = templates[key]
     resolved = canonical_language(language)
     if resolved != "en":
         translated = _catalog_section(resolved, section).get(key)
-        if translated:
-            template = translated
+        expected = _placeholders(template)
+        if translated and expected is not None and _placeholders(translated) == expected:
+            try:
+                return translated.format(**params)
+            except (KeyError, IndexError, ValueError, TypeError):
+                pass
     return template.format(**params)
 
 
@@ -1937,11 +2062,18 @@ def _catalog_section(language: str, section: str) -> dict[str, str]:
     return _catalog_sections.get((language, section), {})
 
 
-def _placeholders(value: str) -> frozenset[str]:
-    """The {placeholder} names in one catalog string, ignoring literal text."""
-    return frozenset(
-        field for _, field, _, _ in string.Formatter().parse(value) if field
-    )
+def _placeholders(value: str) -> frozenset[str] | None:
+    """The {placeholder} names in one catalog string, ignoring literal text.
+
+    None when the string does not parse as a format template (a stray brace), so
+    no comparison against a parseable English string treats it as a match.
+    """
+    try:
+        return frozenset(
+            field for _, field, _, _ in string.Formatter().parse(value) if field
+        )
+    except ValueError:
+        return None
 
 
 @lru_cache(maxsize=8)
@@ -1950,8 +2082,8 @@ def panel_catalog(language: str) -> dict[str, str]:
 
     English is the base and the requested language is overlaid, so an untranslated
     key resolves to English rather than rendering as a raw key. A translated
-    string whose {placeholder} set differs from English is DROPPED in favour of
-    the English one: the panel interpolates by name, so a renamed, dropped or
+    string whose {placeholder} set differs from English, or that does not parse,
+    is DROPPED in favour of the English one: the panel interpolates by name, so a renamed, dropped or
     invented placeholder would render a broken sentence or throw. A guard test
     already refuses to let a mismatched locale ship, so this is the runtime
     backstop for a hand-edited install.
@@ -1963,7 +2095,9 @@ def panel_catalog(language: str) -> dict[str, str]:
     merged = dict(english)
     for key, value in _catalog_section(resolved, "panel").items():
         base = english.get(key)
-        if base is not None and _placeholders(base) != _placeholders(value):
+        if base is not None and (
+            (names := _placeholders(value)) is None or names != _placeholders(base)
+        ):
             continue
         merged[key] = value
     return merged

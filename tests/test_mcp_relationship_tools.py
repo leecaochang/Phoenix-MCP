@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 import os
 import uuid
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 import yaml
@@ -277,6 +277,92 @@ class TestGetRelationships:
         autos = [c for c in _json(content)["consumers"] if c["kind"] == "automation"]
         assert autos and autos[0]["name"] == "Device trig"
         assert autos[0]["roles"] == ["trigger"]
+
+
+class TestUnreferencedEntities:
+    """'Which helpers or scripts does nothing use' is one call over a list scope."""
+
+    @pytest.fixture
+    def helper_env(self, hass):
+        registry = er.async_get(hass)
+        for domain, platform, uid in (("automation", "automation", "a1"), ("automation", "automation", "a2"),
+                                      ("script", "script", "greet"),
+                                      ("script", "script", "lonely"), ("input_boolean", "input_boolean", "used"),
+                                      ("input_boolean", "input_boolean", "idle"), ("counter", "counter", "visits")):
+            entry = registry.async_get_or_create(domain, platform, uid, suggested_object_id=uid)
+            hass.states.async_set(entry.entity_id, "on")
+        _write(os.path.join(hass.config.config_dir, "automations.yaml"), [{
+            "id": "a1", "alias": "Arrival",
+            "triggers": [{"trigger": "state", "entity_id": "input_boolean.used"}],
+            "actions": [{"action": "script.greet"}, {"action": "script.removed"},
+                        {"action": "counter.increment", "target": {"entity_id": "counter.visits"}}],
+        }, {
+            # script.turn_on names a verb; the script it runs is the target.
+            "id": "a2", "alias": "Greeting again", "triggers": [],
+            "actions": [{"action": "script.turn_on", "target": {"entity_id": "script.greet"}}],
+        }])
+        _write(hass.config.path("scripts.yaml"), {
+            "greet": {"alias": "Greet", "sequence": [{"delay": 0}]},
+            "lonely": {"alias": "Lonely", "sequence": [{"delay": 0}]},
+        })
+
+    def _key(self):
+        return AccessKeyRecord(
+            id=str(uuid.uuid4()), name="t", access_key_hash="x", created_at=utcnow(), created_by="u",
+            cap_search="allow", permissions=PermissionTree(domains={
+                domain: PermissionNode(state="GREEN") for domain in ("automation", "script", "input_boolean", "counter")}))
+
+    async def _ask(self, hass, scope):
+        data = MagicMock()
+        data.mesa = None
+        return await _call_tool("get_relationships", {"scope": scope}, self._key(), hass, data)
+
+    async def test_every_helper_type_in_one_call_names_the_unused_ones(self, hass, helper_env):
+        content, outcome, _ = await self._ask(hass, {"kind": "integration", "id": ["input_boolean", "counter"]})
+        assert outcome == "allowed"
+        body = _json(content)
+        assert body["scope"]["value"] == ["input_boolean", "counter"]
+        assert body["scope"]["entity_ids"] == ["counter.visits", "input_boolean.idle", "input_boolean.used"]
+        assert body["unreferenced"] == ["input_boolean.idle"]
+        assert [consumer["id"] for consumer in body["consumers"]] == ["a1"]
+
+    async def test_a_script_called_as_an_action_is_used(self, hass, helper_env):
+        body = _json((await self._ask(hass, {"kind": "integration", "id": "script"}))[0])
+        assert body["unreferenced"] == ["script.lonely"]
+        assert {consumer["id"]: consumer["entities"] for consumer in body["consumers"]}["a1"] == [
+            {"entity_id": "script.greet", "roles": ["action"]}]
+        # Running a script that no longer exists is a dead reference, as on a dashboard.
+        assert [ref["entity_id"] for ref in body["dangling_references"]] == ["script.removed"]
+
+    async def test_a_list_of_entities_is_one_scope_without_forward_references(self, hass, helper_env):
+        body = _json((await self._ask(hass, {"kind": "entity", "id": ["input_boolean.used", "input_boolean.idle"]}))[0])
+        assert body["unreferenced"] == ["input_boolean.idle"] and "references" not in body
+
+    @pytest.mark.parametrize("scope_id", [[], ["input_boolean", 3], ["input_boolean", " "]])
+    async def test_a_malformed_id_list_is_refused(self, hass, helper_env, scope_id):
+        content, outcome, _ = await self._ask(hass, {"kind": "integration", "id": scope_id})
+        assert outcome == "invalid_request"
+
+    async def test_consumers_past_one_result_are_counted_and_unreferenced_stays_whole(self, hass, helper_env):
+        from custom_components.phoenix_mcp import tool_common
+        from custom_components.phoenix_mcp.conversation_log import json_size
+        configs = [{"id": f"x{index}", "alias": f"Extra {index}",
+                    "triggers": [{"trigger": "state", "entity_id": "input_boolean.used"}], "actions": []}
+                   for index in range(40)]
+        registry = er.async_get(hass)
+        for config in configs:
+            hass.states.async_set(registry.async_get_or_create(
+                "automation", "automation", config["id"], suggested_object_id=config["id"]).entity_id, "on")
+        path = os.path.join(hass.config.config_dir, "automations.yaml")
+        with open(path, encoding="utf-8") as handle:
+            original = yaml.safe_load(handle)
+        # The only consumer of counter.visits comes last, past what the result lists.
+        _write(path, configs + original)
+        with patch.object(tool_common, "TOOL_RESULT_MAX_BYTES", 4000):
+            body = _json((await self._ask(hass, {"kind": "integration", "id": ["input_boolean", "counter"]}))[0])
+        assert body["consumer_count"] == 41 and body["consumers_not_listed"] == 41 - len(body["consumers"])
+        assert "a1" not in [consumer["id"] for consumer in body["consumers"]]
+        assert body["unreferenced"] == ["input_boolean.idle"] and json_size(json.dumps(body)) <= 4000
 
 
 class TestRelationshipSelectors:
@@ -706,6 +792,64 @@ class TestRelationshipCoverage:
             assert len(matches) == 1
             assert matches[0]["kind"] == "config_entry"
             assert matches[0]["entities"] == [{"entity_id": "light.kitchen", "roles": [helper.domain]}]
+
+    async def test_a_config_entry_consumer_name_is_scrubbed(self, hass, rel_env):
+        """An entry titled by its host shows the same scrubbed title as list_integrations."""
+        helper = MockConfigEntry(
+            domain="derivative", entry_id="helper3", title="Rate from 192.168.1.50",
+            options={"source": "light.kitchen"},
+        )
+        helper.add_to_hass(hass)
+        entity = er.async_get(hass).async_get_or_create(
+            "sensor", helper.domain, "rate3", config_entry=helper, suggested_object_id="kitchen_rate3")
+        hass.states.async_set(entity.entity_id, "1")
+        access_key = _access_key(cap_integration_write="allow")
+        access_key.permissions.entities[entity.entity_id] = PermissionNode(state="GREEN")
+        content, _, _ = await _call("get_relationships", {"entity_id": "light.kitchen"}, access_key, hass)
+        matches = [c for c in _json(content)["consumers"] if c["id"] == "helper3"]
+        assert [m["name"] for m in matches] == ["Rate from <redacted-ip>"]
+
+    async def test_a_ui_group_helper_is_listed_once(self, hass, rel_env, monkeypatch):
+        """The body scan finds its config entry and HA's graph names its group entity: one consumer."""
+        import custom_components.phoenix_mcp.tools.discovery as disc
+
+        helper = MockConfigEntry(
+            domain="group", entry_id="group-helper", title="Kitchen lights",
+            options={"group_type": "light", "entities": ["light.kitchen"]},
+        )
+        helper.add_to_hass(hass)
+        entity = er.async_get(hass).async_get_or_create(
+            "light", "group", "group-helper", config_entry=helper, suggested_object_id="kitchen_lights")
+        hass.states.async_set(entity.entity_id, "on", {"friendly_name": "Kitchen lights"})
+
+        async def _graph(hass_, command, payload):
+            return {"group": {entity.entity_id}} if payload["item_id"] == "light.kitchen" else {}
+
+        monkeypatch.setattr(disc, "async_ws_command", _graph)
+        access_key = _access_key(cap_integration_write="allow")
+        access_key.permissions.entities[entity.entity_id] = PermissionNode(state="GREEN")
+        content, _, _ = await _call("get_relationships", {"entity_id": "light.kitchen"}, access_key, hass)
+        matches = [c for c in _json(content)["consumers"] if "group-helper" in (c["id"], c.get("entity_id"))
+                   or c.get("entity_id") == entity.entity_id]
+        assert len(matches) == 1, matches
+        assert matches[0]["kind"] == "config_entry" and matches[0]["id"] == "group-helper"
+        assert matches[0]["entity_id"] == entity.entity_id
+        assert matches[0]["entities"] == [{"entity_id": "light.kitchen", "roles": ["group"]}]
+
+    async def test_a_list_scope_names_the_values_that_cover_nothing_readable(self, hass, rel_env):
+        """Hidden and missing alike, instead of narrowing the answer silently."""
+        access_key = _access_key()
+        content, _, _ = await _call("get_relationships", {"scope": {"kind": "entity", "id": [
+            "light.kitchen", "sensor.secret", "light.nowhere"]}}, access_key, hass)
+        scope = _json(content)["scope"]
+        assert scope["entity_ids"] == ["light.kitchen"]
+        assert scope["not_found"] == ["sensor.secret", "light.nowhere"]
+        content, _, _ = await _call("get_relationships", {"scope": {"kind": "integration", "id": [
+            "test_integration", "nothing_here"]}}, access_key, hass)
+        assert _json(content)["scope"]["not_found"] == ["nothing_here"]
+        content, _, _ = await _call("get_relationships", {"scope": {"kind": "entity", "id": "light.kitchen"}},
+                                    access_key, hass)
+        assert "not_found" not in _json(content)["scope"]
 
     async def test_dangling_references_come_free_with_the_walk(self, hass, rel_env):
         """An id referenced by something but present in neither hass.states nor

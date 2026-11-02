@@ -9,9 +9,11 @@ the same compare-and-swap contract as get_dashboard_config.
 
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import json
 import uuid
-from unittest.mock import MagicMock
+from unittest.mock import patch, MagicMock
 
 import pytest
 from homeassistant.core import HomeAssistant
@@ -266,6 +268,9 @@ class TestApprovalDiffCompleteness:
             def set_pending_approvals(self, v: list) -> None:
                 self._p = v
 
+            def get_settings(self):
+                return SimpleNamespace(mesa_mode="off", notify_on_approval=True)
+
         big_cfg = {
             "alias": "Long",
             "trigger": [{"platform": "state", "entity_id": "input_boolean.x"}],
@@ -325,15 +330,20 @@ class TestListTools:
             PermissionTree(domains={"automation": PermissionNode(state="GREEN")}),
             cap_registry_read="allow",
         )
-        hass.states.async_set("automation.porch", "on", {"friendly_name": "Porch", "id": "auto-1"})
+        hass.states.async_set("automation.porch", "on", {"friendly_name": "Porch", "id": "auto-1",
+                                                         "last_triggered": "2026-10-24T06:30:00+00:00"})
+        hass.states.async_set("automation.never", "on", {"friendly_name": "Never", "id": "auto-2", "last_triggered": None})
         result, outcome, _res = await _call_tool("list_automations", {}, access_key, hass, data)
         assert outcome == "allowed"
         body = _json(result)
-        assert body["count"] == 1
-        row = body["automations"][0]
+        assert body["count"] == 2
+        never, row = body["automations"]
         assert row["entity_id"] == "automation.porch"
         assert row["automation_id"] == "auto-1"
         assert row["alias"] == "Porch"
+        # When each last ran is in the listing, so "which ran today" is one call.
+        assert row["last_triggered"] == "2026-10-24T06:30:00+00:00"
+        assert never["last_triggered"] is None
 
     async def test_renamed_script_list_preserves_editable_storage_id(self, hass):
         hass.services.async_register("script", "reload", lambda call: None)
@@ -378,6 +388,84 @@ class TestListTools:
         access_key = _access_key(cap_registry_read="deny")
         _r, outcome, _res = await _call_tool("list_automations", {}, access_key, hass, data)
         assert outcome == "denied"
+
+
+class TestAutomationSearch:
+    """trigger and query answer set questions about automations in one list_automations call."""
+
+    @pytest.fixture
+    def search_env(self, hass, isolated_config_dir):
+        import yaml
+        configs = [
+            {"id": "a1", "alias": "Wake", "triggers": [{"trigger": "time", "at": "07:00:00"}],
+             "actions": [{"action": "notify.mobile_app_phone", "data": {"message": "Morning"}}]},
+            {"id": "a2", "alias": "Sunset", "trigger": [{"platform": "sun", "event": "sunset", "offset": "-00:30:00"}],
+             "action": [{"service": "light.turn_on", "target": {"entity_id": "light.porch"}}]},
+            {"id": "a3", "alias": "Door", "triggers": [{"trigger": "state", "entity_id": "binary_sensor.door", "to": "on"}],
+             "actions": [{"action": "notify.mobile_app_phone"}]},
+            {"id": "a4", "alias": "Motion", "use_blueprint": {"path": "motion_light.yaml", "input": {}}},
+            {"id": "a5", "alias": "Hidden", "triggers": [{"trigger": "time", "at": "02:00:00"}], "actions": []},
+            {"id": "a6", "alias": "Hook", "triggers": [{"trigger": "webhook", "webhook_id": "secret-hook"}], "actions": []},
+        ]
+        (isolated_config_dir / "automations.yaml").write_text(yaml.safe_dump(configs), encoding="utf-8")
+        for entity_id, automation_id in (("automation.wake", "a1"), ("automation.sunset", "a2"), ("automation.door", "a3"),
+                                         ("automation.motion", "a4"), ("automation.hidden", "a5"), ("automation.hook", "a6")):
+            hass.states.async_set(entity_id, "on", {"id": automation_id})
+
+    def _key(self, **caps):
+        return _access_key(PermissionTree(domains={"automation": PermissionNode(state="GREEN")},
+                                          entities={"automation.hidden": PermissionNode(state="RED")}),
+                           **{"cap_registry_read": "allow", "cap_automation_write": "confirm", **caps})
+
+    async def _search(self, hass, **args):
+        result, outcome, _ = await _call_tool("list_automations", args, self._key(), hass, _data())
+        return result, outcome
+
+    async def test_a_trigger_type_lists_only_its_automations_with_their_triggers(self, hass, search_env):
+        result, outcome = await self._search(hass, trigger="time")
+        body = _json(result)
+        assert outcome == "allowed" and [row["entity_id"] for row in body["automations"]] == ["automation.wake"]
+        assert body["automations"][0]["triggers"] == [{"trigger": "time", "at": "07:00:00"}]
+        assert body["blueprint_automations"] == ["automation.motion"]
+
+    async def test_several_trigger_types_and_the_old_platform_key(self, hass, search_env):
+        body = _json((await self._search(hass, trigger=["time", "sun"]))[0])
+        rows = {row["entity_id"]: row["triggers"] for row in body["automations"]}
+        assert rows == {"automation.sunset": [{"trigger": "sun", "event": "sunset", "offset": "-00:30:00"}],
+                        "automation.wake": [{"trigger": "time", "at": "07:00:00"}]}
+
+    async def test_a_query_names_where_the_text_appears(self, hass, search_env):
+        body = _json((await self._search(hass, query="notify.mobile_app"))[0])
+        assert [row["entity_id"] for row in body["automations"]] == ["automation.door", "automation.wake"]
+        assert body["automations"][1]["matches"] == [
+            {"path": ["actions", 0, "action"], "value": "notify.mobile_app_phone"}]
+        assert "blueprint_automations" not in body
+
+    async def test_a_webhook_id_is_not_summarized(self, hass, search_env):
+        body = _json((await self._search(hass, trigger="webhook"))[0])
+        assert body["automations"][0]["triggers"] == [{"trigger": "webhook"}]
+        assert "secret-hook" not in json.dumps(body)
+
+    async def test_searching_needs_the_configuration_read_capability(self, hass, search_env):
+        key = self._key(cap_automation_write="deny")
+        _r, outcome, _ = await _call_tool("list_automations", {"trigger": "time"}, key, hass, _data())
+        assert outcome == "denied"
+        result, outcome, _ = await _call_tool("list_automations", {}, key, hass, _data())
+        assert outcome == "allowed" and "triggers" not in _json(result)["automations"][0]
+
+    @pytest.mark.parametrize("args", [{"trigger": 3}, {"trigger": ["time", 3]}, {"query": 5}, {"query": "x" * 201}])
+    async def test_a_malformed_filter_is_refused(self, hass, search_env, args):
+        _r, outcome = await self._search(hass, **args)
+        assert outcome == "invalid_request"
+
+    async def test_matches_past_one_result_are_named(self, hass, search_env):
+        from custom_components.phoenix_mcp import tool_common
+        from custom_components.phoenix_mcp.conversation_log import json_size
+        whole = json_size(json.dumps(_json((await self._search(hass, query="notify"))[0])))
+        with patch.object(tool_common, "TOOL_RESULT_MAX_BYTES", whole - 1):
+            body = _json((await self._search(hass, query="notify"))[0])
+        assert body["count"] == 1 and body["not_listed"] == ["automation.wake"]
+        assert json_size(json.dumps(body)) < whole
 
 
 class TestGetScript:

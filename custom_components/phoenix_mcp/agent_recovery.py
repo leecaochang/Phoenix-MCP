@@ -17,6 +17,10 @@ from homeassistant.util.dt import utcnow
 
 from .const import DOMAIN, TURN_DELIVERED_EVENT
 
+# Approval outcomes that settle a dispatch claim; mirrors approvals.TERMINAL_STATUSES,
+# named here so loading this module never pulls the approval machinery in.
+TERMINAL_APPROVAL_STATUSES = frozenset({"approved", "rejected", "failed", "expired", "cancelled"})
+
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
     from .access_key_store import AccessKeyStore
@@ -28,6 +32,10 @@ _turn_id: ContextVar[str | None] = ContextVar("phoenix_recovery_turn", default=N
 
 class RecoveryRequired(RuntimeError):
     """A dispatch cannot safely start or its outcome cannot be established."""
+
+
+class NotDispatched(RecoveryRequired):
+    """The dispatch barrier refused before anything reached Home Assistant."""
 
 
 def _journal_tool_name(tool: str) -> str:
@@ -132,8 +140,10 @@ class AgentRecovery:
 
     async def begin(self, access_key_id: str, tool: str, rid: str) -> None:
         async with self._lock:
-            if self.blocks(access_key_id) or len(self._records) >= MAX_RECORDS:
-                raise RecoveryRequired("Reconcile the previous agent operation in Phoenix MCP > Needs attention before retrying.")
+            if self.blocks(access_key_id):
+                raise NotDispatched("Reconcile the previous agent operation in the Needs Attention window of the Phoenix MCP panel before retrying; nothing was dispatched.")
+            if len(self._records) >= MAX_RECORDS:
+                raise NotDispatched("Too many agent operations await review in the Needs Attention window of the Phoenix MCP panel; nothing was dispatched.")
             tool = _journal_tool_name(tool)
             self._records[rid] = {"access_key_id": access_key_id, "tool": tool, "started_at": utcnow().isoformat(), "turn_id": _turn_id.get()}
             try:
@@ -141,7 +151,7 @@ class AgentRecovery:
             except Exception:
                 # Retain the barrier in memory too: a failed save may still
                 # have committed, and continuing would make that ambiguous.
-                raise RecoveryRequired("Could not persist the dispatch barrier; nothing was dispatched.") from None
+                raise NotDispatched("Could not persist the dispatch barrier; nothing was dispatched.") from None
             self._active.add(rid)
 
     async def retain_unknown(self, access_key_id: str, tool: str, rid: str) -> None:
@@ -191,6 +201,40 @@ class AgentRecovery:
                         record["dispatch_result"] = "approval_" + status
                         await self._save()
                 break
+
+    async def settle_known_outcomes(self, store: AccessKeyStore) -> int:
+        """Drop the claims whose outcome is on record, and return how many.
+
+        Run at startup. A claim is settled when Home Assistant answered the
+        agent (dispatch_result "received": the tool reported back, so whether it
+        ran is recorded in the audit log and the approval queue), or when the
+        approval queue holds a terminal record for the same request. What is
+        left is a write that reached Home Assistant with no outcome recorded
+        anywhere, which is the case Needs Attention exists for: it still blocks the access key until the operator reviews
+        it, because retrying could apply the same change a second time.
+        """
+        terminal = {
+            approval.get("request_id")
+            for approval in store.get_pending_approvals()
+            if approval.get("status") in TERMINAL_APPROVAL_STATUSES
+            and isinstance(approval.get("request_id"), str)
+        }
+
+        async with self._lock:
+            settled = [
+                rid for rid, record in self._records.items()
+                if rid not in self._active
+                and (record.get("dispatch_result") == "received" or rid in terminal)
+            ]
+            if not settled:
+                return 0
+            removed = {rid: self._records.pop(rid) for rid in settled}
+            try:
+                await self._save()
+            except BaseException:
+                self._records.update(removed)
+                raise
+        return len(settled)
 
     async def reviewed(self, rid: str) -> bool:
         """Persist one explicit review while preserving active and failed claims."""
@@ -284,13 +328,18 @@ def tool_is_read_only(name: str) -> bool:
     return _TOOL_ANNOTATIONS.get(canonical, {}).get("readOnlyHint") is True
 
 
-
 async def dispatch_agent_tool(
     dispatch: Any, *, hass: HomeAssistant, data: Any, access_key: Any,
     name: str, arguments: dict, tool_id: Any, request_id: str,
     client_ip: str, base_url: str,
 ) -> tuple:
-    """One dispatch, with no retry after the durable boundary."""
+    """One dispatch, with no retry after the durable boundary.
+
+    A barrier refusal is returned as an ordinary tool refusal, because nothing
+    was dispatched; only a failure after the boundary is an unknown outcome.
+    """
+    from .tool_common import RefusedBeforeWrite, _tool_error
+
     recovery = data.agent_recovery
     # Unknown names are refused before a handler can run. Do not turn a model
     # typo into a durable claim that an action might have reached HA.
@@ -299,7 +348,10 @@ async def dispatch_agent_tool(
     try:
         if write:
             await recovery.reconcile(data.store, access_key.id)
-            await recovery.begin(access_key.id, name, request_id)
+            try:
+                await recovery.begin(access_key.id, name, request_id)
+            except NotDispatched as refusal:
+                return {"jsonrpc": "2.0", "id": tool_id, "result": _tool_error(str(refusal))}, "tools/call", name, "denied"
         response = await dispatch(
             "tools/call", tool_id, {"name": name, "arguments": arguments},
             access_key, hass, data, client_ip, base_url, request_id=request_id,
@@ -314,15 +366,19 @@ async def dispatch_agent_tool(
                 await recovery.received(request_id)
             elif isinstance(result, dict) and outcome in ("denied", "not_found"):
                 await recovery.received(request_id)
+            elif isinstance(result, RefusedBeforeWrite):
+                # Server-owned proof that nothing was written: the model gets the
+                # error back and there is no outcome to reconcile.
+                await recovery.finish(request_id)
             elif (isinstance(msg, dict) and isinstance(msg.get("error"), dict)
                   and msg["error"].get("code") == -32000):
                 msg["error"]["message"] = "Authority changed during dispatch. The action outcome is unknown; reconcile Home Assistant before retrying."
             else:
-                raise RecoveryRequired("The action outcome is unknown. Check Phoenix MCP > Needs attention before retrying.")
+                raise RecoveryRequired("The action outcome is unknown. Check the Needs Attention window of the Phoenix MCP panel before retrying.")
         return response
     except Exception:
         if write:
-            raise RecoveryRequired("The action outcome is unknown. Check Phoenix MCP > Needs attention before retrying.") from None
+            raise RecoveryRequired("The action outcome is unknown. Check the Needs Attention window of the Phoenix MCP panel before retrying.") from None
         raise
     finally:
         if write:

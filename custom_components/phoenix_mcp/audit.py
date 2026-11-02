@@ -8,11 +8,20 @@ import uuid
 from collections import deque
 from dataclasses import dataclass
 from datetime import datetime
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 from homeassistant.util.dt import parse_datetime, utcnow
 
-from .const import AUDIT_LOG_MAXLEN, AUDIT_STORAGE_VERSION
+from .const import (
+    AGENTCLI_CLIENT_IP,
+    AI_TASK_CLIENT_IP,
+    ASSIST_CLIENT_IP,
+    AUDIT_LOG_MAXLEN,
+    AUDIT_STORAGE_VERSION,
+    CONVERSATION_LOG_SCAN_BYTES,
+    HOME_COMPANION_CLIENT_IP,
+    VOICE_AGENT_CLIENT_IP,
+)
 from .access_key_store import GlobalSettings
 
 if TYPE_CHECKING:
@@ -37,6 +46,23 @@ Outcome = Literal[
 
 _REDACTED = "[redacted]"
 
+# Sources that are Phoenix's own surfaces, not a caller's address: Log client IP
+# off hides addresses, and these name no one.
+_INTERNAL_SOURCES = frozenset({
+    AGENTCLI_CLIENT_IP, ASSIST_CLIENT_IP, VOICE_AGENT_CLIENT_IP, AI_TASK_CLIENT_IP, HOME_COMPANION_CLIENT_IP,
+})
+# Payload keys that hold entity IDs, hidden with the resource when Log entity IDs is off.
+_ENTITY_KEYS = frozenset({"entity_id", "entity_ids", "entity", "entities"})
+
+
+def _without_entity_ids(value: Any) -> Any:
+    """A payload with every entity-ID field replaced. Free text that names an entity stays."""
+    if isinstance(value, dict):
+        return {k: _REDACTED if k in _ENTITY_KEYS else _without_entity_ids(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_without_entity_ids(v) for v in value]
+    return value
+
 
 def _bounded_field(value: object) -> str:
     """Coerce an audit scalar to a length-capped string (see MAX_AUDIT_FIELD_LEN)."""
@@ -50,6 +76,38 @@ MAX_AUDIT_PAYLOAD_BYTES = 2048
 # bounded string before storage: an unbounded or non-string value could bloat the
 # ring buffer's persisted snapshot and crash any consumer that string-methods it.
 MAX_AUDIT_FIELD_LEN = 256
+
+
+def _logged_payload(payload: Any) -> str | None:
+    """A payload as the audit log keeps it: redacted as the Conversation Log redacts, then capped.
+
+    The Conversation Log's sanitizer also hides device codes (an alarm or lock
+    `code`, a PIN, a Wi-Fi key), in keys and in free text, which the general
+    secret redaction keeps. A stored payload from an older version may be a
+    capped string that is no longer JSON; it is cleaned as text. A payload that
+    cannot be sanitized is left out rather than kept raw.
+    """
+    from .conversation_log import sanitized  # noqa: PLC0415
+    from .helpers import log_internal_failure  # noqa: PLC0415
+
+    try:
+        if isinstance(payload, str):
+            try:
+                value: Any = json.loads(payload)
+            except ValueError:
+                value = None
+            clean = sanitized(payload, max_bytes=CONVERSATION_LOG_SCAN_BYTES) if value is None else json.dumps(
+                sanitized(value, max_bytes=CONVERSATION_LOG_SCAN_BYTES))
+        else:
+            # Values that are not JSON (a datetime in a MESA event) keep their text form.
+            value = json.loads(json.dumps(payload, default=str))
+            clean = json.dumps(sanitized(value, max_bytes=CONVERSATION_LOG_SCAN_BYTES))
+    except ValueError:
+        return None
+    except Exception as error:  # noqa: BLE001 - never keep the raw value
+        log_internal_failure(_LOGGER, "audit_payload_sanitize", error)
+        return None
+    return clean if len(clean) <= MAX_AUDIT_PAYLOAD_BYTES else clean[:MAX_AUDIT_PAYLOAD_BYTES] + "...[truncated]"
 
 
 def generate_request_id() -> str:
@@ -146,9 +204,10 @@ class AuditLog:
         """Append an audit entry, subject to the current logging settings.
 
         Returns without writing if disable_all_logging or the relevant per-outcome
-        toggle is off. resource and client_ip are redacted when log_entity_names or
-        log_client_ip is off. pending_approval and approval/* lifecycle rows ignore
-        the log_allowed/log_denied toggles.
+        toggle is off. resource and the payload's entity-ID fields are redacted when
+        log_entity_names is off, and client_ip when log_client_ip is off unless it
+        names one of Phoenix's own surfaces. pending_approval and approval/*
+        lifecycle rows ignore the log_allowed/log_denied toggles.
         """
         if settings.disable_all_logging:
             return
@@ -177,17 +236,11 @@ class AuditLog:
             return
 
         logged_resource = resource if settings.log_entity_names else _REDACTED
-        logged_ip = client_ip if settings.log_client_ip else _REDACTED
+        logged_ip = client_ip if settings.log_client_ip or client_ip in _INTERNAL_SOURCES else _REDACTED
 
-        logged_payload: str | None = None
-        if payload is not None:
-            try:
-                from .helpers import redact_structure  # noqa: PLC0415
-
-                s = json.dumps(redact_structure(payload), default=str)
-                logged_payload = s if len(s) <= MAX_AUDIT_PAYLOAD_BYTES else s[:MAX_AUDIT_PAYLOAD_BYTES] + "...[truncated]"
-            except (TypeError, ValueError):
-                logged_payload = None
+        if payload is not None and not settings.log_entity_names:
+            payload = _without_entity_ids(payload)
+        logged_payload = None if payload is None else _logged_payload(payload)
 
         from .household_authority import household_authority
 
@@ -222,6 +275,7 @@ class AuditLog:
         client_ip: str | None = None,
         method: str | None = None,
         resource: str | None = None,
+        request_id: str | None = None,
         since: datetime | None = None,
     ) -> list[AuditEntry] | None:
         """Shared filter pass behind query() and count(). Newest first.
@@ -248,6 +302,10 @@ class AuditLog:
             entries = [e for e in entries if method.lower() in str(e.method).lower()]
         if resource is not None:
             entries = [e for e in entries if resource.lower() in str(e.resource).lower()]
+        # Exact, not a substring: a request id identifies one request, and Needs
+        # Attention links to it to show what became of an uncertain write.
+        if request_id is not None:
+            entries = [e for e in entries if str(e.request_id) == request_id]
         if since is not None:
             entries = [e for e in entries if e.timestamp >= since]
 
@@ -262,6 +320,7 @@ class AuditLog:
         client_ip: str | None = None,
         method: str | None = None,
         resource: str | None = None,
+        request_id: str | None = None,
         since: datetime | None = None,
         limit: int = 100,
         offset: int = 0,
@@ -274,7 +333,7 @@ class AuditLog:
         """
         entries = self._filtered(
             access_key_id=access_key_id, outcome=outcome, client_ip=client_ip,
-            method=method, resource=resource, since=since,
+            method=method, resource=resource, request_id=request_id, since=since,
         )
         if entries is None:
             return None
@@ -289,6 +348,7 @@ class AuditLog:
         client_ip: str | None = None,
         method: str | None = None,
         resource: str | None = None,
+        request_id: str | None = None,
         since: datetime | None = None,
     ) -> int | None:
         """Return the number of entries matching query()'s filters, ignoring limit/offset.
@@ -297,7 +357,7 @@ class AuditLog:
         """
         entries = self._filtered(
             access_key_id=access_key_id, outcome=outcome, client_ip=client_ip,
-            method=method, resource=resource, since=since,
+            method=method, resource=resource, request_id=request_id, since=since,
         )
         return None if entries is None else len(entries)
 
@@ -346,6 +406,9 @@ class AuditLog:
             return
         from .access_key_schema import normalize_access_key_fields
 
+        # Payloads saved before device codes were redacted are cleaned once here,
+        # and the cleaned log is saved at once so the codes leave the disk.
+        scrubbed = 0
         for r in raw.get("entries", []):
             try:
                 r = normalize_access_key_fields(r)
@@ -355,6 +418,11 @@ class AuditLog:
                 outcome = r["outcome"]
                 if outcome not in self._VALID_OUTCOMES:
                     raise ValueError(f"unrecognised outcome: {outcome!r}")
+                payload = r.get("payload")
+                if payload is not None:
+                    clean = _logged_payload(payload)
+                    scrubbed += clean != payload
+                    payload = clean
                 self._log.append(AuditEntry(
                     request_id=r["request_id"],
                     timestamp=ts,
@@ -365,7 +433,7 @@ class AuditLog:
                     outcome=outcome,
                     client_ip=r["client_ip"],
                     pass_through=r.get("pass_through", False),
-                    payload=r.get("payload"),
+                    payload=payload,
                     mesa_advisory=r.get("mesa_advisory", False),
                     preset=r.get("preset"),
                     stale_tools_advisory=r.get("stale_tools_advisory", False),
@@ -374,6 +442,8 @@ class AuditLog:
                 ))
             except (KeyError, TypeError, ValueError) as exc:
                 _LOGGER.warning("Skipping corrupt audit entry: %s", exc)
+        if scrubbed:
+            await self.async_save()
 
     async def async_wipe(self) -> None:
         """Clear all entries from memory and write an empty snapshot to disk."""

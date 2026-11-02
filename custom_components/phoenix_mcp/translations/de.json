@@ -9,7 +9,7 @@
       "already_configured": "Phoenix MCP ist bereits konfiguriert."
     },
     "create_entry": {
-      "default": "Verwenden Sie das Phoenix-MCP-Panel, um Ihre Zugriffsschlüssel zu verwalten"
+      "default": "Verwenden Sie das Phoenix-MCP-Panel in der Seitenleiste, um Ihre Zugriffsschlüssel zu verwalten. Das Panel wird nur Administratoren angezeigt."
     }
   },
   "issues": {
@@ -41,11 +41,27 @@
   "entity": {
     "sensor": {
       "status": {
+        "name": "Status",
         "state": {
           "active": "Aktiv",
           "expired": "Abgelaufen",
           "revoked": "Widerrufen"
         }
+      },
+      "request_count": {
+        "name": "Anzahl Anfragen"
+      },
+      "denied_count": {
+        "name": "Anzahl abgelehnt"
+      },
+      "rate_limit_hits": {
+        "name": "Ratenlimit erreicht"
+      },
+      "last_access": {
+        "name": "Letzter Zugriff"
+      },
+      "expires_in": {
+        "name": "Läuft ab in"
       }
     }
   }

@@ -13,7 +13,9 @@ import math
 import re
 import secrets
 import time
+from contextvars import ContextVar
 from datetime import datetime, timedelta, timezone
+from collections.abc import Awaitable, Callable
 from typing import Any, Literal, cast
 
 import voluptuous as vol
@@ -45,25 +47,31 @@ from homeassistant.util.dt import utcnow
 from homeassistant.util.ulid import ulid_to_bytes_or_none
 
 from .audit import generate_request_id
-from .const import AGENTCLI_CLIENT_IP, AI_TASK_CLIENT_IP, ASSIST_CLIENT_IP, PHOENIX_VERSION, BLOCKED_DOMAINS, VOICE_AGENT_CLIENT_IP, HOME_COMPANION_CLIENT_IP, CAP_ALLOW, CAP_CONFIRM, CAP_DENY, CAPABILITY_NAMES, DOMAIN, DOMAIN_IMPORTANT_ATTRIBUTES, DUAL_GATE_SERVICES, LEAN_ALWAYS_ATTRS, HIGH_RISK_DOMAINS, MCP_AUTHORITY_CHANGED_ERROR, MCP_DISCOVER_TTL_MS, MCP_LEGACY_PROTOCOL_VERSION_PREFERRED, MCP_LEGACY_PROTOCOL_VERSIONS, MCP_PROTOCOL_VERSIONS, MCP_SSE_KEEPALIVE_SECONDS, MAX_APPROVAL_RESULT_CHARS, MAX_BATCH_APPROVALS, MAX_BATCH_ITEMS, LOG_LEVELS, LOG_LEVEL_ERROR_MESSAGE, MAX_LOG_ENTRIES, MAX_LOGBOOK_HOME_DAYS, MAX_LOGBOOK_NARROWED_DAYS, MAX_LOGBOOK_RESOURCE_IDS, MAX_SEARCH_QUERY_LEN, MAX_SUBSCRIPTION_SECONDS, MAX_ENTITY_ALIASES, MAX_ENTITY_ALIAS_LENGTH, MAX_TOOL_NAME_LENGTH, MESA_APPROVED_EXECUTOR, MESA_MODE_OFF, NO_TARGET_SERVICES, PROXY_TIMEOUT_SECONDS
+from .const import AGENTCLI_CLIENT_IP, BACKUP_COMPLETION_WAIT_SECONDS, BACKUP_SINGLE_SLOT_AGENT_DOMAINS, LOCAL_BACKUP_AGENT_IDS, AI_TASK_CLIENT_IP, ASSIST_CLIENT_IP, PHOENIX_VERSION, BLOCKED_DOMAINS, VOICE_AGENT_CLIENT_IP, HOME_COMPANION_CLIENT_IP, CAP_ALLOW, CAP_CONFIRM, CAP_DENY, CAPABILITY_NAMES, DOMAIN, DUAL_GATE_SERVICES, HIGH_RISK_DOMAINS, MCP_AUTHORITY_CHANGED_ERROR, MCP_DISCOVER_TTL_MS, MCP_LEGACY_PROTOCOL_VERSION_PREFERRED, MCP_LEGACY_PROTOCOL_VERSIONS, MCP_PROTOCOL_VERSIONS, MCP_SSE_KEEPALIVE_SECONDS, MAX_APPROVAL_RESULT_CHARS, MAX_BATCH_APPROVALS, MAX_BATCH_ITEMS, LOG_LEVELS, LOG_LEVEL_ERROR_MESSAGE, GET_LOGS_LEVEL_ERROR_MESSAGE, ORIENTATION_GUIDANCE, MAX_LOG_ENTRIES, MAX_LOGBOOK_HOME_DAYS, MAX_LOGBOOK_NARROWED_DAYS, MAX_LOGBOOK_RESOURCE_IDS, MAX_SEARCH_QUERY_LEN, MAX_SUBSCRIPTION_SECONDS, MAX_ENTITY_ALIASES, MAX_ENTITY_ALIAS_LENGTH, MAX_TOOL_NAME_LENGTH, MESA_APPROVED_EXECUTOR, MESA_MODE_OFF, NO_TARGET_SERVICES, PROXY_TIMEOUT_SECONDS
 from .data import PhoenixData
 from .tools.esphome import _tool_search_esphome_yaml, _tool_list_esphome_jobs, _tool_list_esphome_devices
+from .tools.todo import _tool_get_todo_items, _tool_set_todo_item
+from .tools.notify import _execute_send_notification, _tool_get_notifications, _tool_send_notification
+from .tools.labels import _execute_set_label_or_category, _tool_list_labels, _tool_set_label_or_category, restore_label_version
 from .template_render import TemplateRenderError, async_render_template_for_access_key
 from .request_authority import (AuthorityChangedError, PolicyChangedError, RequestAuthority, check_request_authority, policy_version, request_authority)
 from .household_authority import household_service_kwargs, household_tool_access
 from .request_authority import DispatchProgress, dispatch_progress, mark_dispatch_started
-from .tool_common import _create_registry_mesa_approval, offset_page, unknown_category_message, unknown_label_message
+from .tool_common import _create_registry_mesa_approval, _project_state, fitted_offset_page, longest_fitting, offset_page, unknown_category_message, unknown_label_message
 from .tools.locations import _tool_set_area_or_floor, _execute_set_area_or_floor, restore_location_version
-from .tool_input import decode_container_strings, scalar_arguments, tool_arguments_error
+from .tool_input import _argument_notes, decode_container_strings, note_argument_adjustment, scalar_arguments, tool_arguments_error, with_argument_notes
 from .device_semantics import (
+    device_entry_value,
     device_registry_snapshot,
     entity_follows_device_name,
     entity_name_source,
     update_device_registry_entry,
 )
-from .service_targets import secondary_target_error, unsupported_secondary_targets
-from .tool_contracts import _RETIRED_REPLACEMENTS, normalize_tool_args, unknown_argument_error
-from .const import SERVICE_RESULT_STATES_MAX, CALENDAR_EVENTS_DEFAULT_LIMIT, CALENDAR_MAX_EVENTS, DEBUG_CAPTURE_CAPACITY, LOG_DETAIL_STALE_MESSAGE, CALL_SERVICE_NO_TARGET_CAPS, GET_STATE_MAX_IDS, HISTORY_SUMMARY_MAX_ROWS, HISTORY_SUMMARY_MAX_SECONDS, HISTORY_SUMMARY_MAX_STATES, HISTORY_SUMMARY_PAGE_ROWS, INTEGRATION_LIST_DEFAULT_LIMIT, INTEGRATION_LIST_MAX_LIMIT, UNKNOWN_ARGUMENT_PROTECTED_FIELDS
+from .service_targets import secondary_target_error, template_fields, template_fields_error, unsupported_secondary_targets
+from .tool_contracts import _RETIRED_REPLACEMENTS, adopt_near_misses, handler_arguments, normalize_tool_args, unknown_argument_error
+from .const import SERVICE_RESULT_STATES_MAX, CALENDAR_EVENTS_DEFAULT_LIMIT, CALENDAR_MAX_EVENTS, DEBUG_CAPTURE_CAPACITY, LOG_DETAIL_STALE_MESSAGE, CALL_SERVICE_NO_TARGET_CAPS, GET_STATE_MAX_IDS, HISTORY_SUMMARY_BATCH_SECONDS, HISTORY_SUMMARY_MANY_MAX_STATES, HISTORY_SUMMARY_MAX_ROWS, HISTORY_SUMMARY_MAX_SECONDS, HISTORY_SUMMARY_MAX_STATES, HISTORY_SUMMARY_PAGE_ROWS, INTEGRATION_LIST_DEFAULT_LIMIT, INTEGRATION_LIST_MAX_LIMIT, SEARCH_ENTITIES_MAX_LIMIT, TOOL_RESULT_MAX_BYTES, UNKNOWN_ARGUMENT_PROTECTED_FIELDS
+from .const import MAX_PENDING_APPROVALS_PER_ACCESS_KEY, MCP_LEGACY_SESSION_BUSY_RETRY_SECONDS
+from .approvals import PendingApprovalCapacityError
 from .mesa import (
     RegistryMesaDecision,
     async_apply_mesa_to_call,
@@ -73,11 +81,12 @@ from .mesa import (
 from .ws_dispatch import WsDispatchError, async_ws_command
 from .agent_recovery import tool_is_read_only
 from .mesa_tools import MESA_TOOL_NAMES, async_call_mesa_tool, mesa_tool_defs
-from .helpers import _strict_phoenix_log_text, access_key_notes_block, access_key_notes_for_agent, build_error_response as _error, build_permitted_states as _build_permitted_states, build_safe_config, collect_log_entries as _collect_log_entries, content_hash, diff_summary_fields as _summary, effective_cap, effective_caps, entity_hint_for_agent, fire_rate_limit_events as _fire_rate_limit_events, async_get_authenticated_access_key as _async_get_authenticated_access_key, get_client_ip as _get_client_ip, log_internal_failure, log_request as _log, parse_time_param as _parse_time_param, redact_diagnostics, redact_structure, sanitize_service_data as _sanitize_service_data, service_not_found_hint as _service_not_found_hint, str_arg, SystemLogDegradedError, SystemLogUnavailableError, access_key_has_write_scope, validation_error_message as _validation_error_message, version_summary_fields as _version_summary
+from .helpers import _strict_phoenix_log_text, access_key_notes_block, access_key_notes_for_agent, build_error_response as _error, build_permitted_states as _build_permitted_states, build_safe_config, collect_log_entries as _collect_log_entries, content_hash, diff_summary_fields as _summary, effective_cap, effective_caps, entity_hint_for_agent, fire_rate_limit_events as _fire_rate_limit_events, async_get_authenticated_access_key as _async_get_authenticated_access_key, get_client_ip as _get_client_ip, log_internal_failure, log_request as _log, parse_time_param as _parse_time_param, redact_diagnostics, redact_structure, sanitize_service_data as _sanitize_service_data, service_not_found_hint as _service_not_found_hint, str_arg, str_list_arg, SystemLogDegradedError, SystemLogUnavailableError, access_key_has_write_scope, validation_error_message as _validation_error_message, version_summary_fields as _version_summary
 from .proxy_diagnostics import discovered_flows, full_pass_through, integration_serial_ports
-from .history_summary import SummaryUnavailableError, read_state_change_page, scan_state_changes, summary_body
+from .history_summary import SummaryUnavailableError, compact_summary_row, read_attribute_change_page, read_state_change_page, scan_state_changes, summary_body
 from .recorder_queries import (
     MAX_SIGNIFICANT_STATES_RANGE,
+    read_statistic_window,
     RecorderWindow,
     backward_page_start,
     ceil_us,
@@ -235,7 +244,7 @@ from .tools.dashboard_resources import (
     _tool_set_dashboard_resource,
 )
 from .tools.camera import _tool_get_camera_image
-from .tools.esphome import _ESPHOME_DOMAIN, _execute_install_esphome_firmware, _tool_cancel_esphome_job, _tool_clean_esphome_build, _tool_compile_esphome_firmware, _tool_decode_esphome_backtrace, _tool_get_esphome_automations, _tool_get_esphome_board, _tool_get_esphome_component, _tool_get_esphome_device_logs, _tool_get_esphome_job, _tool_get_esphome_overview, _tool_get_esphome_yaml, _tool_install_esphome_firmware, _tool_validate_esphome_yaml, _tool_wait_for_esphome_job
+from .tools.esphome import _ESPHOME_DOMAIN, _execute_install_esphome_firmware, _tool_cancel_esphome_job, _tool_clean_esphome_build, _tool_compile_esphome_firmware, _tool_analyze_esphome_memory, _tool_check_esphome_connectivity, _tool_decode_esphome_backtrace, _tool_get_esphome_automations, _tool_get_esphome_board, _tool_get_esphome_component, _tool_get_esphome_device_logs, _tool_get_esphome_history, _tool_get_esphome_job, _tool_get_esphome_overview, _tool_get_esphome_yaml, _tool_install_esphome_firmware, _tool_validate_esphome_yaml, _tool_wait_for_esphome_job
 # The published tool catalog (schemas + MCP annotations) is declarative data
 # in tool_defs.py; this module reads it to answer tools/list, build the
 # per-access-key gate map, and compute the catalog fingerprint. The names are
@@ -249,8 +258,8 @@ from .tool_defs import (
     _TOOL_ANNOTATIONS,
 )
 from .audit import Outcome
-from .tool_common import _CAP_FORBIDDEN_MESSAGE, _resolve_area_id, _ProgressBus, _approved_exec_ctx, _approval_resource, _gate, _mesa_advisory_ctx, _mesa_confirm_annotation, _operator_accepted_result, _pending_or_inline, _progress_ctx, _record_version, _restore_ctx, _set_progress_status, _tool_error, _tool_success
-from .policy_engine import (EntityCreationNotPermitted, Permission, assist_expose_check, call_needs_physical_gate, config_entry_registry_context, device_config_entry_ids, device_registry_entity_ids, esphome_entry_writable, filter_entities_for_access_key, filter_service_response, resolve, resolve_config_entry_registry_access, resolve_config_entry_registry_write, resolve_device_registry_access, resolve_device_registry_write, resolve_esphome_user_service, resolve_read, resolve_registry_access, resolve_service_targets, service_target_binding_valid, scrub_sensitive_attributes, scrub_state_dict as _scrub_state_dict)
+from .tool_common import MESA_DENIED_MESSAGE, _CAP_FORBIDDEN_MESSAGE, _resolve_area_id, _ProgressBus, _approved_exec_ctx, _approval_resource, _gate, _mesa_advisory_ctx, _mesa_confirm_annotation, _operator_accepted_result, _pending_or_inline, _progress_ctx, _record_version, _restore_ctx, _set_progress_status, _tool_error, _tool_refused_before_write, _tool_success
+from .policy_engine import (Permission, assist_expose_check, call_needs_physical_gate, config_entry_registry_context, device_cascade_entity_ids, device_config_entry_ids, esphome_entry_writable, filter_entities_for_access_key, filter_service_response, resolve, resolve_config_entry_registry_access, resolve_config_entry_registry_write, resolve_device_registry_access, resolve_device_registry_write, resolve_esphome_user_service, resolve_read, resolve_registry_access, resolve_service_targets, service_target_binding_valid, scrub_sensitive_attributes, scrub_state_dict as _scrub_state_dict)
 from .rate_limiter import RateLimitResult
 from .access_key_store import AccessKeyRecord
 from . import yaml_includes
@@ -326,12 +335,12 @@ def tool_catalog_counts() -> dict[str, int]:
 
 # Tools that perform writes/actions. They are announced in tools/list only when
 # the access key has write scope (any GREEN grant or pass_through). Cap-tied tools
-# (those with a "cap", "caps" or "caps_any" key) gate on their capability
-# instead; all remaining tools (reads, GetDateTime, get_approval_status) are
+# (those with a "cap", "caps" or "caps_any" key) gate on their capability, and a
+# tool that is both needs both; all remaining tools (reads, GetDateTime, get_approval_status) are
 # always announced. The announce_all_tools access key flag overrides this gating
 # entirely.
 _WRITE_GATED_TOOLS = frozenset({
-    "call_service",
+    "call_service", "set_todo_item",
     "HassTurnOn", "HassTurnOff", "HassLightSet", "HassFanSetSpeed",
     "HassClimateSetTemperature", "HassSetPosition", "HassSetVolume",
     "HassSetVolumeRelative", "HassMediaPause", "HassMediaUnpause",
@@ -381,9 +390,9 @@ def _tool_is_announced(
     is always announced. The caller applies the announce_all_tools override
     separately.
 
-    THREE MIRRORS: this predicate, _tool_gate_map (get_capability_summary), and
-    agentcli.build_mcp_tool_list (Agent Chat, Assist, voice, AI Task) each decide
-    announcement independently. Changing the rules here means changing all three.
+    TWO MIRRORS: this predicate and _tool_gate_map (get_capability_summary)
+    decide announcement independently; agentcli.build_mcp_tool_list (Agent Chat,
+    Assist, voice, AI Task) calls this one. Change both together.
     """
     caps = _tool_required_caps(tool_def)
     any_caps = _tool_any_caps(tool_def)
@@ -394,7 +403,9 @@ def _tool_is_announced(
     internal_name = _NATIVE_TOOL_PUBLIC_TO_INTERNAL.get(
         tool_def["name"], tool_def["name"]
     )
-    if not caps and not any_caps and internal_name in _WRITE_GATED_TOOLS and not _write_gate_open(
+    # A write tool that also names a capability needs both, so a whole-tool
+    # physical gate never announces a tool the key has no target for.
+    if internal_name in _WRITE_GATED_TOOLS and not _write_gate_open(
         internal_name, access_key, has_write
     ):
         return False
@@ -449,6 +460,8 @@ def _tool_gate_map(
             modes = [effective_cap(access_key, cap) for cap in caps]
             any_modes = [effective_cap(access_key, cap) for cap in any_caps]
             if CAP_DENY in modes or (any_modes and all(mode == CAP_DENY for mode in any_modes)):
+                unavailable.append(name)
+            elif internal_name in _WRITE_GATED_TOOLS and not _write_gate_open(internal_name, access_key, has_write):
                 unavailable.append(name)
             elif (
                 CAP_CONFIRM in modes
@@ -522,8 +535,11 @@ _MCP_CACHEABLE_METHODS = frozenset({
     "resources/templates/list", "resources/read",
 })
 _MCP_LEGACY_SESSION_TTL_SECONDS = 3600.0
+_MCP_LEGACY_UNINITIALIZED_TTL_SECONDS = 60.0
 _MCP_LEGACY_SESSION_LIMIT = 256
 _MCP_LEGACY_SESSION_ACCESS_KEY_LIMIT = 8
+# The legacy session this request holds open, released when the request ends.
+_legacy_session_in_use: ContextVar[dict | None] = ContextVar("phoenix_legacy_session_in_use", default=None)
 
 
 def _protocol_error_response(
@@ -747,22 +763,13 @@ def _classify_jsonrpc_message(body: dict) -> tuple[str, Any]:
     return "dispatch", (method, raw_params or {})
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+# The same notice when the operator's change left the announced tools as they were:
+# what needs approval may differ, but the client's list is still right.
+_SETTINGS_CHANGED_ADVISORY = (
+    "Notice: this access key's settings were changed by the operator after your "
+    "client last fetched the tool list. Your tools are the same, but which actions "
+    "need approval may have changed. Call get_capability_summary for the current state."
+)
 
 # One-time in-band advisory appended to a tools/call response when this access key's
 # settings changed after its last tools/list (the stateless transport cannot
@@ -798,79 +805,6 @@ _NOTES_REMOVED_NOTICE = (
     "Notice: the operator removed this access key's administrator notes after your "
     "client received its instructions. Disregard the earlier notes."
 )
-
-
-
-
-
-
-
-
-
-def _normalize_fields(fields: Any) -> list[str]:
-    """Coerce the get_state `fields` arg to a list of field names.
-
-    Accepts a list of strings or a single comma-separated string (a common agent
-    mistake); anything else yields an empty list, which selects the lean default.
-    """
-    if isinstance(fields, str):
-        return [f for f in (p.strip() for p in fields.split(",")) if f]
-    if isinstance(fields, list):
-        return [str(f).strip() for f in fields if str(f).strip()]
-    return []
-
-
-def _select_state_fields(scrubbed: dict, fields: list[str]) -> dict:
-    """Return only the requested fields from an already-scrubbed state dict.
-
-    Top-level keys (state, last_changed, last_updated, ...) are taken as-is;
-    'attr.<name>' selects one attribute; 'attributes' selects all (scrubbed)
-    attributes. entity_id is always included. Unknown fields are ignored. Runs
-    AFTER scrubbing, so a scrubbed attribute can never be selected back in.
-    """
-    attrs = scrubbed.get("attributes", {})
-    out: dict = {"entity_id": scrubbed.get("entity_id")}
-    picked_attrs: dict = {}
-    for f in fields:
-        if f == "attributes":
-            picked_attrs.update(attrs)
-        elif f.startswith("attr."):
-            name = f[len("attr."):]
-            if name in attrs:
-                picked_attrs[name] = attrs[name]
-        elif f in scrubbed and f != "attributes":
-            out[f] = scrubbed[f]
-    if picked_attrs:
-        out["attributes"] = picked_attrs
-    return out
-
-
-def _lean_state(scrubbed: dict) -> dict:
-    """Return the domain-aware lean view of an already-scrubbed state dict."""
-    eid = scrubbed.get("entity_id", "") or ""
-    domain = eid.split(".")[0] if "." in eid else ""
-    attrs = scrubbed.get("attributes", {})
-    keep = set(LEAN_ALWAYS_ATTRS) | set(DOMAIN_IMPORTANT_ATTRIBUTES.get(domain, ()))
-    lean_attrs = {k: v for k, v in attrs.items() if k in keep}
-    out: dict = {"entity_id": eid, "state": scrubbed.get("state")}
-    if lean_attrs:
-        out["attributes"] = lean_attrs
-    return out
-
-
-def _project_state(scrubbed: dict, fields: Any, detailed: bool) -> dict:
-    """Apply presentation-only field projection to a scrubbed state dict.
-
-    `detailed` returns the full dict, explicit fields the requested subset,
-    otherwise the domain-aware lean view. Never bypasses scrubbing (the input is
-    already scrubbed).
-    """
-    if detailed:
-        return scrubbed
-    norm = _normalize_fields(fields)
-    if norm:
-        return _select_state_fields(scrubbed, norm)
-    return _lean_state(scrubbed)
 
 
 def _readable_state(entity_id: Any, access_key: AccessKeyRecord, hass: HomeAssistant) -> tuple[Any, Permission]:
@@ -916,9 +850,67 @@ async def _tool_get_state(
 
 
 async def _tool_get_history(
-    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData | None = None
 ) -> tuple[dict, str, str]:
-    """MCP tool: fetch one bounded page of state history."""
+    """MCP tool: fetch one bounded page of state history, or summarize several entities."""
+    args = _without_empty_placeholder(args)
+    several = "select" in args or isinstance(args.get("entity_id"), list)
+    mode = str(args.get("mode") or "").strip().lower()
+    if several and mode in ("state_changes", "significant_states") and "select" not in args and len(args["entity_id"]) == 1:
+        note_argument_adjustment("Read a one-item entity_id list as that entity.")
+        args = {**args, "entity_id": args["entity_id"][0]}
+    elif several:
+        if not mode:
+            note_argument_adjustment("Several entities are summarized, so mode summary was used; call one entity for rows.")
+            args = {**args, "mode": "summary"}
+        ignored = [key for key in ("limit", "order", "cursor") if key in args]
+        if ignored and mode in ("", "summary"):
+            note_argument_adjustment(f"Ignored {', '.join(ignored)}, which do not apply to a summary of several entities; "
+                                     "continue an entity that returned next_cursor in a single-entity call.")
+            args = {key: value for key, value in args.items() if key not in ignored}
+    if "select" in args:
+        return await _history_summary_select(args["select"], args, access_key, hass, data)
+    if isinstance(args.get("entity_id"), list) and mode == "state_changes":
+        return await _history_rows_many(args["entity_id"], args, access_key, hass)
+    if isinstance(args.get("entity_id"), list):
+        return await _history_summary_many(args["entity_id"], args, access_key, hass)
+    return await _fit_recorder_page(lambda page_args: _history_page(page_args, access_key, hass), args, "history")
+
+
+async def _fit_recorder_page(
+    read: Callable[[dict], Awaitable[tuple[dict, str, str]]], args: dict, rows_key: str,
+) -> tuple[dict, str, str]:
+    """A Recorder page read again with a smaller limit until it fits TOOL_RESULT_MAX_BYTES.
+
+    Each page reader ends a page where its cursor continues exactly, even among
+    rows sharing a microsecond, so a smaller limit keeps the continuation exact
+    where cutting rows afterwards would not. The model is told the page shrank.
+    """
+    result = await read(args)
+    shortened = False
+    for _attempt in range(5):
+        content, outcome, _resource = result
+        text = "" if content.get("isError") else content["content"][0]["text"]
+        # A shortened page leaves room for the warning that says so.
+        budget = TOOL_RESULT_MAX_BYTES - (256 if shortened else 0)
+        if outcome != "allowed" or not text.startswith("{") or json_size(text) <= budget:
+            break
+        rows = len(json.loads(text).get(rows_key) or [])
+        if rows <= 1:
+            break
+        args = {**args, "limit": max(1, min(rows - 1, int(rows * budget * 0.9 / json_size(text))))}
+        result = await read(args)
+        shortened = True
+    if not shortened or result[1] != "allowed" or result[0].get("isError"):
+        return result
+    body = json.loads(result[0]["content"][0]["text"])
+    body["warnings"] = [*body.get("warnings", []),
+                        f"This page was shortened to {body.get('count')} rows to fit one result; continue with next_cursor."]
+    return _tool_success(json.dumps(body, default=str)), result[1], result[2]
+
+
+async def _history_page(args: dict, access_key: AccessKeyRecord, hass: HomeAssistant) -> tuple[dict, str, str]:
+    """One bounded page of one entity's state history, or its summary."""
     entity_id = str_arg(args.get("entity_id"))
     if not entity_id:
         return _tool_error("Missing required argument: entity_id"), "invalid_request", "get_history"
@@ -935,8 +927,12 @@ async def _tool_get_history(
             "Invalid mode. Must be one of: state_changes, significant_states, summary."
         ), "invalid_request", entity_id
     if mode == "summary" and ("limit" in args or "order" in args):
+        ignored = [key for key in ("limit", "order") if key in args]
+        note_argument_adjustment(f"Ignored {', '.join(ignored)}, which do not apply to summary mode's per-state totals.")
+        args = {key: value for key, value in args.items() if key not in ignored}
+    if args.get("attribute") and mode != "summary":
         return _tool_error(
-            "limit and order do not apply to summary mode, which returns per-state totals instead of rows."
+            "attribute is accepted only with mode summary, which totals how long the attribute held each value."
         ), "invalid_request", entity_id
     order = str(args.get("order") or "oldest_first").strip().lower()
     if order not in ("oldest_first", "newest_first"):
@@ -948,7 +944,7 @@ async def _tool_get_history(
     except ValueError as err:
         return _tool_error(str(err)), "invalid_request", entity_id
     if mode == "summary":
-        return await _history_summary(entity_id, window, access_key, hass)
+        return await _history_summary(entity_id, window, access_key, hass, args.get("attribute") or None)
     if mode == "significant_states" and window.end - window.start > MAX_SIGNIFICANT_STATES_RANGE:
         return _tool_error(
             "significant_states supports at most 7 days per request because Home Assistant cannot bound this query in the database. Use state_changes for longer ranges."
@@ -1061,16 +1057,476 @@ async def _tool_get_history(
         retention=retention_metadata("short_term", keep_days),
         warnings=warnings,
         result_key="history",
+        newest_first=newest,
     )
     body["order"] = order
     body["mode"] = mode
     return _tool_success(json.dumps(body, default=str)), "allowed", entity_id
 
 
+async def _scan_summary(
+    instance: Any, hass: HomeAssistant, entity_id: str, start_us: int, end_us: int, max_seconds: float,
+    attribute: str | None = None,
+) -> Any:
+    """Fold one entity's Recorder changes over [start_us, end_us) within the summary budgets.
+
+    With attribute, the fold runs over that attribute's values instead of the state.
+    """
+    async def fetch(after_us: int, before_us: int, limit: int, include_start: bool) -> list[tuple[int, str]]:
+        if attribute is not None:
+            return cast(list[tuple[int, str]], await instance.async_add_executor_job(
+                read_attribute_change_page, hass, entity_id, attribute, after_us, before_us, limit, include_start))
+        return cast(list[tuple[int, str]], await instance.async_add_executor_job(
+            read_state_change_page, hass, entity_id, after_us, before_us, limit, include_start))
+
+    return await scan_state_changes(
+        fetch, start_us, end_us, page_rows=HISTORY_SUMMARY_PAGE_ROWS,
+        max_rows=HISTORY_SUMMARY_MAX_ROWS, max_seconds=max_seconds,
+    )
+
+
+# search_entities filters select accepts; it finds the entities, so their scope,
+# Assist exposure and child-device rules are exactly that tool's.
+_SUMMARY_SELECT_FILTERS = ("query", "domain", "device_class", "integration", "radio", "power", "area")
+
+
+def _stored_bytes(value: Any) -> int:
+    """Bytes a tool result's JSON text takes as the Conversation Log stores it."""
+    return json_size(json.dumps(value))
+
+
+def _without_empty_placeholder(args: dict) -> dict:
+    """args without an empty select or entity_id sent beside the other.
+
+    Some models fill every optional parameter: an empty one beside the other names
+    nothing, so it is not a second, conflicting request.
+    """
+    if "select" in args and "entity_id" in args:
+        for placeholder in ("select", "entity_id"):
+            if args[placeholder] in (None, "", [], {}):
+                return {key: value for key, value in args.items() if key != placeholder}
+    return args
+
+
+async def _resolve_select(
+    select: Any, tool: str, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData | None,
+    *, every: bool = False,
+) -> tuple[list[str], dict[str, Any]] | tuple[dict, str, str]:
+    """The entities a search_entities filter selects for a summary, and the fields describing them.
+
+    "Which Zigbee sensors did not trigger this week" is then one call with no
+    listing first. Diagnostic and configuration entities are left out unless
+    asked for, since a battery or link-quality sensor is not what such a question
+    means, and an approximate (typo-tolerant) name match selects nothing, because
+    summarizing a guessed entity would answer the wrong question. With `every`
+    (a summary that keeps only rows in a given state), a select with no filter
+    selects every accessible entity. Returns the sorted entity IDs and the
+    selection fields, or a tool error.
+    """
+    allowed = (*_SUMMARY_SELECT_FILTERS, "include_diagnostic")
+    if not isinstance(select, dict) or any(key not in allowed for key in select):
+        return _tool_error(
+            "select must be an object of search_entities filters: " + ", ".join(allowed) + "."
+        ), "invalid_request", tool
+    include_diagnostic = select.get("include_diagnostic", False)
+    if not isinstance(include_diagnostic, bool):
+        return _tool_error("select.include_diagnostic must be a boolean."), "invalid_request", tool
+    filters = {key: select[key] for key in _SUMMARY_SELECT_FILTERS if select.get(key) not in (None, "", [])}
+    if not filters and not every:
+        return _tool_error(
+            'select needs at least one filter, for example {"radio": "zigbee", "domain": "binary_sensor"}, '
+            "or in_state, which keeps only the entities that were in a state and lets an empty select scan every entity."
+        ), "invalid_request", tool
+    denied = "select uses search_entities, which this access key cannot use; pass entity_id instead."
+    if not filters:
+        if effective_cap(access_key, "cap_search") == CAP_DENY:
+            return _tool_error(denied), "denied", tool
+        registry = er.async_get(hass)
+        listed: dict[str, Any] = {}
+        rows = [{"entity_id": state["entity_id"], "entity_category": getattr(
+                    registry.async_get(state["entity_id"]), "entity_category", None)}
+                for state in filter_entities_for_access_key(hass.states.async_all(), access_key, hass)]
+    else:
+        from .tools.discovery import _tool_search_entities
+
+        found, outcome, _resource = await _tool_search_entities(
+            {**filters, "limit": SEARCH_ENTITIES_MAX_LIMIT, "registry_state": "enabled"}, access_key, hass,
+            data if data is not None else hass.data[DOMAIN])
+        text = "".join(item.get("text", "") for item in found.get("content", []) if isinstance(item, dict))
+        if outcome != "allowed":
+            if outcome == "denied":
+                text = denied
+            return _tool_error(text if text.startswith("select") else f"select: {text}"), outcome, tool
+        listed = json.loads(text)
+        rows = listed.get("entities", [])
+    warnings: list[str] = []
+    if listed.get("fuzzy_fallback"):
+        rows = []
+        warnings.append("No entity name contains every query word; search_entities shows the closest matches.")
+    diagnostic = [row for row in rows if row.get("entity_category") in ("config", "diagnostic")]
+    chosen = sorted(row["entity_id"] for row in rows if include_diagnostic or row not in diagnostic)
+    if listed.get("has_more"):
+        warnings.append(f"More than {SEARCH_ENTITIES_MAX_LIMIT} entities matched select; narrow it.")
+    selection: dict[str, Any] = {"select": {**filters, **({"include_diagnostic": True} if include_diagnostic else {})},
+                                 "matched": len(chosen)}
+    if diagnostic and not include_diagnostic:
+        selection["diagnostic_excluded"] = len(diagnostic)
+    if not chosen:
+        warnings.append("No entity matched select.")
+    selection["warnings"] = warnings
+    return chosen, selection
+
+
+async def _history_summary_select(
+    select: Any, args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData | None
+) -> tuple[dict, str, str]:
+    """get_history summary mode over the entities a search_entities filter selects.
+
+    Matches past what one result holds are named in not_summarized rather than
+    dropped; _resolve_select owns which entities a filter selects.
+    """
+    tool = "get_history"
+    if "entity_id" in args:
+        return _tool_error("Pass entity_id or select, not both."), "invalid_request", tool
+    if str(args.get("mode") or "").strip().lower() != "summary":
+        return _tool_error("select is accepted only with mode summary."), "invalid_request", tool
+    resolved = await _resolve_select(select, tool, access_key, hass, data,
+                                     every=bool(args.get("in_state") or args.get("not_in_state")))
+    if not isinstance(resolved[0], list):
+        return cast(tuple[dict, str, str], resolved)
+    chosen, selection = cast(tuple[list[str], dict[str, Any]], resolved)
+    return await _history_summary_many(chosen, args, access_key, hass, selection=selection)
+
+
+async def _history_summary_many(
+    raw_ids: list[Any], args: dict, access_key: AccessKeyRecord, hass: HomeAssistant,
+    selection: dict[str, Any] | None = None,
+) -> tuple[dict, str, str]:
+    """get_history summary mode for several entities: one compact row each.
+
+    "Which of these sensors did not trigger this week" then takes one call
+    instead of one per entity. Every entity is access-checked before any Recorder
+    read and again after the scans; inaccessible and missing ones share
+    not_found. One time budget bounds the scans and TOOL_RESULT_MAX_BYTES the
+    result, so the Conversation Log keeps it whole: rows are added in order while
+    they fit, counting every entity still to come as a name, and the entities past
+    either budget are named (unscanned, not_summarized), never dropped. An entity
+    whose own scan stops at its budget keeps a next_cursor to continue alone. A
+    selection resolved by select adds its own fields and warnings, and may
+    legitimately match nothing.
+    """
+    tool = "get_history"
+    if str(args.get("mode") or "").strip().lower() != "summary":
+        return _tool_error(
+            "A list of entity_id is accepted with mode summary, one compact row per entity, or state_changes, "
+            "each entity's rows; significant_states reads one entity."
+        ), "invalid_request", tool
+    if any(key in args for key in ("limit", "order", "cursor")):
+        return _tool_error(
+            "limit, order and cursor do not apply to a summary of several entities; continue an entity that "
+            "returned next_cursor in a single-entity call."
+        ), "invalid_request", tool
+    # A selection is bounded by the scan and result budgets instead, which name what they leave out.
+    if ((not raw_ids and selection is None) or (selection is None and len(raw_ids) > SEARCH_ENTITIES_MAX_LIMIT)
+            or not all(isinstance(item, str) and item.strip() for item in raw_ids)):
+        return _tool_error(
+            f"entity_id must be one entity ID or a list of 1 to {SEARCH_ENTITIES_MAX_LIMIT} entity ID strings."
+        ), "invalid_request", tool
+    raw_in_state, raw_not_in_state = args.get("in_state"), args.get("not_in_state")
+    in_state = {item.strip() for item in str_list_arg(raw_in_state)}
+    not_in_state = {item.strip() for item in str_list_arg(raw_not_in_state)}
+    if raw_in_state not in (None, "", []) and (not in_state or "" in in_state):
+        return _tool_error("in_state must be a state or a list of states."), "invalid_request", tool
+    if raw_not_in_state not in (None, "", []) and (not not_in_state or "" in not_in_state):
+        return _tool_error("not_in_state must be a state or a list of states."), "invalid_request", tool
+    if in_state and not_in_state:
+        return _tool_error("Pass in_state or not_in_state, not both."), "invalid_request", tool
+    try:
+        window = parse_recorder_window(args, default_range=timedelta(hours=24))
+    except ValueError as err:
+        return _tool_error(str(err)), "invalid_request", tool
+    now = utcnow()
+    end = min(window.end, now)
+    if window.start >= end:
+        return _tool_error("A summary needs a range that starts before the current time."), "invalid_request", tool
+
+    def readable(entity_id: str) -> bool:
+        return resolve_read(entity_id, access_key, hass) not in (
+            Permission.NOT_FOUND, Permission.NO_ACCESS, Permission.DENY)
+
+    ids = list(dict.fromkeys(item.strip() for item in raw_ids))
+    scan_ids = [entity_id for entity_id in ids if readable(entity_id)]
+    attribute = args.get("attribute") or None
+    selected = dict(selection or {})
+    # "Which room had no motion" is answered by room, so each row names its entity and area.
+    from .tools.discovery import _area_name_for_entity
+
+    registries = (er.async_get(hass), dr.async_get(hass), ar.async_get(hass))
+    scanned = 0
+    selection_warnings = list(selected.pop("warnings", []))
+    rows: dict[str, Any] = {}
+    not_recorded: list[str] = []
+    unscanned: list[str] = []
+    unavailable: list[str] = []
+    not_summarized: list[str] = []
+    keep_days: Any = None
+
+    def build(still: set[str]) -> dict[str, Any]:
+        warnings = selection_warnings + retention_warnings("short_term", window.start, keep_days, now)
+        kept = [row for entity_id, row in rows.items() if entity_id in still]
+        if window.end > now:
+            warnings.append("end_time is in the future; the summary stops at the current time.")
+        if any("other_states" in row for row in kept):
+            warnings.append(
+                f"Rows list their {HISTORY_SUMMARY_MANY_MAX_STATES} longest states and combine the rest in "
+                "other_states; for a numeric sensor use get_statistics.")
+        if any("next_cursor" in row for row in kept):
+            warnings.append(
+                "An entity with next_cursor stopped at its scan budget: continue it in a single-entity call with "
+                "that cursor and add the totals.")
+        if not_summarized:
+            warnings.append(
+                "The result is full: summarize not_summarized as an entity_id list in another call.")
+        if unscanned:
+            warnings.append(
+                "The call's time budget ended before the unscanned entities; summarize them in another call.")
+        if unavailable:
+            warnings.append(
+                "Recorder holds too many changes within a few microseconds to summarize the entities in unavailable.")
+        body: dict[str, Any] = {
+            "mode": "summary",
+            **({"attribute": attribute} if attribute is not None else {}),
+            **({"in_state": sorted(in_state), "scanned": scanned} if in_state else {}),
+            **({"not_in_state": sorted(not_in_state), "scanned": scanned} if not_in_state else {}),
+            "requested_range": {"start": window.start.isoformat(), "end": window.end.isoformat()},
+            **selected,
+            "count": len(kept),
+            "entities": kept,
+        }
+        # not_found is always present, as on get_state's list; the rest when non-empty.
+        body["not_found"] = [e for e in ids if e not in still]
+        for key, values in (("not_summarized", [e for e in not_summarized if e in still]),
+                            ("not_recorded", [e for e in not_recorded if e in still]),
+                            ("unscanned", [e for e in unscanned if e in still]),
+                            ("unavailable", [e for e in unavailable if e in still])):
+            if values:
+                body[key] = values
+        body["retention"] = retention_metadata("short_term", keep_days)
+        body["warnings"] = warnings
+        return body
+
+    try:
+        from homeassistant.components.recorder import get_instance, is_entity_recorded
+
+        instance = get_instance(hass)
+        keep_days = instance.keep_days
+        deadline = time.monotonic() + HISTORY_SUMMARY_BATCH_SECONDS
+        # Whatever does not fit is named, so every entity still to come counts as
+        # its name; the envelope estimate leaves room for the warnings. The built
+        # body is measured exactly below.
+        names = [_stored_bytes(entity_id) for entity_id in scan_ids]
+        to_come = sum(names)
+        used = _stored_bytes(build(set(scan_ids))) + 1024
+        for entity_id, name in zip(scan_ids, names):
+            to_come -= name
+            if not is_entity_recorded(hass, entity_id):
+                not_recorded.append(entity_id)
+            elif not_summarized:
+                not_summarized.append(entity_id)
+            elif (remaining := deadline - time.monotonic()) <= 0:
+                unscanned.append(entity_id)
+            else:
+                try:
+                    summary = await _scan_summary(
+                        instance, hass, entity_id, to_us(window.start), to_us(end),
+                        min(HISTORY_SUMMARY_MAX_SECONDS, remaining), attribute)
+                except SummaryUnavailableError:
+                    unavailable.append(entity_id)
+                else:
+                    scanned += 1
+                    # Decided on the full totals, which a row's state list may combine.
+                    if in_state and not any(totals.duration_us or totals.entered
+                                            for state, totals in summary.totals.items() if state in in_state):
+                        continue
+                    # "Which sensors never triggered": an entity that held or entered one of
+                    # these states, even when the range began in it, is left out.
+                    if not_in_state and any(totals.duration_us or totals.entered
+                                            for state, totals in summary.totals.items() if state in not_in_state):
+                        continue
+                    row = compact_summary_row(summary_body(
+                        entity_id, (window.start, window.end), summary, max_states=HISTORY_SUMMARY_MANY_MAX_STATES,
+                        retention={}, warnings=[],
+                    ))
+                    state = hass.states.get(entity_id)
+                    row = {"entity_id": entity_id, "name": state.name if state is not None else None,
+                           "area": _area_name_for_entity(entity_id, *registries),
+                           **{key: value for key, value in row.items() if key != "entity_id"}}
+                    size = _stored_bytes(row)
+                    if used + size + to_come <= TOOL_RESULT_MAX_BYTES:
+                        rows[entity_id] = row
+                        used += size
+                        continue
+                    not_summarized.append(entity_id)
+            used += name
+    except Exception:
+        _LOGGER.warning("MCP history summary of several entities failed", exc_info=True)
+        return _tool_error("History call failed."), "invalid_request", tool
+    check_request_authority()
+    authority = request_authority.get()
+    if authority is not None:
+        access_key = authority.current_access_key()
+    still = {entity_id for entity_id in scan_ids if readable(entity_id)}
+    body = build(still)
+    while rows and _stored_bytes(body) > TOOL_RESULT_MAX_BYTES:
+        not_summarized.insert(0, rows.popitem()[0])
+        body = build(still)
+    return _tool_success(json.dumps(body)), "allowed", tool
+
+
+async def _history_rows_many(
+    raw_ids: list[Any], args: dict, access_key: AccessKeyRecord, hass: HomeAssistant,
+) -> tuple[dict, str, str]:
+    """get_history state_changes for several entities: each entity's own page.
+
+    "When did each person last arrive" then takes one call instead of one per
+    entity. Each entity's rows are the page a single-entity call with the same
+    range, order and limit returns (_history_page reads it), so its next_cursor
+    continues that entity alone; a cursor is therefore refused here. Inaccessible
+    and missing entities share not_found, and access is checked again after the
+    reads. Pages are added in order while they fit TOOL_RESULT_MAX_BYTES and one
+    time budget; the entities past either are named (not_listed, unscanned),
+    never dropped.
+    """
+    tool = "get_history"
+    if "cursor" in args:
+        return _tool_error(
+            "cursor continues one entity: send that entity alone with the next_cursor its row returned."
+        ), "invalid_request", tool
+    if (not raw_ids or len(raw_ids) > SEARCH_ENTITIES_MAX_LIMIT
+            or not all(isinstance(item, str) and item.strip() for item in raw_ids)):
+        return _tool_error(
+            f"entity_id must be one entity ID or a list of 1 to {SEARCH_ENTITIES_MAX_LIMIT} entity ID strings."
+        ), "invalid_request", tool
+    order = str(args.get("order") or "oldest_first").strip().lower()
+    if order not in ("oldest_first", "newest_first"):
+        return _tool_error("Invalid order. Must be one of: oldest_first, newest_first."), "invalid_request", tool
+    if args.get("attribute"):
+        return _tool_error(
+            "attribute is accepted only with mode summary, which totals how long the attribute held each value."
+        ), "invalid_request", tool
+    try:
+        window = parse_recorder_window(args, default_range=timedelta(hours=24))
+    except ValueError as err:
+        return _tool_error(str(err)), "invalid_request", tool
+
+    def readable(entity_id: str) -> bool:
+        return resolve_read(entity_id, access_key, hass) not in (
+            Permission.NOT_FOUND, Permission.NO_ACCESS, Permission.DENY)
+
+    from .tools.discovery import _area_name_for_entity
+
+    registries = (er.async_get(hass), dr.async_get(hass), ar.async_get(hass))
+    ids = list(dict.fromkeys(item.strip() for item in raw_ids))
+    read_ids = [entity_id for entity_id in ids if readable(entity_id)]
+    page_args = {key: value for key, value in args.items() if key != "entity_id"}
+    rows: dict[str, Any] = {}
+    page_warnings: list[str] = []
+    not_recorded: list[str] = []
+    not_listed: list[str] = []
+    unscanned: list[str] = []
+    unavailable: list[str] = []
+    keep_days: Any = None
+
+    def build(still: set[str]) -> dict[str, Any]:
+        warnings = list(dict.fromkeys(page_warnings))
+        kept = [row for entity_id, row in rows.items() if entity_id in still]
+        if any(row["has_more"] for row in kept):
+            warnings.append(
+                "An entity with has_more has more rows in the range: continue it in a single-entity call with "
+                "its next_cursor and the same order.")
+        if not_listed:
+            warnings.append("The result is full: read not_listed as an entity_id list in another call.")
+        if unscanned:
+            warnings.append("The call's time budget ended before the unscanned entities; read them in another call.")
+        if unavailable:
+            warnings.append("Recorder could not return a page for the entities in unavailable; read each alone.")
+        body: dict[str, Any] = {
+            "mode": "state_changes",
+            "order": order,
+            "requested_range": {"start": iso_utc(window.start), "end": iso_utc(window.end)},
+            "limit": window.limit,
+            "count": len(kept),
+            "entities": kept,
+            "not_found": [e for e in ids if e not in still],
+        }
+        for key, values in (("not_listed", not_listed), ("not_recorded", not_recorded),
+                            ("unscanned", unscanned), ("unavailable", unavailable)):
+            if listed := [e for e in values if e in still]:
+                body[key] = listed
+        body["retention"] = retention_metadata("short_term", keep_days)
+        body["warnings"] = warnings
+        return body
+
+    try:
+        from homeassistant.components.recorder import get_instance, is_entity_recorded
+
+        keep_days = get_instance(hass).keep_days
+        deadline = time.monotonic() + HISTORY_SUMMARY_BATCH_SECONDS
+        names = [_stored_bytes(entity_id) for entity_id in read_ids]
+        to_come = sum(names)
+        used = _stored_bytes(build(set(read_ids))) + 1024
+        for entity_id, name in zip(read_ids, names):
+            to_come -= name
+            if not is_entity_recorded(hass, entity_id):
+                not_recorded.append(entity_id)
+            elif not_listed:
+                not_listed.append(entity_id)
+            elif time.monotonic() >= deadline:
+                unscanned.append(entity_id)
+            else:
+                content, outcome, _resource = await _history_page(
+                    {**page_args, "entity_id": entity_id}, access_key, hass)
+                if outcome != "allowed" or content.get("isError"):
+                    unavailable.append(entity_id)
+                else:
+                    page = json.loads(content["content"][0]["text"])
+                    page_warnings.extend(page.get("warnings") or [])
+                    state = hass.states.get(entity_id)
+                    row = {"entity_id": entity_id, "name": state.name if state is not None else None,
+                           "area": _area_name_for_entity(entity_id, *registries),
+                           "count": page["count"], "has_more": page["has_more"],
+                           **({"next_cursor": page["next_cursor"]} if page["has_more"] else {}),
+                           "history": page["history"]}
+                    size = _stored_bytes(row)
+                    if used + size + to_come <= TOOL_RESULT_MAX_BYTES:
+                        rows[entity_id] = row
+                        used += size
+                        continue
+                    not_listed.append(entity_id)
+            used += name
+    except Exception:
+        _LOGGER.warning("MCP history rows of several entities failed", exc_info=True)
+        return _tool_error("History call failed."), "invalid_request", tool
+    check_request_authority()
+    authority = request_authority.get()
+    if authority is not None:
+        access_key = authority.current_access_key()
+    still = {entity_id for entity_id in read_ids if readable(entity_id)}
+    body = build(still)
+    while rows and _stored_bytes(body) > TOOL_RESULT_MAX_BYTES:
+        not_listed.insert(0, rows.popitem()[0])
+        body = build(still)
+    return _tool_success(json.dumps(body)), "allowed", tool
+
+
 async def _history_summary(
-    entity_id: str, window: RecorderWindow, access_key: AccessKeyRecord, hass: HomeAssistant
+    entity_id: str, window: RecorderWindow, access_key: AccessKeyRecord, hass: HomeAssistant,
+    attribute: str | None = None,
 ) -> tuple[dict, str, str]:
     """get_history summary mode: one budgeted scan folded into per-state totals.
+
+    With attribute, the totals are per value of that attribute (how long a
+    thermostat's hvac_action was heating), named in the body's attribute field.
 
     The scan stops at the current time, because a future end would attribute time
     that has not happened. An entity Recorder excludes is refused: carrying its
@@ -1090,15 +1546,8 @@ async def _history_summary(
                 "Home Assistant's Recorder does not record this entity, so there is no history to summarize."
             ), "invalid_request", entity_id
         keep_days = instance.keep_days
-
-        async def fetch(after_us: int, before_us: int, limit: int, include_start: bool) -> list[tuple[int, str]]:
-            return cast(list[tuple[int, str]], await instance.async_add_executor_job(
-                read_state_change_page, hass, entity_id, after_us, before_us, limit, include_start))
-
-        summary = await scan_state_changes(
-            fetch, to_us(window.page_start), to_us(end), page_rows=HISTORY_SUMMARY_PAGE_ROWS,
-            max_rows=HISTORY_SUMMARY_MAX_ROWS, max_seconds=HISTORY_SUMMARY_MAX_SECONDS,
-        )
+        summary = await _scan_summary(
+            instance, hass, entity_id, to_us(window.page_start), to_us(end), HISTORY_SUMMARY_MAX_SECONDS, attribute)
     except SummaryUnavailableError:
         return _tool_error(
             "Recorder holds too many changes for this entity within a few microseconds to summarize this range."
@@ -1118,14 +1567,149 @@ async def _history_summary(
     body = summary_body(
         entity_id, (window.start, window.end), summary, max_states=HISTORY_SUMMARY_MAX_STATES,
         retention=retention_metadata("short_term", keep_days), warnings=warnings,
+        continued=window.page_start > window.start,
     )
+    if attribute is not None:
+        body = {"attribute": attribute, **body}
     return _tool_success(json.dumps(body)), "allowed", entity_id
 
 
-async def _tool_get_statistics(
-    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant
+_STATISTIC_WINDOW_TYPES = ("mean", "min", "max", "change")
+
+
+async def _statistics_summary_many(
+    raw_ids: list[Any], args: dict, access_key: AccessKeyRecord, hass: HomeAssistant,
+    selection: dict[str, Any] | None = None,
 ) -> tuple[dict, str, str]:
-    """MCP tool: fetch one aligned and bounded page of Recorder statistics."""
+    """get_statistics over several entities: one row each for the whole window.
+
+    "Which room was warmest this week" or "which device used the most energy"
+    then takes one call instead of one page per entity: each row has the mean,
+    min and max of a measurement, or the change of a total, in its display unit.
+    Access is checked before any Recorder read and again before disclosure; the
+    shared time budget names the entities it did not reach, and rows past what one
+    result holds are named in not_summarized.
+    """
+    tool = "get_statistics"
+    if ((not raw_ids and selection is None) or len(raw_ids) > SEARCH_ENTITIES_MAX_LIMIT
+            or not all(isinstance(item, str) and item.strip() for item in raw_ids)):
+        return _tool_error(
+            f"entity_id must be one entity ID or a list of 1 to {SEARCH_ENTITIES_MAX_LIMIT} entity ID strings."
+        ), "invalid_request", tool
+    raw_types = args.get("statistic_types")
+    if raw_types is not None and (not isinstance(raw_types, list) or not raw_types
+                                  or any(not isinstance(item, str) for item in raw_types)):
+        return _tool_error("statistic_types must be a non-empty array of strings."), "invalid_request", tool
+    # Page options and per-period fields change nothing a whole-window row reads, so
+    # a model carrying them over from a page request is told, not sent back.
+    ignored = [key for key in ("period", "limit", "cursor") if key in args]
+    ignored += [item for item in raw_types or [] if item not in _STATISTIC_WINDOW_TYPES]
+    types = {item for item in raw_types or _STATISTIC_WINDOW_TYPES if item in _STATISTIC_WINDOW_TYPES} \
+        or set(_STATISTIC_WINDOW_TYPES)
+    try:
+        window = parse_recorder_window(args, default_range=timedelta(days=30))
+    except ValueError as err:
+        return _tool_error(str(err)), "invalid_request", tool
+    end = min(window.end, utcnow())
+    if window.start >= end:
+        return _tool_error("Statistics need a range that starts before the current time."), "invalid_request", tool
+
+    def readable(entity_id: str) -> bool:
+        return resolve_read(entity_id, access_key, hass) not in (
+            Permission.NOT_FOUND, Permission.NO_ACCESS, Permission.DENY)
+
+    ids = list(dict.fromkeys(item.strip() for item in raw_ids))
+    scan_ids = [entity_id for entity_id in ids if readable(entity_id)]
+    rows: list[dict[str, Any]] = []
+    no_statistics: list[str] = []
+    unscanned: list[str] = []
+    try:
+        from homeassistant.components.recorder import get_instance
+
+        instance = get_instance(hass)
+        deadline = time.monotonic() + HISTORY_SUMMARY_BATCH_SECONDS
+        for entity_id in scan_ids:
+            if time.monotonic() >= deadline:
+                unscanned.append(entity_id)
+                continue
+            found = await instance.async_add_executor_job(
+                read_statistic_window, hass, window.start, end, entity_id, types)
+            if found is None:
+                no_statistics.append(entity_id)
+            else:
+                values, unit = found
+                rows.append({"entity_id": entity_id, **{key: round(value, 4) if isinstance(value, float) else value
+                                                         for key, value in values.items()}, "unit": unit})
+    except Exception:
+        _LOGGER.warning("MCP statistics of several entities failed", exc_info=True)
+        return _tool_error("Statistics call failed."), "invalid_request", tool
+    check_request_authority()
+    authority = request_authority.get()
+    if authority is not None:
+        access_key = authority.current_access_key()
+    still = {entity_id for entity_id in scan_ids if readable(entity_id)}
+    # A comparison is reported by room and name, so each row carries them.
+    from .tools.discovery import _area_name_for_entity
+
+    registries = (er.async_get(hass), dr.async_get(hass), ar.async_get(hass))
+    rows = [{"entity_id": row["entity_id"],
+             "name": (state.name if (state := hass.states.get(row["entity_id"])) is not None else None),
+             "area": _area_name_for_entity(row["entity_id"], *registries),
+             **{key: value for key, value in row.items() if key != "entity_id"}}
+            for row in rows if row["entity_id"] in still]
+    selected = dict(selection or {})
+    selection_warnings = list(selected.pop("warnings", []))
+
+    def build(count: int) -> dict[str, Any]:
+        warnings = list(selection_warnings)
+        if ignored:
+            warnings.append(
+                "Ignored " + ", ".join(ignored) + ": each row covers the whole window with "
+                + ", ".join(sorted(types)) + " (change is a total's use over the window).")
+        body: dict[str, Any] = {
+            "requested_range": {"start": window.start.isoformat(), "end": window.end.isoformat()},
+            **selected,
+            "count": count,
+            "entities": rows[:count],
+        }
+        body["not_found"] = [e for e in ids if e not in still]
+        for key, values in (("not_summarized", [row["entity_id"] for row in rows[count:]]),
+                            ("no_statistics", [e for e in no_statistics if e in still]),
+                            ("unscanned", [e for e in unscanned if e in still])):
+            if values:
+                body[key] = values
+        if count < len(rows):
+            warnings.append("The result is full: read not_summarized as an entity_id list in another call.")
+        if unscanned:
+            warnings.append("The call's time budget ended before the unscanned entities; read them in another call.")
+        if no_statistics:
+            warnings.append("Entities in no_statistics have no Recorder statistics (no state_class); use get_history.")
+        body["warnings"] = warnings
+        return body
+
+    return _tool_success(json.dumps(longest_fitting(build, len(rows)), default=str)), "allowed", tool
+
+
+async def _tool_get_statistics(
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData | None = None
+) -> tuple[dict, str, str]:
+    """MCP tool: fetch one aligned and bounded page of Recorder statistics, or several entities' windows."""
+    args = _without_empty_placeholder(args)
+    if "select" in args:
+        if "entity_id" in args:
+            return _tool_error("Pass entity_id or select, not both."), "invalid_request", "get_statistics"
+        resolved = await _resolve_select(args["select"], "get_statistics", access_key, hass, data)
+        if not isinstance(resolved[0], list):
+            return cast(tuple[dict, str, str], resolved)
+        chosen, selection = cast(tuple[list[str], dict[str, Any]], resolved)
+        return await _statistics_summary_many(chosen, args, access_key, hass, selection=selection)
+    if isinstance(args.get("entity_id"), list):
+        return await _statistics_summary_many(args["entity_id"], args, access_key, hass)
+    return await _fit_recorder_page(lambda page_args: _statistics_page(page_args, access_key, hass), args, "statistics")
+
+
+async def _statistics_page(args: dict, access_key: AccessKeyRecord, hass: HomeAssistant) -> tuple[dict, str, str]:
+    """One aligned and bounded page of one entity's Recorder statistics."""
     entity_id = str_arg(args.get("entity_id"))
     if not entity_id:
         return _tool_error("Missing required argument: entity_id"), "invalid_request", "get_statistics"
@@ -1146,14 +1730,6 @@ async def _tool_get_statistics(
         return _tool_error(
             "Invalid period. Must be one of: 5minute, hour, day, week, month, year."
         ), "invalid_request", entity_id
-    if period == "year":
-        from awesomeversion import AwesomeVersion
-        from homeassistant.const import __version__ as ha_version
-
-        if AwesomeVersion(ha_version) < AwesomeVersion("2026.3.0"):
-            return _tool_error(
-                "The year statistics period requires Home Assistant 2026.3 or newer."
-            ), "invalid_request", entity_id
 
     valid_types = {"mean", "min", "max", "sum", "state", "change", "last_reset"}
     raw_types = args.get("statistic_types")
@@ -1208,7 +1784,12 @@ async def _tool_get_statistics(
         "short_term" if period == "5minute" else "long_term"
     )
     warnings = retention_warnings(retention_kind, window.start, keep_days, utcnow()) + unit_warnings
-    if not statistics:
+    if not statistics and has_more:
+        # Pages run oldest first, so an empty early page says nothing about later ones.
+        warnings.append(
+            "No statistics in this page. Later pages may hold them: continue with next_cursor through unread_range before concluding there are none."
+        )
+    elif not statistics:
         warnings.append(
             "No statistics were returned. The entity may not expose a state_class, may not produce Recorder statistics, or may have no data in this period."
         )
@@ -1233,14 +1814,97 @@ async def _tool_get_statistics(
     return _tool_success(json.dumps(body, default=str)), "allowed", entity_id
 
 
+def _calendar_event_start(event: dict) -> datetime:
+    """When an event starts, comparable across calendars: an all-day date is local midnight."""
+    value = event.get("start")
+    parsed = dt_util.parse_datetime(value) if isinstance(value, str) else None
+    if parsed is None:
+        return datetime.max.replace(tzinfo=dt_util.UTC)
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=dt_util.get_default_time_zone())
+    return dt_util.as_utc(parsed)
+
+
+async def _calendar_events_many(
+    raw: list | None, args: dict, access_key: AccessKeyRecord, hass: HomeAssistant
+) -> tuple[dict, str, str]:
+    """Events from several calendars, or every readable one, merged in start order.
+
+    "What is on all my calendars this week" is then one call. Each event names
+    its calendar; its content_hash is the single-calendar one, so a write can use
+    it unchanged. A calendar that cannot be read is reported in unreadable rather
+    than failing the others, and a page that would not fit one result continues
+    at next_offset.
+    """
+    from .tools.calendar import _calendar_entity, _calendar_events, _safe_calendar_data, _calendar_window
+    tool = "get_calendar_events"
+    if raw is not None and (not raw or len(raw) > SEARCH_ENTITIES_MAX_LIMIT
+                            or not all(isinstance(item, str) and item.strip() for item in raw)):
+        return _tool_error(
+            f"entity_id must be a calendar entity ID or a list of 1 to {SEARCH_ENTITIES_MAX_LIMIT} of them."
+        ), "invalid_request", tool
+    ids = list(dict.fromkeys(item.strip() for item in raw)) if raw is not None else sorted(
+        state.entity_id for state in hass.states.async_all("calendar"))
+    try:
+        for key in ("start_time", "end_time"):
+            if key in args:
+                if not isinstance(args[key], str):
+                    raise ValueError("Calendar times must be strings.")
+                args[key] = dt_util.as_local(_parse_time_param(args[key])).isoformat()
+        start, end = _calendar_window(args, defaults=True)
+    except ValueError as exc:
+        return _tool_error(_safe_calendar_data(str(exc), access_key, hass)), "invalid_request", tool
+
+    def entity_for(entity_id: str) -> Any:
+        try:
+            return _calendar_entity(entity_id, access_key, hass)
+        except (PermissionError, ValueError):
+            return None
+
+    entities = {entity_id: entity for entity_id in ids if (entity := entity_for(entity_id)) is not None}
+    events: list[dict] = []
+    unreadable: list[dict] = []
+    for entity_id, entity in entities.items():
+        try:
+            events += [{"calendar": entity_id, **row} for row in await _calendar_events(entity, hass, start, end)]
+        except AuthorityChangedError:
+            raise
+        except ValueError as exc:
+            unreadable.append({"calendar": entity_id, "reason": str(exc)})
+        except TimeoutError:
+            unreadable.append({"calendar": entity_id, "reason": "The calendar did not answer in time."})
+    still = {entity_id for entity_id in entities if entity_for(entity_id) is not None}
+    events = sorted((event for event in events if event["calendar"] in still), key=_calendar_event_start)
+    paged = offset_page(events, args, default_limit=CALENDAR_EVENTS_DEFAULT_LIMIT, max_limit=CALENDAR_MAX_EVENTS)
+    if isinstance(paged, str):
+        return _tool_error(paged), "invalid_request", tool
+    page, envelope = paged
+
+    def build(rows: list, envelope: dict) -> dict:
+        body: dict[str, Any] = {"calendars": sorted(still), **envelope, "events": [
+            {**event, "content_hash": content_hash({k: v for k, v in event.items() if k != "calendar"})}
+            for event in rows]}
+        if unreadable:
+            body["unreadable"] = [item for item in unreadable if item["calendar"] in still]
+        body = _safe_calendar_data(body, access_key, hass)
+        # The caller's own IDs, echoed as other summaries do: redacting them would only hide which.
+        if raw is not None:
+            body["not_found"] = [entity_id for entity_id in ids if entity_id not in still]
+        return body
+
+    return _tool_success(json.dumps(fitted_offset_page(page, envelope, build))), "allowed", tool
+
+
 async def _tool_get_calendar_events(
     args: dict, access_key: AccessKeyRecord, hass: HomeAssistant
 ) -> tuple[dict, str, str]:
-    """Read full integration events including UID and occurrence identity."""
+    """Read full integration events including UID and occurrence identity, from one calendar or several."""
     from .tools.calendar import _calendar_entity, _calendar_events, _safe_calendar_data, _calendar_window
     args, error = normalize_tool_args("get_calendar_events", args)
     if error:
         return _tool_error(error), "invalid_request", "get_calendar_events"
+    if args.get("entity_id") is None or isinstance(args.get("entity_id"), list):
+        return await _calendar_events_many(args.get("entity_id"), args, access_key, hass)
     try:
         entity = _calendar_entity(args.get("entity_id"), access_key, hass)
         # Normalize via the shared parser so relative times ("24h") work.
@@ -1256,9 +1920,10 @@ async def _tool_get_calendar_events(
         if isinstance(paged, str):
             raise ValueError(paged)
         page, envelope = paged
-        body = {"calendar_id": args["entity_id"], **envelope, "events": [
-            {**event, "content_hash": content_hash(event)} for event in page]}
-        return _tool_success(json.dumps(_safe_calendar_data(body, access_key, hass))), "allowed", args["entity_id"]
+        body = fitted_offset_page(page, envelope, lambda rows, env: _safe_calendar_data(
+            {"calendar_id": args["entity_id"], **env, "events": [{**event, "content_hash": content_hash(event)} for event in rows]},
+            access_key, hass))
+        return _tool_success(json.dumps(body)), "allowed", args["entity_id"]
     except AuthorityChangedError:
         raise
     except PermissionError:
@@ -1318,7 +1983,7 @@ async def _tool_call_service(
 
     if domain == "calendar" and service != "get_events":
         if effective_cap(access_key, "cap_calendar_write") == CAP_DENY:
-            return _tool_error("Forbidden."), "denied", "call_service"
+            return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "call_service"
         return _tool_error("Use the dedicated calendar event authoring tools for calendar writes."), "invalid_request", "call_service"
 
     secondary_targets = await unsupported_secondary_targets(
@@ -1330,6 +1995,8 @@ async def _tool_call_service(
             "invalid_request",
             "call_service",
         )
+    if templated := template_fields(args.get("service_data")):
+        return _tool_error(template_fields_error(templated)), "invalid_request", "call_service"
 
     service_key = f"{domain}/{service}"
 
@@ -1340,7 +2007,7 @@ async def _tool_call_service(
             and not any((args.get("entity_id"), args.get("device_id"), args.get("area_id")))):
         if (call_needs_physical_gate(domain=domain, service=service, access_key=access_key, hass=hass)
                 and effective_cap(access_key, "cap_physical_control") == CAP_DENY):
-            return _tool_error("Forbidden."), "denied", "call_service"
+            return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "call_service"
         return (
             _tool_error("An explicit entity_id, device_id, or area_id target is required for an entity service. Targetless services outside the supported allowlist are unavailable through call_service."),
             "invalid_request", "call_service",
@@ -1365,13 +2032,10 @@ async def _tool_call_service(
         area_id=args.get("area_id"), access_key=access_key, hass=hass,
     ):
         if effective_cap(access_key, "cap_physical_control") != CAP_DENY:
-            try:
-                targets, _ = resolve_service_targets(
-                    entity_id=args.get("entity_id"), device_id=args.get("device_id"),
-                    area_id=args.get("area_id"), service_domain=domain, access_key=access_key, hass=hass,
-                )
-            except EntityCreationNotPermitted:
-                targets = []
+            targets, _ = resolve_service_targets(
+                entity_id=args.get("entity_id"), device_id=args.get("device_id"),
+                area_id=args.get("area_id"), service_domain=domain, access_key=access_key, hass=hass,
+            )
             if not targets:
                 return _tool_error("Forbidden."), "denied", "call_service"
         blocked = await _gate(
@@ -1379,6 +2043,16 @@ async def _tool_call_service(
             tool_name="call_service", args=args, request_id=request_id,
             client_ip=client_ip, diff=lambda: _build_diff_call_service(args, access_key, hass),
             target_entities=targets if effective_cap(access_key, "cap_physical_control") != CAP_DENY else None,
+        )
+        if blocked is not None:
+            return blocked
+    elif domain == "notify":
+        # Notify services send messages, so call_service follows the same
+        # capability send_notification does; Write on the entity is not enough.
+        blocked = await _gate(
+            "cap_notify", access_key, hass, data,
+            tool_name="call_service", args=args, request_id=request_id,
+            client_ip=client_ip, diff=lambda: _build_diff_call_service(args, access_key, hass),
         )
         if blocked is not None:
             return blocked
@@ -1438,6 +2112,7 @@ async def _dispatch_no_target_tool_call(
             _tool_success(json.dumps({
                 "success": True,
                 "partial": True,
+                "verified": None,
                 "message": f"{timeout_noun} dispatched but {subject} did not respond within the timeout window.",
             })),
             "allowed",
@@ -1452,7 +2127,11 @@ async def _dispatch_no_target_tool_call(
         return _tool_error(_validation_error_message(err)), "invalid_request", resource
     except HomeAssistantError:
         return _tool_error("Forbidden."), "denied", resource
-    return _tool_success(json.dumps({"success": True})), "allowed", resource
+    # Nothing to read back: such an action changes no entity's state.
+    return _tool_success(json.dumps({
+        "success": True, "verified": None,
+        "note": "Home Assistant accepted the action; an action without a target has no state to read back.",
+    })), "allowed", resource
 
 
 async def _execute_call_service(
@@ -1475,7 +2154,7 @@ async def _execute_call_service(
 
     if domain == "calendar" and service != "get_events":
         if effective_cap(access_key, "cap_calendar_write") == CAP_DENY:
-            return _tool_error("Forbidden."), "denied", "call_service"
+            return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "call_service"
         return _tool_error("Use the dedicated calendar event authoring tools for calendar writes."), "invalid_request", "call_service"
 
     from .approval_targets import TARGETS_CHANGED, targets_current
@@ -1510,6 +2189,8 @@ async def _execute_call_service(
             "invalid_request",
             resource,
         )
+    if templated := template_fields(args.get("service_data")):
+        return _tool_error(template_fields_error(templated)), "invalid_request", resource
 
     check_request_authority()
     entity_id = args.get("entity_id")
@@ -1577,24 +2258,21 @@ async def _execute_call_service(
                 surface_validation_errors=True,
             )
 
-    try:
-        if not any((entity_id, device_id, area_id)):
-            if domain == "esphome":
-                return _tool_error("Forbidden."), "denied", resource
-            return (
-                _tool_error("An explicit entity_id, device_id, or area_id target is required for an entity service. Targetless services outside the supported allowlist are unavailable through call_service."),
-                "invalid_request", resource,
-            )
-        permitted_entities, _requested_count = resolve_service_targets(
-            entity_id=entity_id,
-            device_id=device_id,
-            area_id=area_id,
-            service_domain=domain,
-            access_key=access_key,
-            hass=hass,
+    if not any((entity_id, device_id, area_id)):
+        if domain == "esphome":
+            return _tool_error("Forbidden."), "denied", resource
+        return (
+            _tool_error("An explicit entity_id, device_id, or area_id target is required for an entity service. Targetless services outside the supported allowlist are unavailable through call_service."),
+            "invalid_request", resource,
         )
-    except EntityCreationNotPermitted:
-        return _tool_error("Forbidden."), "denied", resource
+    permitted_entities, _visible_count = resolve_service_targets(
+        entity_id=entity_id,
+        device_id=device_id,
+        area_id=area_id,
+        service_domain=domain,
+        access_key=access_key,
+        hass=hass,
+    )
 
     if not permitted_entities or not service_target_binding_valid(domain, service, permitted_entities, hass):
         return _tool_error("Forbidden."), "denied", resource
@@ -1630,7 +2308,7 @@ async def _execute_call_service(
         # one definition, so the two kinds of gate cannot answer differently.
         return await _pending_or_inline(hass, data, access_key, mesa_outcome.approval)
     if mesa_outcome.decision == "deny":
-        return _tool_error("Forbidden."), "denied", resource
+        return _tool_error(MESA_DENIED_MESSAGE), "denied", resource
     check_request_authority()
     permitted_entities = mesa_outcome.entities
     if not service_target_binding_valid(domain, service, permitted_entities, hass):
@@ -1798,8 +2476,6 @@ async def _tool_get_config(
     return _tool_success(json.dumps(body, default=str)), "allowed", "get_config"
 
 
-
-
 _LOG_INTEGRATION_RE = re.compile(r"^[a-z][a-z0-9_]*$")
 _LOG_LOGGER_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*$")
 
@@ -1853,7 +2529,8 @@ async def _tool_log_query(
         return _tool_error(f"{', '.join(malformed)} must be a string."), "invalid_request", tool_name
     raw_level = str_arg(args.get("level"), "WARNING").strip().upper() or "WARNING"
     if raw_level not in LOG_LEVELS:
-        return _tool_error(LOG_LEVEL_ERROR_MESSAGE), "invalid_request", tool_name
+        message = LOG_LEVEL_ERROR_MESSAGE if phoenix_only else GET_LOGS_LEVEL_ERROR_MESSAGE
+        return _tool_error(message), "invalid_request", tool_name
 
     integration = str_arg(args.get("integration")).strip() or None
     logger = str_arg(args.get("logger")).strip() or None
@@ -1883,16 +2560,14 @@ async def _tool_log_query(
     raw_since = str_arg(args.get("since")).strip()
     raw_until = str_arg(args.get("until")).strip()
     try:
+        field = "since"
         if raw_since:
             since = _parse_time_param(raw_since)
-            if since.tzinfo is None:
-                since = since.replace(tzinfo=timezone.utc)
+        field = "until"
         if raw_until:
             until = _parse_time_param(raw_until)
-            if until.tzinfo is None:
-                until = until.replace(tzinfo=timezone.utc)
-    except ValueError:
-        return _tool_error("Invalid since or until time format."), "invalid_request", tool_name
+    except ValueError as err:
+        return _tool_error(f"Invalid {field} time format. {err}"), "invalid_request", tool_name
     if since is not None and until is not None and since >= until:
         return _tool_error("since must be earlier than until."), "invalid_request", tool_name
 
@@ -1946,6 +2621,7 @@ async def _tool_log_query(
                 "time_basis": "latest_occurrence",
             },
             "count": 0,
+            "total": 0,
             "matched_buckets": 0,
             "has_more": False,
             "next_cursor": None,
@@ -2097,15 +2773,10 @@ def _logbook_string_list(args: dict, key: str) -> tuple[list[str], str | None]:
 
 
 def _logbook_time(value: Any, default: datetime) -> datetime:
-    """Parse one logbook bound and normalize timezone-less ISO input to UTC."""
+    """Parse one logbook bound to UTC; a time without an offset is HA local time."""
     if value in (None, ""):
         return default
-    if not isinstance(value, str):
-        raise ValueError
-    parsed = _parse_time_param(value)
-    if parsed.tzinfo is None:
-        parsed = parsed.replace(tzinfo=timezone.utc)
-    return parsed.astimezone(timezone.utc)
+    return _parse_time_param(value).astimezone(timezone.utc)
 
 
 def _logbook_entry_visible(
@@ -2171,9 +2842,6 @@ async def _tool_get_logbook(
         return _tool_error(
             "context_id cannot be combined with entity_ids or device_ids."
         ), "invalid_request", "get_logbook"
-    if any(not valid_entity_id(entity_id) for entity_id in entity_ids):
-        return _tool_error("Requested resource not found."), "not_found", "get_logbook"
-
     raw_search = args.get("search")
     if raw_search is not None and not isinstance(raw_search, str):
         return _tool_error("search must be a string."), "invalid_request", "get_logbook"
@@ -2196,15 +2864,17 @@ async def _tool_get_logbook(
 
     now = utcnow()
     try:
+        field = "start_time"
         start_time = _logbook_time(args.get("start_time"), now - timedelta(hours=24))
+        field = "end_time"
         end_time = _logbook_time(args.get("end_time"), now)
-    except ValueError:
-        return _tool_error(
-            "Invalid start_time or end_time format."
-        ), "invalid_request", "get_logbook"
+    except ValueError as err:
+        return _tool_error(f"Invalid {field} format. {err}"), "invalid_request", "get_logbook"
     if start_time >= end_time:
         return _tool_error(
-            "start_time must be earlier than end_time."
+            "start_time must be earlier than end_time. A relative time such as 7d means 7 days "
+            "ago, and start_time defaults to 24h before now, so keep the original start_time "
+            "when you continue from older_end_time."
         ), "invalid_request", "get_logbook"
     narrowed = bool(entity_ids or device_ids or context_id)
     max_days = MAX_LOGBOOK_NARROWED_DAYS if narrowed else MAX_LOGBOOK_HOME_DAYS
@@ -2213,22 +2883,22 @@ async def _tool_get_logbook(
             f"This logbook query supports at most {max_days} days."
         ), "invalid_request", "get_logbook"
 
-    requested_permissions: list[Permission] = [
-        resolve_read(entity_id, access_key, hass) for entity_id in entity_ids
-    ]
-    requested_permissions.extend(
-        resolve_device_registry_access(device_id, access_key, hass)
-        for device_id in device_ids
-    )
-    if any(
-        permission not in (Permission.READ, Permission.WRITE)
-        for permission in requested_permissions
-    ):
-        return (
-            _tool_error("Requested resource not found."),
-            "not_found",
-            "get_logbook",
-        )
+    # Unreadable resources are named, hidden and missing alike, and the rest are
+    # read; with none left the query is refused rather than widened home-wide.
+    entity_access = {entity_id: resolve_read(entity_id, access_key, hass) if valid_entity_id(entity_id)
+                     else Permission.NOT_FOUND for entity_id in entity_ids}
+    device_access = {device_id: resolve_device_registry_access(device_id, access_key, hass)
+                     for device_id in device_ids}
+    not_found = [item for item, permission in (*entity_access.items(), *device_access.items())
+                 if permission not in (Permission.READ, Permission.WRITE)]
+    entity_ids = [item for item in entity_ids if item not in not_found]
+    device_ids = [item for item in device_ids if item not in not_found]
+    if not_found and not entity_ids and not device_ids:
+        return _tool_error(
+            "Requested resource not found: " + ", ".join(json.dumps(item[:80]) for item in not_found) + "."
+        ), "not_found", "get_logbook"
+    requested_permissions: list[Permission] = [entity_access[item] for item in entity_ids]
+    requested_permissions.extend(device_access[item] for item in device_ids)
 
     payload: dict[str, Any] = {
         "start_time": start_time.isoformat(),
@@ -2288,22 +2958,49 @@ async def _tool_get_logbook(
     scoped.sort(key=lambda entry: float(entry["when"]))
     total = len(scoped)
     scoped = scoped[-limit:]
-    body = {
-        "count": len(scoped),
-        "total": total,
-        "truncated": total > len(scoped),
-        "filters": {
-            "start_time": start_time.isoformat(),
-            "end_time": end_time.isoformat(),
-            "entity_ids": entity_ids,
-            "device_ids": device_ids,
-            "context_id": context_id,
-            "search": search,
-            "limit": limit,
-        },
-        "entries": scoped,
-    }
-    return _tool_success(json.dumps(body, default=str)), "allowed", "get_logbook"
+
+    def build(count: int) -> dict[str, Any]:
+        # The newest entries are kept; a slice that would not fit one result keeps fewer.
+        start = len(scoped) - count
+        crowded = False
+        if 0 < start < len(scoped) and scoped[start - 1]["when"] == scoped[start]["when"]:
+            # A slice never starts inside entries sharing one instant, so older_end_time,
+            # an exclusive end, reads that whole instant next; only an instant with more
+            # entries than one result holds is kept partly, and said so.
+            later = next((index for index in range(start, len(scoped))
+                          if scoped[index]["when"] != scoped[start]["when"]), len(scoped))
+            crowded = later == len(scoped)
+            start = start if crowded else later
+        kept = scoped[start:]
+        count = len(kept)
+        body: dict[str, Any] = {
+            "count": count,
+            "total": total,
+            "has_more": total > count,
+            "truncated": total > count,
+            "filters": {
+                "start_time": start_time.isoformat(),
+                "end_time": end_time.isoformat(),
+                "entity_ids": entity_ids,
+                "device_ids": device_ids,
+                "context_id": context_id,
+                "search": search,
+                "limit": limit,
+            },
+            # Home Assistant's own logbook stamps entries in epoch seconds; every
+            # other tool's time is ISO 8601, so the same key reads the same way.
+            "entries": [{**entry, "when": iso_utc(datetime.fromtimestamp(float(entry["when"]), tz=timezone.utc))}
+                        for entry in kept],
+        }
+        if not_found:
+            body["not_found"] = not_found
+        if total > count and kept:
+            body["older_end_time"] = iso_utc(datetime.fromtimestamp(float(kept[0]["when"]), tz=timezone.utc))
+        if crowded:
+            body["warnings"] = ["More entries share one instant than one result holds; narrow target or search to read them all."]
+        return body
+
+    return _tool_success(json.dumps(longest_fitting(build, len(scoped)), default=str)), "allowed", "get_logbook"
 
 
 _LOGGER_CONTROL_FINGERPRINT = "_phoenix_logger_control_fingerprint"
@@ -3092,7 +3789,6 @@ def _mesa_preview(decision: RegistryMesaDecision) -> dict[str, Any]:
     }
 
 
-
 def _registry_write_precheck(
     args: dict,
     access_key: AccessKeyRecord,
@@ -3314,29 +4010,39 @@ def _device_child_write_error(
     *,
     restoring: bool,
 ) -> tuple[dict, str, str] | None:
-    """Block authorization-affecting edits when any child is not writable."""
+    """Block authorization-affecting edits when any child is not writable.
+
+    Children are the device's entities and, for a main device, its child
+    devices and their entities, which Core disables and places with it.
+    """
     affects_children = any(field in args for field in ("name", "area_id", "enabled"))
     if restoring:
         affects_children = affects_children or "disabled_by" in args
     if not affects_children:
         return None
+    snapshot = device_registry_snapshot(hass)
     blocked = [
         entity_id
-        for entity_id in device_registry_entity_ids(hass, device.id)
+        for entity_id in device_cascade_entity_ids(hass, device.id, snapshot=snapshot)
         if resolve_registry_access(
             entity_id, access_key, hass, force_registry_only=True
         )
         != Permission.WRITE
     ]
-    if not blocked:
+    blocked_parts = any(
+        resolve_device_registry_write(part_id, access_key, hass, snapshot=snapshot)
+        != Permission.WRITE
+        for part_id in snapshot.part_ids(device.id)
+    )
+    if not blocked and not blocked_parts:
         return None
     return (
         _tool_error(
             json.dumps(
                 {
                     "error": (
-                        "The device update would affect registry entities that are "
-                        "not writable by this access key."
+                        "The device update would affect registry entities or child "
+                        "devices that are not writable by this access key."
                     ),
                     "device_id": device.id,
                     "blocked_entities": blocked,
@@ -3388,7 +4094,7 @@ def _device_mesa_decision(
 ) -> _DeviceMesaDecision | tuple[dict, str, str]:
     """Resolve all device MESA actions across the exact attached membership."""
     if entity_ids is None:
-        entity_ids = device_registry_entity_ids(hass, device.id)
+        entity_ids = device_cascade_entity_ids(hass, device.id)
     else:
         entity_ids = sorted(set(entity_ids))
     mesa_active = (
@@ -3611,7 +4317,7 @@ async def _build_diff_set_device(
             "after": after_labels,
         }
     if device is not None and args.get("enabled") is False:
-        affected = device_registry_entity_ids(hass, device.id)
+        affected = device_cascade_entity_ids(hass, device.id)
         preview["affected_entities"] = affected
         preview["relationships"] = await _registry_relationships_preview(
             hass, affected
@@ -3895,7 +4601,7 @@ def _commit_set_device(
         body["labels_added"] = labels_added
         body["labels_removed"] = labels_removed
     if "enabled" in args and args["enabled"]:
-        entity_ids = device_registry_entity_ids(hass, device_id)
+        entity_ids = device_cascade_entity_ids(hass, device_id)
         body["activation"] = {
             "reload_or_restart_may_be_needed": any(
                 hass.states.get(entity_id) is None for entity_id in entity_ids
@@ -3930,6 +4636,7 @@ class _DeviceRemovalContext:
     owner_ids: list[str]
     affected_entity_ids: list[str]
     child_device_ids: list[str]
+    part_device_ids: list[str]
     fingerprint: str
 
 
@@ -3964,7 +4671,7 @@ def _device_owner_summary(entry: Any, *, supports_removal: bool | None = None) -
     return {
         "entry_id": entry.entry_id,
         "domain": entry.domain,
-        "title": entry.title,
+        "title": redact_diagnostics(entry.title),
         "disabled_by": getattr(entry.disabled_by, "value", entry.disabled_by),
         "supports_remove_device": (
             supports_removal
@@ -4006,6 +4713,7 @@ def _device_removal_context_fingerprint(
     owner_ids: list[str],
     affected_entity_ids: list[str],
     child_device_ids: list[str],
+    part_device_ids: list[str],
 ) -> str:
     return hashlib.sha256(
         json.dumps(
@@ -4016,6 +4724,7 @@ def _device_removal_context_fingerprint(
                 "owner_ids": owner_ids,
                 "affected_entity_ids": affected_entity_ids,
                 "child_device_ids": child_device_ids,
+                "part_device_ids": part_device_ids,
                 "supports_removal": True,
             },
             sort_keys=True,
@@ -4107,19 +4816,43 @@ def _device_removal_context(
         return _tool_error("The owning config entry no longer exists."), "invalid_request", device_id
     if entry.domain == DOMAIN:
         return _tool_error("Phoenix MCP devices cannot be removed."), "denied", device_id
+    # Core deletes a device's child devices, and their entities, with the
+    # device. That happens only once its last owner is removed.
+    part_device_ids = (
+        list(device_snapshot.part_ids(device_id)) if owner_ids == [selected] else []
+    )
+    if any(
+        resolve_device_registry_write(part_id, access_key, hass, snapshot=device_snapshot)
+        != Permission.WRITE
+        for part_id in part_device_ids
+    ):
+        return (
+            _tool_error(
+                "Removing this device would also remove child devices that are "
+                "not writable by this access key."
+            ),
+            "denied",
+            device_id,
+        )
+    removed_device_ids = {device_id, *part_device_ids}
     affected_entity_ids = sorted(
         registry_entry.entity_id
         for registry_entry in er.async_get(hass).entities.values()
-        if registry_entry.device_id == device_id
+        if registry_entry.device_id in removed_device_ids
         and registry_entry.config_entry_id == selected
     )
-    child_device_ids = list(device_snapshot.child_ids(device_id))
+    child_device_ids = [
+        child_id
+        for child_id in device_snapshot.child_ids(device_id)
+        if child_id not in removed_device_ids
+    ]
     fingerprint = _device_removal_context_fingerprint(
         device_id,
         entry,
         owner_ids,
         affected_entity_ids,
         child_device_ids,
+        part_device_ids,
     )
     return _DeviceRemovalContext(
         device=device,
@@ -4128,6 +4861,7 @@ def _device_removal_context(
         owner_ids=owner_ids,
         affected_entity_ids=affected_entity_ids,
         child_device_ids=child_device_ids,
+        part_device_ids=part_device_ids,
         fingerprint=fingerprint,
     )
 
@@ -4217,6 +4951,7 @@ async def _build_diff_remove_device(
             hass, context.affected_entity_ids
         ),
         "child_devices_losing_parent_if_device_disappears": visible_children,
+        "child_devices_removed_with_device": context.part_device_ids,
         "remaining_owners": remaining_owners,
         "device_permission_references": _device_permission_references(
             data, context.device.id
@@ -4256,9 +4991,9 @@ async def _tool_remove_device(
     """MCP tool: remove one integration's ownership through its HA hook."""
     if effective_cap(access_key, "cap_integration_write") == CAP_DENY:
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "remove_device"
-    error = unknown_argument_error("remove_device", args)
+    args, error = handler_arguments("remove_device", args)
     if error:
-        return _tool_error(error), "invalid_request", "remove_device"
+        return _tool_refused_before_write(error), "invalid_request", "remove_device"
     resolved = await _resolve_device_removal_context(args, access_key, hass)
     if isinstance(resolved, tuple):
         return resolved
@@ -4489,6 +5224,7 @@ async def _execute_remove_device(
         ),
         "owners_before": context.owner_ids,
         "affected_entities": context.affected_entity_ids,
+        "child_devices_removed_with_device": context.part_device_ids,
         "device_disappeared": disappeared,
         "remaining_owner_ids": remaining_owner_ids,
     }
@@ -4982,9 +5718,9 @@ async def _tool_delete_entity(
     # work, so the tool can never be a scope/existence oracle when the cap is off.
     if effective_cap(access_key, "cap_registry_write") == CAP_DENY:
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "delete_entity"
-    error = unknown_argument_error("delete_entity", args)
+    args, error = handler_arguments("delete_entity", args)
     if error:
-        return _tool_error(error), "invalid_request", "delete_entity"
+        return _tool_refused_before_write(error), "invalid_request", "delete_entity"
     pre = _registry_write_precheck(args, access_key, hass, "delete_entity", data)
     if pre is not None:
         return pre
@@ -5095,7 +5831,9 @@ def _commit_delete_entity(
         _LOGGER.error("delete_entity failed for %s: %s", entity_id, exc)
         return _tool_error("Failed to delete entity."), "denied", entity_id
 
-    body: dict[str, Any] = {"entity_id": entity_id, "deleted": True}
+    # Read back: the registry entry is gone. A live entity's integration can still
+    # report state or re-create the entry later; the tool description says so.
+    body: dict[str, Any] = {"entity_id": entity_id, "deleted": True, "verified": reg.async_get(entity_id) is None}
     if mesa_decision.warnings:
         body["mesa_advisory"] = mesa_decision.warnings
         _mesa_advisory_ctx.set(True)
@@ -5221,17 +5959,8 @@ async def _tool_get_approval_status(
     record = get_approval(data.store, approval_id)
     if record is None or record.access_key_id != access_key.id:
         return _tool_error("Approval not found."), "not_found", "get_approval_status"
-    payload = {
-        "approval_id": record.id,
-        "status": record.status,
-        "tool_name": record.tool_name,
-        "created_at": record.created_at.isoformat() if record.created_at else None,
-        "expires_at": record.expires_at.isoformat() if record.expires_at else None,
-        "resolved_at": record.resolved_at.isoformat() if record.resolved_at else None,
-        "result": record.result,
-        "rejected_reason": record.rejected_reason,
-    }
-    return _tool_success(json.dumps(payload, default=str)), "allowed", _approval_resource(record)
+    return (_approval_status_result(record, resolved=record.status != STATUS_PENDING),
+            "allowed", _approval_resource(record))
 
 
 def _approval_status_result(record: Any, *, resolved: bool) -> dict:
@@ -5262,7 +5991,7 @@ def _approval_status_result(record: Any, *, resolved: bool) -> dict:
 
 
 def _approval_status_payload(record: Any, *, resolved: bool) -> dict:
-    """Status body shared by wait_for_approval (same fields as get_approval_status)."""
+    """Status body shared by get_approval_status and wait_for_approval."""
     return {
         "approval_id": record.id,
         "status": record.status,
@@ -5345,13 +6074,20 @@ async def _wait_for_many_approvals(
         )
 
     records = {}
+    unknown = []
     for approval_id in ids:
         record = get_approval(data.store, approval_id)
         # Unknown and belonging-to-another-access-key answer identically, so a refusal
-        # is not an existence oracle for another access key's queue.
+        # is not an existence oracle for another access key's queue. Naming the
+        # caller's own ids tells it which to drop.
         if record is None or record.access_key_id != access_key.id:
-            return _tool_error("Approval not found."), "not_found", "wait_for_approval"
-        records[approval_id] = record
+            unknown.append(approval_id)
+        else:
+            records[approval_id] = record
+    if unknown:
+        return _tool_error(
+            "Approval not found: " + ", ".join(json.dumps(item[:80]) for item in unknown) + "."
+        ), "not_found", "wait_for_approval"
 
     outstanding = {i for i, r in records.items() if r.status == STATUS_PENDING}
     if outstanding:
@@ -5533,6 +6269,41 @@ async def async_restore_configuration(
         return await _execute_restore_configuration(args, access_key, hass, data)
     finally:
         _restore_ctx.reset(ctx)
+
+
+def restore_refusal(record, side: str, hass: HomeAssistant) -> str | None:
+    """Why async_restore_version would refuse this side whatever the item holds now, or None.
+
+    Returns a reason slug: yaml_tags, audit_only, template_incompatible or
+    entity_missing. These are the refusals that do not depend on the item's
+    current content, so Changes can say why before Restore is chosen. A missing
+    side returns None; the panel explains that itself.
+    """
+    target = record.before if side == "before" else record.after
+    if not isinstance(target, dict):
+        return None
+    resource_type = record.resource_type
+    if resource_type in ("automation", "script", "scene") and yaml_includes.contains_tag_strings(target):
+        return "yaml_tags"
+    if resource_type in ("config_entry", "device") and target.get("restorable") is False:
+        return "audit_only"
+    if resource_type == "config_entry" and target.get("snapshot_type") == "template_helper":
+        from .template_recovery import validate_snapshot
+        try:
+            validate_snapshot(target)
+        except ValueError:  # ConfigurationRecoveryError is a ValueError
+            return "template_incompatible"
+    if resource_type == "entity":
+        # The same ids the restore follows a rename through; a deleted registry
+        # entry cannot be recreated.
+        candidates = [
+            snapshot["entity_id"] for snapshot in (record.before, record.after)
+            if isinstance(snapshot, dict) and isinstance(snapshot.get("entity_id"), str)
+        ] + [record.resource_id]
+        registry = er.async_get(hass)
+        if all(registry.async_get(candidate) is None for candidate in candidates):
+            return "entity_missing"
+    return None
 
 
 async def async_restore_version(
@@ -5737,6 +6508,8 @@ async def async_restore_version(
             return await _execute_create_blueprint(bp_args, access_key, hass, data)
         if resource_type in {"area", "floor"}:
             return await restore_location_version(resource_type, resource_id, target, access_key, hass, data)
+        if resource_type in {"label", "category"}:
+            return await restore_label_version(resource_type, resource_id, target, access_key, hass, data)
         if resource_type == "entity":
             # Re-apply the registry metadata. Restoring a deleted entry's snapshot
             # lands here too and fails cleanly in set_entity, because a deleted
@@ -5831,8 +6604,9 @@ async def async_execute_approved_tool(
     MESA semantics. Raises ExecutorNotRegistered if no executor is registered
     for the tool_name, the ONLY failure here that proves nothing was dispatched.
     """
+    # The refusals below precede the executor, so nothing can have been written.
     if error := tool_arguments_error(args):
-        return _tool_error(error), "invalid_request", tool_name
+        return _tool_refused_before_write(error), "invalid_request", tool_name
     fn = _EXECUTOR_REGISTRY.get(tool_name)
     if fn is None:
         raise ExecutorNotRegistered(f"No executor registered for tool {tool_name!r}")
@@ -5843,7 +6617,7 @@ async def async_execute_approved_tool(
         entities = binding.get("entity_ids") if isinstance(binding, dict) else None
         if (not isinstance(entities, list) or any(not isinstance(entity, str) for entity in entities)
                 or not targets_current(args, entities, hass)):
-            return _tool_error(TARGETS_CHANGED), "denied", tool_name
+            return _tool_refused_before_write(TARGETS_CHANGED), "denied", tool_name
     # The admin's approval covers the whole action, so the MESA gate inside the
     # executor runs under confirm-approved semantics (see _approved_exec_ctx).
     ctx = _approved_exec_ctx.set(True)
@@ -5961,155 +6735,20 @@ async def _tool_watch_entity(
         body = {"entity_id": entity_id, "changed": True, "removed": True}
     else:
         scrubbed = scrub_sensitive_attributes(new_state)
+        # Any state_changed event ends the wait, including an attribute-only
+        # update, so say which it was and time it by this update, not last_changed.
         body = {
             "entity_id": entity_id,
             "changed": new_state is not current,
+            "state_changed": current is None or new_state.state != current.state,
             "state": scrubbed.get("state"),
             "attributes": scrubbed.get("attributes"),
-            "when": getattr(new_state, "last_changed", None),
+            "when": new_state.last_updated.isoformat(),
+            "last_changed": new_state.last_changed.isoformat(),
         }
         if until_state is not None:
             body["reached"] = True
     return _tool_success(json.dumps(body, default=str)), "allowed", entity_id
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 # ---------------------------------------------------------------------------
@@ -6197,9 +6836,11 @@ def _config_entry_private_identity(
             (str(domain), str(identifier))
             for domain, identifier in getattr(device, "identifiers", set())
         )
+        # A child device has no connections; reading the compatibility shim
+        # would report usage that stops working in a later Core release.
         connections = sorted(
             (str(kind), str(value))
-            for kind, value in getattr(device, "connections", set())
+            for kind, value in device_entry_value(device, "connections", ()) or ()
         )
         stable_anchor = stable_anchor or bool(identifiers or connections)
         owners: list[dict[str, str]] = []
@@ -6624,7 +7265,7 @@ async def _tool_list_integrations(
     if isinstance(paged, str):
         return _tool_error(paged), "invalid_request", "list_integrations"
     page, envelope = paged
-    body: dict[str, Any] = {**envelope, "integrations": page}
+    extra: dict[str, Any] = {}
     # HA's discovered-but-not-added list is HA-wide, so only a key that sees what
     # HA sees gets it, once, on the first page.
     if (not envelope.get("offset") and full_pass_through(access_key, hass)
@@ -6635,7 +7276,8 @@ async def _tool_list_integrations(
             if (not domain_filter or row["domain"] == domain_filter)
             and (not query or query in f"{row['domain']} {' '.join(str(v) for v in row['title_placeholders'].values())}".lower())
         ]
-        body["discovered"], body["discovered_omitted"] = discovered, omitted
+        extra = {"discovered": discovered, "discovered_omitted": omitted}
+    body = fitted_offset_page(page, envelope, lambda rows, env: {**env, "integrations": rows, **extra})
     return _tool_success(json.dumps(body, default=str)), "allowed", "list_integrations"
 
 
@@ -7896,15 +8538,18 @@ def _backup_to_summary(b: Any) -> dict:
     agents = d.get("agents") if d else getattr(b, "agents", None)
     size = None
     agent_ids: list = []
+    protected: list = []
     if isinstance(agents, dict):
         agent_ids = list(agents.keys())
         for a in agents.values():
             sz = a.get("size") if isinstance(a, dict) else getattr(a, "size", None)
-            if sz is not None:
+            if sz is not None and size is None:
                 size = sz
-                break
+            protected.append(a.get("protected") if isinstance(a, dict) else getattr(a, "protected", None))
     out["size"] = size
     out["agents"] = agent_ids
+    # True only when every stored copy is encrypted; None when HA did not say.
+    out["encrypted"] = all(protected) if protected and None not in protected else None
     return out
 
 
@@ -7928,13 +8573,23 @@ async def _tool_list_backups(
         limit = 20
     limit = max(1, min(limit, 200))
     warnings: list[str] = []
+    agent_errors = result.get("agent_errors") if isinstance(result, dict) else None
+    if isinstance(agent_errors, dict) and agent_errors:
+        # HA lists what the reachable agents returned; an unreachable one would
+        # otherwise just be missing, and its backups with it.
+        warnings.append(
+            "Backups could not be read from " + ", ".join(sorted(map(str, agent_errors)))
+            + ", so this list may be incomplete."
+        )
     try:
         available_agents = await _backup_agent_ids(hass)
     except WsDispatchError as exc:
         available_agents = []
         warnings.append(f"Failed to list backup agents: {exc}")
     body = {
+        "count": min(len(summaries), limit),
         "total": len(summaries),
+        "has_more": len(summaries) > limit,
         "returned": min(len(summaries), limit),
         # Explicit, even though total vs returned already implies it: every other
         # paginating read states truncation as a boolean, and a reader that has to
@@ -7943,9 +8598,127 @@ async def _tool_list_backups(
         "backups": summaries[:limit],
         "available_agents": available_agents,
     }
+    if isinstance(result, dict) and result.get("state") is not None:
+        # Lets a caller told "started" see whether that backup is still running.
+        body["manager_state"] = str(result["state"])
+    if isinstance(agent_errors, dict) and agent_errors:
+        body["agent_errors"] = {str(k): str(v) for k, v in agent_errors.items()}
     if warnings:
         body["warnings"] = warnings
     return _tool_success(json.dumps(body, default=str)), "allowed", "list_backups"
+
+
+def _backup_manager(hass: HomeAssistant) -> Any | None:
+    """HA's backup manager, or None when the backup integration is not loaded."""
+    try:
+        from homeassistant.components.backup import async_get_manager
+        return async_get_manager(hass)
+    except (ImportError, HomeAssistantError):
+        return None
+
+
+def _single_slot_backup_agent(agent_id: str) -> bool:
+    return agent_id.split(".", 1)[0] in BACKUP_SINGLE_SLOT_AGENT_DOMAINS
+
+
+@dataclasses.dataclass(frozen=True)
+class _BackupPlan:
+    """Where a Phoenix MCP backup goes and what it holds.
+
+    Resolved from HA's stored backup settings. It records whether HA holds a
+    backup key, never the key itself, so it is safe in a preview or a result.
+    """
+
+    agent_ids: list[str]
+    skipped_agent_ids: list[str]
+    destination: Literal["requested", "backup_settings", "local"]
+    has_key: bool
+    # Locations whose own setting stores backups unencrypted even with a key.
+    unencrypted_agent_ids: list[str]
+    include_database: bool
+    include_all_addons: bool
+    include_addons: list[str] | None
+    include_folders: list[Any] | None
+
+    @property
+    def encrypted(self) -> bool:
+        return self.has_key and not self.unencrypted_agent_ids
+
+    def preview(self) -> dict:
+        return {
+            "agent_ids": self.agent_ids, "skipped_agent_ids": self.skipped_agent_ids,
+            "destination": self.destination, "encrypted": self.encrypted,
+            "unencrypted_agent_ids": self.unencrypted_agent_ids if self.has_key else self.agent_ids,
+            "contents": {
+                "homeassistant": True, "database": self.include_database,
+                "all_addons": self.include_all_addons, "addons": self.include_addons or [],
+                "folders": [str(getattr(f, "value", f)) for f in self.include_folders or []],
+            },
+        }
+
+
+def _backup_plan(manager: Any, args: dict) -> _BackupPlan:
+    """Resolve the destination and contents, or raise _BackupRefused.
+
+    Without agent_ids the backup goes where the operator's backup settings send
+    automatic backups, minus single-slot agents, else to a local agent.
+    Contents and encryption always follow those settings.
+    """
+    stored = manager.config.data.create_backup
+    requested = args.get("agent_ids")
+    skipped: list[str] = []
+    destination: Literal["requested", "backup_settings", "local"]
+    if requested is not None:
+        if single := [a for a in requested if _single_slot_backup_agent(a)]:
+            raise _BackupRefused(
+                f"Refused: {', '.join(single)} keeps one backup, so a backup created here would "
+                "replace the operator's own. Choose other agent_ids, or omit agent_ids."
+            )
+        agent_ids, destination = list(requested), "requested"
+    else:
+        configured = [str(a) for a in stored.agent_ids or []]
+        skipped = [a for a in configured if _single_slot_backup_agent(a)]
+        agent_ids, destination = [a for a in configured if a not in skipped], "backup_settings"
+        if not agent_ids:
+            available = list(manager.backup_agents)
+            agent_ids = next(([a] for a in LOCAL_BACKUP_AGENT_IDS if a in available), available[:1])
+            destination = "local"
+        if not agent_ids:
+            raise _BackupRefused("No backup agents are available; pass agent_ids explicitly.")
+    # HA's own rule, on Core and the Supervisor alike: with a key, a location
+    # encrypts unless its own setting says not to.
+    agent_settings = manager.config.data.agents
+    unencrypted = [a for a in agent_ids if a in agent_settings and not agent_settings[a].protected]
+    return _BackupPlan(
+        agent_ids=agent_ids, skipped_agent_ids=skipped, destination=destination,
+        has_key=bool(stored.password), unencrypted_agent_ids=unencrypted,
+        include_database=stored.include_database,
+        include_all_addons=stored.include_all_addons, include_addons=stored.include_addons,
+        include_folders=stored.include_folders,
+    )
+
+
+class _BackupRefused(Exception):
+    """A create_backup refusal found before anything was dispatched."""
+
+    def __init__(self, message: str) -> None:
+        super().__init__(message)
+        self.result: tuple[dict, str, str] = (_tool_error(message), "invalid_request", "create_backup")
+
+
+def _backup_precheck(hass: HomeAssistant, args: dict) -> tuple[Any, _BackupPlan]:
+    """Side-effect-free refusals, run before an approval and again in the executor."""
+    if _backup_agent_ids_malformed(args):
+        raise _BackupRefused(_BACKUP_AGENT_IDS_REFUSAL)
+    manager = _backup_manager(hass)
+    if manager is None:
+        raise _BackupRefused("The Home Assistant backup integration is not available.")
+    if str(manager.state) != "idle":
+        raise _BackupRefused(
+            "Home Assistant is already creating, receiving or restoring a backup. "
+            "Try again when it finishes; list_backups shows manager_state."
+        )
+    return manager, _backup_plan(manager, args)
 
 
 async def _tool_create_backup(
@@ -7953,8 +8726,11 @@ async def _tool_create_backup(
     request_id: str = "", client_ip: str | None = None,
 ) -> tuple[dict, str, str]:
     """MCP tool: create a backup (Confirm-gated)."""
-    if effective_cap(access_key, "cap_backup") != CAP_DENY and (refusal := _backup_agent_refusal(args)):
-        return refusal
+    if effective_cap(access_key, "cap_backup") != CAP_DENY:
+        try:
+            _backup_precheck(hass, args)
+        except _BackupRefused as refused:
+            return refused.result
     blocked = await _gate(
         "cap_backup", access_key, hass, data,
         tool_name="create_backup", args=args, request_id=request_id,
@@ -7965,45 +8741,151 @@ async def _tool_create_backup(
     return await _execute_create_backup(args, access_key, hass, data)
 
 
-def _backup_agent_refusal(args: dict) -> tuple[dict, str, str] | None:
-    """Refuse a malformed agent_ids instead of silently choosing a local agent."""
+_BACKUP_AGENT_IDS_REFUSAL = "agent_ids must be a non-empty array of backup agent IDs; omit it to use the backup settings."
+
+
+def _backup_agent_ids_malformed(args: dict) -> bool:
+    """A malformed agent_ids is refused instead of silently choosing other agents."""
     agent_ids = args.get("agent_ids")
-    if agent_ids is None or (isinstance(agent_ids, list) and agent_ids
-                             and all(isinstance(item, str) and item for item in agent_ids)):
-        return None
-    return _tool_error("agent_ids must be a non-empty array of backup agent IDs; omit it to use a local agent."), "invalid_request", "create_backup"
+    return not (agent_ids is None or (isinstance(agent_ids, list) and agent_ids
+                                      and all(isinstance(item, str) and item for item in agent_ids)))
+
+
+def _backup_result(plan: _BackupPlan, backup: Any | None) -> dict:
+    """Describe the created backup from HA's own record of it."""
+    body: dict[str, Any] = {"destination": plan.destination}
+    if plan.skipped_agent_ids:
+        body["skipped_agent_ids"] = plan.skipped_agent_ids
+    notes: list[str] = []
+    unencrypted = plan.unencrypted_agent_ids
+    if backup is None:
+        body["encrypted"] = plan.encrypted
+    else:
+        agents = {aid: {"encrypted": status.protected, "size": status.size} for aid, status in backup.agents.items()}
+        body["backup"] = {
+            "backup_id": backup.backup_id, "name": backup.name, "date": backup.date,
+            "homeassistant_included": backup.homeassistant_included,
+            "database_included": backup.database_included,
+            "addons": [addon.slug for addon in backup.addons],
+            "folders": [str(getattr(f, "value", f)) for f in backup.folders],
+            "agents": agents,
+        }
+        body["encrypted"] = bool(agents) and all(a["encrypted"] for a in agents.values())
+        body["failed_agent_ids"] = list(backup.failed_agent_ids)
+        body["failed_addons"] = [addon.slug for addon in backup.failed_addons]
+        body["failed_folders"] = [str(getattr(f, "value", f)) for f in backup.failed_folders]
+        unencrypted = [aid for aid, a in agents.items() if not a["encrypted"]]
+    if plan.has_key and unencrypted:
+        notes.append(
+            f"Stored unencrypted on {', '.join(unencrypted)}: Home Assistant's backup settings turn "
+            "encryption off for that location, so the backup holds secrets.yaml in plain text there."
+        )
+    if not plan.has_key:
+        notes.append(
+            "Not encrypted: Home Assistant has no backup encryption key, so this backup holds "
+            "secrets.yaml in plain text. Setting up automatic backups in Home Assistant creates one."
+        )
+    if all(aid in LOCAL_BACKUP_AGENT_IDS for aid in plan.agent_ids):
+        reason = ", because its backup settings name no backup locations" if plan.destination == "local" else ""
+        notes.append(
+            f"Stored only on this Home Assistant's own storage{reason}. It does not survive the loss of that disk."
+        )
+    if plan.skipped_agent_ids:
+        notes.append(
+            f"Not sent to {', '.join(plan.skipped_agent_ids)}: it keeps one backup, so this one "
+            "would have replaced the operator's own."
+        )
+    if notes:
+        body["notes"] = notes
+    return body
 
 
 async def _execute_create_backup(
     args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData
 ) -> tuple[dict, str, str]:
-    if refusal := _backup_agent_refusal(args):
-        return refusal
-    agent_ids = args.get("agent_ids")
-    if agent_ids is None:
-        # Auto-detect: the default agent is install-type dependent (hassio.local on
-        # HAOS/supervised, backup.local on Core). Prefer a local one.
-        try:
-            available = await _backup_agent_ids(hass)
-        except WsDispatchError as exc:
-            return _tool_error(
-                f"Failed to determine available backup agents: {exc}. Pass agent_ids explicitly."
-            ), "invalid_request", "create_backup"
-        agent_ids = next(([a] for a in ("hassio.local", "backup.local") if a in available), available[:1])
-        if not agent_ids:
-            return _tool_error("No backup agents are available; pass agent_ids explicitly."), "invalid_request", "create_backup"
-    payload: dict = {"agent_ids": agent_ids}
-    name = args.get("name")
-    if isinstance(name, str) and name.strip():
-        payload["name"] = name
+    """Create the backup and wait, within a bound, for HA to report how it ended.
+
+    HA's backup key goes straight from its stored settings into the manager call.
+    It is never placed in arguments, previews, results, logs or error text.
+    """
+    from homeassistant.components.backup import CreateBackupEvent
+
     try:
-        result = await async_ws_command(hass, "backup/generate", payload, timeout=60)
-    except WsDispatchError as exc:
-        return _tool_error(f"Failed to create backup: {exc}"), "invalid_request", "create_backup"
-    job_id = getattr(result, "backup_job_id", None)
-    if job_id is None and isinstance(result, dict):
-        job_id = result.get("backup_job_id")
-    body = {"created": True, "backup_job_id": job_id, "agent_ids": agent_ids}
+        manager, plan = _backup_precheck(hass, args)
+    except _BackupRefused as refused:
+        return refused.result
+    name = args.get("name")
+    try:
+        before, _ = await manager.async_get_backups()
+    except Exception:  # noqa: BLE001 - only narrows which backup is new
+        _LOGGER.debug("Could not list backups before creating one", exc_info=True)
+        before = {}
+    finished = asyncio.Event()
+    ended: dict[str, Any] = {}
+
+    @callback
+    def _on_event(event: Any) -> None:
+        if isinstance(event, CreateBackupEvent) and str(event.state) in ("completed", "failed"):
+            ended.update(state=str(event.state), reason=event.reason)
+            finished.set()
+
+    unsubscribe = manager.async_subscribe_events(_on_event)
+    try:
+        check_request_authority()
+        mark_dispatch_started()
+        try:
+            new_backup = await manager.async_initiate_backup(
+                agent_ids=plan.agent_ids,
+                include_addons=plan.include_addons,
+                include_all_addons=plan.include_all_addons,
+                include_database=plan.include_database,
+                include_folders=plan.include_folders,
+                include_homeassistant=True,
+                name=name.strip() if isinstance(name, str) and name.strip() else None,
+                password=manager.config.data.create_backup.password,
+            )
+        except HomeAssistantError as exc:
+            key = manager.config.data.create_backup.password
+            message = str(exc)
+            if key and key in message:
+                message = "Home Assistant refused the backup."
+            return _tool_error(f"Failed to create backup: {message}"), "invalid_request", "create_backup"
+        except Exception as exc:  # noqa: BLE001 - HA's text may carry arguments; keep it out
+            log_internal_failure(_LOGGER, "create_backup", exc)
+            return _tool_error("Failed to create backup: internal error."), "invalid_request", "create_backup"
+        try:
+            async with asyncio.timeout(BACKUP_COMPLETION_WAIT_SECONDS):
+                await finished.wait()
+        except TimeoutError:
+            pass
+    finally:
+        unsubscribe()
+    check_request_authority()
+    job_id = new_backup.backup_job_id
+    status = ended.get("state", "started")
+    backup = None
+    if status != "started":
+        try:
+            after, _ = await manager.async_get_backups()
+        except Exception:  # noqa: BLE001 - the backup exists; only the readback failed
+            _LOGGER.debug("Could not read the new backup back", exc_info=True)
+            after = {}
+        new = {bid: b for bid, b in after.items() if bid not in before}
+        # Core reuses the job ID as the backup ID; the Supervisor does not, and
+        # the manager runs one backup at a time, so a single new entry is it.
+        backup = new.get(job_id) or (next(iter(new.values())) if len(new) == 1 else None)
+    body: dict[str, Any] = {
+        "created": status == "completed" or (status == "failed" and backup is not None and bool(backup.agents)),
+        "status": status, "backup_job_id": job_id, "verified": backup is not None,
+    }
+    if status == "failed":
+        body["reason"] = ended.get("reason")
+    if status == "started":
+        body["message"] = (
+            f"The backup was still running after {BACKUP_COMPLETION_WAIT_SECONDS} seconds. "
+            "Do not start another; check list_backups until manager_state is idle."
+        )
+    body.update(_backup_result(plan, backup))
     return _tool_success(json.dumps(body, default=str)), "allowed", "create_backup"
 
 
@@ -8026,7 +8908,7 @@ async def _tool_mesa(
 
 _TOOL_DEFS_BY_NAME: dict[str, dict] = {
     definition["name"]: definition
-    for definition in (*_ENTITY_TOOL_DEFS, *_SYSTEM_TOOL_DEFS, *_NATIVE_TOOL_DEFS)
+    for definition in (*_ENTITY_TOOL_DEFS, *_SYSTEM_TOOL_DEFS, *_NATIVE_TOOL_DEFS, *mesa_tool_defs())
 }
 
 
@@ -8074,16 +8956,36 @@ async def _call_tool(
         raise
     if not household_tool_access(tool_name):
         return _tool_error("Forbidden."), "denied", tool_name
+    notes: list[str] = []
+    notes_context = _argument_notes.set(notes)
+    try:
+        return with_argument_notes(await _call_tool_checked(
+            tool_name, arguments, access_key, hass, data, request_id, client_ip), notes)
+    finally:
+        _argument_notes.reset(notes_context)
+
+
+async def _call_tool_checked(
+    tool_name: str,
+    arguments: dict,
+    access_key: AccessKeyRecord,
+    hass: HomeAssistant,
+    data: PhoenixData,
+    request_id: str,
+    client_ip: str | None,
+) -> tuple[dict, Outcome, str]:
+    """_call_tool after its authority checks, with argument notes being collected."""
+    # Every refusal below precedes the handler, so nothing can have been written.
     if error := tool_arguments_error(arguments):
-        return _tool_error(error), "invalid_request", tool_name
+        return _tool_refused_before_write(error), "invalid_request", tool_name
     decoded = decode_container_strings(tool_name, arguments)
     if decoded is not arguments:
         if error := tool_arguments_error(decoded):
-            return _tool_error(error), "invalid_request", tool_name
+            return _tool_refused_before_write(error), "invalid_request", tool_name
         arguments = decoded
     from .const import APPROVAL_TARGETS_KEY
     if APPROVAL_TARGETS_KEY in arguments:
-        return _tool_error("Approval target bindings are server-owned."), "invalid_request", tool_name
+        return _tool_refused_before_write("Approval target bindings are server-owned."), "invalid_request", tool_name
     from .home_companion import is_companion, authorize_call, run_request, record_outcome
     if is_companion(access_key):
         refusal = authorize_call(access_key, tool_name, arguments)
@@ -8109,12 +9011,13 @@ async def _call_tool(
     # misspelt required argument is named as such. Retired forms keep the
     # handler's migration guidance.
     if tool_name not in UNKNOWN_ARGUMENT_PROTECTED_FIELDS:
+        arguments = adopt_near_misses(tool_name, arguments)
         if error := unknown_argument_error(tool_name, arguments):
-            return _tool_error(error), "invalid_request", tool_name
+            return _tool_refused_before_write(error), "invalid_request", tool_name
         if not set(arguments) & set(_RETIRED_REPLACEMENTS.get(tool_name, {})):
-            arguments, error = scalar_arguments(tool_name, arguments)
+            arguments, error = scalar_arguments(tool_name, arguments, read_only=tool_is_read_only(tool_name))
             if error:
-                return _tool_error(error), "invalid_request", tool_name
+                return _tool_refused_before_write(error), "invalid_request", tool_name
     context = {"data": data, "request_id": request_id, "client_ip": client_ip}
     from .request_authority import dispatch_request_id
     request_context = dispatch_request_id.set(request_id)
@@ -8259,7 +9162,7 @@ def _build_context_plain(access_key: AccessKeyRecord, hass: HomeAssistant) -> st
         lines.extend(("", notes_block))
     lines.append("")
     caps = effective_caps(access_key)
-    lines.append("Capabilities (deny / allow / confirm; confirm requires admin approval per request):")
+    lines.append("Capabilities (deny / allow / confirm; confirm requires admin approval for each change, while reads run):")
     label_map = (
         ("cap_config_read", "Config read"),
         ("cap_automation_write", "Automation write"),
@@ -8372,8 +9275,8 @@ def _build_instructions(access_key: AccessKeyRecord, data: PhoenixData, base_url
         "Phoenix MCP is a scoped Home Assistant gateway. This access key sees only operator-granted "
         "entities/tools; some actions are gated.",
         "",
-        "- Call get_capability_summary first for read/control permissions and approval gates. "
-        "Discover scoped entities with get_overview or search_entities.",
+        f"- {ORIENTATION_GUIDANCE} It shows which tools run directly, need approval or are "
+        "unavailable. Discover scoped entities with search_entities, or get_overview for the home as a whole.",
         "- Entity/history timestamps may be returned in UTC. If you do not already know Home "
         "Assistant's local offset, call llm__GetDateTime for local presentation. "
         "Present the local date and time directly. Do not mention UTC, offsets, or conversion "
@@ -8413,15 +9316,41 @@ def _build_instructions(access_key: AccessKeyRecord, data: PhoenixData, base_url
             "entity. Prefer its purpose-built triggers/conditions and ready-to-use config examples "
             "over generic state/numeric_state equivalents."
         )
-    notes_block = access_key_notes_block(access_key, hass)
-    if notes_block:
-        lines.extend(("", notes_block))
     lines.append("")
     lines.append(
         f"Full Phoenix MCP and Home Assistant usage guide: {base_url}/api/phoenix-mcp/skill (fetch it before "
         "complex automation, scene, or configuration work)."
     )
+    # The operator's notes come last: a client that clips server instructions
+    # (Claude Code keeps 4,096 characters) then loses only the end of the notes,
+    # never the guide link.
+    notes_block = access_key_notes_block(access_key, hass)
+    if notes_block:
+        lines.extend(("", notes_block))
     return "\n".join(lines)
+
+
+def _announced_tools(access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData) -> list[dict]:
+    """The tools tools/list announces to this access key, as their client-facing definitions.
+
+    Only the tools this access key can use, unless announce_all_tools is set.
+    Cap-tied tools gate on their cap; write/action tools gate on write scope;
+    tools needing a system surface (ESPHome, the Device Builder) gate on it being
+    present; reads are always announced. announce_all_tools overrides all of it,
+    including "requires": it is a debugging affordance, and the call path still
+    refuses.
+    """
+    from .home_companion import is_companion, wrapper_tool
+    if is_companion(access_key):
+        return [wrapper_tool()]
+    announce_all = getattr(access_key, "announce_all_tools", False)
+    has_write = access_key_has_write_scope(access_key)
+    mesa_defs = mesa_tool_defs() if data.mesa is not None else []
+    return [
+        {k: v for k, v in tool_def.items() if k not in ("cap", "caps", "caps_any", "requires")}
+        for tool_def in list(_ENTITY_TOOL_DEFS) + list(_NATIVE_TOOL_DEFS) + list(_SYSTEM_TOOL_DEFS) + mesa_defs
+        if household_tool_access(tool_def["name"]) and (announce_all or _tool_is_announced(tool_def, access_key, has_write, hass))
+    ]
 
 
 def _maybe_append_stale_advisory(
@@ -8433,23 +9362,20 @@ def _maybe_append_stale_advisory(
     Returns whether an advisory was added, which the caller records on the audit
     row. This is the stateless transport's substitute for tools/list_changed: the
     notice rides in-band on the next tools/call, once per staleness epoch (a fresh
-    tools/list resets it). The epoch key spans two independent axes, so resolving
-    one does not re-fire the other: the OPERATOR changed this access key
-    (settings_version moved past the version echoed at the last tools/list), and
-    the BUILD changed under a client that already fetched its schemas (catalog
-    fingerprint differs; an empty stored fingerprint means never recorded, so
-    never stale).
-
-    Changed administrator notes are a third axis with its own counter: the
-    notice carries the current notes and records them as delivered, which
-    instructions also do at initialize and server/discover. A Home Companion
-    access key never gets it, because its notes reach the inner turn on every
-    request instead.
+    tools/list resets it). The epoch spans two independent axes, so resolving one
+    does not re-fire the other: the OPERATOR changed this access key
+    (settings_version moved past the one echoed at the last tools/list), and the
+    BUILD changed under a client that already fetched its schemas (catalog
+    fingerprint differs; an empty stored fingerprint was never recorded, so never
+    stale). Changed administrator notes are a third axis with its own counter: the
+    notice carries the current notes and records them delivered, as instructions
+    also do at initialize and server/discover. A Home Companion access key never
+    gets it; its notes reach the inner turn on every request.
 
     Skipped for Phoenix's own internal surfaces (the sentinel client IPs): they
-    rebuild their tool list and instructions every turn from the live access key
-    and have no external MCP server to reconnect. Nothing is marked for them, so a
-    real external client sharing the access key still gets advised.
+    rebuild tools and instructions every turn from the live access key and have no
+    MCP server to reconnect. Nothing is marked for them, so an external client
+    sharing the access key still gets advised.
     """
     from .home_companion import is_companion
     internal = client_ip in (
@@ -8458,7 +9384,12 @@ def _maybe_append_stale_advisory(
     notices: list[str] = []
     if not internal:
         if access_key.settings_version > access_key.tools_list_version:
-            notices.append(_STALE_TOOLS_ADVISORY)
+            # A change that leaves the announced tools as they were (Allow to
+            # Confirm, say) needs no reconnect, as the panel tells the operator;
+            # without a record of what was announced, advise the reconnect.
+            given = data.announced_tools.get(access_key.id)
+            unchanged = given is not None and given == frozenset(t["name"] for t in _announced_tools(access_key, hass, data))
+            notices.append(_SETTINGS_CHANGED_ADVISORY if unchanged else _STALE_TOOLS_ADVISORY)
         if (
             access_key.tools_catalog_fingerprint
             and access_key.tools_catalog_fingerprint != _TOOL_CATALOG_FINGERPRINT
@@ -8524,6 +9455,15 @@ async def _dispatch_tools_call(
                  resource=receipt_resource, outcome=receipt_outcome, client_ip=client_ip,
                  payload={"name": tool_name, "arguments": arguments, "result_withheld": True})
         raise
+    except PendingApprovalCapacityError:
+        # Not an internal error: the key's approval queue is full.
+        tool_result = _tool_error(
+            f"This access key already has {MAX_PENDING_APPROVALS_PER_ACCESS_KEY} actions waiting for approval, "
+            "so this one was not queued. Ask the user to approve or reject the waiting requests in "
+            "Phoenix MCP's Approvals, then try again."
+        )
+        outcome = "denied"
+        resource = tool_name
     except Exception:
         # _call_tool is a bare dispatcher with no exception handling of its own,
         # and post() has none either: an unhandled exception here would reach
@@ -8574,13 +9514,14 @@ _MCP_METHODS: frozenset[str] = frozenset({
     "prompts/list",
     "prompts/get",
 })
+# 2026-07-28 removed ping together with the session lifecycle.
 _MCP_MODERN_METHODS = _MCP_METHODS - {
-    "initialize", "notifications/initialized", "initialized",
+    "initialize", "notifications/initialized", "initialized", "ping",
 }
 _MCP_LEGACY_METHODS = _MCP_METHODS - {"server/discover"}
 
 
-from .conversation_log import recorded_exchange, transport_session, record_event
+from .conversation_log import json_size, recorded_exchange, transport_session, record_event
 
 
 @recorded_exchange
@@ -8626,7 +9567,7 @@ async def _dispatch_mcp(
             if data.agent_recovery.blocks(access_key.id, request_id):
                 _log(data, access_key, request_id=request_id, method=params["name"], resource=params["name"],
                      outcome="denied", client_ip=client_ip)
-                recovery_error = _tool_error("This new request was not executed because an earlier agent action has an unresolved outcome. Check the earlier action in Home Assistant and resolve it in Phoenix MCP > Needs attention before trying again. Direct read-only tools remain available where this access key exposes them; delegated requests are blocked.")
+                recovery_error = _tool_error("This new request was not executed because an earlier agent action has an unresolved outcome. Check the earlier action in Home Assistant and resolve it in the Needs Attention window of the Phoenix MCP panel before trying again. Direct read-only tools remain available where this access key exposes them; delegated requests are blocked.")
                 return _jsonrpc_result(msg_id, recovery_error), method, params["name"], "denied"
         check_request_authority()
         write_entered = method == "tools/call" and isinstance(params.get("name"), str) and not tool_is_read_only(params["name"])
@@ -8652,7 +9593,7 @@ async def _dispatch_mcp(
                 await data.agent_recovery.retain_unknown(access_key.id, name, request_id)
             except Exception as recovery_error:
                 log_internal_failure(_LOGGER, "retain_unknown", recovery_error)
-            return _jsonrpc_error(msg_id, -32000, "Authority changed during dispatch. The action may already have executed. Do not repeat it. Check Home Assistant and review the action in Phoenix MCP > Needs attention before submitting another write."), method, name, "invalid_request"
+            return _jsonrpc_error(msg_id, -32000, "Authority changed during dispatch. The action may already have executed. Do not repeat it. Check Home Assistant and review the action in the Needs Attention window of the Phoenix MCP panel before submitting another write."), method, name, "invalid_request"
         _log(data, access_key, request_id=request_id, method=method, resource="/api/phoenix-mcp",
              outcome="denied", client_ip=client_ip)
         if isinstance(exc, PolicyChangedError) and method == "tools/call":
@@ -8749,23 +9690,9 @@ async def _dispatch_mcp_authorized(
     if is_companion(access_key) and method in {"resources/read", "prompts/get"}:
         return _jsonrpc_error(msg_id, -32602, "Unavailable for this persona."), method, "/api/phoenix-mcp", "denied"
     if method == "tools/list":
-        # Announce only the tools this access key can use, unless announce_all_tools
-        # is set. Cap-tied tools gate on their cap; write/action tools gate on
-        # write scope; tools needing a system surface (ESPHome, the Device
-        # Builder) gate on it being present; reads are always announced.
-        # announce_all_tools overrides all of it, including "requires": it is a
-        # debugging affordance, and the call path still refuses.
-        announce_all = getattr(access_key, "announce_all_tools", False)
-        has_write = access_key_has_write_scope(access_key)
-        mesa_defs = mesa_tool_defs() if data.mesa is not None else []
-        tools = []
-        for tool_def in list(_ENTITY_TOOL_DEFS) + list(_NATIVE_TOOL_DEFS) + list(_SYSTEM_TOOL_DEFS) + mesa_defs:
-            if household_tool_access(tool_def["name"]) and (announce_all or _tool_is_announced(tool_def, access_key, has_write, hass)):
-                tools.append({k: v for k, v in tool_def.items() if k not in ("cap", "caps", "caps_any", "requires")})
-        if is_companion(access_key):
-            from .home_companion import wrapper_tool
-            tools = [wrapper_tool()]
+        tools = _announced_tools(access_key, hass, data)
         resp = _jsonrpc_result(msg_id, {"tools": tools})
+        data.announced_tools[access_key.id] = frozenset(tool["name"] for tool in tools)
         # After this response the client's tool list is current: echo the settings
         # version (in memory; persisted by the periodic flush, like last_used_at)
         # and clear the advised marker so a later change advises again.
@@ -9375,12 +10302,18 @@ def _origin_rejected(hass: HomeAssistant, request: web.Request, request_id: str)
 
 
 def _prune_legacy_sessions(data: PhoenixData) -> None:
-    """Expire idle legacy sessions and bound worst-case in-memory growth."""
+    """Expire idle legacy sessions and bound worst-case in-memory growth.
+
+    A session that never completed initialization expires sooner: a client that
+    abandons its handshake would otherwise hold a quota slot for the full hour.
+    """
     now = time.monotonic()
     expired = [
         session_id
         for session_id, state in data.mcp_sessions.items()
-        if now - float(state.get("last_seen", 0.0)) > _MCP_LEGACY_SESSION_TTL_SECONDS
+        if now - float(state.get("last_seen", 0.0)) > (
+            _MCP_LEGACY_SESSION_TTL_SECONDS if state.get("initialized")
+            else _MCP_LEGACY_UNINITIALIZED_TTL_SECONDS)
     ]
     for session_id in expired:
         data.mcp_sessions.pop(session_id, None)
@@ -9403,11 +10336,22 @@ def _validate_legacy_initialize(params: dict) -> tuple[int, str] | None:
 
 
 def _open_legacy_session(data: PhoenixData, access_key: AccessKeyRecord) -> str | None:
-    """Allocate within both quotas without evicting another active session."""
+    """Allocate within both quotas, closing this access key's own stale session first.
+
+    A client that restarts without DELETE leaves its old session behind, so a full
+    quota closes the key's least recently used session with no request open; its
+    client receives 404 and initializes again. Another access key's session is
+    never closed, and None means every candidate is busy.
+    """
     _prune_legacy_sessions(data)
-    owned = sum(state.get("access_key_id") == access_key.id for state in data.mcp_sessions.values())
-    if owned >= _MCP_LEGACY_SESSION_ACCESS_KEY_LIMIT or len(data.mcp_sessions) >= _MCP_LEGACY_SESSION_LIMIT:
-        return None
+    owned = [(state, session_id) for session_id, state in data.mcp_sessions.items()
+             if state.get("access_key_id") == access_key.id]
+    if len(owned) >= _MCP_LEGACY_SESSION_ACCESS_KEY_LIMIT or len(data.mcp_sessions) >= _MCP_LEGACY_SESSION_LIMIT:
+        idle = [(float(state.get("last_seen", 0.0)), session_id) for state, session_id in owned
+                if not state.get("in_use")]
+        if not idle:
+            return None
+        data.mcp_sessions.pop(min(idle)[1], None)
     session_id = secrets.token_urlsafe(32)
     data.mcp_sessions[session_id] = {
         "access_key_id": access_key.id,
@@ -9416,6 +10360,22 @@ def _open_legacy_session(data: PhoenixData, access_key: AccessKeyRecord) -> str 
         "protocol_version": MCP_LEGACY_PROTOCOL_VERSION_PREFERRED,
     }
     return session_id
+
+
+def _legacy_session_retry_after(data: PhoenixData, access_key: AccessKeyRecord) -> int:
+    """Seconds until a refused initialize can find room.
+
+    The access key's own sessions are all busy: one frees when its request ends,
+    so a short wait. Otherwise other keys fill the quota: a slot frees when the
+    stalest of their sessions reaches its idle limit.
+    """
+    if any(state.get("access_key_id") == access_key.id for state in data.mcp_sessions.values()):
+        return MCP_LEGACY_SESSION_BUSY_RETRY_SECONDS
+    oldest = min((float(state.get("last_seen", 0.0)) for state in data.mcp_sessions.values()), default=None)
+    if oldest is None:
+        return MCP_LEGACY_SESSION_BUSY_RETRY_SECONDS
+    remaining = _MCP_LEGACY_SESSION_TTL_SECONDS - (time.monotonic() - oldest)
+    return max(MCP_LEGACY_SESSION_BUSY_RETRY_SECONDS, math.ceil(remaining))
 
 
 def _legacy_session(
@@ -9427,6 +10387,9 @@ def _legacy_session(
     if state is None or state.get("access_key_id") != access_key.id:
         return None
     state["last_seen"] = time.monotonic()
+    if _legacy_session_in_use.get() is None:
+        state["in_use"] = state.get("in_use", 0) + 1
+        _legacy_session_in_use.set(state)
     return state
 
 
@@ -9464,10 +10427,15 @@ class PhoenixMcpView(PhoenixView):
     async def post(self, request: web.Request) -> web.Response:
         """Handle one request with task-local credential identity."""
         context = request_authority.set(None)
+        in_use = _legacy_session_in_use.set(None)
         try:
             with transport_session(request.headers.get("Mcp-Session-Id")):
                 return await self._post(request)
         finally:
+            if (session := _legacy_session_in_use.get()) is not None:
+                session["in_use"] -= 1
+                session["last_seen"] = time.monotonic()
+            _legacy_session_in_use.reset(in_use)
             request_authority.reset(context)
 
     async def delete(self, request: web.Request) -> web.Response:
@@ -9870,7 +10838,7 @@ class PhoenixMcpView(PhoenixView):
                             msg_id, -32000, "Legacy MCP session capacity reached. Close unused sessions or retry after they expire.", request_id,
                             status=429,
                         )
-                        response.headers["Retry-After"] = str(math.ceil(_MCP_LEGACY_SESSION_TTL_SECONDS))
+                        response.headers["Retry-After"] = str(_legacy_session_retry_after(data, access_key))
                         return audited_transport_response(response, body=body)
                 else:
                     session = _legacy_session(data, request, access_key)
@@ -10043,8 +11011,6 @@ ALL_MCP_VIEWS: list[type[PhoenixView]] = [
 # rather than blocking creation of the pending approval.
 
 
-
-
 def _build_diff_call_service(args: dict, access_key: AccessKeyRecord, hass: HomeAssistant) -> dict:
     """Diff for call_service. Resolves entity targets read-only and lists service params."""
     domain = args.get("domain", "")
@@ -10071,14 +11037,11 @@ def _build_diff_call_service(args: dict, access_key: AccessKeyRecord, hass: Home
     # Read-only target resolution for the MESA note; the executor re-resolves
     # at approve time. Dual-gate and no-target reloads have no targets and
     # resolve to nothing, so they never carry the note.
-    try:
-        resolved, _count = resolve_service_targets(
-            entity_id=args.get("entity_id"), device_id=args.get("device_id"),
-            area_id=args.get("area_id"), service_domain=domain,
-            access_key=access_key, hass=hass,
-        )
-    except EntityCreationNotPermitted:
-        resolved = []
+    resolved, _count = resolve_service_targets(
+        entity_id=args.get("entity_id"), device_id=args.get("device_id"),
+        area_id=args.get("area_id"), service_domain=domain,
+        access_key=access_key, hass=hass,
+    )
     mesa_note = _mesa_confirm_annotation(access_key, hass, [(domain, service, resolved)])
     if mesa_note:
         preview["mesa"] = mesa_note
@@ -10182,13 +11145,21 @@ async def _build_diff_reload_integration(
 
 def _build_diff_create_backup(args: dict, access_key: AccessKeyRecord, hass: HomeAssistant) -> dict:
     name = args.get("name") if isinstance(args.get("name"), str) else None
-    agent_ids = args.get("agent_ids") if isinstance(args.get("agent_ids"), list) else None
+    preview: dict[str, Any] = {"name": name}
+    manager = _backup_manager(hass)
+    try:
+        if manager is None:
+            raise _BackupRefused("The Home Assistant backup integration is not available.")
+        # Resolved again when the backup runs, so a settings change in between applies.
+        preview.update(_backup_plan(manager, args).preview())
+    except _BackupRefused as refused:
+        preview["refused"] = str(refused)
+    preview["note"] = "Creates a backup; Phoenix MCP cannot restore backups."
     return {
         "kind": "system_action",
         **(_summary("create_backup.named", name=name) if name else _summary("create_backup")),
         "target": {"type": "backup", "id": None, "label": name},
-        "preview": {"name": name, "agent_ids": agent_ids or "(auto-detected local agent)",
-                    "note": "Creates a backup; Phoenix MCP cannot restore backups."},
+        "preview": preview,
     }
 
 
@@ -10197,6 +11168,7 @@ def _build_diff_create_backup(args: dict, access_key: AccessKeyRecord, hass: Hom
 # When an admin approves a pending request, async_execute_approved_tool() invokes the
 # matching executor with the saved args.
 _register_executor("restart_ha", _execute_restart_ha)
+_register_executor("send_notification", _execute_send_notification)
 _register_executor("call_service", _execute_call_service)
 _register_executor("create_automation", _execute_create_automation)
 _register_executor("edit_automation", _execute_edit_automation)
@@ -10234,6 +11206,7 @@ _register_executor("delete_dashboard_card", _execute_delete_dashboard_card)
 _register_executor("patch_dashboard", _execute_patch_dashboard)
 _register_executor("edit_energy_config", _execute_edit_energy_config)
 _register_executor("set_area_or_floor", _execute_set_area_or_floor)
+_register_executor("set_label_or_category", _execute_set_label_or_category)
 _register_executor("set_entity", _execute_set_entity)
 _register_executor("set_device", _execute_set_device)
 _register_executor("remove_device", _execute_remove_device)
@@ -10272,6 +11245,8 @@ _register_tool("get_camera_image", _tool_get_camera_image)
 _register_tool("get_history", _tool_get_history)
 _register_tool("get_statistics", _tool_get_statistics)
 _register_tool("get_calendar_events", _tool_get_calendar_events)
+_register_tool("get_todo_items", _tool_get_todo_items)
+_register_tool("set_todo_item", _tool_set_todo_item)
 _register_tool("call_service", _tool_call_service)
 _register_tool("get_config", _tool_get_config)
 _register_tool("render_template", _tool_render_template)
@@ -10283,6 +11258,8 @@ _register_tool("create_automation", _tool_create_automation)
 _register_tool("edit_automation", _tool_edit_automation)
 _register_tool("delete_automation", _tool_delete_automation)
 _register_tool("restart_ha", _tool_restart_ha)
+_register_tool("send_notification", _tool_send_notification)
+_register_tool("get_notifications", _tool_get_notifications)
 _register_tool("get_approval_status", _tool_get_approval_status)
 _register_tool("wait_for_approval", _tool_wait_for_approval)
 _register_tool("get_capability_summary", _tool_get_capability_summary)
@@ -10322,6 +11299,8 @@ _register_tool("create_blueprint", _tool_create_blueprint)
 _register_tool("edit_blueprint", _tool_edit_blueprint)
 _register_tool("delete_blueprint", _tool_delete_blueprint)
 _register_tool("set_area_or_floor", _tool_set_area_or_floor)
+_register_tool("set_label_or_category", _tool_set_label_or_category)
+_register_tool("list_labels", _tool_list_labels)
 _register_tool("set_entity", _tool_set_entity)
 _register_tool("set_device", _tool_set_device)
 _register_tool("remove_device", _tool_remove_device)
@@ -10386,6 +11365,9 @@ _register_tool("wait_for_esphome_job", _tool_wait_for_esphome_job)
 _register_tool("cancel_esphome_job", _tool_cancel_esphome_job)
 _register_tool("get_esphome_device_logs", _tool_get_esphome_device_logs)
 _register_tool("decode_esphome_backtrace", _tool_decode_esphome_backtrace)
+_register_tool("get_esphome_history", _tool_get_esphome_history)
+_register_tool("check_esphome_connectivity", _tool_check_esphome_connectivity)
+_register_tool("analyze_esphome_memory", _tool_analyze_esphome_memory)
 _register_tool("check_ha_config", _tool_check_config)
 _register_tool("get_relationships", _tool_get_relationships)
 _register_tool("describe_entity", _tool_describe_entity)

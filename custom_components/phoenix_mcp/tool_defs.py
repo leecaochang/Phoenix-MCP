@@ -15,7 +15,7 @@ and against the annotations and executor registries, in both directions.
 
 from __future__ import annotations
 
-from .const import GET_STATE_MAX_IDS, PATCH_DASHBOARD_MAX_CHANGES, SERVICE_TARGET_MAX_GROUPS, SERVICE_TARGET_MAX_IDS
+from .const import BACKUP_COMPLETION_WAIT_SECONDS, GET_STATE_MAX_IDS, ORIENTATION_GUIDANCE, PATCH_DASHBOARD_MAX_CHANGES, SEARCH_ENTITIES_MAX_LIMIT, SEARCH_POWER_TYPES, SEARCH_RADIO_TYPES, SERVICE_TARGET_MAX_GROUPS, SERVICE_TARGET_MAX_IDS
 
 _SYSTEM_LOG_DETAIL_PROPERTIES = {
     "detail_ref": {
@@ -80,12 +80,38 @@ _DASHBOARD_SAVED = (
 )
 
 
+def _select_schema(description: str) -> dict:
+    """The select object get_history and get_statistics share: search_entities filters naming the entities."""
+    return {
+        "type": "object",
+        "additionalProperties": False,
+        "description": description,
+        "properties": {
+            "query": {"type": "string", "description": "Words matched against entity_id, name and aliases."},
+            "domain": {"oneOf": [{"type": "string"}, {"type": "array", "items": {"type": "string"}}],
+                       "description": "One or more domains."},
+            "device_class": {"oneOf": [{"type": "string"}, {"type": "array", "items": {"type": "string"}}],
+                             "description": "One or more device classes."},
+            "integration": {"oneOf": [{"type": "string"}, {"type": "array", "items": {"type": "string"}}],
+                            "description": "One or more providing integrations."},
+            "radio": {"oneOf": [
+                {"type": "string", "enum": list(SEARCH_RADIO_TYPES)},
+                {"type": "array", "items": {"type": "string", "enum": list(SEARCH_RADIO_TYPES)}},
+            ], "description": "How the device connects."},
+            "power": {"type": "string", "enum": list(SEARCH_POWER_TYPES),
+                      "description": "battery: devices whose battery level or low battery is a diagnostic reading."},
+            "area": {"type": "string", "description": "An area or floor."},
+            "include_diagnostic": {"type": "boolean", "description": "Also summarize diagnostic and configuration entities."},
+        },
+    }
+
+
 _ENTITY_TOOL_DEFS: list[dict] = [
     {
         "name": "get_state",
         "description": (
             "Get the current state of one Home Assistant entity, or of several in one call by passing a list of "
-            "entity IDs. Required projection.kind selects compact (state plus domain-specific key attributes), "
+            "entity IDs. projection.kind selects compact (state plus domain-specific key attributes, the default), "
             "full, or fields with fields=[...] for exact fields (e.g. \"state\", \"attr.brightness\"). A list "
             "returns states in request order plus not_found for IDs that do not exist or are outside this access "
             "key's scope. To find entities by name, domain, area or state use search_entities; for everything "
@@ -99,9 +125,9 @@ _ENTITY_TOOL_DEFS: list[dict] = [
                     {"type": "array", "items": {"type": "string"}, "minItems": 1, "maxItems": GET_STATE_MAX_IDS,
                      "description": "Several entity IDs, read in one call."},
                 ], "description": "Entity ID, e.g. light.living_room, or a list of entity IDs."},
-                "projection": {"type": "object", "description": "Required output projection: compact, full, or exact fields.", "additionalProperties": False, "properties": {"kind": {"type": "string", "enum": ["compact", "full", "fields"], "description": "Projection mode."}, "fields": {"type": "array", "items": {"type": "string"}, "description": "Exact fields; only with kind fields, and refused with compact or full."}}, "required": ["kind"]},
+                "projection": {"type": "object", "description": "Output projection: compact (the default), full, or exact fields.", "additionalProperties": False, "properties": {"kind": {"type": "string", "enum": ["compact", "full", "fields"], "description": "Projection mode."}, "fields": {"type": "array", "items": {"type": "string"}, "description": "Exact fields; only with kind fields, and refused with compact or full."}}, "required": ["kind"]},
             },
-            "required": ["entity_id", "projection"],
+            "required": ["entity_id"],
         },
     },
     {
@@ -146,15 +172,35 @@ _ENTITY_TOOL_DEFS: list[dict] = [
             "summary returns per-state durations and entry counts instead of rows (how long a light was on, "
             "how often a pump started); a zero or total is definitive only when complete is true. Zone states "
             "are occupant counts: occupied time is the sum of counts above 0. "
-            "Follow has_more with next_cursor and the same order; there is intentionally no estimated total."
+            "Follow has_more with next_cursor and the same order; there is intentionally no estimated total. "
+            "covered_range and data_range describe only this page; with has_more, unread_range may hold "
+            "more history, so neither shows where history begins. state_changes also lists the same-state row "
+            "Home Assistant records at each restart; use summary to learn whether something entered a state. "
+            "In summary mode entity_id may be a list, one compact row each, or select may name them by "
+            "search_entities filters instead: the way to ask which sensors entered a state in a period, "
+            "in one call; with in_state only the entities that were in that state are listed, and select {} with "
+            "in_state checks every entity (which went unavailable today); not_in_state lists only the entities "
+            "never in those states, so which sensors did not trigger this week is not_in_state on, without reading "
+            "every row. Each row names the entity and its area. "
+            "With state_changes, an entity_id list returns each entity's own page in one call (limit and "
+            "order apply per entity; continue one alone with its next_cursor). "
+            "A state's last_entered is when it last began, such as when someone last arrived home; a row "
+            "with recorded_from has no record before that time, so a state held since then began then or earlier. "
+            "Entities past what one result holds are named in not_summarized. With attribute, "
+            "summary totals that attribute's values instead of the state, such as how long each thermostat's "
+            "hvac_action was heating or cooling."
         ),
         "inputSchema": {
             "type": "object",
             "properties": {
-                "entity_id": {"type": "string", "description": "Accessible entity whose Recorder history to read."},
+                "entity_id": {"oneOf": [
+                    {"type": "string", "description": "Accessible entity whose Recorder history to read."},
+                    {"type": "array", "items": {"type": "string"}, "minItems": 1, "maxItems": SEARCH_ENTITIES_MAX_LIMIT,
+                     "description": "Several entities, in summary or state_changes mode."},
+                ], "description": "Entity ID, or in summary or state_changes mode a list of entity IDs."},
                 "start_time": {
                     "type": "string",
-                    "description": "ISO timestamp or relative string (24h, 7d, 2w, 1m). Defaults to 24h before end_time.",
+                    "description": "ISO timestamp or relative string (30min, 24h, 7d, 2w, 1mo). Defaults to 24h before end_time.",
                 },
                 "end_time": {
                     "type": "string",
@@ -169,12 +215,16 @@ _ENTITY_TOOL_DEFS: list[dict] = [
                         "records. summary: per-state totals; omit limit and order."
                     ),
                 },
+                "attribute": {
+                    "type": "string", "maxLength": 255,
+                    "description": "summary only: total this attribute's values (e.g. hvac_action) instead of the state.",
+                },
                 "limit": {
                     "type": "integer",
                     "minimum": 1,
                     "maximum": 1000,
                     "default": 100,
-                    "description": "Maximum rows in this page.",
+                    "description": "Maximum rows in this page: the earliest in the range, or the latest with order newest_first.",
                 },
                 "order": {
                     "type": "string",
@@ -186,8 +236,23 @@ _ENTITY_TOOL_DEFS: list[dict] = [
                     "type": "string",
                     "description": "The ISO UTC next_cursor from the previous page.",
                 },
+                "select": _select_schema(
+                    "Summary mode, instead of entity_id: summarize the entities these search_entities filters "
+                    "match (diagnostic and configuration entities only with include_diagnostic). With in_state "
+                    "or not_in_state, an empty select scans every accessible entity."
+                ),
+                "in_state": {
+                    "oneOf": [{"type": "string"}, {"type": "array", "items": {"type": "string"}, "minItems": 1}],
+                    "description": "Summary of several entities only: keep the entities that were in one of these "
+                                   "states at some point in the range, e.g. unavailable; the rest are only counted in scanned.",
+                },
+                "not_in_state": {
+                    "oneOf": [{"type": "string"}, {"type": "array", "items": {"type": "string"}, "minItems": 1}],
+                    "description": "Summary of several entities only: keep the entities never in any of these states "
+                                   "in the range, including at its start, e.g. on for sensors that did not trigger; "
+                                   "the rest are only counted in scanned. Not with in_state.",
+                },
             },
-            "required": ["entity_id"],
         },
     },
     {
@@ -196,12 +261,23 @@ _ENTITY_TOOL_DEFS: list[dict] = [
             "Get a bounded page of Recorder statistics for one accessible entity. Five-minute data uses "
             "short-term retention; hour, day, week, month, and year use long-term statistics. Calendar "
             "periods align in Home Assistant's local timezone. Follow has_more with next_cursor; there is "
-            "intentionally no estimated total. For individual state changes use get_history."
+            "intentionally no estimated total. For individual state changes use get_history. A list of "
+            "entity_id, or select with search_entities filters, returns one row per entity for the whole "
+            "window instead: mean, min and max of a measurement, change of a total, in its unit. That is "
+            "the way to compare sensors (warmest room, most energy used) in one call."
         ),
         "inputSchema": {
             "type": "object",
             "properties": {
-                "entity_id": {"type": "string", "description": "Accessible entity whose Recorder statistics to read."},
+                "entity_id": {"oneOf": [
+                    {"type": "string", "description": "Accessible entity whose Recorder statistics to read."},
+                    {"type": "array", "items": {"type": "string"}, "minItems": 1, "maxItems": SEARCH_ENTITIES_MAX_LIMIT,
+                     "description": "Several entities, one row each for the whole window."},
+                ], "description": "Entity ID, or a list of entity IDs."},
+                "select": _select_schema(
+                    "Instead of entity_id: one row for the whole window per entity these search_entities filters "
+                    "match (diagnostic and configuration entities only with include_diagnostic)."
+                ),
                 "start_time": {"type": "string", "description": "ISO or relative time. Defaults to 30 days before end_time."},
                 "end_time": {"type": "string", "description": "ISO or relative time. Defaults to now."},
                 "period": {
@@ -221,14 +297,13 @@ _ENTITY_TOOL_DEFS: list[dict] = [
                     "minimum": 1,
                     "maximum": 1000,
                     "default": 100,
-                    "description": "Requested page size. Safe per-period caps can lower effective_limit.",
+                    "description": "Requested page size, counted from the start of the range. Safe per-period caps can lower effective_limit.",
                 },
                 "cursor": {
                     "type": "string",
                     "description": "The ISO UTC next_cursor from the previous page.",
                 },
             },
-            "required": ["entity_id"],
         },
     },
     {'name': 'create_calendar_event',
@@ -382,19 +457,68 @@ _ENTITY_TOOL_DEFS: list[dict] = [
                                                                   'calendar write.'}},
                      'required': ['entity_id']}},
     {
-        "name": "get_calendar_events",
+        "name": "get_todo_items",
         "description": (
-            "List events from an accessible calendar entity within a time window (defaults to the next 7 "
-            "days, maximum window 31 days). Includes integration-provided uid, recurrence_id and rrule, plus content_hash for writes. Requires READ access to the calendar entity. "
-            "Events are paged in start order (total, has_more, next_offset)."
+            "Read the items on todo lists (shopping lists and the like) the access key can READ: one list, a list of "
+            "them, or every one when entity_id is omitted. Items keep each list's own order and carry uid, summary, "
+            "status (needs_action or completed), and due and description when set; each names its list. status "
+            "narrows to open or completed items. Pages with limit and offset (total, has_more, next_offset)."
         ),
         "inputSchema": {
             "type": "object",
             "properties": {
-                "entity_id": {"type": "string", "description": "A calendar.* entity ID."},
+                "entity_id": {"oneOf": [{"type": "string"}, {"type": "array", "items": {"type": "string"}, "minItems": 1}],
+                              "description": "A todo.* entity ID, or a list of them; omit for every list."},
+                "status": {"oneOf": [{"type": "string", "enum": ["needs_action", "completed"]},
+                                     {"type": "array", "items": {"type": "string", "enum": ["needs_action", "completed"]},
+                                      "minItems": 1}],
+                           "description": "needs_action for open items, completed, or both (the default)."},
+                "limit": {"type": "integer", "minimum": 1, "maximum": 500, "default": 100, "description": "Maximum items to return."},
+                "offset": {"type": "integer", "minimum": 0, "default": 0, "description": "Items to skip; pass next_offset from the previous page."},
+            },
+        },
+    },
+    {
+        "name": "set_todo_item",
+        "description": (
+            "Add, update or remove one item on a todo list the access key can WRITE. add takes summary (the "
+            "item's text) and optional due and description. update renames (summary), completes or reopens (status), "
+            "or sets due or description of the item named by item: its uid from get_todo_items, or its exact "
+            "summary when only one item has it. remove deletes that item. Runs as the todo service through "
+            "call_service, with the same scope, MESA and approval checks, then reads the list back: the result "
+            "gives the item as the list now holds it and verified."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "entity_id": {"type": "string", "description": "The todo.* entity ID of the list."},
+                "action": {"type": "string", "enum": ["add", "update", "remove"], "description": "What to do."},
+                "item": {"type": "string", "description": "update and remove: the item's uid, or its exact summary."},
+                "summary": {"type": "string", "maxLength": 1000, "description": "add: the item's text. update: its new text."},
+                "status": {"type": "string", "enum": ["needs_action", "completed"], "description": "update: completed or needs_action."},
+                "due": {"type": "string", "description": "A date (2026-11-02) or a date and time (2026-11-02T18:00), in Home Assistant's local time when no offset is given."},
+                "description": {"type": "string", "maxLength": 4000, "description": "A longer note on the item, where the list supports one."},
+            },
+            "required": ["entity_id", "action"],
+        },
+    },
+    {
+        "name": "get_calendar_events",
+        "description": (
+            "List events from an accessible calendar entity within a time window (defaults to the next 7 "
+            "days, maximum window 31 days). Includes integration-provided uid, recurrence_id and rrule, plus content_hash for writes. Requires READ access to the calendar entity. "
+            "Events are paged in start order (total, has_more, next_offset). Omit entity_id, or pass a list, "
+            "to read every accessible calendar, or those, in one call: events merged in start order, each "
+            "naming its calendar."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "entity_id": {"oneOf": [{"type": "string"}, {"type": "array", "items": {"type": "string"}, "minItems": 1}],
+                              "description": "A calendar.* entity ID, or a list of them; omit for every calendar."},
                 "start_time": {
                     "type": "string",
-                    "description": "ISO timestamp or relative string (24h, 7d). Defaults to now.",
+                    "description": "ISO timestamp or relative string (24h ago, +7d ahead). Defaults to now.",
                 },
                 "end_time": {
                     "type": "string",
@@ -403,15 +527,15 @@ _ENTITY_TOOL_DEFS: list[dict] = [
                 "limit": {"type": "integer", "minimum": 1, "maximum": 500, "default": 100, "description": "Maximum events to return."},
                 "offset": {"type": "integer", "minimum": 0, "default": 0, "description": "Events to skip; pass next_offset from the previous page."},
             },
-            "required": ["entity_id"],
         },
     },
     {
         "name": "call_service",
         "description": (
-            "Call a Home Assistant service with explicit targets; targetless services are unsupported. Targets (entity_id, area_id, "
-            "device_id, or 'all') are resolved and flattened to the entities this access key can write; "
-            "out-of-scope targets are dropped silently. The call passes the capability gate and "
+            "Call a Home Assistant service. Target groups (kind entity, device, area or all) are resolved "
+            "and flattened to the entities this access key can write; out-of-scope targets are dropped "
+            "silently. A service without a target is refused, except the core reloads (cap_yaml_edit), "
+            "homeassistant.restart and stop (cap_restart) and ESPHome device actions (write on the device). The call passes the capability gate and "
             "per-entity MESA policy, so it may return pending_approval or be refused. Preview a risky "
             "call first with dry_run_service (and whatif to see which automations it would trigger). "
             "For runtime controls use automation.trigger (run actions, skip_condition defaults true), "
@@ -428,7 +552,7 @@ _ENTITY_TOOL_DEFS: list[dict] = [
             "type": "object",
             "properties": {
                 "service": {"type": "object", "description": "Service to execute.", "additionalProperties": False, "properties": {"domain": {"type": "string", "description": "Service domain."}, "name": {"type": "string", "description": "Service name."}, "data": {"type": "object", "description": "Additional service data without target selectors; selectors here are refused."}}, "required": ["domain", "name"]},
-                "targets": {"type": "array", "minItems": 1, "maxItems": SERVICE_TARGET_MAX_GROUPS, "description": "Explicit target groups required for supported calls; use kind all for intentional domain-wide targeting.", "items": {"type": "object", "additionalProperties": False, "properties": {"kind": {"type": "string", "enum": ["entity", "device", "area", "all"], "description": "Target selector kind."}, "ids": {"type": "array", "items": {"type": "string"}, "minItems": 1, "maxItems": SERVICE_TARGET_MAX_IDS, "description": "IDs for entity, device, or area targets."}}, "required": ["kind"]}},
+                "targets": {"type": "array", "minItems": 1, "maxItems": SERVICE_TARGET_MAX_GROUPS, "description": "Explicit target groups required for supported calls; use kind all for intentional domain-wide targeting.", "items": {"type": "object", "additionalProperties": False, "properties": {"kind": {"type": "string", "enum": ["entity", "device", "area", "all"], "description": "Target selector kind."}, "ids": {"type": "array", "items": {"type": "string"}, "minItems": 1, "maxItems": SERVICE_TARGET_MAX_IDS, "description": "IDs for entity, device, or area targets; an area may also be named by its name or an alias."}}, "required": ["kind"]}},
             },
             "required": ["service"],
         },
@@ -442,7 +566,7 @@ _ENTITY_TOOL_DEFS: list[dict] = [
             "access key's currently pending approvals (id, tool, created/expires), useful after a reconnect "
             "or to resume polling. Also returns agent_recovery records for this access key's interrupted "
             "Phoenix-owned provider turns. outcome_unknown blocks further writes until an administrator "
-            "checks Home Assistant and reviews it in Phoenix MCP > Needs attention. dispatch_result is a receipt, not "
+            "checks Home Assistant and reviews it in the Needs Attention window of the Phoenix MCP panel. dispatch_result is a receipt, not "
             "proof of physical completion. Never replay an uncertain action. Access keys only see their own records."
         ),
         "inputSchema": {
@@ -491,7 +615,7 @@ _ENTITY_TOOL_DEFS: list[dict] = [
             "capabilities are Confirm-gated (will require admin approval), write scope, rate limits, and a "
             "tool-level gate map (tools.usable / tools.needs_approval / tools.unavailable) so you know "
             "which tools run directly, which return pending_approval, and which you cannot use. "
-            "Call this at session start to orient. No capability required; an access key only ever sees itself."
+            + ORIENTATION_GUIDANCE + " No capability required; an access key only ever sees itself."
         ),
         "inputSchema": {"type": "object", "properties": {}},
     },
@@ -535,10 +659,17 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
             "records this nowhere else, so call it before removing an integration or deleting an energy "
             "sensor to see whether the Energy dashboard depends on it; referenced_entities lists every "
             "entity the configuration points at. configured is false when Energy was never set up. "
+            "With start_time or end_time it also returns usage: how much each source measured (grid imported "
+            "and exported, solar produced, battery discharged and charged, gas and water used) and each "
+            "device consumed in that range, plus electricity_used, the home's use as the Energy dashboard "
+            "sums it, so how much energy the house or each device used is this one call. "
             "Read-only: this cannot change the Energy dashboard."
         ),
         "cap": "cap_config_read",
-        "inputSchema": {"type": "object", "properties": {}},
+        "inputSchema": {"type": "object", "properties": {
+            "start_time": {"type": "string", "description": "ISO timestamp or relative string (24h, 7d); adds usage from then. Defaults to 24h before end_time."},
+            "end_time": {"type": "string", "description": "ISO timestamp or relative string; adds usage until then. Defaults to now."},
+        }},
     },
     {
         "name": "get_solar_forecast",
@@ -631,9 +762,10 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
     {
         "name": "render_template",
         "description": (
-            "Render a Jinja2 template in Home Assistant. Templates are scoped to this access key: states() of "
-            "an out-of-scope entity returns 'unknown', and enumeration helpers like area_entities() return "
-            "empty. Discover entities with search_entities, not template enumeration."
+            "Render a Jinja2 template in a separate, time-limited worker over a copy of the states this access "
+            "key can read, so the result does not see changes made while it renders. states() of an "
+            "out-of-scope entity returns 'unknown', and helpers that need Home Assistant itself, such as "
+            "area_entities() or device_attr(), return empty. Discover entities with search_entities, not template enumeration."
         ),
         "cap": "cap_template_render",
         "inputSchema": {
@@ -648,11 +780,19 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
         "name": "list_automations",
         "description": (
             "List Home Assistant automations with the id needed to read or edit each one "
-            "(entity_id, alias, automation id, and current state). Use get_automation to read "
-            "one's full configuration."
+            "(entity_id, alias, automation id, current state, and when it last triggered, so "
+            "which ran today or have not run for a month needs no other call). Use get_automation to read "
+            "one's full configuration. trigger and query search every configuration in one call, "
+            "instead of reading each automation: only the matches are listed, each with its "
+            "triggers (type and when it fires) and, for query, where the text appears. They need "
+            "the capability get_automation needs."
         ),
         "cap": "cap_registry_read",
-        "inputSchema": {"type": "object", "properties": {}},
+        "inputSchema": {"type": "object", "properties": {
+            "trigger": {"oneOf": [{"type": "string"}, {"type": "array", "items": {"type": "string"}}],
+                        "description": "Trigger types to match, such as time, sun, time_pattern or state."},
+            "query": {"type": "string", "description": "Text that must appear in the configuration, such as an action or entity ID."},
+        }},
     },
     {
         "name": "get_automation",
@@ -670,7 +810,7 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
         "inputSchema": {
             "type": "object",
             "properties": {
-                "automation_id": {"type": "string", "description": "The automation's stored id (from list_automations or its 'id' state attribute) or its entity_id."},
+                "automation_id": {"type": "string", "description": "The automation's stored id (from list_automations or its 'id' state attribute) or its entity_id. A YAML automation without an id: has no stored configuration to read."},
             },
             "required": ["automation_id"],
         },
@@ -678,8 +818,8 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
     {
         "name": "create_automation",
         "description": (
-            "Create a new Home Assistant automation in the YAML config (split !include layouts are "
-            "routed to the correct file automatically). Do not include an 'id' (Phoenix MCP "
+            "Create a new Home Assistant automation in automations.yaml, which configuration.yaml must load "
+            "with a plain !include; any other layout is refused. Do not include an 'id' (Phoenix MCP "
             "assigns and returns it unless automation_id is supplied). Creation refuses an occupied ID, "
             "even with the same alias; use get_automation then edit_automation for replacement. "
             "HA validates before saving; invalid configs are rejected with an "
@@ -725,7 +865,8 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
     {
         "name": "delete_automation",
         "description": (
-            "Permanently delete a Home Assistant automation from the YAML config. "
+            "Delete a Home Assistant automation from the YAML config. The deletion is recorded in the change "
+            "history, where an administrator can usually restore it. "
             "Use search_entities with domain 'automation' to find automations; an automation's id is in its 'id' state attribute and is returned by create_automation. "
             "Phoenix-created automations have IDs prefixed with 'phoenix_mcp_'."
         ),
@@ -815,7 +956,8 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
     {
         "name": "delete_script",
         "description": (
-            "Permanently delete a Home Assistant script from the YAML config. "
+            "Delete a Home Assistant script from the YAML config. The deletion is recorded in the change "
+            "history, where an administrator can usually restore it. "
             "Use the script_id storage key from list_scripts; a renamed entity_id may have a different suffix."
         ),
         "cap": "cap_script_write",
@@ -972,10 +1114,11 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
         "name": "get_logbook",
         "description": (
             "Read the human-readable Home Assistant logbook in chronological order. Narrow by up to "
-            "100 accessible entities and devices together, or by one causal context_id. Home-wide "
+            "100 accessible entities and up to 100 accessible devices, or by one causal context_id. Home-wide "
             "queries are limited to 7 days and resource- or context-narrowed queries to 31 days. The "
             "response reports the post-permission, post-search total before limiting and whether the "
-            "most-recent slice is truncated. This is narrative event history; get_logs is the system "
+            "most-recent slice is truncated; when it is, pass older_end_time as end_time with the same "
+            "start_time to read the earlier entries. This is narrative event history; get_logs is the system "
             "error log, and get_history is raw state history."
         ),
         "cap": "cap_log_read",
@@ -984,7 +1127,7 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
             "properties": {
                 "start_time": {
                     "type": "string",
-                    "description": "ISO timestamp or relative string (24h, 7d, 2w). Defaults to 24h.",
+                    "description": "ISO timestamp or relative string (24h, 7d, 2w). Defaults to 24h before now, also when end_time is given.",
                 },
                 "end_time": {
                     "type": "string",
@@ -1341,7 +1484,8 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
             "Report every radio network this Home Assistant manages: protocol, backend "
             "(Zigbee via Zigbee2MQTT or ZHA in this version), channel, PAN id, coordinator, and whether "
             "the network is currently open for joining. Returns an empty list when no radio network is "
-            "present. Network keys and other credentials are never included."
+            "present; absent names zigbee when neither Zigbee2MQTT nor ZHA is set up, so there are no "
+            "Zigbee devices to look for. Network keys and other credentials are never included."
         ),
         "cap": "cap_diagnostics",
         "inputSchema": {"type": "object", "properties": {}},
@@ -1751,6 +1895,36 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
         },
     },
     {
+        "name": "send_notification",
+        "description": (
+            "Send a notification to a person or a screen. target is persistent_notification (Home Assistant's own "
+            "notification list), a notify.* entity the access key can WRITE, or a notify service such as "
+            "mobile_app_<phone>; an unknown target is refused with the list of targets this key can use. Mobile app "
+            "commands such as request_location_update are not sent. The result says sent, and verified only for "
+            "persistent_notification, since Home Assistant does not report delivery to a device."
+        ),
+        "cap": "cap_notify",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "target": {"type": "string", "description": "persistent_notification, a notify.* entity, or a notify service name."},
+                "message": {"type": "string", "maxLength": 4000, "description": "The text to send."},
+                "title": {"type": "string", "maxLength": 200, "description": "An optional title."},
+            },
+            "required": ["target", "message"],
+        },
+    },
+    {
+        "name": "get_notifications",
+        "description": (
+            "Read Home Assistant's persistent notifications (the bell in the sidebar: new devices found, repairs, "
+            "login attempts, messages automations left), newest first. Addresses and entity IDs this access key "
+            "cannot read are redacted."
+        ),
+        "cap": "cap_log_read",
+        "inputSchema": {"type": "object", "properties": {}},
+    },
+    {
         "name": "restart_ha",
         "description": "Restart Home Assistant.",
         "cap": "cap_restart",
@@ -1766,6 +1940,48 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
                 "message": {"type": "string", "description": "Message to announce throughout the home."},
             },
             "required": ["message"],
+        },
+    },
+    {
+        "name": "list_labels",
+        "description": (
+            "List the labels and the categories (by scope: automation, script, scene, helpers) carried by something "
+            "this access key can read, with their IDs for set_entity, set_device and set_area_or_floor, and how many "
+            "readable entities and devices carry each. Pass-through keys also see unused ones."
+        ),
+        "cap": "cap_registry_read",
+        "inputSchema": {"type": "object", "properties": {}},
+    },
+    {
+        "name": "set_label_or_category",
+        "description": (
+            "Create, rename or edit, or delete a label or a category through cap_registry_write. A change needs WRITE "
+            "on everything that carries the label or category, since renaming or deleting it changes those too; one "
+            "nothing carries, and creating a new one, need pass-through authority. Use IDs from list_labels. Deleting "
+            "removes it from everything that carries it, automations that target it stop matching, and it cannot be "
+            "restored automatically; an update can be restored from version history."
+        ),
+        "cap": "cap_registry_write",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "kind": {"type": "string", "enum": ["label", "category"], "description": "What to change."},
+                "operation": {"type": "string", "enum": ["create", "update", "delete"], "description": "create, update or delete."},
+                "id": {"type": "string", "description": "update and delete: the label_id or category_id from list_labels."},
+                "scope": {"type": "string", "enum": ["automation", "script", "scene", "helpers"],
+                          "description": "Categories only: which kind of item the category groups."},
+                "changes": {
+                    "type": "object", "additionalProperties": False,
+                    "description": "create and update: the fields to set. Categories take name and icon only.",
+                    "properties": {
+                        "name": {"type": "string", "description": "The name; required to create."},
+                        "color": {"type": ["string", "null"], "description": "Labels: a color name or hex code; null clears."},
+                        "icon": {"type": ["string", "null"], "description": "An mdi: icon; null clears."},
+                        "description": {"type": ["string", "null"], "description": "Labels: a description; null clears."},
+                    },
+                },
+            },
+            "required": ["kind", "operation"],
         },
     },
     {
@@ -1816,6 +2032,7 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
                     "description": "Filter by device-registry disabled state.",
                 },
                 "area": {"type": "string", "description": "An area id, name or alias, or a floor id, name or alias for every area on it."},
+                "has_area": {"type": "boolean", "description": "false finds devices with no area, their own or a main device's; true only those with one."},
                 "integration": {"type": "string", "description": "Owning integration domain, e.g. zha or hue."},
                 "query": {"type": "string", "description": "Case-insensitive text matched against name, manufacturer and model."},
                 "limit": {"type": "integer", "minimum": 1, "maximum": 500, "default": 100, "description": "Maximum rows to return."},
@@ -1843,14 +2060,17 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
     {
         "name": "search_entities",
         "description": (
-            "Search the entities this access key can access by name, domain, area, device_class, or state. "
+            "Search the entities this access key can access by name, domain, area, device_class, state, integration, "
+            "or radio (zigbee, zwave, matter or bluetooth, read from the device registry). "
             "By default this searches live enabled entities. Set registry_state to disabled to find "
             "explicitly disabled registry entries, or all to also include enabled registry entries "
             "whose integration currently publishes no state. Registry-only access is inherited from "
             "the entity's device or domain. "
             "For semantic/profile-based discovery (tags, classification, control mode) use mesa_query_profiles instead. "
-            "A multi-word query matches entities containing all the words (in entity_id, friendly_name, or the "
-            "entity's Assist aliases), and results are ranked by relevance so the best matches lead. Filters combine "
+            "A multi-word query matches entities containing all the words (in entity_id, friendly_name, the "
+            "entity's Assist aliases, or its area, floor, label, device name, manufacturer or model), and results are "
+            "ranked by relevance so the best matches lead, name matches first; a row found through its area, floor, "
+            "labels or device names them in matched. Filters combine "
             "with AND. Returns a compact list (entity_id, state, friendly_name, domain, area); each "
             "result also carries control_mode when its MESA nature is non-default (read_only, confirm, prohibited), "
             "so you can spot restricted entities without a follow-up describe_entity call, entity_category "
@@ -1859,7 +2079,13 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
             "entity is or how to use it, when one is set. "
             "total counts all scoped matching entities before paging; count is the number returned. When has_more "
             "is true, call again with offset set to next_offset for the next page. "
-            "For counts alone, use limit=1 to avoid enumerating the full list."
+            "When the matches span several domains, by_domain counts all of them per domain. "
+            "For counts alone (a total, or by_domain), use limit=1 to avoid enumerating the full list. "
+            "To read the matching entities' current values too (a temperature with its unit, a thermostat's "
+            "hvac_action), add projection exactly as get_state takes it, which saves a get_state call. "
+            "To learn how the matching entities behaved over a period (which did not trigger this week), skip this "
+            "listing: call get_history with mode summary and these filters as select, which finds and summarizes "
+            "them in one call."
         ),
         "cap": "cap_search",
         "inputSchema": {
@@ -1871,10 +2097,39 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
                     "description": "Restrict to one or more domains, e.g. light or [light, switch].",
                 },
                 "area": {"type": "string", "description": "An area id, name or alias, or a floor id, name or alias, which matches every area on that floor (case-insensitive)."},
-                "device_class": {"type": "string", "description": "Exact device_class attribute, e.g. motion, temperature."},
+                "has_area": {"type": "boolean", "description": "false finds entities with no area, directly or through their device; true only those with one."},
+                "device_class": {
+                    "oneOf": [{"type": "string"}, {"type": "array", "items": {"type": "string"}}],
+                    "description": "One or more exact device_class values, e.g. motion or [door, window].",
+                },
+                "integration": {
+                    "oneOf": [{"type": "string"}, {"type": "array", "items": {"type": "string"}}],
+                    "description": "One or more integrations that provide the entity, e.g. esphome or [hue, zha].",
+                },
+                "radio": {
+                    "oneOf": [
+                        {"type": "string", "enum": list(SEARCH_RADIO_TYPES)},
+                        {"type": "array", "items": {"type": "string", "enum": list(SEARCH_RADIO_TYPES)}},
+                    ],
+                    "description": (
+                        "Only entities whose device connects this way: zigbee (ZHA or Zigbee2MQTT), zwave, matter "
+                        "(Thread or Wi-Fi) or bluetooth."
+                    ),
+                },
+                "power": {
+                    "type": "string", "enum": list(SEARCH_POWER_TYPES),
+                    "description": (
+                        "battery: only entities whose device runs on a battery, shown by a diagnostic battery level or "
+                        "low-battery entity; phones and battery cameras count, a car's or home storage battery does not. "
+                        "Home Assistant records no mains or other power source."
+                    ),
+                },
                 "state": {"type": "string", "description": "Exact current state value, e.g. on, off, home."},
                 "unavailable": {"type": "boolean", "description": "If true, only entities in state unavailable or unknown."},
-                "stale_hours": {"type": "number", "description": "Only entities unchanged for at least this many hours."},
+                "stale_hours": {"type": "number", "description": (
+                    "Only entities unchanged for at least this many hours, by last_changed, which Home Assistant "
+                    "resets at every restart."
+                )},
                 "registry_state": {
                     "type": "string",
                     "enum": ["enabled", "disabled", "all"],
@@ -1885,7 +2140,8 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
                     "type": "boolean", "default": False,
                     "description": "Add is_group and visible direct member_entity_ids. Lists may be incomplete; hidden HA entities remain visible when permitted. is_group false means no valid explicit membership, not proof of a leaf; null means no live state or resource bounds prevented inspection. Discovery only, not execution or approval scope.",
                 },
-                "limit": {"type": "integer", "minimum": 1, "maximum": 500, "default": 100, "description": "Maximum matching entities to return."},
+                "projection": {"type": "object", "description": "Optional, as in get_state: compact adds each live entity's key attributes, full all of its state, fields exact fields.", "additionalProperties": False, "properties": {"kind": {"type": "string", "enum": ["compact", "full", "fields"], "description": "Projection mode."}, "fields": {"type": "array", "items": {"type": "string"}, "description": "Exact fields, e.g. attr.unit_of_measurement or last_changed; only with kind fields."}}, "required": ["kind"]},
+                "limit": {"type": "integer", "minimum": 1, "maximum": SEARCH_ENTITIES_MAX_LIMIT, "default": 100, "description": "Maximum matching entities to return."},
                 "offset": {"type": "integer", "minimum": 0, "default": 0, "description": "Number of ranked matches to skip; pass next_offset from the previous page."},
             },
         },
@@ -1923,11 +2179,13 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
         "name": "get_overview",
         "description": (
             "A compact summary of the home as this access key sees it: total accessible entities, "
-            "counts by domain and by area, how many are unavailable, and the deployment MESA mode "
+            "counts by domain and by area, how many are unavailable and how many unknown (normal for a "
+            "never-pressed button, a scene or an event), and the deployment MESA mode "
             "(off | advisory | enforced) so you know whether to expect confirm/read-only gates. "
             "When MESA is active it also lists the operator-set prohibited and read-only entities "
             "with reasons, so this is the fastest way to learn what is off-limits or must not be "
-            "controlled, prefer it over enumerating profiles. Good for orienting at session start."
+            "controlled, prefer it over enumerating profiles. Use it for a question about the home as a "
+            "whole; a question about particular entities can go straight to search_entities."
         ),
         "cap": "cap_search",
         "inputSchema": {"type": "object", "properties": {}},
@@ -1977,19 +2235,20 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
             "Get execution traces for an accessible automation or script, to debug why it did or did not run. "
             "Without run_id, returns a list of recent run summaries (newest first); an empty list comes with a "
             "diagnosis (disabled, never run, or no retained trace). With run_id, returns that run; set summary "
-            "true for a condensed view that highlights the error and last step. Values recorded for entities "
-            "outside this access key's read scope are redacted. Returns 'not found' if the automation or script "
-            "is not accessible."
+            "true for a condensed view that highlights the error and last step. Without automation_id, returns "
+            "every accessible automation and script with retained runs: counts by outcome, the last run, and "
+            "each run that recorded an error, errors first: one call to learn whether anything failed. Values "
+            "recorded for entities outside this access key's read scope are redacted. Returns 'not found' if "
+            "the automation or script is not accessible."
         ),
         "cap": "cap_traces",
         "inputSchema": {
             "type": "object",
             "properties": {
-                "automation_id": {"type": "string", "description": "Automation entity_id (automation.x) or its automation id, or a script entity_id (script.x) for script traces."},
+                "automation_id": {"type": "string", "description": "Automation entity_id (automation.x) or its automation id, or a script entity_id (script.x) for script traces. Omit for the overview of all."},
                 "run_id": {"type": "string", "description": "Optional specific run to fetch."},
                 "summary": {"type": "boolean", "description": "Condensed view highlighting error and last step.", "default": False},
             },
-            "required": ["automation_id"],
         },
     },
     {
@@ -2043,10 +2302,10 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
         "description": (
             "List the ESPHome device YAML files this access key can see, or read one. Credentials "
             "(API encryption keys, wifi/OTA/MQTT passwords, and anything matching the ESPHome "
-            "secrets.yaml) are replaced with __PHOENIX_REDACTED__<path>__ placeholders; leave "
-            "them exactly as they are when editing and they are restored on write. "
-            "content_hash is the hash of the real file, so it still works with expected_hash. "
-            "defined_secrets lists the secret NAMES available for !secret references."
+            "secrets.yaml) are replaced with __PHOENIX_REDACTED__<path>__ placeholders. Read-only: "
+            "the operator edits device YAML in the ESPHome dashboard. content_hash changes "
+            "whenever the visible content does. defined_secrets lists the secret NAMES available "
+            "for !secret references."
         ),
         "cap": "cap_esphome_yaml",
         "inputSchema": {
@@ -2065,7 +2324,7 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
     {
         "name": "search_esphome_yaml",
         "requires": "esphome",
-        "description": "Search authorized local ESPHome YAML, including nested folders. Credentials and inaccessible entity references are masked before matching. Returns line numbers and bounded context, with paging after scope filtering. incomplete means a file could not be parsed or a scan budget was reached. Results are read previews; use get_esphome_yaml before editing.",
+        "description": "Search authorized local ESPHome YAML, including nested folders. Credentials and inaccessible entity references are masked before matching. Returns line numbers and bounded context, with paging after scope filtering. incomplete means a file could not be parsed or a scan budget was reached. Results are read previews; use get_esphome_yaml to read a whole file.",
         "cap": "cap_esphome_yaml",
         "inputSchema": {
             "type": "object",
@@ -2099,7 +2358,7 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
     {
         "name": "list_esphome_devices",
         "requires": "esphome_builder",
-        "description": "List configured ESPHome Device Builder devices this access key may read, and optionally discover importable devices. Unadopted discovery uses the ESPHome authoring capability; adopted devices retain entity scope even when unloaded. Network addresses, MACs, import URLs, keys and raw configuration are withheld. Filtering and paging apply to the authorized projection.",
+        "description": "List configured ESPHome Device Builder devices this access key may read, and optionally discover importable devices. Unadopted discovery uses the ESPHome authoring capability; adopted devices retain entity scope even when unloaded. Configured rows carry the firmware the device runs (deployed_version), whether a build would update it (update_available), whether ESPHome would respell its top-level file (migration_available; see validate_esphome_yaml), and whether an update is armed for its next wake. Network addresses, MACs, import URLs, keys and raw configuration are withheld. Filtering and paging apply to the authorized projection.",
         "cap": "cap_esphome_yaml",
         "inputSchema": {
             "type": "object",
@@ -2185,7 +2444,10 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
             "Check one ESPHome device YAML file for configuration errors, using the ESPHome "
             "Device Builder. This validates the file AS IT IS ON DISK. It does not compile or "
             "flash anything, and the device is untouched either way. Returns whether the config is "
-            "valid plus the validator's output, with any credentials removed."
+            "valid plus the validator's output, with any credentials removed. Also reports "
+            "migration: the renamed keys and actions the installed ESPHome would respell in this "
+            "file, with a masked diff. Nothing is migrated; the operator applies it in the ESPHome "
+            "dashboard."
         ),
         "cap": "cap_esphome_yaml",
         "inputSchema": {
@@ -2224,7 +2486,10 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
             "Look up ESPHome component documentation: pass component_ids for the full "
             "configuration schema of specific components (use this instead of guessing config "
             "keys), a query or category to search the catalog, or neither to list the "
-            "categories. Components not found are simply omitted from the response."
+            "categories. Components not found are simply omitted from the response. Advanced "
+            "and YAML-only options are left out unless include_advanced is true. Pass file "
+            "instead to list the components one device uses: declared (read from the file, "
+            "names only) and loaded (what its last build compiled, including packages)."
         ),
         "cap": "cap_esphome_yaml",
         "inputSchema": {
@@ -2234,6 +2499,8 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
                     "type": "array", "items": {"type": "string"},
                     "description": "Component ids to fetch in full, e.g. [\"dht\", \"bme280\"]. Max 10.",
                 },
+                "include_advanced": {"type": "boolean", "description": "With component_ids, also return advanced and YAML-only options (default false)."},
+                "file": {"type": "string", "description": "Device YAML filename: list the components that configuration uses instead of looking any up."},
                 "query": {"type": "string", "description": "Search text."},
                 "category": {"type": "string", "description": "Filter by category."},
                 "exclude_category": {"type": "string", "description": "Exclude a category from a search."},
@@ -2250,16 +2517,33 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
         "description": (
             "The triggers, actions and conditions available inside one ESPHome device's YAML, "
             "scoped to the components that device actually loads, plus its declared scripts and "
-            "component ids. Use this when writing on_... automations for a device so you build "
-            "them from what that device really supports."
+            "component ids. Use this when explaining or planning on_... automations for a device "
+            "so they are built from what that device really supports. With existing true, lists "
+            "the automations the file already defines instead, each with its line range and "
+            "masked YAML. With refs and no file, returns the documentation (fields and allowed "
+            "values) of specific building blocks."
         ),
         "cap": "cap_esphome_yaml",
         "inputSchema": {
             "type": "object",
             "properties": {
-                "file": {"type": "string", "description": "Device YAML filename, e.g. living-room.yaml"},
+                "file": {"type": "string", "description": "Device YAML filename, e.g. living-room.yaml. Required unless refs is given."},
+                "existing": {"type": "boolean", "description": "With file, list the automations the file already defines (default false)."},
+                "refs": {
+                    "type": "array", "maxItems": 20,
+                    "description": "Building blocks to document, without file. Max 20.",
+                    "items": {
+                        "type": "object", "additionalProperties": False,
+                        "description": "One building block.",
+                        "properties": {
+                            "type": {"type": "string", "enum": ["triggers", "actions", "conditions", "light_effects", "filters"], "description": "The building block kind."},
+                            "id": {"type": "string", "description": "Its id as get_esphome_automations lists it, e.g. light.turn_on."},
+                        },
+                        "required": ["type", "id"],
+                    },
+                },
+                "include_advanced": {"type": "boolean", "description": "With refs, also return advanced and YAML-only fields (default false)."},
             },
-            "required": ["file"],
         },
     },
     {
@@ -2314,9 +2598,12 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
             "immediately; poll get_esphome_job to follow the compile and then the upload. "
             "Compiling finishing does NOT mean the device was flashed. If the device is "
             "currently offline the flash is armed for its next wake instead. Compile first "
-            "with compile_esphome_firmware if you are not certain the config builds."
+            "with compile_esphome_firmware if you are not certain the config builds. If the "
+            "upload is refused because the device did not offer OTA encryption, report that "
+            "to the operator: never add allow_plaintext_upload or change a credential "
+            "yourself to get the install through."
         ),
-        "cap": "cap_esphome_flash",
+        "caps": ["cap_esphome_flash", "cap_esphome_yaml"],
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -2436,6 +2723,69 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
         },
     },
     {
+        "name": "get_esphome_history",
+        "requires": "esphome_builder",
+        "description": (
+            "The ESPHome Device Builder's saved versions of a device YAML file, with "
+            "credentials masked, to answer 'what changed?'. With file only, lists its versions "
+            "newest first. With sha, returns that version as a diff against the current file "
+            "(or against compare_to), or with view content as the whole masked file. Without "
+            "file, lists deleted configurations that history still holds. Read-only: nothing is "
+            "restored. Empty when the Builder's version history is turned off."
+        ),
+        "cap": "cap_esphome_yaml",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "file": {"type": "string", "description": "Device YAML filename, including a deleted one; omit to list deleted configurations."},
+                "sha": {"type": "string", "description": "A version's sha from the version list."},
+                "view": {"type": "string", "enum": ["diff", "content"], "description": "With sha: a masked diff (default) or the whole masked version."},
+                "compare_to": {"type": "string", "description": "With sha and view diff: another version's sha to diff against instead of the current file."},
+                "offset": {"type": "integer", "description": "Offset into the version or deleted-file list."},
+                "limit": {"type": "integer", "minimum": 1, "maximum": 50, "description": "Page size (default 20, max 50)."},
+            },
+        },
+    },
+    {
+        "name": "check_esphome_connectivity",
+        "requires": "esphome_builder",
+        "description": (
+            "Ask the ESPHome Device Builder whether it can find and reach one device right now: "
+            "DNS and mDNS resolution, a ping and its reply time, and a one-word verdict. Use it "
+            "when a device shows offline or an install cannot reach it. Addresses are withheld; "
+            "only counts and the kind of address are reported. It refreshes the Builder's own "
+            "reachability state and changes nothing on the device. Can take up to 40 seconds."
+        ),
+        "cap": "cap_esphome_yaml",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "file": {"type": "string", "description": "Device YAML filename, e.g. living-room.yaml"},
+            },
+            "required": ["file"],
+        },
+    },
+    {
+        "name": "analyze_esphome_memory",
+        "requires": "esphome_builder",
+        "description": (
+            "Build one ESPHome device and report how much flash and RAM each component uses, "
+            "to find what is filling a device up. Touches no device. Unlike "
+            "compile_esphome_firmware this waits for the result, up to 5 minutes, because the "
+            "Device Builder keeps no report afterwards; compile first so the analysis can reuse "
+            "the build. Refused while another build for the same file runs, since starting it "
+            "would cancel that build. Refused on voice, Assist and AI Task."
+        ),
+        "cap": "cap_esphome_yaml",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "file": {"type": "string", "description": "Device YAML filename, e.g. living-room.yaml"},
+            },
+            "required": ["file"],
+        },
+    },
+    {
         "name": "check_ha_config",
         "description": "Validate Home Assistant configuration and return validity, bounded error/warning counts and safe domain labels. Each error carries a value-free reason (for example a missing required key), and, for an access key with YAML editing, the config-relative file and line to fix. Messages that could echo configured values are withheld.",
         "cap": "cap_diagnostics",
@@ -2445,9 +2795,11 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
         "name": "get_relationships",
         "description": (
             "Find what still USES a set of entities, before you change or remove anything. Pass "
-            "one required scope object: kind entity, device, integration, area, or label plus its id. Ask it "
-            "the broadest way you can: 'what references this integration' is one call, where the "
-            "same question per entity can be dozens. Results are grouped by CONSUMER, each naming "
+            "one required scope object: kind entity, device, integration, area, or label plus its id, or a "
+            "list of ids. Ask it the broadest way you can: 'what references this integration' is one call, "
+            "and every helper type or every script is one list, where the same question per entity can be "
+            "dozens. 'unreferenced' names the in-scope entities no searched consumer uses: candidates, not "
+            "proof, since not_searched says what was not checked. Results are grouped by CONSUMER, each naming "
             "the in-scope entities it touches and their roles, so the response is the list of "
             "things you would have to edit. Combines Home Assistant's loaded reference graph with "
             "Phoenix's direct config scans, preserving detailed roles while adding package, blueprint, "
@@ -2464,7 +2816,7 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
         "inputSchema": {
             "type": "object",
             "properties": {
-                "scope": {"type": "object", "description": "The one scope to inspect.", "additionalProperties": False, "properties": {"kind": {"type": "string", "enum": ["entity", "device", "integration", "area", "label"], "description": "Scope kind."}, "id": {"type": "string", "description": "Identifier for the selected scope."}}, "required": ["kind", "id"]},
+                "scope": {"type": "object", "description": "The one scope to inspect.", "additionalProperties": False, "properties": {"kind": {"type": "string", "enum": ["entity", "device", "integration", "area", "label"], "description": "Scope kind."}, "id": {"oneOf": [{"type": "string"}, {"type": "array", "items": {"type": "string"}, "minItems": 1}], "description": "Identifier for the selected scope, or a list of them."}}, "required": ["kind", "id"]},
             },
             "required": ["scope"],
         },
@@ -2477,6 +2829,10 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
             "an allowlisted registry projection with name_source (custom, device, integration or none), area, "
             "domain services, references, MESA control_mode, and hint, the operator's note on what the "
             "entity is or how to use it, when one is set. "
+            "defined_by says where the entity is defined and which tool reads that definition: ui_helper (a "
+            "helper created in Home Assistant's UI, such as a Template helper; read it with get_helper_settings "
+            "and its entry_id, not from YAML), storage_helper (list_helpers), yaml (get_yaml_config, or "
+            "get_automation, get_script or get_scene), or integration. "
             "If configuration branches could not be read, 'referenced_by_not_searched' explains why the "
             "reverse-reference list is incomplete. For full "
             "semantic profile data use mesa_get_profile (requires cap_config_read). 'not found' if not accessible."
@@ -2511,15 +2867,17 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
         "name": "compare_states",
         "description": (
             "Compare the state of accessible entities between two times (ISO or relative like 24h, 7d). "
-            "Returns each entity's state at each time and whether it changed. Useful for 'what changed while I was away'."
+            "Returns each entity's state at each time and whether those two snapshots differ: a change that "
+            "reverted in between is not shown (use recent_activity or get_history summary), and changed is null "
+            "when either time has no recorded state."
         ),
         "cap": "cap_search",
         "inputSchema": {
             "type": "object",
             "properties": {
                 "entity_ids": {"type": "array", "items": {"type": "string"}, "minItems": 1, "maxItems": 100, "description": "One or more entity IDs."},
-                "t1": {"type": "string", "description": "Earlier time (ISO or relative: 24h, 7d, 2w, 1m)."},
-                "t2": {"type": "string", "description": "Later time. Defaults to now."},
+                "t1": {"type": "string", "description": "Earlier time (ISO or relative: 30min, 24h, 7d, 2w, 1mo)."},
+                "t2": {"type": "string", "description": "Later time (ISO or relative). Defaults to now."},
             },
             "required": ["entity_ids", "t1"],
         },
@@ -2551,7 +2909,8 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
         "name": "recent_activity",
         "description": (
             "Summarize which accessible entities changed state in the last N minutes (the 'catch me up' "
-            "primitive), newest first. Scoped to entities this access key can read."
+            "primitive), newest first. Scoped to entities this access key can read. A row that only repeats "
+            "the state, as Home Assistant records at a restart, is not a change."
         ),
         "cap": "cap_search",
         "inputSchema": {
@@ -2576,7 +2935,7 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
             "type": "object",
             "properties": {
                 "service": {"type": "object", "description": "Service to preview.", "additionalProperties": False, "properties": {"domain": {"type": "string", "description": "Service domain."}, "name": {"type": "string", "description": "Service name."}, "data": {"type": "object", "description": "Additional service data without target selectors; selectors here are refused."}}, "required": ["domain", "name"]},
-                "targets": {"type": "array", "minItems": 1, "maxItems": SERVICE_TARGET_MAX_GROUPS, "description": "Explicit target groups required for supported service previews.", "items": {"type": "object", "additionalProperties": False, "properties": {"kind": {"type": "string", "enum": ["entity", "device", "area", "all"], "description": "Target selector kind."}, "ids": {"type": "array", "items": {"type": "string"}, "minItems": 1, "maxItems": SERVICE_TARGET_MAX_IDS, "description": "IDs for non-all targets."}}, "required": ["kind"]}},
+                "targets": {"type": "array", "minItems": 1, "maxItems": SERVICE_TARGET_MAX_GROUPS, "description": "Explicit target groups required for supported service previews.", "items": {"type": "object", "additionalProperties": False, "properties": {"kind": {"type": "string", "enum": ["entity", "device", "area", "all"], "description": "Target selector kind."}, "ids": {"type": "array", "items": {"type": "string"}, "minItems": 1, "maxItems": SERVICE_TARGET_MAX_IDS, "description": "IDs for non-all targets; an area may also be named by its name or an alias."}}, "required": ["kind"]}},
             },
             "required": ["service"],
         },
@@ -2601,9 +2960,16 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
     },
     {
         "name": "list_scenes",
-        "description": "List Home Assistant scenes this access key can access (entity_id, name, and scene id for editing).",
+        "description": (
+            "List Home Assistant scenes this access key can access (entity_id, name, and scene id for editing). "
+            "With entity_id, only the scenes that include any of those entities, each with its members, "
+            "so finding the scenes that use an entity needs no get_scene per scene."
+        ),
         "cap": "cap_registry_read",
-        "inputSchema": {"type": "object", "properties": {}},
+        "inputSchema": {"type": "object", "properties": {
+            "entity_id": {"oneOf": [{"type": "string"}, {"type": "array", "items": {"type": "string"}, "minItems": 1}],
+                          "description": "An entity ID, or a list of them, that a listed scene must include."},
+        }},
     },
     {
         "name": "get_scene",
@@ -2750,7 +3116,7 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
     },
     {
         "name": "delete_helper",
-        "description": "Permanently delete a helper by its helper_type and helper_id. Template entities route through remove_integration, including its current integration authority and MESA checks; the response includes a recovery_id for the captured pre-delete snapshot. Inherited MESA is resolved before approval and fingerprint-rechecked at execution. Zone, tag, and person deletion require write access to that storage-backed entity; person deletion also requires write access to every linked tracker. Scanning a deleted physical tag can make Home Assistant discover it again.",
+        "description": "Delete a helper by its helper_type and helper_id. A Template helper is removed through remove_integration, so it also needs cap_integration_write and passes its MESA checks; the response includes a recovery_id for the captured pre-delete snapshot. Inherited MESA is resolved before approval and fingerprint-rechecked at execution. Zone, tag, and person deletion require write access to that storage-backed entity; person deletion also requires write access to every linked tracker. Scanning a deleted physical tag can make Home Assistant discover it again.",
         "cap": "cap_helper_write",
         "inputSchema": {
             "type": "object",
@@ -2784,8 +3150,9 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
     {
         "name": "watch_entity",
         "description": (
-            "Wait (up to timeout seconds, max 30) for an accessible entity to change state, then return "
-            "the new state. Returns changed=false if nothing changed within the window. Blocks the call until "
+            "Wait (up to timeout seconds, max 30) for an accessible entity to change state or attributes, then "
+            "return the new state. Returns changed=false if nothing changed within the window; state_changed "
+            "says whether the state itself changed, and when is the time of that update. Blocks the call until "
             "a change or the timeout. To verify an action you just took, pass until_state with the state you "
             "expect: it returns at once with reached=true when the entity is already there, so a change that "
             "landed before this call is not missed."
@@ -3037,7 +3404,7 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
     },
     {
         "name": "list_backups",
-        "description": "List existing Home Assistant backups (compact, newest first) and the available backup agents. Reports total alongside returned and truncated, so a clipped page is distinguishable from the whole list.",
+        "description": "List existing Home Assistant backups (compact, newest first, each with encrypted) and the available backup agents. Reports total alongside returned and truncated, so a clipped page is distinguishable from the whole list. agent_errors names locations that could not be read; manager_state shows a running backup.",
         "cap": "cap_backup",
         "inputSchema": {
             "type": "object",
@@ -3050,16 +3417,18 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
     {
         "name": "create_backup",
         "description": (
-            "Create a new Home Assistant backup. May require admin approval. Defaults to an "
-            "available local backup agent (auto-detected). Phoenix MCP does not support restoring backups (too "
-            "destructive); restore from the Home Assistant UI."
+            "Create a Home Assistant backup. May require admin approval. Locations (never Home Assistant Cloud, "
+            "which keeps one backup), contents and encryption follow Home Assistant's backup settings; the result "
+            f"says when it is unencrypted or local only. Waits up to {BACKUP_COMPLETION_WAIT_SECONDS} seconds: status "
+            "is completed, failed or started (still running), and created says whether it exists anywhere. Phoenix "
+            "MCP does not support restoring backups; restore from the Home Assistant UI."
         ),
         "cap": "cap_backup",
         "inputSchema": {
             "type": "object",
             "properties": {
                 "name": {"type": "string", "description": "Optional backup name."},
-                "agent_ids": {"type": "array", "items": {"type": "string"}, "description": "Backup agent ids (see list_backups available_agents); defaults to an auto-detected local agent."},
+                "agent_ids": {"type": "array", "items": {"type": "string"}, "description": "Backup agent ids (see list_backups available_agents); omit to use the backup settings."},
             },
         },
     },
@@ -3219,8 +3588,8 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
             "edit_dashboard_card / delete_dashboard_card, which do not resend the whole "
             "layout. Omit url_path for the default dashboard. Storage-mode dashboards "
             "only (YAML-mode is rejected). "
-            "Lovelace config is not strictly validated, so a malformed layout is stored "
-            "as-is. May require admin approval. Pass expected_hash (the content_hash from a "
+            "A layout whose views, sections, badges or cards are not lists would not display, so it is "
+            "refused. May require admin approval. Pass expected_hash (the content_hash from a "
             "prior get_dashboard_config) to make the write conditional: if the layout changed "
             "since you read it, the write is refused instead of overwriting the other change. "
             "A config containing the \"<redacted>\" placeholder from a lossy dashboard read is "
@@ -3501,6 +3870,7 @@ _NATIVE_TOOL_DEFS: list[dict] = [
     {
         "name": _NATIVE_TOOL_NAMES["HassSetPosition"],
         "description": "Sets the position of a device or entity",
+        "cap": "cap_physical_control",
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -3706,6 +4076,7 @@ _NATIVE_TOOL_DEFS: list[dict] = [
     {
         "name": _NATIVE_TOOL_NAMES["HassStopMoving"],
         "description": "Stops a moving device or entity",
+        "cap": "cap_physical_control",
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -3756,6 +4127,8 @@ _TOOL_ANNOTATIONS: dict[str, dict] = {
     "get_history": _annot(True, False, True),
     "get_statistics": _annot(True, False, True),
     "get_calendar_events": _annot(True, False, True),
+    "get_todo_items": _annot(True, False, True),
+    "set_todo_item": _annot(False, True, False),
     "get_calendar_write": _annot(True, False, True),
     "create_calendar_event": _annot(False, False, False),
     "update_calendar_event": _annot(False, True, False),
@@ -3817,14 +4190,20 @@ _TOOL_ANNOTATIONS: dict[str, dict] = {
     # Destructive: it discards work (a warm build cache), even though nothing it
     # can reach is a device or a configuration file.
     "clean_esphome_build": _annot(False, True, True),
-    # Not idempotent: running it twice renames twice, and the second call
-    # addresses the device by its old name, which matches nothing.
+    # Not idempotent: each call enqueues a fresh build and flash.
     "install_esphome_firmware": _annot(False, True, False),
     "get_esphome_job": _annot(True, False, True),
     "wait_for_esphome_job": _annot(True, False, True),
     "cancel_esphome_job": _annot(False, False, True),
     "get_esphome_device_logs": _annot(True, False, True),
     "decode_esphome_backtrace": _annot(True, False, True),
+    "get_esphome_history": _annot(True, False, True),
+    # Not read-only: it refreshes the Device Builder's own DNS cache and
+    # reachability verdict, though nothing on the device changes.
+    "check_esphome_connectivity": _annot(False, False, True),
+    # A build like compile, and not idempotent: each call compiles again and
+    # supersedes nothing only because it refuses while a job is in flight.
+    "analyze_esphome_memory": _annot(False, False, False),
     "check_ha_config": _annot(True, False, True),
     "get_relationships": _annot(True, False, True),
     "describe_entity": _annot(True, False, True),
@@ -3875,6 +4254,8 @@ _TOOL_ANNOTATIONS: dict[str, dict] = {
     "set_helper_settings": _annot(False, True, True),
     "set_entity": _annot(False, True, True),
     "set_area_or_floor": _annot(False, True, False),
+    "set_label_or_category": _annot(False, True, False),
+    "list_labels": _annot(True, False, True),
     "set_device": _annot(False, True, True),
     "remove_device": _annot(False, True, True),
     "delete_entity": _annot(False, True, True),
@@ -3889,6 +4270,8 @@ _TOOL_ANNOTATIONS: dict[str, dict] = {
     "delete_blueprint": _annot(False, True, True),
     # System actions.
     "restart_ha": _annot(False, True, False),
+    "send_notification": _annot(False, False, False),
+    "get_notifications": _annot(True, False, True),
     _NATIVE_TOOL_NAMES["HassBroadcast"]: _annot(False, False, False),
     "permit_zigbee_join": _annot(False, False, False),
     "reconfigure_zigbee_device": _annot(False, True, True),

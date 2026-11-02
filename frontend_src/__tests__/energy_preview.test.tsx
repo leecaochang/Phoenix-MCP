@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { render, screen } from "@testing-library/react";
-import { EnergyPreview } from "../views/ApprovalsView";
+import { EnergyPreview } from "../components/ApprovalChange";
 
 /**
  * The visual Preview for an Energy approval.

@@ -349,6 +349,7 @@ async def test_inactive_household_approval_is_a_known_refusal(hass, hass_admin_u
     assert saved.status == "failed"
     assert saved.rejected_reason == "execution_failed"
     assert saved.execution_started_at is None
+    assert saved.result["refused_before_write"] is True  # an Agent Chat turn can continue
     assert "No action was dispatched" in response.text
     assert "may have" not in response.text
     assert "Approval execution failed" not in caplog.text

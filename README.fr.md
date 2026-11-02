@@ -11,7 +11,7 @@
 
 Phoenix MCP offre à vos agents IA un accès à Home Assistant limité par périmètre et selon le principe du moindre privilège. Chaque client reçoit sa propre clé d’accès, limitée exactement aux entités que vous autorisez, avec ses propres capacités, limite de débit et date d'expiration facultative. L'audit est activé par défaut et configurable par résultat, toute clé d’accès peut être révoquée instantanément, et la couche de sécurité sémantique par entité (MESA) peut imposer une confirmation ou interdire l'accès à un appareil selon sa nature, quels que soient les droits accordés à la clé d’accès. Le mode MESA par défaut est Consultatif : la plupart des restrictions de politique avertissent seulement tant que le mode Appliqué n’est pas sélectionné ; la nature en lecture seule et les refus explicites de confidentialité restent bloquants.
 
-Phoenix MCP s'exécute entièrement dans Home Assistant, sans service distinct à déployer, sans dépendance au cloud pour le serveur principal et sans configuration au-delà du panneau Phoenix MCP. Les fonctions facultatives Chat de l'agent, vocales et Tâche d'IA envoient les conversations au fournisseur de modèle que vous configurez, sauf si vous les dirigez vers un Ollama local. Il fonctionne avec les clients MCP que vous utilisez déjà, notamment Claude Code, Cursor, ChatGPT/Codex et Gemini. Vous pouvez aussi ne pas installer de client et discuter directement dans Home Assistant. Dans les deux cas, une configuration guidée vous fait passer d’une nouvelle clé d’accès à un agent opérationnel en quelques minutes, avec un catalogue de 165 outils pour lire, contrôler et créer votre configuration. Le panneau est disponible dans plusieurs langues, suit par défaut la langue de votre profil Home Assistant et utilise l'anglais si cette langue n'est pas disponible. Home Companion et le routage décisionnel facultatif peuvent aussi envoyer des requêtes et des résultats autorisés à un fournisseur hébergé. Les clients MCP externes suivent leurs propres réglages de fournisseur et de partage des données.
+Phoenix MCP s'exécute entièrement dans Home Assistant, sans service distinct à déployer, sans dépendance au cloud pour le serveur principal et sans configuration au-delà du panneau Phoenix MCP. Les fonctions facultatives Agent Chat, vocales et Tâche d'IA envoient les conversations au fournisseur de modèle que vous configurez, sauf si vous les dirigez vers un Ollama local. Il fonctionne avec les clients MCP que vous utilisez déjà, notamment Claude Code, Cursor, ChatGPT/Codex et Gemini. Vous pouvez aussi ne pas installer de client et discuter directement dans Home Assistant. Dans les deux cas, une configuration guidée vous fait passer d’une nouvelle clé d’accès à un agent opérationnel en quelques minutes, avec un catalogue de 174 outils pour lire, contrôler et créer votre configuration. Le panneau est disponible dans plusieurs langues, suit par défaut la langue de votre profil Home Assistant et utilise l'anglais si cette langue n'est pas disponible. Home Companion et le routage décisionnel facultatif peuvent aussi envoyer des requêtes et des résultats autorisés à un fournisseur hébergé. Les clients MCP externes suivent leurs propres réglages de fournisseur et de partage des données.
 
 ## Langues
 
@@ -19,9 +19,9 @@ Le panneau prend actuellement en charge l'anglais, l'espagnol, le français, l'i
 
 ## Documentation
 
-La documentation complète, y compris la référence des outils, les autorisations, les capacités, MESA et l'API d'administration, est disponible sur **[leecaochang.github.io/Phoenix-MCP](https://leecaochang.github.io/Phoenix-MCP/)**. Les liens d'aide du panneau y renvoient.
+Le manuel est intégré au panneau : ouvrez le panneau **Phoenix MCP** et choisissez **Guide** dans le menu **Documentation**. Il explique chaque fenêtre et chaque paramètre, ce que les agents peuvent faire, les autorisations, les capacités, MESA, la sécurité et l'API d'administration, et vous pouvez y effectuer des recherches.
 
-Vous débutez ? Commencez par le **[Démarrage rapide](https://leecaochang.github.io/Phoenix-MCP/quickstart.html)** : il crée votre première clé d’accès, lui accorde l'accès à un appareil, puis vous laisse choisir entre discuter dans Home Assistant ou connecter un agent externe, le tout en quelques minutes.
+Vous débutez ? Ouvrez le panneau **Phoenix MCP** et choisissez **Configurer un agent** dans Clés d’accès. Il crée votre première clé d’accès, définit ce qu'elle peut faire, puis vous permet de discuter dans Home Assistant ou de connecter une application externe, et se termine par un test que vous pouvez suivre.
 
 ## Prérequis
 
@@ -38,7 +38,7 @@ Vous préférez une installation manuelle ? Copiez le dossier `custom_component
 
 ### Configuration
 
-Ouvrez **Paramètres > Appareils et services > Ajouter une intégration** et recherchez **Phoenix MCP**. Terminez le flux de configuration en une étape, puis ouvrez le panneau **Phoenix MCP** dans la barre latérale. Le [Démarrage rapide](https://leecaochang.github.io/Phoenix-MCP/quickstart.html) vous guidera ensuite.
+Ouvrez **Paramètres > Appareils et services > Ajouter une intégration** et recherchez **Phoenix MCP**. Terminez le flux de configuration en une étape, puis ouvrez le panneau **Phoenix MCP** dans la barre latérale et choisissez **Configurer un agent**.
 
 ## Problèmes et retours
 

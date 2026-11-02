@@ -29,6 +29,8 @@ if TYPE_CHECKING:
     from .access_key_store import AccessKeyRecord
 
 
+_WORKER_ENV_KEYS = frozenset({"PATH", "HOME", "LANG", "TMPDIR", "TZ"})
+
 async def async_render_template_for_access_key(
     template: str, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData,
 ) -> str:
@@ -59,10 +61,13 @@ async def async_render_template_for_access_key(
                 sys.executable, str(Path(__file__).with_name("template_worker.py")),
                 stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
-                # HA adds installed integration dependencies to sys.path at runtime.
-                # A fresh interpreter must receive those same import locations.
+                # Only locale and path basics are inherited, never HA's credentials
+                # (SUPERVISOR_TOKEN on HAOS). HA adds installed integration
+                # dependencies to sys.path at runtime, so a fresh interpreter must
+                # receive those same import locations.
                 env={
-                    **os.environ,
+                    **{key: value for key, value in os.environ.items()
+                       if key in _WORKER_ENV_KEYS or key.startswith("LC_")},
                     "PYTHONPATH": os.pathsep.join(sys.path),
                     # HA uses mimalloc, whose large virtual reservations conflict
                     # with a small RLIMIT_AS. Keep this worker on the bounded

@@ -1,0 +1,568 @@
+/*
+ * Color themes. Each theme only re-values tokens on the host element, so every
+ * window, menu and pop-out repaints together. The default theme ("spartan")
+ * sets no attribute; the others set data-phx-palette on the host, from the
+ * per-browser choice in Settings > General. Loaded after the panel and dock
+ * stylesheets so the chrome rules below win at equal specificity.
+ *
+ * A theme writes three blocks with the same values: light, the dark block for
+ * Auto under a dark system, and forced Dark. Every token a theme's light block
+ * sets must also be set in its dark blocks, because the light block would
+ * otherwise outrank the panel's own dark defaults.
+ */
+
+/* Chrome tokens the panel stylesheet does not define; the defaults are the Spartan look. */
+:host {
+  --phx-guide-surface: #f5f7fa;
+  --phx-guide-titlebar: #edf1f6;
+  --phx-guide-border: #8fb0d9;
+  --phx-chat-frame: var(--phx-text);
+  --phx-toolbar-bg: var(--phx-raised);
+  --phx-toolbar-border: var(--phx-border);
+  --phx-toolbar-btn-bg: var(--phx-surface);
+  --phx-toolbar-btn-border: var(--phx-border);
+  --phx-toolbar-btn-fg: var(--phx-text);
+  --phx-toolbar-btn-hover: var(--phx-hover);
+  --phx-toolbar-btn-active: var(--phx-accent-lt);
+  --phx-toolbar-muted: var(--phx-text-2);
+  --phx-toolbar-current-bg: var(--phx-accent);
+  --phx-toolbar-current-fg: var(--phx-accent-fg);
+  --phx-toolbar-danger: var(--phx-error);
+  --phx-window-frame: var(--phx-border);
+  --phx-window-frame-active: var(--phx-line-strong);
+  --phx-window-titlebar: var(--phx-surface);
+  --phx-action-icon: currentColor;
+  --phx-persona-companion: #a87400;
+  --phx-persona-companion-bg: rgba(201,145,0,0.08);
+  --phx-persona-new: #2f8a4e;
+  --phx-persona-new-bg: rgba(47,138,78,0.07);
+  --phx-persona-custom: #2f6fbd;
+  --phx-persona-custom-bg: rgba(47,111,189,0.07);
+  --phx-ws-accessKeys: currentColor;
+  --phx-ws-approvals: currentColor;
+  --phx-ws-changes: currentColor;
+  --phx-ws-mesa: currentColor;
+  --phx-ws-logs: currentColor;
+  --phx-ws-settings: currentColor;
+  --phx-ws-my: currentColor;
+  --phx-ws-fg: var(--phx-toolbar-current-fg);
+  --phx-tools-bg: var(--phx-toolbar-btn-bg);
+}
+@media (prefers-color-scheme: dark) {
+  :host(:not(.phx-theme-light)) {
+    --phx-guide-surface: #191c21;
+    --phx-guide-titlebar: #1f242b;
+    --phx-guide-border: #3f5f8a;
+    --phx-persona-companion: #f0c24b;
+    --phx-persona-companion-bg: rgba(240,194,75,0.10);
+    --phx-persona-new: #7fd49b;
+    --phx-persona-new-bg: rgba(127,212,155,0.10);
+    --phx-persona-custom: #8db8ff;
+    --phx-persona-custom-bg: rgba(141,184,255,0.10);
+  }
+}
+:host(.phx-theme-dark) {
+  --phx-guide-surface: #191c21;
+  --phx-guide-titlebar: #1f242b;
+  --phx-guide-border: #3f5f8a;
+  --phx-persona-companion: #f0c24b;
+  --phx-persona-companion-bg: rgba(240,194,75,0.10);
+  --phx-persona-new: #7fd49b;
+  --phx-persona-new-bg: rgba(127,212,155,0.10);
+  --phx-persona-custom: #8db8ff;
+  --phx-persona-custom-bg: rgba(141,184,255,0.10);
+}
+
+/* Wayfinding */
+:host([data-phx-palette="wayfinding"]) {
+  --phx-ws-fg: #ffffff;
+  --phx-ws-accessKeys: #6d4bd8;
+  --phx-ws-approvals: #a35200;
+  --phx-ws-changes: #0e7490;
+  --phx-ws-mesa: #be123c;
+  --phx-ws-logs: #4d7c0f;
+  --phx-ws-settings: #57534e;
+  --phx-ws-my: #be185d;
+  --phx-tools-bg: var(--phx-surface-2);
+}
+@media (prefers-color-scheme: dark) {
+  :host([data-phx-palette="wayfinding"]:not(.phx-theme-light)) {
+    --phx-ws-fg: #111111;
+    --phx-ws-accessKeys: #b4a0ff;
+    --phx-ws-approvals: #f5b851;
+    --phx-ws-changes: #5fd4ea;
+    --phx-ws-mesa: #ff8fa3;
+    --phx-ws-logs: #b5e07a;
+    --phx-ws-settings: #c4bfba;
+    --phx-ws-my: #f59ac6;
+    --phx-tools-bg: var(--phx-surface-2);
+  }
+}
+:host([data-phx-palette="wayfinding"].phx-theme-dark) {
+  --phx-ws-fg: #111111;
+  --phx-ws-accessKeys: #b4a0ff;
+  --phx-ws-approvals: #f5b851;
+  --phx-ws-changes: #5fd4ea;
+  --phx-ws-mesa: #ff8fa3;
+  --phx-ws-logs: #b5e07a;
+  --phx-ws-settings: #c4bfba;
+  --phx-ws-my: #f59ac6;
+  --phx-tools-bg: var(--phx-surface-2);
+}
+
+/* Framed */
+:host([data-phx-palette="framed"]) {
+  --phx-bg: #eef0f6;
+  --phx-window-frame: #9aa5e6;
+  --phx-window-frame-active: #4656d6;
+  --phx-window-titlebar: #e7ebfb;
+  --phx-toolbar-border: #9aa5e6;
+  --phx-guide-surface: #f2f8f9;
+  --phx-guide-titlebar: #e6f2f4;
+  --phx-guide-border: #4fa3b3;
+  --phx-chat-frame: #4656d6;
+}
+@media (prefers-color-scheme: dark) {
+  :host([data-phx-palette="framed"]:not(.phx-theme-light)) {
+    --phx-bg: #0f1016;
+    --phx-window-frame: #3b4280;
+    --phx-window-frame-active: #8c99ff;
+    --phx-window-titlebar: #202338;
+    --phx-toolbar-border: #3b4280;
+    --phx-guide-surface: #161d20;
+    --phx-guide-titlebar: #1a2629;
+    --phx-guide-border: #2f7482;
+    --phx-chat-frame: #8c99ff;
+  }
+}
+:host([data-phx-palette="framed"].phx-theme-dark) {
+  --phx-bg: #0f1016;
+  --phx-window-frame: #3b4280;
+  --phx-window-frame-active: #8c99ff;
+  --phx-window-titlebar: #202338;
+  --phx-toolbar-border: #3b4280;
+  --phx-guide-surface: #161d20;
+  --phx-guide-titlebar: #1a2629;
+  --phx-guide-border: #2f7482;
+  --phx-chat-frame: #8c99ff;
+}
+
+/* Mist */
+:host([data-phx-palette="mist"]) {
+  --phx-bg: #e6edf6;
+  --phx-surface: #ffffff;
+  --phx-surface-2: #f1f5fa;
+  --phx-raised: #ffffff;
+  --phx-hover: #e8eff8;
+  --phx-selected: #d3e0f0;
+  --phx-accent: #2a5cad;
+  --phx-accent-hov: #1f4a8f;
+  --phx-accent-lt: #dce7f5;
+  --phx-accent-fg: #ffffff;
+  --phx-text: #152030;
+  --phx-text-2: #4b586a;
+  --phx-border: #d2dce8;
+  --phx-divider: #e3eaf2;
+  --phx-line-strong: #a9bad0;
+  --phx-field-border: #7b8ca3;
+  --phx-focus: #2a5cad;
+  --phx-read: #6b3fc4;
+  --phx-read-bg: rgba(107,63,196,0.10);
+  --phx-grey-tint: rgba(42,92,173,0.07);
+  --phx-info-bg: rgba(42,92,173,0.07);
+  --phx-agentcli-surface: #ffffff;
+  --phx-agentcli-titlebar: #eef3f9;
+  --phx-window-titlebar: #e9f0f9;
+  --phx-toolbar-bg: #e9f0f9;
+  --phx-toolbar-btn-bg: #ffffff;
+  --phx-guide-surface: #f0f5fb;
+  --phx-guide-titlebar: #e5edf7;
+  --phx-guide-border: #7fa3d1;
+  --phx-chat-frame: #2a5cad;
+  --phx-action-icon: var(--phx-accent);
+}
+@media (prefers-color-scheme: dark) {
+  :host([data-phx-palette="mist"]:not(.phx-theme-light)) {
+    --phx-bg: #0e1520;
+    --phx-surface: #162030;
+    --phx-surface-2: #1b2738;
+    --phx-raised: #1c293b;
+    --phx-hover: #213049;
+    --phx-selected: #283a55;
+    --phx-accent: #8db4ff;
+    --phx-accent-hov: #b3ccff;
+    --phx-accent-lt: #24365a;
+    --phx-accent-fg: #0e1520;
+    --phx-text: #e2e9f2;
+    --phx-text-2: #a5b3c6;
+    --phx-border: #2a3a51;
+    --phx-divider: #1f2c3f;
+    --phx-line-strong: #40567a;
+    --phx-field-border: #6f84a3;
+    --phx-focus: #8db4ff;
+    --phx-read: #c3a8ff;
+    --phx-read-bg: rgba(195,168,255,0.12);
+    --phx-grey-tint: rgba(141,180,255,0.08);
+    --phx-info-bg: rgba(141,180,255,0.08);
+    --phx-agentcli-surface: #162030;
+    --phx-agentcli-titlebar: #1b2738;
+    --phx-window-titlebar: #1d2a3d;
+    --phx-toolbar-bg: #1d2a3d;
+    --phx-toolbar-btn-bg: #1b2738;
+    --phx-guide-surface: #142235;
+    --phx-guide-titlebar: #182a40;
+    --phx-guide-border: #3d6299;
+    --phx-chat-frame: #8db4ff;
+    --phx-action-icon: var(--phx-accent);
+  }
+}
+:host([data-phx-palette="mist"].phx-theme-dark) {
+  --phx-bg: #0e1520;
+  --phx-surface: #162030;
+  --phx-surface-2: #1b2738;
+  --phx-raised: #1c293b;
+  --phx-hover: #213049;
+  --phx-selected: #283a55;
+  --phx-accent: #8db4ff;
+  --phx-accent-hov: #b3ccff;
+  --phx-accent-lt: #24365a;
+  --phx-accent-fg: #0e1520;
+  --phx-text: #e2e9f2;
+  --phx-text-2: #a5b3c6;
+  --phx-border: #2a3a51;
+  --phx-divider: #1f2c3f;
+  --phx-line-strong: #40567a;
+  --phx-field-border: #6f84a3;
+  --phx-focus: #8db4ff;
+  --phx-read: #c3a8ff;
+  --phx-read-bg: rgba(195,168,255,0.12);
+  --phx-grey-tint: rgba(141,180,255,0.08);
+  --phx-info-bg: rgba(141,180,255,0.08);
+  --phx-agentcli-surface: #162030;
+  --phx-agentcli-titlebar: #1b2738;
+  --phx-window-titlebar: #1d2a3d;
+  --phx-toolbar-bg: #1d2a3d;
+  --phx-toolbar-btn-bg: #1b2738;
+  --phx-guide-surface: #142235;
+  --phx-guide-titlebar: #182a40;
+  --phx-guide-border: #3d6299;
+  --phx-chat-frame: #8db4ff;
+  --phx-action-icon: var(--phx-accent);
+}
+
+/* Office */
+:host([data-phx-palette="office"]) {
+  --phx-bg: #f3f2f1;
+  --phx-surface: #ffffff;
+  --phx-surface-2: #faf9f8;
+  --phx-raised: #ffffff;
+  --phx-hover: #f3f2f1;
+  --phx-selected: #dbe7f5;
+  --phx-accent: #2b579a;
+  --phx-accent-hov: #1e4378;
+  --phx-accent-lt: #e1ebf7;
+  --phx-accent-fg: #ffffff;
+  --phx-text: #201f1e;
+  --phx-text-2: #5d5b59;
+  --phx-border: #e1dfdd;
+  --phx-divider: #edebe9;
+  --phx-line-strong: #c8c6c4;
+  --phx-field-border: #8a8886;
+  --phx-focus: #2b579a;
+  --phx-read: #6b3fc4;
+  --phx-read-bg: rgba(107,63,196,0.10);
+  --phx-agentcli-surface: #ffffff;
+  --phx-agentcli-titlebar: #f3f2f1;
+  --phx-window-titlebar: #f3f2f1;
+  --phx-toolbar-bg: #2b579a;
+  --phx-toolbar-border: #2b579a;
+  --phx-toolbar-btn-bg: transparent;
+  --phx-toolbar-btn-border: transparent;
+  --phx-toolbar-btn-fg: #ffffff;
+  --phx-toolbar-btn-hover: rgba(255,255,255,0.16);
+  --phx-toolbar-btn-active: rgba(255,255,255,0.24);
+  --phx-toolbar-muted: rgba(255,255,255,0.75);
+  --phx-toolbar-current-bg: #ffffff;
+  --phx-toolbar-current-fg: #2b579a;
+  --phx-toolbar-danger: #ffc9cc;
+  --phx-guide-surface: #f3f8fd;
+  --phx-guide-titlebar: #e8f1fb;
+  --phx-guide-border: #8db2e3;
+  --phx-chat-frame: #2b579a;
+  --phx-action-icon: var(--phx-accent);
+}
+@media (prefers-color-scheme: dark) {
+  :host([data-phx-palette="office"]:not(.phx-theme-light)) {
+    --phx-bg: #1b1a19;
+    --phx-surface: #252423;
+    --phx-surface-2: #2d2c2b;
+    --phx-raised: #292827;
+    --phx-hover: #323130;
+    --phx-selected: #3b3a39;
+    --phx-accent: #7ba7ea;
+    --phx-accent-hov: #a4c3f2;
+    --phx-accent-lt: #2e3b4f;
+    --phx-accent-fg: #111111;
+    --phx-text: #f3f2f1;
+    --phx-text-2: #b8b5b2;
+    --phx-border: #3b3a39;
+    --phx-divider: #2d2c2b;
+    --phx-line-strong: #53514f;
+    --phx-field-border: #8a8886;
+    --phx-focus: #7ba7ea;
+    --phx-read: #c3a8ff;
+    --phx-read-bg: rgba(195,168,255,0.12);
+    --phx-agentcli-surface: #252423;
+    --phx-agentcli-titlebar: #2d2c2b;
+    --phx-window-titlebar: #2d2c2b;
+    --phx-toolbar-bg: #1f3d6b;
+    --phx-toolbar-border: #1f3d6b;
+    --phx-toolbar-btn-bg: transparent;
+    --phx-toolbar-btn-border: transparent;
+    --phx-toolbar-btn-fg: #ffffff;
+    --phx-toolbar-btn-hover: rgba(255,255,255,0.12);
+    --phx-toolbar-btn-active: rgba(255,255,255,0.2);
+    --phx-toolbar-muted: rgba(255,255,255,0.7);
+    --phx-toolbar-current-bg: #ffffff;
+    --phx-toolbar-current-fg: #1f3d6b;
+    --phx-toolbar-danger: #ffc9cc;
+    --phx-guide-surface: #1f2329;
+    --phx-guide-titlebar: #232a33;
+    --phx-guide-border: #3d5f8f;
+    --phx-chat-frame: #7ba7ea;
+    --phx-action-icon: var(--phx-accent);
+  }
+}
+:host([data-phx-palette="office"].phx-theme-dark) {
+  --phx-bg: #1b1a19;
+  --phx-surface: #252423;
+  --phx-surface-2: #2d2c2b;
+  --phx-raised: #292827;
+  --phx-hover: #323130;
+  --phx-selected: #3b3a39;
+  --phx-accent: #7ba7ea;
+  --phx-accent-hov: #a4c3f2;
+  --phx-accent-lt: #2e3b4f;
+  --phx-accent-fg: #111111;
+  --phx-text: #f3f2f1;
+  --phx-text-2: #b8b5b2;
+  --phx-border: #3b3a39;
+  --phx-divider: #2d2c2b;
+  --phx-line-strong: #53514f;
+  --phx-field-border: #8a8886;
+  --phx-focus: #7ba7ea;
+  --phx-read: #c3a8ff;
+  --phx-read-bg: rgba(195,168,255,0.12);
+  --phx-agentcli-surface: #252423;
+  --phx-agentcli-titlebar: #2d2c2b;
+  --phx-window-titlebar: #2d2c2b;
+  --phx-toolbar-bg: #1f3d6b;
+  --phx-toolbar-border: #1f3d6b;
+  --phx-toolbar-btn-bg: transparent;
+  --phx-toolbar-btn-border: transparent;
+  --phx-toolbar-btn-fg: #ffffff;
+  --phx-toolbar-btn-hover: rgba(255,255,255,0.12);
+  --phx-toolbar-btn-active: rgba(255,255,255,0.2);
+  --phx-toolbar-muted: rgba(255,255,255,0.7);
+  --phx-toolbar-current-bg: #ffffff;
+  --phx-toolbar-current-fg: #1f3d6b;
+  --phx-toolbar-danger: #ffc9cc;
+  --phx-guide-surface: #1f2329;
+  --phx-guide-titlebar: #232a33;
+  --phx-guide-border: #3d5f8f;
+  --phx-chat-frame: #7ba7ea;
+  --phx-action-icon: var(--phx-accent);
+}
+
+/* Aubergine */
+:host([data-phx-palette="aubergine"]) {
+  --phx-bg: #f8f8f8;
+  --phx-surface: #ffffff;
+  --phx-surface-2: #f8f8f8;
+  --phx-raised: #ffffff;
+  --phx-hover: #f4f2f4;
+  --phx-selected: #e9dcea;
+  --phx-accent: #611f69;
+  --phx-accent-hov: #4a154b;
+  --phx-accent-lt: #f2e8f3;
+  --phx-accent-fg: #ffffff;
+  --phx-text: #1d1c1d;
+  --phx-text-2: #5e5d5e;
+  --phx-border: #dddddd;
+  --phx-divider: #ececec;
+  --phx-line-strong: #c2b5c3;
+  --phx-field-border: #868686;
+  --phx-focus: #1264a3;
+  --phx-agentcli-surface: #ffffff;
+  --phx-agentcli-titlebar: #f8f8f8;
+  --phx-toolbar-bg: #3f0e40;
+  --phx-toolbar-border: #3f0e40;
+  --phx-toolbar-btn-bg: transparent;
+  --phx-toolbar-btn-border: transparent;
+  --phx-toolbar-btn-fg: #ffffff;
+  --phx-toolbar-btn-hover: rgba(255,255,255,0.14);
+  --phx-toolbar-btn-active: rgba(255,255,255,0.22);
+  --phx-toolbar-muted: rgba(255,255,255,0.72);
+  --phx-toolbar-current-bg: #1164a3;
+  --phx-toolbar-current-fg: #ffffff;
+  --phx-toolbar-danger: #ffc9cc;
+  --phx-guide-surface: #f5f9fc;
+  --phx-guide-titlebar: #ebf3f9;
+  --phx-guide-border: #8fb3cf;
+  --phx-chat-frame: #611f69;
+  --phx-action-icon: var(--phx-accent);
+}
+@media (prefers-color-scheme: dark) {
+  :host([data-phx-palette="aubergine"]:not(.phx-theme-light)) {
+    --phx-bg: #1a1d21;
+    --phx-surface: #222529;
+    --phx-surface-2: #27292d;
+    --phx-raised: #27292d;
+    --phx-hover: #2c2f33;
+    --phx-selected: #3a3040;
+    --phx-accent: #e2b5e8;
+    --phx-accent-hov: #f1d3f5;
+    --phx-accent-lt: #3a2d3d;
+    --phx-accent-fg: #1a1d21;
+    --phx-text: #d1d2d3;
+    --phx-text-2: #a3a4a7;
+    --phx-border: #35373b;
+    --phx-divider: #2b2d31;
+    --phx-line-strong: #4d4f54;
+    --phx-field-border: #77797d;
+    --phx-focus: #5ca8e6;
+    --phx-agentcli-surface: #222529;
+    --phx-agentcli-titlebar: #27292d;
+    --phx-toolbar-bg: #431645;
+    --phx-toolbar-border: #431645;
+    --phx-toolbar-btn-bg: transparent;
+    --phx-toolbar-btn-border: transparent;
+    --phx-toolbar-btn-fg: #ffffff;
+    --phx-toolbar-btn-hover: rgba(255,255,255,0.1);
+    --phx-toolbar-btn-active: rgba(255,255,255,0.18);
+    --phx-toolbar-muted: rgba(255,255,255,0.68);
+    --phx-toolbar-current-bg: #1164a3;
+    --phx-toolbar-current-fg: #ffffff;
+    --phx-toolbar-danger: #ffb3b8;
+    --phx-guide-surface: #1d232a;
+    --phx-guide-titlebar: #212a33;
+    --phx-guide-border: #3b6283;
+    --phx-chat-frame: #e2b5e8;
+    --phx-action-icon: var(--phx-accent);
+  }
+}
+:host([data-phx-palette="aubergine"].phx-theme-dark) {
+  --phx-bg: #1a1d21;
+  --phx-surface: #222529;
+  --phx-surface-2: #27292d;
+  --phx-raised: #27292d;
+  --phx-hover: #2c2f33;
+  --phx-selected: #3a3040;
+  --phx-accent: #e2b5e8;
+  --phx-accent-hov: #f1d3f5;
+  --phx-accent-lt: #3a2d3d;
+  --phx-accent-fg: #1a1d21;
+  --phx-text: #d1d2d3;
+  --phx-text-2: #a3a4a7;
+  --phx-border: #35373b;
+  --phx-divider: #2b2d31;
+  --phx-line-strong: #4d4f54;
+  --phx-field-border: #77797d;
+  --phx-focus: #5ca8e6;
+  --phx-agentcli-surface: #222529;
+  --phx-agentcli-titlebar: #27292d;
+  --phx-toolbar-bg: #431645;
+  --phx-toolbar-border: #431645;
+  --phx-toolbar-btn-bg: transparent;
+  --phx-toolbar-btn-border: transparent;
+  --phx-toolbar-btn-fg: #ffffff;
+  --phx-toolbar-btn-hover: rgba(255,255,255,0.1);
+  --phx-toolbar-btn-active: rgba(255,255,255,0.18);
+  --phx-toolbar-muted: rgba(255,255,255,0.68);
+  --phx-toolbar-current-bg: #1164a3;
+  --phx-toolbar-current-fg: #ffffff;
+  --phx-toolbar-danger: #ffb3b8;
+  --phx-guide-surface: #1d232a;
+  --phx-guide-titlebar: #212a33;
+  --phx-guide-border: #3b6283;
+  --phx-chat-frame: #e2b5e8;
+  --phx-action-icon: var(--phx-accent);
+}
+
+/* ============================================================
+   Chrome that reads the theme tokens
+   ============================================================ */
+
+/* Toolbar */
+.phx-toolbar { background: var(--phx-toolbar-bg); border-color: var(--phx-toolbar-border); }
+.phx-toolbar[data-dock="floating"] { background: color-mix(in srgb, var(--phx-toolbar-bg) 90%, transparent); }
+.phx-toolbar-button { background: var(--phx-toolbar-btn-bg); border-color: var(--phx-toolbar-btn-border); color: var(--phx-toolbar-btn-fg); }
+.phx-toolbar-button:hover { background: var(--phx-toolbar-btn-hover); }
+.phx-toolbar-button.is-active,
+.phx-toolbar-button[aria-pressed="true"] { background: var(--phx-toolbar-btn-active); }
+.phx-toolbar-button.is-current { background: var(--phx-toolbar-current-bg); border-color: var(--phx-toolbar-current-bg); color: var(--phx-toolbar-current-fg); }
+.phx-toolbar-button.is-danger { color: var(--phx-toolbar-danger); }
+.phx-toolbar-handle,
+.phx-toolbar-plain { color: var(--phx-toolbar-muted); }
+.phx-toolbar-chat { border-color: var(--phx-toolbar-btn-fg); box-shadow: inset 0 0 0 1px var(--phx-toolbar-btn-fg); }
+.phx-toolbar-tools .phx-toolbar-button:not(.is-current) { background: var(--phx-tools-bg); }
+
+/* Wayfinding: each workspace keeps its own hue, on its icon and when it is the current one. */
+.phx-toolbar-button[data-toolbar-workspace="accessKeys"]:not(.is-current) > svg { color: var(--phx-ws-accessKeys); }
+.phx-toolbar-button[data-toolbar-workspace="approvals"]:not(.is-current) > svg { color: var(--phx-ws-approvals); }
+.phx-toolbar-button[data-toolbar-workspace="changes"]:not(.is-current) > svg { color: var(--phx-ws-changes); }
+.phx-toolbar-button[data-toolbar-workspace="mesa"]:not(.is-current) > svg { color: var(--phx-ws-mesa); }
+.phx-toolbar-button[data-toolbar-workspace="logs"]:not(.is-current) > svg { color: var(--phx-ws-logs); }
+.phx-toolbar-button[data-toolbar-workspace="settings"]:not(.is-current) > svg { color: var(--phx-ws-settings); }
+.phx-toolbar-button[data-toolbar-workspace="my"]:not(.is-current) > svg { color: var(--phx-ws-my); }
+:host([data-phx-palette="wayfinding"]) .phx-toolbar-button.is-current[data-toolbar-workspace="accessKeys"] { background: var(--phx-ws-accessKeys); border-color: var(--phx-ws-accessKeys); color: var(--phx-ws-fg); }
+:host([data-phx-palette="wayfinding"]) .phx-toolbar-button.is-current[data-toolbar-workspace="approvals"] { background: var(--phx-ws-approvals); border-color: var(--phx-ws-approvals); color: var(--phx-ws-fg); }
+:host([data-phx-palette="wayfinding"]) .phx-toolbar-button.is-current[data-toolbar-workspace="changes"] { background: var(--phx-ws-changes); border-color: var(--phx-ws-changes); color: var(--phx-ws-fg); }
+:host([data-phx-palette="wayfinding"]) .phx-toolbar-button.is-current[data-toolbar-workspace="mesa"] { background: var(--phx-ws-mesa); border-color: var(--phx-ws-mesa); color: var(--phx-ws-fg); }
+:host([data-phx-palette="wayfinding"]) .phx-toolbar-button.is-current[data-toolbar-workspace="logs"] { background: var(--phx-ws-logs); border-color: var(--phx-ws-logs); color: var(--phx-ws-fg); }
+:host([data-phx-palette="wayfinding"]) .phx-toolbar-button.is-current[data-toolbar-workspace="settings"] { background: var(--phx-ws-settings); border-color: var(--phx-ws-settings); color: var(--phx-ws-fg); }
+:host([data-phx-palette="wayfinding"]) .phx-toolbar-button.is-current[data-toolbar-workspace="my"] { background: var(--phx-ws-my); border-color: var(--phx-ws-my); color: var(--phx-ws-fg); }
+:host([data-phx-palette="wayfinding"]) .phx-toolbar-tools .phx-toolbar-button:not(.is-current) { border-color: transparent; }
+
+/* Windows: their frame, the focused one's frame, and their title bar. */
+.phx-dock {
+  --dv-tabs-and-actions-container-background-color: var(--phx-window-titlebar);
+  --dv-activegroup-visiblepanel-tab-background-color: var(--phx-window-titlebar);
+  --dv-inactivegroup-visiblepanel-tab-background-color: var(--phx-window-titlebar);
+}
+.phx-dock .dv-groupview { border-color: var(--phx-window-frame); }
+.phx-dock .dv-groupview.dv-active-group { border-color: var(--phx-window-frame-active); }
+
+/* The Guide holds information, not controls: a faint blue page inside a thin blue frame. */
+.phx-guide { background: var(--phx-guide-surface); border-color: var(--phx-guide-border); }
+.phx-guide-titlebar { background: var(--phx-guide-titlebar); border-bottom-color: var(--phx-guide-border); border-radius: var(--phx-radius) var(--phx-radius) 0 0; }
+.phx-guide.is-popped,
+.phx-guide.is-popped .phx-guide-titlebar { border-radius: 0; }
+
+/* Agent Chat: a 2 px frame in the Chat button's ink while it floats; docked, its window takes the frame. */
+.agentcli-window:not(.agentcli-maximized):not(.agentcli-popped-out):not(.agentcli-docked) {
+  border-color: var(--phx-chat-frame);
+  box-shadow: 0 0 0 1px var(--phx-chat-frame), var(--phx-shadow-lg);
+}
+.phx-dock .dv-groupview:has(.phx-chat-dock-slot:not(:empty)) { border-color: var(--phx-chat-frame); box-shadow: inset 0 0 0 1px var(--phx-chat-frame); }
+
+/* Icons on buttons inside a workspace's windows: the theme's action color, or in Wayfinding the
+   workspace's own hue. Filled, danger, warning, pressed and disabled buttons keep their own colors,
+   and a delete icon stays neutral. */
+:host([data-phx-palette="wayfinding"]) :is(.phx-workspace-frame, .phx-phone-stack)[data-workspace="accessKeys"] { --phx-action-icon: var(--phx-ws-accessKeys); }
+:host([data-phx-palette="wayfinding"]) :is(.phx-workspace-frame, .phx-phone-stack)[data-workspace="approvals"] { --phx-action-icon: var(--phx-ws-approvals); }
+:host([data-phx-palette="wayfinding"]) :is(.phx-workspace-frame, .phx-phone-stack)[data-workspace="changes"] { --phx-action-icon: var(--phx-ws-changes); }
+:host([data-phx-palette="wayfinding"]) :is(.phx-workspace-frame, .phx-phone-stack)[data-workspace="mesa"] { --phx-action-icon: var(--phx-ws-mesa); }
+:host([data-phx-palette="wayfinding"]) :is(.phx-workspace-frame, .phx-phone-stack)[data-workspace="logs"] { --phx-action-icon: var(--phx-ws-logs); }
+:host([data-phx-palette="wayfinding"]) :is(.phx-workspace-frame, .phx-phone-stack)[data-workspace="settings"] { --phx-action-icon: var(--phx-ws-settings); }
+:host([data-phx-palette="wayfinding"]) :is(.phx-workspace-frame, .phx-phone-stack)[data-workspace="my"] { --phx-action-icon: var(--phx-ws-my); }
+.phx-window-body :is(.btn, button.phx-action):not(:disabled):not([aria-disabled="true"]):not([aria-pressed="true"]):not(.btn-primary):not(.btn-danger):not(.btn-warning):not(.btn-text-danger):not(.btn-text-warning) > svg:not(.phx-icon-delete) { color: var(--phx-action-icon); }
+
+/* Personas with a character of their own, in every theme but Spartan: Home Companion gold, New User green, Custom blue. */
+:host([data-phx-palette]) .persona-card[data-persona="home_companion"] { border-color: var(--phx-persona-companion); background: var(--phx-persona-companion-bg); }
+:host([data-phx-palette]) .persona-card[data-persona="home_companion"] .persona-card-marker { color: var(--phx-persona-companion); }
+:host([data-phx-palette]) .persona-card[data-persona="new_user"] { border-color: var(--phx-persona-new); background: var(--phx-persona-new-bg); }
+:host([data-phx-palette]) .persona-card[data-persona="custom"] { border-color: var(--phx-persona-custom); background: var(--phx-persona-custom-bg); }
+:host([data-phx-palette]) .persona-card-active[data-persona="home_companion"] { box-shadow: 0 0 0 1px var(--phx-persona-companion); }
+:host([data-phx-palette]) .persona-card-active[data-persona="new_user"] { box-shadow: 0 0 0 1px var(--phx-persona-new); }
+:host([data-phx-palette]) .persona-card-active[data-persona="custom"] { box-shadow: 0 0 0 1px var(--phx-persona-custom); }

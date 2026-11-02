@@ -248,7 +248,7 @@ class TestEsphome:
 
 class TestEsphomeCapDefaults:
     def test_no_other_persona_grants_esphome_yaml(self):
-        """Only home_admin (confirm) and esphome (confirm) may touch device YAML.
+        """Only home_admin and esphome may read and build device YAML.
 
         A new cap must not silently widen an existing persona; every other preset
         stays at deny so applying a familiar persona never grants device-file access.

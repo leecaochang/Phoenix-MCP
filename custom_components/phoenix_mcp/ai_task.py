@@ -30,18 +30,19 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.util.json import json_loads
 
 from .const import DOMAIN
+from .helpers import LocalizedReason
 from .schema_compat import schema_engine
 
 _LOGGER = logging.getLogger(__name__)
 
-# ai_task shipped in HA 2025.7 and its import chain reaches camera and then turbojpeg,
-# which a minimal environment may not have. Guard it so Phoenix MCP setup never crashes;
+# ai_task's import chain reaches camera and then turbojpeg, which an install that
+# never loaded camera may not have. Guard it so Phoenix MCP setup never crashes;
 # the entity class is defined only when it imports, and async_setup_entry no-ops otherwise.
 try:
     from homeassistant.components import ai_task as _ai_task
 
     _AI_TASK_AVAILABLE = True
-except ImportError:  # pragma: no cover - absent only on older/minimal HA
+except ImportError:  # pragma: no cover - camera requirement not installed
     _ai_task = None  # type: ignore[assignment]
     _AI_TASK_AVAILABLE = False
 
@@ -79,7 +80,7 @@ def _ai_task_preferences(hass: HomeAssistant) -> Any:
     """HA's AITaskPreferences object (holds gen_data_entity_id), or None."""
     try:
         from homeassistant.components.ai_task.const import DATA_PREFERENCES  # noqa: PLC0415
-    except ImportError:  # pragma: no cover - older/minimal HA
+    except ImportError:  # pragma: no cover - camera requirement not installed
         return None
     return hass.data.get(DATA_PREFERENCES)
 
@@ -116,12 +117,13 @@ def set_ai_task_preferred(hass: HomeAssistant, entry) -> dict:
     """
     entity_id = _loaded_ai_task_entity_id(hass, entry.entry_id)
     if entity_id is None:
-        raise AiTaskSetupError(
-            "Configure and enable the Phoenix MCP AI Task (access key, provider, and model) first."
-        )
+        raise AiTaskSetupError(LocalizedReason(
+            "Configure and enable the Phoenix MCP AI Task (access key, provider, and model) first.",
+            "aiTaskNotConfigured",
+        ))
     prefs = _ai_task_preferences(hass)
     if prefs is None:
-        raise AiTaskSetupError("AI Task preferences are not available on this Home Assistant.")
+        raise AiTaskSetupError(LocalizedReason("AI Task preferences are not available on this Home Assistant.", "aiTaskPreferencesUnavailable"))
     prefs.async_set_preferences(gen_data_entity_id=entity_id)
     return ai_task_preferred_status(hass, entry)
 
@@ -477,7 +479,7 @@ if _AI_TASK_AVAILABLE:
                 data=result,
             )
 
-else:  # pragma: no cover - ai_task absent only on older/minimal HA
+else:  # pragma: no cover - camera requirement not installed
     PhoenixAITaskEntity = None  # type: ignore[assignment,misc]
 
 

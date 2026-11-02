@@ -7,6 +7,7 @@ invalid ancestry are reported rather than guessed at.
 import pytest
 
 from types import SimpleNamespace
+from unittest.mock import patch
 
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import area_registry as ar
@@ -14,6 +15,7 @@ from homeassistant.helpers import device_registry as dr
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.phoenix_mcp.device_semantics import (
+    device_authority_chain,
     device_registry_snapshot,
     device_registry_snapshot_from_registry,
     effective_entity_area_id,
@@ -94,3 +96,62 @@ def test_entity_direct_area_presence_prevents_device_fallback() -> None:
     assert effective_entity_area_id(
         SimpleNamespace(area_id=None, device_id="child"), snapshot
     ) == "device-area"
+
+
+@pytest.mark.parametrize(
+    ("devices", "expected"),
+    [
+        ({}, ("absent",)),
+        ({"main": SimpleNamespace(id="main")}, ("main",)),
+        (
+            {"child": SimpleNamespace(id="child", parent_device_id="main"),
+             "main": SimpleNamespace(id="main")},
+            ("child", "main"),
+        ),
+        ({"child": SimpleNamespace(id="child", parent_device_id="main")}, None),
+        (
+            {"child": SimpleNamespace(id="child", parent_device_id="middle"),
+             "middle": SimpleNamespace(id="middle", parent_device_id="main"),
+             "main": SimpleNamespace(id="main")},
+            None,
+        ),
+    ],
+)
+def test_authority_chain_follows_one_valid_parent(devices, expected) -> None:
+    """Only a present main parent joins the chain; malformed ancestry is None."""
+    registry = SimpleNamespace(async_get=devices.get)
+    device_id = "child" if "child" in devices else next(iter(devices), "absent")
+    with patch(
+        "custom_components.phoenix_mcp.device_semantics.dr.async_get",
+        return_value=registry,
+    ):
+        assert device_authority_chain(object(), device_id) == expected
+        assert device_authority_chain(object(), None) == ()
+
+
+@pytest.mark.usefixtures("requires_child_devices")
+async def test_part_ids_exclude_via_dependents_and_children(
+    hass: HomeAssistant,
+) -> None:
+    entry = MockConfigEntry(domain="test_integration")
+    entry.add_to_hass(hass)
+    registry = dr.async_get(hass)
+    main = registry.async_get_or_create(
+        config_entry_id=entry.entry_id, identifiers={("test_integration", "main")}
+    )
+    part = registry.async_get_or_create_child(
+        config_entry_id=entry.entry_id,
+        identifiers={("test_integration", "part")},
+        parent_device_id=main.id,
+    )
+    dependent = registry.async_get_or_create(
+        config_entry_id=entry.entry_id,
+        identifiers={("test_integration", "dependent")},
+        via_device_id=main.id,
+    )
+    snapshot = device_registry_snapshot(hass)
+
+    assert snapshot.part_ids(main.id) == (part.id,)
+    assert set(snapshot.child_ids(main.id)) == {part.id, dependent.id}
+    assert snapshot.part_ids(part.id) == ()
+    assert snapshot.part_ids(dependent.id) == ()

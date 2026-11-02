@@ -26,26 +26,31 @@ import hashlib
 import json
 import logging
 import os
+import threading
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import TYPE_CHECKING, Any, Callable
+from typing import TYPE_CHECKING, Any, Callable, TypeVar
 
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import area_registry as ar_mod
 from homeassistant.helpers import device_registry as dr_mod
 from homeassistant.helpers import entity_registry as er_mod
 from homeassistant.helpers import sun as sun_mod
+from homeassistant.helpers.event import async_track_time_interval
 from homeassistant.helpers.storage import Store
+from homeassistant.util.async_ import run_callback_threadsafe
 from homeassistant.util.yaml import load_yaml as _load_yaml
 
 from homeassistant.util import dt as dt_util
 
 from . import mesa_audit
-from .device_semantics import device_registry_snapshot, effective_entity_area_id
+from .device_semantics import device_authority_chain, device_registry_snapshot, effective_entity_area_id
 from .helpers import diff_summary_fields
 from .const import (
     MESA_APPROVED_EXECUTOR,
     MESA_CONFIRM_CAP,
+    MESA_HOST_CALLBACK_TIMEOUT_SECONDS,
+    MESA_LEASE_SWEEP_INTERVAL,
     MESA_MODE_ENFORCED,
     MESA_MODE_OFF,
     MESA_STORAGE_KEY,
@@ -179,10 +184,32 @@ class MesaRuntime:
         self.enforcer.mode = "enforced" if mesa_mode == MESA_MODE_ENFORCED else "advisory"
 
 
+_T = TypeVar("_T")
+
+
+def _on_event_loop(hass: HomeAssistant, callback: Callable[..., _T]) -> Callable[..., _T]:
+    """Run a host callback that walks Home Assistant's registries on the event loop.
+
+    mesa-core resolves in its own worker threads (trigger validation and the
+    retrieval tools), but Home Assistant changes its registries on the loop only,
+    and walking one from another thread while it changes fails with "dictionary
+    changed size during iteration". Called on the loop, as enforcement does, the
+    callback runs directly.
+    """
+
+    def _call(*args: Any) -> _T:
+        if threading.get_ident() == hass.loop_thread_id:
+            return callback(*args)
+        return run_callback_threadsafe(hass.loop, callback, *args).result(MESA_HOST_CALLBACK_TIMEOUT_SECONDS)
+
+    return _call
+
+
 def _build_get_entity_area(hass: HomeAssistant) -> Callable[[str], str | None]:
     """Return a sync callback mapping entity_id to its effective area_id.
 
-    The entity's own area, else its device's effective area.
+    The entity's own area, else its device's effective area. Reading the device's
+    area walks the device registry, so the lookup runs on the event loop.
     """
 
     def _get_entity_area(entity_id: str) -> str | None:
@@ -190,7 +217,7 @@ def _build_get_entity_area(hass: HomeAssistant) -> Callable[[str], str | None]:
         entry = er.async_get(entity_id)
         return effective_entity_area_id(entry, device_registry_snapshot(hass))
 
-    return _get_entity_area
+    return _on_event_loop(hass, _get_entity_area)
 
 
 def _build_get_entity_device(hass: HomeAssistant) -> Callable[[str], str | None]:
@@ -213,6 +240,24 @@ def _build_get_entity_device(hass: HomeAssistant) -> Callable[[str], str | None]
         return entry.device_id if entry is not None else None
 
     return _get_entity_device
+
+
+def _build_get_device_parent(hass: HomeAssistant) -> Callable[[str], str | None]:
+    """Return a sync callback mapping a device to the main device it is part of.
+
+    This is the MESA "parent_device" level, between device and area: since HA
+    2026.9 a multi-part product is a main device plus one child device per part,
+    and the main device's profile governs every part. Only a child device's
+    parent_device_id counts; a via_device hub link is connectivity, not
+    composition. Malformed ancestry, which Core forbids, reports no parent: the
+    permission tree already refuses access to such entities.
+    """
+
+    def _get_device_parent(device_id: str) -> str | None:
+        chain = device_authority_chain(hass, device_id)
+        return chain[1] if chain is not None and len(chain) == 2 else None
+
+    return _get_device_parent
 
 
 def _build_get_entity_integration(hass: HomeAssistant) -> Callable[[str], str | None]:
@@ -247,13 +292,16 @@ def build_expand_target(hass: HomeAssistant) -> Callable[[str, str], list[str]]:
     filtering. Disabled registry entries are excluded (they produce no state or
     events). An entity with its own area does not count toward its device's area,
     matching HA's area semantics. Any failure returns [] (a resolution error must
-    never break validation or a reverse-reference read).
+    never break validation or a reverse-reference read). The expansion walks the
+    registries, so it runs on the event loop.
     """
 
     def _device_entities(ent_reg: Any, device_id: str) -> list[str]:
+        # A targeted parent device reaches its child devices' entities too.
         return [
             e.entity_id
-            for e in er_mod.async_entries_for_device(ent_reg, device_id)
+            for target_id in (device_id, *device_registry_snapshot(hass).part_ids(device_id))
+            for e in er_mod.async_entries_for_device(ent_reg, target_id)
             if e.disabled_by is None
         ]
 
@@ -298,7 +346,15 @@ def build_expand_target(hass: HomeAssistant) -> Callable[[str, str], list[str]]:
             return []
         return []
 
-    return _expand_target
+    on_loop = _on_event_loop(hass, _expand_target)
+
+    def _expand_target_from_any_thread(kind: str, ref: str) -> list[str]:
+        try:
+            return on_loop(kind, ref)
+        except Exception:  # noqa: BLE001 - fail-quiet per the docstring, including a loop that is stopping
+            return []
+
+    return _expand_target_from_any_thread
 
 
 def _build_get_state(hass: HomeAssistant) -> Callable[[str], str | None]:
@@ -342,6 +398,35 @@ def _build_on_lease_event(hass: HomeAssistant) -> Callable[[dict[str, Any]], Non
         hass.add_job(hass.bus.async_fire, f"{DOMAIN}_mesa_lease_expired", dict(payload))
 
     return _on_lease_event
+
+
+def async_track_lease_expiry(hass: HomeAssistant, runtime: MesaRuntime) -> Callable[[], None]:
+    """Sweep run-out leases every MESA_LEASE_SWEEP_INTERVAL. Returns the cancel.
+
+    mesa-core owns no event loop: a lease that runs out is removed, and its
+    natural_expiry event fired, only when a lease operation sweeps, so without
+    this an automation on phoenix_mcp_mesa_lease_expired would fire only when
+    some key next requests or releases a lease. mesa-core asks hosts to call
+    expire() periodically for exactly this. The sweep runs in the executor
+    because a worker can hold the lease manager's lock while it waits for a
+    registry lookup the event loop must answer. One sweep at a time; the entry
+    owns the cancel and calls it at unload.
+    """
+    sweeping = False
+
+    async def _sweep(_now: datetime) -> None:
+        nonlocal sweeping
+        if sweeping:
+            return
+        sweeping = True
+        try:
+            await hass.async_add_executor_job(runtime.lease_manager.expire)
+        except Exception:  # noqa: BLE001 - leases are advisory; the next sweep retries
+            _LOGGER.debug("Phoenix MCP MESA: lease expiry sweep failed", exc_info=True)
+        finally:
+            sweeping = False
+
+    return async_track_time_interval(hass, _sweep, MESA_LEASE_SWEEP_INTERVAL)
 
 
 def _numeric_threshold_example(nt_spec: dict[str, Any]) -> dict[str, Any]:
@@ -403,12 +488,11 @@ async def async_semantic_moments(hass: HomeAssistant, entity_id: str) -> list[di
     Backs mesa-core's ``mesa_get_profile(include_semantic_moments=True)``.
     ``async_get_triggers_for_target``/``async_get_conditions_for_target`` resolve
     which apply to an entity from each integration's triggers.yaml/conditions.yaml.
-    Purpose-specific triggers are default from HA 2026.7; on 2026.6 with the Labs
-    flag off the sets are smaller or empty, still a valid answer.
+    An integration that declares none yields a smaller or empty set, still a valid answer.
 
     HA-COUPLING POINT alongside ws_dispatch, the injector and mesa_suggestions:
-    imports sit inside the function and ANY failure (including the module missing
-    on older HA) degrades to None, which mesa-core renders as the field being
+    imports sit inside the function and ANY failure (including a moved or missing
+    module) degrades to None, which mesa-core renders as the field being
     omitted. Re-verify on HA upgrades. Consumed live, never consulted by enforcement.
 
     Each moment carries an ``example`` or its ``schema``. The schema (HA's
@@ -523,17 +607,20 @@ async def async_setup_mesa(hass: HomeAssistant, mesa_mode: str) -> MesaRuntime:
     get_entity_area = _build_get_entity_area(hass)
     get_entity_integration = _build_get_entity_integration(hass)
     get_entity_device = _build_get_entity_device(hass)
+    get_device_parent = _build_get_device_parent(hass)
     store = ProfileStore(
         backend=backend,
         get_entity_area=get_entity_area,
         get_entity_integration=get_entity_integration,
         get_entity_device=get_entity_device,
+        get_device_parent=get_device_parent,
     )
     resolver = InheritanceResolver(
         store=store,
         get_entity_area=get_entity_area,
         get_entity_integration=get_entity_integration,
         get_entity_device=get_entity_device,
+        get_device_parent=get_device_parent,
     )
     store.attach_resolver(resolver)
     # The enforcer resolves through whatever store it is handed, so it takes the
@@ -734,7 +821,7 @@ def evaluate_registry_action(
         return RegistryMesaDecision(
             decision="deny",
             rule="mesa:runtime_unavailable",
-            reason="MESA is configured but unavailable. Reload Phoenix MCP after checking Needs attention in the Phoenix panel.",
+            reason="MESA is configured but unavailable. Reload Phoenix MCP after checking Needs Attention in the Phoenix panel.",
         )
 
     explanation = runtime.resolver.explain(entity_id)
@@ -918,7 +1005,12 @@ def entity_control_mode(
     """Best-effort effective MESA control_mode for one entity (advisory display).
 
     control_mode is an entity-level property, so the representative service used
-    to drive the evaluation does not change it. Returns the control_mode string
+    to drive the evaluation does not change it. The mode is the one this
+    evaluation would act on, after an active temporal window and the restricted
+    privacy level have tightened it, as the gate reads it: the inherited mode
+    alone can read Autonomous for an entity a write would route to Confirm. The
+    inherited mode is the fallback only when mesa-core reports no evaluated
+    mode. Returns the control_mode string
     (autonomous, confirm, read_only, prohibited) or None if it cannot be
     determined. Callers only pass entities the access key can already access, so this
     is not an enumeration oracle.
@@ -936,7 +1028,9 @@ def entity_control_mode(
             caller_context=build_caller_context(access_key, session_id),
             current_time=dt_util.now(),
         )
-        cm = result.effective_profile.operational_boundaries.control_mode
+        cm = result.evaluated_control_mode
+        if cm is None:
+            cm = result.effective_profile.operational_boundaries.control_mode
         return getattr(cm, "value", cm) if cm is not None else None
     except Exception:  # noqa: BLE001 - advisory display must never break the caller
         return None
@@ -1064,7 +1158,7 @@ async def async_apply_mesa_to_call(
 
     Returns an outcome the caller maps to its own response shape:
     - allow: proceed with ``outcome.entities`` (a subset of the input).
-    - deny: every entity was blocked; caller returns its standard Forbidden.
+    - deny: every entity was blocked; caller returns tool_common.MESA_DENIED_MESSAGE or its own MESA refusal.
     - pending: at least one entity needs confirmation; an approval was created.
 
     ``mesa_mode == off`` short-circuits to allow-all. A production setup failure
@@ -1079,7 +1173,7 @@ async def async_apply_mesa_to_call(
     if settings.mesa_mode == MESA_MODE_OFF:
         return MesaGateOutcome(decision="allow", entities=list(entities))
     if runtime is None:
-        reason = "MESA is configured but unavailable. Reload Phoenix MCP after checking Needs attention in the Phoenix panel."
+        reason = "MESA is configured but unavailable. Reload Phoenix MCP after checking Needs Attention in the Phoenix panel."
         return MesaGateOutcome(
             decision="deny",
             blocked=[(entity_id, "mesa:runtime_unavailable", reason) for entity_id in entities],
@@ -1189,7 +1283,12 @@ async def async_create_mesa_approval(
         fire_approval_requested_event,
     )
 
+    from .request_authority import check_request_authority
+
     async with data.store.async_lock:
+        # As the capability and registry paths do: a request whose key, runtime or
+        # policy changed while it waited queues nothing.
+        check_request_authority()
         approval = await async_create_pending_approval(
             data.store,
             access_key_id=access_key.id,

@@ -328,7 +328,7 @@ async def _execute_set_area_or_floor(
     # Capture the receipt before history persistence lets other writers run.
     receipt = _tool_success(json.dumps({
         "kind": plan.kind, "operation": plan.operation, "location_id": location_id,
-        "write_success": True, "updated": after, "restorable": plan.operation != "delete",
+        "write_success": True, "verified": True, "updated": after, "restorable": plan.operation != "delete",
     }))
     assert isinstance(location_id, str)
     before = dict(plan.before) if plan.before is not None else None

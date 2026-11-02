@@ -1,4 +1,4 @@
-"""Authorization boundary for service-data target selectors."""
+"""Authorization boundary for service data: target selectors and HA-rendered templates."""
 
 from __future__ import annotations
 
@@ -7,6 +7,7 @@ from typing import Any
 
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.service import async_get_all_descriptions
+from homeassistant.helpers.template import is_template_string
 
 from .const import SECONDARY_TARGET_SELECTOR_KEYS, TARGET_SELECTOR_KEYS
 
@@ -106,4 +107,43 @@ def secondary_target_error(fields: tuple[str, ...]) -> str:
         f"Unsupported secondary target selector in service_data: {joined}. "
         "Phoenix MCP can authorize only the primary entity_id, device_id, or area_id "
         "target for a generic service call."
+    )
+
+
+def template_fields(service_data: object) -> tuple[str, ...]:
+    """Return caller fields whose value carries Home Assistant template syntax.
+
+    A service may render a field as a template (camera.snapshot's filename, a
+    custom integration's own fields) over every entity's state, outside this
+    access key's scope, so the rendered value or the call's success can disclose
+    what the key cannot read. Service descriptions do not say which fields are
+    rendered, so template syntax is refused in every field, keys included.
+    """
+    if not isinstance(service_data, Mapping):
+        return ()
+
+    def _holds_template(value: object) -> bool:
+        pending = [value]
+        while pending:
+            item = pending.pop()
+            if isinstance(item, str):
+                if is_template_string(item):
+                    return True
+            elif isinstance(item, Mapping):
+                pending.extend(item.keys())
+                pending.extend(item.values())
+            elif isinstance(item, (list, tuple)):
+                pending.extend(item)
+        return False
+
+    return tuple(sorted(str(key) for key, value in service_data.items() if _holds_template((key, value))))
+
+
+def template_fields_error(fields: tuple[str, ...]) -> str:
+    """Explain a template refusal using only field names the caller supplied."""
+    return (
+        f"Template syntax is not supported in service_data: {', '.join(fields)}. "
+        "Home Assistant would render it with access to every entity, outside this "
+        "access key's scope. Read the values you need first and send them as plain "
+        "text. No action was dispatched."
     )

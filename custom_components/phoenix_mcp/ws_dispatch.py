@@ -90,6 +90,9 @@ ALLOWED_WS_COMMANDS: frozenset[str] = frozenset(
         # them on cap_dashboard_resources. They are not registered in YAML mode.
         "lovelace/resources/create", "lovelace/resources/update", "lovelace/resources/delete",
         "logbook/get_events",
+        # Read only; tools/notify.py is the only caller, gated on cap_log_read, and
+        # it drops Phoenix's own operator notifications before anything is shown.
+        "persistent_notification/get",
         # Loaded-config reverse references. This complements Phoenix's direct
         # YAML walk with packages, blueprint-expanded configs, people, and
         # integration-managed consumers. The caller supplies only entity ids
@@ -151,6 +154,19 @@ class WsCommandNotDispatchedError(WsDispatchError):
     """The command was refused before its handler could execute."""
 
 
+class WsCommandRefusedError(WsDispatchError):
+    """The handler ran and answered with an error result carrying Home Assistant's `code`.
+
+    Whether that proves nothing changed depends on the handler, so callers decide
+    per command; Core's collection create and update answer `invalid_format`
+    only from validation that runs before anything is stored.
+    """
+
+    def __init__(self, code: str, message: str) -> None:
+        super().__init__(f"{code}: {message}")
+        self.code = code
+
+
 class WsDashboardNotFoundError(WsCommandNotDispatchedError):
     """A named Lovelace dashboard does not exist.
 
@@ -184,8 +200,8 @@ class _CapturingConnection(ActiveConnection):
 
     def __init__(self, hass: HomeAssistant, user: Any) -> None:
         # Pass only the constructor kwargs the live ActiveConnection accepts, so
-        # this works across supported HA versions (parameters are added over time,
-        # e.g. `remote` in HA 2026.6). Read names from the code object, never
+        # this works across supported HA versions (parameters are added over
+        # time). Read names from the code object, never
         # inspect.signature, which on Python 3.14 evaluates ActiveConnection's
         # TYPE_CHECKING-only annotations and raises NameError.
         available: dict[str, Any] = {
@@ -236,7 +252,7 @@ class _CapturingConnection(ActiveConnection):
     @callback
     def send_error(self, msg_id: int, code: str, message: str, *args: Any, **kwargs: Any) -> None:
         if not self.result_future.done():
-            self.result_future.set_exception(WsDispatchError(f"{code}: {message}"))
+            self.result_future.set_exception(WsCommandRefusedError(code, message))
 
     @callback
     def async_handle_exception(self, msg: dict, err: Exception) -> None:
@@ -600,8 +616,8 @@ async def async_zha_reconfigure_device(hass: HomeAssistant, ieee: str) -> None:
     (5-60s+, longer for sleepy battery devices); there is no completion
     signal to await. Raises WsDispatchError when ZHA is unavailable or the
     device is not on the network. HA-coupling point: get_zha_gateway and the
-    gateway API come from the zha-lib extraction (~HA 2024.8); on older HA this
-    degrades to a clean per-call error.
+    gateway API are ZHA internals; if they move, this degrades to a clean
+    per-call error.
     """
     try:
         from homeassistant.components.zha.helpers import get_zha_gateway  # noqa: PLC0415

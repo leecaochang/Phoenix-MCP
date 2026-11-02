@@ -69,6 +69,7 @@ from ..tool_common import (
     _pending_or_inline,
     _record_version,
     _restore_ctx,
+    fitted_list,
     redaction_sentinel_path,
     _tool_error,
     _tool_success,
@@ -407,12 +408,11 @@ def _predict_tag_entity_id(hass: HomeAssistant, tag_id: str, name: str | None) -
     registry = er.async_get(hass)
     if existing := registry.async_get_entity_id("tag", "tag", tag_id):
         return existing
-    deleted = getattr(registry, "deleted_entities", {}).get(("tag", "tag", tag_id))
+    deleted = registry.deleted_entities.get(("tag", "tag", tag_id))
     if (deleted is not None and registry.async_get(deleted.entity_id) is None
             and hass.states.async_available(deleted.entity_id)):
         return str(deleted.entity_id)
-    available = getattr(registry, "async_get_available_entity_id", None) or registry.async_generate_entity_id
-    return str(available("tag", slugify(name) if name else tag_id))
+    return str(registry.async_get_available_entity_id("tag", slugify(name) if name else tag_id))
 
 
 def _restored_helper_entity_id(hass: HomeAssistant, helper_type: str, storage_id: str) -> str:
@@ -922,7 +922,7 @@ async def _tool_list_helpers(
             })
         helpers.append(helper)
     helpers.sort(key=lambda h: h["entity_id"])
-    return _tool_success(json.dumps({"count": len(helpers), "helpers": helpers}, default=str)), "allowed", "list_helpers"
+    return _tool_success(json.dumps(fitted_list(helpers, "helpers"), default=str)), "allowed", "list_helpers"
 
 
 def _helper_icon_error(helper_type: str, icon: Any, *, editing: bool) -> str | None:
@@ -1706,6 +1706,14 @@ async def _execute_create_helper(
     assert isinstance(post_mesa, _HelperMesaContext)
     if post_mesa.warnings:
         _mesa_advisory_ctx.set(True)
+    # Read the stored row back: it must hold what Home Assistant reported creating,
+    # which already carries HA's own normalization of the request. Unreadable
+    # storage leaves the create unconfirmed rather than failed.
+    rows = await _storage_helper_rows(hass, str(helper_type))
+    stored = next((row for row in rows if row.get("id") == new_id), None) if rows and new_id is not None else None
+    verified = None if rows is None else stored is not None and (not isinstance(item, dict) or stored == item)
+    if stored is not None:
+        item = stored
     public_item = (
         _public_helper_config(str(helper_type), item)
         if helper_type == "person" and isinstance(item, dict)
@@ -1716,7 +1724,10 @@ async def _execute_create_helper(
         data, access_key, resource_type="helper", resource_id=f"{helper_type}:{new_id}",
         action="create", before=None, after=version_after, alias=config.get("name"),
     )
-    return _tool_success(json.dumps({"helper_type": helper_type, "helper": public_item}, default=str)), "allowed", f"helper:{helper_type}"
+    body: dict[str, Any] = {"helper_type": helper_type, "helper": public_item, "verified": verified}
+    if verified is False:
+        body["note"] = "Home Assistant reported the helper created, but its stored configuration does not read back as reported."
+    return _tool_success(json.dumps(body, default=str)), "allowed", f"helper:{helper_type}"
 
 
 async def _execute_config_flow_helper(
@@ -2234,7 +2245,9 @@ async def _execute_edit_helper(
         data, access_key, resource_type="helper", resource_id=f"{helper_type}:{helper_id}",
         action="edit", before=public_before, after=version_after, alias=config.get("name"),
     )
-    return _tool_success(json.dumps({"helper_type": helper_type, "helper": public_item}, default=str)), "allowed", f"helper:{helper_type}:{helper_id}"
+    # The stored row is compared before this point; a mismatch returns status partial instead.
+    return _tool_success(json.dumps({"helper_type": helper_type, "helper": public_item, "verified": True},
+                                    default=str)), "allowed", f"helper:{helper_type}:{helper_id}"
 
 
 async def _tool_delete_helper(
@@ -2362,7 +2375,11 @@ async def _execute_delete_helper(
         action="delete", before=public_before, after=None,
         alias=public_before.get("name") if isinstance(public_before, dict) else None,
     )
-    return _tool_success(f"Helper '{helper_id}' deleted successfully."), "allowed", f"helper:{helper_type}:{helper_id}"
+    # The row's absence is read back before this point; otherwise the deletion is reported unverified.
+    return _tool_success(json.dumps({
+        "deleted": True, "helper_type": helper_type, "helper_id": helper_id, "verified": True,
+        "message": f"Helper '{helper_id}' deleted successfully.",
+    })), "allowed", f"helper:{helper_type}:{helper_id}"
 
 
 def _build_diff_create_helper(args: dict, access_key: AccessKeyRecord, hass: HomeAssistant) -> dict:
@@ -2818,16 +2835,32 @@ async def _tool_get_config_entry_options(
     return _tool_success(json.dumps(body, default=str)), "allowed", tool
 
 
-def _entities_in_options(options: Any) -> set[str]:
-    """Whole entity IDs and statically established template dependencies.
+def _entities_in_options(options: Any, registry: er.EntityRegistry) -> set[str]:
+    """Entity references and statically established template dependencies.
 
     Matched by VALUE, never by key name: each helper names its source differently
     (`entity_id` on threshold, `source` on derivative, `entity_ids` on min_max,
     whatever a third-party helper chose), so a key list would go stale silently
     and let an unchecked entity through. Over-matching a coincidental string only
-    costs a scope check the caller would pass anyway.
+    costs a scope check.
+
+    Strings are read the way HA's validators read them, since those decide what
+    the helper binds to: an entity ID in any letter case, a comma-separated list,
+    or an entity registry ID, which the entity selector accepts and resolve()
+    maps to its entity.
     """
     found: set[str] = set()
+
+    def _string(value: str) -> None:
+        found.update(template_entities(value))
+        for part in value.split(","):
+            part = part.strip()
+            lowered = part.lower()
+            if (_ENTITY_ID_RE.fullmatch(lowered)
+                    and not all(piece.isdecimal() for piece in lowered.split("."))):
+                found.add(lowered)
+            elif registry.async_get(part) is not None:
+                found.add(part)
 
     def _walk(node: Any) -> None:
         if isinstance(node, dict):
@@ -2837,10 +2870,7 @@ def _entities_in_options(options: Any) -> set[str]:
             for value in node:
                 _walk(value)
         elif isinstance(node, str):
-            found.update(template_entities(node))
-            if (_ENTITY_ID_RE.fullmatch(node)
-                    and not all(part.isdecimal() for part in node.split("."))):
-                found.add(node)
+            _string(node)
 
     _walk(options)
     return found
@@ -2871,7 +2901,7 @@ def _unwritable_option_entities(
     if template_type is not None:
         validate_template_selectors(options, template_type)
     return sorted(
-        eid for eid in _entities_in_options(options)
+        eid for eid in _entities_in_options(options, er.async_get(hass))
         if resolve(eid, access_key, hass) != Permission.WRITE
     )
 

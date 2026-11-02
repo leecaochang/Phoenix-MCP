@@ -6,7 +6,7 @@ import asyncio
 import json
 import os
 import uuid
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -110,14 +110,16 @@ class TestCapabilitySummary:
 class TestAuditSummary:
     async def test_returns_own_entries(self, hass):
         access_key = _access_key()
-        entry = SimpleNamespace(request_id="r1", timestamp="2026-01-01", method="tools/call",
-                                resource="get_state", outcome="allowed", mesa_advisory=False)
+        entry = SimpleNamespace(request_id="r1", timestamp=datetime(2026, 1, 1, 8, 30, tzinfo=timezone.utc),
+                                method="tools/call", resource="get_state", outcome="allowed", mesa_advisory=False)
         data = _data()
         data.audit.query.return_value = [entry]
         content, outcome, _ = await _call("get_audit_summary", {"limit": 10}, access_key, hass, data)
         assert outcome == "allowed"
         body = _json(content)
         assert body["entries"][0]["request_id"] == "r1"
+        # ISO 8601 like every other tool's times, not Python's space-separated str().
+        assert body["entries"][0]["timestamp"] == "2026-01-01T08:30:00+00:00"
         # mesa_advisory omitted when false (matches AuditEntry.to_dict)
         assert "mesa_advisory" not in body["entries"][0]
         # query must be scoped to this access key
@@ -125,8 +127,8 @@ class TestAuditSummary:
 
     async def test_surfaces_mesa_advisory_flag(self, hass):
         access_key = _access_key()
-        entry = SimpleNamespace(request_id="r2", timestamp="2026-01-01", method="tools/call",
-                                resource="call_service", outcome="allowed", mesa_advisory=True)
+        entry = SimpleNamespace(request_id="r2", timestamp=datetime(2026, 1, 1, tzinfo=timezone.utc),
+                                method="tools/call", resource="call_service", outcome="allowed", mesa_advisory=True)
         data = _data()
         data.audit.query.return_value = [entry]
         content, outcome, _ = await _call("get_audit_summary", {"limit": 10}, access_key, hass, data)
@@ -541,6 +543,17 @@ class TestCompareState:
         assert comp["state_at_t1"] == "off"
         assert comp["state_at_t2"] == "on"
         assert comp["changed"] is True
+
+    @pytest.mark.parametrize("unrecorded", ["t1", "t2"])
+    async def test_an_unrecorded_snapshot_is_unknown_not_a_change(self, hass, unrecorded):
+        hass.states.async_set("light.kitchen", "on", {})
+        now = utcnow()
+        recorded = {"light.kitchen": [_FakeState("light.kitchen", "on", now)]}
+        at_t1, at_t2 = ({}, recorded) if unrecorded == "t1" else (recorded, {})
+        with _patch_history(at_t1, at_t2):
+            content, outcome, _ = await _call("compare_state", {"entity_id": "light.kitchen", "t1": "24h"}, _access_key(), hass)
+        assert outcome == "allowed"
+        assert _json(content)["comparisons"][0]["changed"] is None
 
     async def test_invalid_t1(self, hass):
         hass.states.async_set("light.kitchen", "on", {})

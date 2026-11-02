@@ -1,29 +1,39 @@
 import type { ApprovalDiff } from "../types";
-import { hasMessage, t } from "../i18n";
-
-export type ApprovalView = "summary" | "details";
-
-export const APPROVAL_DEFAULT_VIEW_KEY = "phx-approval-default-view";
-
-export function storedApprovalView(): ApprovalView {
-  try {
-    return localStorage.getItem(APPROVAL_DEFAULT_VIEW_KEY) === "details" ? "details" : "summary";
-  } catch {
-    return "summary";
-  }
-}
-
-export function rememberApprovalView(view: ApprovalView): void {
-  try {
-    localStorage.setItem(APPROVAL_DEFAULT_VIEW_KEY, view);
-  } catch {
-    // A blocked store makes the choice session-only; Summary remains the next default.
-  }
-}
+import { hasMessage, t, type Params } from "../i18n";
+import { dashboardDisplayName, withDashboardLabel } from "./dashboard_names";
 
 export interface FriendlyApprovalSummary {
   title: string;
   body: string;
+}
+
+export const ENERGY_SOURCE_LABEL_KEYS: Readonly<Record<string, string>> = {
+  grid: "approvals.energyGrid",
+  solar: "approvals.energySolar",
+  battery: "approvals.energyBattery",
+  gas: "approvals.energyGas",
+  water: "approvals.energyWater",
+};
+
+/**
+ * A request's summary params in the reader's language: a sentinel dashboard
+ * name, a blueprint's automation or script domain, and an Energy source type
+ * are backend slugs that would otherwise sit untranslated inside the sentence.
+ */
+export function approvalParams(diff: ApprovalDiff | undefined): Params | undefined {
+  const params = withDashboardLabel(diff?.summary_params, diff?.target?.type);
+  if (!params) return params;
+  const out: Params = { ...params };
+  const key = diff?.summary_key ?? "";
+  if (key.startsWith("diff.blueprint.") && typeof out.domain === "string") {
+    const kind = `approvalSummary.named.kind.${out.domain}`;
+    if (hasMessage(kind)) out.domain = t(kind);
+  }
+  if (key.startsWith("diff.edit_energy_config.") && typeof out.source_type === "string") {
+    const label = ENERGY_SOURCE_LABEL_KEYS[out.source_type];
+    if (label) out.source_type = t(label);
+  }
+  return out;
 }
 
 function basename(value: string): string {
@@ -33,7 +43,7 @@ function basename(value: string): string {
 
 function targetValue(diff: ApprovalDiff | undefined): string | null {
   const value = diff?.target?.label || diff?.target?.id;
-  return typeof value === "string" && value.trim() ? value.trim() : null;
+  return typeof value === "string" && value.trim() ? dashboardDisplayName(value.trim(), diff?.target?.type) : null;
 }
 
 function registryEntityLabel(diff: ApprovalDiff, fallback: string | null): string | null {
@@ -109,6 +119,7 @@ function namedResource(key: string, diff: ApprovalDiff, label: string | null): F
 /** Resolve operator copy without interpreting rendered YAML or generating text. */
 function baseApprovalSummary(diff: ApprovalDiff | undefined): FriendlyApprovalSummary {
   const summaryKey = diff?.summary_key;
+  const params = approvalParams(diff);
   if (diff && summaryKey?.startsWith("diff.")) {
     const key = summaryKey.slice("diff.".length);
     const label = targetValue(diff);
@@ -117,14 +128,14 @@ function baseApprovalSummary(diff: ApprovalDiff | undefined): FriendlyApprovalSu
     if (key === "edit_automation" && label) {
       return {
         title: t("approvalSummary.named.editAutomation.title", { label }),
-        body: t("approvalSummary.edit_automation.body", diff?.summary_params),
+        body: t("approvalSummary.edit_automation.body", params),
       };
     }
     const registryLabel = key === "set_entity" ? registryEntityLabel(diff, label) : label;
     if ((key === "set_entity" || key === "set_device") && registryLabel) {
       return {
         title: t("approvalSummary.fallback.item.title", { label: registryLabel }),
-        body: t(`approvalSummary.${key}.body`, diff?.summary_params),
+        body: t(`approvalSummary.${key}.body`, params),
       };
     }
     if (key === "remove_device") {
@@ -142,8 +153,8 @@ function baseApprovalSummary(diff: ApprovalDiff | undefined): FriendlyApprovalSu
     const bodyKey = `approvalSummary.${key}.body`;
     if (hasMessage(titleKey) && hasMessage(bodyKey)) {
       return {
-        title: t(titleKey, diff?.summary_params),
-        body: t(bodyKey, diff?.summary_params),
+        title: t(titleKey, params),
+        body: t(bodyKey, params),
       };
     }
   }
@@ -158,30 +169,30 @@ function baseApprovalSummary(diff: ApprovalDiff | undefined): FriendlyApprovalSu
   if ((type.includes("file") || type.includes("yaml") || previewFile) && file) {
     return {
       title: t("approvalSummary.fallback.file.title", { file }),
-      body: t("approvalSummary.fallback.body"),
+      body: "",
     };
   }
   if (type.includes("integration") && label) {
     return {
       title: t("approvalSummary.fallback.integration.title", { label }),
-      body: t("approvalSummary.fallback.body"),
+      body: "",
     };
   }
   if ((type.includes("device") || type.includes("entity")) && label) {
     return {
       title: t("approvalSummary.fallback.item.title", { label }),
-      body: t("approvalSummary.fallback.body"),
+      body: "",
     };
   }
   if (type.includes("service") && label) {
     return {
       title: t("approvalSummary.fallback.service.title", { label }),
-      body: t("approvalSummary.fallback.body"),
+      body: "",
     };
   }
   return {
     title: t("approvalSummary.fallback.unknown.title"),
-    body: t("approvalSummary.fallback.body"),
+    body: "",
   };
 }
 
@@ -192,5 +203,8 @@ export function friendlyApprovalSummary(diff: ApprovalDiff | undefined): Friendl
   const message = semantics === "exact" ? "targets.exact"
     : semantics === "future_native_execution" ? "targets.futureNative"
     : semantics === "dynamic_accessible_devices" ? "targets.dynamicAccessible" : null;
-  return message ? { ...summary, body: `${summary.body} ${t(`approvalSummary.${message}`)}` } : summary;
+  if (!message) return summary;
+  const note = t(`approvalSummary.${message}`);
+  // A request with no consequence copy of its own keeps the note alone.
+  return { ...summary, body: summary.body ? [summary.body, note].join(t("common.sentenceSeparator")) : note };
 }

@@ -43,7 +43,7 @@ async def test_v4_upgrade_preserves_secret_bindings_scope_and_pending_authority(
     assert key.id == "existing" and key.settings_version == 17
     assert key.cap_physical_control == "confirm"
     assert key.permissions.to_dict()["entities"] == permission["entities"]
-    assert store.get_archived_by_hash(digest).id == "retired"
+    assert [(record.id, record.access_key_hash) for record in store.list_archived()] == [("retired", digest)]
     settings = store.get_settings()
     assert settings.assist_bound_access_key_id == settings.voice_agent_access_key_id == settings.ai_task_access_key_id == key.id
     assert settings.access_key_presets_enabled

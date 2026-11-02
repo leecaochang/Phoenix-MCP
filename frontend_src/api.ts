@@ -1,3 +1,4 @@
+import type { CompanionDomains } from "./utils/companion_reach";
 import type {
   AttentionItem,
   ConversationEntry, ConversationListResponse,
@@ -10,7 +11,6 @@ import type {
   ApprovalListParams,
   ApprovalListResponse,
   ApprovalRecord,
-  BulkPermissionResult,
   BatchApproveResult,
   AuditEntry,
   AuditListResponse,
@@ -47,6 +47,7 @@ import type {
 import { validApiResponse } from "./api_response";
 
 import { hasMessage, resolveLanguage, t } from "./i18n";
+import { noteConnection } from "./utils/connection";
 
 import { setAgentCliOwner } from "./utils/agentcli_state";
 
@@ -114,13 +115,25 @@ async function _doReq<T>(method: string, path: string, body?: unknown, extraHead
 
   // HA owns access-token refresh and request authentication. Calling
   // refreshAccessToken here races its WebSocket/session lifecycle in browsers.
-  const res = await hass.fetchWithAuth(`${BASE}${path}`, opts);
+  // A rejected fetch is the server being away, not an answer: everything that
+  // comes back, including an error status, means it is reachable again.
+  let res: Response;
+  try {
+    res = await hass.fetchWithAuth(`${BASE}${path}`, opts);
+  } catch {
+    noteConnection(false);
+    // The rejection's own message is the browser's text ("Failed to fetch",
+    // "Load failed"), not the operator's language; every view shows e.message.
+    throw new ApiError(0, "unreachable", t("common.serverUnreachable"));
+  }
+  noteConnection(true);
 
   if (res.status === 204) return undefined as T;
   let json: unknown;
   try { json = await res.json(); }
   catch {
-    if (!res.ok) throw new ApiError(res.status, "parse_error", res.statusText || t("common.invalidResponse"));
+    // A proxy's HTML error page: its reason phrase is English, the status is not.
+    if (!res.ok) throw new ApiError(res.status, "parse_error", t("common.httpStatus", { status: String(res.status) }));
     throw new ApiError(502, "invalid_response", t("common.invalidResponse"));
   }
   const error = json !== null && typeof json === "object" && !Array.isArray(json)
@@ -161,6 +174,7 @@ function buildQuery(params?: AuditQueryParams): string {
   if (params.ip) p.set("ip", params.ip);
   if (params.method) p.set("method", params.method);
   if (params.resource) p.set("resource", params.resource);
+  if (params.request_id) p.set("request_id", params.request_id);
   if (params.since) p.set("since", params.since);
   const s = p.toString();
   return s ? `?${s}` : "";
@@ -208,17 +222,6 @@ export const api = {
     req<{ integrations: IntegrationPermissionOption[] }>(
       "GET", `/access-keys/${accessKeyId}/permissions/integration-options`,
     ),
-  bulkSelectPermissions: (
-    accessKeyId: string,
-    selectorType: "area" | "label" | "integration",
-    selectorId: string,
-    state: PermissionPatchBody["state"],
-  ) => req<BulkPermissionResult>(
-    "POST",
-    `/access-keys/${accessKeyId}/permissions/bulk-select`,
-    { selector_type: selectorType, selector_id: selectorId, state },
-  ),
-
   resolve: (accessKeyId: string, entityId: string) =>
     req<ResolveResult>("GET", `/access-keys/${accessKeyId}/resolve/${encodeURIComponent(entityId)}`),
   getScope: (accessKeyId: string) => req<ScopeResult>("GET", `/access-keys/${accessKeyId}/scope`),
@@ -246,7 +249,7 @@ export const api = {
   getConversation: (id: string) => req<ConversationEntry>("GET", `/conversations/${encodeURIComponent(id)}`),
   clearConversations: () => req<{ cleared: boolean }>("DELETE", "/conversations", { confirm: true }),
 
-  getInfo: () => req<{ version: string; min_ha_version: string; github_url: string }>("GET", "/info"),
+  getInfo: () => req<{ version: string; min_ha_version: string; github_url: string; home_companion_reach?: CompanionDomains }>("GET", "/info"),
 
   getRoutingStatistics: () => req<RoutingStatisticsResponse>("GET", "/command-routing/statistics"),
   resetRoutingStatistics: (surface: "voice" | "chat") => req<RoutingStatisticsResponse>("DELETE", "/command-routing/statistics", { surface, confirm: true }),
@@ -263,7 +266,11 @@ export const api = {
       "POST", "/voice_agent/pipeline", { preferred },
     ),
   deleteVoiceAgentPipeline: () =>
-    req<{ ok: boolean }>("DELETE", "/voice_agent/pipeline"),
+    // kept: Home Assistant still has the assistant (for example its only one), though Phoenix no longer tracks it.
+    req<{ ok: boolean; kept?: boolean }>("DELETE", "/voice_agent/pipeline"),
+  // Whether that pipeline is Home Assistant's preferred assistant; the pipeline stays either way.
+  setVoiceAgentPreferred: (preferred: boolean) =>
+    req<{ pipeline_id: string; preferred: boolean }>(preferred ? "POST" : "DELETE", "/voice_agent/pipeline/preferred"),
 
   // The AI Task "Data generation tasks" default entity (one-click set/clear/status).
   getAiTaskPreferred: () =>
@@ -377,8 +384,8 @@ export const api = {
     req<{ canonical_tags: string[]; canonical_roots: string[] }>("GET", "/mesa/vocabulary"),
 
   // refresh=true recomputes everything (trigger issues, orphans, suggestions);
-  // refresh="suggestions" recomputes only suggestions, leaving the separate
-  // issues/orphans banner untouched (the Suggestions card's own Rescan).
+  // refresh="suggestions" recomputes only suggestions, leaving trigger issues
+  // and orphans as cached (the MESA workspace's quiet half-minute read).
   getMesaIssues: (refresh: boolean | "suggestions" = false) =>
     req<MesaIssuesResponse>(
       "GET",
@@ -408,8 +415,8 @@ export const api = {
     ),
 
   getApproval: (id: string) => req<ApprovalRecord>("GET", `/approvals/${encodeURIComponent(id)}`),
-  approveApproval: (id: string, body: { note?: string } = {}) =>
-    req<ApprovalRecord>("POST", `/approvals/${encodeURIComponent(id)}/approve`, body),
+  approveApproval: (id: string) =>
+    req<ApprovalRecord>("POST", `/approvals/${encodeURIComponent(id)}/approve`, {}),
   rejectApproval: (id: string, body: { reason?: string } = {}) =>
     req<ApprovalRecord>("POST", `/approvals/${encodeURIComponent(id)}/reject`, body),
   // Approves several pending approvals in one admin action. The server walks them
@@ -429,8 +436,11 @@ export const api = {
     return req<VersionListResponse>("GET", `/versions${q ? `?${q}` : ""}`);
   },
   getVersion: (id: string) => req<VersionRecord>("GET", `/versions/${encodeURIComponent(id)}`),
-  restoreVersion: (id: string, side?: "before" | "after") =>
-    req<VersionRestoreResponse>("POST", `/versions/${encodeURIComponent(id)}/restore`, side ? { side } : undefined),
+  /** expectedLatestId: the item's newest change when Restore was chosen; the server refuses if another came since. */
+  restoreVersion: (id: string, side?: "before" | "after", expectedLatestId?: string | null) => {
+    const body = { ...(side ? { side } : {}), ...(expectedLatestId ? { expected_latest_id: expectedLatestId } : {}) };
+    return req<VersionRestoreResponse>("POST", `/versions/${encodeURIComponent(id)}/restore`, Object.keys(body).length ? body : undefined);
+  },
 
   // agentCLI: provider accounts live on the admin surface. Multiple accounts of
   // the same kind are allowed; each has an opaque instance id.
@@ -504,14 +514,22 @@ export async function agentCliChat(
   if (typeof hass?.fetchWithAuth !== "function") {
     throw new ApiError(401, "unauthorized", t("common.noSession"));
   }
-  const res = await hass.fetchWithAuth("/api/phoenix-mcp/agentcli/chat", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ ...body, language: resolveLanguage(hass) }),
-    signal,
-  });
+  let res: Response;
+  try {
+    res = await hass.fetchWithAuth("/api/phoenix-mcp/agentcli/chat", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ ...body, language: resolveLanguage(hass) }),
+      signal,
+    });
+  } catch (e: unknown) {
+    // An aborted turn is the user stopping it, not Home Assistant going away.
+    if (!signal?.aborted) noteConnection(false);
+    throw e;
+  }
+  noteConnection(true);
   if (!res.ok || !res.body) {
     const j = await res.json().catch(() => ({ error: "stream_error", message: res.statusText }));
     throw new ApiError(res.status, j.error ?? "unknown", j.message ?? res.statusText,

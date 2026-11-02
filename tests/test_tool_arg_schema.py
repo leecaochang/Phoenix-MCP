@@ -181,12 +181,24 @@ def test_catalog_v2_removes_retired_flat_public_fields():
         assert not fields & set(defs[tool]["inputSchema"]["properties"])
 
 
-def test_every_retired_field_error_contains_exact_replacement_syntax():
-    for tool, replacements in _RETIRED_REPLACEMENTS.items():
-        for field, replacement in replacements.items():
-            _, error = normalize_tool_args(tool, {field: "retired-value"})
-            assert error is not None
-            assert f"{field} -> {replacement}" in error
+def test_a_retired_field_alone_is_read_and_beside_its_current_field_is_refused():
+    """Alone it names one request, so it is read and the result says how; with both it is ambiguous."""
+    from custom_components.phoenix_mcp.tool_contracts import _CURRENT_FIELDS
+    from custom_components.phoenix_mcp.tool_input import _argument_notes
+
+    for tool, current in _CURRENT_FIELDS.items():
+        for field, replacement in _RETIRED_REPLACEMENTS[tool].items():
+            notes: list[str] = []
+            token = _argument_notes.set(notes)
+            try:
+                normalize_tool_args(tool, {field: "retired-value"})
+            finally:
+                _argument_notes.reset(token)
+            assert any(replacement in note for note in notes), (tool, field, notes)
+            if tool == "patch_dashboard" and field == "url_path":
+                continue  # A top-level url_path beside changes still names one request.
+            _, error = normalize_tool_args(tool, {field: "retired-value", sorted(current)[0]: {}})
+            assert error is not None and f"{field} -> {replacement}" in error, (tool, field, error)
 
 
 @pytest.mark.parametrize("tool", ["call_service", "dry_run_service"])
@@ -197,14 +209,12 @@ def test_retired_flat_service_string_has_exact_object_migration(tool):
 
 
 @pytest.mark.parametrize("tool", ["call_service", "dry_run_service"])
-def test_mixed_retired_service_fields_are_reported_together(tool):
-    _, error = normalize_tool_args(
+def test_retired_flat_service_fields_together_name_one_call(tool):
+    normalized, error = normalize_tool_args(
         tool, {"domain": "light", "service": "turn_on", "entity_id": "light.a"}
     )
-    assert error is not None
-    assert "domain ->" in error
-    assert "entity_id ->" in error
-    assert f"service -> {_SERVICE_OBJECT_SYNTAX}" in error
+    assert error is None
+    assert normalized == {"domain": "light", "service": "turn_on", "entity_id": ["light.a"]}
 
 
 @pytest.mark.parametrize("tool", ["call_service", "dry_run_service"])

@@ -1,6 +1,7 @@
 import { BusyInput } from "./BusyButton";
 import type { GlobalSettings } from "../types";
 import { t } from "../i18n";
+import { SettingLabel, helpRow } from "../ui/SettingLabel";
 
 interface Props {
   settings: GlobalSettings;
@@ -11,13 +12,8 @@ interface Props {
 export function NotificationSettings({ settings, onToggle, saving }: Props) {
   return (
     <div>
-      <div className="toggle-row">
-        <div className="toggle-label">
-          <span>{t("settings.notifyApprovalLabel")}</span>
-          <small>
-            {t("settings.notifyApprovalHelp")}
-          </small>
-        </div>
+      <div className="toggle-row" {...helpRow(t("settings.notifyApprovalHelp"))}>
+        <SettingLabel help={t("settings.notifyApprovalHelp")}><span>{t("settings.notifyApprovalLabel")}</span></SettingLabel>
         <label className={`toggle-switch${saving ? " disabled" : ""}`}>
           <BusyInput
             type="checkbox"
@@ -29,13 +25,8 @@ export function NotificationSettings({ settings, onToggle, saving }: Props) {
           <span className="toggle-switch-track" />
         </label>
       </div>
-      <div className="toggle-row">
-        <div className="toggle-label">
-          <span>{t("settings.notifyRateLimitLabel")}</span>
-          <small>
-            {t("settings.notifyRateLimitHelp")}
-          </small>
-        </div>
+      <div className="toggle-row" {...helpRow(t("settings.notifyRateLimitHelp"))}>
+        <SettingLabel help={t("settings.notifyRateLimitHelp")}><span>{t("settings.notifyRateLimitLabel")}</span></SettingLabel>
         <label className={`toggle-switch${saving ? " disabled" : ""}`}>
           <BusyInput
             type="checkbox"

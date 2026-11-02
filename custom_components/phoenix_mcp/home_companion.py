@@ -2,7 +2,8 @@
 from __future__ import annotations
 
 import logging
-from .helpers import access_key_notes_block, log_internal_failure
+from .command_display import async_state_translations
+from .helpers import access_key_notes_block, canonical_language, log_internal_failure
 
 import asyncio
 from contextvars import ContextVar
@@ -49,6 +50,12 @@ _presentation: ContextVar[tuple[str, str] | None] = ContextVar("phoenix_companio
 
 
 _turn: ContextVar[CompanionTurn | None] = ContextVar("phoenix_companion_turn", default=None)
+
+
+# The provider account and model Agent Chat's user chose. Only an internal caller
+# sets it, never home_request's arguments, so an external client cannot pick which
+# account is spent; without it the Voice settings decide.
+_account: ContextVar[tuple[str, str | None] | None] = ContextVar("phoenix_companion_account", default=None)
 
 
 def is_companion(access_key: Any) -> bool:
@@ -142,11 +149,52 @@ def record_outcome(access_key: Any, name: str, outcome: str, result: dict | None
             turn.evidence.warnings = [scrub(warning) for warning in turn.evidence.warnings]
 
 
+def _context_bytes(system: str, messages: list[dict]) -> int:
+    return len(json.dumps({"system": system, "messages": messages}, ensure_ascii=False, default=str).encode())
+
+
 def check_turn_context(access_key: Any, system: str, messages: list[dict]) -> bool:
     if not internal_turn(access_key):
         return True
     check_request_authority()
-    return len(json.dumps({"system": system, "messages": messages}, ensure_ascii=False).encode()) <= HOME_COMPANION_MAX_CONTEXT_BYTES
+    return _context_bytes(system, messages) <= HOME_COMPANION_MAX_CONTEXT_BYTES
+
+
+def append_fitting_results(access_key: Any, system: str, messages: list[dict], results: list[dict],
+                           append: Any) -> None:
+    """Append a round's results, withholding the largest reads the request has no room for.
+
+    One full-size result can fill this persona's whole context and end the
+    request. A withheld read comes back as an error naming its size, so the
+    model can ask again for less. A control result is never withheld: it is the
+    evidence of what ran. If the rest still does not fit, the next round's context
+    check ends the request as before.
+    """
+    start = len(messages)
+    append(messages, results)
+    turn = _turn.get()
+    if not internal_turn(access_key) or turn is None:
+        return
+    from .agent_recovery import tool_is_read_only
+    from .conversation_log import record_current
+    withheld: set[int] = set()
+    while (size := _context_bytes(system, messages)) > HOME_COMPANION_MAX_CONTEXT_BYTES:
+        reads = [(len(str(row.get("result_text") or "").encode()), index) for index, row in enumerate(results)
+                 if index not in withheld and not row.get("is_error") and tool_is_read_only(str(row.get("tool_name") or ""))]
+        if not reads:
+            return
+        length, index = max(reads)
+        withheld.add(index)
+        room = max(0, HOME_COMPANION_MAX_CONTEXT_BYTES - (size - length))
+        row = results[index]
+        results[index] = {**row, "images": [], "is_error": True, "result_text": (
+            f"This result was too large for this request ({length} bytes; about {room} bytes remain) and was not shown. "
+            "Ask again for less: fewer entities, a narrower selection, a shorter period or a smaller limit.")}
+        turn.evidence.model_answer = True
+        record_current("error", {"code": "result_withheld", "name": row.get("tool_name"), "call_id": row.get("tool_use_id"),
+                                 "executed": True, "message": f"A {length}-byte result did not fit the request's context and was withheld from the model."})
+        del messages[start:]
+        append(messages, results)
 
 
 def preflight_control_calls(access_key: Any, calls: list[dict]) -> list[dict] | None:
@@ -154,6 +202,9 @@ def preflight_control_calls(access_key: Any, calls: list[dict]) -> list[dict] | 
     if not internal_turn(access_key):
         return None
     check_request_authority()
+    turn = _turn.get()
+    if turn is not None and any(call.get('name') in HOME_COMPANION_CONTROL_TOOLS for call in calls):
+        turn.evidence.control_proposed = True
     from .tools.native import validate_native_control_args
     errors = {}
     for call in calls:
@@ -198,8 +249,7 @@ def ambiguous_control(access_key: Any, hass: Any, name: str, arguments: Any = No
             continue
         label = state.attributes.get('friendly_name', state.entity_id)
         entry = registry.async_get(state.entity_id)
-        aliases = [] if entry is None else (er.async_get_entity_aliases(hass, entry)
-            if hasattr(er, 'async_get_entity_aliases') else [alias for alias in entry.aliases if isinstance(alias, str)])
+        aliases = [] if entry is None else er.async_get_entity_aliases(hass, entry)
         labels = [str(label), state.entity_id, *aliases]
         area_id = effective_entity_area_id(entry, devices)
         if area_id and (area := areas.async_get_area(area_id)):
@@ -289,11 +339,34 @@ def _parse_final_answer(text: str, evidence: ResponseEvidence) -> dict | None:
         return None
 
 
-def invalid_count_report(access_key: Any, text: str) -> bool:
-    """Let the bounded loop correct final formatting after scoped count discovery."""
+def _read_only_answer(text: str) -> dict | None:
+    """The answer in a read-only reply that missed the required object: its prose, or a malformed object's message."""
+    body = text.strip()
+    start = body.find("{")
+    if start >= 0:
+        try:
+            value, _ = json.JSONDecoder().raw_decode(body, start)
+        except ValueError:
+            value = None
+        if isinstance(value, dict):
+            message, status = value.get("message"), value.get("status")
+            # A count reference that failed validation means the model supplied its own count.
+            if not isinstance(message, str) or not message.strip() or "read_answer" in value:
+                return None
+            return {"status": status if status in {"completed", "clarification_needed", "refused"} else "completed",
+                    "message": message.strip()}
+    return {"status": "completed", "message": body} if body else None
+
+
+def invalid_read_report(access_key: Any, text: str) -> bool:
+    """Let the bounded loop correct the final formatting of a read-only answer.
+
+    Models sometimes answer a history question in plain prose; one tools-free
+    round asks for the required object instead of discarding a good answer.
+    """
     turn = _turn.get()
-    return bool(internal_turn(access_key) and turn and turn.evidence.search_totals
-                and not turn.evidence.attempts and _parse_final_answer(text, turn.evidence) is None)
+    return bool(internal_turn(access_key) and turn and not turn.evidence.attempts
+                and _parse_final_answer(text, turn.evidence) is None)
 
 
 async def run_request(arguments: dict, access_key: Any, hass: Any, data: Any) -> tuple:
@@ -318,11 +391,14 @@ async def run_request(arguments: dict, access_key: Any, hass: Any, data: Any) ->
     guard_context = None
     turn = CompanionTurn(access_key.id, language=arguments.get("language", "en"), request=arguments["request"])
     try:
+        # Readings are spoken in the request's language; load HA's state labels
+        # and the CLDR number data now, off the event loop, before any tool runs.
+        turn.evidence.language = canonical_language(turn.language)
+        turn.evidence.state_translations = await async_state_translations(hass, turn.language)
         authority = RoutingAuthority.capture(data, access_key)
         settings = data.store.get_settings()
         turn.style, turn.detail = _presentation.get() or (settings.voice_agent_conversation_style, settings.voice_agent_detail_level)
-        account = settings.voice_agent_provider_id
-        model = settings.voice_agent_model or None
+        account, model = _account.get() or (settings.voice_agent_provider_id, settings.voice_agent_model or None)
         store = await _get_secret_store(hass)
         cfg = store.resolve(account, model) if account else None
         if cfg is None or not cfg.model:
@@ -438,6 +514,12 @@ async def run_request(arguments: dict, access_key: Any, hass: Any, data: Any) ->
         if result.outcome != TURN_OK:
             return _result("completed", outcomes=turn.outcomes)
         answer = _parse_final_answer(result.text, turn.evidence)
+        if (answer is None and turn.evidence.model_answer and not turn.evidence.attempts
+                and not turn.evidence.control_proposed):
+            # A model-authored read answer (history and the like) whose format the
+            # bounded loop could not correct is still the answer; the report still
+            # says nothing was executed. Counts and plain state reads stay server-built.
+            answer = _read_only_answer(result.text)
         if answer is None:
             return _result("invalid_output", outcomes=turn.outcomes)
         if "read_answer" in answer:
@@ -462,15 +544,24 @@ async def run_request(arguments: dict, access_key: Any, hass: Any, data: Any) ->
 
 
 async def async_delegate(hass: Any, data: Any, access_key: Any, request: str, language: object,
-                         base_url: str, *, style: str | None = None, detail: str | None = None) -> dict:
-    """Delegate original ingress text once through normal MCP and recovery gates."""
+                         base_url: str, *, style: str | None = None, detail: str | None = None,
+                         usage: Any = None, account: tuple[str, str | None] | None = None) -> dict:
+    """Delegate original ingress text once through normal MCP and recovery gates.
+
+    usage, a HeadlessUsage, collects the inner turn's provider-reported tokens for
+    a caller that shows them; it never enters the report. account is the provider
+    account and model the caller's user chose; None uses the Voice settings.
+    """
     from .agent_recovery import dispatch_agent_tool
+    from .agentcli import headless_usage
     from .mcp_view import _dispatch_mcp
     from .audit import generate_request_id
     from .helpers import voice_text
     check_request_authority()
     settings = data.store.get_settings()
     presentation = _presentation.set((style or settings.voice_agent_conversation_style, detail or settings.voice_agent_detail_level))
+    sink = headless_usage.set(usage)
+    chosen = _account.set(account)
     try:
         response, _, _, _ = await dispatch_agent_tool(
             _dispatch_mcp, hass=hass, data=data, access_key=access_key, name="home_request",
@@ -479,6 +570,8 @@ async def async_delegate(hass: Any, data: Any, access_key: Any, request: str, la
             request_id=generate_request_id(),
         )
     finally:
+        _account.reset(chosen)
+        headless_usage.reset(sink)
         _presentation.reset(presentation)
     check_request_authority()
     result = response.get("result", {})

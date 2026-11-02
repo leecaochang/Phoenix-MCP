@@ -5,14 +5,14 @@ import { ConnectInstructions } from "../components/ConnectInstructions";
 describe("external client connection instructions", () => {
   it("opens Harness setup and keeps its configuration aligned with the editable URL", () => {
     render(<ConnectInstructions accessKey="phx_example" accessKeyName="Voice_Assist" />);
-    const tab = screen.getByRole("tab", { name: "DeepSeek Harness (experimental)" });
+    const tab = screen.getByRole("tab", { name: "DeepSeek Harness (Preview)" });
     fireEvent.click(tab);
     expect(tab).toHaveAttribute("aria-selected", "true");
     expect(screen.queryByRole("tab", { name: "Claude web/app" })).not.toBeInTheDocument();
     expect(screen.getByRole("tabpanel")).toHaveTextContent("desktop app or CLI");
     expect(screen.getByRole("tabpanel")).toHaveTextContent("~/.dsh/profiles/desktop/cordis.patch.yml");
     expect(screen.getByRole("tabpanel")).toHaveTextContent("otherwise append");
-    expect(screen.getByRole("tabpanel")).toHaveTextContent("CLI alternative");
+    expect(screen.getByRole("tabpanel")).toHaveTextContent("CLI Alternative");
     expect(screen.getByRole("tabpanel")).toHaveTextContent('serverName: "voice-assist"');
     expect(screen.getByRole("tabpanel")).toHaveTextContent('Authorization: "Bearer phx_example"');
     fireEvent.change(screen.getByRole("textbox", { name: "MCP server URL" }), {

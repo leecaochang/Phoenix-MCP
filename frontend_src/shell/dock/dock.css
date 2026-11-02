@@ -1,0 +1,258 @@
+/* Workspace windows on Dockview: Dockview's variables mapped onto Phoenix tokens,
+   window chrome, and the drag look (window outline, edge line, dimmed source). */
+
+.phx-dock {
+  --dv-background-color: var(--phx-bg);
+  --dv-group-view-background-color: var(--phx-surface);
+  --dv-tabs-and-actions-container-background-color: var(--phx-surface);
+  --dv-tabs-and-actions-container-height: 34px;
+  --dv-tabs-and-actions-container-font-size: 13px;
+  --dv-activegroup-visiblepanel-tab-background-color: var(--phx-surface);
+  --dv-inactivegroup-visiblepanel-tab-background-color: var(--phx-surface);
+  --dv-activegroup-visiblepanel-tab-color: var(--phx-text);
+  --dv-inactivegroup-visiblepanel-tab-color: var(--phx-text-2);
+  --dv-separator-border: transparent;
+  --dv-paneview-header-border-color: var(--phx-border);
+  --dv-drag-over-background-color: var(--phx-focus);
+  --dv-drag-over-border: none;
+  --dv-drag-over-border-color: transparent;
+  --dv-active-sash-color: var(--phx-line-strong);
+  --dv-floating-box-shadow: var(--phx-shadow-lg);
+  --dv-icon-hover-background-color: var(--phx-hover);
+  background: var(--phx-bg);
+  font-family: var(--phx-font);
+}
+
+/* A workspace: a pinned band on top, the scrolling grid, a pinned band below, and floating windows above them all. */
+.phx-workspace-frame {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.phx-workspace-frame[hidden] { display: none; }
+
+/* The grid scrolls vertically; Dockview lays windows out on a canvas of the height the shell sets. */
+.phx-workspace {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.phx-workspace[hidden] { display: none; }
+/* Dockview sizes itself to its wrapper; pin the wrapper so that resolves inside nested flex layouts.
+   DockviewReact sets an inline height of 100%, so the canvas height must override it. */
+.phx-canvas-host > div { position: absolute; top: 0; left: 0; right: 0; height: var(--phx-canvas-height, 100%) !important; }
+/* A scrolling canvas leaves room for the scrollbar beside the windows. */
+.phx-canvas-host.phx-scrolls { scrollbar-gutter: stable; }
+.phx-canvas-host.phx-fits { overflow: hidden; }
+/* While a border is dragged, the workspace keeps the scroll height it had when the drag began. */
+.phx-canvas-host::after { content: ""; position: absolute; top: 0; left: 0; width: 1px; height: var(--phx-canvas-hold, 0px); pointer-events: none; visibility: hidden; }
+/* The handle along the bottom of a scrolling grid, inside the canvas so it scrolls with the windows. */
+.phx-grid-edge {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(var(--phx-canvas-height, 100%) - 6px);
+  height: 6px;
+  z-index: 1000;
+  cursor: ns-resize;
+  touch-action: none;
+}
+.phx-grid-edge:hover, .phx-grid-edge.is-dragging { background-color: var(--phx-hover); }
+.phx-fits > .phx-grid-edge, .phx-workspace:not(:has(.dv-groupview)) > .phx-grid-edge { display: none; }
+.phx-canvas-host.phx-resizing, .phx-canvas-host.phx-resizing * { cursor: ns-resize !important; user-select: none; }
+.phx-canvas-host.phx-resizing.phx-resizing-columns, .phx-canvas-host.phx-resizing.phx-resizing-columns * { cursor: ew-resize !important; }
+
+/* Pinned bands are as tall as their windows (up to a share of the workspace) and do not scroll with the grid. */
+.phx-band {
+  position: relative;
+  flex: none;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.phx-band.phx-band-empty, .phx-band.phx-band-clipped { overflow: hidden; }
+/* A clipped band never scrolls, so it keeps no scrollbar gutter beside its windows. */
+.phx-band.phx-band-clipped.phx-canvas-host { scrollbar-gutter: auto; }
+/* The edge between a band and the grid resizes the band's windows along it. */
+.phx-band-edge {
+  flex: none;
+  height: 6px;
+  cursor: ns-resize;
+  touch-action: none;
+  background: linear-gradient(var(--phx-border), var(--phx-border)) center / 32px 2px no-repeat;
+  border-radius: 1px;
+}
+.phx-band-edge:hover, .phx-band-edge.is-dragging { background-color: var(--phx-hover); }
+.phx-band-top.phx-band-empty + .phx-band-edge-top,
+.phx-band-edge-bottom:has(+ .phx-band-bottom.phx-band-empty) { display: none; }
+
+/* Floating windows sit in a layer over the whole workspace, fixed while the grid scrolls; only the windows take the pointer. */
+.phx-float-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  pointer-events: none;
+  /* Windows are kept inside it; nothing, not even focus, may make it or the panel scroll. */
+  overflow: clip;
+}
+.phx-float-layer .phx-dock,
+.phx-float-layer .dv-dockview,
+.phx-float-layer .dv-grid-view { background: transparent; }
+.phx-float-layer .dv-resize-container,
+.phx-float-layer .dv-render-overlay { pointer-events: auto; }
+/* The grid and the bands keep their own stacking, so nothing in them (window content, Dockview's
+   borders between windows) can rise above a floating window and take the pointer. */
+.phx-workspace, .phx-band { isolation: isolate; }
+
+/* A floating window moves by its title bar and resizes from every edge and corner, as Agent Chat does:
+   each grabber straddles the border, half outside and half inside. The content gives up its outer
+   3 px to them; clip-path also stops it taking the pointer there. */
+.phx-float-layer .phx-dock :is(.dv-tab, .dv-void-container) { cursor: move; }
+.phx-float-layer .dv-render-overlay { clip-path: inset(0 3px 3px 3px); }
+.phx-float-layer .dv-resize-container .dv-resize-handle-top { top: -3px; height: 6px; left: 8px; width: calc(100% - 16px); }
+.phx-float-layer .dv-resize-container .dv-resize-handle-bottom { bottom: -3px; height: 6px; left: 8px; width: calc(100% - 16px); }
+.phx-float-layer .dv-resize-container .dv-resize-handle-left { left: -3px; width: 6px; top: 8px; height: calc(100% - 16px); }
+.phx-float-layer .dv-resize-container .dv-resize-handle-right { right: -3px; width: 6px; top: 8px; height: calc(100% - 16px); }
+.phx-float-layer .dv-resize-container :is(.dv-resize-handle-topleft, .dv-resize-handle-topright, .dv-resize-handle-bottomleft, .dv-resize-handle-bottomright) { width: 12px; height: 12px; }
+/* Dockview's own z-index for these reads a custom property that refers to itself, which is invalid,
+   so the window's frame drew over their inner half; above it, the corners above the edges. */
+.phx-float-layer .dv-resize-container :is(.dv-resize-handle-top, .dv-resize-handle-bottom, .dv-resize-handle-left, .dv-resize-handle-right) { z-index: 5; }
+.phx-float-layer .dv-resize-container :is(.dv-resize-handle-topleft, .dv-resize-handle-topright, .dv-resize-handle-bottomleft, .dv-resize-handle-bottomright) { z-index: 6; }
+.phx-float-layer .dv-resize-container .dv-resize-handle-topleft { top: -4px; left: -4px; cursor: nwse-resize; }
+.phx-float-layer .dv-resize-container .dv-resize-handle-topright { top: -4px; right: -4px; cursor: nesw-resize; }
+.phx-float-layer .dv-resize-container .dv-resize-handle-bottomleft { bottom: -4px; left: -4px; cursor: nesw-resize; }
+.phx-float-layer .dv-resize-container .dv-resize-handle-bottomright { bottom: -4px; right: -4px; cursor: nwse-resize; }
+
+/* A folded floating window shows only its title bar and resizes only in width. */
+.phx-float-layer .dv-resize-container.phx-float-folded { height: calc(var(--dv-tabs-and-actions-container-height, 34px) + 2px) !important; }
+.phx-float-layer .dv-resize-container.phx-float-folded > .dv-grid-view { overflow: hidden; height: 100% !important; }
+.phx-float-layer .dv-resize-container.phx-float-folded :is(.dv-resize-handle-top, .dv-resize-handle-bottom, .dv-resize-handle-topleft, .dv-resize-handle-topright, .dv-resize-handle-bottomleft, .dv-resize-handle-bottomright) { display: none; }
+.phx-float-layer .dv-render-overlay:has(.phx-window-body[hidden]) { display: none; }
+
+/* A window's content element, moved between hosts with the window. */
+.phx-window-slot, .phx-window-content { height: 100%; }
+
+.phx-dock .dv-groupview {
+  border: 1px solid var(--phx-border);
+  border-radius: var(--phx-radius);
+  overflow: hidden;
+}
+.phx-dock .dv-groupview.dv-active-group { border-color: var(--phx-line-strong); }
+.phx-dock .dv-tabs-and-actions-container { border-bottom: 1px solid var(--phx-border); }
+.phx-dock .dv-tab { padding: 0 8px 0 4px; }
+.phx-dock .dv-void-container { cursor: grab; }
+
+.phx-window-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 100%;
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--phx-text);
+}
+.phx-window-title-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.phx-window-controls {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  height: 100%;
+  padding: 0 4px;
+}
+.phx-window-control {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: none;
+  border-radius: var(--phx-radius-sm);
+  background: transparent;
+  color: var(--phx-text-2);
+  cursor: pointer;
+}
+.phx-window-control:hover:not(:disabled) { background: var(--phx-hover); color: var(--phx-text); }
+/* At the end of the Guide's history, Back or Forward is greyed out and does nothing. */
+.phx-window-control:disabled { opacity: 0.35; cursor: default; }
+.phx-window-control.is-active { background: var(--phx-accent-lt); color: var(--phx-text); }
+.phx-window-resize-hint { padding: 0 6px; font-size: 12px; color: var(--phx-text-2); white-space: nowrap; }
+
+.phx-window-body { box-sizing: border-box; height: 100%; overflow: auto; padding: 0 16px 16px; }
+/* F6 lands on a window, the toolbar or the Guide itself: show where focus went. */
+.phx-window-body:focus-visible { outline: 2px solid var(--phx-focus); outline-offset: -2px; }
+/* Windows that follow their content (Access Keys, Settings) are as tall as it, never scrolling inside, unless one is maximized.
+   Dragging a border gives a window a height of its own (user, 2026-10-31). */
+.phx-workspace.phx-content-sized:not(.phx-has-maximized) .phx-window-body { height: auto; overflow: hidden; }
+/* One held to its share of the visible height (the key list) scrolls inside instead. */
+.phx-workspace.phx-content-sized:not(.phx-has-maximized) .phx-window-body.phx-window-capped { max-height: var(--phx-window-cap); overflow: auto; }
+/* A window taller than its content ends its frame at the content; the rest of its place is empty workspace. */
+/* Dockview sets the frame's height inline; a maximum shortens it without fighting that. A folded
+   window under a window ending at its content is lifted to sit right under it (see liftFolded). */
+.phx-workspace .phx-dock .dv-groupview { max-height: calc(100% - var(--phx-slack, 0px)); }
+/* A floating window hidden in place. */
+.phx-float-hidden { display: none !important; }
+.phx-window-body[hidden] { display: none; }
+
+/* Drag look: a thin line marks where the window will dock and slides between edges. */
+.phx-dock .dv-drop-target,
+.phx-dock .dv-drop-target-container { --dv-transition-duration: 120ms; }
+.phx-dock .dv-drop-target-selection,
+.phx-dock .dv-drop-target-anchor {
+  border-radius: 2px;
+  box-shadow: 0 0 10px color-mix(in srgb, var(--phx-focus) 35%, transparent);
+}
+.phx-dock .phx-window-dragging { opacity: 0.45; transition: opacity 120ms ease-out; }
+
+/* The outline that follows the pointer. A drag that starts on the title text
+   uses Dockview's copy of the tab, which carries every computed style inline. */
+.phx-window-ghost,
+.dv-tab-ghost-drag {
+  box-sizing: border-box !important;
+  width: 260px !important;
+  height: 160px !important;
+  min-width: 0 !important;
+  max-width: none !important;
+  min-height: 0 !important;
+  max-height: none !important;
+  background: var(--phx-surface) !important;
+  border: 1px solid var(--phx-line-strong) !important;
+  border-radius: var(--phx-radius) !important;
+  box-shadow: var(--phx-shadow-lg) !important;
+  overflow: hidden !important;
+  font: 500 13px var(--phx-font) !important;
+  color: var(--phx-text) !important;
+  opacity: 1 !important;
+  pointer-events: none !important;
+}
+.phx-window-ghost { position: relative; top: -27px; }
+.dv-tab-ghost-drag {
+  top: -27px !important;
+  left: 0 !important;
+  display: block !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  transform: none !important;
+}
+.phx-window-ghost-title,
+.dv-tab-ghost-drag .phx-window-title {
+  display: flex;
+  align-items: center;
+  height: 34px;
+  padding: 0 12px;
+  border-bottom: 1px solid var(--phx-border);
+}
+.dv-tab-ghost-drag .phx-window-control { display: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  .phx-dock .dv-drop-target,
+  .phx-dock .dv-drop-target-container { --dv-transition-duration: 0ms; }
+  .phx-dock .phx-window-dragging { transition: none; }
+}

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import copy
 from datetime import datetime, timedelta, timezone
 import json
 from types import SimpleNamespace
@@ -52,7 +53,7 @@ class _FakeResp:
         text_data: str = "", headers: dict | None = None,
     ) -> None:
         self.status = status
-        self.content = _FakeContent(body)
+        self.content = _FakeContent(body or text_data.encode())
         self._json = json_data
         self._text = text_data
         self.headers = headers or {}
@@ -80,6 +81,9 @@ class _FakeSession:
         return self._resp
 
     def get(self, url, headers=None, timeout=None, allow_redirects=None, params=None):
+        if url.endswith("/api/ps"):
+            # A local Ollama's loaded-model list: nothing loaded, so no context check applies.
+            return _FakeResp(200, json_data={"models": []})
         self.calls.append(("GET", {"url": url, "allow_redirects": allow_redirects, "params": params}))
         return self._resp
 
@@ -282,14 +286,26 @@ async def test_retry_after_without_delay_seconds_is_dropped(value):
 
 
 @pytest.mark.asyncio
-async def test_retry_after_outside_a_rate_limit_is_not_reported():
+async def test_retry_after_on_an_overloaded_answer_is_kept_for_pacing():
+    # RFC 9110 defines Retry-After for 503 too; the retry wrapper waits it out.
     cfg = ProviderConfig(kind="chatgpt", model="gpt-5", base_url="https://api.openai.com/v1", api_key="k")
     response = _FakeResp(503, text_data="overloaded", headers={"Retry-After": "30"})
 
     events = await _collect(OpenAICompatProvider(cfg).stream_turn(
         _FakeSession(response), system_prompt="s", messages=[], tools=[], options={}))
 
-    assert events[0]["code"] == "upstream"
+    assert events[0]["code"] == "upstream" and events[0]["retryable"] is True
+    assert events[0]["rate_limit"] == {"retry_after_seconds": 30}
+
+
+@pytest.mark.asyncio
+async def test_retry_after_on_a_server_error_is_not_reported():
+    cfg = ProviderConfig(kind="chatgpt", model="gpt-5", base_url="https://api.openai.com/v1", api_key="k")
+    response = _FakeResp(500, text_data="boom", headers={"Retry-After": "30"})
+
+    events = await _collect(OpenAICompatProvider(cfg).stream_turn(
+        _FakeSession(response), system_prompt="s", messages=[], tools=[], options={}))
+
     assert "rate_limit" not in events[0]
 
 
@@ -331,8 +347,10 @@ async def test_claude_stream_reports_usage_from_message_start_and_delta():
     events = await _collect(provider.stream_turn(
         _FakeSession(_FakeResp(200, body)), system_prompt="s", messages=[], tools=[], options={}))
     usage = [e for e in events if e["type"] == agentcli.EV_USAGE]
-    assert usage[0] == {"type": agentcli.EV_USAGE, "input_tokens": 420, "output_tokens": 2}
-    assert usage[-1] == {"type": agentcli.EV_USAGE, "input_tokens": 420, "output_tokens": 55}
+    # Cache reads and writes stay inside input_tokens and are also reported apart.
+    cache = {"cache_read_tokens": 300, "cache_write_tokens": 20}
+    assert usage[0] == {"type": agentcli.EV_USAGE, "input_tokens": 420, "output_tokens": 2, **cache}
+    assert usage[-1] == {"type": agentcli.EV_USAGE, "input_tokens": 420, "output_tokens": 55, **cache}
 
 
 @pytest.mark.asyncio
@@ -430,6 +448,55 @@ async def test_mistral_reasoning_is_preserved_when_verbose_output_is_hidden():
     assert not any(e["type"] == agentcli.EV_THINKING for e in events)
     done = next(e for e in events if e["type"] == agentcli.EV_DONE)
     assert done["assistant_msg"]["content"][0]["type"] == "thinking"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("kind", "model", "temperature", "top_p"), [
+    ("mistral", "mistral-small-latest", 0, 1), ("opencode", "mistral-large-4", 0, 1),
+    ("opencode", "mistral-large-4", 0.7, None), ("opencode", "glm-5.3", 0, None),
+])
+async def test_mistral_greedy_temperature_sends_top_p_one(kind, model, temperature, top_p):
+    """Mistral refuses temperature 0 unless top_p is 1, naming only top_p.
+
+    Phoenix cannot learn that refusal as a temperature one, so every Agent Chat
+    turn at temperature 0 on a Mistral model failed until the user changed it.
+    """
+    session = _FakeSession(_FakeResp(200, _sse("data: [DONE]")))
+    cfg = ProviderConfig(kind=kind, model=model, base_url="https://h", api_key="k")
+    await _collect(OpenAICompatProvider(cfg).stream_turn(
+        session, system_prompt="s", messages=[], tools=[], options={"temperature": temperature}))
+    sent = session.calls[0][1]["json"]
+    assert sent["temperature"] == temperature
+    assert sent.get("top_p") == top_p
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("model", "mistral_shape"), [("mistral-large-4", True), ("glm-5.3", False)])
+async def test_opencode_accepts_mistral_content_parts_only_for_mistral_models(model, mistral_shape):
+    """OpenCode forwards a Mistral model's replies in Mistral's typed content shape.
+
+    Every turn on such a model failed as malformed. The same shape from any other
+    model behind OpenCode is still malformed, so the exception follows the family.
+    """
+    chunks = [{"type": "thinking", "thinking": [{"type": "text", "text": "Check the light."}], "closed": True}]
+    body = _sse(
+        'data: {"choices":[{"delta":{"role":"assistant","content":""},"finish_reason":null}]}',
+        f'data: {json.dumps({"choices": [{"delta": {"content": chunks}, "finish_reason": None}]})}',
+        'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"c1","function":{"name":"get_state","arguments":"{\\"entity_id\\": \\"light.desk\\"}"}}]},"finish_reason":"tool_calls"}]}',
+        "data: [DONE]",
+    )
+    cfg = ProviderConfig(kind="opencode", model=model, base_url="https://opencode.ai/zen/v1", api_key="k")
+    events = await _collect(OpenAICompatProvider(cfg).stream_turn(
+        _FakeSession(_FakeResp(200, body)), system_prompt="s", messages=[], tools=[], options={}))
+
+    done = next((e for e in events if e["type"] == agentcli.EV_DONE), None)
+    if not mistral_shape:
+        assert done is None
+        assert next(e for e in events if e["type"] == agentcli.EV_ERROR)["code"] == "provider_malformed"
+        return
+    assert next(e for e in events if e["type"] == agentcli.EV_TOOL)["input"] == {"entity_id": "light.desk"}
+    # Mistral requires the reasoning parts back on the next turn.
+    assert done["assistant_msg"]["content"] == chunks
 
 
 @pytest.mark.asyncio
@@ -772,9 +839,9 @@ async def test_zai_preserves_reasoning_and_enables_streamed_tools():
         options={"thinking": True, "show_thinking": False},
     ))
     sent = session.calls[-1][1]["json"]
-    assert sent["thinking"] == {"type": "enabled"}
+    assert sent["thinking"] == {"type": "enabled", "clear_thinking": False}
     assert sent["tool_stream"] is True
-    assert sent["clear_thinking"] is False
+    assert "clear_thinking" not in sent
     done = next(event for event in events if event["type"] == agentcli.EV_DONE)
     assert done["assistant_msg"]["reasoning_content"] == "check state"
 
@@ -1241,14 +1308,16 @@ async def test_clean_stream_with_bad_json_is_not_reported_as_a_dropped_connectio
 
 @pytest.mark.asyncio
 async def test_deepseek_gets_explicit_max_tokens_other_kinds_do_not():
-    # DeepSeek's undocumented default output cap can truncate a large tool call, so
-    # Phoenix MCP pins an explicit ceiling for DeepSeek only. ChatGPT must NOT get
-    # max_tokens (OpenAI reasoning models reject the field).
+    # DeepSeek's 8K non-thinking default can truncate a large tool call, so Phoenix
+    # MCP raises it while thinking is off. With thinking on, or left at DeepSeek's
+    # default (on), its own larger defaults stand. ChatGPT must NOT get max_tokens
+    # (OpenAI reasoning models reject the field).
     body = _sse('data: {"choices":[{"delta":{"content":"ok"},"finish_reason":"stop"}]}', "data: [DONE]")
     ds = OpenAICompatProvider(ProviderConfig(kind="deepseek", model="deepseek-v4-flash", base_url="https://d", api_key="k"))
-    session = _FakeSession(_FakeResp(200, body))
-    await _collect(ds.stream_turn(session, system_prompt="s", messages=[], tools=[], options={"thinking": True}))
-    assert session.calls[-1][1]["json"]["max_tokens"] == AGENTCLI_DEEPSEEK_MAX_TOKENS
+    for options in ({"thinking": True}, {}):
+        session = _FakeSession(_FakeResp(200, body))
+        await _collect(ds.stream_turn(session, system_prompt="s", messages=[], tools=[], options=options))
+        assert "max_tokens" not in session.calls[-1][1]["json"]
     session = _FakeSession(_FakeResp(200, body))
     await _collect(ds.stream_turn(session, system_prompt="s", messages=[], tools=[], options={"thinking": False}))
     assert session.calls[-1][1]["json"]["max_tokens"] == AGENTCLI_DEEPSEEK_MAX_TOKENS
@@ -1689,6 +1758,7 @@ class _ScriptedProvider:
         self.turns = turns
         self.i = 0
         self.system_prompts: list[str] = []
+        self.sent_messages: list[list[dict]] = []
         self.tool_catalogs: list[list[dict]] = []
 
     def format_tools(self, tools):
@@ -1702,6 +1772,7 @@ class _ScriptedProvider:
 
     async def stream_turn(self, session, *, system_prompt, messages, tools, options):
         self.system_prompts.append(system_prompt)
+        self.sent_messages.append(copy.deepcopy(messages))
         self.tool_catalogs.append(tools)
         turn = self.turns[self.i]
         self.i += 1
@@ -1918,22 +1989,26 @@ async def test_run_agent_turn_uses_home_assistant_timezone_silently(
     with patch("custom_components.phoenix_mcp.agentcli.build_mcp_tool_list", return_value=catalog), \
          patch("custom_components.phoenix_mcp.mcp_view._build_instructions", return_value="sys"), \
          patch("custom_components.phoenix_mcp.agentcli.dt_util.now", return_value=local_now):
-        await async_run_agent_turn(
+        stored = await async_run_agent_turn(
             hass=hass, data=data, access_key=MagicMock(), provider=provider,
-            session=MagicMock(), messages=[], options={}, client_ip="agentcli",
-            base_url="http://h", emit=AsyncMock(), cancel=asyncio.Event(),
+            session=MagicMock(), messages=[{"role": "user", "content": "What happened?"}], options={},
+            client_ip="agentcli", base_url="http://h", emit=AsyncMock(), cancel=asyncio.Event(),
         )
 
     prompt = provider.system_prompts[0]
-    assert zone in prompt
-    assert offset_label in prompt
-    assert "2026-08-13 11:26" in prompt
     assert "preserve their canonical timestamps" in prompt
     assert "authoritative companion fields" in prompt
     assert "Use the _local value" in prompt
     assert "without a timezone suffix" in prompt
     assert "State dates and times matter-of-factly" in prompt
     assert [tool["name"] for tool in provider.tool_catalogs[0]] == ["get_logbook"]
+    # The clock changes every turn, so it stays out of the cached system prompt
+    # and rides on the operator's message in the request copy only.
+    assert "2026-08-13 11:26" not in prompt and agentcli._TIME_CONTEXT_LEAD not in prompt
+    sent = provider.sent_messages[0][-1]["content"]
+    assert sent.startswith("What happened?" + agentcli._TIME_CONTEXT_LEAD)
+    assert zone in sent and offset_label in sent and "2026-08-13 11:26" in sent
+    assert stored[0] == {"role": "user", "content": "What happened?"}
 
 
 def test_agentcli_adds_local_companions_without_changing_canonical_timestamps():
@@ -1977,26 +2052,82 @@ def test_agentcli_leaves_non_temporal_tool_results_unchanged():
     ) == text
 
 
-def test_agentcli_applies_home_zone_to_naive_query_bounds_and_rejects_shifted_ones():
+@pytest.mark.parametrize(("tool", "first", "second"), [
+    ("get_logbook", "start_time", "end_time"),
+    ("get_history", "start_time", "end_time"),
+    ("get_statistics", "start_time", "end_time"),
+    ("compare_states", "t1", "t2"),
+    ("get_logs", "since", "until"),
+    ("get_phoenix_diagnostics", "since", "until"),
+])
+def test_agentcli_passes_wall_times_and_rejects_shifted_ones(tool, first, second):
+    # Every listed tool reads a wall time as HA local time itself, so Agent Chat
+    # passes it unchanged and refuses only an offset the model invented.
     local_tz = timezone(timedelta(hours=7))
 
-    prepared, error = agentcli._agentcli_prepare_time_args(
-        "get_logbook",
-        {"start_time": "2026-08-14T05:00:00", "end_time": "2h"},
-        local_tz,
-    )
-    assert error is None
-    assert prepared == {
-        "start_time": "2026-08-14T05:00:00+07:00",
-        "end_time": "2h",
-    }
-
-    original = {"start_time": "2026-08-13T22:00:00Z"}
-    prepared, error = agentcli._agentcli_prepare_time_args(
-        "get_logbook", original, local_tz,
-    )
-    assert prepared == original
+    assert agentcli._agentcli_time_arg_error(
+        tool, {first: "2026-08-14T05:00:00", second: "2h"}, local_tz,
+    ) is None
+    error = agentcli._agentcli_time_arg_error(tool, {first: "2026-08-13T22:00:00Z"}, local_tz)
     assert "without a timezone suffix" in str(error)
+
+    # A _local value sent back is already in the home zone: the exact instant.
+    echoed = {first: "2026-08-14T05:14:17.250000+07:00", second: "2026-08-14T06:00:00+07:00"}
+    assert agentcli._agentcli_time_arg_error(tool, echoed, local_tz) is None
+
+
+def test_agentcli_accepts_the_home_offset_of_each_instant_across_daylight_saving():
+    from zoneinfo import ZoneInfo
+
+    local_tz = ZoneInfo("America/Los_Angeles")
+    for value, accepted in (("2026-07-01T05:00:00-07:00", True), ("2026-01-01T05:00:00-08:00", True),
+                            ("2026-07-01T05:00:00-08:00", False), ("2026-01-01T05:00:00-07:00", False)):
+        error = agentcli._agentcli_time_arg_error("get_logbook", {"start_time": value}, local_tz)
+        assert (error is None) is accepted, value
+
+
+def test_agentcli_states_the_logbook_resume_time_locally_so_it_can_be_sent_back():
+    local_tz = timezone(timedelta(hours=7))
+    text = json.dumps({"entries": [], "older_end_time": "2026-08-13T22:14:17.250000+00:00"})
+    augmented = json.loads(agentcli._agentcli_add_local_time_fields("get_logbook", text, local_tz))
+    assert augmented["older_end_time"] == "2026-08-14T05:14:17.250000+07:00"
+    assert "older_end_time_local" not in augmented
+    assert agentcli._agentcli_time_arg_error(
+        "get_logbook", {"end_time": augmented["older_end_time"]}, local_tz,
+    ) is None
+
+
+def test_every_absolute_time_a_read_takes_follows_the_agent_chat_wall_time_rule():
+    """A new read tool time parameter must join the table or be named here with its reason."""
+    from tests.test_mcp_tool_catalog import _all_defs
+
+    # Calendar reads already take a naive time as local and keep the offsets events carry.
+    exempt = {("get_calendar_events", "start_time"), ("get_calendar_events", "end_time")}
+    taken = set()
+    for definition in _all_defs():
+        if not (definition.get("annotations") or {}).get("readOnlyHint"):
+            continue
+        for name, schema in (definition["inputSchema"].get("properties") or {}).items():
+            description = schema.get("description", "") if isinstance(schema, dict) else ""
+            if "ISO" in description and "next_cursor" not in description:
+                taken.add((definition["name"], name))
+    covered = {(tool, field) for tool, fields in agentcli._AGENTCLI_LOCAL_QUERY_FIELDS.items() for field in fields}
+    assert taken - exempt == covered
+    prompt = agentcli._agentcli_time_guidance()
+    assert all(tool in prompt for tool in agentcli._AGENTCLI_LOCAL_QUERY_FIELDS)
+
+
+def test_agentcli_adds_local_companions_to_log_occurrences():
+    text = json.dumps({"source": {"latest_occurred": "2026-08-13T22:14:17+00:00", "read_at": "2026-08-13T23:00:00+00:00"},
+                       "filters": {"since": "2026-08-13T21:00:00+00:00"},
+                       "entries": [{"first_occurred": "2026-08-13T22:00:00+00:00"}]})
+    for tool in ("get_logs", "get_phoenix_diagnostics"):
+        augmented = json.loads(agentcli._agentcli_add_local_time_fields(tool, text, timezone(timedelta(hours=7))))
+        assert augmented["source"]["latest_occurred"] == "2026-08-13T22:14:17+00:00"
+        assert augmented["source"]["latest_occurred_local"] == "2026-08-14T05:14:17+07:00"
+        assert augmented["source"]["read_at_local"] == "2026-08-14T06:00:00+07:00"
+        assert augmented["filters"]["since_local"] == "2026-08-14T04:00:00+07:00"
+        assert augmented["entries"][0]["first_occurred_local"] == "2026-08-14T05:00:00+07:00"
 
 
 @pytest.mark.asyncio
@@ -2029,6 +2160,56 @@ async def test_run_agent_turn_read_tool(hass):
     tr = next(p for n, p in events if n == "tool_result")
     assert tr["is_error"] is False and tr["summary"] == "on"
     fake_dispatch.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_the_next_turn_resends_earlier_history_unchanged(hass):
+    """A prompt cache is a prefix: the time note must not alter history a later turn re-sends."""
+    provider = _ScriptedProvider([
+        [{"type": agentcli.EV_TOOL, "id": "tu1", "name": "get_state", "input": {"entity_id": "light.x"}},
+         _done("tool_use")],
+        [{"type": agentcli.EV_TEXT, "text": "It is on."}, _done("end_turn")],
+        [{"type": agentcli.EV_TEXT, "text": "Yes."}, _done("end_turn")],
+    ])
+    data = _loop_data()
+    fake_dispatch = AsyncMock(return_value=({"result": {"content": [{"type": "text", "text": "on"}]}}, "m", "r", "allowed"))
+    clock = [datetime(2026, 8, 13, 11, 26, tzinfo=timezone.utc)]
+    with patch("custom_components.phoenix_mcp.agentcli.build_mcp_tool_list", return_value=[]), \
+         patch("custom_components.phoenix_mcp.mcp_view._build_instructions", return_value="sys"), \
+         patch("custom_components.phoenix_mcp.mcp_view._dispatch_mcp", fake_dispatch), \
+         patch("custom_components.phoenix_mcp.agentcli.dt_util.now", side_effect=lambda: clock[0]):
+        messages = [{"role": "user", "content": "Is the light on?"}]
+        for text in (None, "Still?"):
+            if text is not None:
+                clock[0] += timedelta(minutes=1)
+                messages = [*messages, {"role": "user", "content": text}]
+            messages = await async_run_agent_turn(
+                hass=hass, data=data, access_key=MagicMock(), provider=provider,
+                session=MagicMock(), messages=messages, options={}, client_ip="agentcli",
+                base_url="http://h", emit=AsyncMock(), cancel=asyncio.Event(),
+            )
+
+    first, second, third = provider.sent_messages
+    # Every round of a turn carries the same note on the same message.
+    assert first[0]["content"] == second[0]["content"] != "Is the light on?"
+    assert "11:26" in first[0]["content"]
+    # The next turn re-sends the stored history byte for byte and stamps only its own message.
+    assert third[:-1] == messages[:4] and third[0] == {"role": "user", "content": "Is the light on?"}
+    assert third[-1]["content"].startswith("Still?" + agentcli._TIME_CONTEXT_LEAD) and "11:27" in third[-1]["content"]
+    assert len(set(provider.system_prompts)) == 1
+    assert all(agentcli._TIME_CONTEXT_LEAD not in json.dumps(message) for message in messages)
+
+
+def test_the_time_note_skips_tool_results_and_joins_block_content():
+    tool_results = {"role": "user", "content": [{"type": "tool_result", "tool_use_id": "t1", "content": "on"}]}
+    image = {"role": "user", "content": [{"type": "image", "source": {}}, {"type": "text", "text": "What is this?"}]}
+    messages = [image, {"role": "assistant", "content": [{"type": "tool_use", "id": "t1"}]}, tool_results]
+    assert agentcli._operator_message_index(messages) == 0
+    assert agentcli._operator_message_index([tool_results]) is None
+    stamped = agentcli._with_time_context(messages, 0, agentcli._TIME_CONTEXT_LEAD + "UTC (UTC).]")
+    assert stamped[0]["content"][:2] == image["content"]
+    assert stamped[0]["content"][2] == {"type": "text", "text": agentcli._TIME_CONTEXT_LEAD.lstrip("\n") + "UTC (UTC).]"}
+    assert stamped[1:] == messages[1:] and len(image["content"]) == 2
 
 
 @pytest.mark.asyncio
@@ -2081,9 +2262,10 @@ async def test_run_agent_turn_adds_logbook_local_companions_before_model_sees_it
     for result_text in (model_result, panel_result):
         assert '"when":1786659257.0' in result_text
         assert '"when_local":"2026-08-14T05:14:17+07:00"' in result_text
+    # The wall time reaches the tool unchanged; the tool reads it as HA local time.
     dispatch_params = fake_dispatch.await_args.args[2]
-    assert dispatch_params["arguments"]["start_time"] == "2026-08-14T05:00:00+07:00"
-    assert dispatch_params["arguments"]["end_time"] == "2026-08-14T06:00:00+07:00"
+    assert dispatch_params["arguments"]["start_time"] == "2026-08-14T05:00:00"
+    assert dispatch_params["arguments"]["end_time"] == "2026-08-14T06:00:00"
 
 
 @pytest.mark.asyncio
@@ -2183,10 +2365,11 @@ async def test_run_agent_turn_emits_turn_cumulative_usage(hass):
         )
 
     usage = [p for n, p in events if n == "usage"]
-    assert usage[0] == {"input_tokens": 1000, "output_tokens": 5, "context_tokens": 1000}
-    assert usage[1] == {"input_tokens": 1000, "output_tokens": 50, "context_tokens": 1000}
+    none = {"cache_read_tokens": 0, "cache_write_tokens": 0}
+    assert usage[0] == {"input_tokens": 1000, "output_tokens": 5, "context_tokens": 1000, **none}
+    assert usage[1] == {"input_tokens": 1000, "output_tokens": 50, "context_tokens": 1000, **none}
     # Second call: prior call folded (1000 in / 50 out) + new call's report.
-    assert usage[2] == {"input_tokens": 2600, "output_tokens": 80, "context_tokens": 1600}
+    assert usage[2] == {"input_tokens": 2600, "output_tokens": 80, "context_tokens": 1600, **none}
 
 
 @pytest.mark.asyncio
@@ -2236,6 +2419,13 @@ async def test_run_agent_turn_inline_approval_resume(hass, approval_status):
         assert provider.i == 1
         assert data.agent_recovery.blocks("tid")
         assert any(n == "error" and p["code"] == "outcome_unknown" for n, p in events)
+        # The returned conversation still answers the call, so the next turn
+        # is accepted by the provider once the barrier is reviewed.
+        returned = next(p["messages"] for n, p in events if n == "messages")
+        assert returned[-1]["tool_results"] == [{
+            "tool_use_id": "tu1", "tool_name": "call_service",
+            "result_text": agentcli._UNKNOWN_OUTCOME_RESULT, "is_error": True,
+        }]
         return
     # The executed result flows back to the transcript as the tool_result summary,
     # with the operator-accepted note appended so the model treats the approved
@@ -2244,6 +2434,196 @@ async def test_run_agent_turn_inline_approval_resume(hass, approval_status):
     assert tr["summary"].startswith("applied")
     assert "reviewed this exact change and approved it" in tr["summary"]
     assert names[-1] == "done"
+
+
+class _ClaudeShapedProvider(_ScriptedProvider):
+    """Scripted turns that keep the conversation in Anthropic's message shapes."""
+
+    def __init__(self, turns: list[list[dict]]) -> None:
+        super().__init__(turns)
+        self._claude = ClaudeProvider(ProviderConfig(kind="claude", model="m", base_url="https://x", api_key="k"))
+
+    def append_tool_results(self, messages, results):
+        self._claude.append_tool_results(messages, results)
+
+
+def _tool_use_done(*calls: tuple[str, str]) -> dict:
+    """A tool_use stop whose assistant message carries the calls as Anthropic blocks."""
+    return {"type": agentcli.EV_DONE, "stop_reason": "tool_use", "assistant_msg": {
+        "role": "assistant",
+        "content": [{"type": "tool_use", "id": call_id, "name": name, "input": {}} for call_id, name in calls],
+    }}
+
+
+def _unanswered_tool_uses(messages: list[dict]) -> list[str]:
+    """Return tool_use ids that the next message does not answer, the rule Anthropic enforces."""
+    missing = []
+    for index, message in enumerate(messages):
+        if message.get("role") != "assistant" or not isinstance(message.get("content"), list):
+            continue
+        after = messages[index + 1] if index + 1 < len(messages) else {}
+        answered = {block.get("tool_use_id") for block in after.get("content", [])
+                    if isinstance(block, dict) and block.get("type") == "tool_result"} \
+            if after.get("role") == "user" and isinstance(after.get("content"), list) else set()
+        missing += [block["id"] for block in message["content"]
+                    if block.get("type") == "tool_use" and block["id"] not in answered]
+    return missing
+
+
+@pytest.mark.asyncio
+async def test_unknown_outcome_answers_every_call_in_the_round(hass):
+    # A read succeeds, the next write's outcome is unknown, and a third call
+    # never starts. The turn ends there, but the conversation handed back to the
+    # browser answers all three, so the next turn is not refused by the provider.
+    provider = _ClaudeShapedProvider([[
+        {"type": agentcli.EV_TOOL, "id": "tu1", "name": "get_state", "input": {}},
+        {"type": agentcli.EV_TOOL, "id": "tu2", "name": "call_service", "input": {}},
+        {"type": agentcli.EV_TOOL, "id": "tu3", "name": "call_service", "input": {}},
+        _tool_use_done(("tu1", "get_state"), ("tu2", "call_service"), ("tu3", "call_service")),
+    ]])
+    data = _loop_data()
+
+    async def dispatch(method, tool_id, params, *args, **kwargs):
+        if params["name"] == "get_state":
+            return {"result": {"content": [{"type": "text", "text": "on"}]}}, "m", "r", "allowed"
+        # An error after the handler ran: the write may have been applied.
+        return {"result": {"content": [{"type": "text", "text": "Failed."}], "isError": True}}, "m", "r", "invalid_request"
+
+    fake_dispatch = AsyncMock(side_effect=dispatch)
+    events: list = []
+
+    async def emit(name, payload):
+        events.append((name, payload))
+
+    with patch("custom_components.phoenix_mcp.agentcli.build_mcp_tool_list", return_value=[]), \
+        patch("custom_components.phoenix_mcp.mcp_view._build_instructions", return_value="sys"), \
+        patch("custom_components.phoenix_mcp.mcp_view._dispatch_mcp", fake_dispatch):
+        await async_run_agent_turn(
+            hass=hass, data=data, access_key=MagicMock(), provider=provider,
+            session=MagicMock(), messages=[{"role": "user", "content": "go"}], options={},
+            client_ip="agentcli", base_url="http://h", emit=emit, cancel=asyncio.Event(),
+        )
+
+    assert fake_dispatch.await_count == 2  # the call after the unknown outcome never ran
+    assert provider.i == 1  # and no further model round turned the error into a replay
+    assert data.agent_recovery.blocks("tid")
+    assert [p["code"] for n, p in events if n == "error"] == ["outcome_unknown"]
+    returned = next(p["messages"] for n, p in events if n == "messages")
+    assert _unanswered_tool_uses(returned) == []
+    answers = {block["tool_use_id"]: block for block in returned[-1]["content"]}
+    assert answers["tu1"]["content"][0]["text"] == "on" and "is_error" not in answers["tu1"]
+    assert answers["tu2"]["content"][0]["text"] == agentcli._UNKNOWN_OUTCOME_RESULT
+    assert answers["tu3"]["content"][0]["text"] == agentcli._NOT_RUN_AFTER_UNKNOWN
+    assert answers["tu2"]["is_error"] is answers["tu3"]["is_error"] is True
+    assert events[-1] == ("done", {"stop_reason": "error"})
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("marked", [True, False])
+async def test_a_refusal_before_writing_returns_to_the_model(hass, marked):
+    # A stale expected_hash is refused before anything is written, so the model
+    # gets the error and can re-read. The same error without the server-owned
+    # marker keeps the unknown-outcome barrier: losing the marker fails closed.
+    from custom_components.phoenix_mcp.tool_common import _tool_error, _tool_refused_before_write
+
+    provider = _ClaudeShapedProvider([
+        [{"type": agentcli.EV_TOOL, "id": "tu1", "name": "edit_dashboard_card", "input": {}},
+         _tool_use_done(("tu1", "edit_dashboard_card"))],
+        [{"type": agentcli.EV_TEXT, "text": "Re-reading."}, _done("end_turn")],
+    ])
+    data = _loop_data()
+    stale = "This configuration changed since you last read it (expected_hash no longer matches)."
+    result = _tool_refused_before_write(stale) if marked else _tool_error(stale)
+    fake_dispatch = AsyncMock(return_value=({"result": result}, "m", "r", "invalid_request"))
+    events: list = []
+
+    async def emit(name, payload):
+        events.append((name, payload))
+
+    with patch("custom_components.phoenix_mcp.agentcli.build_mcp_tool_list", return_value=[]), \
+        patch("custom_components.phoenix_mcp.mcp_view._build_instructions", return_value="sys"), \
+        patch("custom_components.phoenix_mcp.mcp_view._dispatch_mcp", fake_dispatch):
+        await async_run_agent_turn(
+            hass=hass, data=data, access_key=MagicMock(), provider=provider,
+            session=MagicMock(), messages=[{"role": "user", "content": "go"}], options={},
+            client_ip="agentcli", base_url="http://h", emit=emit, cancel=asyncio.Event(),
+        )
+
+    returned = next(p["messages"] for n, p in events if n == "messages")
+    assert _unanswered_tool_uses(returned) == []
+    errors = [p["code"] for n, p in events if n == "error"]
+    if marked:
+        assert provider.i == 2 and errors == []
+        assert not data.agent_recovery.blocks("tid")
+        assert data.agent_recovery.records("tid") == []
+        answer = returned[2]["content"][0]
+        assert answer["is_error"] is True and answer["content"][0]["text"] == stale
+        assert events[-1] == ("done", {"stop_reason": "end_turn"})
+    else:
+        assert provider.i == 1 and errors == ["outcome_unknown"]
+        assert data.agent_recovery.blocks("tid")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("refused", [True, False])
+async def test_an_approved_run_refused_before_writing_returns_to_the_model(hass, refused):
+    # The dashboard changed while the approval waited, so the approved executor
+    # refused its stale hash before writing. The persisted flag lets the model
+    # read the executor's reason and continue; without it the outcome stays
+    # unknown, and the synthetic result still carries that reason.
+    provider = _ClaudeShapedProvider([
+        [{"type": agentcli.EV_TOOL, "id": "tu1", "name": "patch_dashboard", "input": {}},
+         _tool_use_done(("tu1", "patch_dashboard"))],
+        [{"type": agentcli.EV_TEXT, "text": "Re-reading."}, _done("end_turn")],
+    ])
+    data = _loop_data()
+    stale = "This configuration changed since you last read it (expected_hash no longer matches)."
+    pending_result = {"content": [{"type": "text", "text": json.dumps(
+        {"status": "pending_approval", "approval_id": "ap1", "review_url": "/phoenix-mcp/approvals/ap1"})}]}
+    fake_dispatch = AsyncMock(return_value=({"result": pending_result}, "m", "r", "pending_approval"))
+    record = SimpleNamespace(
+        status=STATUS_FAILED, rejected_reason="execution_failed", diff=None, execution_started_at=None,
+        result={"tool_result": {"content": [{"type": "text", "text": stale}], "isError": True},
+                "outcome": "invalid_request", **({"refused_before_write": True} if refused else {})},
+    )
+    events: list = []
+
+    async def emit(name, payload):
+        events.append((name, payload))
+
+    with patch("custom_components.phoenix_mcp.agentcli.build_mcp_tool_list", return_value=[]), \
+        patch("custom_components.phoenix_mcp.mcp_view._build_instructions", return_value="sys"), \
+        patch("custom_components.phoenix_mcp.mcp_view._dispatch_mcp", fake_dispatch), \
+        patch("custom_components.phoenix_mcp.agentcli._parse_pending", return_value={
+            "approval_id": "ap1", "review_url": "/phoenix-mcp/approvals/ap1",
+            "expires_at": None, "record": record,
+        }), \
+        patch("custom_components.phoenix_mcp.agentcli.get_approval", return_value=record):
+        task = hass.async_create_task(async_run_agent_turn(
+            hass=hass, data=data, access_key=MagicMock(), provider=provider,
+            session=MagicMock(), messages=[{"role": "user", "content": "go"}], options={},
+            client_ip="agentcli", base_url="http://h", emit=emit, cancel=asyncio.Event(),
+        ))
+        await asyncio.sleep(0.05)
+        hass.bus.async_fire("phoenix_mcp_approval_resolved", {"approval_id": "ap1"})
+        await task
+
+    returned = next(p["messages"] for n, p in events if n == "messages")
+    assert _unanswered_tool_uses(returned) == []
+    answer = returned[2]["content"][0]
+    assert answer["is_error"] is True
+    errors = [p["code"] for n, p in events if n == "error"]
+    if refused:
+        assert provider.i == 2 and errors == []
+        assert data.agent_recovery.records("tid") == []
+        message = json.loads(answer["content"][0]["text"])
+        assert message["status"] == "execution_failed"
+        assert f"executing it failed: {stale}" in message["message"]
+        assert events[-1] == ("done", {"stop_reason": "end_turn"})
+    else:
+        assert provider.i == 1 and errors == ["outcome_unknown"]
+        assert data.agent_recovery.blocks("tid")
+        assert answer["content"][0]["text"] == f"{agentcli._UNKNOWN_OUTCOME_RESULT} The executor reported: {stale}"
 
 
 @pytest.mark.asyncio
@@ -2367,6 +2747,25 @@ async def test_sse_lines_caps_cumulative_newline_delimited_output(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_error_body_read_stops_at_its_cap():
+    # An error body is classified from its start, so an endless one must not be buffered.
+    from custom_components.phoenix_mcp.const import AGENTCLI_PROVIDER_ERROR_BYTES
+
+    class _Endless:
+        chunks = 0
+
+        async def iter_chunked(self, _n):
+            while True:
+                _Endless.chunks += 1
+                yield b"x" * 1024
+
+    resp = MagicMock()
+    resp.content = _Endless()
+    assert len(await agentcli._error_body(resp)) == AGENTCLI_PROVIDER_ERROR_BYTES
+    assert _Endless.chunks <= AGENTCLI_PROVIDER_ERROR_BYTES // 1024 + 1
+
+
+@pytest.mark.asyncio
 async def test_openai_requests_disable_redirects():
     # The admin-supplied Ollama base URL is an SSRF surface; requests must not
     # follow a redirect (which could 302 to a metadata endpoint).
@@ -2377,6 +2776,21 @@ async def test_openai_requests_disable_redirects():
     await _collect(provider.stream_turn(
         session, system_prompt="s", messages=[], tools=[], options={}))
     assert session.calls[-1][1]["allow_redirects"] is False
+
+
+@pytest.mark.asyncio
+async def test_claude_requests_disable_redirects():
+    # aiohttp strips only Authorization on a cross-origin redirect, so following
+    # one would forward the x-api-key header to another host.
+    cfg = ProviderConfig(kind="claude", model="claude-opus-4-8", base_url="https://x", api_key="k")
+    provider = ClaudeProvider(cfg)
+    session = _FakeSession(_FakeResp(200, _sse('event: message_stop\ndata: {"type":"message_stop"}'),
+                                     json_data={"data": [], "has_more": False}))
+    await provider.validate(session)
+    await provider.list_models(session)
+    await _collect(provider.stream_turn(session, system_prompt="s", messages=[], tools=[], options={}))
+    assert {method for method, _ in session.calls} == {"GET", "POST"}
+    assert all(call["allow_redirects"] is False for _, call in session.calls)
 
 
 def _make_chat_request(body: bytes):
@@ -2418,6 +2832,29 @@ async def test_chat_view_refuses_when_kill_switch_or_shutting_down():
         req = _make_chat_request(json.dumps({"access_key_id": "t"}).encode())
         resp = await view.post(req)
         assert resp.status == expect
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("down", "ready", "kill", "key"), [
+    (True, False, True, "adminError.serviceStopping"),
+    (False, False, True, "adminError.setupIncomplete"),
+    (False, True, True, "adminError.serviceDisabled"),
+])
+async def test_chat_view_unavailable_answers_one_key_per_cause(down, ready, kill, key):
+    """Shutdown, incomplete setup and the kill switch each answer 503 with their own key, in that order."""
+    from custom_components.phoenix_mcp.agentcli import PhoenixAgentCliChatView
+
+    data = MagicMock()
+    data.shutting_down = down
+    data.ready = ready
+    data.store.get_settings.return_value = MagicMock(kill_switch=kill)
+    view = PhoenixAgentCliChatView()
+    view.hass = MagicMock()
+    view.hass.data = {agentcli.DOMAIN: data}
+    resp = await view.post(_make_chat_request(json.dumps({"access_key_id": "t"}).encode()))
+    assert resp.status == 503
+    assert json.loads(resp.text)["message_key"] == key
+    data.store.get_access_key_by_id.assert_not_called()
 
 
 @pytest.mark.asyncio
@@ -2578,6 +3015,74 @@ async def test_await_agent_approval_cancels_orphaned_approval(hass):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(("cancelled", "reason"), [
+    (True, "agent_chat_ended"),
+    (False, "agent_chat_wait_timed_out"),
+])
+async def test_await_agent_approval_names_why_it_stopped_waiting(hass, cancelled, reason):
+    """A wait that ran out with the chat still open is not recorded as the chat ending.
+
+    Both cases reach the same withdrawal, so the cancel event decides; a chat
+    that ended at the moment the wait ran out records the chat ending.
+    """
+    from homeassistant.util.dt import utcnow
+
+    from custom_components.phoenix_mcp.agentcli import _await_agent_approval
+    from custom_components.phoenix_mcp.approvals import STATUS_PENDING, PendingApproval, get_approval
+
+    now = utcnow()
+    appr = PendingApproval(
+        id="a1", access_key_id="t", access_key_name="n", tool_name="call_service",
+        cap_name="cap_physical_control", args={}, diff={}, status=STATUS_PENDING,
+        created_at=now, expires_at=now, request_id="r",
+    )
+
+    class _Store:
+        def __init__(self) -> None:
+            self._a = [appr.to_dict(redact_args=False)]
+            self.async_lock = asyncio.Lock()
+            self.async_save = AsyncMock()
+
+        def get_pending_approvals(self):
+            return self._a
+
+        def set_pending_approvals(self, v):
+            self._a = v
+
+    store = _Store()
+    data = MagicMock(store=store, approvals_in_progress=set())
+    cancel = asyncio.Event()
+    if cancelled:
+        cancel.set()
+
+    with patch("custom_components.phoenix_mcp.agentcli.dismiss_approval_notification"), \
+         patch("custom_components.phoenix_mcp.agentcli.fire_approval_resolved_event"):
+        await _await_agent_approval(hass, data, "a1", cancel, timeout=0.01)
+
+    assert get_approval(store, "a1").rejected_reason == reason
+
+
+@pytest.mark.parametrize(("reason", "kill_switch", "code"), [
+    ("cancelled", False, "cancelled"),
+    ("catalog_changed", False, "review_changed"),
+    ("context_changed", True, "review_changed"),
+    ("authority_changed", True, "kill_switch"),
+    ("authority_changed", False, "unauthorized"),
+])
+def test_review_stop_names_what_stopped_the_turn(reason, kill_switch, code):
+    """A tool review that stops a turn reports the kill switch and a changed tool list as themselves.
+
+    Reporting either as an unauthorized key sends the operator to fix a key that is fine.
+    """
+    from custom_components.phoenix_mcp.agentcli import _review_stop_error
+
+    data = MagicMock()
+    data.store.get_settings.return_value = MagicMock(kill_switch=kill_switch)
+    with patch("custom_components.phoenix_mcp.agentcli._kill_switch_on", return_value=kill_switch):
+        assert _review_stop_error(reason, data)["code"] == code
+
+
+@pytest.mark.asyncio
 async def test_await_agent_approval_does_not_cancel_an_in_progress_approval(hass):
     # An admin approve claims the id in approvals_in_progress, releases the lock,
     # and runs the side effect while the record is still pending. Cancellation
@@ -2722,6 +3227,36 @@ async def test_run_agent_turn_stops_when_access_key_revoked_midturn(hass):
 
 
 @pytest.mark.asyncio
+async def test_run_agent_turn_names_the_kill_switch_when_it_stops_a_turn(hass):
+    """The kill switch is not the key's fault, so the chat says which stopped it."""
+    provider = _ScriptedProvider([
+        [{"type": agentcli.EV_TOOL, "id": "tu1", "name": "call_service", "input": {}}, _done("tool_use")],
+    ])
+    data = _loop_data()
+    data.store.get_settings.return_value = GlobalSettings(kill_switch=True)
+    events: list = []
+
+    async def emit(name, payload):
+        events.append((name, payload))
+
+    access_key = MagicMock()
+    access_key.id = "tid"
+    with patch("custom_components.phoenix_mcp.agentcli.build_mcp_tool_list", return_value=[]), \
+         patch("custom_components.phoenix_mcp.mcp_view._build_instructions", return_value="sys"), \
+         patch("custom_components.phoenix_mcp.agentcli._current_dispatch_access_key", return_value=None):
+        msgs = await async_run_agent_turn(
+            hass=hass, data=data, access_key=access_key, provider=provider,
+            session=MagicMock(), messages=[], options={}, client_ip="agentcli",
+            base_url="http://h", emit=emit, cancel=asyncio.Event(),
+        )
+
+    batch = next(m for m in msgs if m.get("tool_results"))
+    assert "kill switch" in batch["tool_results"][0]["result_text"]
+    codes = [p.get("code") for n, p in events if n == "error"]
+    assert codes == ["kill_switch"]
+
+
+@pytest.mark.asyncio
 async def test_run_agent_turn_rejection_reason_reaches_agent(hass):
     # An admin rejects from the Approvals panel WITH a reason; the agent loop must
     # feed that reason back as the tool result so the model can report it.
@@ -2803,22 +3338,22 @@ async def test_run_agent_turn_retries_transient_connection_error(hass):
         {"type": agentcli.EV_ERROR, "status": 429, "code": "rate_limit",
          "message": "Rate limit exceeded", "retryable": False},
         "provider_rate_limit_exhausted",
-        "The provider's rate limit remained exceeded after retrying for about 12s. "
+        "The provider's rate limit remained exceeded after retrying for about 0s. "
         "Provider detail: Rate limit exceeded",
     ),
     (
         {"type": agentcli.EV_ERROR, "status": 503, "code": "upstream",
          "message": "Temporarily unavailable", "retryable": False},
         "provider_retry_exhausted",
-        "Could not reach the provider after retrying for about 12s. Temporarily unavailable",
+        "The provider did not answer after retrying for about 0s. Temporarily unavailable",
     ),
 ])
 async def test_retry_exhaustion_only_specializes_an_explicit_http_429(
     final_error, expected_code, expected_text,
 ):
     provider = _ScriptedProvider([
-        [{"type": agentcli.EV_ERROR, "status": 0, "code": "network",
-          "message": "DNS timeout", "retryable": True}],
+        [{"type": agentcli.EV_ERROR, "status": 503, "code": "upstream", "message": "Provider request failed (HTTP 503).",
+          "provider_detail": "This model is currently experiencing high demand.", "retryable": True}],
         [final_error],
     ])
 
@@ -2828,11 +3363,112 @@ async def test_retry_exhaustion_only_specializes_an_explicit_http_429(
             options={}, cancel=asyncio.Event(),
         ))
 
-    assert events[0]["code"] == expected_code
-    assert events[0]["message"] == expected_text
-    assert events[0]["message_params"] == {
-        "seconds": 12, "detail": final_error["message"],
-    }
+    # The retry is announced with the provider's own sentence.
+    # No detail_code: the detail is the provider's own sentence, shown verbatim.
+    assert events[0] == {"type": agentcli.EV_RETRYING, "attempt": 2, "status": 503,
+                         "detail": "This model is currently experiencing high demand.", "detail_code": ""}
+    # The final error gives the real time spent and keeps the failure that started the retries.
+    assert events[1]["code"] == expected_code
+    assert events[1]["message"] == expected_text
+    # The detail is Phoenix's own sentence, so its code lets the panel translate it.
+    assert events[1]["message_params"] == {"seconds": 0, "detail": final_error["message"],
+                                           "detail_code": final_error["code"]}
+    assert events[1]["provider_detail"] == "This model is currently experiencing high demand."
+
+
+@pytest.mark.asyncio
+async def test_a_retry_that_sends_nothing_stops_at_the_first_reply_bound():
+    """A provider that just failed and then stays silent is stuck, so the retry does not wait the full read bound."""
+    class _Silent:
+        cfg = None
+        calls = 0
+
+        async def stream_turn(self, session, **kwargs):
+            self.calls += 1
+            if self.calls == 1:
+                yield {"type": agentcli.EV_ERROR, "status": 503, "code": "upstream", "retryable": True,
+                       "message": "Provider request failed (HTTP 503).", "provider_detail": "High demand."}
+                return
+            await asyncio.sleep(3600)
+            yield {"type": agentcli.EV_TEXT, "text": "late"}
+
+    with patch("custom_components.phoenix_mcp.agentcli._CONNECT_RETRY_BACKOFF_SECONDS", 0), \
+            patch("custom_components.phoenix_mcp.agentcli.AGENTCLI_RETRY_FIRST_REPLY_SECONDS", 0.05):
+        events = await asyncio.wait_for(_collect(agentcli._stream_turn_resilient(
+            _Silent(), MagicMock(), system_prompt="sys", messages=[], tools=[],
+            options={}, cancel=asyncio.Event(),
+        )), 5)
+    assert [ev["type"] for ev in events] == [agentcli.EV_RETRYING, agentcli.EV_ERROR]
+    assert events[1]["code"] == "provider_retry_exhausted" and events[1]["retryable"] is True
+    assert events[1]["provider_detail"] == "High demand." and "no reply within" in events[1]["message"]
+
+
+class _SilentFirst:
+    """A provider whose first attempt sends nothing for an hour."""
+    cfg = None
+    calls = 0
+
+    async def stream_turn(self, session, **kwargs):
+        self.calls += 1
+        await asyncio.sleep(3600)
+        yield {"type": agentcli.EV_TEXT, "text": "late"}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("dispatch_started", "write_started", "code", "outcome"), [
+    (False, False, "provider_slow", None),
+    # A read already ran: still slow, never retried.
+    (True, False, "provider_slow", None),
+    # A write may have run: the turn reports an unknown outcome instead.
+    (True, True, "provider_after_dispatch", "outcome_unknown"),
+])
+async def test_a_bounded_first_reply_ends_the_call_without_retrying(dispatch_started, write_started, code, outcome):
+    provider = _SilentFirst()
+    events = await asyncio.wait_for(_collect(agentcli._stream_turn_resilient(
+        provider, MagicMock(), system_prompt="sys", messages=[], tools=[], options={},
+        cancel=asyncio.Event(), dispatch_started=dispatch_started, write_started=write_started,
+        first_reply_seconds=0.05,
+    )), 5)
+    assert provider.calls == 1
+    assert [ev["type"] for ev in events] == [agentcli.EV_ERROR]
+    assert events[0]["code"] == code and events[0]["retryable"] is False
+    assert events[0].get("outcome") == outcome
+
+
+@pytest.mark.asyncio
+async def test_without_a_first_reply_bound_a_slow_start_still_answers():
+    class _SlowStart:
+        cfg = None
+
+        async def stream_turn(self, session, **kwargs):
+            await asyncio.sleep(0.1)
+            yield {"type": agentcli.EV_TEXT, "text": "answer"}
+
+    events = await asyncio.wait_for(_collect(agentcli._stream_turn_resilient(
+        _SlowStart(), MagicMock(), system_prompt="sys", messages=[], tools=[], options={}, cancel=asyncio.Event(),
+    )), 5)
+    assert events == [{"type": agentcli.EV_TEXT, "text": "answer"}]
+
+
+@pytest.mark.asyncio
+async def test_a_retry_keeps_the_shorter_of_the_two_first_reply_bounds():
+    class _FailThenSilent(_SilentFirst):
+        async def stream_turn(self, session, **kwargs):
+            self.calls += 1
+            if self.calls == 1:
+                yield {"type": agentcli.EV_ERROR, "status": 503, "code": "upstream", "retryable": True,
+                       "message": "Provider request failed (HTTP 503)."}
+                return
+            await asyncio.sleep(3600)
+            yield {"type": agentcli.EV_TEXT, "text": "late"}
+
+    with patch("custom_components.phoenix_mcp.agentcli._CONNECT_RETRY_BACKOFF_SECONDS", 0):
+        events = await asyncio.wait_for(_collect(agentcli._stream_turn_resilient(
+            _FailThenSilent(), MagicMock(), system_prompt="sys", messages=[], tools=[], options={},
+            cancel=asyncio.Event(), first_reply_seconds=0.05,
+        )), 5)
+    assert [ev["type"] for ev in events] == [agentcli.EV_RETRYING, agentcli.EV_ERROR]
+    assert events[1]["code"] == "provider_retry_exhausted"
 
 
 @pytest.mark.asyncio
@@ -3481,6 +4117,25 @@ class TestSetDefaultModel:
         secret_store.set_model.assert_not_awaited()
 
     @pytest.mark.asyncio
+    async def test_patch_auto_on_a_decision_account_needs_a_model(self, hass):
+        """Automatic model selection on a decision account answers decisionModelRequired and saves nothing."""
+        from unittest.mock import AsyncMock, patch
+        secret_store = MagicMock()
+        secret_store.get = MagicMock(return_value={"kind": "typesafe"})
+        secret_store.set_model = AsyncMock(return_value=True)
+        secret_store.set_auto = AsyncMock(return_value=True)
+        view = agentcli.PhoenixAgentCliProviderView()
+        view.hass = hass
+        with patch("custom_components.phoenix_mcp.agentcli._get_secret_store",
+                   AsyncMock(return_value=secret_store)):
+            resp = await view.patch(_admin_request({"auto": True}), instance_id="pid")
+        assert resp.status == 400
+        assert json.loads(resp.text)["message_key"] == "adminError.decisionModelRequired"
+        secret_store.get.assert_called_once_with("pid")
+        secret_store.set_model.assert_not_awaited()
+        secret_store.set_auto.assert_not_awaited()
+
+    @pytest.mark.asyncio
     async def test_patch_reports_an_unknown_account(self, hass):
         from unittest.mock import AsyncMock, patch
         secret_store = MagicMock()
@@ -3693,6 +4348,8 @@ def _effort_of(extra: dict):
     """The effort level in a probe fragment, whichever backend shape it uses."""
     if "reasoning_effort" in extra:
         return extra["reasoning_effort"]
+    if "reasoning" in extra:
+        return (extra.get("reasoning") or {}).get("effort")
     return (extra.get("output_config") or {}).get("effort")
 
 
@@ -3784,7 +4441,7 @@ class TestCapabilityProbe:
 
         caps, calls, prov, _a = await self._probe(hass, "ollama", answer)
         assert caps["effort_levels"] == ["low", "medium", "high", "max"]
-        assert calls == 8  # control + sentinel + five candidates + temperature
+        assert calls == 10  # control + sentinel + seven candidates + temperature
         assert _effort_of(prov.sent[1]) == agentcli.AGENTCLI_PROBE_SENTINEL
 
     @pytest.mark.asyncio
@@ -3949,13 +4606,22 @@ class TestAggregatorEffort:
     against ONE selected model, which is exactly what per-model variation needs.
     """
 
-    @pytest.mark.parametrize("kind", ["openrouter", "nvidia", "opencode", "tencent"])
+    @pytest.mark.parametrize("kind", ["nvidia", "opencode", "tencent"])
     def test_the_probe_asks_them_about_effort(self, kind):
         assert agentcli._effort_probe_body(kind, "high") == {"reasoning_effort": "high"}
 
-    @pytest.mark.parametrize("kind", ["minimax"])
+    def test_openrouter_is_asked_through_its_nested_reasoning_object(self):
+        # The top-level field has no "max"; the nested object carries every level.
+        assert agentcli._effort_probe_body("openrouter", "max") == {"reasoning": {"effort": "max"}}
+
+    def test_minimax_and_zai_carry_the_switch_their_effort_needs(self):
+        assert agentcli._effort_probe_body("minimax", "low") == {
+            "thinking": {"type": "adaptive"}, "output_config": {"effort": "low"}}
+        assert agentcli._effort_probe_body("zai", "low") == {"thinking": {"type": "enabled"}, "reasoning_effort": "low"}
+
+    @pytest.mark.parametrize("kind", ["mimo", "qwen"])
     def test_a_backend_with_no_level_vocabulary_is_still_skipped(self, kind):
-        """MiniMax has an adaptive toggle, not a level vocabulary."""
+        """These take an on/off switch, not a level vocabulary."""
         assert agentcli._effort_probe_body(kind, "high") is None
 
     @pytest.mark.parametrize("kind", ["ollama", "ollama_cloud"])
@@ -3991,7 +4657,10 @@ class TestAggregatorEffort:
                 break
         except Exception:
             pass
-        assert sent.get("reasoning_effort") == "high"
+        if kind == "openrouter":
+            assert sent.get("reasoning") == {"effort": "high"} and "reasoning_effort" not in sent
+        else:
+            assert sent.get("reasoning_effort") == "high"
 
     @pytest.mark.asyncio
     async def test_no_effort_means_no_field(self, hass):
@@ -4046,6 +4715,31 @@ async def test_http_200_prompt_block_is_never_retried(kind):
     assert len(session.calls) == 1
     assert events[-1]["code"] == "provider_blocked"
     assert events[-1]["retryable"] is False
+
+
+@pytest.mark.asyncio
+async def test_groq_in_stream_tool_use_failure_is_an_invalid_call_not_a_block():
+    """Groq streams tool_use_failed in place of a call it rejects; the model erred, so it is retried.
+
+    Reported as a provider block it read as a policy refusal and ended the turn.
+    """
+    error = ('data: {"error":{"message":"Tool choice is none, but model called a tool","type":"invalid_request_error",'
+             '"code":"tool_use_failed","failed_generation":"{\\"name\\": \\"x\\"}","status_code":400}}')
+    provider = OpenAICompatProvider(ProviderConfig("groq", "model", "https://example", "key"))
+    replies = iter([_FakeResp(200, _sse(error)), _FakeResp(200, _sse(
+        'data: {"choices":[{"delta":{"content":"Done."},"finish_reason":"stop"}]}', "data: [DONE]"))])
+    session = _FakeSession(_FakeResp())
+    post = session.post
+    session.post = lambda *args, **kwargs: (post(*args, **kwargs), next(replies))[1]
+    events = await _collect(agentcli._stream_turn_resilient(
+        provider, session, system_prompt="s", messages=[], tools=[], options={}, cancel=asyncio.Event()))
+    assert len(session.calls) == 2
+    assert [e["text"] for e in events if e["type"] == agentcli.EV_TEXT] == ["Done."]
+    single = await _collect(provider.stream_turn(_FakeSession(_FakeResp(200, _sse(error))),
+                                                 system_prompt="s", messages=[], tools=[], options={}))
+    failure = next(e for e in single if e["type"] == agentcli.EV_ERROR)
+    assert failure["code"] == "bad_tool_call" and failure["retryable"] is True
+    assert "failed_generation" not in json.dumps(single) and '"x"' not in json.dumps(single)
 
 
 @pytest.mark.asyncio
@@ -4754,6 +5448,21 @@ def test_provider_detail_is_scrubbed_and_clipped():
     assert len(long) <= AGENTCLI_PROVIDER_DETAIL_CHARS
 
 
+@pytest.mark.parametrize("key", [
+    "AIzaSyA1b2C3d4E5f6G7h8I9j0KlMnOpQrStUvW", "gsk_" + "a1B2c3D4" * 6, "xai-" + "Q9w8E7r6" * 6,
+    "nvapi-" + "z1X2c3V4" * 6, "custom.Format+With/Symbols==",
+])
+def test_provider_detail_never_echoes_a_key(key):
+    """Known prefixes are scrubbed in any text; the configured key is removed whatever its shape."""
+    for message in (f"Invalid API key provided: {key}", f"The key {key} is not valid"):
+        body = json.dumps({"error": {"message": message}})
+        assert key not in agentcli._provider_error_detail(body, key)
+        failure = agentcli._http_failure("groq", 401, body, code="auth", retryable=False, api_key=key)
+        assert key not in failure.get("provider_detail", "")
+    if not key.startswith("custom"):
+        assert key not in agentcli._provider_error_detail(json.dumps({"error": {"message": f"The key {key} is not valid"}}))
+
+
 @pytest.mark.asyncio
 async def test_provider_detail_reaches_the_panel_but_never_voice_or_ai_task(hass):
     failure = {"type": agentcli.EV_ERROR, "status": 400, "code": "provider_rejected", "retryable": False,
@@ -4900,7 +5609,8 @@ async def test_headless_hands_malformed_tool_json_back_within_its_rounds(hass):
 # --------------------------------------------------------------------------- #
 
 @pytest.mark.parametrize(("kind", "capped"), [("chatgpt", True), ("groq", True), ("mistral", True), ("zai", True),
-                                              ("deepseek", False), ("gemini", False), ("claude", False)])
+                                              ("gemini", True), ("kimi", True), ("openrouter", True),
+                                              ("deepseek", False), ("claude", False)])
 def test_documented_tools_array_caps(kind, capped):
     from custom_components.phoenix_mcp.const import AGENTCLI_MAX_TOOLS_PER_REQUEST
     assert agentcli.PROVIDER_DEFINITIONS[kind].max_tools == (AGENTCLI_MAX_TOOLS_PER_REQUEST if capped else None)
@@ -4910,7 +5620,8 @@ def test_documented_tools_array_caps(kind, capped):
 @pytest.mark.parametrize("count", [128, 129])
 async def test_a_catalog_over_the_providers_cap_is_refused_before_any_request(hass, count):
     """Past the cap the provider answers HTTP 400 to every request; trimming would
-    hide capabilities silently. So the turn is refused up front, saying why."""
+    hide capabilities silently. A catalog with no deferrable tools cannot be
+    declared in parts, so the turn is refused up front, saying why."""
     catalog = [{"name": f"tool_{i}", "description": "d", "inputSchema": {"type": "object", "properties": {}}}
                for i in range(count)]
     provider = _ScriptedProvider([[{"type": agentcli.EV_TEXT, "text": "Hi."}, _done("end_turn")]])
@@ -5097,3 +5808,804 @@ def test_only_identifier_shaped_provider_codes_are_kept():
     prose = agentcli._http_failure("chatgpt", 429, json.dumps({"error": {"code": "see https://x.invalid/ now"}}),
                                    code="rate_limit", retryable=True)
     assert shaped["provider_code"] == "rate_limit_exceeded" and "provider_code" not in prose
+
+
+def test_agentcli_states_when_each_automation_last_triggered_locally():
+    text = json.dumps({"automations": [{"entity_id": "automation.a", "last_triggered": "2026-08-13T22:00:00+00:00"}]})
+    augmented = json.loads(agentcli._agentcli_add_local_time_fields("list_automations", text, timezone(timedelta(hours=7))))
+    assert augmented["automations"][0]["last_triggered_local"] == "2026-08-14T05:00:00+07:00"
+
+
+
+def test_the_history_before_the_operator_message_is_its_own_cached_prefix():
+    """The operator's message carries the turn's time note, so the history before it gets a breakpoint."""
+    marker = {"cache_control": {"type": "ephemeral"}}
+    earlier = [
+        {"role": "user", "content": "Is the light on?"},
+        {"role": "assistant", "content": [{"type": "text", "text": "It is on."},
+                                          {"type": "thinking", "thinking": "t", "signature": "s"}]},
+    ]
+    messages = [*earlier, {"role": "user", "content": "Still?" + agentcli._TIME_CONTEXT_LEAD + "UTC (UTC).]"}]
+    system, marked = agentcli._cache_marked("stable instructions", messages)
+    assert system == [{"type": "text", "text": "stable instructions", **marker}]
+    # A thinking block cannot hold a breakpoint, so the text block before it does.
+    assert marked[1]["content"][0] == {"type": "text", "text": "It is on.", **marker}
+    assert "cache_control" not in marked[1]["content"][1] and marked[0] == messages[0]
+    assert marked[2]["content"][-1]["cache_control"] == marker["cache_control"]
+    assert "cache_control" not in json.dumps(messages)
+    # A first message, or a tool-result round, has no earlier history to mark separately.
+    _, single = agentcli._cache_marked("s", messages[2:])
+    assert [block.get("cache_control") for block in single[0]["content"]] == [marker["cache_control"]]
+    tool_round = [*messages, {"role": "assistant", "content": [{"type": "tool_use", "id": "t1"}]},
+                  {"role": "user", "content": [{"type": "tool_result", "tool_use_id": "t1", "content": ""}]}]
+    _, marked = agentcli._cache_marked("s", tool_round)
+    assert ["cache_control" in json.dumps(message) for message in marked] == [False, True, False, False, True]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("extra", "cached"), [
+    ('"prompt_tokens_details":{"cached_tokens":64}', 64),  # OpenAI
+    ('"prompt_cache_hit_tokens":32,"prompt_cache_miss_tokens":68', 32),  # DeepSeek
+    ('"total_tokens":105', 0),
+])
+async def test_openai_compatible_cached_prompt_tokens_are_reported(extra, cached):
+    body = _sse(
+        'data: {"choices":[{"delta":{"content":"Hi"},"finish_reason":"stop"}]}',
+        'data: {"choices":[],"usage":{"prompt_tokens":100,"completion_tokens":5,' + extra + '}}',
+        "data: [DONE]",
+    )
+    cfg = ProviderConfig(kind="deepseek", model="deepseek-v4-flash", base_url="https://d", api_key="k")
+    events = await _collect(OpenAICompatProvider(cfg).stream_turn(
+        _FakeSession(_FakeResp(200, body)), system_prompt="s", messages=[], tools=[], options={}))
+    usage = next(e for e in events if e["type"] == agentcli.EV_USAGE)
+    assert usage["input_tokens"] == 100 and usage["cache_read_tokens"] == cached
+
+
+class _KindScripted(_ScriptedProvider):
+    kind = "gemini"
+
+
+async def _consume(provider, events, **status):
+    async def emit(name, payload):
+        events.append((name, payload))
+    return await agentcli._consume_model_stream(
+        provider, MagicMock(), system="sys", messages=[], tools=[], options={}, cancel=asyncio.Event(),
+        emit=emit, usage_done_input=0, usage_done_output=0, context_tokens=0, status=status or None)
+
+
+@pytest.mark.asyncio
+async def test_the_status_line_names_the_provider_step_and_tools_and_ends_once_the_reply_shows():
+    events: list = []
+    provider = _KindScripted([[{"type": agentcli.EV_TEXT, "text": "Hi"},
+                               {"type": agentcli.EV_DONE, "stop_reason": "end_turn", "assistant_msg": {}}]])
+    await _consume(provider, events, step=3, tools=2)
+    statuses = [p for n, p in events if n == "status"]
+    assert statuses == [{"provider": "Gemini", "step": 3, "tools": 2, "phase": "waiting", "seconds": 0}]
+
+
+@pytest.mark.asyncio
+async def test_a_silent_model_call_is_reported_until_something_shows():
+    class _Slow(_KindScripted):
+        async def stream_turn(self, session, **kwargs):
+            yield {"type": agentcli.EV_THINKING, "text": "..."}
+            await asyncio.sleep(0.05)
+            yield {"type": agentcli.EV_TEXT, "text": "Done"}
+            await asyncio.sleep(0.05)
+            yield {"type": agentcli.EV_DONE, "stop_reason": "end_turn", "assistant_msg": {}}
+
+    events: list = []
+    with patch("custom_components.phoenix_mcp.agentcli.AGENTCLI_STATUS_INTERVAL_SECONDS", 0.02):
+        await _consume(_Slow([]), events, step=1, tools=0)
+    phases = [p["phase"] for n, p in events if n == "status"]
+    # Waiting, then thinking, refreshed while nothing visible, and quiet once the reply shows.
+    assert phases[:2] == ["waiting", "thinking"] and set(phases[2:]) <= {"thinking"} and len(phases) >= 3
+    reply = next(i for i, (n, _p) in enumerate(events) if n == "assistant_delta")
+    assert all(n != "status" for n, _p in events[reply + 1:])
+
+
+@pytest.mark.asyncio
+async def test_a_retry_is_shown_with_the_providers_own_sentence():
+    events: list = []
+    provider = _KindScripted([
+        [{"type": agentcli.EV_ERROR, "status": 503, "code": "upstream", "retryable": True,
+          "message": "Provider request failed (HTTP 503).", "provider_detail": "High demand."}],
+        [{"type": agentcli.EV_TEXT, "text": "Recovered"},
+         {"type": agentcli.EV_DONE, "stop_reason": "end_turn", "assistant_msg": {}}],
+    ])
+    with patch("custom_components.phoenix_mcp.agentcli._CONNECT_RETRY_BACKOFF_SECONDS", 0):
+        await _consume(provider, events, step=1, tools=0)
+    retrying = [p for n, p in events if n == "status" and p["phase"] == "retrying"]
+    assert retrying == [{"provider": "Gemini", "step": 1, "tools": 0, "attempt": 2, "detail": "High demand.",
+                         "detail_code": "", "phase": "retrying", "seconds": 0}]
+    assert all(n != "error" for n, _p in events)
+
+
+@pytest.mark.asyncio
+async def test_the_turn_counts_steps_and_tools_for_the_status_line(hass):
+    provider = _KindScripted([
+        [{"type": agentcli.EV_TOOL, "id": "t1", "name": "get_state", "input": {"entity_id": "light.x"}},
+         {"type": agentcli.EV_DONE, "stop_reason": "tool_use", "assistant_msg": {"role": "assistant"}}],
+        [{"type": agentcli.EV_TEXT, "text": "On."},
+         {"type": agentcli.EV_DONE, "stop_reason": "end_turn", "assistant_msg": {"role": "assistant"}}],
+    ])
+    events: list = []
+
+    async def emit(name, payload):
+        events.append((name, payload))
+    batch = MagicMock(results=[{"tool_use_id": "t1", "result_text": "on"}], write_started=False, human_resolved=False,
+                      stop_turn=False, authority_lost=False, outcome_unknown=False)
+    with patch("custom_components.phoenix_mcp.agentcli.build_mcp_tool_list", return_value=[]), \
+         patch("custom_components.phoenix_mcp.mcp_view._build_instructions", return_value="sys"), \
+         patch("custom_components.phoenix_mcp.agentcli._run_tool_batch", AsyncMock(return_value=batch)):
+        await async_run_agent_turn(
+            hass=hass, data=_loop_data(), access_key=MagicMock(), provider=provider,
+            session=MagicMock(), messages=[], options={}, client_ip="agentcli",
+            base_url="http://h", emit=emit, cancel=asyncio.Event(),
+        )
+    assert [(p["step"], p["tools"]) for n, p in events if n == "status"] == [(1, 0), (2, 1)]
+
+
+class _StalledSession:
+    """A session whose request connects and then hits aiohttp's read timeout."""
+
+    def post(self, *args, **kwargs):
+        from aiohttp import SocketTimeoutError
+        raise SocketTimeoutError("Timeout on reading data from socket")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("provider", [
+    ClaudeProvider(ProviderConfig(kind="claude", model="m", base_url="https://x", api_key="k")),
+    OpenAICompatProvider(ProviderConfig(kind="gemini", model="m", base_url="https://x", api_key="k")),
+])
+async def test_a_stream_that_goes_silent_says_so_instead_of_connection_failed(provider):
+    events = await _collect(provider.stream_turn(_StalledSession(), system_prompt="s", messages=[], tools=[], options={}))
+    assert events == [{"type": agentcli.EV_ERROR, "status": 0, "code": "provider_silent", "retryable": True,
+                       "message": "The provider sent nothing for 180s, so the request was stopped.",
+                       "message_params": {"seconds": 180}}]
+
+
+# --------------------------------------------------------------------------- #
+# Provider protocol repairs: stream errors, retry pacing, refusals, replay
+# --------------------------------------------------------------------------- #
+
+class _SeqSession:
+    """Answers each POST with the next response, recording the request bodies."""
+
+    def __init__(self, *responses: _FakeResp) -> None:
+        self._responses = list(responses)
+        self.bodies: list[dict] = []
+
+    def post(self, url, headers=None, json=None, timeout=None, allow_redirects=None):  # noqa: A002
+        self.bodies.append(copy.deepcopy(json))
+        return self._responses.pop(0)
+
+
+def _claude_sse(*events: dict) -> bytes:
+    return _sse(*(f'event: {ev["type"]}\ndata: {json.dumps(ev)}' for ev in events))
+
+
+@pytest.mark.parametrize(("error", "code", "retryable"), [
+    ({"code": 502, "message": "x", "metadata": {"error_type": "provider_unavailable"}}, "provider_transient", True),
+    ({"code": 504, "message": "x"}, "provider_transient", True),
+    ({"code": "408", "message": "x"}, "provider_transient", True),
+    ({"code": "429006", "message": "upstream busy"}, "provider_transient", True),
+    ({"code": 502001, "message": "x"}, "provider_transient", True),
+    ({"code": "x", "metadata": {"error_type": "timeout"}}, "provider_transient", True),
+    ({"code": "451001", "message": "content safety"}, "provider_blocked", False),
+    ({"code": 403, "message": "moderation"}, "provider_blocked", False),
+])
+def test_stream_errors_are_classified_by_their_http_class(error, code, retryable):
+    with pytest.raises(agentcli._ProviderResponseError) as raised:
+        agentcli._provider_object(json.dumps({"error": error}))
+    assert raised.value.code == code and raised.value.retryable is retryable
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("finish", "code", "retryable"), [
+    ("model_context_window_exceeded", "provider_context_limit", False),
+    ("model_length", "provider_context_limit", False),
+    ("sensitive", "provider_blocked", False),
+    ("insufficient_system_resource", "provider_transient", True),
+    ("network_error", "provider_transient", True),
+    ("error", "provider_transient", True),
+])
+async def test_documented_finish_reasons_are_not_called_malformed(finish, code, retryable):
+    body = _sse(f'data: {{"choices":[{{"delta":{{"content":"partial"}},"finish_reason":"{finish}"}}]}}', "data: [DONE]")
+    provider = OpenAICompatProvider(ProviderConfig(kind="zai", model="glm-5.3", base_url="https://z", api_key="k"))
+    events = await _collect(provider.stream_turn(_FakeSession(_FakeResp(200, body)), system_prompt="s",
+                                                 messages=[], tools=[], options={}))
+    error = events[-1]
+    assert error["type"] == agentcli.EV_ERROR and error["code"] == code and error["retryable"] is retryable
+
+
+@pytest.mark.asyncio
+async def test_a_repetition_cut_is_an_output_limit():
+    body = _sse('data: {"choices":[{"delta":{"content":"again again"},"finish_reason":"repetition_truncation"}]}',
+                "data: [DONE]")
+    provider = OpenAICompatProvider(ProviderConfig(kind="mimo", model="mimo-v2.6-pro", base_url="https://m", api_key="k"))
+    events = await _collect(provider.stream_turn(_FakeSession(_FakeResp(200, body)), system_prompt="s",
+                                                 messages=[], tools=[], options={}))
+    assert events[-1]["type"] == agentcli.EV_DONE and events[-1]["stop_reason"] == "max_tokens"
+
+
+@pytest.mark.asyncio
+async def test_claude_context_window_stop_is_not_retried():
+    body = _claude_sse(
+        {"type": "message_start", "message": {"usage": {"input_tokens": 5}}},
+        {"type": "message_delta", "delta": {"stop_reason": "model_context_window_exceeded"}, "usage": {"output_tokens": 0}},
+        {"type": "message_stop"},
+    )
+    provider = ClaudeProvider(ProviderConfig(kind="claude", model="claude-sonnet-5-5", base_url="https://a", api_key="k"))
+    events = await _collect(provider.stream_turn(_FakeSession(_FakeResp(200, body)), system_prompt="s",
+                                                 messages=[], tools=[], options={}))
+    assert events[-1]["code"] == "provider_context_limit" and events[-1]["retryable"] is False
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("status", [408, 504, 529])
+async def test_timeouts_and_overload_are_retryable_on_every_adapter(status):
+    for provider in (OpenAICompatProvider(ProviderConfig(kind="groq", model="m", base_url="https://g", api_key="k")),
+                     ClaudeProvider(ProviderConfig(kind="claude", model="m", base_url="https://a", api_key="k"))):
+        events = await _collect(provider.stream_turn(_FakeSession(_FakeResp(status, text_data="{}")),
+                                                     system_prompt="s", messages=[], tools=[], options={}))
+        assert events[0]["retryable"] is True
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("kind", "status", "error", "code", "retryable"), [
+    ("zai", 429, {"code": "1308", "message": "Usage limit reached for 5 hour. Resets at 18:00"}, "rate_limit", False),
+    ("zai", 429, {"code": "1302", "message": "Rate limit reached"}, "rate_limit", True),
+    ("zai", 429, {"code": "1311", "message": "Your plan does not include this model"}, "provider_rejected", False),
+    ("tencent", 429, {"code": "429004", "message": "daily token limit"}, "rate_limit", False),
+    ("tencent", 429, {"code": "429001", "message": "rate limit"}, "rate_limit", True),
+])
+async def test_plan_quotas_are_not_retried_as_rate_limits(kind, status, error, code, retryable):
+    provider = OpenAICompatProvider(ProviderConfig(kind=kind, model="m", base_url="https://p", api_key="test-secret"))
+    events = await _collect(provider.stream_turn(_FakeSession(_FakeResp(status, text_data=json.dumps({"error": error}))),
+                                                 system_prompt="s", messages=[], tools=[], options={}))
+    assert events[0]["code"] == code and events[0]["retryable"] is retryable
+    assert events[0]["provider_detail"] == error["message"]
+
+
+@pytest.mark.asyncio
+async def test_gemini_daily_quota_and_retry_delay_are_read_from_details():
+    def body(quota_id: str) -> str:
+        return json.dumps([{"error": {"code": 429, "status": "RESOURCE_EXHAUSTED", "message": "Quota exceeded.", "details": [
+            {"@type": "type.googleapis.com/google.rpc.QuotaFailure", "violations": [{"quotaId": quota_id}]},
+            {"@type": "type.googleapis.com/google.rpc.RetryInfo", "retryDelay": "37s"},
+        ]}}])
+    provider = OpenAICompatProvider(ProviderConfig(kind="gemini", model="gemini-3-flash", base_url="https://g", api_key="k"))
+    daily = await _collect(provider.stream_turn(_FakeSession(_FakeResp(429, text_data=body(
+        "GenerateRequestsPerDayPerProjectPerModel-FreeTier"))), system_prompt="s", messages=[], tools=[], options={}))
+    minute = await _collect(provider.stream_turn(_FakeSession(_FakeResp(429, text_data=body(
+        "GenerateRequestsPerMinutePerProjectPerModel"))), system_prompt="s", messages=[], tools=[], options={}))
+    assert daily[0]["retryable"] is False
+    assert minute[0]["retryable"] is True and minute[0]["rate_limit"] == {"retry_after_seconds": 37}
+
+
+class _ErrorThenText:
+    cfg = None
+
+    def __init__(self, retry_after: int | None) -> None:
+        self.calls = 0
+        self.retry_after = retry_after
+
+    async def stream_turn(self, session, **kwargs):
+        self.calls += 1
+        if self.calls == 1:
+            limits = {"rate_limit": {"retry_after_seconds": self.retry_after}} if self.retry_after is not None else {}
+            yield {"type": agentcli.EV_ERROR, "status": 429, "code": "rate_limit", "retryable": True,
+                   "message": "Provider request failed (HTTP 429).", **limits}
+            return
+        yield {"type": agentcli.EV_TEXT, "text": "ok"}
+
+
+@pytest.mark.asyncio
+async def test_a_named_wait_beyond_the_retry_window_is_not_retried_early():
+    provider = _ErrorThenText(retry_after=30)
+    events = await _collect(agentcli._stream_turn_resilient(
+        provider, MagicMock(), system_prompt="s", messages=[], tools=[], options={}, cancel=asyncio.Event()))
+    assert provider.calls == 1 and [ev["type"] for ev in events] == [agentcli.EV_ERROR]
+
+
+@pytest.mark.asyncio
+async def test_a_named_wait_inside_the_window_is_waited_out():
+    provider = _ErrorThenText(retry_after=3)
+    waits: list[float] = []
+
+    async def fake_wait_for(awaitable, timeout):
+        waits.append(timeout)
+        awaitable.close()
+        raise asyncio.TimeoutError
+
+    with patch.object(agentcli.asyncio, "wait_for", fake_wait_for):
+        events = await _collect(agentcli._stream_turn_resilient(
+            provider, MagicMock(), system_prompt="s", messages=[], tools=[], options={}, cancel=asyncio.Event()))
+    assert provider.calls == 2 and waits == [3.0]
+    assert [ev["type"] for ev in events] == [agentcli.EV_RETRYING, agentcli.EV_TEXT]
+
+
+def test_validation_refusals_teach_options_on_422_too():
+    assert agentcli._refused_option(422, "temperature: Input should be less than 1", {"temperature": 1.5}) == "temperature"
+    assert agentcli._refused_option(500, "temperature broke", {"temperature": 1.5}) is None
+
+
+@pytest.mark.parametrize(("body", "message"), [
+    ({"object": "error", "message": {"detail": [{"type": "enum", "loc": ["body", "reasoning_effort"],
+                                                 "msg": "Input should be 'none' or 'high'"}]}},
+     "reasoning_effort: Input should be 'none' or 'high'"),
+    ({"detail": [{"loc": ["body", "temperature"], "msg": "too large"}]}, "temperature: too large"),
+    ({"detail": "plain"}, "plain"),
+])
+def test_validation_detail_lists_become_one_sentence(body, message):
+    assert agentcli._envelope_message(body) == message
+
+
+@pytest.mark.asyncio
+async def test_effort_probe_accepts_a_422_refusal(hass):
+    # control, sentinel refused, then none..max (low and high accepted), temperature.
+    statuses = iter([200, 422, 422, 422, 200, 422, 200, 422, 422, 200])
+
+    async def probe_option(self, session, extra):
+        return next(statuses)
+
+    cfg = ProviderConfig(kind="nvidia", model="openai/gpt-oss-120b", base_url="https://n", api_key="k")
+    with patch.object(OpenAICompatProvider, "probe_option", probe_option):
+        caps, _calls, answered = await agentcli.async_probe_capabilities(MagicMock(), cfg)
+    assert answered is True and caps.get("effort_levels")
+
+
+@pytest.mark.asyncio
+async def test_claude_tool_round_replays_thinking_with_its_signature():
+    body = _claude_sse(
+        {"type": "message_start", "message": {"usage": {"input_tokens": 5}}},
+        {"type": "content_block_start", "index": 0, "content_block": {"type": "thinking", "thinking": ""}},
+        {"type": "content_block_delta", "index": 0, "delta": {"type": "thinking_delta", "thinking": "check it"}},
+        {"type": "content_block_delta", "index": 0, "delta": {"type": "signature_delta", "signature": "sig=="}},
+        {"type": "content_block_stop", "index": 0},
+        {"type": "content_block_start", "index": 1, "content_block": {"type": "redacted_thinking", "data": "opaque"}},
+        {"type": "content_block_stop", "index": 1},
+        {"type": "content_block_start", "index": 2, "content_block": {"type": "tool_use", "id": "tu1", "name": "get_state"}},
+        {"type": "content_block_delta", "index": 2, "delta": {"type": "input_json_delta", "partial_json": "{}"}},
+        {"type": "content_block_stop", "index": 2},
+        {"type": "message_delta", "delta": {"stop_reason": "tool_use"}, "usage": {"output_tokens": 9}},
+        {"type": "message_stop"},
+    )
+    provider = ClaudeProvider(ProviderConfig(kind="claude", model="claude-haiku-4-5", base_url="https://a", api_key="k"))
+    events = await _collect(provider.stream_turn(_FakeSession(_FakeResp(200, body)), system_prompt="s",
+                                                 messages=[], tools=[], options={}))
+    done = next(ev for ev in events if ev["type"] == agentcli.EV_DONE)
+    assert done["assistant_msg"]["content"] == [
+        {"type": "thinking", "thinking": "check it", "signature": "sig=="},
+        {"type": "redacted_thinking", "data": "opaque"},
+        {"type": "tool_use", "id": "tu1", "name": "get_state", "input": {}},
+    ]
+
+
+@pytest.mark.asyncio
+async def test_claude_final_answer_keeps_no_thinking():
+    body = _claude_sse(
+        {"type": "message_start", "message": {"usage": {"input_tokens": 5}}},
+        {"type": "content_block_start", "index": 0, "content_block": {"type": "thinking", "thinking": ""}},
+        {"type": "content_block_delta", "index": 0, "delta": {"type": "signature_delta", "signature": "sig=="}},
+        {"type": "content_block_stop", "index": 0},
+        {"type": "content_block_start", "index": 1, "content_block": {"type": "text", "text": ""}},
+        {"type": "content_block_delta", "index": 1, "delta": {"type": "text_delta", "text": "Done."}},
+        {"type": "content_block_stop", "index": 1},
+        {"type": "message_delta", "delta": {"stop_reason": "end_turn"}, "usage": {"output_tokens": 3}},
+        {"type": "message_stop"},
+    )
+    provider = ClaudeProvider(ProviderConfig(kind="claude", model="claude-sonnet-5-5", base_url="https://a", api_key="k"))
+    events = await _collect(provider.stream_turn(_FakeSession(_FakeResp(200, body)), system_prompt="s",
+                                                 messages=[], tools=[], options={}))
+    done = next(ev for ev in events if ev["type"] == agentcli.EV_DONE)
+    assert done["assistant_msg"]["content"] == [{"type": "text", "text": "Done."}]
+
+
+def test_finished_history_drops_thinking_blocks():
+    from custom_components.phoenix_mcp.decision_history import without_thinking
+    history = [
+        {"role": "user", "content": "hi"},
+        {"role": "assistant", "content": [{"type": "thinking", "thinking": "t", "signature": "s"},
+                                          {"type": "redacted_thinking", "data": "d"},
+                                          {"type": "tool_use", "id": "tu1", "name": "get_state", "input": {}}]},
+    ]
+    stripped = without_thinking(history)
+    assert stripped[1]["content"] == [{"type": "tool_use", "id": "tu1", "name": "get_state", "input": {}}]
+    assert history[1]["content"][0]["type"] == "thinking"  # the input is not modified
+
+
+def test_tool_images_follow_every_tool_message():
+    provider = OpenAICompatProvider(ProviderConfig(kind="chatgpt", model="gpt-5", base_url="https://o",
+                                                   api_key="k", vision=True))
+    image = {"mime_type": "image/png", "data": "AAAA"}
+    messages: list[dict] = []
+    provider.append_tool_results(messages, [
+        {"tool_use_id": "c1", "tool_name": "camera", "result_text": "one", "images": [image]},
+        {"tool_use_id": "c2", "tool_name": "camera", "result_text": "two", "images": [image]},
+        {"tool_use_id": "c3", "tool_name": "get_state", "result_text": "three"},
+    ])
+    assert [m["role"] for m in messages] == ["tool", "tool", "tool", "user"]
+    parts = messages[-1]["content"]
+    assert [p["type"] for p in parts] == ["text", "image_url", "text", "image_url"]
+    assert "c1" in parts[0]["text"] and "c2" in parts[2]["text"]
+
+
+@pytest.mark.asyncio
+async def test_claude_output_cap_falls_back_for_a_smaller_model():
+    ok = _claude_sse(
+        {"type": "message_start", "message": {"usage": {"input_tokens": 1}}},
+        {"type": "message_delta", "delta": {"stop_reason": "end_turn"}, "usage": {"output_tokens": 1}},
+        {"type": "message_stop"},
+    )
+    refused = _FakeResp(400, text_data=json.dumps({"type": "error", "error": {
+        "type": "invalid_request_error", "message": "max_tokens: 32000 > 8192, which is the maximum allowed"}}))
+    session = _SeqSession(refused, _FakeResp(200, ok))
+    provider = ClaudeProvider(ProviderConfig(kind="claude", model="claude-old", base_url="https://a", api_key="k"))
+    events = await _collect(provider.stream_turn(session, system_prompt="s", messages=[], tools=[], options={}))
+    assert [b["max_tokens"] for b in session.bodies] == [agentcli.AGENTCLI_DEFAULT_MAX_TOKENS, 8192]
+    assert events[-1]["type"] == agentcli.EV_DONE
+
+
+@pytest.mark.asyncio
+async def test_nvidia_gets_an_output_cap_and_drops_it_when_refused():
+    ok = _sse('data: {"choices":[{"delta":{"content":"ok"},"finish_reason":"stop"}]}', "data: [DONE]")
+    refused = _FakeResp(422, text_data=json.dumps({"detail": [{"loc": ["body", "max_tokens"], "msg": "too large"}]}))
+    session = _SeqSession(refused, _FakeResp(200, ok))
+    provider = OpenAICompatProvider(ProviderConfig(kind="nvidia", model="meta/llama", base_url="https://n", api_key="k"))
+    events = await _collect(provider.stream_turn(session, system_prompt="s", messages=[], tools=[], options={}))
+    assert session.bodies[0]["max_tokens"] == agentcli.AGENTCLI_NVIDIA_MAX_TOKENS
+    assert "max_tokens" not in session.bodies[1]
+    assert events[-1]["type"] == agentcli.EV_DONE
+
+
+def test_mimo_offers_each_token_plan_region():
+    hosts = {choice.value: choice.base_url for choice in agentcli.PROVIDER_DEFINITIONS["mimo"].endpoints}
+    assert hosts["token_plan"] == "https://token-plan-cn.xiaomimimo.com/v1"
+    assert hosts["token_plan_sgp"] == "https://token-plan-sgp.xiaomimimo.com/v1"
+    assert hosts["token_plan_ams"] == "https://token-plan-ams.xiaomimimo.com/v1"
+
+
+# --------------------------------------------------------------------------- #
+# OpenAI through the Responses API
+# --------------------------------------------------------------------------- #
+
+def _responses_sse(*events: dict) -> bytes:
+    return _sse(*(f'event: {ev["type"]}\ndata: {json.dumps(ev)}' for ev in events))
+
+
+_OPENAI_TOOLS = [{"type": "function", "function": {"name": "get_state", "description": "Read one entity.",
+                                                   "parameters": {"type": "object", "properties": {}}}}]
+_REASONING_ITEM = {"type": "reasoning", "id": "rs_1", "summary": [], "encrypted_content": "enc=="}
+_CALL_ITEM = {"type": "function_call", "id": "fc_1", "call_id": "call_1", "name": "get_state",
+              "arguments": '{"entity_id": "light.x"}', "status": "completed"}
+
+
+def _responses_provider(model: str = "gpt-6-astra") -> agentcli.OpenAIResponsesProvider:
+    return agentcli.OpenAIResponsesProvider(ProviderConfig(
+        kind="chatgpt", model=model, base_url="https://api.openai.com/v1", api_key="test-secret", vision=True))
+
+
+def test_openai_accounts_use_the_responses_adapter():
+    provider = agentcli.build_provider(ProviderConfig(kind="chatgpt", model="gpt-6-luna", base_url="https://o", api_key="k"))
+    assert isinstance(provider, agentcli.OpenAIResponsesProvider)
+    other = agentcli.build_provider(ProviderConfig(kind="grok", model="grok-4", base_url="https://x", api_key="k"))
+    assert type(other) is OpenAICompatProvider
+
+
+@pytest.mark.asyncio
+async def test_responses_request_converts_history_tools_and_reasoning():
+    done = _responses_sse({"type": "response.completed", "response": {"status": "completed", "usage": None}})
+    session = _SeqSession(_FakeResp(200, done))
+    messages = [
+        {"role": "user", "content": [{"type": "text", "text": "look"},
+                                     {"type": "image_url", "image_url": {"url": "data:image/png;base64,AAAA"}}]},
+        {"role": "assistant", "content": "", "tool_calls": [
+            {"id": "call_0", "type": "function", "function": {"name": "get_state", "arguments": "{}"}}]},
+        {"role": "tool", "tool_call_id": "call_0", "name": "get_state", "content": "on"},
+    ]
+    await _collect(_responses_provider().stream_turn(
+        session, system_prompt="SYS", messages=messages, tools=_OPENAI_TOOLS,
+        options={"effort": "high", "show_thinking": True, "temperature": 0.4}))
+    body = session.bodies[0]
+    assert body["instructions"] == "SYS" and body["store"] is False and body["stream"] is True
+    assert body["include"] == ["reasoning.encrypted_content"]
+    assert body["reasoning"] == {"effort": "high", "summary": "auto"}
+    assert "temperature" not in body
+    assert body["tools"] == [{"type": "function", "name": "get_state", "description": "Read one entity.",
+                              "parameters": {"type": "object", "properties": {}}, "strict": False}]
+    assert body["input"] == [
+        {"role": "user", "content": [{"type": "input_text", "text": "look"},
+                                     {"type": "input_image", "image_url": "data:image/png;base64,AAAA", "detail": "auto"}]},
+        {"type": "function_call", "call_id": "call_0", "name": "get_state", "arguments": "{}"},
+        {"type": "function_call_output", "call_id": "call_0", "output": "on"},
+    ]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("model", "options", "sent"), [
+    ("gpt-6-luna", {"temperature": 0.4}, False),         # reasons by default
+    ("gpt-6-luna", {"temperature": 0.4, "effort": "none"}, True),
+    ("gpt-4.1", {"temperature": 0.4}, True),             # not a reasoning model
+])
+async def test_responses_temperature_only_without_reasoning(model, options, sent):
+    done = _responses_sse({"type": "response.completed", "response": {"status": "completed"}})
+    session = _SeqSession(_FakeResp(200, done))
+    await _collect(_responses_provider(model).stream_turn(session, system_prompt="s", messages=[],
+                                                          tools=[], options=options))
+    assert ("temperature" in session.bodies[0]) is sent
+
+
+@pytest.mark.asyncio
+async def test_responses_tool_round_streams_and_replays_its_output_items():
+    stream = _responses_sse(
+        {"type": "response.created", "response": {"status": "in_progress"}},
+        {"type": "response.output_item.added", "output_index": 0, "item": {"type": "reasoning", "id": "rs_1"}},
+        {"type": "response.reasoning_summary_text.delta", "output_index": 0, "delta": "Checking."},
+        {"type": "response.output_item.done", "output_index": 0, "item": _REASONING_ITEM},
+        {"type": "response.output_item.added", "output_index": 1,
+         "item": {**_CALL_ITEM, "arguments": "", "status": "in_progress"}},
+        {"type": "response.function_call_arguments.delta", "output_index": 1, "delta": '{"entity_id"'},
+        {"type": "response.output_item.done", "output_index": 1, "item": _CALL_ITEM},
+        {"type": "response.completed", "response": {"status": "completed", "usage": {
+            "input_tokens": 120, "input_tokens_details": {"cached_tokens": 100}, "output_tokens": 30}}},
+    )
+    provider = _responses_provider()
+    events = await _collect(provider.stream_turn(_SeqSession(_FakeResp(200, stream)), system_prompt="s",
+                                                 messages=[{"role": "user", "content": "hi"}], tools=_OPENAI_TOOLS,
+                                                 options={"show_thinking": True}))
+    assert {"type": agentcli.EV_THINKING, "text": "Checking."} in events
+    tool = next(ev for ev in events if ev["type"] == agentcli.EV_TOOL)
+    assert tool["id"] == "call_1" and tool["name"] == "get_state" and tool["input"] == {"entity_id": "light.x"}
+    usage = next(ev for ev in events if ev["type"] == agentcli.EV_USAGE)
+    assert usage["input_tokens"] == 120 and usage["cache_read_tokens"] == 100 and usage["output_tokens"] == 30
+    done = events[-1]
+    assert done["type"] == agentcli.EV_DONE and done["stop_reason"] == "tool_use"
+    assistant = done["assistant_msg"]
+    assert assistant["response_items"] == [_REASONING_ITEM, _CALL_ITEM]
+
+    # The next round sends those items back unchanged, then the tool output.
+    history = [{"role": "user", "content": "hi"}, assistant]
+    provider.append_tool_results(history, [{"tool_use_id": "call_1", "tool_name": "get_state", "result_text": "on"}])
+    after = _responses_sse({"type": "response.completed", "response": {"status": "completed"}})
+    session = _SeqSession(_FakeResp(200, after))
+    await _collect(provider.stream_turn(session, system_prompt="s", messages=history, tools=_OPENAI_TOOLS, options={}))
+    sent = session.bodies[0]["input"]
+    assert sent[0] == {"role": "user", "content": "hi"}
+    assert sent[1:3] == [_REASONING_ITEM, _CALL_ITEM]
+    assert sent[3]["type"] == "function_call_output" and sent[3]["call_id"] == "call_1"
+
+    # Once the turn is over, the encrypted items leave the history.
+    from custom_components.phoenix_mcp.decision_history import without_thinking
+    assert "response_items" not in without_thinking(history)[1]
+
+
+@pytest.mark.asyncio
+async def test_responses_final_answer_carries_no_output_items():
+    stream = _responses_sse(
+        {"type": "response.output_item.done", "output_index": 0, "item": _REASONING_ITEM},
+        {"type": "response.output_text.delta", "output_index": 1, "delta": "All off."},
+        {"type": "response.output_item.done", "output_index": 1, "item": {
+            "type": "message", "id": "msg_1", "role": "assistant", "phase": "final_answer",
+            "content": [{"type": "output_text", "text": "All off."}]}},
+        {"type": "response.completed", "response": {"status": "completed"}},
+    )
+    events = await _collect(_responses_provider().stream_turn(_SeqSession(_FakeResp(200, stream)), system_prompt="s",
+                                                              messages=[], tools=[], options={}))
+    assert "".join(ev["text"] for ev in events if ev["type"] == agentcli.EV_TEXT) == "All off."
+    done = events[-1]
+    assert done["stop_reason"] == "end_turn" and done["assistant_msg"] == {"role": "assistant", "content": "All off."}
+
+
+@pytest.mark.asyncio
+async def test_responses_replay_uses_the_corrected_arguments_of_an_unparseable_call():
+    assistant = {"role": "assistant", "content": "", "tool_calls": [
+        {"id": "call_1", "type": "function", "function": {"name": "get_state", "arguments": "{}"}}],
+        "response_items": [_REASONING_ITEM, {**_CALL_ITEM, "arguments": '{"entity_id": '}]}
+    items = agentcli._responses_input([{"role": "user", "content": "hi"}, assistant])
+    assert items[2]["arguments"] == "{}" and items[1] == _REASONING_ITEM
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("event", "code", "retryable", "stop"), [
+    ({"type": "response.incomplete", "response": {"status": "incomplete",
+                                                  "incomplete_details": {"reason": "max_output_tokens"}}},
+     None, None, "max_tokens"),
+    ({"type": "response.incomplete", "response": {"status": "incomplete",
+                                                  "incomplete_details": {"reason": "content_filter"}}},
+     "provider_blocked", False, None),
+    ({"type": "response.failed", "response": {"status": "failed",
+                                              "error": {"code": "server_error", "message": "x"}}},
+     "provider_transient", True, None),
+    ({"type": "response.failed", "response": {"status": "failed",
+                                              "error": {"code": "invalid_prompt", "message": "x"}}},
+     "provider_blocked", False, None),
+    ({"type": "error", "code": "rate_limit_exceeded", "message": "slow down"}, "provider_transient", True, None),
+])
+async def test_responses_terminal_events(event, code, retryable, stop):
+    stream = _responses_sse({"type": "response.output_text.delta", "output_index": 0, "delta": "part"}, event)
+    events = await _collect(_responses_provider().stream_turn(_SeqSession(_FakeResp(200, stream)), system_prompt="s",
+                                                              messages=[], tools=[], options={}))
+    if stop:
+        assert events[-1]["type"] == agentcli.EV_DONE and events[-1]["stop_reason"] == stop
+    else:
+        assert events[-1]["type"] == agentcli.EV_ERROR
+        assert events[-1]["code"] == code and events[-1]["retryable"] is retryable
+
+
+@pytest.mark.asyncio
+async def test_responses_http_errors_keep_the_shared_classification():
+    refused = _FakeResp(429, text_data=json.dumps({"error": {"message": "Slow down", "type": "rate_limit_error",
+                                                             "code": "slow_down"}}), headers={"Retry-After": "7"})
+    events = await _collect(_responses_provider().stream_turn(_SeqSession(refused), system_prompt="s",
+                                                              messages=[], tools=[], options={}))
+    assert events[0]["code"] == "rate_limit" and events[0]["retryable"] is True
+    assert events[0]["rate_limit"] == {"retry_after_seconds": 7}
+    billing = _FakeResp(429, text_data=json.dumps({"error": {"message": "No credit", "type": "insufficient_quota",
+                                                             "code": "insufficient_quota"}}))
+    events = await _collect(_responses_provider().stream_turn(_SeqSession(billing), system_prompt="s",
+                                                              messages=[], tools=[], options={}))
+    assert events[0]["code"] == "quota" and events[0]["retryable"] is False
+
+
+@pytest.mark.asyncio
+async def test_responses_effort_refusal_is_learned_as_thinking():
+    refused = _FakeResp(400, text_data=json.dumps({"error": {
+        "message": "Unsupported value: 'reasoning.effort' does not support 'none' with this model.",
+        "type": "invalid_request_error", "param": "reasoning.effort"}}))
+    events = await _collect(_responses_provider().stream_turn(_SeqSession(refused), system_prompt="s",
+                                                              messages=[], tools=[], options={"effort": "none"}))
+    assert events[0]["refused"] == "reasoning_effort"
+
+
+# --------------------------------------------------------------------------- #
+# Local Ollama: a prompt longer than the loaded context
+# --------------------------------------------------------------------------- #
+
+class _OllamaSession:
+    """Answers /api/ps from a queue of loaded-context values and POSTs with one response."""
+
+    def __init__(self, contexts: list[int | None], response: _FakeResp, model: str = "qwen3.8:27b") -> None:
+        self.contexts = list(contexts)
+        self.response = response
+        self.model = model
+        self.posts: list[dict] = []
+        self.ps_calls = 0
+
+    def get(self, url, headers=None, timeout=None, allow_redirects=None, params=None):
+        assert url.endswith("/api/ps")
+        self.ps_calls += 1
+        context = self.contexts.pop(0) if self.contexts else None
+        rows = [] if context is None else [{"name": self.model, "model": self.model, "context_length": context}]
+        return _FakeResp(200, json_data={"models": rows})
+
+    def post(self, url, headers=None, json=None, timeout=None, allow_redirects=None):  # noqa: A002
+        self.posts.append(json)
+        return self.response
+
+
+_OLLAMA_TOOL_REPLY = _sse(
+    'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"c1","function":{"name":"get_state","arguments":"{}"}}]},"finish_reason":null}]}',
+    'data: {"choices":[{"delta":{},"finish_reason":"tool_calls"}]}',
+    "data: [DONE]",
+)
+_BIG_PROMPT = [{"role": "user", "content": "x" * 100_000}]   # about 20,000 estimated tokens
+
+
+def _local_ollama(kind: str = "ollama") -> OpenAICompatProvider:
+    return OpenAICompatProvider(ProviderConfig(kind=kind, model="qwen3.8:27b", base_url="http://ollama.test:11434",
+                                               api_key=None if kind == "ollama" else "k"))
+
+
+def test_prompt_estimate_and_context_problem():
+    assert agentcli._estimated_prompt_tokens({"messages": _BIG_PROMPT, "tools": []}) == pytest.approx(20_000, rel=0.01)
+    assert agentcli._ollama_context_problem(20_000, None) is None
+    assert agentcli._ollama_context_problem(20_000, 32_768) is None
+    problem = agentcli._ollama_context_problem(20_000, 8_192)
+    assert problem["code"] == "ollama_context_too_small" and problem["retryable"] is False
+    assert problem["message_params"] == {"needed": 20_000, "context": 8_192, "suggested": 32_768}
+
+
+@pytest.mark.asyncio
+async def test_a_loaded_small_context_is_refused_before_sending():
+    session = _OllamaSession([8_192], _FakeResp(200, _OLLAMA_TOOL_REPLY))
+    events = await _collect(_local_ollama().stream_turn(session, system_prompt="s", messages=_BIG_PROMPT,
+                                                        tools=[], options={}))
+    assert [ev["code"] for ev in events] == ["ollama_context_too_small"]
+    assert session.posts == []
+
+
+@pytest.mark.asyncio
+async def test_a_cold_model_is_checked_before_its_tool_calls_run():
+    # Not loaded before the request; loaded with 4K by it.
+    session = _OllamaSession([None, 4_096], _FakeResp(200, _OLLAMA_TOOL_REPLY))
+    events = await _collect(_local_ollama().stream_turn(session, system_prompt="s", messages=_BIG_PROMPT,
+                                                        tools=[], options={}))
+    assert len(session.posts) == 1
+    assert not any(ev["type"] in (agentcli.EV_TOOL, agentcli.EV_DONE) for ev in events)
+    assert events[-1]["code"] == "ollama_context_too_small"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("contexts", [[262_144], [None, 262_144], [None, None]])
+async def test_a_prompt_that_fits_or_an_unknown_context_runs(contexts):
+    session = _OllamaSession(contexts, _FakeResp(200, _OLLAMA_TOOL_REPLY))
+    events = await _collect(_local_ollama().stream_turn(session, system_prompt="s", messages=_BIG_PROMPT,
+                                                        tools=[], options={}))
+    assert any(ev["type"] == agentcli.EV_TOOL for ev in events) and events[-1]["type"] == agentcli.EV_DONE
+    # A context found before the request is not asked for again.
+    assert session.ps_calls == (1 if contexts[0] is not None else 2)
+
+
+@pytest.mark.asyncio
+async def test_ollama_cloud_is_not_checked():
+    session = _OllamaSession([4_096], _FakeResp(200, _OLLAMA_TOOL_REPLY))
+    events = await _collect(_local_ollama("ollama_cloud").stream_turn(
+        session, system_prompt="s", messages=_BIG_PROMPT, tools=[], options={}))
+    assert session.ps_calls == 0 and events[-1]["type"] == agentcli.EV_DONE
+
+
+# --------------------------------------------------------------------------- #
+# Thinking controls: levels from catalogs, and each backend's effort field
+# --------------------------------------------------------------------------- #
+
+def test_openrouter_catalog_supplies_each_models_levels():
+    caps = agentcli._openrouter_capabilities([
+        {"id": "a/optional", "supported_parameters": ["tools", "reasoning"],
+         "reasoning": {"supported_efforts": ["none", "low", "high", "max", "ultra"], "mandatory": False}},
+        {"id": "b/mandatory", "supported_parameters": ["tools", "reasoning"],
+         "reasoning": {"supported_efforts": ["none", "low", "medium"], "mandatory": True}},
+        {"id": "c/plain", "supported_parameters": ["tools", "temperature"]},
+    ])
+    assert caps["a/optional"]["effort_levels"] == ["none", "low", "high", "max"]
+    assert caps["b/mandatory"]["effort_levels"] == ["low", "medium"]
+    assert "effort_levels" not in caps["c/plain"]
+
+
+@pytest.mark.asyncio
+async def test_ollama_show_supplies_thinking_levels():
+    class _Show:
+        def post(self, url, headers=None, json=None, timeout=None, allow_redirects=None):  # noqa: A002
+            body = {"capabilities": ["completion", "tools", "thinking"],
+                    "thinking": {"values": [False, "low", "medium", "xhigh"], "default": "medium"}}
+            return _FakeResp(200, json_data=body)
+    caps = await agentcli._ollama_capabilities(_Show(), "http://o", {}, ["qwen3.8:27b"])
+    assert caps["qwen3.8:27b"]["effort_levels"] == ["low", "medium", "xhigh"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("options", "thinking", "effort"), [
+    ({"thinking": True, "effort": "low"}, {"type": "enabled", "clear_thinking": False}, "low"),
+    ({"thinking": True, "effort": "none"}, {"type": "disabled"}, None),
+    ({"thinking": False}, {"type": "disabled"}, None),
+])
+async def test_zai_sends_effort_beside_the_thinking_switch(options, thinking, effort):
+    body = _sse('data: {"choices":[{"delta":{"content":"ok"},"finish_reason":"stop"}]}', "data: [DONE]")
+    session = _FakeSession(_FakeResp(200, body))
+    provider = OpenAICompatProvider(ProviderConfig(kind="zai", model="glm-5.2", base_url="https://z", api_key="k"))
+    await _collect(provider.stream_turn(session, system_prompt="s", messages=[], tools=[{"type": "function"}],
+                                        options=options))
+    sent = session.calls[-1][1]["json"]
+    assert sent["thinking"] == thinking and sent.get("reasoning_effort") == effort
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("model", "sent_effort"), [("MiniMax-M3.1-Flash", "low"), ("MiniMax-M3", None)])
+async def test_minimax_effort_only_on_m31_flash(model, sent_effort):
+    done = _claude_sse({"type": "message_start", "message": {"usage": {"input_tokens": 1}}},
+                       {"type": "message_delta", "delta": {"stop_reason": "end_turn"}, "usage": {"output_tokens": 1}},
+                       {"type": "message_stop"})
+    session = _SeqSession(_FakeResp(200, done))
+    provider = ClaudeProvider(ProviderConfig(kind="minimax", model=model, base_url="https://m/anthropic", api_key="k"))
+    await _collect(provider.stream_turn(session, system_prompt="s", messages=[], tools=[],
+                                        options={"thinking": True, "effort": "low"}))
+    assert (session.bodies[0].get("output_config") or {}).get("effort") == sent_effort
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("kind", "stream"), [("qwen", True), ("deepseek", False)])
+async def test_qwen_probes_stream_because_some_models_only_stream(kind, stream):
+    session = _FakeSession(_FakeResp(200))
+    await OpenAICompatProvider(ProviderConfig(kind=kind, model="m", base_url="https://q", api_key="k")).probe_option(session, {})
+    assert session.calls[-1][1]["json"]["stream"] is stream

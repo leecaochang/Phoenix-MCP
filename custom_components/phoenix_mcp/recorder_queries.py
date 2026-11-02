@@ -61,16 +61,18 @@ def parse_recorder_window(
         try:
             end = _as_utc(parse_time_param(args["end_time"]))
         except (TypeError, ValueError) as err:
-            raise ValueError("Invalid end_time format.") from err
+            raise ValueError(f"Invalid end_time format. {err}") from err
 
     start = end - default_range
     if args.get("start_time"):
         try:
             start = _as_utc(parse_time_param(args["start_time"]))
         except (TypeError, ValueError) as err:
-            raise ValueError("Invalid start_time format.") from err
+            raise ValueError(f"Invalid start_time format. {err}") from err
     if start >= end:
-        raise ValueError("start_time must be earlier than end_time.")
+        raise ValueError(
+            "start_time must be earlier than end_time. A relative time such as 7d means 7 days ago."
+        )
 
     page_start = start
     if args.get("cursor"):
@@ -266,16 +268,28 @@ def recorder_envelope(
     retention: dict[str, Any],
     warnings: list[str],
     result_key: Literal["history", "statistics"],
+    newest_first: bool = False,
 ) -> dict[str, Any]:
-    """Build the common cursor-based Recorder response contract."""
+    """Build the common cursor-based Recorder response contract.
+
+    `covered_range` is the time this page read and `data_range` spans its rows,
+    earliest to latest whatever order they are listed in. With `has_more`,
+    `unread_range` names the side of the requested range that no page has read
+    yet, so a page's own bounds are never mistaken for where the data begins.
+    """
     timestamps = [stamp for row in rows if (stamp := timestamp_getter(row)) is not None]
     data_range = None
     if timestamps:
-        data_range = {"start": iso_utc(timestamps[0]), "end": iso_utc(timestamps[-1])}
+        data_range = {"start": iso_utc(min(timestamps)), "end": iso_utc(max(timestamps))}
+    unread: dict[str, Any] = {}
+    if has_more:
+        start, end = (window.start, covered_start) if newest_first else (covered_end, window.end)
+        unread["unread_range"] = {"start": iso_utc(start), "end": iso_utc(end)}
     return {
         "entity_id": entity_id,
         "requested_range": {"start": iso_utc(window.start), "end": iso_utc(window.end)},
         "covered_range": {"start": iso_utc(covered_start), "end": iso_utc(covered_end)},
+        **unread,
         "data_range": data_range,
         "count": len(rows),
         "limit": window.limit,
@@ -350,6 +364,30 @@ def statistic_page(window: RecorderWindow, period: str) -> tuple[datetime, datet
     requested_end = ceil_statistic_period(window.end, period)
     page_end = min(add_statistic_periods(page_start, period, effective_limit), requested_end)
     return page_start, page_end, effective_limit, page_end < requested_end
+
+
+def read_statistic_window(
+    hass: Any, start: datetime, end: datetime, statistic_id: str, types: set[Any],
+) -> tuple[dict[str, Any], str | None] | None:
+    """Mean, min, max and change of one statistic over [start, end). Recorder executor only.
+
+    Core combines hourly and five-minute statistics for an exact window and converts
+    the values to the display unit, which is the label; None when the entity has no
+    statistics. A type the statistic does not keep (a mean of a total) is absent:
+    it is never asked for, since Core's query fails outright when none of the
+    requested mean, min or max columns exists.
+    """
+    from homeassistant.components.recorder import statistics as recorder_stats
+
+    metadata = recorder_stats.get_metadata(hass, statistic_ids={statistic_id}).get(statistic_id)
+    if metadata is None:
+        return None
+    meta = metadata[1]
+    kept = {kind for kind in types if (meta.get("has_sum") if kind == "change"
+                                       else meta.get("mean_type", meta.get("has_mean")))}
+    values = recorder_stats.statistic_during_period(hass, start, end, statistic_id, kept, None) if kept else {}
+    unit = recorder_stats.get_display_unit(hass, statistic_id, meta.get("unit_class"), meta.get("unit_of_measurement"))
+    return {key: value for key, value in values.items() if value is not None}, unit
 
 
 def read_statistics_page(

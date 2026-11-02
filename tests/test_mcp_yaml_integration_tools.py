@@ -95,6 +95,15 @@ class TestYamlConfig:
         _, outcome, _ = await _call("get_yaml_config", {}, _access_key(), hass)
         assert outcome == "allowed"
 
+    async def test_non_utf8_file_is_refused_as_not_text(self, hass):
+        """A YAML file that is not UTF-8 is refused as not text, not as oversized."""
+        with open(hass.config.path("configuration.yaml"), "wb") as f:
+            f.write(b"\xff\xfe\x00")
+        content, outcome, _ = await _call("get_yaml_config", {}, _access_key(), hass)
+        assert outcome == "invalid_request"
+        text = content["content"][0]["text"]
+        assert text == "configuration.yaml is not UTF-8 text, so it cannot be read."
+
 
 class TestGetYamlConfigFileArg:
     """get_yaml_config reads other YAML files in the config dir, inside a jail."""

@@ -1,9 +1,15 @@
-import { BusyButton } from "./BusyButton";
+/**
+ * Switch to Scoped Mode, shown in place of a pass-through key's Permissions
+ * tree. The panel shows at once, without a first press to open it, and what
+ * pass-through allows and what switching does read in the Help window
+ * (user, 2026-10-31).
+ */
 import React, { useState } from "react";
 import type { AccessKeyRecord, PatchAccessKeyBody } from "../types";
 import { api } from "../api";
 import { t } from "../i18n";
-import { tRich } from "../i18n/rich";
+import { tPlain } from "../i18n/rich";
+import { ActionButton } from "../ui/ActionButton";
 
 interface Props {
   accessKey: AccessKeyRecord;
@@ -11,7 +17,6 @@ interface Props {
 }
 
 export const PassThroughNotice = React.memo(function PassThroughNotice({ accessKey, onUpdate }: Props) {
-  const [confirming, setConfirming] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -26,52 +31,19 @@ export const PassThroughNotice = React.memo(function PassThroughNotice({ accessK
       setError(e instanceof Error ? e.message : t("accessKeys.ptConvertFailed"));
     } finally {
       setSaving(false);
-      setConfirming(false);
     }
   }
 
+  const help = [tPlain("accessKeys.ptNoticeIntro"), t("accessKeys.ptNoticeCaps"), t("accessKeys.ptNoticeUsage"), t("accessKeys.ptConvertBody")]
+    .join(t("common.sentenceSeparator"));
   return (
-    <div>
-      <div className="pass-through-header-banner">
-        <p>
-          {tRich("accessKeys.ptNoticeIntro", { strong: (c) => <strong className="text-warning">{c}</strong> })}
-        </p>
-        <p className="mt-8">
-          {t("accessKeys.ptNoticeCaps")}
-        </p>
-        <p className="mt-8">
-          {t("accessKeys.ptNoticeUsage")}
-        </p>
+    <div className="phx-inline-confirm is-warning" role="group" aria-label={t("accessKeys.switchToScoped")} data-help-text={help} data-help-controls="">
+      <div className="phx-inline-confirm-title">{t("accessKeys.switchToScoped")}</div>
+      {error && <div className="banner banner-error" role="alert">{error}</div>}
+      <div className="phx-inline-confirm-actions">
+        <ActionButton icon="switchPreset" label={t("accessKeys.switchToScoped")} className="btn btn-outline btn-sm" busy={saving}
+          help="help.switchToScoped" onClick={() => void convertToScoped()} />
       </div>
-
-      {error && <div className="banner banner-error">{error}</div>}
-
-      {!confirming ? (
-        <button
-          className="btn btn-outline"
-          onClick={() => setConfirming(true)}
-        >
-          {t("accessKeys.switchToScoped")}
-        </button>
-      ) : (
-        <div className="card pass-through-convert-card">
-          <p className="pass-through-convert-body">
-            {t("accessKeys.ptConvertBody")}
-          </p>
-          <div className="pass-through-actions">
-            <BusyButton
-              className="btn btn-primary"
-              onClick={convertToScoped}
-              busy={saving}
-            >
-              {saving ? t("accessKeys.switching") : t("accessKeys.switchToScoped")}
-            </BusyButton>
-            <button className="btn btn-text" onClick={() => setConfirming(false)}>
-              {t("accessKeys.cancel")}
-            </button>
-          </div>
-        </div>
-      )}
     </div>
   );
 });

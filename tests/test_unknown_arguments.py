@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
+import json
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -105,8 +106,9 @@ def test_hash_typos_and_conflicting_selectors_are_not_ignored(name):
 
 def test_nested_dashboard_and_retired_forms():
     assert 'target.url_path' in unknown_argument_error('patch_dashboard', {'dashboard_url': 'x'})
+    # A top-level url_path is read as target.url_path; the request still needs changes.
     _, error = normalize_tool_args('patch_dashboard', {'url_path': 'x'})
-    assert 'Catalog v2' in error and 'target.url_path' in error
+    assert error == 'Missing required argument: changes.'
     assert unknown_argument_error('set_dashboard_config', {'config': {'dashboard_url': 'x'}}) is None
     assert unknown_argument_error('set_device', {'changes': {'unrelated': 'x'}}) is None
 
@@ -245,9 +247,15 @@ def test_diagnostics_escape_names_and_cap_findings():
 async def test_misspelt_optional_argument_on_any_tool_is_reported(hass):
     hass.states.async_set('light.kitchen', 'on', {})
     key = access_key(cap_search='allow')
+    # A read takes the one parameter a near miss plainly means, and says so.
     result, outcome, _ = await _call_tool('search_entities', {'query': 'kitchen', 'limt': 5}, key, hass, MagicMock())
+    assert outcome == 'allowed'
+    assert json.loads(result['content'][0]['text'])['arguments_adjusted'][0].startswith('Read "limt" as limit.')
+    # A write never guesses: the near miss is refused with the intended name.
+    result, outcome, _ = await _call_tool('delete_entity', {'entty_id': 'light.kitchen'},
+                                          access_key(cap_registry_write='allow'), hass, MagicMock())
     assert outcome == 'invalid_request'
-    assert 'Unknown argument "limt". Use limit.' in result['content'][0]['text']
+    assert 'Use entity_id.' in result['content'][0]['text']
     result, outcome, _ = await _call_tool('search_entities', {'query': 'kitchen', 'unrelated_extra': 5}, key, hass, MagicMock())
     assert outcome == 'invalid_request'
     assert 'Unknown argument "unrelated_extra".' in result['content'][0]['text']

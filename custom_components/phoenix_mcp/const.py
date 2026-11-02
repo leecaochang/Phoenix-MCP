@@ -14,7 +14,7 @@ from home_assistant_intents import get_languages as _assist_languages
 # served to the panel by admin_view.PhoenixAdminCatalogView.
 CATALOGS_DIR = pathlib.Path(__file__).parent / "catalogs"
 
-PHOENIX_VERSION = "1.5.0"
+PHOENIX_VERSION = "2.0.0"
 # Minimum supported HA release; runtime imports and boundaries are exercised at this floor.
 MIN_HA_VERSION = "2026.7.0"
 ASSIST_SCHEMA_DIALECT = "https://json-schema.org/draft/2020-12/schema"
@@ -32,6 +32,16 @@ CALENDAR_EVENT_MAX_BYTES = 32768
 CALENDAR_RESULT_MAX_BYTES = 1048576
 
 PROXY_TIMEOUT_SECONDS = 30
+# create_backup holds the request until Home Assistant reports the backup finished,
+# so the result can say where it landed and what failed. A configuration-only
+# backup fits; one with add-ons can run longer and is then reported as started.
+BACKUP_COMPLETION_WAIT_SECONDS = 45
+# Backup agents that keep one backup per account, so a backup Phoenix MCP sent
+# there would replace the operator's own. Matched on the agent ID's domain.
+BACKUP_SINGLE_SLOT_AGENT_DOMAINS = frozenset({"cloud"})
+# The agents that store a backup on Home Assistant's own disk, in the order
+# create_backup prefers them when the backup settings name no location.
+LOCAL_BACKUP_AGENT_IDS = ("hassio.local", "backup.local")
 AUTHORING_REGISTRATION_TIMEOUT_SECONDS = 5.0
 AUTHORING_REGISTRATION_POLL_SECONDS = 0.1
 RELATIVE_VOLUME_MAX_CONCURRENCY = 8
@@ -61,6 +71,9 @@ SERVICE_TARGET_MAX_GROUPS = 32
 SERVICE_TARGET_MAX_IDS = 1024
 # One get_state call reads at most this many explicit entity IDs.
 GET_STATE_MAX_IDS = 1024
+# Rows one search_entities page returns at most: the largest set of entities one
+# listing hands over, so also the most one get_history summary takes.
+SEARCH_ENTITIES_MAX_LIMIT = 500
 # get_history summary mode: Recorder rows per database page, rows one call may
 # fold (so at most this many divided by the page size queries), wall-clock
 # seconds before no further page starts, and states listed individually.
@@ -68,12 +81,23 @@ HISTORY_SUMMARY_PAGE_ROWS = 1000
 HISTORY_SUMMARY_MAX_ROWS = 20000
 HISTORY_SUMMARY_MAX_SECONDS = 10.0
 HISTORY_SUMMARY_MAX_STATES = 50
+# A summary of several entities: the wall-clock seconds after which no further
+# entity's scan starts (each scan keeps its own row and time budget within that).
+# How many rows one result holds is set by TOOL_RESULT_MAX_BYTES, not a count.
+HISTORY_SUMMARY_BATCH_SECONDS = 20.0
+# States listed per entity in that call; the rest are combined, so a numeric
+# sensor's hundreds of distinct values do not crowd out the other entities.
+HISTORY_SUMMARY_MANY_MAX_STATES = 5
 # Offset-paged registry and calendar reads.
 DEVICE_LIST_DEFAULT_LIMIT = 100
 DEVICE_LIST_MAX_LIMIT = 500
 INTEGRATION_LIST_DEFAULT_LIMIT = 100
 INTEGRATION_LIST_MAX_LIMIT = 500
 CALENDAR_EVENTS_DEFAULT_LIMIT = 100
+# get_todo_items pages items across lists like calendar events.
+TODO_ITEMS_DEFAULT_LIMIT = 100
+TODO_ITEMS_MAX_LIMIT = 500
+TODO_TIMEOUT_SECONDS = 15
 # find_available_actions include_fields bounds per service.
 SERVICE_FIELDS_MAX = 40
 SERVICE_FIELD_MAX_OPTIONS = 30
@@ -207,11 +231,11 @@ HELPER_TEMPLATE_STATE_PROPERTIES = frozenset({
     "last_changed", "last_updated", "last_reported",
 })
 HELPER_TEMPLATE_PURE_FUNCTIONS = frozenset({
-    "float", "int", "bool", "str", "min", "max", "abs", "round",
+    "float", "int", "bool", "min", "max",
     "sin", "cos", "tan", "asin", "acos", "atan", "atan2", "sqrt",
     "log", "average", "median", "clamp", "wrap", "remap",
     "now", "utcnow", "today_at", "as_datetime", "as_local", "as_timestamp",
-    "timedelta", "strptime",
+    "timedelta", "strptime", "iif", "is_number",
 })
 HELPER_TEMPLATE_TIME_FUNCTIONS = frozenset({
     "now", "utcnow", "today_at", "as_datetime", "as_local", "timedelta", "strptime",
@@ -228,18 +252,27 @@ HELPER_TEMPLATE_PURE_FILTERS = frozenset({
     "sum", "average", "median", "sqrt", "log", "sin", "cos", "tan",
     "lower", "upper", "title", "capitalize", "trim", "replace",
     "default", "d", "length", "count", "first", "last", "list", "join",
-    "to_json", "from_json",
+    "to_json", "from_json", "iif", "is_number", "format",
+    "regex_replace", "regex_match", "regex_search", "regex_findall", "regex_findall_index",
 })
 HELPER_TEMPLATE_PURE_TESTS = frozenset({
     "defined", "undefined", "none", "boolean", "true", "false", "number",
     "integer", "float", "string", "mapping", "sequence", "iterable",
     "even", "odd", "divisibleby", "equalto", "eq", "ne", "lt", "le", "gt", "ge", "in",
+    "is_number", "match", "search",
+})
+# String methods, allowed on any receiver except a states.* path, whose state
+# objects stay out of reach; read a value with states() first.
+HELPER_TEMPLATE_STRING_METHODS = frozenset({
+    "strip", "lstrip", "rstrip", "removeprefix", "removesuffix", "split",
+    "startswith", "endswith", "replace", "lower", "upper",
 })
 HELPER_TEMPLATE_NODE_TYPES = frozenset({
     "Template", "Output", "TemplateData", "Const", "List", "Tuple", "Dict", "Pair",
     "Add", "Sub", "Mul", "Div", "FloorDiv", "Mod", "Pow", "Neg", "Pos",
     "And", "Or", "Not", "Compare", "Operand", "CondExpr", "Concat", "Keyword",
     "Call", "Filter", "Test", "Name", "Getattr", "Getitem", "If",
+    "Assign", "AssignBlock", "For",
 })
 # Per-resource FIFO retention: the newest N versions per (resource_type,
 # resource_id) are kept; older ones are evicted on write.
@@ -254,7 +287,7 @@ MAX_VERSIONS_PER_RESOURCE = 20
 # version of that resource.
 VERSIONED_RESOURCE_TYPES = frozenset(
     {"automation", "script", "scene", "helper", "dashboard", "entity", "device",
-     "blueprint", "energy", "config_entry", "area", "floor"}
+     "blueprint", "energy", "config_entry", "area", "floor", "label", "category"}
 )
 
 # Dashboard card catalog. Which Lovelace cards this instance can actually render,
@@ -326,7 +359,7 @@ AGENTCLI_MINIMAX_BASE_URL = "https://api.minimax.io/anthropic"
 # case. Automatic mode ranks it like any catalogue, so a new MiniMax model reaches
 # an account through the live listing without touching this tuple.
 AGENTCLI_MINIMAX_MODELS = (
-    "MiniMax-M3", "MiniMax-M2.7", "MiniMax-M2.7-highspeed", "MiniMax-M2.5",
+    "MiniMax-M3.1-Flash", "MiniMax-M3", "MiniMax-M2.7", "MiniMax-M2.7-highspeed", "MiniMax-M2.5",
     "MiniMax-M2.5-highspeed", "MiniMax-M2.1", "MiniMax-M2.1-highspeed", "MiniMax-M2",
 )
 # Mistral's hosted API is OpenAI-compatible for chat and publishes live model
@@ -377,18 +410,16 @@ AGENTCLI_OPENCODE_BASE_URL = "https://opencode.ai/zen/v1"
 # Keep Zen as the default for accounts saved before Console routing existed.
 AGENTCLI_OPENCODE_CONSOLE_BASE_URL = "https://opencode.ai/inference/openai/v1"
 AGENTCLI_OPENCODE_CONSOLE_MODELS_URL = "https://opencode.ai/inference/v1/models"
-# The public catalog exposes ids but no API-family metadata. Console eligibility
-# needs a documented Chat Completions endpoint or a qualified live tool round.
-# Source: https://opencode.ai/v2/docs/console/models/ (2026-10-18).
+# Console eligibility needs a documented Chat Completions endpoint or a qualified
+# live tool round. The catalog now also lists each model's API family; this set
+# remains the documented source until that metadata is qualified. Free models are
+# left out: OpenCode serves them only to its own app.
+# Source: https://opencode.ai/v2/docs/console/models/ (2026-10-18, rechecked 2026-10-30).
 AGENTCLI_OPENCODE_CHAT_MODELS = frozenset({
     "qwen3.8-max", "deepseek-v4.1-flash", "deepseek-v4-pro",
     "minimax-m3", "minimax-m2.7", "minimax-m2.5", "glm-5.3-flash",
     "glm-5.3", "glm-5.2", "glm-5.1", "glm-5", "kimi-k2.5", "kimi-k2.6",
-    "kimi-k2.7-code", "kimi-k3", "mistral-large-4", "big-pickle",
-    "glm-5.3-flash-free", "deepseek-v4.1-flash-free", "space-bunny-free",
-    "beam-free", "ll-alpha-free", "longcat-2.5-preview-free", "exo-free",
-    "mimo-v2.6-flash-free", "mimo-v2.5-free", "nemotron-3-ultra-free",
-    "nemotron-3.5-lightning-free", "nemotron-3.5-super-vl-free",
+    "kimi-k2.7-code", "kimi-k3", "mistral-large-4",
     # The table lists Messages, but live Chat Completions tool rounds also pass.
     "qwen3.5-plus",
 })
@@ -400,19 +431,37 @@ AGENTCLI_OPENCODE_LEGACY_CHAT_EXCEPTIONS = frozenset({"qwen3.8-max", "qwen3.5-pl
 AGENTCLI_KIMI_CHINA_BASE_URL = "https://api.moonshot.cn/v1"
 AGENTCLI_ZAI_CHINA_BASE_URL = "https://open.bigmodel.cn/api/paas/v4"
 AGENTCLI_MIMO_TOKEN_PLAN_BASE_URL = "https://token-plan-cn.xiaomimimo.com/v1"
+AGENTCLI_MIMO_TOKEN_PLAN_SGP_BASE_URL = "https://token-plan-sgp.xiaomimimo.com/v1"
+AGENTCLI_MIMO_TOKEN_PLAN_AMS_BASE_URL = "https://token-plan-ams.xiaomimimo.com/v1"
 AGENTCLI_MISTRAL_EU_BASE_URL = "https://api.eu.mistral.ai/v1"
 AGENTCLI_MISTRAL_US_BASE_URL = "https://api.us.mistral.ai/v1"
 AGENTCLI_OPENAI_US_BASE_URL = "https://us.api.openai.com/v1"
 AGENTCLI_OPENAI_EU_BASE_URL = "https://eu.api.openai.com/v1"
+# OpenAI's other data-residency prefixes. A residency project must use its own
+# prefixed host; US, EU and UAE also process in-region, the others store only.
+AGENTCLI_OPENAI_REGION_PREFIXES = ("ae", "au", "ca", "jp", "in", "sg", "kr", "gb")
+AGENTCLI_MINIMAX_CHINA_BASE_URL = "https://api.minimaxi.com/anthropic"
 AGENTCLI_GROK_US_BASE_URL = "https://us.api.x.ai/v1"
-AGENTCLI_DEFAULT_MAX_TOKENS = 8192
-# Explicit output cap sent to DeepSeek only. Its undocumented default cap can
-# truncate a large tool call (a whole-dashboard write) mid-JSON; 32K is at or
-# above the defaults for both modes, so it only ever raises the ceiling, and is
-# far under the documented 384K max output. Other OpenAI-compatible kinds are
-# deliberately not sent max_tokens (OpenAI reasoning models reject the field
-# outright).
+# Output cap for Anthropic-format requests. Thinking counts toward it, and a
+# large tool call (a whole-dashboard write) cut off mid-JSON cannot run, so it
+# sits well above a normal answer. Every current Claude model accepts it; a model
+# that refuses it is retried once at the provider's default.
+AGENTCLI_DEFAULT_MAX_TOKENS = 32000
+# Explicit output cap sent to DeepSeek only while thinking is OFF, where its
+# default (8K) can truncate a large tool call mid-JSON. With thinking on, its
+# defaults (64K, 128K at maximum effort) are larger, so nothing is sent. Other
+# OpenAI-compatible kinds are deliberately not sent max_tokens (OpenAI reasoning
+# models reject the field outright), except NVIDIA below.
 AGENTCLI_DEEPSEEK_MAX_TOKENS = 32768
+# NVIDIA's hosted models default as low as 1024 output tokens (Llama 3.3 70B);
+# 4096 is within each documented model range checked. A model that refuses it is
+# retried once without the field.
+AGENTCLI_NVIDIA_MAX_TOKENS = 4096
+# Characters per token for estimating a request's size before a local Ollama
+# server sees it: a whole Phoenix request measured 4.6 (its tool definitions
+# alone 4.7), so 5 estimates about 8% low and an estimate over the loaded
+# context is a real overflow.
+AGENTCLI_PROMPT_CHARS_PER_TOKEN = 5.0
 # How many Ollama /api/show lookups run at once during a capability refresh.
 # Ollama is the only backend whose capabilities cost one request PER MODEL, and a
 # large local library would otherwise arrive as one burst against a machine that
@@ -424,7 +473,9 @@ AGENTCLI_EFFORT_LEVELS = frozenset({"low", "medium", "high", "xhigh", "max"})
 # The same levels in a fixed order, which the capability probe walks. A frozenset
 # iterates arbitrarily, and a probe that reports its findings in a different order
 # each run reads as a changing answer when nothing changed.
-AGENTCLI_EFFORT_LEVEL_ORDER = ("low", "medium", "high", "xhigh", "max")
+# "none" comes first: a provider that accepts it has a real way to turn
+# reasoning off, which the panel then offers as Off.
+AGENTCLI_EFFORT_LEVEL_ORDER = ("none", "minimal", "low", "medium", "high", "xhigh", "max")
 
 # The value the probe sends when it is asking "is this field read at all". It has
 # to be something no provider could ever accept as a real level, and recognisable
@@ -432,7 +483,7 @@ AGENTCLI_EFFORT_LEVEL_ORDER = ("low", "medium", "high", "xhigh", "max")
 AGENTCLI_PROBE_SENTINEL = "phoenix-probe-invalid"
 
 # Hard cap on completion requests one probe run may make. The matrix is bounded by
-# construction (one control request, one validation check, five levels and
+# construction (one control request, one validation check, seven levels and
 # temperature), so this is a backstop that keeps a new knob from turning a button
 # into unbounded spend.
 AGENTCLI_PROBE_MAX_CALLS = 10
@@ -474,10 +525,33 @@ AGENTCLI_MAX_ITERATIONS_MAX = 100
 # the iteration cap above; past this cap the turn ends with bad_tool_call.
 AGENTCLI_MAX_TOOL_CALL_CORRECTIONS = 2
 # The tools-array cap OpenAI, Groq, Mistral and Z.ai document or enforce. A
-# provider definition opts in through max_tools; past it the turn is refused.
+# provider definition opts in through max_tools; a larger catalog is declared in
+# parts (tool_loading.py), and one whose starting set still exceeds it is refused.
 AGENTCLI_MAX_TOOLS_PER_REQUEST = 128
+# Phoenix's own client-local function that declares deferred tools; never an MCP tool.
+AGENTCLI_LOAD_TOOLS_NAME = "load_tools"
+# Groups of tools deferred under a provider's tools-array cap: id -> (capabilities,
+# name fragments, directory summary). A tool joins the first group whose
+# capabilities hold its first capability or one of whose fragments is in its
+# name; every other tool is in the starting set.
+AGENTCLI_DEFERRED_TOOL_GROUPS: dict[str, tuple[tuple[str, ...], tuple[str, ...], str]] = {
+    "esphome": (("cap_esphome_yaml", "cap_esphome_flash"), ("esphome",),
+                "ESPHome Device Builder: device YAML, validation, builds, flashing, jobs, device logs and diagnostics."),
+    "dashboards": (("cap_lovelace_write", "cap_dashboard_resources"), ("dashboard",),
+                   "Lovelace dashboards, their views and cards, and dashboard resources."),
+    "zigbee": (("cap_radio_write",), ("zigbee", "radio"),
+               "Zigbee and radio networks: network and device diagnostics, pairing, options, bindings, reporting and groups."),
+    "integrations": (("cap_integration_write", "cap_integration_reconfigure"), (),
+                     "Adding, removing, reloading and reconfiguring integrations."),
+    "registry_writes": (("cap_registry_write",), (), "Renaming, moving, enabling, disabling and removing registry entries."),
+    "files_and_backups": (("cap_backup", "cap_filesystem", "cap_yaml_edit"), (), "Configuration files, YAML edits and backups."),
+    "helpers": (("cap_helper_write",), (), "Creating, editing and deleting helpers."),
+    "mesa": ((), ("mesa_",), "MESA device-safety profiles, their explanations and control leases."),
+}
 # Longest provider error-envelope message shown to an administrator.
 AGENTCLI_PROVIDER_DETAIL_CHARS = 300
+# Bytes of a provider's error body read for classification; the rest is never read.
+AGENTCLI_PROVIDER_ERROR_BYTES = 4000
 # Images an administrator attaches to one Agent Chat message. The browser
 # re-encodes each to a JPEG with a long edge of at most
 # AGENTCLI_ATTACHMENT_BROWSER_EDGE_PX; the server bounds stay independent of it.
@@ -506,6 +580,16 @@ AGENTCLI_MAX_TURN_OUTPUT_BYTES = 48 * 1024 * 1024
 # total time is deliberately unbounded (a long agentic turn streams for minutes),
 # but a provider that stops sending data must not hang the turn forever.
 AGENTCLI_STREAM_READ_TIMEOUT_SECONDS = 180
+# A retry after a temporary provider failure waits this long for the first reply
+# rather than the full silent-stream bound: a provider that has just said it is
+# overloaded and then sends nothing is stuck, not thinking.
+AGENTCLI_RETRY_FIRST_REPLY_SECONDS = 60
+# A Voice model call that has sent nothing after this long is abandoned and the
+# speaker hears that the provider is too slow, instead of waiting out the
+# silent-stream bound. A healthy provider starts its stream within seconds.
+VOICE_FIRST_REPLY_SECONDS = 30
+# How often Agent Chat's status line reports a model call that has shown nothing yet.
+AGENTCLI_STATUS_INTERVAL_SECONDS = 30
 # Interactive inline-approval wait, tied to the live SSE connection (far longer
 # than the per-access-key confirm_inline_wait cap, which is for unattended agents).
 AGENTCLI_APPROVAL_WAIT_SECONDS = 900
@@ -579,6 +663,14 @@ MESA_SCOPES: tuple[str, ...] = ("entity", "device", "area", "integration", "doma
 
 MESA_STORAGE_KEY = "phoenix_mcp_mesa"
 MESA_STORAGE_VERSION = 1
+# How long a mesa-core worker waits for a registry lookup handed to the event
+# loop. One lookup takes milliseconds; the bound only stops a worker from
+# waiting forever on a loop that has stopped.
+MESA_HOST_CALLBACK_TIMEOUT_SECONDS = 30
+# How often Phoenix asks mesa-core to drop advisory leases that have run out,
+# which is what fires their natural-expiry event. Leases last at most 30
+# seconds, so an expiry is reported at most this late.
+MESA_LEASE_SWEEP_INTERVAL = datetime.timedelta(seconds=2)
 # Global enforcement mode for the vendored MesaEnforcer. "off" disables MESA
 # entirely; "advisory" warns but never blocks (except read_only, which is
 # entity-nature, not policy); "enforced" blocks and routes confirm through the
@@ -622,12 +714,12 @@ MESA_SUGGESTION_TEMPLATES: dict[str, str] = {
         "bypassing their own profiles."
     ),
     "blast_radius.fanout": (
-        "This {noun} references {count} entities and has no MESA profile of its own; "
+        "This {noun} has no MESA profile of its own and references many entities ({count}); "
         "one trigger has a wide blast radius."
     ),
     "naked_risky.domain": (
-        "{count} {domain} entities have no MESA profile at any level. This domain "
-        "{concern}. A domain-level profile covers them all at once.{baseline_note}"
+        "{domain} entities with no MESA profile at any level: {count}. This domain "
+        "{concern}. A domain-level profile covers them all.{baseline_note}"
     ),
     "naked_risky.entity": (
         "No MESA profile covers this entity at any level, and it {concern}.{baseline_note}"
@@ -641,9 +733,9 @@ MESA_SUGGESTION_PHRASES: dict[str, str] = {
     "noun.scene": "scene",
     "shown.more": "{shown} + {extra} more",
     "baseline_note": (
-        " Prohibited matches the built-in baseline for this domain, so the authored "
-        "profile makes that intent explicit; choose confirm in Review to allow agent "
-        "control behind approvals instead."
+        " Prohibited matches the built-in baseline for this domain, so the profile makes "
+        "that intent explicit. To allow agent control behind admin approval instead, "
+        "choose Confirm in Profile Editor before saving; approval applies while MESA is enforced."
     ),
 }
 
@@ -889,6 +981,7 @@ CAPABILITY_NAMES = (
     "cap_traces",
     "cap_diagnostics",
     "cap_broadcast",
+    "cap_notify",
     "cap_service_response",
     "cap_automation_write",
     "cap_script_write",
@@ -925,6 +1018,9 @@ CAPABILITY_TIERS: dict[str, str] = {
     "cap_traces": "read",
     "cap_diagnostics": "read",
     "cap_broadcast": "everyday",
+    # Messages reach people's phones and screens: an agent could spam or
+    # impersonate, so it sits with the other actions on the household.
+    "cap_notify": "system",
     "cap_service_response": "everyday",
     "cap_automation_write": "config_write",
     "cap_script_write": "config_write",
@@ -966,6 +1062,7 @@ CAPABILITY_TIERS: dict[str, str] = {
 # Capabilities for which Confirm is a meaningful third state.
 # UI hides the Confirm option for caps not in this set.
 CONFIRM_AVAILABLE_CAPS = frozenset({
+    "cap_notify",
     "cap_automation_write",
     "cap_script_write",
     "cap_blueprint_write",
@@ -992,6 +1089,7 @@ CONFIRM_AVAILABLE_CAPS = frozenset({
 # except that "confirm" is honored even for non-exempt caps under pass_through
 # (admin's intent to gate is preserved). See helpers.effective_cap.
 PASS_THROUGH_EXEMPT_CAPS = frozenset({
+    "cap_notify",
     "cap_camera_read",
     "cap_restart",
     "cap_physical_control",
@@ -1058,10 +1156,11 @@ Z2M_DEVICE_OPTIONS_RESPONSE_TIMEOUT_SECONDS = 5.0
 # Version-sensitive surface: the frame shapes and command names are the add-on's,
 # with no stability promise, so re-verify them on add-on upgrades.
 # Source-qualified protocol targets. The compiler and Device Builder use
-# independent version families; ESPHome 2026.9.1 bundles Device Builder 1.14.9.
-# Used only to add context to failures, never as an upgrade warning on success.
-ESPHOME_BUILDER_VERIFIED_VERSION = "1.14.9"
-ESPHOME_COMPILER_VERIFIED_VERSION = "2026.9.1"
+# independent version families; ESPHome 2026.10.0 and 2026.10.1 both bundle Device
+# Builder 1.25.0. Used only to add context to failures, never as an upgrade
+# warning on success.
+ESPHOME_BUILDER_VERIFIED_VERSION = "1.25.0"
+ESPHOME_COMPILER_VERIFIED_VERSION = "2026.10.1"
 ESPHOME_BUILDER_REQUEST_TIMEOUT_SECONDS = 10.0
 # Validation runs the config through ESPHome itself (no compile), which is
 # seconds on a small file but can pull external_components on a large one.
@@ -1108,6 +1207,9 @@ ESPHOME_BUILDER_JOB_WAIT_HEADLESS_SECONDS = 10
 # Faster than the 15s keepalive so the reported percentage is fresh when a frame
 # goes out, and so a build that finishes returns promptly rather than on the tick.
 ESPHOME_BUILDER_JOB_POLL_SECONDS = 5.0
+# A cancel is confirmed by re-reading the job until it reports a finished status.
+ESPHOME_BUILDER_CANCEL_SETTLE_SECONDS = 5.0
+ESPHOME_BUILDER_CANCEL_POLL_SECONDS = 0.5
 # The add-on caps a decode at 200 lines of 500 chars and times out server-side
 # at 60s; the client waits a little longer so its own timeout is never the first
 # to fire and mask the add-on's own answer.
@@ -1118,6 +1220,31 @@ ESPHOME_BUILDER_MAX_BACKTRACE_LINES = 200
 # long it runs.
 ESPHOME_BUILDER_LOG_CAPTURE_SECONDS = 15
 ESPHOME_BUILDER_LOG_CAPTURE_MAX_SECONDS = 60
+# Automation building-block docs. The add-on pages a large request through
+# `remaining`; the page cap bounds a reply that never makes progress.
+ESPHOME_BUILDER_MAX_AUTOMATION_REFS = 20
+ESPHOME_BUILDER_AUTOMATION_DOCS_MAX_PAGES = 5
+# The add-on's AUTOMATION_TYPES (controllers/automations/catalog.py).
+ESPHOME_AUTOMATION_REF_TYPES = frozenset({
+    "triggers", "actions", "conditions", "light_effects", "filters",
+})
+# One existing automation's masked YAML, and all of them together.
+ESPHOME_AUTOMATION_YAML_MAX_CHARS = 4_000
+ESPHOME_AUTOMATION_LIST_MAX_CHARS = 32_768
+# Masked unified diffs (migration preview, version history).
+ESPHOME_DIFF_MAX_CHARS = 16_384
+# The git author the Device Builder commits as. Rows report only whether a
+# version came from the Builder; an adopted repository can carry real names.
+ESPHOME_BUILDER_HISTORY_AUTHOR = "ESPHome Device Builder"
+ESPHOME_BUILDER_LOADED_COMPONENTS_MAX = 500
+# devices/troubleshoot carries no budget of its own (its legs self-bound) and
+# the add-on's own dialog waits 35 s. A headless surface cannot hold that long.
+ESPHOME_BUILDER_TROUBLESHOOT_TIMEOUT_SECONDS = 40.0
+ESPHOME_BUILDER_TROUBLESHOOT_HEADLESS_SECONDS = 8.0
+# Memory analysis is followed in the call that starts it: the add-on drops the
+# job once it ends, so there is nothing to poll afterwards.
+ESPHOME_BUILDER_ANALYZE_TIMEOUT_SECONDS = ESPHOME_BUILDER_JOB_WAIT_SECONDS
+ESPHOME_BUILDER_ANALYZE_OUTPUT_MAX_CHARS = 24_576
 
 # Pending-approval queue limits.
 MAX_PENDING_APPROVALS_PER_ACCESS_KEY = 100
@@ -1153,9 +1280,10 @@ PERSONA_DASHBOARD_DESIGNER = "dashboard_designer"
 # Routine upkeep: full reads + diagnostics + backups; restart gated to confirm.
 # No config authoring or device control.
 PERSONA_MAINTENANCE = "maintenance"
-# ESPHome device work: diagnostic reads plus device-YAML editing gated to
-# confirm. No entity control, no HA config authoring. Seeds caps only, so the
-# admin still scopes the entity tree to the ESPHome devices.
+# ESPHome device work: diagnostic reads, device-YAML reads and Device Builder
+# work, with flashing gated to confirm. No entity control, no configuration
+# authoring. Seeds caps only, so the admin still scopes the entity tree to the
+# ESPHome devices.
 PERSONA_ESPHOME = "esphome"
 PERSONA_NAMES = frozenset({
     PERSONA_HOME_COMPANION,
@@ -1366,11 +1494,25 @@ MAX_LOGBOOK_NARROWED_DAYS = 31
 # "nothing was logged" rather than "that level is not available here". Distinct
 # from helpers._LOG_LEVEL_RANK, which ranks the level of a RECORD; this is the
 # narrower set a CALLER may ask for.
+# When to read get_capability_summary, said the same way on every surface that
+# steers it: models told to orient first spent a call on it before every read.
+ORIENTATION_GUIDANCE = (
+    "Call get_capability_summary before a write or after a permission refusal; "
+    "a question that only reads needs no orientation call."
+)
+
 LOG_LEVELS = ("WARNING", "ERROR")
 LOG_LEVEL_ERROR_MESSAGE = (
     "level must be WARNING or ERROR. Home Assistant's system log holds WARNING "
     "and above only, so INFO and DEBUG entries never enter it and cannot be read "
     "through this tool. They are written to home-assistant.log on the server."
+)
+# get_logs can read them from its other source, so it says how instead.
+GET_LOGS_LEVEL_ERROR_MESSAGE = (
+    "level must be WARNING or ERROR. Home Assistant's system log holds WARNING "
+    "and above only. To read an integration's INFO or DEBUG records, raise its "
+    "level with set_integration_log_level, then call get_logs with source "
+    "integration_debug and that integration."
 )
 
 # Cap on a tools/call request's "name" field before it is used for dispatch or
@@ -1426,6 +1568,13 @@ MAX_APPROVAL_RESULT_CHARS = 500
 # entity, so an unbounded query could stall the event loop; a real query is far
 # shorter than this.
 MAX_SEARCH_QUERY_LEN = 512
+# The radio types search_entities can filter by, each recognized from the device
+# registry rather than inferred from names: zigbee (ZHA or Zigbee2MQTT), zwave
+# (Z-Wave JS), matter (Matter over Thread or Wi-Fi) and bluetooth (devices
+# reached by a Bluetooth address).
+SEARCH_RADIO_TYPES = ("zigbee", "zwave", "matter", "bluetooth")
+# Home Assistant records a battery reading but no mains or other power source.
+SEARCH_POWER_TYPES = ("battery",)
 # Bound opt-in membership normalization and disclosure across one search page.
 MAX_SEARCH_MEMBERS = 256
 MAX_SEARCH_MEMBER_CHECKS = 4096
@@ -1451,7 +1600,6 @@ MCP_SSE_KEEPALIVE_SECONDS = 15.0
 # ADDING AN ENTRY IS A COMPLIANCE CLAIM, NOT A LABEL. Do not add an intermediate
 # legacy revision unless every MUST introduced by that revision is implemented.
 MCP_PROTOCOL_VERSIONS: tuple[str, ...] = ("2026-07-28", "2025-03-26")
-MCP_PROTOCOL_VERSION_PREFERRED = MCP_PROTOCOL_VERSIONS[0]
 MCP_AUTHORITY_CHANGED_ERROR = 1001
 MCP_LEGACY_PROTOCOL_VERSIONS: tuple[str, ...] = ("2025-03-26",)
 MCP_LEGACY_PROTOCOL_VERSION_PREFERRED = MCP_LEGACY_PROTOCOL_VERSIONS[0]
@@ -1530,12 +1678,19 @@ DIFF_SUMMARY_TEMPLATES: dict[str, str] = {
     "delete_calendar_event": "Delete calendar event",
     "configuration_recovery.restore": "Restore saved configuration for {resource}",
     "configuration_recovery.acknowledge": "Check configuration after an interrupted change to {resource}",
+    "restore.template_helper": "Restore Template helper configuration",
+    "restore.blueprint": "Restore blueprint source '{label}'",
+    "restore.dashboard_layout": "Restore the layout of dashboard '{label}'",
+    "restore.dashboard_registry": "Restore the registry entry of dashboard '{label}'",
+    "restore.dashboard_resource": "Restore dashboard resource {url}",
+    "restore.energy": "Restore Energy dashboard preferences",
+    "edit_energy_config.fallback": "Change the Energy dashboard configuration",
     # Blueprints. Create never reports consumers (a new blueprint has none).
     "blueprint.create": "Create {domain} blueprint '{rel}'",
     "blueprint.edit": "Replace {domain} blueprint '{rel}'",
     "blueprint.delete": "Delete {domain} blueprint '{rel}'",
-    "blueprint.edit.consumers": "Replace {domain} blueprint '{rel}' ({count} will be reloaded)",
-    "blueprint.delete.consumers": "Delete {domain} blueprint '{rel}' ({count} still use it)",
+    "blueprint.edit.consumers": "Replace {domain} blueprint '{rel}' (to be reloaded: {count})",
+    "blueprint.delete.consumers": "Delete {domain} blueprint '{rel}' (still in use: {count})",
     # Entity registry.
     "set_entity": "Update registry metadata ({fields}) for {entity_id}",
     "delete_entity": "Delete the registry entry for {entity_id}",
@@ -1543,6 +1698,12 @@ DIFF_SUMMARY_TEMPLATES: dict[str, str] = {
     "location.create": "Create location {name}",
     "location.update": "Update location {name}",
     "location.delete": "Delete location {name}",
+    "label.create": "Create label {name}",
+    "label.update": "Update label {name}",
+    "label.delete": "Delete label {name}",
+    "category.create": "Create category {name}",
+    "category.update": "Update category {name}",
+    "category.delete": "Delete category {name}",
     # Device registry.
     "set_device": "Update device registry metadata ({fields}) for {device_id}",
     "remove_device": "Remove {device_id} from config entry {config_entry_id}",
@@ -1559,15 +1720,20 @@ DIFF_SUMMARY_TEMPLATES: dict[str, str] = {
     "zigbee_property": "Change a Zigbee2MQTT exposed property",
     "zigbee_property.device": "Change Zigbee2MQTT property {property} for {label}",
     "zigbee_binding": "Change a Zigbee device binding",
-    "zigbee_binding.devices": "{operation} Zigbee binding from {source} to {target}",
+    "zigbee_binding.devices.bind": "Bind Zigbee device {source} to {target}",
+    "zigbee_binding.devices.unbind": "Unbind Zigbee device {source} from {target}",
     "zigbee_reporting": "Configure Zigbee attribute reporting",
     "zigbee_reporting.device": "Configure {cluster}.{attribute} reporting for {label}",
     "zigbee_group": "Change a Zigbee group",
-    "zigbee_group.named": "{operation} Zigbee group {name}",
+    "zigbee_group.named.create": "Create Zigbee group {name}",
+    "zigbee_group.named.add_members": "Add devices to Zigbee group {name}",
+    "zigbee_group.named.remove_members": "Remove devices from Zigbee group {name}",
+    "zigbee_group.named.delete": "Remove Zigbee group {name}",
     "zigbee_topology": "Scan Zigbee topology",
     "zigbee_topology.backend": "Scan {backend} neighbor tables for the scoped Zigbee map",
     # System.
     "restart_ha": "Restart Home Assistant",
+    "send_notification": "Send a notification to {target}",
     "config_entry.options": "Change {keys} on helper '{label}'",
     "integration.enable": "Enable integration {label}",
     "integration.disable": "Disable integration {label}",
@@ -1612,10 +1778,10 @@ DIFF_SUMMARY_TEMPLATES: dict[str, str] = {
     # Service calls and the native physical-gate tools.
     "call_service": "Call {domain}/{service}",
     "call_service.mesa": "Call {domain}/{service} (includes MESA confirmation)",
-    "hass_turn.on": "Turn on physical device(s): {names}",
-    "hass_turn.off": "Turn off physical device(s): {names}",
-    "hass_turn.on.mesa": "Turn on physical device(s): {names} (includes MESA confirmation)",
-    "hass_turn.off.mesa": "Turn off physical device(s): {names} (includes MESA confirmation)",
+    "hass_turn.on": "Physical device control: turn on {names}",
+    "hass_turn.off": "Physical device control: turn off {names}",
+    "hass_turn.on.mesa": "Physical device control: turn on {names} (includes MESA confirmation)",
+    "hass_turn.off.mesa": "Physical device control: turn off {names} (includes MESA confirmation)",
     "hass_set_position": "Set cover/valve position",
     "hass_set_position.mesa": "Set cover/valve position (includes MESA confirmation)",
     "hass_stop_moving": "Stop moving cover",
@@ -1655,23 +1821,34 @@ _APPROVAL_SUMMARY_TITLE_OVERRIDES = {
 }
 
 _APPROVAL_SUMMARY_BODIES = {
-    "configuration_recovery.restore": "A previous change could not be verified. Approve restores the saved configuration shown in Details. Reject keeps the current configuration. The original command will not be repeated.",
+    "configuration_recovery.restore": "A previous change could not be verified. Approve restores the saved configuration shown below. Reject keeps the current configuration. The original command will not be repeated.",
     "configuration_recovery.acknowledge": "A previous change could not be verified and cannot be safely restored here. Check this resource in Home Assistant, then Approve to accept its current state and unblock changes. Reject leaves changes blocked. The original command will not be repeated.",
     "restart_ha": "Home Assistant will be briefly unavailable while it restarts.",
+    "restore.template_helper": "This will put back the Template helper configuration from the selected change. Compare it with the current configuration below.",
+    "restore.blueprint": "This will put back the blueprint source from the selected change. Compare it with the current source below.",
+    "restore.dashboard_layout": "This will put back the dashboard layout from the selected change. Compare it with the current layout below.",
+    "restore.dashboard_registry": "This will put back the dashboard's registry settings from the selected change. Compare them with the current settings below.",
+    "restore.dashboard_resource": "This will put back the dashboard resource from the selected change. Every browser loads it when it opens a dashboard.",
+    "restore.energy": "This will put back the Energy dashboard preferences from the selected change. Compare them with the current preferences below.",
+    "send_notification": "This will send the message shown below to {target}.",
     "zigbee_reconfigure": "This will interview the Zigbee device again. It may be briefly unresponsive. Battery devices must be awake.",
     "zigbee_reconfigure.device": "This will interview {label} again. It may be briefly unresponsive. Battery devices must be awake.",
     "zigbee_remove": "This will remove the Zigbee device from the network. The change cannot be undone from this approval.",
     "zigbee_remove.device": "This will remove {label} from the Zigbee network. The change cannot be undone from this approval.",
-    "zigbee_options": "This will change Zigbee2MQTT device options. Open Details to review the proposed values.",
-    "zigbee_options.device": "This will change Zigbee2MQTT device options for {label}. Open Details to review the proposed values.",
-    "zigbee_property": "This will directly change a Zigbee2MQTT device property. Open Details to review the proposed value.",
-    "zigbee_property.device": "This will directly change property {property} for {label}. Open Details to review the proposed value.",
-    "zigbee_binding": "This will change direct control between two Zigbee devices. Open Details to review both devices and the selected clusters.",
-    "zigbee_binding.devices": "This will {operation} direct Zigbee control from {source} to {target}. Open Details to review the exact relationship.",
-    "zigbee_reporting": "This will change how frequently a Zigbee device reports an attribute. Open Details to review the intervals.",
-    "zigbee_reporting.device": "This will change {cluster}.{attribute} reporting for {label}. Open Details to review the intervals.",
-    "zigbee_group": "This will change which devices are controlled together as a Zigbee group. Open Details to review the membership.",
-    "zigbee_group.named": "This will {operation} Zigbee group {name}. Open Details to review the exact membership change.",
+    "zigbee_options": "This will change Zigbee2MQTT device options. Review the proposed values below.",
+    "zigbee_options.device": "This will change Zigbee2MQTT device options for {label}. Review the proposed values below.",
+    "zigbee_property": "This will directly change a Zigbee2MQTT device property. Review the proposed value below.",
+    "zigbee_property.device": "This will directly change property {property} for {label}. Review the proposed value below.",
+    "zigbee_binding": "This will change direct control between two Zigbee devices. Review both devices and the selected clusters below.",
+    "zigbee_binding.devices.bind": "This will let {source} control {target} directly over Zigbee. Review the exact relationship below.",
+    "zigbee_binding.devices.unbind": "This will stop {source} controlling {target} directly over Zigbee. Review the exact relationship below.",
+    "zigbee_reporting": "This will change how frequently a Zigbee device reports an attribute. Review the intervals below.",
+    "zigbee_reporting.device": "This will change {cluster}.{attribute} reporting for {label}. Review the intervals below.",
+    "zigbee_group": "This will change which devices are controlled together as a Zigbee group. Review the membership below.",
+    "zigbee_group.named.create": "This will create Zigbee group {name}. Review its members below.",
+    "zigbee_group.named.add_members": "This will add devices to Zigbee group {name}. Review the exact membership change below.",
+    "zigbee_group.named.remove_members": "This will remove devices from Zigbee group {name}. Review the exact membership change below.",
+    "zigbee_group.named.delete": "This will remove Zigbee group {name}. Its devices stay paired but are no longer controlled together.",
     "zigbee_topology": "This actively queries Zigbee routers. The mesh may be less responsive while the scan runs.",
     "zigbee_topology.backend": "This actively queries Zigbee routers on {backend}. The mesh may be less responsive while the scan runs.",
     "integration.reload": "This will temporarily unload the {label} integration and set it up again.",
@@ -1686,10 +1863,10 @@ _APPROVAL_SUMMARY_BODIES = {
     "install_esphome_firmware": "This will compile and flash firmware to {label}. Do not disconnect the device during the update.",
     "install_esphome_firmware.jump": "This will change the ESPHome version, compile, and flash firmware to {label}. Do not disconnect the device during the update.",
     "blueprint.delete": "This will permanently delete the {domain} blueprint {rel}.",
-    "blueprint.delete.consumers": "This will permanently delete {rel}, even though {count} automations or scripts still use it.",
+    "blueprint.delete.consumers": "This will permanently delete {rel}. Automations and scripts that still use it: {count}.",
     "dashboard.delete": "This will permanently delete the dashboard {label}.",
     "dashboard_resource.create": "Every browser that opens a dashboard will load {url}. A JavaScript file runs with that person's Home Assistant access, so approve only a file you trust.",
-    "dashboard_resource.update": "This changes a file every browser loads when it opens a dashboard. Open Details to compare the current and proposed file.",
+    "dashboard_resource.update": "This changes a file every browser loads when it opens a dashboard. Compare the current and proposed file below.",
     "dashboard_resource.delete": "Dashboards will stop loading {url}. Cards that come from it will show an error until it is added back.",
     "dashboard_card.delete": "This will permanently delete the selected card from {label}.",
     "dashboard_card.delete.section": "This will permanently delete the selected card from {label}.",
@@ -1707,11 +1884,11 @@ def _approval_summary_body(key: str) -> str:
     if key.startswith("integration."):
         return "This will change the {label} integration in Home Assistant."
     if key.startswith(("dashboard", "patch_dashboard", "edit_energy_config")):
-        return "This will update the Home Assistant dashboard configuration. Open Details to review the exact proposed change."
-    if key == "location.delete":
+        return "This will update the Home Assistant dashboard configuration."
+    if key in ("location.delete", "label.delete", "category.delete"):
         return "This will remove the selected item. The change may not be reversible."
-    if key.startswith(("create_", "edit_", "set_", "patch_", "blueprint.", "location.")):
-        return "This will apply the proposed configuration change. Open Details to review the exact proposed change."
+    if key.startswith(("create_", "edit_", "set_", "patch_", "blueprint.", "location.", "label.", "category.")):
+        return "This will apply the proposed configuration change."
     if key.startswith(("call_service", "mesa_service")):
         return "This will run the proposed Home Assistant service action."
     if key.startswith(("hass_turn", "hass_set_position", "hass_stop_moving")):
@@ -1720,7 +1897,7 @@ def _approval_summary_body(key: str) -> str:
         return "This will change whether new devices can join the Zigbee network."
     if key.startswith(("delete_", "remove_")):
         return "This will remove the selected item. The change may not be reversible."
-    return "This will apply the proposed action. Open Details to review the exact proposed change."
+    return "This will apply the proposed action."
 
 
 APPROVAL_SUMMARY_TEMPLATES: dict[str, str] = {
@@ -1733,14 +1910,6 @@ APPROVAL_SUMMARY_TEMPLATES: dict[str, str] = {
 }
 
 APPROVAL_SUMMARY_UI: dict[str, str] = {
-    "view.summary": "Summary",
-    "view.details": "Details",
-    "view.defaultAria": "Default approval view",
-    "action.approve": "Approve and execute",
-    "action.approving": "Approving...",
-    "action.reject": "Reject",
-    "action.rejecting": "Rejecting...",
-    "action.cancelReject": "Cancel",
     "action.optionalReason": "Optional reason",
     "action.reasonPlaceholder": "Explain why this request was rejected",
     "fallback.file.title": "Update {file}",
@@ -1748,8 +1917,7 @@ APPROVAL_SUMMARY_UI: dict[str, str] = {
     "fallback.item.title": "Update {label}",
     "fallback.service.title": "Run {label}",
     "fallback.unknown.title": "Review proposed action",
-    "fallback.body": "Open Details to review the exact proposed change.",
-    "targets.exact": "This approval covers the entities listed in Details. Changed targets require a new request.",
+    "targets.exact": "This approval covers the entities listed below. Changed targets require a new request.",
     "targets.futureNative": "Home Assistant resolves future targets when this configuration runs. Membership may change, and later execution is outside Phoenix permission and MESA checks.",
     "targets.dynamicAccessible": "Accessible devices are resolved again at execution and may have changed.",
     "named.editAutomation.title": "Edit automation '{label}'",
@@ -1778,8 +1946,8 @@ APPROVAL_SUMMARY_UI: dict[str, str] = {
     "named.resource.editTitle": "Edit {kind} '{label}'",
     "named.resource.deleteTitle": "Delete {kind} '{label}'",
     "named.resource.deleteUnnamedTitle": "Delete {kind}",
-    "named.resource.createBody": "This will add {kind} '{label}' to Home Assistant. Open Details to review its configuration.",
-    "named.resource.editBody": "This will update {kind} '{label}'. Open Details to review the exact proposed change.",
+    "named.resource.createBody": "This will add {kind} '{label}' to Home Assistant. Review its configuration below.",
+    "named.resource.editBody": "This will update {kind} '{label}'.",
     "named.resource.deleteBody": "This will permanently delete {kind} '{label}'. This action cannot be undone.",
     "named.resource.deleteUnnamedBody": "This will permanently delete the selected {kind}. This action cannot be undone.",
     "history.approved.body": "The request completed successfully.",
@@ -1788,7 +1956,7 @@ APPROVAL_SUMMARY_UI: dict[str, str] = {
     "history.expired.body": "The request expired and was not run.",
     "history.cancelled.body": "The request was cancelled and was not run.",
     "history.cancelledReason.body": "The request was cancelled and was not run. Reason: {reason}",
-    "history.error.generic": "The action could not be completed. Open Details to review the executor error.",
+    "history.error.generic": "The action could not be completed. Request Details shows the full error under Result.",
     "history.error.integrationChanged": "The integration changed after approval. Review the current request details and try again.",
     "history.error.integrationDisabled": "The integration is disabled and cannot be reloaded.",
     "history.error.integrationLoggerChanged": "The integration's logging configuration changed after approval. Review the current request details and try again.",
@@ -1796,7 +1964,7 @@ APPROVAL_SUMMARY_UI: dict[str, str] = {
     "history.error.integrationReloadFailed": "Home Assistant could not reload the integration.",
     "history.error.integrationReloadUnsupported": "This integration does not currently support reloading.",
     "history.error.integrationStateNotReloadable": "The integration is currently in state {state} and cannot be reloaded.",
-    "history.failed.body": "The request was approved, but execution failed. Error: {error}",
+    "history.failed.body": "The request was approved but did not complete. Error: {error}",
     "history.interrupted.body": "Execution was interrupted and the change may have been applied. Verify the current state before requesting it again.",
     "history.resolvedAt": "Resolved {time}",
 }
@@ -1815,8 +1983,8 @@ APPROVAL_SUMMARY_UI: dict[str, str] = {
 # card: it is a coordinate list, not prose, so the order is fixed and only the
 # nouns need translating.
 VERSION_SUMMARY_TEMPLATES: dict[str, str] = {
-    "cards": "{count} cards",
-    "cards.was": "{count} cards (was {before})",
+    "cards": "cards: {count}",
+    "cards.was": "cards: {count} (was {before})",
     "size": "{size}",
     "size.was": "{size} (was {before})",
     "entity.removed": "registry entry removed",
@@ -1825,9 +1993,13 @@ VERSION_SUMMARY_TEMPLATES: dict[str, str] = {
     "device.changed": "changed: {fields}",
     "device.zigbee_options": "changed Zigbee2MQTT options: {keys}",
     "device.zigbee_property": "changed Zigbee2MQTT property: {property}",
-    "device.zigbee_binding": "{operation} Zigbee binding to {target}",
+    "device.zigbee_binding.bind": "bound Zigbee control to {target}",
+    "device.zigbee_binding.unbind": "removed the Zigbee binding to {target}",
     "device.zigbee_reporting": "configured Zigbee reporting: {cluster}.{attribute}",
-    "device.zigbee_group": "{operation} Zigbee group: {name}",
+    "device.zigbee_group.create": "created Zigbee group: {name}",
+    "device.zigbee_group.add_members": "added to Zigbee group: {name}",
+    "device.zigbee_group.remove_members": "removed from Zigbee group: {name}",
+    "device.zigbee_group.delete": "removed Zigbee group: {name}",
     "config_entry.removed": "integration removed",
     "card.added": "added {subject} ({where})",
     "card.edited": "edited {subject} ({where})",
@@ -1835,13 +2007,13 @@ VERSION_SUMMARY_TEMPLATES: dict[str, str] = {
     "loc.view": "view {index}",
     "loc.section": "section {index}",
     "loc.card": "card {index}",
-    "energy.sources": "{count} sources, {devices} devices",
+    "energy.sources": "sources: {count}, devices: {devices}",
     "config_entry.options": "reconfigured {subject}",
     "config_entry.reconfigure": "reconfigured {subject}",
     "patch.set": "set {subject}",
     "patch.append": "appended to {subject}",
     "patch.remove": "removed {subject}",
-    "patch.multi": "{count} changes",
+    "patch.multi": "changes: {count}",
 }
 
 
@@ -1857,6 +2029,7 @@ NOTIFICATION_TEMPLATES: dict[str, str] = {
     # The link label is inside the markdown, so it has to be part of the string;
     # the URL is substituted and must not be translated.
     "approval.message": "Access key '{access_key}' requested approval.\n\n[Review in Phoenix MCP]({url})",
+    "approval.recovery_message": "Configuration recovery needs review: a previous change could not be verified.\n\n[Review in Phoenix MCP]({url})",
     "rate_limit.title": "Phoenix MCP Alert",
     "rate_limit.message": "Phoenix MCP: access key '{access_key}' has hit its rate limit.",
 }
@@ -1879,13 +2052,15 @@ VOICE_TEMPLATES: dict[str, str] = {
     "local_state_unconfirmed": "Command sent. Home Assistant has not yet confirmed the requested state.",
     "local_pending": "This command needs approval in the Phoenix MCP panel.",
     "local_review": "Review command",
+    # Link label after a typed Assist reply that queued approvals (not spoken).
+    "approval_link": "Approve in the Phoenix MCP panel",
     "local_failed": "Phoenix MCP could not complete this command.",
     "local_state": "The state is {state}.",
     "local_state_unknown": "Unknown",
     "local_state_unavailable": "Unavailable",
-    'local_summary_count': 'Among entities exposed to Assist that I can access: {matched} of {total} have state {state}; {unknown} have unknown or unavailable state.',
-    'local_summary_total': 'Among entities exposed to Assist that I can access: {total} entities; {unknown} have unknown or unavailable state.',
-    'local_summary_breakdown': 'Among entities exposed to Assist that I can access: {total} entities. {summary}.',
+    'local_summary_count': 'Entities exposed to Assist that I can access, with state {state}: {matched} of {total}. Unknown or unavailable: {unknown}.',
+    'local_summary_total': 'Entities exposed to Assist that I can access: {total}. Unknown or unavailable: {unknown}.',
+    'local_summary_breakdown': 'Entities exposed to Assist that I can access: {total}. {summary}.',
 
     "local_read_failed": "Phoenix MCP could not read the state.",
     "local_attribute_unavailable": "Home Assistant is not reporting a value for the requested property right now.",
@@ -1900,10 +2075,11 @@ VOICE_TEMPLATES: dict[str, str] = {
     # and stays in whatever language the provider produced: it is third-party
     # output and is not translated.
     "could_not_complete": "Sorry, I could not complete that.",
-    "provider_error": "Sorry, {reason}.",
+    "provider_unavailable": "Sorry, the language model could not answer right now.",
+    "provider_slow": "Sorry, the language model is taking too long to answer. Try again in a moment.",
     "model_api_unsupported": "This model is not qualified for OpenCode Chat Completions. Choose a supported model.",
-    "outcome_unknown": "This action may have run. Check Home Assistant and its approval history before trying it again. Open Needs attention in Phoenix MCP.",
-    "prior_action_unresolved": "This request was not executed because a previous action needs checking. Open Needs attention in Phoenix MCP.",
+    "outcome_unknown": "This action may have run. Check Home Assistant and its approval history before trying it again. Open Needs Attention in Phoenix MCP.",
+    "prior_action_unresolved": "This request was not executed because a previous action needs checking. Open Needs Attention in Phoenix MCP.",
     'companion_accepted_direct': 'Home Assistant accepted the command for {names}.',
     'companion_accepted_warm': 'Your command for {names} has been accepted by Home Assistant.',
     'companion_accepted_calm_guide': 'Home Assistant confirms it accepted the command for {names}.',
@@ -1911,18 +2087,18 @@ VOICE_TEMPLATES: dict[str, str] = {
     'companion_accepted_technical': 'Command receipt: accepted. Targets: {names}.',
     'companion_verified_short': 'It reports the requested settings.',
     'companion_receipt_limit': 'A command receipt confirms acceptance; the state check shows what Home Assistant reports, not physical proof.',
-    'companion_group_targets': '{count} {kind} in {area}',
+    'companion_group_targets': '{kind} in {area} ({count})',
     'companion_action_lights': 'lights',
     'companion_action_fans': 'fans',
     'companion_action_devices': 'devices',
-    'companion_verification_progress': 'Home Assistant reports the requested settings for {count} of {total} targets.',
+    'companion_verification_progress': 'Targets Home Assistant reports with the requested settings: {count} of {total}.',
     'companion_unavailable_targets': 'Unavailable ({count}): {names}. Check in Home Assistant; do not resend commands.',
     'companion_unverified_targets': 'Not verified ({count}): {names}. Check in Home Assistant; do not resend commands.',
-    'companion_count_direct': 'I can see {count} matching {kind} in your permitted scope.',
-    'companion_count_warm': "I can see {count} matching {kind} within Phoenix's permitted scope.",
-    'companion_count_calm_guide': 'Phoenix can access {count} matching {kind}; this count covers your permitted scope.',
-    'companion_count_lively': '{count} matching {kind} are visible to Phoenix.',
-    'companion_count_technical': "Count: {count} matching {kind} within Phoenix's permitted scope.",
+    'companion_count_direct': 'Matching {kind} in your permitted scope: {count}.',
+    'companion_count_warm': "Matching {kind} I can see within Phoenix's permitted scope: {count}.",
+    'companion_count_calm_guide': 'Matching {kind} Phoenix can access: {count}. This count covers your permitted scope.',
+    'companion_count_lively': 'Matching {kind} visible to Phoenix: {count}.',
+    'companion_count_technical': "Matching {kind} within Phoenix's permitted scope, count: {count}.",
     'companion_kind_light': 'light entities',
     'companion_kind_fan': 'fan entities',
     'companion_kind_sensor': 'sensor entities',
@@ -2256,6 +2432,11 @@ DECISION_TIMEOUT_MAX_MS = 30000
 DECISION_MAX_RESPONSE_BYTES = 65536
 DECISION_MAX_ERROR_BYTES = 4096
 DECISION_TYPESAFE_HTTP_ERRORS = {"max_tokens_exceeded": "provider_context_limit"}
+# TypeSafe moves this alias to each new JEV revision. An account configured with
+# it accepts whichever revision answers, by operator decision, wherever the
+# registries below admit the alias; a pinned revision must answer as itself.
+DECISION_FOLLOWED_ALIASES = frozenset({("typesafe", DECISION_TYPESAFE_BASE_URL, "jev-latest")})
+DECISION_FOLLOWED_REVISION = r"jev-\d+\.\d+\.\d+"
 DECISION_METRIC_SAMPLES = 256
 DECISION_METRIC_SCOPES = frozenset({"preview", "voice", "chat", "voice_shadow", "chat_shadow", "tool_chat", "tool_voice", "tool_ai_task"})
 DECISION_METRIC_OPERATIONS = frozenset({"classify", "target", "context", "batch", "reference", "tool"})
@@ -2539,9 +2720,14 @@ UNKNOWN_ARGUMENT_ALIASES = {
     "file": ("filename", "file_name", "file_path", "path"),
     "path": ("filename", "file_name", "file_path", "directory"),
     "targets": ("target", "entity_ids", "device_ids", "area_ids", "entities"),
-    "entity_id": ("entity", "entity_ids"),
+    "entity_id": ("entity", "entity_ids", "entities", "statistic_id"),
     "device_id": ("device", "device_ids"),
     "entry_id": ("integration_id", "config_entry_id"),
+    "start_time": ("start",),
+    "end_time": ("end",),
+    "statistic_types": ("types", "statistic_type", "stat_types"),
+    "device_class": ("device_classes",),
+    "query": ("name",),
 }
 UNKNOWN_ARGUMENT_MAX_NAME = 80
 UNKNOWN_ARGUMENT_MAX_ERRORS = 8
@@ -2600,6 +2786,8 @@ HOME_COMPANION_CONTROL_DOMAINS = frozenset({
     "light", "fan", "switch", "input_boolean", "climate", "cover", "valve",
     "media_player", "vacuum", "humidifier", "timer",
 })
+# Reads whose states can answer on their own; any other read leaves the answer to the model.
+HOME_COMPANION_STATE_READ_TOOLS = frozenset({"search_entities", "get_state", "get_capability_summary"})
 HOME_COMPANION_READ_DOMAINS = frozenset({"sensor", "binary_sensor", "weather", "calendar", "sun"})
 HOME_COMPANION_TOOL_DOMAINS = {
     "light__HassLightSet": ("light",), "fan__HassFanSetSpeed": ("fan",),
@@ -2691,7 +2879,6 @@ HOME_COMPANION_MAX_ROUNDS = 4
 HOME_COMPANION_MAX_CALLS = 8
 HOME_COMPANION_MAX_REQUEST_BYTES = 4096
 HOME_COMPANION_MAX_CATALOG_BYTES = 65536
-HOME_COMPANION_MAX_CONTEXT_BYTES = 65536
 HOME_COMPANION_MAX_REPORT_ENTITIES = 128
 HOME_COMPANION_MAX_REPORT_NAMES = 8
 HOME_COMPANION_TIMEOUT_SECONDS = 120
@@ -2744,6 +2931,17 @@ CONVERSATION_LOG_MAX_DEPTH = 25
 CONVERSATION_LOG_FLUSH_SECONDS = 30
 CONVERSATION_LOG_ENTRY_BYTES = 1_000_000
 CONVERSATION_LOG_PAYLOAD_BYTES = 64_000
+# Bytes one tool result may take as the Conversation Log stores it: its text as an
+# escaped JSON string inside the JSON-RPC envelope, which the rest leaves room for.
+# A larger payload is clipped there, so a read that adds rows up to this budget and
+# names the rest stays auditable whole.
+TOOL_RESULT_MAX_BYTES = CONVERSATION_LOG_PAYLOAD_BYTES - 512
+# Home Companion's context is bounded by its call and result limits rather than a
+# smaller guess: every permitted call may return a full-size result, plus room for
+# the system prompt, operator notes, the request and the model's own tool calls.
+# Anything past it (oversized model output) is withheld for the model to narrow.
+HOME_COMPANION_PROMPT_BYTES = 32768
+HOME_COMPANION_MAX_CONTEXT_BYTES = HOME_COMPANION_MAX_CALLS * TOOL_RESULT_MAX_BYTES + HOME_COMPANION_PROMPT_BYTES
 CONVERSATION_LOG_SCAN_BYTES = 8_000_000
 CONVERSATION_LOG_MAX_EVENTS = 256
 CONVERSATION_LOG_MAX_OPERATIONS = 256
@@ -2760,3 +2958,7 @@ CONVERSATION_LOG_METADATA = frozenset({
     "request_id", "client_ip", "conversation_id", "session_ref", "provider", "model",
     "access_key_id", "access_key_name",
 })
+
+# Seconds a refused legacy MCP initialize waits when the access key's own sessions
+# are all busy: one frees as soon as its request ends.
+MCP_LEGACY_SESSION_BUSY_RETRY_SECONDS = 5

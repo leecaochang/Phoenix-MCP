@@ -65,23 +65,13 @@ def languages() -> list[str]:
     stems = {p.stem for d in (CATALOGS, TRANSLATIONS) for p in d.glob("*.json")}
     return sorted(s for s in stems if s not in ("en", "strings"))
 
-# No whole section is exempt; sensor names are excluded individually below.
+# No whole section is exempt.
 KEEP_ENGLISH_SECTIONS: tuple[str, ...] = ()
 
 # Individual keys that stay English, with the reason grouped so the next person
 # can tell a decision from an oversight. Absence from the locale file IS the
 # mechanism: HA falls back per key.
 KEEP_ENGLISH: dict[str, tuple[str, ...]] = {
-    # Sensor display names seed entity IDs at first registration. Translate the
-    # displayed enum states while keeping these established names stable.
-    "sensor identity names": (
-        "entity.sensor.status.name",
-        "entity.sensor.request_count.name",
-        "entity.sensor.denied_count.name",
-        "entity.sensor.rate_limit_hits.name",
-        "entity.sensor.last_access.name",
-        "entity.sensor.expires_in.name",
-    ),
     # The MESA enum values and the permission states (READ/WRITE/DENY/INHERIT) are
     # translated, not kept English. Home Assistant itself translates entity states
     # for display while hass.states keeps the English slug, so "translate the
@@ -91,6 +81,7 @@ KEEP_ENGLISH: dict[str, tuple[str, ...]] = {
     "proper nouns": (
         "panel.shell.tabMesa",
         "panel.audit.rowMesa",
+        "panel.workspace.homeAssistant",
         "notification.approval.title",
         "config.step.user.title",
     ),
@@ -98,8 +89,6 @@ KEEP_ENGLISH: dict[str, tuple[str, ...]] = {
     # just be one more entry to keep in step for no benefit.
     "pure placeholder": (
         "panel.version.size",
-        # A middot and a value that is already localized where it is built.
-        "panel.approvals.cardTimeSuffix",
     ),
 }
 
@@ -126,35 +115,45 @@ LITERALS: dict[str, tuple[str, ...]] = {
     # is a hardcoded literal, so a translated WIPE tells the operator to type
     # something the button will never accept.
     "panel.settings.wipeTypeConfirm": ("WIPE",),
-    "panel.caps.cap_restart.description": ("homeassistant.restart", "homeassistant.stop"),
     "panel.caps.cap_filesystem.description": ("www/", "themes/", "custom_templates/"),
-    "panel.caps.cap_service_response.description": ("conversation.process",),
-    "panel.caps.cap_esphome_yaml.description": ("esphome/",),
-    "panel.caps.cap_yaml_edit.description": ("configuration.yaml", "secrets.yaml", "!secret"),
+    "panel.caps.cap_yaml_edit.description": ("secrets.yaml",),
+    # YAML tags and setup values the operator has to recognize or type exactly.
+    "panel.adminError.restoreYamlTags": ("!secret", "!include"),
+    "panel.help.auditMethod": ("approval/",),
+    "panel.adminError.providerOllamaUnreachable": ("Ollama", "OLLAMA_HOST=0.0.0.0", "11434", "localhost", "HA"),
+    "panel.adminError.providerOllamaCloudUnreachable": ("Ollama Cloud",),
+    "panel.adminError.providerFireworksInactive": ("Fireworks",),
+    "panel.adminError.providerQwenWrongEndpoint": ("Qwen", "404", "/apps/anthropic"),
     # These echo an API field name back at the caller; translating it would name
     # a field that does not exist in the request body.
     "panel.adminError.expiresImmutable": ("expires_at",),
     "panel.adminError.badExpiresAt": ("expires_at",),
     "panel.adminError.nameRequired": ("name",),
-    "panel.perms.simEntityPlaceholder": ("entity_id", "light.kitchen"),
     "panel.accessKeys.namePlaceholder": ("my_access_key",),
     # ai_task.py hardcodes _attr_name = "Phoenix MCP AI Task"; the entity is not
     # localized, so a translated mention would name something the operator
     # cannot find in Home Assistant.
-    "panel.settings.aiTaskDefaultModalBody": ("Phoenix MCP AI Task",),
+    "panel.settings.aiTaskDefaultSetToast": ("Phoenix MCP AI Task",),
+    "panel.settings.aiTaskDefaultReplacedToast": ("Phoenix MCP AI Task",),
+    "panel.settings.aiTaskDefaultClearedToast": ("Phoenix MCP AI Task",),
 }
 
 # Values a locale may legitimately leave byte-identical to English. Anything
 # else that matches English exactly is almost certainly a copy that was never
 # translated, which nothing at runtime would ever report.
 ALLOW_IDENTICAL = frozenset({
+    "panel.settings.selectedOptionHelp",  # placeholders only: "{option}: {description}"
+    "panel.settings.modelWithMode",   # "{model} ({mode})": placeholders and brackets only
     "panel.perms.colId",              # "ID"
+    "panel.mesa.colId",               # "ID"
     "panel.accessKeys.namePlaceholder",   # "my_access_key", a literal example value
     "panel.changes.typeEsphomeYaml",  # "ESPHome YAML": a product name plus a format name
     # Product and plan names are proper nouns rather than translatable prose.
     "panel.settings.agentcliZaiCoding",
     "panel.settings.agentcliZaiStandard",
     "panel.settings.agentcliMimoTokenPlan",
+    "panel.settings.agentcliMimoTokenPlanSingapore",
+    "panel.settings.agentcliMimoTokenPlanEurope",
     "panel.settings.agentcliOpenCodeConsole",
     "panel.settings.providerAnthropic",
     "panel.settings.providerCerebras",
@@ -187,6 +186,15 @@ ALLOW_IDENTICAL = frozenset({
 # Chinese value such as "Token" pass silently.
 ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
     "da": frozenset({
+        "panel.settings.colorTheme.aubergine",  # "Aubergine", the color's own name in this language
+        "entity.sensor.status.name",  # "Status", the same word in this language
+        "panel.settings.agentcliRegionCa",  # Region name or label spelled the same as English in this language.
+        "panel.settings.agentcliRegionJp",  # Region name or label spelled the same as English in this language.
+        "panel.changes.typeLabel",  # "Label", Home Assistant's Danish term
+        "panel.selectBy.menu",  # "Filter", the same word in this language
+        "panel.mesa.colSignal",  # "Signal"
+        "panel.mesa.colTags",  # "Tags"
+        "panel.guide.title",  # "Guide", the same word in this language
         # Bare templates and shared technical fragments with no prose to translate.
         "panel.accessKeys.secondsShort",  # "{n}s", the seconds unit is "s" in Danish
         "panel.agentchat.approvalReason",  # " - {reason}", a bare separator fragment
@@ -206,16 +214,15 @@ ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
         "panel.agentchat.stop",  # "Stop", the Danish imperative
         "panel.approvalSummary.named.kind.scene",  # "scene", the HA entity type
         "panel.approvalSummary.named.kind.script",  # "script", the HA entity type
-        "panel.approvals.detailTabDiff",  # "Diff"
         "panel.approvals.energyGas",  # "Gas"
         "panel.approvals.metaStatus",  # "Status"
         "panel.changes.colType",  # "Type"
+        "panel.mesa.colAppliesTo",  # "Type"
         "panel.changes.typeBlueprint",  # "Blueprint"
         "panel.changes.typeScene",  # "Scene"
         "panel.changes.typeScript",  # "Script"
         "panel.common.diff",  # "Diff"
         "panel.conversations.modelLabel",  # "Model"
-        "panel.mesa.addIntegrationShort",  # "+ Integration"
         "panel.mesa.countIntegration.one",  # "{count} integration", the singular form
         "panel.mesa.privNormal",  # "Normal"
         "panel.mesa.scopeLabelIntegration",  # "Integration"
@@ -230,12 +237,21 @@ ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
         "panel.wizard.stepPersona",  # "Persona"
         "panel.wizard.stepTest",  # "Test"
         "panel.accessKeys.cardPersona",  # "Persona"
-        "panel.accessKeys.diffPassThrough",  # "Pass-through: {from} -> {to}", a technical label
         "panel.agentchat.title",  # "Agent Chat", a Phoenix product name
         "panel.conversations.prompt",  # "Prompt", the established loanword
         "panel.shell.agentChat",  # "Agent Chat", a Phoenix product name
     }),
     "de": frozenset({
+        "panel.settings.colorTheme.aubergine",  # "Aubergine", the color's own name in this language
+        "entity.sensor.status.name",  # "Status", the same word in this language
+        "panel.settings.agentcliRegionJp",  # Region name or label spelled the same as English in this language.
+        "panel.agentchat.title",  # "Agent Chat", a Phoenix product name
+        "panel.selectBy.menu",  # "Filter", the same word in this language
+        "panel.workspace.horizontal",  # "Horizontal"
+        "panel.changes.typeLabel",  # "Label"
+        "panel.mesa.colName",  # "Name"
+        "panel.mesa.colSignal",  # "Signal"
+        "panel.mesa.colTags",  # "Tags"
         # Product names kept in English, as the localized READMEs do.
         "panel.conversations.source.agentcli",  # "Agent Chat", a Phoenix product name
         "panel.conversations.source.home_companion",  # "Home Companion", a Phoenix product name
@@ -253,19 +269,15 @@ ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
         "panel.agentchat.approvalReason",      # " - {reason}", a bare separator fragment
         "panel.agentchat.levelMinimal",        # "Minimal"
         "panel.agentchat.toolResult",          # "<code>{name}</code>: {summary}", no prose to translate
-        "panel.approvalSummary.view.details",  # "Details"
-        "panel.approvals.detailTabDiff",       # "Diff"
         "panel.approvals.energyGas",           # "Gas"
         "panel.approvals.energySolar",         # "Solar"
         "panel.approvals.metaStatus",          # "Status"
         "panel.approvals.metaTool",            # "Tool"
         "panel.caps.cap_backup.label",         # "Backup"
         "panel.changes.actionRollback",        # "Rollback"
-        "panel.changes.colName",               # "Name"
         "panel.changes.typeBlueprint",         # "Blueprint"
         "panel.changes.typeDashboard",         # "Dashboard"
         "panel.common.diff",                   # "Diff"
-        "panel.mesa.addIntegrationShort",      # "+ Integration"
         "panel.mesa.costTrivial",              # "Trivial"
         "panel.mesa.privNormal",               # "Normal"
         "panel.mesa.scopeLabelIntegration",    # "Integration"
@@ -282,6 +294,7 @@ ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
         "panel.wizard.stepTest",               # "Test"
     }),
     "fi": frozenset({
+        "panel.settings.agentcliRegionAu",  # Region name or label spelled the same as English in this language.
         # Bare templates and shared technical fragments with no prose to translate.
         "panel.accessKeys.secondsShort",  # "{n}s", the seconds unit is "s" in Finnish
         "panel.agentchat.approvalReason",  # " - {reason}", a bare separator fragment
@@ -300,6 +313,16 @@ ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
         "panel.shell.agentChat",  # "Agent Chat", a Phoenix product name
     }),
     "fr": frozenset({
+        "panel.settings.colorTheme.aubergine",  # "Aubergine", the color's own name in this language
+        "panel.approvals.detailTabArgs",       # "Arguments", the French word
+        "panel.settings.agentcliRegionCa",  # Region name or label spelled the same as English in this language.
+        "panel.agentchat.title",  # "Agent Chat", a Phoenix product name
+        "panel.mesa.roleCondition",  # "condition", Home Assistant's French term
+        "panel.mesa.roleAction",  # "action", Home Assistant's French term
+        "panel.caps.cap_notify.label",  # "Notifications"
+        "panel.mesa.colSignal",  # "Signal"
+        "panel.mesa.colSource",  # "Source"
+        "panel.guide.title",  # "Guide", the same word in this language
         # Product names kept in English, as the localized READMEs do.
         "panel.conversations.source.agentcli",  # "Agent Chat", a Phoenix product name
         "panel.conversations.source.home_companion",  # "Home Companion", a Phoenix product name
@@ -310,14 +333,13 @@ ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
         "panel.conversations.conversation",  # French cognate: Conversation.
         "panel.conversations.sourceLabel",  # Shared technical term or cognate.
         "panel.settings.agentcliSite",  # French cognate: Site.
-        "panel.accessKeys.cardNotes",  # French cognate: Notes.
         "panel.approvalSummary.named.kind.script",  # HA entity type: "script"
         "panel.changes.typeBlueprint",              # HA term: "Blueprint"
         "panel.changes.typeScript",                 # "Script"
         "panel.mesa.privNormal",                    # privacy level, masculine
         "panel.mesa.privPublic",                    # privacy level
         "panel.mesaSuggestion.noun.script",         # "script"
-        "panel.settings.notificationsCard",         # "Notifications"
+        "panel.notifications.title",                # "Notifications"
         "panel.shell.documentation",                # "Documentation"
         "panel.accessKeys.expiryMinutes",               # "Minutes"
         "panel.version.loc.section",                # "section {index}"
@@ -325,6 +347,12 @@ ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
         "panel.wizard.expiryMinutes",               # "Minutes"
     }),
     "es": frozenset({
+        "panel.settings.agentcliRegionAu",  # Region name or label spelled the same as English in this language.
+        "panel.settings.agentcliRegionIn",  # Region name or label spelled the same as English in this language.
+        "panel.agentchat.title",  # "Agent Chat", a Phoenix product name
+        "panel.workspace.general",  # "General"
+        "panel.workspace.horizontal",  # "Horizontal"
+        "panel.workspace.vertical",  # "Vertical"
         # Product names kept in English, as the localized READMEs do.
         "panel.conversations.source.agentcli",  # "Agent Chat", a Phoenix product name
         "panel.conversations.source.home_companion",  # "Home Companion", a Phoenix product name
@@ -348,12 +376,19 @@ ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
         "panel.mesa.no",
         "panel.mesa.privNormal",
         "panel.mesaSuggestion.noun.script",
-        "panel.settings.experimentalCard",
         "panel.settings.providerOllamaLocal",
         "panel.accessKeys.cardPersona",
         "panel.wizard.stepPersona",
     }),
     "it": frozenset({
+        "panel.settings.agentcliRegionAu",  # Region name or label spelled the same as English in this language.
+        "panel.settings.agentcliRegionCa",  # Region name or label spelled the same as English in this language.
+        "panel.settings.agentcliRegionIn",  # Region name or label spelled the same as English in this language.
+        "panel.changes.typeArea",  # "Area", Home Assistant's Italian term
+        "panel.wizard.stepProvider",  # "Provider", the Italian UI term
+        "panel.settings.colAccount",  # "Account"
+        "panel.settings.colProvider",  # "Provider"
+        "panel.settings.privacySection",  # "Privacy"
         # Product names kept in English, as the localized READMEs do.
         "panel.conversations.source.agentcli",  # "Agent Chat", a Phoenix product name
         "panel.conversations.source.home_companion",  # "Home Companion", a Phoenix product name
@@ -373,7 +408,6 @@ ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
         "panel.caps.cap_backup.label",         # "Backup"
         "panel.changes.typeFile",              # "File", the same word in Italian
         "panel.changes.typeScript",            # "Script"
-        "panel.mesa.addAreaShort",             # "+ Area", a compact picker label
         "panel.mesa.no",                       # "No", the boolean answer
         "panel.mesa.scopeLabelArea",           # "Area"
         "panel.mesaSuggestion.noun.script",    # "script"
@@ -388,6 +422,7 @@ ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
         "panel.wizard.stepTest",               # "Test"
     }),
     "ja": frozenset({
+        "panel.agentchat.title",  # "Agent Chat", a Phoenix product name
         # Product names kept in English, as the localized READMEs do.
         "panel.conversations.source.agentcli",  # "Agent Chat", a Phoenix product name
         "panel.conversations.source.home_companion",  # "Home Companion", a Phoenix product name
@@ -396,6 +431,7 @@ ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
         "panel.shell.agentChat",  # "Agent Chat", a Phoenix product name
     }),
     "ko": frozenset({
+        "panel.agentchat.title",  # "Agent Chat", a Phoenix product name
         # Product names kept in English, as the localized READMEs do.
         "panel.conversations.source.agentcli",  # "Agent Chat", a Phoenix product name
         "panel.conversations.source.home_companion",  # "Home Companion", a Phoenix product name
@@ -404,8 +440,15 @@ ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
         "panel.shell.agentChat",  # "Agent Chat", a Phoenix product name
     }),
     "nb": frozenset({
+        "panel.settings.colorTheme.aubergine",  # "Aubergine", the color's own name in this language
+        "entity.sensor.status.name",  # "Status", the same word in this language
+        "panel.settings.agentcliRegionAu",  # Region name or label spelled the same as English in this language.
+        "panel.settings.agentcliRegionCa",  # Region name or label spelled the same as English in this language.
+        "panel.settings.agentcliRegionIn",  # Region name or label spelled the same as English in this language.
+        "panel.settings.agentcliRegionJp",  # Region name or label spelled the same as English in this language.
+        "panel.selectBy.menu",  # "Filter", the same word in this language
+        "panel.mesa.colSignal",  # "Signal"
         # Bare templates and shared technical fragments with no prose to translate.
-        "panel.accessKeys.rateSummary",  # "{requests}/min · burst {burst}", a technical template
         "panel.accessKeys.secondsShort",  # "{n}s", the seconds unit is "s" in Norwegian
         "panel.agentchat.approvalReason",  # " - {reason}", a bare separator fragment
         "panel.agentchat.toolResult",  # "<code>{name}</code>: {summary}", no prose to translate
@@ -422,9 +465,9 @@ ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
         "panel.agentchat.resultOk",  # "ok"
         "panel.agentchat.send",  # "Send", the Norwegian imperative
         "panel.approvalSummary.named.kind.scene",  # "scene", the HA entity type
-        "panel.approvals.detailTabDiff",  # "Diff"
         "panel.approvals.metaStatus",  # "Status"
         "panel.changes.colType",  # "Type"
+        "panel.mesa.colAppliesTo",  # "Type"
         "panel.changes.typeScene",  # "Scene"
         "panel.common.diff",  # "Diff"
         "panel.mesa.privNormal",  # "Normal"
@@ -432,7 +475,6 @@ ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
         "panel.perms.colType",  # "Type"
         "panel.settings.agentcliRegion",  # "Region"
         "panel.settings.agentcliRegionGlobal",  # "Global"
-        "panel.settings.loggingCard",  # "Logging", used unchanged in Norwegian
         "panel.wizard.agentTablist",  # "Agent"
         "panel.wizard.stepPersona",  # "Persona"
         "panel.wizard.stepTest",  # "Test"
@@ -440,6 +482,23 @@ ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
         "panel.conversations.source.agentcli",  # "Agent Chat", a Phoenix product name
     }),
     "nl": frozenset({
+        "panel.settings.colorTheme.aubergine",  # "Aubergine", the color's own name in this language
+        "entity.sensor.status.name",  # "Status", the same word in this language
+        "panel.settings.agentcliRegionCa",  # Region name or label spelled the same as English in this language.
+        "panel.mesa.colAppliesTo",  # "Type", the same word in this language
+        "panel.settings.agentcliRegionIn",  # Region name or label spelled the same as English in this language.
+        "panel.settings.agentcliRegionJp",  # Region name or label spelled the same as English in this language.
+        "panel.mesa.roleTrigger",  # "trigger", Home Assistant's Dutch term
+        "panel.selectBy.menu",  # "Filter", the same word in this language
+        "panel.changes.colName",               # "Item", the Dutch loanword
+        "panel.settings.colAccount",  # "Account"
+        "panel.settings.colProvider",  # "Provider"
+        "panel.settings.privacySection",  # "Privacy"
+        "panel.changes.typeLabel",  # "Label"
+        "panel.mesa.colTags",  # "Tags"
+        "panel.help.title",  # "Help", the usual Dutch interface term
+        "panel.logs.filters",  # "Filters", also Dutch
+        "panel.logs.filtersCount",  # "Filters ({count})", also Dutch
         # Product names kept in English, as the localized READMEs do.
         "panel.conversations.source.agentcli",  # "Agent Chat", a Phoenix product name
         "panel.conversations.source.home_companion",  # "Home Companion", a Phoenix product name
@@ -455,15 +514,12 @@ ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
         "panel.agentchat.approvalReason",      # " - {reason}", a bare separator fragment
         "panel.agentchat.levelMax",            # "Max"
         "panel.agentchat.model",               # "Model"
-        "panel.agentchat.provider",            # "Provider"
         "panel.agentchat.resultOk",            # "ok"
         "panel.agentchat.title",               # "Agent Chat", a product name
         "panel.agentchat.toolResult",          # "<code>{name}</code>: {summary}", no prose to translate
         "panel.agentchat.usageContext",        # " · context {tokens}", "context" is a cognate
         "panel.approvalSummary.named.kind.helper",  # "helper"
         "panel.approvalSummary.named.kind.script",  # "script"
-        "panel.approvalSummary.view.details",  # "Details"
-        "panel.approvals.detailTabDiff",       # "Diff"
         "panel.approvals.energyGas",           # "Gas"
         "panel.approvals.energyWater",         # "Water"
         "panel.approvals.metaStatus",          # "Status"
@@ -477,7 +533,6 @@ ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
         "panel.changes.typeHelper",            # "Helper"
         "panel.changes.typeScript",            # "Script"
         "panel.common.diff",                   # "Diff"
-        "panel.mesa.helpAria",                 # "Help: {text}", "Help" is a cognate
         "panel.mesaSuggestion.noun.script",    # "script"
         "panel.perms.colType",                 # "Type"
         "panel.selectBy.label",                # "Label"
@@ -488,17 +543,17 @@ ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
         "panel.shell.agentChat",               # "Agent Chat", a product name
         "panel.accessKeys.cardPersona",            # "Persona"
         "panel.accessKeys.colStatus",              # "Status"
-        "panel.accessKeys.diffPassThrough",        # "Pass-through: {from} -> {to}", a technical template
-        "panel.accessKeys.rateSummary",            # "{requests}/min · burst {burst}", a technical template
         "panel.accessKeys.secondsShort",           # "{n}s", the seconds unit is "s" in Dutch
         "panel.version.size.was",              # "{size} (was {before})", "was" is a cognate
         "panel.wizard.agentTablist",           # "Agent"
         "panel.wizard.stepPersona",            # "Persona"
         "panel.wizard.stepProvider",           # "Provider"
         "panel.wizard.stepTest",               # "Test"
-        "voice.provider_error",                # "Sorry, {reason}.", "Sorry" is a cognate
     }),
     "pl": frozenset({
+        "entity.sensor.status.name",  # "Status", the same word in this language
+        "panel.settings.agentcliRegionAu",  # Region name or label spelled the same as English in this language.
+        "panel.agentchat.title",  # "Agent Chat", a Phoenix product name
         # Product names kept in English, as the localized READMEs do.
         "panel.conversations.source.agentcli",  # "Agent Chat", a Phoenix product name
         "panel.conversations.source.home_companion",  # "Home Companion", a Phoenix product name
@@ -514,7 +569,6 @@ ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
         "panel.agentchat.model",               # "Model"
         "panel.agentchat.resultOk",            # "ok"
         "panel.agentchat.toolResult",          # "<code>{name}</code>: {summary}", no prose to translate
-        "panel.approvals.detailTabDiff",       # "Diff"
         "panel.approvals.metaStatus",          # "Status"
         "panel.common.diff",                   # "Diff"
         "panel.settings.languageAuto",         # "Auto"
@@ -522,13 +576,12 @@ ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
         "panel.settings.themeAuto",            # "Auto"
         "panel.accessKeys.cardPersona",            # "Persona"
         "panel.accessKeys.colStatus",              # "Status"
-        "panel.accessKeys.diffPassThrough",        # "Pass-through: {from} -> {to}", a technical template
-        "panel.accessKeys.rateSummary",            # "{requests}/min · burst {burst}", a technical template
         "panel.wizard.agentTablist",           # "Agent"
         "panel.wizard.stepPersona",            # "Persona"
         "panel.wizard.stepTest",               # "Test"
     }),
     "ru": frozenset({
+        "panel.agentchat.title",  # "Agent Chat", a Phoenix product name
         # Product names kept in English, as the localized READMEs do.
         "panel.conversations.source.agentcli",  # "Agent Chat", a Phoenix product name
         "panel.conversations.source.home_companion",  # "Home Companion", a Phoenix product name
@@ -541,6 +594,12 @@ ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
         "panel.agentchat.toolResult",      # "<code>{name}</code>: {summary}"
     }),
     "sv": frozenset({
+        "panel.settings.colorTheme.aubergine",  # "Aubergine", the color's own name in this language
+        "entity.sensor.status.name",  # "Status", the same word in this language
+        "panel.settings.agentcliRegionJp",  # Region name or label spelled the same as English in this language.
+        "panel.selectBy.menu",  # "Filter", the same word in this language
+        "panel.mesa.colSignal",  # "Signal"
+        "panel.guide.title",  # "Guide", the same word in this language
         # Bare templates and shared technical fragments with no prose to translate.
         "panel.accessKeys.secondsShort",  # "{n}s", the seconds unit is "s" in Swedish
         "panel.agentchat.approvalReason",  # " - {reason}", a bare separator fragment
@@ -556,12 +615,10 @@ ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
         "panel.agentchat.levelMax",  # "Max"
         "panel.agentchat.levelMinimal",  # "Minimal"
         "panel.agentchat.resultOk",  # "ok"
-        "panel.approvals.detailTabDiff",  # "Diff"
         "panel.approvals.energyGas",  # "Gas"
         "panel.approvals.metaStatus",  # "Status"
         "panel.changes.typeBlueprint",  # "Blueprint", Home Assistant's own Swedish term
         "panel.common.diff",  # "Diff"
-        "panel.mesa.addIntegrationShort",  # "+ Integration"
         "panel.mesa.costTrivial",  # "Trivial"
         "panel.mesa.countIntegration.one",  # "{count} integration", the singular form
         "panel.mesa.privNormal",  # "Normal"
@@ -571,14 +628,13 @@ ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
         "panel.settings.agentcliRegionGlobal",  # "Global"
         "panel.wizard.agentTablist",  # "Agent"
         "panel.wizard.stepPersona",  # "Persona"
-        "panel.accessKeys.diffPassThrough",  # "Pass-through: {from} -> {to}", a technical label
-        "panel.accessKeys.rateSummary",  # "{requests}/min · burst {burst}", a technical template
         "panel.agentchat.title",  # "Agent Chat", a Phoenix product name
         "panel.conversations.prompt",  # "Prompt", the established loanword
         "panel.conversations.source.agentcli",  # "Agent Chat", a Phoenix product name
         "panel.shell.agentChat",  # "Agent Chat", a Phoenix product name
     }),
     "zh-Hans": frozenset({
+        "panel.agentchat.title",  # "Agent Chat", a Phoenix product name
         # Product names kept in English, as the localized READMEs do.
         "panel.conversations.source.agentcli",  # "Agent Chat", a Phoenix product name
         "panel.conversations.source.home_companion",  # "Home Companion", a Phoenix product name
@@ -587,6 +643,7 @@ ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
         "panel.shell.agentChat",  # "Agent Chat", a Phoenix product name
     }),
     "zh-Hant": frozenset({
+        "panel.agentchat.title",  # "Agent Chat", a Phoenix product name
         # Product names kept in English, as the localized READMEs do.
         "panel.conversations.source.agentcli",  # "Agent Chat", a Phoenix product name
         "panel.conversations.source.home_companion",  # "Home Companion", a Phoenix product name
@@ -602,8 +659,7 @@ ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
 # glue between fragments and losing it is a real defect.
 WHITESPACE_EXEMPT = frozenset({
     "panel.common.listSeparator",   # ", " becomes the ideographic comma
-    "panel.mesa.currentFilter",     # "Current filter: " becomes a full-width colon
-    "panel.perms.simResult",        # "Result: " likewise
+    "panel.common.sentenceSeparator",   # " " disappears after a full-width full stop
     "panel.agentchat.approvalReason",  # leading " - " becomes a full-width comma
     # Appended after a sentence: English needs the separating space, Chinese
     # does not, because the preceding full stop is already full-width.
@@ -613,7 +669,11 @@ WHITESPACE_EXEMPT = frozenset({
 # The house style forbids these everywhere, catalog values included. The
 # ideographic characters that look similar in Chinese text are different code
 # points and are fine.
-FORBIDDEN = re.compile(r"[—–→]|[\U0001F300-\U0001FAFF☀-➿]")
+FORBIDDEN = re.compile(r"[—–→]|->|<-|=>|[\U0001F300-\U0001FAFF☀-➿]")
+
+# Korean separates sentences with a space after the full stop, as English does;
+# a full stop running straight into the next Hangul word is a joining defect.
+KOREAN_RUN_ON = re.compile(r"[.!?][\uac00-\ud7af]")
 
 TAG = re.compile(r"<(/?)(\w+)>")
 CODE_SPAN = re.compile(r"<code>(.*?)</code>", re.DOTALL)
@@ -929,6 +989,9 @@ def check(language: str) -> int:
                 " (forbidden dash, arrow, or emoji)"
             )
 
+        if language == "ko" and KOREAN_RUN_ON.search(value):
+            problems.append(f"{key}: a sentence runs into the next without a space")
+
         # An untranslated copy renders English inside a translated screen and is
         # invisible to every other check, since it is a perfectly valid string.
         if key not in allow_identical and value.strip() == source.strip() and any(
@@ -973,5 +1036,31 @@ def check(language: str) -> int:
     return 0
 
 
+def consistency_report(language: str) -> int:
+    """List English values that one locale translates in more than one way.
+
+    Advisory, never a failure: a different translation is sometimes right (a
+    plural filter beside a singular status, a noun beside a verb). The
+    terminology policy asks for one target term per concept, so review each
+    group and either align it or confirm the difference is deliberate.
+    """
+    en_flat = flatten(load("en"))
+    other = flatten(load(language))
+    groups: dict[str, dict[str, list[str]]] = {}
+    for key, source in en_flat.items():
+        value = other.get(key)
+        if value is not None and key not in KEEP_ENGLISH_KEYS:
+            groups.setdefault(source, {}).setdefault(value, []).append(key)
+    split = {source: variants for source, variants in groups.items() if len(variants) > 1}
+    for source, variants in sorted(split.items(), key=lambda item: (len(item[0]), item[0])):
+        print(f"{source!r}")
+        for value, keys in variants.items():
+            print(f"    {value!r}: {', '.join(keys)}")
+    print(f"\n{len(split)} English value(s) translated more than one way in {language}")
+    return 0
+
+
 if __name__ == "__main__":
+    if len(sys.argv) > 2 and sys.argv[1] == "--consistency":
+        sys.exit(consistency_report(sys.argv[2]))
     sys.exit(check(sys.argv[1] if len(sys.argv) > 1 else "zh-Hans"))

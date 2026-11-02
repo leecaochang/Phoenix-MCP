@@ -726,3 +726,32 @@ async def test_decision_request_records_identity_and_outcome_without_request_env
         assert 'canary-api-secret' not in json.dumps(events)
     finally:
         history._current.reset(ctx)
+
+
+@pytest.mark.parametrize(('model', 'base_url', 'returned', 'admitted'), [
+    ('jev-latest', 'official', 'jev-1.13.0', True),
+    # The alias follows whichever JEV revision TypeSafe points it at.
+    ('jev-latest', 'official', 'jev-1.14.0', True),
+    ('jev-latest', 'official', 'jev-2.0.10', True),
+    ('jev-latest', 'official', 'jev-preview', False),
+    ('jev-latest', 'official', 'unqualified-revision', False),
+    ('jev-latest', 'official', 'jev-1.14.0-rc1', False),
+    ('jev-latest', 'official', None, False),
+    # A pinned revision must answer as itself.
+    ('jev-1.13.0', 'official', 'jev-1.13.0', True),
+    ('jev-1.13.0', 'official', 'jev-1.14.0', False),
+    # The alias is followed only at the official endpoint.
+    ('jev-latest', 'https://custom.test/v1', 'jev-1.14.0', False),
+    ('jev-preview', 'official', 'jev-1.14.0', False),
+])
+def test_revision_admission_follows_only_the_official_alias(model, base_url, returned, admitted):
+    from custom_components.phoenix_mcp.const import (
+        DECISION_BATCH_EXECUTION_MODELS, DECISION_CONTEXT_EXECUTION_MODELS, DECISION_FOLLOWUP_EXECUTION_MODELS,
+        DECISION_PERCENTAGE_EXECUTION_MODELS, DECISION_REFERENCE_EXECUTION_MODELS, DECISION_TYPESAFE_BASE_URL,
+    )
+    from custom_components.phoenix_mcp.decision_provider import revision_admitted
+    cfg = agentcli.ProviderConfig('typesafe', model, DECISION_TYPESAFE_BASE_URL if base_url == 'official' else base_url, 'key')
+    for registry in (DECISION_BATCH_EXECUTION_MODELS, DECISION_CONTEXT_EXECUTION_MODELS, DECISION_FOLLOWUP_EXECUTION_MODELS,
+                     DECISION_PERCENTAGE_EXECUTION_MODELS, DECISION_REFERENCE_EXECUTION_MODELS):
+        assert revision_admitted(registry, cfg, returned) is admitted
+    assert revision_admitted({}, cfg, returned) is False

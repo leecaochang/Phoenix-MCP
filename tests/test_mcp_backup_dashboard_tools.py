@@ -2,7 +2,9 @@
 
 The tools dispatch through ws_dispatch.async_ws_command, which is patched here so
 the checks cover Phoenix MCP's wiring: the gates, the command names and payloads,
-defaults, and validation. There is deliberately no restore_backup tool.
+defaults, and validation. create_backup drives HA's backup manager directly and is
+covered against the real one in test_backup_creation.py. There is deliberately no
+restore_backup tool.
 """
 
 from __future__ import annotations
@@ -135,33 +137,6 @@ class TestBackup:
         assert body["returned"] == 2
         assert len(body["backups"]) == 2
 
-    async def test_create_default_agent_autodetected(self, hass):
-        # Default backup agent comes from backup/agents/info.
-        mapping = {
-            "backup/agents/info": {"agents": [{"agent_id": "hassio.local"}]},
-            "backup/generate": {"backup_job_id": "abc"},
-        }
-        with _patch_ws_map(mapping) as m:
-            content, outcome, _ = await _call("create_backup", {"name": "Nightly"}, _access_key(), hass)
-        assert outcome == "allowed"
-        gen = [c for c in m.await_args_list if c.args[1] == "backup/generate"][0]
-        assert gen.args[2]["agent_ids"] == ["hassio.local"]  # not backup.local
-        assert gen.args[2]["name"] == "Nightly"
-        assert _json(content)["backup_job_id"] == "abc"  # clean field, not a NewBackup repr
-
-    async def test_create_no_agents_errors(self, hass):
-        mapping = {"backup/agents/info": {"agents": []}, "backup/generate": {"backup_job_id": "x"}}
-        with _patch_ws_map(mapping):
-            _, outcome, _ = await _call("create_backup", {}, _access_key(), hass)
-        assert outcome == "invalid_request"
-
-    async def test_create_explicit_agent_honored(self, hass):
-        with _patch_ws({"backup_job_id": "z"}) as m:
-            _, outcome, _ = await _call("create_backup", {"agent_ids": ["my.agent"]}, _access_key(), hass)
-        assert outcome == "allowed"
-        gen = [c for c in m.await_args_list if c.args[1] == "backup/generate"][0]
-        assert gen.args[2]["agent_ids"] == ["my.agent"]
-
     async def test_create_deny(self, hass):
         _, outcome, _ = await _call("create_backup", {}, _access_key(cap_backup="deny"), hass)
         assert outcome == "denied"
@@ -196,19 +171,6 @@ class TestBackupAgentReadFailure:
             content, outcome, _ = await _call("list_backups", {}, _access_key(), hass)
         assert outcome == "allowed"
         assert "warnings" not in _json(content)
-
-    async def test_create_backup_reports_the_read_failure_not_no_agents(self, hass):
-        with self._patch_agents_fail():
-            content, outcome, _ = await _call("create_backup", {}, _access_key(), hass)
-        assert outcome == "invalid_request"
-        text = content["content"][0]["text"]
-        assert "Failed to determine available backup agents" in text
-        assert "No backup agents are available" not in text
-
-    async def test_create_backup_never_dispatches_generate_on_read_failure(self, hass):
-        with self._patch_agents_fail() as m:
-            await _call("create_backup", {}, _access_key(), hass)
-        assert not [c for c in m.await_args_list if c.args[1] == "backup/generate"]
 
 
 class TestDashboard:

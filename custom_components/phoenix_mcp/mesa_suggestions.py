@@ -5,7 +5,7 @@ Two signals, with a pluggable engine:
   MESA coverage whose referenced entities touch a risky domain, or whose fan-out
   exceeds a threshold. The profile goes ON the orchestrator entity: an
   automation's ACTIONS run natively in HA and are never re-gated per entity, so
-  covering the referenced lock does not stop the automation (docs/permissions.html).
+  covering the referenced lock does not stop the automation.
 - naked_risky: entities in a curated risky-domain list with no operator-authored
   coverage at any inheritance level. lock and alarm_control_panel suggest
   "prohibited" (mesa-core's zero-profile baseline, so applying is never a

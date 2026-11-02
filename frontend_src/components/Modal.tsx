@@ -1,5 +1,7 @@
 /**Accessible modal with focus trap, ARIA dialog role, and Escape to close.*/
-import React, { useEffect, useRef, useCallback, useState } from "react";
+import React, { useContext, useEffect, useRef, useCallback, useState } from "react";
+import { createPortal } from "react-dom";
+import { MenuRootContext } from "../ui/Menu";
 
 interface Props {
   titleId: string;
@@ -11,6 +13,8 @@ interface Props {
   recordNavigation?: boolean;
   /** Widen the dialog (e.g. for side-by-side diffs that need more room). */
   wide?: boolean;
+  /** Opened from inside a window: draw it over the whole workspace, so the window cannot clip it. */
+  overWorkspace?: boolean;
   children: React.ReactNode;
 }
 
@@ -86,7 +90,8 @@ function touchScrollOwner(
   return null;
 }
 
-export function Modal({ titleId, onClose, onNavigatePrevious, onNavigateNext, recordNavigation, wide, children }: Props) {
+export function Modal({ titleId, onClose, onNavigatePrevious, onNavigateNext, recordNavigation, wide, overWorkspace, children }: Props) {
+  const shellRoot = useContext(MenuRootContext);
   const backdropRef = useRef<HTMLDivElement>(null);
   const modalRef = useRef<HTMLDivElement>(null);
   // Capture before React commits an autoFocus child inside this dialog.
@@ -208,7 +213,7 @@ export function Modal({ titleId, onClose, onNavigatePrevious, onNavigateNext, re
     }
   }, []);
 
-  return (
+  const dialog = (
     <div ref={backdropRef} className="modal-backdrop" onClick={onClose}>
       <div
         ref={modalRef}
@@ -224,4 +229,5 @@ export function Modal({ titleId, onClose, onNavigatePrevious, onNavigateNext, re
       </div>
     </div>
   );
+  return overWorkspace && shellRoot ? createPortal(dialog, shellRoot) : dialog;
 }

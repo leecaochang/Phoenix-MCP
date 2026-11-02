@@ -5,13 +5,13 @@ from aiohttp import web
 
 from .view_base import PhoenixView
 
-from .const import DOMAIN
+from .const import DOMAIN, ORIENTATION_GUIDANCE
 
 PHOENIX_SKILL_MARKDOWN = """---
 name: phoenix
 description: >-
   Use when controlling, inspecting, or configuring Home Assistant through a Phoenix MCP
-  (Phoenix MCP) MCP connection. Covers Phoenix MCP's scoped permission
+  connection. Covers Phoenix MCP's scoped permission
   model, the human-approval ("confirm") gate, the MESA per-entity safety layer,
   and the recommended discover, preview, act, verify workflow for reads, service
   calls, and authoring automations, scripts, scenes, helpers, and dashboards,
@@ -20,7 +20,7 @@ description: >-
 
 # Using Home Assistant through Phoenix MCP
 
-You are connected to Home Assistant through Phoenix MCP (Phoenix MCP), a
+You are connected to Home Assistant through Phoenix MCP, a
 scoped gateway. Your access key sees only the entities and tools an operator
 granted it, and some actions are gated behind human approval or a per-entity
 safety layer. Phoenix MCP is the enforcement: this guide is advisory. Working with the
@@ -41,14 +41,16 @@ grain of the model gives the smoothest results and avoids dead ends.
 ### 1. Orient
 - `get_capability_summary` (no special capability needed): your persona, which
   capabilities are allowed, which are gated behind admin approval ("confirm"),
-  whether you can write at all, and your rate limits. Call it once at the start.
+  whether you can write at all, and your rate limits. {orientation}
 - `mesa_get_caller_context`: who this access key is from MESA's perspective.
 - `get_audit_summary`: your own recent calls, useful to avoid repeating work.
 
 ### 2. Discover (read-only; results are always scoped to your access key)
 - `get_overview`: a compact home summary to get your bearings.
-- `search_entities`: find entities by name, state, `device_class`, area, or
-  filters like unavailable or "stale > N". It defaults to live enabled
+- `search_entities`: find entities by name, state, `device_class` (one or a
+  list), area, `integration`, `radio` (`zigbee`, `zwave`, `matter`,
+  `bluetooth`, from the device registry, so ZHA and Zigbee2MQTT both count as
+  zigbee), or filters like unavailable or "stale > N". It defaults to live enabled
   entities; pass `registry_state: disabled` for disabled registry entries or
   `registry_state: all` to include registry entries with no live state. Those
   registry-only rows require inherited device/domain permission. This is
@@ -90,14 +92,24 @@ grain of the model gives the smoothest results and avoids dead ends.
   unavailable, unreadable, unmodeled, or capability-skipped source.
 - `get_history` (`state_changes` by default), `get_statistics`,
   `recent_activity`, `compare_states`: what changed and when. Use relative time
-  strings like `24h`, `7d`, `2w`, `1m`. History and statistics are bounded
+  strings like `30min`, `24h`, `7d`, `2w`, `1mo`. History and statistics are bounded
   pages: continue only when `has_more` is true, using `next_cursor` as the next
-  call's `cursor`. There is no total to infer. `significant_states` is a
-  scrubbed significant-state view, not every sample, and accepts at most 7 days.
+  call's `cursor`. There is no total to infer. A page's `covered_range` is only
+  what it read; `unread_range` is the rest, so it never shows where data begins.
+  `significant_states` is a scrubbed significant-state view, not every sample,
+  and accepts at most 7 days.
   For how long something was in a state or how often it changed, use
   `get_history` `mode: "summary"`: per-state durations and entry counts with no
-  rows. Read `complete` before reporting a zero or a total; unrecorded time is
-  not a state. A zone's states are occupant counts.
+  rows. For a set of entities ("which of my Zigbee sensors did not trigger
+  this week"), pass `select` with the `search_entities` filters (`radio`,
+  `domain`, `device_class`, `integration`, `area`, `query`) in summary mode:
+  one call, no listing first. With IDs already in hand, pass them as one
+  `entity_id` list instead of one call each. For numbers over a period
+  ("which room was warmest", "what used the most energy"), `get_statistics`
+  takes the same `select` or `entity_id` list: one row per entity with its
+  mean, min and max, or a total's change.
+  Read `complete` before reporting a zero or a total; unrecorded time is not a
+  state. A zone's states are occupant counts.
 - `compare_entities`: whether one entity can stand in for another, BEFORE you
   repoint automations, scripts or dashboard cards from one to the other. It
   names attributes the replacement lacks, attributes whose value differs, and
@@ -135,6 +147,10 @@ grain of the model gives the smoothest results and avoids dead ends.
   edited in the ESPHome dashboard. When a change is needed, show the operator
   the exact lines to add or change, then validate, compile and install from the
   file once they have saved it.
+- `get_esphome_history` answers "what changed?" from the Device Builder's saved
+  versions: list a file's versions, then pass a `sha` for a masked diff against
+  the current file. With no `file` it lists deleted configurations that history
+  still holds. It never restores anything.
 
 ### Checking ESPHome work, and looking things up
 
@@ -145,16 +161,23 @@ at what they would have told you.
 - `validate_esphome_yaml` checks one file for configuration errors. It reads the
   file **from disk**, so it checks what the operator saved. It does not compile
   or flash anything, and a failure leaves the device untouched. Run it after any
-  non-trivial edit rather than declaring the change good.
+  non-trivial edit rather than declaring the change good. Its `migration` block
+  lists keys and actions the installed ESPHome would respell, with a masked
+  diff; pass that to the operator, who applies it in the dashboard.
 - `get_esphome_board` gives a board's real pin map, including which pins are
   already taken and which carry warnings. Look the board up before choosing
   pins; a plausible-looking GPIO can be strapping or input-only.
 - `get_esphome_component` returns a component's actual configuration schema.
   Use it instead of recalling key names, which is where invented options come
-  from.
+  from. Advanced options are left out unless you pass `include_advanced`. With
+  `file` it lists the components one device uses instead.
 - `get_esphome_automations` lists the triggers, actions, and conditions that
   one device's own configuration supports, so `on_...` blocks are built from
-  what that device really has.
+  what that device really has. `existing: true` lists the automations the file
+  already defines; `refs` (without `file`) returns a building block's fields.
+- `check_esphome_connectivity` asks the Device Builder whether it can resolve
+  and ping a device that shows offline. It reports a verdict and counts, never
+  an address.
 
 ### Building and flashing ESPHome firmware
 
@@ -186,6 +209,10 @@ config is good on the strength of validation alone if you can compile it.
   build cache is the usual culprit: `clean_esphome_build` discards it so the
   next build starts fresh. Stop a running build first, it will not interrupt
   one.
+- `analyze_esphome_memory` reports flash and RAM use per component when a
+  device is running out of room. Unlike compiling it waits for the result,
+  so compile first and the analysis reuses the build. It is refused while
+  another build for the file runs, and on voice, Assist and AI Task.
 - On a voice assistant or Assist, `wait_for_esphome_job` returns almost at once
   and says so: that surface cannot hold a request open for minutes, and it
   allows only a limited number of tool calls per turn. When you see that, **end
@@ -219,7 +246,7 @@ config is good on the strength of validation alone if you can compile it.
 - Prefer the native intent tools (`intent__HassTurnOn`, `intent__HassTurnOff`,
   `light__HassLightSet`, `intent__HassSetPosition`, climate/media/fan tools) for
   everyday control; fall back to `call_service` for anything they do not cover.
-- Supply explicit targets for call_service and dry_run_service; targetless services are unsupported. Use kind all only for intentional domain-wide targeting. Entity, device, area, floor and label selectors in service.data are refused. Phoenix resolves device/area targets to writable entities, silently dropping inaccessible members.
+- Supply explicit targets for call_service and dry_run_service; targetless services are unsupported. Use kind all only for intentional domain-wide targeting. Entity, device, area, floor and label selectors in service.data are refused, and so is template syntax ({{ }}, {% %}): read the values first and send them as plain text. Phoenix resolves device/area targets to writable entities, silently dropping inaccessible members.
 - Authoring tools, when granted: automations and scripts (`cap_automation_write`
   / `cap_script_write`), scenes (`cap_scene_write`), helpers such as
   `input_boolean`, `input_number`, `timer`, `counter` (`cap_helper_write`),
@@ -315,7 +342,7 @@ Use `get_calendar_events` to read an accessible calendar and its integration-pro
 
 Creation supplies `event` with `summary`, `start` and exclusive `end`, using all-day ISO dates or timestamps with timezones. Updates and deletes supply the current `uid`, `expected_hash`, `start_time` and `end_time` lookup window. Updates explicitly select `mode`: `replace` requires summary/start/end and clears omitted optional fields; `patch` preserves omissions and accepts null to clear description/location. Recurrence-rule removal is refused because Home Assistant has no validated clear value; an existing rule must be retained or explicitly replaced. Recurring writes require the exact `recurrence_id`; the optional range is spelled `THISANDFUTURE` and requires a visible recurrence rule; edited exceptions are refused.
 
-Writes save a durable receipt before dispatch. Use `get_calendar_write(entity_id=...)` to find this access key's receipts after interruption, then supply `receipt_id` for the prior occurrence, requested fields and readback. `outcome_unknown` means effects may have occurred. Do not automatically repeat the write. Snapshots preserve occurrence identity but cannot exactly restore deleted UIDs or complete recurring series. No automatic rollback is offered; recovery is an explicitly reviewed new request after checking current Home Assistant data. Interrupted unknown outcomes appear under Needs attention in the Phoenix MCP panel. An administrator must check the calendar before acknowledging it; acknowledgment marks the receipt reviewed without replay or rollback. The 200-receipt journal may evict applied, not_applied and reviewed records, but keeps unresolved uncertain outcomes.
+Writes save a durable receipt before dispatch. Use `get_calendar_write(entity_id=...)` to find this access key's receipts after interruption, then supply `receipt_id` for the prior occurrence, requested fields and readback. `outcome_unknown` means effects may have occurred. Do not automatically repeat the write. Snapshots preserve occurrence identity but cannot exactly restore deleted UIDs or complete recurring series. No automatic rollback is offered; recovery is an explicitly reviewed new request after checking current Home Assistant data. Interrupted unknown outcomes appear under Needs Attention in the Phoenix MCP panel. An administrator must check the calendar before acknowledging it; acknowledgment marks the receipt reviewed without replay or rollback. The 200-receipt journal may evict applied, not_applied and reviewed records, but keeps unresolved uncertain outcomes.
 
 ## Home Assistant authoring best practices
 
@@ -614,7 +641,7 @@ For a deeper Home Assistant authoring guide (blueprints, YAML-only integrations,
 helper selection), see the community Agent Skill at
 https://github.com/homeassistant-ai/skills. Phoenix MCP's permission tree, approval
 gate, and MESA remain the enforcement regardless of any external guidance.
-"""
+""".replace("{orientation}", ORIENTATION_GUIDANCE)
 
 
 class PhoenixSkillView(PhoenixView):

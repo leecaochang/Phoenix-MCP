@@ -1,7 +1,9 @@
 import { useState, useMemo } from "react";
 import type { PermissionTree, NodeState, EntityTree } from "../types";
 import { MesaProfileLink } from "./MesaProfileLink";
-import { compareStrings, t } from "../i18n";
+import { t } from "../i18n";
+import { ConfigTable, type Column } from "../ui/table/ConfigTable";
+import { companionCap, companionDomainCap, type CompanionCap, type CompanionDomains } from "../utils/companion_reach";
 
 interface Props {
   permissions: PermissionTree;
@@ -9,13 +11,16 @@ interface Props {
   onEntityClick?: (entityId: string, depth?: "entity" | "device" | "domain") => void;
   mesaProfileEntities?: Set<string>;
   onOpenMesa?: (entityId: string) => void;
+  /** A Home Companion key's reach: rules it can never use read No Access, and Write in a read domain reads Read. */
+  companion?: CompanionDomains | null;
 }
 
+// The state's own words, as the Permissions tree names them (user, 2026-10-28).
 const STATE_LABEL_KEYS: Record<NodeState, string> = {
-  GREY: "perms.stateInherit",
-  YELLOW: "perms.stateRead",
-  GREEN: "perms.stateWrite",
-  RED: "perms.stateDeny",
+  GREY: "perms.levelInherit",
+  YELLOW: "perms.levelRead",
+  GREEN: "perms.levelWrite",
+  RED: "perms.levelDeny",
 };
 
 const STATE_CLASS: Record<NodeState, string> = {
@@ -26,8 +31,6 @@ const STATE_CLASS: Record<NodeState, string> = {
 };
 
 type NodeType = "domain" | "device" | "entity";
-type SortCol = "type" | "friendly" | "id" | "state";
-type SortDir = "asc" | "desc";
 
 const TYPE_ORDER: Record<NodeType, number> = { domain: 0, device: 1, entity: 2 };
 const STATE_ORDER: Record<NodeState, number> = { GREEN: 0, YELLOW: 1, RED: 2, GREY: 3 };
@@ -51,97 +54,73 @@ function buildLookups(entityTree: EntityTree | null | undefined): {
   domainFirstEntity: Map<string, string>;
   deviceFirstEntity: Map<string, string>;
   entityToDevice: Map<string, string>;
-  deviceDomain: Map<string, string>;
+  /** Every domain a device has entities in; a device can span several. */
+  deviceDomain: Map<string, string[]>;
+  deviceParent: Map<string, string>;
 } {
   const entityNames = new Map<string, string>();
   const deviceNames = new Map<string, string>();
   const domainFirstEntity = new Map<string, string>();
   const deviceFirstEntity = new Map<string, string>();
   const entityToDevice = new Map<string, string>();
-  const deviceDomain = new Map<string, string>();
-  if (!entityTree) return { entityNames, deviceNames, domainFirstEntity, deviceFirstEntity, entityToDevice, deviceDomain };
+  const deviceDomain = new Map<string, string[]>();
+  const deviceParent = new Map<string, string>();
+  if (!entityTree) return { entityNames, deviceNames, domainFirstEntity, deviceFirstEntity, entityToDevice, deviceDomain, deviceParent };
   for (const [domainKey, domain] of Object.entries(entityTree)) {
     for (const [eid, info] of Object.entries(domain.entity_details)) {
       if (info.friendly_name) entityNames.set(eid, info.friendly_name);
     }
     const domFirst = domain.deviceless_entities[0]
-      ?? Object.values(domain.devices)[0]?.entities[0];
+      ?? Object.values(domain.devices).find((device) => device.entities.length > 0)?.entities[0];
     if (domFirst) domainFirstEntity.set(domainKey, domFirst);
     for (const [did, device] of Object.entries(domain.devices)) {
       deviceNames.set(did, device.name);
       if (device.entities[0]) deviceFirstEntity.set(did, device.entities[0]);
-      deviceDomain.set(did, domainKey);
+      // A parent listed only for its parts has no entity of its own in this domain.
+      if (device.entities.length > 0) deviceDomain.set(did, [...(deviceDomain.get(did) ?? []), domainKey]);
+      if (device.parent_device_id) deviceParent.set(did, device.parent_device_id);
       for (const eid of device.entities) {
         entityToDevice.set(eid, did);
       }
     }
   }
-  return { entityNames, deviceNames, domainFirstEntity, deviceFirstEntity, entityToDevice, deviceDomain };
+  return { entityNames, deviceNames, domainFirstEntity, deviceFirstEntity, entityToDevice, deviceDomain, deviceParent };
 }
 
 function resolvedState(
   permissions: PermissionTree,
   item: SummaryItem,
   entityToDevice: Map<string, string>,
-  deviceDomain: Map<string, string>,
+  deviceDomain: Map<string, string[]>,
+  deviceParent: Map<string, string>,
 ): NodeState {
   // Pass 1: walk ancestor chain for RED
   const toCheck: NodeState[] = [];
   if (item.type === "entity") {
     const deviceId = entityToDevice.get(item.id);
     if (deviceId) toCheck.push(permissions.devices[deviceId]?.state ?? "GREY");
+    const parentId = deviceId ? deviceParent.get(deviceId) : undefined;
+    if (parentId) toCheck.push(permissions.devices[parentId]?.state ?? "GREY");
     toCheck.push(permissions.domains[item.id.split(".")[0]]?.state ?? "GREY");
   } else if (item.type === "device") {
-    const domain = deviceDomain.get(item.id);
-    if (domain) toCheck.push(permissions.domains[domain]?.state ?? "GREY");
+    const parentId = deviceParent.get(item.id);
+    if (parentId) toCheck.push(permissions.devices[parentId]?.state ?? "GREY");
+    // A Deny on one of its domains covers only that part of the device; on all of them, the whole device.
+    const domains = deviceDomain.get(item.id) ?? [];
+    if (domains.length && domains.every((d) => permissions.domains[d]?.state === "RED")) toCheck.push("RED");
   }
   if (toCheck.some((s) => s === "RED")) return "RED";
   // Pass 2: item's own state is the most specific non-GREY grant
   return item.state;
 }
 
-function SortHeader({
-  label,
-  col,
-  current,
-  dir,
-  onSort,
-}: {
-  label: string;
-  col: SortCol;
-  current: SortCol;
-  dir: SortDir;
-  onSort: (col: SortCol) => void;
-}) {
-  const active = current === col;
-  const arrow = active ? (dir === "asc" ? " \u25B2" : " \u25BC") : " \u25B4\u25BE";
-  return (
-    <th
-      aria-sort={active ? (dir === "asc" ? "ascending" : "descending") : "none"}
-      className={`perm-summary-th${active ? " active" : ""}`}
-    >
-      <button type="button" className="table-sort-btn" onClick={() => onSort(col)}>
-        {label}<span className={`perm-summary-arrow${active ? " active" : ""}`}>{arrow}</span>
-      </button>
-    </th>
-  );
-}
+const BY_TYPE = { column: "type", dir: "asc" } as const;
+const keyOf = (item: SummaryItem) => `${item.type}:${item.id}`;
 
-function EffectiveCell({ permissions, item, entityToDevice, deviceDomain }: {
-  permissions: PermissionTree;
-  item: SummaryItem;
-  entityToDevice: Map<string, string>;
-  deviceDomain: Map<string, string>;
-}) {
-  const eff = resolvedState(permissions, item, entityToDevice, deviceDomain);
-  return <td className="perm-summary-td"><span className={STATE_CLASS[eff]}>{t(STATE_LABEL_KEYS[eff])}</span></td>;
-}
+export function PermissionSummary({ permissions, entityTree, onEntityClick, mesaProfileEntities, onOpenMesa, companion = null }: Props) {
+  const [chosen, setChosen] = useState<string | null>(null);
 
-export function PermissionSummary({ permissions, entityTree, onEntityClick, mesaProfileEntities, onOpenMesa }: Props) {
-  const [sortCol, setSortCol] = useState<SortCol>("type");
-  const [sortDir, setSortDir] = useState<SortDir>("asc");
-
-  const { entityNames, deviceNames, domainFirstEntity, deviceFirstEntity, entityToDevice, deviceDomain } = useMemo(
+  const { entityNames, deviceNames, domainFirstEntity, deviceFirstEntity, entityToDevice, deviceDomain, deviceParent } = useMemo(
     () => buildLookups(entityTree),
     [entityTree],
   );
@@ -176,99 +155,69 @@ export function PermissionSummary({ permissions, entityTree, onEntityClick, mesa
     return result;
   }, [permissions, entityNames, deviceNames]);
 
-  const sorted = useMemo(() => {
-    const copy = [...items];
-    copy.sort((a, b) => {
-      let cmp = 0;
-      if (sortCol === "type") cmp = TYPE_ORDER[a.type] - TYPE_ORDER[b.type];
-      else if (sortCol === "friendly") cmp = compareStrings(a.friendlyName, b.friendlyName);
-      else if (sortCol === "id") cmp = compareStrings(a.id, b.id);
-      else if (sortCol === "state") cmp = STATE_ORDER[a.state] - STATE_ORDER[b.state];
-      return sortDir === "asc" ? cmp : -cmp;
-    });
-    return copy;
-  }, [items, sortCol, sortDir]);
-
-  function handleSort(col: SortCol) {
-    if (col === sortCol) {
-      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
-    } else {
-      setSortCol(col);
-      setSortDir("asc");
-    }
-  }
-
   if (items.length === 0) {
     return (
-      <p className="perm-summary-empty">{t("perms.summaryEmpty")}</p>
+      <p className="perm-summary-empty" data-guide="window.permissionSummary#empty">{t("perms.summaryEmpty")}</p>
     );
   }
 
+  const stateOf = (item: SummaryItem) => resolvedState(permissions, item, entityToDevice, deviceDomain, deviceParent);
+  const capOf = (item: SummaryItem, d: CompanionDomains): CompanionCap => item.type === "entity"
+    ? companionCap(item.id, d)
+    : item.type === "domain" ? companionDomainCap(item.id, d)
+      // A device reaches as far as the widest of its domains.
+      : (deviceDomain.get(item.id) ?? []).map((domain) => companionDomainCap(domain, d))
+        .reduce<CompanionCap>((best, cap) => (best === "control" || cap === "control" ? "control" : best ?? cap), null);
+  // What the State column shows: the rule's state, or what a Home Companion key really gets from it.
+  const shown = (item: SummaryItem): { cls: string; label: string; order: number } => {
+    let state = stateOf(item);
+    if (companion) {
+      const cap = capOf(item, companion);
+      if (cap === null) return { cls: STATE_CLASS.GREY, label: t("perms.stateNoAccess"), order: STATE_ORDER.GREY + 1 };
+      if (cap === "read" && state === "GREEN") state = "YELLOW";
+    }
+    return { cls: STATE_CLASS[state], label: t(STATE_LABEL_KEYS[state]), order: STATE_ORDER[state] };
+  };
+  // Choosing a rule finds it in the Permissions tree: an entity itself, or a device's or domain's first entity.
+  const target = (item: SummaryItem): { entity: string; depth: "entity" | "device" | "domain" } | null => {
+    const entity = item.type === "entity" ? item.id : item.type === "domain" ? domainFirstEntity.get(item.id) : deviceFirstEntity.get(item.id);
+    return entity ? { entity, depth: item.type } : null;
+  };
+  const nameOf = (item: SummaryItem) => (item.friendlyName !== item.id ? item.friendlyName : "");
+  // A configurable table like the other workspaces' lists (user, 2026-10-28). Name and ID stay narrow
+  // enough for all four columns to fit half the workspace; their full text is in the tooltip.
+  const columns: Column<SummaryItem>[] = [
+    { id: "type", label: t("perms.colType"), width: 100, sortValue: (item) => TYPE_ORDER[item.type], cell: (item) => t(TYPE_LABEL_KEYS[item.type]) },
+    { id: "name", label: t("perms.colName"), width: 180, maxWidth: 180, sortValue: nameOf, title: (item) => nameOf(item) || undefined,
+      cell: (item) => (
+        <span className="perm-summary-name-wrap">
+          {item.type === "entity" && onOpenMesa && (
+            <MesaProfileLink targetKey={item.id} exists={!!mesaProfileEntities?.has(item.id)} onOpen={onOpenMesa} />
+          )}
+          {nameOf(item)}
+        </span>
+      ) },
+    { id: "id", label: t("perms.colId"), width: 180, maxWidth: 180, sortValue: (item) => item.id, title: (item) => item.id, cell: (item) => item.id, className: "phx-cell-mono" },
+    { id: "state", label: t("perms.colState"), width: 100, sortValue: (item) => shown(item).order,
+      cell: (item) => { const s = shown(item); return <span className={s.cls}>{s.label}</span>; } },
+  ];
+
   return (
-    <table className="perm-summary-table">
-      <thead>
-        <tr>
-          <SortHeader label={t("perms.colType")} col="type" current={sortCol} dir={sortDir} onSort={handleSort} />
-          <SortHeader label={t("perms.colName")} col="friendly" current={sortCol} dir={sortDir} onSort={handleSort} />
-          <SortHeader label={t("perms.colId")} col="id" current={sortCol} dir={sortDir} onSort={handleSort} />
-          <SortHeader label={t("perms.colState")} col="state" current={sortCol} dir={sortDir} onSort={handleSort} />
-        </tr>
-      </thead>
-      <tbody>
-        {sorted.map((item) => {
-          let targetEntity: string | undefined;
-          let depth: "entity" | "device" | "domain" = "entity";
-          if (item.type === "entity") { targetEntity = item.id; depth = "entity"; }
-          else if (item.type === "domain") { targetEntity = domainFirstEntity.get(item.id); depth = "domain"; }
-          else if (item.type === "device") { targetEntity = deviceFirstEntity.get(item.id); depth = "device"; }
-          const isClickable = !!onEntityClick && !!targetEntity;
-          const handleClick = isClickable ? () => onEntityClick!(targetEntity!, depth) : undefined;
-          const title = isClickable
-            ? t("perms.simulateTitle", { type: t(TYPE_LABEL_KEYS[item.type]).toLowerCase(), id: item.id })
-            : undefined;
-          return (
-            <tr key={`${item.type}:${item.id}`} className="perm-summary-tr">
-              <td className="perm-summary-td">
-                <span className={`perm-type-badge perm-type-${item.type}`}>
-                  {t(TYPE_LABEL_KEYS[item.type])}
-                </span>
-              </td>
-              <td className="perm-summary-td-name">
-                <div className="perm-summary-name-wrap">
-                  {item.type === "entity" && onOpenMesa && (
-                    <MesaProfileLink
-                      targetKey={item.id}
-                      exists={!!mesaProfileEntities?.has(item.id)}
-                      onOpen={onOpenMesa}
-                    />
-                  )}
-                  <button
-                    type="button"
-                    className={`perm-summary-name-text${isClickable ? " clickable" : ""}`}
-                    onClick={handleClick}
-                    title={title}
-                    disabled={!isClickable}
-                  >
-                    {item.friendlyName !== item.id ? item.friendlyName : <span className="state-GREY">-</span>}
-                  </button>
-                </div>
-              </td>
-              <td className="perm-summary-td-id">
-                <button
-                  type="button"
-                  className={isClickable ? "clickable" : ""}
-                  onClick={handleClick}
-                  title={title}
-                  disabled={!isClickable}
-                >
-                  {item.id}
-                </button>
-              </td>
-              <EffectiveCell permissions={permissions} item={item} entityToDevice={entityToDevice} deviceDomain={deviceDomain} />
-            </tr>
-          );
-        })}
-      </tbody>
-    </table>
+    <ConfigTable
+      id="permissionSummary"
+      label={t("accessKeys.permissionSummary")}
+      defaultSort={BY_TYPE}
+      columns={columns}
+      rows={items}
+      rowKey={keyOf}
+      selectedKey={chosen}
+      rowHelp="help.summaryRow"
+      onSelect={(item) => {
+        setChosen(keyOf(item));
+        const found = target(item);
+        if (found) onEntityClick?.(found.entity, found.depth);
+      }}
+      rowLabel={(item) => [t(TYPE_LABEL_KEYS[item.type]), nameOf(item), item.id, shown(item).label].filter(Boolean).join(t("common.listSeparator"))}
+    />
   );
 }

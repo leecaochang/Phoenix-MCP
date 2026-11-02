@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+from contextvars import ContextVar
 import math
 import json
 import re
-from typing import Any
+from typing import Any, TypeVar
 
 from .const import MAX_REQUEST_BODY_BYTES, TOOL_INPUT_MAX_DEPTH, TOOL_INPUT_MAX_NODES
 from .tool_defs import _ENTITY_TOOL_DEFS, _NATIVE_TOOL_DEFS, _SYSTEM_TOOL_DEFS
@@ -16,6 +17,47 @@ _SCHEMAS = {definition["name"]: definition["inputSchema"]
 _PUBLIC_SCHEMAS = {**_SCHEMAS, **{definition["name"]: definition["inputSchema"]
                                   for definition in _NATIVE_TOOL_DEFS}}
 _CONTAINER_TYPES = ("object", "array")
+_NATIVE_TOOLS = frozenset(definition["name"] for definition in _NATIVE_TOOL_DEFS)
+_INTEGER_TEXT = re.compile(r"-?\d+")
+_NUMBER_TEXT = re.compile(r"-?\d+(\.\d+)?")
+_IDENTIFIER = re.compile(r"[\w.-]+")
+_STATE_VALUES = frozenset({"in_state", "not_in_state"})
+
+
+# How one call's arguments were read when they arrived in an older or Home
+# Assistant shape that names one request unambiguously: the call runs, and the
+# result says how it was read so the next call can send the current shape.
+# Collected per tools/call by _call_tool; None outside one.
+_argument_notes: ContextVar[list[str] | None] = ContextVar("phoenix_mcp_argument_notes", default=None)
+
+
+def note_argument_adjustment(text: str) -> None:
+    """Record one reading of the current call's arguments for its result."""
+    notes = _argument_notes.get()
+    if notes is not None and text not in notes:
+        notes.append(text)
+
+
+_Outcome = TypeVar("_Outcome", bound=str)
+
+
+def with_argument_notes(result: tuple[dict, _Outcome, str], notes: list[str]) -> tuple[dict, _Outcome, str]:
+    """Attach the call's argument readings to its result, a JSON object's field or a text line."""
+    if not notes:
+        return result
+    content, outcome, resource = result
+    items = list(content.get("content") or [])
+    first = items[0].get("text") if items and isinstance(items[0], dict) else None
+    try:
+        body = json.loads(first) if isinstance(first, str) and first.startswith("{") else None
+    except ValueError:
+        body = None
+    if isinstance(body, dict):
+        body["arguments_adjusted"] = notes
+        items[0] = {**items[0], "text": json.dumps(body, default=str)}
+    else:
+        items.append({"type": "text", "text": "Arguments adjusted: " + " ".join(notes)})
+    return {**content, "content": items}, outcome, resource
 
 
 def decode_container_strings(tool: str, arguments: dict) -> dict:
@@ -35,7 +77,14 @@ def decode_container_strings(tool: str, arguments: dict) -> dict:
             continue
         kinds = schema.get("type")
         kinds = [kinds] if isinstance(kinds, str) else kinds
-        if not isinstance(kinds, list) or "string" in kinds:
+        if not isinstance(kinds, list):
+            items = _list_text(name, schema, value)
+            if items is not None:
+                decoded_arguments = decoded_arguments if decoded_arguments is not None else dict(arguments)
+                decoded_arguments[name] = items
+                note_argument_adjustment(f"Read {name} text as a list of {len(items)}; send a JSON array next time.")
+            continue
+        if "string" in kinds:
             continue
         wanted = [kind for kind in kinds if kind in _CONTAINER_TYPES]
         text = value.strip()
@@ -49,6 +98,33 @@ def decode_container_strings(tool: str, arguments: dict) -> dict:
             decoded_arguments = decoded_arguments if decoded_arguments is not None else dict(arguments)
             decoded_arguments[name] = decoded
     return arguments if decoded_arguments is None else decoded_arguments
+
+
+def _list_text(name: str, schema: dict, value: str) -> list[str] | None:
+    """The list in text sent for a field that takes one string or a list of them.
+
+    JSON array text of strings is the list it spells, and so is bracketed text
+    of bare identifiers such as "[door, window]", which no domain, device class
+    or ID can be; a state is free text, so only JSON reads as a list there. A
+    comma list is split only for entity IDs, which contain no comma; any other
+    value, such as a state of "1,234", stays as sent.
+    """
+    if not any(isinstance(choice, dict) and choice.get("type") == "array" for choice in schema.get("oneOf") or ()):
+        return None
+    text = value.strip()
+    if text.startswith("["):
+        try:
+            decoded = json.loads(text)
+        except (ValueError, RecursionError):
+            items = [item.strip() for item in text[1:-1].split(",")] if text.endswith("]") else []
+            if name in _STATE_VALUES or not items or not all(_IDENTIFIER.fullmatch(item) for item in items):
+                return None
+            return items
+        return decoded if isinstance(decoded, list) and decoded and all(isinstance(i, str) for i in decoded) else None
+    if name in ("entity_id", "entity_ids") and "," in text:
+        ids = [item.strip() for item in text.split(",") if item.strip()]
+        return ids or None
+    return None
 
 
 def tool_arguments_error(arguments: object) -> str | None:
@@ -142,6 +218,26 @@ def _whole_integers(value: Any, schema: Any) -> Any:
     return value
 
 
+def _native_shape(value: Any, schema: dict) -> Any:
+    """Take the shapes Home Assistant's own native tools accept.
+
+    HA's intent slots wrap one string in a list (cv.ensure_list) and coerce
+    numeric text (vol.Coerce(int) or vol.Coerce(float)), so a native tool takes
+    "light" for ["light"] and "50" for 50. A string is never read as absent.
+    """
+    if not isinstance(value, str):
+        return value
+    kinds, text = _kinds(schema), value.strip()
+    items = schema.get("items")
+    if "array" in kinds and text and isinstance(items, dict) and _kinds(items) == ["string"]:
+        return [value]
+    if "integer" in kinds and _INTEGER_TEXT.fullmatch(text):
+        return int(text)
+    if "number" in kinds and _NUMBER_TEXT.fullmatch(text):
+        return float(text)
+    return value
+
+
 def _scalar_error(name: str, value: Any, schema: dict, kinds: list[str]) -> str | None:
     """Name the schema field and its rule, never the value."""
     if value is None:
@@ -168,17 +264,67 @@ def _scalar_error(name: str, value: Any, schema: dict, kinds: list[str]) -> str 
     return None
 
 
-def scalar_arguments(tool: str, arguments: dict) -> tuple[dict, str | None]:
+def _scalar_text(name: str, value: Any, schema: dict) -> Any:
+    """A number or boolean sent as its canonical text, for a field that takes no text.
+
+    Some clients send every argument as a string. "10", "2.5" and "true" are
+    the value they spell; any other text stays for the type check to refuse.
+    """
+    kinds = _kinds(schema)
+    if not isinstance(value, str) or "string" in kinds:
+        return value
+    text = value.strip()
+    read: Any = value
+    if "integer" in kinds and _INTEGER_TEXT.fullmatch(text):
+        read = int(text)
+    elif "number" in kinds and _NUMBER_TEXT.fullmatch(text):
+        read = float(text)
+    elif "boolean" in kinds and text.lower() in ("true", "false"):
+        read = text.lower() == "true"
+    if read is not value:
+        note_argument_adjustment(f"Read {name} text {json.dumps(value[:40])} as {json.dumps(read)}.")
+    return read
+
+
+def _enum_case(name: str, value: Any, schema: dict) -> Any:
+    """The schema's own spelling of an enum value sent in another case.
+
+    Some handlers fold case and others do not, so "Day" worked for one tool and
+    was refused by the next; one rule here makes them agree.
+    """
+    allowed = schema.get("enum")
+    if not isinstance(value, str) or not isinstance(allowed, list) or value in allowed:
+        return value
+    matches = [item for item in allowed if isinstance(item, str) and item.casefold() == value.strip().casefold()]
+    if len(matches) != 1:
+        return value
+    note_argument_adjustment(f"Read {name} {json.dumps(value[:40])} as {json.dumps(matches[0])}.")
+    return matches[0]
+
+
+# Empty on a read means "not given", except for a compare-and-swap token. An
+# empty object can be the request itself (select {} with in_state scans every
+# entity, input {} renders a blueprint without inputs), so it is kept.
+_MEANINGFUL_EMPTY = frozenset({"expected_hash"})
+# Page and wait sizes a read clamps to its maximum instead of refusing.
+_CLAMPED = frozenset({"limit", "timeout"})
+
+
+def scalar_arguments(tool: str, arguments: dict, *, read_only: bool = False) -> tuple[dict, str | None]:
     """Hold top-level arguments to the advertised schema, the one contract on every route.
 
     Required arguments must be present and not null. A scalar the schema refuses
-    by type, bound, length or pattern is refused with the field named, rather
-    than clamped or ignored; enum values and null stay with their handlers, whose
-    messages explain the choice and for whom null can be a refused value (a
-    compare-and-swap expected_hash) as well as absence. Whole-valued
-    floats become ints wherever the schema expects an integer, nested ones
-    included. Union-typed fields are left to their handler. Call after the
-    owning capability's denial check.
+    by type, bound, length or pattern is refused with the field named; enum
+    values and null stay with their handlers, whose messages explain the choice
+    and for whom null can be a refused value (a compare-and-swap expected_hash)
+    as well as absence. Whole-valued floats become ints wherever the schema
+    expects an integer, nested ones included, and native tools take HA's own
+    list and number shapes (_native_shape). On a read, canonical number and
+    boolean text is the value it spells, an optional argument that is only an
+    empty placeholder is absent, and a limit or timeout above its maximum is the
+    maximum; a write refuses all three. Each reading is noted on the result.
+    Union-typed fields are left to their handler. Call after the owning
+    capability's denial check.
     """
     schema = _PUBLIC_SCHEMAS.get(tool)
     if schema is None:
@@ -194,11 +340,24 @@ def scalar_arguments(tool: str, arguments: dict) -> tuple[dict, str | None]:
         if not isinstance(field, dict) or any(key in field for key in ("anyOf", "oneOf", "allOf")):
             continue
         kinds = _kinds(field)
+        if (read_only and value in (None, "", []) and name not in required
+                and name not in _MEANINGFUL_EMPTY):
+            del result[name]
+            note_argument_adjustment(f"Read empty {name} as not given.")
+            continue
         if value is None:
             # What null means stays the handler's call: for some fields it is
             # absence, for a safety token such as expected_hash it must refuse.
             continue
+        if tool in _NATIVE_TOOLS:
+            value = _native_shape(value, field)
+        elif read_only:
+            value = _enum_case(name, _scalar_text(name, value, field), field)
         converted = _whole_integers(value, field)
+        if (read_only and name in _CLAMPED and isinstance(converted, (int, float)) and not isinstance(converted, bool)
+                and "maximum" in field and converted > field["maximum"]):
+            note_argument_adjustment(f"{name} {converted} is above its maximum, so {field['maximum']} was used.")
+            converted = field["maximum"]
         if kinds and set(kinds) <= _SCALAR_TYPES and (error := _scalar_error(name, converted, field, kinds)):
             return arguments, error
         result[name] = converted
@@ -206,24 +365,35 @@ def scalar_arguments(tool: str, arguments: dict) -> tuple[dict, str | None]:
 
 
 def _schema_error(value: Any, schema: dict, path: str) -> str | None:
-    """Validate only the small schema vocabulary used by owned control objects."""
+    """Validate only the small schema vocabulary used by owned control objects.
+
+    A refusal names the field and what it takes (the schema's own types, values
+    and keys), never the caller's value, so the next call can be right.
+    """
     choices = schema.get("oneOf")
     if choices and not any(_schema_error(value, choice, path) is None for choice in choices):
-        return f"{path} has an invalid type or value."
+        choice_kinds = [str(choice.get("type")) for choice in choices if isinstance(choice, dict) and choice.get("type")]
+        return (f"{path} must be {' or '.join(dict.fromkeys(choice_kinds))}." if choice_kinds
+                else f"{path} has an invalid type or value.")
     kinds = schema.get("type")
     if isinstance(kinds, str):
         kinds = [kinds]
     if kinds and not any(_matches_type(value, kind) for kind in kinds):
         return f"{path} must be {' or '.join(kinds)}."
     if "enum" in schema and value not in schema["enum"]:
-        return f"{path} must be one of the supported values."
+        allowed = schema["enum"]
+        return (f"{path} must be one of: {', '.join(str(item) for item in allowed)}." if len(allowed) <= 24
+                else f"{path} must be one of the supported values.")
     if isinstance(value, dict):
         properties = schema.get("properties", {})
         extra = schema.get("additionalProperties", True)
-        if extra is False and any(key not in properties for key in value):
-            return f"{path} contains unsupported fields."
-        if any(key not in value for key in schema.get("required", [])):
-            return f"{path} is missing a required field."
+        unknown = [key for key in value if key not in properties]
+        if extra is False and unknown:
+            named = json.dumps(str(unknown[0])[:60], ensure_ascii=True)
+            return f"{path} contains unsupported fields ({named}); it takes {', '.join(sorted(properties))}."
+        missing = [key for key in schema.get("required", []) if key not in value]
+        if missing:
+            return f"{path} is missing a required field: {', '.join(missing)}."
         if len(value) < schema.get("minProperties", 0):
             return f"{path} must be a non-empty object."
         for key, item in value.items():
@@ -234,7 +404,7 @@ def _schema_error(value: Any, schema: dict, path: str) -> str | None:
                     return error
     elif isinstance(value, list):
         if not schema.get("minItems", 0) <= len(value) <= schema.get("maxItems", TOOL_INPUT_MAX_NODES):
-            return f"{path} has an invalid number of items."
+            return f"{path} must have {schema.get('minItems', 0)} to {schema.get('maxItems', TOOL_INPUT_MAX_NODES)} items."
         if schema.get("uniqueItems") and any(item in value[:index] for index, item in enumerate(value)):
             return f"{path} must not contain duplicate items."
         for index, item in enumerate(value):
@@ -246,7 +416,9 @@ def _schema_error(value: Any, schema: dict, path: str) -> str | None:
             return f"{path} has an invalid length."
     elif isinstance(value, (int, float)) and not isinstance(value, bool):
         if value < schema.get("minimum", -math.inf) or value > schema.get("maximum", math.inf):
-            return f"{path} is outside its supported range."
+            bounds = [f"at least {schema['minimum']}"] if "minimum" in schema else []
+            bounds += [f"at most {schema['maximum']}"] if "maximum" in schema else []
+            return f"{path} must be {' and '.join(bounds)}."
     return None
 
 

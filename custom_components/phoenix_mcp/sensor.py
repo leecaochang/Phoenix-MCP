@@ -13,6 +13,7 @@ from homeassistant.const import EntityCategory, UnitOfTime
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.util import slugify
 from homeassistant.util.dt import utcnow
 
 from .const import DOMAIN
@@ -83,7 +84,9 @@ class PhoenixAccessKeySensor(SensorEntity):
             self._attr_options = ["active", "expired", "revoked"]
         self._attr_unique_id = _unique_id(access_key.id, sensor_type)
         # Suggest access-key IDs for new sensors; HA retains registered IDs by UUID.
-        self.entity_id = f"sensor.phoenix_mcp_access_key_{access_key_name_slug(access_key.name)}_{sensor_type}"
+        # Slugified as HA does, since a name may repeat or end with a separator and
+        # HA refuses a suggested ID with a double or edge underscore.
+        self.entity_id = f"sensor.{slugify(f'phoenix_mcp_access_key_{access_key.name}_{sensor_type}')}"
         # HA resolves the display name from translations/<lang>.json's entity
         # section; the English entries are the title-cased sensor type names.
         self._attr_translation_key = sensor_type

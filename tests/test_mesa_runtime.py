@@ -310,6 +310,36 @@ async def test_expand_target_resolves_device_area_floor_label(hass: HomeAssistan
 
 
 @pytest.mark.asyncio
+async def test_registry_walks_from_a_worker_thread_run_on_the_event_loop(hass: HomeAssistant):
+    # mesa-core calls these from its worker threads; Home Assistant changes its
+    # registries on the loop, so a walk from another thread can meet a registry
+    # mid-change ("dictionary changed size during iteration").
+    import threading
+    from unittest.mock import patch
+
+    from custom_components.phoenix_mcp import mesa as mesa_mod
+
+    device, on_device, second, area, _floor_id, _label_id = _registry_env(hass)
+    get_area, expand = _build_get_entity_area(hass), build_expand_target(hass)
+    walked_on: list[int] = []
+    real_snapshot = mesa_mod.device_registry_snapshot
+
+    def recording_snapshot(*args):
+        walked_on.append(threading.get_ident())
+        return real_snapshot(*args)
+
+    with patch.object(mesa_mod, "device_registry_snapshot", recording_snapshot):
+        area_id = await hass.async_add_executor_job(get_area, on_device.entity_id)
+        expanded = await hass.async_add_executor_job(expand, "device_id", device.id)
+        # On the loop itself the callbacks run directly.
+        assert get_area(on_device.entity_id) == area.id
+
+    assert area_id == area.id
+    assert set(expanded) == {on_device.entity_id, second.entity_id}
+    assert walked_on and set(walked_on) == {hass.loop_thread_id}
+
+
+@pytest.mark.asyncio
 async def test_trigger_validator_flags_none_entity_behind_device_trigger(
     hass: HomeAssistant,
 ):

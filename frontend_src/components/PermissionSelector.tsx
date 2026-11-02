@@ -9,11 +9,11 @@ interface Props {
   label?: string;
 }
 
-const BUTTONS: { state: NodeState; label: string; titleKey: string }[] = [
-  { state: "GREY", label: "N", titleKey: "perms.selGrey" },
-  { state: "YELLOW", label: "R", titleKey: "perms.selYellow" },
-  { state: "GREEN", label: "W", titleKey: "perms.selGreen" },
-  { state: "RED", label: "D", titleKey: "perms.selRed" },
+const BUTTONS: { state: NodeState; label: string; titleKey: string; helpKey: string }[] = [
+  { state: "GREY", label: "N", titleKey: "perms.selGrey", helpKey: "help.permInherit" },
+  { state: "YELLOW", label: "R", titleKey: "perms.selYellow", helpKey: "help.permRead" },
+  { state: "GREEN", label: "W", titleKey: "perms.selGreen", helpKey: "help.permWrite" },
+  { state: "RED", label: "D", titleKey: "perms.selRed", helpKey: "help.permDeny" },
 ];
 
 // A paint gesture belongs to the pointer that started it: another finger
@@ -53,6 +53,7 @@ export const PermissionSelector = React.memo(function PermissionSelector({ value
     <div
       className="perm-selector"
       role="group"
+      data-guide="window.permissions#states"
       aria-label={label}
       style={{ touchAction: "none" }}
       onPointerEnter={(e) => {
@@ -67,13 +68,14 @@ export const PermissionSelector = React.memo(function PermissionSelector({ value
         }
       }}
     >
-      {BUTTONS.map(({ state, label, titleKey }) => {
+      {BUTTONS.map(({ state, label: letter, titleKey, helpKey }) => {
         const title = t(titleKey);
         return (
         <button
           key={state}
           type="button"
           title={title}
+          data-help={helpKey}
           className={`perm-btn${value === state ? ` active-${state}` : ""}`}
           onPointerDown={(e) => {
             // Only the primary button of the primary contact paints: a right
@@ -99,7 +101,7 @@ export const PermissionSelector = React.memo(function PermissionSelector({ value
           aria-pressed={value === state}
           aria-label={`${label}: ${value === state ? t("perms.selSelected", { title }) : title}`}
         >
-          {label}
+          {letter}
         </button>
         );
       })}

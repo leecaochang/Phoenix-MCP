@@ -4,7 +4,7 @@
       "already_configured": "Phoenix MCP 已設定。"
     },
     "create_entry": {
-      "default": "請在 Phoenix MCP 面板中管理您的存取金鑰"
+      "default": "請在側邊欄的 Phoenix MCP 面板中管理您的存取金鑰。此面板僅向管理員顯示。"
     },
     "step": {
       "user": {
@@ -41,11 +41,27 @@
   "entity": {
     "sensor": {
       "status": {
+        "name": "狀態",
         "state": {
           "active": "有效",
           "expired": "已過期",
           "revoked": "已撤銷"
         }
+      },
+      "request_count": {
+        "name": "請求數"
+      },
+      "denied_count": {
+        "name": "拒絕數"
+      },
+      "rate_limit_hits": {
+        "name": "觸發速率限制次數"
+      },
+      "last_access": {
+        "name": "上次存取"
+      },
+      "expires_in": {
+        "name": "距到期"
       }
     }
   }

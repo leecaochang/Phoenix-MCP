@@ -36,7 +36,7 @@ class _Content:
 
 class _Resp:
     def __init__(self, status=200, body=b"", json_data=None, text=""):
-        self.status, self.content, self._json, self._text = status, _Content(body), json_data, text
+        self.status, self.content, self._json, self._text = status, _Content(body or text.encode()), json_data, text
         self.headers: dict = {}
 
     async def text(self):
@@ -238,41 +238,7 @@ _TOOL = [{"type": "function", "function": {"name": "t", "parameters": {}}}]
 
 
 @pytest.mark.asyncio
-async def test_openai_tool_turns_send_reasoning_effort_none_even_when_a_level_is_chosen():
-    agentcli._OPENAI_NO_EFFORT_NONE.discard("gpt-x")
-    session = _Session(_Resp(body=_DONE_BODY))
-    await _collect(_openai().stream_turn(
-        session, system_prompt="s", messages=[], tools=_TOOL, options={"effort": "high"}))
-    assert session.calls[0]["json"]["reasoning_effort"] == "none"
-    # Without tools the operator's level is honoured.
-    session = _Session(_Resp(body=_DONE_BODY))
-    await _collect(_openai().stream_turn(
-        session, system_prompt="s", messages=[], tools=[], options={"effort": "high"}))
-    assert session.calls[0]["json"]["reasoning_effort"] == "high"
-
-
-@pytest.mark.asyncio
-async def test_openai_model_that_rejects_effort_none_is_retried_once_and_remembered():
-    agentcli._OPENAI_NO_EFFORT_NONE.discard("gpt-x")
-    reject = _Resp(status=400, text=json.dumps({"error": {
-        "message": "Unrecognized request argument supplied: reasoning_effort", "type": "invalid_request_error"}}))
-    session = _Session(reject, _Resp(body=_DONE_BODY))
-    events = await _collect(_openai().stream_turn(
-        session, system_prompt="s", messages=[], tools=_TOOL, options={}))
-    assert any(e["type"] == "message_done" for e in events)
-    assert "reasoning_effort" in session.calls[0]["json"]
-    assert "reasoning_effort" not in session.calls[1]["json"]
-    # Remembered: the next tool turn does not send the field, so no failing request.
-    session = _Session(_Resp(body=_DONE_BODY))
-    await _collect(_openai().stream_turn(
-        session, system_prompt="s", messages=[], tools=_TOOL, options={}))
-    assert len(session.calls) == 1 and "reasoning_effort" not in session.calls[0]["json"]
-    agentcli._OPENAI_NO_EFFORT_NONE.discard("gpt-x")
-
-
-@pytest.mark.asyncio
 async def test_openai_responses_only_refusal_is_learned_as_no_tools():
-    agentcli._OPENAI_NO_EFFORT_NONE.discard("gpt-x")
     reject = _Resp(status=400, text=json.dumps({"error": {
         "message": "Function calling is not supported with this model on Chat Completions; use the Responses API.",
         "type": "invalid_request_error"}}))
@@ -339,8 +305,9 @@ def test_opencode_legacy_allows_qualified_qwen_models_without_opening_the_family
     ids = ["gpt-5.5", "claude-sonnet-5-5", "gemini-3.8-flash", "jev-1.13", "grok-4.7", "muse-spark-1.3",
            "qwen3.8-max", "qwen3.5-plus", "qwen3.8-flash", "qwen-next", "deepseek-flash", "kimi-k3", "glm-5.3",
            "big-pickle", "minimax-m3"]
+    # big-pickle is a free model, which OpenCode refuses outside its own app.
     assert _filter_opencode_models(ids) == [
-        "big-pickle", "deepseek-flash", "glm-5.3", "kimi-k3", "minimax-m3", "qwen3.5-plus", "qwen3.8-max",
+        "deepseek-flash", "glm-5.3", "kimi-k3", "minimax-m3", "qwen3.5-plus", "qwen3.8-max",
     ]
 
 
@@ -474,7 +441,8 @@ async def test_opencode_replays_reasoning_and_complete_tool_calls_without_usage_
     (401, {"type": "CreditsError", "message": "Insufficient balance."}, "quota", False),
     (402, {"message": "No credit."}, "quota", False),
     (429, {"type": "RateLimitError", "message": "Slow down."}, "rate_limit", True),
-    (403, {"type": "FreeTierError", "message": "Free tier requires OpenCode."}, "auth", False),
+    # A free model outside OpenCode's app: a refusal of this request, not a bad key.
+    (403, {"type": "FreeTierError", "message": "Free tier requires OpenCode."}, "provider_rejected", False),
 ])
 async def test_opencode_console_keeps_billing_and_rate_limit_classifications(status, error, code, retryable):
     provider = OpenAICompatProvider(ProviderConfig(

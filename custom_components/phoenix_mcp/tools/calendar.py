@@ -33,7 +33,7 @@ from ..request_authority import AuthorityChangedError, check_request_authority, 
 from ..access_key_store import AccessKeyRecord
 from ..tool_common import (
     _approved_exec_ctx, _gate, _pending_or_inline, _tool_error, _tool_success,
-    redaction_sentinel_path, _tool_pending,
+    redaction_sentinel_path, _tool_pending, _approval_notifies,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -167,13 +167,14 @@ def _calendar_entity(entity_id: Any, access_key: AccessKeyRecord, hass: HomeAssi
 
 
 def _calendar_time(value: Any) -> datetime:
+    """An ISO date or timestamp in HA's zone; one without an offset is local time."""
     if not isinstance(value, str) or not value:
-        raise ValueError("Times must be ISO dates or timestamps with a timezone.")
+        raise ValueError("Times must be ISO dates or timestamps.")
     if len(value) == 10 and (day := dt_util.parse_date(value)) is not None:
         return dt_util.start_of_local_day(datetime.combine(day, datetime.min.time()))
     parsed = dt_util.parse_datetime(value)
-    if parsed is None or parsed.tzinfo is None:
-        raise ValueError("Times must be ISO dates or timestamps with a timezone.")
+    if parsed is None:
+        raise ValueError("Times must be ISO dates or timestamps.")
     return dt_util.as_local(parsed)
 
 
@@ -183,7 +184,10 @@ def _calendar_window(args: dict, *, defaults: bool = False) -> tuple[datetime, d
     if start is None or end is None:
         raise ValueError("start_time and end_time are required to locate the event.")
     if not timedelta(0) < end - start <= timedelta(days=CALENDAR_MAX_WINDOW_DAYS):
-        raise ValueError(f"Event windows must be positive and at most {CALENDAR_MAX_WINDOW_DAYS} days.")
+        raise ValueError(
+            f"Event windows must be positive and at most {CALENDAR_MAX_WINDOW_DAYS} days. A relative "
+            "time such as 7d means 7 days ago; +7d means 7 days ahead."
+        )
     return start, end
 
 
@@ -397,7 +401,10 @@ async def _execute_calendar_write(args: dict, access_key: AccessKeyRecord, hass:
                 if removable is None:
                     raise ValueError("Calendar recovery storage is full. No write was dispatched.")
                 records.remove(removable)
+            # The request id ties this receipt to the same call's Agent Chat recovery row,
+            # so Needs Attention lists one item for it, not two.
             receipt = {"receipt_id": uuid.uuid4().hex, "access_key_id": access_key.id,
+                       "request_id": dispatch_request_id.get(),
                        "identity": target_binding([entity_id], hass), "entity_id": entity_id,
                        "status": "outcome_unknown", "created_at": dt_util.utcnow().isoformat(),
                        "operation": operation, "before": copy.deepcopy(plan["before"]),
@@ -422,7 +429,10 @@ async def _execute_calendar_write(args: dict, access_key: AccessKeyRecord, hass:
             )
             if mesa.decision == "pending" and mesa.approval is not None:
                 # Waiting inline while holding the journal lock would deadlock replay.
-                return _tool_pending(mesa.approval), "pending_approval", mesa.approval.id
+                return (
+                    _tool_pending(mesa.approval, notified=_approval_notifies(data)),
+                    "pending_approval", mesa.approval.id,
+                )
             if mesa.decision != "allow":
                 raise PermissionError
             check_request_authority()
@@ -477,6 +487,12 @@ async def _execute_calendar_write(args: dict, access_key: AccessKeyRecord, hass:
             else:
                 candidates = [row for row in rows if row.get("uid") == plan["uid"] and row.get("recurrence_id") == plan.get("recurrence_id")]
             receipt["after"] = candidates[0] if len(candidates) == 1 else None
+            # after alone is ambiguous: null is success for a delete and failure otherwise.
+            if operation == "delete":
+                receipt["verified"] = not candidates
+            else:
+                receipt["verified"] = len(candidates) == 1 and all(
+                    candidates[0].get(key) == value for key, value in plan["event"].items())
             await journal.save()
         except AuthorityChangedError:
             raise
@@ -495,6 +511,8 @@ def _calendar_result(receipt: dict, access_key: AccessKeyRecord, hass: HomeAssis
     check_request_authority()
     _calendar_entity(receipt["entity_id"], access_key, hass)
     body = {key: value for key, value in receipt.items() if key not in ("access_key_id", "identity")}
+    # A write whose read-back failed is applied but unconfirmed.
+    body.setdefault("verified", None)
     if receipt["after"] is not None:
         body["after"] = {**receipt["after"], "content_hash": content_hash(receipt["after"])}
     result = _tool_success(json.dumps(_safe_calendar_data(body, access_key, hass)))

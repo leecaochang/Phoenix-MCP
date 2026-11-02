@@ -1,8 +1,8 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { agentCliChat, api } from "../api";
+import { homeAssistantReachable, onConnectionChange, useHomeAssistantAway } from "../utils/connection";
 import { renderMarkdown, flagsUnsafeContent } from "../utils/markdown";
-import { mdiClose, mdiPaperclip } from "@mdi/js";
 import {
   ATTACHMENT_MAX_COUNT, AttachmentError, imageFiles, prepareAttachment, withoutSentImages,
   type ChatAttachment,
@@ -17,6 +17,8 @@ import {
 import { approvalStatusLabel, copyToClipboard, effortLevelLabel } from "../utils";
 import { clearReasonDraft, getReasonDraft } from "../utils/approval_reason_draft";
 import { localizedApprovalReason } from "../utils/approval_reason";
+import { chatNoticeText, failureDetailText } from "../utils/chat_notice";
+import { localizedExecutorError } from "../utils/approval_text";
 import { subscribeApprovalEvents } from "../utils/approval_events";
 import {
   AGENTCHAT_REVIEW_CLOSED_EVENT,
@@ -34,7 +36,10 @@ import type {
 import { hasMessage, localeClock, localeCompactNumber, localeNumber, resolveLanguage, t, tn } from "../i18n";
 import { tRich } from "../i18n/rich";
 import { registerAgentChatShortcut } from "../utils/agentchat_shortcut";
-import PANEL_CSS from "../phoenix-mcp-panel.css?inline";
+import { openPopupWindow } from "../ui/popup";
+import { Icon } from "../ui/Icon";
+import { MenuButton, MenuRootContext, type MenuEntry } from "../ui/Menu";
+import { applyThemeClass, resolveThemeClass } from "../ui/theme";
 
 // One rendered item in the transcript. ts (epoch ms, stamped at creation) is
 // optional: restored session entries may lack it, and the timestamp display
@@ -46,7 +51,7 @@ type ChatEntry =
   | { kind: "tool_result"; id: string; name: string; isError: boolean; summary: string }
   | { kind: "tool_image"; id: string; name: string; mimeType: string; dataUrl?: string; unavailable?: boolean }
   | { kind: "progress"; id: string; message: string; activity?: boolean }
-  | { kind: "approval"; approvalId: string; toolName: string; status: string; reason?: string; checking?: boolean }
+  | { kind: "approval"; approvalId: string; toolName: string; status: string; reason?: string; executionReason?: boolean; checking?: boolean }
   | { kind: "notice"; code?: string; message: string; messageParams?: Record<string, string | number> }
   | { kind: "error"; code: string; message: string; messageParams?: Record<string, string | number>;
       rateLimit?: ProviderRateLimit; providerDetail?: string };
@@ -266,16 +271,17 @@ function applyDeclared(
   // key fronting many vendors, so no single built-in answer fits). That is sound
   // only because the probe proved the field is validated: an unvalidated field
   // records nothing, so a list here means the API accepted exactly these levels
-  // and refused the rest. "off" is kept if the table had it (it is Phoenix not
-  // sending the field, not a level), and a created control always gets "off" so
-  // the operator can decline it.
+  // and refused the rest. "off" is kept only if the table had it (it is Phoenix
+  // not sending the field, not a level) and the levels hold no "none". A created
+  // control gets no synthetic "off": omitting the field leaves the model at its
+  // default reasoning, so an accepted "none" (shown as Off) is the only real off.
   // Ollama is the one deliberate conversion: its fallback is boolean for older
   // servers, but a successful per-model probe proves the endpoint validates
   // effort levels, so the backend knows how to send the resulting dropdown values.
   if (declared.effort_levels?.length
       && (out.style === "effort" || kind === "ollama" || kind === "ollama_cloud")) {
     out.style = "effort";
-    const keepOff = out.thinking.length === 0 || out.thinking.some((o) => o.value === "off");
+    const keepOff = out.thinking.some((o) => o.value === "off") && !declared.effort_levels.includes("none");
     out.thinking = [
       ...(keepOff ? thinkOpts(["off"]) : []),
       ...thinkOpts(declared.effort_levels),
@@ -294,12 +300,62 @@ export function modelCaps(
   return applyDeclared(shippedCaps(kind, model, thinkingOn), declared, kind);
 }
 
+/** Claude models that keep thinking when the request leaves it out (Claude 5 on). */
+function claudeAlwaysThinks(m: string): boolean {
+  return /^claude-(?:[a-z]+-)?(?:[5-9]|\d{2})(?:[-.]|$)/.test(m) || /^claude-fable/.test(m);
+}
+
+/** Google's per-model Gemini thinking levels, or [] for a model without them. */
+function geminiLevels(m: string): string[] {
+  if (/gemini-3-pro/.test(m)) return ["low", "high"];
+  if (/gemini-3(\.\d+)?-flash(?!-lite)/.test(m) && !/gemini-3\.8/.test(m)) return ["minimal", "low", "medium", "high"];
+  if (/gemini-(?:[4-9]|3\.)/.test(m)) return ["low", "medium", "high"];
+  if (/gemini-2\.5-flash/.test(m)) return ["none", "low", "medium", "high"];
+  if (/gemini-2\.5/.test(m)) return ["low", "medium", "high"];
+  return [];
+}
+
+/** Whether a Grok model is at least major.minor (grok-4.20 is later than 4.6). */
+function grokAtLeast(m: string, major: number, minor: number): boolean {
+  const match = /^grok-(\d+)(?:[.-](\d+))?/.exec(m);
+  if (!match) return false;
+  const [have, sub] = [Number(match[1]), Number(match[2] ?? 0)];
+  return have > major || (have === major && sub >= minor);
+}
+
+/** OpenAI's documented reasoning levels and default for one model id, or null.
+ *
+ *  From OpenAI's per-model pages (2026-10-30). "none" turns reasoning off and is
+ *  absent where a model cannot stop reasoning (GPT-6 Astra, GPT-6.1 Sol, GPT-5
+ *  and the o-series); GPT-6 has no "minimal". The default is the model's own, so
+ *  an untouched control keeps OpenAI's behaviour.
+ */
+function openaiReasoning(m: string): { levels: string[]; defaultLevel: string } | null {
+  if (/^gpt-6-astra|^gpt-6\.1-sol/.test(m))
+    return { levels: ["low", "medium", "high", "xhigh", "max"], defaultLevel: "medium" };
+  if (/^gpt-6|^gpt-5\.[6-9]/.test(m))
+    return { levels: ["none", "low", "medium", "high", "xhigh", "max"], defaultLevel: "medium" };
+  if (/^gpt-5\.5/.test(m))
+    return { levels: ["none", "low", "medium", "high", "xhigh"], defaultLevel: "medium" };
+  if (/^gpt-5\.[2-4]/.test(m))
+    return { levels: ["none", "low", "medium", "high", "xhigh"], defaultLevel: "none" };
+  if (/^gpt-5\.1/.test(m))
+    return { levels: ["none", "low", "medium", "high"], defaultLevel: "none" };
+  if (/^gpt-5/.test(m))
+    return { levels: ["minimal", "low", "medium", "high"], defaultLevel: "medium" };
+  if (/^o\d/.test(m))
+    return { levels: ["low", "medium", "high"], defaultLevel: "medium" };
+  return null;
+}
+
 function shippedCaps(kind: AgentCliProviderKind, model: string, thinkingOn: boolean): ModelCaps {
   const m = (model || "").toLowerCase();
   switch (kind) {
     case "claude":
-      // Anthropic output_config.effort. Opus does not take temperature.
-      return { thinking: thinkOpts(["off", "low", "medium", "high", "xhigh", "max"]),
+      // Anthropic output_config.effort. Opus does not take temperature. Leaving
+      // thinking out turns it off only before the Claude 5 generation; from it
+      // on, the model still thinks adaptively, so no Off is offered there.
+      return { thinking: thinkOpts([...(claudeAlwaysThinks(m) ? [] : ["off"]), "low", "medium", "high", "xhigh", "max"]),
                style: "effort", defaultLevel: "high", temperature: false };
     case "deepseek":
       // A thinking on/off toggle plus reasoning_effort low/high/max, default high;
@@ -309,33 +365,35 @@ function shippedCaps(kind: AgentCliProviderKind, model: string, thinkingOn: bool
       return { thinking: thinkOpts(["off", "low", "high", "max"]), style: "effort",
                defaultLevel: "high", temperature: !thinkingOn };
     case "chatgpt": {
-      // OpenAI reasoning_effort (Chat Completions). gpt-5 supports none/minimal/
-      // low/medium/high (none = reasoning off); o-series is low/medium/high with
-      // no off. Reasoning models reject a custom temperature; plain gpt-* models
-      // have no thinking control and take temperature.
-      if (m.startsWith("gpt-5"))
-        return { thinking: thinkOpts(["none", "minimal", "low", "medium", "high"]), style: "effort",
-                 defaultLevel: "medium", temperature: false };
-      if (/^o\d/.test(m))
-        return { thinking: thinkOpts(["low", "medium", "high"]), style: "effort",
-                 defaultLevel: "medium", temperature: false };
+      // OpenAI reasoning.effort (Responses API). Reasoning models reject a custom
+      // temperature; plain gpt-* models have no thinking control and take it.
+      const reasoning = openaiReasoning(m);
+      if (reasoning)
+        return { thinking: thinkOpts(reasoning.levels), style: "effort",
+                 defaultLevel: reasoning.defaultLevel, temperature: false };
       return { thinking: [], style: "effort", defaultLevel: "high", temperature: true };
     }
     case "gemini": {
       // Gemini via Google's OpenAI-compatible endpoint: reasoning_effort maps to
-      // Gemini's thinking_level (minimal/low/medium/high, default medium). Google
-      // strongly recommends NOT setting temperature on its reasoning models, so no
-      // temperature control is offered. Thinking-capable models are 2.5 and 3.x.
-      if (m.includes("2.5") || m.includes("3.5") || m.includes("gemini-3"))
-        return { thinking: thinkOpts(["minimal", "low", "medium", "high"]), style: "effort",
-                 defaultLevel: "medium", temperature: false };
-      return { thinking: [], style: "effort", defaultLevel: "medium", temperature: false };
+      // the model's thinking level. Google strongly recommends NOT setting
+      // temperature on its reasoning models, so none is offered. Levels follow
+      // Google's per-model table; reasoning cannot be turned off on Gemini 3 or
+      // later, and only 2.5 Flash takes "none".
+      const levels = geminiLevels(m);
+      // Gemini 3 and later default to high thinking; 2.5 to a medium budget.
+      return { thinking: thinkOpts(levels), style: "effort",
+               defaultLevel: /gemini-2\./.test(m) ? "medium" : "high", temperature: false };
     }
     case "grok": {
-      // xAI reasoning_effort on chat completions. grok-3-mini and the grok-4
-      // reasoning models take low/high (newer models also accept medium, but
-      // off/low/high is the safe common set); grok-4 reasons even with none set.
-      // Sending an effort marks a reasoning turn, which drops temperature.
+      // xAI reasoning_effort. Grok 4.5 and later always reason (default high):
+      // low/medium/high, plus xhigh from 4.6. The multi-agent model reads the
+      // field as an agent count, so it gets no control. Older reasoning models
+      // take low/high and can run without it. Sending an effort marks a
+      // reasoning turn, which drops temperature.
+      if (m.includes("multi-agent")) return { thinking: [], style: "effort", defaultLevel: "high", temperature: false };
+      if (grokAtLeast(m, 4, 5))
+        return { thinking: thinkOpts(["low", "medium", "high", ...(grokAtLeast(m, 4, 6) ? ["xhigh"] : [])]),
+                 style: "effort", defaultLevel: "high", temperature: false };
       return { thinking: thinkOpts(["off", "low", "high"]), style: "effort",
                defaultLevel: "low", temperature: !thinkingOn };
     }
@@ -353,24 +411,36 @@ function shippedCaps(kind: AgentCliProviderKind, model: string, thinkingOn: bool
       return { thinking: [], style: "effort", defaultLevel: "high", temperature: true };
     }
     case "meta":
-      // Meta's Model API reasoning_effort. Muse Spark always reasons (it rejects
-      // "none" with a 400), so no off is offered, and "max" is not one of Meta's
-      // levels. Meta tunes the model for its default temperature, so temperature
-      // is not offered either.
-      return { thinking: thinkOpts(["minimal", "low", "medium", "high", "xhigh"]),
+      // Meta's Model API reasoning_effort. Muse models always reason (they reject
+      // "none" with a 400), so no off is offered; Muse Wonder and Spark 1.3 also
+      // take "max". Meta tunes the models for their default temperature, so
+      // temperature is not offered either.
+      return { thinking: thinkOpts(["minimal", "low", "medium", "high", "xhigh",
+                                    ...(/^muse-wonder|^muse-spark-1\.3(?!.*contributor)/.test(m) ? ["max"] : [])]),
                style: "effort", defaultLevel: "medium", temperature: false };
     case "minimax":
-      // MiniMax via its Anthropic-compatible API: thinking is a plain on/off
-      // adaptive toggle (no effort levels, no custom temperature). M2 models
-      // always reason; turning thinking off there is a no-op on the model side.
+      // MiniMax via its Anthropic-compatible API (no custom temperature). M3.1
+      // Flash takes an effort (default max, no "none"); M3 has an on/off adaptive
+      // toggle; M2 models always reason, so they get no control.
+      if (/^minimax-m3\.1/.test(m))
+        return { thinking: thinkOpts(["low", "medium", "high", "max"]), style: "effort",
+                 defaultLevel: "max", temperature: false };
+      if (/^minimax-m2/.test(m)) return { thinking: [], style: "effort", defaultLevel: "high", temperature: false };
       return { thinking: thinkOpts(["off", "on"]), style: "boolean", defaultLevel: "on", temperature: false };
     case "mistral":
-      // Mistral documents adjustable reasoning on these two aliases, with the
-      // stable `none` and `high` levels. Other Mistral models keep their own
-      // default. Chat Completions supports temperature in either case.
-      if (m === "mistral-small-latest" || m === "mistral-medium-3-5")
+      // Mistral's reasoning models: Small 4 and Medium 3.5 take none/high,
+      // Large 4 takes low/medium/high and always reasons, and the hosted GLM 5.3
+      // takes low/high/max. Other models keep their own default. Chat
+      // Completions supports temperature in every case.
+      if (/^mistral-(small-(latest|2603|4)|medium-(latest|3-5))/.test(m))
         return { thinking: thinkOpts(["none", "high"]), style: "effort",
                  defaultLevel: "high", temperature: true };
+      if (/^mistral-large-(latest|4)/.test(m))
+        return { thinking: thinkOpts(["low", "medium", "high"]), style: "effort",
+                 defaultLevel: "high", temperature: true };
+      if (/^zai-glm-5/.test(m))
+        return { thinking: thinkOpts(["low", "high", "max"]), style: "effort",
+                 defaultLevel: "max", temperature: true };
       return { thinking: [], style: "effort", defaultLevel: "high", temperature: true };
     case "ollama":
     case "ollama_cloud":
@@ -388,8 +458,19 @@ function shippedCaps(kind: AgentCliProviderKind, model: string, thinkingOn: bool
       // rather than only narrowing it. Until then the model still reasons at its
       // own default; only the ability to choose is missing.
       return { thinking: [], style: "effort", defaultLevel: "high", temperature: true };
-    case "mimo":
     case "zai":
+      // GLM 5.2 and later take reasoning_effort (default max); 5.3 and 4.7
+      // cannot turn thinking off, and 5.2 turns it off with "none".
+      if (/^glm-5\.[3-9]|^glm-[6-9]/.test(m))
+        return { thinking: thinkOpts(["low", "high", "max"]), style: "effort",
+                 defaultLevel: "max", temperature: false };
+      if (/^glm-5\.2/.test(m))
+        return { thinking: thinkOpts(["none", "low", "medium", "high", "max"]), style: "effort",
+                 defaultLevel: "max", temperature: false };
+      if (/^glm-4\.7/.test(m)) return { thinking: [], style: "effort", defaultLevel: "high", temperature: false };
+      return { thinking: thinkOpts(["off", "on"]), style: "boolean",
+               defaultLevel: "on", temperature: !thinkingOn };
+    case "mimo":
     case "qwen":
       // These providers publish a boolean thinking control. Their APIs own the
       // reasoning depth, so Phoenix exposes only on and off and omits a custom
@@ -462,6 +543,10 @@ interface Props {
   hass?: unknown;
   getHass?: () => unknown;
   summonVersion?: number;
+  /** My Workspace's Agent Chat slot while it is on screen: the window draws itself into it. */
+  dockMount?: HTMLElement | null;
+  /** Whether Agent Chat belongs in My Workspace, and the menu item that changes it; absent where it cannot dock. */
+  dock?: { docked: boolean; toggle: () => void } | null;
 }
 
 interface AgentCliHass {
@@ -495,29 +580,9 @@ function forgetAgentCliPopup(popup: Window | null): void {
   if (activePopupWindow === popup) activePopupWindow = null;
 }
 
-// The panel stylesheet is authored for a shadow host. A same-origin popup has
-// no shadow host, so translate those selectors to the document root while
-// preserving the exact same tokens and component rules.
-const POPUP_PANEL_CSS = PANEL_CSS
-  .replace(/:host\(([^)]*)\)/g, ":root$1")
-  .replaceAll(":host", ":root");
-
-function resolvePopupTheme(hass: unknown): "phx-theme-dark" | "phx-theme-light" | null {
-  const typedHass = hass as AgentCliHass | null | undefined;
-  let saved: string | null = null;
-  try { saved = localStorage.getItem("phx-theme"); } catch { /* storage blocked */ }
-  if (saved === "light") return "phx-theme-light";
-  if (saved === "dark") return "phx-theme-dark";
-  if (typedHass?.themes?.darkMode === true) return "phx-theme-dark";
-  if (typedHass?.themes?.darkMode === false) return "phx-theme-light";
-  return null;
-}
-
 function applyPopupTheme(popup: Window, hass: unknown): void {
-  const root = popup.document.documentElement;
-  root.classList.remove("phx-theme-dark", "phx-theme-light");
-  const theme = resolvePopupTheme(hass);
-  if (theme) root.classList.add(theme);
+  const darkMode = (hass as AgentCliHass | null | undefined)?.themes?.darkMode;
+  applyThemeClass(popup.document.documentElement, resolveThemeClass(darkMode));
 }
 
 const RESIZE_MIN_W = 320, RESIZE_MIN_H = 280;
@@ -620,9 +685,12 @@ export function clampPosToViewport(
   };
 }
 
+/** Statuses a card never asks about again. */
+const TERMINAL_APPROVAL_STATUSES: ReadonlySet<string> = new Set(["approved", "rejected", "cancelled", "expired", "failed", "resolved"]);
+
 export function AgentCliWindow({
   accessKeys, instances, scrollbackLines, initialAccessKeyId, onClose, hass = null, getHass: getLiveHass,
-  summonVersion,
+  summonVersion, dockMount = null, dock = null,
 }: Props) {
   // Restore persisted window state (survives navigation away/back and reopen).
   const persistenceOwner = useRef(getAgentCliOwner()).current;
@@ -635,10 +703,10 @@ export function AgentCliWindow({
   const [models, setModels] = useState<string[]>([]);
   const [model, setModel] = useState<string>(saved.model);
   const restoredApprovals = useRef(new Set<string>());
-  const [turns, setTurns] = useState<Turn[]>(() => restorableTurns(getSessionTurns()).map((turn) => ({
+  const [turns, setTurns] = useState<Turn[]>(() => (saved.freshConversation ? [] : restorableTurns(getSessionTurns())).map((turn) => ({
     ...turn,
     entries: turn.entries.map((entry) => {
-      if (entry.kind !== "approval" || ["approved", "rejected", "cancelled", "expired", "failed", "resolved"].includes(entry.status)) return entry;
+      if (entry.kind !== "approval" || TERMINAL_APPROVAL_STATUSES.has(entry.status)) return entry;
       restoredApprovals.current.add(entry.approvalId);
       return { ...entry, checking: true };
     }),
@@ -652,6 +720,8 @@ export function AgentCliWindow({
   const [attachments, setAttachments] = useState<ChatAttachment[]>([]);
   const [attachError, setAttachError] = useState("");
   const [sending, setSending] = useState(false);
+  // The server's account of the current model call, shown in place of "Working…".
+  const [liveStatus, setLiveStatus] = useState<string | null>(null);
   const turnGenerationRef = useRef(0);
   // Non-null when the last turn paused at the round-cap checkpoint (its value is
   // the round count reached); drives the Continue/Stop control.
@@ -664,7 +734,9 @@ export function AgentCliWindow({
   });
   const minimized = mode === "min";
   const maximized = mode === "max";
-  const [gearOpen, setGearOpen] = useState(false);
+  // The connection fields (key, provider, model and its options) open under the line that names them.
+  const [connectionOpen, setConnectionOpen] = useState(false);
+  const connectionId = useId();
   const [options, setOptions] = useState<GenOptions>(saved.options);
   const [showFooter, setShowFooter] = useState(saved.showFooter);
   const [showTimestamps, setShowTimestamps] = useState(saved.showTimestamps);
@@ -672,7 +744,7 @@ export function AgentCliWindow({
   // Provider-reported token usage for this conversation (session lifecycle,
   // like the transcript). The stream's usage events carry TURN-cumulative
   // totals, so each event is added to the session base captured at send time.
-  const [usage, setUsage] = useState<SessionUsage>(() => getSessionUsage());
+  const [usage, setUsage] = useState<SessionUsage>(() => (saved.freshConversation ? { input: 0, output: 0, context: 0, noData: false } : getSessionUsage()));
   // Screen-reader announcement of discrete chat events (completed replies,
   // approvals, errors). Deliberately NOT the streaming transcript itself:
   // a live region over token-by-token deltas would announce every chunk.
@@ -680,8 +752,13 @@ export function AgentCliWindow({
   const [popupMount, setPopupMount] = useState<HTMLElement | null>(null);
   const [popOutError, setPopOutError] = useState("");
   const poppedOut = popupMount !== null;
+  // Docked in My Workspace: the workspace window gives the size and place, and its title bar moves and closes it.
+  const docked = dockMount !== null && !poppedOut;
   const [narrowViewport, setNarrowViewport] = useState(isNarrowViewport);
   const agentChatTitle = t("agentchat.title");
+  // Home Assistant away: the chat floats over every page and pops out into a window of its
+  // own, where the panel's notice cannot reach it, so it says so and takes no work (user, 2026-10-29).
+  const away = useHomeAssistantAway(() => api.getSettings());
   const currentHass = useCallback(() => getLiveHass?.() ?? hass, [getLiveHass, hass]);
   const agentChatLanguage = resolveLanguage(currentHass());
 
@@ -692,6 +769,9 @@ export function AgentCliWindow({
   const [reviewingApprovalId, setReviewingApprovalId] = useState<string | null>(null);
 
   const rootRef = useRef<HTMLDivElement>(null);
+  // Menus open inside the window, so they follow it into a separate browser window.
+  const [rootEl, setRootEl] = useState<HTMLDivElement | null>(null);
+  const attachRoot = useCallback((el: HTMLDivElement | null) => { rootRef.current = el; setRootEl(el); }, []);
   const bodyRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -766,7 +846,7 @@ export function AgentCliWindow({
     const ownsGesture = (target: EventTarget | null): boolean => {
       const element = target as { closest?: (selector: string) => Element | null } | null;
       if (typeof element?.closest !== "function") return false;
-      if (element.closest(".agentcli-controls, .agentcli-input, .agentcli-continue, .agentcli-footer, .agentcli-gear")) {
+      if (element.closest(".agentcli-connection, .agentcli-input, .agentcli-continue, .agentcli-footer")) {
         return true;
       }
       const transcript = bodyRef.current;
@@ -828,7 +908,15 @@ export function AgentCliWindow({
   // The prefill is one-shot: consumed into the input above, then cleared so it
   // does not reappear on a later open.
   useEffect(() => { if (saved.prefill) patchDurable({ prefill: "" }, persistenceOwner); }, [persistenceOwner, saved.prefill]);
-  // The transcript is session-only (survives remount within a page load).
+  // A fresh conversation is one-shot too: the cleared transcript is saved by the
+  // effect below, and the usage counters are saved here.
+  useEffect(() => {
+    if (!saved.freshConversation) return;
+    patchDurable({ freshConversation: false }, persistenceOwner);
+    setSessionUsage({ input: 0, output: 0, context: 0, noData: false }, persistenceOwner);
+  }, [persistenceOwner, saved.freshConversation]);
+  // The transcript is kept in this browser's storage for the Home Assistant user
+  // (utils/agentcli_state), so it survives a remount and a reload.
   useEffect(() => { setSessionTurns(turns, persistenceOwner); }, [persistenceOwner, turns]);
   // Mirror the unsent message box into the same session tier. Done as an effect
   // rather than at each setInput call site so every path stays in sync: typing,
@@ -983,7 +1071,6 @@ export function AgentCliWindow({
     setTurns([]);
     updateLive([]);
     resetUsage();
-    setGearOpen(false);
     setAnnouncement("");
     // Images waiting to be sent belong to the conversation being cleared.
     setAttachments([]);
@@ -1121,7 +1208,7 @@ export function AgentCliWindow({
   ) => {
     if (sending) return;
     const generation = ++turnGenerationRef.current;
-    setGearOpen(false);
+    setConnectionOpen(false);
     setPendingContinue(null);
     cancelledRef.current = false;
     lastQueryRef.current = mode === "continue" ? "" : text;
@@ -1136,6 +1223,7 @@ export function AgentCliWindow({
     usageBaseRef.current = stateless ? { input: 0, output: 0 }
       : { input: usageRef.current.input, output: usageRef.current.output };
     turnSawUsageRef.current = false;
+    setLiveStatus(null);
     updateLive(mode === "continue" ? [] : [{
       kind: "user", text, ts: Date.now(),
       ...(images.length ? { images: images.map((image) => ({ name: image.name, dataUrl: image.dataUrl })) } : {}),
@@ -1201,13 +1289,18 @@ export function AgentCliWindow({
           if (cancelledRef.current || turnGenerationRef.current !== generation) return;
           const p = (payload ?? {}) as Record<string, unknown>;
           switch (name) {
+            case "status":
+              setLiveStatus(modelStatusText(p));
+              break;
             case "assistant_delta":
+              setLiveStatus(null);
               appendAssistant(String(p.text ?? ""), false);
               break;
             case "thinking_delta":
               appendAssistant(String(p.text ?? ""), true);
               break;
             case "tool_call":
+              setLiveStatus(null);
               push({ kind: "tool_call", id: String(p.id ?? ""), name: String(p.name ?? ""), args: p.arguments });
               showActivity(String(p.name ?? ""));
               break;
@@ -1257,7 +1350,8 @@ export function AgentCliWindow({
               updateLive((prev) => prev.map((e) =>
                 e.kind === "approval" && e.approvalId === p.approval_id
                   ? { ...e, status: String(p.status ?? "resolved"),
-                      reason: typeof p.reason === "string" && p.reason ? p.reason : undefined } : e));
+                      reason: typeof p.reason === "string" && p.reason ? p.reason : undefined,
+                      executionReason: p.reason_kind === "execution" } : e));
               setAnnouncement(t("agentchat.announceResolved", { status: approvalStatusLabel(String(p.status ?? "resolved")) }));
               break;
             case "usage": {
@@ -1290,6 +1384,7 @@ export function AgentCliWindow({
               setPendingContinue(Number(p.iterations ?? 0) || 0);
               break;
             case "error":
+              setLiveStatus(null);
               {
                 const code = String(p.code ?? "error");
                 const message = String(p.message ?? "");
@@ -1321,7 +1416,20 @@ export function AgentCliWindow({
     } catch (err) {
       // An intentional cancel aborts the fetch; don't surface that as an error.
       if (!cancelledRef.current && turnGenerationRef.current === generation) {
-        push({ kind: "error", code: "network", message: err instanceof Error ? err.message : t("agentchat.requestFailed") });
+        // Home Assistant going away is not the model provider failing, and the window
+        // already says so above the composer: no red line is added, and what was typed
+        // comes back so it can be sent again (user, 2026-10-29).
+        // A server answer carries its HTTP status; a network failure does not.
+        if (err instanceof Error && typeof (err as { status?: unknown }).status === "number") {
+          // Phoenix answered and refused before any reply streamed (the kill switch, a key or
+          // account no longer usable, an attachment over its limit): its own message says why,
+          // so it is shown as is, never replaced by the provider-unavailable text.
+          push({ kind: "error", code: "", message: err.message });
+        } else if (homeAssistantReachable()) {
+          push({ kind: "error", code: "network", message: err instanceof Error ? err.message : t("agentchat.requestFailed") });
+        } else if (lastQueryRef.current) {
+          setInput((current) => current || lastQueryRef.current);
+        }
       }
     } finally {
       if (abortRef.current === ac) abortRef.current = null;
@@ -1505,6 +1613,23 @@ export function AgentCliWindow({
         ? { ...turn, entries: turn.entries.map(mapEntry) } : turn));
   }, [updateLive]);
 
+  // Home Assistant restarting cancels the approvals it was still holding, so a
+  // card left offering Approve and Reject is stale. When it answers again, every
+  // unresolved card is verified the same way a restored one is (user, 2026-10-29).
+  const turnsRef = useRef(turns);
+  turnsRef.current = turns;
+  const [verifyNonce, setVerifyNonce] = useState(0);
+  useEffect(() => onConnectionChange((up) => {
+    if (!up) return;
+    let found = false;
+    for (const entry of [...liveRef.current, ...turnsRef.current.flatMap((turn) => turn.entries)]) {
+      if (entry.kind !== "approval" || TERMINAL_APPROVAL_STATUSES.has(entry.status)) continue;
+      restoredApprovals.current.add(entry.approvalId);
+      found = true;
+    }
+    if (found) setVerifyNonce((n) => n + 1);
+  }), []);
+
   // Resolution events sent while this document was absent cannot reach its
   // subscription. Verify restored cards before offering actions, and poll until
   // terminal so a disconnect cleanup that lands just after reload is not missed.
@@ -1533,7 +1658,7 @@ export function AgentCliWindow({
     };
     void refresh();
     return () => { disposed = true; clearTimeout(timer); };
-  }, [updateApprovalEntry]);
+  }, [updateApprovalEntry, verifyNonce]);
 
   // Learn about approvals resolved or claimed ELSEWHERE, straight off the HA bus.
   //
@@ -1567,7 +1692,7 @@ export function AgentCliWindow({
 
   // --- drag ---
   const startDrag = useCallback((e: React.PointerEvent) => {
-    if (maximized || poppedOut) return;  // full screen or popup: nothing to drag
+    if (maximized || poppedOut || docked) return;  // full screen, popup or docked: nothing to drag
     if ((e.target as HTMLElement).closest("button, select")) return;
     e.preventDefault();
     const startX = e.clientX, startY = e.clientY;
@@ -1618,7 +1743,7 @@ export function AgentCliWindow({
     };
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", up);
-  }, [maximized, poppedOut, minimized, pillPos, pos, size, persistenceOwner]);
+  }, [maximized, poppedOut, docked, minimized, pillPos, pos, size, persistenceOwner]);
 
   // --- resize ---
   const startResize = useCallback((dir: string) => (e: React.PointerEvent) => {
@@ -1676,7 +1801,7 @@ export function AgentCliWindow({
   // a popped-out chat is already in a separate browser window. Navigation stays
   // on HA's soft SPA path so the turn survives.
   const openReview = useCallback((approvalId: string) => {
-    if (!poppedOut && isNarrowViewport()) {
+    if (!poppedOut && !docked && isNarrowViewport()) {
       reviewRestoreRef.current = mode !== "min"
         ? { approvalId, mode }
         : null;
@@ -1696,7 +1821,7 @@ export function AgentCliWindow({
     } catch {
       window.location.href = url;
     }
-  }, [minimize, mode, poppedOut]);
+  }, [minimize, mode, poppedOut, docked]);
 
   const maximize = useCallback(() => setMode("max"), []);
 
@@ -1771,57 +1896,17 @@ export function AgentCliWindow({
     // conversation behind browser chrome. The control is hidden there too,
     // but keep the action itself guarded against stale or scripted calls.
     if (isNarrowViewport()) return;
-    const popupWidth = Math.max(360, Math.min(size.w, window.screen.availWidth || size.w));
-    const popupHeight = Math.max(360, Math.min(size.h, window.screen.availHeight || size.h));
-    const left = Math.max(0, Math.round(window.screenX + (window.outerWidth - popupWidth) / 2));
-    const top = Math.max(0, Math.round(window.screenY + (window.outerHeight - popupHeight) / 2));
-    let popup: Window | null = null;
-    try {
-      popup = window.open(
-        "",
-        POPUP_WINDOW_NAME,
-        [
-          "popup=yes",
-          `width=${popupWidth}`,
-          `height=${popupHeight}`,
-          `left=${left}`,
-          `top=${top}`,
-          "toolbar=no",
-          "location=no",
-          "menubar=no",
-          "status=no",
-          "scrollbars=no",
-          "resizable=yes",
-        ].join(","),
-      );
-    } catch {
-      // Browser policy can reject window.open by returning null or throwing.
-    }
-    if (!popup) {
+    const opened = openPopupWindow({
+      name: POPUP_WINDOW_NAME, mountId: POPUP_MOUNT_ID, width: size.w, height: size.h,
+      title: agentChatTitle, language: agentChatLanguage, background: "var(--phx-agentcli-surface)",
+    });
+    if (!opened) {
       const message = t("agentchat.popOutBlocked");
       setPopOutError(message);
       setAnnouncement(message);
       return;
     }
-
-    const doc = popup.document;
-    const base = doc.createElement("base");
-    base.href = window.location.href;
-    const viewport = doc.createElement("meta");
-    viewport.name = "viewport";
-    viewport.content = "width=device-width, initial-scale=1";
-    const styleEl = doc.createElement("style");
-    styleEl.textContent = `${POPUP_PANEL_CSS}\n
-      html, body, #${POPUP_MOUNT_ID} { width: 100%; height: 100%; margin: 0; overflow: hidden; }
-      body { background: var(--phx-agentcli-surface); }
-      #${POPUP_MOUNT_ID} { position: relative; }
-    `;
-    doc.head.replaceChildren(base, viewport, styleEl);
-    doc.title = agentChatTitle;
-    doc.documentElement.lang = agentChatLanguage;
-    const mount = doc.createElement("div");
-    mount.id = POPUP_MOUNT_ID;
-    doc.body.replaceChildren(mount);
+    const { window: popup, mount } = opened;
 
     closingPopupRef.current = false;
     activePopupWindow = popup;
@@ -1830,15 +1915,14 @@ export function AgentCliWindow({
     setMode("normal");
     setPopOutError("");
     setPopupMount(mount);
-    popup.focus();
   }, [agentChatLanguage, agentChatTitle, currentHass, size]);
 
   const noInstances = instances.length === 0;
 
   const pillXY = pillPos.x >= 0 ? pillPos : pos;  // fall back before first seed
-  const collapsed = minimized && !poppedOut;
+  const collapsed = minimized && !poppedOut && !docked;
   // Maximized geometry comes entirely from CSS (inset: 0); no inline style.
-  const geometryStyle: React.CSSProperties = poppedOut || maximized
+  const geometryStyle: React.CSSProperties = poppedOut || docked || maximized
     ? {}
     : collapsed
       ? { left: pillXY.x, top: pillXY.y }
@@ -1852,8 +1936,28 @@ export function AgentCliWindow({
     setTextSizePt((current) => normalizeAgentCliTextSize(current + delta));
   };
 
+  // The header menu: the connection, what the conversation shows, text size, and clearing it.
+  const chatMenu = (): MenuEntry[] => [
+    { id: "connection", label: t("agentchat.connection"), toggle: true, checked: connectionOpen, onSelect: () => setConnectionOpen((open) => !open) },
+    { id: "verbose", label: t("agentchat.verbose"), hint: t("agentchat.verboseHint"), toggle: true, checked: options.verbose,
+      onSelect: () => setOptions((o) => ({ ...o, verbose: !o.verbose })) },
+    { id: "timestamps", label: t("agentchat.showTimestamps"), hint: t("agentchat.showTimestampsHint"), toggle: true, checked: showTimestamps,
+      onSelect: () => setShowTimestamps((on) => !on) },
+    { id: "footer", label: t("agentchat.showFooter"), hint: t("agentchat.showFooterHint"), toggle: true, checked: showFooter,
+      onSelect: () => setShowFooter((on) => !on) },
+    "separator",
+    { id: "smaller", label: t("agentchat.decreaseTextSize"), disabled: textSizePt <= AGENTCLI_TEXT_SIZE_MIN_PT, onSelect: () => adjustTextSize(-AGENTCLI_TEXT_SIZE_STEP_PT) },
+    { id: "larger", label: t("agentchat.increaseTextSize"), disabled: textSizePt >= AGENTCLI_TEXT_SIZE_MAX_PT, onSelect: () => adjustTextSize(AGENTCLI_TEXT_SIZE_STEP_PT) },
+    "separator",
+    { id: "clear", label: t("agentchat.clearHistory"), onSelect: clearHistory },
+    ...(dock ? ["separator" as const, dock.docked
+      ? { id: "float", label: t("agentchat.floatChat"), onSelect: dock.toggle }
+      : { id: "dock", label: t("workspace.addToMy"), onSelect: dock.toggle }] : []),
+  ];
+
   const content = (
-    <div ref={rootRef} className={`agentcli-window${collapsed ? " agentcli-minimized" : ""}${reviewingApprovalId ? " agentcli-reviewing" : ""}${maximized && !poppedOut ? " agentcli-maximized" : ""}${poppedOut ? " agentcli-popped-out" : ""}`} style={style} role="dialog" aria-label={agentChatTitle}
+    <MenuRootContext.Provider value={rootEl}>
+    <div ref={attachRoot} className={`agentcli-window${collapsed ? " agentcli-minimized" : ""}${reviewingApprovalId ? " agentcli-reviewing" : ""}${maximized && !poppedOut && !docked ? " agentcli-maximized" : ""}${poppedOut ? " agentcli-popped-out" : ""}${docked ? " agentcli-docked" : ""}`} style={style} role={docked ? "region" : "dialog"} aria-label={agentChatTitle}
          // Files dropped anywhere on the window attach; unhandled, the browser
          // would open the image in place of Home Assistant.
          onDragOver={(e) => { if (e.dataTransfer?.types.includes("Files")) e.preventDefault(); }}
@@ -1867,13 +1971,18 @@ export function AgentCliWindow({
           tech reliably picks up updates (live regions must pre-exist). */}
       <div className="sr-only" role="status">{announcement}</div>
       {collapsed && narrowViewport ? (
-        <button type="button" className="agentcli-mobile-pill" onClick={restore}
+        // On a phone Chat comes back full screen, as when the toolbar opens it.
+        <button type="button" className="agentcli-mobile-pill" onClick={() => (isNarrowViewport() ? setMode("max") : restore())}
                 title={t("agentchat.restore")} aria-label={t("agentchat.restore")}>
           <img src={PHOENIX_ICON} className="agentcli-title-icon" alt="" />
         </button>
       ) : <div className="agentcli-titlebar" onPointerDown={startDrag}>
-        <span className="agentcli-title"><img src={PHOENIX_ICON} className="agentcli-title-icon" alt="" />{agentChatTitle}</span>
+        <span className="agentcli-title">{collapsed && <img src={PHOENIX_ICON} className="agentcli-title-icon" alt="" />}{agentChatTitle}</span>
         <div className="agentcli-titlebar-actions">
+          {!collapsed && (
+            <MenuButton label={t("agentchat.options")} icon={<Icon name="chatMenu" />} items={chatMenu}
+              className="agentcli-icon-btn agentcli-menu-btn" />
+          )}
           {(!narrowViewport || poppedOut) && (
             <button
               className="agentcli-icon-btn agentcli-pop-btn"
@@ -1882,39 +1991,25 @@ export function AgentCliWindow({
               onClick={poppedOut ? popIn : popOut}
             >
               {poppedOut ? (
-                <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false">
-                  <path d="M19 19H5V5H12V3H5C3.89 3 3 3.9 3 5V19A2 2 0 0 0 5 21H19A2 2 0 0 0 21 19V12H19V19Z" />
-                  <path d="M8 16V10L10.59 12.59L19.59 3.59L21 5L12 14L14 16H8Z" />
-                </svg>
+                <Icon name="popIn" />
               ) : (
-                <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false">
-                  <path d="M14 3V5H17.59L7.76 14.83L9.17 16.24L19 6.41V10H21V3M19 19H5V5H12V3H5C3.89 3 3 3.9 3 5V19A2 2 0 0 0 5 21H19A2 2 0 0 0 21 19V12H19V19Z" />
-                </svg>
+                <Icon name="popOut" />
               )}
             </button>
           )}
-          {!collapsed && (
-            <button className="agentcli-icon-btn agentcli-gear-btn" title={t("agentchat.options")} aria-label={t("agentchat.options")}
-                    aria-expanded={gearOpen}
-                    onClick={() => setGearOpen((v) => !v)}>
-              <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false">
-                <path d="M12,15.5A3.5,3.5 0 0,1 8.5,12A3.5,3.5 0 0,1 12,8.5A3.5,3.5 0 0,1 15.5,12A3.5,3.5 0 0,1 12,15.5M19.43,12.97C19.47,12.65 19.5,12.33 19.5,12C19.5,11.67 19.47,11.34 19.43,11L21.54,9.37C21.73,9.22 21.78,8.95 21.66,8.73L19.66,5.27C19.54,5.05 19.27,4.96 19.05,5.05L16.56,6.05C16.04,5.66 15.5,5.32 14.87,5.07L14.5,2.42C14.46,2.18 14.25,2 14,2H10C9.75,2 9.54,2.18 9.5,2.42L9.13,5.07C8.5,5.32 7.96,5.66 7.44,6.05L4.95,5.05C4.73,4.96 4.46,5.05 4.34,5.27L2.34,8.73C2.21,8.95 2.27,9.22 2.46,9.37L4.57,11C4.53,11.34 4.5,11.67 4.5,12C4.5,12.33 4.53,12.65 4.57,12.97L2.46,14.63C2.27,14.78 2.21,15.05 2.34,15.27L4.34,18.73C4.46,18.95 4.73,19.03 4.95,18.95L7.44,17.94C7.96,18.34 8.5,18.68 9.13,18.93L9.5,21.58C9.54,21.82 9.75,22 10,22H14C14.25,22 14.46,21.82 14.5,21.58L14.87,18.93C15.5,18.67 16.04,18.34 16.56,17.94L19.05,18.95C19.27,19.03 19.54,18.95 19.66,18.73L21.66,15.27C21.78,15.05 21.73,14.78 21.54,14.63L19.43,12.97Z" />
-              </svg>
-            </button>
-          )}
-          {!poppedOut && mode !== "min" && (
+          {!poppedOut && !docked && mode !== "min" && (
             <button className="agentcli-icon-btn" title={t("agentchat.minimize")} aria-label={t("agentchat.minimize")}
-                    onClick={minimize}>&minus;</button>
+                    onClick={minimize}><Icon name="minimize" /></button>
           )}
-          {!poppedOut && mode !== "max" && (
+          {!poppedOut && !docked && mode !== "max" && (
             <button className="agentcli-icon-btn" title={t("agentchat.maximize")} aria-label={t("agentchat.maximize")}
-                    onClick={maximize}>□</button>
+                    onClick={maximize}><Icon name="maximize" /></button>
           )}
-          {!poppedOut && mode !== "normal" && (
+          {!poppedOut && !docked && mode !== "normal" && (
             <button className="agentcli-icon-btn" title={t("agentchat.restore")} aria-label={t("agentchat.restore")}
-                    onClick={restore}>&#10064;</button>
+                    onClick={restore}><Icon name="restore" /></button>
           )}
-          <button className="agentcli-icon-btn" title={t("common.close")} aria-label={t("common.close")} onClick={handleClose}>&times;</button>
+          {!docked && <button className="agentcli-icon-btn" title={t("common.close")} aria-label={t("common.close")} onClick={handleClose}><Icon name="close" /></button>}
         </div>
       </div>}
 
@@ -1922,84 +2017,77 @@ export function AgentCliWindow({
         <div className="agentcli-popout-error" role="alert">{popOutError}</div>
       )}
 
-      {gearOpen && !collapsed && (
-        <div className="agentcli-gear">
-          {caps.thinking.length > 0 && (
-            // One dropdown carries this provider's real API thinking levels.
-            <label className="agentcli-gear-row">
-              {kind === "ollama" ? t("agentchat.thinkingOllama") : t("agentchat.thinking")}
-              <select className="input agentcli-select" value={thinkValue(caps, options)}
-                      onChange={(e) => applyThink(caps, e.target.value, setOptions)}>
-                {caps.thinking.map((opt) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
-              </select>
-            </label>
-          )}
-          {caps.note && (
-            <div className="agentcli-gear-note">{caps.note}</div>
-          )}
-          {caps.temperature && (
-            <label className="agentcli-gear-row">
-              {t("agentchat.temperature")}
-              <input type="number" step="0.1" min="0" max="2" value={options.temperature} placeholder={t("agentchat.temperatureDefault")}
-                     onChange={(e) => setOptions((o) => ({ ...o, temperature: e.target.value }))} />
-            </label>
-          )}
-          <div className="agentcli-gear-row" title={t("agentchat.verboseHint")}>
-            <span>{t("agentchat.verbose")}</span>
-            <label className="toggle-switch">
-              <input type="checkbox" checked={options.verbose} aria-label={t("agentchat.verbose")}
-                     onChange={(e) => setOptions((o) => ({ ...o, verbose: e.target.checked }))} />
-              <span className="toggle-switch-track" />
-            </label>
-          </div>
-          <div className="agentcli-gear-row" title={t("agentchat.showTimestampsHint")}>
-            <span>{t("agentchat.showTimestamps")}</span>
-            <label className="toggle-switch">
-              <input type="checkbox" checked={showTimestamps} aria-label={t("agentchat.showTimestamps")}
-                     onChange={(e) => setShowTimestamps(e.target.checked)} />
-              <span className="toggle-switch-track" />
-            </label>
-          </div>
-          <div className="agentcli-gear-row" title={t("agentchat.showFooterHint")}>
-            <span>{t("agentchat.showFooter")}</span>
-            <label className="toggle-switch">
-              <input type="checkbox" checked={showFooter} aria-label={t("agentchat.showFooter")}
-                     onChange={(e) => setShowFooter(e.target.checked)} />
-              <span className="toggle-switch-track" />
-            </label>
-          </div>
-          <button className="btn btn-outline btn-sm agentcli-gear-clear" onClick={clearHistory}>{t("agentchat.clearHistory")}</button>
-          <button className="btn btn-primary btn-sm" onClick={() => setGearOpen(false)}>{t("common.close")}</button>
-        </div>
-      )}
-
       {!collapsed && (
         <>
-          <div className="agentcli-controls">
-            <label className="agentcli-control" title={t("agentchat.accessKeyHint")}>
-              <span>{t("agentchat.accessKey")}</span>
-              <select className="input agentcli-select" value={accessKeyId} onChange={(e) => { setGearOpen(false); setAccessKeyId(e.target.value); }} aria-label={t("agentchat.accessKey")} disabled={sending}>
-                {accessKeys.map((tok) => <option key={tok.id} value={tok.id}>{tok.name}</option>)}
-              </select>
-            </label>
-            <label className="agentcli-control" title={t("agentchat.providerHint")}>
-              <span>{t("agentchat.provider")}</span>
-              <select className="input agentcli-select" value={instanceId} onChange={(e) => { setGearOpen(false); setInstanceId(e.target.value); }} aria-label={t("agentchat.provider")} disabled={sending || noInstances}>
-                {noInstances
-                  ? <option value="">{t("common.none")}</option>
-                  : instances.map((i) => <option key={i.id} value={i.id}>{i.name}</option>)}
-              </select>
-            </label>
-            <label className="agentcli-control" title={t("agentchat.modelHint")}>
-              <span>{t("agentchat.model")}</span>
-              <select className="input agentcli-select" value={model} onChange={(e) => { setGearOpen(false); setModel(e.target.value); }} aria-label={t("agentchat.model")} disabled={sending || !models.length}>
-                {noInstances
-                  ? <option value="">{t("common.none")}</option>
-                  : models.length
-                    ? models.map((m) => <option key={m} value={m}>{m}</option>)
-                    : <option value="">{t("agentchat.noModels")}</option>}
-              </select>
-            </label>
+          {/* One line naming the key, provider and model; the triangle beside it opens the fields that change them. */}
+          <div className="agentcli-connection" data-guide="window.agentChat#connection">
+            <div className="agentcli-connection-head">
+              {/* Only the triangle opens the fields: the line itself is text, not a control (user, 2026-10-29). */}
+              <button type="button" className="agentcli-connection-toggle" aria-expanded={connectionOpen}
+                      aria-controls={connectionId} aria-label={t("agentchat.changeConnection")}
+                      title={t("agentchat.changeConnection")} onClick={() => setConnectionOpen((open) => !open)}>
+                <Icon name={connectionOpen ? "expand" : "folded"} size={14} />
+              </button>
+              {connectionOpen
+                ? <span className="agentcli-connection-label">{t("agentchat.connection")}</span>
+                : (
+                  <span className="agentcli-connection-summary">
+                    <span className="agentcli-connection-key">{accessKeys.find((k) => k.id === accessKeyId)?.name ?? t("common.none")}</span>
+                    <span className="agentcli-connection-rest">{noInstances ? ` · ${t("common.none")}` : ` · ${instance?.name ?? ""} · ${model || t("agentchat.noModels")}`}</span>
+                  </span>
+                )}
+            </div>
+            {/* Kept mounted while closed, so the selections stay in place for the rest of the window. */}
+            <div className="agentcli-controls" id={connectionId} hidden={!connectionOpen}
+                 onKeyDown={(e) => { if (e.key === "Escape") { e.stopPropagation(); setConnectionOpen(false); } }}>
+              {/* Two rows of their own: too narrow for one line, the second drops below the first and neither wraps. */}
+              <div className="agentcli-control-row">
+                <label className="agentcli-control" title={t("agentchat.accessKeyHint")}>
+                  <span>{t("agentchat.accessKey")}</span>
+                  <select className="input agentcli-select" value={accessKeyId} onChange={(e) => setAccessKeyId(e.target.value)} aria-label={t("agentchat.accessKey")} disabled={sending}>
+                    {accessKeys.map((tok) => <option key={tok.id} value={tok.id}>{tok.name}</option>)}
+                  </select>
+                </label>
+                <label className="agentcli-control" title={t("agentchat.providerHint")}>
+                  <span>{t("agentchat.provider")}</span>
+                  <select className="input agentcli-select" value={instanceId} onChange={(e) => setInstanceId(e.target.value)} aria-label={t("agentchat.provider")} disabled={sending || noInstances}>
+                    {noInstances
+                      ? <option value="">{t("common.none")}</option>
+                      : instances.map((i) => <option key={i.id} value={i.id}>{i.name}</option>)}
+                  </select>
+                </label>
+              </div>
+              <div className="agentcli-control-row">
+                <label className="agentcli-control" title={t("agentchat.modelHint")}>
+                  <span>{t("agentchat.model")}</span>
+                  <select className="input agentcli-select" value={model} onChange={(e) => setModel(e.target.value)} aria-label={t("agentchat.model")} disabled={sending || !models.length}>
+                    {noInstances
+                      ? <option value="">{t("common.none")}</option>
+                      : models.length
+                        ? models.map((m) => <option key={m} value={m}>{m}</option>)
+                        : <option value="">{t("agentchat.noModels")}</option>}
+                  </select>
+                </label>
+                {caps.thinking.length > 0 && (
+                  // One dropdown carries this provider's real API thinking levels.
+                  <label className="agentcli-control">
+                    <span>{kind === "ollama" ? t("agentchat.thinkingOllama") : t("agentchat.thinking")}</span>
+                    <select className="input agentcli-select" value={thinkValue(caps, options)}
+                            onChange={(e) => applyThink(caps, e.target.value, setOptions)}>
+                      {caps.thinking.map((opt) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+                    </select>
+                  </label>
+                )}
+                {caps.temperature && (
+                  <label className="agentcli-control">
+                    <span>{t("agentchat.temperature")}</span>
+                    <input className="input agentcli-select agentcli-number" type="number" step="0.1" min="0" max="2" value={options.temperature} placeholder={t("agentchat.temperatureDefault")}
+                           onChange={(e) => setOptions((o) => ({ ...o, temperature: e.target.value }))} />
+                  </label>
+                )}
+              </div>
+              {caps.note && <div className="agentcli-connection-note">{caps.note}</div>}
+            </div>
           </div>
 
           <div className="agentcli-body" ref={bodyRef}>
@@ -2007,22 +2095,22 @@ export function AgentCliWindow({
               <div className="agentcli-empty">{t("agentchat.noProvider")}</div>
             )}
             {displayed.map((e, i) => (
-              <ChatItem key={i} entry={e} verbose={options.verbose} showTs={showTimestamps}
+              <ChatItem key={i} entry={e} verbose={options.verbose} showTs={showTimestamps} away={away}
                         onResolve={resolveApproval} onReview={openReview}
                       />
             ))}
             {sending && (
               <div className="agentcli-working" role="status" aria-live="polite">
                 <span className="agentcli-spin" aria-hidden="true" />
-                {t("agentchat.workingSpinner")}
+                {liveStatus ?? t("agentchat.workingSpinner")}
               </div>
             )}
           </div>
 
           {pendingContinue !== null && !sending && (
-            <div className="agentcli-continue" role="status">
+            <div className="agentcli-continue" role="status" data-guide="window.agentChat#check-in">
               <span className="agentcli-continue-text">
-                {t("agentchat.pausedAfter", { count: pendingContinue })}
+                {tn("agentchat.pausedAfter", pendingContinue)}
               </span>
               <button className="btn btn-primary btn-sm" onClick={continueTurn}>{t("agentchat.continue")}</button>
               <button className="btn btn-sm" onClick={() => setPendingContinue(null)}>{t("agentchat.stop")}</button>
@@ -2030,7 +2118,7 @@ export function AgentCliWindow({
           )}
 
           {(attachments.length > 0 || attachError) && (
-            <div className="agentcli-attachments">
+            <div className="agentcli-attachments" data-guide="window.agentChat#images">
               {attachments.length > 0 && (
                 <ul className="agentcli-attachment-list">
                   {attachments.map((attachment) => (
@@ -2043,7 +2131,7 @@ export function AgentCliWindow({
                                 setAttachError("");
                                 setAttachments((current) => current.filter((item) => item.id !== attachment.id));
                               }}>
-                        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d={mdiClose} /></svg>
+                        <Icon name="close" size={14} />
                       </button>
                     </li>
                   ))}
@@ -2056,14 +2144,21 @@ export function AgentCliWindow({
             </div>
           )}
 
-          <div className="agentcli-input">
+          {away && (
+            <div className="agentcli-offline" role="status">
+              <span className="agentcli-spin" aria-hidden="true" />
+              <span>{t("shell.offlineBody")}</span>
+            </div>
+          )}
+
+          <div className="agentcli-input" data-guide="window.agentChat#conversation">
             <input
               ref={fileInputRef} type="file" accept="image/*" multiple hidden
               onChange={(e) => { const files = Array.from(e.target.files ?? []); e.target.value = ""; void addFiles(files); }}
             />
             <button
               type="button" className="btn btn-sm agentcli-attach-btn"
-              aria-label={t("agentchat.attachImage")} title={attachBlocked || t("agentchat.attachImage")}
+              aria-label={t("agentchat.attachImage")} title={attachBlocked || t("agentchat.attachImage")} data-guide="window.agentChat#images"
               aria-disabled={Boolean(attachBlocked) || attachments.length >= ATTACHMENT_MAX_COUNT}
               onClick={() => {
                 if (attachBlocked) setAttachError(attachBlocked);
@@ -2071,7 +2166,7 @@ export function AgentCliWindow({
                 else fileInputRef.current?.click();
               }}
             >
-              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d={mdiPaperclip} /></svg>
+              <Icon name="attach" size={18} />
             </button>
             {/* Stays editable while a turn runs so the next message can be drafted;
                 send() and runTurn() refuse a second turn until this one ends. */}
@@ -2079,31 +2174,39 @@ export function AgentCliWindow({
               ref={inputRef}
               value={input}
               aria-label={t("agentchat.messageAria")}
-              placeholder={noInstances ? t("agentchat.configureFirst") : t("agentchat.messagePlaceholder")}
-              disabled={noInstances}
+              placeholder={noInstances ? t("agentchat.configureFirst") : away ? t("shell.offlineTitle") : t("agentchat.messagePlaceholder")}
+              disabled={noInstances || away}
               rows={2}
               onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void send(); } }}
+              // Enter that ends an input method's composition (Chinese, Japanese, Korean) picks the
+              // characters; it does not send. Safari reports that as key code 229.
+              onKeyDown={(e) => {
+                if (e.key !== "Enter" || e.shiftKey || e.nativeEvent.isComposing || e.keyCode === 229) return;
+                e.preventDefault();
+                void send();
+              }}
               onPaste={(e) => {
                 const files = imageFiles(e.clipboardData);
                 if (files.length) { e.preventDefault(); void addFiles(files); }
               }}
             />
             {sending ? (
-              <button className="btn btn-sm agentcli-cancel-btn" onClick={() => cancel()} title={t("agentchat.stopRequest")}>
-                {t("common.cancel")}
+              <button type="button" className="btn btn-sm agentcli-cancel-btn" onClick={() => cancel()}
+                      aria-label={t("agentchat.stop")} title={t("agentchat.stopRequest")}>
+                <Icon name="stop" size={16} filled />
               </button>
             ) : (
-              <button className="btn btn-primary btn-sm"
-                      aria-disabled={noInstances || (!input.trim() && !attachments.length) || Boolean(attachments.length && attachBlocked)}
-                      onClick={() => { if (!noInstances) void send(); }}>
-                {t("agentchat.send")}
+              <button type="button" className="btn btn-primary btn-sm agentcli-send-btn"
+                      aria-label={t("agentchat.send")} title={t("agentchat.send")}
+                      aria-disabled={noInstances || away || (!input.trim() && !attachments.length) || Boolean(attachments.length && attachBlocked)}
+                      onClick={() => { if (!noInstances && !away) void send(); }}>
+                <Icon name="send" size={18} />
               </button>
             )}
           </div>
 
           {showFooter && (
-            <div className="agentcli-footer">
+            <div className="agentcli-footer" data-guide="window.agentChat#conversation">
               <div className="agentcli-text-size-controls" role="group" aria-label={t("agentchat.textSize")}>
                 <button type="button" className="agentcli-text-size-btn"
                         aria-label={t("agentchat.decreaseTextSize")} title={t("agentchat.decreaseTextSize")}
@@ -2137,14 +2240,16 @@ export function AgentCliWindow({
           )}
 
           {/* resize handles: windowed mode only (full screen has no edges to drag) */}
-          {mode === "normal" && !poppedOut && (["n", "s", "e", "w", "ne", "nw", "se", "sw"] as const).map((d) => (
+          {mode === "normal" && !poppedOut && !docked && (["n", "s", "e", "w", "ne", "nw", "se", "sw"] as const).map((d) => (
             <div key={d} className={`agentcli-resize agentcli-resize-${d}`} onPointerDown={startResize(d)} />
           ))}
         </>
       )}
     </div>
+    </MenuRootContext.Provider>
   );
-  return popupMount ? createPortal(content, popupMount) : content;
+  // A popped-out window stays in its browser window; otherwise a docked one draws into My Workspace.
+  return popupMount ? createPortal(content, popupMount) : dockMount ? createPortal(content, dockMount) : content;
 }
 
 /** A backend notice or error in the operator's language.
@@ -2153,6 +2258,34 @@ export function AgentCliWindow({
  *  itself raises have a catalog entry; a provider-relayed message (a model API's
  *  own error text) has none and shows verbatim, as is right for text Phoenix
  *  did not write. */
+// The status line for one model call, from the facts the server sent: the
+// provider, the turn's step and tools run, how long nothing has shown, and a
+// retry with the provider's own sentence. Never the model's words.
+export function modelStatusText(p: Record<string, unknown>): string {
+  const provider = String(p.provider ?? "");
+  const seconds = localeNumber(Number(p.seconds ?? 0));
+  const detail = failureDetailText(String(p.detail ?? ""), p.detail_code);
+  const attempt = localeNumber(Number(p.attempt ?? 0));
+  let status: string;
+  if (p.phase === "retrying") {
+    status = t("agentchat.status.retrying", { provider, detail, attempt });
+  } else if (p.phase === "thinking") {
+    status = t("agentchat.status.thinking", { provider, seconds });
+  } else if (detail && Number(p.attempt ?? 0) > 0) {
+    status = t("agentchat.status.retryWait", { provider, detail, attempt, seconds });
+  } else if (Number(p.seconds ?? 0) > 0) {
+    status = t("agentchat.status.noReply", { provider, seconds });
+  } else {
+    status = t("agentchat.status.waiting", { provider });
+  }
+  const step = Number(p.step ?? 1);
+  const tools = Number(p.tools ?? 0);
+  const turn = step > 1 || tools > 0
+    ? [t("agentchat.status.step", { step: localeNumber(step) }), tn("agentchat.status.tools", tools, { count: localeNumber(tools) })]
+    : [];
+  return [...turn, status].join(" · ");
+}
+
 function serverText(
   code: string | undefined,
   message: string,
@@ -2160,9 +2293,7 @@ function serverText(
   rateLimit?: ProviderRateLimit,
   providerDetail?: string,
 ): string {
-  const key = code ? `agentchat.notice.${code}` : "";
-  const base = key && hasMessage(key) ? t(key, params) : message;
-  const lines = [base, rateLimitDiagnostics(rateLimit)];
+  const lines = [chatNoticeText(code, message, params), rateLimitDiagnostics(rateLimit)];
   if (providerDetail) lines.push(t("agentchat.providerDetail", { detail: providerDetail }));
   return lines.filter(Boolean).join("\n");
 }
@@ -2236,39 +2367,34 @@ function CopyResponseButton({ text }: { text: string }) {
       title={label}
       onClick={(event) => { event.stopPropagation(); void copy(); }}
     >
-      {copied ? (
-        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-          <path d="M5 12.5 9.5 17 19 7" />
-        </svg>
-      ) : (
-        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-          <rect x="8" y="8" width="12" height="12" rx="2" />
-          <path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2" />
-        </svg>
-      )}
+      <Icon name={copied ? "check" : "copy"} size={14} />
     </button>
   );
 }
 
 function ChatItem({
-  entry, verbose, showTs, onResolve, onReview,
+  entry, verbose, showTs, away = false, onResolve, onReview,
 }: {
   entry: ChatEntry;
   verbose: boolean;
   showTs: boolean;
+  /** Home Assistant is not answering: a decision cannot be sent, so it is not offered. */
+  away?: boolean;
   onResolve: (id: string, approve: boolean) => void;
   onReview: (approvalId: string) => void;
 }) {
-  // Wall-clock label under a message bubble; entries without a ts (restored
-  // from a session transcript) show none.
+  // Under a message: Copy, always available, and the wall-clock time when
+  // timestamps are on. Entries without a ts (restored from a session
+  // transcript) show no time.
   const copyText = (entry.kind === "user" || entry.kind === "assistant") && entry.text.trim()
     ? entry.text
     : null;
-  const ts = showTs && "ts" in entry && entry.ts
+  const time = showTs && "ts" in entry && entry.ts ? fmtClock(entry.ts) : null;
+  const ts = copyText !== null || time !== null
     ? (
-      <div className="agentcli-ts">
+      <div className="agentcli-msg-meta">
         {copyText !== null && <CopyResponseButton text={copyText} />}
-        <span>{fmtClock(entry.ts)}</span>
+        {time !== null && <span className="agentcli-ts">{time}</span>}
       </div>
     )
     : null;
@@ -2363,18 +2489,22 @@ function ChatItem({
         return <div className="agentcli-notice">{t("agentchat.chatEnded")}</div>;
       }
       return (
-        <div className="agentcli-approval">
+        <div className="agentcli-approval" data-guide="window.agentChat#approvals">
           <div>{tRich("agentchat.approvalNeeded", { code: (c) => <code>{c}</code> }, { name: entry.toolName })}</div>
           {entry.status === "pending" && !entry.checking ? (
             <div className="agentcli-approval-actions">
-              <button className="btn btn-outline btn-sm" onClick={() => onReview(entry.approvalId)}>{t("agentchat.review")}</button>
-              <button className="btn btn-primary btn-sm" onClick={() => onResolve(entry.approvalId, true)}>{t("agentchat.approve")}</button>
-              <button className="btn btn-sm" onClick={() => onResolve(entry.approvalId, false)}>{t("agentchat.reject")}</button>
+              <button className="btn btn-outline btn-sm" disabled={away} onClick={() => onReview(entry.approvalId)}>{t("agentchat.review")}</button>
+              <button className="btn btn-sm agentcli-approve" disabled={away} onClick={() => onResolve(entry.approvalId, true)}>
+                <Icon name="check" size={14} />{t("agentchat.approve")}
+              </button>
+              <button className="btn btn-sm agentcli-reject" disabled={away} onClick={() => onResolve(entry.approvalId, false)}>
+                <Icon name="close" size={14} />{t("agentchat.reject")}
+              </button>
             </div>
           ) : (
             <div className="agentcli-approval-status">
               {entry.checking ? t("common.loading") : approvalStatusLabel(entry.status)}
-              {entry.reason ? <span className="agentcli-approval-reason">{t("agentchat.approvalReason", { reason: localizedApprovalReason(entry.reason) })}</span> : null}
+              {entry.reason ? <span className="agentcli-approval-reason">{t("agentchat.approvalReason", { reason: entry.executionReason ? localizedExecutorError(entry.reason) : localizedApprovalReason(entry.reason) })}</span> : null}
             </div>
           )}
         </div>

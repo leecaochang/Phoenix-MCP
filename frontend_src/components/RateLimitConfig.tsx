@@ -49,6 +49,10 @@ export function RateLimitConfig({ accessKey, onUpdate }: Props) {
       return;
     }
     setError(null);
+    // Leaving a field without a change saves nothing: every save tells the key's
+    // connected agents their tools changed and refuses their requests in progress.
+    // While an earlier save is on its way the stored values are stale, so save then.
+    if (inFlight.current === 0 && reqNum === accessKey.rate_limit_requests && burstNum === accessKey.rate_limit_burst) return;
     const submission = ++submitted.current;
     const sent = { ...edits.current };
     inFlight.current += 1;
@@ -81,8 +85,8 @@ export function RateLimitConfig({ accessKey, onUpdate }: Props) {
   return (
     <div>
       {error && <div className="banner banner-error mb-8">{error}</div>}
-      <div className="rate-limit-row">
-        <div className="field">
+      <div className="rate-limit-row" data-help="accessKeys.rateLimitHelp" data-help-controls="">
+        <div className="field" data-guide="window.keySettings#rate-requests">
           <label htmlFor="rate-limit-requests">{t("accessKeys.rateRequestsLabel")}</label>
           <input
             id="rate-limit-requests"
@@ -94,7 +98,7 @@ export function RateLimitConfig({ accessKey, onUpdate }: Props) {
             onBlur={(e) => save(e.target.value, burst)}
           />
         </div>
-        <div className="field">
+        <div className="field" data-guide="window.keySettings#rate-burst">
           <label htmlFor="rate-limit-burst">{t("accessKeys.rateBurstLabel")}</label>
           <input
             id="rate-limit-burst"
@@ -108,11 +112,6 @@ export function RateLimitConfig({ accessKey, onUpdate }: Props) {
           />
         </div>
       </div>
-      {requestsNum === 0 && (
-        <p className="rate-limit-disabled-text">
-          {t("accessKeys.rateLimitingDisabled")}
-        </p>
-      )}
     </div>
   );
 }

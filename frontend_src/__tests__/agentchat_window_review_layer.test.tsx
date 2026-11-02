@@ -13,6 +13,7 @@ vi.mock("../i18n", () => ({
   loadTranslations: vi.fn().mockResolvedValue(undefined),
   resolveLanguage: vi.fn().mockReturnValue("en"),
   syncTranslations: vi.fn().mockResolvedValue(false),
+  registerLanguageRoot: vi.fn(),
 }));
 
 vi.mock("../components/AgentCliWindow", () => ({

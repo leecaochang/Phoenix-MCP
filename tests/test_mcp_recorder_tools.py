@@ -69,10 +69,14 @@ async def test_statistics_common_envelope_and_safe_day_cap(hass) -> None:
     assert body["effective_limit"] == 366
     assert body["has_more"] is True
     assert body["next_cursor"] == body["covered_range"]["end"]
+    # The rest of the requested range is named, so an empty first page is not read as "no data".
+    assert body["unread_range"] == {"start": body["covered_range"]["end"], "end": body["requested_range"]["end"]}
     assert body["retention"] == {"kind": "long_term"}
     assert body["statistics"] == []
     assert body["count"] == 0
-    assert "state_class" in body["warnings"][0]
+    # An empty oldest page with more to read must not claim the entity has no statistics.
+    assert "Later pages may hold them" in body["warnings"][0]
+    assert not any("state_class" in warning for warning in body["warnings"])
     job = executor.await_args.args[0]
     assert isinstance(job, functools.partial)
     assert job.args[-1] == {"mean", "last_reset"}
@@ -93,6 +97,18 @@ async def test_empty_five_minute_page_can_have_more_and_warn_about_retention(has
     assert body["next_cursor"] is not None
     assert body["retention"] == {"kind": "short_term", "configured_days": 10}
     assert len(body["warnings"]) == 2
+
+
+async def test_an_empty_final_statistics_page_says_the_entity_may_have_none(hass) -> None:
+    hass.states.async_set("sensor.power", "12", {})
+    instance, _ = _recorder([])
+    with patch("homeassistant.components.recorder.get_instance", return_value=instance):
+        content, outcome, _ = await _call(
+            {"entity_id": "sensor.power", "start_time": "6h", "period": "hour", "limit": 100}, hass,
+        )
+    body = _json(content)
+    assert outcome == "allowed" and body["has_more"] is False and "unread_range" not in body
+    assert any("may not expose a state_class" in warning for warning in body["warnings"])
 
 
 async def test_statistics_returns_rows_and_complete_final_page(hass) -> None:
@@ -124,25 +140,12 @@ async def test_statistics_returns_rows_and_complete_final_page(hass) -> None:
     assert body["count"] == 2
     assert body["has_more"] is False
     assert body["next_cursor"] is None
+    assert "unread_range" not in body
     assert body["warnings"] == []
     assert body["data_range"] == {
         "start": start.isoformat(),
         "end": (start + timedelta(hours=1)).isoformat(),
     }
-
-
-async def test_year_period_is_rejected_on_older_home_assistant(hass) -> None:
-    hass.states.async_set("sensor.power", "12", {"state_class": "measurement"})
-    with (
-        patch("homeassistant.const.__version__", "2026.2.0"),
-        patch("homeassistant.components.recorder.get_instance") as get_instance,
-    ):
-        content, outcome, _ = await _call(
-            {"entity_id": "sensor.power", "period": "year"}, hass,
-        )
-    assert outcome == "invalid_request"
-    assert "2026.3" in content["content"][0]["text"]
-    get_instance.assert_not_called()
 
 
 async def test_statistics_rejects_unknown_type_before_recorder_query(hass) -> None:

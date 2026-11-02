@@ -6,6 +6,7 @@ import { copyToClipboard } from "../utils";
 import { buildAgentTabs, buildMcpUrl, buildSkillInstall, skillUrlFromMcp } from "../wizard_helpers";
 import { t } from "../i18n";
 import { tRich } from "../i18n/rich";
+import { ActionButton } from "../ui/ActionButton";
 
 // A full-width value box (read-only or editable) with the Copy button inside it,
 // matching the look of the command/JSON blocks.
@@ -22,14 +23,14 @@ export function CopyCodeBox(
     <div className="command-field">
       {label && <div className="command-field-label">{label}</div>}
       <div className="command-block-codewrap">
-        <button className="btn btn-primary btn-sm wizard-copy-btn command-copy" onClick={copy}>
-          {copied ? t("common.copied") : t("common.copy")}
-        </button>
+        {onChange
+          ? <input className="command-block-input" data-help="help.connectMcpUrl" value={value} onChange={(e) => onChange(e.target.value)} aria-label={label} />
+          : <pre className="command-block-code">{value}</pre>}
+        {/* Beside the value, not over it (user, 2026-10-28). */}
+        <ActionButton icon={copied ? "check" : "copy"} label={copied ? t("common.copied") : t("common.copy")} help="help.connectCopy" className="btn btn-outline btn-sm command-copy"
+          onClick={() => { void copy(); }} />
         {/* Announce the visual Copy -> Copied! swap to assistive tech. */}
         <span className="sr-only" role="status">{copied ? t("common.copiedToClipboard") : ""}</span>
-        {onChange
-          ? <input className="command-block-input" value={value} onChange={(e) => onChange(e.target.value)} aria-label={label} />
-          : <pre className="command-block-code">{value}</pre>}
       </div>
     </div>
   );
@@ -96,6 +97,7 @@ export function ConnectInstructions({ accessKey, accessKeyName }: { accessKey: s
             key={t.key}
             id={`agent-tab-${t.key}`}
             role="tab"
+            data-help="help.connectAgentTab"
             aria-selected={current?.key === t.key}
             aria-controls="agent-tab-panel"
             tabIndex={current?.key === t.key ? 0 : -1}
@@ -117,7 +119,7 @@ export function ConnectInstructions({ accessKey, accessKeyName }: { accessKey: s
           {current.blocks.map((b, i) => (
             <CommandBlock key={i} title={b.title} hint={b.hint} code={b.code} fields={b.fields} />
           ))}
-          <a className="btn btn-text btn-sm" href={current.href} target="_blank" rel="noopener noreferrer">
+          <a className="btn btn-text btn-sm" data-help="help.connectSetupGuide" href={current.href} target="_blank" rel="noopener noreferrer">
             {t("wizard.openSetupGuide", { label: current.label })}
           </a>
         </div>

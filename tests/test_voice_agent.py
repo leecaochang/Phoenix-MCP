@@ -24,6 +24,7 @@ from custom_components.phoenix_mcp.const import (
     VOICE_TEMPLATES,
 )
 from custom_components.phoenix_mcp.access_key_store import GlobalSettings
+from custom_components.phoenix_mcp.helpers import voice_text
 
 
 class _MockProvider:
@@ -259,6 +260,20 @@ async def test_voice_turn_appends_review_link_only_when_requested():
         assert ("http://h/phoenix-mcp/approvals/ap1" in text) is expect_link
         assert "It is queued." in text
 
+    # The link label follows the conversation language, like the reply around it.
+    with patch.object(agentcli, "_stream_turn_resilient", stream_factory()), \
+         patch.object(agentcli, "build_mcp_tool_list", return_value=[]), \
+         patch.object(agentcli, "_current_dispatch_access_key", return_value=access_key), \
+         patch.object(agentcli, "get_approval", return_value=record), \
+         patch.object(agentcli, "voice_text", side_effect=lambda lang, key, **p: f"{lang}:{key}"), \
+         patch("custom_components.phoenix_mcp.mcp_view._dispatch_mcp", side_effect=dispatch_pending), \
+         patch("custom_components.phoenix_mcp.mcp_view._build_instructions", return_value="SYS"):
+        text = await async_run_voice_turn(
+            MagicMock(), data, access_key, _MockProvider(), MagicMock(), "http://h", "unlock",
+            include_review_links=True, language="de",
+        )
+    assert "[de:approval_link](http://h/phoenix-mcp/approvals/ap1)" in text
+
 
 @pytest.mark.asyncio
 async def test_voice_turn_authority_loss_skips_side_effect():
@@ -428,7 +443,64 @@ async def test_voice_turn_provider_error_yields_spoken_fallback():
          patch.object(agentcli, "build_mcp_tool_list", return_value=[]), \
          patch("custom_components.phoenix_mcp.mcp_view._build_instructions", return_value="SYS"):
         text = await async_run_voice_turn(MagicMock(), data, access_key, provider, MagicMock(), "http://h", "hi")
-    assert "the model is down" in text
+    # The provider's detail is English for the log; the speaker hears a sentence
+    # of the conversation's language instead of it.
+    assert "the model is down" not in text
+    assert text == voice_text("en", "provider_unavailable")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("language", ["en", "de", "ja"])
+async def test_voice_turn_gives_up_on_a_silent_provider_and_says_so(language):
+    class _Silent(_MockProvider):
+        async def stream_turn(self, session, **kwargs):
+            await asyncio.sleep(3600)
+            yield {"type": EV_ERROR, "message": "never"}
+
+    with patch.object(agentcli, "VOICE_FIRST_REPLY_SECONDS", 0.05), \
+         patch.object(agentcli, "build_mcp_tool_list", return_value=[]), \
+         patch("custom_components.phoenix_mcp.mcp_view._build_instructions", return_value="SYS"):
+        text = await asyncio.wait_for(async_run_voice_turn(
+            MagicMock(), _make_data(), _make_access_key(), _Silent(), MagicMock(),
+            "http://h", "hi", language=language,
+        ), 5)
+    assert text == voice_text(language, "provider_slow")
+    assert language == "en" or text != voice_text("en", "provider_slow")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("kind", "slow"), [("ollama", False), ("ollama_cloud", True), ("claude", True)])
+async def test_voice_waits_for_a_local_ollama_to_load_and_read_the_prompt(kind, slow):
+    class _SlowStart(_MockProvider):
+        def __init__(self):
+            super().__init__()
+            self.kind = kind
+
+        async def stream_turn(self, session, **kwargs):
+            await asyncio.sleep(0.2)
+            yield {"type": EV_TEXT, "text": "ready"}
+            yield {"type": EV_DONE, "stop_reason": "end_turn", "assistant_msg": {"role": "assistant", "content": "ready"}}
+
+    with patch.object(agentcli, "VOICE_FIRST_REPLY_SECONDS", 0.05), \
+         patch.object(agentcli, "build_mcp_tool_list", return_value=[]), \
+         patch("custom_components.phoenix_mcp.mcp_view._build_instructions", return_value="SYS"):
+        text = await asyncio.wait_for(async_run_voice_turn(
+            MagicMock(), _make_data(), _make_access_key(), _SlowStart(), MagicMock(), "http://h", "hi"), 5)
+    assert text == (voice_text("en", "provider_slow") if slow else "ready")
+
+
+@pytest.mark.asyncio
+async def test_voice_turn_provider_error_speaks_the_conversation_language():
+    stream = _staged_stream([{"type": EV_ERROR, "message": "the model is down"}])
+    with patch.object(agentcli, "_stream_turn_resilient", stream), \
+         patch.object(agentcli, "build_mcp_tool_list", return_value=[]), \
+         patch("custom_components.phoenix_mcp.mcp_view._build_instructions", return_value="SYS"):
+        text = await async_run_voice_turn(
+            MagicMock(), _make_data(), _make_access_key(), _MockProvider(), MagicMock(),
+            "http://h", "hi", language="de",
+        )
+    assert text == voice_text("de", "provider_unavailable")
+    assert text != voice_text("en", "provider_unavailable")
 
 
 @pytest.mark.asyncio
@@ -774,9 +846,23 @@ async def test_remove_pipeline_reassigns_preferred_then_deletes():
     store.async_set_preferred_item(phoenix.id)
     data = _make_pipeline_data(voice_agent_pipeline_id=phoenix.id, **_FULL_CFG)
     with patch.object(voice_agent, "_pipeline_store", return_value=store):
-        await voice_agent.async_remove_assist_pipeline(MagicMock(), data)
+        kept = await voice_agent.async_remove_assist_pipeline(MagicMock(), data)
+    assert kept is False
     assert phoenix.id not in store.data
     assert store.async_get_preferred_item() == other.id
+    assert data.store.get_settings().voice_agent_pipeline_id is None
+
+
+@pytest.mark.asyncio
+async def test_remove_pipeline_reports_only_pipeline_kept():
+    """Home Assistant's only pipeline stays; removal says so and stops tracking it."""
+    store = _FakePipelineStore()
+    phoenix = await store.async_create_item({"name": "Phoenix MCP"})  # first item is preferred
+    data = _make_pipeline_data(voice_agent_pipeline_id=phoenix.id, **_FULL_CFG)
+    with patch.object(voice_agent, "_pipeline_store", return_value=store):
+        kept = await voice_agent.async_remove_assist_pipeline(MagicMock(), data)
+    assert kept is True
+    assert phoenix.id in store.data
     assert data.store.get_settings().voice_agent_pipeline_id is None
 
 
@@ -787,3 +873,71 @@ async def test_remove_pipeline_noop_when_untracked():
     with patch.object(voice_agent, "_pipeline_store", return_value=store):
         await voice_agent.async_remove_assist_pipeline(MagicMock(), data)  # must not raise
     assert data.store.get_settings().voice_agent_pipeline_id is None
+
+
+async def _two_pipelines(*, phoenix_preferred: bool):
+    """A store holding Home Assistant's own pipeline and Phoenix MCP's tracked one."""
+    store = _FakePipelineStore()
+    other = await store.async_create_item({"name": "Home Assistant"})  # first item is preferred
+    phoenix = await store.async_create_item({"name": "Phoenix MCP"})
+    if phoenix_preferred:
+        store.async_set_preferred_item(phoenix.id)
+    data = _make_pipeline_data(voice_agent_pipeline_id=phoenix.id, **_FULL_CFG)
+    return store, other, phoenix, data
+
+
+@pytest.mark.asyncio
+async def test_set_preferred_makes_the_tracked_pipeline_preferred():
+    store, other, phoenix, data = await _two_pipelines(phoenix_preferred=False)
+    with patch.object(voice_agent, "_pipeline_store", return_value=store):
+        assert voice_agent.assist_pipeline_preferred(MagicMock(), phoenix.id) is False
+        res = await voice_agent.async_set_assist_pipeline_preferred(MagicMock(), data, preferred=True)
+        assert voice_agent.assist_pipeline_preferred(MagicMock(), phoenix.id) is True
+    assert res == {"pipeline_id": phoenix.id, "preferred": True}
+    assert store.async_get_preferred_item() == phoenix.id
+
+
+@pytest.mark.asyncio
+async def test_clear_preferred_keeps_the_pipeline_and_hands_preference_on():
+    store, other, phoenix, data = await _two_pipelines(phoenix_preferred=True)
+    with patch.object(voice_agent, "_pipeline_store", return_value=store):
+        res = await voice_agent.async_set_assist_pipeline_preferred(MagicMock(), data, preferred=False)
+    assert res["preferred"] is False
+    assert store.async_get_preferred_item() == other.id
+    # Clearing the preference is not removal.
+    assert phoenix.id in store.data
+    assert data.store.get_settings().voice_agent_pipeline_id == phoenix.id
+
+
+@pytest.mark.asyncio
+async def test_clear_preferred_leaves_another_preferred_pipeline_alone():
+    store, other, phoenix, data = await _two_pipelines(phoenix_preferred=False)
+    third = await store.async_create_item({"name": "Kitchen"})
+    store.async_set_preferred_item(third.id)
+    with patch.object(voice_agent, "_pipeline_store", return_value=store):
+        await voice_agent.async_set_assist_pipeline_preferred(MagicMock(), data, preferred=False)
+    assert store.async_get_preferred_item() == third.id
+
+
+@pytest.mark.asyncio
+async def test_clear_preferred_is_refused_when_phoenix_is_the_only_pipeline():
+    store = _FakePipelineStore()
+    phoenix = await store.async_create_item({"name": "Phoenix MCP"})
+    data = _make_pipeline_data(voice_agent_pipeline_id=phoenix.id, **_FULL_CFG)
+    with patch.object(voice_agent, "_pipeline_store", return_value=store):
+        with pytest.raises(voice_agent.VoicePipelineError, match="only one"):
+            await voice_agent.async_set_assist_pipeline_preferred(MagicMock(), data, preferred=False)
+    assert store.async_get_preferred_item() == phoenix.id
+
+
+@pytest.mark.asyncio
+async def test_preference_needs_a_tracked_pipeline_that_still_exists():
+    store = _FakePipelineStore()
+    await store.async_create_item({"name": "Home Assistant"})
+    for tracked in (None, "gone"):
+        data = _make_pipeline_data(voice_agent_pipeline_id=tracked, **_FULL_CFG)
+        with patch.object(voice_agent, "_pipeline_store", return_value=store):
+            with pytest.raises(voice_agent.VoicePipelineError, match="Set up"):
+                await voice_agent.async_set_assist_pipeline_preferred(MagicMock(), data, preferred=True)
+            assert voice_agent.assist_pipeline_preferred(MagicMock(), tracked) is False
+

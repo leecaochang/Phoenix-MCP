@@ -64,6 +64,43 @@ def _display_value(value: Any, attributes: dict, domain: str, field: str | None,
     return (number if number is not None else value) + (' ' + unit if isinstance(unit, str) and unit else '')
 
 
+async def async_state_translations(hass: Any, language: object) -> dict[str, str]:
+    """HA's translated entity states for every loaded domain, or {} when unavailable.
+
+    Also loads the language's CLDR data in an executor, so a caller on the event
+    loop can then use display_number and reading_text without file I/O.
+    """
+    resolved = canonical_language(language)
+    await hass.async_add_executor_job(display_number, 0, resolved)
+    try:
+        async with asyncio.timeout(COMMAND_ROUTING_TRANSLATION_TIMEOUT_SECONDS):
+            return await translation.async_get_translations(hass, resolved, 'entity_component')
+    except (TimeoutError, HomeAssistantError, ValueError):
+        return {}
+
+
+def state_label(translations: dict[str, str], domain: str, value: str, device_class: object = None) -> str | None:
+    """HA's label for one entity state, preferring the device-class variant."""
+    keys = ([f'component.{domain}.entity_component.{device_class}.state.{value}'] if isinstance(device_class, str) else [])
+    for key in [*keys, f'component.{domain}.entity_component._.state.{value}']:
+        label = translations.get(key)
+        if isinstance(label, str) and label and len(label) <= 1024:
+            return label
+    return None
+
+
+def reading_text(value: str, attributes: dict, domain: str, language: str, translations: dict[str, str]) -> str:
+    """One state as spoken: HA's translated label, a CLDR number with its unit, or the raw value.
+
+    Needs the language's CLDR data already loaded (async_state_translations).
+    """
+    if value not in ('unknown', 'unavailable') and domain not in ('select', 'input_select', 'text', 'input_text'):
+        label = state_label(translations, domain, value, attributes.get('device_class'))
+        if label is not None:
+            return label
+    return _display_value(value, attributes, domain, None, language, None) or value
+
+
 async def async_display_state(hass: Any, entity_id: str, payload: dict, language: object,
                               *, field: str | None = None, temperature_unit: str | None = None) -> str | None:
     """Render supplied scrubbed values using registry identity and HA translations."""

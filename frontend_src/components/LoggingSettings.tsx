@@ -1,18 +1,24 @@
 import { BusyInput } from "./BusyButton";
 import type { GlobalSettings } from "../types";
 import { t } from "../i18n";
+import { SettingLabel, helpRow } from "../ui/SettingLabel";
+
+type LogToggle = "disable_all_logging" | "log_allowed" | "log_denied" | "log_rate_limited" | "log_entity_names" | "log_client_ip";
 
 interface Props {
   settings: GlobalSettings;
   onToggle: (key: keyof GlobalSettings, value: boolean) => void;
   saving: boolean;
+  /** Only these switches, in their usual order; all of them by default. */
+  only?: readonly LogToggle[];
 }
 
+/** What is recorded, and the privacy switches shown apart from it. */
+export const AUDIT_TOGGLES: readonly LogToggle[] = ["disable_all_logging", "log_allowed", "log_denied", "log_rate_limited"];
+export const PRIVACY_TOGGLES: readonly LogToggle[] = ["log_entity_names", "log_client_ip"];
+
 const TOGGLES: {
-  key: keyof Pick<
-    GlobalSettings,
-    "disable_all_logging" | "log_allowed" | "log_denied" | "log_rate_limited" | "log_entity_names" | "log_client_ip"
-  >;
+  key: LogToggle;
   labelKey: string;
   descriptionKey: string;
   master?: boolean;
@@ -50,22 +56,22 @@ const TOGGLES: {
   },
 ];
 
-export function LoggingSettings({ settings, onToggle, saving }: Props) {
+export function LoggingSettings({ settings, onToggle, saving, only }: Props) {
   const masterOff = settings.disable_all_logging;
 
   return (
     <div>
-      {TOGGLES.map(({ key, labelKey, descriptionKey, master }) => {
+      {TOGGLES.filter(({ key }) => !only || only.includes(key)).map(({ key, labelKey, descriptionKey, master }) => {
         const greyed = !master && masterOff;
         return (
           <div
             key={key}
             className={`toggle-row${greyed ? " toggle-row-greyed" : ""}`}
+            {...helpRow(t(descriptionKey))}
           >
-            <div className="toggle-label">
+            <SettingLabel help={t(descriptionKey)}>
               <span className={master ? "toggle-label-master" : undefined}>{t(labelKey)}</span>
-              <small>{t(descriptionKey)}</small>
-            </div>
+            </SettingLabel>
             <label className={`toggle-switch${(saving || greyed) ? " disabled" : ""}`}>
               <BusyInput
                 type="checkbox"

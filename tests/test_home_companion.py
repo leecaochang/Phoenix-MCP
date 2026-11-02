@@ -8,7 +8,7 @@ import pytest
 from homeassistant.core import ServiceCall, ServiceRegistry
 
 from custom_components.phoenix_mcp import agentcli, home_companion as home, mcp_view
-from custom_components.phoenix_mcp.const import DOMAIN, HOME_COMPANION_TOOLS
+from custom_components.phoenix_mcp.const import DOMAIN, HOME_COMPANION_MAX_CONTEXT_BYTES, HOME_COMPANION_TOOLS
 from custom_components.phoenix_mcp.data import PhoenixData
 from custom_components.phoenix_mcp.personas import get_persona_caps, detect_persona
 from custom_components.phoenix_mcp.policy_engine import resolve, Permission
@@ -337,18 +337,43 @@ async def test_repeated_write_never_reexecutes(hass,companion,monkeypatch):
     assert result['execution']=='partial'
 
 
-@pytest.mark.parametrize('answer,expected', [
-    ('```json\n{"status":"completed","message":"23 degrees."}\n```', 'completed'),
-    ('The value is 23 degrees.\n\n{"status":"completed","message":"23 degrees."}', 'completed'),
-    ('{"status":"completed","message":"ok"}\nActually the task failed.', 'invalid_output'),
-    ('{"status":"completed","message":"ok"}{"status":"refused","message":"no"}', 'invalid_output'),
-    ('{"status":"completed","message":"ok","extra":true}', 'invalid_output'),
-    ('{"status":"success","message":"ok"}', 'invalid_output'),
-    ('not JSON', 'invalid_output'),
+@pytest.mark.parametrize('answer,message', [
+    ('```json\n{"status":"completed","message":"It is 23 degrees."}\n```', 'It is 23 degrees.'),
+    ('The value is 23 degrees.\n\n{"status":"completed","message":"It is 23 degrees."}', 'It is 23 degrees.'),
+    ('{"status":"completed","message":"It is 23 degrees."}\nActually the task failed.', 'It is 23 degrees.'),
+    ('{"status":"completed","message":"It is 23 degrees.","extra":true}', 'It is 23 degrees.'),
+    ('{"status":"success","message":"It is 23 degrees."}', 'It is 23 degrees.'),
+    ('It is 23 degrees in the office.', 'It is 23 degrees in the office.'),
 ])
-async def test_final_envelope_accepts_fences_but_rejects_wrong_shapes(hass,companion,monkeypatch,answer,expected):
-    scripted(monkeypatch,[[('get_state',{'entity_id':'sensor.temperature','projection':{'kind':'compact'}})],answer])
-    assert payload(await rpc(hass,companion))['status']==expected
+async def test_a_read_only_reply_keeps_its_answer_when_the_format_is_wrong(hass,companion,monkeypatch,answer,message):
+    # A wrong shape gets one tools-free correction; repeated, the answer in it is still kept,
+    # never the raw object, and the report still says nothing was executed.
+    scripted(monkeypatch,[[('list_areas',{})],answer,answer])
+    report=payload(await rpc(hass,companion))
+    assert report['status']=='completed' and report['message']==message and report['execution']=='not_attempted'
+
+
+@pytest.mark.parametrize('answer', ['{"status":"success","message":"Done."}', 'I turned it on.', '{"status":"completed"}'])
+async def test_a_reply_after_a_proposed_command_must_keep_the_required_shape(hass,companion,monkeypatch,answer):
+    # Vetoed by the preflight check, so nothing ran, but a command was proposed.
+    scripted(monkeypatch,[[('intent__HassTurnOn',{'entity_id':'light.selected'})],answer,answer])
+    with patch.object(ServiceRegistry, 'async_call', AsyncMock()) as service:
+        report=payload(await rpc(hass,companion,args={'request':'Turn on the selected lamp.'}))
+    assert report['status']=='invalid_output' and 'Done' not in report['message'] and 'turned' not in report['message']
+    service.assert_not_awaited()
+
+
+async def test_a_read_answered_in_prose_is_corrected_once_instead_of_discarded(hass,companion,monkeypatch):
+    transcripts=[]
+    catalogs=scripted(monkeypatch,[[('get_state',{'entity_id':'sensor.temperature','projection':{'kind':'compact'}})],
+                                   'It is 23 degrees.', json.dumps({'status':'completed','message':'It is 23 degrees.'})],
+                      transcripts=transcripts)
+    with patch.object(ServiceRegistry, 'async_call', AsyncMock()) as service:
+        report=payload(await rpc(hass,companion))
+    # A plain state read is still reported from the state itself.
+    assert report['status']=='completed' and 'temperature: 23' in report['message']
+    assert len(catalogs)==3 and catalogs[-1]==[] and 'did not pass validation' in json.dumps(transcripts[-1])
+    service.assert_not_awaited()
 
 
 async def test_invalid_final_reply_after_control_reports_possible_effects_without_retry(hass,companion,monkeypatch):
@@ -929,7 +954,7 @@ async def test_room_targets_follow_registry_area_even_when_names_suggest_other_r
     ])
     report = payload(await rpc(hass, companion, args={'request': 'turn off lights in steve office'}))
     assert len(calls) == 1 and set(calls[0]['entity_id']) == set(targets)
-    assert report['message'].startswith('Turned off 2 lights in Steve Office.')
+    assert report['message'].startswith('Turned off lights in Steve Office (2).')
     assert 'Unavailable (1): Garage Switch Qwerty Lights.' in report['message']
     assert report['verification'] == 'not_verified'
     assert not companion[0].agent_recovery.records(companion[1].id)
@@ -944,7 +969,7 @@ async def test_invalid_count_report_gets_one_tools_free_correction(hass, compani
                         transcripts=transcripts)
     with patch.object(ServiceRegistry, 'async_call', AsyncMock()) as service:
         report = payload(await rpc(hass, companion, args={'request': 'How many lights in my house?'}))
-    assert report['status'] == 'completed' and '1 matching light entities' in report['message']
+    assert report['status'] == 'completed' and 'Matching light entities in your permitted scope: 1.' in report['message']
     assert '999' not in report['message'] and report['execution'] == 'not_attempted'
     assert len(catalogs) == 3 and catalogs[-1] == []
     assert 'did not pass validation' in json.dumps(transcripts[-1])
@@ -1140,3 +1165,121 @@ async def test_ambiguity_guard_records_withheld_proposal_and_selected_provider(h
     route = next(event['payload'] for event in entry['events'] if event['kind'] == 'routing')
     assert route['route'] == 'provider' and route['provider'] == 'claude' and route['model'] == 'test'
     assert route['result'] == 'completed'
+
+
+def test_every_permitted_call_may_return_a_full_size_result():
+    from custom_components.phoenix_mcp.const import HOME_COMPANION_MAX_CALLS, TOOL_RESULT_MAX_BYTES
+    assert HOME_COMPANION_MAX_CONTEXT_BYTES > HOME_COMPANION_MAX_CALLS * TOOL_RESULT_MAX_BYTES
+
+
+async def test_a_read_too_large_for_the_request_is_withheld_so_the_model_can_narrow_it(hass, companion, monkeypatch):
+    # The call and result limits keep ordinary reads within the context; this exercises
+    # the safety net with a smaller budget, as when the model's own output is oversized.
+    monkeypatch.setattr(home, 'HOME_COMPANION_MAX_CONTEXT_BYTES', 65536)
+    _, access_key, _, _ = companion
+    access_key.permissions.domains['binary_sensor'] = PermissionNode('YELLOW')
+    for i in range(400):
+        hass.states.async_set(f'binary_sensor.zigbee_contact_{i}', 'off',
+                              {'friendly_name': f'Zigbee contact sensor number {i} in the long hallway'})
+    transcripts = []
+    scripted(monkeypatch, [
+        [('search_entities', {'domain': 'binary_sensor', 'query': 'zigbee', 'limit': 400})],
+        [('search_entities', {'domain': 'binary_sensor', 'query': 'zigbee', 'limit': 1})],
+        json.dumps({'status': 'completed', 'message': 'You have 400 zigbee contact sensors.'}),
+    ], transcripts=transcripts)
+    report = payload(await rpc(hass, companion, args={'request': 'Which zigbee sensors do I have?'}))
+    withheld = json.dumps(transcripts[1][-1])
+    assert 'too large for this request' in withheld and 'long hallway' not in withheld
+    assert len(json.dumps(transcripts[1]).encode()) < 65536
+    # The model's answer is used: the states listed while finding the sensors are not an answer.
+    assert report['status'] == 'completed' and report['message'] == 'You have 400 zigbee contact sensors.'
+    assert report['tool_outcomes'] == [{'tool': 'search_entities', 'outcome': 'allowed'}] * 2
+
+
+@pytest.mark.parametrize('control', [False, True])
+async def test_only_a_clarification_without_a_proposed_command_keeps_the_models_text(hass, companion, monkeypatch, control):
+    question = 'Two lamps match. Which one did you mean?'
+    rounds = [[('search_entities', {'domain': 'light', 'query': 'lamp'})]]
+    if control:
+        # Vetoed by the preflight check, so nothing is attempted, but a command was proposed.
+        rounds.append([('intent__HassTurnOn', {'entity_id': 'light.selected'})])
+    rounds.append(json.dumps({'status': 'clarification_needed', 'message': question}))
+    scripted(monkeypatch, rounds)
+    with patch.object(ServiceRegistry, 'async_call', AsyncMock()) as service:
+        report = payload(await rpc(hass, companion, args={'request': 'What is the lamp doing?'}))
+    assert report['status'] == 'clarification_needed' and report['execution'] == 'not_attempted'
+    assert 'complete request' in report['message']
+    assert (question in report['message']) is not control
+    service.assert_not_awaited()
+
+
+@pytest.mark.parametrize('reported', [True, False])
+async def test_agent_chat_shows_the_companion_turns_token_usage(hass, companion, monkeypatch, reported):
+    data, access_key, _, _ = companion
+    scripted(monkeypatch, [
+        [('get_state', {'entity_id': 'sensor.temperature', 'projection': {'kind': 'compact'}})],
+        json.dumps({'status': 'completed', 'message': '23 degrees.'}),
+    ])
+    provider = agentcli.build_provider(None)
+    inner, calls = provider.stream_turn, []
+    async def stream(session, **kwargs):
+        calls.append(1)
+        async for ev in inner(session, **kwargs):
+            if reported and ev['type'] == agentcli.EV_DONE:
+                # A provider's report is cumulative within one call: only the last one counts.
+                for output in (5, 50):
+                    yield {'type': agentcli.EV_USAGE, 'input_tokens': 1000 * len(calls),
+                           'output_tokens': output, 'cache_read_tokens': 400}
+            yield ev
+    monkeypatch.setattr(provider, 'stream_turn', stream)
+    events = []
+    async def emit(name, value):
+        events.append((name, value))
+    await agentcli.async_run_agent_turn(hass=hass, data=data, access_key=access_key, provider=provider, session=None,
+        messages=[{'role': 'user', 'content': 'Read the temperature.'}], options={}, client_ip='test', base_url='',
+        emit=emit, cancel=asyncio.Event())
+    usage = [value for name, value in events if name == 'usage']
+    if reported:
+        assert usage == [{'input_tokens': 3000, 'output_tokens': 100, 'context_tokens': 2000,
+                          'cache_read_tokens': 800, 'cache_write_tokens': 0}]
+        # Usage never enters the report, which AI Task hands to its own model.
+        assert 'tokens' not in json.dumps([value for name, value in events if name == 'assistant_delta'])
+    else:
+        assert usage == []
+
+
+@pytest.mark.parametrize('voice_configured', [True, False])
+async def test_agent_chat_runs_companion_on_the_chats_own_account_and_model(hass, companion, monkeypatch, voice_configured):
+    data, access_key, store, voice_account = companion
+    chat_account = await store.add('claude', {'api_key': 'synthetic-key', 'model': 'chat-default'})
+    if not voice_configured:
+        await data.store.async_patch_settings(voice_agent_provider_id=None, voice_agent_model=None)
+    scripted(monkeypatch, [
+        [('get_state', {'entity_id': 'sensor.temperature', 'projection': {'kind': 'compact'}})],
+        json.dumps({'status': 'completed', 'message': '23 degrees.'}),
+    ])
+    provider, used = agentcli.build_provider(None), []
+    monkeypatch.setattr(agentcli, 'build_provider', lambda cfg: used.append((cfg.kind, cfg.model)) or provider)
+    events = []
+    async def emit(name, value):
+        events.append((name, value))
+    await agentcli.async_run_agent_turn(hass=hass, data=data, access_key=access_key, provider=provider, session=None,
+        messages=[{'role': 'user', 'content': 'Read the temperature.'}], options={}, client_ip='test', base_url='',
+        emit=emit, cancel=asyncio.Event(), account=(chat_account, 'chat-picked-model'))
+    assert used == [('claude', 'chat-picked-model')]
+    assert [value for name, value in events if name == 'assistant_delta'][0]['text'] == 'Home Assistant reports: sensor.temperature: 23.'
+    # Voice and external clients still run on the Voice settings.
+    if voice_configured:
+        used.clear()
+        scripted(monkeypatch, [json.dumps({'status': 'clarification_needed', 'message': 'Which sensor?'})])
+        monkeypatch.setattr(agentcli, 'build_provider', lambda cfg: used.append((cfg.kind, cfg.model)) or provider)
+        await rpc(hass, companion)
+        assert used == [('chatgpt', 'test-model')]
+
+
+async def test_an_external_request_cannot_choose_the_provider_account(hass, companion, monkeypatch):
+    _, _, store, _ = companion
+    other = await store.add('claude', {'api_key': 'synthetic-key', 'model': 'other'})
+    catalogs = scripted(monkeypatch, [])
+    report = payload(await rpc(hass, companion, args={'request': 'Read the temperature.', 'account': other}))
+    assert report['status'] == 'invalid_request' and catalogs == []

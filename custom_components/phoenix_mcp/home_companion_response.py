@@ -11,8 +11,9 @@ from typing import Any
 
 from homeassistant.util.color import color_name_to_rgb
 
-from .const import HOME_COMPANION_CONTROL_TOOLS, HOME_COMPANION_CONTROL_DOMAINS, HOME_COMPANION_MAX_REPORT_ENTITIES, HOME_COMPANION_MAX_REPORT_NAMES, HOME_COMPANION_MAX_CALLS, CONVERSATION_STYLES, DETAIL_LEVELS, HOME_COMPANION_ACCEPTED_TEMPLATES, HOME_COMPANION_COUNT_TEMPLATES, HOME_COMPANION_VERIFIED_TEMPLATES, HOME_COMPANION_COUNT_KIND_TEMPLATES, HOME_COMPANION_POWER_TEMPLATES, HOME_COMPANION_ACTION_KIND_TEMPLATES, HOME_COMPANION_EXCEPTION_TEMPLATES
-from .helpers import voice_text
+from .const import HOME_COMPANION_CONTROL_TOOLS, HOME_COMPANION_CONTROL_DOMAINS, HOME_COMPANION_MAX_REPORT_ENTITIES, HOME_COMPANION_MAX_REPORT_NAMES, HOME_COMPANION_MAX_CALLS, CONVERSATION_STYLES, DETAIL_LEVELS, HOME_COMPANION_ACCEPTED_TEMPLATES, HOME_COMPANION_COUNT_TEMPLATES, HOME_COMPANION_VERIFIED_TEMPLATES, HOME_COMPANION_COUNT_KIND_TEMPLATES, HOME_COMPANION_POWER_TEMPLATES, HOME_COMPANION_ACTION_KIND_TEMPLATES, HOME_COMPANION_EXCEPTION_TEMPLATES, HOME_COMPANION_STATE_READ_TOOLS
+from .command_display import reading_text
+from .helpers import spoken_list, spoken_sentences, voice_text
 
 
 def _body(result: dict | None) -> Any:
@@ -85,6 +86,17 @@ class ResponseEvidence:
     search_kinds: dict[int, str] = field(default_factory=dict)
     selected_count: int | None = None
     selected_kind: str = "other"
+    # A history, statistics or other interpreted read, or a result withheld from
+    # the model: the answer is then the model's, not a list of current states.
+    model_answer: bool = False
+    # Set when the model proposed any device command, even one never dispatched.
+    control_proposed: bool = False
+    # The states the model chose to read, which answer before the rows its searches found.
+    chosen: dict[str, str] = field(default_factory=dict)
+    # The reply's language and HA's translated states for it, loaded before the
+    # turn so readings can be spoken in that language.
+    language: str = "en"
+    state_translations: dict[str, str] = field(default_factory=dict)
 
     def observe(self, name: str, outcome: str, result: dict | None, arguments: dict | None = None) -> None:
         index = self.calls
@@ -151,6 +163,8 @@ class ResponseEvidence:
                 self.search_kinds[index] = domain if isinstance(domain, str) and domain in HOME_COMPANION_COUNT_KIND_TEMPLATES else 'other'
         if name not in {'get_capability_summary'}:
             self.successful_reads += 1
+        if name not in HOME_COMPANION_STATE_READ_TOOLS:
+            self.model_answer = True
         self.last_read_failed = False
         rows = (body['states'] if name == 'get_state' and isinstance(body, dict) and isinstance(body.get('states'), list) else
                 [body] if name == 'get_state' and isinstance(body, dict) else
@@ -168,8 +182,10 @@ class ResponseEvidence:
             if name == 'get_state' and eid in self.targets:
                 self.observed[eid] = {**attrs, 'state': row.get('state')}
             if name in {'get_state', 'search_entities'} and isinstance(row.get('state'), str) and len(self.readings) < HOME_COMPANION_MAX_REPORT_ENTITIES:
-                unit = attrs.get('unit_of_measurement', '')
-                self.readings[eid] = f"{label}: {row['state']}" + (f" {unit}" if isinstance(unit, str) and unit else '')
+                value = reading_text(row['state'], attrs, eid.split('.', 1)[0], self.language, self.state_translations)
+                self.readings[eid] = f"{label}: {value}"
+                if name == 'get_state':
+                    self.chosen[eid] = self.readings[eid]
 
     def valid_read_answer(self, proposal: Any) -> bool:
         """Validate a count reference without selecting or altering evidence."""
@@ -229,8 +245,8 @@ def _target_phrase(evidence: ResponseEvidence, targets: set[str], language: obje
         kind_template = HOME_COMPANION_ACTION_KIND_TEMPLATES.get(kind, HOME_COMPANION_ACTION_KIND_TEMPLATES['other'])
         return voice_text(language, 'companion_group_targets', count=len(targets),
                           kind=voice_text(language, kind_template), area=area)
-    return ', '.join(
-        [evidence.targets[eid] for eid in evidence.targets if eid in targets][:HOME_COMPANION_MAX_REPORT_NAMES])
+    return spoken_list(
+        [evidence.targets[eid] for eid in evidence.targets if eid in targets][:HOME_COMPANION_MAX_REPORT_NAMES], language)
 
 
 def _verification_exceptions(evidence: ResponseEvidence, unmatched: set[str], language: object) -> list[str]:
@@ -239,7 +255,7 @@ def _verification_exceptions(evidence: ResponseEvidence, unmatched: set[str], la
     for ids, key in [(unavailable, HOME_COMPANION_EXCEPTION_TEMPLATES['unavailable']),
                      (unmatched - unavailable, HOME_COMPANION_EXCEPTION_TEMPLATES['unverified'])]:
         if ids:
-            names = ', '.join([evidence.targets[eid] for eid in evidence.targets if eid in ids][:HOME_COMPANION_MAX_REPORT_NAMES])
+            names = spoken_list([evidence.targets[eid] for eid in evidence.targets if eid in ids][:HOME_COMPANION_MAX_REPORT_NAMES], language)
             parts.append(voice_text(language, key, count=len(ids), names=names))
     return parts
 
@@ -280,7 +296,7 @@ def build_report(status: str, model_message: str, evidence: ResponseEvidence, la
         parts.append(voice_text(language, 'companion_partial') if partial else
                      voice_text(language, 'companion_accepted') if not labels else
                      voice_text(language, HOME_COMPANION_ACCEPTED_TEMPLATES[style],
-                                names=_target_phrase(evidence, all_targets, language) if detail == 'concise' else ', '.join(labels)))
+                                names=_target_phrase(evidence, all_targets, language) if detail == 'concise' else spoken_list(labels, language)))
         if evidence.verified:
             verification = 'confirmed'
             if detail == 'concise' and power in ({'on'}, {'off'}):
@@ -306,7 +322,12 @@ def build_report(status: str, model_message: str, evidence: ResponseEvidence, la
         next_step = 'check_state'
         parts.append(voice_text(language, 'companion_unverified' if status == 'outcome_unknown' else 'companion_refused'))
     elif status == 'clarification_needed' or (status == 'completed' and not evidence.successful_reads and not evidence.last_read_failed):
+        # A read-only question keeps the model's own question; the guidance still follows it.
+        own = status == 'clarification_needed' and not evidence.control_proposed and model_message.strip()
         status, next_step = 'clarification_needed', 'full_request'
+        if own:
+            parts.append(model_message.strip())
+            labels = []
         parts.append(voice_text(language, 'companion_clarify'))
     elif status == 'output_limit':
         next_step = 'review_limits'
@@ -327,18 +348,21 @@ def build_report(status: str, model_message: str, evidence: ResponseEvidence, la
         next_step = 'full_request'
         parts.append(voice_text(language, 'companion_read_failed'))
     else:
-        if evidence.selected_count is not None:
+        # A count answers only a counting question; after a history or other
+        # interpreted read the model's answer is the reply, even if it cites a count.
+        if evidence.selected_count is not None and not evidence.model_answer:
             kind = voice_text(language, HOME_COMPANION_COUNT_KIND_TEMPLATES[evidence.selected_kind])
             parts.append(voice_text(language, HOME_COMPANION_COUNT_TEMPLATES[style], count=evidence.selected_count, kind=kind))
             if detail != 'concise':
                 parts.append(voice_text(language, 'companion_count_groups'))
             if detail == 'detailed':
                 parts.append(voice_text(language, 'companion_count_scope'))
-        elif evidence.readings:
+        elif evidence.readings and not evidence.model_answer:
             parts.append(voice_text(language, 'companion_readings', readings='; '.join(
-                list(evidence.readings.values())[:HOME_COMPANION_MAX_REPORT_NAMES])))
+                list((evidence.chosen or evidence.readings).values())[:HOME_COMPANION_MAX_REPORT_NAMES])))
         else:
-            # Interpretation of successful history/statistics reads remains model-authored.
+            # Interpretation of successful history/statistics reads remains model-authored;
+            # the states gathered while finding the entities do not answer those questions.
             parts.append(model_message)
     if status not in {'authority_lost', 'outcome_unknown'}:
         if detail == 'detailed' and evidence.accepted:
@@ -347,8 +371,8 @@ def build_report(status: str, model_message: str, evidence: ResponseEvidence, la
                 parts.append(voice_text(language, 'companion_readings', readings='; '.join(readings[:HOME_COMPANION_MAX_REPORT_NAMES])))
             parts.append(voice_text(language, 'companion_receipt_limit'))
         if labels and ((evidence.accepted and execution != 'accepted') or status == 'clarification_needed'):
-            parts.append(voice_text(language, 'companion_targets' if evidence.attempts else 'companion_candidates', names=', '.join(labels)))
+            parts.append(voice_text(language, 'companion_targets' if evidence.attempts else 'companion_candidates', names=spoken_list(labels, language)))
         if detail != 'concise' or status != 'completed':
             parts.extend(evidence.warnings)
-    return {'status': status, 'message': ' '.join(parts), 'execution': execution,
+    return {'status': status, 'message': spoken_sentences(parts, language), 'execution': execution,
             'verification': verification, 'next_step': next_step, 'retry_policy': retry}

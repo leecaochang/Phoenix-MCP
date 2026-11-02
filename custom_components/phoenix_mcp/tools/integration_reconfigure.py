@@ -13,7 +13,7 @@ import logging
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, cast
+from typing import Any
 
 import voluptuous as vol
 
@@ -287,13 +287,7 @@ async def async_run_reconfigure_flow(
             _LOGGER.debug("Could not record reconfigure state transition", exc_info=True)
         state_changed.set()
 
-    on_state_change = getattr(entry, "async_on_state_change", None)
-    listener_supported = callable(on_state_change)
-    remove_listener = (
-        cast(Any, on_state_change)(_on_state_change)
-        if listener_supported
-        else lambda: None
-    )
+    remove_listener = entry.async_on_state_change(_on_state_change)
     flow_id: str | None = None
     encountered: set[str] = set()
     menu_index = 0
@@ -455,17 +449,13 @@ async def async_run_reconfigure_flow(
                 # missing entry after success is an applied identity failure,
                 # classified by the caller after it re-captures identity.
                 commit = commit or baseline
-                verified = (
-                    await _verify_reload(
-                        entry,
-                        baseline,
-                        commit,
-                        events,
-                        state_changed,
-                        submit_boundary,
-                    )
-                    if listener_supported
-                    else False
+                verified = await _verify_reload(
+                    entry,
+                    baseline,
+                    commit,
+                    events,
+                    state_changed,
+                    submit_boundary,
                 )
                 unused = sorted(set(config) - encountered)
                 unused_menus = menu_choices[menu_index:]

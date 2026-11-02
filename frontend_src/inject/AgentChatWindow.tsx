@@ -9,7 +9,7 @@ import { ErrorBoundary } from "../components/ErrorBoundary";
 import { useEffect, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { api, setHass } from "../api";
-import { loadTranslations, resolveLanguage, syncTranslations } from "../i18n";
+import { loadTranslations, registerLanguageRoot, resolveLanguage, syncTranslations } from "../i18n";
 import { AgentCliWindow, focusAgentCliPopup } from "../components/AgentCliWindow";
 import type { AgentCliInstance, AccessKeyRecord } from "../types";
 import { JS_BUILD } from "../version";
@@ -20,6 +20,9 @@ import {
   AGENTCHAT_REVIEW_OPENED_EVENT,
 } from "../utils/agentchat_review";
 import PANEL_CSS from "../phoenix-mcp-panel.css?inline";
+import THEMES_CSS from "../themes.css?inline";
+import { ensurePhoenixFont } from "../ui/fonts";
+import { applyThemeClass, resolveThemeClass } from "../ui/theme";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function getHass(): any {
@@ -32,12 +35,23 @@ interface BootData {
   scrollback: number;
 }
 
+/** My Workspace's Agent Chat slot and dock state, from the Phoenix MCP panel while it is open. */
+export interface AgentChatDock {
+  /** The slot while My Workspace shows it; null while Chat should float. */
+  slot: HTMLElement | null;
+  /** Agent Chat belongs in My Workspace. */
+  docked: boolean;
+  /** Add Agent Chat to My Workspace, or float it again. */
+  toggle: () => void;
+}
+
 function Boot({
-  accessKeyId, onClose, summonVersion,
+  accessKeyId, onClose, summonVersion, dock,
 }: {
   accessKeyId: string;
   onClose: () => void;
   summonVersion: number;
+  dock: AgentChatDock | null;
 }) {
   const [data, setData] = useState<BootData | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
@@ -94,6 +108,8 @@ function Boot({
       hass={getHass()}
       getHass={getHass}
       summonVersion={summonVersion}
+      dockMount={dock?.slot ?? null}
+      dock={dock ? { docked: dock.docked, toggle: dock.toggle } : null}
     />
   );
 }
@@ -106,6 +122,7 @@ let themeObserver: MutationObserver | null = null;
 let activeAccessKeyId = "";
 let summonVersion = 0;
 let reviewResumeFrame: number | null = null;
+let dockState: AgentChatDock | null = null;
 
 function suspendForApprovalReview(): void {
   if (reviewResumeFrame !== null) {
@@ -153,9 +170,21 @@ function paintAgentChat(): void {
       accessKeyId={activeAccessKeyId}
       onClose={hideAgentChat}
       summonVersion={summonVersion}
+      dock={dockState}
     />
     </ErrorBoundary>,
   );
+}
+
+/**
+ * Follow My Workspace's Agent Chat slot. A slot on screen shows Chat in it,
+ * opening Chat if it was closed; without one, an open Chat floats again. The
+ * conversation stays mounted throughout.
+ */
+export function setAgentChatDock(next: AgentChatDock | null): void {
+  dockState = next;
+  // A slot never opens Chat: a Chat closed elsewhere stays closed in My Workspace (user, 2026-11-01).
+  if (host) paintAgentChat();
 }
 
 export function isAgentChatVisible(): boolean {
@@ -173,24 +202,13 @@ export function focusAgentChatPopup(): boolean {
 // element itself cannot be queried for its resolved class here: HA mounts
 // panels behind several nested shadow roots, so document.querySelector
 // never reaches it.
-function resolveThemeClass(): "phx-theme-dark" | "phx-theme-light" | null {
-  let saved: string | null = null;
-  try { saved = localStorage.getItem("phx-theme"); } catch { /* storage blocked */ }
-  if (saved === "light") return "phx-theme-light";
-  if (saved === "dark") return "phx-theme-dark";
-  try {
-    const dark = getHass()?.themes?.darkMode;
-    if (dark === true) return "phx-theme-dark";
-    if (dark === false) return "phx-theme-light";
-  } catch { /* leave to prefers-color-scheme */ }
-  return null;
+function pageDarkMode(): boolean | undefined {
+  try { return getHass()?.themes?.darkMode; } catch { return undefined; }
 }
 
 function applyTheme(): void {
   if (!host) return;
-  host.classList.remove("phx-theme-dark", "phx-theme-light");
-  const cls = resolveThemeClass();
-  if (cls) host.classList.add(cls);
+  applyThemeClass(host, resolveThemeClass(pageDarkMode()));
 }
 
 // The window persists across HA navigation and theme flips, so a one-shot
@@ -270,13 +288,15 @@ export function showAgentChat(accessKeyId?: string): void {
   applyTheme();
   watchTheme();
   watchApprovalReview();
+  ensurePhoenixFont(document);
   const shadow = host.attachShadow({ mode: "open" });
   const style = document.createElement("style");
-  style.textContent = PANEL_CSS + "\n.agentcli-window{pointer-events:auto;}";
+  style.textContent = PANEL_CSS + THEMES_CSS + "\n.agentcli-window{pointer-events:auto;}";
   shadow.appendChild(style);
   const mount = document.createElement("div");
   mount.style.pointerEvents = "none";
   shadow.appendChild(mount);
+  registerLanguageRoot(mount);
   document.body.appendChild(host);
   root = createRoot(mount);
   paintAgentChat();

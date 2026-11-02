@@ -65,6 +65,68 @@ async def test_real_dashboard_registry_restore_updates_only_supported_fields(has
     assert next(r for r in rows if r["id"] == row["id"])["title"] == "Before"
 
 
+async def test_single_word_dashboard_create_verifies_and_a_refused_create_applies_nothing(hass, hass_admin_user):
+    """Core pops allow_single_word and never stores it, so the readback must not expect it back.
+
+    A create Core refuses for its missing hyphen stored nothing, so its recovery
+    record is not applied rather than unknown.
+    """
+    assert await async_setup_component(hass, "lovelace", {"lovelace": {}})
+    from custom_components.phoenix_mcp.tools.lovelace import _execute_create_dashboard
+    t, d = access_key(cap_lovelace_write="allow"), runtime()
+    created = await _execute_create_dashboard({"config": {"url_path": "map", "title": "Map", "allow_single_word": True}}, t, hass, d)
+    assert created[1] == "allowed", created
+    assert body(created)["status"] == "verified", created
+    refused = await _execute_create_dashboard({"config": {"url_path": "plan", "title": "Plan"}}, t, hass, d)
+    assert refused[0].get("isError") and "hyphen" in refused[0]["content"][0]["text"], refused
+    phases = {r["resource"]: r["phase"] for r in d.config_recovery.records()}
+    assert phases["dashboard_registry:map"] == "verified"
+    assert phases["dashboard_registry:plan"] == "not_applied"
+
+
+@pytest.mark.parametrize("url_path", ["map", "audit-board"])
+async def test_deleted_dashboard_restores_with_or_without_a_hyphen(hass, hass_admin_user, url_path):
+    """Restoring a deleted dashboard re-creates it, single-word paths included."""
+    assert await async_setup_component(hass, "lovelace", {"lovelace": {}})
+    from custom_components.phoenix_mcp.tools.lovelace import _execute_delete_dashboard
+    t, d = access_key(cap_lovelace_write="allow"), runtime()
+    row = await async_ws_command(hass, "lovelace/dashboards/create", {"url_path": url_path, "title": "Board", "allow_single_word": True})
+    deleted = await _execute_delete_dashboard({"dashboard_id": row["id"]}, t, hass, d)
+    assert deleted[1] == "allowed" and body(deleted)["status"] == "verified", deleted
+    args = {"recovery_id": body(deleted)["recovery_id"], "side": "before"}
+    info = body(await _tool_restore_configuration(args, t, hass, d))
+    args.update({k: info[k] for k in ("snapshot_digest", "target_fingerprint")})
+    restored = await _tool_restore_configuration(args, t, hass, d)
+    assert restored[1] == "allowed", restored
+    assert body(restored)["status"] == "verified", restored
+    rows = await async_ws_command(hass, "lovelace/dashboards/list", {})
+    assert [r["title"] for r in rows if r["url_path"] == url_path] == ["Board"]
+
+
+@pytest.mark.parametrize(("error", "phase", "words"), [
+    ("refused", "not_applied", "nothing was changed"),
+    ("failed", "unknown", "uncertain"),
+])
+async def test_dashboard_restore_failure_says_whether_anything_changed(hass, hass_admin_user, error, phase, words):
+    """A restore Core refused in validation applied nothing; any other failure may have landed."""
+    assert await async_setup_component(hass, "lovelace", {"lovelace": {}})
+    from custom_components.phoenix_mcp.tools.lovelace import _execute_delete_dashboard
+    from custom_components.phoenix_mcp.ws_dispatch import WsCommandRefusedError
+    t, d = access_key(cap_lovelace_write="allow"), runtime()
+    row = await async_ws_command(hass, "lovelace/dashboards/create", {"url_path": "map", "title": "Map", "allow_single_word": True})
+    deleted = await _execute_delete_dashboard({"dashboard_id": row["id"]}, t, hass, d)
+    args = {"recovery_id": body(deleted)["recovery_id"], "side": "before"}
+    info = body(await _tool_restore_configuration(args, t, hass, d))
+    args.update({k: info[k] for k in ("snapshot_digest", "target_fingerprint")})
+    raised = WsCommandRefusedError("invalid_format", "Url path needs to contain a hyphen (-)") if error == "refused" \
+        else WsDispatchError("WebSocket command lovelace/dashboards/create failed: boom")
+    with patch("custom_components.phoenix_mcp.ws_dispatch.async_ws_command", AsyncMock(side_effect=raised)):
+        restored = await _tool_restore_configuration(args, t, hass, d)
+    assert restored[0].get("isError") and words in restored[0]["content"][0]["text"], restored
+    restore_record = next(r for r in d.config_recovery.records() if r["operation"] == "dashboard_registry_restore")
+    assert restore_record["phase"] == phase
+
+
 @pytest.mark.parametrize("operation", ["create", "edit"])
 @pytest.mark.parametrize("field,previous,wanted", [
     ("title", "Before", "After"),
@@ -324,7 +386,7 @@ async def test_real_blueprint_formatting_is_verified(hass, hass_admin_user):
     content = '# A preserved comment\nblueprint:\n  name: "Audit blueprint"\n  domain: automation\n  input: {}\ntriggers: []\nactions: []\n'
     result = await _execute_create_blueprint({"domain": "automation", "path": "audit/example.yaml", "content": content}, t, hass, d)
     assert result[1] == "allowed", result
-    assert body(result)["saved"] is True, result
+    assert body(result)["saved"] is True and body(result)["verified"] is True, result
     actual = Path(hass.config.path("blueprints", "automation", "audit", "example.yaml")).read_text()
     assert "Audit blueprint" in actual and actual != content
     assert d.config_recovery.records()[0]["phase"] == "verified"

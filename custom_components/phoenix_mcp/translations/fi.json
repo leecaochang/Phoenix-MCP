@@ -4,7 +4,7 @@
       "already_configured": "Phoenix MCP on jo määritetty."
     },
     "create_entry": {
-      "default": "Hallitse käyttöavaimiasi Phoenix MCP -paneelissa"
+      "default": "Hallitse käyttöavaimiasi sivupalkin Phoenix MCP -paneelissa. Paneeli näkyy vain ylläpitäjille."
     },
     "step": {
       "user": {
@@ -15,11 +15,27 @@
   "entity": {
     "sensor": {
       "status": {
+        "name": "Tila",
         "state": {
           "active": "Aktiivinen",
           "expired": "Vanhentunut",
           "revoked": "Mitätöity"
         }
+      },
+      "request_count": {
+        "name": "Pyyntöjen määrä"
+      },
+      "denied_count": {
+        "name": "Hylättyjen määrä"
+      },
+      "rate_limit_hits": {
+        "name": "Pyyntörajoitukseen osumiset"
+      },
+      "last_access": {
+        "name": "Viimeisin käyttö"
+      },
+      "expires_in": {
+        "name": "Vanhenee"
       }
     }
   },

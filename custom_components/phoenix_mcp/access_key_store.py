@@ -73,6 +73,9 @@ from .const import (
 _LOGGER = logging.getLogger(__name__)
 
 VALID_NODE_STATES = frozenset({"GREY", "YELLOW", "GREEN", "RED"})
+# Passed as a node's hint to keep the one it has: painting a node changes its
+# state and must not delete a hint set elsewhere.
+KEEP_HINT: Any = object()
 
 
 def _require_dt(value: str | None, field: str) -> datetime:
@@ -176,7 +179,8 @@ class PermissionTree:
     """Three-level permission hierarchy: domains, devices, and entities.
 
     Each level is a dict keyed by the relevant ID. Nodes with state GREY are
-    omitted from storage; their absence implies inheritance.
+    omitted from storage, their absence implying inheritance, unless they keep
+    a hint: a hint describes the item for agents whatever its state.
     """
 
     domains: dict[str, PermissionNode] = field(default_factory=dict)
@@ -339,6 +343,7 @@ class AccessKeyRecord:
     cap_physical_control: str = CAP_DENY
     cap_service_response: str = CAP_DENY
     cap_broadcast: str = CAP_DENY
+    cap_notify: str = CAP_DENY
     cap_log_read: str = CAP_DENY
     # Process-wide logger changes are deliberately separate from diagnostics.
     cap_log_control: str = CAP_DENY
@@ -939,6 +944,14 @@ class _PhoenixStore(DurableStore[dict]):
         return raw
 
 
+class PresetLimitError(ValueError):
+    """The access key already holds the most presets it may have."""
+
+
+class PresetNameTakenError(ValueError):
+    """Another preset on the access key already uses the name."""
+
+
 class AccessKeyStore:
     """Manages persistent storage and in-memory state for Phoenix MCP access keys."""
 
@@ -1159,12 +1172,6 @@ class AccessKeyStore:
                 return access_key
         return None
 
-    def get_archived_by_hash(self, access_key_hash: str) -> ArchivedAccessKeyRecord | None:
-        for record in self._archived.values():
-            if hmac_compare(record.access_key_hash, access_key_hash):
-                return record
-        return None
-
     def list_access_keys(self) -> list[AccessKeyRecord]:
         return list(self._access_keys.values())
 
@@ -1284,7 +1291,9 @@ class AccessKeyStore:
         # Re-derive the persona from the resulting cap set so the label stays
         # honest: tweaking any cap drops the access key to "custom" (or to a different
         # matching persona).
-        if cap_changed and access_key.persona != PERSONA_HOME_COMPANION:
+        # Custom named in the same change is the operator's choice and stands, even
+        # when a preset happens to match its settings.
+        if cap_changed and kwargs.get("persona") != "custom" and access_key.persona != PERSONA_HOME_COMPANION:
             from .personas import detect_persona  # noqa: PLC0415 - avoid circular import at module load
             access_key.persona = detect_persona(access_key.caps_dict())
         # Anything beyond a bare rename or an inline-wait tweak changes what the
@@ -1326,12 +1335,14 @@ class AccessKeyStore:
         node_type: str,
         node_id: str,
         state: str,
-        hint: str | None = None,
+        hint: str | None = KEEP_HINT,
     ) -> AccessKeyRecord | None:
         """Set or clear a single permission node and persist.
 
-        Setting state to GREY removes the node entirely (GREY is the default
-        and is not stored explicitly).
+        Omitting `hint` keeps the node's current one; None or "" clears it.
+        GREY is the default and is not stored, so a GREY node without a hint is
+        removed; one with a hint stays, since the hint still reaches agents
+        through the item's other grants.
         """
         access_key = self._access_keys.get(access_key_id)
         if access_key is None:
@@ -1341,10 +1352,12 @@ class AccessKeyStore:
         collection = getattr(access_key.permissions, node_type, None)
         if collection is None:
             return None
-        if state == "GREY":
+        existing = collection.get(node_id)
+        kept = (existing.hint if existing else None) if hint is KEEP_HINT else (hint or None)
+        if state == "GREY" and not kept:
             collection.pop(node_id, None)
         else:
-            collection[node_id] = PermissionNode(state=state, hint=hint)
+            collection[node_id] = PermissionNode(state=state, hint=kept)
         access_key.settings_version += 1
         access_key.updated_at = utcnow()
         await self.async_save()
@@ -1367,9 +1380,9 @@ class AccessKeyStore:
         if access_key is None:
             return None
         if len(access_key.presets) >= MAX_PRESETS_PER_ACCESS_KEY:
-            raise ValueError(f"An access key can have at most {MAX_PRESETS_PER_ACCESS_KEY} presets")
+            raise PresetLimitError(f"An access key can have at most {MAX_PRESETS_PER_ACCESS_KEY} presets")
         if self._preset_name_taken(access_key, name):
-            raise ValueError(f"A preset named {name!r} already exists on this access key")
+            raise PresetNameTakenError(f"A preset named {name!r} already exists on this access key")
         preset = snapshot_preset(access_key, name)
         access_key.presets.append(preset)
         access_key.active_preset_id = preset.id
@@ -1511,6 +1524,30 @@ class AccessKeyStore:
         else:
             self._entity_hints.pop(entity_id, None)
         await self.async_save()
+
+    async def async_rename_entity(self, old_entity_id: str, new_entity_id: str) -> bool:
+        """Carry an entity's per-key permission nodes and global hint over a rename.
+
+        The registry entry, and so the device, stays the same; only its ID
+        changed, so the grant keeps applying to the same entity. A node or hint
+        already at the new ID is kept and the old one is left to show as
+        missing, so a rename never widens or overwrites what the operator set.
+        Returns whether anything moved. Caller holds async_lock.
+        """
+        changed = False
+        for access_key in self._access_keys.values():
+            nodes = access_key.permissions.entities
+            if old_entity_id in nodes and new_entity_id not in nodes:
+                nodes[new_entity_id] = nodes.pop(old_entity_id)
+                access_key.settings_version += 1
+                access_key.updated_at = utcnow()
+                changed = True
+        if old_entity_id in self._entity_hints and new_entity_id not in self._entity_hints:
+            self._entity_hints[new_entity_id] = self._entity_hints.pop(old_entity_id)
+            changed = True
+        if changed:
+            await self.async_save()
+        return changed
 
     async def async_patch_settings(self, **kwargs) -> GlobalSettings:
         """Update any GlobalSettings fields by name and persist.

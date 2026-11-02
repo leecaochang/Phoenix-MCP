@@ -538,6 +538,7 @@ class TestApprovalApprove:
 
     @pytest.mark.asyncio
     async def test_approve_expires_an_overdue_record_before_claiming_it(self):
+        """An overdue request answers approvalExpired on Approve and closes as expired without running."""
         access_key = _make_access_key("tok-1", cap_restart="confirm")
         pending = _make_pending(
             "appr_a",
@@ -561,10 +562,36 @@ class TestApprovalApprove:
 
         stored = next(r for r in store._pending if r["id"] == "appr_a")
         assert response.status == 409
+        assert json.loads(response.text)["message_key"] == "adminError.approvalExpired"
         assert stored["status"] == STATUS_EXPIRED
         executor.assert_not_awaited()
         resolved.assert_called_once()
         assert resolved.call_args.args[1].status == STATUS_EXPIRED
+        assert data.audit.record.call_args.kwargs["method"] == "approval/expired"
+
+    @pytest.mark.asyncio
+    async def test_reject_closes_an_overdue_record_as_expired(self):
+        """An overdue request times out on Reject too, not only on Approve."""
+        pending = _make_pending(
+            "appr_a",
+            access_key_id="tok-1",
+            expires_at=(utcnow() - timedelta(seconds=1)).isoformat(),
+        )
+        store = _make_store(pending=[pending], access_keys=[_make_access_key("tok-1", cap_restart="confirm")])
+        data = _make_data(store)
+        view = PhoenixAdminApprovalRejectView()
+        view.hass = _make_hass(data)
+
+        with patch("homeassistant.components.persistent_notification.async_dismiss"):
+            response = await view.post(
+                _make_admin_request(body=b'{"reason": "not now"}'), approval_id="appr_a",
+            )
+
+        stored = next(r for r in store._pending if r["id"] == "appr_a")
+        assert response.status == 200
+        assert stored["status"] == STATUS_EXPIRED
+        assert stored.get("rejected_reason") is None
+        assert stored.get("approved_by_user_id") is None
         assert data.audit.record.call_args.kwargs["method"] == "approval/expired"
 
     @pytest.mark.asyncio
@@ -712,6 +739,35 @@ class TestApprovalApprove:
         out = json.loads(resp.text)
         assert out["status"] == STATUS_FAILED
         assert out["rejected_reason"] == "execution_failed"
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("refused", [True, False])
+    async def test_approve_records_an_executor_refusal_made_before_writing(self, refused):
+        # Only a RefusedBeforeWrite result is persisted as known-unapplied; the
+        # type cannot survive storage, so the record carries a server-owned flag.
+        from custom_components.phoenix_mcp.tool_common import _tool_error, _tool_refused_before_write
+
+        access_key = _make_access_key("tok-1", cap_restart="confirm")
+        store = _make_store(pending=[_make_pending("appr_a", access_key_id="tok-1")], access_keys=[access_key])
+        data = _make_data(store)
+        hass = _make_hass(data)
+        view = PhoenixAdminApprovalApproveView()
+        view.hass = hass
+        request = _make_admin_request(body=b"{}")
+        text = "This configuration changed since you last read it (expected_hash no longer matches)."
+
+        async def _executor(name, args, tok, hass, data):
+            result = _tool_refused_before_write(text) if refused else _tool_error(text)
+            return result, "invalid_request", "restart_ha"
+
+        with \
+             patch("custom_components.phoenix_mcp.mcp_view.async_execute_approved_tool", side_effect=_executor), \
+             patch("homeassistant.components.persistent_notification.async_dismiss"):
+            resp = await view.post(request, approval_id="appr_a")
+
+        out = json.loads(resp.text)
+        assert out["status"] == STATUS_FAILED and out["rejected_reason"] == "execution_failed"
+        assert out["result"].get("refused_before_write") is (True if refused else None)
 
     @pytest.mark.asyncio
     async def test_approve_cancels_when_token_revoked(self):

@@ -1,7 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, fireEvent, waitFor } from "@testing-library/react";
-import { ApprovalsView } from "../views/ApprovalsView";
+import { fireEvent, render, waitFor } from "@testing-library/react";
+import { renderApprovals } from "./approvals_harness";
 import { api } from "../api";
+import { copyToClipboard } from "../utils";
+import { DashboardPreview } from "../components/DashboardPreview";
 import type { ApprovalRecord } from "../types";
 
 // A card whose configuration fails becomes HA's hui-error-card inside the live
@@ -9,12 +11,14 @@ import type { ApprovalRecord } from "../types";
 // so the operator can hand it back to the agent and reject in the usual way.
 // This stub hui-card always spawns an error card; jsdom's custom element
 // registry is shared per test file, which is why it lives apart from the other
-// approval preview tests.
+// approval preview tests. Every error shows in one list with one copy icon,
+// so several paste back to the agent at once.
 
 vi.mock("../api", () => ({
   api: { listApprovals: vi.fn(), getApproval: vi.fn(), rejectApproval: vi.fn() },
   currentHass: () => ({}),
 }));
+vi.mock("../utils", async (importOriginal) => ({ ...(await importOriginal<typeof import("../utils")>()), copyToClipboard: vi.fn() }));
 
 customElements.define("hui-card", class extends HTMLElement {
   connectedCallback() {
@@ -52,7 +56,6 @@ describe("card configuration errors in the approval preview", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     localStorage.clear();
-    localStorage.setItem("phx-approval-default-view", "details");
     // Open straight into Preview mode so error detection runs immediately.
     localStorage.setItem("phx-dash-preview-mode", "preview");
   });
@@ -60,16 +63,15 @@ describe("card configuration errors in the approval preview", () => {
   it("shows a failing card's error as copyable text and keeps ordinary rejection", async () => {
     vi.mocked(api.listApprovals).mockResolvedValue({ approvals: [record()], total: 1, limit: 50, offset: 0 });
     vi.mocked(api.rejectApproval).mockResolvedValue(record({ status: "rejected" }));
-    const { container, findByText, findByRole, queryByRole } = render(
-      <ApprovalsView tab="pending" onTabChange={() => {}} />,
-    );
+    const { container, findByText, findByRole, queryByRole } = renderApprovals();
     fireEvent.click(await findByText("Add 'custom:apexcharts-card' to dashboard"));
     await waitFor(() => expect(container.querySelector(".dash-preview-cards hui-card hui-error-card")).toBeTruthy());
     const message = await findByText("value.series[0] is not a ChartCardSeriesExternalConfig", { selector: ".dash-preview-error-msg" });
     expect(container.querySelector(".dash-preview-cards")).not.toContainElement(message);
-    expect(container.querySelector(".dash-preview-error-panel")?.querySelector("button")?.textContent).toBe("Copy");
+    expect([...container.querySelector(".dash-preview-error-panel")!.querySelectorAll("button")].map((b) => b.getAttribute("aria-label"))).toEqual(["Copy Errors"]);
     expect(queryByRole("button", { name: "Reject with error message" })).toBeNull();
     fireEvent.click(await findByRole("button", { name: /^Reject$/ }));
+    fireEvent.click(await findByRole("button", { name: "Confirm Rejection" }));
     await waitFor(() => expect(api.rejectApproval).toHaveBeenCalledTimes(1));
   });
 
@@ -84,11 +86,22 @@ describe("card configuration errors in the approval preview", () => {
       })],
       total: 1, limit: 50, offset: 0,
     });
-    const { container, findByText, queryByRole } = render(
-      <ApprovalsView tab="pending" onTabChange={() => {}} />,
-    );
+    const { container, findByText, queryByRole } = renderApprovals();
     fireEvent.click(await findByText("Create automation 'x'"));
-    await waitFor(() => expect(container.querySelector("#approval-detail-tab-diff")).toBeTruthy());
+    await waitFor(() => expect(container.querySelector(".phx-review-change")).toBeTruthy());
     expect(queryByRole("button", { name: "Reject with error message" })).toBeNull();
+  });
+
+  it("lists every card's error once and copies them all as one text", async () => {
+    const { container, findByRole } = render(<DashboardPreview config={{ views: [{ cards: [{ type: "tile" }, { type: "gauge" }] }] }} />);
+    await waitFor(() => expect(container.querySelectorAll(".dash-preview-error-list li")).toHaveLength(2));
+    const panel = container.querySelector(".dash-preview-error-panel")!;
+    expect(panel.textContent).toContain("Cards in this preview reported configuration errors.");
+    expect(panel.querySelectorAll("button")).toHaveLength(1);
+    fireEvent.click(await findByRole("button", { name: "Copy Errors" }));
+    const error = "value.series[0] is not a ChartCardSeriesExternalConfig";
+    await waitFor(() => expect(copyToClipboard).toHaveBeenCalledWith(
+      `Card configuration errors were found in the dashboard preview, please investigate:\n- tile: ${error}\n- gauge: ${error}`,
+    ));
   });
 });

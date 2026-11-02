@@ -5,9 +5,9 @@
   "codeowners": [],
   "config_flow": true,
   "dependencies": ["frontend"],
-  "documentation": "https://leecaochang.github.io/Phoenix-MCP/",
+  "documentation": "https://github.com/leecaochang/Phoenix-MCP",
   "iot_class": "calculated",
   "issue_tracker": "https://github.com/leecaochang/Phoenix-MCP/issues",
   "requirements": ["Babel>=2.18.0", "jsonschema>=4.26.0"],
-  "version": "1.5.0"
+  "version": "2.0.0"
 }

@@ -12,6 +12,7 @@ which would be a cycle. mcp_view imports the names it uses from here.
 
 
 import asyncio
+from collections.abc import Callable
 import dataclasses
 import json
 from contextvars import ContextVar
@@ -23,11 +24,14 @@ from homeassistant.core import HomeAssistant, callback
 
 from .const import (
     DOMAIN,
+    DOMAIN_IMPORTANT_ATTRIBUTES,
+    LEAN_ALWAYS_ATTRS,
     MAX_DIFF_INLINE_BYTES,
     MAX_FILE_BYTES,
     MAX_CONFIRM_INLINE_WAIT_SECONDS,
     REDACTION_SENTINEL,
     REGISTRY_ID_HINT_MAX,
+    TOOL_RESULT_MAX_BYTES,
 )
 from .data import PhoenixData
 from .device_semantics import (
@@ -86,6 +90,63 @@ def unknown_category_message(hass: HomeAssistant, scope: str, category_id: str) 
         f"Categories in this scope: {listed}{more}." if known else "This scope has no categories yet.")
 
 
+def stored_result_bytes(value: Any) -> int:
+    """Bytes a tool result's JSON text takes as the Conversation Log stores it."""
+    from .conversation_log import json_size  # noqa: PLC0415
+
+    return json_size(json.dumps(value, default=str))
+
+
+def longest_fitting(build: Callable[[int], dict], count: int) -> dict:
+    """The body built from the most leading rows whose result fits TOOL_RESULT_MAX_BYTES.
+
+    build(k) makes the body from the first k of count rows and says how the rest
+    continue (a next offset, a cursor, or their names). The Conversation Log keeps
+    a result of this size whole, so what a model saw stays auditable.
+    """
+    body = build(count)
+    if count == 0 or stored_result_bytes(body) <= TOOL_RESULT_MAX_BYTES:
+        return body
+    low, high = 0, count - 1
+    while low < high:
+        middle = (low + high + 1) // 2
+        if stored_result_bytes(build(middle)) <= TOOL_RESULT_MAX_BYTES:
+            low = middle
+        else:
+            high = middle - 1
+    return build(low)
+
+
+def fitted_list(rows: list[dict], key: str) -> dict:
+    """A whole listing that fits one result, naming by entity_id the rows past it.
+
+    For listings without paging, which would otherwise grow without bound on a large home.
+    """
+    def build(count: int) -> dict:
+        body: dict = {"count": count, key: rows[:count]}
+        if count < len(rows):
+            body["not_listed"] = [row.get("entity_id") for row in rows[count:]]
+            body["warnings"] = ["The result is full: the entities in not_listed were not listed."]
+        return body
+
+    return longest_fitting(build, len(rows))
+
+
+def fitted_offset_page(page: list, envelope: dict, build: Callable[[list, dict], dict]) -> dict:
+    """An offset page shrunk to what fits TOOL_RESULT_MAX_BYTES, continuing at the first row left out.
+
+    build(rows, envelope) makes the body; a shorter page sets has_more and the
+    next_offset that resumes exactly where it stopped, so nothing is skipped.
+    """
+    def make(count: int) -> dict:
+        trimmed = dict(envelope, count=count)
+        if count < len(page):
+            trimmed.update(has_more=True, next_offset=envelope["offset"] + count)
+        return build(page[:count], trimmed)
+
+    return longest_fitting(make, len(page))
+
+
 def offset_page(rows: list, args: dict, *, default_limit: int, max_limit: int) -> tuple[list, dict] | str:
     """Slice one offset page; returns (page, envelope) or a caller-facing error.
 
@@ -115,7 +176,22 @@ def _tool_error(message: str) -> dict:
     return {"content": [{"type": "text", "text": message}], "isError": True}
 
 
-def _tool_pending(approval: Any, waited_seconds: int | None = None) -> dict:
+class RefusedBeforeWrite(dict):
+    """A tool error returned before the call could write anything.
+
+    It serializes as the ordinary error dict, so clients see no difference, and
+    tool text cannot create one. Phoenix's agent loops hand it back to the model
+    instead of holding an unknown-outcome barrier. A copy that drops the type
+    keeps that barrier, so losing the marker fails closed.
+    """
+
+
+def _tool_refused_before_write(message: str) -> dict:
+    """Return a tool error for a refusal made before any write could start."""
+    return RefusedBeforeWrite(_tool_error(message))
+
+
+def _tool_pending(approval: Any, waited_seconds: int | None = None, *, notified: bool = False) -> dict:
     """Return an MCP tool result for a pending admin approval.
 
     isError is False because pending is a valid outcome, not a failure.
@@ -134,7 +210,15 @@ def _tool_pending(approval: Any, waited_seconds: int | None = None) -> dict:
     again on the same id would likely spend it twice. The advice is otherwise
     identical on every path that reaches here, because the agent cannot tell
     which it is on (the inline wait is an access key setting).
+
+    `notified` says whether new approvals raise a Home Assistant notification
+    (`_approval_notifies`); the message claims one only then.
     """
+    notice = (
+        "the admin has been notified. "
+        if notified
+        else "approval notifications are off, so the admin sees it only in the Phoenix MCP panel. "
+    )
     waited = (
         f"This call already held for {waited_seconds} seconds without resolving, so the operator "
         "is not reviewing in real time right now. "
@@ -148,7 +232,7 @@ def _tool_pending(approval: Any, waited_seconds: int | None = None) -> dict:
         "review_url": f"/phoenix-mcp/approvals/{approval.id}",
         "message": (
             f"{waited}This action is queued for admin approval and will be applied once approved; "
-            "the admin has been notified. Do not retry it. Continue with your remaining steps: "
+            f"{notice}Do not retry it. Continue with your remaining steps: "
             "further approval-gated calls queue alongside this one and the admin can clear the "
             "whole queue in a single action, so do NOT stop or wait after each one. When you "
             "genuinely need the outcomes, call wait_for_approval ONCE with approval_ids listing "
@@ -158,6 +242,11 @@ def _tool_pending(approval: Any, waited_seconds: int | None = None) -> dict:
         ),
     })
     return {"content": [{"type": "text", "text": body}]}
+
+
+def _approval_notifies(data: Any) -> bool:
+    """Whether a new approval raises a notification, as `create_approval_notification` decides."""
+    return bool(data.store.get_settings().notify_on_approval)
 
 
 def _tool_inline_resolved(approval: Any) -> dict:
@@ -294,6 +383,15 @@ _CAP_FORBIDDEN_MESSAGE = (
     "your tool list (reconnect) if it changed, or ask the operator to grant it."
 )
 
+# A MESA policy refusal of every target an action had left after Phoenix's own
+# scope checks. Unlike a capability denial, neither reconnecting nor
+# get_capability_summary changes it, so it says so instead of sending the agent
+# there. MESA only ever sees permitted targets, so naming it reveals nothing hidden.
+MESA_DENIED_MESSAGE = (
+    "Blocked by MESA policy for these targets. This is not a capability: reconnecting or "
+    "get_capability_summary will not change it; only the operator's MESA policy can."
+)
+
 
 # Appended to the executed result when an interactive wait returns an
 # operator-APPROVED action. Without it an agent iterating toward a goal reads an
@@ -405,7 +503,10 @@ async def _await_inline_confirm(
     except TimeoutError:
         # The one place the agent is told how long it already held, so it does
         # not immediately block on the same id and spend the budget twice.
-        return _tool_pending(approval, waited_seconds=wait), "pending_approval", _approval_resource(approval)
+        return (
+            _tool_pending(approval, waited_seconds=wait, notified=_approval_notifies(data)),
+            "pending_approval", _approval_resource(approval),
+        )
     finally:
         unsub()
         _set_progress_status(None)
@@ -415,7 +516,7 @@ async def _await_inline_confirm(
     if latest is None or latest.status == STATUS_PENDING:
         # Event fired but the record is not terminal (a rare race): behave as if
         # it timed out, so the agent still gets a usable pending reply.
-        return _tool_pending(approval), "pending_approval", resource
+        return _tool_pending(approval, notified=_approval_notifies(data)), "pending_approval", resource
     if latest.status == STATUS_APPROVED and latest.result:
         tool_result = latest.result.get("tool_result")
         if tool_result is not None:
@@ -451,7 +552,7 @@ async def _pending_or_inline(
     """
     if access_key.confirm_inline_wait_seconds > 0 and not _access_key_has_other_pending(data, access_key, approval):
         return await _await_inline_confirm(hass, data, access_key, approval)
-    return _tool_pending(approval), "pending_approval", _approval_resource(approval)
+    return _tool_pending(approval, notified=_approval_notifies(data)), "pending_approval", _approval_resource(approval)
 
 
 def _access_key_has_other_pending(data: PhoenixData, access_key: AccessKeyRecord, approval: Any) -> bool:
@@ -532,13 +633,15 @@ def _version_change_summary(
         return None
     if resource_type in ("yaml_config", "file"):
         b, a = _payload_size(before), _payload_size(after)
+        # The English sizes are the stored record; the byte counts travel too so
+        # the panel can format them for the reader's locale.
         if a is not None and b is not None:
             return (
-                _version_summary("size.was", size=_fmt_bytes(a), before=_fmt_bytes(b))
-                if a != b else _version_summary("size", size=_fmt_bytes(a))
+                _version_summary("size.was", size=_fmt_bytes(a), before=_fmt_bytes(b), size_bytes=a, before_bytes=b)
+                if a != b else _version_summary("size", size=_fmt_bytes(a), size_bytes=a)
             )
         if a is not None:
-            return _version_summary("size", size=_fmt_bytes(a))
+            return _version_summary("size", size=_fmt_bytes(a), size_bytes=a)
         return None
     if resource_type in ("entity", "device"):
         if after is None:
@@ -680,8 +783,9 @@ def _cas_conflict(
     current_hash = content_hash(current) if current is not None else None
     if current_hash == expected:
         return None
+    # Every caller returns this before its write starts.
     return (
-        _tool_error(
+        _tool_refused_before_write(
             "This configuration changed since you last read it (expected_hash no "
             "longer matches). Re-read it and reapply your change."
         ),
@@ -889,3 +993,72 @@ async def _create_registry_mesa_approval(
     create_approval_notification(hass, approval)
     fire_approval_requested_event(hass, approval)
     return await _pending_or_inline(hass, data, access_key, approval)
+
+
+# State projections shared by get_state and search_entities.
+
+
+def _normalize_fields(fields: Any) -> list[str]:
+    """Coerce the get_state `fields` arg to a list of field names.
+
+    Accepts a list of strings or a single comma-separated string (a common agent
+    mistake); anything else yields an empty list, which selects the lean default.
+    """
+    if isinstance(fields, str):
+        return [f for f in (p.strip() for p in fields.split(",")) if f]
+    if isinstance(fields, list):
+        return [str(f).strip() for f in fields if str(f).strip()]
+    return []
+
+
+def _select_state_fields(scrubbed: dict, fields: list[str]) -> dict:
+    """Return only the requested fields from an already-scrubbed state dict.
+
+    Top-level keys (state, last_changed, last_updated, ...) are taken as-is;
+    'attr.<name>' selects one attribute; 'attributes' selects all (scrubbed)
+    attributes. entity_id is always included. Unknown fields are ignored. Runs
+    AFTER scrubbing, so a scrubbed attribute can never be selected back in.
+    """
+    attrs = scrubbed.get("attributes", {})
+    out: dict = {"entity_id": scrubbed.get("entity_id")}
+    picked_attrs: dict = {}
+    for f in fields:
+        if f == "attributes":
+            picked_attrs.update(attrs)
+        elif f.startswith("attr."):
+            name = f[len("attr."):]
+            if name in attrs:
+                picked_attrs[name] = attrs[name]
+        elif f in scrubbed and f != "attributes":
+            out[f] = scrubbed[f]
+    if picked_attrs:
+        out["attributes"] = picked_attrs
+    return out
+
+
+def _lean_state(scrubbed: dict) -> dict:
+    """Return the domain-aware lean view of an already-scrubbed state dict."""
+    eid = scrubbed.get("entity_id", "") or ""
+    domain = eid.split(".")[0] if "." in eid else ""
+    attrs = scrubbed.get("attributes", {})
+    keep = set(LEAN_ALWAYS_ATTRS) | set(DOMAIN_IMPORTANT_ATTRIBUTES.get(domain, ()))
+    lean_attrs = {k: v for k, v in attrs.items() if k in keep}
+    out: dict = {"entity_id": eid, "state": scrubbed.get("state")}
+    if lean_attrs:
+        out["attributes"] = lean_attrs
+    return out
+
+
+def _project_state(scrubbed: dict, fields: Any, detailed: bool) -> dict:
+    """Apply presentation-only field projection to a scrubbed state dict.
+
+    `detailed` returns the full dict, explicit fields the requested subset,
+    otherwise the domain-aware lean view. Never bypasses scrubbing (the input is
+    already scrubbed).
+    """
+    if detailed:
+        return scrubbed
+    norm = _normalize_fields(fields)
+    if norm:
+        return _select_state_fields(scrubbed, norm)
+    return _lean_state(scrubbed)

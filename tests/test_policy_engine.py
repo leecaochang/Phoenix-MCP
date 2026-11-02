@@ -19,17 +19,19 @@ from homeassistant.util.dt import utcnow
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.phoenix_mcp.policy_engine import (
-    EntityCreationNotPermitted,
     Permission,
     call_needs_physical_gate,
     config_entry_registry_context,
     device_config_entry_ids,
     filter_entities_for_access_key,
     filter_service_response,
+    get_effective_hint,
     parse_relative_time,
     resolve,
     resolve_config_entry_registry_access,
     resolve_config_entry_registry_write,
+    resolve_device_registry_access,
+    resolve_device_registry_write,
     resolve_registry_access,
     resolve_intent_entities,
     resolve_service_targets,
@@ -185,6 +187,147 @@ def device_env(hass: HomeAssistant, config_entry: MockConfigEntry, entity_reg, d
         "light_accent": light_accent,
         "sensor": sensor,
     }
+
+
+@pytest.fixture
+def part_env(hass, device_env, config_entry, entity_reg, device_reg):
+    """A child device that is a part of the hub, plus a via-device dependent."""
+    hub = device_env["device"]
+    part = device_reg.async_get_or_create_child(
+        config_entry_id=config_entry.entry_id,
+        identifiers={("test_integration", "hub-outlet")},
+        name="Outlet",
+        parent_device_id=hub.id,
+    )
+    part_light = entity_reg.async_get_or_create(
+        "light", "test_integration", "hub-outlet-light",
+        config_entry=config_entry,
+        device_id=part.id,
+    )
+    hass.states.async_set(part_light.entity_id, "on")
+    dependent = device_reg.async_get_or_create(
+        config_entry_id=config_entry.entry_id,
+        identifiers={("test_integration", "hub-dependent")},
+        name="Dependent",
+        via_device_id=hub.id,
+    )
+    dependent_light = entity_reg.async_get_or_create(
+        "light", "test_integration", "hub-dependent-light",
+        config_entry=config_entry,
+        device_id=dependent.id,
+    )
+    hass.states.async_set(dependent_light.entity_id, "on")
+    return {
+        "hub": hub,
+        "part": part,
+        "part_light": part_light.entity_id,
+        "dependent": dependent,
+        "dependent_light": dependent_light.entity_id,
+    }
+
+
+@pytest.mark.usefixtures("requires_child_devices")
+class TestChildDeviceAuthority:
+    """A main device's node governs its child devices; via_device does not."""
+
+    def test_parent_red_blocks_child_entity_despite_domain_grant(self, hass, part_env):
+        key = _make_access_key(
+            domains={"light": "GREEN"}, devices={part_env["hub"].id: "RED"}
+        )
+        assert resolve(part_env["part_light"], key, hass) == Permission.DENY
+        assert resolve(part_env["dependent_light"], key, hass) == Permission.WRITE
+
+    def test_parent_grant_reaches_child_entity(self, hass, part_env):
+        key = _make_access_key(devices={part_env["hub"].id: "GREEN"})
+        assert resolve(part_env["part_light"], key, hass) == Permission.WRITE
+        assert resolve(part_env["dependent_light"], key, hass) == Permission.NO_ACCESS
+
+    @pytest.mark.parametrize(
+        ("part_state", "hub_state", "expected"),
+        [
+            ("YELLOW", "GREEN", Permission.READ),
+            ("GREEN", "YELLOW", Permission.WRITE),
+            ("GREEN", "RED", Permission.DENY),
+            ("RED", "GREEN", Permission.DENY),
+        ],
+    )
+    def test_child_node_is_more_specific_but_red_ancestor_wins(
+        self, hass, part_env, part_state, hub_state, expected
+    ):
+        key = _make_access_key(
+            devices={part_env["part"].id: part_state, part_env["hub"].id: hub_state}
+        )
+        assert resolve(part_env["part_light"], key, hass) == expected
+
+    def test_registry_only_child_entity_inherits_parent(self, hass, part_env, entity_reg):
+        entity_reg.async_update_entity(
+            part_env["part_light"], disabled_by=er.RegistryEntryDisabler.USER
+        )
+        key = _make_access_key(devices={part_env["hub"].id: "GREEN"})
+        assert resolve_registry_access(part_env["part_light"], key, hass) == Permission.WRITE
+        key = _make_access_key(
+            domains={"light": "GREEN"}, devices={part_env["hub"].id: "RED"}
+        )
+        assert resolve_registry_access(part_env["part_light"], key, hass) == Permission.DENY
+
+    @pytest.mark.parametrize(
+        ("hub_state", "expected"),
+        [("GREEN", Permission.WRITE), ("YELLOW", Permission.READ), ("RED", Permission.DENY)],
+    )
+    def test_child_device_registry_resolvers_inherit_parent(
+        self, hass, part_env, hub_state, expected
+    ):
+        key = _make_access_key(devices={part_env["hub"].id: hub_state})
+        assert resolve_device_registry_write(part_env["part"].id, key, hass) == expected
+        assert resolve_device_registry_write(
+            part_env["dependent"].id, key, hass
+        ) == Permission.NO_ACCESS
+        if expected != Permission.DENY:
+            assert resolve_device_registry_access(part_env["part"].id, key, hass) == expected
+
+    def test_parent_red_beats_child_device_grant(self, hass, part_env):
+        key = _make_access_key(
+            devices={part_env["part"].id: "GREEN", part_env["hub"].id: "RED"}
+        )
+        assert resolve_device_registry_write(part_env["part"].id, key, hass) == Permission.DENY
+
+    def test_parent_hint_reaches_child_entity(self, hass, part_env):
+        key = _make_access_key()
+        key.permissions.devices[part_env["hub"].id] = _node("GREEN", "Hub hint")
+        assert get_effective_hint(key, part_env["part_light"], hass) == "Hub hint"
+        key.permissions.devices[part_env["part"].id] = _node("GREY", "Outlet hint")
+        assert get_effective_hint(key, part_env["part_light"], hass) == "Outlet hint"
+
+    def test_parent_device_target_reaches_parts_not_dependents(self, hass, part_env):
+        key = _make_access_key(domains={"light": "GREEN"})
+        result, _ = resolve_service_targets(
+            device_id=part_env["hub"].id,
+            service_domain="light",
+            access_key=key,
+            hass=hass,
+        )
+        assert part_env["part_light"] in result
+        assert part_env["dependent_light"] not in result
+
+        result, _ = resolve_service_targets(
+            device_id=part_env["part"].id,
+            service_domain="light",
+            access_key=key,
+            hass=hass,
+        )
+        assert result == [part_env["part_light"]]
+
+    def test_parent_target_still_filters_child_permissions(self, hass, part_env):
+        key = _make_access_key(
+            domains={"light": "GREEN"}, devices={part_env["part"].id: "RED"}
+        )
+        result, _ = resolve_service_targets(
+            device_id=part_env["hub"].id,
+            service_domain="light",
+            access_key=key,
+            hass=hass,
+        )
+        assert part_env["part_light"] not in result
 
 
 class TestConfigEntryRegistryPolicy:
@@ -561,18 +704,6 @@ class TestResolveRegistryAccess:
             == Permission.WRITE
         )
 
-    async def test_recorder_entity_ids_use_the_same_registry_scope(
-        self, hass, registered_env
-    ):
-        from custom_components.phoenix_mcp.helpers import build_permitted_entity_ids
-
-        entity_id = registered_env["lights"]["kitchen"].entity_id
-        hass.states.async_remove(entity_id)
-        entity_only = _make_access_key(entities={entity_id: "GREEN"})
-        domain_read = _make_access_key(domains={"light": "YELLOW"})
-        assert entity_id not in build_permitted_entity_ids(entity_only, hass)
-        assert entity_id in build_permitted_entity_ids(domain_read, hass)
-
 
 class TestResolveGhostAndBlocklist:
     async def test_ghost_entity_returns_not_found(self, hass):
@@ -841,16 +972,14 @@ class TestResolveServiceTargetsEntityId:
         )
         assert result == []
 
-    async def test_nonexistent_entity_raises_entity_creation_not_permitted(self, hass):
+    async def test_nonexistent_entity_is_skipped_and_never_dispatched(self, hass):
         access_key = _make_access_key(domains={"light": "GREEN"})
-        with pytest.raises(EntityCreationNotPermitted) as exc_info:
-            resolve_service_targets(
-                entity_id="light.does_not_exist",
-                service_domain="light",
-                access_key=access_key,
-                hass=hass,
-            )
-        assert exc_info.value.entity_id == "light.does_not_exist"
+        assert resolve_service_targets(
+            entity_id="light.does_not_exist",
+            service_domain="light",
+            access_key=access_key,
+            hass=hass,
+        ) == ([], 0)
 
     async def test_all_expands_to_domain_entities(self, hass, registered_env):
         kitchen_id = registered_env["lights"]["kitchen"].entity_id
@@ -1107,13 +1236,12 @@ class TestResolveServiceTargetsPassThrough:
 
     async def test_pass_through_entity_creation_still_blocked(self, hass):
         access_key = _make_access_key(pass_through=True)
-        with pytest.raises(EntityCreationNotPermitted):
-            resolve_service_targets(
-                entity_id="light.ghost_entity",
-                service_domain="light",
-                access_key=access_key,
-                hass=hass,
-            )
+        assert resolve_service_targets(
+            entity_id="light.ghost_entity",
+            service_domain="light",
+            access_key=access_key,
+            hass=hass,
+        ) == ([], 0)
 
     async def test_pass_through_still_blocks_phoenix_domain(self, hass, registered_env):
         access_key = _make_access_key(pass_through=True)
@@ -1374,8 +1502,47 @@ class TestParseRelativeTime:
     def test_months(self):
         with patch("custom_components.phoenix_mcp.policy_engine.utcnow") as mock_now:
             mock_now.return_value = datetime(2026, 4, 10, 0, 0, 0)
-            result = parse_relative_time("1m")
+            result = parse_relative_time("1mo")
         assert result == datetime(2026, 3, 11, 0, 0, 0)
+
+    @pytest.mark.parametrize(("value", "expected"), [
+        ("30min", datetime(2026, 4, 10, 11, 30)),
+        ("45 minutes", datetime(2026, 4, 10, 11, 15)),
+        ("24H", datetime(2026, 4, 9, 12, 0)),
+        ("24 hours", datetime(2026, 4, 9, 12, 0)),
+        ("-24h", datetime(2026, 4, 9, 12, 0)),
+        ("2 days ago", datetime(2026, 4, 8, 12, 0)),
+        ("1 Week", datetime(2026, 4, 3, 12, 0)),
+        ("2 months", datetime(2026, 2, 9, 12, 0)),
+        ("+7d", datetime(2026, 4, 17, 12, 0)),
+        ("+90min", datetime(2026, 4, 10, 13, 30)),
+    ])
+    def test_spelled_signed_and_minute_units(self, value, expected):
+        with patch("custom_components.phoenix_mcp.policy_engine.utcnow") as mock_now:
+            mock_now.return_value = datetime(2026, 4, 10, 12, 0, 0)
+            assert parse_relative_time(value) == expected
+
+    @pytest.mark.parametrize("value", ["5m", "30M", "1 m"])
+    def test_bare_m_is_refused_as_ambiguous(self, value):
+        from custom_components.phoenix_mcp.policy_engine import RelativeTimeError
+        with pytest.raises(RelativeTimeError, match="min for minutes or .*mo for months"):
+            parse_relative_time(value)
+
+    @pytest.mark.parametrize("value", ["367d", "53w", "13mo", "+400d", "530000min"])
+    def test_range_cap_is_a_refusal_with_its_reason(self, value):
+        from custom_components.phoenix_mcp.policy_engine import RelativeTimeError
+        with pytest.raises(RelativeTimeError, match="maximum allowed range of 366 days"):
+            parse_relative_time(value)
+
+    @pytest.mark.parametrize("value", ["366d", "52w", "12mo"])
+    def test_range_cap_allows_a_year(self, value):
+        assert isinstance(parse_relative_time(value), datetime)
+
+    @pytest.mark.parametrize("value", ["now", " NOW "])
+    def test_now_is_the_current_time(self, value):
+        with patch("custom_components.phoenix_mcp.policy_engine.utcnow") as mock_now:
+            mock_now.return_value = datetime(2026, 4, 10, 12, 0, 0)
+            assert parse_relative_time(value) == datetime(2026, 4, 10, 12, 0, 0)
 
     def test_whitespace_stripped(self):
         result = parse_relative_time("  6h  ")
@@ -1389,9 +1556,12 @@ class TestParseRelativeTime:
         with pytest.raises(ValueError):
             parse_relative_time("invalid")
 
-    def test_invalid_unit_raises(self):
-        with pytest.raises(ValueError):
-            parse_relative_time("5x")
+    @pytest.mark.parametrize("value", ["5x", "+7d ago", "7 fortnights", "yesterday"])
+    def test_invalid_unit_raises(self, value):
+        from custom_components.phoenix_mcp.policy_engine import RelativeTimeError
+        with pytest.raises(ValueError) as caught:
+            parse_relative_time(value)
+        assert not isinstance(caught.value, RelativeTimeError)
 
     def test_no_number_raises(self):
         with pytest.raises(ValueError):

@@ -29,6 +29,8 @@ from custom_components.phoenix_mcp.access_key_store import AccessKeyRecord, Perm
 from custom_components.phoenix_mcp.history_summary import (
     SummaryUnavailableError, cursor_cut, group_cut, scan_state_changes,
 )
+from custom_components.phoenix_mcp.const import CONVERSATION_LOG_PAYLOAD_BYTES, TOOL_RESULT_MAX_BYTES
+from custom_components.phoenix_mcp.conversation_log import json_size
 from custom_components.phoenix_mcp.mcp_view import _call_tool
 from custom_components.phoenix_mcp.policy_engine import Permission
 
@@ -52,7 +54,7 @@ BASE = dt_util.utcnow().replace(microsecond=0) - timedelta(days=2)
 
 
 def _key() -> AccessKeyRecord:
-    domains = {domain: PermissionNode(state="GREEN") for domain in ("light", "sensor", "zone")}
+    domains = {domain: PermissionNode(state="GREEN") for domain in ("light", "sensor", "zone", "climate")}
     return AccessKeyRecord(id=str(uuid.uuid4()), name="t", access_key_hash="x", created_at=dt_util.utcnow(),
                            created_by="u", permissions=PermissionTree(domains=domains))
 
@@ -201,6 +203,157 @@ def _alternate(hass: HomeAssistant, entity_id: str, count: int) -> None:
         _set(hass, entity_id, "on" if index % 2 == 0 else "off", 10 + index * 10 + index % 3)
 
 
+def _hvac(hass: HomeAssistant) -> None:
+    """A thermostat in heat mode throughout whose hvac_action alone changes, once while unavailable."""
+    _set(hass, "climate.hall", "heat", -3600, {"hvac_action": "idle", "temperature": 21})
+    for action, seconds in (("heating", 600), ("idle", 1500), ("heating", 2400)):
+        _set(hass, "climate.hall", "heat", seconds, {"hvac_action": action, "temperature": 21})
+    _set(hass, "climate.hall", "unavailable", 3000)
+    _set(hass, "climate.hall", "heat", 3300, {"hvac_action": "idle", "temperature": 21})
+
+
+async def test_attribute_totals_follow_attribute_only_updates(recorder_mock, hass: HomeAssistant) -> None:
+    """How long hvac_action was heating, though the state stayed heat; an absent attribute counts as the state."""
+    _anchor(hass)
+    _hvac(hass)
+    await async_wait_recording_done(hass)
+    state = await _summary(hass, "climate.hall", 0, 3600)
+    assert _states(state) == {"heat": (3300.0, 1), "unavailable": (300.0, 1)}
+    body = await _summary(hass, "climate.hall", 0, 3600, attribute="hvac_action")
+    assert body["attribute"] == "hvac_action"
+    assert body["state_at_start"] == "idle" and body["state_at_end"] == "idle"
+    assert _states(body) == {"heating": (1500.0, 2), "idle": (1800.0, 2), "unavailable": (300.0, 1)}
+    assert body["complete"] is True
+
+
+async def test_attribute_totals_are_the_same_across_internal_pages(recorder_mock, hass: HomeAssistant) -> None:
+    _anchor(hass)
+    _hvac(hass)
+    for index in range(12):
+        _set(hass, "climate.hall", "heat", 3400 + index * 10, {"hvac_action": "heating" if index % 2 else "idle"})
+    await async_wait_recording_done(hass)
+    whole = await _summary(hass, "climate.hall", 0, 3600, attribute="hvac_action")
+    with (patch.object(mcp_view, "HISTORY_SUMMARY_PAGE_ROWS", 3),
+          patch.object(mcp_view, "read_attribute_change_page", wraps=mcp_view.read_attribute_change_page) as page):
+        paged = await _summary(hass, "climate.hall", 0, 3600, attribute="hvac_action")
+    assert page.call_count >= 5
+    assert paged == whole and whole["complete"] is True
+
+
+async def test_attribute_totals_for_several_entities_and_only_in_summary(recorder_mock, hass: HomeAssistant) -> None:
+    _anchor(hass)
+    _hvac(hass)
+    _set(hass, "climate.den", "cool", -3600, {"hvac_action": "cooling"})
+    await async_wait_recording_done(hass)
+    args = {"entity_id": ["climate.hall", "climate.den"], "mode": "summary", "attribute": "hvac_action",
+            "start_time": _at(0).isoformat(), "end_time": _at(3600).isoformat()}
+    result = await _call_tool("get_history", args, _key(), hass, MagicMock(), "r", None)
+    body = json.loads(result[0]["content"][0]["text"])
+    assert body["attribute"] == "hvac_action"
+    rows = {row["entity_id"]: {item["state"]: item["duration_seconds"] for item in row["states"]} for row in body["entities"]}
+    assert rows == {"climate.den": {"cooling": 3600.0}, "climate.hall": {"idle": 1800.0, "heating": 1500.0, "unavailable": 300.0}}
+    result = await _call(hass, "climate.hall", 0, 3600, mode="state_changes", attribute="hvac_action")
+    assert result[1] == "invalid_request" and "only with mode summary" in result[0]["content"][0]["text"]
+
+
+async def _many(hass: HomeAssistant, start: float, end: float, key: AccessKeyRecord | None = None, **extra) -> dict:
+    args = {"mode": "summary", "start_time": _at(start).isoformat(), "end_time": _at(end).isoformat(), **extra}
+    result = await _call_tool("get_history", args, key or _key(), hass, MagicMock(), "r", None)
+    assert result[1] == "allowed", result
+    return json.loads(result[0]["content"][0]["text"])
+
+
+def _flappers(hass: HomeAssistant) -> None:
+    """Of three sensors, one goes unavailable inside the window and one starts it unavailable."""
+    _set(hass, "sensor.steady", "1", -3600)
+    _set(hass, "sensor.dropped", "1", -3600)
+    _set(hass, "sensor.dropped", "unavailable", 600)
+    _set(hass, "sensor.dropped", "1", 900)
+    _set(hass, "sensor.already", "unavailable", -3600)
+    _set(hass, "sensor.already", "1", 300)
+
+
+async def test_in_state_keeps_only_the_entities_that_were_in_it(recorder_mock, hass: HomeAssistant) -> None:
+    _anchor(hass)
+    _flappers(hass)
+    await async_wait_recording_done(hass)
+    body = await _many(hass, 0, 3600, entity_id=["sensor.steady", "sensor.dropped", "sensor.already"], in_state="unavailable")
+    assert [row["entity_id"] for row in body["entities"]] == ["sensor.dropped", "sensor.already"]
+    assert body["in_state"] == ["unavailable"] and body["scanned"] == 3 and body["count"] == 2
+    assert "not_summarized" not in body
+
+
+async def test_a_row_without_a_starting_state_says_when_its_record_begins(recorder_mock, hass: HomeAssistant) -> None:
+    """A state held since before the record began is known only from then; the row says when."""
+    _anchor(hass)
+    _set(hass, "light.desk", "on", -3600)
+    _set(hass, "light.new", "on", 600)
+    _set(hass, "light.later", "on", 5000)
+    await async_wait_recording_done(hass)
+    body = await _many(hass, 0, 1200, entity_id=["light.desk", "light.new", "light.later"])
+    rows = {row["entity_id"]: row for row in body["entities"]}
+    alone = await _summary(hass, "light.new", 0, 1200)
+    assert rows["light.new"]["recorded_from"] == alone["recorded_range"]["start"] == _at(600).isoformat()
+    # A baseline at the start, or no record in the range at all, has no such time.
+    assert "recorded_from" not in rows["light.desk"] and "recorded_from" not in rows["light.later"]
+
+
+async def test_in_state_sees_a_state_a_row_combines(recorder_mock, hass: HomeAssistant) -> None:
+    """A brief state past the listed ones still counts, since the filter reads the full totals."""
+    _anchor(hass)
+    _set(hass, "sensor.busy", "0", -3600)
+    for index in range(12):
+        _set(hass, "sensor.busy", str(index + 1), 100 + index * 200)
+    _set(hass, "sensor.busy", "unavailable", 2500)
+    _set(hass, "sensor.busy", "20", 2501)
+    await async_wait_recording_done(hass)
+    with patch.object(mcp_view, "HISTORY_SUMMARY_MANY_MAX_STATES", 3):
+        body = await _many(hass, 0, 3600, entity_id=["sensor.busy"], in_state="unavailable")
+    row = body["entities"][0]
+    assert "unavailable" not in {item["state"] for item in row["states"]} and row["other_states"]["count"] > 0
+
+
+async def test_an_empty_select_scans_every_entity_only_with_in_state(recorder_mock, hass: HomeAssistant) -> None:
+    from homeassistant.helpers import entity_registry as er
+    from homeassistant.const import EntityCategory
+
+    _anchor(hass)
+    _flappers(hass)
+    entry = er.async_get(hass).async_get_or_create("sensor", "test", "diag", suggested_object_id="diag",
+                                                    entity_category=EntityCategory.DIAGNOSTIC)
+    _set(hass, entry.entity_id, "unavailable", 600)
+    _set(hass, "light.hidden", "unavailable", 600)
+    await async_wait_recording_done(hass)
+    args = {"mode": "summary", "select": {}, "start_time": _at(0).isoformat(), "end_time": _at(3600).isoformat()}
+    refused = await _call_tool("get_history", args, _key(), hass, MagicMock(), "r", None)
+    assert refused[1] == "invalid_request" and "in_state" in refused[0]["content"][0]["text"]
+    # Like any select, scanning every entity needs the search capability.
+    denied = await _call_tool("get_history", {**args, "in_state": "unavailable"}, _key(), hass, MagicMock(), "r", None)
+    assert denied[1] == "denied"
+    key = _key()
+    key.cap_search = "allow"
+    key.permissions.domains.pop("light")
+    # The cap on a caller's own list does not bound a selection.
+    with patch.object(mcp_view, "SEARCH_ENTITIES_MAX_LIMIT", 2):
+        body = await _many(hass, 0, 3600, key=key, select={}, in_state="unavailable")
+    assert [row["entity_id"] for row in body["entities"]] == ["sensor.already", "sensor.dropped"]
+    assert body["select"] == {} and body["diagnostic_excluded"] == 1
+    assert "light.hidden" not in json.dumps(body)
+
+
+async def test_rows_name_the_entity_and_its_area(recorder_mock, hass: HomeAssistant) -> None:
+    from homeassistant.helpers import area_registry as ar
+    from homeassistant.helpers import entity_registry as er
+
+    _anchor(hass)
+    entry = er.async_get(hass).async_get_or_create("light", "test", "lamp", suggested_object_id="lamp")
+    er.async_get(hass).async_update_entity(entry.entity_id, area_id=ar.async_get(hass).async_create("Den").id)
+    _set(hass, entry.entity_id, "on", -3600, {"friendly_name": "Den lamp"})
+    await async_wait_recording_done(hass)
+    body = await _many(hass, 0, 3600, entity_id=[entry.entity_id])
+    assert body["entities"][0]["name"] == "Den lamp" and body["entities"][0]["area"] == "Den"
+
+
 async def test_state_carries_across_internal_pages(recorder_mock, hass: HomeAssistant) -> None:
     _anchor(hass)
     _alternate(hass, "light.desk", 25)
@@ -247,10 +400,15 @@ async def test_a_spent_budget_returns_a_cursor_whose_continuations_add_up(record
                 totals.setdefault(row["state"], [0.0, 0])
                 totals[row["state"]][0] += row["duration_seconds"]
                 totals[row["state"]][1] += row["entered"]
+            # Only the first page totals from the requested start; later ones say so.
+            assert body["continuation"] is (cursor is not None)
+            assert any("cover only covered_range" in warning for warning in body["warnings"]) is (cursor is not None)
             if not body["has_more"]:
+                assert "unread_range" not in body
                 break
             assert body["complete"] is False and body["incomplete_reasons"] == ["scan_limit"]
             assert body["covered_range"]["end"] == body["next_cursor"]
+            assert body["unread_range"] == {"start": body["next_cursor"], "end": body["requested_range"]["end"]}
             cursor = body["next_cursor"]
     assert len(pages) > 2 and pages[-1]["complete"] is True
     for previous, following in zip(pages, pages[1:]):
@@ -334,10 +492,16 @@ async def test_access_is_rechecked_after_the_scan(recorder_mock, hass: HomeAssis
 
 
 @pytest.mark.parametrize("extra", [{"limit": 10}, {"order": "newest_first"}, {"order": "oldest_first"}])
-async def test_row_paging_arguments_are_refused(recorder_mock, hass: HomeAssistant, extra: dict) -> None:
+async def test_row_paging_arguments_are_ignored_and_named(recorder_mock, hass: HomeAssistant, extra: dict) -> None:
+    """Refusing them cost a round; the totals do not depend on them."""
+    _anchor(hass)
     _set(hass, "light.desk", "on", -60)
-    result = await _call(hass, "light.desk", 0, 600, **extra)
-    assert result[1] == "invalid_request" and "do not apply to summary mode" in result[0]["content"][0]["text"]
+    await async_wait_recording_done(hass)
+    plain = await _summary(hass, "light.desk", 0, 600)
+    body = await _summary(hass, "light.desk", 0, 600, **extra)
+    assert body.pop("arguments_adjusted") == [
+        f"Ignored {next(iter(extra))}, which do not apply to summary mode's per-state totals."]
+    assert body == plain
 
 
 async def test_hidden_entities_are_not_found_before_any_scan(recorder_mock, hass: HomeAssistant) -> None:
@@ -436,3 +600,385 @@ async def test_a_spent_budget_can_stop_just_before_a_page_without_a_cursor() -> 
     summary = await scan_state_changes(recorder.fetch, 0, 100, page_rows=4, max_rows=8, max_seconds=60)
     assert summary.next_cursor_us == 7 and summary.rows_scanned == 1
     assert summary.current == "a" and summary.totals["a"].duration_us == 2
+
+
+async def test_several_entities_summarize_in_one_call_with_the_single_entity_totals(
+        recorder_mock, hass: HomeAssistant) -> None:
+    # "Which of these did not turn on" is one call; each row agrees with that
+    # entity's own summary, and unknown or hidden entities only say not_found.
+    _anchor(hass)
+    _alternate(hass, "light.desk", 6)
+    _set(hass, "light.porch", "off", -60)
+    _set(hass, "light.porch", "off", 30, force_update=True)  # a restart rewrite, not an entry
+    _set(hass, "switch.hidden", "on", 20)
+    await async_wait_recording_done(hass)
+    many = await _summary(hass, ["light.desk", "light.porch", "light.desk", "light.nowhere", "switch.hidden"], 0, 400)
+    assert "covered_range" not in many and many["requested_range"]["start"] == _at(0).isoformat()
+    assert [row["entity_id"] for row in many["entities"]] == ["light.desk", "light.porch"]
+    assert many["count"] == 2 and many["not_found"] == ["light.nowhere", "switch.hidden"]
+    for row in many["entities"]:
+        single = await _summary(hass, row["entity_id"], 0, 400)
+        assert row["complete"] is single["complete"] and row["transitions"] == single["transitions"]
+        assert {item["state"]: (item["duration_seconds"], item["entered"]) for item in row["states"]} == _states(single)
+        assert "covered_range" not in row and "next_cursor" not in row
+    porch = many["entities"][1]
+    assert porch["transitions"] == 0 and [item["state"] for item in porch["states"]] == ["off"]
+
+
+async def _rows(hass: HomeAssistant, ids: list[str], start: float, end: float, **extra) -> dict:
+    args = {"entity_id": ids, "mode": "state_changes", "start_time": _at(start).isoformat(),
+            "end_time": _at(end).isoformat(), **extra}
+    content, outcome, _ = await _call_tool("get_history", args, _key(), hass, MagicMock(), "r", None)
+    assert outcome == "allowed", content
+    return json.loads(content["content"][0]["text"])
+
+
+@pytest.mark.parametrize("order", ["oldest_first", "newest_first"])
+async def test_several_entities_list_each_entitys_own_page(recorder_mock, hass: HomeAssistant, order) -> None:
+    # "When did each of these last change" is one call; each entity's rows and
+    # cursor are its single-entity page, and unknown or hidden ones say not_found.
+    _anchor(hass)
+    _alternate(hass, "light.desk", 6)
+    _set(hass, "light.porch", "off", -60)
+    _set(hass, "light.porch", "on", 120)
+    _set(hass, "switch.hidden", "on", 20)
+    await async_wait_recording_done(hass)
+    many = await _rows(hass, ["light.desk", "light.porch", "light.desk", "light.nowhere", "switch.hidden"], 0, 400,
+                       limit=3, order=order)
+    assert many["mode"] == "state_changes" and many["order"] == order and many["limit"] == 3
+    assert [row["entity_id"] for row in many["entities"]] == ["light.desk", "light.porch"]
+    assert many["count"] == 2 and many["not_found"] == ["light.nowhere", "switch.hidden"]
+    for row in many["entities"]:
+        single = json.loads((await _call(hass, row["entity_id"], 0, 400, mode="state_changes", limit=3,
+                                         order=order))[0]["content"][0]["text"])
+        assert row["history"] == single["history"] and row["count"] == single["count"]
+        assert row["has_more"] is single["has_more"] and row.get("next_cursor") == (single["next_cursor"] or None)
+    desk, porch = many["entities"]
+    assert desk["has_more"] is True and porch["has_more"] is False and "next_cursor" not in porch
+    assert any("single-entity call with its next_cursor" in warning for warning in many["warnings"])
+
+
+@pytest.mark.parametrize(("extra", "message"), [
+    ({"mode": "significant_states"}, "significant_states reads one entity"),
+    ({"mode": "state_changes", "cursor": _at(10).isoformat()}, "cursor continues one entity"),
+    ({"mode": "state_changes", "attribute": "brightness"}, "attribute is accepted only with mode summary"),
+])
+async def test_what_several_entities_cannot_take_is_refused(hass: HomeAssistant, extra, message) -> None:
+    args = {"entity_id": ["light.desk", "light.lamp"], "start_time": "1h", **extra}
+    content, outcome, _ = await _call_tool("get_history", args, _key(), hass, MagicMock(), "r", None)
+    assert outcome == "invalid_request" and message in content["content"][0]["text"]
+
+
+async def test_entity_pages_past_one_result_are_named_not_dropped(recorder_mock, hass: HomeAssistant) -> None:
+    _anchor(hass)
+    ids = [f"light.l{index}" for index in range(6)]
+    for entity_id in ids:
+        _alternate(hass, entity_id, 20)
+    await async_wait_recording_done(hass)
+    with patch.object(mcp_view, "TOOL_RESULT_MAX_BYTES", 6000):
+        body = await _rows(hass, ids, 0, 4000)
+    listed = [row["entity_id"] for row in body["entities"]]
+    assert listed and listed + body["not_listed"] == ids
+    assert _stored(body) <= 6000 and any("not_listed" in warning for warning in body["warnings"])
+
+
+async def test_a_list_without_mode_is_summarized_and_paging_is_ignored(recorder_mock, hass: HomeAssistant) -> None:
+    """Refusing these cost a round for a request that names one answer."""
+    _anchor(hass)
+    _set(hass, "light.desk", "on", -3600)
+    _set(hass, "light.lamp", "off", -3600)
+    await async_wait_recording_done(hass)
+    args = {"entity_id": ["light.desk", "light.lamp"], "start_time": _at(0).isoformat(), "end_time": _at(600).isoformat(),
+            "limit": 5, "cursor": "x"}
+    content, outcome, _ = await _call_tool("get_history", args, _key(), hass, MagicMock(), "r", None)
+    assert outcome == "allowed", content
+    body = json.loads(content["content"][0]["text"])
+    assert body["mode"] == "summary" and body["count"] == 2
+    assert any("mode summary was used" in note for note in body["arguments_adjusted"])
+    assert any(note.startswith("Ignored limit, cursor") for note in body["arguments_adjusted"])
+
+
+async def test_a_one_item_list_with_a_row_mode_is_that_entity(recorder_mock, hass: HomeAssistant) -> None:
+    _anchor(hass)
+    _set(hass, "light.desk", "on", 100)
+    await async_wait_recording_done(hass)
+    args = {"entity_id": ["light.desk"], "mode": "state_changes", "start_time": _at(0).isoformat(), "end_time": _at(600).isoformat()}
+    content, outcome, _ = await _call_tool("get_history", args, _key(), hass, MagicMock(), "r", None)
+    assert outcome == "allowed", content
+    body = json.loads(content["content"][0]["text"])
+    assert body["entity_id"] == "light.desk" and body["arguments_adjusted"] == ["Read a one-item entity_id list as that entity."]
+
+
+@pytest.mark.parametrize("ids", [[], [f"light.l{index}" for index in range(501)], ["light.a", 3], [" "]])
+async def test_a_malformed_entity_list_is_refused(hass: HomeAssistant, ids) -> None:
+    # The longest list is the most one search_entities page hands over.
+    content, outcome, _ = await _call_tool(
+        "get_history", {"entity_id": ids, "mode": "summary"}, _key(), hass, MagicMock(), "r", None)
+    assert outcome == "invalid_request" and "list of 1 to 500" in content["content"][0]["text"]
+
+
+def _stored(body: dict) -> int:
+    return json_size(json.dumps(body))
+
+
+async def test_every_entity_that_fits_one_result_is_summarized(recorder_mock, hass: HomeAssistant) -> None:
+    # No entity count caps a call: 120 small rows fit one result, so the model asks once.
+    _anchor(hass)
+    ids = [f"sensor.probe_{index:03d}" for index in range(120)]
+    for entity_id in ids:
+        _set(hass, entity_id, "1", -60)
+    await async_wait_recording_done(hass)
+    body = await _summary(hass, ids, 0, 400)
+    assert body["count"] == 120 and "not_summarized" not in body
+
+
+@pytest.mark.parametrize("budget", [5000, 7000, 9000])
+async def test_rows_fill_the_result_budget_and_name_the_rest(recorder_mock, hass: HomeAssistant, budget) -> None:
+    _anchor(hass)
+    # Enough names that leaving them out of the estimate would overrun the warning reserve.
+    ids = [f"light.lamp_along_the_upstairs_hallway_{index:02d}" for index in range(48)]
+    for entity_id in ids:
+        _alternate(hass, entity_id, 3)
+    await async_wait_recording_done(hass)
+    scanned: list[str] = []
+    real = mcp_view._scan_summary
+
+    async def recording(instance, hass_, entity_id, *rest):
+        scanned.append(entity_id)
+        return await real(instance, hass_, entity_id, *rest)
+
+    with patch.object(mcp_view, "TOOL_RESULT_MAX_BYTES", budget), \
+            patch.object(mcp_view, "_scan_summary", side_effect=recording):
+        body = await _summary(hass, ids, 0, 400)
+    rows = [row["entity_id"] for row in body["entities"]]
+    assert rows and rows + body["not_summarized"] == ids
+    assert _stored(body) <= budget
+    assert any("summarize not_summarized" in warning for warning in body["warnings"])
+    # The estimate counts what is still to come, so the one entity that did not fit is
+    # the only Recorder read that produced no row; the rest are named unread.
+    assert scanned == rows + body["not_summarized"][:1]
+
+
+async def test_the_built_result_is_measured_and_trimmed_when_the_estimate_misses(
+        recorder_mock, hass: HomeAssistant) -> None:
+    # The running estimate only saves Recorder reads; the bound comes from measuring the built body.
+    _anchor(hass)
+    ids = [f"light.lamp_{index:02d}" for index in range(16)]
+    for entity_id in ids:
+        _alternate(hass, entity_id, 3)
+    await async_wait_recording_done(hass)
+    real = mcp_view._stored_bytes
+
+    def blind(value):
+        return real(value) if isinstance(value, dict) and "mode" in value else 0
+
+    with patch.object(mcp_view, "TOOL_RESULT_MAX_BYTES", 3000), patch.object(mcp_view, "_stored_bytes", side_effect=blind):
+        body = await _summary(hass, ids, 0, 400)
+    rows = [row["entity_id"] for row in body["entities"]]
+    assert rows and body["not_summarized"] and rows + body["not_summarized"] == ids
+    assert _stored(body) <= 3000
+
+
+async def test_a_full_result_stays_whole_in_the_conversation_log(recorder_mock, hass: HomeAssistant) -> None:
+    # The budget is what the Conversation Log keeps unclipped, envelope and longest tool call ID included.
+    _anchor(hass)
+    ids = [f"light.a_rather_long_entity_name_for_the_hallway_{index:03d}" for index in range(260)]
+    for entity_id in ids:
+        _alternate(hass, entity_id, 4)
+    await async_wait_recording_done(hass)
+    content, outcome, _ = await _call(hass, ids, 0, 400)
+    body = json.loads(content["content"][0]["text"])
+    assert outcome == "allowed" and body["not_summarized"] and body["count"] > 50
+    message = {"jsonrpc": "2.0", "id": "x" * 256, "result": content}
+    assert json_size(message) <= CONVERSATION_LOG_PAYLOAD_BYTES
+    # Room for the envelope around the longest tool call ID Agent Chat dispatches.
+    envelope = {"jsonrpc": "2.0", "id": "x" * 256, "result": {"content": [{"type": "text", "text": ""}], "isError": False}}
+    assert TOOL_RESULT_MAX_BYTES + json_size(envelope) - 2 <= CONVERSATION_LOG_PAYLOAD_BYTES
+
+
+async def test_entities_past_the_call_budget_are_listed_not_dropped(recorder_mock, hass: HomeAssistant) -> None:
+    _anchor(hass)
+    _alternate(hass, "light.desk", 4)
+    _alternate(hass, "light.porch", 4)
+    await async_wait_recording_done(hass)
+    with patch.object(mcp_view, "HISTORY_SUMMARY_BATCH_SECONDS", 0):
+        body = await _summary(hass, ["light.desk", "light.porch"], 0, 400)
+    assert body["entities"] == [] and body["unscanned"] == ["light.desk", "light.porch"]
+    assert any("summarize them in another call" in warning for warning in body["warnings"])
+
+
+async def test_an_entity_outside_scope_is_never_read_from_recorder(recorder_mock, hass: HomeAssistant) -> None:
+    _anchor(hass)
+    _set(hass, "switch.hidden", "on", 20)
+    _set(hass, "light.desk", "on", 20)
+    await async_wait_recording_done(hass)
+    scanned: list[str] = []
+    real = mcp_view._scan_summary
+
+    async def recording(instance, hass_, entity_id, *rest):
+        scanned.append(entity_id)
+        return await real(instance, hass_, entity_id, *rest)
+
+    with patch.object(mcp_view, "_scan_summary", side_effect=recording):
+        body = await _summary(hass, ["switch.hidden", "light.desk"], 0, 400)
+    assert scanned == ["light.desk"] and body["not_found"] == ["switch.hidden"]
+
+
+async def test_a_numeric_sensor_lists_its_longest_states_in_a_many_entity_summary(
+        recorder_mock, hass: HomeAssistant) -> None:
+    # Hundreds of distinct values would crowd out every other row; the rest are combined.
+    _anchor(hass)
+    _set(hass, "sensor.temperature", "20.0", -60)
+    for index in range(12):
+        _set(hass, "sensor.temperature", f"{20 + index / 10:.1f}", 10 + index * 10)
+    _alternate(hass, "light.desk", 2)
+    await async_wait_recording_done(hass)
+    body = await _summary(hass, ["sensor.temperature", "light.desk"], 0, 400)
+    temperature, desk = body["entities"]
+    assert len(temperature["states"]) == 5 and temperature["other_states"]["count"] == 7
+    assert "other_states" not in desk
+    assert any("use get_statistics" in warning for warning in body["warnings"])
+
+
+def _search_key(**caps) -> AccessKeyRecord:
+    domains = {domain: PermissionNode(state="GREEN") for domain in ("binary_sensor", "sensor", "light")}
+    return AccessKeyRecord(id=str(uuid.uuid4()), name="t", access_key_hash="x", created_at=dt_util.utcnow(),
+                           created_by="u", permissions=PermissionTree(domains=domains),
+                           **{"cap_search": "allow", **caps})
+
+
+async def _select(hass: HomeAssistant, select, start: float = 0, end: float = 400, key=None, **extra):
+    args = {"select": select, "mode": "summary", "start_time": _at(start).isoformat(),
+            "end_time": _at(end).isoformat(), **extra}
+    return await _call_tool("get_history", args, key or _search_key(), hass, MagicMock(), "r", None)
+
+
+def _register(hass: HomeAssistant, entity_id: str, *, category=None, device=None):
+    from homeassistant.helpers import entity_registry as er
+    domain, object_id = entity_id.split(".")
+    return er.async_get(hass).async_get_or_create(
+        domain, "test", object_id, suggested_object_id=object_id, entity_category=category,
+        device_id=device)
+
+
+async def test_select_summarizes_what_the_filters_match_and_skips_diagnostics(
+        recorder_mock, hass: HomeAssistant) -> None:
+    # One call answers "which motion and door sensors entered on" without listing them first.
+    from homeassistant.const import EntityCategory
+    _anchor(hass)
+    for entity_id in ("binary_sensor.hall_motion", "binary_sensor.front_door", "binary_sensor.desk_battery_low"):
+        _register(hass, entity_id, category=EntityCategory.DIAGNOSTIC if "battery" in entity_id else None)
+    for entity_id, device_class in (("binary_sensor.hall_motion", "motion"), ("binary_sensor.front_door", "door"),
+                                    ("binary_sensor.desk_battery_low", "door")):
+        _set(hass, entity_id, "off", -60, {"device_class": device_class})
+    _set(hass, "binary_sensor.hall_motion", "on", 50, {"device_class": "motion"})
+    await async_wait_recording_done(hass)
+    result = await _select(hass, {"domain": "binary_sensor", "device_class": ["motion", "door"]})
+    assert result[1] == "allowed", result
+    body = json.loads(result[0]["content"][0]["text"])
+    assert body["select"] == {"domain": "binary_sensor", "device_class": ["motion", "door"]}
+    assert body["matched"] == 2 and body["diagnostic_excluded"] == 1
+    assert [row["entity_id"] for row in body["entities"]] == ["binary_sensor.front_door", "binary_sensor.hall_motion"]
+    hall = body["entities"][1]
+    assert {item["state"]: item["entered"] for item in hall["states"]}["on"] == 1
+    with_diagnostic = json.loads((await _select(
+        hass, {"domain": "binary_sensor", "device_class": ["motion", "door"], "include_diagnostic": True}))[0]["content"][0]["text"])
+    assert with_diagnostic["matched"] == 3 and "diagnostic_excluded" not in with_diagnostic
+
+
+async def test_select_by_radio_reads_the_device_registry(recorder_mock, hass: HomeAssistant) -> None:
+    from homeassistant.helpers import device_registry as dr
+    from pytest_homeassistant_custom_component.common import MockConfigEntry
+    _anchor(hass)
+    entry = MockConfigEntry(domain="zha", entry_id="zha-entry")
+    entry.add_to_hass(hass)
+    device = dr.async_get(hass).async_get_or_create(config_entry_id=entry.entry_id,
+                                                      identifiers={("zha", "00:11:22:33:44:55:66:77")})
+    _register(hass, "binary_sensor.leak", device=device.id)
+    _register(hass, "binary_sensor.wired_door")
+    for entity_id in ("binary_sensor.leak", "binary_sensor.wired_door"):
+        _set(hass, entity_id, "off", -60)
+    await async_wait_recording_done(hass)
+    body = json.loads((await _select(hass, {"radio": "zigbee"}))[0]["content"][0]["text"])
+    assert body["matched"] == 1 and [row["entity_id"] for row in body["entities"]] == ["binary_sensor.leak"]
+
+
+async def test_select_past_one_result_names_the_rest(recorder_mock, hass: HomeAssistant) -> None:
+    _anchor(hass)
+    for index in range(53):
+        _set(hass, f"sensor.probe_{index:02d}", "1", -60)
+    await async_wait_recording_done(hass)
+    with patch.object(mcp_view, "TOOL_RESULT_MAX_BYTES", 3000):
+        body = json.loads((await _select(hass, {"query": "probe"}))[0]["content"][0]["text"])
+    rows = [row["entity_id"] for row in body["entities"]]
+    assert body["matched"] == 53 and 0 < len(rows) < 53
+    assert rows + body["not_summarized"] == [f"sensor.probe_{index:02d}" for index in range(53)]
+    assert any("summarize not_summarized" in warning for warning in body["warnings"])
+
+
+async def test_an_approximate_name_selects_nothing(recorder_mock, hass: HomeAssistant) -> None:
+    # Summarizing a typo-matched entity would answer a question nobody asked.
+    _anchor(hass)
+    _set(hass, "binary_sensor.kitchen_window", "off", -60)
+    await async_wait_recording_done(hass)
+    body = json.loads((await _select(hass, {"query": "kitchn windw"}))[0]["content"][0]["text"])
+    assert body["matched"] == 0 and body["entities"] == []
+    assert any("closest matches" in warning for warning in body["warnings"])
+
+
+@pytest.mark.parametrize(("args", "message"), [
+    ({"select": {"domain": "light"}, "entity_id": "light.desk", "mode": "summary"}, "entity_id or select, not both"),
+    ({"select": {"domain": "light"}, "mode": "state_changes"}, "select is accepted only with mode summary"),
+    ({"select": {"colour": "red"}, "mode": "summary"}, "search_entities filters"),
+    ({"select": {}, "mode": "summary"}, "at least one filter"),
+    ({"select": {"domain": "light", "include_diagnostic": "yes"}, "mode": "summary"}, "must be a boolean"),
+    ({"select": {"radio": "thread"}, "mode": "summary"}, "radio must be one or more of"),
+])
+async def test_a_malformed_select_is_refused(hass: HomeAssistant, args, message) -> None:
+    content, outcome, _ = await _call_tool("get_history", args, _search_key(), hass, MagicMock(), "r", None)
+    assert outcome == "invalid_request" and message in content["content"][0]["text"]
+
+
+@pytest.mark.parametrize("placeholder", [None, "", [], {}])
+async def test_an_empty_placeholder_beside_entity_id_or_select_is_ignored(
+        recorder_mock, hass: HomeAssistant, placeholder) -> None:
+    # Models that fill every optional parameter send one of these beside the real argument.
+    _anchor(hass)
+    _set(hass, "light.desk", "on", 20)
+    _register(hass, "light.desk")
+    await async_wait_recording_done(hass)
+    single = await _call(hass, "light.desk", 0, 400, select=placeholder)
+    assert single[1] == "allowed", single
+    assert json.loads(single[0]["content"][0]["text"])["entity_id"] == "light.desk"
+    selected = await _select(hass, {"domain": "light"}, entity_id=placeholder)
+    assert selected[1] == "allowed", selected
+    assert json.loads(selected[0]["content"][0]["text"])["matched"] == 1
+
+
+async def test_select_needs_search_access(hass: HomeAssistant) -> None:
+    content, outcome, _ = await _call_tool(
+        "get_history", {"select": {"domain": "light"}, "mode": "summary"}, _search_key(cap_search="deny"),
+        hass, MagicMock(), "r", None)
+    assert outcome == "denied" and "pass entity_id instead" in content["content"][0]["text"]
+
+
+async def test_not_in_state_keeps_only_the_entities_never_in_it(recorder_mock, hass: HomeAssistant) -> None:
+    """Which sensors did not trigger: an unavailable blip does not count, starting the range on does."""
+    _anchor(hass)
+    _set(hass, "light.quiet", "off", -3600)
+    _set(hass, "light.quiet", "unavailable", 600)
+    _set(hass, "light.quiet", "off", 700)
+    _set(hass, "light.tripped", "off", -3600)
+    _set(hass, "light.tripped", "on", 1200)
+    _set(hass, "light.tripped", "off", 1300)
+    _set(hass, "light.stuck", "on", -3600)
+    await async_wait_recording_done(hass)
+    ids = ["light.quiet", "light.tripped", "light.stuck"]
+    body = await _many(hass, 0, 3600, entity_id=ids, not_in_state="on")
+    assert [row["entity_id"] for row in body["entities"]] == ["light.quiet"]
+    assert body["not_in_state"] == ["on"] and body["scanned"] == 3 and "in_state" not in body
+    args = {"mode": "summary", "entity_id": ids, "start_time": _at(0).isoformat(), "end_time": _at(3600).isoformat()}
+    for extra, message in (({"in_state": "on", "not_in_state": "off"}, "not both"),
+                           ({"not_in_state": [""]}, "not_in_state must be a state")):
+        refused = await _call_tool("get_history", {**args, **extra}, _key(), hass, MagicMock(), "r", None)
+        assert refused[1] == "invalid_request" and message in refused[0]["content"][0]["text"]

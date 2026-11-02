@@ -4,6 +4,7 @@
     "area",
     "automation",
     "blueprint",
+    "category",
     "config_entry",
     "dashboard",
     "device",
@@ -11,6 +12,7 @@
     "entity",
     "floor",
     "helper",
+    "label",
     "scene",
     "script"
   ],

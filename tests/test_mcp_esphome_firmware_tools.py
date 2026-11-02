@@ -84,6 +84,9 @@ class _ApprStore:
     def set_pending_approvals(self, v: list) -> None:
         self._p = v
 
+    def get_settings(self):
+        return SimpleNamespace(mesa_mode="off", notify_on_approval=True)
+
 
 def _job(**over):
     base = {"job_id": JOB, "configuration": FILE, "status": "running", "output": []}
@@ -142,6 +145,38 @@ class TestGating:
             "install_esphome_firmware", {"file": FILE},
             _yaml_access_key(cap_esphome_flash="deny"), hass, builder)
         assert outcome == "denied"
+        assert builder.calls == []
+
+    async def test_flashing_needs_the_authoring_cap_before_an_approval_exists(self, hass, esphome_dir):
+        """With cap_esphome_yaml denied, an install on a Confirm flash cap is refused and queues nothing.
+
+        Both the dispatched call and the tool handler on its own refuse.
+        """
+        store = _ApprStore()
+        data = PhoenixData(store=store, rate_limiter=MagicMock(), audit=MagicMock(), mesa=None)
+        builder = FakeBuilder()
+        access_key = _flash_access_key(cap_esphome_flash="confirm", cap_esphome_yaml="deny")
+        content, outcome, _ = await _run("install_esphome_firmware", {"file": FILE}, access_key, hass, builder, data)
+        assert outcome == "denied"
+        assert "Forbidden" in content["content"][0]["text"]
+        with patch(_DASHBOARD_PATCH, return_value=_dash()), patch(_COMMAND_PATCH, builder):
+            content, outcome, _ = await esphome._tool_install_esphome_firmware(
+                {"file": FILE}, access_key, hass, data)
+        assert outcome == "denied"
+        assert "Forbidden" in content["content"][0]["text"]
+        assert store._p == []
+        assert builder.calls == []
+
+    async def test_an_approved_install_needs_the_authoring_cap(self, hass, esphome_dir):
+        """The install executor refuses on its own when cap_esphome_yaml is denied, as an approved request runs it."""
+        from custom_components.phoenix_mcp.mcp_view import _execute_install_esphome_firmware
+
+        builder = FakeBuilder(**{"firmware/install": {"job_id": JOB, "status": "queued"}})
+        with patch(_DASHBOARD_PATCH, return_value=_dash()), patch(_COMMAND_PATCH, builder):
+            content, outcome, _ = await _execute_install_esphome_firmware(
+                {"file": FILE}, _flash_access_key(cap_esphome_yaml="deny"), hass, MagicMock())
+        assert outcome == "denied"
+        assert "Forbidden" in content["content"][0]["text"]
         assert builder.calls == []
 
     async def test_flash_cap_alone_does_not_grant_compiling(self, hass, esphome_dir):
@@ -631,6 +666,59 @@ class TestJobStatus:
         assert body["flashed"] is False
         assert body["armed_for_next_boot"] is True
         assert "next wake" in body["note"]
+
+    async def test_going_offline_during_the_build_reports_the_armed_update(self, hass, esphome_dir):
+        """The add-on flags the compile and CANCELS its held upload; that is not a stopped install."""
+        builder = FakeBuilder(**{
+            "firmware/get_job": _job(status="completed", job_type="compile", is_deferred_install=True),
+            "firmware/follow_job": BuilderResult(output="Compiled", success=True, exit_code=0),
+            "firmware/get_jobs": [
+                {"job_id": UPLOAD, "configuration": FILE, "job_type": "upload", "status": "cancelled",
+                 "depends_on": JOB, "is_deferred_install": False,
+                 "error": "Device went offline; update queued for its next wake"},
+            ],
+        })
+        content, _outcome, _ = await _run(
+            "get_esphome_job", {"job_id": JOB}, _yaml_access_key(), hass, builder)
+        body = _json(content)
+        assert body["upload"]["status"] == "cancelled"
+        assert body["flashed"] is False
+        assert body["armed_for_next_boot"] is True
+        assert "next wake" in body["note"]
+
+    async def test_a_failed_upload_to_an_offline_device_reports_the_armed_update(self, hass, esphome_dir):
+        builder = FakeBuilder(**{
+            "firmware/get_job": _job(status="completed", job_type="compile"),
+            "firmware/follow_job": BuilderResult(output="Compiled", success=True, exit_code=0),
+            "firmware/get_jobs": [
+                {"job_id": UPLOAD, "configuration": FILE, "job_type": "upload", "status": "failed",
+                 "depends_on": JOB, "is_deferred_install": True},
+            ],
+        })
+        content, _outcome, _ = await _run(
+            "get_esphome_job", {"job_id": JOB}, _yaml_access_key(), hass, builder)
+        body = _json(content)
+        assert body["upload"]["status"] == "failed"
+        assert body["flashed"] is False
+        assert body["armed_for_next_boot"] is True
+
+    @pytest.mark.parametrize("upload", [
+        {"status": "cancelled", "is_deferred_install": False},
+        {"status": "failed", "is_deferred_install": False},
+    ])
+    async def test_an_unflagged_stopped_upload_is_not_called_armed(self, hass, esphome_dir, upload):
+        """An operator cancel or an ordinary failed flash arms nothing."""
+        builder = FakeBuilder(**{
+            "firmware/get_job": _job(status="completed", job_type="compile", is_deferred_install=False),
+            "firmware/follow_job": BuilderResult(output="Compiled", success=True, exit_code=0),
+            "firmware/get_jobs": [{"job_id": UPLOAD, "configuration": FILE, "job_type": "upload",
+                                   "depends_on": JOB, **upload}],
+        })
+        content, _outcome, _ = await _run(
+            "get_esphome_job", {"job_id": JOB}, _yaml_access_key(), hass, builder)
+        body = _json(content)
+        assert body["flashed"] is False
+        assert "armed_for_next_boot" not in body
 
     async def test_a_failed_compile_never_looks_for_an_upload(self, hass, esphome_dir):
         builder = FakeBuilder(**{
@@ -1144,19 +1232,35 @@ class TestWaiting:
         assert content["content"][0]["text"] == "No such firmware job."
 
 
+def _statuses(*statuses):
+    """firmware/get_job replies that move through these statuses, then stay on the last."""
+    remaining = list(statuses)
+    return lambda _args: _job(status=remaining.pop(0) if len(remaining) > 1 else remaining[0])
+
+
 class TestCancel:
-    async def test_cancels_a_running_job(self, hass, esphome_dir):
-        builder = FakeBuilder(**{"firmware/get_job": _job(status="running")})
-        content, outcome, _ = await _run(
-            "cancel_esphome_job", {"job_id": JOB}, _yaml_access_key(), hass, builder)
+    async def test_cancels_a_running_job_and_reads_it_back_finished(self, hass, esphome_dir):
+        builder = FakeBuilder(**{"firmware/get_job": _statuses("running", "running", "cancelled")})
+        with patch("custom_components.phoenix_mcp.tools.esphome.ESPHOME_BUILDER_CANCEL_POLL_SECONDS", 0):
+            content, outcome, _ = await _run(
+                "cancel_esphome_job", {"job_id": JOB}, _yaml_access_key(), hass, builder)
 
         assert outcome == "allowed"
-        assert _json(content)["cancelled"] is True
+        body = _json(content)
+        assert body["cancelled"] is True and body["status"] == "cancelled" and body["verified"] is True
         assert builder.args_for("firmware/cancel") == {"job_id": JOB}
+
+    async def test_a_job_still_running_after_the_wait_is_not_claimed_stopped(self, hass, esphome_dir):
+        builder = FakeBuilder(**{"firmware/get_job": _job(status="running")})
+        with patch("custom_components.phoenix_mcp.tools.esphome.ESPHOME_BUILDER_CANCEL_SETTLE_SECONDS", 0):
+            content, _, _ = await _run(
+                "cancel_esphome_job", {"job_id": JOB}, _yaml_access_key(), hass, builder)
+        body = _json(content)
+        assert body["verified"] is False and body["status"] == "running" and "get_esphome_job" in body["message"]
 
     async def test_an_already_finished_job_is_not_an_error(self, hass, esphome_dir):
         builder = FakeBuilder(**{
-            "firmware/get_job": _job(status="running"),
+            "firmware/get_job": _statuses("running", "completed"),
             "firmware/cancel": BuilderCommandError("not_found"),
         })
         content, outcome, _ = await _run(
@@ -1164,7 +1268,7 @@ class TestCancel:
 
         assert outcome == "allowed"
         body = _json(content)
-        assert body["cancelled"] is False
+        assert body["cancelled"] is False and body["status"] == "completed" and body["verified"] is True
         assert "already finished" in body["message"]
 
     async def test_scoping_applies(self, hass, esphome_dir, esphome_entries):
@@ -1287,6 +1391,18 @@ class TestScrubbing:
         assert REAL_API_KEY not in blob
         assert REAL_OTA_PASSWORD not in blob
         assert "<redacted>" in _json(content)["output"]
+
+    async def test_job_error_text_is_scrubbed(self, hass, esphome_dir):
+        builder = FakeBuilder(**{
+            "firmware/get_job": _job(status="failed", exit_code=1,
+                                     error=f"Upload refused for key {REAL_API_KEY}"),
+            "firmware/follow_job": BuilderResult(output="", success=False, exit_code=1),
+        })
+        content, _outcome, _ = await _run(
+            "get_esphome_job", {"job_id": JOB}, _yaml_access_key(), hass, builder)
+        body = _json(content)
+        assert REAL_API_KEY not in json.dumps(content)
+        assert body["error"] == "Upload refused for key <redacted>"
 
     async def test_running_job_output_is_scrubbed_too(self, hass, esphome_dir):
         builder = FakeBuilder(**{

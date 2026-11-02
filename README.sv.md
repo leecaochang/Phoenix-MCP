@@ -11,7 +11,7 @@
 
 Phoenix MCP ger dina AI-agenter avgränsad åtkomst till Home Assistant enligt principen om lägsta behörighet. Varje klient får en egen åtkomstnyckel, begränsad till exakt de entiteter du tillåter, med egna funktioner, egen hastighetsbegränsning och valfritt utgångsdatum. Revision är aktiverad som standard och kan konfigureras per utfall, varje åtkomstnyckel kan återkallas omedelbart, och det semantiska säkerhetslagret per entitet (MESA) kan göra en enhet till endast-bekräfta eller helt förbjuden utifrån sin art, oavsett vilka behörigheter en åtkomstnyckel har. Rådgivande är MESA:s standardläge: de flesta policybegränsningar varnar tills Påtvingat väljs; skrivskyddad art och uttryckliga integritetsnekanden blockerar fortfarande.
 
-Phoenix MCP körs helt inuti Home Assistant, utan separat tjänst att driftsätta, utan molnberoende i kärnservern och utan konfiguration utöver panelen Phoenix MCP (de valfria funktionerna Agent Chat, röst och AI-uppgift skickar konversationer till den modellleverantör du konfigurerar, om du inte pekar dem mot en lokal Ollama). Det fungerar med de MCP-klienter du redan använder (Claude Code, Cursor, ChatGPT/Codex, Gemini med flera), eller så kan du hoppa över att installera en klient och chatta inifrån Home Assistant. Hur du än gör tar en guidad konfiguration dig från en ny åtkomstnyckel till en fungerande agent på några minuter, med stöd av en katalog med 165 verktyg för att läsa, styra och skapa din konfiguration. Panelen finns på flera språk, följer språket i din Home Assistant-profil som standard och faller tillbaka på engelska när språket inte är tillgängligt. Home Companion och valfri beslutsdirigering kan också skicka begäranden och avgränsade resultat till en extern leverantör. Externa MCP-klienter följer sina egna inställningar för leverantör och datautbyte.
+Phoenix MCP körs helt inuti Home Assistant, utan separat tjänst att driftsätta, utan molnberoende i kärnservern och utan konfiguration utöver panelen Phoenix MCP (de valfria funktionerna Agent Chat, röst och AI-uppgift skickar konversationer till den modellleverantör du konfigurerar, om du inte pekar dem mot en lokal Ollama). Det fungerar med de MCP-klienter du redan använder (Claude Code, Cursor, ChatGPT/Codex, Gemini med flera), eller så kan du hoppa över att installera en klient och chatta inifrån Home Assistant. Hur du än gör tar en guidad konfiguration dig från en ny åtkomstnyckel till en fungerande agent på några minuter, med stöd av en katalog med 174 verktyg för att läsa, styra och skapa din konfiguration. Panelen finns på flera språk, följer språket i din Home Assistant-profil som standard och faller tillbaka på engelska när språket inte är tillgängligt. Home Companion och valfri beslutsdirigering kan också skicka begäranden och avgränsade resultat till en extern leverantör. Externa MCP-klienter följer sina egna inställningar för leverantör och datautbyte.
 
 ## Språk
 
@@ -19,9 +19,9 @@ Panelen stöder för närvarande engelska, spanska, franska, italienska, tyska, 
 
 ## Dokumentation
 
-Den fullständiga dokumentationen, inklusive verktygsreferensen, behörigheter, funktioner, MESA och admin-API:t, finns på **[leecaochang.github.io/Phoenix-MCP](https://leecaochang.github.io/Phoenix-MCP/)**. Panelens hjälplänkar pekar dit.
+Handboken är inbyggd i panelen: öppna panelen **Phoenix MCP** och välj **Guide** i menyn **Dokumentation**. Den förklarar varje fönster och inställning, vad agenter kan göra, behörigheter, funktioner, MESA, säkerhet och admin-API:t, och du kan söka i den.
 
-Ny här? Börja med **[Snabbstart](https://leecaochang.github.io/Phoenix-MCP/quickstart.html)**: den skapar din första åtkomstnyckel, ger den en enhet och låter dig sedan välja om du vill chatta inifrån Home Assistant eller ansluta en extern agent, på några minuter hur du än gör.
+Ny här? Öppna panelen **Phoenix MCP** och välj **Konfigurera en agent** under Åtkomstnycklar. Den skapar din första åtkomstnyckel, bestämmer vad den får göra, låter dig sedan chatta inifrån Home Assistant eller ansluta en extern app och avslutas med ett test som du kan följa.
 
 ## Krav
 
@@ -38,7 +38,7 @@ Föredrar du att installera manuellt? Kopiera mappen `custom_components/phoenix_
 
 ### Konfigurera
 
-Gå till **Inställningar > Enheter och tjänster > Lägg till integration** och sök efter **Phoenix MCP**. Klicka igenom konfigurationsflödet med ett steg och öppna sedan panelen **Phoenix MCP** i sidofältet. [Snabbstart](https://leecaochang.github.io/Phoenix-MCP/quickstart.html) tar det därifrån.
+Gå till **Inställningar > Enheter och tjänster > Lägg till integration** och sök efter **Phoenix MCP**. Klicka igenom konfigurationsflödet med ett steg, öppna sedan panelen **Phoenix MCP** i sidofältet och välj **Konfigurera en agent**.
 
 ## Problem och återkoppling
 

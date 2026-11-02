@@ -16,6 +16,13 @@ export const APPROVAL_REASON_LABEL_KEYS: Readonly<Record<string, string>> = {
   execution_interrupted: "approvals.reason.execution_interrupted",
   approval_format_incompatible: "approvals.reason.approval_format_incompatible",
   agent_chat_ended: "approvals.reason.agent_chat_ended",
+  agent_chat_wait_timed_out: "approvals.reason.agent_chat_wait_timed_out",
+  phoenix_mcp_restarted: "approvals.reason.phoenix_mcp_restarted",
+  phoenix_mcp_data_wiped: "approvals.reason.phoenix_mcp_data_wiped",
+  integration_removed: "approvals.reason.integration_removed",
+  recovery_review_replaced: "approvals.reason.recovery_review_replaced",
+  // Stored as English before the slug existed.
+  "Configuration changed; replaced by a fresh review.": "approvals.reason.recovery_review_replaced",
 };
 
 /** Localize a backend reason slug; preserve free-form operator/tool text. */

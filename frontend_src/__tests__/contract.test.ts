@@ -45,6 +45,7 @@ const ACCESS_KEY_RECORD_KEYS = {
   cap_traces: true,
   cap_diagnostics: true,
   cap_broadcast: true,
+  cap_notify: true,
   cap_service_response: true,
   cap_automation_write: true,
   cap_script_write: true,
@@ -97,6 +98,8 @@ const VERSION_RESOURCE_TYPES = {
   config_entry: true,
   area: true,
   floor: true,
+  label: true,
+  category: true,
 } satisfies Record<VersionResourceType, true>;
 
 describe("frontend/backend version resource type contract", () => {

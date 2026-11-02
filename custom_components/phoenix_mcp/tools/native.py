@@ -36,7 +36,7 @@ from homeassistant.core import HomeAssistant
 
 from ..audit import generate_request_id
 from ..const import (
-    ANNOUNCE_BIT, BLOCKED_DOMAINS, CAP_CONFIRM, CAP_DENY, DOMAIN, PHYSICAL_GATE_DOMAINS,
+    ANNOUNCE_BIT, CAP_CONFIRM, CAP_DENY, DOMAIN, PHYSICAL_GATE_DOMAINS,
     PROXY_TIMEOUT_SECONDS, RELATIVE_VOLUME_MAX_CONCURRENCY,
     RELATIVE_VOLUME_PLAN_VERSION, SENSITIVE_ATTRIBUTES,
     VACUUM_CLEAN_AREA_BIT, VACUUM_RETURN_HOME_BIT, VACUUM_START_BIT,
@@ -186,35 +186,12 @@ def _build_live_context(access_key: AccessKeyRecord, hass: HomeAssistant) -> str
     ar_inst = ar.async_get(hass)
     area_names: dict[str, str] = {a.id: a.name for a in ar_inst.async_list_areas()}
 
-    states = hass.states.async_all()
-    if access_key.pass_through:
-        if access_key.use_assist_exposure:
-            from homeassistant.components.homeassistant.exposed_entities import (  # noqa: PLC0415
-                async_should_expose as _should_expose,
-            )
-            accessible = [
-                s for s in states
-                if _should_expose(hass, "conversation", s.entity_id)
-                and s.entity_id.split(".")[0] not in BLOCKED_DOMAINS
-                and not (
-                    (entry := registry.async_get(s.entity_id)) is not None
-                    and entry.platform == DOMAIN
-                )
-            ]
-        else:
-            accessible = [
-                s for s in states
-                if s.entity_id.split(".")[0] not in BLOCKED_DOMAINS
-                and not (
-                    (entry := registry.async_get(s.entity_id)) is not None
-                    and entry.platform == DOMAIN
-                )
-            ]
-    else:
-        accessible = [
-            s for s in states
-            if resolve(s.entity_id, access_key, hass) in (Permission.READ, Permission.WRITE)
-        ]
+    # resolve() decides for pass-through keys too: their Assist filter, Phoenix's
+    # own entities and the household speaker's limits all apply there.
+    accessible = [
+        s for s in hass.states.async_all()
+        if resolve(s.entity_id, access_key, hass) in (Permission.READ, Permission.WRITE)
+    ]
 
     accessible.sort(key=lambda s: str_arg(s.attributes.get("friendly_name")) or s.entity_id)
 
@@ -1839,7 +1816,8 @@ async def _tool_hass_broadcast(
             continue
         features = state.attributes.get("supported_features", 0)
         if isinstance(features, int) and (features & ANNOUNCE_BIT):
-            if access_key.pass_through or resolve(state.entity_id, access_key, hass) == Permission.WRITE:
+            # resolve() covers pass-through too, with its Assist filter and the household check.
+            if resolve(state.entity_id, access_key, hass) == Permission.WRITE:
                 targets.append(state.entity_id)
 
     if not targets:

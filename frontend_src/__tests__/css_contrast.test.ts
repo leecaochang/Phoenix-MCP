@@ -24,7 +24,7 @@ const dark = { ...light, ...tokens(css.match(/:host\(:not\(.phx-theme-light\)\)\
 it.each([["light", light], ["dark", dark]] as const)("keeps %s status and chat text above 4.5:1", (_theme, values) => {
   for (const surface of ["--phx-bg", "--phx-surface", "--phx-surface-2"]) {
     const background = rgb(values[surface]);
-    for (const status of ["success", "error", "warning", "info"]) {
+    for (const status of ["success", "error", "warning", "info", "read"]) {
       const tint = rgb(values[`--phx-${status}-bg`]);
       const blended = background.map((v, i) => tint[i] * tint[3] + v * (1 - tint[3]));
       expect(contrast(rgb(values[`--phx-${status}`]), blended), `${surface} ${status}`).toBeGreaterThanOrEqual(4.5);
@@ -42,32 +42,6 @@ it("defines every Phoenix CSS variable or provides a fallback", () => {
   expect(missing.map((m) => m[1])).toEqual([]);
 });
 
-it("keeps documentation buttons, signals and focus rings legible in both themes", () => {
-  const docs = readFileSync("docs/assets/phoenix-mcp-docs.css", "utf8");
-  const read = (block: string) => Object.fromEntries([...block.matchAll(/(--[\w-]+):\s*([^;]+);/g)].map((m) => [m[1], m[2].trim()]));
-  const base = read(docs.match(/:root\s*\{([^}]+)/)![1]);
-  const night = { ...base, ...read(docs.match(/:root\[data-theme="dark"\]\s*\{([^}]+)/)![1]) };
-  for (const values of [base, night]) {
-    expect(contrast(rgb(values["--button-ink"]), rgb(values["--button-bg"]))).toBeGreaterThanOrEqual(4.5);
-    for (const surface of ["--bg", "--surface", "--surface-2", "--surface-3"]) {
-      const background = rgb(values[surface]);
-      expect(contrast(rgb(values["--accent-deep"]), background)).toBeGreaterThanOrEqual(4.5);
-      expect(contrast(rgb(values["--ink-3"]), background)).toBeGreaterThanOrEqual(4.5);
-      for (const status of ["success", "error", "warn", "st-yellow", "st-green", "st-red"]) {
-        const tint = rgb(values[`--${status}-bg`]);
-        const blended = background.map((v, i) => tint[i] * tint[3] + v * (1 - tint[3]));
-        expect(contrast(rgb(values[`--${status}`]), blended), `${surface} ${status}`).toBeGreaterThanOrEqual(4.5);
-      }
-      const wash = rgb(values["--accent-wash"]);
-      const washed = background.map((v, i) => wash[i] * wash[3] + v * (1 - wash[3]));
-      expect(contrast(rgb(values["--accent-deep"]), washed)).toBeGreaterThanOrEqual(4.5);
-      const tint = rgb(values["--st-grey-bg"]);
-      const blended = background.map((v, i) => tint[i] * tint[3] + v * (1 - tint[3]));
-      expect(contrast(rgb(values["--st-grey"]), blended)).toBeGreaterThanOrEqual(4.5);
-    }
-  }
-});
-
 const forcedDark = { ...light, ...tokens(css.match(/:host\(.phx-theme-dark\)\s*\{([^}]+)/)![1]) };
 it.each([["light", light], ["auto dark", dark], ["forced dark", forcedDark]] as const)("keeps %s destructive controls readable", (_theme, values) => {
   const declarations = (selector: string) => {
@@ -75,21 +49,80 @@ it.each([["light", light], ["auto dark", dark], ["forced dark", forcedDark]] as 
     return Object.fromEntries([...block.slice(0, block.indexOf("}")).matchAll(/(?:^|[;{])\s*([\w-]+):\s*([^;]+)/g)].map(m => [m[1], m[2].trim()]));
   };
   const color = (value: string) => rgb(value.startsWith("var(") ? values[value.match(/--phx-[\w-]+/)![0]] : value);
-  for (const selector of [".btn-danger", ".phx-tab-badge", ".agentcli-cancel-btn", ".agentcli-popout-error"]) {
+  for (const selector of [".btn-danger", ".phx-toolbar-badge", ".agentcli-cancel-btn", ".agentcli-popout-error"]) {
     const rule = declarations(selector);
     expect(rule.background, selector).toBeTruthy();
     expect(contrast(color(rule.color), color(rule.background)), selector).toBeGreaterThanOrEqual(4.5);
   }
 });
 
-it("provides a visible keyboard ring and hides closed documentation drawers", () => {
-  const styles = readFileSync("docs/assets/phoenix-mcp-docs.css", "utf8");
-  const ring = styles.match(/:focus-visible\s*\{([^}]+)\}/)![1];
-  expect(ring).toMatch(/outline:\s*[3-9]px solid /);
-  for (const selector of ["body[data-home] .sidebar", ".sidebar"]) {
-    const blocks = [...styles.matchAll(/([^{}]+)\{([^{}]+)\}/g)];
-    const drawers = blocks.filter((block) => block[1].trim() === selector && block[2].includes("translateX"));
-    expect(drawers.length, selector).toBeGreaterThan(0);
-    expect(drawers.some((block) => /visibility:\s*hidden/.test(block[2])), selector).toBe(true);
+it.each([["light", light], ["auto dark", dark], ["forced dark", forcedDark]] as const)("keeps %s neutral chrome legible and operable", (_theme, values) => {
+  // Text and the read signal hold 4.5:1 on every surface a panel or window can
+  // paint; the ink focus ring and field borders are non-text UI and hold 3:1.
+  const surfaces = ["--phx-bg", "--phx-surface", "--phx-surface-2", "--phx-raised", "--phx-hover", "--phx-accent-lt", "--phx-selected"];
+  for (const surface of surfaces) {
+    for (const text of ["--phx-text", "--phx-text-2"]) {
+      expect(contrast(rgb(values[text]), rgb(values[surface])), `${text} on ${surface}`).toBeGreaterThanOrEqual(4.5);
+    }
+  }
+  for (const surface of ["--phx-bg", "--phx-surface", "--phx-surface-2", "--phx-raised"]) {
+    expect(contrast(rgb(values["--phx-read"]), rgb(values[surface])), `read on ${surface}`).toBeGreaterThanOrEqual(4.5);
+    expect(contrast(rgb(values["--phx-focus"]), rgb(values[surface])), `focus on ${surface}`).toBeGreaterThanOrEqual(3);
+  }
+  for (const surface of ["--phx-surface", "--phx-raised"]) {
+    expect(contrast(rgb(values["--phx-field-border"]), rgb(values[surface])), `field border on ${surface}`).toBeGreaterThanOrEqual(3);
+  }
+  expect(contrast(rgb(values["--phx-accent-fg"]), rgb(values["--phx-accent"])), "primary button").toBeGreaterThanOrEqual(4.5);
+});
+
+// Color themes re-value the same tokens on the host; each one must stay as legible as the default.
+const themes = readFileSync("frontend_src/themes.css", "utf8");
+const block = (selector: string): Record<string, string> => {
+  const at = themes.indexOf(selector + " {");
+  return at < 0 ? {} : tokens(themes.slice(at, themes.indexOf("}", at)));
+};
+const palettes = [...themes.matchAll(/:host\(\[data-phx-palette="(\w+)"\]\) \{/g)].map((m) => m[1]);
+
+it("ships the color themes Settings offers", () => {
+  expect(palettes).toEqual(["wayfinding", "framed", "mist", "office", "aubergine"]);
+});
+
+it.each(palettes)("keeps the %s theme's light and dark blocks complete and in step", (name) => {
+  const lightBlock = block(`:host([data-phx-palette="${name}"])`);
+  const autoDark = block(`  :host([data-phx-palette="${name}"]:not(.phx-theme-light))`);
+  const forced = block(`:host([data-phx-palette="${name}"].phx-theme-dark)`);
+  // A token the light block sets but a dark block leaves out would outrank the panel's own dark value.
+  expect(Object.keys(forced).sort()).toEqual(Object.keys(lightBlock).sort());
+  expect(autoDark).toEqual(forced);
+});
+
+it.each(palettes.flatMap((name) => [[name, "light"], [name, "dark"]]))("keeps the %s theme legible in %s", (name, mode) => {
+  const hex = (v: Record<string, string>) => Object.fromEntries(Object.entries(v).filter(([, x]) => x.startsWith("#")));
+  const values = mode === "light"
+    ? { ...light, ...hex(block(`:host([data-phx-palette="${name}"])`)) }
+    : { ...forcedDark, ...hex(block(`:host([data-phx-palette="${name}"].phx-theme-dark)`)) };
+  for (const surface of ["--phx-bg", "--phx-surface", "--phx-surface-2", "--phx-raised", "--phx-hover", "--phx-selected", "--phx-accent-lt"]) {
+    for (const text of ["--phx-text", "--phx-text-2"]) {
+      expect(contrast(rgb(values[text]), rgb(values[surface])), `${text} on ${surface}`).toBeGreaterThanOrEqual(4.5);
+    }
+  }
+  for (const surface of ["--phx-bg", "--phx-surface", "--phx-surface-2", "--phx-raised"]) {
+    for (const signal of ["--phx-success", "--phx-error", "--phx-warning", "--phx-read"]) {
+      expect(contrast(rgb(values[signal]), rgb(values[surface])), `${signal} on ${surface}`).toBeGreaterThanOrEqual(4.5);
+    }
+    expect(contrast(rgb(values["--phx-focus"]), rgb(values[surface])), `focus on ${surface}`).toBeGreaterThanOrEqual(3);
+  }
+  for (const surface of ["--phx-surface", "--phx-raised"]) {
+    expect(contrast(rgb(values["--phx-field-border"]), rgb(values[surface])), `field border on ${surface}`).toBeGreaterThanOrEqual(3);
+  }
+  expect(contrast(rgb(values["--phx-accent-fg"]), rgb(values["--phx-accent"])), "primary button").toBeGreaterThanOrEqual(4.5);
+  if (values["--phx-guide-surface"]) {
+    expect(contrast(rgb(values["--phx-text-2"]), rgb(values["--phx-guide-surface"])), "Guide text").toBeGreaterThanOrEqual(4.5);
+  }
+  if (values["--phx-toolbar-current-bg"]?.startsWith("#")) {
+    expect(contrast(rgb(values["--phx-toolbar-current-fg"]), rgb(values["--phx-toolbar-current-bg"])), "current workspace").toBeGreaterThanOrEqual(4.5);
+  }
+  if (values["--phx-toolbar-bg"]?.startsWith("#") && values["--phx-toolbar-btn-fg"]?.startsWith("#")) {
+    expect(contrast(rgb(values["--phx-toolbar-btn-fg"]), rgb(values["--phx-toolbar-bg"])), "toolbar icons").toBeGreaterThanOrEqual(4.5);
   }
 });

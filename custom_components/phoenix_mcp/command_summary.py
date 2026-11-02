@@ -9,7 +9,8 @@ from homeassistant.helpers import area_registry as ar, entity_registry as er
 
 from .const import COMMAND_SUMMARY_STATES, COMMAND_SUMMARY_UNKNOWN_STATES, COMMAND_SUMMARY_MAX_STATES, DECISION_CATALOG_PACK_THRESHOLD, DECISION_BATCH_MAX_TARGETS, DECISION_MAX_TARGET_BYTES
 from .device_semantics import device_registry_snapshot
-from .helpers import voice_text, redact_secrets_in_text, redact_inaccessible_entity_ids_in_text
+from .command_display import state_label
+from .helpers import spoken_list, voice_text, redact_secrets_in_text, redact_inaccessible_entity_ids_in_text
 
 
 def summary_catalog(hass: Any, access_key: Any, *, devices: Any = None,
@@ -118,8 +119,13 @@ def local_summary(hass: Any, access_key: Any, result: Any, slots: dict) -> dict 
     return candidates[0] if len(candidates) == 1 else None
 
 
-def summary_text(proposal: dict, payload: Any, language: object) -> str | None:
-    """Count only fully returned authorized members; missing data is never zero."""
+def summary_text(proposal: dict, payload: Any, language: object,
+                 translations: dict[str, str] | None = None) -> str | None:
+    """Count only fully returned authorized members; missing data is never zero.
+
+    `translations` are HA's entity state labels (async_state_translations), so a
+    state is spoken in the reply's language rather than as its raw value.
+    """
     if not isinstance(payload, list):
         return None
     ids = set(proposal['entity_ids'])
@@ -132,13 +138,19 @@ def summary_text(proposal: dict, payload: Any, language: object) -> str | None:
     counts = Counter(states.values())
     unknown = counts.get('unknown', 0) + counts.get('unavailable', 0)
     mode = proposal['summary_mode']
+    domain = str((proposal.get('summary_scope') or {}).get('domain') or '')
+
+    def label(state: str) -> str:
+        return state_label(translations or {}, domain, state) or state
+
     if mode == 'total':
         return voice_text(language, 'local_summary_total', total=len(ids), unknown=unknown)
     if mode == 'breakdown':
         if len(counts) > COMMAND_SUMMARY_MAX_STATES:
             return None
-        return voice_text(language, 'local_summary_breakdown', total=len(ids), summary=', '.join(f'{state}: {count}' for state, count in sorted(counts.items())))
-    return voice_text(language, 'local_summary_count', matched=counts.get(mode, 0), total=len(ids), state=mode, unknown=unknown)
+        return voice_text(language, 'local_summary_breakdown', total=len(ids), summary=spoken_list(
+            (f'{label(str(state))}: {count}' for state, count in sorted(counts.items())), language))
+    return voice_text(language, 'local_summary_count', matched=counts.get(mode, 0), total=len(ids), state=label(mode), unknown=unknown)
 
 
 def summary_wire(targets: dict[str, dict]) -> dict:

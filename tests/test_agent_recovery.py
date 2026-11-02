@@ -90,6 +90,40 @@ async def test_reconciliation_requires_attributed_approval_receipt(status, marke
 
 
 @pytest.mark.asyncio
+async def test_startup_settles_recorded_outcomes_and_keeps_the_unknown_one():
+    """A restart clears the claims whose outcome is on record (user, 2026-10-29).
+
+    What is left is a write that reached Home Assistant with nothing recorded
+    anywhere, which still blocks the access key until it is reviewed.
+    """
+    disk = Disk()
+    recovery = AgentRecovery(disk)
+    # One claim per access key: a second one is refused while the first is outstanding.
+    for key, rid in (("answered_key", "answered"), ("decided_key", "decided"), ("unknown_key", "unknown")):
+        await recovery.begin(key, "call_service", rid)
+        recovery.interrupted(rid)
+    # Home Assistant answered the agent for one of them.
+    recovery._records["answered"]["dispatch_result"] = "received"
+    store = SimpleNamespace(get_pending_approvals=lambda: [
+        {"request_id": "decided", "access_key_id": "decided_key", "status": "cancelled"},
+        {"request_id": "unknown", "access_key_id": "unknown_key", "status": "pending"},
+    ])
+
+    assert await recovery.settle_known_outcomes(store) == 2
+    assert recovery.records("answered_key") == []
+    assert recovery.records("decided_key") == []
+    assert [r["request_id"] for r in recovery.records("unknown_key")] == ["unknown"]
+    # The settled access keys may dispatch again; the unknown one still blocks.
+    assert recovery.blocks("answered_key") is False
+    assert recovery.blocks("decided_key") is False
+    assert recovery.blocks("unknown_key") is True
+    restored = AgentRecovery(disk)
+    await restored.async_load()
+    assert [r["request_id"] for r in restored.records("unknown_key")] == ["unknown"]
+    assert await restored.settle_known_outcomes(store) == 0
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("failure", ["cancel", "exception", "error", "save"])
 async def test_interrupted_dispatch_never_replays_and_never_stores_arguments(hass, failure):
     disk = Disk()
@@ -114,8 +148,9 @@ async def test_interrupted_dispatch_never_replays_and_never_stores_arguments(has
     with pytest.raises((asyncio.CancelledError, RecoveryRequired)):
         await dispatch_agent_tool(dispatch, **args)
     assert len(calls) == 1
-    with pytest.raises(RecoveryRequired):
-        await dispatch_agent_tool(dispatch, **{**args, "request_id": "duplicate"})
+    refused, _method, _resource, outcome = await dispatch_agent_tool(dispatch, **{**args, "request_id": "duplicate"})
+    assert outcome == "denied"
+    assert "nothing was dispatched" in refused["result"]["content"][0]["text"]
     assert len(calls) == 1
     assert "never persist" not in str(disk.saved)
     assert recovery.records("access_key")[0]["status"] == "outcome_unknown"
@@ -128,11 +163,32 @@ async def test_unwritable_journal_prevents_dispatch(hass):
     recovery = AgentRecovery(disk)
     data = SimpleNamespace(agent_recovery=recovery, store=SimpleNamespace(get_pending_approvals=lambda: []))
     dispatch = AsyncMock()
-    with pytest.raises(RecoveryRequired):
-        await dispatch_agent_tool(dispatch, hass=hass, data=data, access_key=SimpleNamespace(id="t"),
-                                  name="call_service", arguments={}, tool_id="t", request_id="r",
-                                  client_ip="agentcli", base_url="http://example")
+    refused, _method, _resource, outcome = await dispatch_agent_tool(
+        dispatch, hass=hass, data=data, access_key=SimpleNamespace(id="t"),
+        name="call_service", arguments={}, tool_id="t", request_id="r",
+        client_ip="agentcli", base_url="http://example")
+    assert outcome == "denied" and refused["result"]["isError"] is True
     dispatch.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_full_journal_refuses_another_key_as_not_dispatched(hass):
+    """A full journal is a refusal before dispatch, never an unknown outcome for the caller."""
+    from custom_components.phoenix_mcp.agent_recovery import MAX_RECORDS
+
+    recovery = AgentRecovery(Disk())
+    for index in range(MAX_RECORDS):
+        await recovery.begin(f"key_{index}", "call_service", f"r{index}")
+    data = SimpleNamespace(agent_recovery=recovery, store=SimpleNamespace(get_pending_approvals=lambda: []))
+    dispatch = AsyncMock()
+    refused, _method, _resource, outcome = await dispatch_agent_tool(
+        dispatch, hass=hass, data=data, access_key=SimpleNamespace(id="key_b"),
+        name="call_service", arguments={}, tool_id="t", request_id="b",
+        client_ip="agentcli", base_url="http://example")
+    assert outcome == "denied"
+    assert "nothing was dispatched" in refused["result"]["content"][0]["text"]
+    dispatch.assert_not_awaited()
+    assert recovery.records("key_b") == []
 
 
 def test_read_classification_uses_canonical_and_legacy_server_catalog():
@@ -344,3 +400,5 @@ async def test_begin_persists_only_bounded_catalog_tool_names(tool, expected):
     await recovery.begin("access_key", tool, "request")
     assert recovery.records("access_key")[0]["tool"] == expected
     assert disk.saved["records"]["request"]["tool"] == expected
+
+

@@ -15,7 +15,7 @@ import asyncio
 import json
 import uuid
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from homeassistant.core import HomeAssistant
@@ -520,7 +520,7 @@ class _ApprStore:
         self._p = v
 
     def get_settings(self):
-        return SimpleNamespace(mesa_mode="off")
+        return SimpleNamespace(mesa_mode="off", notify_on_approval=True)
 
 
 def _appr_data() -> tuple[PhoenixData, _ApprStore]:
@@ -536,7 +536,8 @@ class TestGetRadioNetwork:
     async def test_no_backends_empty_list(self, hass, radio_env, broker):
         res = await _call_tool("get_radio_network", {}, _light_access_key(cap_diagnostics="allow"), hass, _data())
         assert res[1] == "allowed"
-        assert _body(res) == {"networks": []}
+        # Said outright, so a question about Zigbee devices ends here.
+        assert _body(res) == {"networks": [], "absent": ["zigbee"]}
 
     async def test_z2m_projection_no_key_material(self, hass, radio_env, broker):
         hass.config.components.add("mqtt")
@@ -546,6 +547,7 @@ class TestGetRadioNetwork:
         assert len(networks) == 1
         net = networks[0]
         assert net["backend"] == "z2m" and net["protocol"] == "zigbee"
+        assert "absent" not in _body(res)
         assert net["channel"] == 15 and net["pan_id"] == 6754
         assert net["coordinator"]["ieee"] == "0x00124b002e1e03c7"
         assert net["permit_join"] is False
@@ -580,6 +582,8 @@ class TestGetRadioNetwork:
         networks = _body(res)["networks"]
         assert networks[0]["backend"] == "z2m"
         assert "error" in networks[0]
+        # A coordinator that cannot be read is not an absent one.
+        assert "absent" not in _body(res)
 
 
 class TestScanZigbeeTopology:
@@ -1693,6 +1697,25 @@ class TestSetZigbeeDeviceProperty:
         )
         assert result[1] == "denied"
         assert broker.published == []
+
+    async def test_a_mesa_deny_says_mesa_not_capability(self, hass, radio_env, broker):
+        # A capability text would send the agent to get_capability_summary and a
+        # reconnect, neither of which can change a MESA policy.
+        from custom_components.phoenix_mcp.mesa import MesaGateOutcome
+        from custom_components.phoenix_mcp.tool_common import MESA_DENIED_MESSAGE
+
+        access_key = _light_access_key(
+            cap_diagnostics="allow", cap_radio_write="allow", cap_physical_control="allow")
+        current = await self._current(hass, radio_env, access_key)
+        with patch("custom_components.phoenix_mcp.tools.radio.async_apply_mesa_to_call",
+                   AsyncMock(return_value=MesaGateOutcome(decision="deny"))):
+            result = await _call_tool(
+                "set_zigbee_device_property",
+                {"device_id": radio_env["z2m_bulb"], "property": "led_mode", "value": "on",
+                 "expected_hash": current["content_hash"]},
+                access_key, hass, _data())
+        assert result[1] == "denied" and not any(topic.endswith("/set") for topic, _ in broker.published)
+        assert result[0]["content"][0]["text"] == MESA_DENIED_MESSAGE
 
     async def test_allow_changes_and_exactly_confirms_property(
         self, hass, radio_env, broker
@@ -2985,3 +3008,25 @@ class TestAnnouncementGating:
             "get_radio_network", "get_radio_device",
         ):
             assert name in gate_map["unavailable"]
+
+
+@pytest.mark.usefixtures("requires_child_devices")
+def test_the_radio_preview_reads_a_child_device_without_core_reports(hass):
+    # manufacturer and model are compatibility shims on a child device.
+    from unittest.mock import patch as _patch
+    from pytest_homeassistant_custom_component.common import MockConfigEntry
+    from custom_components.phoenix_mcp.tools.radio import _radio_device_diff_preview
+
+    entry = MockConfigEntry(domain="zha", entry_id="zha-preview")
+    entry.add_to_hass(hass)
+    registry = dr.async_get(hass)
+    parent = registry.async_get_or_create(config_entry_id=entry.entry_id, identifiers={("zha", "00:aa")},
+                                          manufacturer="Acme", model="Plug", name="Plug")
+    child = registry.async_get_or_create_child(config_entry_id=entry.entry_id, identifiers={("zha", "00:aa-2")},
+                                               parent_device_id=parent.id)
+    with _patch("homeassistant.helpers.device_registry.report_usage") as report:
+        preview = _radio_device_diff_preview(child, "00:aa-2")
+        main = _radio_device_diff_preview(registry.async_get(parent.id), "00:aa")
+    report.assert_not_called()
+    assert (preview["manufacturer"], preview["model"]) == (None, None)
+    assert (main["manufacturer"], main["model"]) == ("Acme", "Plug")

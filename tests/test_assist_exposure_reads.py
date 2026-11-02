@@ -83,7 +83,8 @@ async def _assert_gated(hass, tool, args_for, data, *, shown=SHOWN, hidden=HIDDE
     refused = await _call_tool(tool, args_for(hidden), _key(), hass, data)
     absent = await _call_tool(tool, args_for(ghost), _key(), hass, data)
     assert refused[0].get("isError") is True, refused
-    assert refused[0] == absent[0]
+    # Identical apart from echoing the caller's own id back.
+    assert json.dumps(refused[0]).replace(hidden, "<id>") == json.dumps(absent[0]).replace(ghost, "<id>")
 
 
 async def test_resolve_read_canonicalizes_and_never_records_a_ghost(home):
@@ -221,6 +222,9 @@ async def test_compare_states_drops_an_unexposed_entity_like_a_missing_one(home)
     assert [row["entity_id"] for row in _body(filtered)["comparisons"]] == [SHOWN]
     assert [row["entity_id"] for row in _body(unfiltered)["comparisons"]] == [SHOWN, HIDDEN]
     assert seen[:2] == [[SHOWN], [SHOWN]]
+    # Named, not silently dropped: hidden and missing alike, as on get_state's list.
+    assert _body(filtered)["not_found"] == [HIDDEN, GHOST]
+    assert _body(unfiltered)["not_found"] == [GHOST]
 
 
 async def test_watch_entity(home):
@@ -345,8 +349,29 @@ async def test_mesa_entity_tools(home, tool):
             entity_id, {"semantic_profile": {"semantic_tags": ["lighting.ambient"]}},
             default_origin=MetadataOrigin.USER))
     data = _data(mesa=runtime)
-    assert (await _call_tool(tool, {"entity_id": SHOWN}, _key(), home, data))[1] == "allowed"
-    assert (await _call_tool(tool, {"entity_id": HIDDEN}, _key(filtered=False), home, data))[1] == "allowed"
+    # mesa-core resolves in a worker thread; an exposed entity's profile must still be found.
+    shown = await _call_tool(tool, {"entity_id": SHOWN}, _key(), home, data)
+    assert shown[1] == "allowed" and _body(shown)["entity_id"] == SHOWN and "error" not in _body(shown)
+    unfiltered = await _call_tool(tool, {"entity_id": HIDDEN}, _key(filtered=False), home, data)
+    assert unfiltered[1] == "allowed" and "error" not in _body(unfiltered)
     refused = await _call_tool(tool, {"entity_id": HIDDEN}, _key(), home, data)
     assert refused[1] == "not_found"
     assert _body(refused) == _not_found_envelope(HIDDEN)
+
+
+async def test_mesa_query_lists_the_exposed_profiles(home):
+    from custom_components.phoenix_mcp.mesa import async_setup_mesa
+    from custom_components.phoenix_mcp.mesa_core import MetadataOrigin, SemanticProfile
+
+    runtime = await async_setup_mesa(home, "advisory")
+    for entity_id in (SHOWN, HIDDEN):
+        runtime.store.set(entity_id, SemanticProfile.from_dict(
+            entity_id, {"semantic_profile": {"semantic_tags": ["lighting.ambient"]}},
+            default_origin=MetadataOrigin.USER))
+    data = _data(mesa=runtime)
+    listed = {}
+    for filtered in (True, False):
+        result = await _call_tool("mesa_query_profiles", {}, _key(filtered=filtered), home, data)
+        assert result[1] == "allowed", result
+        listed[filtered] = {row["entity_id"] for row in _body(result)["results"]}
+    assert listed[True] == {SHOWN} and listed[False] >= {SHOWN, HIDDEN}

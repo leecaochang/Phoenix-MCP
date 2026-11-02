@@ -27,13 +27,14 @@ import logging
 import re
 
 from homeassistant.exceptions import HomeAssistantError
+from homeassistant.helpers import area_registry as ar
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 from homeassistant.core import HomeAssistant
 
 from ..const import CAP_CONFIRM, CAP_DENY, PROXY_TIMEOUT_SECONDS, Z2M_BASE_TOPIC
 from ..data import PhoenixData
-from ..device_semantics import device_registry_snapshot
+from ..device_semantics import device_entry_value, device_registry_snapshot
 from ..mesa import (
     async_apply_mesa_to_call,
     entity_control_mode,
@@ -47,6 +48,7 @@ from ..helpers import (
 )
 from .discovery import _accessible_entity_ids
 from ..tool_common import (
+    MESA_DENIED_MESSAGE,
     _CAP_FORBIDDEN_MESSAGE,
     _approved_exec_ctx,
     _gate,
@@ -981,6 +983,18 @@ def _group_mesa_entities(
     return tuple(sorted(anchors))
 
 
+def _zigbee_group_summary_op(change: _ResolvedZigbeeGroupChange) -> str:
+    """The summary variant for a group change.
+
+    One template per operation rather than an interpolated verb, so each
+    language can conjugate its own: membership edits and removing the whole
+    group are different sentences even though both carry operation "remove".
+    """
+    if change.tool_name == "set_zigbee_group_members":
+        return "add_members" if change.operation == "add" else "remove_members"
+    return "create" if change.operation == "create" else "delete"
+
+
 async def _resolve_create_zigbee_group(
     args: dict, access_key: AccessKeyRecord, hass: HomeAssistant
 ) -> _ResolvedZigbeeGroupChange | tuple[dict, str, str]:
@@ -1478,8 +1492,10 @@ def _radio_device_diff_preview(device: Any, ieee: str) -> dict:
     return {
         "device": device.name_by_user or device.name or ieee,
         "ieee": ieee,
-        "manufacturer": device.manufacturer,
-        "model": device.model,
+        # Read from the public representation: on a child device these are
+        # compatibility shims that report every read.
+        "manufacturer": device_entry_value(device, "manufacturer"),
+        "model": device_entry_value(device, "model"),
     }
 
 
@@ -1674,8 +1690,7 @@ async def _build_diff_set_zigbee_binding(
     return {
         "kind": "config_diff",
         **_summary(
-            "zigbee_binding.devices",
-            operation=change.operation,
+            f"zigbee_binding.devices.{change.operation}",
             source=source_label,
             target=target_label,
         ),
@@ -1781,7 +1796,7 @@ async def _build_diff_zigbee_group(
     )
     return {
         "kind": "config_diff",
-        **_summary("zigbee_group.named", operation=change.operation, name=change.name),
+        **_summary(f"zigbee_group.named.{_zigbee_group_summary_op(change)}", name=change.name),
         "target": target,
         "before": _truncate(json.dumps(before, indent=2)),
         "after": _truncate(json.dumps(after, indent=2)),
@@ -1888,6 +1903,9 @@ async def _tool_get_radio_network(
         return _tool_error("Forbidden."), "denied", "get_radio_network"
     networks = await radio_backend.async_radio_networks(hass)
     body: dict[str, Any] = {"networks": networks}
+    # Said outright, so "which Zigbee devices are weak" ends here when there are none.
+    if not any(network.get("protocol") == "zigbee" for network in networks):
+        body["absent"] = ["zigbee"]
     if full_pass_through(access_key, hass):
         try:
             bluetooth = bluetooth_network(hass)
@@ -2134,6 +2152,8 @@ async def _tool_get_radio_device(
     area_id = device_registry_snapshot(hass).effective_area_id(device.id)
     if area_id:
         projected["area_id"] = area_id
+        if (area := ar.async_get(hass).async_get_area(area_id)) is not None:
+            projected["area"] = area.name
     return _tool_success(json.dumps(projected, default=str)), "allowed", device.id
 
 
@@ -2446,7 +2466,7 @@ async def _tool_set_zigbee_device_property(
     if mesa_outcome.decision == "pending":
         return await _pending_or_inline(hass, data, access_key, mesa_outcome.approval)
     if mesa_outcome.decision == "deny":
-        return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", pre.device.id
+        return _tool_error(MESA_DENIED_MESSAGE), "denied", pre.device.id
     if mesa_outcome.warnings:
         _mesa_advisory_ctx.set(True)
     if not _approved_exec_ctx.get():
@@ -2519,7 +2539,7 @@ async def _execute_set_zigbee_device_property(
             hass, data, access_key, mesa_outcome.approval
         )
     if mesa_outcome.decision == "deny":
-        return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", change.device.id
+        return _tool_error(MESA_DENIED_MESSAGE), "denied", change.device.id
     if mesa_outcome.warnings:
         _mesa_advisory_ctx.set(True)
 
@@ -2625,7 +2645,7 @@ async def _tool_set_zigbee_binding(
     if mesa_outcome.decision == "pending":
         return await _pending_or_inline(hass, data, access_key, mesa_outcome.approval)
     if mesa_outcome.decision == "deny":
-        return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", pre.source.device.id
+        return _tool_error(MESA_DENIED_MESSAGE), "denied", pre.source.device.id
     if mesa_outcome.warnings:
         _mesa_advisory_ctx.set(True)
     if not _approved_exec_ctx.get():
@@ -2697,7 +2717,7 @@ async def _execute_set_zigbee_binding(
     if mesa_outcome.decision == "pending":
         return await _pending_or_inline(hass, data, access_key, mesa_outcome.approval)
     if mesa_outcome.decision == "deny":
-        return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", change.source.device.id
+        return _tool_error(MESA_DENIED_MESSAGE), "denied", change.source.device.id
     if mesa_outcome.warnings:
         _mesa_advisory_ctx.set(True)
 
@@ -2772,8 +2792,7 @@ async def _execute_set_zigbee_binding(
         },
         alias=source_label,
         summary=_version_summary(
-            "device.zigbee_binding",
-            operation=change.operation,
+            f"device.zigbee_binding.{change.operation}",
             target=(
                 change.target.device.name_by_user
                 or change.target.device.name
@@ -2984,7 +3003,7 @@ async def _tool_zigbee_group_change(
     if mesa_outcome.decision == "pending":
         return await _pending_or_inline(hass, data, access_key, mesa_outcome.approval)
     if mesa_outcome.decision == "deny":
-        return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", tool_name
+        return _tool_error(MESA_DENIED_MESSAGE), "denied", tool_name
     if mesa_outcome.warnings:
         _mesa_advisory_ctx.set(True)
     if not _approved_exec_ctx.get():
@@ -3066,7 +3085,7 @@ async def _execute_zigbee_group_change(
     if mesa_outcome.decision == "pending":
         return await _pending_or_inline(hass, data, access_key, mesa_outcome.approval)
     if mesa_outcome.decision == "deny":
-        return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", tool_name
+        return _tool_error(MESA_DENIED_MESSAGE), "denied", tool_name
     if mesa_outcome.warnings:
         _mesa_advisory_ctx.set(True)
 
@@ -3140,7 +3159,7 @@ async def _execute_zigbee_group_change(
         },
         alias=change.name,
         summary=_version_summary(
-            "device.zigbee_group", operation=change.operation, name=change.name
+            f"device.zigbee_group.{_zigbee_group_summary_op(change)}", name=change.name
         ),
     )
     body: dict[str, Any] = {

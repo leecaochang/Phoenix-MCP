@@ -1,12 +1,28 @@
-import { BusyButton } from "../components/BusyButton";
-import { useState, useEffect, useCallback, useMemo } from "react";
+/**
+ * The Audit Log window: requests to Phoenix in a configurable table, newest
+ * first, loaded a page at a time with server-side filters, and updated every
+ * five seconds while visible unless updates are paused. Choosing an entry
+ * shows it in Log Details. In the workspace shell, Refresh, Filters, Pause
+ * Updates and Log Settings sit on the toolbar; the filters open in a
+ * panel above the table, and a column's menu can open its filter.
+ */
+
+import { useState, useEffect, useCallback, useContext, useMemo, useRef, useSyncExternalStore } from "react";
 import type { AuditEntry, AccessKeyRecord, Outcome } from "../types";
 import { api } from "../api";
-import { AuditTable } from "../components/AuditTable";
-import { RefreshIcon } from "../index";
-import { t } from "../i18n";
-import { auditSourceFilterValue } from "../utils/audit_source";
+import { AuditOutcome, accessLabel, auditEntryKey, mesaLabel, formatAccessKeyName, formatAccessKeyNameShort, outcomeLabel } from "../components/AuditEntry";
+import { RefreshIcon } from "../components/common";
+import { localeDateTime, localeDateTimeShort, localeNumber, t } from "../i18n";
+import { friendlyResource, resourceFilterValue } from "../utils";
+import { auditSourceFilterValue, auditSourceLabel, isNamedAuditSource } from "../utils/audit_source";
 import { useLatestRequest } from "../utils/latest_request";
+import { AuditFocusContext, useLogSelection } from "../shell/logDetails";
+import { useOnToolbar, useToolbarTools } from "../shell/tools";
+import { pauseUpdatesTool, useLogSettingsTool } from "../shell/settings";
+import { useWindowVisible } from "../shell/visibility";
+import { ActionButton } from "../ui/ActionButton";
+import { ConfigTable, type Column } from "../ui/table/ConfigTable";
+import { useTableSettings } from "../ui/table/settings";
 
 interface Props {
   accessKeys: AccessKeyRecord[];
@@ -21,10 +37,18 @@ const TIME_WINDOW_MS: Record<Exclude<TimeWindow, "">, number> = {
   "1w": 7 * 24 * 60 * 60 * 1000,
 };
 
+const noSubscribe = () => () => {};
+const noVersion = () => 0;
+
 const PAGE_SIZE = 100;
+/** How often a visible, unpaused Audit Log checks for new entries. */
+const UPDATE_MS = 5000;
+/** The server's own order, newest first; any other sort covers only the loaded entries. */
+const SERVER_SORT = { column: "time", dir: "desc" } as const;
 
 export function AuditView({ accessKeys }: Props) {
   const [entries, setEntries] = useState<AuditEntry[]>([]);
+  const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [hasMore, setHasMore] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -37,6 +61,11 @@ export function AuditView({ accessKeys }: Props) {
   const [methodFilter, setMethodFilter] = useState("");
   const [resourceFilter, setResourceFilter] = useState("");
   const [ipFilter, setIpFilter] = useState("");
+  // Set by Needs Attention, to show what became of one uncertain write (user, 2026-10-29).
+  const [requestFilter, setRequestFilter] = useState("");
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  // Hidden filters stop applying, and come back as they were when shown again (user, 2026-10-27).
+  const filtersApply = !useOnToolbar() || filtersOpen;
 
   // Method/resource/ip are server-side filters; debounce them so typing does
   // not fire a request per keystroke.
@@ -58,25 +87,57 @@ export function AuditView({ accessKeys }: Props) {
     () => Object.fromEntries(accessKeys.map((t) => [t.id, t.name])),
     [accessKeys],
   );
+  const displayName = useCallback((e: AuditEntry): string => accessKeyNames[e.access_key_id] ?? e.access_key_name, [accessKeyNames]);
 
-  const filterParams = useMemo(() => ({
+  const filterParams = useMemo(() => (filtersApply ? {
     outcome: outcomeFilter || undefined,
     access_key_id: accessKeyFilter || undefined,
-    since: timeWindow ? new Date(Date.now() - TIME_WINDOW_MS[timeWindow]).toISOString() : undefined,
+    // The window itself, not a fixed start: each load counts back from its own moment.
+    windowMs: timeWindow ? TIME_WINDOW_MS[timeWindow] : undefined,
     method: debouncedMethod || undefined,
-    resource: debouncedResource || undefined,
+    // Typed against the shown text; the server matches the stored one.
+    resource: debouncedResource ? resourceFilterValue(debouncedResource) : undefined,
     ip: debouncedIp ? auditSourceFilterValue(debouncedIp) : undefined,
-  }), [outcomeFilter, accessKeyFilter, timeWindow, debouncedMethod, debouncedResource, debouncedIp]);
+    request_id: requestFilter || undefined,
+  } : {}), [filtersApply, outcomeFilter, accessKeyFilter, timeWindow, debouncedMethod, debouncedResource, debouncedIp, requestFilter]);
+
+  // A request asked for by Needs Attention replaces the filters, so the one row it means is what shows.
+  const focus = useContext(AuditFocusContext);
+  const focusVersion = useSyncExternalStore(focus?.subscribe ?? noSubscribe, focus?.getVersion ?? noVersion);
+  useEffect(() => {
+    const asked = focus?.take();
+    if (!asked) return;
+    setRequestFilter(asked);
+    setOutcomeFilter("");
+    setAccessKeyFilter("");
+    setTimeWindow("");
+    setMethodFilter("");
+    setResourceFilter("");
+    setIpFilter("");
+    setFiltersOpen(true);
+  }, [focus, focusVersion]);
+
+  /** The query for one load, its time window counted back from now so Past 5 Minutes slides. */
+  const query = useCallback((offset: number) => {
+    const { windowMs, ...rest } = filterParams as typeof filterParams & { windowMs?: number };
+    return { ...rest, since: windowMs ? new Date(Date.now() - windowMs).toISOString() : undefined, limit: PAGE_SIZE, offset };
+  }, [filterParams]);
 
   const beginLoad = useLatestRequest();
+  // Each load starts a generation; a background update applies only within the one it began in.
+  const loadGeneration = useRef(0);
+  const loadsRunning = useRef(0);
 
   const load = useCallback(async (offset: number) => {
     const isLatest = beginLoad();
+    loadGeneration.current++;
+    loadsRunning.current++;
     if (offset === 0) setLoading(true); else setLoadingMore(true);
     try {
-      const resp = await api.getAudit({ ...filterParams, limit: PAGE_SIZE, offset });
+      const resp = await api.getAudit(query(offset));
       if (!isLatest()) return;
       setEntries((prev) => (offset === 0 ? resp.entries : [...prev, ...resp.entries]));
+      setTotal(resp.total);
       setHasMore(offset + resp.entries.length < resp.total);
       setError(null);
     } catch {
@@ -85,26 +146,105 @@ export function AuditView({ accessKeys }: Props) {
       // later page keeps the rows already shown and Load more stays to retry.
       if (offset === 0) {
         setEntries([]);
+        setTotal(0);
         setHasMore(false);
       }
       setError(t("audit.loadFailed"));
     } finally {
+      loadsRunning.current--;
       if (isLatest()) {
         setLoading(false);
         setLoadingMore(false);
       }
     }
-  }, [beginLoad, filterParams]);
+  }, [beginLoad, query]);
 
   // (Re)load from the top whenever a filter changes.
   useEffect(() => { load(0); }, [load]);
 
+  // New entries arrive while the log is visible, unless updates are paused. The newest
+  // page is read again; with more pages loaded, only entries not shown yet are added
+  // at the top, so the pages below stay where they are.
+  const [paused, setPaused] = useState(false);
+  const windowVisible = useWindowVisible();
+  const updateQuietly = useCallback(async () => {
+    if (loadsRunning.current > 0) return;
+    const generation = loadGeneration.current;
+    try {
+      const resp = await api.getAudit(query(0));
+      if (generation !== loadGeneration.current || loadsRunning.current > 0) return;
+      setEntries((prev) => {
+        if (prev.length <= PAGE_SIZE) return resp.entries;
+        const shown = new Set(prev.map(auditEntryKey));
+        return [...resp.entries.filter((e) => !shown.has(auditEntryKey(e))), ...prev];
+      });
+      setTotal(resp.total);
+      setHasMore((more) => more || resp.entries.length < resp.total);
+      setError(null);
+    } catch {
+      // A failed background update keeps what is shown; the next one or Refresh retries.
+    }
+  }, [query]);
+  useEffect(() => {
+    if (paused || !windowVisible) return;
+    const timer = window.setInterval(() => { if (!document.hidden) void updateQuietly(); }, UPDATE_MS);
+    return () => clearInterval(timer);
+  }, [paused, windowVisible, updateQuietly]);
+  const logSettings = useLogSettingsTool();
+
+  const activeFilters = filtersApply ? [outcomeFilter, accessKeyFilter, timeWindow, methodFilter, resourceFilter, ipFilter, requestFilter].filter(Boolean).length : 0;
+  const clearFilters = () => {
+    setOutcomeFilter(""); setAccessKeyFilter(""); setTimeWindow("");
+    setMethodFilter(""); setResourceFilter(""); setIpFilter(""); setRequestFilter("");
+  };
+
+  // In the workspace shell, a chosen entry opens in Log Details; Refresh and Filters move to the toolbar.
+  const logSelection = useLogSelection();
+  // A renamed access key shows its current name in Log Details too.
+  useEffect(() => {
+    const shown = logSelection?.get();
+    if (shown?.kind === "audit" && shown.nameOf !== displayName) logSelection!.set({ ...shown, nameOf: displayName }, false);
+  }, [displayName]); // eslint-disable-line react-hooks/exhaustive-deps
+  const onToolbar = useToolbarTools([{
+    id: "auditLog",
+    label: t("shell.tabAudit"),
+    tools: [
+      // The log updates itself; Refresh is offered only while updates are paused.
+      { id: "filters", label: activeFilters ? t("logs.filtersCount", { count: localeNumber(activeFilters) }) : t("logs.filters"), short: t("logs.filters"), icon: "filter", help: "help.filters",
+        pressed: filtersOpen, badge: activeFilters || undefined, shared: { id: "filters", label: t("logs.filters"), countLabel: "logs.filtersCount" },
+        onSelect: () => setFiltersOpen((open) => !open), onSet: setFiltersOpen },
+      pauseUpdatesTool(paused, setPaused),
+      // Refresh sits to the right of Pause Updates, and only while paused.
+      ...(paused ? [{ id: "refresh", label: t("workspace.refreshWindow", { window: t("shell.tabAudit") }), short: t("common.refresh"), icon: "refresh" as const, help: "help.refreshPaused",
+        shared: { id: "refresh", label: t("common.refresh") }, onSelect: () => { void load(0); } }] : []),
+      ...logSettings,
+    ],
+  }]);
+  const showFilters = !onToolbar || filtersOpen;
+
+
+  const columns = useMemo((): Column<AuditEntry>[] => [
+    { id: "time", label: t("audit.rowTime"), width: 170, sortValue: (e) => e.timestamp, cell: (e) => localeDateTimeShort(e.timestamp), title: (e) => localeDateTime(e.timestamp) },
+    { id: "outcome", label: t("audit.rowOutcome"), width: 140, sortValue: (e) => outcomeLabel(e), cell: (e) => <AuditOutcome entry={e} /> },
+    { id: "access", label: t("audit.rowAccess"), width: 120, sortValue: accessLabel, cell: accessLabel },
+    { id: "resource", label: t("audit.rowResource"), width: 260, maxWidth: 360, sortValue: (e) => friendlyResource(e.resource), cell: (e) => friendlyResource(e.resource), title: (e) => friendlyResource(e.resource), className: "phx-cell-mono" },
+    { id: "mesa", label: t("audit.rowMesa"), width: 100, sortValue: mesaLabel, cell: mesaLabel, title: (e) => (e.mesa_advisory ? t("audit.mesaAdvisory") : undefined) },
+    { id: "accessKey", label: t("audit.colAccessKey"), width: 170, maxWidth: 240, sortValue: displayName, cell: (e) => formatAccessKeyNameShort(displayName(e)), title: (e) => formatAccessKeyName(displayName(e)) },
+    { id: "method", label: t("audit.rowMethod"), width: 130, maxWidth: 200, sortValue: (e) => e.method, cell: (e) => e.method, className: "phx-cell-mono" },
+    { id: "source", label: t("audit.rowIp"), width: 150, maxWidth: 220, sortValue: (e) => auditSourceLabel(e.client_ip), cell: (e) => <span className={isNamedAuditSource(e.client_ip) ? "audit-source-name" : undefined}>{auditSourceLabel(e.client_ip)}</span>, title: (e) => auditSourceLabel(e.client_ip), className: "audit-cell-source" },
+  ], [displayName]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Sorting by anything but the server's order covers only the entries loaded so far.
+  const [tableSettings] = useTableSettings("auditLog");
+  const partialSort = hasMore && !!tableSettings.sort && !(tableSettings.sort.column === SERVER_SORT.column && tableSettings.sort.dir === SERVER_SORT.dir);
+
   return (
-    <div className="view-root">
-      <div className="card">
+    <div className="view-root phx-log-view">
+      <div className="phx-filters" hidden={!showFilters} data-guide="window.auditLog#filters">
         <div className="filter-row">
           <select
             aria-label={t("audit.filterOutcomeAria")}
+            data-filter="outcome"
+            data-help="help.auditOutcome"
             className="input input-auto"
             value={outcomeFilter}
             onChange={(e) => setOutcomeFilter(e.target.value as Outcome | "")}
@@ -120,6 +260,8 @@ export function AuditView({ accessKeys }: Props) {
           </select>
           <select
             aria-label={t("audit.filterAccessKeyAria")}
+            data-filter="accessKey"
+            data-help="help.auditAccessKey"
             className="input input-auto"
             value={accessKeyFilter}
             onChange={(e) => setAccessKeyFilter(e.target.value)}
@@ -131,6 +273,8 @@ export function AuditView({ accessKeys }: Props) {
           </select>
           <select
             aria-label={t("audit.filterTimeAria")}
+            data-filter="time"
+            data-help="help.auditTime"
             className="input input-auto"
             value={timeWindow}
             onChange={(e) => setTimeWindow(e.target.value as TimeWindow)}
@@ -144,6 +288,8 @@ export function AuditView({ accessKeys }: Props) {
           <input
             className="input"
             aria-label={t("audit.filterMethodAria")}
+            data-filter="method"
+            data-help="help.auditMethod"
             placeholder={t("audit.methodPlaceholder")}
             value={methodFilter}
             onChange={(e) => setMethodFilter(e.target.value)}
@@ -151,21 +297,31 @@ export function AuditView({ accessKeys }: Props) {
           <input
             className="input"
             aria-label={t("audit.filterResourceAria")}
+            data-filter="resource"
+            data-help="help.auditResource"
             placeholder={t("audit.resourcePlaceholder")}
             value={resourceFilter}
             onChange={(e) => setResourceFilter(e.target.value)}
           />
-          {/* Grouped so mobile can put Source and Refresh on one row together
-              (see .audit-source-row) instead of Refresh wrapping off on its own
-              below every other filter. */}
-          <div className="audit-source-row">
-            <input
-              className="input"
-              aria-label={t("audit.filterIpAria")}
-              placeholder={t("audit.ipPlaceholder")}
-              value={ipFilter}
-              onChange={(e) => setIpFilter(e.target.value)}
-            />
+          <input
+            className="input"
+            aria-label={t("audit.filterIpAria")}
+            data-filter="source"
+            data-help="help.auditSource"
+            placeholder={t("audit.ipPlaceholder")}
+            value={ipFilter}
+            onChange={(e) => setIpFilter(e.target.value)}
+          />
+          <input
+            className="input"
+            aria-label={t("audit.filterRequestAria")}
+            data-filter="request"
+            data-help="help.auditRequestId"
+            placeholder={t("audit.requestPlaceholder")}
+            value={requestFilter}
+            onChange={(e) => setRequestFilter(e.target.value)}
+          />
+          {!onToolbar && (
             <button
               className="btn btn-ghost btn-sm btn-icon"
               onClick={() => load(0)}
@@ -174,28 +330,47 @@ export function AuditView({ accessKeys }: Props) {
             >
               <RefreshIcon />
             </button>
-          </div>
+          )}
+          {activeFilters > 0 && (
+            <ActionButton icon="clearFilters" label={t("logs.clearFilters")} help="help.clearFilters" onClick={clearFilters} />
+          )}
         </div>
-
-        {error && <div className="banner banner-error mb-8" role="alert">{error}</div>}
-        {!(error && entries.length === 0 && !loading) && (
-          <AuditTable
-            entries={entries}
-            loading={loading}
-            accessKeyNames={accessKeyNames}
-          />
-        )}
-        {/* Not while a first page is loading: a later page fetched for the new
-            filters would append to rows from the old ones. */}
-        {hasMore && !loading && (
-          <div className="approval-history-more">
-            <BusyButton className="btn btn-ghost btn-sm" busy={loadingMore}
-              onClick={() => load(entries.length)}>
-              {loadingMore ? t("common.loading") : t("common.loadMore")}
-            </BusyButton>
-          </div>
-        )}
       </div>
+
+      {error && <div className="banner banner-error mb-8" role="alert">{error}</div>}
+      {loading ? (
+        <div className="loading-wrap"><div className="spinner" /><span>{t("common.loading")}</span></div>
+      ) : !(error && entries.length === 0) && (
+        <div className="log-group" data-guide="window.auditLog#list">
+        <ConfigTable
+          id="auditLog"
+          label={t("shell.tabAudit")}
+          rowHelp="help.auditRow"
+          columns={columns}
+          rows={entries}
+          rowKey={auditEntryKey}
+          defaultSort={SERVER_SORT}
+          selectedKey={logSelection?.selectedKey("audit")}
+          onOrder={(ordered) => logSelection?.reorder("audit", ordered)}
+          onSelect={(entry, ordered) => logSelection?.set({ kind: "audit", entry, ordered, nameOf: displayName })}
+          rowLabel={(e) => t("audit.openEntryAria", { outcome: outcomeLabel(e), name: displayName(e) })}
+          empty={<p className="audit-empty">{t("audit.empty")}</p>}
+        />
+        </div>
+      )}
+      {!loading && entries.length > 0 && (
+        <div className="phx-table-footer" data-guide="window.auditLog#list">
+          <span className="conversation-secondary">{t("conversations.showing", { shown: localeNumber(entries.length), total: localeNumber(total) })}</span>
+          {partialSort && <span className="conversation-secondary">{t("table.sortedLoaded")}</span>}
+          {/* Not while a first page is loading: a later page fetched for the new
+              filters would append to rows from the old ones. */}
+          {hasMore && (
+            <ActionButton icon="loadMore" label={loadingMore ? t("common.loading") : t("common.loadMore")} busy={loadingMore}
+              helpText={t("help.loadMore", { count: localeNumber(PAGE_SIZE) })}
+              onClick={() => { void load(entries.length); }} />
+          )}
+        </div>
+      )}
     </div>
   );
 }

@@ -256,21 +256,54 @@ async def test_authority_loss_wire_code_matches_era_after_real_dispatch(http_aut
     assert any(row.request_id == response.headers["X-Phoenix-Request-ID"] and row.outcome == "denied" for row in rows)
 
 
-async def test_legacy_session_capacity_retries_without_eviction_and_delete_releases(http_authority, monkeypatch):
+async def test_legacy_session_capacity_evicts_the_keys_oldest_idle_session(http_authority, monkeypatch):
+    """A client restarting without DELETE reclaims its own stale slot; the evicted client re-initializes."""
     from custom_components.phoenix_mcp import mcp_view
 
     client, data = http_authority
     monkeypatch.setattr(mcp_view, "_MCP_LEGACY_SESSION_ACCESS_KEY_LIMIT", 2)
-    _, raw, headers = await _initialized_session(client, data)
+    _, raw, oldest = await _initialized_session(client, data)
     second = await client.post("/api/phoenix-mcp", headers=_headers(raw), json=_initialize())
     assert second.status == 200
+    kept = second.headers["Mcp-Session-Id"]
+    third = await client.post("/api/phoenix-mcp", headers=_headers(raw), json=_initialize())
+    assert third.status == 200
+    assert set(data.mcp_sessions) == {kept, third.headers["Mcp-Session-Id"]}
+    assert all(not state["in_use"] for state in data.mcp_sessions.values() if "in_use" in state)
+    ping = {"jsonrpc": "2.0", "id": 2, "method": "ping"}
+    assert (await client.post("/api/phoenix-mcp", headers=oldest, json=ping)).status == 404
+    assert (await client.delete("/api/phoenix-mcp", headers=_headers(raw, **{"Mcp-Session-Id": kept}))).status == 204
+    assert kept not in data.mcp_sessions
+
+
+async def test_legacy_session_capacity_refuses_while_every_own_session_is_busy(http_authority, monkeypatch):
+    from custom_components.phoenix_mcp import mcp_view
+
+    client, data = http_authority
+    monkeypatch.setattr(mcp_view, "_MCP_LEGACY_SESSION_ACCESS_KEY_LIMIT", 1)
+    _, raw, _headers_in_use = await _initialized_session(client, data)
+    (state,) = data.mcp_sessions.values()
+    state["in_use"] = 1
     sessions = set(data.mcp_sessions)
     response = await client.post("/api/phoenix-mcp", headers=_headers(raw), json=_initialize())
     assert response.status == 429
     assert 0 < int(response.headers["Retry-After"]) <= mcp_view._MCP_LEGACY_SESSION_TTL_SECONDS
     assert set(data.mcp_sessions) == sessions
-    assert (await client.delete("/api/phoenix-mcp", headers=headers)).status == 204
-    assert (await client.post("/api/phoenix-mcp", headers=_headers(raw), json=_initialize())).status == 200
+
+
+async def test_unfinished_legacy_handshake_expires_early(http_authority, monkeypatch):
+    from types import SimpleNamespace
+    from custom_components.phoenix_mcp import mcp_view
+
+    client, data = http_authority
+    _, raw = await data.store.async_create_access_key("handshake", "admin", rate_limit_requests=0, rate_limit_burst=0)
+    response = await client.post("/api/phoenix-mcp", headers=_headers(raw), json=_initialize())
+    session = response.headers["Mcp-Session-Id"]
+    clock = data.mcp_sessions[session]["last_seen"] + mcp_view._MCP_LEGACY_UNINITIALIZED_TTL_SECONDS + 1
+    monkeypatch.setattr(mcp_view, "time", SimpleNamespace(monotonic=lambda: clock))
+    ping = {"jsonrpc": "2.0", "id": 2, "method": "ping"}
+    assert (await client.post("/api/phoenix-mcp", headers=_headers(raw, **{"Mcp-Session-Id": session}), json=ping)).status == 404
+    assert session not in data.mcp_sessions
 
 
 async def test_legacy_session_idle_expiry_and_activity_refresh(http_authority, monkeypatch):

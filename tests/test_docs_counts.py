@@ -21,11 +21,16 @@ import re
 
 import pytest
 
-from custom_components.phoenix_mcp.const import AGENTCLI_PROVIDERS, CAPABILITY_NAMES
+from custom_components.phoenix_mcp.const import (
+    AGENTCLI_MAX_TOOLS_PER_REQUEST,
+    AGENTCLI_PROVIDERS,
+    CAPABILITY_NAMES,
+)
 from custom_components.phoenix_mcp.mcp_view import tool_catalog_counts
 from custom_components.phoenix_mcp.personas import PERSONA_DEFINITIONS
 
-DOCS = pathlib.Path(__file__).resolve().parent.parent / "docs"
+ROOT = pathlib.Path(__file__).resolve().parent.parent
+GUIDE = ROOT / "frontend_src" / "guide" / "topics" / "en"
 
 # Every written-out number nine through ninety-nine, generated so there are no
 # gaps. One through eight stay unlisted on purpose (subset counts); anything
@@ -96,27 +101,13 @@ _JA_KIND = {"ツール": "tool", "機能": "capabilit", "ペルソナ": "persona
 
 
 def _pages() -> list[pathlib.Path]:
-    # The READMEs carry the same headline counts as the docs site.
-    return sorted(DOCS.glob("*.html")) + sorted(DOCS.parent.glob("README*.md"))
+    # The READMEs carry the same headline counts as the Guide.
+    return sorted(GUIDE.glob("*.md")) + sorted(ROOT.glob("README*.md"))
 
 
-def test_docs_directory_is_present() -> None:
+def test_documentation_is_present() -> None:
     """So the sweep below cannot pass by finding nothing to read."""
-    assert len(_pages()) > 5
-
-
-def test_agent_chat_provider_cards_are_alphabetical() -> None:
-    """The provider cards on the Agent Chat page stay alphabetical and complete."""
-    html = (DOCS / "agentcli.html").read_text(encoding="utf-8")
-    directory = re.search(
-        r'<div class="grid-2 provider-directory">(.*?)<h2>Using the chat</h2>',
-        html,
-        re.DOTALL,
-    )
-    assert directory is not None
-    names = re.findall(r"<h3>([^<]+)</h3>", directory.group(1))
-    assert len(names) == len(AGENTCLI_PROVIDERS)
-    assert names == sorted(names, key=str.casefold)
+    assert len(_pages()) > 50
 
 
 def test_word_list_has_no_gaps() -> None:
@@ -128,7 +119,8 @@ def _stale_counts(text: str, name: str = "fixture") -> list[str]:
     """Check visible prose; native and additional totals are not interchangeable."""
     counts = tool_catalog_counts()
     allowed = {
-        "tool": {counts["total"]},
+        # The catalog total, or the per-request limit some providers impose.
+        "tool": {counts["total"], AGENTCLI_MAX_TOOLS_PER_REQUEST},
         "capabilit": {len(CAPABILITY_NAMES)},
         "persona": {len(PERSONA_DEFINITIONS)},
         "switches": {len(CAPABILITY_NAMES)},

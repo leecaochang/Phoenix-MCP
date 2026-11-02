@@ -97,6 +97,16 @@ class TestReadFile:
         assert outcome == "allowed"
         assert len(_json(content)["content"]) == MAX_FILE_BYTES
 
+    async def test_non_utf8_file_is_refused_as_not_text(self, hass, fs_env):
+        """A file that is not UTF-8 is refused as not text, not as oversized, and none of it is returned."""
+        with open(hass.config.path("www/binary.bin"), "wb") as f:
+            f.write(b"\xff\xfe\x00")
+        content, outcome, _ = await _call("read_file", {"path": "www/binary.bin"}, _access_key(), hass)
+        assert outcome == "invalid_request"
+        text = content["content"][0]["text"]
+        assert "is not UTF-8 text" in text
+        assert "maximum readable size" not in text
+
 
 class TestListFiles:
     async def test_root_lists_allowed_dirs(self, hass, fs_env):

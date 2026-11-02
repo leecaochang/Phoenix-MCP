@@ -260,6 +260,22 @@ class TestWrite:
         assert outcome == "denied"
         assert "lock.secret" in content["content"][0]["text"]
 
+    @pytest.mark.parametrize("spelling", ["entity_id", "upper", "comma_list", "registry_id"])
+    async def test_every_spelling_ha_accepts_is_scope_checked(self, hass, helper_entry, as_helper, spelling):
+        """HA lowercases entity IDs, splits comma lists and resolves registry IDs, so each binds the entity."""
+        entry = er.async_get(hass).async_get_or_create("lock", "test", "secret", suggested_object_id="secret")
+        hass.states.async_set("lock.secret", "locked", {})
+        hass.states.async_set("sensor.ok", "1", {})
+        ref = {"entity_id": "lock.secret", "upper": "LOCK.SECRET",
+               "comma_list": "sensor.ok, lock.secret", "registry_id": entry.id}[spelling]
+        content, outcome, _ = await _call(
+            "set_config_entry_options",
+            {"entry_id": "helper1", "settings": {"entity_id": ref}}, _access_key(), hass)
+        assert outcome == "denied", content
+        text = content["content"][0]["text"]
+        assert (entry.id if spelling == "registry_id" else "lock.secret") in text
+        assert "sensor.ok" not in text
+
     async def test_read_access_alone_is_not_enough(self, hass, helper_entry, as_helper):
         """WRITE rather than READ, matching _unwritable_scene_members. A helper
         both exposes the entity it points at AND can actuate it (switch_as_x

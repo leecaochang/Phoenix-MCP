@@ -364,3 +364,89 @@ async def test_a_restore_whose_readback_is_unverified_is_not_reported_as_restore
         assert "restored" not in _body(resp)
     else:
         assert _body(resp)["restored"] is True
+
+
+def _restore_request(body: bytes = b"") -> MagicMock:
+    req = _request()
+    req.content_length = len(body)
+    req.content = MagicMock()
+    req.content.read = AsyncMock(side_effect=[body, b""])
+    return req
+
+
+@pytest.mark.asyncio
+async def test_a_recreated_helper_whose_readback_differs_is_unverified_not_raw_json():
+    """The helper recreate reports a mismatch as an error result; the panel gets restoreUnverified."""
+    data = _data()
+    rec = await _seed(data)
+    view = PhoenixAdminVersionRestoreView()
+    view.hass = _hass(data)
+    partial = json.dumps({"status": "partial", "recovery_id": "r1", "replacement_helper_id": "h1", "retry_safe": False})
+    for text in (partial, "Helper restoration was not verified. Inspect configuration recovery before retrying."):
+        result = ({"content": [{"type": "text", "text": text}], "isError": True}, "invalid_request", "helper:x")
+        with patch("custom_components.phoenix_mcp.mcp_view.async_restore_version", AsyncMock(return_value=result)):
+            resp = await view.post(_restore_request(), version_id=rec.id)
+        assert resp.status == 409
+        assert _body(resp)["message_key"] == "adminError.restoreUnverified"
+
+
+@pytest.mark.asyncio
+async def test_restore_refuses_when_the_item_changed_after_it_was_chosen():
+    """The stale check holds on the server too, not only in the panel."""
+    data = _data()
+    rec = await _seed(data)
+    view = PhoenixAdminVersionRestoreView()
+    view.hass = _hass(data)
+    restore = AsyncMock(return_value=({"content": [{"type": "text", "text": "restored"}]}, "allowed", "automation:aid1"))
+    with patch("custom_components.phoenix_mcp.mcp_view.async_restore_version", restore):
+        # The newest change the caller saw was the create, but the edit came after it.
+        older = data.versions.list_for("automation", "aid1")[1].id
+        stale = await view.post(_restore_request(json.dumps({"side": "before", "expected_latest_id": older}).encode()), version_id=rec.id)
+        assert stale.status == 409
+        assert _body(stale)["error"] == "stale_version"
+        assert _body(stale)["message_key"] == "adminError.restoreStale"
+        restore.assert_not_awaited()
+        bad = await view.post(_restore_request(b'{"expected_latest_id": 5}'), version_id=rec.id)
+        assert bad.status == 400
+        fresh = await view.post(_restore_request(json.dumps({"side": "before", "expected_latest_id": rec.id}).encode()), version_id=rec.id)
+        assert fresh.status == 200
+        restore.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_restore_refusals_name_the_sides_restore_would_refuse(hass):
+    """Changes is told up front which sides the server refuses, and why."""
+    from homeassistant.helpers import entity_registry as er
+    from custom_components.phoenix_mcp.mcp_view import restore_refusal
+
+    store = VersionStore()
+    tagged = await store.record(resource_type="automation", resource_id="a", action="edit",
+                                before={"alias": "A", "action": "!secret x"}, after={"alias": "A"})
+    audit = await store.record(resource_type="device", resource_id="d", action="edit",
+                               before={"restorable": False}, after={"name": "D"})
+    template = await store.record(resource_type="config_entry", resource_id="e", action="edit",
+                                  before={"snapshot_type": "template_helper", "ha_version": "1900.1.0"}, after=None)
+    gone = await store.record(resource_type="entity", resource_id="light.gone", action="edit",
+                              before={"entity_id": "light.gone"}, after={"entity_id": "light.gone2"})
+    kept = er.async_get(hass).async_get_or_create("light", "test", "kept", suggested_object_id="kept")
+    present = await store.record(resource_type="entity", resource_id=kept.entity_id, action="edit",
+                                 before={"entity_id": kept.entity_id}, after={"entity_id": kept.entity_id})
+
+    assert [restore_refusal(tagged, s, hass) for s in ("before", "after")] == ["yaml_tags", None]
+    assert [restore_refusal(audit, s, hass) for s in ("before", "after")] == ["audit_only", None]
+    assert [restore_refusal(template, s, hass) for s in ("before", "after")] == ["template_incompatible", None]
+    assert restore_refusal(gone, "before", hass) == "entity_missing"
+    assert restore_refusal(present, "before", hass) is None
+
+
+@pytest.mark.asyncio
+async def test_a_version_reads_with_its_restore_refusals():
+    data = _data()
+    await data.versions.record(resource_type="automation", resource_id="a", action="create",
+                               before=None, after={"alias": "A"})
+    rec = await data.versions.record(resource_type="automation", resource_id="a", action="edit",
+                                     before={"alias": "A", "action": "!include x.yaml"}, after={"alias": "B"})
+    view = PhoenixAdminVersionView()
+    view.hass = _hass(data)
+    body = _body(await view.get(_request(), version_id=rec.id))
+    assert body["restore_refusals"] == {"before": "yaml_tags", "after": None}

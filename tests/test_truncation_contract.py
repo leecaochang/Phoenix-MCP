@@ -42,6 +42,9 @@ _CURSOR_SIGNALS = {"has_more", "next_cursor"}
 # there is no follow-up question a truncation flag would enable. Each entry needs
 # a written reason; the point of the list is that adding one is a decision.
 _NOT_PAGINATION = {
+    # Keeps the few closest registered trigger or condition keys as a "did you
+    # mean" hint inside a validation message. It ranks suggestions, not rows.
+    "authoring_validation.py:_closest_keys",
     # A background retention policy deletes resolved storage history. It returns
     # no caller page; approval-list pagination has its own completion contract.
     "approvals.py:async_prune_terminal_approvals",

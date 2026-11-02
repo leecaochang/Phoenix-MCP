@@ -6,6 +6,8 @@ import { act, fireEvent, render, screen } from "@testing-library/react";
 vi.mock("../api", () => ({ api: { patchAccessKey: vi.fn() } }));
 import { api } from "../api";
 import { RateLimitConfig } from "../components/RateLimitConfig";
+import { helpFor } from "../shell/help";
+import { t } from "../i18n";
 import type { AccessKeyRecord } from "../types";
 
 const KEY = { id: "k1", name: "alpha", rate_limit_requests: 10, rate_limit_burst: 3 } as AccessKeyRecord;
@@ -79,4 +81,42 @@ it("still shows a saved value the operator had not edited", () => {
   fireEvent.click(screen.getByRole("button", { name: "external" }));
   expect(burst().value).toBe("7");
   expect(requests().value).toBe("10");
+});
+
+it("saves nothing when a field is left unchanged, so connected agents are not told their tools changed", async () => {
+  vi.mocked(api.patchAccessKey).mockImplementation(async (_id, body) => ({ ...KEY, ...body }) as AccessKeyRecord);
+  render(<Parent />);
+  fireEvent.focus(requests());
+  fireEvent.blur(requests());
+  fireEvent.focus(burst());
+  fireEvent.blur(burst());
+  // Typing the stored value back is no change either.
+  fireEvent.change(requests(), { target: { value: "11" } });
+  fireEvent.change(requests(), { target: { value: "10" } });
+  fireEvent.blur(requests());
+  expect(api.patchAccessKey).not.toHaveBeenCalled();
+
+  fireEvent.change(burst(), { target: { value: "4" } });
+  await act(async () => { fireEvent.blur(burst()); });
+  expect(api.patchAccessKey).toHaveBeenCalledTimes(1);
+  expect(api.patchAccessKey).toHaveBeenCalledWith("k1", { rate_limit_requests: 10, rate_limit_burst: 4 });
+});
+
+it("still saves a value typed back while an earlier save is on its way", async () => {
+  let reply!: (key: AccessKeyRecord) => void;
+  vi.mocked(api.patchAccessKey).mockReturnValueOnce(new Promise((r) => { reply = r; })).mockResolvedValue({ ...KEY });
+  render(<Parent />);
+  fireEvent.change(requests(), { target: { value: "20" } });
+  fireEvent.blur(requests());
+  fireEvent.change(requests(), { target: { value: "10" } });
+  fireEvent.blur(requests());
+  expect(api.patchAccessKey).toHaveBeenCalledTimes(2);
+  expect(vi.mocked(api.patchAccessKey).mock.calls[1]).toEqual(["k1", { rate_limit_requests: 10, rate_limit_burst: 3 }]);
+  await act(async () => reply({ ...KEY, rate_limit_requests: 20 }));
+});
+
+it("reads the rate limit help on both fields, not just their names", () => {
+  render(<Parent />);
+  expect(helpFor(requests())).toBe(t("accessKeys.rateLimitHelp"));
+  expect(helpFor(burst())).toBe(t("accessKeys.rateLimitHelp"));
 });

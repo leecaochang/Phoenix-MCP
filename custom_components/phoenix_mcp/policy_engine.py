@@ -28,6 +28,7 @@ from .const import (
 )
 from .device_semantics import (
     DeviceRegistrySnapshot,
+    device_authority_chain,
     device_registry_snapshot,
     device_registry_snapshot_from_registry,
     effective_entity_area_id,
@@ -58,16 +59,15 @@ def device_registry_entries(registry: Any) -> Any:
     return device_registry_snapshot_from_registry(registry).entries
 
 
-class EntityCreationNotPermitted(Exception):
-    def __init__(self, entity_id: str) -> None:
-        self.entity_id = entity_id
-        super().__init__(
-            f"Entity {entity_id!r} is not in the entity registry; "
-            "Phoenix MCP does not permit entity creation via service calls."
-        )
-
-
-_RELATIVE_TIME_RE = re.compile(r"^(\d+)(h|d|w|m)$")
+_RELATIVE_TIME_RE = re.compile(r"^([+-]?)\s*(\d+)\s*([a-z]+)(\s+ago)?$")
+_RELATIVE_UNITS = {
+    **dict.fromkeys(("min", "mins", "minute", "minutes"), "minutes"),
+    **dict.fromkeys(("h", "hr", "hrs", "hour", "hours"), "hours"),
+    **dict.fromkeys(("d", "day", "days"), "days"),
+    **dict.fromkeys(("w", "wk", "wks", "week", "weeks"), "weeks"),
+    **dict.fromkeys(("mo", "mon", "month", "months"), "months"),
+}
+_RELATIVE_MAX_DAYS = 366
 _ENTITY_ID_RE = re.compile(r"^[a-z0-9_]+\.[a-z0-9_]+$")
 
 
@@ -115,6 +115,9 @@ def _resolve_access_key_access(entity_id: str, access_key: AccessKeyRecord, hass
     blocklist check). Home Companion access keys are limited to the companion control
     and read domains and sensor classes, and are never pass-through. The
     DUAL_GATE_SERVICES check is NOT performed here; it is the caller's responsibility.
+
+    The ancestor chain is entity, device, the main parent of a child device, then
+    domain. A child device with malformed ancestry confers NO_ACCESS.
     """
     # A non-string cannot name an entity, and a model does not always follow the
     # tool schema (for example a list where a string was declared). Treated as a
@@ -169,19 +172,23 @@ def _resolve_access_key_access(entity_id: str, access_key: AccessKeyRecord, hass
         return Permission.WRITE
 
     permissions = access_key.permissions
-    device_id = entry.device_id if entry else None
+    device_chain = device_authority_chain(hass, entry.device_id if entry else None)
+    if device_chain is None:
+        return Permission.NO_ACCESS
 
-    entity_node = permissions.entities.get(entity_id)
-    device_node = permissions.devices.get(device_id) if device_id else None
-    domain_node = permissions.domains.get(domain)
+    nodes = (
+        permissions.entities.get(entity_id),
+        *(permissions.devices.get(device_id) for device_id in device_chain),
+        permissions.domains.get(domain),
+    )
 
     # Pass 1: RED check - walk entire ancestor chain before resolving any grant
-    for node in (entity_node, device_node, domain_node):
+    for node in nodes:
         if node is not None and node.state == "RED":
             return Permission.DENY
 
     # Pass 2: most specific non-GREY grant
-    for node in (entity_node, device_node, domain_node):
+    for node in nodes:
         if node is None:
             continue
         if node.state == "GREEN":
@@ -228,11 +235,14 @@ def resolve_registry_access(
 
     permissions = access_key.permissions
     domain = canonical_id.split(".", 1)[0]
-    device_node = permissions.devices.get(entry.device_id) if entry.device_id else None
-    domain_node = permissions.domains.get(domain)
+    # resolve() already refused a malformed chain and any RED ancestor.
+    device_chain = device_authority_chain(hass, entry.device_id) or ()
 
     inherited = Permission.NO_ACCESS
-    for node in (device_node, domain_node):
+    for node in (
+        *(permissions.devices.get(device_id) for device_id in device_chain),
+        permissions.domains.get(domain),
+    ):
         if node is None:
             continue
         if node.state == "GREEN":
@@ -276,6 +286,27 @@ def device_registry_entity_ids(hass: HomeAssistant, device_id: str) -> list[str]
     )
 
 
+def device_cascade_entity_ids(
+    hass: HomeAssistant,
+    device_id: str,
+    *,
+    snapshot: DeviceRegistrySnapshot | None = None,
+) -> list[str]:
+    """Return a device's registry entities plus those of its child devices.
+
+    Core cascades deletion and disabling from a main device to its child
+    devices, and a child without its own area follows the parent's. A write to
+    the parent therefore reaches every entity listed here.
+    """
+    snapshot = snapshot or device_registry_snapshot(hass)
+    device_ids = {device_id, *snapshot.part_ids(device_id)}
+    return sorted(
+        entry.entity_id
+        for entry in er.async_get(hass).entities.values()
+        if entry.device_id in device_ids
+    )
+
+
 def _phoenix_owned_device(device: Any, hass: HomeAssistant) -> bool:
     """Whether a device belongs to Phoenix MCP and must remain unreachable."""
     for config_entry_id in device_config_entry_ids(device):
@@ -299,8 +330,9 @@ def resolve_device_registry_access(
 ) -> Permission:
     """Resolve read access to a device-registry entry.
 
-    An explicit device node authorizes the device even when it has no entities.
-    Otherwise one attached entity must pass the ordinary registry-aware entity
+    An explicit device node, or the node of a child device's main parent,
+    authorizes the device even when it has no entities. Otherwise one attached
+    entity must pass the ordinary registry-aware entity
     resolver. Pass-through access keys retain their Assist-exposure filter: a device
     with no exposed attached entity is not an alternate enumeration path.
     """
@@ -332,14 +364,12 @@ def resolve_device_registry_access(
             return Permission.NO_ACCESS
         return Permission.WRITE
 
-    device_node = access_key.permissions.devices.get(device_id)
-    if device_node is not None:
-        if device_node.state == "RED":
-            return Permission.DENY
-        if device_node.state == "GREEN":
-            return Permission.WRITE
-        if device_node.state == "YELLOW":
-            return Permission.READ
+    device_chain = device_authority_chain(hass, device_id)
+    if device_chain is None:
+        return Permission.NO_ACCESS
+    explicit = _device_chain_permission(access_key, device_chain)
+    if explicit is not None:
+        return explicit
 
     inherited = [
         resolve_registry_access(
@@ -370,7 +400,9 @@ def resolve_device_registry_write(
 
     Attached entities may make a device readable, but they never authorize a
     registry mutation that affects the whole device. Scoped callers therefore
-    need GREEN on the exact device node; pass-through remains unrestricted.
+    need GREEN on the device node, or on the main parent of a child device whose
+    own node is Grey; a RED parent blocks its children. Pass-through remains
+    unrestricted.
     """
     if not isinstance(device_id, str):
         return Permission.NOT_FOUND
@@ -382,16 +414,31 @@ def resolve_device_registry_write(
         return Permission.NO_ACCESS
     if access_key.pass_through:
         return Permission.WRITE
-    node = access_key.permissions.devices.get(device_id)
-    if node is None:
+    device_chain = device_authority_chain(hass, device_id)
+    if device_chain is None:
         return Permission.NO_ACCESS
-    if node.state == "GREEN":
-        return Permission.WRITE
-    if node.state == "YELLOW":
-        return Permission.READ
-    if node.state == "RED":
+    return _device_chain_permission(access_key, device_chain) or Permission.NO_ACCESS
+
+
+def _device_chain_permission(
+    access_key: AccessKeyRecord, device_chain: tuple[str, ...]
+) -> Permission | None:
+    """Resolve explicit device nodes along a device's authority chain.
+
+    A RED node anywhere on the chain denies; otherwise the most specific
+    non-Grey node grants. None means every node on the chain is Grey.
+    """
+    nodes = [access_key.permissions.devices.get(device_id) for device_id in device_chain]
+    if any(node is not None and node.state == "RED" for node in nodes):
         return Permission.DENY
-    return Permission.NO_ACCESS
+    for node in nodes:
+        if node is None:
+            continue
+        if node.state == "GREEN":
+            return Permission.WRITE
+        if node.state == "YELLOW":
+            return Permission.READ
+    return None
 
 
 def config_entry_registry_context(
@@ -636,6 +683,28 @@ def _eligible_for_indirect_expansion(entry: er.RegistryEntry) -> bool:
     return entry.entity_category is None and entry.hidden_by is None
 
 
+def _service_area_ids(hass: HomeAssistant, values: list[str]) -> list[str]:
+    """Area IDs for service area targets given as an ID, a name or an alias.
+
+    The reads accept all three, so an agent that read "Kitchen" from them can
+    target it too. Each area still expands only to the entities the access key
+    may write, so an unknown name and a hidden area both expand to nothing; the
+    reading is not noted, since naming the area ID would confirm an area the key
+    cannot see.
+    """
+    registry = ar.async_get(hass)
+    resolved: list[str] = []
+    for value in values:
+        if registry.async_get_area(value) is not None:
+            resolved.append(value)
+            continue
+        wanted = value.strip().casefold()
+        matches = [area.id for area in registry.async_list_areas()
+                   if wanted in {area.name.casefold(), *(str(alias).casefold() for alias in area.aliases or ())}]
+        resolved.extend(matches)
+    return resolved
+
+
 def expand_service_targets(
     *,
     entity_id: str | list[str] | None,
@@ -644,15 +713,14 @@ def expand_service_targets(
     service_domain: str,
     hass: HomeAssistant,
 ) -> tuple[set[str], list[str]]:
-    """Expand service call targets without permission filtering or entity creation checks.
+    """Expand service call targets without permission filtering or registry checks.
 
     Returns (device_area_candidates, explicit_entity_ids) where:
     - device_area_candidates: entity IDs from device/area/'all' expansion (deduplicated set)
     - explicit_entity_ids: entity IDs specified directly (not via 'all') that callers must
       validate against the entity registry before use
 
-    Use resolve_service_targets for the full filtered result. Use this directly only when
-    a raw count is needed (e.g. X-Phoenix-Entities-Requested header).
+    Use resolve_service_targets for the full filtered result.
     """
     entity_registry = er.async_get(hass)
     device_snapshot = device_registry_snapshot(hass)
@@ -684,15 +752,20 @@ def expand_service_targets(
             dids = [d for d in device_id if isinstance(d, str)]
         else:
             dids = []
-        for did in dids:
-            for entry in entity_registry.entities.values():
-                if (
-                    entry.device_id == did
-                    and entry.domain == service_domain
-                    and not entry.disabled_by
-                    and _eligible_for_indirect_expansion(entry)
-                ):
-                    candidates.add(entry.entity_id)
+        # Like HA's own target helper, a parent device reaches its parts too.
+        target_device_ids = {
+            target_id
+            for did in dids
+            for target_id in (did, *device_snapshot.part_ids(did))
+        }
+        for entry in entity_registry.entities.values():
+            if (
+                entry.device_id in target_device_ids
+                and entry.domain == service_domain
+                and not entry.disabled_by
+                and _eligible_for_indirect_expansion(entry)
+            ):
+                candidates.add(entry.entity_id)
 
     if area_id is not None:
         if isinstance(area_id, str):
@@ -701,6 +774,7 @@ def expand_service_targets(
             aids = [a for a in area_id if isinstance(a, str)]
         else:
             aids = []
+        aids = _service_area_ids(hass, aids)
         # Build indexes once to avoid O(A*E) and O(D*E) nested iteration.
         device_entity_index: dict[str, list[str]] = {}
         area_entity_index: dict[str, list[str]] = {}
@@ -745,12 +819,11 @@ def resolve_service_targets(
 ) -> tuple[list[str], int]:
     """Resolve service call targets to a WRITE-permitted, deduplicated entity_id list.
 
-    Returns (permitted_entities, raw_count) where raw_count is the number of
-    candidate entities before permission filtering. This avoids a second call to
-    expand_service_targets just to populate X-Phoenix-Entities-Requested.
-
-    Raises:
-        EntityCreationNotPermitted: if an explicit entity_id is not in the entity registry.
+    Returns (permitted_entities, visible_count) where visible_count is the number
+    of candidates this access key can read or write. An explicit ID with no
+    registry entry is skipped, so it is never dispatched (HA could create it) and
+    counts exactly like an entity the key cannot see: neither a mixed target list
+    nor the count tells a missing entity from a hidden one.
 
     Returns an empty list when no entities pass permission filtering; the caller must
     return 403 in that case.
@@ -768,28 +841,37 @@ def resolve_service_targets(
         hass=hass,
     )
 
-    # Entity creation check for explicit entity_ids; raises immediately if any are not in registry
+    unregistered: set[str] = set()
     for eid in explicit_ids:
         entry = entity_registry.async_get(eid.lower())
         if entry is None:
-            raise EntityCreationNotPermitted(eid)
-        # HA accepts registry IDs too. Every later gate and dispatch must use
-        # the same canonical identity that permission resolution authorizes.
-        candidates.add(entry.entity_id)
-
-    raw_count = len(candidates)
+            unregistered.add(eid.lower())
+        else:
+            # HA accepts registry IDs too. Every later gate and dispatch must use
+            # the same canonical identity that permission resolution authorizes.
+            candidates.add(entry.entity_id)
 
     # Deduplicate while preserving order, then filter to WRITE-permitted entities
     seen: set[str] = set()
     permitted: list[str] = []
+    visible = 0
     for eid in candidates:
         if eid in seen:
             continue
         seen.add(eid)
-        if resolve(eid, access_key, hass) == Permission.WRITE:
+        permission = resolve(eid, access_key, hass)
+        if permission in (Permission.READ, Permission.WRITE):
+            visible += 1
+        if permission == Permission.WRITE:
             permitted.append(eid)
+    # A stateful entity without a registry entry (YAML, no unique ID) that the
+    # key can read is counted as dropped; a ghost resolves NOT_FOUND and is not.
+    visible += sum(
+        resolve(eid, access_key, hass) in (Permission.READ, Permission.WRITE)
+        for eid in unregistered - seen
+    )
 
-    return permitted, raw_count
+    return permitted, visible
 
 
 def service_target_binding_valid(
@@ -853,13 +935,10 @@ def call_needs_physical_gate(
     if domain in PHYSICAL_GATE_DOMAINS:
         return True
     if domain == "homeassistant" and service == "toggle":
-        try:
-            targets, _ = resolve_service_targets(
-                entity_id=entity_id, device_id=device_id, area_id=area_id,
-                service_domain=domain, access_key=access_key, hass=hass,
-            )
-        except EntityCreationNotPermitted:
-            return False
+        targets, _ = resolve_service_targets(
+            entity_id=entity_id, device_id=device_id, area_id=area_id,
+            service_domain=domain, access_key=access_key, hass=hass,
+        )
         return physical_gate_applies(domain, service, targets)
     return False
 
@@ -965,8 +1044,8 @@ def get_effective_hint(
     if entity_node and entity_node.hint:
         return entity_node.hint
 
-    if entry and entry.device_id:
-        device_node = permissions.devices.get(entry.device_id)
+    for device_id in device_authority_chain(hass, entry.device_id if entry else None) or ():
+        device_node = permissions.devices.get(device_id)
         if device_node and device_node.hint:
             return device_node.hint
 
@@ -1040,37 +1119,42 @@ def template_blocklist_vars() -> dict:
     }
 
 
+class RelativeTimeError(ValueError):
+    """A recognized relative time Phoenix refuses; the message is safe to return."""
+
+
 def parse_relative_time(value: str) -> datetime:
     """Parse a relative time string to a UTC datetime.
 
-    Supported formats: '24h' (hours), '7d' (days), '2w' (weeks), '1m' (30-day months).
-    Raises ValueError for unrecognized formats.
+    An amount and unit, case-insensitive, with or without a space: minutes
+    (30min), hours (24h, 24 hours), days (7d), weeks (2w) or 30-day months
+    (1mo). It means that long ago; a leading minus or a trailing "ago" says the
+    same, and a leading plus means that far ahead. 'now' is the current time.
+    A bare 'm' is refused as ambiguous, since models send it for minutes and
+    months alike. Raises RelativeTimeError for a refused relative time and
+    ValueError for anything that is not one.
     """
     if not isinstance(value, str):
         raise ValueError(f"Unrecognized relative time format: {value!r}")
-    match = _RELATIVE_TIME_RE.match(value.strip())
+    text = value.strip().lower()
+    if text == "now":
+        return utcnow()
+    match = _RELATIVE_TIME_RE.match(text)
     if not match:
         raise ValueError(f"Unrecognized relative time format: {value!r}")
-    n = int(match.group(1))
-    unit = match.group(2)
-    _MAX_DAYS = 366
-    if unit == "h":
-        if n > _MAX_DAYS * 24:
-            raise ValueError(f"Relative time {value!r} exceeds the maximum allowed range of {_MAX_DAYS} days.")
-        delta = timedelta(hours=n)
-    elif unit == "d":
-        if n > _MAX_DAYS:
-            raise ValueError(f"Relative time {value!r} exceeds the maximum allowed range of {_MAX_DAYS} days.")
-        delta = timedelta(days=n)
-    elif unit == "w":
-        if n > 52:
-            raise ValueError(f"Relative time {value!r} exceeds the maximum allowed range of 52 weeks.")
-        delta = timedelta(weeks=n)
-    else:
-        if n > 12:
-            raise ValueError(f"Relative time {value!r} exceeds the maximum allowed range of 12 months.")
-        delta = timedelta(days=30 * n)
-    return utcnow() - delta
+    sign, amount, unit_text, ago = match.groups()
+    n = int(amount)
+    if unit_text == "m":
+        raise RelativeTimeError(f"{value.strip()!r} is ambiguous: use {n}min for minutes or {n}mo for months.")
+    unit = _RELATIVE_UNITS.get(unit_text)
+    if unit is None or (sign == "+" and ago):
+        raise ValueError(f"Unrecognized relative time format: {value!r}")
+    delta = timedelta(days=30 * n) if unit == "months" else timedelta(**{unit: n})
+    if delta > timedelta(days=_RELATIVE_MAX_DAYS):
+        raise RelativeTimeError(
+            f"Relative time {value.strip()!r} exceeds the maximum allowed range of {_RELATIVE_MAX_DAYS} days."
+        )
+    return utcnow() + delta if sign == "+" else utcnow() - delta
 
 
 def _selector_list(value: object) -> list[str] | None:

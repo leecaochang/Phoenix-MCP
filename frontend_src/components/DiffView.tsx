@@ -1,7 +1,9 @@
 /** Before/after diff pane for approval review. */
-import React, { useMemo, useState } from "react";
+import React, { useContext, useMemo, useState } from "react";
 import { toYaml, YamlView } from "./YamlView";
 import { t } from "../i18n";
+import { DisplayModeContext } from "../ui/ActionButton";
+import { Icon } from "../ui/Icon";
 
 // The approval diff carries before/after as JSON strings (possibly truncated).
 // Render them as YAML so the line diff reads like the stored config; if a side
@@ -75,21 +77,21 @@ export function rememberCodeView(code: boolean): void {
  * with that one instead of competing with it. */
 export function CodeToggle({ code, onToggle }: { code: boolean; onToggle: () => void }) {
   const label = code ? t("changes.toCodeOff") : t("changes.toCodeOn");
+  // Icons only, or icons with their short name, as the toolbar's display mode says.
+  const withText = useContext(DisplayModeContext) !== "icons";
+  // Like the layout toggle, the icon and name show the view the button switches TO.
   return (
     <button
       type="button"
-      className="btn btn-ghost btn-sm btn-icon diff-code-toggle"
+      className={`btn btn-ghost btn-sm diff-code-toggle${withText ? " phx-action" : " btn-icon"}`}
+      data-help="help.codeView"
       onClick={onToggle}
       aria-label={label}
-      aria-pressed={code}
       title={label}
     >
-      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor"
-           strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"
-           style={{ display: "block" }}>
-        <path d="M5.5 4.5 2 8l3.5 3.5" />
-        <path d="M10.5 4.5 14 8l-3.5 3.5" />
-      </svg>
+      {/* Not "Diff": the Diff|Preview control can sit beside it, and two Diffs read as one broken control. */}
+      <Icon name={code ? "lineView" : "code"} size={16} style={{ display: "block" }} />
+      {withText && <span aria-hidden="true">{t(code ? "changes.lineViewShort" : "changes.codeEditorShort")}</span>}
     </button>
   );
 }
@@ -99,29 +101,19 @@ export function CodeToggle({ code, onToggle }: { code: boolean; onToggle: () => 
  * the Changes tab. */
 export function LayoutToggle({ stacked, onToggle }: { stacked: boolean; onToggle: () => void }) {
   const label = stacked ? t("changes.toSideBySide") : t("changes.toStacked");
+  const withText = useContext(DisplayModeContext) !== "icons";
   return (
     <button
       type="button"
-      className="btn btn-ghost btn-sm btn-icon diff-layout-toggle"
+      className={`btn btn-ghost btn-sm diff-layout-toggle${withText ? " phx-action" : " btn-icon"}`}
+      data-help="help.layoutView"
       onClick={onToggle}
       aria-label={label}
       title={label}
     >
-      <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true" style={{ display: "block" }}>
-        {stacked ? (
-          // Target = side-by-side: two vertical panes.
-          <>
-            <rect x="2" y="2.5" width="5" height="11" rx="1" />
-            <rect x="9" y="2.5" width="5" height="11" rx="1" />
-          </>
-        ) : (
-          // Target = stacked: two horizontal panes.
-          <>
-            <rect x="2.5" y="2" width="11" height="5" rx="1" />
-            <rect x="2.5" y="9" width="11" height="5" rx="1" />
-          </>
-        )}
-      </svg>
+      {/* The icon and name show the layout the button switches TO. */}
+      <Icon name={stacked ? "sideBySide" : "stacked"} size={16} style={{ display: "block" }} />
+      {withText && <span aria-hidden="true">{t(stacked ? "changes.sideBySideShort" : "changes.stackedShort")}</span>}
     </button>
   );
 }
@@ -153,15 +145,8 @@ export function BeforeAfter({ before, after, toolbarExtra }: {
   );
   return (
     <div className="change-diff-wrap">
+      {/* No explanatory hint (user, 2026-10-27): the pressed Code Editor button says the tinting is off. */}
       <div className="change-diff-toolbar">
-        <span className="change-diff-hint">
-          {code
-            // Say what this view GIVES UP. The tinting is how an approver sees
-            // what they are approving, and a syntax-coloured pane looks
-            // authoritative enough that its absence would otherwise go unnoticed.
-            ? t("changes.hintCode")
-            : t("changes.hintDiff")}
-        </span>
         {toolbarExtra}
         <CodeToggle code={code} onToggle={toggleCode} />
         <LayoutToggle stacked={stacked} onToggle={toggleStacked} />

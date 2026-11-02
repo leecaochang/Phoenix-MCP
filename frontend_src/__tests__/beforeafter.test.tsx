@@ -67,8 +67,8 @@ describe("BeforeAfter code view", () => {
   it("defaults to the line diff, not the code view", () => {
     const { container } = render(<BeforeAfter {...props} />);
     expect(container.querySelectorAll(".diff-line").length).toBeGreaterThan(0);
-    expect(container.querySelector(".change-diff-hint")?.textContent)
-      .toContain("tinted red");
+    // No explanatory hint beside the controls (user, 2026-10-27).
+    expect(container.querySelector(".change-diff-hint")).toBeNull();
   });
 
   it("switches both panes out of the line diff and still shows both sides", () => {
@@ -82,14 +82,12 @@ describe("BeforeAfter code view", () => {
     expect(text).toContain("alias: Evening");
   });
 
-  it("admits that changed lines are no longer marked", () => {
-    // A syntax-coloured pane looks authoritative, so losing the red/green
-    // tinting has to be stated or an approver will not notice it is gone.
-    const { container, getByRole } = render(<BeforeAfter {...props} />);
+  it("says on its button that the line view (with the tinting) is the other view", () => {
+    // Without a hint, the button naming the view it switches to is what tells an approver the tinting is off.
+    const { getByRole } = render(<BeforeAfter {...props} />);
+    expect(getByRole("button", { name: /code editor view/i })).toHaveTextContent("Code Editor");
     fireEvent.click(getByRole("button", { name: /code editor view/i }));
-    const hint = container.querySelector(".change-diff-hint")?.textContent ?? "";
-    expect(hint).toContain("line numbers");
-    expect(hint).toContain("not marked");
+    expect(getByRole("button", { name: /plain line diff/i })).toHaveTextContent("Line View");
   });
 
   it("toggles back to the line diff", () => {

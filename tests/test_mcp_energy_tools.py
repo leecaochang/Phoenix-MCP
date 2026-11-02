@@ -1101,12 +1101,12 @@ async def test_every_write_records_a_restorable_version(hass: HomeAssistant) -> 
     data = _data()
     ws, saved = _writer(LIVE)
     with patch(_WS, ws):
-        _, outcome, _ = await _call_tool(
+        content, outcome, _ = await _call_tool(
             "edit_energy_config",
                 {"operation": "add_device", "target": {"kind": "statistic", "id": "sensor.dryer_energy"}, "changes": {"name": "Dryer"}},
             _access_key(cap_energy_write="allow"), hass, data, "req-1", None,
         )
-    assert outcome == "allowed"
+    assert outcome == "allowed" and json.loads(content["content"][0]["text"])["verified"] is True
     records = data.versions.list_for("energy", "preferences")
     assert len(records) == 1
     rec = records[0]

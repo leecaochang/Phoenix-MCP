@@ -1,6 +1,6 @@
 {
   "name": "phoenix-mcp-panel",
-  "version": "1.5.0",
+  "version": "2.0.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -11,8 +11,9 @@
     "lint": "eslint frontend_src"
   },
   "dependencies": {
-    "@mdi/js": "^7.4.47",
+    "dockview-react": "8.4.1",
     "js-yaml": "^4.3.2",
+    "lucide-react": "1.52.0",
     "react": "^19.3.0",
     "react-dom": "^19.3.0"
   },
@@ -38,6 +39,8 @@
     "node": ">=24.15 <25"
   },
   "overrides": {
-    "@vitest/mocker": "5.0.3"
+    "@vitest/mocker": "5.0.3",
+    "dockview": "8.4.1",
+    "dockview-core": "8.4.1"
   }
 }
