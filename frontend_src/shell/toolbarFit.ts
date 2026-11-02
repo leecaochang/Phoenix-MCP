@@ -2,7 +2,7 @@
  * The toolbar's fit rule. With icons and text along the top or bottom, or
  * floating, the main row stays on one line: when it does not fit, its
  * controls give up their text in a fixed order (Workspace Options, then
- * Documentation, Agent Chat, and last the workspaces), keeping their names
+ * Help, Agent Chat, and last the workspaces), keeping their names
  * as tooltips and accessible names. The toolbar options never carry text.
  *
  * A toolbar set to one row (user, 2026-11-01) puts the tools after the main

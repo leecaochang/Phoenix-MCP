@@ -1,11 +1,11 @@
 ---
-{ "id": "topic.windows", "title": "Working with Windows", "parent": "workspace.my", "order": 10, "keywords": ["layout", "arrange", "workspace", "window", "toolbar"], "sectionKeywords": { "toolbar": ["workspace buttons", "documentation", "tools"], "toolbar-options": ["icons only", "icons and text", "single row", "dock", "float toolbar", "collapse"], "title-bar": ["fold", "maximize", "close", "float", "dock window"], "window-menu": ["move left", "move right", "move up", "move down", "pin", "unpin", "resize with keyboard", "always show icons and text"], "arranging": ["drag", "resize", "border", "scroll"], "closing": ["show window", "reopen", "hidden"], "defaults": ["my default", "reset", "reset this workspace", "reset all workspaces", "layout"], "saved": ["sync", "other computer", "browser"], "phones": ["mobile", "narrow", "tablet", "move up", "move down", "load more", "rows"], "keyboard": ["shortcuts", "context menu", "escape"], "guide": ["guide", "pop out", "pop in", "separate window", "contents", "search"] }, "covers": ["frontend_src/shell/Toolbar.tsx", "frontend_src/shell/Shell.tsx", "frontend_src/shell/dock/TitleBar.tsx", "frontend_src/shell/dock/controller.ts", "frontend_src/shell/storage.ts", "frontend_src/shell/PhoneStack.tsx", "frontend_src/shell/phoneLayout.ts", "frontend_src/ui/table/rowLimit.ts", "frontend_src/shell/dock/", "frontend_src/shell/areaFocus.ts", "frontend_src/shell/sync.ts", "frontend_src/shell/toolbarFit.ts", "frontend_src/shell/tools.ts", "frontend_src/shell/windowTools.tsx", "frontend_src/shell/Reconnecting.tsx", "frontend_src/shell/guide.tsx", "frontend_src/shell/guideTarget.ts", "frontend_src/guide/search.ts", "frontend_src/utils/connection.ts", "frontend_src/utils/list_search.ts", "frontend_src/ui/ActionButton.tsx", "frontend_src/ui/Menu.tsx", "frontend_src/ui/InlineConfirm.tsx", "frontend_src/ui/table/settings.ts", "frontend_src/ui/popup.ts"] }
+{ "id": "topic.windows", "title": "Working with Windows", "parent": "workspace.my", "order": 10, "keywords": ["layout", "arrange", "workspace", "window", "toolbar"], "sectionKeywords": { "toolbar": ["workspace buttons", "help menu", "documentation", "tools"], "toolbar-options": ["icons only", "icons and text", "single row", "dock", "float toolbar", "collapse"], "title-bar": ["fold", "maximize", "close", "float", "dock window"], "window-menu": ["move left", "move right", "move up", "move down", "pin", "unpin", "resize with keyboard", "always show icons and text"], "arranging": ["drag", "resize", "border", "scroll"], "closing": ["show window", "reopen", "hidden"], "defaults": ["my default", "reset", "reset this workspace", "reset all workspaces", "layout"], "saved": ["sync", "other computer", "browser"], "phones": ["mobile", "narrow", "tablet", "move up", "move down", "load more", "rows"], "keyboard": ["shortcuts", "context menu", "escape"], "guide": ["guide", "pop out", "pop in", "separate window", "contents", "search"] }, "covers": ["frontend_src/shell/Toolbar.tsx", "frontend_src/shell/Shell.tsx", "frontend_src/shell/dock/TitleBar.tsx", "frontend_src/shell/dock/controller.ts", "frontend_src/shell/storage.ts", "frontend_src/shell/PhoneStack.tsx", "frontend_src/shell/phoneLayout.ts", "frontend_src/ui/table/rowLimit.ts", "frontend_src/shell/dock/", "frontend_src/shell/areaFocus.ts", "frontend_src/shell/sync.ts", "frontend_src/shell/toolbarFit.ts", "frontend_src/shell/tools.ts", "frontend_src/shell/windowTools.tsx", "frontend_src/shell/Reconnecting.tsx", "frontend_src/shell/guide.tsx", "frontend_src/shell/guideTarget.ts", "frontend_src/guide/search.ts", "frontend_src/utils/connection.ts", "frontend_src/utils/list_search.ts", "frontend_src/ui/ActionButton.tsx", "frontend_src/ui/Menu.tsx", "frontend_src/ui/InlineConfirm.tsx", "frontend_src/ui/table/settings.ts", "frontend_src/ui/popup.ts"] }
 ---
 Each workspace is a set of windows you can arrange as you like. Phoenix remembers the arrangement for you, on every computer you sign in from.
 
 ## The toolbar {#toolbar}
 
-The buttons switch workspaces. Approvals shows how many requests are waiting. **{{label:shell.agentChat}}** opens Agent Chat, and **{{label:shell.documentation}}** turns the Help Bar and the Guide on or off.
+The buttons switch workspaces. Approvals shows how many requests are waiting. **{{label:shell.agentChat}}** opens Agent Chat, and **{{label:shell.help}}** turns Quick Help and the Guide on or off.
 
 The second row holds the tools of the windows you have open, such as Filters or Refresh. A tool several windows share shows once and acts on all of them.
 
@@ -54,7 +54,7 @@ Access Keys and Settings scroll, and each window is as tall as its content. The 
 
 Closing a window hides it in this workspace. Show it again from **{{label:workspace.options}}**, and it returns to the place it had.
 
-Help comes back from **{{label:help.showHelpBar}}** in the Documentation menu, and Needs Attention from **{{label:workspace.showAttention}}**. In My Workspace, closing a window removes it.
+Quick Help comes back from the **{{label:shell.help}}** menu, and Needs Attention from **{{label:workspace.showAttention}}**. In My Workspace, closing a window removes it.
 
 ## Your arrangements {#defaults}
 
@@ -62,7 +62,7 @@ Help comes back from **{{label:help.showHelpBar}}** in the Documentation menu, a
 
 - **{{label:workspace.saveMyDefault}}** keeps this workspace's arrangement, including table columns. **{{label:workspace.restoreMyDefault}}** brings it back.
 - **{{label:workspace.restoreOriginal}}** puts this workspace back as Phoenix first arranged it, and resets its table columns. Your My Default stays.
-- **{{label:workspace.restorePanelDefaults}}** does that for every workspace, and also resets the toolbar, Help and the Guide, and empties My Workspace. Every My Default stays.
+- **{{label:workspace.restorePanelDefaults}}** does that for every workspace, and also resets the toolbar, Quick Help and the Guide, and empties My Workspace. Every My Default stays.
 
 ## How arrangements are saved {#saved}
 
@@ -82,7 +82,7 @@ Each title bar has buttons to fold the window, open its menu and close it. There
 
 Long lists show 10 rows at a time. **{{label:common.loadMore}}** shows the next 10.
 
-The Guide opens at the bottom of the column. Help and Notification History aren't available on a phone.
+The Guide opens at the bottom of the column. Quick Help and Notification History aren't available on a phone.
 
 ## Keyboard {#keyboard}
 

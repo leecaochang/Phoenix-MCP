@@ -222,7 +222,7 @@ describe("phoenix-mcp-panel full app shell", () => {
       await waitFor(() => expect(el.shadowRoot!.querySelector(".phx-toolbar")).toHaveAttribute("data-fit", "0"));
       const main = el.shadowRoot!.querySelector(".phx-toolbar-main")!;
       expect(main.querySelector('[aria-label="Workspace Options"]')).toHaveClass("phx-fit-1");
-      expect(main.querySelector('[aria-label="Documentation"]')).toHaveClass("phx-fit-2");
+      expect(main.querySelector('[aria-label="Help"]')).toHaveClass("phx-fit-2");
       expect([...main.querySelectorAll(".phx-toolbar-nav button")].every((b) => b.classList.contains("phx-fit-4"))).toBe(true);
       // The toolbar options and the tools toggle are icons only and never part of the fit.
       expect(main.querySelector('[aria-label="Toolbar Options"]')?.className).not.toMatch(/phx-fit-/);
@@ -367,9 +367,9 @@ describe("phoenix-mcp-panel full app shell", () => {
         delete (body as unknown as Record<string, unknown>).scrollWidth;
         delete (body as unknown as Record<string, unknown>).clientWidth;
       }
-      // Documentation holds Help and the Guide; the Guide is the manual, so the website is gone.
-      act(() => { el.shadowRoot!.querySelector<HTMLButtonElement>('.phx-toolbar [aria-label="Documentation"]')!.click(); });
-      expect(items()).toEqual(["Show Help Bar", "Guide"]);
+      // The Help menu holds Quick Help and the Guide; the Guide is the manual, so the website is gone.
+      act(() => { el.shadowRoot!.querySelector<HTMLButtonElement>('.phx-toolbar [aria-label="Help"]')!.click(); });
+      expect(items()).toEqual(["Quick Help", "Guide"]);
     });
   });
 });

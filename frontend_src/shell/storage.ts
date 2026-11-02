@@ -45,10 +45,10 @@ export function withToolbarDock(state: ToolbarState, dock: ToolbarDock): Toolbar
   return { ...state, dock, ...(dock === "floating" ? { vertical: toolbarVertical(state) } : {}) };
 }
 
-/** Show Help Bar, and the workspaces where Help was reopened or closed against it. */
+/** Quick Help on or off, and the workspaces where it was reopened or closed against that. */
 export interface HelpPrefs {
   show: boolean;
-  /** true: Help is open here although Show Help Bar is off; false: closed here although it is on. */
+  /** true: Quick Help is open here although it is off in the Help menu; false: closed here although it is on. */
   workspaces: Partial<Record<WorkspaceId, boolean>>;
 }
 export const DEFAULT_HELP: HelpPrefs = { show: true, workspaces: {} };

@@ -28,7 +28,7 @@ export interface WorkspaceActions {
   restoreMyDefault: (controller: WorkspaceController) => void;
   hasMyDefault: (controller: WorkspaceController) => boolean;
   restoreOriginal: (controller: WorkspaceController) => void;
-  /** Reset All Workspaces: the toolbar, Help Bar, Guide and every arrangement, never My Defaults or settings. */
+  /** Reset All Workspaces: the toolbar, Quick Help, Guide and every arrangement, never My Defaults or settings. */
   restorePanelDefaults: () => void;
   /** Items are waiting and Needs Attention was closed in this workspace: offer it back (user, 2026-10-29). */
   attentionHidden: (controller: WorkspaceController) => boolean;
@@ -41,11 +41,11 @@ export const WorkspaceActionsContext = createContext<WorkspaceActions | null>(nu
 /**
  * Workspace options: reopen closed windows, save or restore My Default,
  * Reset This Workspace (which empties My Workspace), and Reset All Workspaces
- * (every arrangement plus the toolbar, Help Bar and Guide).
+ * (every arrangement plus the toolbar, Quick Help and Guide).
  */
 export function workspaceMenu(controller: WorkspaceController, actions: WorkspaceActions | null): MenuEntry[] {
   const toolWindows: readonly string[] = WORKSPACES[controller.id as WorkspaceId]?.toolWindows ?? [];
-  // Help is shown and hidden from Documentation, Show Help Bar; Notifications keeps its own wording below.
+  // Quick Help is shown and hidden from the Help menu; Notifications keeps its own wording below.
   const items: MenuEntry[] = controller.closedWindows().filter((id) => id !== NOTIFICATIONS && id !== HELP_WINDOW && !toolWindows.includes(id)).map((id) => ({
     id: `reopen-${id}`,
     label: t("workspace.reopen", { window: windowTitle(id) }),
@@ -172,7 +172,7 @@ export function Toolbar({ controller, shellRoot, env, state, onChange, documenta
   env: Env;
   state: ToolbarState;
   onChange: (next: ToolbarState) => void;
-  /** The Documentation menu: Help and the Guide. */
+  /** The Help menu: Quick Help and the Guide. */
   documentation: () => MenuEntry[];
   /** Agent Chat: its docked window in My Workspace, or the floating one. */
   onAgentChat?: () => void;
@@ -274,7 +274,7 @@ export function Toolbar({ controller, shellRoot, env, state, onChange, documenta
   // when the panel's width or the rows' text changes.
   const vertical = env === "desktop" && toolbarVertical(effective);
   const fitOneLine = env === "desktop" && effective.mode === "icon-text" && !effective.collapsed && !vertical;
-  // Phones always put the tools beside Agent Chat, Documentation and Workspace Options, so the toolbar is at
+  // Phones always put the tools beside Agent Chat, Help and Workspace Options, so the toolbar is at
   // most two rows: the workspaces, then the rest (user, 2026-11-02).
   const oneRow = (env === "mobile" || (env === "desktop" && effective.singleRow)) && !effective.collapsed && !vertical;
   const fitKey = useRef("");
@@ -382,9 +382,9 @@ export function Toolbar({ controller, shellRoot, env, state, onChange, documenta
                     <span className="phx-toolbar-label">{t("shell.agentChat")}</span>
                   </button>
                 ) : null}
-                <MenuButton label={t("shell.documentation")} help="help.documentation" icon={<Icon name="documentation" size={16} />}
+                <MenuButton label={t("shell.help")} help="help.helpMenu" icon={<Icon name="documentation" size={16} />}
                   items={documentation} className={`phx-toolbar-button ${fitClass(2)}`}>
-                  <span className="phx-toolbar-label">{t("shell.documentation")}</span>
+                  <span className="phx-toolbar-label">{t("shell.help")}</span>
                 </MenuButton>
                 {(controller || options) && (
                   <MenuButton label={t("workspace.options")} help="help.workspaceOptions" icon={<Icon name="workspaceOptions" size={16} />}

@@ -340,7 +340,6 @@ ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
         "panel.mesa.privPublic",                    # privacy level
         "panel.mesaSuggestion.noun.script",         # "script"
         "panel.notifications.title",                # "Notifications"
-        "panel.shell.documentation",                # "Documentation"
         "panel.accessKeys.expiryMinutes",               # "Minutes"
         "panel.version.loc.section",                # "section {index}"
         "panel.wizard.agentTablist",                # "Agent"
@@ -496,7 +495,7 @@ ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
         "panel.settings.privacySection",  # "Privacy"
         "panel.changes.typeLabel",  # "Label"
         "panel.mesa.colTags",  # "Tags"
-        "panel.help.title",  # "Help", the usual Dutch interface term
+        "panel.shell.help",  # "Help", the usual Dutch interface term
         "panel.logs.filters",  # "Filters", also Dutch
         "panel.logs.filtersCount",  # "Filters ({count})", also Dutch
         # Product names kept in English, as the localized READMEs do.

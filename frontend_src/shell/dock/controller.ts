@@ -234,7 +234,7 @@ export class WorkspaceController {
   private floatedFrom = new Map<string, Slot | null>();
   private pinnedFrom = new Map<string, Slot | null>();
   private closed = new Map<string, Slot | null>();
-  /** Windows the shell keeps open or closed whatever the arrangement says (Help follows Show Help Bar). */
+  /** Windows the shell keeps open or closed whatever the arrangement says (Quick Help follows the Help menu). */
   private wanted = new Map<string, boolean>();
   /** Each window's content element, which moves between hosts with the window. */
   private contents = new Map<string, HTMLElement>();

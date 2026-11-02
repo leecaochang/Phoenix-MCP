@@ -81,7 +81,7 @@ If you clear any of them, Phoenix removes the entity, and any changes you made t
 
 ### {{label:settings.aiTaskDefaultLabel}} {#ai-task-default}
 
-Makes Phoenix's entity Home Assistant's default AI Task. This replaces any current default straight away, without asking. Help shows which one it replaces.
+Makes Phoenix's entity Home Assistant's default AI Task. This replaces any current default straight away, without asking. Quick Help shows which one it replaces.
 
 Turning it off leaves Home Assistant with no default. The previous default isn't restored.
 

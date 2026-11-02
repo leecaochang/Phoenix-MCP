@@ -117,7 +117,7 @@ describe("Access Keys", () => {
     expect(shown(el, "Capabilities")).toBe(false);
     expect(shown(el, "Permissions Tree")).toBe(false);
     expect(shown(el, "Access Keys")).toBe(true);
-    expect(shown(el, "Help")).toBe(true);
+    expect(shown(el, "Quick Help")).toBe(true);
     act(() => { fireEvent.click(keyRow(el)); });
     await waitFor(() => expect(shown(el, "Persona")).toBe(true));
     expect(shown(el, "Permissions Tree")).toBe(true);

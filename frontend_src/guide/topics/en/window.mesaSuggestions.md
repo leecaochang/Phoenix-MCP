@@ -1,7 +1,7 @@
 ---
 { "id": "window.mesaSuggestions", "title": "{{label:mesa.suggestTitle}}", "parent": "workspace.mesa", "order": 3, "keywords": ["MESA", "recommendations", "unprotected", "blast radius"], "sectionKeywords": { "why": ["lock", "alarm", "garage", "valve", "siren", "water heater", "firmware", "automation", "script", "scene"], "review": ["apply", "accept"], "dismiss": ["hide", "restore", "rescan"] }, "covers": ["frontend_src/views/MesaWindows.tsx", "frontend_src/components/MesaSuggestions.tsx", "custom_components/phoenix_mcp/mesa_suggestions.py", "custom_components/phoenix_mcp/const.py"] }
 ---
-Devices and automations that may need a MESA profile. Phoenix never applies a suggestion itself. Point at a row to read why it's suggested in Help.
+Devices and automations that may need a MESA profile. Phoenix never applies a suggestion itself. Point at a row to read why it's suggested in Quick Help.
 
 ## Why something is suggested {#why}
 

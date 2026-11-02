@@ -82,7 +82,7 @@ describe("a workspace of chosen windows", () => {
     expect(c.closedWindows()).toEqual([]);
   });
 
-  it("leaves Help to Show Help Bar, and a shared window closed, rather than opening them as chosen windows", () => {
+  it("leaves Quick Help to the Help menu, and a shared window closed, rather than opening them as chosen windows", () => {
     const c = mount(["a", "help", "n"], undefined, {}, (ctl) => ctl.want("help", false));
     expect(open(c)).toEqual(["a"]);
     // Not chosen: each counts as closed, as in every workspace, and reopens from Workspace Options.

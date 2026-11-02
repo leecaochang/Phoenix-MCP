@@ -45,7 +45,7 @@ describe("Workspace Options", () => {
       restorePanelDefaults: () => {}, attentionHidden: () => false, showAttention: () => {}, openToolWindow: () => {} };
     const all = workspaceMenu(c, actions).filter((e): e is Item => e !== "separator");
     expect(all.find((i) => i.id === "restore")).toMatchObject({ label: "Reset This Workspace", hint: expect.stringContaining("Other workspaces") });
-    expect(all.find((i) => i.id === "panel-defaults")).toMatchObject({ label: "Reset All Workspaces", hint: expect.stringContaining("the toolbar, the Help Bar and the Guide") });
+    expect(all.find((i) => i.id === "panel-defaults")).toMatchObject({ label: "Reset All Workspaces", hint: expect.stringContaining("the toolbar, Quick Help and the Guide") });
   });
 
   it("offers Needs Attention back, in this workspace, while items are waiting (user, 2026-10-29)", () => {

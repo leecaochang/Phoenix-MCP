@@ -319,7 +319,7 @@ const OWN_WINDOWS: Record<WorkspaceId, WorkspaceDef> = {
 
 /**
  * Windows every workspace offers besides its own; desktop only for now. Help
- * starts pinned along the bottom and follows Show Help Bar; Notifications
+ * starts pinned along the bottom and follows the Help menu's Quick Help; Notifications
  * starts closed until reopened from Workspace Options.
  */
 export const SHARED_WINDOWS: readonly WindowId[] = [HELP_WINDOW, "notifications"];
@@ -633,7 +633,7 @@ export function EmptyWorkspace(_props: IWatermarkPanelProps) {
   if (!controller) return null;
   const mine = controller.id === "my";
   const toolWindows: readonly string[] = WORKSPACES[controller.id as WorkspaceId]?.toolWindows ?? [];
-  // The workspace's own windows, as Workspace Options offers them: Help follows Show Help Bar,
+  // The workspace's own windows, as Workspace Options offers them: Quick Help follows the Help menu,
   // and Notifications has its own item there.
   const closed = controller.closedWindows().filter((id) => !toolWindows.includes(id) && !SHARED_WINDOWS.includes(id as WindowId));
   return (

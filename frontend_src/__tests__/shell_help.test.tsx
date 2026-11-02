@@ -1,5 +1,5 @@
 /**
- * The Help window and Show Help Bar: what Help says for the control under the
+ * The Quick Help window and its Help menu item: what Quick Help says for the control under the
  * pointer or in focus, the saved preference with its per-workspace overrides,
  * and the controller keeping Help open or closed whatever the arrangement says.
  */
@@ -111,7 +111,7 @@ describe("what Help says", () => {
   });
 });
 
-describe("Show Help Bar", () => {
+describe("Quick Help in the Help menu", () => {
   it("applies everywhere unless one workspace was opened or closed against it", () => {
     expect(helpOpen(DEFAULT_HELP, "logs")).toBe(true);
     const closedInLogs = withHelpIn(DEFAULT_HELP, "logs", false);

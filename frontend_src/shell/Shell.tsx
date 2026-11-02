@@ -139,7 +139,7 @@ export function Shell() {
   const record = store.record;
   const recordRef = useRef(record);
   recordRef.current = record;
-  // Show Help Bar and the workspaces where Help was reopened or closed against it.
+  // The Quick Help setting and the workspaces where Quick Help was reopened or closed against it.
   const [help, setHelp] = useState<HelpPrefs>(() => record?.help ?? DEFAULT_HELP);
   useEffect(() => { setHelp(record?.help ?? DEFAULT_HELP); }, [record]);
   const helpRef = useRef(help);
@@ -199,7 +199,7 @@ export function Shell() {
           { ...extras, ...MY_EXTRAS, heights: { ...def.heights, ...MY_EXTRAS.heights } })
         : new WorkspaceController(id, def.windows, def.arrange, windowTitle, extras);
       controller.want(HELP_WINDOW, helpOpen(helpRef.current, id));
-      // Closing or reopening Help in one workspace overrides Show Help Bar there only.
+      // Closing or reopening Quick Help in one workspace overrides the Help menu's choice there only.
       // Closing Agent Chat's window in My Workspace closes Chat. Closing an added window there takes it out of
       // My Workspace (user, 2026-10-27): it comes back only by adding it again from its own workspace.
       controller.onUserSized = (windowId) => {
@@ -559,14 +559,14 @@ export function Shell() {
     root.current?.querySelector(".phx-guide-phone")?.scrollIntoView?.({ block: "start", behavior: "smooth" });
   }, [revealGuide]);
 
-  // Documentation: Show Help Bar (every workspace; not on phones, user 2026-11-02) and the Guide (every workspace).
+  // The Help menu: Quick Help (every workspace; not on phones, user 2026-11-02) and the Guide (every workspace).
   // The Guide is the manual, so the website is no longer offered (user, 2026-11-01).
   const documentationMenu = useCallback((): MenuEntry[] => {
     const items: MenuEntry[] = [];
     if (env === "desktop") {
       // Checked while Help is shown in this workspace; choosing it shows or hides Help everywhere.
       const shown = helpOpen(helpRef.current, workspaceRef.current);
-      items.push({ id: "help-bar", label: t("help.showHelpBar"), help: t("help.menuHelpBar"), checked: shown, onSelect: () => setHelp({ show: !shown, workspaces: {} }) });
+      items.push({ id: "help-bar", label: t("help.title"), help: t("help.menuQuickHelp"), checked: shown, onSelect: () => setHelp({ show: !shown, workspaces: {} }) });
     }
     const here = workspaceRef.current;
     // The wizard keeps the Guide shown in Access Keys until it ends.

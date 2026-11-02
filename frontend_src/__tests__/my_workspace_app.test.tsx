@@ -111,7 +111,7 @@ describe("My Workspace", () => {
     await waitFor(() => expect(frame(el)).toHaveAttribute("data-workspace", "my"));
     await waitFor(() => expect(frame(el)!.querySelector(".phx-workspace-empty")?.textContent ?? "").toContain("Add a window with Add to My Workspace in its window menu"));
     // Only Help is open; Notifications stays closed, as in every workspace.
-    expect([...frame(el)!.querySelectorAll(".phx-window-title-text")].map((e) => e.textContent)).toEqual(["Help"]);
+    expect([...frame(el)!.querySelectorAll(".phx-window-title-text")].map((e) => e.textContent)).toEqual(["Quick Help"]);
     expect(toolbarButton(el, "My Workspace")).toHaveAttribute("aria-current", "page");
   });
 
@@ -162,7 +162,7 @@ describe("My Workspace", () => {
     act(() => { menuItem(el, "Reset This Workspace")!.click(); });
     await waitFor(() => expect(visible(el, "accessKeys")).toBeNull());
     expect(visible(el, "approvals")).toBeNull();
-    expect([...frame(el)!.querySelectorAll(".phx-window-title-text")].map((e) => e.textContent)).toEqual(["Help"]);
+    expect([...frame(el)!.querySelectorAll(".phx-window-title-text")].map((e) => e.textContent)).toEqual(["Quick Help"]);
     await waitFor(() => expect(frame(el)!.querySelector(".phx-workspace-empty")?.textContent ?? "").toContain("Add a window with Add to My Workspace"));
     expect(stored().myWindows).toEqual([]);
   });
