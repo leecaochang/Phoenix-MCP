@@ -1,5 +1,5 @@
 ---
-{ "id": "wizard.accessKey", "title": "Naming the Access Key", "parent": "workspace.accessKeys", "order": 102 }
+{ "id": "wizard.accessKey", "title": "Naming the Access Key", "parent": "workspace.accessKeys", "order": 102, "covers": ["frontend_src/views/OnboardingWizard.tsx"] }
 ---
 The agent uses this access key to connect to Phoenix. Its name appears in the audit log and in approvals, so pick a name that says which agent uses it.
 

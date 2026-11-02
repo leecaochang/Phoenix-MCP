@@ -10,7 +10,7 @@
 
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { GUIDE_FORMAT, compileGuide, lengthProblems, translationProblems, type GuideTopic } from "../guide/compile";
+import { GUIDE_FORMAT, compileGuide, lengthProblems, translationProblems, voiceProblems, type GuideTopic } from "../guide/compile";
 import { fold, searchGuide, topicSections } from "../guide/search";
 import { GuideTargetContext, GuideWindow, clearGuideCache, guideContents, pushStep, renderTopic, topicAncestors, topicTitle } from "../shell/guide";
 import { GuideTargetTracker, guideTargetFor, parseGuideRef } from "../shell/guideTarget";
@@ -70,6 +70,18 @@ describe("compiling topics with sections", () => {
     expect(lengthProblems(`- ${long(20)}. ${long(25)}.`)).toEqual([expect.stringMatching(/^list item over 40 words/)]);
     expect(lengthProblems(`{{label:settings.a.very.long.key}} ${long(28)}.`)).toEqual([]);
     expect(lengthProblems(`\`\`\`\n${long(80)}\n\`\`\``)).toEqual([]);
+  });
+
+  it("refuses the phrasings the Writing rules ban, outside code, and only in English", () => {
+    expect(voiceProblems("Accounts can be added here.")).toEqual([expect.stringMatching(/^"can be added": talk to the reader/)]);
+    expect(voiceProblems("It checks the key. Phoenix then stores it.")).toEqual([expect.stringMatching(/^"Phoenix then": no chains/)]);
+    expect(voiceProblems("Show it from the menu, which then applies everywhere.")).toEqual([expect.stringMatching(/^"which then"/)]);
+    expect(voiceProblems("When the time runs out, it stops.")).toEqual([expect.stringMatching(/^"runs out"/)]);
+    expect(voiceProblems("Add your account, then select the model. Approves several at once.")).toEqual([]);
+    expect(voiceProblems("Run `x can be set` here.\n```\nvalue can be set\n```")).toEqual([]);
+    const page = (body: string) => [{ file: "a.md", source: `---\n{ "id": "topic.a", "title": "A" }\n---\n${body}` }];
+    expect(compileGuide("en", page("Accounts can be added."), () => true).problems).toHaveLength(1);
+    expect(compileGuide("de", page("Accounts can be added."), () => true).problems).toEqual([]);
   });
 
   it("holds a translation to English's pages, sections and places", () => {

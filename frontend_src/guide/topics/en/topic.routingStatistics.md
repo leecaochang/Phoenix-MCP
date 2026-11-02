@@ -1,5 +1,5 @@
 ---
-{ "id": "topic.routingStatistics", "title": "Reading Routing Statistics", "parent": "window.settingsChat", "order": 2, "keywords": ["counts", "percentage", "tokens", "usage", "reset"], "covers": ["frontend_src/components/RoutingStatistics.tsx", "custom_components/phoenix_mcp/routing_statistics.py"] }
+{ "id": "topic.routingStatistics", "title": "Reading Routing Statistics", "parent": "window.settingsChat", "order": 2, "keywords": ["counts", "percentage", "tokens", "usage", "reset"], "covers": ["frontend_src/components/RoutingStatistics.tsx", "custom_components/phoenix_mcp/routing_statistics.py", "custom_components/phoenix_mcp/chat_routing_history.py", "custom_components/phoenix_mcp/decision_metrics.py"] }
 ---
 Routing statistics show how often Phoenix carried out a command without your AI model, and what the rest cost. Agent Chat and the Voice Agent are counted separately.
 

@@ -1,5 +1,5 @@
 ---
-{ "id": "window.changes", "title": "{{label:shell.tabChanges}}", "parent": "workspace.changes", "order": 1, "keywords": ["history", "list", "versions"], "sectionKeywords": { "filters": ["type", "action", "search"] }, "covers": ["frontend_src/views/ChangesView.tsx", "frontend_src/shell/changes.tsx"] }
+{ "id": "window.changes", "title": "{{label:shell.tabChanges}}", "parent": "workspace.changes", "order": 1, "keywords": ["history", "list", "versions"], "sectionKeywords": { "filters": ["type", "action", "search"] }, "covers": ["frontend_src/views/ChangesView.tsx", "frontend_src/shell/changes.tsx", "frontend_src/utils/dashboard_names.ts"] }
 ---
 Every change Phoenix recorded, newest first. Choose one to compare it in [{{label:workspace.comparison}}](guide:window.comparison). The list updates itself as agents make changes.
 

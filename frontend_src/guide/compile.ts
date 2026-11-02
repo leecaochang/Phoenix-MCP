@@ -5,7 +5,8 @@
  * `guide:` link names a topic and section that exist, that each
  * `{{label:<key>}}` placeholder names a catalog key, that each file a topic
  * covers exists, and that no paragraph, sentence or list item is too long to
- * read beside the window it explains. A broken topic fails the build instead
+ * read beside the window it explains or, in English, uses a phrasing the
+ * Writing rules ban. A broken topic fails the build instead
  * of the panel. The rules for writing topics are in docs-internal/agents/guide.md.
  *
  * Topic ids say what a topic explains: `workspace.<workspace id>` for a
@@ -146,6 +147,34 @@ export function lengthProblems(body: string): string[] {
   return problems;
 }
 
+/**
+ * English phrasings the Writing rules ban that are wrong almost every time they appear
+ * (user, 2026-11-01): the reader is the one acting, and steps are short sentences, not
+ * chains. Ambiguous ones ("at once", "is shown") are left to review, since they are
+ * often right. Code is skipped; each pattern names the rule it enforces.
+ */
+export const VOICE_PATTERNS: ReadonlyArray<{ pattern: RegExp; rule: string }> = [
+  {
+    pattern: /\b(?:can|could|may|must|should|will) be (?:added|chosen|selected|set|opened|changed|turned|removed|edited|created|entered|cleared|deleted|renamed|saved|switched|found)\b/i,
+    rule: "talk to the reader: say what they do (\"Add\", \"Select\"), not what can be done",
+  },
+  { pattern: /\b(?:Phoenix|which|that|it) then\b/i, rule: "no chains: split the step into its own sentence" },
+  { pattern: /\bruns? out\b/i, rule: "use the everyday word: \"times out\", \"is used up\"" },
+];
+
+/** Problems with the voice of an English topic: phrasings the Writing rules ban. */
+export function voiceProblems(body: string): string[] {
+  const problems: string[] = [];
+  const prose = body.replace(/^```[\s\S]*?^```/gm, "").replace(/`[^`\n]*`/g, "");
+  for (const line of prose.split("\n")) {
+    for (const { pattern, rule } of VOICE_PATTERNS) {
+      const match = pattern.exec(line);
+      if (match) problems.push(`"${match[0]}": ${rule}`);
+    }
+  }
+  return problems;
+}
+
 /** The anchors of a topic's sections, with any heading that lacks one or repeats one. */
 export function sectionAnchors(body: string): { anchors: string[]; problems: string[] } {
   const anchors: string[] = [];
@@ -179,7 +208,8 @@ export function compileGuide(
     if (from.has(topic.id)) { problems.push(`${file}: topic ${topic.id} is also defined in ${from.get(topic.id)}`); continue; }
     from.set(topic.id, file);
     const { anchors, problems: headings } = sectionAnchors(topic.body);
-    for (const p of [...headings, ...lengthProblems(topic.body)]) problems.push(`${file}: ${p}`);
+    const voice = language === "en" ? voiceProblems(topic.body) : [];
+    for (const p of [...headings, ...lengthProblems(topic.body), ...voice]) problems.push(`${file}: ${p}`);
     for (const path of topic.covers) if (!fileExists(path)) problems.push(`${file}: covers a file that does not exist: ${path}`);
     for (const anchor of Object.keys(topic.sectionKeywords ?? {})) {
       if (!anchors.includes(anchor)) problems.push(`${file}: sectionKeywords names a section that does not exist: #${anchor}`);

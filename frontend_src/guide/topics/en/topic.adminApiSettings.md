@@ -167,7 +167,7 @@ A missing flag, or one that isn't a boolean, uses its default. So `{"confirm": "
 - Per-key sensors and expiry timers. Phoenix restores any loggers it had changed for a set time.
 - The Phoenix Assist pipeline.
 
-Phoenix then applies each changed default, such as MESA mode, the Voice Agent, AI Task and the modules added to Home Assistant's pages. It opens the agent routes if they were off.
+Afterwards, Phoenix applies each changed default, such as MESA mode, the Voice Agent, AI Task and the modules added to Home Assistant's pages. It opens the agent routes if they were off.
 
 `wipe_providers` clears every Agent Chat and decision account, with their API keys. It also clears the settings that use them. That's the Voice Agent and AI Task provider and model, and the decision account in use and its default. Shadow observation, tool review and every `hybrid` mode turn off too.
 

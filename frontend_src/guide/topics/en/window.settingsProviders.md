@@ -1,5 +1,5 @@
 ---
-{ "id": "window.settingsProviders", "title": "{{label:workspace.aiProviders}}", "parent": "workspace.settings", "order": 1, "keywords": ["API key", "model", "LLM", "account", "credit", "TypeSafe", "JEV"], "sectionKeywords": { "provider-add": ["new account", "OpenAI", "Anthropic", "Claude", "Gemini", "Ollama"], "decision-provider": ["TypeSafe", "JEV", "fast path"] }, "covers": ["frontend_src/components/LlmProviderSettings.tsx", "frontend_src/components/ProviderAddForm.tsx", "frontend_src/components/DecisionProviderSettings.tsx"] }
+{ "id": "window.settingsProviders", "title": "{{label:workspace.aiProviders}}", "parent": "workspace.settings", "order": 1, "keywords": ["API key", "model", "LLM", "account", "credit", "TypeSafe", "JEV"], "sectionKeywords": { "provider-add": ["new account", "OpenAI", "Anthropic", "Claude", "Gemini", "Ollama"], "decision-provider": ["TypeSafe", "JEV", "fast path"] }, "covers": ["frontend_src/components/LlmProviderSettings.tsx", "frontend_src/components/ProviderAddForm.tsx", "frontend_src/components/DecisionProviderSettings.tsx", "custom_components/phoenix_mcp/tool_loading.py", "custom_components/phoenix_mcp/model_selection.py", "custom_components/phoenix_mcp/decision_budget.py"] }
 ---
 Add the AI accounts Phoenix uses. Each account needs an API key or, for a local model, a server address.
 

@@ -180,3 +180,59 @@ def test_event_reference_covers_runtime_events_and_rate_limit_coalescing() -> No
     assert events <= documented, events - documented
     row = re.search(r"^- `phoenix_mcp_rate_limited`:.*$", source, re.M).group(0)
     assert "at most once a minute per key" in row
+
+
+EXEMPT = ROOT / "tests" / "contract" / "guide_exempt_sources.json"
+
+
+def _source_files() -> list[str]:
+    """Every tracked file whose change can alter what the panel or an agent sees."""
+    import subprocess
+
+    tracked = subprocess.run(
+        ["git", "ls-files", "frontend_src", "custom_components/phoenix_mcp"],
+        cwd=ROOT, capture_output=True, text=True, check=True,
+    ).stdout.split()
+    return sorted(
+        path for path in tracked
+        if (path.startswith("frontend_src/") and path.endswith((".ts", ".tsx"))
+            and "/__tests__/" not in path and not path.startswith("frontend_src/guide/topics/"))
+        or (path.startswith("custom_components/phoenix_mcp/") and path.endswith(".py")
+            and "/mesa_core/" not in path)
+    )
+
+
+def _covers() -> set[str]:
+    covers: set[str] = set()
+    for path in GUIDE.glob("*.md"):
+        header = json.loads(path.read_text(encoding="utf-8").split("\n")[1])
+        covers.update(header.get("covers", []))
+    return covers
+
+
+def _is_covered(path: str, covers: set[str]) -> bool:
+    return any(path == c or path.startswith(c.rstrip("/") + "/") for c in covers)
+
+
+def test_every_source_file_is_covered_by_a_page_or_exempt() -> None:
+    """A new file is either described by a Guide page or exempt with a stated reason.
+
+    The `covers` lists are how a change finds the pages to review (and how the
+    commit guard asks for them), so a file in neither group would change silently.
+    """
+    files = _source_files()
+    assert len(files) > 200, f"source listing broke: {len(files)}"
+    covers, exempt = _covers(), json.loads(EXEMPT.read_text(encoding="utf-8"))
+    unclaimed = [path for path in files if not _is_covered(path, covers) and path not in exempt]
+    assert unclaimed == [], (
+        "add each file to the covers list of the Guide page that describes it, or to "
+        f"{EXEMPT.relative_to(ROOT)} with the reason no page does: {unclaimed}"
+    )
+
+
+def test_exemptions_are_current_and_give_a_reason() -> None:
+    files, covers = set(_source_files()), _covers()
+    exempt = json.loads(EXEMPT.read_text(encoding="utf-8"))
+    assert sorted(path for path in exempt if path not in files) == [], "exempt files that no longer exist"
+    assert sorted(path for path in exempt if _is_covered(path, covers)) == [], "exempt files a page now covers"
+    assert sorted(path for path, reason in exempt.items() if len(reason.split()) < 2) == [], "exemptions need a reason"

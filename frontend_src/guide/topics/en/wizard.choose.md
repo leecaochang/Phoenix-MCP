@@ -1,5 +1,5 @@
 ---
-{ "id": "wizard.choose", "title": "How Your Agent Connects", "parent": "workspace.accessKeys", "order": 100 }
+{ "id": "wizard.choose", "title": "How Your Agent Connects", "parent": "workspace.accessKeys", "order": 100, "covers": ["frontend_src/views/OnboardingWizard.tsx"] }
 ---
 Phoenix is installed. This wizard sets up your first agent and ends with a test you can watch.
 

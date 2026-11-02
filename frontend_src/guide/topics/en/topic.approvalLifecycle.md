@@ -1,5 +1,5 @@
 ---
-{ "id": "topic.approvalLifecycle", "title": "How an Approval Works", "parent": "workspace.approvals", "order": 10, "keywords": ["confirm", "lifecycle", "expire", "pending_approval", "wait_for_approval"], "sectionKeywords": { "agent": ["inline wait", "wait_for_approval", "voice", "assist"], "expiry": ["expire", "expired", "timeout", "one hour"], "history": ["retention", "kept"] }, "covers": ["custom_components/phoenix_mcp/approvals.py", "custom_components/phoenix_mcp/tool_common.py", "custom_components/phoenix_mcp/admin_view.py", "custom_components/phoenix_mcp/const.py"] }
+{ "id": "topic.approvalLifecycle", "title": "How an Approval Works", "parent": "workspace.approvals", "order": 10, "keywords": ["confirm", "lifecycle", "expire", "pending_approval", "wait_for_approval"], "sectionKeywords": { "agent": ["inline wait", "wait_for_approval", "voice", "assist"], "expiry": ["expire", "expired", "timeout", "one hour"], "history": ["retention", "kept"] }, "covers": ["custom_components/phoenix_mcp/approvals.py", "custom_components/phoenix_mcp/tool_common.py", "custom_components/phoenix_mcp/admin_view.py", "custom_components/phoenix_mcp/const.py", "custom_components/phoenix_mcp/approval_targets.py"] }
 ---
 What happens to a request from the moment an agent asks until it's decided, and what the agent is told along the way.
 
@@ -30,7 +30,7 @@ Phoenix checks the request again before running it:
 - If its capability is now Deny, the request fails without running.
 - If the kill switch is on, the request is cancelled.
 
-Phoenix then records your decision before it runs anything. Each action also checks its own targets, permissions and MESA rules again. If the devices it targets have changed since the request, it's refused, and the agent must ask again.
+Once those pass, Phoenix records your decision before it runs anything. Each action also checks its own targets, permissions and MESA rules again. If the devices it targets have changed since the request, it's refused, and the agent must ask again.
 
 ## How it can end {#outcomes}
 

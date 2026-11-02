@@ -1,5 +1,5 @@
 ---
-{ "id": "wizard.test", "title": "Testing the Connection", "parent": "workspace.accessKeys", "order": 107 }
+{ "id": "wizard.test", "title": "Testing the Connection", "parent": "workspace.accessKeys", "order": 107, "covers": ["frontend_src/views/OnboardingWizard.tsx"] }
 ---
 Send the suggested prompt from your app. As soon as Phoenix sees any request from the app, **{{label:wizard.next}}** becomes available. Often the app's own startup request is enough.
 

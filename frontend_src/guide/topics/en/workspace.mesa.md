@@ -1,5 +1,5 @@
 ---
-{ "id": "workspace.mesa", "title": "MESA Workspace", "order": 40, "keywords": ["MESA", "safety", "profiles", "control mode"] }
+{ "id": "workspace.mesa", "title": "MESA Workspace", "order": 40, "keywords": ["MESA", "safety", "profiles", "control mode"], "covers": ["frontend_src/components/MesaIdentity.tsx"] }
 ---
 MESA is Phoenix's device safety layer. A profile tells MESA how careful to be with a device or entity: let agents act freely, ask you first, or keep them off it entirely. MESA applies on top of what each access key allows.
 

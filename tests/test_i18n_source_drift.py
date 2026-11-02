@@ -84,3 +84,55 @@ def test_keys_a_locale_deliberately_leaves_english_need_no_stamp() -> None:
     stamp = _stamper()
     problems = stamp.audit(english={"entity.sensor.status.name": "Status"}, locale={}, stamped={})
     assert problems == {"stale": [], "unstamped": [], "orphaned": []}
+
+
+def test_audit_reads_the_english_half_of_a_two_part_stamp() -> None:
+    stamp = _stamper()
+    current = f"{stamp.digest('Pending')}/{stamp.digest('待处理')}"
+    assert stamp.audit(english={"a": "Pending"}, locale={"a": "待处理"}, stamped={"a": current})["stale"] == []
+    moved = f"{stamp.digest('Waiting')}/{stamp.digest('待处理')}"
+    assert stamp.audit(english={"a": "Pending"}, locale={"a": "待处理"}, stamped={"a": moved})["stale"] == ["a"]
+
+
+def _stamp_fixture(monkeypatch, tmp_path, english, locale, stamped):
+    """The stamper over in-memory catalogs and a baseline file in tmp_path."""
+    import json
+
+    stamp = _stamper()
+    monkeypatch.setattr(stamp, "BASELINE", tmp_path / "hashes.json")
+    stamp.BASELINE.write_text(json.dumps({"locales": {"xx": stamped}}), encoding="utf-8")
+    monkeypatch.setattr(stamp, "catalog", lambda name: english if name == "en" else locale)
+    return stamp
+
+
+def test_stamping_refuses_a_translation_left_unchanged_after_the_english_moved(monkeypatch, tmp_path) -> None:
+    stamp = _stamper()
+    old = {"a": f"{stamp.digest('Waiting')}/{stamp.digest('待处理')}"}
+    stamp = _stamp_fixture(monkeypatch, tmp_path, {"a": "Pending"}, {"a": "待处理"}, old)
+    assert stamp.stamp("xx") == 1
+    assert stamp.load_baseline()["xx"] == old
+    assert stamp.stamp("xx", allow_unchanged=True) == 0
+    assert stamp.load_baseline()["xx"]["a"] == f"{stamp.digest('Pending')}/{stamp.digest('待处理')}"
+
+
+def test_stamping_accepts_a_retranslated_key(monkeypatch, tmp_path) -> None:
+    stamp = _stamper()
+    old = {"a": f"{stamp.digest('Waiting')}/{stamp.digest('等待中')}"}
+    stamp = _stamp_fixture(monkeypatch, tmp_path, {"a": "Pending"}, {"a": "待处理"}, old)
+    assert stamp.stamp("xx") == 0
+
+
+def test_stamping_chosen_keys_leaves_other_stale_keys_stale(monkeypatch, tmp_path) -> None:
+    """A merged batch must not mark the locale's other stale keys as reviewed."""
+    stamp = _stamper()
+    old = {k: f"{stamp.digest('Old')}/{stamp.digest('旧')}" for k in ("a", "b")}
+    stamp = _stamp_fixture(monkeypatch, tmp_path, {"a": "New", "b": "New"}, {"a": "新", "b": "旧"}, old)
+    assert stamp.stamp("xx", keys={"a"}) == 0
+    assert stamp.load_baseline()["xx"]["b"] == old["b"]
+    assert stamp.audit({"a": "New", "b": "New"}, {"a": "新", "b": "旧"}, stamp.load_baseline()["xx"])["stale"] == ["b"]
+
+
+def test_a_stamp_without_a_translation_half_never_refuses(monkeypatch, tmp_path) -> None:
+    stamp = _stamper()
+    stamp = _stamp_fixture(monkeypatch, tmp_path, {"a": "Pending"}, {"a": "待处理"}, {"a": stamp.digest("Waiting")})
+    assert stamp.stamp("xx") == 0

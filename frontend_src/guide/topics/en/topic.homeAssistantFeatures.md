@@ -1,5 +1,5 @@
 ---
-{ "id": "topic.homeAssistantFeatures", "title": "Voice Agent, AI Task or Assist Tool Provider", "parent": "window.settingsHome", "order": 2, "keywords": ["conversation agent", "LLM API", "Control Home Assistant", "which model"], "covers": ["custom_components/phoenix_mcp/voice_agent.py", "custom_components/phoenix_mcp/ai_task.py", "custom_components/phoenix_mcp/assist_api.py"] }
+{ "id": "topic.homeAssistantFeatures", "title": "Voice Agent, AI Task or Assist Tool Provider", "parent": "window.settingsHome", "order": 2, "keywords": ["conversation agent", "LLM API", "Control Home Assistant", "which model"], "covers": ["custom_components/phoenix_mcp/voice_agent.py", "custom_components/phoenix_mcp/ai_task.py", "custom_components/phoenix_mcp/assist_api.py", "custom_components/phoenix_mcp/assist_gemini.py", "custom_components/phoenix_mcp/assist_schema.py"] }
 ---
 Phoenix can work with Home Assistant's AI features in three ways. The difference is whose model answers, and what the access key controls.
 

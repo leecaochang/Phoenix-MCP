@@ -94,7 +94,7 @@ Each account in `instances` has these fields. The API key is never among them.
 
 `POST /api/phoenix-mcp/admin/agentcli/providers` takes the [setup fields](guide:#setup-fields).
 
-For a conversation kind, Phoenix runs the provider's credential check. For a decision kind, it loads the model list and requires your model to be in it. Phoenix then stores the account and tries to read its model list and declared capabilities.
+For a conversation kind, Phoenix runs the provider's credential check. For a decision kind, it loads the model list and requires your model to be in it. If that passes, Phoenix stores the account and tries to read its model list and declared capabilities.
 
 The response is `201` with `{"instance": {...}}`, holding the account fields above.
 

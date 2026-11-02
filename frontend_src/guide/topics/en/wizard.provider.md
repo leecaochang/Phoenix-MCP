@@ -1,5 +1,5 @@
 ---
-{ "id": "wizard.provider", "title": "Setting Up the Model Provider", "parent": "workspace.accessKeys", "order": 104 }
+{ "id": "wizard.provider", "title": "Setting Up the Model Provider", "parent": "workspace.accessKeys", "order": 104, "covers": ["frontend_src/views/OnboardingWizard.tsx"] }
 ---
 Agent Chat sends the conversation to the model provider you choose, using your own account.
 

@@ -9,6 +9,6 @@ Pointing at the Help window itself keeps its text, so you can read it. For more 
 
 **{{label:help.showHelpBar}}** in the Documentation menu shows or hides Help in every workspace. It's on by default.
 
-Closing Help in one workspace hides it there only. Show it again from **{{label:help.showHelpBar}}**, which then applies to every workspace again.
+Closing Help in one workspace hides it there only. Show it again from **{{label:help.showHelpBar}}**, and it applies to every workspace again.
 
 Help isn't available on a phone.

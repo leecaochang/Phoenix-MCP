@@ -1,5 +1,5 @@
 ---
-{ "id": "wizard.access", "title": "Granting Access to One Light", "parent": "workspace.accessKeys", "order": 103 }
+{ "id": "wizard.access", "title": "Granting Access to One Light", "parent": "workspace.accessKeys", "order": 103, "covers": ["frontend_src/views/OnboardingWizard.tsx"] }
 ---
 A new key can't reach any device until you grant it something. Grant one light you can see, so the test shows everything working.
 

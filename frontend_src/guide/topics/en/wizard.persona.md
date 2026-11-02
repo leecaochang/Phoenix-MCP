@@ -1,5 +1,5 @@
 ---
-{ "id": "wizard.persona", "title": "Choosing a Persona", "parent": "workspace.accessKeys", "order": 101 }
+{ "id": "wizard.persona", "title": "Choosing a Persona", "parent": "workspace.accessKeys", "order": 101, "covers": ["frontend_src/views/OnboardingWizard.tsx"] }
 ---
 A persona is a starting set of capabilities: which kinds of tools the agent can use, and which ones wait for your approval first.
 
