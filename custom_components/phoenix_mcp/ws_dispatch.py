@@ -154,6 +154,19 @@ class WsCommandNotDispatchedError(WsDispatchError):
     """The command was refused before its handler could execute."""
 
 
+class WsCommandRefusedError(WsDispatchError):
+    """The handler ran and answered with an error result carrying Home Assistant's `code`.
+
+    Whether that proves nothing changed depends on the handler, so callers decide
+    per command; Core's collection create and update answer `invalid_format`
+    only from validation that runs before anything is stored.
+    """
+
+    def __init__(self, code: str, message: str) -> None:
+        super().__init__(f"{code}: {message}")
+        self.code = code
+
+
 class WsDashboardNotFoundError(WsCommandNotDispatchedError):
     """A named Lovelace dashboard does not exist.
 
@@ -239,7 +252,7 @@ class _CapturingConnection(ActiveConnection):
     @callback
     def send_error(self, msg_id: int, code: str, message: str, *args: Any, **kwargs: Any) -> None:
         if not self.result_future.done():
-            self.result_future.set_exception(WsDispatchError(f"{code}: {message}"))
+            self.result_future.set_exception(WsCommandRefusedError(code, message))
 
     @callback
     def async_handle_exception(self, msg: dict, err: Exception) -> None:

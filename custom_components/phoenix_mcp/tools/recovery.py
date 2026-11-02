@@ -436,7 +436,8 @@ async def _execute_restore_dashboard_registry(args, record, side, snapshot, acce
                     await recovery.mark(rid, "not_applied")
                     return _tool_error("The dashboard registry changed before restore dispatch."), "invalid_request", tool
                 check_request_authority()
-                from ..ws_dispatch import async_ws_command
+                from ..ws_dispatch import WsDispatchError, async_ws_command
+                from .lovelace import dashboard_registry_refused
                 if snapshot["exists"]:
                     dashboard = snapshot.get("dashboard")
                     if not isinstance(dashboard, dict):
@@ -445,23 +446,31 @@ async def _execute_restore_dashboard_registry(args, record, side, snapshot, acce
                     current_row = target.get("dashboard")
                     metadata = {k: v for k, v in dashboard.items() if k != "id"}
                     if current_row is None:
-                        result = await async_ws_command(hass, "lovelace/dashboards/create", metadata)
+                        # The stored row already passed Core's url_path rule once, and a
+                        # single-word path such as "map" needs this flag to be created again.
+                        command, payload = "lovelace/dashboards/create", {**metadata, "allow_single_word": True}
                     else:
                         from homeassistant.components.lovelace.const import STORAGE_DASHBOARD_UPDATE_FIELDS
                         fields = {getattr(field, "schema", field) for field in STORAGE_DASHBOARD_UPDATE_FIELDS}
-                        result = await async_ws_command(
-                            hass, "lovelace/dashboards/update",
-                            {"dashboard_id": current_row["id"], **{k: v for k, v in metadata.items() if k in fields}},
-                        )
+                        command = "lovelace/dashboards/update"
+                        payload = {"dashboard_id": current_row["id"], **{k: v for k, v in metadata.items() if k in fields}}
                 elif target.get("exists"):
                     row = target.get("dashboard")
                     if not isinstance(row, dict) or not isinstance(row.get("id"), str):
                         await recovery.mark(rid, "not_applied")
                         return _tool_error("The current dashboard identity is incomplete; it was not deleted."), "invalid_request", tool
-                    result = await async_ws_command(hass, "lovelace/dashboards/delete", {"dashboard_id": row["id"]})
+                    command, payload = "lovelace/dashboards/delete", {"dashboard_id": row["id"]}
                 else:
                     await recovery.mark(rid, "not_applied")
                     return _tool_error("No dashboard registry change is needed."), "invalid_request", tool
+                try:
+                    result = await async_ws_command(hass, command, payload)
+                except WsDispatchError as exc:
+                    if dashboard_registry_refused(exc):
+                        await recovery.mark(rid, "not_applied", error="command_rejected")
+                        return _tool_error(f"Home Assistant refused the dashboard restore; nothing was changed: {exc}"), "invalid_request", tool
+                    await recovery.mark(rid, "unknown", error="command_rejected")
+                    return _tool_error("Dashboard registry restore outcome is uncertain; inspect configuration recovery before retrying."), "invalid_request", tool
                 observed = await _dashboard_registry_snapshot(hass, key)
                 same = (observed.get("exists") == snapshot["exists"] and
                         (not snapshot["exists"] or all(

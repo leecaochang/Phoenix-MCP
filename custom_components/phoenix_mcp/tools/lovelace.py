@@ -71,6 +71,7 @@ from ..tool_common import (
 )
 from ..ws_dispatch import (
     WsCommandNotDispatchedError,
+    WsCommandRefusedError,
     WsDashboardNotFoundError,
     WsDispatchError,
     WsYamlDashboardError,
@@ -110,6 +111,17 @@ async def _dashboard_registry_snapshot(hass: HomeAssistant, dashboard_id: str) -
     }) or {}
 
 
+def dashboard_registry_refused(exc: WsDispatchError) -> bool:
+    """Whether a dashboard registry command failed without changing anything.
+
+    Core's dashboard collection answers invalid_format only from the checks it
+    runs before storing (a url_path without a hyphen, a schema error), so that
+    refusal is proof nothing changed; any other failure may have landed.
+    """
+    return isinstance(exc, WsCommandNotDispatchedError) or (
+        isinstance(exc, WsCommandRefusedError) and exc.code == "invalid_format")
+
+
 async def _recoverable_dashboard_registry_write(
     *, dashboard_id: str, before: dict, operation: str, command: str,
     payload: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData,
@@ -119,8 +131,11 @@ async def _recoverable_dashboard_registry_write(
     resource = f"dashboard_registry:{dashboard_id}"
     try:
         async with recovery.resource(resource):
+            # Core pops allow_single_word on create and never stores it, so it is
+            # an instruction, not a field the readback can show.
             expected_row = None if command.endswith("/delete") else {
-                **(before.get("dashboard") or {}), **{k: v for k, v in payload.items() if k != "dashboard_id"},
+                **(before.get("dashboard") or {}),
+                **{k: v for k, v in payload.items() if k not in ("dashboard_id", "allow_single_word")},
             }
             rid = await recovery.begin(resource, operation, access_key.id, before, expected={
                 **before, "exists": expected_row is not None, "dashboard": expected_row,
@@ -134,7 +149,7 @@ async def _recoverable_dashboard_registry_write(
                 try:
                     result = await async_ws_command(hass, command, payload)
                 except WsDispatchError as exc:
-                    await recovery.mark(rid, "not_applied" if isinstance(exc, WsCommandNotDispatchedError) else "unknown", error="command_rejected")
+                    await recovery.mark(rid, "not_applied" if dashboard_registry_refused(exc) else "unknown", error="command_rejected")
                     return _tool_error(f"Dashboard registry operation failed: {exc}"), "invalid_request", operation
                 try:
                     after = await _dashboard_registry_snapshot(hass, dashboard_id)
