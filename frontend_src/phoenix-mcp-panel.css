@@ -21,6 +21,9 @@
   --phx-accent-fg:    #ffffff;
   --phx-text:         #141414;
   --phx-text-2:       #5e5e5e;
+  /* The select arrow in --phx-text-2; an image cannot read a variable, so each theme names it. */
+  --phx-chevron:      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%235e5e5e' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+  --phx-mono:         ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
   --phx-border:       #e1e1e1;
   --phx-divider:      #ececec;
   --phx-success:      #257343;
@@ -97,6 +100,7 @@
     --phx-accent-fg:    #111111;
     --phx-text:         #e1e1e1;
     --phx-text-2:       #9b9b9b;
+    --phx-chevron:      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%239b9b9b' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
     --phx-border:       #333333;
     --phx-divider:      #262626;
     --phx-success:      #85daa0;
@@ -138,6 +142,7 @@
   --phx-accent-fg:    #111111;
   --phx-text:         #e1e1e1;
   --phx-text-2:       #9b9b9b;
+  --phx-chevron:      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%239b9b9b' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
   --phx-border:       #333333;
   --phx-divider:      #262626;
   --phx-success:      #85daa0;
@@ -234,7 +239,7 @@
 }
 .phx-header-title {
   font-size: 17px;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--phx-text);
   margin-left: 8px;
   letter-spacing: -0.01em;
@@ -675,7 +680,7 @@
 .phx-log-fields { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 10px 16px; margin: 0; }
 .phx-log-field dt { font-size: 12px; color: var(--phx-text-2); }
 .phx-log-field dd { margin: 2px 0 0; overflow-wrap: anywhere; }
-.phx-log-mono { font-family: var(--phx-mono, monospace); font-size: 12px; }
+.phx-log-mono { font-family: var(--phx-mono); font-size: 12px; }
 .phx-log-section-title { margin: 0 0 4px; font-size: 12px; font-weight: 600; color: var(--phx-text-2); }
 .phx-log-record .audit-payload-section { border-bottom: none; padding: 0; }
 
@@ -871,7 +876,7 @@
 .phx-table tbody tr.is-selected > td { background: var(--phx-selected); }
 .phx-table tbody tr:focus-visible { outline: none; }
 .phx-table-wrap[data-keyboard] tbody tr[tabindex]:not(.is-selected):hover > td { background: transparent; }
-.phx-cell-mono { font-family: var(--phx-mono, monospace); font-size: 12px; }
+.phx-cell-mono { font-family: var(--phx-mono); font-size: 12px; }
 .phx-table-empty { padding: 16px 10px; color: var(--phx-text-2); }
 .phx-table-footer { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 16px; padding: 8px 2px 0; }
 .phx-table-footer > .btn { margin-left: auto; }
@@ -892,47 +897,6 @@
   .phx-toolbar-icon-only { width: 40px; }
 }
 
-/* ============================================================
-   Tab bar
-   ============================================================ */
-.phx-tabs {
-  display: flex;
-  align-items: stretch;
-  background: var(--phx-surface);
-  border-bottom: 2px solid var(--phx-border);
-  padding: 0;
-  flex-shrink: 0;
-}
-.phx-tab {
-  padding: 0 20px;
-  height: 50px;
-  border: none;
-  border-bottom: 3px solid transparent;
-  margin-bottom: -2px;
-  background: none;
-  cursor: pointer;
-  font-size: 12px;
-  font-weight: 700;
-  color: var(--phx-text-2);
-
-  transition: color 0.15s, border-color 0.15s, background 0.15s;
-  white-space: nowrap;
-  flex-shrink: 0;
-  display: inline-flex;
-  align-items: center;
-}
-.phx-tab:hover { color: var(--phx-accent); background: var(--phx-hover); }
-.phx-tab.active { color: var(--phx-accent); border-bottom-color: var(--phx-accent); }
-.phx-tab-doclink { text-decoration: none; gap: 6px; }
-.phx-tab-extlink { opacity: 0.7; flex-shrink: 0; }
-.phx-tab-badge {
-  display: inline-flex; align-items: center; justify-content: center;
-  margin-left: 8px; padding: 0 6px; min-width: 18px; height: 18px;
-  border-radius: 9px; background: var(--phx-error); color: var(--phx-accent-fg);
-  font-size: 10px; font-weight: 700; letter-spacing: 0;
-  line-height: 1;
-}
-.phx-tab-spacer { flex: 1; }
 
 .phx-header-actions {
   display: flex;
@@ -952,7 +916,7 @@
   background: var(--phx-error-bg);
   color: var(--phx-error);
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: 0.02em;
   white-space: nowrap;
 }
@@ -961,7 +925,6 @@
 
 /* Forced wrap point for the mobile two-row tab bar (see the max-width: 700px
    block below). Inert here: nowrap means it never actually causes a break. */
-.phx-tabs-break { display: none; }
 
 /* ============================================================
    Main content
@@ -987,7 +950,7 @@
 }
 .card-header {
   font-size: 11px;
-  font-weight: 700;
+  font-weight: 600;
   margin: 0 0 16px 0;
   color: var(--phx-text-2);
 
@@ -1019,7 +982,7 @@
 /* Small subheading that introduces the collapsed Advanced cluster. */
 .advanced-section-label {
   font-size: 11px;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--phx-text-2);
 
   margin: 4px 2px 8px;
@@ -1041,7 +1004,7 @@
   padding: 0;
   cursor: pointer;
   font-size: 11px;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--phx-text-2);
 
   text-align: left;
@@ -1128,7 +1091,7 @@
   .btn-sm { min-height: 36px; }
 }
 .btn-warning { background: var(--phx-warning); color: var(--phx-accent-fg); }
-.btn-warning:hover:not(:disabled):not([aria-disabled="true"]) { background: var(--phx-accent-hov); }
+.btn-warning:hover:not(:disabled):not([aria-disabled="true"]) { opacity: 0.85; box-shadow: var(--phx-shadow-md); }
 .btn-text-danger { color: var(--phx-error); }
 .btn-text-warning { color: var(--phx-warning); }
 .btn-text-danger:hover:not(:disabled):not([aria-disabled="true"]) { background: var(--phx-error-bg); }
@@ -1152,7 +1115,7 @@
   text-align: left;
   padding: 10px 12px;
   font-size: 11px;
-  font-weight: 700;
+  font-weight: 600;
 
   color: var(--phx-text-2);
   border-bottom: 2px solid var(--phx-border);
@@ -1212,7 +1175,7 @@
 .input.error { border-color: var(--phx-error); }
 .field-error { font-size: 12px; color: var(--phx-error); }
 select.input {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2371717a' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+  background-image: var(--phx-chevron);
   background-repeat: no-repeat;
   background-position: right 10px center;
   padding-right: 32px;
@@ -1290,7 +1253,7 @@ input.input[type="number"]:not(.agentcli-number) { flex: 0 0 auto; width: 7rem; 
 .toggle-label > span:not(.sr-only), .toggle-label > label { align-self: flex-start; max-width: 100%; }
 .toggle-row:has(.toggle-switch) > .toggle-label > span:not(.sr-only), .toggle-label > label { cursor: pointer; }
 .toggle-label small { font-size: 12px; color: var(--phx-text-2); line-height: 1.4; }
-.toggle-label-master { font-weight: 700; }
+.toggle-label-master { font-weight: 600; }
 
 /* Access key Guidance: a resizable multiline field, the one-line caution under it, and a footer
    that keeps the counter and the save actions on one line until it wraps. */
@@ -1446,12 +1409,6 @@ input.input[type="number"]:not(.agentcli-number) { flex: 0 0 auto; width: 7rem; 
 /* ============================================================
    Responsive / mobile
    ============================================================ */
-/* Two-row tab bar: row 1 is Access keys/Approvals/Changes plus whichever of the
-   Agent Chat button / kill-switch banner is showing (both must stay visible
-   without scrolling); row 2 is MESA/Audit Log/Settings plus Documentation.
-   The split point is fixed by .phx-tabs-break, not by wherever content
-   happens to overflow. DOM order is untouched (desktop reading order); see
-   the comment in index.tsx. */
 @media (max-width: 700px) {
   /* The companion app exposes its measured status-bar inset through HA's
      inherited custom property. Use it as the sticky stopping edge, not as
@@ -1475,13 +1432,7 @@ input.input[type="number"]:not(.agentcli-number) { flex: 0 0 auto; width: 7rem; 
     background: var(--phx-surface);
     pointer-events: none;
   }
-  .phx-tabs { flex-wrap: wrap; }
-  .phx-tab-row1 { order: 1; }
   .phx-header-actions { order: 2; margin-left: auto; padding: 0; flex-shrink: 0; }
-  .phx-tabs-break { display: block; order: 3; flex: 0 0 100%; height: 0; }
-  .phx-tab-row2 { order: 4; }
-  .phx-tab-doclink { order: 5; }
-  .phx-tab-spacer { display: none; }
 }
 
 @media (max-width: 600px) {
@@ -1491,8 +1442,6 @@ input.input[type="number"]:not(.agentcli-number) { flex: 0 0 auto; width: 7rem; 
      instead of just clipping locally. */
   .phx-content { padding: 0 10px 16px; overflow-x: hidden; }
   .card { padding: 14px; overflow-x: hidden; }
-  .phx-tab { padding: 0 12px; font-size: 11px; letter-spacing: 0.04em; }
-  .phx-tab-row1 { padding: 0 9px; }
   .phx-header-action-label { display: none; }
 
   .card-header-stack { flex-direction: column; align-items: stretch; gap: 8px; }
@@ -1532,7 +1481,7 @@ input.input[type="number"]:not(.agentcli-number) { flex: 0 0 auto; width: 7rem; 
   .access-key-card-body { flex-direction: column; }
   .access-key-card-actions { min-width: auto; width: 100%; flex-direction: row; flex-wrap: wrap; }
   .access-key-action-btn { flex: 1; min-width: 120px; }
-  .btn, .phx-tab, .perm-btn, .tree-expand, .theme-toggle-btn { min-height: 44px; }
+  .btn, .perm-btn, .tree-expand, .theme-toggle-btn { min-height: 44px; }
   .perm-btn { min-width: 36px; }
 }
 
@@ -1562,7 +1511,7 @@ input.input[type="number"]:not(.agentcli-number) { flex: 0 0 auto; width: 7rem; 
   background: none;
   cursor: pointer;
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--phx-text-2);
   transition: background 0.12s, color 0.12s;
   min-width: 28px;
@@ -1618,7 +1567,7 @@ input.input[type="number"]:not(.agentcli-number) { flex: 0 0 auto; width: 7rem; 
 .tree-device-name:hover { color: var(--phx-accent); }
 .tree-device-id {
   min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-  color: var(--phx-text-2); font-family: var(--phx-mono, "Roboto Mono", monospace); font-size: 11px;
+  color: var(--phx-text-2); font-family: var(--phx-mono); font-size: 11px;
   cursor: text; user-select: text;
 }
 .tree-entity-id { font-size: 12px; color: var(--phx-text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
@@ -1627,14 +1576,14 @@ input.input[type="number"]:not(.agentcli-number) { flex: 0 0 auto; width: 7rem; 
 .tree-children { margin-left: 14px; padding-left: 8px; border-left: 1px solid var(--phx-border); }
 /* Device entities align with 1st-level (deviceless) entities: no extra indent. */
 .tree-children-flat { margin: 0; padding: 0; }
-.tree-badge { font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 4px; flex-shrink: 0; }
+.tree-badge { font-size: 10px; font-weight: 600; padding: 1px 6px; border-radius: 4px; flex-shrink: 0; }
 .tree-badge-dynamic { background: var(--phx-info-bg);    color: var(--phx-info); }
 .tree-badge-risk    { background: var(--phx-error-bg);   color: var(--phx-error); }
 .tree-badge-ghost   { background: var(--phx-warning-bg); color: var(--phx-warning); }
 .tree-stale-devices { border-top: 1px solid var(--phx-border); margin-block-start: 14px; padding-block-start: 12px; }
 .tree-stale-title {
   color: var(--phx-text-2);
-  margin: 0 6px 4px; font-size: 11px; font-weight: 700;
+  margin: 0 6px 4px; font-size: 11px; font-weight: 600;
 }
 .tree-stale-note { color: var(--phx-text-2); margin: 0 6px 8px; font-size: 12px; }
 .tree-stale-device-row { background: var(--phx-surface-2); }
@@ -1649,7 +1598,7 @@ input.input[type="number"]:not(.agentcli-number) { flex: 0 0 auto; width: 7rem; 
 .tree-hint-editor-head code { font-size: 12px; color: var(--phx-text-2); overflow-wrap: anywhere; }
 .tree-hint-editor-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .tree-hint-error { color: var(--phx-error); font-size: 12px; margin: 0; }
-.tree-perm-error { font-size: 11px; font-weight: 700; color: var(--phx-error); white-space: nowrap; flex-shrink: 0; cursor: help; }
+.tree-perm-error { font-size: 11px; font-weight: 600; color: var(--phx-error); white-space: nowrap; flex-shrink: 0; cursor: help; }
 .hint-scope { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; font-size: 13px; color: var(--phx-text-2); }
 .hint-scope-active { color: var(--phx-text); font-weight: 600; }
 .hint-scope-side { cursor: pointer; }
@@ -1689,13 +1638,13 @@ input.input[type="number"]:not(.agentcli-number) { flex: 0 0 auto; width: 7rem; 
    Section header
    ============================================================ */
 .section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
-.section-title { font-size: 11px; font-weight: 700; color: var(--phx-text-2); }
+.section-title { font-size: 11px; font-weight: 600; color: var(--phx-text-2); }
 
 /* ============================================================
    Access key display (rotated modal)
    ============================================================ */
 .access-key-display {
-  font-family: "Roboto Mono", monospace; font-size: 13px;
+  font-family: var(--phx-mono); font-size: 13px;
   background: var(--phx-surface-2); border: 1.5px solid var(--phx-border);
   border-radius: var(--phx-radius-sm); padding: 14px; word-break: break-all;
   user-select: all; margin: 14px 0; line-height: 1.6;
@@ -1704,7 +1653,7 @@ input.input[type="number"]:not(.agentcli-number) { flex: 0 0 auto; width: 7rem; 
 /* ============================================================
    Permission summary
    ============================================================ */
-.perm-summary { font-family: "Roboto Mono", monospace; font-size: 12px; }
+.perm-summary { font-family: var(--phx-mono); font-size: 12px; }
 .perm-summary-row { display: flex; align-items: center; justify-content: space-between; padding: 3px 0; border-bottom: 1px solid var(--phx-divider); }
 .perm-summary-row:last-child { border-bottom: none; }
 .perm-summary-empty { color: var(--phx-text-2); font-size: 13px; margin: 0; }
@@ -1714,7 +1663,7 @@ input.input[type="number"]:not(.agentcli-number) { flex: 0 0 auto; width: 7rem; 
    Permission simulator
    ============================================================ */
 .epe-card { height: 280px; overflow: hidden; }
-.sim-path { font-size: 13px; background: var(--phx-surface-2); border-radius: var(--phx-radius-sm); padding: 12px 14px; font-family: "Roboto Mono", monospace; margin-top: 10px; border: 1px solid var(--phx-border); }
+.sim-path { font-size: 13px; background: var(--phx-surface-2); border-radius: var(--phx-radius-sm); padding: 12px 14px; font-family: var(--phx-mono); margin-top: 10px; border: 1px solid var(--phx-border); }
 .sim-step { margin: 2px 0; }
 .sim-loading { font-size: 12px; color: var(--phx-text-2); margin-top: 6px; }
 .sim-resolution-level { color: var(--phx-text-2); }
@@ -1761,9 +1710,9 @@ input.input[type="number"]:not(.agentcli-number) { flex: 0 0 auto; width: 7rem; 
    ============================================================ */
 .audit-section-title { margin-bottom: 12px; }
 .audit-empty { color: var(--phx-text-2); font-size: 13px; }
-.audit-cell-reqid    { font-family: monospace; font-size: 11px; color: var(--phx-text-2); }
+.audit-cell-reqid    { font-family: var(--phx-mono); font-size: 11px; color: var(--phx-text-2); }
 
-.audit-cell-source   { font-family: monospace; font-size: 12px; }
+.audit-cell-source   { font-family: var(--phx-mono); font-size: 12px; }
 .audit-cell-source .audit-source-name { font-family: inherit; }
 
 /* ============================================================
@@ -1875,7 +1824,7 @@ input.input[type="number"]:not(.agentcli-number) { flex: 0 0 auto; width: 7rem; 
 .access-key-card-icon { width: 28px; height: 28px; border-radius: 6px; flex-shrink: 0; }
 .access-key-card-name {
   font-size: 18px;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--phx-accent-hov);
   min-width: 0;
   overflow: hidden;
@@ -1935,7 +1884,7 @@ input.input[type="number"]:not(.agentcli-number) { flex: 0 0 auto; width: 7rem; 
   margin: 0;
   padding-left: 18px;
   font-size: 12.5px;
-  font-family: var(--phx-mono, monospace);
+  font-family: var(--phx-mono);
   color: var(--phx-text-2);
 }
 .preset-diff-list li { margin: 2px 0; }
@@ -1964,7 +1913,7 @@ input.input[type="number"]:not(.agentcli-number) { flex: 0 0 auto; width: 7rem; 
 }
 .access-key-meta-label {
   font-size: 11px;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--phx-text-2);
 
   white-space: nowrap;
@@ -2177,7 +2126,7 @@ input.input[type="number"]:not(.agentcli-number) { flex: 0 0 auto; width: 7rem; 
 .yaml-diff-col { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .yaml-pre {
   background: var(--phx-surface-2); padding: 10px 12px; border-radius: var(--phx-radius-xs);
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; line-height: 1.45;
+  font-family: var(--phx-mono); font-size: 12px; line-height: 1.45;
   overflow: auto; white-space: pre; margin: 0; max-height: 60vh; border: 1px solid var(--phx-border);
 }
 .yaml-pre-empty { color: var(--phx-text-2); font-style: italic; }
@@ -2364,7 +2313,7 @@ hui-card, .dash-preview-card-slot { display: block; min-width: 0; }
 
 /* Onboarding wizard */
 .wizard-hero { text-align: center; padding: 40px 24px; }
-.wizard-hero-title { font-size: 22px; font-weight: 700; color: var(--phx-text); margin-bottom: 10px; }
+.wizard-hero-title { font-size: 22px; font-weight: 600; color: var(--phx-text); margin-bottom: 10px; }
 .wizard-hero-sub { font-size: 14px; color: var(--phx-text-2); max-width: 520px; margin: 0 auto 20px; }
 .wizard-hero-actions { display: flex; justify-content: center; }
 
@@ -2445,7 +2394,7 @@ hui-card, .dash-preview-card-slot { display: block; min-width: 0; }
 .command-field-label { font-size: 12px; font-weight: 600; color: var(--phx-text-2); margin-bottom: 3px; }
 .command-block-codewrap { display: flex; align-items: flex-start; gap: 8px; padding-right: 6px; border: 1px solid var(--phx-border); border-radius: var(--phx-radius-sm); overflow: hidden; background: var(--phx-surface-2, var(--phx-surface)); }
 .command-block-code { flex: 1 1 auto; min-width: 0; margin: 0; padding: 10px; font-size: 12px; line-height: 1.5; overflow-x: auto; white-space: pre; color: var(--phx-text); background: transparent; }
-.command-block-input { flex: 1 1 auto; min-width: 0; box-sizing: border-box; border: none; outline: none; background: transparent; color: var(--phx-text); font-family: var(--phx-mono, monospace); font-size: 12px; padding: 10px; }
+.command-block-input { flex: 1 1 auto; min-width: 0; box-sizing: border-box; border: none; outline: none; background: transparent; color: var(--phx-text); font-family: var(--phx-mono); font-size: 12px; padding: 10px; }
 .command-copy { flex: none; margin-top: 5px; }
 
 .connect-details { margin: 12px 0; }
@@ -2535,7 +2484,7 @@ hui-card, .dash-preview-card-slot { display: block; min-width: 0; }
   display: inline-flex; align-items: center; justify-content: center;
   min-width: 18px; height: 18px; padding: 0 5px; flex: 0 0 auto;
   border: 1px solid var(--phx-border); border-radius: 9px; background: var(--phx-surface);
-  color: var(--phx-text-2); font-size: 10px; font-weight: 700; line-height: 1; cursor: pointer;
+  color: var(--phx-text-2); font-size: 10px; font-weight: 600; line-height: 1; cursor: pointer;
 }
 .mesa-link:hover { border-color: var(--phx-accent); color: var(--phx-accent); background: var(--phx-accent-lt); }
 .mesa-link-exists { border-color: var(--phx-accent); color: var(--phx-accent); }
@@ -2580,7 +2529,7 @@ hui-card, .dash-preview-card-slot { display: block; min-width: 0; }
 .mesa-import-summary { margin-top: 8px; }
 .mesa-import-result { border-top: 1px solid var(--phx-divider); padding-top: 10px; }
 .mesa-identity { display: inline-flex; flex-direction: column; align-items: flex-start; gap: 2px; min-width: 0; max-width: 100%; vertical-align: top; }
-.mesa-identity-name { font-size: 13px; font-weight: 700; color: var(--phx-text); overflow-wrap: anywhere; }
+.mesa-identity-name { font-size: 13px; font-weight: 600; color: var(--phx-text); overflow-wrap: anywhere; }
 .mesa-identity-id { font-size: 13px; overflow-wrap: anywhere; white-space: normal; }
 .mesa-identity .mesa-identity-secondary { font-size: 11px; color: var(--phx-text-2); }
 .mesa-notice-identities { margin: 6px 0; padding-left: 20px; }
@@ -2879,7 +2828,7 @@ hui-card, .dash-preview-card-slot { display: block; min-width: 0; }
 .agentcli-msg-assistant .agentcli-md h5,
 .agentcli-msg-assistant .agentcli-md h6 { font-size: 1.08em; }
 .agentcli-md code {
-  font-family: var(--phx-mono, "Roboto Mono", monospace); font-size: 12px;
+  font-family: var(--phx-mono); font-size: 12px;
   background: var(--phx-grey-tint); padding: 1px 4px; border-radius: 4px;
 }
 .agentcli-msg-assistant .agentcli-md code { font-size: 0.92em; }
@@ -3138,7 +3087,7 @@ hui-card, .dash-preview-card-slot { display: block; min-width: 0; }
   width: 15px; height: 15px; margin-left: 6px; padding: 0; cursor: pointer;
   border: 1px solid var(--phx-error); border-radius: 50%;
   background: none; color: var(--phx-error);
-  font-size: 10px; font-weight: 700; line-height: 1; vertical-align: middle;
+  font-size: 10px; font-weight: 600; line-height: 1; vertical-align: middle;
 }
 .agentcli-warn-badge:hover { background: var(--phx-error-bg); }
 
@@ -3191,8 +3140,8 @@ hui-card, .dash-preview-card-slot { display: block; min-width: 0; }
   padding: 5px 8px 5px 22px; border-radius: var(--phx-radius-xs); position: relative; min-width: 0;
 }
 .energy-preview-row::before {
-  position: absolute; left: 8px; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-weight: 700;
+  position: absolute; left: 8px; font-family: var(--phx-mono);
+  font-weight: 600;
 }
 .energy-preview-row.is-added { background: var(--phx-success-bg); }
 .energy-preview-row.is-added::before { content: "+"; color: var(--phx-success); }
@@ -3202,7 +3151,7 @@ hui-card, .dash-preview-card-slot { display: block; min-width: 0; }
 .energy-preview-row.is-changed::before { content: "-"; color: var(--phx-error); }
 .energy-preview-name { font-size: 13px; font-weight: 500; overflow-wrap: anywhere; }
 .energy-preview-stat {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px;
+  font-family: var(--phx-mono); font-size: 12px;
   color: var(--phx-text-2); overflow-wrap: anywhere;
 }
 .approval-preview-toolbar { display: flex; justify-content: flex-end; margin-bottom: 10px; }
@@ -3248,7 +3197,7 @@ hui-card, .dash-preview-card-slot { display: block; min-width: 0; }
 .conversation-copy.btn-icon { flex: 0 0 28px; width: 28px; height: 28px; padding: 4px; color: var(--phx-text-2); }
 .conversation-copy svg { width: 18px; height: 18px; }
 .conversation-copy-feedback { flex-basis: 100%; }
-.conversation-evidence pre { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; background: var(--phx-surface-2); border-radius: var(--phx-radius-xs); padding: 12px; font-family: "Roboto Mono", monospace; font-size: 13px; }
+.conversation-evidence pre { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; background: var(--phx-surface-2); border-radius: var(--phx-radius-xs); padding: 12px; font-family: var(--phx-mono); font-size: 13px; }
 .conversation-evidence > span { font-size: 12px; color: var(--phx-text-2); }
 .conversation-detail details > summary { display: list-item; list-style-type: disclosure-closed; cursor: pointer; color: var(--phx-accent); padding: 6px 0; }
 .conversation-detail details[open] > summary { list-style-type: disclosure-open; }

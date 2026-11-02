@@ -49,7 +49,7 @@ it.each([["light", light], ["auto dark", dark], ["forced dark", forcedDark]] as 
     return Object.fromEntries([...block.slice(0, block.indexOf("}")).matchAll(/(?:^|[;{])\s*([\w-]+):\s*([^;]+)/g)].map(m => [m[1], m[2].trim()]));
   };
   const color = (value: string) => rgb(value.startsWith("var(") ? values[value.match(/--phx-[\w-]+/)![0]] : value);
-  for (const selector of [".btn-danger", ".phx-tab-badge", ".phx-toolbar-badge", ".agentcli-cancel-btn", ".agentcli-popout-error"]) {
+  for (const selector of [".btn-danger", ".phx-toolbar-badge", ".agentcli-cancel-btn", ".agentcli-popout-error"]) {
     const rule = declarations(selector);
     expect(rule.background, selector).toBeTruthy();
     expect(contrast(color(rule.color), color(rule.background)), selector).toBeGreaterThanOrEqual(4.5);

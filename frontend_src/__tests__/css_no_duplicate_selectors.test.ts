@@ -67,7 +67,6 @@ describe("panel stylesheet", () => {
     expect(CSS).toMatch(/@media\s*\(max-width:\s*700px\)[\s\S]*?\.phx-topbar\s*\{[^}]*--phx-topbar-safe-top:\s*var\(--safe-area-inset-top,\s*env\(safe-area-inset-top,\s*0px\)\);[^}]*top:\s*var\(--phx-topbar-safe-top\);/s);
     expect(CSS).toMatch(/\.phx-topbar::before\s*\{[^}]*position:\s*absolute;[^}]*bottom:\s*100%;[^}]*height:\s*var\(--phx-topbar-safe-top\);[^}]*background:\s*var\(--phx-surface\);/s);
     expect(CSS).not.toMatch(/\.phx-topbar\s*\{[^}]*padding-top:/s);
-    expect(CSS).not.toMatch(/\.phx-tabs\s*\{[^}]*position:\s*sticky;/s);
   });
 
   it("keeps the workspace toolbar clear of the companion app's status bar", () => {

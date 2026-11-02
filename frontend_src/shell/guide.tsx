@@ -295,7 +295,14 @@ function useGuideTopic(workspace: string, windowId: string | null, language: str
   const autoRef = useRef(auto);
   autoRef.current = auto;
   const autoKey = auto ? stepKey(auto) : "";
-  useEffect(() => { if (autoRef.current) setHistory((h) => pushStep(h, autoRef.current!)); }, [autoKey]);
+  // The automatic page is shown before the effect below records it, so a step the reader takes in
+  // between records it first: otherwise the late effect would push it on top of the reader's page.
+  const recordedAuto = useRef("");
+  useEffect(() => {
+    if (!autoRef.current || recordedAuto.current === autoKey) return;
+    recordedAuto.current = autoKey;
+    setHistory((h) => pushStep(h, autoRef.current!));
+  }, [autoKey]);
   const step = history.steps[history.at] ?? auto;
   const view = step?.kind === "contents" || step?.kind === "search" ? step.kind : "topic";
   let topic: FoundTopic | null = null;
@@ -305,7 +312,12 @@ function useGuideTopic(workspace: string, windowId: string | null, language: str
     anchor = step.anchor;
   }
   if (topic && anchor && !topic.anchors.includes(anchor)) anchor = null;
-  const go = (next: Step) => setHistory((h) => pushStep(h, next));
+  const go = (next: Step) => {
+    const shown = autoRef.current;
+    const unrecorded = shown && recordedAuto.current !== autoKey ? shown : null;
+    recordedAuto.current = autoKey;
+    setHistory((h) => pushStep(unrecorded ? pushStep(h, unrecorded) : h, next));
+  };
   return {
     loading: bundles === null,
     failed: !!bundles && bundles.every((b) => !b),
