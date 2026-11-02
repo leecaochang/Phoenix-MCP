@@ -6,6 +6,8 @@ import { compileGuide, translationProblems, type GuideBundle } from "./frontend_
 
 const GUIDE_TOPICS = resolve(__dirname, "frontend_src/guide/topics");
 const CATALOG = resolve(__dirname, "custom_components/phoenix_mcp/catalogs/en.json");
+/** Every language with Guide topics, so adding a language's folder is all it takes to ship it. */
+const GUIDE_LANGUAGE_FOLDERS = readdirSync(GUIDE_TOPICS, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name).sort();
 
 /**
  * Compile each language's Guide topics into guide/<language>.json beside the panel bundle; a broken topic,
@@ -44,6 +46,7 @@ function guideTopics(): Plugin {
 
 export default defineConfig({
   plugins: [react(), guideTopics()],
+  define: { __GUIDE_LANGUAGES__: JSON.stringify(GUIDE_LANGUAGE_FOLDERS) },
   publicDir: "frontend_src/public",
   base: "/local/phoenix-mcp/",
   build: {

@@ -2876,7 +2876,8 @@
       "guideContents": "Vis alle sider i veiledningen, hver under siden den hører til. Velg én for å lese den.",
       "guideSearch": "Finn enhver seksjon i veiledningen etter ordene eller nøkkelordene.",
       "guideSearchInput": "Skriv ord for å finne samsvarende seksjoner i veiledningen. Enter åpner det beste treffet.",
-      "guideLink": "Åpne denne siden i Veiledning. Tilbake tar deg til siden du leste."
+      "guideLink": "Åpne denne siden i Veiledning. Tilbake tar deg til siden du leste.",
+      "accessKeyFilter": "Vis bare tilgangsnøkler der navnet eller statusen inneholder denne teksten."
     },
     "guide": {
       "title": "Veiledning",

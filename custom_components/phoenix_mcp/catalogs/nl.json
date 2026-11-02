@@ -2951,7 +2951,8 @@
       "guideContents": "Toon alle Gids-pagina's, elk onder de pagina waar ze bij hoort. Selecteer er een om hem te lezen.",
       "guideSearch": "Vind elke sectie van de Gids op woorden of trefwoorden.",
       "guideSearchInput": "Typ woorden om passende secties van de Gids te vinden. Enter opent de beste treffer.",
-      "guideLink": "Open deze pagina in de Gids. Terug brengt je naar de pagina die je aan het lezen was."
+      "guideLink": "Open deze pagina in de Gids. Terug brengt je naar de pagina die je aan het lezen was.",
+      "accessKeyFilter": "Toon alleen toegangssleutels waarvan de naam of status deze tekst bevat."
     },
     "guide": {
       "title": "Gids",

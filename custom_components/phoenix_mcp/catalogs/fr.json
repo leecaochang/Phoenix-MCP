@@ -2870,7 +2870,8 @@
       "guideContents": "Listez toutes les pages du guide, chacune sous la page dont elle relève. Sélectionnez-en une pour la lire.",
       "guideSearch": "Trouvez n’importe quelle section du guide par ses mots ou ses mots-clés.",
       "guideSearchInput": "Saisissez des mots pour trouver les sections du guide correspondantes. Entrée ouvre le meilleur résultat.",
-      "guideLink": "Ouvrez cette page dans le guide. Retour vous ramène à la page que vous lisiez."
+      "guideLink": "Ouvrez cette page dans le guide. Retour vous ramène à la page que vous lisiez.",
+      "accessKeyFilter": "Affichez uniquement les clés d’accès dont le nom ou l’état contient ce texte."
     },
     "guide": {
       "title": "Guide",

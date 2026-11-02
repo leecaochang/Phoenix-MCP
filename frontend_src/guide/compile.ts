@@ -106,10 +106,17 @@ export function parseTopic(source: string): ParsedTopic | string {
   };
 }
 
-/** The words of a line as a reader counts them: labels and link targets add none of their own. */
+/** Scripts written without spaces between words. */
+const UNSPACED = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Thai}]/gu;
+
+/**
+ * The words of a line as a reader counts them: labels and link targets add none of their own.
+ * Text in a script without spaces counts two characters as a word, so its limits still apply.
+ */
 function words(text: string): number {
   const plain = text.replace(LABEL, "X").replace(/\]\([^)]*\)/g, "]").replace(/[*_`#>[\]]/g, " ");
-  return plain.split(/\s+/).filter(Boolean).length;
+  const unspaced = plain.match(UNSPACED)?.length ?? 0;
+  return plain.replace(UNSPACED, " ").split(/\s+/).filter(Boolean).length + Math.ceil(unspaced / 2);
 }
 
 /** Problems with the length of a topic's paragraphs, sentences and list items. */
@@ -117,7 +124,7 @@ export function lengthProblems(body: string): string[] {
   const problems: string[] = [];
   const short = (s: string) => (s.length > 60 ? `${s.slice(0, 60)}...` : s);
   const sentences = (text: string) => {
-    for (const sentence of text.split(/(?<=[.!?。！？])\s+/)) {
+    for (const sentence of text.split(/(?<=[.!?])\s+|(?<=[。！？])/)) {
       if (words(sentence) > LIMITS.sentenceWords) problems.push(`sentence over ${LIMITS.sentenceWords} words: "${short(sentence.trim())}"`);
     }
   };

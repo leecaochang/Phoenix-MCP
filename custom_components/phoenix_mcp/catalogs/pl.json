@@ -3007,7 +3007,8 @@
       "guideContents": "Wyświetl wszystkie strony Przewodnika, każdą pod stroną, do której należy. Wybierz jedną, aby ją przeczytać.",
       "guideSearch": "Znajdź dowolną sekcję Przewodnika po jej słowach lub słowach kluczowych.",
       "guideSearchInput": "Wpisz słowa, aby znaleźć pasujące sekcje Przewodnika. Enter otwiera najlepsze dopasowanie.",
-      "guideLink": "Otwórz tę stronę w Przewodniku. Wstecz wraca do wcześniej czytanej strony."
+      "guideLink": "Otwórz tę stronę w Przewodniku. Wstecz wraca do wcześniej czytanej strony.",
+      "accessKeyFilter": "Pokaż tylko klucze dostępu, których nazwa lub stan zawiera ten tekst."
     },
     "guide": {
       "title": "Przewodnik",

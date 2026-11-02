@@ -2870,7 +2870,8 @@
       "guideContents": "Alle Leitfadenseiten auflisten, jeweils unter der Seite, zu der sie gehören. Wählen Sie eine aus, um sie zu lesen.",
       "guideSearch": "Jeden Abschnitt des Leitfadens anhand seiner Wörter oder Stichwörter finden.",
       "guideSearchInput": "Wörter eingeben, um passende Abschnitte im Leitfaden zu finden. Eingabe öffnet den besten Treffer.",
-      "guideLink": "Diese Seite im Leitfaden öffnen. Zurück bringt Sie zu der Seite, die Sie gerade gelesen haben."
+      "guideLink": "Diese Seite im Leitfaden öffnen. Zurück bringt Sie zu der Seite, die Sie gerade gelesen haben.",
+      "accessKeyFilter": "Nur Zugriffsschlüssel zeigen, deren Name oder Status diesen Text enthält."
     },
     "guide": {
       "title": "Leitfaden",

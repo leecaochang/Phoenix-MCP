@@ -2870,7 +2870,8 @@
       "guideContents": "Elenca tutte le pagine della Guida, ciascuna sotto la pagina a cui appartiene. Selezionane una per leggerla.",
       "guideSearch": "Trova qualsiasi sezione della Guida in base alle sue parole o parole chiave.",
       "guideSearchInput": "Digita delle parole per trovare le sezioni corrispondenti della Guida. Invio apre il risultato migliore.",
-      "guideLink": "Apri questa pagina nella Guida. Indietro ti riporta alla pagina che stavi leggendo."
+      "guideLink": "Apri questa pagina nella Guida. Indietro ti riporta alla pagina che stavi leggendo.",
+      "accessKeyFilter": "Mostra solo le chiavi di accesso il cui nome o stato contiene questo testo."
     },
     "guide": {
       "title": "Guida",

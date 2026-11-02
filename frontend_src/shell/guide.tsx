@@ -35,8 +35,9 @@ import { JS_BUILD } from "../version";
 import type { WorkspaceController } from "./dock/controller";
 import type { GuideRect } from "./storage";
 
-/** Languages with Guide topics; readers of any other language get English. */
-export const GUIDE_LANGUAGES: readonly string[] = ["en"];
+declare const __GUIDE_LANGUAGES__: string[];
+/** Languages with Guide topics, read from the topic folders at build time; readers of any other language get English. */
+export const GUIDE_LANGUAGES: readonly string[] = __GUIDE_LANGUAGES__;
 const GUIDE_URL = "/local/phoenix-mcp/guide";
 /** Space kept between the Guide and the screen edges; an edge this close snaps to it. */
 const MARGIN = 8;

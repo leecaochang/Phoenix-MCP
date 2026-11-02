@@ -16,7 +16,7 @@ import { GUIDE_LANGUAGES, GuideWindow, besideRect, clearGuideCache, findTopic, g
 import { WIZARD_STEPS } from "../views/OnboardingWizard";
 import { GUIDE_CLOSED, WORKSPACE_IDS, readGuide } from "../shell/storage";
 import { WorkspaceController } from "../shell/dock/controller";
-import { flattenCatalog } from "../i18n";
+import { LANGUAGES, flattenCatalog } from "../i18n";
 import en from "../../custom_components/phoenix_mcp/catalogs/en.json";
 
 const TOPICS = resolve(__dirname, "../guide/topics");
@@ -51,6 +51,8 @@ describe("compiling topics", () => {
 
   it("ships topics that compile cleanly, with an overview for every workspace, in the languages the panel knows", () => {
     expect(readdirSync(TOPICS).sort()).toEqual([...GUIDE_LANGUAGES].sort());
+    // A folder is shipped by being there, so its name must be a language the panel offers.
+    expect(GUIDE_LANGUAGES.filter((code) => !LANGUAGES.some((l) => l.code === code))).toEqual([]);
     const files = readdirSync(resolve(TOPICS, "en")).filter((f) => f.endsWith(".md")).map((f) => ({ file: f, source: readFileSync(resolve(TOPICS, "en", f), "utf8") }));
     const { bundle, problems } = compileGuide("en", files, labelExists);
     expect(problems).toEqual([]);

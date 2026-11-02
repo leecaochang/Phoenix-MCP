@@ -837,7 +837,8 @@
       "guideContents": "List every Guide page, each under the page it belongs to. Select one to read it.",
       "guideSearch": "Find any section of the Guide by its words or keywords.",
       "guideSearchInput": "Type words to find matching Guide sections. Enter opens the best match.",
-      "guideLink": "Open this page in the Guide. Back returns you to the page you were reading."
+      "guideLink": "Open this page in the Guide. Back returns you to the page you were reading.",
+      "accessKeyFilter": "Show only access keys whose name or status contains this text."
     },
     "guide": {
       "title": "Guide",

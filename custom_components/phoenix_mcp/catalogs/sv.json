@@ -2876,7 +2876,8 @@
       "guideContents": "Lista alla sidor i Guide, var och en under sidan den hör till. Välj en för att läsa den.",
       "guideSearch": "Hitta valfritt avsnitt i Guide efter dess ord eller nyckelord.",
       "guideSearchInput": "Skriv ord för att hitta matchande avsnitt i Guide. Enter öppnar den bästa träffen.",
-      "guideLink": "Öppna sidan i Guide. Tillbaka tar dig till sidan du läste."
+      "guideLink": "Öppna sidan i Guide. Tillbaka tar dig till sidan du läste.",
+      "accessKeyFilter": "Visa bara åtkomstnycklar vars namn eller status innehåller den här texten."
     },
     "guide": {
       "title": "Guide",

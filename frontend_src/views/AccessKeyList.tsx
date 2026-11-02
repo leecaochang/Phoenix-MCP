@@ -212,7 +212,7 @@ export function AccessKeyListView({
       {createForm}
 
       <div className="phx-filters"><div className="filter-row">
-        <input type="search" className="input" data-guide="window.accessKeys#key-list" aria-label={t("accessKeys.filterAria")} placeholder={t("accessKeys.filterPlaceholder")}
+        <input type="search" className="input" data-guide="window.accessKeys#key-list" data-help="help.accessKeyFilter" aria-label={t("accessKeys.filterAria")} placeholder={t("accessKeys.filterPlaceholder")}
           value={filter} onChange={(e) => setFilter(e.target.value)} />
       </div></div>
       {/* Reading the list again keeps the table in place; only a first load shows the loading state. */}

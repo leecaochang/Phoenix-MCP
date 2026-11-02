@@ -2876,7 +2876,8 @@
       "guideContents": "Luettele kaikki oppaan sivut, kukin sen sivun alla, johon se kuuluu. Lue sivu valitsemalla se.",
       "guideSearch": "Etsi mikä tahansa oppaan osio sen sanojen tai avainsanojen perusteella.",
       "guideSearchInput": "Kirjoita sanoja löytääksesi vastaavat oppaan osiot. Enter avaa parhaan osuman.",
-      "guideLink": "Avaa tämä sivu Oppaassa. Takaisin palauttaa sinut sivulle, jota luit."
+      "guideLink": "Avaa tämä sivu Oppaassa. Takaisin palauttaa sinut sivulle, jota luit.",
+      "accessKeyFilter": "Näytä vain käyttöavaimet, joiden nimi tai tila sisältää tämän tekstin."
     },
     "guide": {
       "title": "Opas",

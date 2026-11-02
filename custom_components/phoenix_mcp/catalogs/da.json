@@ -2876,7 +2876,8 @@
       "guideContents": "Vis alle sider i guiden, hver under den side, den hører til. Vælg en for at læse den.",
       "guideSearch": "Find enhver sektion i guiden ud fra dens ord eller nøgleord.",
       "guideSearchInput": "Skriv ord for at finde matchende sektioner i guiden. Enter åbner det bedste match.",
-      "guideLink": "Åbn denne side i guiden. Tilbage fører dig til den side, du læste."
+      "guideLink": "Åbn denne side i guiden. Tilbage fører dig til den side, du læste.",
+      "accessKeyFilter": "Vis kun adgangsnøgler, hvis navn eller status indeholder denne tekst."
     },
     "guide": {
       "title": "Guide",

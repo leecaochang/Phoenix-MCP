@@ -12,7 +12,7 @@ import { describe, it, expect, vi, afterEach } from "vitest";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { GUIDE_FORMAT, compileGuide, lengthProblems, translationProblems, voiceProblems, type GuideTopic } from "../guide/compile";
 import { fold, searchGuide, topicSections } from "../guide/search";
-import { GuideTargetContext, GuideWindow, clearGuideCache, guideContents, pushStep, renderTopic, topicAncestors, topicTitle } from "../shell/guide";
+import { GuideTargetContext, GuideWindow, clearGuideCache, guideContents, mergedTopics, pushStep, renderTopic, topicAncestors, topicTitle } from "../shell/guide";
 import { GuideTargetTracker, guideTargetFor, parseGuideRef } from "../shell/guideTarget";
 import { WorkspaceController } from "../shell/dock/controller";
 
@@ -84,6 +84,22 @@ describe("compiling topics with sections", () => {
     expect(compileGuide("de", page("Accounts can be added."), () => true).problems).toEqual([]);
   });
 
+  it("holds text without spaces to the same limits, two characters to a word", () => {
+    const han = (n: number) => "字".repeat(n);
+    expect(lengthProblems(`${han(58)}。`)).toEqual([]);
+    expect(lengthProblems(`${han(62)}。`)).toEqual([expect.stringMatching(/^sentence over 30 words/)]);
+    expect(lengthProblems(`${han(50)}。${han(50)}。${han(30)}。`)).toEqual([expect.stringMatching(/^paragraph over 60 words/)]);
+  });
+
+  it("reads a page not translated yet in English, and a translated one in its language", () => {
+    const topic = (title: string): GuideTopic => ({ title, body: "x", anchors: [] });
+    const en = { format: GUIDE_FORMAT, language: "en", topics: { "window.a": topic("Access Keys"), "window.b": topic("Approvals") } };
+    const zh = { format: GUIDE_FORMAT, language: "zh-Hans", topics: { "window.a": topic("访问密钥") } };
+    const merged = mergedTopics([zh, en]);
+    expect(merged["window.a"].title).toBe("访问密钥");
+    expect(merged["window.b"].title).toBe("Approvals");
+  });
+
   it("holds a translation to English's pages, sections and places", () => {
     const topic = (anchors: string[], parent?: string): GuideTopic => ({ title: "T", body: "x", anchors, ...(parent ? { parent } : {}) });
     const en = { format: GUIDE_FORMAT, language: "en", topics: { "window.a": topic(["one", "two"]), "topic.b": topic([], "window.a") } };
@@ -151,6 +167,14 @@ describe("searching the Guide", () => {
     expect(searchGuide(sections, "desicion")[0].section.anchor).toBe("decision-provider");
     expect(searchGuide(sections, "typesafe").map((h) => h.section.topic)).toContain("window.settingsProviders");
     expect(searchGuide(sections, "endpoint")[0].snippet).toContain("Stops every Phoenix endpoint");
+  });
+
+  it("finds words in Chinese and Japanese, which have no spaces between them", () => {
+    const zh = topicSections("window.settingsSafety", "安全", "## 紧急开关 {#kill-switch}\n\n立即拒绝所有代理请求。", [], (k) => k);
+    expect(searchGuide(zh, "代理")[0].section.anchor).toBe("kill-switch");
+    expect(searchGuide(zh, "紧急开关")[0].section.anchor).toBe("kill-switch");
+    const ja = topicSections("window.settingsSafety", "安全", "## キルスイッチ {#kill-switch}\n\nすべてのエージェント要求を拒否します。", [], (k) => k);
+    expect(searchGuide(ja, "エージェント")[0].section.anchor).toBe("kill-switch");
   });
 
   it("puts the section that explains a word before the sections that only share its page", () => {
