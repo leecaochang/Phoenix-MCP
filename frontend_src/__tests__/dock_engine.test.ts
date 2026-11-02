@@ -1,8 +1,9 @@
 import { describe, it, expect, vi } from "vitest";
-import type { DockviewApi, DockviewGroupPanel } from "dockview-react";
+import type { DockviewApi, DockviewGroupPanel, SerializedDockview } from "dockview-react";
 import { largestGridGroup, moveWindow, neighbor, rowOf, slotOf } from "../shell/dock/geometry";
 import { FoldStore, MIN_WINDOW_HEIGHT, TITLE_BAR_HEIGHT, foldWindow, reapplyCollapsed, unfoldWindow } from "../shell/dock/fold";
 import { sanitizeLayout } from "../shell/dock/sanitize";
+import { withFloatSizes } from "../shell/dock/controller";
 import { edgeResolver } from "../shell/dock/drop";
 import { DOCK_OPTIONS } from "../shell/dock/WorkspaceDock";
 
@@ -187,6 +188,26 @@ describe("saved layout sanitizer", () => {
     const clean = sanitizeLayout(layout, known)!;
     expect(clean.floatingGroups).toHaveLength(1);
     expect(Object.keys(clean.panels).sort()).toEqual(["audit", "conversations"]);
+  });
+});
+
+describe("floating window sizes", () => {
+  const floats = (...positions: Array<Record<string, number>>) => ({
+    grid: { root: { type: "branch", data: [], size: 0 }, width: 800, height: 600, orientation: "HORIZONTAL" },
+    panels: {},
+    floatingGroups: positions.map((position, i) => ({ data: { id: String(i), views: [`w${i}`], activeView: `w${i}` }, position })),
+  }) as unknown as SerializedDockview;
+  const sizes = (json: SerializedDockview) => json.floatingGroups!.map((g) => g.position);
+
+  it("takes the last measured box over what Dockview measured", () => {
+    const boxes = new Map([["w0", { left: 5, top: 6, width: 420, height: 320 }]]);
+    expect(sizes(withFloatSizes(floats({ top: 1, right: 2, width: 0, height: 0 }), boxes))).toEqual([{ left: 5, top: 6, width: 420, height: 320 }]);
+  });
+
+  it("keeps a saved place that has a size, and gives one without a size the default", () => {
+    const [kept, repaired, missing] = sizes(withFloatSizes(floats({ top: 1, right: 2, width: 300, height: 200 }, { top: 1, right: 2, width: 0, height: 308 }, { top: 1, left: 2 }), new Map()));
+    expect(kept).toEqual({ top: 1, right: 2, width: 300, height: 200 });
+    for (const p of [repaired, missing]) expect(p).toEqual({ left: 80, top: 64, width: 360, height: 260 });
   });
 });
 

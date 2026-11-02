@@ -110,6 +110,28 @@ const validBox = (b: unknown): b is FloatBox => !!b && typeof b === "object"
   && (["left", "top", "width", "height"] as const).every((k) => Number.isFinite((b as Record<string, unknown>)[k]))
   && (b as FloatBox).width > 0 && (b as FloatBox).height > 0;
 
+/**
+ * Give each floating window in a saved float layer a usable size. Dockview records
+ * a floating window's size as measured on screen, and a frame no longer on screen
+ * measures 0 by 0: the panel saves as Home Assistant removes it during a restart,
+ * and a hidden workspace saves too. A frame restored at width 0 shows its content
+ * without title bar or border (user, 2026-11-02). Each window takes the box last
+ * measured on screen, else its saved place when that has a size, else the
+ * default floating size.
+ */
+export function withFloatSizes(json: SerializedDockview, boxes: ReadonlyMap<string, FloatBox>): SerializedDockview {
+  if (!json.floatingGroups?.length) return json;
+  const floatingGroups = json.floatingGroups.map((entry) => {
+    const id = entry.data?.activeView ?? entry.data?.views[0];
+    const box = id ? boxes.get(id) : undefined;
+    if (box) return { ...entry, position: { left: box.left, top: box.top, width: box.width, height: box.height } };
+    const p = entry.position as Partial<Record<"width" | "height", unknown>>;
+    if (validHeight(p.width) && validHeight(p.height)) return entry;
+    return { ...entry, position: { left: FLOAT_BOUNDS.left, top: FLOAT_BOUNDS.top, width: FLOAT_BOUNDS.minWidth, height: FLOAT_BOUNDS.minHeight } };
+  });
+  return { ...json, floatingGroups };
+}
+
 export interface WindowSpec {
   id: string;
   title: string;
@@ -918,11 +940,12 @@ export class WorkspaceController {
           this.restoreHeights("main", saved?.heights, known);
           api.fromJSON(dock, { reuseExistingPanels: true });
           for (const band of BANDS) this.loadHost(band, saved?.bands?.[band]?.dock, saved?.bands?.[band]?.heights, known, used);
-          this.loadHost("float", saved?.floats, undefined, known, used);
+          this.floatBoxes = new Map(Object.entries(saved?.floatBoxes ?? {}).filter(([id, box]) => known.has(id) && validBox(box)));
+          const floats = saved?.floats && sanitizeLayout(saved.floats, known);
+          this.loadHost("float", floats ? withFloatSizes(floats, this.floatBoxes) : undefined, undefined, known, used);
           this.closed = new Map(Object.entries(saved?.closed ?? {}).filter(([id]) => known.has(id) && !used.has(id)));
           // A window added since the arrangement was saved starts closed where the default arrangement keeps it.
           for (const [id, slot] of Object.entries(this.extras.closedAt ?? {})) if (known.has(id) && !used.has(id) && !this.closed.has(id)) this.closed.set(id, slot);
-          this.floatBoxes = new Map(Object.entries(saved?.floatBoxes ?? {}).filter(([id, box]) => known.has(id) && validBox(box)));
           this.dismissed = new Set((Array.isArray(saved?.dismissed) ? saved.dismissed : []).filter((id) => typeof id === "string" && known.has(id)));
           this.heldHeights = new Set((Array.isArray(saved?.held) ? saved.held : []).filter((id) => typeof id === "string" && known.has(id)));
           this.folds.restore(saved?.folds, (id) => used.has(id));
@@ -1172,7 +1195,7 @@ export class WorkspaceController {
     const floatApi = this.apiOf("float");
     if (floatApi?.panels.length) {
       const json = sanitizeLayout(floatApi.toJSON(), saved);
-      if (json) out.floats = json;
+      if (json) out.floats = withFloatSizes(json, this.floatBoxes);
     }
     return out;
   }

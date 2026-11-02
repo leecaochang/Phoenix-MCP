@@ -396,6 +396,28 @@ describe("pinned bands and the floating layer", () => {
     w.controller.restoreOriginal();
     expect(w.controller.layout()!.floatBoxes).toBeUndefined();
   });
+
+  // jsdom measures every frame as 0 by 0, as a browser does a panel removed from the page.
+  it("never saves a floating window at the size of a frame that is not on screen", () => {
+    const w = mount();
+    w.controller.float(w.group("b"));
+    const position = w.controller.layout()!.floats!.floatingGroups![0].position as { width: number; height: number };
+    expect(position.width).toBeGreaterThan(0);
+    expect(position.height).toBeGreaterThan(0);
+  });
+
+  it("restores a floating window saved at 0 by 0 at its last measured box", () => {
+    const first = mount();
+    first.controller.float(first.group("b"));
+    const broken = first.controller.layout()!;
+    const floats = { ...broken.floats!, floatingGroups: broken.floats!.floatingGroups!.map((g) => ({ ...g, position: { top: 402, right: 55, width: 0, height: 0 } })) };
+    const w = mount();
+    w.controller.load({ ...broken, floats, floatBoxes: { b: { left: 300, top: 200, width: 420, height: 320 } } });
+    expect(w.controller.hostOf("b")).toBe("float");
+    const frame = w.apis.float!.getPanel("b")!.group.element.closest<HTMLElement>(".dv-resize-container")!;
+    expect(frame.style.width).toBe("420px");
+    expect(frame.style.height).toBe("320px");
+  });
 });
 
 describe("window content across moves", () => {
