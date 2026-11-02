@@ -1845,7 +1845,8 @@ input.input[type="number"]:not(.agentcli-number) { flex: 0 0 auto; width: 7rem; 
   border: 1px solid transparent;
   border-radius: var(--phx-radius-xs);
   padding: 2px 6px;
-  font-family: inherit;
+  /* A field keeps the browser's small control font unless told otherwise (tiny on iOS): match the name around it. */
+  font: inherit;
   cursor: text;
 }
 .access-key-name-input:hover:not(:disabled):not([aria-disabled="true"]):not(:focus) { border-color: var(--phx-border); }

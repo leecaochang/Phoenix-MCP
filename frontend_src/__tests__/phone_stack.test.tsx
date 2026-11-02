@@ -5,8 +5,9 @@
  * records the window as closed and Workspace Options offers it back; Maximize
  * shows one window and keeps the others mounted; folding and the per-window
  * labels choice are saved; Add to My Workspace is in the window menu, not the
- * title bar (user, 2026-11-02); and the record keeps phone stacks through reading
- * and section merges.
+ * title bar (user, 2026-11-02); the record keeps phone stacks through reading
+ * and section merges; and a phone is told from a tablet by its touch-only
+ * screen's shorter side, so a phone keeps the stack in landscape.
  */
 import { describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
@@ -15,6 +16,7 @@ import { movedOrder, phoneOrder, readPhoneLayout, type PhoneLayout } from "../sh
 import { SHELL_SCHEMA, parseRecord, type ShellRecord } from "../shell/storage";
 import { mergeRecords } from "../shell/sync";
 import { MenuRootContext } from "../ui/Menu";
+import { isPhone } from "../shell/Shell";
 
 vi.mock("../shell/workspaces", async (original) => {
   const real = await original<typeof import("../shell/workspaces")>();
@@ -172,5 +174,22 @@ describe("phone stacks in the record", () => {
     expect(merged.phone).toEqual({ logs: { closed: [] }, mesa: { folded: ["x"] } });
     // A reset removes the workspace's stack from the shared copy too.
     expect(mergeRecords(stored, base(), new Set(["phone:logs", "phone:mesa"]), "w").phone).toBeUndefined();
+  });
+});
+
+describe("telling a phone from a tablet", () => {
+  const device = (touchOnly: boolean, width: number, height: number) =>
+    ({ matchMedia: () => ({ matches: touchOnly }), screen: { width, height } }) as unknown as Window;
+
+  it("holds a phone to the stack in either orientation", () => {
+    expect(isPhone(device(true, 393, 852))).toBe(true);
+    expect(isPhone(device(true, 852, 393))).toBe(true);
+  });
+
+  it("leaves tablets and desktops to the width rule", () => {
+    // An iPad mini in landscape, an iPad Air in portrait, and a desktop with a mouse.
+    expect(isPhone(device(true, 1133, 744))).toBe(false);
+    expect(isPhone(device(true, 820, 1180))).toBe(false);
+    expect(isPhone(device(false, 393, 852))).toBe(false);
   });
 });

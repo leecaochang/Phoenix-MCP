@@ -19,6 +19,7 @@ import { pauseUpdatesTool, useLogSettingsTool } from "../shell/settings";
 import { ActionButton } from "../ui/ActionButton";
 import { InlineConfirm } from "../ui/InlineConfirm";
 import { ConfigTable, type Column } from "../ui/table/ConfigTable";
+import { shownCount, useRowLimit } from "../ui/table/rowLimit";
 import { useTableSettings } from "../ui/table/settings";
 
 /** The server's own order, newest first; any other sort covers only the loaded conversations. */
@@ -35,6 +36,7 @@ const NO_KEYS: AccessKeyRecord[] = [];
 export function ConversationsView({ accessKeys = NO_KEYS }: { accessKeys?: AccessKeyRecord[] }) {
   const accessKeyNames = useMemo(() => Object.fromEntries(accessKeys.map(key => [key.id, key.name])), [accessKeys]);
   const [entries, setEntries] = useState<ConversationSummary[]>([]);
+  const rowLimit = useRowLimit();
   const [total, setTotal] = useState(0);
   const [limit, setLimit] = useState(25);
   const [search, setSearch] = useState("");
@@ -183,6 +185,7 @@ export function ConversationsView({ accessKeys = NO_KEYS }: { accessKeys?: Acces
     <div className="conversation-list" aria-busy={loading} data-guide="window.conversationLog#list">
       <ConfigTable
         id="conversationLog"
+        maxRows={rowLimit.limit}
         label={t("conversations.title")}
         columns={columns}
         rows={entries}
@@ -197,9 +200,10 @@ export function ConversationsView({ accessKeys = NO_KEYS }: { accessKeys?: Acces
       />
     </div>
     <div className="phx-table-footer" data-guide="window.conversationLog#list">
-      <span className="conversation-secondary">{t("conversations.showing", { shown: localeNumber(entries.length), total: localeNumber(total) })}</span>
+      <span className="conversation-secondary">{t("conversations.showing", { shown: localeNumber(shownCount(entries.length, rowLimit.limit)), total: localeNumber(total) })}</span>
       {partialSort && <span className="conversation-secondary">{t("table.sortedLoaded")}</span>}
-      {entries.length < total && <ActionButton icon="loadMore" label={t("common.loadMore")} helpText={t("help.loadMore", { count: localeNumber(25) })} busy={loading} onClick={() => setLimit(n => n + 25)} />}
+      {(entries.length < total || rowLimit.hidden(entries.length)) && <ActionButton icon="loadMore" label={t("common.loadMore")} helpText={t("help.loadMore", { count: localeNumber(rowLimit.step ?? 25) })} busy={loading}
+        onClick={() => { if (!rowLimit.hidden(entries.length)) setLimit(n => n + 25); rowLimit.more(); }} />}
       {!onToolbar && <button className="btn btn-text" onClick={() => setConfirmClear(true)}>{t("conversations.clear")}</button>}
     </div>
   </div>;

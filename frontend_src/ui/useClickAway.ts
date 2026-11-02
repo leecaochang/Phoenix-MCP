@@ -9,6 +9,11 @@
  * that sits above other controls moves them up, and a click whose press already
  * moved the control away from the pointer lands on something else (user,
  * 2026-10-31, a provider row below an open account could not be chosen).
+ *
+ * A touch always waits for the click: a finger that goes down to scroll the
+ * page also starts with a press, and the box it was scrolling towards closed
+ * under it (user, 2026-11-02, Clear History on an iPhone). A scroll ends
+ * without a click, so it no longer counts as a click elsewhere.
  */
 
 import { useEffect, useRef, type RefObject } from "react";
@@ -29,7 +34,8 @@ export function useClickAway(ref: RefObject<HTMLElement | null>, onAway: () => v
     const el = ref.current;
     if (!active || !el) return;
     const doc = el.ownerDocument;
-    const down = (e: MouseEvent) => {
+    let touched = false;
+    const away = (e: MouseEvent) => {
       // The path crosses shadow roots, so a press inside the element counts as inside from the document too.
       const path = e.composedPath();
       if (path.includes(el) || (opener?.current && path.includes(opener.current))) return;
@@ -37,7 +43,24 @@ export function useClickAway(ref: RefObject<HTMLElement | null>, onAway: () => v
       if (target instanceof Element && onScrollbar(target, e)) return;
       latest.current();
     };
-    doc.addEventListener(on, down, true);
-    return () => doc.removeEventListener(on, down, true);
+    const down = (e: MouseEvent) => {
+      touched = (e as PointerEvent).pointerType === "touch";
+      if (!touched) away(e);
+    };
+    const click = (e: MouseEvent) => {
+      if (!touched) return;
+      touched = false;
+      away(e);
+    };
+    if (on === "click") {
+      doc.addEventListener("click", away, true);
+      return () => doc.removeEventListener("click", away, true);
+    }
+    doc.addEventListener("pointerdown", down, true);
+    doc.addEventListener("click", click, true);
+    return () => {
+      doc.removeEventListener("pointerdown", down, true);
+      doc.removeEventListener("click", click, true);
+    };
   }, [ref, active, opener, on]);
 }

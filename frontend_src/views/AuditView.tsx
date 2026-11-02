@@ -22,6 +22,7 @@ import { pauseUpdatesTool, useLogSettingsTool } from "../shell/settings";
 import { useWindowVisible } from "../shell/visibility";
 import { ActionButton } from "../ui/ActionButton";
 import { ConfigTable, type Column } from "../ui/table/ConfigTable";
+import { shownCount, useRowLimit } from "../ui/table/rowLimit";
 import { useTableSettings } from "../ui/table/settings";
 
 interface Props {
@@ -48,6 +49,7 @@ const SERVER_SORT = { column: "time", dir: "desc" } as const;
 
 export function AuditView({ accessKeys }: Props) {
   const [entries, setEntries] = useState<AuditEntry[]>([]);
+  const rowLimit = useRowLimit();
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [hasMore, setHasMore] = useState(false);
@@ -344,6 +346,7 @@ export function AuditView({ accessKeys }: Props) {
         <div className="log-group" data-guide="window.auditLog#list">
         <ConfigTable
           id="auditLog"
+          maxRows={rowLimit.limit}
           label={t("shell.tabAudit")}
           rowHelp="help.auditRow"
           columns={columns}
@@ -360,14 +363,14 @@ export function AuditView({ accessKeys }: Props) {
       )}
       {!loading && entries.length > 0 && (
         <div className="phx-table-footer" data-guide="window.auditLog#list">
-          <span className="conversation-secondary">{t("conversations.showing", { shown: localeNumber(entries.length), total: localeNumber(total) })}</span>
+          <span className="conversation-secondary">{t("conversations.showing", { shown: localeNumber(shownCount(entries.length, rowLimit.limit)), total: localeNumber(total) })}</span>
           {partialSort && <span className="conversation-secondary">{t("table.sortedLoaded")}</span>}
           {/* Not while a first page is loading: a later page fetched for the new
               filters would append to rows from the old ones. */}
-          {hasMore && (
+          {(hasMore || rowLimit.hidden(entries.length)) && (
             <ActionButton icon="loadMore" label={loadingMore ? t("common.loading") : t("common.loadMore")} busy={loadingMore}
-              helpText={t("help.loadMore", { count: localeNumber(PAGE_SIZE) })}
-              onClick={() => { void load(entries.length); }} />
+              helpText={t("help.loadMore", { count: localeNumber(rowLimit.step ?? PAGE_SIZE) })}
+              onClick={() => { if (!rowLimit.hidden(entries.length)) void load(entries.length); rowLimit.more(); }} />
           )}
         </div>
       )}

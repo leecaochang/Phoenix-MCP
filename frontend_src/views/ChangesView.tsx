@@ -22,6 +22,7 @@ import { InlineConfirm } from "../ui/InlineConfirm";
 import { withCardLocation, withLocaleSizes } from "../utils/dashboard_names";
 import { MenuButton, type MenuEntry } from "../ui/Menu";
 import { ConfigTable, type Column } from "../ui/table/ConfigTable";
+import { shownCount, useRowLimit } from "../ui/table/rowLimit";
 import { formatDateTime } from "../utils";
 import { matchesListSearch } from "../utils/list_search";
 
@@ -107,6 +108,7 @@ const NEWEST_FIRST = { column: "time", dir: "desc" } as const;
 
 export function ChangesListWindow() {
   const c = useChanges();
+  const rowLimit = useRowLimit();
   // Resetting the workspace clears what it had chosen, as it clears the arrangement.
   useWorkspaceReset(() => c?.select(null));
   // Choosing a change brings Comparison back if the user closed it, as Log Details comes back in Logs.
@@ -179,6 +181,7 @@ export function ChangesListWindow() {
         defaultSort={NEWEST_FIRST}
         columns={columns}
         rows={shown}
+        maxRows={rowLimit.limit}
         rowKey={(v) => v.id}
         selectedKey={c.selectedId}
         onSelect={(v, ordered) => { c.select(v.id, ordered.map((o) => o.id)); ensureOpen("comparison"); }}
@@ -189,9 +192,10 @@ export function ChangesListWindow() {
       </div>
       {!c.loading && c.feed.length > 0 && (
         <div className="phx-table-footer">
-          <span className="conversation-secondary">{t("conversations.showing", { shown: localeNumber(shown.length), total: localeNumber(c.total) })}</span>
-          {c.hasMore && (
-            <ActionButton icon="loadMore" label={c.loadingMore ? t("common.loading") : t("common.loadMore")} guide="window.changes#load-more" helpText={t("help.loadMore", { count: localeNumber(100) })} busy={c.loadingMore} onClick={c.loadMore} />
+          <span className="conversation-secondary">{t("conversations.showing", { shown: localeNumber(shownCount(shown.length, rowLimit.limit)), total: localeNumber(c.total) })}</span>
+          {(c.hasMore || rowLimit.hidden(shown.length)) && (
+            <ActionButton icon="loadMore" label={c.loadingMore ? t("common.loading") : t("common.loadMore")} guide="window.changes#load-more" helpText={t("help.loadMore", { count: localeNumber(rowLimit.step ?? 100) })} busy={c.loadingMore}
+              onClick={() => { if (!rowLimit.hidden(shown.length)) c.loadMore(); rowLimit.more(); }} />
           )}
         </div>
       )}

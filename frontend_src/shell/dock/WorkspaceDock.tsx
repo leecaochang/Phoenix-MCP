@@ -173,6 +173,11 @@ export function WorkspaceDock({ controller, components, renderWindow, watermark,
       const refitBands = new ResizeObserver(() => { for (const c of bandCanvases) c.refit(); });
       refitBands.observe(frame.current);
       out.push(() => refitMain.disconnect(), () => refitBands.disconnect());
+      if (floatEl) {
+        const fitFloats = new ResizeObserver(() => controller.fitFloats());
+        fitFloats.observe(floatEl);
+        out.push(() => fitFloats.disconnect());
+      }
     }
     // Windows that follow their content end their frames at it after every layout.
     if (controller.contentSized) {

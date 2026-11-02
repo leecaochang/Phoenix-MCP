@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { agentCliChat, api } from "../api";
 import { homeAssistantReachable, onConnectionChange, useHomeAssistantAway } from "../utils/connection";
@@ -1830,8 +1830,10 @@ export function AgentCliWindow({
   // refit whichever is showing as soon as the viewport changes. Also run once
   // on mount for a geometry that went stale while the window was unmounted.
   // The change-guards make in-bounds calls no-ops, so drags and resizes (which
-  // already clamp to the viewport) are never fought.
-  useEffect(() => {
+  // already clamp to the viewport) are never fought. It runs before the window is
+  // painted, so a window saved on a larger screen never shows past the edge of a
+  // smaller one, such as an iPad (user, 2026-11-02).
+  useLayoutEffect(() => {
     if (poppedOut) return;
     const refit = () => {
       const vw = window.innerWidth, vh = window.innerHeight, M = VIEWPORT_MARGIN;

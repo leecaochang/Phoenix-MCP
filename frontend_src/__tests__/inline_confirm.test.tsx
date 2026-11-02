@@ -2,7 +2,9 @@
  * Behaviour: every inline confirmation is a plain UI2 box (user, 2026-10-28):
  * a heading with no icon or coloured accent, the label unless a title is
  * given, and the explanation below it. A click anywhere else cancels it,
- * as Cancel does, unless the action is running.
+ * as Cancel does, unless the action is running. A finger that goes down to
+ * scroll is not a click elsewhere, and the box scrolls itself into view, so a
+ * box opened below an iPhone screen can be reached (user, 2026-11-02).
  */
 import { describe, it, expect, vi } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
@@ -70,5 +72,37 @@ describe("InlineConfirm", () => {
       expect(helpFor(screen.getByRole("button", { name }))).toBe("Covered entities fall back to the next profile.");
     }
     expect(helpFor(screen.getByRole("checkbox"))).toBe("Covered entities fall back to the next profile.");
+  });
+
+  it("waits for a tap rather than a touch, so scrolling to the box keeps it open", () => {
+    const outside = document.createElement("div");
+    document.body.appendChild(outside);
+    try {
+      const onCancel = vi.fn();
+      render(<InlineConfirm label="Clear" confirmLabel="Clear" cancelLabel="Cancel" onConfirm={vi.fn()} onCancel={onCancel} />);
+      // A scroll: the finger goes down and the browser cancels it, with no click.
+      fireEvent.pointerDown(outside, { pointerType: "touch" });
+      fireEvent.pointerCancel(outside, { pointerType: "touch" });
+      expect(onCancel).not.toHaveBeenCalled();
+      // A tap ends in a click, which closes the box.
+      fireEvent.pointerDown(outside, { pointerType: "touch" });
+      fireEvent.click(outside);
+      expect(onCancel).toHaveBeenCalledOnce();
+    } finally {
+      outside.remove();
+    }
+  });
+
+  it("scrolls the whole box into view when it opens", () => {
+    const scrolled = vi.fn();
+    const original = Element.prototype.scrollIntoView;
+    Element.prototype.scrollIntoView = scrolled;
+    try {
+      render(<InlineConfirm label="Clear" confirmLabel="Clear" cancelLabel="Cancel" onConfirm={vi.fn()} onCancel={vi.fn()} />);
+      expect(scrolled).toHaveBeenCalledWith({ block: "nearest" });
+      expect(scrolled.mock.contexts[0]).toBe(screen.getByRole("group", { name: "Clear" }));
+    } finally {
+      Element.prototype.scrollIntoView = original;
+    }
   });
 });

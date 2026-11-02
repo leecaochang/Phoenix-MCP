@@ -3,12 +3,15 @@
  * Next in Log Details, is scrolled to the middle of the table; a row chosen
  * with the pointer only comes into view, so the list does not jump under the
  * pointer. Previous and Next report the step so Log Details can be resized.
+ * In a phone window the table neither centres nor scrolls to the chosen row,
+ * and shows its rows ten at a time (user, 2026-11-02).
  */
 import { describe, expect, it, vi } from "vitest";
 import { fireEvent, render } from "@testing-library/react";
 import { useState } from "react";
 import { ConfigTable } from "../ui/table/ConfigTable";
 import { LogSelection } from "../shell/logDetails";
+import { PHONE_ROWS, RowLimitContext } from "../ui/table/rowLimit";
 
 const ROWS = Array.from({ length: 40 }, (_, i) => ({ id: `r${i}` }));
 const ROW_H = 30;
@@ -70,6 +73,26 @@ describe("moving through a log", () => {
     fireEvent.keyDown(row(container, "r10"), { key: "ArrowDown" });
     // r11's middle (375) lines up with the middle of the window (150); the header scrolled away with the rows.
     expect(body.scrollTop).toBe(225);
+  });
+
+  it("leaves a phone window's scroll alone when a row is chosen (user, 2026-11-02)", () => {
+    const { container } = render(<RowLimitContext.Provider value={PHONE_ROWS}><Table /></RowLimitContext.Provider>);
+    const wrap = layout(container);
+    fireEvent.keyDown(row(container, "r5"), { key: "ArrowDown" });
+    expect(wrap.scrollTop).toBe(0);
+    expect(row(container, "r6").scrollIntoView).not.toHaveBeenCalled();
+  });
+
+  it("shows at most maxRows rows, after sorting, and steps only among them", () => {
+    const chosen: string[][] = [];
+    const { container } = render(<ConfigTable id="t2" label="Log" rows={ROWS} rowKey={(r) => r.id} maxRows={PHONE_ROWS}
+      onSelect={(_, ordered) => chosen.push(ordered.map((r) => r.id))} columns={[{ id: "id", label: "Id", cell: (r) => r.id, sortValue: (r) => -Number(r.id.slice(1)) }]}
+      defaultSort={{ column: "id", dir: "asc" }} />);
+    const keys = [...container.querySelectorAll<HTMLElement>("tbody tr[data-row]")].map((tr) => tr.dataset.row);
+    // Sorted first (r39 leads), then cut to ten.
+    expect(keys).toEqual(Array.from({ length: 10 }, (_, i) => `r${39 - i}`));
+    fireEvent.click(row(container, "r39"));
+    expect(chosen[0]).toHaveLength(10);
   });
 
   it("marks the table as keyboard-driven until the mouse moves, so a row under a still pointer is not hovered", () => {

@@ -3,7 +3,7 @@
  * instead of a dialog over the panel. It says what the action will do and can
  * require an acknowledgement before Confirm becomes available. Focus moves
  * into it when it opens, so a confirmation started from a menu is reached
- * without hunting for it; Escape, Cancel or a click anywhere else closes it
+ * without hunting for it, and the whole box scrolls into view; Escape, Cancel or a click anywhere else closes it
  * unless the action is running. It is a plain UI2 box (user, 2026-10-28): the window's own surface
  * and a hairline with a heading, no coloured accents.
  */
@@ -48,7 +48,10 @@ export function InlineConfirm({
   const root = useRef<HTMLDivElement | null>(null);
   useClickAway(root, onCancel, !busy, opener);
   useEffect(() => {
-    root.current?.querySelector<HTMLElement>("input, button:not([disabled])")?.focus();
+    // Focus alone does not bring the box into view on an iPhone, and a box opened from a
+    // toolbar can start below the screen (user, 2026-11-02): show the whole box first.
+    root.current?.scrollIntoView?.({ block: "nearest" });
+    root.current?.querySelector<HTMLElement>("input, button:not([disabled])")?.focus({ preventScroll: true });
   }, []);
   return (
     <div ref={root} className={`phx-inline-confirm is-${tone}`} role="group" aria-label={label} data-help-text={help}

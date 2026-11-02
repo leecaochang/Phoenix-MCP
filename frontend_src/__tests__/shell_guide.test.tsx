@@ -4,7 +4,8 @@
  * labels, the right topic is chosen, and the window follows links and the
  * focused window. It is one window over every workspace, saved once, with
  * the window controls every window has except Dock. During the setup wizard
- * it shows each step's topic beside the step until the user moves it.
+ * it shows each step's topic beside the step until the user moves it. A size
+ * saved on a larger screen shrinks to fit a smaller one, such as an iPad.
  */
 
 import { describe, it, expect, vi, afterEach } from "vitest";
@@ -12,7 +13,7 @@ import { act, fireEvent, render, renderHook, screen, waitFor, within } from "@te
 import { readdirSync, readFileSync } from "fs";
 import { resolve } from "path";
 import { GUIDE_FORMAT, compileGuide, parseTopic, type GuideBundle } from "../guide/compile";
-import { GUIDE_LANGUAGES, GuideWindow, besideRect, clearGuideCache, findTopic, guideLanguages, renderTopic, topicById, useWizardGuide } from "../shell/guide";
+import { GUIDE_LANGUAGES, GuideWindow, besideRect, fitGuideRect, clearGuideCache, findTopic, guideLanguages, renderTopic, topicById, useWizardGuide } from "../shell/guide";
 import { WIZARD_STEPS } from "../views/OnboardingWizard";
 import { GUIDE_CLOSED, WORKSPACE_IDS, readGuide } from "../shell/storage";
 import { WorkspaceController } from "../shell/dock/controller";
@@ -168,6 +169,16 @@ describe("the Guide window", () => {
     expect(guide.style.width).toBe("360px");
     expect(within(guide).getByRole("button", { name: "Close" })).toBeInTheDocument();
     frame.remove();
+  });
+});
+
+describe("fitting the Guide to the screen", () => {
+  it("shrinks a size saved on a larger screen and keeps the whole window on screen", () => {
+    // Saved on a 1920 x 1200 desktop, opened on an iPad in portrait.
+    expect(fitGuideRect({ x: 1400, y: 100, w: 500, h: 1050 }, 820, 1100)).toEqual({ x: 312, y: 42, w: 500, h: 1050 });
+    expect(fitGuideRect({ x: 1400, y: 100, w: 500, h: 1050 }, 1180, 780)).toEqual({ x: 672, y: 8, w: 500, h: 764 });
+    // A window that already fits is left alone.
+    expect(fitGuideRect({ x: 40, y: 60, w: 400, h: 500 }, 1180, 780)).toEqual({ x: 40, y: 60, w: 400, h: 500 });
   });
 });
 

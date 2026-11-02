@@ -69,12 +69,28 @@ function allSections(record: ShellRecord): Section[] {
   ];
 }
 
+/** A screen whose shorter side is below this, with touch only, is a phone. */
+const PHONE_SHORT_SIDE = 600;
+
+/**
+ * A phone keeps the phone stack in both orientations, so turning it never swaps
+ * the phone arrangement for the desktop one (user, 2026-11-02). A phone is a
+ * touch-only screen with a phone-sized shorter side; a tablet is not, and a
+ * narrowed tablet window gets the stack by width like any narrow window.
+ */
+export function isPhone(win: Window = window): boolean {
+  const touchOnly = typeof win.matchMedia === "function" && win.matchMedia("(pointer: coarse) and (hover: none)").matches;
+  const shortSide = Math.min(win.screen?.width ?? Infinity, win.screen?.height ?? Infinity);
+  return touchOnly && shortSide > 0 && shortSide < PHONE_SHORT_SIDE;
+}
+
 function useEnvironment(root: React.RefObject<HTMLElement | null>): Env {
-  const [env, setEnv] = useState<Env>(() => (window.innerWidth < (PHONE_BELOW + DESKTOP_ABOVE) / 2 ? "mobile" : "desktop"));
+  const [env, setEnv] = useState<Env>(() => (isPhone() || window.innerWidth < (PHONE_BELOW + DESKTOP_ABOVE) / 2 ? "mobile" : "desktop"));
   useLayoutEffect(() => {
     const el = root.current;
     if (!el) return;
     const decide = (width: number) => setEnv((current) => {
+      if (isPhone()) return "mobile";
       if (width <= 0) return current;
       if (width < PHONE_BELOW) return "mobile";
       if (width > DESKTOP_ABOVE) return "desktop";

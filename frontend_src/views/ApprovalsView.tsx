@@ -19,6 +19,7 @@ import { ActionButton } from "../ui/ActionButton";
 import { useClickAway } from "../ui/useClickAway";
 import { Icon, type IconName } from "../ui/Icon";
 import { ConfigTable, type Column } from "../ui/table/ConfigTable";
+import { useRowLimit } from "../ui/table/rowLimit";
 import { approvalStatusLabel, formatDateTime, friendlyToolName } from "../utils";
 import { approvalListTitle, approvalOutcome, diffSummary, friendlyReason } from "../utils/approval_text";
 import { localizedApprovalReason } from "../utils/approval_reason";
@@ -158,6 +159,7 @@ function listColumns(a: ApprovalsState): Column<ApprovalRecord>[] {
 
 export function ApprovalsListWindow() {
   const a = useApprovals();
+  const rowLimit = useRowLimit();
   // Resetting the workspace clears what it had chosen, as it clears the arrangement.
   useWorkspaceReset(() => a?.select(null));
   const groups: ToolGroup[] = a ? [{
@@ -201,6 +203,7 @@ export function ApprovalsListWindow() {
         defaultSort={{ column: "requested", dir: "desc" }}
         columns={listColumns(a)}
         rows={a.shown}
+        maxRows={rowLimit.limit}
         rowKey={(r) => r.id}
         selectedKey={a.current?.id ?? null}
         onSelect={(r, ordered) => a.select(r, ordered.map((o) => o.id))}
@@ -220,9 +223,10 @@ export function ApprovalsListWindow() {
         } : undefined}
       />
       </div>
-      {a.hasMore && (
+      {(a.hasMore || rowLimit.hidden(a.shown.length)) && (
         <div className="phx-table-footer">
-          <ActionButton icon="loadMore" label={t("common.loadMore")} guide="window.approvals#load-more" helpText={t("help.loadMore", { count: localeNumber(50) })} busy={a.loadingMore} onClick={a.loadMore} />
+          <ActionButton icon="loadMore" label={t("common.loadMore")} guide="window.approvals#load-more" helpText={t("help.loadMore", { count: localeNumber(rowLimit.step ?? 50) })} busy={a.loadingMore}
+            onClick={() => { if (!rowLimit.hidden(a.shown.length)) a.loadMore(); rowLimit.more(); }} />
         </div>
       )}
     </div>

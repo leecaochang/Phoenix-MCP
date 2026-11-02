@@ -352,13 +352,16 @@ export class WorkspaceController {
   private followContent(): void {
     const api = this.api;
     const canvas = this.canvas;
-    if (!api || !canvas || !this.shown || api.hasMaximizedGroup() || canvas.host.classList.contains("phx-resizing")) return;
+    if (!api || !canvas || !this.shown || canvas.host.classList.contains("phx-resizing")) return;
     if (!this.natural.size) return;
+    // A floating window has no place in the grid: it takes its content's height directly,
+    // also over a maximized window, as Needs Attention does over the key list that Access
+    // Keys keeps maximized until a key is chosen (user, 2026-11-02).
+    for (const [id, h] of this.natural) if (this.followsContent(id) && this.hostOf(id) === "float") this.sizeFloating(id, h);
+    if (api.hasMaximizedGroup()) return;
     const targets: Heights = {};
     for (const [id, h] of this.natural) {
-      if (!this.followsContent(id)) continue;
-      // A floating window has no place in the grid: it takes its content's height directly.
-      if (this.hostOf(id) === "float") { this.sizeFloating(id, h); continue; }
+      if (!this.followsContent(id) || this.hostOf(id) === "float") continue;
       const group = api.getPanel(id)?.group;
       if (!group || this.folds.isFolded(id) || this.hiddenIds.has(id)) continue;
       if (this.heldHeights.has(id)) {
@@ -408,7 +411,7 @@ export class WorkspaceController {
    * Draw a floating window at the height its content needs, up to its share of
    * the workspace (a third unless the workspace says otherwise) and never past
    * its visible height, so a notice with two lines in it is not a half-empty
-   * box (user, 2026-10-30). A window in the lower half keeps its bottom edge,
+   * box (user, 2026-10-30). Needs Attention takes all the height it needs. A window in the lower half keeps its bottom edge,
    * so one opened in the bottom corner grows upward and shrinks back down;
    * either way it stays inside the workspace.
    */
@@ -416,7 +419,10 @@ export class WorkspaceController {
     const group = this.apiOf("float")?.getPanel(id)?.group;
     if (!group) return;
     const visible = this.visibleHeight();
-    const cap = Math.round(Math.min(visible * (this.extras.contentMax?.[id] ?? 1 / 3), visible - 2 * FLOAT_MARGIN));
+    // Needs Attention is never held to a share, floating or docked, so what it holds is
+    // always shown (user, 2026-11-02, it scrolled at the bottom of an iPad screen).
+    const share = this.transient.has(id) ? 1 : this.extras.contentMax?.[id] ?? 1 / 3;
+    const cap = Math.round(Math.min(visible * share, visible - 2 * FLOAT_MARGIN));
     const target = Math.max(MIN_WINDOW_HEIGHT, cap > MIN_WINDOW_HEIGHT ? Math.min(Math.round(needed), cap) : Math.round(needed));
     if (Math.abs(group.height - target) < 8) return;
     // Dockview resizes a floating window from its top edge and has no call to move one,
@@ -1549,6 +1555,10 @@ export class WorkspaceController {
       this.floatBoxes.set(id, { left: Math.max(0, room - width - FLOAT_BOUNDS.left), top: Math.max(0, this.visibleHeight() - height - FLOAT_MARGIN), width, height });
     }
     this.toggleFloating(id, width, height);
+    // The window opens at a share of the workspace; content that has not changed since
+    // reports no new height, so take the height it is known to need (user, 2026-11-02,
+    // Needs Attention shrank again after Reset Workspace).
+    this.requestFollow();
   }
 
   /** Open a closed window as a floating window over the workspace; close it again when it is open. */
@@ -1610,6 +1620,28 @@ export class WorkspaceController {
     const height = frame.classList.contains("phx-float-folded") ? parseFloat(frame.style.height) : r.height;
     const box = { left: Math.round(r.left - l.left), top: Math.round(r.top - l.top), width: Math.round(r.width), height: Math.round(height) };
     return validBox(box) ? box : null;
+  }
+
+  /**
+   * Keep every floating window inside its layer: one larger than the layer shrinks to
+   * fit and Dockview then moves it back on screen. A layout saved on a larger screen
+   * opens on a smaller one, such as an iPad, with nothing past its edges (user,
+   * 2026-11-02). A hidden layer measures 0 by 0 and is left alone; a folded window
+   * keeps its unfolded height.
+   */
+  fitFloats(): void {
+    for (const group of this.apiOf("float")?.groups ?? []) {
+      const frame = group.element.closest<HTMLElement>(".dv-resize-container");
+      const layer = frame?.offsetParent as HTMLElement | null | undefined;
+      const box = this.floatBox(group);
+      if (!frame || !layer || !box || layer.clientWidth <= 0 || layer.clientHeight <= 0) continue;
+      const folded = frame.classList.contains("phx-float-folded");
+      const width = Math.min(box.width, Math.max(FLOAT_BOUNDS.minWidth, layer.clientWidth));
+      const height = folded ? box.height : Math.min(box.height, Math.max(MIN_WINDOW_HEIGHT, layer.clientHeight));
+      const outside = box.left < 0 || box.top < 0 || box.left + width > layer.clientWidth || box.top + (folded ? frame.offsetHeight : height) > layer.clientHeight;
+      if (width === box.width && height === box.height && !outside) continue;
+      group.api.setSize(folded ? { width } : { width, height });
+    }
   }
 
   /** Note where a floating window is, before it leaves the floating layer. */

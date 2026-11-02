@@ -496,6 +496,17 @@ const MIN_W = 320;
 const MIN_H = 280;
 
 /**
+ * The Guide's place on this screen: a size saved on a larger screen shrinks to
+ * fit a smaller one, such as an iPad, and the whole window stays on screen
+ * (user, 2026-11-02). The fit is not saved, so the larger screen keeps its size.
+ */
+export function fitGuideRect(r: GuideRect, vw: number, vh: number): GuideRect {
+  const w = Math.min(r.w, Math.max(MIN_W, vw - 2 * MARGIN));
+  const h = Math.min(r.h, Math.max(MIN_H, vh - 2 * MARGIN));
+  return { ...clampPosToViewport({ x: r.x, y: r.y }, { w, h }, vw, vh), w, h };
+}
+
+/**
  * The floating Guide on a desktop: one window over every workspace. It has
  * the window controls every window has (user, 2026-11-01): Fold, the window
  * menu with keyboard Move and Resize, Maximize and Close, but no Dock, since
@@ -525,10 +536,12 @@ export function GuideWindow({ workspace, controller, language, rect, onRect, onC
   useSyncExternalStore(controller?.subscribe ?? (() => () => {}), controller?.getVersion ?? (() => 0));
   const active = controller?.activeWindow ?? null;
   const guide = useGuideTopic(workspace, active && opensItself.has(active) ? null : active, language, topicId);
-  const [live, setLive] = useState<GuideRect>(() => rect ?? defaultGuideRect(window.innerWidth, window.innerHeight));
+  const placed = () => fitGuideRect(rect ?? defaultGuideRect(window.innerWidth, window.innerHeight), window.innerWidth, window.innerHeight);
+  const [live, setLive] = useState<GuideRect>(placed);
   // A saved place applies unless the Guide is pinned beside the wizard; after the wizard it returns there.
   const following = !!follow;
-  useEffect(() => { if (!following) setLive(rect ?? defaultGuideRect(window.innerWidth, window.innerHeight)); }, [rect, following]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { if (!following) setLive(placed()); }, [rect, following]);
   const liveRef = useRef(live);
   liveRef.current = live;
   const frame = useRef<HTMLElement | null>(null);
@@ -554,8 +567,8 @@ export function GuideWindow({ workspace, controller, language, rect, onRect, onC
   useLayoutEffect(() => {
     const fit = () => {
       const r = liveRef.current;
-      const p = clampPosToViewport({ x: r.x, y: r.y }, { w: r.w, h: r.h }, window.innerWidth, window.innerHeight);
-      if (p.x !== r.x || p.y !== r.y) setLive({ ...r, ...p });
+      const next = fitGuideRect(r, window.innerWidth, window.innerHeight);
+      if (next.x !== r.x || next.y !== r.y || next.w !== r.w || next.h !== r.h) setLive(next);
     };
     fit();
     window.addEventListener("resize", fit);

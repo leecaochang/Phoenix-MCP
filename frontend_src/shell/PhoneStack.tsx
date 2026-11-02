@@ -5,7 +5,7 @@
  * phone arrangement (see PhoneLayout).
  */
 
-import { useContext, useId, useMemo, type ReactNode } from "react";
+import { useContext, useEffect, useId, useMemo, useRef, type MouseEvent, type ReactNode } from "react";
 import { ErrorBoundary } from "../components/ErrorBoundary";
 import { t } from "../i18n";
 import { DisplayModeContext } from "../ui/ActionButton";
@@ -18,9 +18,81 @@ import type { GlobalSettings } from "../types";
 import { ARCHIVED_WINDOW, ATTENTION_WINDOW, SHARED_WINDOWS, WINDOW_CONTENT, WORKSPACES, canAddToMy, windowAvailable, windowTitle, type WindowId } from "./workspaces";
 import type { MesaFindings } from "./mesa";
 import { movedOrder, phoneOrder, withMember, type PhoneLayout } from "./phoneLayout";
+import { PHONE_ROWS, RowLimitContext } from "../ui/table/rowLimit";
 
 /** Windows a phone never stacks: their content shows inside the window that opens them. */
 const INLINE_ON_PHONES: readonly string[] = ["chatRoutingStatistics", "voiceRoutingStatistics"];
+
+/** Previous and Next in a details window (Log Details, Comparison, Review), by their Help keys. */
+const STEP_BUTTONS = '[data-help="help.previousRecord"], [data-help="help.nextRecord"]';
+/** Shown while a record loads; the window keeps its height until none is left. */
+const LOADING = "[data-loading], .spinner, .loading-wrap";
+/** The content must stay this long without changing size before the held height is let go. */
+const SETTLE_MS = 300;
+const HOLD_MAX_MS = 4000;
+
+/**
+ * Keep a window's height while it loads (user, 2026-11-02). A loading
+ * placeholder is short, and on a phone the page is the scroller, so the
+ * browser pulled the page up as the window shrank (Safari keeps no scroll
+ * anchor) and the reader lost their place: stepping with Previous or Next,
+ * choosing a row, refreshing. The window holds the height it last had with
+ * nothing loading, from the moment a placeholder appears (a mutation, so
+ * before the browser lays the shorter page out) or Previous or Next is
+ * pressed, until nothing is loading and its size has settled.
+ */
+function useLoadHold(): { body: React.RefObject<HTMLDivElement | null>; onClickCapture: (e: MouseEvent<HTMLDivElement>) => void } {
+  const body = useRef<HTMLDivElement | null>(null);
+  const hold = useRef<(() => void) | null>(null);
+  useEffect(() => {
+    const el = body.current;
+    if (!el) return undefined;
+    let settled = el.hidden ? 0 : el.offsetHeight;
+    let quiet = 0;
+    let cap = 0;
+    const letGo = () => {
+      window.clearTimeout(quiet);
+      window.clearTimeout(cap);
+      el.style.minHeight = "";
+      settled = el.offsetHeight;
+    };
+    const holding = () => el.style.minHeight !== "";
+    const settle = () => {
+      window.clearTimeout(quiet);
+      quiet = window.setTimeout(() => (el.querySelector(LOADING) ? settle() : letGo()), SETTLE_MS);
+    };
+    const start = () => {
+      if (!holding() && settled > 0 && !el.hidden) {
+        el.style.minHeight = `${settled}px`;
+        cap = window.setTimeout(letGo, HOLD_MAX_MS);
+      }
+      settle();
+    };
+    hold.current = start;
+    const mutations = new MutationObserver(() => {
+      if (el.querySelector(LOADING)) start();
+    });
+    mutations.observe(el, { subtree: true, childList: true, attributes: true, attributeFilter: ["data-loading", "class"] });
+    const sizes = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(() => {
+      if (holding()) settle();
+      else if (!el.hidden && !el.querySelector(LOADING)) settled = el.offsetHeight;
+    });
+    sizes?.observe(el);
+    return () => {
+      mutations.disconnect();
+      sizes?.disconnect();
+      window.clearTimeout(quiet);
+      window.clearTimeout(cap);
+      el.style.minHeight = "";
+      hold.current = null;
+    };
+  }, []);
+  // Previous and Next may swap the record without a placeholder at first: hold from the press.
+  const onClickCapture = (e: MouseEvent<HTMLDivElement>) => {
+    if ((e.target as HTMLElement).closest(STEP_BUTTONS)) hold.current?.();
+  };
+  return { body, onClickCapture };
+}
 
 /** The phone arrangement a workspace starts from: folded and closed as its definition says. */
 export function phoneDefaults(workspace: WorkspaceId): { folded: string[]; closed: string[] } {
@@ -50,6 +122,7 @@ function PhoneWindow({ id, workspace, folded, labels, maximized, menu, onFold, o
 }) {
   const place = useMemo(() => ({ workspace, window: id }), [workspace, id]);
   const mode = useContext(DisplayModeContext);
+  const hold = useLoadHold();
   const titleId = useId();
   const Content = WINDOW_CONTENT[id];
   return (
@@ -78,9 +151,12 @@ function PhoneWindow({ id, workspace, folded, labels, maximized, menu, onFold, o
       <WindowPlaceContext.Provider value={place}>
       <WindowVisibleContext.Provider value={!folded}>
       <DisplayModeContext.Provider value={labels ? "icon-text" : mode}>
-        <div className="phx-phone-body" data-phx-window={id} data-labels={labels ? "" : undefined} hidden={folded}>
+      <RowLimitContext.Provider value={PHONE_ROWS}>
+        <div ref={hold.body} className="phx-phone-body" data-phx-window={id} data-labels={labels ? "" : undefined} hidden={folded}
+          onClickCapture={hold.onClickCapture}>
           <ErrorBoundary><Content /></ErrorBoundary>
         </div>
+      </RowLimitContext.Provider>
       </DisplayModeContext.Provider>
       </WindowVisibleContext.Provider>
       </WindowPlaceContext.Provider>

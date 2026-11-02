@@ -9,11 +9,12 @@
  * on a row ticks it, and ticking never changes the chosen row.
  */
 
-import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
+import { Fragment, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import { compareStrings, t } from "../../i18n";
 import { Icon } from "../Icon";
 import { MenuButton, useContextMenu, type MenuEntry } from "../Menu";
 import { MIN_COLUMN_WIDTH, useTableSettings, type SortState, type TableSettings } from "./settings";
+import { RowLimitContext } from "./rowLimit";
 
 export interface Column<Row> {
   id: string;
@@ -89,7 +90,7 @@ function clean(settings: TableSettings): TableSettings {
   return out;
 }
 
-export function ConfigTable<Row>({ id, label, columns, rows, rowKey, defaultSort, selectedKey, onSelect, onOrder, rowLabel, rowClass, rowHelp, empty, selection, detail, fitColumns = true }: {
+export function ConfigTable<Row>({ id, label, columns, rows, rowKey, defaultSort, selectedKey, onSelect, onOrder, rowLabel, rowClass, rowHelp, empty, selection, detail, fitColumns = true, maxRows = null }: {
   /** Settings are kept under this id. */
   id: string;
   /** Accessible name of the table. */
@@ -120,6 +121,8 @@ export function ConfigTable<Row>({ id, label, columns, rows, rowKey, defaultSort
    * (user, 2026-10-27).
    */
   fitColumns?: boolean;
+  /** Show at most this many rows, after sorting (a phone list, see rowLimit.ts); null shows all. */
+  maxRows?: number | null;
 }) {
   const [settings, saveSettings] = useTableSettings(id);
   const showMenu = useContextMenu();
@@ -141,7 +144,7 @@ export function ConfigTable<Row>({ id, label, columns, rows, rowKey, defaultSort
   const widthOf = (c: Column<Row>) => (liveWidth?.id === c.id ? liveWidth.width : settings.widths?.[c.id] ?? (fitColumns ? fitted[c.id] : undefined) ?? c.width ?? DEFAULT_WIDTH);
   const total = visible.reduce((sum, c) => sum + widthOf(c), 0) + (selection ? PICK_WIDTH : 0);
 
-  const sorted = useMemo(() => {
+  const ordered = useMemo(() => {
     const col = sort ? byId.get(sort.column) : undefined;
     if (!sort || !col?.sortValue) return rows;
     const dir = sort.dir === "asc" ? 1 : -1;
@@ -154,6 +157,8 @@ export function ConfigTable<Row>({ id, label, columns, rows, rowKey, defaultSort
       })
       .map((x) => x.row);
   }, [rows, sort, byId]);
+  // The rows on screen: choosing, stepping and the keys move only among these.
+  const sorted = useMemo(() => (maxRows === null ? ordered : ordered.slice(0, maxRows)), [ordered, maxRows]);
   const onOrderRef = useRef(onOrder);
   onOrderRef.current = onOrder;
   useEffect(() => { onOrderRef.current?.(sorted); }, [sorted]);
@@ -285,6 +290,9 @@ export function ConfigTable<Row>({ id, label, columns, rows, rowKey, defaultSort
   // middle of a table that scrolls, until the list reaches its top or bottom (user, 2026-10-26).
   // A row chosen with the pointer is already where the user is looking, so it only comes into view.
   const pointerChoice = useRef(false);
+  // On a phone the stack is the page: following the chosen row would pull the reader away from
+  // the window they are stepping from (Log Details), so the table stays where it is (user, 2026-11-02).
+  const onPhone = useContext(RowLimitContext) !== null;
   /** The row kept in the middle of the table, if any. */
   const centred = useRef<string | null>(null);
   // Where the mouse last was: the browser reports a "move" when rows scroll under a still pointer.
@@ -315,7 +323,7 @@ export function ConfigTable<Row>({ id, label, columns, rows, rowKey, defaultSort
     scroller.scrollTop += r.top + r.height / 2 - middle;
   };
   useEffect(() => {
-    if (!selectedKey) return;
+    if (!selectedKey || onPhone) return;
     const tr = [...(body.current?.querySelectorAll<HTMLElement>("tr[data-row]") ?? [])].find((r) => r.dataset.row === selectedKey);
     const scroller = rowScroller();
     const byPointer = pointerChoice.current;
