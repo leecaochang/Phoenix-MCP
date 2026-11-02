@@ -23,6 +23,8 @@ Otherwise the nearest R or W decides. An entity's own setting beats its device's
 
 When someone speaks to Assist or the Voice Agent, Phoenix also limits the result to what that Home Assistant user may see and control.
 
+Related: [Capabilities for household speakers](guide:topic.tools#household)
+
 ## Disabled entities {#registry-only}
 
 An entity that's disabled, or has no current state, is visible only through a grant on its device or domain.

@@ -20,7 +20,7 @@ Related: [{{label:agentchat.title}}](guide:window.agentChat), [Connecting Extern
 3. **MESA**: how careful to be with each device, whatever the key allows: let agents act, ask you first, or keep them off it.
 4. **Approvals**: an action set to Confirm waits until you approve it.
 
-Related: [{{label:accessKeys.cardCapabilities}}](guide:window.capabilities), [How a permission is decided](guide:topic.permissionResolution), [How MESA Decides](guide:topic.mesaRules), [How an approval works](guide:topic.approvalLifecycle)
+Related: [What Agents Can Do](guide:topic.tools), [{{label:accessKeys.cardCapabilities}}](guide:window.capabilities), [How a permission is decided](guide:topic.permissionResolution), [How MESA Decides](guide:topic.mesaRules), [How an approval works](guide:topic.approvalLifecycle)
 
 ## Why not a long-lived access token {#token}
 
