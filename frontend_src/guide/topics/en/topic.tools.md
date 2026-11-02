@@ -142,7 +142,7 @@ Related: [How MESA decides](guide:topic.mesaRules)
 - Configuration read covers Home Assistant's basic setup, the Energy setup, solar forecasts and blueprints.
 - Manage Energy dashboard changes one part of the Energy setup.
 - Template render renders templates in a separate, limited process. It works on a copy of the states the key can read, for up to 5 seconds.
-- System log read covers warnings and errors, the logbook and notifications.
+- System log read covers warnings and errors, the logbook and notifications. The fault log and captured debug records also need Diagnostics.
 - Integration log levels changes how much an integration logs, such as turning on debug logging. A change can end after 5 to 120 minutes, last until the next restart, or stay until cleared.
 
 Template functions that need Home Assistant itself, such as area or device lookups, return nothing.

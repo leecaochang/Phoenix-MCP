@@ -49,7 +49,7 @@ Reads automation traces. Pass-through allows it.
 
 ### {{label:caps.cap_diagnostics.label}} {#diagnostics}
 
-Reads system health, repairs, configuration checks, radio networks and the ESPHome overview, and validates automations and scripts. Pass-through allows it.
+Reads system health, repairs, configuration checks, radio networks and the ESPHome overview, and validates automations and scripts. With {{label:caps.cap_log_read.label}}, it also reads the fault log, captured debug records and Phoenix's own diagnostics. Pass-through allows it.
 
 ### {{label:caps.cap_filesystem.label}} {#filesystem}
 

@@ -38,3 +38,5 @@ Restoring a helper usually replaces it whole, so fields added since are removed.
 ## Safety copies {#recovery}
 
 Before some risky writes, Phoenix also keeps a safety copy, separate from Changes. If a write may not have finished, Phoenix asks in Approvals whether to put the copy back. Safety copies survive deleting core data.
+
+Phoenix checks unfinished writes every 30 seconds and at startup. It keeps up to 256 safety copies, each up to 1 MiB. Resolved copies are kept for 30 days, and at most 20 per item.
