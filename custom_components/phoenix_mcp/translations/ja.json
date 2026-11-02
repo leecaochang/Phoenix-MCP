@@ -41,11 +41,27 @@
   "entity": {
     "sensor": {
       "status": {
+        "name": "ステータス",
         "state": {
           "active": "有効",
           "expired": "期限切れ",
           "revoked": "取り消し済み"
         }
+      },
+      "request_count": {
+        "name": "リクエスト数"
+      },
+      "denied_count": {
+        "name": "拒否数"
+      },
+      "rate_limit_hits": {
+        "name": "レート制限到達回数"
+      },
+      "last_access": {
+        "name": "最終アクセス"
+      },
+      "expires_in": {
+        "name": "有効期限まで"
       }
     }
   }

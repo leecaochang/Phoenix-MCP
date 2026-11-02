@@ -212,10 +212,10 @@ def test_catalog_payload_metrics_cover_representative_profiles_and_provider_wire
             "openai_bytes": 60231,
         },
         "write_capable": {
-            "tool_count": 102,
-            "canonical_bytes": 128008,
-            "claude_bytes": 116752,
-            "openai_bytes": 119710,
+            "tool_count": 100,
+            "canonical_bytes": 125774,
+            "claude_bytes": 114848,
+            "openai_bytes": 117748,
         },
         "announce_all": {
             "tool_count": 168,
@@ -682,3 +682,69 @@ def test_set_questions_are_steered_to_one_summary_call():
     assert "select may name them by search_entities filters" in history["description"]
     assert set(history["inputSchema"]["properties"]["select"]["properties"]) == {
         "query", "domain", "device_class", "integration", "radio", "power", "area", "include_diagnostic"}
+
+
+def _announcement_key(*, tree: PermissionTree | None = None, pass_through: bool = False, **caps) -> AccessKeyRecord:
+    """An access key with only the given capabilities and permission tree."""
+    return AccessKeyRecord(
+        id="t1", name="t", access_key_hash="x", created_at=utcnow(), created_by="u",
+        permissions=tree or PermissionTree(), pass_through=pass_through, **caps,
+    )
+
+
+def _announced(name: str, access_key: AccessKeyRecord) -> bool:
+    """tools/list's decision for one tool, with write scope computed as tools/list computes it."""
+    from custom_components.phoenix_mcp.helpers import access_key_has_write_scope
+
+    return mcp_view._tool_is_announced(_by_name()[name], access_key, access_key_has_write_scope(access_key), None)
+
+
+async def _summary_tools(access_key: AccessKeyRecord) -> dict:
+    """The tools section get_capability_summary returns for this access key."""
+    import json
+
+    content, outcome, _ = await mcp_view._tool_get_capability_summary({}, access_key, None, SimpleNamespace(mesa=None))
+    assert outcome == "allowed"
+    return json.loads(content["content"][0]["text"])["tools"]
+
+
+async def test_firmware_install_is_announced_only_with_both_esphome_capabilities():
+    """Installing needs the flash and the authoring capability; either one denied hides the tool."""
+    name = "install_esphome_firmware"
+    both = _announcement_key(cap_esphome_flash="allow", cap_esphome_yaml="allow")
+    assert _announced(name, both)
+    assert name in (await _summary_tools(both))["usable"]
+    for denied in ("cap_esphome_flash", "cap_esphome_yaml"):
+        access_key = _announcement_key(**{"cap_esphome_flash": "allow", "cap_esphome_yaml": "allow", denied: "deny"})
+        assert not _announced(name, access_key), denied
+        assert name in (await _summary_tools(access_key))["unavailable"], denied
+
+
+_POSITION_TOOLS = [_public_name("HassSetPosition"), _public_name("HassStopMoving")]
+_GREEN_COVERS = PermissionTree(domains={"cover": PermissionNode(state="GREEN")})
+
+
+@pytest.mark.parametrize(("profile", "access_key", "announced"), [
+    ("physical denied", _announcement_key(tree=_GREEN_COVERS, cap_physical_control="deny"), False),
+    ("no write scope", _announcement_key(cap_physical_control="allow"), False),
+    ("GREEN grant", _announcement_key(tree=_GREEN_COVERS, cap_physical_control="allow"), True),
+    ("pass-through", _announcement_key(pass_through=True, cap_physical_control="allow"), True),
+])
+async def test_position_and_stop_tools_need_physical_control_and_write_scope(profile, access_key, announced):
+    """Set-position and stop-moving are announced only with cap_physical_control and write scope together."""
+    tools = await _summary_tools(access_key)
+    for name in _POSITION_TOOLS:
+        assert _announced(name, access_key) is announced, (profile, name)
+        assert (name in tools["usable"]) is announced, (profile, name)
+        assert (name in tools["unavailable"]) is not announced, (profile, name)
+
+
+@pytest.mark.parametrize(("mode", "announced"), [("allow", True), ("deny", False)])
+async def test_broadcast_is_announced_by_its_capability_without_write_scope(mode, announced):
+    """Broadcast follows cap_broadcast alone; an access key with no write scope still sees it when allowed."""
+    name = _public_name("HassBroadcast")
+    access_key = _announcement_key(cap_broadcast=mode)
+    tools = await _summary_tools(access_key)
+    assert _announced(name, access_key) is announced
+    assert (name in tools["usable"]) is announced
+    assert (name in tools["unavailable"]) is not announced

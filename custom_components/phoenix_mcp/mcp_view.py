@@ -335,8 +335,8 @@ def tool_catalog_counts() -> dict[str, int]:
 
 # Tools that perform writes/actions. They are announced in tools/list only when
 # the access key has write scope (any GREEN grant or pass_through). Cap-tied tools
-# (those with a "cap", "caps" or "caps_any" key) gate on their capability
-# instead; all remaining tools (reads, GetDateTime, get_approval_status) are
+# (those with a "cap", "caps" or "caps_any" key) gate on their capability, and a
+# tool that is both needs both; all remaining tools (reads, GetDateTime, get_approval_status) are
 # always announced. The announce_all_tools access key flag overrides this gating
 # entirely.
 _WRITE_GATED_TOOLS = frozenset({
@@ -390,9 +390,9 @@ def _tool_is_announced(
     is always announced. The caller applies the announce_all_tools override
     separately.
 
-    THREE MIRRORS: this predicate, _tool_gate_map (get_capability_summary), and
-    agentcli.build_mcp_tool_list (Agent Chat, Assist, voice, AI Task) each decide
-    announcement independently. Changing the rules here means changing all three.
+    TWO MIRRORS: this predicate and _tool_gate_map (get_capability_summary)
+    decide announcement independently; agentcli.build_mcp_tool_list (Agent Chat,
+    Assist, voice, AI Task) calls this one. Change both together.
     """
     caps = _tool_required_caps(tool_def)
     any_caps = _tool_any_caps(tool_def)
@@ -403,7 +403,9 @@ def _tool_is_announced(
     internal_name = _NATIVE_TOOL_PUBLIC_TO_INTERNAL.get(
         tool_def["name"], tool_def["name"]
     )
-    if not caps and not any_caps and internal_name in _WRITE_GATED_TOOLS and not _write_gate_open(
+    # A write tool that also names a capability needs both, so a whole-tool
+    # physical gate never announces a tool the key has no target for.
+    if internal_name in _WRITE_GATED_TOOLS and not _write_gate_open(
         internal_name, access_key, has_write
     ):
         return False
@@ -458,6 +460,8 @@ def _tool_gate_map(
             modes = [effective_cap(access_key, cap) for cap in caps]
             any_modes = [effective_cap(access_key, cap) for cap in any_caps]
             if CAP_DENY in modes or (any_modes and all(mode == CAP_DENY for mode in any_modes)):
+                unavailable.append(name)
+            elif internal_name in _WRITE_GATED_TOOLS and not _write_gate_open(internal_name, access_key, has_write):
                 unavailable.append(name)
             elif (
                 CAP_CONFIRM in modes
@@ -2039,6 +2043,16 @@ async def _tool_call_service(
             tool_name="call_service", args=args, request_id=request_id,
             client_ip=client_ip, diff=lambda: _build_diff_call_service(args, access_key, hass),
             target_entities=targets if effective_cap(access_key, "cap_physical_control") != CAP_DENY else None,
+        )
+        if blocked is not None:
+            return blocked
+    elif domain == "notify":
+        # Notify services send messages, so call_service follows the same
+        # capability send_notification does; Write on the entity is not enough.
+        blocked = await _gate(
+            "cap_notify", access_key, hass, data,
+            tool_name="call_service", args=args, request_id=request_id,
+            client_ip=client_ip, diff=lambda: _build_diff_call_service(args, access_key, hass),
         )
         if blocked is not None:
             return blocked

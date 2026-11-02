@@ -41,11 +41,27 @@
   "entity": {
     "sensor": {
       "status": {
+        "name": "狀態",
         "state": {
           "active": "有效",
           "expired": "已過期",
           "revoked": "已撤銷"
         }
+      },
+      "request_count": {
+        "name": "請求數"
+      },
+      "denied_count": {
+        "name": "拒絕數"
+      },
+      "rate_limit_hits": {
+        "name": "觸發速率限制次數"
+      },
+      "last_access": {
+        "name": "上次存取"
+      },
+      "expires_in": {
+        "name": "距到期"
       }
     }
   }

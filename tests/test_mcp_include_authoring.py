@@ -815,6 +815,91 @@ class TestTagHandling:
         assert _text(content) == yi.MSG_INCLUDE_REFUSAL.format(name="automations.yaml")
 
 
+TAG_TEXTS = ["!secret wifi", "!include x.yaml"]
+
+
+def _with_tag_text(domain: str, body: dict, tag: str) -> dict:
+    """The body with tag display text nested where Home Assistant's schema accepts any value."""
+    body = dict(body)
+    if domain == "scene":
+        body["entities"] = {"light.kitchen": {"state": "on", "note": tag}}
+    else:
+        step = {"service": "homeassistant.toggle", "entity_id": "input_boolean.x", "data": {"note": tag}}
+        body["action" if domain == "automation" else "sequence"] = [step]
+    return body
+
+
+def _seed_editor_entry(base: Path, domain: str) -> None:
+    """An editor-file layout holding one entry "ui" that the editor itself wrote."""
+    write(base, "configuration.yaml", f"{domain}: !include {EDITOR[domain]}\n")
+    write(base, EDITOR[domain], _entries_text(domain, {"ui": _body(domain, "UI")}))
+
+
+class TestTagTextInWrites:
+    """A config carrying tag display text is refused on every write path.
+
+    Tag text cannot be written back as a real tag, so a create or edit naming it
+    never reaches the Confirm gate and never changes a byte, before approval or
+    after it. The same call without the tag text still passes these checks.
+    """
+
+    @pytest.mark.parametrize("domain", DOMAINS)
+    @pytest.mark.parametrize("operation", ["create", "edit"])
+    @pytest.mark.parametrize("tag", TAG_TEXTS)
+    async def test_tag_text_is_refused_before_an_approval_exists(
+        self, hass, kitchen_env, domain, operation, tag,
+    ):
+        """Tag text anywhere in config is refused ahead of the gate; the tag-free call is queued."""
+        env = kitchen_env
+        _seed_editor_entry(env, domain)
+        tool = f"{operation}_{domain}"
+        data, store = _approval_data()
+        access_key = _confirm_key()
+        clean = _tool_args(env, domain, operation, "ui", "UI")
+        tagged = dict(clean, config=_with_tag_text(domain, clean["config"], tag))
+        before = snapshot(env)
+
+        with _gate_spy() as gate:
+            content, outcome, _ = await _call_tool(tool, tagged, access_key, hass, data)
+            assert outcome == "invalid_request"
+            assert yi.TAG_STRING_REFUSAL in _text(content)
+            gate.assert_not_called()
+            assert store.pending == []
+            assert snapshot(env) == before
+
+            _, outcome, _ = await _call_tool(tool, clean, access_key, hass, data)
+            assert outcome == "pending_approval"
+            gate.assert_awaited_once()
+        assert [approval["tool_name"] for approval in store.pending] == [tool]
+        assert snapshot(env) == before
+
+    @pytest.mark.parametrize("domain", DOMAINS)
+    @pytest.mark.parametrize("operation", ["create", "edit"])
+    async def test_approved_tag_text_is_refused_without_writing(self, hass, kitchen_env, domain, operation):
+        """The approved executor refuses tag text itself and records no version; the tag-free call applies."""
+        env = kitchen_env
+        _seed_editor_entry(env, domain)
+        tool = f"{operation}_{domain}"
+        data, versions = _data()
+        access_key = _access_key(
+            tree=_scene_tree(), cap_automation_write="allow", cap_script_write="allow",
+            cap_scene_write="allow", cap_registry_read="allow",
+        )
+        clean = _tool_args(env, domain, operation, "ui", "UI")
+        tagged = dict(clean, config=_with_tag_text(domain, clean["config"], "!secret wifi"))
+        before = snapshot(env)
+
+        content, outcome, _ = await async_execute_approved_tool(tool, tagged, access_key, hass, data)
+        assert outcome == "invalid_request"
+        assert yi.TAG_STRING_REFUSAL in _text(content)
+        assert snapshot(env) == before
+        assert versions.list_for(domain, "ui") == []
+
+        content, outcome, _ = await async_execute_approved_tool(tool, clean, access_key, hass, data)
+        assert outcome == "allowed", _text(content)
+        assert changed_files(before, snapshot(env)) == {EDITOR[domain]}
+
+
 class TestApprovalReplay:
     async def test_execute_edit_automation_standalone(self, hass, env):
         """Approval replay runs _execute_X directly; it must behave identically.

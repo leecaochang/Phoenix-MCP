@@ -41,11 +41,27 @@
   "entity": {
     "sensor": {
       "status": {
+        "name": "Статус",
         "state": {
           "active": "Активен",
           "expired": "Истёк",
           "revoked": "Отозван"
         }
+      },
+      "request_count": {
+        "name": "Количество запросов"
+      },
+      "denied_count": {
+        "name": "Количество отказов"
+      },
+      "rate_limit_hits": {
+        "name": "Срабатывания ограничения частоты"
+      },
+      "last_access": {
+        "name": "Последний доступ"
+      },
+      "expires_in": {
+        "name": "Истекает через"
       }
     }
   }

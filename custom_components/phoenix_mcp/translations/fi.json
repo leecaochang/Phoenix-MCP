@@ -15,11 +15,27 @@
   "entity": {
     "sensor": {
       "status": {
+        "name": "Tila",
         "state": {
           "active": "Aktiivinen",
           "expired": "Vanhentunut",
           "revoked": "Mitätöity"
         }
+      },
+      "request_count": {
+        "name": "Pyyntöjen määrä"
+      },
+      "denied_count": {
+        "name": "Hylättyjen määrä"
+      },
+      "rate_limit_hits": {
+        "name": "Pyyntörajoitukseen osumiset"
+      },
+      "last_access": {
+        "name": "Viimeisin käyttö"
+      },
+      "expires_in": {
+        "name": "Vanhenee"
       }
     }
   },

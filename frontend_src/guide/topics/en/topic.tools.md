@@ -47,11 +47,12 @@ Agents can also run any Home Assistant action on targets they can write, and pre
 - Restarting or stopping Home Assistant needs Restart.
 - Reloading automations, scripts, scenes, helpers or the core configuration needs YAML configuration.
 - An action's returned data needs Service response data. Without it, the action still runs.
+- Notify actions, which send messages, need Notifications.
 - ESPHome device actions need only Write on the device. MESA doesn't check them, and doesn't check reloads or restarts either.
 
 Other actions without a target are refused. So are calendar changes, which have their own tools. An action still running after 30 seconds is reported as possibly incomplete.
 
-Allowed by: [{{label:caps.cap_restart.label}}](guide:window.capabilities#restart), [{{label:caps.cap_yaml_edit.label}}](guide:window.capabilities#yaml-edit), [{{label:caps.cap_service_response.label}}](guide:window.capabilities#service-response), [{{label:caps.cap_search.label}}](guide:window.capabilities#search) for previews
+Allowed by: [{{label:caps.cap_restart.label}}](guide:window.capabilities#restart), [{{label:caps.cap_yaml_edit.label}}](guide:window.capabilities#yaml-edit), [{{label:caps.cap_service_response.label}}](guide:window.capabilities#service-response), [{{label:caps.cap_notify.label}}](guide:window.capabilities#notify), [{{label:caps.cap_search.label}}](guide:window.capabilities#search) for previews
 
 ## Lists and calendars {#lists}
 
@@ -174,7 +175,7 @@ Allowed by: [{{label:caps.cap_filesystem.label}}](guide:window.capabilities#file
 
 Agents read and search ESPHome device configuration, with passwords and keys masked. With the ESPHome Device Builder add-on, they can also validate, compile, read device logs, analyse memory and check connections. Without the add-on, only reading and searching remain.
 
-Compiling, cleaning and memory analysis need Write on the device. Installing firmware needs ESPHome firmware flashing and Write on the device.
+Compiling, cleaning and memory analysis need Write on the device. Installing firmware needs ESPHome firmware flashing, ESPHome device YAML and Write on the device.
 
 Allowed by: [{{label:caps.cap_esphome_yaml.label}}](guide:window.capabilities#esphome-yaml), [{{label:caps.cap_esphome_flash.label}}](guide:window.capabilities#esphome-flash)
 
@@ -186,7 +187,7 @@ Allowed by: [{{label:caps.cap_esphome_yaml.label}}](guide:window.capabilities#es
 - Radio management changes Zigbee networks. Groups, bindings and device properties also need Physical control.
 - Backup creates and lists backups, but can't restore one.
 - Restart or stop Home Assistant restarts it. The agent is told not to retry by itself.
-- Notifications sends a notification.
+- Notifications sends a notification, whether through its own tool or by running a notify action.
 
 A backup waits up to 45 seconds and never goes to Home Assistant Cloud. Without a backup encryption key it isn't encrypted, and it includes secrets.yaml.
 

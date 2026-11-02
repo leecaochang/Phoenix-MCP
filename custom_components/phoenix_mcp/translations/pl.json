@@ -41,11 +41,27 @@
   "entity": {
     "sensor": {
       "status": {
+        "name": "Status",
         "state": {
           "active": "Aktywny",
           "expired": "Wygasły",
           "revoked": "Unieważniony"
         }
+      },
+      "request_count": {
+        "name": "Liczba żądań"
+      },
+      "denied_count": {
+        "name": "Liczba odmów"
+      },
+      "rate_limit_hits": {
+        "name": "Przekroczenia ograniczenia szybkości"
+      },
+      "last_access": {
+        "name": "Ostatni dostęp"
+      },
+      "expires_in": {
+        "name": "Wygasa za"
       }
     }
   }

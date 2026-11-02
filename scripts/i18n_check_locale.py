@@ -65,23 +65,13 @@ def languages() -> list[str]:
     stems = {p.stem for d in (CATALOGS, TRANSLATIONS) for p in d.glob("*.json")}
     return sorted(s for s in stems if s not in ("en", "strings"))
 
-# No whole section is exempt; sensor names are excluded individually below.
+# No whole section is exempt.
 KEEP_ENGLISH_SECTIONS: tuple[str, ...] = ()
 
 # Individual keys that stay English, with the reason grouped so the next person
 # can tell a decision from an oversight. Absence from the locale file IS the
 # mechanism: HA falls back per key.
 KEEP_ENGLISH: dict[str, tuple[str, ...]] = {
-    # Sensor display names seed entity IDs at first registration. Translate the
-    # displayed enum states while keeping these established names stable.
-    "sensor identity names": (
-        "entity.sensor.status.name",
-        "entity.sensor.request_count.name",
-        "entity.sensor.denied_count.name",
-        "entity.sensor.rate_limit_hits.name",
-        "entity.sensor.last_access.name",
-        "entity.sensor.expires_in.name",
-    ),
     # The MESA enum values and the permission states (READ/WRITE/DENY/INHERIT) are
     # translated, not kept English. Home Assistant itself translates entity states
     # for display while hass.states keeps the English slug, so "translate the
@@ -197,6 +187,7 @@ ALLOW_IDENTICAL = frozenset({
 # Chinese value such as "Token" pass silently.
 ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
     "da": frozenset({
+        "entity.sensor.status.name",  # "Status", the same word in this language
         "panel.settings.agentcliRegionCa",  # Region name or label spelled the same as English in this language.
         "panel.settings.agentcliRegionJp",  # Region name or label spelled the same as English in this language.
         "panel.changes.typeLabel",  # "Label", Home Assistant's Danish term
@@ -251,6 +242,7 @@ ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
         "panel.shell.agentChat",  # "Agent Chat", a Phoenix product name
     }),
     "de": frozenset({
+        "entity.sensor.status.name",  # "Status", the same word in this language
         "panel.settings.agentcliRegionJp",  # Region name or label spelled the same as English in this language.
         "panel.agentchat.title",  # "Agent Chat", a Phoenix product name
         "panel.selectBy.menu",  # "Filter", the same word in this language
@@ -446,6 +438,7 @@ ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
         "panel.shell.agentChat",  # "Agent Chat", a Phoenix product name
     }),
     "nb": frozenset({
+        "entity.sensor.status.name",  # "Status", the same word in this language
         "panel.settings.agentcliRegionAu",  # Region name or label spelled the same as English in this language.
         "panel.settings.agentcliRegionCa",  # Region name or label spelled the same as English in this language.
         "panel.settings.agentcliRegionIn",  # Region name or label spelled the same as English in this language.
@@ -486,6 +479,7 @@ ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
         "panel.conversations.source.agentcli",  # "Agent Chat", a Phoenix product name
     }),
     "nl": frozenset({
+        "entity.sensor.status.name",  # "Status", the same word in this language
         "panel.settings.agentcliRegionCa",  # Region name or label spelled the same as English in this language.
         "panel.mesa.colAppliesTo",  # "Type", the same word in this language
         "panel.settings.agentcliRegionIn",  # Region name or label spelled the same as English in this language.
@@ -553,6 +547,7 @@ ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
         "panel.wizard.stepTest",               # "Test"
     }),
     "pl": frozenset({
+        "entity.sensor.status.name",  # "Status", the same word in this language
         "panel.settings.agentcliRegionAu",  # Region name or label spelled the same as English in this language.
         "panel.agentchat.title",  # "Agent Chat", a Phoenix product name
         # Product names kept in English, as the localized READMEs do.
@@ -595,6 +590,7 @@ ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
         "panel.agentchat.toolResult",      # "<code>{name}</code>: {summary}"
     }),
     "sv": frozenset({
+        "entity.sensor.status.name",  # "Status", the same word in this language
         "panel.settings.agentcliRegionJp",  # Region name or label spelled the same as English in this language.
         "panel.selectBy.menu",  # "Filter", the same word in this language
         "panel.mesa.colSignal",  # "Signal"

@@ -55,6 +55,8 @@ from .const import (
     PRESET_NAME_MAX_LENGTH,
     RUNTIME_READY_KEY,
     ACCESS_KEY_NAME_REGEX,
+    DEFAULT_RATE_LIMIT_BURST,
+    DEFAULT_RATE_LIMIT_REQUESTS,
 )
 from .data import PhoenixData
 from .device_semantics import device_authority_chain, device_registry_snapshot, effective_entity_area_id
@@ -288,8 +290,8 @@ async def _read_body(
     return parsed
 
 
-_DOMAIN_RE = re.compile(r"^[a-z][a-z0-9_]*$")
-_ENTITY_RE = re.compile(r"^[a-z][a-z0-9_]*\.[a-z0-9_]+$")
+_DOMAIN_RE = re.compile(r"^[a-z][a-z0-9_]*\Z")
+_ENTITY_RE = re.compile(r"^[a-z][a-z0-9_]*\.[a-z0-9_]+\Z")
 _MAX_NODE_ID_LEN = 255
 _INJECTION_CHARS = frozenset("<>\"'&;")
 
@@ -796,7 +798,7 @@ class PhoenixAdminAccessKeysView(PhoenixView):
         name = body.get("name")
         if not name or not isinstance(name, str):
             return _err("invalid_request", "name is required.", 400, rid, key="nameRequired")
-        if not ACCESS_KEY_NAME_REGEX.match(name):
+        if not ACCESS_KEY_NAME_REGEX.fullmatch(name):
             return _err(
                 "invalid_request", "name does not match required pattern.", 400, rid,
                 key="accessKeyNamePattern",
@@ -843,8 +845,8 @@ class PhoenixAdminAccessKeysView(PhoenixView):
         # "12" (as 12), which contradicts the error message and the documented
         # contract. Same test as confirm_inline_wait_seconds; bool is excluded
         # explicitly because it is a subclass of int.
-        rate_limit_requests = body.get("rate_limit_requests", 60)
-        rate_limit_burst = body.get("rate_limit_burst", 10)
+        rate_limit_requests = body.get("rate_limit_requests", DEFAULT_RATE_LIMIT_REQUESTS)
+        rate_limit_burst = body.get("rate_limit_burst", DEFAULT_RATE_LIMIT_BURST)
         if not all(
             isinstance(v, int) and not isinstance(v, bool)
             for v in (rate_limit_requests, rate_limit_burst)
@@ -940,7 +942,7 @@ def _validated_access_key_patch(
         new_name = body["name"]
         if not new_name or not isinstance(new_name, str):
             return {}, _err("invalid_request", "name is required.", 400, rid, key="nameRequired")
-        if not ACCESS_KEY_NAME_REGEX.match(new_name):
+        if not ACCESS_KEY_NAME_REGEX.fullmatch(new_name):
             return {}, _err(
                 "invalid_request",
                 "name must be 3-32 characters: letters, numbers, hyphens, or underscores.",
@@ -1817,28 +1819,16 @@ class PhoenixAdminScopeView(PhoenixView):
         readable: list[str] = []
         writable: list[str] = []
 
-        if access_key.pass_through:
-            # Fast path: pass_through access keys have WRITE on everything except BLOCKED_DOMAINS
-            # and Phoenix MCP platform entities. Avoids an O(n) resolve() call per entity.
-            registry = er_mod.async_get(hass)
-            for state in all_states:
-                eid = state.entity_id
-                if eid.split(".")[0] in BLOCKED_DOMAINS:
-                    continue
-                entry = registry.async_get(eid)
-                if entry is not None and entry.platform == DOMAIN:
-                    continue
+        # resolve() for pass-through keys too, so a key limited to Assist-exposed
+        # entities lists only what its agent can actually reach.
+        for state in all_states:
+            eid = state.entity_id
+            perm = resolve(eid, access_key, hass)
+            if perm == Permission.WRITE:
                 readable.append(eid)
                 writable.append(eid)
-        else:
-            for state in all_states:
-                eid = state.entity_id
-                perm = resolve(eid, access_key, hass)
-                if perm == Permission.WRITE:
-                    readable.append(eid)
-                    writable.append(eid)
-                elif perm == Permission.READ:
-                    readable.append(eid)
+            elif perm == Permission.READ:
+                readable.append(eid)
 
         # capability_flags reports raw stored values, without the pass_through OR
         # adjustments applied by _build_server_info / _build_context_json: this is a
@@ -4031,6 +4021,8 @@ class PhoenixAdminMesaProfileView(PhoenixView):
         runtime, err = _mesa_runtime(self.hass, rid)
         if err is not None:
             return err
+        if not _ENTITY_RE.match(entity_id):
+            return _err("invalid_request", "Invalid entity ID format.", 400, rid, key="badEntityId")
         stored = runtime.store.get(entity_id)
         effective = runtime.store.get_effective(entity_id)
         explanation = runtime.resolver.explain(entity_id)
@@ -4096,6 +4088,8 @@ class PhoenixAdminMesaProfileView(PhoenixView):
         runtime, err = _mesa_runtime(self.hass, rid)
         if err is not None:
             return err
+        if not _ENTITY_RE.match(entity_id):
+            return _err("invalid_request", "Invalid entity ID format.", 400, rid, key="badEntityId")
         async with runtime.lock:
             runtime.store.delete(entity_id)
             await runtime.async_save()
@@ -4552,11 +4546,12 @@ class PhoenixAdminMesaDefaultsView(PhoenixView):
         body = await _read_body(request, rid)
         if isinstance(body, web.Response):
             return body
+        from .mesa_core.exceptions import MesaValidationError  # noqa: PLC0415
         try:
             async with runtime.lock:
                 runtime.store.set_deployment_defaults(body)
                 await runtime.async_save()
-        except (ValueError, KeyError) as exc:
+        except (MesaValidationError, ValueError, KeyError, TypeError) as exc:
             return _err(
                 "invalid_request", f"Invalid deployment defaults: {exc}", 400, rid,
                 key="deploymentDefaultsInvalid", params={"detail": str(exc)},

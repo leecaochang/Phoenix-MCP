@@ -41,11 +41,27 @@
   "entity": {
     "sensor": {
       "status": {
+        "name": "Status",
         "state": {
           "active": "Actief",
           "expired": "Verlopen",
           "revoked": "Ingetrokken"
         }
+      },
+      "request_count": {
+        "name": "Aantal verzoeken"
+      },
+      "denied_count": {
+        "name": "Aantal geweigerd"
+      },
+      "rate_limit_hits": {
+        "name": "Snelheidsbeperking bereikt"
+      },
+      "last_access": {
+        "name": "Laatste toegang"
+      },
+      "expires_in": {
+        "name": "Verloopt over"
       }
     }
   }

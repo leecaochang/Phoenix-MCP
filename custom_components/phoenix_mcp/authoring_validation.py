@@ -240,6 +240,9 @@ def authoring_input_error(args: dict, domain: str) -> str | None:
         findings.append("config must be an object containing one " + domain + "; do not wrap it in a domain or resource ID.")
         findings.append(expected_shape(domain))
     else:
+        from .yaml_includes import TAG_STRING_REFUSAL, contains_tag_strings  # noqa: PLC0415
+        if contains_tag_strings(config):
+            findings.append(TAG_STRING_REFUSAL)
         if "enabled" in config or "enabled" in args:
             advice = "Use config.initial_state for automation startup state; omit it to let HA restore the saved state. Runtime changes use call_service with automation.turn_on or automation.turn_off and normal authorization."
             if domain == "script":

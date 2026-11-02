@@ -147,6 +147,38 @@ class TestGating:
         assert outcome == "denied"
         assert builder.calls == []
 
+    async def test_flashing_needs_the_authoring_cap_before_an_approval_exists(self, hass, esphome_dir):
+        """With cap_esphome_yaml denied, an install on a Confirm flash cap is refused and queues nothing.
+
+        Both the dispatched call and the tool handler on its own refuse.
+        """
+        store = _ApprStore()
+        data = PhoenixData(store=store, rate_limiter=MagicMock(), audit=MagicMock(), mesa=None)
+        builder = FakeBuilder()
+        access_key = _flash_access_key(cap_esphome_flash="confirm", cap_esphome_yaml="deny")
+        content, outcome, _ = await _run("install_esphome_firmware", {"file": FILE}, access_key, hass, builder, data)
+        assert outcome == "denied"
+        assert "Forbidden" in content["content"][0]["text"]
+        with patch(_DASHBOARD_PATCH, return_value=_dash()), patch(_COMMAND_PATCH, builder):
+            content, outcome, _ = await esphome._tool_install_esphome_firmware(
+                {"file": FILE}, access_key, hass, data)
+        assert outcome == "denied"
+        assert "Forbidden" in content["content"][0]["text"]
+        assert store._p == []
+        assert builder.calls == []
+
+    async def test_an_approved_install_needs_the_authoring_cap(self, hass, esphome_dir):
+        """The install executor refuses on its own when cap_esphome_yaml is denied, as an approved request runs it."""
+        from custom_components.phoenix_mcp.mcp_view import _execute_install_esphome_firmware
+
+        builder = FakeBuilder(**{"firmware/install": {"job_id": JOB, "status": "queued"}})
+        with patch(_DASHBOARD_PATCH, return_value=_dash()), patch(_COMMAND_PATCH, builder):
+            content, outcome, _ = await _execute_install_esphome_firmware(
+                {"file": FILE}, _flash_access_key(cap_esphome_yaml="deny"), hass, MagicMock())
+        assert outcome == "denied"
+        assert "Forbidden" in content["content"][0]["text"]
+        assert builder.calls == []
+
     async def test_flash_cap_alone_does_not_grant_compiling(self, hass, esphome_dir):
         builder = FakeBuilder()
         content, outcome, _ = await _run(

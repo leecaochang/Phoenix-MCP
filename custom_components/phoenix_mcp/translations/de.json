@@ -41,11 +41,27 @@
   "entity": {
     "sensor": {
       "status": {
+        "name": "Status",
         "state": {
           "active": "Aktiv",
           "expired": "Abgelaufen",
           "revoked": "Widerrufen"
         }
+      },
+      "request_count": {
+        "name": "Anzahl Anfragen"
+      },
+      "denied_count": {
+        "name": "Anzahl abgelehnt"
+      },
+      "rate_limit_hits": {
+        "name": "Ratenlimit erreicht"
+      },
+      "last_access": {
+        "name": "Letzter Zugriff"
+      },
+      "expires_in": {
+        "name": "Läuft ab in"
       }
     }
   }

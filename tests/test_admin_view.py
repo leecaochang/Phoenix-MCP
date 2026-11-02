@@ -449,6 +449,76 @@ async def test_patch_access_key_rename_invalid_name_rejected():
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("name,status", [("abc\n", 400), ("abc", 201)])
+async def test_create_access_key_name_must_match_whole_pattern(name, status):
+    """A create name with a trailing newline is refused; the same name without it is accepted."""
+    data = _make_data()
+    data.store.name_slug_exists.return_value = False
+    data.store.async_create_access_key = AsyncMock(return_value=(_make_active_access_key(), "phx_raw"))
+    view = PhoenixAdminAccessKeysView()
+    view.hass = _make_hass(data)
+
+    resp = await view.post(_make_admin_request(body=json.dumps({"name": name}).encode()))
+
+    assert resp.status == status, resp.text
+    if status == 400:
+        assert json.loads(resp.text)["message_key"] == "adminError.accessKeyNamePattern"
+        data.store.async_create_access_key.assert_not_called()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("name,status", [("new-name\n", 400), ("new-name", 200)])
+async def test_patch_access_key_rename_must_match_whole_pattern(name, status):
+    """A rename with a trailing newline is refused; the same name without it is accepted."""
+    access_key = _make_active_access_key(name="old-name")
+    data = _make_data([access_key])
+    data.store.get_access_key_by_id = MagicMock(return_value=access_key)
+    data.store.name_slug_exists.return_value = False
+    data.store.async_patch_access_key = AsyncMock(return_value=access_key)
+    view = PhoenixAdminAccessKeyView()
+    view.hass = _make_hass(data)
+
+    resp = await view.patch(_make_admin_request(body=json.dumps({"name": name}).encode()), access_key_id=access_key.id)
+
+    assert resp.status == status, resp.text
+    if status == 400:
+        data.store.async_patch_access_key.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_create_access_key_without_rate_fields_takes_the_shared_defaults():
+    """A create that names no rate limits stores the shared default request and burst limits."""
+    from custom_components.phoenix_mcp import admin_view
+
+    data = _make_data()
+    data.store.name_slug_exists.return_value = False
+    data.store.async_create_access_key = AsyncMock(return_value=(_make_active_access_key(), "phx_raw"))
+    view = PhoenixAdminAccessKeysView()
+    view.hass = _make_hass(data)
+
+    # Values unlike any literal, so the limits provably come from the defaults.
+    with patch.object(admin_view, "DEFAULT_RATE_LIMIT_REQUESTS", 41), \
+            patch.object(admin_view, "DEFAULT_RATE_LIMIT_BURST", 7):
+        resp = await view.post(_make_admin_request(body=json.dumps({"name": "my-access-key"}).encode()))
+
+    assert resp.status == 201, resp.text
+    kwargs = data.store.async_create_access_key.call_args.kwargs
+    assert (kwargs["rate_limit_requests"], kwargs["rate_limit_burst"]) == (41, 7)
+
+
+@pytest.mark.parametrize("node_type,node_id", [("domains", "light\n"), ("entities", "light.kitchen\n")])
+def test_node_id_with_a_trailing_newline_is_refused(node_type, node_id):
+    """A domain or entity ID followed by a newline fails the format check; without it, it passes."""
+    from custom_components.phoenix_mcp.admin_view import _validate_node_id
+
+    refused = _validate_node_id(node_type, node_id, "rid")
+    assert refused is not None and refused.status == 400
+    expected = "adminError.badDomain" if node_type == "domains" else "adminError.badEntityId"
+    assert json.loads(refused.text)["message_key"] == expected
+    assert _validate_node_id(node_type, node_id.rstrip("\n"), "rid") is None
+
+
+@pytest.mark.asyncio
 async def test_patch_access_key_rejects_expires_at_field():
     access_key = _make_active_access_key()
     data = _make_data([access_key])

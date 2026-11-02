@@ -326,6 +326,16 @@ _TAG_STRING_RE = re.compile(
 )
 
 
+# Agent-facing refusal for a write whose config carries tag display strings.
+# Turning them back into real tags is refused on purpose: an agent could then
+# plant `!secret <name>` and have Home Assistant resolve a secret it cannot read.
+TAG_STRING_REFUSAL = (
+    "config contains YAML tag text such as \"!secret name\". Phoenix shows tags this way when "
+    "reading but cannot write them; saved as text, the tag would be lost. Remove the tag, or "
+    "edit this entry in Home Assistant instead. Nothing was written."
+)
+
+
 def contains_tag_strings(obj: Any) -> bool:
     """Whether an encode_tags()-style tag string appears anywhere in the structure.
 

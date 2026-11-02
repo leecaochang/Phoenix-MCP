@@ -105,7 +105,7 @@ Controls locks, alarm panels, covers and valves. The agent also needs W on them 
 
 ### {{label:caps.cap_notify.label}} {#notify}
 
-Sends notifications.
+Sends notifications, through its own tool or by running a notify action.
 
 ### {{label:caps.cap_restart.label}} {#restart}
 
@@ -141,7 +141,7 @@ Changes the Energy dashboard's settings.
 
 ### {{label:caps.cap_esphome_flash.label}} {#esphome-flash}
 
-Installs firmware on ESPHome devices, through the ESPHome Device Builder. Only the ESPHome Devices persona allows it, with your approval.
+Installs firmware on ESPHome devices, through the ESPHome Device Builder. It also needs {{label:caps.cap_esphome_yaml.label}}. Only the ESPHome Devices persona allows it, with your approval.
 
 ### {{label:caps.cap_yaml_edit.label}} {#yaml-edit}
 

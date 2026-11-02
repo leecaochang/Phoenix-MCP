@@ -1976,6 +1976,7 @@ async def _tool_find_available_actions(
     physical_ok = effective_cap(access_key, "cap_physical_control") != CAP_DENY
     restart_ok = effective_cap(access_key, "cap_restart") != CAP_DENY
     yaml_edit_ok = effective_cap(access_key, "cap_yaml_edit") != CAP_DENY
+    notify_ok = effective_cap(access_key, "cap_notify") != CAP_DENY
 
     actions: list[dict] = []
     for svc in sorted(hass.services.async_services().get(domain, {}).keys()):
@@ -1997,6 +1998,8 @@ async def _tool_find_available_actions(
             available, reason = False, "requires physical control capability"
         elif key in DUAL_GATE_SERVICES and not restart_ok:
             available, reason = False, "requires restart capability"
+        elif domain == "notify" and not notify_ok:
+            available, reason = False, "requires notifications capability"
         entry = {"service": f"{domain}.{svc}", "available": available}
         if guidance := RUNTIME_SERVICE_GUIDANCE.get(key):
             entry["description"] = guidance
@@ -3308,6 +3311,8 @@ async def _tool_dry_run_service(
     predicted: str
     if physical_gate and effective_cap(access_key, "cap_physical_control") != CAP_ALLOW:
         predicted = _cap_outcome(effective_cap(access_key, "cap_physical_control"))
+    elif domain == "notify" and effective_cap(access_key, "cap_notify") != CAP_ALLOW:
+        predicted = _cap_outcome(effective_cap(access_key, "cap_notify"))
     elif not permitted:
         predicted = "denied"
     else:

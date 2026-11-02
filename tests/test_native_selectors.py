@@ -480,7 +480,7 @@ async def test_a_selector_rule_lowered_to_prose_is_still_refused_at_dispatch(too
     with patch(f"{NATIVE}.resolve_intent_entities", resolver), \
             patch(f"{NATIVE}._tool_intent_action", action):
         response, outcome, _resource = await _call_tool(
-            tool_name, operation, _access_key(), MagicMock(), MagicMock())
+            tool_name, operation, _access_key(cap_physical_control="allow"), MagicMock(), MagicMock())
     assert outcome == "invalid_request"
     assert "No usable targeting parameter" in _text(response)
     resolver.assert_not_called()

@@ -2105,7 +2105,9 @@ async def _tool_install_esphome_firmware(
     """MCP tool: build and flash one device's firmware (Confirm-eligible)."""
     # Capability gate first, so a denied access key gets a uniform Forbidden and never
     # learns anything about the file it named.
-    if effective_cap(access_key, "cap_esphome_flash") == CAP_DENY:
+    # Installing builds from the device's YAML, so it needs that capability too.
+    if (effective_cap(access_key, "cap_esphome_flash") == CAP_DENY
+            or effective_cap(access_key, "cap_esphome_yaml") == CAP_DENY):
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "install_esphome_firmware"
 
     pre, _url, _rel = await _install_esphome_precheck(hass, access_key, args)
@@ -2126,6 +2128,9 @@ async def _execute_install_esphome_firmware(
     args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData
 ) -> tuple[dict, str, str]:
     """Side-effect path for install_esphome_firmware."""
+    # An approval checks cap_esphome_flash again; the YAML capability is checked here.
+    if effective_cap(access_key, "cap_esphome_yaml") == CAP_DENY:
+        return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "install_esphome_firmware"
     pre, url, rel = await _install_esphome_precheck(hass, access_key, args)
     if pre is not None:
         return pre

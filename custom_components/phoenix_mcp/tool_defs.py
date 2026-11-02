@@ -2599,7 +2599,7 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
             "to the operator: never add allow_plaintext_upload or change a credential "
             "yourself to get the install through."
         ),
-        "cap": "cap_esphome_flash",
+        "caps": ["cap_esphome_flash", "cap_esphome_yaml"],
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -3866,6 +3866,7 @@ _NATIVE_TOOL_DEFS: list[dict] = [
     {
         "name": _NATIVE_TOOL_NAMES["HassSetPosition"],
         "description": "Sets the position of a device or entity",
+        "cap": "cap_physical_control",
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -4071,6 +4072,7 @@ _NATIVE_TOOL_DEFS: list[dict] = [
     {
         "name": _NATIVE_TOOL_NAMES["HassStopMoving"],
         "description": "Stops a moving device or entity",
+        "cap": "cap_physical_control",
         "inputSchema": {
             "type": "object",
             "properties": {

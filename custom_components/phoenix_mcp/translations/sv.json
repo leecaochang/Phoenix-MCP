@@ -15,11 +15,27 @@
   "entity": {
     "sensor": {
       "status": {
+        "name": "Status",
         "state": {
           "active": "Aktiv",
           "expired": "Utgången",
           "revoked": "Återkallad"
         }
+      },
+      "request_count": {
+        "name": "Antal begäranden"
+      },
+      "denied_count": {
+        "name": "Antal nekade"
+      },
+      "rate_limit_hits": {
+        "name": "Hastighetsbegränsning nådd"
+      },
+      "last_access": {
+        "name": "Senaste åtkomst"
+      },
+      "expires_in": {
+        "name": "Upphör om"
       }
     }
   },

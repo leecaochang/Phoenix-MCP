@@ -41,11 +41,27 @@
   "entity": {
     "sensor": {
       "status": {
+        "name": "Stato",
         "state": {
           "active": "Attivo",
           "expired": "Scaduto",
           "revoked": "Revocato"
         }
+      },
+      "request_count": {
+        "name": "Numero di richieste"
+      },
+      "denied_count": {
+        "name": "Numero di rifiuti"
+      },
+      "rate_limit_hits": {
+        "name": "Limite di frequenza raggiunto"
+      },
+      "last_access": {
+        "name": "Ultimo accesso"
+      },
+      "expires_in": {
+        "name": "Scade tra"
       }
     }
   }

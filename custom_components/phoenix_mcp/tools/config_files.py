@@ -94,6 +94,9 @@ async def _tool_read_file(
         return _tool_error("File not found."), "not_found", path
     try:
         content = await hass.async_add_executor_job(_read_text_capped, target)
+    except UnicodeDecodeError:
+        # A ValueError too, so it is caught first: a binary file is not oversized.
+        return _tool_error("File is not UTF-8 text, so it cannot be read."), "invalid_request", path
     except ValueError:
         return _tool_error("File exceeds the maximum readable size."), "invalid_request", path
     except OSError:
@@ -211,6 +214,8 @@ async def _tool_get_yaml_config(
         return _tool_success(json.dumps(body)), "allowed", "get_yaml_config"
     try:
         content = await hass.async_add_executor_job(_read_text_capped, path)
+    except UnicodeDecodeError:
+        return _tool_error(f"{rel} is not UTF-8 text, so it cannot be read."), "invalid_request", "get_yaml_config"
     except ValueError:
         return _tool_error(f"{rel} exceeds the maximum readable size."), "invalid_request", "get_yaml_config"
     except OSError:

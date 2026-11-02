@@ -275,6 +275,47 @@ async def test_defaults_round_trip(hass: HomeAssistant):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("defaults", [
+    {"bogus": 1},
+    {"triggers_automations_domains": "light"},
+    {"domain_overrides": {"light": "confirm"}},
+])
+async def test_defaults_put_rejected_by_mesa_core_is_a_400(hass: HomeAssistant, defaults):
+    """Defaults mesa-core refuses answer 400 deploymentDefaultsInvalid and leave the stored defaults unchanged."""
+    data = await _setup(hass)
+    view = PhoenixAdminMesaDefaultsView()
+    view.hass = hass
+    valid = json.dumps({"deployment_defaults": {"default_control_mode": "confirm"}}).encode()
+    assert (await view.put(_admin_request(body=valid))).status == 200
+    before = data.mesa.store.get_deployment_defaults()
+    assert before is not None
+
+    resp = await view.put(_admin_request(body=json.dumps({"deployment_defaults": defaults}).encode()))
+
+    assert resp.status == 400, resp.text
+    assert _body(resp)["message_key"] == "adminError.deploymentDefaultsInvalid"
+    assert data.mesa.store.get_deployment_defaults() == before
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("entity_id", ["Light.Kitchen", "not-an-id", "light.kitchen\n"])
+@pytest.mark.parametrize("method", ["get", "delete"])
+async def test_profile_read_and_delete_refuse_a_noncanonical_entity_id(hass: HomeAssistant, entity_id, method):
+    """Reading or deleting a profile by a non-canonical entity ID answers 400 badEntityId and touches no profile."""
+    data = await _setup(hass)
+    view = PhoenixAdminMesaProfileView()
+    view.hass = hass
+    put_body = json.dumps({"semantic_profile": {"operational_boundaries": {"control_mode": "confirm"}}}).encode()
+    assert (await view.put(_admin_request(body=put_body), entity_id="light.kitchen")).status == 200
+
+    resp = await getattr(view, method)(_admin_request(), entity_id=entity_id)
+
+    assert resp.status == 400, resp.text
+    assert _body(resp)["message_key"] == "adminError.badEntityId"
+    assert data.mesa.store.get("light.kitchen") is not None
+
+
+@pytest.mark.asyncio
 async def test_issues_endpoint_refresh(hass: HomeAssistant):
     await _setup(hass)
     # Profile declares triggers_automations: none, but an automation references it.

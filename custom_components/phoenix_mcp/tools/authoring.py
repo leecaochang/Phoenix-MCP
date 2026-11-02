@@ -1498,6 +1498,8 @@ async def _scene_write(
     """Shared create/edit body: validate, scope-check members, write scenes.yaml, reload."""
     if not _valid_scene_config(config):
         return _tool_error("config must include a non-empty 'name' and a non-empty 'entities' map."), "invalid_request", tool_name
+    if yaml_includes.contains_tag_strings(config):
+        return _tool_error(yaml_includes.TAG_STRING_REFUSAL), "invalid_request", tool_name
     bad = _unwritable_scene_members(config, access_key, hass)
     if bad:
         return _tool_error("Scene references entities this access key cannot write: " + ", ".join(bad)), "denied", tool_name
@@ -1585,6 +1587,8 @@ def _scene_write_precheck(args: dict, tool_name: str, *, require_id: bool) -> tu
         return _tool_error("config must be an object."), "invalid_request", tool_name
     if not _valid_scene_config(config):
         return _tool_error("config must include a non-empty 'name' and a non-empty 'entities' map."), "invalid_request", tool_name
+    if yaml_includes.contains_tag_strings(config):
+        return _tool_error(yaml_includes.TAG_STRING_REFUSAL), "invalid_request", tool_name
     return None
 
 
