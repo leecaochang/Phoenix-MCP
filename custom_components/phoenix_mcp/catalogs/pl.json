@@ -2128,7 +2128,17 @@
       "privacySectionHelp": "Pokaż lub ukryj, czy dzienniki zapisują ID encji i adresy IP wywołujących.",
       "haNotificationsHelp": "Pokaż lub ukryj, kiedy Phoenix MCP wysyła Ci powiadomienie Home Assistant.",
       "aboutHelp": "Pokaż lub ukryj numery wersji i miejsce, w którym Phoenix MCP przechowuje dane.",
-      "githubHelp": "Otwórz kod źródłowy i system zgłoszeń Phoenix MCP na GitHub w nowej karcie."
+      "githubHelp": "Otwórz kod źródłowy i system zgłoszeń Phoenix MCP na GitHub w nowej karcie.",
+      "colorThemeLabel": "Motyw kolorów",
+      "colorThemeHelp": "Ustala kolory panelu, Przewodnika i Agent Chat w tej przeglądarce. Motyw wybiera jasny lub ciemny.",
+      "colorTheme": {
+        "spartan": "Spartański",
+        "wayfinding": "Drogowskazy",
+        "framed": "W ramkach",
+        "mist": "Mgła",
+        "office": "Biuro",
+        "aubergine": "Bakłażan"
+      }
     },
     "approvalSummary": {
       "action.optionalReason": "Opcjonalny powód",

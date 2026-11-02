@@ -74,3 +74,55 @@ it.each([["light", light], ["auto dark", dark], ["forced dark", forcedDark]] as 
   }
   expect(contrast(rgb(values["--phx-accent-fg"]), rgb(values["--phx-accent"])), "primary button").toBeGreaterThanOrEqual(4.5);
 });
+
+// Color themes re-value the same tokens on the host; each one must stay as legible as the default.
+const themes = readFileSync("frontend_src/themes.css", "utf8");
+const block = (selector: string): Record<string, string> => {
+  const at = themes.indexOf(selector + " {");
+  return at < 0 ? {} : tokens(themes.slice(at, themes.indexOf("}", at)));
+};
+const palettes = [...themes.matchAll(/:host\(\[data-phx-palette="(\w+)"\]\) \{/g)].map((m) => m[1]);
+
+it("ships the color themes Settings offers", () => {
+  expect(palettes).toEqual(["wayfinding", "framed", "mist", "office", "aubergine"]);
+});
+
+it.each(palettes)("keeps the %s theme's light and dark blocks complete and in step", (name) => {
+  const lightBlock = block(`:host([data-phx-palette="${name}"])`);
+  const autoDark = block(`  :host([data-phx-palette="${name}"]:not(.phx-theme-light))`);
+  const forced = block(`:host([data-phx-palette="${name}"].phx-theme-dark)`);
+  // A token the light block sets but a dark block leaves out would outrank the panel's own dark value.
+  expect(Object.keys(forced).sort()).toEqual(Object.keys(lightBlock).sort());
+  expect(autoDark).toEqual(forced);
+});
+
+it.each(palettes.flatMap((name) => [[name, "light"], [name, "dark"]]))("keeps the %s theme legible in %s", (name, mode) => {
+  const hex = (v: Record<string, string>) => Object.fromEntries(Object.entries(v).filter(([, x]) => x.startsWith("#")));
+  const values = mode === "light"
+    ? { ...light, ...hex(block(`:host([data-phx-palette="${name}"])`)) }
+    : { ...forcedDark, ...hex(block(`:host([data-phx-palette="${name}"].phx-theme-dark)`)) };
+  for (const surface of ["--phx-bg", "--phx-surface", "--phx-surface-2", "--phx-raised", "--phx-hover", "--phx-selected", "--phx-accent-lt"]) {
+    for (const text of ["--phx-text", "--phx-text-2"]) {
+      expect(contrast(rgb(values[text]), rgb(values[surface])), `${text} on ${surface}`).toBeGreaterThanOrEqual(4.5);
+    }
+  }
+  for (const surface of ["--phx-bg", "--phx-surface", "--phx-surface-2", "--phx-raised"]) {
+    for (const signal of ["--phx-success", "--phx-error", "--phx-warning", "--phx-read"]) {
+      expect(contrast(rgb(values[signal]), rgb(values[surface])), `${signal} on ${surface}`).toBeGreaterThanOrEqual(4.5);
+    }
+    expect(contrast(rgb(values["--phx-focus"]), rgb(values[surface])), `focus on ${surface}`).toBeGreaterThanOrEqual(3);
+  }
+  for (const surface of ["--phx-surface", "--phx-raised"]) {
+    expect(contrast(rgb(values["--phx-field-border"]), rgb(values[surface])), `field border on ${surface}`).toBeGreaterThanOrEqual(3);
+  }
+  expect(contrast(rgb(values["--phx-accent-fg"]), rgb(values["--phx-accent"])), "primary button").toBeGreaterThanOrEqual(4.5);
+  if (values["--phx-guide-surface"]) {
+    expect(contrast(rgb(values["--phx-text-2"]), rgb(values["--phx-guide-surface"])), "Guide text").toBeGreaterThanOrEqual(4.5);
+  }
+  if (values["--phx-toolbar-current-bg"]?.startsWith("#")) {
+    expect(contrast(rgb(values["--phx-toolbar-current-fg"]), rgb(values["--phx-toolbar-current-bg"])), "current workspace").toBeGreaterThanOrEqual(4.5);
+  }
+  if (values["--phx-toolbar-bg"]?.startsWith("#") && values["--phx-toolbar-btn-fg"]?.startsWith("#")) {
+    expect(contrast(rgb(values["--phx-toolbar-btn-fg"]), rgb(values["--phx-toolbar-bg"])), "toolbar icons").toBeGreaterThanOrEqual(4.5);
+  }
+});

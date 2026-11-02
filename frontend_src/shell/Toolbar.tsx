@@ -348,6 +348,7 @@ export function Toolbar({ controller, shellRoot, env, state, onChange, documenta
                   return (
                     <button key={id} type="button"
                       className={`phx-toolbar-button ${fitClass(4)}${active ? " is-current" : ""}`}
+                      data-toolbar-workspace={id}
                       aria-current={active ? "page" : undefined}
                       aria-label={count > 0 ? t("shell.approvalsTabAria", { count }) : undefined}
                       title={label}

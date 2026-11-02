@@ -1231,6 +1231,16 @@
       "themeHelp": "Wählen, wie das Panel in diesem Browser aussieht. Automatisch folgt dem hellen oder dunklen Modus von Home Assistant.",
       "themeLabel": "Design",
       "themeLight": "Hell",
+      "colorThemeLabel": "Farbdesign",
+      "colorThemeHelp": "Legt die Farben des Panels, des Leitfadens und von Agent Chat in diesem Browser fest. Design wählt hell oder dunkel.",
+      "colorTheme": {
+        "spartan": "Spartanisch",
+        "wayfinding": "Wegweiser",
+        "framed": "Gerahmt",
+        "mist": "Nebel",
+        "office": "Büro",
+        "aubergine": "Aubergine"
+      },
       "accessKey": "Zugriffsschlüssel",
       "voiceAssistSetup": "Assist-Einrichtung",
       "voiceAssistSetupCreated": "Phoenix MCP hat für diesen Sprachagenten einen Home-Assistant-Assistenten erstellt. Das Entfernen deaktiviert den Sprachagenten nicht.",

@@ -26,7 +26,6 @@
   "frontend_src/types.ts": "Type definitions.",
   "frontend_src/ui/Icon.tsx": "Icon set.",
   "frontend_src/ui/fonts.ts": "Font registration.",
-  "frontend_src/ui/theme.ts": "Light and dark theme selection, following Home Assistant.",
   "frontend_src/ui/toggleNames.ts": "Accessible names for switches.",
   "frontend_src/ui/useClickAway.ts": "Shared interaction hook.",
   "frontend_src/utils/approval_events.ts": "Event subscription plumbing.",

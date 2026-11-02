@@ -1619,7 +1619,17 @@
       "privacySectionHelp": "로그에 엔티티 ID와 호출자 IP 주소를 기록할지 여부를 표시하거나 숨깁니다.",
       "haNotificationsHelp": "Phoenix MCP가 Home Assistant 알림을 보내는 경우를 표시하거나 숨깁니다.",
       "aboutHelp": "버전 번호와 Phoenix MCP가 데이터를 보관하는 위치를 표시하거나 숨깁니다.",
-      "githubHelp": "GitHub의 Phoenix MCP 소스 코드와 이슈 트래커를 새 탭에서 엽니다."
+      "githubHelp": "GitHub의 Phoenix MCP 소스 코드와 이슈 트래커를 새 탭에서 엽니다.",
+      "colorThemeLabel": "색상 테마",
+      "colorThemeHelp": "이 브라우저에서 패널, 가이드, Agent Chat의 색을 정합니다. 밝기는 테마에서 고릅니다.",
+      "colorTheme": {
+        "spartan": "스파르탄",
+        "wayfinding": "길잡이",
+        "framed": "프레임",
+        "mist": "안개",
+        "office": "오피스",
+        "aubergine": "가지색"
+      }
     },
     "approvalSummary": {
       "action.optionalReason": "선택 사유",

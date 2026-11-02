@@ -2294,6 +2294,16 @@
       "themeHelp": "Velg hvordan panelet ser ut i denne nettleseren. Automatisk følger lys eller mørk modus i Home Assistant.",
       "themeLabel": "Tema",
       "themeLight": "Lyst",
+      "colorThemeLabel": "Fargetema",
+      "colorThemeHelp": "Bestemmer fargene i panelet, Veiledning og Agent Chat i denne nettleseren. Tema velger lys eller mørk.",
+      "colorTheme": {
+        "spartan": "Spartansk",
+        "wayfinding": "Veiviser",
+        "framed": "Innrammet",
+        "mist": "Tåke",
+        "office": "Kontor",
+        "aubergine": "Aubergine"
+      },
       "voiceAccessKeyAria": "Tilgangsnøkkel for taleagent",
       "voiceAccessKeyHelp": "Styrer hvilke entiteter og handlinger denne taleagenten har tilgang til.",
       "voiceAssistSetup": "Assist-oppsett",

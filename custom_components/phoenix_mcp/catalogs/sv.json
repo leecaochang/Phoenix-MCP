@@ -2294,6 +2294,16 @@
       "themeHelp": "Välj hur panelen ser ut i den här webbläsaren. Automatiskt följer Home Assistants ljusa eller mörka läge.",
       "themeLabel": "Tema",
       "themeLight": "Ljust",
+      "colorThemeLabel": "Färgtema",
+      "colorThemeHelp": "Bestämmer färgerna i panelen, Guide och Agent Chat i den här webbläsaren. Tema väljer ljust eller mörkt.",
+      "colorTheme": {
+        "spartan": "Spartansk",
+        "wayfinding": "Vägvisare",
+        "framed": "Inramad",
+        "mist": "Dimma",
+        "office": "Kontor",
+        "aubergine": "Aubergine"
+      },
       "voiceAccessKeyAria": "Röstagentens åtkomstnyckel",
       "voiceAccessKeyHelp": "Styr vilka entiteter och åtgärder den här röstagenten kan komma åt.",
       "voiceAssistSetup": "Assist-konfiguration",

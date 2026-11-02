@@ -20,6 +20,7 @@ import {
   AGENTCHAT_REVIEW_OPENED_EVENT,
 } from "../utils/agentchat_review";
 import PANEL_CSS from "../phoenix-mcp-panel.css?inline";
+import THEMES_CSS from "../themes.css?inline";
 import { ensurePhoenixFont } from "../ui/fonts";
 import { applyThemeClass, resolveThemeClass } from "../ui/theme";
 
@@ -290,7 +291,7 @@ export function showAgentChat(accessKeyId?: string): void {
   ensurePhoenixFont(document);
   const shadow = host.attachShadow({ mode: "open" });
   const style = document.createElement("style");
-  style.textContent = PANEL_CSS + "\n.agentcli-window{pointer-events:auto;}";
+  style.textContent = PANEL_CSS + THEMES_CSS + "\n.agentcli-window{pointer-events:auto;}";
   shadow.appendChild(style);
   const mount = document.createElement("div");
   mount.style.pointerEvents = "none";

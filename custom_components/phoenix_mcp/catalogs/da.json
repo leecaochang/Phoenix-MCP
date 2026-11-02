@@ -2294,6 +2294,16 @@
       "themeHelp": "Vælg, hvordan panelet ser ud i denne browser. Automatisk følger Home Assistants lyse eller mørke tilstand.",
       "themeLabel": "Tema",
       "themeLight": "Lys",
+      "colorThemeLabel": "Farvetema",
+      "colorThemeHelp": "Bestemmer farverne i panelet, Guide og Agent Chat i denne browser. Tema vælger lys eller mørk.",
+      "colorTheme": {
+        "spartan": "Spartansk",
+        "wayfinding": "Vejviser",
+        "framed": "Indrammet",
+        "mist": "Tåge",
+        "office": "Kontor",
+        "aubergine": "Aubergine"
+      },
       "voiceAccessKeyAria": "Adgangsnøgle til stemmeagent",
       "voiceAccessKeyHelp": "Styrer, hvilke entiteter og handlinger denne stemmeagent har adgang til.",
       "voiceAssistSetup": "Assist-opsætning",

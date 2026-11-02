@@ -18,6 +18,7 @@ import { Modal } from "../components/Modal";
 import { ActionButton } from "../ui/ActionButton";
 import { Loading, ErrorMsg } from "../components/common";
 import PANEL_CSS from "../phoenix-mcp-panel.css?inline";
+import THEMES_CSS from "../themes.css?inline";
 import { ensurePhoenixFont } from "../ui/fonts";
 import { applyThemeClass, resolveThemeClass } from "../ui/theme";
 import { hasMessage, loadTranslations, registerLanguageRoot, resolveLanguage, t } from "../i18n";
@@ -172,7 +173,7 @@ class QuickAddElement extends HTMLElement {
     ensurePhoenixFont(this.ownerDocument);
     const shadow = this.attachShadow({ mode: "open" });
     const style = document.createElement("style");
-    style.textContent = PANEL_CSS;
+    style.textContent = PANEL_CSS + THEMES_CSS;
     shadow.appendChild(style);
     const mount = document.createElement("div");
     mount.style.height = "100%";

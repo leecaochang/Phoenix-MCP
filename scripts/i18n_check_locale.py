@@ -186,6 +186,7 @@ ALLOW_IDENTICAL = frozenset({
 # Chinese value such as "Token" pass silently.
 ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
     "da": frozenset({
+        "panel.settings.colorTheme.aubergine",  # "Aubergine", the color's own name in this language
         "entity.sensor.status.name",  # "Status", the same word in this language
         "panel.settings.agentcliRegionCa",  # Region name or label spelled the same as English in this language.
         "panel.settings.agentcliRegionJp",  # Region name or label spelled the same as English in this language.
@@ -241,6 +242,7 @@ ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
         "panel.shell.agentChat",  # "Agent Chat", a Phoenix product name
     }),
     "de": frozenset({
+        "panel.settings.colorTheme.aubergine",  # "Aubergine", the color's own name in this language
         "entity.sensor.status.name",  # "Status", the same word in this language
         "panel.settings.agentcliRegionJp",  # Region name or label spelled the same as English in this language.
         "panel.agentchat.title",  # "Agent Chat", a Phoenix product name
@@ -311,6 +313,7 @@ ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
         "panel.shell.agentChat",  # "Agent Chat", a Phoenix product name
     }),
     "fr": frozenset({
+        "panel.settings.colorTheme.aubergine",  # "Aubergine", the color's own name in this language
         "panel.approvals.detailTabArgs",       # "Arguments", the French word
         "panel.settings.agentcliRegionCa",  # Region name or label spelled the same as English in this language.
         "panel.agentchat.title",  # "Agent Chat", a Phoenix product name
@@ -437,6 +440,7 @@ ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
         "panel.shell.agentChat",  # "Agent Chat", a Phoenix product name
     }),
     "nb": frozenset({
+        "panel.settings.colorTheme.aubergine",  # "Aubergine", the color's own name in this language
         "entity.sensor.status.name",  # "Status", the same word in this language
         "panel.settings.agentcliRegionAu",  # Region name or label spelled the same as English in this language.
         "panel.settings.agentcliRegionCa",  # Region name or label spelled the same as English in this language.
@@ -478,6 +482,7 @@ ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
         "panel.conversations.source.agentcli",  # "Agent Chat", a Phoenix product name
     }),
     "nl": frozenset({
+        "panel.settings.colorTheme.aubergine",  # "Aubergine", the color's own name in this language
         "entity.sensor.status.name",  # "Status", the same word in this language
         "panel.settings.agentcliRegionCa",  # Region name or label spelled the same as English in this language.
         "panel.mesa.colAppliesTo",  # "Type", the same word in this language
@@ -589,6 +594,7 @@ ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
         "panel.agentchat.toolResult",      # "<code>{name}</code>: {summary}"
     }),
     "sv": frozenset({
+        "panel.settings.colorTheme.aubergine",  # "Aubergine", the color's own name in this language
         "entity.sensor.status.name",  # "Status", the same word in this language
         "panel.settings.agentcliRegionJp",  # Region name or label spelled the same as English in this language.
         "panel.selectBy.menu",  # "Filter", the same word in this language

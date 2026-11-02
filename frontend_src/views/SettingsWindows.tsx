@@ -32,6 +32,7 @@ import { WindowPlaceContext, useToolbarTools, type Tool } from "../shell/tools";
 import { ControllerContext } from "../shell/dock/TitleBar";
 import { useWindowToggle } from "../shell/windowTools";
 import { ActionButton } from "../ui/ActionButton";
+import { PALETTES, readPalette, setPalette, subscribeTheme, type Palette } from "../ui/theme";
 import { SettingLabel, helpRow } from "../ui/SettingLabel";
 import { JS_BUILD } from "../version";
 
@@ -41,6 +42,15 @@ const THEME_LABEL_KEYS: Record<Theme, string> = {
   light: "settings.themeLight",
   auto: "settings.themeAuto",
   dark: "settings.themeDark",
+};
+
+const PALETTE_LABEL_KEYS: Record<Palette, string> = {
+  spartan: "settings.colorTheme.spartan",
+  wayfinding: "settings.colorTheme.wayfinding",
+  framed: "settings.colorTheme.framed",
+  mist: "settings.colorTheme.mist",
+  office: "settings.colorTheme.office",
+  aubergine: "settings.colorTheme.aubergine",
 };
 
 /** Offer Find Setting, and any tools of the window's own, on the toolbar. */
@@ -298,6 +308,7 @@ export function LogsSettingsWindow() {
 
 export function GeneralSettingsWindow() {
   const s = useSettings();
+  const palette = useSyncExternalStore(subscribeTheme, readPalette);
   const { settings, saving, change, error } = useSettingsChange();
   const injectBlocked = useSyncExternalStore(subscribeInjectCompatibility, injectSessionBlocked);
   useSettingsTools("settingsGeneral");
@@ -324,6 +335,12 @@ export function GeneralSettingsWindow() {
             </button>
           ))}
         </div>
+      </div>
+      <div className="toggle-row toggle-row-stacked-control" {...helpRow(t("settings.colorThemeHelp"))}>
+        <SettingLabel help={t("settings.colorThemeHelp")}><span>{t("settings.colorThemeLabel")}</span></SettingLabel>
+        <select aria-label={t("settings.colorThemeLabel")} className="input input-auto" value={palette} onChange={(e) => setPalette(e.target.value as Palette)}>
+          {PALETTES.map((p) => <option key={p} value={p}>{t(PALETTE_LABEL_KEYS[p])}</option>)}
+        </select>
       </div>
       {/* A rule sets the presets and profile buttons apart; no heading names them (user, 2026-10-31). */}
       <hr className="settings-divider" />

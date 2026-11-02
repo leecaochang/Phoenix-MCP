@@ -6,12 +6,13 @@
  */
 
 import PANEL_CSS from "../phoenix-mcp-panel.css?inline";
+import THEMES_CSS from "../themes.css?inline";
 import { ensurePhoenixFont } from "./fonts";
 
 // The panel stylesheet is authored for a shadow host. A same-origin popup has
 // no shadow host, so translate those selectors to the document root while
 // preserving the exact same tokens and component rules.
-const POPUP_PANEL_CSS = PANEL_CSS
+const POPUP_PANEL_CSS = (PANEL_CSS + THEMES_CSS)
   .replace(/:host\(([^)]*)\)/g, ":root$1")
   .replaceAll(":host", ":root");
 

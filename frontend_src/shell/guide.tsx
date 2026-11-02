@@ -714,7 +714,7 @@ export function GuideWindow({ workspace, controller, language, rect, onRect, onC
     };
     sync();
     const observer = themeHost.current ? new MutationObserver(sync) : null;
-    if (themeHost.current) observer?.observe(themeHost.current, { attributes: true, attributeFilter: ["class"] });
+    if (themeHost.current) observer?.observe(themeHost.current, { attributes: true, attributeFilter: ["class", "data-phx-palette"] });
     const closed = () => {
       if (closingPopup.current) return;
       setPopup(null);

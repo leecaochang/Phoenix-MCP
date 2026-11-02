@@ -1699,6 +1699,16 @@
       "themeHelp": "Choose how the panel looks in this browser. Auto follows Home Assistant's light or dark mode.",
       "themeLabel": "Theme",
       "themeLight": "Light",
+      "colorThemeLabel": "Color theme",
+      "colorThemeHelp": "Sets the colors of the panel, the Guide and Agent Chat in this browser. Theme picks light or dark.",
+      "colorTheme": {
+        "spartan": "Spartan",
+        "wayfinding": "Wayfinding",
+        "framed": "Framed",
+        "mist": "Mist",
+        "office": "Office",
+        "aubergine": "Aubergine"
+      },
       "accessKey": "Access key",
       "voiceAssistSetup": "Assist setup",
       "voiceAssistSetupCreated": "Phoenix MCP created a Home Assistant assistant for this voice agent. Removing it does not disable the voice agent.",

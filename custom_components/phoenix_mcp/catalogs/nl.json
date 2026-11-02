@@ -1956,6 +1956,16 @@
       "themeHelp": "Kies hoe het paneel er in deze browser uitziet. Automatisch volgt de lichte of donkere modus van Home Assistant.",
       "themeLabel": "Thema",
       "themeLight": "Licht",
+      "colorThemeLabel": "Kleurthema",
+      "colorThemeHelp": "Bepaalt de kleuren van het paneel, de Gids en Agent Chat in deze browser. Thema kiest licht of donker.",
+      "colorTheme": {
+        "spartan": "Spartaans",
+        "wayfinding": "Wegwijzer",
+        "framed": "Omlijst",
+        "mist": "Nevel",
+        "office": "Kantoor",
+        "aubergine": "Aubergine"
+      },
       "accessKey": "Toegangssleutel",
       "voiceAssistSetup": "Assist-installatie",
       "voiceAssistSetupCreated": "Phoenix MCP heeft een Home Assistant-assistent voor deze spraakagent aangemaakt. Het verwijderen ervan schakelt de spraakagent niet uit.",

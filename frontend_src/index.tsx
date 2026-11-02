@@ -13,11 +13,12 @@ import { setHass } from "./api";
 import DOCKVIEW_CSS from "dockview-react/dist/styles/dockview.css?inline";
 import PANEL_CSS from "./phoenix-mcp-panel.css?inline";
 import DOCK_CSS from "./shell/dock/dock.css?inline";
+import THEMES_CSS from "./themes.css?inline";
 import { PanelDataProvider, type Theme } from "./shell/PanelData";
 import { Shell } from "./shell/Shell";
 import { readRecord } from "./shell/storage";
 import { ensurePhoenixFont } from "./ui/fonts";
-import { applyThemeClass, resolveThemeClass } from "./ui/theme";
+import { applyThemeClass, resolveThemeClass, subscribeTheme } from "./ui/theme";
 
 export { HIGH_RISK_DOMAINS } from "./utils";
 
@@ -48,6 +49,7 @@ class PhoenixPanelElement extends HTMLElement {
   private _narrow: boolean = false;
   private _prevUserId: string | undefined = undefined;
   private _theme: Theme = "auto";
+  private _unsubscribeTheme: (() => void) | null = null;
   private _i18nStarted: boolean = false;
   private _language: string = getLanguagePreference();
 
@@ -60,13 +62,14 @@ class PhoenixPanelElement extends HTMLElement {
       this._theme = saved;
     }
     this._applyThemeClass();
+    this._unsubscribeTheme = subscribeTheme(() => this._applyThemeClass());
     ensurePhoenixFont(this.ownerDocument);
 
     const shadow = this.attachShadow({ mode: "open" });
 
     const style = document.createElement("style");
     // Dockview's own stylesheet first, so the panel's window styles override it.
-    style.textContent = DOCKVIEW_CSS + PANEL_CSS + DOCK_CSS;
+    style.textContent = DOCKVIEW_CSS + PANEL_CSS + DOCK_CSS + THEMES_CSS;
     shadow.appendChild(style);
 
     const mount = document.createElement("div");
@@ -79,6 +82,8 @@ class PhoenixPanelElement extends HTMLElement {
   }
 
   disconnectedCallback() {
+    this._unsubscribeTheme?.();
+    this._unsubscribeTheme = null;
     this._root?.unmount();
     this._root = null;
   }

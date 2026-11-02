@@ -2394,7 +2394,17 @@
       "privacySectionHelp": "Näytä tai piilota, kirjaavatko lokit entiteettien tunnukset ja kutsujien IP-osoitteet.",
       "haNotificationsHelp": "Näytä tai piilota, milloin Phoenix MCP lähettää sinulle Home Assistant -ilmoituksen.",
       "aboutHelp": "Näytä tai piilota versionumerot ja se, missä Phoenix MCP säilyttää tietonsa.",
-      "githubHelp": "Avaa Phoenix MCP:n lähdekoodi ja vikaseuranta GitHubissa uudessa välilehdessä."
+      "githubHelp": "Avaa Phoenix MCP:n lähdekoodi ja vikaseuranta GitHubissa uudessa välilehdessä.",
+      "colorThemeLabel": "Väriteema",
+      "colorThemeHelp": "Määrittää paneelin, oppaan ja Agent Chatin värit tässä selaimessa. Teema valitsee vaalean tai tumman.",
+      "colorTheme": {
+        "spartan": "Spartalainen",
+        "wayfinding": "Opasteet",
+        "framed": "Kehystetty",
+        "mist": "Usva",
+        "office": "Toimisto",
+        "aubergine": "Munakoiso"
+      }
     },
     "shell": {
       "agentChat": "Agent Chat",

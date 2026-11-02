@@ -7,6 +7,8 @@ A persona decides which tools the agent may use, not which devices it can reach.
 
 Personas don't stop an agent from controlling devices. With every persona except Home Companion, the agent can control anything you set to W in the tree. Only locks, alarm panels, covers and valves also need [{{label:caps.cap_physical_control.label}}](guide:window.capabilities#physical-control).
 
+With any [{{label:settings.colorThemeLabel}}](guide:window.settingsGeneral#color-theme) except {{label:settings.colorTheme.spartan}}, three personas have their own color: {{label:personas.home_companion.label}} gold, {{label:personas.new_user.label}} green and {{label:personas.custom.label}} blue.
+
 ## {{label:personas.read_only.label}} {#read-only}
 
 Reads only: configuration, templates, system logs, search, the registry, automation traces, diagnostics and service response data. It changes no configuration.

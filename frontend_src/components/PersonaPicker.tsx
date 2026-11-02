@@ -95,6 +95,7 @@ export function PersonaPicker(props: Props) {
               key={p.key}
               type="button"
               className={`persona-card${active ? " persona-card-active" : ""}`}
+              data-persona={p.key}
               onClick={() => !saving && !active && choose(p.key)}
               busy={saving}
               aria-pressed={active}

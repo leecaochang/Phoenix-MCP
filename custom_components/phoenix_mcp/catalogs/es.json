@@ -1905,7 +1905,17 @@
       "privacySectionHelp": "Muestre u oculte si los registros guardan los ID de entidad y las direcciones IP de quienes llaman.",
       "haNotificationsHelp": "Muestre u oculte cuándo le envía Phoenix MCP una notificación de Home Assistant.",
       "aboutHelp": "Muestre u oculte los números de versión y dónde guarda Phoenix MCP sus datos.",
-      "githubHelp": "Abra el código fuente y el gestor de incidencias de Phoenix MCP en GitHub en una nueva pestaña."
+      "githubHelp": "Abra el código fuente y el gestor de incidencias de Phoenix MCP en GitHub en una nueva pestaña.",
+      "colorThemeLabel": "Tema de color",
+      "colorThemeHelp": "Define los colores del panel, la Guía y Agent Chat en este navegador. Tema elige claro u oscuro.",
+      "colorTheme": {
+        "spartan": "Espartano",
+        "wayfinding": "Orientación",
+        "framed": "Enmarcado",
+        "mist": "Niebla",
+        "office": "Oficina",
+        "aubergine": "Berenjena"
+      }
     },
     "approvalSummary": {
       "action.optionalReason": "Motivo opcional",

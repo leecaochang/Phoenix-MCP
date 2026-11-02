@@ -1706,7 +1706,17 @@
       "privacySectionHelp": "显示或隐藏日志是否记录实体 ID 和调用方 IP 地址。",
       "haNotificationsHelp": "显示或隐藏 Phoenix MCP 何时向您发送 Home Assistant 通知。",
       "aboutHelp": "显示或隐藏版本号以及 Phoenix MCP 存放数据的位置。",
-      "githubHelp": "在新标签页中打开 GitHub 上的 Phoenix MCP 源代码和问题跟踪器。"
+      "githubHelp": "在新标签页中打开 GitHub 上的 Phoenix MCP 源代码和问题跟踪器。",
+      "colorThemeLabel": "配色主题",
+      "colorThemeHelp": "设置此浏览器中面板、指南和 Agent Chat 的颜色。浅色或深色由“主题”决定。",
+      "colorTheme": {
+        "spartan": "简朴",
+        "wayfinding": "指路",
+        "framed": "边框",
+        "mist": "薄雾",
+        "office": "办公",
+        "aubergine": "茄紫"
+      }
     },
     "agentchat": {
       "accessKey": "访问密钥",

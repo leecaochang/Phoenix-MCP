@@ -1705,7 +1705,17 @@
       "privacySectionHelp": "ログにエンティティ ID と呼び出し元の IP アドレスを記録するかどうかを表示または非表示にします。",
       "haNotificationsHelp": "Phoenix MCP が Home Assistant の通知を送る条件を表示または非表示にします。",
       "aboutHelp": "バージョン番号と、Phoenix MCP のデータの保存場所を表示または非表示にします。",
-      "githubHelp": "GitHub 上の Phoenix MCP のソースコードと課題トラッカーを新しいタブで開きます。"
+      "githubHelp": "GitHub 上の Phoenix MCP のソースコードと課題トラッカーを新しいタブで開きます。",
+      "colorThemeLabel": "カラーテーマ",
+      "colorThemeHelp": "このブラウザーでのパネル、ガイド、Agent Chat の色を設定します。明暗は「テーマ」で選びます。",
+      "colorTheme": {
+        "spartan": "スパルタン",
+        "wayfinding": "道しるべ",
+        "framed": "フレーム",
+        "mist": "ミスト",
+        "office": "オフィス",
+        "aubergine": "オーベルジーヌ"
+      }
     },
     "mesa": {
       "addAreaProfile": "エリアプロファイルを追加",

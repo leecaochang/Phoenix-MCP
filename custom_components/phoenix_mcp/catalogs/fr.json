@@ -1338,6 +1338,16 @@
       "themeHelp": "Choisissez l’apparence du panneau dans ce navigateur. Automatique suit le mode clair ou sombre de Home Assistant.",
       "themeLabel": "Thème",
       "themeLight": "Clair",
+      "colorThemeLabel": "Thème de couleurs",
+      "colorThemeHelp": "Définit les couleurs du panneau, du Guide et d’Agent Chat dans ce navigateur. Thème choisit clair ou sombre.",
+      "colorTheme": {
+        "spartan": "Spartiate",
+        "wayfinding": "Repères",
+        "framed": "Encadré",
+        "mist": "Brume",
+        "office": "Bureau",
+        "aubergine": "Aubergine"
+      },
       "accessKey": "Clé d’accès",
       "voiceAssistSetup": "Configuration d'Assist",
       "voiceAssistSetupCreated": "Phoenix MCP a créé un assistant Home Assistant pour cet agent vocal. Le supprimer ne désactive pas l'agent vocal.",

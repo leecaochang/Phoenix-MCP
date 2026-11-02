@@ -2060,7 +2060,17 @@
       "privacySectionHelp": "Показать или скрыть, записывают ли журналы идентификаторы сущностей и IP-адреса вызывающих.",
       "haNotificationsHelp": "Показать или скрыть, когда Phoenix MCP отправляет вам уведомление Home Assistant.",
       "aboutHelp": "Показать или скрыть номера версий и место, где Phoenix MCP хранит данные.",
-      "githubHelp": "Открыть исходный код и трекер задач Phoenix MCP на GitHub в новой вкладке."
+      "githubHelp": "Открыть исходный код и трекер задач Phoenix MCP на GitHub в новой вкладке.",
+      "colorThemeLabel": "Цветовая тема",
+      "colorThemeHelp": "Задаёт цвета панели, руководства и Agent Chat в этом браузере. Светлую или тёмную выбирает «Тема».",
+      "colorTheme": {
+        "spartan": "Спартанская",
+        "wayfinding": "Ориентиры",
+        "framed": "В рамках",
+        "mist": "Туман",
+        "office": "Офис",
+        "aubergine": "Баклажан"
+      }
     },
     "shell": {
       "agentChat": "Agent Chat",

@@ -118,7 +118,7 @@ const ICONS = {
 
 export type IconName = keyof typeof ICONS;
 
-/** A decorative glyph: the control around it carries the accessible name. */
+/** A decorative glyph: the control around it carries the accessible name. Its `phx-icon-<name>` class lets a theme single it out. */
 export function Icon({ name, size = 16, className, style, filled = false }: {
   name: IconName;
   size?: number;
@@ -132,7 +132,7 @@ export function Icon({ name, size = 16, className, style, filled = false }: {
       size={size}
       strokeWidth={1.75}
       fill={filled ? "currentColor" : "none"}
-      className={className}
+      className={className ? `phx-icon-${name} ${className}` : `phx-icon-${name}`}
       style={style}
       aria-hidden="true"
       focusable="false"
