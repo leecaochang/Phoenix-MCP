@@ -56,11 +56,12 @@ from .const import (
     RUNTIME_READY_KEY,
     ACCESS_KEY_NAME_REGEX,
     DEFAULT_RATE_LIMIT_BURST,
+    MAX_PRESETS_PER_ACCESS_KEY,
     DEFAULT_RATE_LIMIT_REQUESTS,
 )
 from .data import PhoenixData
 from .device_semantics import device_authority_chain, device_registry_snapshot, effective_entity_area_id
-from .helpers import cancel_expiry_timer, panel_catalog
+from .helpers import LocalizedReason, cancel_expiry_timer, panel_catalog
 from .locales import canonical_language
 from .policy_engine import (
     Permission,
@@ -77,6 +78,8 @@ from .access_key_store import (
     NotesError,
     PermissionNode,
     PermissionTree,
+    PresetLimitError,
+    PresetNameTakenError,
     VALID_NODE_STATES,
     access_key_name_slug,
     normalize_notes,
@@ -367,20 +370,15 @@ def _validate_permission_tree_body(body: dict, rid: str) -> web.Response | None:
                 )
             state = value.get("state", "GREY")
             if state not in VALID_NODE_STATES:
-                return _err(
-                    "invalid_request",
-                    f"Invalid state {state!r} for {node_type[:-1]} {key!r}. "
-                    f"Valid states: {sorted(VALID_NODE_STATES)}.",
-                    400,
-                    rid,
-                    key="permissionStateInvalid",
-                    params={
-                        "state": state,
-                        "node_type": node_type[:-1],
-                        "node": key,
-                        "states": ", ".join(sorted(VALID_NODE_STATES)),
-                    },
-                )
+                message = (f"Invalid state {state!r} for {node_type[:-1]} {key!r}. "
+                           f"Valid states: {sorted(VALID_NODE_STATES)}.")
+                params = {"state": state, "node": key, "states": ", ".join(sorted(VALID_NODE_STATES))}
+                # One message per node type, so a translated message never carries an English noun.
+                if node_type == "domains":
+                    return _err("invalid_request", message, 400, rid, key="permissionStateInvalidDomain", params=params)
+                if node_type == "devices":
+                    return _err("invalid_request", message, 400, rid, key="permissionStateInvalidDevice", params=params)
+                return _err("invalid_request", message, 400, rid, key="permissionStateInvalidEntity", params=params)
             hint = value.get("hint")
             if hint is not None:
                 if not isinstance(hint, str):
@@ -800,8 +798,9 @@ class PhoenixAdminAccessKeysView(PhoenixView):
             return _err("invalid_request", "name is required.", 400, rid, key="nameRequired")
         if not ACCESS_KEY_NAME_REGEX.fullmatch(name):
             return _err(
-                "invalid_request", "name does not match required pattern.", 400, rid,
-                key="accessKeyNamePattern",
+                "invalid_request",
+                "name must be 3-32 characters: letters, numbers, hyphens, or underscores.",
+                400, rid, key="accessKeyNameLengthPattern", params={"min": 3, "max": 32},
             )
         pass_through = body.get("pass_through", False)
         if not isinstance(pass_through, bool):
@@ -1319,6 +1318,11 @@ class PhoenixAdminAccessKeyPresetsView(PhoenixView):
         async with data.store.async_lock:
             try:
                 updated = await data.store.async_add_preset(access_key_id, name)
+            except PresetLimitError as exc:
+                return _err("invalid_request", str(exc), 400, rid,
+                            key="presetLimitReached", params={"max": MAX_PRESETS_PER_ACCESS_KEY})
+            except PresetNameTakenError as exc:
+                return _err("invalid_request", str(exc), 400, rid, key="presetNameTaken")
             except ValueError as exc:
                 return _err(
                     "invalid_request", str(exc), 400, rid,
@@ -2363,25 +2367,28 @@ async def _validated_settings_patch(
             )
     if "command_routing_languages" in patchable and not valid_command_routing_languages(patchable["command_routing_languages"]):
         return {}, _err("invalid_request", "Invalid command routing languages.", 400, rid,
-                        key="routingPreviewInvalid")
+                        key="routingLanguagesInvalid")
     if "command_routing_timeout_ms" in patchable:
         value = patchable["command_routing_timeout_ms"]
         if (type(value) is not int or not
                 COMMAND_ROUTING_TIMEOUT_MIN_MS <= value <= COMMAND_ROUTING_TIMEOUT_MAX_MS):
             return {}, _err(
                 "invalid_request", "Invalid recognition time budget.", 400, rid,
-                key="routingPreviewInvalid",
+                key="conversationLimitInvalid", params={"field": "command_routing_timeout_ms",
+                "min": COMMAND_ROUTING_TIMEOUT_MIN_MS, "max": COMMAND_ROUTING_TIMEOUT_MAX_MS},
             )
 
     if "decision_timeout_ms" in patchable:
         value = patchable["decision_timeout_ms"]
         if type(value) is not int or not DECISION_TIMEOUT_MIN_MS <= value <= DECISION_TIMEOUT_MAX_MS:
-            return {}, _err("invalid_request", "Invalid decision time budget.", 400, rid, key="routingPreviewInvalid")
+            return {}, _err("invalid_request", "Invalid decision time budget.", 400, rid, key="conversationLimitInvalid",
+                            params={"field": "decision_timeout_ms", "min": DECISION_TIMEOUT_MIN_MS, "max": DECISION_TIMEOUT_MAX_MS})
 
     if 'decision_request_budget' in patchable:
         value = patchable['decision_request_budget']
         if type(value) is not int or not 0 <= value <= DECISION_REQUEST_BUDGET_MAX:
-            return {}, _err('invalid_request', 'Invalid decision request limit.', 400, rid, key='routingPreviewInvalid')
+            return {}, _err('invalid_request', 'Invalid decision request limit.', 400, rid, key='conversationLimitInvalid',
+                            params={'field': 'decision_request_budget', 'min': 0, 'max': DECISION_REQUEST_BUDGET_MAX})
 
     for key, (lo, hi) in CONVERSATION_LOG_LIMITS.items():
         if key in patchable and (type(patchable[key]) is not int or not lo <= patchable[key] <= hi):
@@ -2484,7 +2491,7 @@ async def _validated_settings_patch(
         provider_store = await _get_secret_store(hass)
         if not account or provider_store.resolve(account, purpose="decision") is None:
             return {}, _err("invalid_request", "Choose a decision provider account.", 400, rid,
-                            key="configuredProviderRequired", params={"field": "decision_provider_id"})
+                            key="decisionProviderRequired")
     if any(patchable.get(key) == "advise" for key in TOOL_ROUTING_SETTINGS.values()):
         from .tool_routing import qualified_languages
         from .agentcli import _get_secret_store
@@ -2805,10 +2812,10 @@ class PhoenixAdminVoiceAgentPipelineView(PhoenixView):
                 )
         except VoicePipelineError as err:
             _LOGGER.warning("Assist pipeline setup failed", exc_info=True)
-            return _err(
-                "invalid_request", str(err), 400, rid,
-                key="assistPipelineFailed",
-            )
+            # Each cause carries its own message key; an unexpected one keeps the general message.
+            reason = err.args[0] if err.args and isinstance(err.args[0], LocalizedReason) else LocalizedReason(
+                str(err) or "Could not create the Phoenix MCP Assist pipeline.", "assistPipelineFailed")
+            return _err("invalid_request", str(reason), 400, rid, key=reason.key)
         _audit_admin(self.hass, request, rid, "voice_agent_pipeline")
         return _ok(result, request_id=rid)
 
@@ -2846,10 +2853,10 @@ class PhoenixAdminVoiceAgentPreferredView(PhoenixView):
                 result = await async_set_assist_pipeline_preferred(self.hass, data, preferred=preferred)
         except VoicePipelineError as err:
             _LOGGER.warning("Assist pipeline preference change failed", exc_info=True)
-            return _err(
-                "invalid_request", str(err), 400, rid,
-                key="assistPipelineFailed",
-            )
+            # Each cause carries its own message key; an unexpected one keeps the general message.
+            reason = err.args[0] if err.args and isinstance(err.args[0], LocalizedReason) else LocalizedReason(
+                str(err) or "Could not change the preferred assistant.", "assistantPreferredFailed")
+            return _err("invalid_request", str(reason), 400, rid, key=reason.key)
         _audit_admin(self.hass, request, rid, "voice_agent_pipeline")
         return _ok(result, request_id=rid)
 
@@ -2905,10 +2912,10 @@ class PhoenixAdminAiTaskPreferredView(PhoenixView):
             return _ok(result, request_id=rid)
         except AiTaskSetupError as err:
             _LOGGER.warning("AI Task preferred setup failed", exc_info=True)
-            return _err(
-                "invalid_request", str(err),
-                400, rid, key="aiTaskPreferredFailed",
-            )
+            # Each cause carries its own message key; an unexpected one keeps the general message.
+            reason = err.args[0] if err.args and isinstance(err.args[0], LocalizedReason) else LocalizedReason(
+                str(err) or "Could not configure the preferred AI Task entity.", "aiTaskPreferredFailed")
+            return _err("invalid_request", str(reason), 400, rid, key=reason.key)
 
     @require_admin
     async def delete(self, request: web.Request) -> web.Response:
@@ -3593,8 +3600,8 @@ async def _approve_approval(hass: HomeAssistant, request: web.Request, approval_
             )
             closed_method = "approval/expired"
             closed_response = _err(
-                "conflict", "Approval was already resolved.", 409, rid,
-                key="approvalAlreadyResolved",
+                "conflict", "This request expired before it was approved, so nothing was run.", 409, rid,
+                key="approvalExpired",
             )
         else:
             access_key = _restore_access_key(user.id) if recovery_request else data.store.get_access_key_by_id(record.access_key_id)
@@ -4787,9 +4794,9 @@ class PhoenixAdminConfigurationRecoveryRecordView(PhoenixView):
                 await data.config_recovery.reviewed(recovery_id, user.id, delete=action == "delete")
                 result = {"status": action}
             elif action == "restore":
-                if record["phase"] not in ("verified", "not_applied", "reviewed") or any(
-                    item["id"] == recovery_id and item["active"] for item in data.config_recovery.records()
-                ):
+                if any(item["id"] == recovery_id and item["active"] for item in data.config_recovery.records()):
+                    raise ConfigurationRecoveryError("The configuration operation is still active.")
+                if record["phase"] not in ("verified", "not_applied", "reviewed"):
                     raise ConfigurationRecoveryError("Review the inactive recovery record before restoring it.")
                 side = body.get("side")
                 if side not in ("before", "source") or not isinstance(record.get(side), dict):

@@ -85,10 +85,13 @@
       "activeAccessKeyRequired": "{field} должен ссылаться на активный ключ доступа.",
       "adminRequired": "Требуется доступ администратора.",
       "aiTaskPreferredFailed": "Не удалось настроить предпочтительный объект AI-задачи.",
+      "aiTaskNotConfigured": "Сначала настройте и включите Phoenix MCP AI Task, указав ключ доступа, провайдера и модель.",
+      "aiTaskPreferencesUnavailable": "Настройки AI-задач недоступны в этом Home Assistant.",
       "approvalAlreadyResolved": "Одобрение уже было обработано.",
+      "approvalExpired": "Срок этого запроса истёк до того, как вы его одобрили, поэтому ничего не выполнялось.",
       "approvalBatchMaximum": "Пакет может содержать не более {max} одобрений.",
-      "approvalCapabilityDenied": "Возможность теперь запрещена для этого ключа доступа.",
-      "approvalExecutionInterrupted": "Предыдущая попытка, возможно, уже была применена. При восстановлении это подтверждение будет закрыто с неопределённым результатом; проверьте результат, а не запускайте его снова.",
+      "approvalCapabilityDenied": "Для возможности ключа доступа теперь задано «Запретить», поэтому запрос закрыт без выполнения.",
+      "approvalExecutionInterrupted": "Предыдущая попытка, возможно, уже была применена. Проверьте результат, прежде чем изменять или повторять этот запрос.",
       "approvalWipeInProgress": "Выполнение подтверждённого действия и удаление основных данных не могут происходить одновременно. Дождитесь завершения одной из операций и повторите попытку.",
       "approvalWipeExecutionUncertain": "Основные данные нельзя стереть, пока действие могло быть применено без возврата результата. Сначала проверьте результат.",
       "approvalExecutionUncertain": "Выполнение не удалось и могло примениться частично. Это одобрение было закрыто; проверьте результат перед повторной попыткой.",
@@ -99,10 +102,15 @@
       "approvalProcessing": "Одобрение уже обрабатывается.",
       "approvalReasonString": "reason должен быть строкой.",
       "approvalRecordFailed": "Не удалось записать это одобрение перед выполнением. Ничего не было выполнено; попробуйте ещё раз.",
-      "approvalAccessKeyInactive": "Ключ доступа больше не активен.",
+      "approvalAccessKeyInactive": "Ключ доступа больше не активен, поэтому этот запрос нельзя выполнить. Ничего не выполнялось.",
       "archivedAccessKeyNotFound": "Архивный ключ доступа не найден.",
       "assistExposurePassThroughOnly": "use_assist_exposure допустимо только для ключей доступа pass_through.",
       "assistPipelineFailed": "Не удалось создать конвейер Assist.",
+      "assistPipelineUnavailable": "Конвейеры Assist недоступны в этом Home Assistant.",
+      "voiceAgentNotConfigured": "Сначала настройте и включите голосового агента Phoenix MCP, указав ключ доступа, провайдера и модель.",
+      "assistantSetupFirst": "Сначала настройте ассистента Phoenix MCP.",
+      "assistantOnlyOneStaysPreferred": "Ассистент Phoenix MCP единственный в Home Assistant, поэтому он остаётся предпочтительным.",
+      "assistantPreferredFailed": "Не удалось изменить предпочтительного ассистента.",
       "authRequired": "Требуется аутентификация.",
       "badDomain": "Недопустимое имя домена.",
       "badEntityId": "Недопустимый формат идентификатора сущности.",
@@ -120,6 +128,7 @@
       "capabilityModeInvalid": "{capability} должен быть deny, allow или confirm.",
       "catalogNotFound": "Каталог не найден.",
       "configuredProviderRequired": "{field} должен ссылаться на настроенную учётную запись провайдера.",
+      "decisionProviderRequired": "Сначала выберите учётную запись провайдера решений.",
       "deploymentDefaultsInvalid": "Недопустимые значения по умолчанию развёртывания: {detail}",
       "emptyMessage": "Введите сообщение.",
       "entriesListRequired": "entries должен быть списком.",
@@ -129,7 +138,7 @@
       "inlineWaitRange": "confirm_inline_wait_seconds должен быть равен 0 (выключено) или быть целым числом от {min} до {max}.",
       "integerRequired": "{field} должен быть целым числом.",
       "integrationNameInvalid": "Недопустимое имя интеграции.",
-      "killSwitchEngaged": "Аварийный выключатель включён.",
+      "killSwitchEngaged": "Аварийный выключатель включён, поэтому запрос отменён без выполнения.",
       "maximumRequired": "{field} не должен превышать {max}.",
       "mesaArchiveRequired": "требуется archive.",
       "mesaProfileExists": "Профиль уже существует. Откройте его в режиме редактирования.",
@@ -149,7 +158,9 @@
       "permissionNodeObject": "Узел {node} должен быть объектом с полем state.",
       "permissionSectionObject": "{section} должен быть объектом, ключи которого являются идентификаторами узлов.",
       "permissionSelectionNotFound": "Выбранные разрешения не найдены.",
-      "permissionStateInvalid": "Недопустимое состояние {state} для {node_type} {node}. Допустимые состояния: {states}.",
+      "permissionStateInvalidDomain": "Недопустимое состояние {state} для домена {node}. Допустимые состояния: {states}.",
+      "permissionStateInvalidDevice": "Недопустимое состояние {state} для устройства {node}. Допустимые состояния: {states}.",
+      "permissionStateInvalidEntity": "Недопустимое состояние {state} для объекта {node}. Допустимые состояния: {states}.",
       "permissionTreeInvalid": "Недопустимая структура дерева разрешений.",
       "presetDeleteRejected": "Не удалось удалить эту предустановку. Переключитесь с активной предустановки перед её удалением.",
       "presetNameInvalidCharacters": "name содержит недопустимые символы.",
@@ -157,7 +168,9 @@
       "presetNotFound": "Предустановка не найдена.",
       "presetPassThroughConfirmationRequired": "когда предустановка включает pass_through, требуется confirm_pass_through: true.",
       "presetRenameRejected": "Не удалось переименовать эту предустановку. Возможно, это имя уже занято другой предустановкой.",
-      "presetSaveRejected": "Не удалось сохранить эту предустановку. Возможно, такое имя уже существует или достигнут лимит предустановок.",
+      "presetSaveRejected": "Не удалось сохранить эту предустановку.",
+      "presetNameTaken": "У этого ключа доступа уже есть предустановка с таким именем.",
+      "presetLimitReached": "У ключа доступа может быть не более {max} предустановок.",
       "presetsDisabled": "Предустановки ключей доступа отключены. Включите их в настройках.",
       "providerAccountNotFound": "Учётная запись провайдера не найдена.",
       "providerAlreadyConfigured": "Эта учётная запись провайдера уже настроена.",
@@ -169,6 +182,7 @@
       "providerEndpointInvalid": "Выберите допустимый тариф провайдера.",
       "providerModelMissing": "Для этого провайдера не выбрана модель.",
       "providerModelRequired": "Требуется модель.",
+      "decisionModelRequired": "Аккаунту решений нужна конкретная модель. Он не может выбрать её автоматически.",
       "providerNotConfigured": "Учётная запись провайдера не настроена.",
       "providerRemoteUrlAddressForbidden": "URL провайдера не должен указывать на частный, loopback, link-local, multicast или зарезервированный адрес.",
       "providerRemoteUrlResolutionForbidden": "URL провайдера разрешается в частный, loopback, link-local, multicast или зарезервированный адрес.",
@@ -190,7 +204,8 @@
       "restoreStale": "Этот элемент изменился после выбора восстановления. Проверьте сравнение и повторите попытку.",
       "selectorIdRequired": "требуется selector_id.",
       "selectorTypeInvalid": "selector_type должен быть area, label или integration.",
-      "serviceDisabled": "Phoenix MCP отключён аварийным выключателем.",
+      "serviceDisabled": "Аварийный выключатель включён, поэтому запросы агентов отклоняются.",
+      "serviceStopping": "Home Assistant завершает работу. Повторите попытку, когда он снова будет доступен.",
       "setupIncomplete": "Настройка Phoenix MCP не завершена.",
       "setupMissing": "Phoenix MCP не настроен.",
       "sinceTimestampInvalid": "Недопустимая метка времени since.",
@@ -203,8 +218,7 @@
       "accessKeyIdOrNull": "{field} должен быть строкой идентификатора ключа доступа или null.",
       "accessKeyInactive": "Этот ключ доступа отозван или срок его действия истёк.",
       "accessKeyNameLengthPattern": "name должен содержать {min}-{max} символов: буквы, цифры, дефисы или подчёркивания.",
-      "accessKeyNamePattern": "name не соответствует требуемому шаблону.",
-      "accessKeyNameTaken": "Ключ доступа с таким именем (или эквивалентным slug) уже существует.",
+      "accessKeyNameTaken": "Ключ доступа с таким именем уже существует. Имена, которые различаются только регистром букв или символами - и _, считаются одинаковыми.",
       "accessKeyNotFound": "Ключ доступа не найден.",
       "unknownPersona": "Неизвестная персона.",
       "valueAllowed": "{field} должен быть одним из: {values}.",
@@ -212,6 +226,7 @@
       "versionResourcePairRequired": "Укажите и resource_type, и resource_id, либо ни то, ни другое для ленты последних изменений.",
       "wipeConfirmationRequired": "confirm должен быть WIPE.",
       "routingPreviewInvalid": "Проверьте ключ доступа, язык команды и настройки маршрутизации.",
+      "routingLanguagesInvalid": "Выберите языки маршрутизации команд из установленных языков Assist.",
       "providerModelNotListed": "Выберите модель из списка этого провайдера.",
       "providerAccountChanged": "Аккаунт провайдера изменился. Обновите страницу и повторите попытку.",
       "routingStatisticsResetInvalid": "Выберите Voice или Chat и подтвердите сброс статистики.",
@@ -894,7 +909,7 @@
         "label": "Чтение изображений камер"
       },
       "cap_config_read": {
-        "description": "Чтение конфигурации Home Assistant и количества слушателей событий.",
+        "description": "Чтение конфигурации Home Assistant, настроек энергопотребления и прогнозов солнечной энергии, проектов и профилей MESA, а также ожидание изменения объекта.",
         "label": "Чтение конфигурации"
       },
       "cap_diagnostics": {
@@ -918,7 +933,7 @@
         "label": "Чтение файлов"
       },
       "cap_helper_write": {
-        "description": "Создание, изменение и удаление помощников, таких как поля ввода, счётчики и таймеры.",
+        "description": "Создание, изменение и удаление помощников, включая поля ввода, счётчики, таймеры, зоны, теги, персоны и помощники-шаблоны, а также изменение их настроек. Действует MESA.",
         "label": "Управление помощниками"
       },
       "cap_integration_reconfigure": {
@@ -938,11 +953,11 @@
         "label": "Чтение системного журнала"
       },
       "cap_lovelace_write": {
-        "description": "Чтение, создание, изменение и удаление панелей управления Lovelace и их карточек.",
+        "description": "Чтение, поиск, создание, изменение и удаление панелей и их карточек, а также просмотр списка установленных пользовательских карточек.",
         "label": "Управление панелями управления"
       },
       "cap_physical_control": {
-        "description": "Управление замками, сигнализациями, шторами и клапанами.",
+        "description": "Управление замками, сигнализациями, шторами и клапанами, а также изменение групп Zigbee, привязок и свойств устройств.",
         "label": "Физическое управление"
       },
       "cap_radio_write": {
@@ -962,7 +977,7 @@
         "label": "Перезапуск или остановка Home Assistant"
       },
       "cap_scene_write": {
-        "description": "Создание, изменение и удаление сцен. Объекты, на которые они ссылаются, по-прежнему подчиняются MESA и разрешениям объектов.",
+        "description": "Чтение, создание, изменение и удаление сцен. Ключ доступа должен иметь право записи для каждого объекта в сцене.",
         "label": "Управление сценами"
       },
       "cap_script_write": {
@@ -974,7 +989,7 @@
         "label": "Поиск и обнаружение"
       },
       "cap_service_response": {
-        "description": "Возврат данных от служб, предоставляющих ответ, например conversation.process.",
+        "description": "Возврат данных, которыми отвечает действие, например прогноза погоды.",
         "label": "Данные ответов служб"
       },
       "cap_template_render": {
@@ -1807,11 +1822,11 @@
       "injectHelp": "Добавить кнопки профилей MESA в списки «Объекты», «Автоматизации», «Скрипты», «Сцены», «Помощники» и «Люди» Home Assistant, а также на страницы устройств, пространств и интеграций. Этим кнопкам может потребоваться обновление Phoenix MCP после изменения фронтенда Home Assistant. Изменение вступает в силу при следующей полной загрузке страницы Home Assistant. Только для администраторов.",
       "injectLabel": "Контекстные кнопки профилей",
       "injectUnavailable": "Отключено до перезагрузки страницы, поскольку кнопки профиля дали сбой на странице Home Assistant. Если это повторяется, может потребоваться обновление Phoenix MCP.",
-      "killSwitchActiveAria": "Аварийный выключатель активен. Все конечные точки Phoenix MCP отключены",
-      "killSwitchActiveHelp": "Все клиентские запросы Phoenix MCP сейчас отклоняются. Повторное включение немедленно перерегистрирует все маршруты Phoenix MCP без перезапуска HA.",
-      "killSwitchActiveLabel": "Аварийный выключатель АКТИВЕН - Все конечные точки Phoenix MCP отключены",
+      "killSwitchActiveAria": "Аварийный выключатель активен. Подключения агентов отклоняются",
+      "killSwitchActiveHelp": "Phoenix MCP отклоняет все запросы агентов. Если отключить аварийный выключатель, агенты сразу смогут подключиться снова, без перезапуска Home Assistant.",
+      "killSwitchActiveLabel": "Аварийный выключатель АКТИВЕН - Подключения агентов отклоняются",
       "killSwitchCard": "Аварийный выключатель",
-      "killSwitchDisableLabel": "Отключить все конечные точки Phoenix MCP",
+      "killSwitchDisableLabel": "Отклонять все подключения агентов",
       "killSwitchInactiveHelp": "При включении MCP, контекст, инструкция, Agent Chat, голосовой агент и AI-задача отклоняют новую работу. Assist не предоставляет инструменты. Панель администратора остаётся доступной.",
       "languageAuto": "Авто",
       "languageHelp": "Язык панели в этом браузере. «Авто» следует профилю Home Assistant.",

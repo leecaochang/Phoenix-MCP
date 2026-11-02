@@ -125,7 +125,7 @@
     "caps": {
       "cap_config_read": {
         "label": "Lecture de la configuration",
-        "description": "Lire la configuration de Home Assistant et le nombre d'écouteurs d'événements."
+        "description": "Lire la configuration de Home Assistant, la configuration Énergie et les prévisions solaires, les blueprints et les profils MESA, et attendre qu'une entité change."
       },
       "cap_camera_read": {
         "label": "Lecture d'images de caméra",
@@ -169,7 +169,7 @@
       },
       "cap_service_response": {
         "label": "Données de réponse de service",
-        "description": "Renvoyer les données des services qui fournissent une réponse, comme conversation.process."
+        "description": "Renvoyer les données qu'une action fournit en réponse, comme une prévision météo."
       },
       "cap_automation_write": {
         "label": "Gérer les automatisations",
@@ -185,15 +185,15 @@
       },
       "cap_scene_write": {
         "label": "Gérer les scènes",
-        "description": "Créer, modifier et supprimer des scènes. Les entités référencées restent soumises à MESA et au contrôle d'accès des entités."
+        "description": "Lire, créer, modifier et supprimer des scènes. La clé d’accès doit pouvoir écrire sur chaque entité d'une scène."
       },
       "cap_helper_write": {
         "label": "Gérer les entrées",
-        "description": "Créer, modifier et supprimer des entrées telles que des champs de saisie, des compteurs et des minuteurs."
+        "description": "Créer, modifier et supprimer des entrées, notamment les champs de saisie, compteurs, minuteurs, zones, étiquettes, personnes et entrées Modèle, et modifier leurs paramètres. MESA s'applique."
       },
       "cap_physical_control": {
         "label": "Contrôle physique",
-        "description": "Contrôler les serrures, les alarmes, les volets et les vannes."
+        "description": "Contrôler les serrures, les alarmes, les volets et les vannes, et modifier les groupes Zigbee, les liaisons et les propriétés des appareils."
       },
       "cap_restart": {
         "label": "Redémarrer ou arrêter Home Assistant",
@@ -209,7 +209,7 @@
       },
       "cap_lovelace_write": {
         "label": "Gérer les tableaux de bord",
-        "description": "Lire, créer, modifier et supprimer des tableaux de bord Lovelace et leurs cartes."
+        "description": "Lire, rechercher, créer, modifier et supprimer des tableaux de bord et leurs cartes, et lister les cartes personnalisées installées."
       },
       "cap_registry_write": {
         "label": "Gérer le registre des entités",
@@ -1227,11 +1227,11 @@
       "injectHelp": "Ajoutez des boutons de profil MESA aux listes Entités, Automatisations, Scripts, Scènes, Entrées et Personnes de Home Assistant, ainsi qu'à ses pages d'appareil, de pièce et d'intégration. Ces boutons peuvent nécessiter une mise à jour de Phoenix MCP après un changement du frontend Home Assistant. Une modification prend effet au prochain chargement complet d'une page Home Assistant. Administrateurs uniquement.",
       "injectLabel": "Boutons de profil contextuels",
       "injectUnavailable": "Désactivé jusqu'au rechargement de la page, car les boutons de profil ont échoué sur une page Home Assistant. Si cela se reproduit, une mise à jour de Phoenix MCP peut être nécessaire.",
-      "killSwitchActiveAria": "Coupe-circuit actif. Tous les points de terminaison Phoenix MCP sont désactivés",
-      "killSwitchActiveHelp": "Toutes les requêtes client Phoenix MCP sont désormais refusées. La réactivation réenregistrera immédiatement toutes les routes Phoenix MCP, sans redémarrage de HA.",
-      "killSwitchActiveLabel": "Coupe-circuit ACTIF - Tous les points de terminaison Phoenix MCP sont désactivés",
+      "killSwitchActiveAria": "Coupe-circuit actif. Les connexions des agents sont refusées",
+      "killSwitchActiveHelp": "Phoenix MCP refuse toutes les demandes des agents. Désactiver le coupe-circuit permet aux agents de se reconnecter immédiatement, sans redémarrer Home Assistant.",
+      "killSwitchActiveLabel": "Coupe-circuit ACTIF - Les connexions des agents sont refusées",
       "killSwitchCard": "Coupe-circuit d'urgence",
-      "killSwitchDisableLabel": "Désactiver tous les points de terminaison Phoenix MCP",
+      "killSwitchDisableLabel": "Refuser toutes les connexions des agents",
       "killSwitchInactiveHelp": "Une fois activé, MCP, le contexte, la compétence, Agent Chat, l’Agent vocal et la Tâche d'IA refusent les nouvelles tâches. Assist ne propose aucun outil. Le panneau d’administration reste accessible.",
       "languageAuto": "Automatique",
       "languageHelp": "Langue du panneau dans ce navigateur. Automatique suit votre profil Home Assistant.",
@@ -1736,7 +1736,7 @@
       "providerAlreadyConfigured": "Ce compte de fournisseur est déjà configuré.",
       "unknownPersona": "Personnalité inconnue.",
       "presetsDisabled": "Les préréglages de clé d’accès sont désactivés. Activez-les dans Paramètres.",
-      "accessKeyNameTaken": "Une clé d’accès portant ce nom (ou un slug équivalent) existe déjà.",
+      "accessKeyNameTaken": "Une clé d’accès portant ce nom existe déjà. Les noms qui ne diffèrent que par la casse, ou par - au lieu de _, sont considérés comme identiques.",
       "expiresImmutable": "expires_at est immuable après la création de la clé d’accès.",
       "nameRequired": "name est obligatoire.",
       "badExpiresAt": "Valeur expires_at de date/heure invalide.",
@@ -1748,10 +1748,13 @@
       "nodeIdInvalidChars": "L'ID de nœud contient des caractères invalides.",
       "activeAccessKeyRequired": "{field} doit référencer une clé d’accès active.",
       "aiTaskPreferredFailed": "Impossible de configurer l'entité Tâche d'IA préférée.",
+      "aiTaskNotConfigured": "Configurez et activez d'abord la Tâche d'IA Phoenix MCP, avec une clé d’accès, un fournisseur et un modèle.",
+      "aiTaskPreferencesUnavailable": "Les préférences de Tâche d'IA ne sont pas disponibles dans ce Home Assistant.",
       "approvalAlreadyResolved": "L'approbation a déjà été résolue.",
+      "approvalExpired": "Cette demande a expiré avant que vous ne l'approuviez, rien n'a donc été exécuté.",
       "approvalBatchMaximum": "Un lot peut contenir au plus {max} approbations.",
-      "approvalCapabilityDenied": "La capacité est désormais refusée pour cette clé d’accès.",
-      "approvalExecutionInterrupted": "Une tentative précédente a peut-être déjà été appliquée. La récupération clôturera cette approbation avec un résultat incertain ; consultez le résultat au lieu de la réexécuter.",
+      "approvalCapabilityDenied": "La capacité de la clé d’accès est désormais réglée sur Refuser, la demande a donc été close sans être exécutée.",
+      "approvalExecutionInterrupted": "Une tentative précédente a peut-être déjà été appliquée. Vérifiez le résultat avant de modifier ou de réessayer cette demande.",
       "approvalWipeInProgress": "L’exécution d’une approbation et l’effacement des données principales ne peuvent pas avoir lieu en même temps. Attendez que l’une des opérations se termine, puis réessayez.",
       "approvalWipeExecutionUncertain": "Les données principales ne peuvent pas être effacées si une approbation a pu être appliquée sans renvoyer de résultat. Vérifiez d’abord le résultat.",
       "approvalExecutionUncertain": "L'exécution a échoué et a pu être partiellement appliquée. Cette approbation a été fermée ; consultez le résultat avant de réessayer.",
@@ -1761,9 +1764,14 @@
       "approvalProcessing": "L'approbation est déjà en cours de traitement.",
       "approvalReasonString": "reason doit être une chaîne.",
       "approvalRecordFailed": "Impossible d'enregistrer cette approbation avant de l'exécuter. Rien n'a été exécuté ; réessayez.",
-      "approvalAccessKeyInactive": "La clé d’accès n'est plus actif.",
+      "approvalAccessKeyInactive": "La clé d’accès n'est plus active, cette demande ne peut donc pas s'exécuter. Rien n'a été exécuté.",
       "assistExposurePassThroughOnly": "use_assist_exposure n'est valable que pour les clés d’accès pass_through.",
       "assistPipelineFailed": "Impossible de créer le pipeline Assist.",
+      "assistPipelineUnavailable": "Les pipelines Assist ne sont pas disponibles dans ce Home Assistant.",
+      "voiceAgentNotConfigured": "Configurez et activez d'abord l'agent vocal Phoenix MCP, avec une clé d’accès, un fournisseur et un modèle.",
+      "assistantSetupFirst": "Configurez d'abord l'assistant Phoenix MCP.",
+      "assistantOnlyOneStaysPreferred": "L'assistant Phoenix MCP est le seul de Home Assistant, il reste donc l'assistant préféré.",
+      "assistantPreferredFailed": "Impossible de modifier l'assistant préféré.",
       "booleanRequired": "{field} doit être true ou false.",
       "companionSettingRefused": "Une clé Home Companion ne peut pas utiliser la transmission directe ni annoncer tous les outils.",
       "unknownFields": "La requête contient des champs que Phoenix ne reconnaît pas : {fields}.",
@@ -1771,6 +1779,7 @@
       "capabilityModeInvalid": "{capability} doit être deny, allow ou confirm.",
       "catalogNotFound": "Catalogue introuvable.",
       "configuredProviderRequired": "{field} doit référencer un compte de fournisseur configuré.",
+      "decisionProviderRequired": "Choisissez d'abord un compte de fournisseur de décisions.",
       "deploymentDefaultsInvalid": "Valeurs par défaut de déploiement invalides : {detail}",
       "emptyMessage": "Saisissez un message.",
       "entriesListRequired": "entries doit être une liste.",
@@ -1779,7 +1788,7 @@
       "inlineWaitRange": "confirm_inline_wait_seconds doit être 0 (désactivé) ou un entier de {min} à {max}.",
       "integerRequired": "{field} doit être un entier.",
       "integrationNameInvalid": "Nom d'intégration invalide.",
-      "killSwitchEngaged": "Coupe-circuit activé.",
+      "killSwitchEngaged": "Le coupe-circuit est activé, la demande a donc été annulée sans être exécutée.",
       "maximumRequired": "{field} ne doit pas dépasser {max}.",
       "mesaArchiveRequired": "archive est obligatoire.",
       "mesaProfileExists": "Un profil existe déjà. Ouvrez-le en mode modification.",
@@ -1796,14 +1805,18 @@
       "permissionNodeObject": "Le nœud {node} doit être un objet avec un champ state.",
       "permissionSectionObject": "{section} doit être un objet indexé par ID de nœud.",
       "permissionSelectionNotFound": "Sélection d'autorisation introuvable.",
-      "permissionStateInvalid": "État {state} invalide pour {node_type} {node}. États valides : {states}.",
+      "permissionStateInvalidDomain": "État {state} invalide pour le domaine {node}. États valides : {states}.",
+      "permissionStateInvalidDevice": "État {state} invalide pour l'appareil {node}. États valides : {states}.",
+      "permissionStateInvalidEntity": "État {state} invalide pour l'entité {node}. États valides : {states}.",
       "permissionTreeInvalid": "Structure d'arbre des autorisations invalide.",
       "presetDeleteRejected": "Impossible de supprimer ce préréglage. Désactivez le préréglage actif avant de le supprimer.",
       "presetNameInvalidCharacters": "name contient des caractères invalides.",
       "presetNameTooLong": "name doit contenir au plus {max} caractères.",
       "presetPassThroughConfirmationRequired": "confirm_pass_through: true est obligatoire lorsque le préréglage active pass_through.",
       "presetRenameRejected": "Impossible de renommer ce préréglage. Un autre préréglage utilise peut-être déjà ce nom.",
-      "presetSaveRejected": "Impossible d'enregistrer ce préréglage. Le nom existe peut-être déjà ou la limite de préréglages a pu être atteinte.",
+      "presetSaveRejected": "Impossible d'enregistrer ce préréglage.",
+      "presetNameTaken": "Cette clé d’accès a déjà un préréglage portant ce nom.",
+      "presetLimitReached": "Une clé d’accès peut avoir au maximum {max} préréglages.",
       "providerAccountNotFound": "Compte de fournisseur introuvable.",
       "providerApiKeyRequired": "Saisissez votre clé API.",
       "providerBaseUrlRequired": "Saisissez l'URL de base du fournisseur.",
@@ -1812,6 +1825,7 @@
       "providerConnectionFailedNoDetail": "Échec de la connexion.",
       "providerModelMissing": "Aucun modèle n'est sélectionné pour ce fournisseur.",
       "providerModelRequired": "Un modèle est obligatoire.",
+      "decisionModelRequired": "Un compte de décisions nécessite un modèle précis. Il ne peut pas en choisir un automatiquement.",
       "providerNotConfigured": "Le compte de fournisseur n'est pas configuré.",
       "providerEndpointInvalid": "Choisissez un forfait de fournisseur valide.",
       "providerRemoteUrlAddressForbidden": "L'URL du fournisseur ne doit pas pointer vers une adresse privée, de bouclage, locale au lien, de multidiffusion ou réservée.",
@@ -1834,7 +1848,8 @@
       "restoreStale": "Cet élément a changé depuis que vous avez choisi de le restaurer. Vérifiez la comparaison et réessayez.",
       "selectorIdRequired": "selector_id est obligatoire.",
       "selectorTypeInvalid": "selector_type doit être area, label ou integration.",
-      "serviceDisabled": "Phoenix MCP est désactivé par le coupe-circuit.",
+      "serviceDisabled": "Le coupe-circuit est activé, les demandes des agents sont donc refusées.",
+      "serviceStopping": "Home Assistant est en cours d'arrêt. Réessayez une fois qu'il sera de nouveau disponible.",
       "setupIncomplete": "La configuration de Phoenix MCP n'est pas terminée.",
       "setupMissing": "Phoenix MCP n'est pas configuré.",
       "sinceTimestampInvalid": "Horodatage since invalide.",
@@ -1847,12 +1862,12 @@
       "accessKeyIdOrNull": "{field} doit être une chaîne d'ID de clé d’accès ou null.",
       "accessKeyInactive": "Cette clé d’accès est révoquéee ou expirée.",
       "accessKeyNameLengthPattern": "name doit contenir de {min} à {max} caractères en utilisant des lettres, des chiffres, des tirets ou des traits de soulignement.",
-      "accessKeyNamePattern": "name ne correspond pas au motif requis.",
       "valueAllowed": "{field} doit être l'une des valeurs suivantes : {values}.",
       "versionNotFound": "Version introuvable.",
       "versionResourcePairRequired": "Fournissez à la fois resource_type et resource_id, ou aucun des deux pour le flux récent.",
       "wipeConfirmationRequired": "confirm doit être WIPE.",
       "routingPreviewInvalid": "Vérifiez la clé d’accès, la langue de la commande et les paramètres de routage.",
+      "routingLanguagesInvalid": "Choisissez les langues de routage des commandes parmi les langues Assist installées.",
       "providerModelNotListed": "Choisissez un modèle renvoyé par ce fournisseur.",
       "providerAccountChanged": "Le compte du fournisseur a changé. Rechargez et réessayez.",
       "routingStatisticsResetInvalid": "Choisissez Voice ou Chat et confirmez la réinitialisation des statistiques.",

@@ -620,6 +620,39 @@ async def test_admin_recovery_requires_ha_admin_and_keeps_active_records(hass):
     assert runtime.config_recovery.get(rid)["reviewed_by"] == "admin"
 
 
+@pytest.mark.parametrize(("active", "key"), [
+    (True, "adminError.recoveryOperationActive"),
+    (False, "adminError.recoveryReviewBeforeRestoring"),
+])
+async def test_admin_restore_refusal_names_active_or_unreviewed_record(hass, hass_admin_user, active, key):
+    """Restore of a still-active record answers recoveryOperationActive; an inactive unreviewed one, recoveryReviewBeforeRestoring."""
+    from homeassistant.components.http.const import KEY_AUTHENTICATED, KEY_HASS_USER
+    from custom_components.phoenix_mcp.admin_view import PhoenixAdminConfigurationRecoveryRecordView
+    from custom_components.phoenix_mcp.const import DOMAIN
+    runtime = data()
+    hass.data[DOMAIN] = runtime
+    rid = await runtime.config_recovery.begin("helper:test", "delete", "t", {"name": "safe"})
+    if active:
+        # Verified but still running: activity alone blocks the restore.
+        await runtime.config_recovery.mark(rid, "verified")
+    else:
+        runtime.config_recovery.leave(rid)
+    values = {KEY_HASS_USER: hass_admin_user, KEY_AUTHENTICATED: True, "phoenix_mcp_rid": "request"}
+    request = MagicMock()
+    request.get.side_effect = lambda k, default=None: values.get(k, default)
+    request.__getitem__.side_effect = values.__getitem__
+    view = PhoenixAdminConfigurationRecoveryRecordView()
+    view.hass = hass
+    with patch("custom_components.phoenix_mcp.admin_view._read_body",
+               new=AsyncMock(return_value={"action": "restore", "side": "before"})), \
+         patch("custom_components.phoenix_mcp.mcp_view.async_restore_version", new=AsyncMock()) as restore:
+        response = await view.post(request, recovery_id=rid)
+    assert response.status == 409
+    assert json.loads(response.text)["message_key"] == key
+    restore.assert_not_awaited()
+    assert [r["active"] for r in runtime.config_recovery.records() if r["id"] == rid] == [active]
+
+
 @pytest.mark.parametrize("change_on_call", [1, 2])
 async def test_template_change_during_form_preparation_never_submits(hass, change_on_call):
     from custom_components.phoenix_mcp.tools import helper

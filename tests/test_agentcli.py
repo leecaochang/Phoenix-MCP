@@ -2835,6 +2835,29 @@ async def test_chat_view_refuses_when_kill_switch_or_shutting_down():
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(("down", "ready", "kill", "key"), [
+    (True, False, True, "adminError.serviceStopping"),
+    (False, False, True, "adminError.setupIncomplete"),
+    (False, True, True, "adminError.serviceDisabled"),
+])
+async def test_chat_view_unavailable_answers_one_key_per_cause(down, ready, kill, key):
+    """Shutdown, incomplete setup and the kill switch each answer 503 with their own key, in that order."""
+    from custom_components.phoenix_mcp.agentcli import PhoenixAgentCliChatView
+
+    data = MagicMock()
+    data.shutting_down = down
+    data.ready = ready
+    data.store.get_settings.return_value = MagicMock(kill_switch=kill)
+    view = PhoenixAgentCliChatView()
+    view.hass = MagicMock()
+    view.hass.data = {agentcli.DOMAIN: data}
+    resp = await view.post(_make_chat_request(json.dumps({"access_key_id": "t"}).encode()))
+    assert resp.status == 503
+    assert json.loads(resp.text)["message_key"] == key
+    data.store.get_access_key_by_id.assert_not_called()
+
+
+@pytest.mark.asyncio
 async def test_chat_view_refuses_revoked_or_missing_access_key():
     from custom_components.phoenix_mcp.agentcli import PhoenixAgentCliChatView
 
@@ -4092,6 +4115,25 @@ class TestSetDefaultModel:
             resp = await view.patch(_admin_request({"model": "   "}), instance_id="pid")
         assert resp.status == 400
         secret_store.set_model.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_patch_auto_on_a_decision_account_needs_a_model(self, hass):
+        """Automatic model selection on a decision account answers decisionModelRequired and saves nothing."""
+        from unittest.mock import AsyncMock, patch
+        secret_store = MagicMock()
+        secret_store.get = MagicMock(return_value={"kind": "typesafe"})
+        secret_store.set_model = AsyncMock(return_value=True)
+        secret_store.set_auto = AsyncMock(return_value=True)
+        view = agentcli.PhoenixAgentCliProviderView()
+        view.hass = hass
+        with patch("custom_components.phoenix_mcp.agentcli._get_secret_store",
+                   AsyncMock(return_value=secret_store)):
+            resp = await view.patch(_admin_request({"auto": True}), instance_id="pid")
+        assert resp.status == 400
+        assert json.loads(resp.text)["message_key"] == "adminError.decisionModelRequired"
+        secret_store.get.assert_called_once_with("pid")
+        secret_store.set_model.assert_not_awaited()
+        secret_store.set_auto.assert_not_awaited()
 
     @pytest.mark.asyncio
     async def test_patch_reports_an_unknown_account(self, hass):

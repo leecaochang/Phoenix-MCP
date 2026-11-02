@@ -429,7 +429,7 @@
         "label": "Odczyt obrazów kamery"
       },
       "cap_config_read": {
-        "description": "Odczytuj konfigurację Home Assistant i liczbę nasłuchiwaczy zdarzeń.",
+        "description": "Odczytuj konfigurację Home Assistant, konfigurację energii i prognozy energii słonecznej, schematy oraz profile MESA, a także czekaj na zmianę encji.",
         "label": "Odczyt konfiguracji"
       },
       "cap_diagnostics": {
@@ -453,7 +453,7 @@
         "label": "Odczyt plików"
       },
       "cap_helper_write": {
-        "description": "Twórz, edytuj i usuwaj pomocniki, takie jak pola wejściowe, liczniki i timery.",
+        "description": "Twórz, edytuj i usuwaj pomocniki, w tym pola wejściowe, liczniki, timery, strefy, tagi, osoby i pomocniki szablonu, a także zmieniaj ich ustawienia. Obowiązuje MESA.",
         "label": "Zarządzaj pomocnikami"
       },
       "cap_integration_reconfigure": {
@@ -473,11 +473,11 @@
         "label": "Odczyt dziennika systemowego"
       },
       "cap_lovelace_write": {
-        "description": "Odczytuj, twórz, edytuj i usuwaj panele Lovelace i ich karty.",
+        "description": "Odczytuj, przeszukuj, twórz, edytuj i usuwaj panele i ich karty oraz wyświetlaj listę zainstalowanych kart niestandardowych.",
         "label": "Zarządzaj panelami"
       },
       "cap_physical_control": {
-        "description": "Steruj zamkami, alarmami, roletami i zaworami.",
+        "description": "Steruj zamkami, alarmami, roletami i zaworami oraz zmieniaj grupy Zigbee, powiązania i właściwości urządzeń.",
         "label": "Sterowanie fizyczne"
       },
       "cap_radio_write": {
@@ -497,7 +497,7 @@
         "label": "Ponowne uruchomienie lub zatrzymanie Home Assistant"
       },
       "cap_scene_write": {
-        "description": "Twórz, edytuj i usuwaj sceny. Przywoływane encje nadal podlegają MESA i dostępowi do encji.",
+        "description": "Odczytuj, twórz, edytuj i usuwaj sceny. Klucz dostępu musi mieć prawo zapisu do każdej encji w scenie.",
         "label": "Zarządzaj scenami"
       },
       "cap_script_write": {
@@ -509,7 +509,7 @@
         "label": "Wyszukiwanie i wykrywanie"
       },
       "cap_service_response": {
-        "description": "Zwracaj dane z usług udzielających odpowiedzi, takich jak conversation.process.",
+        "description": "Zwracaj dane, którymi odpowiada akcja, na przykład prognozę pogody.",
         "label": "Dane odpowiedzi usług"
       },
       "cap_template_render": {
@@ -997,10 +997,13 @@
       "activeAccessKeyRequired": "{field} musi odnosić się do aktywnego klucza dostępu.",
       "adminRequired": "Wymagany dostęp administratora.",
       "aiTaskPreferredFailed": "Nie można było skonfigurować preferowanej encji Zadania AI.",
+      "aiTaskNotConfigured": "Najpierw skonfiguruj i włącz Phoenix MCP AI Task, podając klucz dostępu, dostawcę i model.",
+      "aiTaskPreferencesUnavailable": "Preferencje Zadania AI nie są dostępne w tym Home Assistant.",
       "approvalAlreadyResolved": "Zatwierdzenie zostało już rozwiązane.",
+      "approvalExpired": "To żądanie wygasło, zanim zostało zatwierdzone, więc nic nie zostało wykonane.",
       "approvalBatchMaximum": "Partia może zawierać co najwyżej {max} zatwierdzeń.",
-      "approvalCapabilityDenied": "Możliwość jest teraz odmówiona dla tego klucza dostępu.",
-      "approvalExecutionInterrupted": "Poprzednia próba mogła już zostać zastosowana. Odzyskiwanie zamknie to zatwierdzenie z niepewnym wynikiem; sprawdź wynik zamiast uruchamiać je ponownie.",
+      "approvalCapabilityDenied": "Możliwość klucza dostępu jest teraz ustawiona na Odmów, więc żądanie zostało zamknięte bez wykonania.",
+      "approvalExecutionInterrupted": "Poprzednia próba mogła już zostać zastosowana. Sprawdź wynik, zanim zmienisz to żądanie lub spróbujesz ponownie.",
       "approvalWipeInProgress": "Wykonywanie zatwierdzenia i czyszczenie danych podstawowych nie mogą odbywać się jednocześnie. Poczekaj na zakończenie jednej z tych czynności i spróbuj ponownie.",
       "approvalWipeExecutionUncertain": "Nie można wyczyścić danych podstawowych, gdy zatwierdzenie mogło zostać zastosowane bez zwrócenia wyniku. Najpierw sprawdź wynik.",
       "approvalExecutionUncertain": "Wykonanie nie powiodło się i mogło zostać częściowo zastosowane. To zatwierdzenie zostało zamknięte; sprawdź wynik przed ponowieniem.",
@@ -1011,10 +1014,15 @@
       "approvalProcessing": "Zatwierdzenie jest już przetwarzane.",
       "approvalReasonString": "reason musi być ciągiem znaków.",
       "approvalRecordFailed": "Nie można było zapisać tego zatwierdzenia przed jego uruchomieniem. Nic nie zostało uruchomione; spróbuj ponownie.",
-      "approvalAccessKeyInactive": "Klucz dostępu nie jest już aktywny.",
+      "approvalAccessKeyInactive": "Klucz dostępu nie jest już aktywny, więc tego żądania nie można wykonać. Nic nie zostało wykonane.",
       "archivedAccessKeyNotFound": "Nie znaleziono zarchiwizowanego klucza dostępu.",
       "assistExposurePassThroughOnly": "use_assist_exposure jest ważne tylko dla kluczy dostępu pass_through.",
       "assistPipelineFailed": "Nie można było utworzyć potoku Assist.",
+      "assistPipelineUnavailable": "Potoki Assist nie są dostępne w tym Home Assistant.",
+      "voiceAgentNotConfigured": "Najpierw skonfiguruj i włącz agenta głosowego Phoenix MCP, podając klucz dostępu, dostawcę i model.",
+      "assistantSetupFirst": "Najpierw skonfiguruj asystenta Phoenix MCP.",
+      "assistantOnlyOneStaysPreferred": "Asystent Phoenix MCP jest jedynym asystentem w Home Assistant, więc pozostaje preferowany.",
+      "assistantPreferredFailed": "Nie można było zmienić preferowanego asystenta.",
       "authRequired": "Wymagane uwierzytelnienie.",
       "badDomain": "Nieprawidłowa nazwa domeny.",
       "badEntityId": "Nieprawidłowy format ID encji.",
@@ -1032,6 +1040,7 @@
       "capabilityModeInvalid": "{capability} musi mieć wartość deny, allow lub confirm.",
       "catalogNotFound": "Nie znaleziono katalogu.",
       "configuredProviderRequired": "{field} musi odnosić się do skonfigurowanego konta dostawcy.",
+      "decisionProviderRequired": "Najpierw wybierz konto dostawcy decyzji.",
       "deploymentDefaultsInvalid": "Nieprawidłowe domyślne ustawienia wdrożenia: {detail}",
       "emptyMessage": "Wpisz wiadomość.",
       "entriesListRequired": "entries musi być listą.",
@@ -1041,7 +1050,7 @@
       "inlineWaitRange": "confirm_inline_wait_seconds musi wynosić 0 (wyłączone) lub być liczbą całkowitą od {min} do {max}.",
       "integerRequired": "{field} musi być liczbą całkowitą.",
       "integrationNameInvalid": "Nieprawidłowa nazwa integracji.",
-      "killSwitchEngaged": "Wyłącznik awaryjny włączony.",
+      "killSwitchEngaged": "Wyłącznik awaryjny jest włączony, więc żądanie zostało anulowane bez wykonania.",
       "maximumRequired": "{field} nie może przekraczać {max}.",
       "mesaArchiveRequired": "archive jest wymagane.",
       "mesaProfileExists": "Profil już istnieje. Otwórz go w trybie edycji.",
@@ -1061,7 +1070,9 @@
       "permissionNodeObject": "Węzeł {node} musi być obiektem z polem stanu.",
       "permissionSectionObject": "{section} musi być obiektem z kluczami ID węzłów.",
       "permissionSelectionNotFound": "Nie znaleziono wyboru uprawnienia.",
-      "permissionStateInvalid": "Nieprawidłowy stan {state} dla {node_type} {node}. Prawidłowe stany: {states}.",
+      "permissionStateInvalidDomain": "Nieprawidłowy stan {state} dla domeny {node}. Prawidłowe stany: {states}.",
+      "permissionStateInvalidDevice": "Nieprawidłowy stan {state} dla urządzenia {node}. Prawidłowe stany: {states}.",
+      "permissionStateInvalidEntity": "Nieprawidłowy stan {state} dla encji {node}. Prawidłowe stany: {states}.",
       "permissionTreeInvalid": "Nieprawidłowa struktura drzewa uprawnień.",
       "presetDeleteRejected": "Nie można było usunąć tego ustawienia wstępnego. Przełącz się z aktywnego ustawienia przed jego usunięciem.",
       "presetNameInvalidCharacters": "name zawiera nieprawidłowe znaki.",
@@ -1069,7 +1080,9 @@
       "presetNotFound": "Nie znaleziono ustawienia wstępnego.",
       "presetPassThroughConfirmationRequired": "confirm_pass_through: true jest wymagane, gdy ustawienie wstępne włącza pass_through.",
       "presetRenameRejected": "Nie można było zmienić nazwy tego ustawienia wstępnego. Inne ustawienie może już używać tej nazwy.",
-      "presetSaveRejected": "Nie można było zapisać tego ustawienia wstępnego. Nazwa może już istnieć lub osiągnięto limit ustawień.",
+      "presetSaveRejected": "Nie można było zapisać tego ustawienia wstępnego.",
+      "presetNameTaken": "Ten klucz dostępu ma już ustawienie wstępne o tej nazwie.",
+      "presetLimitReached": "Klucz dostępu może mieć co najwyżej {max} ustawień wstępnych.",
       "presetsDisabled": "Ustawienia wstępne kluczy dostępu są wyłączone. Włącz je w Ustawieniach.",
       "providerAccountNotFound": "Nie znaleziono konta dostawcy.",
       "providerAlreadyConfigured": "To konto dostawcy jest już skonfigurowane.",
@@ -1081,6 +1094,7 @@
       "providerEndpointInvalid": "Wybierz prawidłowy plan dostawcy.",
       "providerModelMissing": "Nie wybrano modelu dla tego dostawcy.",
       "providerModelRequired": "Model jest wymagany.",
+      "decisionModelRequired": "Konto dostawcy decyzji wymaga konkretnego modelu. Nie może wybrać go automatycznie.",
       "providerNotConfigured": "Konto dostawcy nie jest skonfigurowane.",
       "providerRemoteUrlAddressForbidden": "Adres URL dostawcy nie może wskazywać na adres prywatny, pętli zwrotnej, lokalny, multicastowy ani zastrzeżony.",
       "providerRemoteUrlResolutionForbidden": "Adres URL dostawcy jest rozwiązywany na adres prywatny, pętli zwrotnej, lokalny, multicastowy lub zastrzeżony.",
@@ -1102,7 +1116,8 @@
       "restoreStale": "Ten element zmienił się od chwili wybrania przywracania. Sprawdź porównanie i spróbuj ponownie.",
       "selectorIdRequired": "selector_id jest wymagane.",
       "selectorTypeInvalid": "selector_type musi mieć wartość area, label lub integration.",
-      "serviceDisabled": "Phoenix MCP jest wyłączone wyłącznikiem awaryjnym.",
+      "serviceDisabled": "Wyłącznik awaryjny jest włączony, więc żądania agentów są odrzucane.",
+      "serviceStopping": "Home Assistant jest zamykany. Spróbuj ponownie, gdy znów będzie dostępny.",
       "setupIncomplete": "Konfiguracja Phoenix MCP nie jest ukończona.",
       "setupMissing": "Phoenix MCP nie jest skonfigurowane.",
       "sinceTimestampInvalid": "Nieprawidłowy znacznik czasu since.",
@@ -1115,8 +1130,7 @@
       "accessKeyIdOrNull": "{field} musi być ciągiem znaków ID klucza dostępu lub null.",
       "accessKeyInactive": "Ten klucz dostępu jest unieważniony lub wygasły.",
       "accessKeyNameLengthPattern": "name musi mieć {min}-{max} znaków, używając liter, cyfr, łączników lub podkreśleń.",
-      "accessKeyNamePattern": "name nie pasuje do wymaganego wzorca.",
-      "accessKeyNameTaken": "Klucz dostępu o tej nazwie (lub równoważnym slugu) już istnieje.",
+      "accessKeyNameTaken": "Klucz dostępu o tej nazwie już istnieje. Nazwy różniące się tylko wielkością liter albo znakiem - zamiast _ są traktowane jako takie same.",
       "accessKeyNotFound": "Nie znaleziono klucza dostępu.",
       "unknownPersona": "Nieznana persona.",
       "valueAllowed": "{field} musi być jedną z: {values}.",
@@ -1124,6 +1138,7 @@
       "versionResourcePairRequired": "Podaj zarówno resource_type, jak i resource_id, albo żadne z nich dla ostatniego kanału.",
       "wipeConfirmationRequired": "confirm musi mieć wartość WIPE.",
       "routingPreviewInvalid": "Sprawdź klucz dostępu, język polecenia i ustawienia routingu.",
+      "routingLanguagesInvalid": "Wybierz języki kierowania poleceń spośród zainstalowanych języków Assist.",
       "providerModelNotListed": "Wybierz model zwrócony przez tego dostawcę.",
       "providerAccountChanged": "Konto dostawcy uległo zmianie. Odśwież i spróbuj ponownie.",
       "routingStatisticsResetInvalid": "Wybierz Voice lub Chat i potwierdź wyzerowanie statystyk.",
@@ -1874,11 +1889,11 @@
       "injectHelp": "Dodaj przyciski profili MESA do list Encje, Automatyzacje, Skrypty, Sceny, Pomocnicy i Osoby w Home Assistant oraz do jego stron urządzeń, obszarów i integracji. Te przyciski mogą wymagać aktualizacji Phoenix MCP po zmianie frontendu Home Assistant. Zmiana zacznie działać przy następnym pełnym załadowaniu strony Home Assistant. Tylko administratorzy.",
       "injectLabel": "Przyciski profili w kontekście",
       "injectUnavailable": "Wyłączono do czasu ponownego wczytania strony, ponieważ przyciski profilu zawiodły na stronie Home Assistant. Jeśli to się powtarza, może być potrzebna aktualizacja Phoenix MCP.",
-      "killSwitchActiveAria": "Wyłącznik awaryjny aktywny. Wszystkie punkty końcowe Phoenix MCP są wyłączone",
-      "killSwitchActiveHelp": "Wszystkie żądania klientów Phoenix MCP są teraz odrzucane. Ponowne włączenie natychmiast zarejestruje ponownie wszystkie trasy Phoenix MCP, bez ponownego uruchamiania HA.",
-      "killSwitchActiveLabel": "Wyłącznik awaryjny AKTYWNY - wszystkie punkty końcowe Phoenix MCP są wyłączone",
+      "killSwitchActiveAria": "Wyłącznik awaryjny aktywny. Połączenia agentów są odrzucane",
+      "killSwitchActiveHelp": "Phoenix MCP odrzuca każde żądanie agenta. Po wyłączeniu wyłącznika awaryjnego agenci mogą od razu połączyć się ponownie, bez ponownego uruchamiania Home Assistant.",
+      "killSwitchActiveLabel": "Wyłącznik awaryjny AKTYWNY - połączenia agentów są odrzucane",
       "killSwitchCard": "Awaryjny wyłącznik",
-      "killSwitchDisableLabel": "Wyłącz wszystkie punkty końcowe Phoenix MCP",
+      "killSwitchDisableLabel": "Odrzucaj wszystkie połączenia agentów",
       "killSwitchInactiveHelp": "Po włączeniu MCP, kontekst, instrukcja, Agent Chat, Agent głosowy i Zadanie AI odmawiają nowej pracy. Assist nie udostępnia narzędzi. Panel administratora pozostaje dostępny.",
       "languageAuto": "Auto",
       "languageHelp": "Język panelu w tej przeglądarce. Auto podąża za Twoim profilem Home Assistant.",

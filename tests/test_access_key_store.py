@@ -1398,6 +1398,25 @@ class TestPresets:
         except ValueError:
             pass
 
+    async def test_add_preset_refusals_raise_one_error_class_per_cause(self, access_key_store):
+        """A taken name and a full preset list raise distinct ValueError subclasses."""
+        from custom_components.phoenix_mcp.access_key_store import PresetLimitError, PresetNameTakenError
+        from custom_components.phoenix_mcp.const import MAX_PRESETS_PER_ACCESS_KEY
+
+        record, _ = await access_key_store.async_create_access_key("t1", "u")
+        await access_key_store.async_add_preset(record.id, "Baseline")
+        with pytest.raises(PresetNameTakenError):
+            await access_key_store.async_add_preset(record.id, "BASELINE")
+        for i in range(MAX_PRESETS_PER_ACCESS_KEY - 1):
+            await access_key_store.async_add_preset(record.id, f"p{i}")
+        # At the limit a taken name still reports the limit, which is checked first.
+        for name in ("one-too-many", "Baseline"):
+            with pytest.raises(PresetLimitError):
+                await access_key_store.async_add_preset(record.id, name)
+        assert not issubclass(PresetLimitError, PresetNameTakenError)
+        assert not issubclass(PresetNameTakenError, PresetLimitError)
+        assert len(access_key_store.get_access_key_by_id(record.id).presets) == MAX_PRESETS_PER_ACCESS_KEY
+
     async def test_rename_preset(self, access_key_store):
         record, _ = await access_key_store.async_create_access_key("t1", "u")
         updated = await access_key_store.async_add_preset(record.id, "Old")

@@ -31,7 +31,7 @@ function deferred<T>() {
   return { promise, resolve };
 }
 
-const killSwitch = () => screen.getByRole("checkbox", { name: "Disable all Phoenix MCP endpoints" });
+const killSwitch = () => screen.getByRole("checkbox", { name: "Refuse all agent connections" });
 
 beforeEach(() => {
   vi.resetAllMocks();
@@ -449,7 +449,7 @@ describe("help in the Help window", () => {
   it("shows a setting's help for its row and the controls in it, and each tab's purpose over the tab", async () => {
     renderSettings();
     const safety = settingsWindow("Safety");
-    expect(helpFor(safety.getByRole("checkbox", { name: "Disable all Phoenix MCP endpoints" }))).toBe(t("settings.killSwitchInactiveHelp"));
+    expect(helpFor(safety.getByRole("checkbox", { name: "Refuse all agent connections" }))).toBe(t("settings.killSwitchInactiveHelp"));
     // The mode's help says what Enforced means without profiles, which the window no longer shows (user, 2026-10-31).
     const modeHelp = `${t("settings.mesaModeHelp")} ${t("settings.mesaEnforcedWarning")}`;
     expect(helpFor(safety.getByText(t("settings.mesaModeLabel")))).toBe(modeHelp);

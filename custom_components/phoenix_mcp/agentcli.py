@@ -6825,7 +6825,11 @@ class PhoenixAgentCliChatView(PhoenixView):
         # bearer-authed), so it must enforce the same invariants that gate every
         # MCP request: shutdown, the runtime kill switch, and access key validity.
         settings = data.store.get_settings()
-        if not data.ready or data.shutting_down or settings.kill_switch:
+        if data.shutting_down:
+            return _err("service_unavailable", "Home Assistant is shutting down.", 503, rid, key="serviceStopping")
+        if not data.ready:
+            return _err("service_unavailable", "Phoenix MCP setup is not complete.", 503, rid, key="setupIncomplete")
+        if settings.kill_switch:
             return _err(
                 "service_unavailable", "Phoenix MCP is disabled (kill switch).", 503, rid,
                 key="serviceDisabled",
@@ -7302,7 +7306,7 @@ class PhoenixAgentCliProviderView(PhoenixView):
         if auto is True and record and provider_purpose(record.get("kind", "")) == "decision":
             # Decision accounts are qualified against exact model ids.
             return _err("invalid_request", "Decision accounts need an explicit model.", 400, rid,
-                        key="providerModelRequired")
+                        key="decisionModelRequired")
         if record and provider_purpose(record.get("kind", "")) == "decision":
             cfg = store.resolve(instance_id, purpose="decision")
             if cfg is None:

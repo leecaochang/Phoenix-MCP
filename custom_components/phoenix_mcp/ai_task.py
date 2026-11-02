@@ -30,6 +30,7 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.util.json import json_loads
 
 from .const import DOMAIN
+from .helpers import LocalizedReason
 from .schema_compat import schema_engine
 
 _LOGGER = logging.getLogger(__name__)
@@ -116,12 +117,13 @@ def set_ai_task_preferred(hass: HomeAssistant, entry) -> dict:
     """
     entity_id = _loaded_ai_task_entity_id(hass, entry.entry_id)
     if entity_id is None:
-        raise AiTaskSetupError(
-            "Configure and enable the Phoenix MCP AI Task (access key, provider, and model) first."
-        )
+        raise AiTaskSetupError(LocalizedReason(
+            "Configure and enable the Phoenix MCP AI Task (access key, provider, and model) first.",
+            "aiTaskNotConfigured",
+        ))
     prefs = _ai_task_preferences(hass)
     if prefs is None:
-        raise AiTaskSetupError("AI Task preferences are not available on this Home Assistant.")
+        raise AiTaskSetupError(LocalizedReason("AI Task preferences are not available on this Home Assistant.", "aiTaskPreferencesUnavailable"))
     prefs.async_set_preferences(gen_data_entity_id=entity_id)
     return ai_task_preferred_status(hass, entry)
 

@@ -125,7 +125,7 @@
     "caps": {
       "cap_config_read": {
         "label": "設定の読み取り",
-        "description": "Home Assistant の設定とイベントリスナー数を読み取ります。"
+        "description": "Home Assistant の設定、エネルギー設定と太陽光発電予測、ブループリント、MESA プロファイルを読み取り、エンティティの変化を待機します。"
       },
       "cap_camera_read": {
         "label": "カメラ画像の読み取り",
@@ -169,7 +169,7 @@
       },
       "cap_service_response": {
         "label": "サービス応答データ",
-        "description": "conversation.process など、応答を返すサービスのデータを返します。"
+        "description": "天気予報など、アクションが応答として返すデータを返します。"
       },
       "cap_automation_write": {
         "label": "オートメーションの管理",
@@ -185,15 +185,15 @@
       },
       "cap_scene_write": {
         "label": "シーンの管理",
-        "description": "シーンを作成、編集、削除します。参照されるエンティティには引き続き MESA とエンティティアクセスが適用されます。"
+        "description": "シーンを読み取り、作成、編集、削除します。シーン内のすべてのエンティティに、アクセスキーの書き込み権限が必要です。"
       },
       "cap_helper_write": {
         "label": "ヘルパーの管理",
-        "description": "入力、カウンター、タイマーなどのヘルパーを作成、編集、削除します。"
+        "description": "入力、カウンター、タイマー、ゾーン、タグ、人物、テンプレートヘルパーなどのヘルパーを作成、編集、削除し、その設定を変更します。MESA が適用されます。"
       },
       "cap_physical_control": {
         "label": "物理デバイスの制御",
-        "description": "ロック、アラーム、カバー、バルブを制御します。"
+        "description": "ロック、アラーム、カバー、バルブを制御し、Zigbee のグループ、バインディング、デバイスのプロパティを変更します。"
       },
       "cap_restart": {
         "label": "Home Assistant の再起動または停止",
@@ -209,7 +209,7 @@
       },
       "cap_lovelace_write": {
         "label": "ダッシュボードの管理",
-        "description": "Lovelace ダッシュボードとそのカードを読み取り、作成、編集、削除します。"
+        "description": "ダッシュボードとそのカードを読み取り、検索、作成、編集、削除し、インストール済みのカスタムカードを一覧表示します。"
       },
       "cap_registry_write": {
         "label": "エンティティレジストリの管理",
@@ -927,7 +927,7 @@
       "providerAlreadyConfigured": "このプロバイダーアカウントはすでに設定されています。",
       "unknownPersona": "不明なペルソナです。",
       "presetsDisabled": "アクセスキープリセットは無効です。設定で有効にしてください。",
-      "accessKeyNameTaken": "その名前または同等のスラッグを持つアクセスキーはすでに存在します。",
+      "accessKeyNameTaken": "この名前のアクセスキーはすでに存在します。大文字と小文字、または - と _ の違いだけの名前は同じものとして扱われます。",
       "expiresImmutable": "アクセスキー作成後に expires_at は変更できません。",
       "nameRequired": "name は必須です。",
       "badExpiresAt": "expires_at の日時が無効です。",
@@ -939,10 +939,13 @@
       "nodeIdInvalidChars": "ノード ID に無効な文字が含まれています。",
       "activeAccessKeyRequired": "{field} は有効なアクセスキーを参照する必要があります。",
       "aiTaskPreferredFailed": "優先 AI タスクエンティティを設定できませんでした。",
+      "aiTaskNotConfigured": "先に Phoenix MCP AI Task をアクセスキー、プロバイダー、モデルとともに設定し、有効にしてください。",
+      "aiTaskPreferencesUnavailable": "この Home Assistant では AI タスクの環境設定を利用できません。",
       "approvalAlreadyResolved": "承認はすでに解決済みです。",
+      "approvalExpired": "このリクエストは承認される前に期限切れになったため、何も実行されていません。",
       "approvalBatchMaximum": "一括処理に含められる承認は最大 {max} 件です。",
-      "approvalCapabilityDenied": "このアクセスキーでは現在この機能が拒否されています。",
-      "approvalExecutionInterrupted": "以前の試行がすでに適用されている可能性があります。復旧処理でこの承認を不確定として終了します。再実行せず結果を確認してください。",
+      "approvalCapabilityDenied": "アクセスキーの機能が「拒否」に設定されたため、リクエストは実行されずに終了しました。",
+      "approvalExecutionInterrupted": "以前の試行がすでに適用されている可能性があります。このリクエストを変更または再試行する前に、結果を確認してください。",
       "approvalWipeInProgress": "承認の実行とコアデータの消去は同時に行えません。どちらかが完了するまで待ってから、もう一度お試しください。",
       "approvalWipeExecutionUncertain": "承認が適用された可能性があり、結果が返されていない場合はコアデータを消去できません。先に結果を確認してください。",
       "approvalExecutionUncertain": "実行に失敗し、一部が適用された可能性があります。この承認は終了しました。再試行する前に結果を確認してください。",
@@ -952,9 +955,14 @@
       "approvalProcessing": "承認はすでに処理中です。",
       "approvalReasonString": "reason は文字列にしてください。",
       "approvalRecordFailed": "実行前にこの承認を記録できませんでした。何も実行されていません。もう一度お試しください。",
-      "approvalAccessKeyInactive": "アクセスキーは無効になっています。",
+      "approvalAccessKeyInactive": "アクセスキーが無効になったため、このリクエストは実行できません。何も実行されていません。",
       "assistExposurePassThroughOnly": "use_assist_exposure は pass_through アクセスキーでのみ有効です。",
       "assistPipelineFailed": "Assist パイプラインを作成できませんでした。",
+      "assistPipelineUnavailable": "この Home Assistant では Assist パイプラインを利用できません。",
+      "voiceAgentNotConfigured": "先に Phoenix MCP 音声エージェントをアクセスキー、プロバイダー、モデルとともに設定し、有効にしてください。",
+      "assistantSetupFirst": "先に Phoenix MCP アシスタントを設定してください。",
+      "assistantOnlyOneStaysPreferred": "Phoenix MCP アシスタントは Home Assistant で唯一のアシスタントのため、優先アシスタントのままになります。",
+      "assistantPreferredFailed": "優先アシスタントを変更できませんでした。",
       "booleanRequired": "{field} は true または false にしてください。",
       "companionSettingRefused": "Home Companion キーではパススルーもすべてのツールの通知も使えません。",
       "unknownFields": "Phoenix が認識できないフィールドがリクエストに含まれています: {fields}。",
@@ -962,6 +970,7 @@
       "capabilityModeInvalid": "{capability} は deny、allow、confirm のいずれかにしてください。",
       "catalogNotFound": "カタログが見つかりません。",
       "configuredProviderRequired": "{field} は設定済みのプロバイダーアカウントを参照する必要があります。",
+      "decisionProviderRequired": "先に判断プロバイダーのアカウントを選択してください。",
       "deploymentDefaultsInvalid": "デプロイメントの既定値が無効です: {detail}",
       "emptyMessage": "メッセージを入力してください。",
       "entriesListRequired": "entries はリストにしてください。",
@@ -970,7 +979,7 @@
       "inlineWaitRange": "confirm_inline_wait_seconds は 0（オフ）または {min} から {max} までの整数にしてください。",
       "integerRequired": "{field} は整数にしてください。",
       "integrationNameInvalid": "インテグレーション名が無効です。",
-      "killSwitchEngaged": "キルスイッチが作動しています。",
+      "killSwitchEngaged": "キルスイッチがオンのため、リクエストは実行されずにキャンセルされました。",
       "maximumRequired": "{field} は {max} 以下にしてください。",
       "mesaArchiveRequired": "archive は必須です。",
       "mesaProfileExists": "プロファイルはすでに存在します。編集モードで開いてください。",
@@ -987,14 +996,18 @@
       "permissionNodeObject": "ノード {node} は state フィールドを持つオブジェクトにしてください。",
       "permissionSectionObject": "{section} はノード ID をキーとするオブジェクトにしてください。",
       "permissionSelectionNotFound": "権限の選択対象が見つかりません。",
-      "permissionStateInvalid": "{node_type} {node} の状態 {state} は無効です。有効な状態: {states}。",
+      "permissionStateInvalidDomain": "ドメイン {node} の状態 {state} は無効です。有効な状態: {states}。",
+      "permissionStateInvalidDevice": "デバイス {node} の状態 {state} は無効です。有効な状態: {states}。",
+      "permissionStateInvalidEntity": "エンティティ {node} の状態 {state} は無効です。有効な状態: {states}。",
       "permissionTreeInvalid": "権限ツリーの構造が無効です。",
       "presetDeleteRejected": "このプリセットを削除できませんでした。有効なプリセットから切り替えてから削除してください。",
       "presetNameInvalidCharacters": "name に無効な文字が含まれています。",
       "presetNameTooLong": "name は {max} 文字以内にしてください。",
       "presetPassThroughConfirmationRequired": "プリセットで pass_through を有効にする場合は confirm_pass_through: true が必要です。",
       "presetRenameRejected": "このプリセットの名前を変更できませんでした。同じ名前をほかのプリセットが使用している可能性があります。",
-      "presetSaveRejected": "このプリセットを保存できませんでした。名前がすでに存在するか、プリセットの上限に達した可能性があります。",
+      "presetSaveRejected": "このプリセットを保存できませんでした。",
+      "presetNameTaken": "このアクセスキーには、同じ名前のプリセットがすでにあります。",
+      "presetLimitReached": "一つのアクセスキーに保存できるプリセットは最大 {max} 個です。",
       "providerAccountNotFound": "プロバイダーアカウントが見つかりません。",
       "providerApiKeyRequired": "API キーを入力してください。",
       "providerBaseUrlRequired": "プロバイダーのベース URL を入力してください。",
@@ -1003,6 +1016,7 @@
       "providerConnectionFailedNoDetail": "接続に失敗しました。",
       "providerModelMissing": "このプロバイダーでモデルが選択されていません。",
       "providerModelRequired": "モデルが必要です。",
+      "decisionModelRequired": "判断用アカウントには特定のモデルが必要です。自動では選択できません。",
       "providerNotConfigured": "プロバイダーアカウントが設定されていません。",
       "providerEndpointInvalid": "有効なプロバイダープランを選択してください。",
       "providerRemoteUrlAddressForbidden": "プロバイダー URL にプライベート、ループバック、リンクローカル、マルチキャスト、予約済みのアドレスは指定できません。",
@@ -1025,7 +1039,8 @@
       "restoreStale": "復元を選択した後にこの項目が変更されました。比較を確認して、もう一度お試しください。",
       "selectorIdRequired": "selector_id は必須です。",
       "selectorTypeInvalid": "selector_type は area、label、integration のいずれかにしてください。",
-      "serviceDisabled": "Phoenix MCP はキルスイッチによって無効化されています。",
+      "serviceDisabled": "キルスイッチがオンのため、エージェントのリクエストは拒否されます。",
+      "serviceStopping": "Home Assistant はシャットダウン中です。再開してからもう一度お試しください。",
       "setupIncomplete": "Phoenix MCP のセットアップが完了していません。",
       "setupMissing": "Phoenix MCP がセットアップされていません。",
       "sinceTimestampInvalid": "since のタイムスタンプが無効です。",
@@ -1038,12 +1053,12 @@
       "accessKeyIdOrNull": "{field} はアクセスキー ID の文字列または null にしてください。",
       "accessKeyInactive": "このアクセスキーは取り消されたか期限切れです。",
       "accessKeyNameLengthPattern": "name は {min}-{max} 文字で、英字、数字、ハイフン、アンダースコアを使用してください。",
-      "accessKeyNamePattern": "name が必要なパターンと一致しません。",
       "valueAllowed": "{field} は次のいずれかにしてください: {values}。",
       "versionNotFound": "バージョンが見つかりません。",
       "versionResourcePairRequired": "resource_type と resource_id の両方を指定するか、最近のフィードでは両方とも省略してください。",
       "wipeConfirmationRequired": "confirm は WIPE にしてください。",
       "routingPreviewInvalid": "アクセスキー、コマンドの言語、ルーティング設定を確認してください。",
+      "routingLanguagesInvalid": "コマンドルーティングの言語は、インストール済みの Assist 言語から選択してください。",
       "providerModelNotListed": "このプロバイダーが返したモデルを選んでください。",
       "providerAccountChanged": "プロバイダーのアカウントが変更されました。再読み込みしてやり直してください。",
       "routingStatisticsResetInvalid": "VoiceまたはChatを選び、統計のリセットを確認してください。",
@@ -1488,11 +1503,11 @@
       "injectHelp": "Home Assistant のエンティティ、オートメーション、スクリプト、シーン、ヘルパー、人物の各リストと、デバイス、エリア、インテグレーションの各ページに MESA プロファイルボタンを追加します。Home Assistant のフロントエンド変更後に Phoenix MCP の更新が必要になる場合があります。変更は、次に Home Assistant のページを完全に読み込んだときに反映されます。管理者専用です。",
       "injectLabel": "コンテキスト内のプロファイルボタン",
       "injectUnavailable": "Home Assistant のページでプロファイルボタンにエラーが発生したため、ページを再読み込みするまでオフになっています。繰り返し発生する場合は、Phoenix MCP の更新が必要な可能性があります。",
-      "killSwitchActiveAria": "キルスイッチ作動中。すべての Phoenix MCP エンドポイントが無効です",
-      "killSwitchActiveHelp": "Phoenix MCP クライアントのすべてのリクエストが拒否されます。再度有効にすると、HA を再起動せずにすべての Phoenix MCP ルートがすぐ再登録されます。",
-      "killSwitchActiveLabel": "キルスイッチ作動中 - すべての Phoenix MCP エンドポイントは無効です",
+      "killSwitchActiveAria": "キルスイッチ作動中。エージェントの接続は拒否されます",
+      "killSwitchActiveHelp": "Phoenix MCP はすべてのエージェントリクエストを拒否します。キルスイッチをオフにすると、Home Assistant を再起動しなくても、エージェントはすぐに再接続できます。",
+      "killSwitchActiveLabel": "キルスイッチ作動中 - エージェントの接続は拒否されます",
       "killSwitchCard": "緊急キルスイッチ",
-      "killSwitchDisableLabel": "すべての Phoenix MCP エンドポイントを無効化",
+      "killSwitchDisableLabel": "すべてのエージェント接続を拒否",
       "killSwitchInactiveHelp": "有効にすると、MCP、コンテキスト、スキル、Agent Chat、音声エージェント、AI タスクは新しい処理を拒否します。Assist はツールを提供しません。管理パネルには引き続きアクセスできます。",
       "languageAuto": "自動",
       "languageHelp": "このブラウザーでのパネルの言語です。自動では Home Assistant プロファイルに従います。",

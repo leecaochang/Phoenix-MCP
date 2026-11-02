@@ -92,7 +92,8 @@ The response is `200` with the updated record:
 | 404 | `not_found` | `adminError.approvalNotFound` | No approval has this ID, or it disappeared while running. |
 | 409 | `conflict` | `adminError.approvalProcessing` | Another approve is running it now. |
 | 409 | `conflict` | `adminError.approvalExecutionInterrupted` | An earlier approve reached the action and never reported back. Check the result before doing anything else. |
-| 409 | `conflict` | `adminError.approvalAlreadyResolved` | It was past `expires_at`, so this call closed it as `expired`. Also when another request finished it first. |
+| 409 | `conflict` | `adminError.approvalExpired` | It was past `expires_at`, so this call closed it as `expired`. Nothing ran. |
+| 409 | `conflict` | `adminError.approvalAlreadyResolved` | Another request finished it first. |
 | 404 | `not_found` | `adminError.approvalAccessKeyInactive` | The access key is no longer active. Phoenix closes the approval as `cancelled`, reason `access_key_inactive`. |
 | 403 | `forbidden` | `adminError.approvalCapabilityDenied` | The capability is now set to Deny for this key. Phoenix closes the approval as `failed`, reason `capability_denied`. |
 | 503 | `service_unavailable` | `adminError.killSwitchEngaged` | The kill switch is on. Phoenix closes the approval as `cancelled`, reason `kill_switch`. |

@@ -48,12 +48,13 @@ The audit log records the change with the names of the changed settings, not the
 | 400 | `invalid_request` | `adminError.booleanRequired` | A boolean setting got another type. `message_params` has `field`. |
 | 400 | `invalid_request` | `adminError.valueAllowed` | A choice setting got another value: `mesa_mode`, a style, a detail level, a routing mode or an audit menu. `message_params` has `field` and `values`. |
 | 400 | `invalid_request` | `adminError.integerRequired` | An integer setting got another type. `message_params` has `field`. |
-| 400 | `invalid_request` | `adminError.routingPreviewInvalid` | `command_routing_languages`, `command_routing_timeout_ms`, `decision_timeout_ms` or `decision_request_budget` is invalid or out of range. Read `message` for which. |
-| 400 | `invalid_request` | `adminError.conversationLimitInvalid` | A Conversation Log limit is out of range. `message_params` has `field`, `min` and `max`. |
+| 400 | `invalid_request` | `adminError.routingLanguagesInvalid` | `command_routing_languages` names a language that isn't an installed Assist language. |
+| 400 | `invalid_request` | `adminError.conversationLimitInvalid` | A Conversation Log limit, `command_routing_timeout_ms`, `decision_timeout_ms` or `decision_request_budget` is out of range. `message_params` has `field`, `min` and `max`. |
 | 400 | `invalid_request` | `adminError.accessKeyIdOrNull` | An access key setting isn't a string or `null`. `message_params` has `field`. |
 | 400 | `invalid_request` | `adminError.activeAccessKeyRequired` | An access key setting doesn't name an active key. `message_params` has `field`. |
 | 400 | `invalid_request` | `adminError.stringOrNull` | A model setting isn't a string or `null`. `message_params` has `field`. |
-| 400 | `invalid_request` | `adminError.configuredProviderRequired` | A provider setting names no existing account, or a decision feature was turned on with no decision account. In the second case, `field` is `decision_provider_id`. |
+| 400 | `invalid_request` | `adminError.configuredProviderRequired` | A provider setting names no existing account. `message_params` has `field`. |
+| 400 | `invalid_request` | `adminError.decisionProviderRequired` | A decision feature was turned on with no decision account. |
 | 400 | `invalid_request` | `adminError.toolRoutingUnqualified` | A tool review mode was set to `advise` for a model with no qualified language. |
 
 ### Writable settings {#writable-settings}
@@ -335,7 +336,9 @@ The response has `pipeline_id`, `name` and `preferred`.
 |---|---|---|---|
 | 400 | `invalid_request` | `adminError.booleanRequired` | `preferred` isn't a boolean. |
 | 404 | `not_found` | `adminError.setupMissing` | Phoenix isn't set up. |
-| 400 | `invalid_request` | `adminError.assistPipelineFailed` | Home Assistant lacks assistant support, the Voice Agent isn't fully set up, or creating it failed. Read `message` for which. |
+| 400 | `invalid_request` | `adminError.assistPipelineUnavailable` | Home Assistant has no assistant support. |
+| 400 | `invalid_request` | `adminError.voiceAgentNotConfigured` | The Voice Agent isn't fully set up and turned on. |
+| 400 | `invalid_request` | `adminError.assistPipelineFailed` | Creating the assistant failed. |
 
 ### Remove the assistant {#remove-pipeline}
 
@@ -349,7 +352,10 @@ The response has `pipeline_id`, `name` and `preferred`.
 
 | Status | `error` | `message_key` | When |
 |---|---|---|---|
-| 400 | `invalid_request` | `adminError.assistPipelineFailed` | There's no Phoenix assistant yet, it's the only assistant so it stays preferred, or saving failed. Read `message` for which. |
+| 400 | `invalid_request` | `adminError.assistPipelineUnavailable` | Home Assistant has no assistant support. |
+| 400 | `invalid_request` | `adminError.assistantSetupFirst` | There's no Phoenix assistant yet. |
+| 400 | `invalid_request` | `adminError.assistantOnlyOneStaysPreferred` | Phoenix's is the only assistant, so it stays preferred. |
+| 400 | `invalid_request` | `adminError.assistantPreferredFailed` | Saving the preference failed. |
 
 ## AI Task default {#ai-task}
 
@@ -374,7 +380,9 @@ All three answer with the same fields:
 | Status | `error` | `message_key` | When |
 |---|---|---|---|
 | 404 | `not_found` | `adminError.setupMissing` | Phoenix isn't set up. |
-| 400 | `invalid_request` | `adminError.aiTaskPreferredFailed` | `POST` only. AI Task isn't fully set up, or Home Assistant has nowhere to save the default. Read `message` for which. |
+| 400 | `invalid_request` | `adminError.aiTaskNotConfigured` | `POST` only. Phoenix's AI Task isn't fully set up and turned on. |
+| 400 | `invalid_request` | `adminError.aiTaskPreferencesUnavailable` | `POST` only. Home Assistant has nowhere to save the default. |
+| 400 | `invalid_request` | `adminError.aiTaskPreferredFailed` | `POST` only. Saving the default failed. |
 
 Related: [Home Assistant settings](guide:window.settingsHome#ai-task-default)
 

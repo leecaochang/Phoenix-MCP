@@ -125,7 +125,7 @@
     "caps": {
       "cap_config_read": {
         "label": "Configuration read",
-        "description": "Read Home Assistant configuration and event listener counts."
+        "description": "Read Home Assistant's configuration, the Energy setup and solar forecasts, blueprints and MESA profiles, and wait for an entity to change."
       },
       "cap_camera_read": {
         "label": "Camera image read",
@@ -169,7 +169,7 @@
       },
       "cap_service_response": {
         "label": "Service response data",
-        "description": "Return data from services that provide a response, such as conversation.process."
+        "description": "Return the data an action responds with, such as a weather forecast."
       },
       "cap_automation_write": {
         "label": "Manage automations",
@@ -185,15 +185,15 @@
       },
       "cap_scene_write": {
         "label": "Manage scenes",
-        "description": "Create, edit, and delete scenes. Referenced entities are still subject to MESA and entity access."
+        "description": "Read, create, edit, and delete scenes. Every entity in a scene must be writable by the access key."
       },
       "cap_helper_write": {
         "label": "Manage helpers",
-        "description": "Create, edit, and delete helpers such as inputs, counters, and timers."
+        "description": "Create, edit, and delete helpers, including inputs, counters, timers, zones, tags, people and Template helpers, and change their settings. MESA applies."
       },
       "cap_physical_control": {
         "label": "Physical control",
-        "description": "Control locks, alarms, covers, and valves."
+        "description": "Control locks, alarms, covers and valves, and change Zigbee groups, bindings and device properties."
       },
       "cap_restart": {
         "label": "Restart or stop Home Assistant",
@@ -209,7 +209,7 @@
       },
       "cap_lovelace_write": {
         "label": "Manage dashboards",
-        "description": "Read, create, edit, and delete Lovelace dashboards and their cards."
+        "description": "Read, search, create, edit, and delete dashboards and their cards, and list the installed custom cards."
       },
       "cap_registry_write": {
         "label": "Manage entity registry",
@@ -1404,11 +1404,11 @@
       "injectHelp": "Add MESA profile buttons to Home Assistant's Entities, Automations, Scripts, Scenes, Helpers, and People lists and to its device, area, and integration pages. These buttons may need a Phoenix MCP update after a Home Assistant frontend change. A change takes effect the next time a Home Assistant page fully loads. Admins only.",
       "injectLabel": "In-context profile buttons",
       "injectUnavailable": "Turned off until you reload the page, because the profile buttons failed on a Home Assistant page. If this keeps happening, a Phoenix MCP update may be needed.",
-      "killSwitchActiveAria": "Kill switch active. All Phoenix MCP endpoints are disabled",
-      "killSwitchActiveHelp": "All Phoenix MCP client requests are now refused. Re-enabling will re-register all Phoenix MCP routes immediately, without an HA restart.",
-      "killSwitchActiveLabel": "Kill switch ACTIVE - All Phoenix MCP endpoints are disabled",
+      "killSwitchActiveAria": "Kill switch active. Agent connections are refused",
+      "killSwitchActiveHelp": "Phoenix MCP refuses every agent request. Turning the kill switch off lets agents connect again straight away, without a Home Assistant restart.",
+      "killSwitchActiveLabel": "Kill switch ACTIVE - Agent connections are refused",
       "killSwitchCard": "Emergency Kill Switch",
-      "killSwitchDisableLabel": "Disable all Phoenix MCP endpoints",
+      "killSwitchDisableLabel": "Refuse all agent connections",
       "killSwitchInactiveHelp": "When enabled, MCP, context, skill, Agent Chat, Voice Agent and AI Task refuse new work. Assist exposes zero tools. The admin panel remains accessible.",
       "languageAuto": "Auto",
       "languageHelp": "Panel language for this browser. Auto follows your Home Assistant profile.",
@@ -1908,7 +1908,7 @@
       "providerAlreadyConfigured": "This provider account is already configured.",
       "unknownPersona": "Unknown persona.",
       "presetsDisabled": "Access key presets are disabled. Enable them in Settings.",
-      "accessKeyNameTaken": "An access key with that name (or equivalent slug) already exists.",
+      "accessKeyNameTaken": "An access key with that name already exists. Names that differ only in letter case, or in - versus _, count as the same.",
       "expiresImmutable": "expires_at is immutable after access key creation.",
       "nameRequired": "name is required.",
       "badExpiresAt": "Invalid expires_at datetime.",
@@ -1920,10 +1920,13 @@
       "nodeIdInvalidChars": "Node ID contains invalid characters.",
       "activeAccessKeyRequired": "{field} must reference an active access key.",
       "aiTaskPreferredFailed": "Could not configure the preferred AI Task entity.",
+      "aiTaskNotConfigured": "Set up and turn on the Phoenix MCP AI Task first, with an access key, provider and model.",
+      "aiTaskPreferencesUnavailable": "AI Task preferences aren't available on this Home Assistant.",
       "approvalAlreadyResolved": "Approval was already resolved.",
+      "approvalExpired": "This request expired before you approved it, so nothing was run.",
       "approvalBatchMaximum": "A batch may hold at most {max} approvals.",
-      "approvalCapabilityDenied": "Capability is now denied for this access key.",
-      "approvalExecutionInterrupted": "A previous attempt may already have applied. Recovery will close this approval as uncertain; check the result instead of running it again.",
+      "approvalCapabilityDenied": "The access key's capability is now set to Deny, so the request was closed without running.",
+      "approvalExecutionInterrupted": "A previous attempt may already have applied. Check the result before changing or retrying this request.",
       "approvalWipeInProgress": "Approval execution and core data wipe cannot run at the same time. Wait for one to finish and try again.",
       "approvalWipeExecutionUncertain": "Core data cannot be wiped while an approval may have applied without reporting back. Check the result first.",
       "approvalExecutionUncertain": "Execution failed and may have partly applied. This approval was closed; check the result before retrying.",
@@ -1933,9 +1936,14 @@
       "approvalProcessing": "Approval is already being processed.",
       "approvalReasonString": "reason must be a string.",
       "approvalRecordFailed": "Could not record this approval before running it. Nothing was run; try again.",
-      "approvalAccessKeyInactive": "The access key is no longer active.",
+      "approvalAccessKeyInactive": "The access key is no longer active, so this request can't run. Nothing was run.",
       "assistExposurePassThroughOnly": "use_assist_exposure is only valid for pass_through access keys.",
       "assistPipelineFailed": "Could not create the Assist pipeline.",
+      "assistPipelineUnavailable": "Assist pipelines aren't available on this Home Assistant.",
+      "voiceAgentNotConfigured": "Set up and turn on the Phoenix MCP voice agent first, with an access key, provider and model.",
+      "assistantSetupFirst": "Set up the Phoenix MCP assistant first.",
+      "assistantOnlyOneStaysPreferred": "The Phoenix MCP assistant is Home Assistant's only one, so it stays preferred.",
+      "assistantPreferredFailed": "Could not change the preferred assistant.",
       "booleanRequired": "{field} must be true or false.",
       "companionSettingRefused": "A Home Companion key can't use pass-through or announce all tools.",
       "unknownFields": "The request contains fields Phoenix does not recognize: {fields}.",
@@ -1943,6 +1951,7 @@
       "capabilityModeInvalid": "{capability} must be deny, allow, or confirm.",
       "catalogNotFound": "Catalog not found.",
       "configuredProviderRequired": "{field} must reference a configured provider account.",
+      "decisionProviderRequired": "Choose a decision provider account first.",
       "deploymentDefaultsInvalid": "Invalid deployment defaults: {detail}",
       "emptyMessage": "Enter a message.",
       "entriesListRequired": "entries must be a list.",
@@ -1954,7 +1963,7 @@
       "inlineWaitRange": "confirm_inline_wait_seconds must be 0 (off) or an integer from {min} to {max}.",
       "integerRequired": "{field} must be an integer.",
       "integrationNameInvalid": "Invalid integration name.",
-      "killSwitchEngaged": "Kill switch engaged.",
+      "killSwitchEngaged": "The kill switch is on, so the request was cancelled without running.",
       "maximumRequired": "{field} must not exceed {max}.",
       "mesaArchiveRequired": "archive is required.",
       "mesaProfileExists": "A profile already exists. Open it in Edit mode.",
@@ -1971,14 +1980,18 @@
       "permissionNodeObject": "Node {node} must be an object with a state field.",
       "permissionSectionObject": "{section} must be an object keyed by node ID.",
       "permissionSelectionNotFound": "Permission selection not found.",
-      "permissionStateInvalid": "Invalid state {state} for {node_type} {node}. Valid states: {states}.",
+      "permissionStateInvalidDomain": "Invalid state {state} for domain {node}. Valid states: {states}.",
+      "permissionStateInvalidDevice": "Invalid state {state} for device {node}. Valid states: {states}.",
+      "permissionStateInvalidEntity": "Invalid state {state} for entity {node}. Valid states: {states}.",
       "permissionTreeInvalid": "Invalid permission tree structure.",
       "presetDeleteRejected": "Could not delete this preset. Switch away from an active preset before deleting it.",
       "presetNameInvalidCharacters": "name contains invalid characters.",
       "presetNameTooLong": "name must be at most {max} characters.",
       "presetPassThroughConfirmationRequired": "confirm_pass_through: true is required when the preset enables pass_through.",
       "presetRenameRejected": "Could not rename this preset. Another preset may already use that name.",
-      "presetSaveRejected": "Could not save this preset. The name may already exist or the preset limit may have been reached.",
+      "presetSaveRejected": "Could not save this preset.",
+      "presetNameTaken": "This access key already has a preset with that name.",
+      "presetLimitReached": "An access key can have at most {max} presets.",
       "providerAccountNotFound": "Provider account not found.",
       "providerApiKeyRequired": "Enter your API key.",
       "providerBaseUrlRequired": "Enter the provider base URL.",
@@ -1987,6 +2000,7 @@
       "providerConnectionFailedNoDetail": "Connection failed.",
       "providerModelMissing": "No model is selected for this provider.",
       "providerModelRequired": "A model is required.",
+      "decisionModelRequired": "A decision account needs a specific model. It can't choose one automatically.",
       "providerNotConfigured": "Provider account is not configured.",
       "providerEndpointInvalid": "Choose a valid provider plan.",
       "providerRemoteUrlAddressForbidden": "The provider URL must not point at a private, loopback, link-local, multicast, or reserved address.",
@@ -2010,7 +2024,8 @@
       "restoreUnverified": "The restore was submitted, but the configuration read back afterwards does not match the chosen version, so it may be only partly applied. Phoenix rechecks it and asks for review in Approvals if it still differs. Check the current configuration before restoring again.",
       "selectorIdRequired": "selector_id is required.",
       "selectorTypeInvalid": "selector_type must be area, label, or integration.",
-      "serviceDisabled": "Phoenix MCP is disabled by the kill switch.",
+      "serviceDisabled": "The kill switch is on, so agent requests are refused.",
+      "serviceStopping": "Home Assistant is shutting down. Try again once it's back.",
       "setupIncomplete": "Phoenix MCP setup is not complete.",
       "setupMissing": "Phoenix MCP is not set up.",
       "sinceTimestampInvalid": "Invalid since timestamp.",
@@ -2023,12 +2038,12 @@
       "accessKeyIdOrNull": "{field} must be an access key ID string or null.",
       "accessKeyInactive": "This access key is revoked or expired.",
       "accessKeyNameLengthPattern": "name must be {min}-{max} characters using letters, numbers, hyphens, or underscores.",
-      "accessKeyNamePattern": "name does not match the required pattern.",
       "valueAllowed": "{field} must be one of: {values}.",
       "versionNotFound": "Version not found.",
       "versionResourcePairRequired": "Provide both resource_type and resource_id, or neither for the recent feed.",
       "wipeConfirmationRequired": "confirm must be WIPE.",
       "routingPreviewInvalid": "Check the access key, command language and routing settings.",
+      "routingLanguagesInvalid": "Choose command routing languages from the installed Assist languages.",
       "providerModelNotListed": "Choose a model returned by this provider.",
       "providerAccountChanged": "Provider account changed. Reload and try again.",
       "routingStatisticsResetInvalid": "Choose Voice or Chat and confirm the statistics reset.",

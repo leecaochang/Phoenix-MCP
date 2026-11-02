@@ -163,7 +163,7 @@
     "caps": {
       "cap_config_read": {
         "label": "구성 읽기",
-        "description": "Home Assistant 구성과 이벤트 리스너 수를 읽습니다."
+        "description": "Home Assistant 구성, 에너지 설정과 태양광 예측, 블루프린트 및 MESA 프로필을 읽고, 엔티티가 변경될 때까지 기다립니다."
       },
       "cap_camera_read": {
         "label": "카메라 이미지 읽기",
@@ -207,7 +207,7 @@
       },
       "cap_service_response": {
         "label": "서비스 응답 데이터",
-        "description": "conversation.process 와 같이 응답을 제공하는 서비스에서 데이터를 반환합니다."
+        "description": "날씨 예보처럼 액션이 응답으로 반환하는 데이터를 반환합니다."
       },
       "cap_automation_write": {
         "label": "자동화 관리",
@@ -223,15 +223,15 @@
       },
       "cap_scene_write": {
         "label": "장면 관리",
-        "description": "장면을 생성, 편집 및 삭제합니다. 참조된 엔티티는 여전히 MESA 및 엔티티 접근의 적용을 받습니다."
+        "description": "장면을 읽고, 생성, 편집 및 삭제합니다. 장면의 모든 엔티티는 액세스 키로 쓸 수 있어야 합니다."
       },
       "cap_helper_write": {
         "label": "도우미 관리",
-        "description": "입력, 카운터 및 타이머와 같은 도우미를 생성, 편집 및 삭제합니다."
+        "description": "입력, 카운터, 타이머, 지역, 태그, 사람 및 템플릿 도우미를 포함한 도우미를 생성, 편집 및 삭제하고 설정을 변경합니다. MESA가 적용됩니다."
       },
       "cap_physical_control": {
         "label": "물리적 제어",
-        "description": "잠금, 경보, 커버 및 밸브를 제어합니다."
+        "description": "잠금, 경보, 커버 및 밸브를 제어하고, Zigbee 그룹, 바인딩 및 기기 속성을 변경합니다."
       },
       "cap_restart": {
         "label": "Home Assistant 재시작 또는 중지",
@@ -247,7 +247,7 @@
       },
       "cap_lovelace_write": {
         "label": "대시보드 관리",
-        "description": "Lovelace 대시보드와 카드를 읽고, 생성, 편집 및 삭제합니다."
+        "description": "대시보드와 카드를 읽고, 검색, 생성, 편집 및 삭제하며, 설치된 사용자 지정 카드를 나열합니다."
       },
       "cap_registry_write": {
         "label": "엔티티 레지스트리 관리",
@@ -815,10 +815,13 @@
       "activeAccessKeyRequired": "{field}은(는) 활성 액세스 키를 참조해야 합니다.",
       "adminRequired": "관리자 접근이 필요합니다.",
       "aiTaskPreferredFailed": "선호 AI 작업 엔티티를 구성할 수 없습니다.",
+      "aiTaskNotConfigured": "먼저 액세스 키, 제공업체 및 모델로 Phoenix MCP AI 작업을 설정하고 활성화하십시오.",
+      "aiTaskPreferencesUnavailable": "이 Home Assistant에서는 AI 작업 기본 설정을 사용할 수 없습니다.",
       "approvalAlreadyResolved": "승인이 이미 처리되었습니다.",
+      "approvalExpired": "이 요청은 승인되기 전에 만료되어 아무것도 실행되지 않았습니다.",
       "approvalBatchMaximum": "한 배치에는 최대 {max}개의 승인을 포함할 수 있습니다.",
-      "approvalCapabilityDenied": "이 액세스 키에 대해 이 기능이 현재 거부되었습니다.",
-      "approvalExecutionInterrupted": "이전 시도가 이미 적용되었을 수 있습니다. 복구 과정에서 이 승인을 결과 불확실 상태로 종료합니다. 다시 실행하지 말고 결과를 확인하십시오.",
+      "approvalCapabilityDenied": "액세스 키의 기능이 이제 거부로 설정되어 있어 요청이 실행되지 않고 종료되었습니다.",
+      "approvalExecutionInterrupted": "이전 시도가 이미 적용되었을 수 있습니다. 이 요청을 변경하거나 다시 시도하기 전에 결과를 확인하십시오.",
       "approvalWipeInProgress": "승인 실행과 핵심 데이터 삭제는 동시에 진행할 수 없습니다. 한 작업이 완료될 때까지 기다린 후 다시 시도하십시오.",
       "approvalWipeExecutionUncertain": "승인이 적용되었지만 결과가 보고되지 않았을 수 있는 동안에는 핵심 데이터를 삭제할 수 없습니다. 먼저 결과를 확인하십시오.",
       "approvalExecutionUncertain": "실행에 실패하여 일부가 적용되었을 수 있습니다. 이 승인은 종료되었습니다. 다시 시도하기 전에 결과를 확인하십시오.",
@@ -829,10 +832,15 @@
       "approvalProcessing": "승인이 이미 처리 중입니다.",
       "approvalReasonString": "reason은 문자열이어야 합니다.",
       "approvalRecordFailed": "이 승인을 실행하기 전에 기록할 수 없었습니다. 아무것도 실행되지 않았습니다. 다시 시도하십시오.",
-      "approvalAccessKeyInactive": "이 액세스 키는 더 이상 활성 상태가 아닙니다.",
+      "approvalAccessKeyInactive": "액세스 키가 더 이상 활성 상태가 아니므로 이 요청을 실행할 수 없습니다. 아무것도 실행되지 않았습니다.",
       "archivedAccessKeyNotFound": "보관된 액세스 키를 찾을 수 없습니다.",
       "assistExposurePassThroughOnly": "use_assist_exposure는 pass_through 액세스 키에서만 유효합니다.",
       "assistPipelineFailed": "Assist 파이프라인을 만들 수 없습니다.",
+      "assistPipelineUnavailable": "이 Home Assistant에서는 Assist 파이프라인을 사용할 수 없습니다.",
+      "voiceAgentNotConfigured": "먼저 액세스 키, 제공업체 및 모델로 Phoenix MCP 음성 에이전트를 설정하고 활성화하십시오.",
+      "assistantSetupFirst": "먼저 Phoenix MCP 어시스턴트를 설정하십시오.",
+      "assistantOnlyOneStaysPreferred": "Phoenix MCP 어시스턴트는 Home Assistant의 유일한 어시스턴트이므로 기본 어시스턴트로 유지됩니다.",
+      "assistantPreferredFailed": "기본 어시스턴트를 변경할 수 없습니다.",
       "authRequired": "인증이 필요합니다.",
       "badDomain": "도메인 이름이 유효하지 않습니다.",
       "badEntityId": "엔티티 ID 형식이 유효하지 않습니다.",
@@ -850,6 +858,7 @@
       "capabilityModeInvalid": "{capability}은(는) deny, allow 또는 confirm 중 하나여야 합니다.",
       "catalogNotFound": "카탈로그를 찾을 수 없습니다.",
       "configuredProviderRequired": "{field}은(는) 구성된 제공업체 계정을 참조해야 합니다.",
+      "decisionProviderRequired": "먼저 결정 제공업체 계정을 선택하십시오.",
       "deploymentDefaultsInvalid": "배포 기본값이 유효하지 않습니다: {detail}",
       "emptyMessage": "메시지를 입력하십시오.",
       "entriesListRequired": "entries는 목록이어야 합니다.",
@@ -859,7 +868,7 @@
       "inlineWaitRange": "confirm_inline_wait_seconds는 0(꺼짐) 또는 {min}에서 {max} 사이의 정수여야 합니다.",
       "integerRequired": "{field}은(는) 정수여야 합니다.",
       "integrationNameInvalid": "통합 구성 요소 이름이 유효하지 않습니다.",
-      "killSwitchEngaged": "킬 스위치가 작동 중입니다.",
+      "killSwitchEngaged": "킬 스위치가 켜져 있어 요청이 실행되지 않고 취소되었습니다.",
       "maximumRequired": "{field}은(는) {max}를 초과할 수 없습니다.",
       "mesaArchiveRequired": "archive는 필수입니다.",
       "mesaProfileExists": "프로필이 이미 있습니다. 편집 모드에서 여세요.",
@@ -879,7 +888,9 @@
       "permissionNodeObject": "노드 {node}은(는) state 필드가 있는 객체여야 합니다.",
       "permissionSectionObject": "{section}은(는) 노드 ID를 키로 사용하는 객체여야 합니다.",
       "permissionSelectionNotFound": "권한 선택 항목을 찾을 수 없습니다.",
-      "permissionStateInvalid": "{node_type} {node}의 상태 {state}이(가) 유효하지 않습니다. 유효한 상태: {states}.",
+      "permissionStateInvalidDomain": "도메인 {node}의 상태 {state}이(가) 유효하지 않습니다. 유효한 상태: {states}.",
+      "permissionStateInvalidDevice": "기기 {node}의 상태 {state}이(가) 유효하지 않습니다. 유효한 상태: {states}.",
+      "permissionStateInvalidEntity": "엔티티 {node}의 상태 {state}이(가) 유효하지 않습니다. 유효한 상태: {states}.",
       "permissionTreeInvalid": "권한 트리 구조가 유효하지 않습니다.",
       "presetDeleteRejected": "이 프리셋을 삭제할 수 없습니다. 삭제하기 전에 활성 프리셋에서 다른 프리셋으로 전환하십시오.",
       "presetNameInvalidCharacters": "name에 잘못된 문자가 포함되어 있습니다.",
@@ -887,7 +898,9 @@
       "presetNotFound": "프리셋을 찾을 수 없습니다.",
       "presetPassThroughConfirmationRequired": "프리셋이 pass_through를 활성화할 때 confirm_pass_through: true가 필요합니다.",
       "presetRenameRejected": "이 프리셋의 이름을 변경할 수 없습니다. 다른 프리셋이 이미 해당 이름을 사용하고 있을 수 있습니다.",
-      "presetSaveRejected": "이 프리셋을 저장할 수 없습니다. 이름이 이미 존재하거나 프리셋 제한에 도달했을 수 있습니다.",
+      "presetSaveRejected": "이 프리셋을 저장할 수 없습니다.",
+      "presetNameTaken": "이 액세스 키에는 같은 이름의 프리셋이 이미 있습니다.",
+      "presetLimitReached": "액세스 키는 최대 {max}개의 프리셋을 가질 수 있습니다.",
       "presetsDisabled": "액세스 키 프리셋이 비활성화되어 있습니다. 설정에서 활성화하십시오.",
       "providerAccountNotFound": "제공업체 계정을 찾을 수 없습니다.",
       "providerAlreadyConfigured": "이 제공업체 계정은 이미 구성되어 있습니다.",
@@ -899,6 +912,7 @@
       "providerEndpointInvalid": "유효한 제공업체 플랜을 선택하십시오.",
       "providerModelMissing": "이 제공업체에 대해 선택된 모델이 없습니다.",
       "providerModelRequired": "모델이 필요합니다.",
+      "decisionModelRequired": "판단 계정에는 특정 모델이 필요합니다. 모델을 자동으로 선택할 수 없습니다.",
       "providerNotConfigured": "제공업체 계정이 구성되어 있지 않습니다.",
       "providerRemoteUrlAddressForbidden": "제공업체 URL은 사설, 루프백, 링크 로컬, 멀티캐스트 또는 예약된 주소를 가리킬 수 없습니다.",
       "providerRemoteUrlResolutionForbidden": "제공업체 URL이 사설, 루프백, 링크 로컬, 멀티캐스트 또는 예약된 주소로 확인됩니다.",
@@ -920,7 +934,8 @@
       "restoreStale": "복원을 선택한 후 이 항목이 변경되었습니다. 비교를 확인하고 다시 시도하세요.",
       "selectorIdRequired": "selector_id는 필수입니다.",
       "selectorTypeInvalid": "selector_type은 area, label 또는 integration 중 하나여야 합니다.",
-      "serviceDisabled": "Phoenix MCP는 킬 스위치에 의해 비활성화되었습니다.",
+      "serviceDisabled": "킬 스위치가 켜져 있어 에이전트 요청이 거부됩니다.",
+      "serviceStopping": "Home Assistant가 종료되는 중입니다. 다시 실행되면 다시 시도하십시오.",
       "setupIncomplete": "Phoenix MCP 설정이 완료되지 않았습니다.",
       "setupMissing": "Phoenix MCP가 설정되지 않았습니다.",
       "sinceTimestampInvalid": "since 타임스탬프가 유효하지 않습니다.",
@@ -933,8 +948,7 @@
       "accessKeyIdOrNull": "{field}은(는) 액세스 키 ID 문자열 또는 null이어야 합니다.",
       "accessKeyInactive": "이 액세스 키는 철회되었거나 만료되었습니다.",
       "accessKeyNameLengthPattern": "name은 {min}-{max}자여야 하며 문자, 숫자, 하이픈 또는 밑줄을 사용해야 합니다.",
-      "accessKeyNamePattern": "name이 필요한 패턴과 일치하지 않습니다.",
-      "accessKeyNameTaken": "해당 이름 또는 동일한 슬러그를 가진 액세스 키가 이미 존재합니다.",
+      "accessKeyNameTaken": "이 이름의 액세스 키가 이미 존재합니다. 대소문자나 -와 _만 다른 이름은 같은 이름으로 간주됩니다.",
       "accessKeyNotFound": "액세스 키를 찾을 수 없습니다.",
       "unknownPersona": "알 수 없는 페르소나입니다.",
       "valueAllowed": "{field}은(는) 다음 중 하나여야 합니다: {values}.",
@@ -942,6 +956,7 @@
       "versionResourcePairRequired": "resource_type과 resource_id를 모두 제공하거나, 최근 피드에서는 둘 다 생략하십시오.",
       "wipeConfirmationRequired": "confirm은 WIPE여야 합니다.",
       "routingPreviewInvalid": "액세스 키, 명령 언어 및 라우팅 설정을 확인하세요.",
+      "routingLanguagesInvalid": "설치된 Assist 언어 중에서 명령 라우팅 언어를 선택하십시오.",
       "providerModelNotListed": "이 제공업체가 반환한 모델을 선택하세요.",
       "providerAccountChanged": "제공업체 계정이 변경되었습니다. 새로 고친 후 다시 시도하세요.",
       "routingStatisticsResetInvalid": "Voice 또는 Chat을 선택하고 통계 초기화를 확인하세요.",
@@ -1367,11 +1382,11 @@
       "injectHelp": "Home Assistant의 엔티티, 자동화, 스크립트, 장면, 도우미, 사람 목록과 기기, 영역, 통합 구성 요소 페이지에 MESA 프로필 버튼을 추가합니다. Home Assistant 프론트엔드 변경 후에는 이러한 버튼에 Phoenix MCP 업데이트가 필요할 수 있습니다. 변경 사항은 다음에 Home Assistant 페이지를 완전히 다시 로드할 때 적용됩니다. 관리자 전용입니다.",
       "injectLabel": "문맥 내 프로필 버튼",
       "injectUnavailable": "Home Assistant 페이지에서 프로필 버튼에 오류가 발생해 페이지를 다시 불러올 때까지 꺼져 있습니다. 계속 발생하면 Phoenix MCP 업데이트가 필요할 수 있습니다.",
-      "killSwitchActiveAria": "킬 스위치가 활성화되어 있습니다. 모든 Phoenix MCP 엔드포인트가 비활성화되었습니다",
-      "killSwitchActiveHelp": "이제 모든 Phoenix MCP 클라이언트 요청이 거부됩니다. 다시 활성화하면 HA를 재시작하지 않고도 모든 Phoenix MCP 경로가 즉시 다시 등록됩니다.",
-      "killSwitchActiveLabel": "킬 스위치 작동 중 - 모든 Phoenix MCP 엔드포인트가 비활성화되었습니다",
+      "killSwitchActiveAria": "킬 스위치가 활성화되어 있습니다. 에이전트 연결이 거부됩니다",
+      "killSwitchActiveHelp": "Phoenix MCP가 모든 에이전트 요청을 거부합니다. 킬 스위치를 끄면 Home Assistant를 재시작하지 않고도 에이전트가 바로 다시 연결할 수 있습니다.",
+      "killSwitchActiveLabel": "킬 스위치 작동 중 - 에이전트 연결이 거부됩니다",
       "killSwitchCard": "비상 킬 스위치",
-      "killSwitchDisableLabel": "모든 Phoenix MCP 엔드포인트 비활성화",
+      "killSwitchDisableLabel": "모든 에이전트 연결 거부",
       "killSwitchInactiveHelp": "활성화하면 MCP, 컨텍스트, 스킬, Agent Chat, 음성 에이전트 및 AI 작업이 새 작업을 거부합니다. Assist는 도구를 제공하지 않습니다. 관리자 패널은 계속 사용할 수 있습니다.",
       "languageAuto": "자동",
       "languageHelp": "이 브라우저의 패널 언어입니다. 자동은 Home Assistant 프로필을 따릅니다.",

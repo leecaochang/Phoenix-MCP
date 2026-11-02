@@ -193,17 +193,19 @@
       "accessKeyIdOrNull": "{field} måste vara en åtkomstnyckel-ID-sträng eller null.",
       "accessKeyInactive": "Den här åtkomstnyckeln är återkallad eller har gått ut.",
       "accessKeyNameLengthPattern": "name måste vara {min}-{max} tecken och får endast innehålla bokstäver, siffror, bindestreck eller understreck.",
-      "accessKeyNamePattern": "name matchar inte det obligatoriska mönstret.",
-      "accessKeyNameTaken": "Det finns redan en åtkomstnyckel med det namnet (eller motsvarande slug).",
+      "accessKeyNameTaken": "En åtkomstnyckel med detta namn finns redan. Namn som bara skiljer sig i versaler och gemener, eller i - mot _, räknas som samma.",
       "accessKeyNotFound": "Åtkomstnyckeln hittades inte.",
       "activeAccessKeyRequired": "{field} måste referera till en aktiv åtkomstnyckel.",
       "adminRequired": "Administratörsbehörighet krävs.",
       "aiTaskPreferredFailed": "Det gick inte att konfigurera den föredragna AI-uppgiftsentiteten.",
-      "approvalAccessKeyInactive": "Åtkomstnyckeln är inte längre aktiv.",
+      "aiTaskNotConfigured": "Konfigurera först Phoenix MCP AI Task med en åtkomstnyckel, en leverantör och en modell, och aktivera den.",
+      "aiTaskPreferencesUnavailable": "Inställningar för AI-uppgifter är inte tillgängliga i den här Home Assistant-instansen.",
+      "approvalAccessKeyInactive": "Åtkomstnyckeln är inte längre aktiv, så den här begäran kan inte köras. Inget kördes.",
       "approvalAlreadyResolved": "Godkännandet har redan behandlats.",
+      "approvalExpired": "Den här begäran gick ut innan du godkände den, så inget kördes.",
       "approvalBatchMaximum": "En batch får innehålla högst {max} godkännanden.",
-      "approvalCapabilityDenied": "Funktionen nekas nu för den här åtkomstnyckeln.",
-      "approvalExecutionInterrupted": "Ett tidigare försök kan redan ha tillämpats. Återställningen stänger godkännandet som osäkert. Kontrollera resultatet i stället för att köra det igen.",
+      "approvalCapabilityDenied": "Åtkomstnyckelns funktion är nu inställd på Neka, så begäran stängdes utan att köras.",
+      "approvalExecutionInterrupted": "Ett tidigare försök kan redan ha tillämpats. Kontrollera resultatet innan du ändrar den här begäran eller försöker igen.",
       "approvalExecutionUncertain": "Körningen misslyckades och kan ha tillämpats delvis. Godkännandet stängdes. Kontrollera resultatet innan du försöker igen.",
       "approvalExecutorMissing": "Ingen utförare är registrerad för det här verktyget.",
       "approvalIdsNonEmpty": "approval_ids måste vara en icke-tom array av strängar.",
@@ -217,6 +219,11 @@
       "archivedAccessKeyNotFound": "Arkiverad åtkomstnyckel hittades inte.",
       "assistExposurePassThroughOnly": "use_assist_exposure är endast giltigt för åtkomstnycklar av typen pass_through.",
       "assistPipelineFailed": "Det gick inte att skapa Assist-pipelinen.",
+      "assistPipelineUnavailable": "Assist-pipelines är inte tillgängliga i den här Home Assistant-instansen.",
+      "voiceAgentNotConfigured": "Konfigurera först Phoenix MCP-röstagenten med en åtkomstnyckel, en leverantör och en modell, och aktivera den.",
+      "assistantSetupFirst": "Konfigurera Phoenix MCP-assistenten först.",
+      "assistantOnlyOneStaysPreferred": "Phoenix MCP-assistenten är den enda assistenten i Home Assistant, så den förblir föredragen.",
+      "assistantPreferredFailed": "Det gick inte att ändra den föredragna assistenten.",
       "attentionCheckRequired": "Kontrollera åtgärdens utfall innan du fortsätter.",
       "attentionNotReviewable": "Det här objektet kan inte bekräftas.",
       "attentionReviewConflict": "Den här åtgärden körs eller har redan granskats.",
@@ -237,6 +244,7 @@
       "capabilityModeInvalid": "{capability} måste vara deny, allow eller confirm.",
       "catalogNotFound": "Katalogen hittades inte.",
       "configuredProviderRequired": "{field} måste referera till ett konfigurerat leverantörskonto.",
+      "decisionProviderRequired": "Välj ett konto för beslutsleverantören först.",
       "conversationClearConfirm": "Bekräfta rensning av konversationshistoriken.",
       "conversationLimitInvalid": "{field} måste vara ett heltal mellan {min} och {max}.",
       "conversationNotFound": "Den här konversationsposten är inte längre tillgänglig.",
@@ -250,7 +258,7 @@
       "inlineWaitRange": "confirm_inline_wait_seconds måste vara 0 (av) eller ett heltal från {min} till {max}.",
       "integerRequired": "{field} måste vara ett heltal.",
       "integrationNameInvalid": "Ogiltigt integrationsnamn.",
-      "killSwitchEngaged": "Nödstoppet är aktiverat.",
+      "killSwitchEngaged": "Nödstoppet är på, så begäran avbröts utan att köras.",
       "maximumRequired": "{field} får inte överskrida {max}.",
       "mesaArchiveRequired": "archive krävs.",
       "mesaConflictModeInvalid": "on_conflict måste vara skip eller overwrite.",
@@ -270,7 +278,9 @@
       "permissionNodeObject": "Noden {node} måste vara ett objekt med fältet state.",
       "permissionSectionObject": "{section} måste vara ett objekt med nod-ID som nycklar.",
       "permissionSelectionNotFound": "Behörighetsvalet hittades inte.",
-      "permissionStateInvalid": "Ogiltigt state {state} för {node_type} {node}. Giltiga state: {states}.",
+      "permissionStateInvalidDomain": "Ogiltigt tillstånd {state} för domänen {node}. Giltiga tillstånd: {states}.",
+      "permissionStateInvalidDevice": "Ogiltigt tillstånd {state} för enheten {node}. Giltiga tillstånd: {states}.",
+      "permissionStateInvalidEntity": "Ogiltigt tillstånd {state} för entiteten {node}. Giltiga tillstånd: {states}.",
       "permissionTreeInvalid": "Ogiltig struktur för behörighetsträdet.",
       "presetDeleteRejected": "Det gick inte att radera den här förinställningen. Byt bort från en aktiv förinställning innan du raderar den.",
       "presetNameInvalidCharacters": "name innehåller ogiltiga tecken.",
@@ -278,7 +288,9 @@
       "presetNotFound": "Förinställningen hittades inte.",
       "presetPassThroughConfirmationRequired": "confirm_pass_through: true krävs när förinställningen aktiverar pass_through.",
       "presetRenameRejected": "Det gick inte att byta namn på den här förinställningen. En annan förinställning kan redan använda det namnet.",
-      "presetSaveRejected": "Det gick inte att spara den här förinställningen. Namnet kan redan finnas eller så kan gränsen för antal förinställningar ha nåtts.",
+      "presetSaveRejected": "Det gick inte att spara den här förinställningen.",
+      "presetNameTaken": "Den här åtkomstnyckeln har redan en förinställning med det namnet.",
+      "presetLimitReached": "En åtkomstnyckel kan ha högst {max} förinställningar.",
       "presetsDisabled": "Förinställningar för åtkomstnycklar är inaktiverade. Aktivera dem i Inställningar.",
       "providerAccountChanged": "Leverantörskontot ändrades. Ladda om och försök igen.",
       "providerAccountNotFound": "Leverantörskontot hittades inte.",
@@ -293,6 +305,7 @@
       "providerModelNotListed": "Välj en modell som leverantören returnerar.",
       "providerModelOrAuto": "Skicka antingen en modell eller auto, inte båda.",
       "providerModelRequired": "En modell krävs.",
+      "decisionModelRequired": "Ett beslutskonto behöver en specifik modell. Det kan inte välja en automatiskt.",
       "providerNotConfigured": "Leverantörskontot är inte konfigurerat.",
       "providerRemoteUrlAddressForbidden": "Leverantörens URL får inte peka på en privat, loopback-, link-local-, multicast- eller reserverad adress.",
       "providerRemoteUrlResolutionForbidden": "Leverantörens URL motsvarar en privat, loopback-, link-local-, multicast- eller reserverad adress.",
@@ -329,10 +342,12 @@
       "restoreSideInvalid": "side måste vara before eller after.",
       "restoreStale": "Objektet har ändrats sedan du valde att återställa. Granska jämförelsen och försök igen.",
       "routingPreviewInvalid": "Kontrollera åtkomstnyckeln, kommandospråket och routningsinställningarna.",
+      "routingLanguagesInvalid": "Välj språk för kommandoroutning bland de installerade Assist-språken.",
       "routingStatisticsResetInvalid": "Välj Voice eller Chat och bekräfta nollställningen av statistiken.",
       "selectorIdRequired": "selector_id krävs.",
       "selectorTypeInvalid": "selector_type måste vara area, label eller integration.",
-      "serviceDisabled": "Phoenix MCP är inaktiverat av nödstoppet.",
+      "serviceDisabled": "Nödstoppet är på, så agentbegäranden avvisas.",
+      "serviceStopping": "Home Assistant stängs av. Försök igen när Home Assistant är tillbaka.",
       "setupIncomplete": "Installationen av Phoenix MCP är inte slutförd.",
       "setupMissing": "Phoenix MCP är inte installerat.",
       "sinceTimestampInvalid": "Ogiltig tidsstämpel för since.",
@@ -1020,7 +1035,7 @@
         "label": "Läsning av kamerabild"
       },
       "cap_config_read": {
-        "description": "Läs Home Assistant-konfiguration och antal händelselyssnare.",
+        "description": "Läs Home Assistant-konfigurationen, energikonfigurationen och solprognoser, blueprints och MESA-profiler, och vänta på att en entitet ändras.",
         "label": "Läsning av konfiguration"
       },
       "cap_diagnostics": {
@@ -1044,7 +1059,7 @@
         "label": "Läs filer"
       },
       "cap_helper_write": {
-        "description": "Skapa, redigera och radera hjälpare som indata, räknare och timers.",
+        "description": "Skapa, redigera och radera hjälpare, bland annat indata, räknare, timers, zoner, taggar, personer och mallhjälpare, och ändra deras inställningar. MESA gäller.",
         "label": "Hantera hjälpare"
       },
       "cap_integration_reconfigure": {
@@ -1064,11 +1079,11 @@
         "label": "Läsning av systemlogg"
       },
       "cap_lovelace_write": {
-        "description": "Läs, skapa, redigera och radera Lovelace-kontrollpaneler och deras kort.",
+        "description": "Läs, sök i, skapa, redigera och radera kontrollpaneler och deras kort, och lista de installerade anpassade korten.",
         "label": "Hantera kontrollpaneler"
       },
       "cap_physical_control": {
-        "description": "Styr lås, larm, skydd och ventiler.",
+        "description": "Styr lås, larm, skydd och ventiler, och ändra Zigbee-grupper, bindningar och enhetsegenskaper.",
         "label": "Fysisk styrning"
       },
       "cap_radio_write": {
@@ -1088,7 +1103,7 @@
         "label": "Starta om eller stoppa Home Assistant"
       },
       "cap_scene_write": {
-        "description": "Skapa, redigera och radera scener. Refererade entiteter omfattas fortfarande av MESA och entitetsåtkomst.",
+        "description": "Läs, skapa, redigera och radera scener. Åtkomstnyckeln måste kunna skriva till alla entiteter i en scen.",
         "label": "Hantera scener"
       },
       "cap_script_write": {
@@ -1100,7 +1115,7 @@
         "label": "Sökning och upptäckt"
       },
       "cap_service_response": {
-        "description": "Returnera data från tjänster som ger ett svar, till exempel conversation.process.",
+        "description": "Returnera de data som en åtgärd svarar med, till exempel en väderprognos.",
         "label": "Data i tjänstesvar"
       },
       "cap_template_render": {
@@ -2148,11 +2163,11 @@
       "injectHelp": "Lägg till MESA-profilknappar i Home Assistants listor för entiteter, automatiseringar, skript, scener, hjälpare och personer och på dess enhets-, områdes- och integrationssidor. De här knapparna kan behöva en Phoenix MCP-uppdatering efter en ändring i Home Assistants användargränssnitt. En ändring gäller nästa gång en Home Assistant-sida läses in helt. Endast administratörer.",
       "injectLabel": "Profilknappar i kontexten",
       "injectUnavailable": "Avstängd tills du läser in sidan igen, eftersom profilknapparna misslyckades på en Home Assistant-sida. Om det fortsätter att hända kan en Phoenix MCP-uppdatering behövas.",
-      "killSwitchActiveAria": "Nödstoppet är aktivt. Alla Phoenix MCP-slutpunkter är inaktiverade",
-      "killSwitchActiveHelp": "Alla klientbegäranden till Phoenix MCP avvisas nu. Om du aktiverar igen registreras alla Phoenix MCP-rutter på nytt omedelbart, utan att HA startas om.",
-      "killSwitchActiveLabel": "NÖDSTOPPET ÄR AKTIVT - Alla Phoenix MCP-slutpunkter är inaktiverade",
+      "killSwitchActiveAria": "Nödstoppet är aktivt. Agentanslutningar avvisas",
+      "killSwitchActiveHelp": "Phoenix MCP avvisar alla agentbegäranden. När du stänger av nödstoppet kan agenter ansluta igen direkt, utan att Home Assistant startas om.",
+      "killSwitchActiveLabel": "Nödstoppet AKTIVT - Agentanslutningar avvisas",
       "killSwitchCard": "Nödstopp",
-      "killSwitchDisableLabel": "Inaktivera alla Phoenix MCP-slutpunkter",
+      "killSwitchDisableLabel": "Avvisa alla agentanslutningar",
       "killSwitchInactiveHelp": "När det är aktiverat avvisar MCP, kontext, skill, Agent Chat, Röstagent och AI-uppgift nytt arbete. Assist exponerar inga verktyg. Administratörspanelen är fortfarande tillgänglig.",
       "languageAuto": "Automatiskt",
       "languageHelp": "Panelens språk i den här webbläsaren. Automatiskt följer din Home Assistant-profil.",

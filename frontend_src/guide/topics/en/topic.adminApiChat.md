@@ -129,7 +129,8 @@ The response is `200` with only `{"instance": {"id": ..., "model": ..., "model_m
 | 400 | `invalid_request` | `adminError.unknownFields` | The body has fields other than `model` and `auto`. |
 | 400 | `invalid_request` | `adminError.booleanRequired` | `auto` isn't a boolean. |
 | 400 | `invalid_request` | `adminError.providerModelOrAuto` | Both `model` and `auto: true` were sent. |
-| 400 | `invalid_request` | `adminError.providerModelRequired` | Neither was sent, or `auto: true` went to a decision account. |
+| 400 | `invalid_request` | `adminError.providerModelRequired` | Neither was sent. |
+| 400 | `invalid_request` | `adminError.decisionModelRequired` | `auto: true` went to a decision account, which needs a specific model. |
 | 400 | `invalid_request` | `adminError.providerModelNotListed` and the decision provider errors under [Add an account](guide:#add-provider) | A decision account's model isn't listed, or the check failed. |
 | 409 | `invalid_request` | `adminError.providerAccountChanged` | The decision account changed during the check. Read it again and retry. |
 | 404 | `not_found` | `adminError.providerAccountNotFound` | No account has this ID. |
@@ -269,7 +270,9 @@ Phoenix checks the body size, setup, kill switch, access key, account, model, im
 |---|---|---|---|
 | 413 | `request_too_large` | `adminError.bodyTooLarge` | The body, or the images, are over their limits. |
 | 404 | `not_found` | `adminError.setupMissing` | Phoenix isn't set up. |
-| 503 | `service_unavailable` | `adminError.serviceDisabled` | The kill switch is on, or Phoenix is starting or shutting down. |
+| 503 | `service_unavailable` | `adminError.serviceDisabled` | The kill switch is on. |
+| 503 | `service_unavailable` | `adminError.setupIncomplete` | Phoenix is still starting. |
+| 503 | `service_unavailable` | `adminError.serviceStopping` | Home Assistant is shutting down. |
 | 404 | `not_found` | `adminError.accessKeyNotFound` | No access key has this ID. |
 | 400 | `invalid_request` | `adminError.accessKeyInactive` | The access key isn't active. |
 | 404 | `not_found` | `adminError.providerNotConfigured` | No provider account has this ID. |

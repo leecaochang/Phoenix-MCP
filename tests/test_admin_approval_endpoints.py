@@ -538,6 +538,7 @@ class TestApprovalApprove:
 
     @pytest.mark.asyncio
     async def test_approve_expires_an_overdue_record_before_claiming_it(self):
+        """An overdue request answers approvalExpired on Approve and closes as expired without running."""
         access_key = _make_access_key("tok-1", cap_restart="confirm")
         pending = _make_pending(
             "appr_a",
@@ -561,6 +562,7 @@ class TestApprovalApprove:
 
         stored = next(r for r in store._pending if r["id"] == "appr_a")
         assert response.status == 409
+        assert json.loads(response.text)["message_key"] == "adminError.approvalExpired"
         assert stored["status"] == STATUS_EXPIRED
         executor.assert_not_awaited()
         resolved.assert_called_once()

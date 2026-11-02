@@ -266,7 +266,7 @@
     "caps": {
       "cap_config_read": {
         "label": "Konfiguration lesen",
-        "description": "Home Assistant-Konfiguration und die Anzahl der Ereignis-Listener lesen."
+        "description": "Die Home Assistant-Konfiguration, die Energie-Konfiguration und Solarprognosen, Blueprints und MESA-Profile lesen und darauf warten, dass sich eine Entität ändert."
       },
       "cap_camera_read": {
         "label": "Kamerabild lesen",
@@ -310,7 +310,7 @@
       },
       "cap_service_response": {
         "label": "Dienst-Antwortdaten",
-        "description": "Daten von Diensten zurückgeben, die eine Antwort liefern, wie z. B. conversation.process."
+        "description": "Die Daten zurückgeben, mit denen eine Aktion antwortet, etwa eine Wettervorhersage."
       },
       "cap_automation_write": {
         "label": "Automationen verwalten",
@@ -326,15 +326,15 @@
       },
       "cap_scene_write": {
         "label": "Szenen verwalten",
-        "description": "Szenen erstellen, bearbeiten und löschen. Referenzierte Entitäten unterliegen weiterhin MESA und dem Entitätszugriff."
+        "description": "Szenen lesen, erstellen, bearbeiten und löschen. Jede Entität in einer Szene muss für den Zugriffsschlüssel beschreibbar sein."
       },
       "cap_helper_write": {
         "label": "Helfer verwalten",
-        "description": "Helfer wie Eingaben, Zähler und Timer erstellen, bearbeiten und löschen."
+        "description": "Helfer erstellen, bearbeiten und löschen, darunter Eingaben, Zähler, Timer, Zonen, Tags, Personen und Template-Helfer, und ihre Einstellungen ändern. MESA gilt."
       },
       "cap_physical_control": {
         "label": "Physische Steuerung",
-        "description": "Schlösser, Alarmanlagen, Abdeckungen und Ventile steuern."
+        "description": "Schlösser, Alarmanlagen, Abdeckungen und Ventile steuern sowie Zigbee-Gruppen, Zigbee-Bindungen und Geräteeigenschaften ändern."
       },
       "cap_restart": {
         "label": "Home Assistant neu starten oder stoppen",
@@ -350,7 +350,7 @@
       },
       "cap_lovelace_write": {
         "label": "Dashboards verwalten",
-        "description": "Lovelace-Dashboards und ihre Karten lesen, erstellen, bearbeiten und löschen."
+        "description": "Dashboards und ihre Karten lesen, durchsuchen, erstellen, bearbeiten und löschen sowie die installierten benutzerdefinierten Karten auflisten."
       },
       "cap_registry_write": {
         "label": "Entitätsregister verwalten",
@@ -1119,11 +1119,11 @@
       "injectHelp": "Fügt den Listen Entitäten, Automationen, Skripte, Szenen, Helfer und Personen von Home Assistant sowie seinen Geräte-, Bereichs- und Integrationsseiten MESA-Profil-Schaltflächen hinzu. Diese Schaltflächen benötigen nach einer Änderung der Home-Assistant-Oberfläche möglicherweise ein Phoenix-MCP-Update. Eine Änderung wirkt, sobald eine Home-Assistant-Seite das nächste Mal vollständig geladen wird. Nur für Administratoren.",
       "injectLabel": "Kontextbezogene Profil-Schaltflächen",
       "injectUnavailable": "Ausgeschaltet, bis Sie die Seite neu laden, da die Profilschaltflächen auf einer Home-Assistant-Seite fehlgeschlagen sind. Wenn das wiederholt passiert, ist möglicherweise ein Phoenix-MCP-Update nötig.",
-      "killSwitchActiveAria": "Not-Aus-Schalter aktiv. Alle Phoenix-MCP-Endpunkte sind deaktiviert",
-      "killSwitchActiveHelp": "Alle Phoenix-MCP-Clientanfragen werden jetzt abgelehnt. Beim erneuten Aktivieren werden alle Phoenix-MCP-Routen sofort neu registriert, ohne einen HA-Neustart.",
-      "killSwitchActiveLabel": "Not-Aus-Schalter AKTIV - Alle Phoenix-MCP-Endpunkte sind deaktiviert",
+      "killSwitchActiveAria": "Not-Aus-Schalter aktiv. Agentenverbindungen werden abgelehnt",
+      "killSwitchActiveHelp": "Phoenix MCP lehnt jede Agentenanfrage ab. Wenn Sie den Not-Aus-Schalter ausschalten, können sich Agenten sofort wieder verbinden, ohne Neustart von Home Assistant.",
+      "killSwitchActiveLabel": "Not-Aus-Schalter AKTIV - Agentenverbindungen werden abgelehnt",
       "killSwitchCard": "Not-Aus-Schalter",
-      "killSwitchDisableLabel": "Alle Phoenix-MCP-Endpunkte deaktivieren",
+      "killSwitchDisableLabel": "Alle Agentenverbindungen ablehnen",
       "killSwitchInactiveHelp": "Wenn aktiviert, lehnen MCP, Kontext, Skill, Agent Chat, Sprachagent und KI-Aufgabe neue Aufgaben ab. Assist bietet keine Werkzeuge an. Das Admin-Bedienfeld bleibt zugänglich.",
       "languageAuto": "Automatisch",
       "languageHelp": "Sprache des Bedienfelds in diesem Browser. Automatisch folgt Ihrem Home-Assistant-Profil.",
@@ -1432,7 +1432,7 @@
       "providerAlreadyConfigured": "Dieses Anbieterkonto ist bereits konfiguriert.",
       "unknownPersona": "Unbekannte Persona.",
       "presetsDisabled": "Zugriffsschlüssel-Voreinstellungen sind deaktiviert. Aktivieren Sie sie in den Einstellungen.",
-      "accessKeyNameTaken": "Ein Zugriffsschlüssel mit diesem Namen (oder einem gleichwertigen Slug) ist bereits vorhanden.",
+      "accessKeyNameTaken": "Ein Zugriffsschlüssel mit diesem Namen ist bereits vorhanden. Namen, die sich nur in Groß- und Kleinschreibung oder durch - statt _ unterscheiden, gelten als gleich.",
       "expiresImmutable": "expires_at ist nach der Zugriffsschlüssel-Erstellung unveränderlich.",
       "nameRequired": "name ist erforderlich.",
       "badExpiresAt": "Ungültiger expires_at-Zeitpunkt.",
@@ -1444,10 +1444,13 @@
       "nodeIdInvalidChars": "Knoten-ID enthält ungültige Zeichen.",
       "activeAccessKeyRequired": "{field} muss auf einen aktiven Zugriffsschlüssel verweisen.",
       "aiTaskPreferredFailed": "Die bevorzugte KI-Aufgabe-Entität konnte nicht konfiguriert werden.",
+      "aiTaskNotConfigured": "Richten Sie zuerst Phoenix MCP AI Task mit Zugriffsschlüssel, Anbieter und Modell ein und aktivieren Sie die KI-Aufgabe.",
+      "aiTaskPreferencesUnavailable": "Einstellungen für KI-Aufgaben sind in diesem Home Assistant nicht verfügbar.",
       "approvalAlreadyResolved": "Die Genehmigung wurde bereits abgeschlossen.",
+      "approvalExpired": "Diese Anfrage ist abgelaufen, bevor Sie sie genehmigt haben, daher wurde nichts ausgeführt.",
       "approvalBatchMaximum": "Ein Stapel darf höchstens {max} Genehmigungen enthalten.",
-      "approvalCapabilityDenied": "Die Fähigkeit ist für diesen Zugriffsschlüssel jetzt verweigert.",
-      "approvalExecutionInterrupted": "Ein früherer Versuch wurde möglicherweise bereits angewendet. Die Wiederherstellung schließt diese Genehmigung mit ungewissem Ergebnis; prüfen Sie das Ergebnis, statt sie erneut auszuführen.",
+      "approvalCapabilityDenied": "Die Fähigkeit des Zugriffsschlüssels steht jetzt auf Verweigern, daher wurde die Anfrage geschlossen, ohne ausgeführt zu werden.",
+      "approvalExecutionInterrupted": "Ein früherer Versuch wurde möglicherweise bereits angewendet. Prüfen Sie das Ergebnis, bevor Sie diese Anfrage ändern oder erneut versuchen.",
       "approvalWipeInProgress": "Genehmigungsausführung und das Löschen der Kerndaten können nicht gleichzeitig laufen. Warten Sie, bis eines abgeschlossen ist, und versuchen Sie es erneut.",
       "approvalWipeExecutionUncertain": "Kerndaten können nicht gelöscht werden, solange eine Genehmigung möglicherweise angewendet wurde, ohne ein Ergebnis zu melden. Prüfen Sie zuerst das Ergebnis.",
       "approvalExecutionUncertain": "Die Ausführung ist fehlgeschlagen und wurde möglicherweise teilweise angewendet. Diese Genehmigung wurde geschlossen; prüfen Sie das Ergebnis, bevor Sie es erneut versuchen.",
@@ -1457,9 +1460,14 @@
       "approvalProcessing": "Die Genehmigung wird bereits verarbeitet.",
       "approvalReasonString": "reason muss eine Zeichenfolge sein.",
       "approvalRecordFailed": "Diese Genehmigung konnte vor der Ausführung nicht aufgezeichnet werden. Es wurde nichts ausgeführt; versuchen Sie es erneut.",
-      "approvalAccessKeyInactive": "Der Zugriffsschlüssel ist nicht mehr aktiv.",
+      "approvalAccessKeyInactive": "Der Zugriffsschlüssel ist nicht mehr aktiv, daher kann diese Anfrage nicht ausgeführt werden. Es wurde nichts ausgeführt.",
       "assistExposurePassThroughOnly": "use_assist_exposure ist nur für pass_through-Zugriffsschlüssel gültig.",
       "assistPipelineFailed": "Die Assist-Pipeline konnte nicht erstellt werden.",
+      "assistPipelineUnavailable": "Assist-Pipelines sind in diesem Home Assistant nicht verfügbar.",
+      "voiceAgentNotConfigured": "Richten Sie zuerst den Phoenix-MCP-Sprachagenten mit Zugriffsschlüssel, Anbieter und Modell ein und aktivieren Sie ihn.",
+      "assistantSetupFirst": "Richten Sie zuerst den Phoenix-MCP-Assistenten ein.",
+      "assistantOnlyOneStaysPreferred": "Der Phoenix-MCP-Assistent ist der einzige Assistent in Home Assistant und bleibt daher bevorzugt.",
+      "assistantPreferredFailed": "Der bevorzugte Assistent konnte nicht geändert werden.",
       "booleanRequired": "{field} muss true oder false sein.",
       "companionSettingRefused": "Ein Home Companion-Schlüssel kann keine Durchreichung nutzen und nicht alle Tools ankündigen.",
       "unknownFields": "Die Anfrage enthält Felder, die Phoenix nicht kennt: {fields}.",
@@ -1467,6 +1475,7 @@
       "capabilityModeInvalid": "{capability} muss deny, allow oder confirm sein.",
       "catalogNotFound": "Katalog nicht gefunden.",
       "configuredProviderRequired": "{field} muss auf ein konfiguriertes Anbieterkonto verweisen.",
+      "decisionProviderRequired": "Wählen Sie zuerst ein Konto für den Entscheidungsanbieter.",
       "deploymentDefaultsInvalid": "Ungültige Standardwerte für die Bereitstellung: {detail}",
       "emptyMessage": "Geben Sie eine Nachricht ein.",
       "entriesListRequired": "entries muss eine Liste sein.",
@@ -1475,7 +1484,7 @@
       "inlineWaitRange": "confirm_inline_wait_seconds muss 0 (aus) oder eine ganze Zahl von {min} bis {max} sein.",
       "integerRequired": "{field} muss eine ganze Zahl sein.",
       "integrationNameInvalid": "Ungültiger Integrationsname.",
-      "killSwitchEngaged": "Notausschalter aktiviert.",
+      "killSwitchEngaged": "Der Not-Aus-Schalter ist aktiv, daher wurde die Anfrage abgebrochen, ohne ausgeführt zu werden.",
       "maximumRequired": "{field} darf {max} nicht überschreiten.",
       "mesaArchiveRequired": "archive ist erforderlich.",
       "mesaProfileExists": "Ein Profil ist bereits vorhanden. Öffne es im Bearbeitungsmodus.",
@@ -1492,14 +1501,18 @@
       "permissionNodeObject": "Knoten {node} muss ein Objekt mit einem state-Feld sein.",
       "permissionSectionObject": "{section} muss ein Objekt mit Knoten-IDs als Schlüssel sein.",
       "permissionSelectionNotFound": "Berechtigungsauswahl nicht gefunden.",
-      "permissionStateInvalid": "Ungültiger Zustand {state} für {node_type} {node}. Gültige Zustände: {states}.",
+      "permissionStateInvalidDomain": "Ungültiger Zustand {state} für Domäne {node}. Gültige Zustände: {states}.",
+      "permissionStateInvalidDevice": "Ungültiger Zustand {state} für Gerät {node}. Gültige Zustände: {states}.",
+      "permissionStateInvalidEntity": "Ungültiger Zustand {state} für Entität {node}. Gültige Zustände: {states}.",
       "permissionTreeInvalid": "Ungültige Struktur des Berechtigungsbaums.",
       "presetDeleteRejected": "Diese Voreinstellung konnte nicht gelöscht werden. Wechseln Sie von einer aktiven Voreinstellung weg, bevor Sie sie löschen.",
       "presetNameInvalidCharacters": "name enthält ungültige Zeichen.",
       "presetNameTooLong": "name darf höchstens {max} Zeichen lang sein.",
       "presetPassThroughConfirmationRequired": "confirm_pass_through: true ist erforderlich, wenn die Voreinstellung pass_through aktiviert.",
       "presetRenameRejected": "Diese Voreinstellung konnte nicht umbenannt werden. Möglicherweise verwendet bereits eine andere Voreinstellung diesen Namen.",
-      "presetSaveRejected": "Diese Voreinstellung konnte nicht gespeichert werden. Der Name ist möglicherweise bereits vorhanden, oder das Limit für Voreinstellungen wurde erreicht.",
+      "presetSaveRejected": "Diese Voreinstellung konnte nicht gespeichert werden.",
+      "presetNameTaken": "Dieser Zugriffsschlüssel hat bereits eine Voreinstellung mit diesem Namen.",
+      "presetLimitReached": "Ein Zugriffsschlüssel kann höchstens {max} Voreinstellungen haben.",
       "providerAccountNotFound": "Anbieterkonto nicht gefunden.",
       "providerApiKeyRequired": "Geben Sie Ihren API-Schlüssel ein.",
       "providerBaseUrlRequired": "Geben Sie die Basis-URL des Anbieters ein.",
@@ -1508,6 +1521,7 @@
       "providerConnectionFailedNoDetail": "Verbindung fehlgeschlagen.",
       "providerModelMissing": "Für diesen Anbieter ist kein Modell ausgewählt.",
       "providerModelRequired": "Ein Modell ist erforderlich.",
+      "decisionModelRequired": "Ein Entscheidungskonto braucht ein bestimmtes Modell. Es kann keines automatisch wählen.",
       "providerNotConfigured": "Das Anbieterkonto ist nicht konfiguriert.",
       "providerEndpointInvalid": "Wählen Sie einen gültigen Anbieterplan.",
       "providerRemoteUrlAddressForbidden": "Die Anbieter-URL darf nicht auf eine private, Loopback-, link-lokale, Multicast- oder reservierte Adresse verweisen.",
@@ -1530,7 +1544,8 @@
       "restoreStale": "Das Element wurde geändert, seit Sie die Wiederherstellung gewählt haben. Prüfen Sie den Vergleich und versuchen Sie es erneut.",
       "selectorIdRequired": "selector_id ist erforderlich.",
       "selectorTypeInvalid": "selector_type muss area, label oder integration sein.",
-      "serviceDisabled": "Phoenix MCP ist durch den Notausschalter deaktiviert.",
+      "serviceDisabled": "Der Not-Aus-Schalter ist aktiv, daher werden Agentenanfragen abgelehnt.",
+      "serviceStopping": "Home Assistant wird heruntergefahren. Versuchen Sie es erneut, sobald Home Assistant wieder läuft.",
       "setupIncomplete": "Die Phoenix-MCP-Einrichtung ist nicht abgeschlossen.",
       "setupMissing": "Phoenix MCP ist nicht eingerichtet.",
       "sinceTimestampInvalid": "Ungültiger since-Zeitstempel.",
@@ -1543,12 +1558,12 @@
       "accessKeyIdOrNull": "{field} muss eine Zugriffsschlüssel-ID-Zeichenfolge oder null sein.",
       "accessKeyInactive": "Dieser Zugriffsschlüssel ist widerrufen oder abgelaufen.",
       "accessKeyNameLengthPattern": "name muss {min}-{max} Zeichen lang sein und Buchstaben, Zahlen, Bindestriche oder Unterstriche verwenden.",
-      "accessKeyNamePattern": "name entspricht nicht dem erforderlichen Muster.",
       "valueAllowed": "{field} muss einer der folgenden Werte sein: {values}.",
       "versionNotFound": "Version nicht gefunden.",
       "versionResourcePairRequired": "Geben Sie entweder resource_type und resource_id zusammen an, oder keines von beiden für den aktuellen Feed.",
       "wipeConfirmationRequired": "confirm muss WIPE sein.",
       "routingPreviewInvalid": "Prüfe den Zugriffsschlüssel, die Befehlssprache und die Routing-Einstellungen.",
+      "routingLanguagesInvalid": "Wählen Sie die Sprachen für die Befehlsweiterleitung aus den installierten Assist-Sprachen.",
       "providerModelNotListed": "Wählen Sie ein vom Anbieter zurückgegebenes Modell.",
       "providerAccountChanged": "Das Anbieterkonto wurde geändert. Laden Sie neu und versuchen Sie es erneut.",
       "routingStatisticsResetInvalid": "Wählen Sie Voice oder Chat und bestätigen Sie das Zurücksetzen der Statistik.",

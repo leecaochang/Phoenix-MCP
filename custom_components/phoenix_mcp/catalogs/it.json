@@ -4,10 +4,13 @@
       "activeAccessKeyRequired": "{field} deve fare riferimento a una chiave di accesso attiva.",
       "adminRequired": "Accesso amministratore richiesto.",
       "aiTaskPreferredFailed": "Impossibile configurare l'entità Attività di IA preferita.",
+      "aiTaskNotConfigured": "Configura e abilita prima l'Attività di IA di Phoenix MCP, con una chiave di accesso, un provider e un modello.",
+      "aiTaskPreferencesUnavailable": "Le preferenze dell'Attività di IA non sono disponibili in questa istanza di Home Assistant.",
       "approvalAlreadyResolved": "L'approvazione è già stata risolta.",
+      "approvalExpired": "Questa richiesta è scaduta prima che la approvassi, quindi non è stato eseguito nulla.",
       "approvalBatchMaximum": "Un batch può contenere al massimo {max} approvazioni.",
-      "approvalCapabilityDenied": "La capacità è ora negata per questa chiave di accesso.",
-      "approvalExecutionInterrupted": "Un tentativo precedente potrebbe essere già stato applicato. Il recupero chiuderà questa approvazione con esito incerto; controlla il risultato invece di eseguirla di nuovo.",
+      "approvalCapabilityDenied": "La capacità della chiave di accesso ora è impostata su Nega, quindi la richiesta è stata chiusa senza essere eseguita.",
+      "approvalExecutionInterrupted": "Un tentativo precedente potrebbe essere già stato applicato. Controlla il risultato prima di modificare o ritentare questa richiesta.",
       "approvalWipeInProgress": "L'esecuzione di un'approvazione e la cancellazione dei dati principali non possono avvenire contemporaneamente. Attendi che una delle operazioni termini e riprova.",
       "approvalWipeExecutionUncertain": "I dati principali non possono essere cancellati se un'approvazione potrebbe essere stata applicata senza restituire un risultato. Controlla prima il risultato.",
       "approvalExecutionUncertain": "L'esecuzione non è riuscita e potrebbe essere stata applicata parzialmente. Questa approvazione è stata chiusa; controlla il risultato prima di riprovare.",
@@ -18,10 +21,15 @@
       "approvalProcessing": "L'approvazione è già in elaborazione.",
       "approvalReasonString": "reason deve essere una stringa.",
       "approvalRecordFailed": "Impossibile registrare questa approvazione prima di eseguirla. Non è stato eseguito nulla; riprova.",
-      "approvalAccessKeyInactive": "La chiave di accesso non è più attivo.",
+      "approvalAccessKeyInactive": "La chiave di accesso non è più attiva, quindi questa richiesta non può essere eseguita. Non è stato eseguito nulla.",
       "archivedAccessKeyNotFound": "Chiave di accesso archiviata non trovato.",
       "assistExposurePassThroughOnly": "use_assist_exposure è valido solo per le chiavi di accesso pass_through.",
       "assistPipelineFailed": "Impossibile creare la pipeline di Assist.",
+      "assistPipelineUnavailable": "Le pipeline di Assist non sono disponibili in questa istanza di Home Assistant.",
+      "voiceAgentNotConfigured": "Configura e abilita prima l'agente vocale di Phoenix MCP, con una chiave di accesso, un provider e un modello.",
+      "assistantSetupFirst": "Configura prima l'assistente di Phoenix MCP.",
+      "assistantOnlyOneStaysPreferred": "L'assistente di Phoenix MCP è l'unico in Home Assistant, quindi resta quello preferito.",
+      "assistantPreferredFailed": "Impossibile modificare l'assistente preferito.",
       "authRequired": "Autenticazione richiesta.",
       "badDomain": "Nome di dominio non valido.",
       "badEntityId": "Formato dell'ID entità non valido.",
@@ -38,6 +46,7 @@
       "capabilityModeInvalid": "{capability} deve essere deny, allow o confirm.",
       "catalogNotFound": "Catalogo non trovato.",
       "configuredProviderRequired": "{field} deve fare riferimento a un account provider configurato.",
+      "decisionProviderRequired": "Scegli prima un account del provider di decisioni.",
       "deploymentDefaultsInvalid": "Valori predefiniti di distribuzione non validi: {detail}",
       "emptyMessage": "Inserisci un messaggio.",
       "entriesListRequired": "entries deve essere un elenco.",
@@ -47,7 +56,7 @@
       "inlineWaitRange": "confirm_inline_wait_seconds deve essere 0 (disattivato) oppure un numero intero da {min} a {max}.",
       "integerRequired": "{field} deve essere un numero intero.",
       "integrationNameInvalid": "Nome dell'integrazione non valido.",
-      "killSwitchEngaged": "Kill switch attivato.",
+      "killSwitchEngaged": "Il kill switch è attivo, quindi la richiesta è stata annullata senza essere eseguita.",
       "maximumRequired": "{field} non deve superare {max}.",
       "mesaArchiveRequired": "archive è obbligatorio.",
       "mesaProfileExists": "Esiste già un profilo. Aprilo in modalità modifica.",
@@ -67,7 +76,9 @@
       "permissionNodeObject": "Il nodo {node} deve essere un oggetto con un campo state.",
       "permissionSectionObject": "{section} deve essere un oggetto indicizzato per ID del nodo.",
       "permissionSelectionNotFound": "Selezione di autorizzazione non trovata.",
-      "permissionStateInvalid": "Stato {state} non valido per {node_type} {node}. Stati validi: {states}.",
+      "permissionStateInvalidDomain": "Stato {state} non valido per il dominio {node}. Stati validi: {states}.",
+      "permissionStateInvalidDevice": "Stato {state} non valido per il dispositivo {node}. Stati validi: {states}.",
+      "permissionStateInvalidEntity": "Stato {state} non valido per l'entità {node}. Stati validi: {states}.",
       "permissionTreeInvalid": "Struttura dell'albero delle autorizzazioni non valida.",
       "presetDeleteRejected": "Impossibile eliminare questo preset. Passa a un altro preset attivo prima di eliminarlo.",
       "presetNameInvalidCharacters": "name contiene caratteri non validi.",
@@ -75,7 +86,9 @@
       "presetNotFound": "Preset non trovato.",
       "presetPassThroughConfirmationRequired": "confirm_pass_through: true è obbligatorio quando il preset abilita pass_through.",
       "presetRenameRejected": "Impossibile rinominare questo preset. Un altro preset potrebbe già usare quel nome.",
-      "presetSaveRejected": "Impossibile salvare questo preset. Il nome potrebbe già esistere o potrebbe essere stato raggiunto il limite di preset.",
+      "presetSaveRejected": "Impossibile salvare questo preset.",
+      "presetNameTaken": "Questa chiave di accesso ha già un preset con quel nome.",
+      "presetLimitReached": "Una chiave di accesso può avere al massimo {max} preset.",
       "presetsDisabled": "I preset delle chiavi di accesso sono disabilitati. Abilitali nelle Impostazioni.",
       "providerAccountNotFound": "Account provider non trovato.",
       "providerAlreadyConfigured": "Questo account provider è già configurato.",
@@ -87,6 +100,7 @@
       "providerEndpointInvalid": "Scegli un piano provider valido.",
       "providerModelMissing": "Nessun modello è selezionato per questo provider.",
       "providerModelRequired": "È obbligatorio un modello.",
+      "decisionModelRequired": "Un account per le decisioni richiede un modello specifico. Non può sceglierne uno automaticamente.",
       "providerNotConfigured": "L'account provider non è configurato.",
       "providerRemoteUrlAddressForbidden": "L'URL del provider non deve puntare a un indirizzo privato, di loopback, link-local, multicast o riservato.",
       "providerRemoteUrlResolutionForbidden": "L'URL del provider si risolve in un indirizzo privato, di loopback, link-local, multicast o riservato.",
@@ -108,7 +122,8 @@
       "restoreStale": "Questo elemento è cambiato da quando hai scelto di ripristinarlo. Controlla il confronto e riprova.",
       "selectorIdRequired": "selector_id è obbligatorio.",
       "selectorTypeInvalid": "selector_type deve essere area, label o integration.",
-      "serviceDisabled": "Phoenix MCP è disabilitato dal kill switch.",
+      "serviceDisabled": "Il kill switch è attivo, quindi le richieste degli agenti vengono rifiutate.",
+      "serviceStopping": "Home Assistant si sta arrestando. Riprova quando sarà di nuovo disponibile.",
       "setupIncomplete": "La configurazione di Phoenix MCP non è completa.",
       "setupMissing": "Phoenix MCP non è configurato.",
       "sinceTimestampInvalid": "Timestamp since non valido.",
@@ -121,8 +136,7 @@
       "accessKeyIdOrNull": "{field} deve essere una stringa di ID chiave di accesso oppure null.",
       "accessKeyInactive": "Questa chiave di accesso è revocata o scaduta.",
       "accessKeyNameLengthPattern": "name deve contenere da {min} a {max} caratteri usando lettere, numeri, trattini o trattini bassi.",
-      "accessKeyNamePattern": "name non corrisponde al formato richiesto.",
-      "accessKeyNameTaken": "Esiste già una chiave di accesso con quel nome (o uno slug equivalente).",
+      "accessKeyNameTaken": "Esiste già una chiave di accesso con quel nome. I nomi che differiscono solo per maiuscole e minuscole, o per - invece di _, contano come uguali.",
       "accessKeyNotFound": "Chiave di accesso non trovato.",
       "unknownFields": "La richiesta contiene campi che Phoenix non riconosce: {fields}.",
       "unknownPersona": "Persona sconosciuta.",
@@ -131,6 +145,7 @@
       "versionResourcePairRequired": "Specifica sia resource_type sia resource_id, oppure nessuno dei due per il feed recente.",
       "wipeConfirmationRequired": "confirm deve essere WIPE.",
       "routingPreviewInvalid": "Controlla la chiave di accesso, la lingua del comando e le impostazioni di instradamento.",
+      "routingLanguagesInvalid": "Scegli le lingue per l'instradamento dei comandi tra le lingue di Assist installate.",
       "providerModelNotListed": "Scegli un modello restituito da questo provider.",
       "providerAccountChanged": "L’account del provider è cambiato. Ricarica e riprova.",
       "routingStatisticsResetInvalid": "Scegli Voice o Chat e conferma il ripristino delle statistiche.",
@@ -826,7 +841,7 @@
         "label": "Lettura immagini telecamera"
       },
       "cap_config_read": {
-        "description": "Legge la configurazione di Home Assistant e il conteggio dei listener di eventi.",
+        "description": "Legge la configurazione di Home Assistant, la configurazione Energia e le previsioni solari, i progetti e i profili MESA, e attende che un'entità cambi.",
         "label": "Lettura configurazione"
       },
       "cap_diagnostics": {
@@ -850,7 +865,7 @@
         "label": "Lettura file"
       },
       "cap_helper_write": {
-        "description": "Crea, modifica ed elimina aiutanti come input, contatori e timer.",
+        "description": "Crea, modifica ed elimina aiutanti, tra cui input, contatori, timer, zone, tag, persone e aiutanti Modello, e ne modifica le impostazioni. Si applica MESA.",
         "label": "Gestisci aiutanti"
       },
       "cap_integration_reconfigure": {
@@ -870,11 +885,11 @@
         "label": "Lettura registro di sistema"
       },
       "cap_lovelace_write": {
-        "description": "Legge, crea, modifica ed elimina plance Lovelace e le loro schede.",
+        "description": "Legge, cerca, crea, modifica ed elimina plance e le loro schede, ed elenca le schede personalizzate installate.",
         "label": "Gestisci plance"
       },
       "cap_physical_control": {
-        "description": "Controlla serrature, allarmi, tapparelle e valvole.",
+        "description": "Controlla serrature, allarmi, tapparelle e valvole, e modifica gruppi Zigbee, binding e proprietà dei dispositivi.",
         "label": "Controllo fisico"
       },
       "cap_radio_write": {
@@ -894,7 +909,7 @@
         "label": "Riavvia o arresta Home Assistant"
       },
       "cap_scene_write": {
-        "description": "Crea, modifica ed elimina scene. Le entità referenziate restano soggette a MESA e all'accesso alle entità.",
+        "description": "Legge, crea, modifica ed elimina scene. La chiave di accesso deve poter scrivere su ogni entità di una scena.",
         "label": "Gestisci scene"
       },
       "cap_script_write": {
@@ -906,7 +921,7 @@
         "label": "Ricerca e scoperta"
       },
       "cap_service_response": {
-        "description": "Restituisce i dati dei servizi che forniscono una risposta, come conversation.process.",
+        "description": "Restituisce i dati con cui risponde un'azione, come una previsione meteo.",
         "label": "Dati di risposta dei servizi"
       },
       "cap_template_render": {
@@ -1454,11 +1469,11 @@
       "injectHelp": "Aggiungi i pulsanti dei profili MESA agli elenchi Entità, Automazioni, Script, Scene, Aiutanti e Persone di Home Assistant e alle sue pagine di dispositivi, aree e integrazioni. Questi pulsanti possono richiedere un aggiornamento di Phoenix MCP dopo una modifica al frontend di Home Assistant. Una modifica ha effetto al successivo caricamento completo di una pagina di Home Assistant. Solo amministratori.",
       "injectLabel": "Pulsanti dei profili nel contesto",
       "injectUnavailable": "Disattivato finché non ricarichi la pagina, perché i pulsanti del profilo non hanno funzionato in una pagina di Home Assistant. Se continua a succedere, potrebbe servire un aggiornamento di Phoenix MCP.",
-      "killSwitchActiveAria": "Kill switch attivo. Tutti gli endpoint di Phoenix MCP sono disabilitati",
-      "killSwitchActiveHelp": "Tutte le richieste dei client a Phoenix MCP vengono ora rifiutate. Riabilitandolo, tutte le route di Phoenix MCP verranno registrate di nuovo immediatamente, senza riavviare HA.",
-      "killSwitchActiveLabel": "Kill switch ATTIVO - Tutti gli endpoint di Phoenix MCP sono disabilitati",
+      "killSwitchActiveAria": "Kill switch attivo. Le connessioni degli agenti vengono rifiutate",
+      "killSwitchActiveHelp": "Phoenix MCP rifiuta ogni richiesta degli agenti. Disattivando il kill switch, gli agenti possono riconnettersi subito, senza riavviare Home Assistant.",
+      "killSwitchActiveLabel": "Kill switch ATTIVO - Le connessioni degli agenti vengono rifiutate",
       "killSwitchCard": "Kill switch di emergenza",
-      "killSwitchDisableLabel": "Disabilita tutti gli endpoint di Phoenix MCP",
+      "killSwitchDisableLabel": "Rifiuta tutte le connessioni degli agenti",
       "killSwitchInactiveHelp": "Se attivo, MCP, contesto, skill, Agent Chat, Agente vocale e Attività di IA rifiutano nuove attività. Assist non espone strumenti. Il pannello amministrativo resta accessibile.",
       "languageAuto": "Auto",
       "languageHelp": "Lingua del pannello in questo browser. Auto segue il tuo profilo di Home Assistant.",

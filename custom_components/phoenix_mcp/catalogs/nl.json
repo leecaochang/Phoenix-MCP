@@ -421,7 +421,7 @@
         "label": "Camerabeelden lezen"
       },
       "cap_config_read": {
-        "description": "Home Assistant-configuratie en aantallen eventlisteners lezen.",
+        "description": "De Home Assistant-configuratie, de energieconfiguratie en zonneprognoses, blueprints en MESA-profielen lezen, en wachten tot een entiteit verandert.",
         "label": "Configuratie lezen"
       },
       "cap_diagnostics": {
@@ -445,7 +445,7 @@
         "label": "Bestanden lezen"
       },
       "cap_helper_write": {
-        "description": "Helpers zoals invoeren, tellers en timers maken, bewerken en verwijderen.",
+        "description": "Helpers maken, bewerken en verwijderen, waaronder invoeren, tellers, timers, zones, tags, personen en sjabloonhelpers, en hun instellingen wijzigen. MESA is van toepassing.",
         "label": "Helpers beheren"
       },
       "cap_integration_reconfigure": {
@@ -465,11 +465,11 @@
         "label": "Systeemlogboek lezen"
       },
       "cap_lovelace_write": {
-        "description": "Lovelace-dashboards en hun kaarten lezen, maken, bewerken en verwijderen.",
+        "description": "Dashboards en hun kaarten lezen, doorzoeken, maken, bewerken en verwijderen, en de geïnstalleerde aangepaste kaarten weergeven.",
         "label": "Dashboards beheren"
       },
       "cap_physical_control": {
-        "description": "Sloten, alarmen, rolluiken en kleppen bedienen.",
+        "description": "Sloten, alarmen, rolluiken en kleppen bedienen, en Zigbee-groepen, -bindingen en apparaateigenschappen wijzigen.",
         "label": "Fysieke bediening"
       },
       "cap_radio_write": {
@@ -489,7 +489,7 @@
         "label": "Home Assistant herstarten of stoppen"
       },
       "cap_scene_write": {
-        "description": "Scènes maken, bewerken en verwijderen. Verwezen entiteiten zijn nog steeds onderworpen aan MESA en entiteitstoegang.",
+        "description": "Scènes lezen, maken, bewerken en verwijderen. De toegangssleutel moet schrijftoegang hebben tot elke entiteit in een scène.",
         "label": "Scènes beheren"
       },
       "cap_script_write": {
@@ -501,7 +501,7 @@
         "label": "Zoeken en ontdekken"
       },
       "cap_service_response": {
-        "description": "Gegevens retourneren van services die een antwoord geven, zoals conversation.process.",
+        "description": "De gegevens retourneren waarmee een actie antwoordt, zoals een weersverwachting.",
         "label": "Service-antwoordgegevens"
       },
       "cap_template_render": {
@@ -983,10 +983,13 @@
       "activeAccessKeyRequired": "{field} moet naar een actief toegangssleutel verwijzen.",
       "adminRequired": "Beheerderstoegang vereist.",
       "aiTaskPreferredFailed": "De voorkeurs-AI-taakentiteit kon niet worden geconfigureerd.",
+      "aiTaskNotConfigured": "Stel eerst Phoenix MCP AI Task in met een toegangssleutel, provider en model, en schakel deze in.",
+      "aiTaskPreferencesUnavailable": "Voorkeuren voor AI-taken zijn niet beschikbaar in deze Home Assistant.",
       "approvalAlreadyResolved": "De goedkeuring is al afgehandeld.",
+      "approvalExpired": "Dit verzoek is verlopen voordat je het goedkeurde, dus er is niets uitgevoerd.",
       "approvalBatchMaximum": "Een batch mag maximaal {max} goedkeuringen bevatten.",
-      "approvalCapabilityDenied": "De mogelijkheid is nu geweigerd voor deze toegangssleutel.",
-      "approvalExecutionInterrupted": "Een eerdere poging is mogelijk al toegepast. Herstel sluit deze goedkeuring af met een onzekere uitkomst; controleer het resultaat in plaats van deze opnieuw uit te voeren.",
+      "approvalCapabilityDenied": "De mogelijkheid van de toegangssleutel staat nu op Weigeren, dus het verzoek is gesloten zonder te worden uitgevoerd.",
+      "approvalExecutionInterrupted": "Een eerdere poging is mogelijk al toegepast. Controleer het resultaat voordat je dit verzoek wijzigt of opnieuw probeert.",
       "approvalWipeInProgress": "Goedkeuringen uitvoeren en kerngegevens wissen kan niet tegelijk. Wacht tot een van beide is voltooid en probeer het opnieuw.",
       "approvalWipeExecutionUncertain": "Kerngegevens kunnen niet worden gewist zolang een goedkeuring mogelijk is toegepast zonder resultaat terug te melden. Controleer eerst het resultaat.",
       "approvalExecutionUncertain": "De uitvoering is mislukt en is mogelijk gedeeltelijk toegepast. Deze goedkeuring is afgesloten; controleer het resultaat voordat je het opnieuw probeert.",
@@ -997,10 +1000,15 @@
       "approvalProcessing": "De goedkeuring wordt al verwerkt.",
       "approvalReasonString": "reason moet een tekenreeks zijn.",
       "approvalRecordFailed": "Deze goedkeuring kon niet worden vastgelegd voordat deze werd uitgevoerd. Er is niets uitgevoerd; probeer het opnieuw.",
-      "approvalAccessKeyInactive": "De toegangssleutel is niet langer actief.",
+      "approvalAccessKeyInactive": "De toegangssleutel is niet langer actief, dus dit verzoek kan niet worden uitgevoerd. Er is niets uitgevoerd.",
       "archivedAccessKeyNotFound": "Gearchiveerde toegangssleutel niet gevonden.",
       "assistExposurePassThroughOnly": "use_assist_exposure is alleen geldig voor pass_through-toegangssleutels.",
       "assistPipelineFailed": "De Assist-pipeline kon niet worden aangemaakt.",
+      "assistPipelineUnavailable": "Assist-pipelines zijn niet beschikbaar in deze Home Assistant.",
+      "voiceAgentNotConfigured": "Stel eerst de Phoenix MCP-spraakagent in met een toegangssleutel, provider en model, en schakel hem in.",
+      "assistantSetupFirst": "Stel eerst de Phoenix MCP-assistent in.",
+      "assistantOnlyOneStaysPreferred": "De Phoenix MCP-assistent is de enige assistent in Home Assistant, dus hij blijft de voorkeursassistent.",
+      "assistantPreferredFailed": "De voorkeursassistent kon niet worden gewijzigd.",
       "authRequired": "Authenticatie vereist.",
       "badDomain": "Ongeldige domeinnaam.",
       "badEntityId": "Ongeldig entiteits-ID-formaat.",
@@ -1018,6 +1026,7 @@
       "capabilityModeInvalid": "{capability} moet deny, allow of confirm zijn.",
       "catalogNotFound": "Catalogus niet gevonden.",
       "configuredProviderRequired": "{field} moet naar een geconfigureerd provideraccount verwijzen.",
+      "decisionProviderRequired": "Kies eerst een account voor de beslissingsprovider.",
       "deploymentDefaultsInvalid": "Ongeldige implementatiestandaarden: {detail}",
       "emptyMessage": "Voer een bericht in.",
       "entriesListRequired": "entries moet een lijst zijn.",
@@ -1027,7 +1036,7 @@
       "inlineWaitRange": "confirm_inline_wait_seconds moet 0 (uit) zijn of een geheel getal van {min} tot {max}.",
       "integerRequired": "{field} moet een geheel getal zijn.",
       "integrationNameInvalid": "Ongeldige integratienaam.",
-      "killSwitchEngaged": "Noodstop ingeschakeld.",
+      "killSwitchEngaged": "De noodstop staat aan, dus het verzoek is geannuleerd zonder te worden uitgevoerd.",
       "maximumRequired": "{field} mag {max} niet overschrijden.",
       "mesaArchiveRequired": "archive is vereist.",
       "mesaProfileExists": "Er bestaat al een profiel. Open het in de bewerkingsmodus.",
@@ -1047,7 +1056,9 @@
       "permissionNodeObject": "Knooppunt {node} moet een object zijn met een statusveld.",
       "permissionSectionObject": "{section} moet een object zijn met knooppunt-ID als sleutel.",
       "permissionSelectionNotFound": "Machtigingsselectie niet gevonden.",
-      "permissionStateInvalid": "Ongeldige status {state} voor {node_type} {node}. Geldige statussen: {states}.",
+      "permissionStateInvalidDomain": "Ongeldige status {state} voor domein {node}. Geldige statussen: {states}.",
+      "permissionStateInvalidDevice": "Ongeldige status {state} voor apparaat {node}. Geldige statussen: {states}.",
+      "permissionStateInvalidEntity": "Ongeldige status {state} voor entiteit {node}. Geldige statussen: {states}.",
       "permissionTreeInvalid": "Ongeldige machtigingsboomstructuur.",
       "presetDeleteRejected": "Deze voorinstelling kon niet worden verwijderd. Schakel eerst weg van een actieve voorinstelling voordat je deze verwijdert.",
       "presetNameInvalidCharacters": "name bevat ongeldige tekens.",
@@ -1055,7 +1066,9 @@
       "presetNotFound": "Voorinstelling niet gevonden.",
       "presetPassThroughConfirmationRequired": "confirm_pass_through: true is vereist wanneer de voorinstelling pass_through inschakelt.",
       "presetRenameRejected": "Deze voorinstelling kon niet worden hernoemd. Een andere voorinstelling gebruikt mogelijk al die naam.",
-      "presetSaveRejected": "Deze voorinstelling kon niet worden opgeslagen. De naam bestaat mogelijk al of de voorinstellingslimiet is bereikt.",
+      "presetSaveRejected": "Deze voorinstelling kon niet worden opgeslagen.",
+      "presetNameTaken": "Deze toegangssleutel heeft al een voorinstelling met die naam.",
+      "presetLimitReached": "Een toegangssleutel kan maximaal {max} voorinstellingen hebben.",
       "presetsDisabled": "Voorinstellingen voor toegangssleutels zijn uitgeschakeld. Schakel ze in onder Instellingen.",
       "providerAccountNotFound": "Provideraccount niet gevonden.",
       "providerAlreadyConfigured": "Dit provideraccount is al geconfigureerd.",
@@ -1067,6 +1080,7 @@
       "providerEndpointInvalid": "Kies een geldig providerplan.",
       "providerModelMissing": "Er is geen model geselecteerd voor deze provider.",
       "providerModelRequired": "Een model is vereist.",
+      "decisionModelRequired": "Een beslissingsaccount heeft een specifiek model nodig. Het kan er niet automatisch een kiezen.",
       "providerNotConfigured": "Provideraccount is niet geconfigureerd.",
       "providerRemoteUrlAddressForbidden": "De provider-URL mag niet naar een privé-, loopback-, link-lokaal, multicast- of gereserveerd adres wijzen.",
       "providerRemoteUrlResolutionForbidden": "De provider-URL wordt opgelost naar een privé-, loopback-, link-lokaal, multicast- of gereserveerd adres.",
@@ -1088,7 +1102,8 @@
       "restoreStale": "Dit item is gewijzigd sinds je ervoor koos het te herstellen. Bekijk de vergelijking en probeer het opnieuw.",
       "selectorIdRequired": "selector_id is vereist.",
       "selectorTypeInvalid": "selector_type moet area, label of integration zijn.",
-      "serviceDisabled": "Phoenix MCP is uitgeschakeld door de noodstop.",
+      "serviceDisabled": "De noodstop staat aan, dus agentverzoeken worden geweigerd.",
+      "serviceStopping": "Home Assistant wordt afgesloten. Probeer het opnieuw zodra Home Assistant weer beschikbaar is.",
       "setupIncomplete": "De Phoenix MCP-installatie is niet voltooid.",
       "setupMissing": "Phoenix MCP is niet ingesteld.",
       "sinceTimestampInvalid": "Ongeldig since-tijdstempel.",
@@ -1101,8 +1116,7 @@
       "accessKeyIdOrNull": "{field} moet een toegangssleutel-ID-tekenreeks of null zijn.",
       "accessKeyInactive": "Deze toegangssleutel is ingetrokken of verlopen.",
       "accessKeyNameLengthPattern": "name moet {min}-{max} tekens bevatten met letters, cijfers, koppeltekens of underscores.",
-      "accessKeyNamePattern": "name komt niet overeen met het vereiste patroon.",
-      "accessKeyNameTaken": "Er bestaat al een toegangssleutel met die naam (of een equivalente slug).",
+      "accessKeyNameTaken": "Er bestaat al een toegangssleutel met deze naam. Namen die alleen verschillen in hoofdletters en kleine letters, of in - tegenover _, gelden als hetzelfde.",
       "accessKeyNotFound": "Toegangssleutel niet gevonden.",
       "unknownPersona": "Onbekende persona.",
       "valueAllowed": "{field} moet een van de volgende zijn: {values}.",
@@ -1110,6 +1124,7 @@
       "versionResourcePairRequired": "Geef zowel resource_type als resource_id op, of geen van beide voor de recente feed.",
       "wipeConfirmationRequired": "confirm moet WIPE zijn.",
       "routingPreviewInvalid": "Controleer de toegangssleutel, de taal van de opdracht en de routeringsinstellingen.",
+      "routingLanguagesInvalid": "Kies de talen voor opdrachtroutering uit de geïnstalleerde Assist-talen.",
       "providerModelNotListed": "Kies een model dat deze provider heeft teruggegeven.",
       "providerAccountChanged": "Het provideraccount is gewijzigd. Herlaad en probeer het opnieuw.",
       "routingStatisticsResetInvalid": "Kies Voice of Chat en bevestig het resetten van de statistieken.",
@@ -1830,11 +1845,11 @@
       "injectHelp": "MESA-profielknoppen toevoegen aan de lijsten Entiteiten, Automatiseringen, Scripts, Scènes, Helpers en Personen van Home Assistant en aan de apparaat-, ruimte- en integratiepagina's. Deze knoppen hebben mogelijk een Phoenix MCP-update nodig na een wijziging aan de Home Assistant-frontend. Een wijziging werkt de volgende keer dat een Home Assistant-pagina volledig laadt. Alleen beheerders.",
       "injectLabel": "Profielknoppen in context",
       "injectUnavailable": "Uitgeschakeld tot je de pagina opnieuw laadt, omdat de profielknoppen op een Home Assistant-pagina zijn mislukt. Als dit blijft gebeuren, is mogelijk een update van Phoenix MCP nodig.",
-      "killSwitchActiveAria": "Noodstop actief. Alle Phoenix MCP-eindpunten zijn uitgeschakeld",
-      "killSwitchActiveHelp": "Alle Phoenix MCP-clientverzoeken worden nu geweigerd. Opnieuw inschakelen registreert alle Phoenix MCP-routes direct opnieuw, zonder HA-herstart.",
-      "killSwitchActiveLabel": "Noodstop ACTIEF - alle Phoenix MCP-eindpunten zijn uitgeschakeld",
+      "killSwitchActiveAria": "Noodstop actief. Agentverbindingen worden geweigerd",
+      "killSwitchActiveHelp": "Phoenix MCP weigert elk agentverzoek. Als je de noodstop uitschakelt, kunnen agents direct weer verbinding maken, zonder Home Assistant opnieuw te starten.",
+      "killSwitchActiveLabel": "Noodstop ACTIEF - agentverbindingen worden geweigerd",
       "killSwitchCard": "Noodstop",
-      "killSwitchDisableLabel": "Alle Phoenix MCP-eindpunten uitschakelen",
+      "killSwitchDisableLabel": "Alle agentverbindingen weigeren",
       "killSwitchInactiveHelp": "Wanneer ingeschakeld weigeren MCP, context, handleiding, Agent Chat, spraakagent en AI-taak nieuw werk. Assist biedt geen tools aan. Het beheerpaneel blijft toegankelijk.",
       "languageAuto": "Auto",
       "languageHelp": "Paneeltaal voor deze browser. Auto volgt je Home Assistant-profiel.",

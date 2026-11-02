@@ -155,6 +155,32 @@ async def test_create_preset_duplicate_and_cap(access_key_store):
 
 
 @pytest.mark.asyncio
+async def test_create_preset_refusals_carry_their_own_message_key(access_key_store):
+    """A taken name and a full preset list each answer with their own message key."""
+    from custom_components.phoenix_mcp.const import MAX_PRESETS_PER_ACCESS_KEY
+
+    data = _make_data(access_key_store)
+    hass = _make_hass(data)
+    await _enable_presets(access_key_store)
+    record, _ = await access_key_store.async_create_access_key("t1", "u")
+    view = _view(PhoenixAdminAccessKeyPresetsView, hass)
+
+    resp = await view.post(_make_admin_request({"name": "Default Preset"}), access_key_id=record.id)
+    body = json.loads(resp.text)
+    assert resp.status == 400
+    assert body["message_key"] == "adminError.presetNameTaken"
+    assert "message_params" not in body
+
+    for i in range(MAX_PRESETS_PER_ACCESS_KEY - 1):
+        assert (await view.post(_make_admin_request({"name": f"p{i}"}), access_key_id=record.id)).status == 201
+    resp = await view.post(_make_admin_request({"name": "overflow"}), access_key_id=record.id)
+    body = json.loads(resp.text)
+    assert resp.status == 400
+    assert body["message_key"] == "adminError.presetLimitReached"
+    assert body["message_params"] == {"max": MAX_PRESETS_PER_ACCESS_KEY}
+
+
+@pytest.mark.asyncio
 async def test_switch_auto_saves_outgoing_then_applies_target(access_key_store):
     data = _make_data(access_key_store)
     hass = _make_hass(data)

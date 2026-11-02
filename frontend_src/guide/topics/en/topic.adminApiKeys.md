@@ -124,7 +124,7 @@ The response is `201` with the new record plus `access_key`, the key itself: `ph
 | Status | `error` | `message_key` | When |
 |---|---|---|---|
 | 400 | `invalid_request` | `adminError.nameRequired` | `name` is missing. |
-| 400 | `invalid_request` | `adminError.accessKeyNamePattern` | `name` breaks the naming rule. |
+| 400 | `invalid_request` | `adminError.accessKeyNameLengthPattern` | `name` breaks the naming rule. `message_params` has `min` and `max`. |
 | 400 | `invalid_request` | `adminError.booleanRequired` | `pass_through` or `use_assist_exposure` isn't a boolean. `message_params` names the `field`. |
 | 400 | `invalid_request` | `adminError.passThroughConfirmationRequired` | `pass_through` is `true` without `confirm_pass_through: true`. |
 | 400 | `invalid_request` | `adminError.badExpiresAt` | `expires_at` isn't a usable time. |
@@ -291,7 +291,8 @@ Every preset endpoint can also answer:
 | 400 | `invalid_request` | `adminError.nameRequired` | `name` is missing. |
 | 400 | `invalid_request` | `adminError.presetNameTooLong` | `name` is over `max` characters. |
 | 400 | `invalid_request` | `adminError.presetNameInvalidCharacters` | `name` contains a refused character. |
-| 400 | `invalid_request` | `adminError.presetSaveRejected` | The key already has a preset with this name, or already has 8. |
+| 400 | `invalid_request` | `adminError.presetNameTaken` | The key already has a preset with this name. |
+| 400 | `invalid_request` | `adminError.presetLimitReached` | The key already has 8 presets. `message_params` has `max`. |
 
 ### Rename a preset {#preset-rename}
 
@@ -380,7 +381,7 @@ Related: [{{label:workspace.clearAllPermissions}}](guide:window.permissions#clea
 | 400 | `invalid_request` | `adminError.nodeIdInvalidChars` | A node ID contains a refused character. |
 | 400 | `invalid_request` | `adminError.badDomain` | A domain ID isn't a valid domain. |
 | 400 | `invalid_request` | `adminError.badEntityId` | An entity ID isn't a valid entity ID. |
-| 400 | `invalid_request` | `adminError.permissionStateInvalid` | A node's `state` isn't one of the four. `message_params` gives `state`, `node_type`, `node` and `states`. |
+| 400 | `invalid_request` | `adminError.permissionStateInvalidDomain`, `adminError.permissionStateInvalidDevice` or `adminError.permissionStateInvalidEntity` | A node's `state` isn't one of the four. The key names the node's type; `message_params` gives `state`, `node` and `states`. |
 | 400 | `invalid_request` | `adminError.permissionHintString` | A node's `hint` isn't a string or `null`. |
 | 400 | `invalid_request` | `adminError.permissionHintTooLong` | A node's `hint` is over `max` characters. |
 | 400 | `invalid_request` | `adminError.permissionTreeInvalid` | The tree can't be saved as sent. |

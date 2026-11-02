@@ -12,7 +12,7 @@ PHOENIX honored: allowed traffic would flood the ring buffer, and
 reinterprets it host-side (advisory warns, enforced raises its own approval), so
 it is never a Phoenix denial. 2. THE LOGGER'S LEVEL IS UNCHANGED (mesa-core
 defaults it to INFO): an operator raising it can suppress rows, so an empty trail
-does not prove no denial occurred. See docs/mesa.html.
+does not prove no denial occurred, and the operator Guide says so.
 
 Rows are attributed to the request that provoked them through a ContextVar set by
 the actuation gate, MESA-tool adapter and camera privacy check; with no context

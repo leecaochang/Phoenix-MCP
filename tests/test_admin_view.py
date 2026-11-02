@@ -21,6 +21,7 @@ from custom_components.phoenix_mcp.admin_view import (
     PhoenixAdminPermissionDomainView,
     PhoenixAdminPermissionBulkSelectView,
     PhoenixAdminPermissionIntegrationOptionsView,
+    PhoenixAdminPermissionsView,
     PhoenixAdminSettingsView,
     PhoenixAdminAccessKeyAuditView,
     PhoenixAdminAccessKeyStatsView,
@@ -462,7 +463,9 @@ async def test_create_access_key_name_must_match_whole_pattern(name, status):
 
     assert resp.status == status, resp.text
     if status == 400:
-        assert json.loads(resp.text)["message_key"] == "adminError.accessKeyNamePattern"
+        body = json.loads(resp.text)
+        assert body["message_key"] == "adminError.accessKeyNameLengthPattern"
+        assert body["message_params"] == {"min": 3, "max": 32}
         data.store.async_create_access_key.assert_not_called()
 
 
@@ -873,6 +876,35 @@ async def test_permission_patch_invalid_state_rejected():
     resp = await view.patch(request, access_key_id=access_key.id, node_id="light")
 
     assert resp.status == 400
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("section", "node", "key"), [
+    ("domains", "light", "adminError.permissionStateInvalidDomain"),
+    ("devices", "0123456789abcdef0123456789abcdef", "adminError.permissionStateInvalidDevice"),
+    ("entities", "light.kitchen", "adminError.permissionStateInvalidEntity"),
+])
+async def test_permission_tree_put_invalid_state_key_names_the_node_type(section, node, key):
+    """An invalid node state answers a message key per node type, with no node-type word in the params."""
+    from custom_components.phoenix_mcp.access_key_store import VALID_NODE_STATES
+
+    access_key = _make_active_access_key()
+    data = _make_data([access_key])
+    data.store.get_access_key_by_id = MagicMock(return_value=access_key)
+    data.store.async_set_permissions = AsyncMock(return_value=access_key)
+    view = PhoenixAdminPermissionsView()
+    view.hass = _make_hass(data)
+
+    body = json.dumps({section: {node: {"state": "PURPLE"}}}).encode()
+    resp = await view.put(_make_admin_request(body=body), access_key_id=access_key.id)
+
+    assert resp.status == 400
+    payload = json.loads(resp.text)
+    assert payload["message_key"] == key
+    assert payload["message_params"] == {
+        "state": "PURPLE", "node": node, "states": ", ".join(sorted(VALID_NODE_STATES)),
+    }
+    data.store.async_set_permissions.assert_not_called()
 
 
 @pytest.mark.asyncio
@@ -3111,6 +3143,60 @@ async def test_settings_patch_rejects_unknown_provider_account():
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("field", ["command_routing_timeout_ms", "decision_timeout_ms", "decision_request_budget"])
+@pytest.mark.parametrize("side", ["below", "above"])
+async def test_settings_patch_out_of_range_limit_names_field_and_bounds(field, side):
+    """An out-of-range time budget or request limit answers conversationLimitInvalid with its field and bounds."""
+    from custom_components.phoenix_mcp.const import (
+        COMMAND_ROUTING_TIMEOUT_MAX_MS,
+        COMMAND_ROUTING_TIMEOUT_MIN_MS,
+        DECISION_REQUEST_BUDGET_MAX,
+        DECISION_TIMEOUT_MAX_MS,
+        DECISION_TIMEOUT_MIN_MS,
+    )
+
+    bounds = {
+        "command_routing_timeout_ms": (COMMAND_ROUTING_TIMEOUT_MIN_MS, COMMAND_ROUTING_TIMEOUT_MAX_MS),
+        "decision_timeout_ms": (DECISION_TIMEOUT_MIN_MS, DECISION_TIMEOUT_MAX_MS),
+        "decision_request_budget": (0, DECISION_REQUEST_BUDGET_MAX),
+    }[field]
+    value = bounds[0] - 1 if side == "below" else bounds[1] + 1
+    hass, data, _ = _patchable_hass()
+    resp = await _settings_patch(hass, {field: value})
+    body = json.loads(resp.text)
+    assert resp.status == 400
+    assert body["message_key"] == "adminError.conversationLimitInvalid"
+    assert body["message_params"] == {"field": field, "min": bounds[0], "max": bounds[1]}
+    data.store.async_patch_settings.assert_not_called()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("languages", ["en", ["xx"], ["en", "en"], [1]])
+async def test_settings_patch_invalid_routing_languages_key(languages):
+    """An invalid command routing language selection answers routingLanguagesInvalid."""
+    hass, data, _ = _patchable_hass()
+    resp = await _settings_patch(hass, {"command_routing_languages": languages})
+    body = json.loads(resp.text)
+    assert resp.status == 400
+    assert body["message_key"] == "adminError.routingLanguagesInvalid"
+    data.store.async_patch_settings.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_settings_patch_decision_feature_without_account_key():
+    """Turning on a decision feature with no decision account answers decisionProviderRequired."""
+    hass, data, _ = _patchable_hass()
+    secret_store = MagicMock(resolve=MagicMock(return_value=None))
+    with patch("custom_components.phoenix_mcp.agentcli._get_secret_store", new=AsyncMock(return_value=secret_store)):
+        resp = await _settings_patch(hass, {"decision_shadow_enabled": True})
+    body = json.loads(resp.text)
+    assert resp.status == 400
+    assert body["message_key"] == "adminError.decisionProviderRequired"
+    assert "message_params" not in body
+    data.store.async_patch_settings.assert_not_called()
+
+
+@pytest.mark.asyncio
 async def test_settings_patch_side_effects_fire_for_their_own_keys_only():
     """Each side effect is keyed on its own setting; an unrelated patch is inert."""
     hass, data, _ = _patchable_hass()
@@ -3649,3 +3735,106 @@ async def test_voice_preferred_surfaces_why_it_could_not_change():
     assert resp.status == 400
     assert "only one" in body["message"]
 
+
+
+def _voice_pipeline_store(*pipeline_ids: str) -> MagicMock:
+    """An Assist pipeline collection holding these pipelines; the first is preferred."""
+    store = MagicMock()
+    store.data = {pid: SimpleNamespace(id=pid) for pid in pipeline_ids}
+    store.async_get_preferred_item.return_value = pipeline_ids[0] if pipeline_ids else None
+    return store
+
+
+@pytest.mark.asyncio
+async def test_voice_pipeline_post_not_configured_key():
+    """Creating the assistant before the voice agent is fully configured answers voiceAgentNotConfigured."""
+    from custom_components.phoenix_mcp import voice_agent
+
+    data, _ = _settings_data([])
+    view = PhoenixAdminVoiceAgentPipelineView()
+    view.hass = _make_hass(data)
+    store = _voice_pipeline_store()
+    with patch.object(voice_agent, "_pipeline_store", return_value=store):
+        resp = await view.post(_make_admin_request(body=b"{}"))
+    body = json.loads(resp.text)
+    assert resp.status == 400
+    assert body["message_key"] == "adminError.voiceAgentNotConfigured"
+    assert body["message"].startswith("Configure and enable the Phoenix MCP voice agent")
+    store.async_create_item.assert_not_called()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("tracked", "pipelines", "method", "key"), [
+    (None, ("ha",), "post", "adminError.assistantSetupFirst"),
+    ("gone", ("ha",), "post", "adminError.assistantSetupFirst"),
+    ("pl1", ("pl1",), "delete", "adminError.assistantOnlyOneStaysPreferred"),
+])
+async def test_voice_preferred_refusal_keys(tracked, pipelines, method, key):
+    """The preferred-assistant route answers a message key per refusal cause."""
+    from custom_components.phoenix_mcp import voice_agent
+
+    data, holder = _settings_data([])
+    holder["s"] = GlobalSettings(voice_agent_pipeline_id=tracked)
+    view = PhoenixAdminVoiceAgentPreferredView()
+    view.hass = _make_hass(data)
+    store = _voice_pipeline_store(*pipelines)
+    with patch.object(voice_agent, "_pipeline_store", return_value=store):
+        resp = await getattr(view, method)(_make_admin_request(body=b"{}"))
+    assert resp.status == 400
+    assert json.loads(resp.text)["message_key"] == key
+    store.async_set_preferred_item.assert_not_called()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("view_cls", "target", "key"), [
+    (PhoenixAdminVoiceAgentPipelineView, "async_create_assist_pipeline", "adminError.assistPipelineFailed"),
+    (PhoenixAdminVoiceAgentPreferredView, "async_set_assist_pipeline_preferred", "adminError.assistantPreferredFailed"),
+])
+async def test_voice_routes_plain_pipeline_error_falls_back_to_route_key(view_cls, target, key):
+    """A VoicePipelineError with plain text keeps that text and answers the route's general key."""
+    from custom_components.phoenix_mcp.voice_agent import VoicePipelineError
+
+    data, _ = _settings_data([])
+    view = view_cls()
+    view.hass = _make_hass(data)
+    boom = AsyncMock(side_effect=VoicePipelineError("Something unexpected."))
+    with patch(f"custom_components.phoenix_mcp.voice_agent.{target}", boom):
+        resp = await view.post(_make_admin_request(body=b"{}"))
+    body = json.loads(resp.text)
+    assert resp.status == 400
+    assert body["message_key"] == key
+    assert body["message"] == "Something unexpected."
+
+
+@pytest.mark.asyncio
+async def test_ai_task_preferred_post_not_configured_key(hass):
+    """Making an unloaded AI Task entity preferred answers aiTaskNotConfigured."""
+    from pytest_homeassistant_custom_component.common import MockConfigEntry
+
+    data = _make_data([])
+    hass.data[DOMAIN] = data
+    MockConfigEntry(domain=DOMAIN).add_to_hass(hass)
+    view = PhoenixAdminAiTaskPreferredView()
+    view.hass = hass
+    resp = await view.post(_make_admin_request())
+    body = json.loads(resp.text)
+    assert resp.status == 400
+    assert body["message_key"] == "adminError.aiTaskNotConfigured"
+    assert body["message"].startswith("Configure and enable the Phoenix MCP AI Task")
+
+
+@pytest.mark.asyncio
+async def test_ai_task_preferred_post_plain_setup_error_falls_back():
+    """An AiTaskSetupError with plain text keeps that text and answers aiTaskPreferredFailed."""
+    from custom_components.phoenix_mcp.ai_task import AiTaskSetupError
+
+    data = _make_data([])
+    view = PhoenixAdminAiTaskPreferredView()
+    view.hass = _make_hass(data)
+    with patch("custom_components.phoenix_mcp.ai_task.set_ai_task_preferred",
+               side_effect=AiTaskSetupError("Something unexpected.")):
+        resp = await view.post(_make_admin_request())
+    body = json.loads(resp.text)
+    assert resp.status == 400
+    assert body["message_key"] == "adminError.aiTaskPreferredFailed"
+    assert body["message"] == "Something unexpected."

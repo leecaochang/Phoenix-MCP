@@ -532,9 +532,10 @@ _ENTITY_TOOL_DEFS: list[dict] = [
     {
         "name": "call_service",
         "description": (
-            "Call a Home Assistant service with explicit targets; targetless services are unsupported. Targets (entity_id, area_id, "
-            "device_id, or 'all') are resolved and flattened to the entities this access key can write; "
-            "out-of-scope targets are dropped silently. The call passes the capability gate and "
+            "Call a Home Assistant service. Target groups (kind entity, device, area or all) are resolved "
+            "and flattened to the entities this access key can write; out-of-scope targets are dropped "
+            "silently. A service without a target is refused, except the core reloads (cap_yaml_edit), "
+            "homeassistant.restart and stop (cap_restart) and ESPHome device actions (write on the device). The call passes the capability gate and "
             "per-entity MESA policy, so it may return pending_approval or be refused. Preview a risky "
             "call first with dry_run_service (and whatif to see which automations it would trigger). "
             "For runtime controls use automation.trigger (run actions, skip_condition defaults true), "
@@ -761,9 +762,10 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
     {
         "name": "render_template",
         "description": (
-            "Render a Jinja2 template in Home Assistant. Templates are scoped to this access key: states() of "
-            "an out-of-scope entity returns 'unknown', and enumeration helpers like area_entities() return "
-            "empty. Discover entities with search_entities, not template enumeration."
+            "Render a Jinja2 template in a separate, time-limited worker over a copy of the states this access "
+            "key can read, so the result does not see changes made while it renders. states() of an "
+            "out-of-scope entity returns 'unknown', and helpers that need Home Assistant itself, such as "
+            "area_entities() or device_attr(), return empty. Discover entities with search_entities, not template enumeration."
         ),
         "cap": "cap_template_render",
         "inputSchema": {
@@ -816,8 +818,8 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
     {
         "name": "create_automation",
         "description": (
-            "Create a new Home Assistant automation in the YAML config (split !include layouts are "
-            "routed to the correct file automatically). Do not include an 'id' (Phoenix MCP "
+            "Create a new Home Assistant automation in automations.yaml, which configuration.yaml must load "
+            "with a plain !include; any other layout is refused. Do not include an 'id' (Phoenix MCP "
             "assigns and returns it unless automation_id is supplied). Creation refuses an occupied ID, "
             "even with the same alias; use get_automation then edit_automation for replacement. "
             "HA validates before saving; invalid configs are rejected with an "
@@ -863,7 +865,8 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
     {
         "name": "delete_automation",
         "description": (
-            "Permanently delete a Home Assistant automation from the YAML config. "
+            "Delete a Home Assistant automation from the YAML config. The deletion is recorded in the change "
+            "history, where an administrator can usually restore it. "
             "Use search_entities with domain 'automation' to find automations; an automation's id is in its 'id' state attribute and is returned by create_automation. "
             "Phoenix-created automations have IDs prefixed with 'phoenix_mcp_'."
         ),
@@ -953,7 +956,8 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
     {
         "name": "delete_script",
         "description": (
-            "Permanently delete a Home Assistant script from the YAML config. "
+            "Delete a Home Assistant script from the YAML config. The deletion is recorded in the change "
+            "history, where an administrator can usually restore it. "
             "Use the script_id storage key from list_scripts; a renamed entity_id may have a different suffix."
         ),
         "cap": "cap_script_write",
@@ -1110,7 +1114,7 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
         "name": "get_logbook",
         "description": (
             "Read the human-readable Home Assistant logbook in chronological order. Narrow by up to "
-            "100 accessible entities and devices together, or by one causal context_id. Home-wide "
+            "100 accessible entities and up to 100 accessible devices, or by one causal context_id. Home-wide "
             "queries are limited to 7 days and resource- or context-narrowed queries to 31 days. The "
             "response reports the post-permission, post-search total before limiting and whether the "
             "most-recent slice is truncated; when it is, pass older_end_time as end_time with the same "
@@ -3112,7 +3116,7 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
     },
     {
         "name": "delete_helper",
-        "description": "Permanently delete a helper by its helper_type and helper_id. Template entities route through remove_integration, including its current integration authority and MESA checks; the response includes a recovery_id for the captured pre-delete snapshot. Inherited MESA is resolved before approval and fingerprint-rechecked at execution. Zone, tag, and person deletion require write access to that storage-backed entity; person deletion also requires write access to every linked tracker. Scanning a deleted physical tag can make Home Assistant discover it again.",
+        "description": "Delete a helper by its helper_type and helper_id. A Template helper is removed through remove_integration, so it also needs cap_integration_write and passes its MESA checks; the response includes a recovery_id for the captured pre-delete snapshot. Inherited MESA is resolved before approval and fingerprint-rechecked at execution. Zone, tag, and person deletion require write access to that storage-backed entity; person deletion also requires write access to every linked tracker. Scanning a deleted physical tag can make Home Assistant discover it again.",
         "cap": "cap_helper_write",
         "inputSchema": {
             "type": "object",
@@ -3584,8 +3588,8 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
             "edit_dashboard_card / delete_dashboard_card, which do not resend the whole "
             "layout. Omit url_path for the default dashboard. Storage-mode dashboards "
             "only (YAML-mode is rejected). "
-            "Lovelace config is not strictly validated, so a malformed layout is stored "
-            "as-is. May require admin approval. Pass expected_hash (the content_hash from a "
+            "A layout whose views, sections, badges or cards are not lists would not display, so it is "
+            "refused. May require admin approval. Pass expected_hash (the content_hash from a "
             "prior get_dashboard_config) to make the write conditional: if the layout changed "
             "since you read it, the write is refused instead of overwriting the other change. "
             "A config containing the \"<redacted>\" placeholder from a lossy dashboard read is "

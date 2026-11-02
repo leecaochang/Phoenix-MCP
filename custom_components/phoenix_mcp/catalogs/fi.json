@@ -193,17 +193,19 @@
       "accessKeyIdOrNull": "{field} on oltava käyttöavaimen tunnus merkkijonona tai null.",
       "accessKeyInactive": "Tämä käyttöavain on mitätöity tai vanhentunut.",
       "accessKeyNameLengthPattern": "name on oltava {min}-{max} merkkiä, ja siinä saa olla kirjaimia, numeroita, yhdysviivoja tai alaviivoja.",
-      "accessKeyNamePattern": "name ei vastaa vaadittua kaavaa.",
-      "accessKeyNameTaken": "Samanniminen käyttöavain (tai vastaava slug) on jo olemassa.",
+      "accessKeyNameTaken": "Samanniminen käyttöavain on jo olemassa. Nimet, jotka eroavat vain kirjainkoolta tai merkeiltä - ja _, katsotaan samoiksi.",
       "accessKeyNotFound": "Käyttöavainta ei löytynyt.",
       "activeAccessKeyRequired": "{field} on viitattava aktiiviseen käyttöavaimeen.",
       "adminRequired": "Vaaditaan ylläpitäjän käyttöoikeudet.",
       "aiTaskPreferredFailed": "Ensisijaista tekoälytehtäväentiteettiä ei voitu määrittää.",
-      "approvalAccessKeyInactive": "Käyttöavain ei ole enää aktiivinen.",
+      "aiTaskNotConfigured": "Määritä ensin Phoenix MCP AI Task käyttöavaimella, palveluntarjoajalla ja mallilla ja ota se käyttöön.",
+      "aiTaskPreferencesUnavailable": "Tekoälytehtävien asetukset eivät ole käytettävissä tässä Home Assistantissa.",
+      "approvalAccessKeyInactive": "Käyttöavain ei ole enää aktiivinen, joten tätä pyyntöä ei voi suorittaa. Mitään ei suoritettu.",
       "approvalAlreadyResolved": "Hyväksyntä on jo ratkaistu.",
+      "approvalExpired": "Tämä pyyntö vanheni ennen kuin hyväksyit sen, joten mitään ei suoritettu.",
       "approvalBatchMaximum": "Erä voi sisältää enintään {max} hyväksyntää.",
-      "approvalCapabilityDenied": "Ominaisuus on nyt kielletty tältä käyttöavaimelta.",
-      "approvalExecutionInterrupted": "Edellinen yritys on saatettu jo toteuttaa. Palautus sulkee tämän hyväksynnän epävarmana; tarkista tulos sen sijaan, että suoritat sen uudelleen.",
+      "approvalCapabilityDenied": "Käyttöavaimen ominaisuus on nyt asetettu tilaan Kiellä, joten pyyntö suljettiin suorittamatta.",
+      "approvalExecutionInterrupted": "Edellinen yritys on saatettu jo toteuttaa. Tarkista tulos ennen kuin muutat tätä pyyntöä tai yrität sitä uudelleen.",
       "approvalExecutionUncertain": "Suoritus epäonnistui ja on saatettu toteuttaa osittain. Tämä hyväksyntä suljettiin; tarkista tulos ennen uutta yritystä.",
       "approvalExecutorMissing": "Tälle työkalulle ei ole rekisteröity suorittajaa.",
       "approvalIdsNonEmpty": "approval_ids on oltava ei-tyhjä merkkijonotaulukko.",
@@ -217,6 +219,11 @@
       "archivedAccessKeyNotFound": "Arkistoitua käyttöavainta ei löytynyt.",
       "assistExposurePassThroughOnly": "use_assist_exposure on kelvollinen vain pass_through-käyttöavaimille.",
       "assistPipelineFailed": "Assist-putkea ei voitu luoda.",
+      "assistPipelineUnavailable": "Assist-putket eivät ole käytettävissä tässä Home Assistantissa.",
+      "voiceAgentNotConfigured": "Määritä ensin Phoenix MCP -ääniagentti käyttöavaimella, palveluntarjoajalla ja mallilla ja ota se käyttöön.",
+      "assistantSetupFirst": "Määritä ensin Phoenix MCP -avustaja.",
+      "assistantOnlyOneStaysPreferred": "Phoenix MCP -avustaja on Home Assistantin ainoa avustaja, joten se pysyy ensisijaisena.",
+      "assistantPreferredFailed": "Ensisijaisen avustajan vaihtaminen ei onnistunut.",
       "attentionCheckRequired": "Tarkista toiminnon tulos ennen jatkamista.",
       "attentionNotReviewable": "Tätä kohdetta ei voi kuitata.",
       "attentionReviewConflict": "Tämä toiminto on käynnissä tai se on jo tarkistettu.",
@@ -237,6 +244,7 @@
       "capabilityModeInvalid": "{capability} on oltava deny, allow tai confirm.",
       "catalogNotFound": "Luetteloa ei löytynyt.",
       "configuredProviderRequired": "{field} on viitattava määritettyyn palveluntarjoajatiliin.",
+      "decisionProviderRequired": "Valitse ensin päätöstarjoajan tili.",
       "conversationClearConfirm": "Vahvista keskusteluhistorian tyhjentäminen.",
       "conversationLimitInvalid": "{field} on oltava kokonaisluku välillä {min} ja {max}.",
       "conversationNotFound": "Tämä keskustelumerkintä ei ole enää käytettävissä.",
@@ -250,7 +258,7 @@
       "inlineWaitRange": "confirm_inline_wait_seconds on oltava 0 (pois) tai kokonaisluku välillä {min} ja {max}.",
       "integerRequired": "{field} on oltava kokonaisluku.",
       "integrationNameInvalid": "Virheellinen integraation nimi.",
-      "killSwitchEngaged": "Hätäkatkaisu on päällä.",
+      "killSwitchEngaged": "Hätäkatkaisu on päällä, joten pyyntö peruutettiin suorittamatta.",
       "maximumRequired": "{field} ei saa ylittää arvoa {max}.",
       "mesaArchiveRequired": "archive on pakollinen.",
       "mesaConflictModeInvalid": "on_conflict on oltava skip tai overwrite.",
@@ -270,7 +278,9 @@
       "permissionNodeObject": "Solmun {node} on oltava objekti, jossa on state-kenttä.",
       "permissionSectionObject": "{section} on oltava objekti, jonka avaimina ovat solmujen tunnukset.",
       "permissionSelectionNotFound": "Käyttöoikeusvalintaa ei löytynyt.",
-      "permissionStateInvalid": "Virheellinen tila {state} kohteelle {node_type} {node}. Kelvolliset tilat: {states}.",
+      "permissionStateInvalidDomain": "Virheellinen tila {state} verkkotunnukselle {node}. Kelvolliset tilat: {states}.",
+      "permissionStateInvalidDevice": "Virheellinen tila {state} laitteelle {node}. Kelvolliset tilat: {states}.",
+      "permissionStateInvalidEntity": "Virheellinen tila {state} entiteetille {node}. Kelvolliset tilat: {states}.",
       "permissionTreeInvalid": "Virheellinen käyttöoikeuspuun rakenne.",
       "presetDeleteRejected": "Tätä esiasetusta ei voitu poistaa. Vaihda pois aktiivisesta esiasetuksesta ennen sen poistamista.",
       "presetNameInvalidCharacters": "name sisältää virheellisiä merkkejä.",
@@ -278,7 +288,9 @@
       "presetNotFound": "Esiasetusta ei löytynyt.",
       "presetPassThroughConfirmationRequired": "confirm_pass_through: true vaaditaan, kun esiasetus ottaa pass_through-toiminnon käyttöön.",
       "presetRenameRejected": "Tätä esiasetusta ei voitu nimetä uudelleen. Toinen esiasetus saattaa jo käyttää samaa nimeä.",
-      "presetSaveRejected": "Tätä esiasetusta ei voitu tallentaa. Nimi on ehkä jo käytössä tai esiasetusten enimmäismäärä on saatettu saavuttaa.",
+      "presetSaveRejected": "Tätä esiasetusta ei voitu tallentaa.",
+      "presetNameTaken": "Tällä käyttöavaimella on jo samanniminen esiasetus.",
+      "presetLimitReached": "Käyttöavaimella voi olla enintään {max} esiasetusta.",
       "presetsDisabled": "Käyttöavaimen esiasetukset on poistettu käytöstä. Ota ne käyttöön asetuksissa.",
       "providerAccountChanged": "Palveluntarjoajatili on vaihtunut. Lataa sivu uudelleen ja yritä sitten.",
       "providerAccountNotFound": "Palveluntarjoajatiliä ei löytynyt.",
@@ -293,6 +305,7 @@
       "providerModelNotListed": "Valitse malli, jonka tämä palveluntarjoaja palauttaa.",
       "providerModelOrAuto": "Lähetä joko model tai auto, ei molempia.",
       "providerModelRequired": "Malli vaaditaan.",
+      "decisionModelRequired": "Päätöstili tarvitsee tietyn mallin. Se ei voi valita mallia automaattisesti.",
       "providerNotConfigured": "Palveluntarjoajatiliä ei ole määritetty.",
       "providerRemoteUrlAddressForbidden": "Palveluntarjoajan URL-osoite ei saa osoittaa yksityiseen, loopback-, link-local-, multicast- tai varattuun osoitteeseen.",
       "providerRemoteUrlResolutionForbidden": "Palveluntarjoajan URL-osoite ratkeaa yksityiseen, loopback-, link-local-, multicast- tai varattuun osoitteeseen.",
@@ -329,10 +342,12 @@
       "restoreSideInvalid": "side on oltava before tai after.",
       "restoreStale": "Kohde on muuttunut sen jälkeen, kun valitsit palautuksen. Tarkista vertailu ja yritä uudelleen.",
       "routingPreviewInvalid": "Tarkista käyttöavain, komentokieli ja reititysasetukset.",
+      "routingLanguagesInvalid": "Valitse komentojen reitityskielet asennetuista Assist-kielistä.",
       "routingStatisticsResetInvalid": "Valitse ääni tai chat ja vahvista tilastojen nollaus.",
       "selectorIdRequired": "selector_id on pakollinen.",
       "selectorTypeInvalid": "selector_type on oltava area, label tai integration.",
-      "serviceDisabled": "Phoenix MCP on poistettu käytöstä hätäkatkaisulla.",
+      "serviceDisabled": "Hätäkatkaisu on päällä, joten agenttipyynnöt torjutaan.",
+      "serviceStopping": "Home Assistant sammuu. Yritä uudelleen, kun se on taas käytettävissä.",
       "setupIncomplete": "Phoenix MCP:n käyttöönotto ei ole valmis.",
       "setupMissing": "Phoenix MCP:tä ei ole otettu käyttöön.",
       "sinceTimestampInvalid": "Virheellinen since-aikaleima.",
@@ -1020,7 +1035,7 @@
         "label": "Kamerakuvan luku"
       },
       "cap_config_read": {
-        "description": "Lue Home Assistant -kokoonpano ja tapahtumakuuntelijoiden määrät.",
+        "description": "Lue Home Assistantin kokoonpano, energia-asetukset ja aurinkoennusteet, mallipohjat ja MESA-profiilit, ja odota entiteetin muuttumista.",
         "label": "Kokoonpanon luku"
       },
       "cap_diagnostics": {
@@ -1044,7 +1059,7 @@
         "label": "Tiedostojen luku"
       },
       "cap_helper_write": {
-        "description": "Luo, muokkaa ja poista apureita, kuten syötteet, laskurit ja ajastimet.",
+        "description": "Luo, muokkaa ja poista apureita, mukaan lukien syötteet, laskurit, ajastimet, vyöhykkeet, tunnisteet, henkilöt ja malliapurit, ja muuta niiden asetuksia. Niihin sovelletaan MESA:a.",
         "label": "Hallitse apureita"
       },
       "cap_integration_reconfigure": {
@@ -1064,11 +1079,11 @@
         "label": "Järjestelmälokin luku"
       },
       "cap_lovelace_write": {
-        "description": "Lue, luo, muokkaa ja poista Lovelace-kojelautoja ja niiden kortteja.",
+        "description": "Lue, hae, luo, muokkaa ja poista kojelautoja ja niiden kortteja, ja luettele asennetut mukautetut kortit.",
         "label": "Hallitse kojelautoja"
       },
       "cap_physical_control": {
-        "description": "Ohjaa lukkoja, hälytyksiä, suojuksia ja venttiilejä.",
+        "description": "Ohjaa lukkoja, hälytyksiä, suojuksia ja venttiilejä, ja muuta Zigbee-ryhmiä, sidontoja ja laitteiden attribuutteja.",
         "label": "Fyysinen ohjaus"
       },
       "cap_radio_write": {
@@ -1088,7 +1103,7 @@
         "label": "Käynnistä tai pysäytä Home Assistant"
       },
       "cap_scene_write": {
-        "description": "Luo, muokkaa ja poista tilanteita. Viitatut entiteetit ovat edelleen MESA:n ja entiteettikäytön alaisia.",
+        "description": "Lue, luo, muokkaa ja poista tilanteita. Käyttöavaimella on oltava kirjoitusoikeus jokaiseen tilanteen entiteettiin.",
         "label": "Hallitse tilanteita"
       },
       "cap_script_write": {
@@ -1100,7 +1115,7 @@
         "label": "Haku ja löytäminen"
       },
       "cap_service_response": {
-        "description": "Palauta tiedot palveluista, jotka tarjoavat vastauksen, kuten conversation.process.",
+        "description": "Palauta tiedot, joilla toiminto vastaa, kuten sääennuste.",
         "label": "Palvelun vastaustiedot"
       },
       "cap_template_render": {
@@ -2148,11 +2163,11 @@
       "injectHelp": "Lisää MESA-profiilipainikkeet Home Assistantin entiteetti-, automaatio-, skripti-, tilanne-, apuri- ja henkilöluetteloihin sekä sen laite-, huone- ja integraatiosivuille. Nämä painikkeet voivat vaatia Phoenix MCP -päivityksen Home Assistantin käyttöliittymän muutoksen jälkeen. Muutos tulee voimaan, kun Home Assistant -sivu seuraavan kerran ladataan kokonaan. Vain ylläpitäjille.",
       "injectLabel": "Profiilipainikkeet kontekstissa",
       "injectUnavailable": "Poissa käytöstä, kunnes lataat sivun uudelleen, koska profiilipainikkeet epäonnistuivat Home Assistant -sivulla. Jos tämä toistuu, Phoenix MCP -päivitys voi olla tarpeen.",
-      "killSwitchActiveAria": "Hätäkatkaisu on aktiivinen. Kaikki Phoenix MCP -päätepisteet on poistettu käytöstä",
-      "killSwitchActiveHelp": "Kaikki Phoenix MCP -asiakasohjelmien pyynnöt torjutaan nyt. Uudelleen käyttöön ottaminen rekisteröi kaikki Phoenix MCP -reitit välittömästi uudelleen ilman HA:n uudelleenkäynnistystä.",
-      "killSwitchActiveLabel": "Hätäkatkaisu AKTIIVINEN - kaikki Phoenix MCP -päätepisteet on poistettu käytöstä",
+      "killSwitchActiveAria": "Hätäkatkaisu on aktiivinen. Agenttiyhteydet torjutaan",
+      "killSwitchActiveHelp": "Phoenix MCP torjuu jokaisen agenttipyynnön. Kun poistat hätäkatkaisun käytöstä, agentit voivat muodostaa yhteyden heti uudelleen ilman Home Assistantin uudelleenkäynnistystä.",
+      "killSwitchActiveLabel": "Hätäkatkaisu AKTIIVINEN - agenttiyhteydet torjutaan",
       "killSwitchCard": "Hätäkatkaisu",
-      "killSwitchDisableLabel": "Poista kaikki Phoenix MCP -päätepisteet käytöstä",
+      "killSwitchDisableLabel": "Torju kaikki agenttiyhteydet",
       "killSwitchInactiveHelp": "Kun tämä on käytössä, MCP, konteksti, taidot, Agent Chat, ääniagentti ja tekoälytehtävä kieltäytyvät uudesta työstä. Assist tarjoaa nolla työkalua. Ylläpitopaneeli on edelleen käytettävissä.",
       "languageAuto": "Automaattinen",
       "languageHelp": "Paneelin kieli tässä selaimessa. Automaattinen noudattaa Home Assistant -profiiliasi.",

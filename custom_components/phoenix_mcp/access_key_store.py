@@ -944,6 +944,14 @@ class _PhoenixStore(DurableStore[dict]):
         return raw
 
 
+class PresetLimitError(ValueError):
+    """The access key already holds the most presets it may have."""
+
+
+class PresetNameTakenError(ValueError):
+    """Another preset on the access key already uses the name."""
+
+
 class AccessKeyStore:
     """Manages persistent storage and in-memory state for Phoenix MCP access keys."""
 
@@ -1372,9 +1380,9 @@ class AccessKeyStore:
         if access_key is None:
             return None
         if len(access_key.presets) >= MAX_PRESETS_PER_ACCESS_KEY:
-            raise ValueError(f"An access key can have at most {MAX_PRESETS_PER_ACCESS_KEY} presets")
+            raise PresetLimitError(f"An access key can have at most {MAX_PRESETS_PER_ACCESS_KEY} presets")
         if self._preset_name_taken(access_key, name):
-            raise ValueError(f"A preset named {name!r} already exists on this access key")
+            raise PresetNameTakenError(f"A preset named {name!r} already exists on this access key")
         preset = snapshot_preset(access_key, name)
         access_key.presets.append(preset)
         access_key.active_preset_id = preset.id

@@ -29,7 +29,7 @@ from homeassistant.core import Context, HomeAssistant
 from homeassistant.helpers import intent
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
-from .helpers import voice_text
+from .helpers import LocalizedReason, voice_text
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -456,16 +456,17 @@ async def async_create_assist_pipeline(
     """
     store = _pipeline_store(hass)
     if store is None:
-        raise VoicePipelineError("Assist pipeline support is not available.")
+        raise VoicePipelineError(LocalizedReason("Assist pipeline support is not available.", "assistPipelineUnavailable"))
 
     s = data.store.get_settings()
     if not (
         s.voice_agent_enabled and s.voice_agent_access_key_id
         and s.voice_agent_provider_id and s.voice_agent_model
     ):
-        raise VoicePipelineError(
-            "Configure and enable the Phoenix MCP voice agent (access key, provider, and model) first."
-        )
+        raise VoicePipelineError(LocalizedReason(
+            "Configure and enable the Phoenix MCP voice agent (access key, provider, and model) first.",
+            "voiceAgentNotConfigured",
+        ))
 
     # Idempotent: if a tracked pipeline still exists, reuse it rather than duplicate.
     existing = s.voice_agent_pipeline_id
@@ -482,7 +483,7 @@ async def async_create_assist_pipeline(
     try:
         pipeline = await store.async_create_item(settings)
     except Exception as err:  # noqa: BLE001
-        raise VoicePipelineError("Could not create the Phoenix MCP Assist pipeline.") from err
+        raise VoicePipelineError(LocalizedReason("Could not create the Phoenix MCP Assist pipeline.", "assistPipelineFailed")) from err
 
     if preferred:
         _set_preferred(store, pipeline.id)
@@ -547,10 +548,10 @@ async def async_set_assist_pipeline_preferred(hass: HomeAssistant, data: Any, *,
     """
     store = _pipeline_store(hass)
     if store is None:
-        raise VoicePipelineError("Assist pipeline support is not available.")
+        raise VoicePipelineError(LocalizedReason("Assist pipeline support is not available.", "assistPipelineUnavailable"))
     pipeline_id = data.store.get_settings().voice_agent_pipeline_id
     if pipeline_id is None or pipeline_id not in getattr(store, "data", {}):
-        raise VoicePipelineError("Set up the Phoenix MCP assistant first.")
+        raise VoicePipelineError(LocalizedReason("Set up the Phoenix MCP assistant first.", "assistantSetupFirst"))
     try:
         if preferred:
             if not _is_preferred(store, pipeline_id):
@@ -558,14 +559,15 @@ async def async_set_assist_pipeline_preferred(hass: HomeAssistant, data: Any, *,
         elif _is_preferred(store, pipeline_id):
             other = next((pid for pid in store.data if pid != pipeline_id), None)
             if other is None:
-                raise VoicePipelineError(
-                    "The Phoenix MCP assistant is the only one, so Home Assistant keeps it preferred."
-                )
+                raise VoicePipelineError(LocalizedReason(
+                    "The Phoenix MCP assistant is the only one, so Home Assistant keeps it preferred.",
+                    "assistantOnlyOneStaysPreferred",
+                ))
             store.async_set_preferred_item(other)
     except VoicePipelineError:
         raise
     except Exception as err:  # noqa: BLE001 - HA store errors become one clear failure
-        raise VoicePipelineError("Could not change the preferred assistant.") from err
+        raise VoicePipelineError(LocalizedReason("Could not change the preferred assistant.", "assistantPreferredFailed")) from err
     return {"pipeline_id": pipeline_id, "preferred": _is_preferred(store, pipeline_id)}
 
 

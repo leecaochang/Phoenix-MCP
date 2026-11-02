@@ -71,7 +71,7 @@
       },
       "cap_config_read": {
         "label": "读取配置",
-        "description": "读取 Home Assistant 配置和事件监听器数量。"
+        "description": "读取 Home Assistant 配置、能源设置和太阳能预测、蓝图及 MESA 策略，并等待实体发生变化。"
       },
       "cap_camera_read": {
         "label": "读取摄像头图像",
@@ -95,7 +95,7 @@
       },
       "cap_helper_write": {
         "label": "管理辅助元素",
-        "description": "创建、编辑和删除辅助元素，例如输入、计数器和计时器。"
+        "description": "创建、编辑和删除辅助元素，包括输入、计数器、计时器、区域、标签、人员和模板辅助元素，并更改其设置。适用 MESA。"
       },
       "cap_integration_write": {
         "label": "集成管理",
@@ -115,11 +115,11 @@
       },
       "cap_lovelace_write": {
         "label": "管理仪表盘",
-        "description": "读取、创建、编辑和删除 Lovelace 仪表盘及其卡片。"
+        "description": "读取、搜索、创建、编辑和删除仪表盘及其卡片，并列出已安装的自定义卡片。"
       },
       "cap_physical_control": {
         "label": "物理控制",
-        "description": "控制门锁、警报控制面板、卷帘和阀门。"
+        "description": "控制门锁、警报控制面板、卷帘和阀门，并更改 Zigbee 群组、绑定和设备属性。"
       },
       "cap_radio_write": {
         "label": "无线电设备管理",
@@ -143,7 +143,7 @@
       },
       "cap_scene_write": {
         "label": "管理场景",
-        "description": "创建、编辑和删除场景。其中引用的实体仍受 MESA 和实体访问控制的约束。"
+        "description": "读取、创建、编辑和删除场景。场景中的每个实体都必须允许该访问密钥写入。"
       },
       "cap_script_write": {
         "label": "管理脚本",
@@ -155,7 +155,7 @@
       },
       "cap_service_response": {
         "label": "服务响应数据",
-        "description": "返回支持响应的服务所提供的数据，例如 conversation.process。"
+        "description": "返回动作响应的数据，例如天气预报。"
       },
       "cap_template_render": {
         "label": "模板渲染",
@@ -555,15 +555,18 @@
       "presetNotFound": "未找到预设。",
       "presetsDisabled": "访问密钥预设已禁用。请在“设置”中启用。",
       "providerAlreadyConfigured": "此提供商账户已配置。",
-      "accessKeyNameTaken": "已存在同名（或等价 slug）的访问密钥。",
+      "accessKeyNameTaken": "已存在同名的访问密钥。仅大小写不同，或仅 - 与 _ 不同的名称视为相同。",
       "accessKeyNotFound": "未找到访问密钥。",
       "unknownPersona": "未知的角色。",
       "activeAccessKeyRequired": "{field} 必须引用有效访问密钥。",
       "aiTaskPreferredFailed": "无法配置首选 AI 任务实体。",
+      "aiTaskNotConfigured": "请先设置并启用 Phoenix MCP AI 任务，并为其指定访问密钥、提供商和模型。",
+      "aiTaskPreferencesUnavailable": "此 Home Assistant 上无法使用 AI 任务偏好设置。",
       "approvalAlreadyResolved": "此审批已处理。",
+      "approvalExpired": "此请求在您批准前已过期，因此未执行任何操作。",
       "approvalBatchMaximum": "每批最多可包含 {max} 项审批。",
-      "approvalCapabilityDenied": "此访问密钥现在已被拒绝使用该能力。",
-      "approvalExecutionInterrupted": "上一次尝试可能已经生效。恢复处理会将此审批标记为结果不确定并关闭；请检查结果，不要再次运行。",
+      "approvalCapabilityDenied": "此访问密钥的该能力现已设为“拒绝”，因此请求已关闭，未执行。",
+      "approvalExecutionInterrupted": "上一次尝试可能已经生效。更改或重试此请求前，请先检查结果。",
       "approvalWipeInProgress": "审批执行与清除核心数据不能同时进行。请等待其中一项完成后重试。",
       "approvalWipeExecutionUncertain": "审批可能已经生效但尚未报告结果，因此无法清除核心数据。请先检查结果。",
       "approvalExecutionUncertain": "执行失败且可能已部分生效。此审批已关闭；重试前请先检查结果。",
@@ -573,9 +576,14 @@
       "approvalProcessing": "此审批正在处理中。",
       "approvalReasonString": "reason 必须是字符串。",
       "approvalRecordFailed": "运行前无法记录此审批。未执行任何操作，请重试。",
-      "approvalAccessKeyInactive": "此访问密钥已不再有效。",
+      "approvalAccessKeyInactive": "此访问密钥已不再有效，因此此请求无法执行。未执行任何操作。",
       "assistExposurePassThroughOnly": "use_assist_exposure 仅适用于 pass_through 访问密钥。",
       "assistPipelineFailed": "无法创建 Assist 流水线。",
+      "assistPipelineUnavailable": "此 Home Assistant 上无法使用 Assist 流水线。",
+      "voiceAgentNotConfigured": "请先设置并启用 Phoenix MCP 语音智能体，并为其指定访问密钥、提供商和模型。",
+      "assistantSetupFirst": "请先设置 Phoenix MCP 助手。",
+      "assistantOnlyOneStaysPreferred": "Phoenix MCP 助手是 Home Assistant 中唯一的助手，因此仍为首选助手。",
+      "assistantPreferredFailed": "无法更改首选助手。",
       "booleanRequired": "{field} 必须为 true 或 false。",
       "companionSettingRefused": "Home Companion 密钥不能使用直通模式，也不能声明全部工具。",
       "unknownFields": "请求包含 Phoenix 无法识别的字段：{fields}。",
@@ -583,6 +591,7 @@
       "capabilityModeInvalid": "{capability} 必须为 deny、allow 或 confirm。",
       "catalogNotFound": "未找到语言目录。",
       "configuredProviderRequired": "{field} 必须引用已配置的提供商账户。",
+      "decisionProviderRequired": "请先选择决策提供商账户。",
       "deploymentDefaultsInvalid": "部署默认值无效：{detail}",
       "emptyMessage": "请输入消息。",
       "entriesListRequired": "entries 必须是列表。",
@@ -591,7 +600,7 @@
       "inlineWaitRange": "confirm_inline_wait_seconds 必须为 0（关闭），或 {min} 到 {max} 之间的整数。",
       "integerRequired": "{field} 必须是整数。",
       "integrationNameInvalid": "集成名称无效。",
-      "killSwitchEngaged": "紧急停止开关已启用。",
+      "killSwitchEngaged": "紧急停止开关已开启，因此请求已取消，未执行。",
       "maximumRequired": "{field} 不能超过 {max}。",
       "mesaArchiveRequired": "archive 为必填项。",
       "mesaProfileExists": "配置已存在。请在编辑模式中打开。",
@@ -608,14 +617,18 @@
       "permissionNodeObject": "节点 {node} 必须是包含 state 字段的对象。",
       "permissionSectionObject": "{section} 必须是以节点 ID 为键的对象。",
       "permissionSelectionNotFound": "未找到权限选择项。",
-      "permissionStateInvalid": "{node_type} {node} 的状态 {state} 无效。有效状态：{states}。",
+      "permissionStateInvalidDomain": "域 {node} 的状态 {state} 无效。有效状态：{states}。",
+      "permissionStateInvalidDevice": "设备 {node} 的状态 {state} 无效。有效状态：{states}。",
+      "permissionStateInvalidEntity": "实体 {node} 的状态 {state} 无效。有效状态：{states}。",
       "permissionTreeInvalid": "权限树结构无效。",
       "presetDeleteRejected": "无法删除此预设。请先切换到其他预设，再删除当前生效的预设。",
       "presetNameInvalidCharacters": "name 包含无效字符。",
       "presetNameTooLong": "name 不能超过 {max} 个字符。",
       "presetPassThroughConfirmationRequired": "预设启用 pass_through 时必须设置 confirm_pass_through: true。",
       "presetRenameRejected": "无法重命名此预设。可能已有其他预设使用该名称。",
-      "presetSaveRejected": "无法保存此预设。该名称可能已存在，或预设数量已达到上限。",
+      "presetSaveRejected": "无法保存此预设。",
+      "presetNameTaken": "此访问密钥已有同名预设。",
+      "presetLimitReached": "一个访问密钥最多可以有 {max} 个预设。",
       "providerAccountNotFound": "未找到提供商账户。",
       "providerApiKeyRequired": "请输入 API 密钥。",
       "providerBaseUrlRequired": "请输入提供商基础 URL。",
@@ -624,6 +637,7 @@
       "providerConnectionFailedNoDetail": "连接失败。",
       "providerModelMissing": "尚未为此提供商选择模型。",
       "providerModelRequired": "必须选择模型。",
+      "decisionModelRequired": "决策账户需要指定具体模型，无法自动选择。",
       "providerNotConfigured": "尚未配置提供商账户。",
       "providerEndpointInvalid": "请选择有效的提供商方案。",
       "providerRemoteUrlAddressForbidden": "提供商 URL 不得指向私有、环回、链路本地、组播或保留地址。",
@@ -646,7 +660,8 @@
       "restoreStale": "自你选择还原以来，此项已发生更改。请查看比较后重试。",
       "selectorIdRequired": "selector_id 为必填项。",
       "selectorTypeInvalid": "selector_type 必须为 area、label 或 integration。",
-      "serviceDisabled": "Phoenix MCP 已被紧急停止开关禁用。",
+      "serviceDisabled": "紧急停止开关已开启，因此智能体请求会被拒绝。",
+      "serviceStopping": "Home Assistant 正在关闭。请在其恢复后重试。",
       "setupIncomplete": "Phoenix MCP 尚未完成设置。",
       "setupMissing": "Phoenix MCP 尚未设置。",
       "sinceTimestampInvalid": "since 时间戳无效。",
@@ -659,12 +674,12 @@
       "accessKeyIdOrNull": "{field} 必须是访问密钥 ID 字符串或 null。",
       "accessKeyInactive": "此访问密钥已撤销或过期。",
       "accessKeyNameLengthPattern": "name 必须为 {min} 到 {max} 个字符，只能使用字母、数字、连字符或下划线。",
-      "accessKeyNamePattern": "name 不符合要求的格式。",
       "valueAllowed": "{field} 必须是以下值之一：{values}。",
       "versionNotFound": "未找到版本。",
       "versionResourcePairRequired": "请同时提供 resource_type 和 resource_id，或两者都不提供以查看最近记录。",
       "wipeConfirmationRequired": "confirm 必须为 WIPE。",
       "routingPreviewInvalid": "请检查访问密钥、指令语言和路由设置。",
+      "routingLanguagesInvalid": "请从已安装的 Assist 语言中选择命令路由语言。",
       "providerModelNotListed": "请选择此提供商返回的模型。",
       "providerAccountChanged": "提供商账户已更改，请刷新后重试。",
       "routingStatisticsResetInvalid": "请选择 Voice 或 Chat 并确认重置统计。",
@@ -1454,11 +1469,11 @@
       "injectHelp": "在 Home Assistant 的实体、自动化、脚本、场景、辅助元素和人员列表，以及设备、区域和集成页面上添加 MESA 策略按钮。Home Assistant 前端更新后，这些按钮可能需要 Phoenix MCP 一并更新。更改会在下次完整加载 Home Assistant 页面时生效。仅限管理员。",
       "injectLabel": "页面内策略按钮",
       "injectUnavailable": "由于策略按钮在某个 Home Assistant 页面上出错，此功能已关闭，直到重新加载页面。如果反复出现，可能需要更新 Phoenix MCP。",
-      "killSwitchActiveAria": "紧急停止开关已启用。所有 Phoenix MCP 端点均已禁用",
-      "killSwitchActiveHelp": "所有 Phoenix MCP 客户端请求现已被拒绝。重新启用后会立即重新注册所有 Phoenix MCP 路由，无需重启 HA。",
-      "killSwitchActiveLabel": "紧急停止开关已启用 - 所有 Phoenix MCP 端点均已禁用",
+      "killSwitchActiveAria": "紧急停止开关已启用。智能体连接会被拒绝",
+      "killSwitchActiveHelp": "Phoenix MCP 会拒绝所有智能体请求。关闭紧急停止开关后，智能体可以立即重新连接，无需重启 Home Assistant。",
+      "killSwitchActiveLabel": "紧急停止开关已启用 - 智能体连接会被拒绝",
       "killSwitchCard": "紧急停止开关",
-      "killSwitchDisableLabel": "禁用所有 Phoenix MCP 端点",
+      "killSwitchDisableLabel": "拒绝所有智能体连接",
       "killSwitchInactiveHelp": "启用后，MCP、上下文、技能说明、Agent Chat、语音智能体和 AI 任务会拒绝新任务。Assist 不提供任何工具。管理面板仍可访问。",
       "logAllowedHelp": "在审计日志中记录成功的请求。",
       "logAllowedLabel": "记录已允许的请求",

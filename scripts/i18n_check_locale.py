@@ -117,7 +117,6 @@ LITERALS: dict[str, tuple[str, ...]] = {
     "panel.settings.wipeTypeConfirm": ("WIPE",),
     "panel.caps.cap_restart.description": ("homeassistant.restart", "homeassistant.stop"),
     "panel.caps.cap_filesystem.description": ("www/", "themes/", "custom_templates/"),
-    "panel.caps.cap_service_response.description": ("conversation.process",),
     "panel.caps.cap_esphome_yaml.description": ("esphome/",),
     "panel.caps.cap_yaml_edit.description": ("configuration.yaml", "secrets.yaml", "!secret"),
     # YAML tags and setup values the operator has to recognize or type exactly.
