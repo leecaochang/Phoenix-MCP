@@ -19,9 +19,9 @@ Phoenix MCP 完全執行於 Home Assistant 內部：無需另行部署服務，�
 
 ## 文件
 
-完整文件包括工具參考、權限、能力、MESA 和管理 API，位於 **[leecaochang.github.io/Phoenix-MCP](https://leecaochang.github.io/Phoenix-MCP/)**。面板中的說明連結也會指向這裡。
+使用手冊內建於面板中：開啟 **Phoenix MCP** 面板，從**文件**選單中選擇**指南**。它說明每個視窗和設定、智慧體可以做什麼、權限、能力、MESA、安全性和管理 API，並且支援搜尋。
 
-第一次使用？請從**[快速入門](https://leecaochang.github.io/Phoenix-MCP/quickstart.html)**開始：它會建立您的第一個存取金鑰，為其授予一台裝置的存取權限，然後讓您選擇直接在 Home Assistant 內對話或連接外部智慧體。無論選擇哪種方式，幾分鐘即可完成。
+第一次使用？開啟 **Phoenix MCP** 面板，在存取金鑰中選擇**設定智慧體**。它會建立您的第一個存取金鑰，決定它可以做什麼，然後讓您直接在 Home Assistant 內對話或連接外部應用程式，最後以一個您可以即時觀察的測試結束。
 
 ## 需求
 
@@ -38,7 +38,7 @@ Phoenix MCP 完全執行於 Home Assistant 內部：無需另行部署服務，�
 
 ### 設定
 
-前往**設定 > 裝置與服務 > 新增整合**，搜尋 **Phoenix MCP**。完成這個單步驟設定流程，然後開啟側邊欄中的 **Phoenix MCP** 面板。之後請按照[快速入門](https://leecaochang.github.io/Phoenix-MCP/quickstart.html)繼續操作。
+前往**設定 > 裝置與服務 > 新增整合**，搜尋 **Phoenix MCP**。完成這個單步驟設定流程，然後開啟側邊欄中的 **Phoenix MCP** 面板並選擇**設定智慧體**。
 
 ## 問題與回饋
 

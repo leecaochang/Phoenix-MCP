@@ -10,8 +10,6 @@
       "copiedToClipboard": "已复制到剪贴板",
       "copy": "复制",
       "diff": "差异",
-      "docsAria": "{label} 文档",
-      "docsTitle": "点击查看文档",
       "empty": "（空）",
       "httpStatus": "服务器返回了 HTTP {status}。请刷新后重试。",
       "invalidResponse": "服务器返回了无效响应。请刷新后重试。",

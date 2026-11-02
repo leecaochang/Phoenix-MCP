@@ -18,28 +18,6 @@ export function ErrorMsg({ msg }: { msg: string }) {
   return <div className="banner banner-error" role="alert">{msg}</div>;
 }
 
-// The documentation is a hosted site, not a copy shipped inside the integration,
-// so every help link leaves Home Assistant. Exported because index.tsx links the
-// site root from the tab bar and the two must not drift.
-export const DOCS_BASE_URL = "https://leecaochang.github.io/Phoenix-MCP/";
-
-// Small "?" badge next to a Settings tab card's label, linking out to the
-// matching section of the documentation site.
-export function DocsHelpLink({ path, label }: { path: string; label: string }) {
-  return (
-    <a
-      className="docs-help-link"
-      href={DOCS_BASE_URL + path}
-      target="_blank"
-      rel="noopener noreferrer"
-      title={t("common.docsTitle")}
-      aria-label={t("common.docsAria", { label })}
-    >
-      ?
-    </a>
-  );
-}
-
 export function RefreshIcon() {
   return <Icon name="refresh" size={15} style={{ display: "block" }} />;
 }

@@ -426,9 +426,7 @@ def test_the_floor_is_stated_identically_everywhere() -> None:
         f"The README badge does not read {major_minor}+."
     )
 
-    for page, needle in (
-        ("index.html", f"HA {major_minor}+"),
-        ("install.html", f"{MIN_HA_VERSION} or later"),
-    ):
-        html = (ROOT / "docs" / page).read_text(encoding="utf-8")
-        assert needle in html, f"docs/{page} does not state the floor as {needle!r}."
+    install = (ROOT / "frontend_src" / "guide" / "topics" / "en" / "topic.install.md").read_text(encoding="utf-8")
+    assert f"Home Assistant {MIN_HA_VERSION} or newer" in install, (
+        f"The Guide's install page does not state the floor as {MIN_HA_VERSION}."
+    )

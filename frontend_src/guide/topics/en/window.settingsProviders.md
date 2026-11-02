@@ -92,7 +92,7 @@ These limits apply while a decision provider is in use.
 
 ### {{label:routing.decisionBudget}} {#decision-timeout}
 
-How long Phoenix waits for the decision provider: 250 to 30,000 milliseconds (default 5,000). If the prompt times out, the request goes to your main AI model as usual.
+How long Phoenix waits for the decision provider, from 250 to 30,000 milliseconds (default 5,000). If the prompt times out, the request goes to your main AI model as usual.
 
 ### {{label:routing.requestLimit}} {#decision-request-limit}
 

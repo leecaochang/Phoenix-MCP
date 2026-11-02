@@ -110,8 +110,6 @@
       "copiedToClipboard": "Skopiowano do schowka",
       "copy": "Kopiuj",
       "diff": "Diff",
-      "docsAria": "Dokumentacja {label}",
-      "docsTitle": "Kliknij, aby przeczytać dokumentację",
       "empty": "(puste)",
       "httpStatus": "Serwer odpowiedział kodem HTTP {status}. Odśwież stronę i spróbuj ponownie.",
       "invalidResponse": "Serwer zwrócił nieprawidłową odpowiedź. Odśwież i spróbuj ponownie.",

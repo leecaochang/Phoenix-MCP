@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 from datetime import timedelta
-from html import unescape
 import json
 from pathlib import Path
 import re
@@ -735,10 +734,10 @@ async def test_requested_events_keep_identical_requests_separate(hass, store):
 
 
 async def test_documented_notification_automation_only_opens_bound_review(hass, store):
-    page = (Path(__file__).resolve().parents[1] / "docs/panel.html").read_text()
-    example = re.search(r'<code id="approval-notification-example">(.*?)</code>', page, re.DOTALL)
+    page = (Path(__file__).resolve().parents[1] / "frontend_src/guide/topics/en/topic.running.md").read_text()
+    example = re.search(r"```yaml\n(.*?event_type: phoenix_mcp_approval_requested.*?)```", page, re.DOTALL)
     assert example is not None
-    config = yaml.safe_load(unescape(example.group(1)))
+    config = yaml.safe_load(example.group(1))
     notifications = []
 
     @callback

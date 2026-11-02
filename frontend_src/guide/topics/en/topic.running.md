@@ -1,5 +1,5 @@
 ---
-{ "id": "topic.running", "title": "Running Phoenix", "parent": "topic.about", "order": 50, "keywords": ["operations", "day to day", "monitor", "automate"], "sectionKeywords": { "sensors": ["sensor", "telemetry", "Request Count", "Denied Count", "Rate Limit Hits", "Last Access", "Expires In", "Status", "device", "statistics"], "events": ["event", "automation trigger", "phoenix_mcp_access_key_revoked", "phoenix_mcp_access_key_rotated", "phoenix_mcp_access_key_expired", "phoenix_mcp_rate_limited", "event data"], "approval-events": ["phoenix_mcp_approval_requested", "phoenix_mcp_approval_resolved", "phoenix_mcp_approval_claimed", "phoenix_mcp_config_changed"], "mesa-events": ["phoenix_mcp_mesa_blocked", "phoenix_mcp_mesa_lease_expired"], "notifications": ["notification_id", "persistent notification", "dismiss"], "storage": [".storage", "files", "backup", "phoenix_mcp_audit", "phoenix_mcp_conversations"] }, "covers": ["custom_components/phoenix_mcp/sensor.py", "custom_components/phoenix_mcp/approvals.py", "custom_components/phoenix_mcp/helpers.py", "custom_components/phoenix_mcp/admin_view.py", "custom_components/phoenix_mcp/mesa.py", "custom_components/phoenix_mcp/tool_common.py", "custom_components/phoenix_mcp/const.py"] }
+{ "id": "topic.running", "title": "Running Phoenix", "parent": "topic.about", "order": 50, "keywords": ["operations", "day to day", "monitor", "automate"], "sectionKeywords": { "sensors": ["sensor", "telemetry", "Request Count", "Denied Count", "Rate Limit Hits", "Last Access", "Expires In", "Status", "entity ID", "device", "statistics"], "events": ["event", "automation trigger", "phoenix_mcp_access_key_revoked", "phoenix_mcp_access_key_rotated", "phoenix_mcp_access_key_expired", "phoenix_mcp_rate_limited", "event data"], "approval-events": ["phoenix_mcp_approval_requested", "phoenix_mcp_approval_resolved", "phoenix_mcp_approval_claimed", "phoenix_mcp_config_changed", "phone notification", "mobile app", "notify approval"], "mesa-events": ["phoenix_mcp_mesa_blocked", "phoenix_mcp_mesa_lease_expired"], "notifications": ["notification_id", "persistent notification", "dismiss"], "storage": [".storage", "files", "backup", "phoenix_mcp_audit", "phoenix_mcp_conversations"] }, "covers": ["custom_components/phoenix_mcp/sensor.py", "custom_components/phoenix_mcp/approvals.py", "custom_components/phoenix_mcp/helpers.py", "custom_components/phoenix_mcp/admin_view.py", "custom_components/phoenix_mcp/mesa.py", "custom_components/phoenix_mcp/tool_common.py", "custom_components/phoenix_mcp/const.py"] }
 ---
 Phoenix adds a few things to Home Assistant to help you watch it and automate around it. Each access key gets sensors, and Phoenix fires events and shows notifications. This page also lists where Phoenix keeps its data.
 
@@ -13,6 +13,17 @@ Each active access key appears in Home Assistant as a device named "Phoenix MCP 
 - **Rate Limit Hits**: requests refused for the rate limit.
 - **Last Access**: the last request from an external app, to the minute. Agent Chat, Voice, AI Task and Assist don't change it.
 - **Expires In**: days until the key expires, or unknown if it never does.
+
+Each sensor's entity ID is `sensor.phoenix_mcp_access_key_`, then the key's name and the sensor's. For a key named My Access Key:
+
+```text
+sensor.phoenix_mcp_access_key_my_access_key_status
+sensor.phoenix_mcp_access_key_my_access_key_request_count
+sensor.phoenix_mcp_access_key_my_access_key_denied_count
+sensor.phoenix_mcp_access_key_my_access_key_rate_limit_hits
+sensor.phoenix_mcp_access_key_my_access_key_last_access
+sensor.phoenix_mcp_access_key_my_access_key_expires_in
+```
 
 The three counts are kept in memory, so they start again from 0 when Home Assistant restarts or Phoenix reloads. They keep counting when logging is off.
 
@@ -39,6 +50,32 @@ Deleting core data or removing the integration doesn't fire revoked or expired e
 - `phoenix_mcp_config_changed`: a change was recorded in Changes. Data: `resource_type`, `resource_id`, `action`.
 
 A `status` of approved means you approved it, not that the action worked. A safety-copy review uses the access key ID `__configuration_recovery__`.
+
+To get a phone notification that opens the request, use an automation like this one, with your phone's notify action in place of `notify.mobile_app_your_device`. The condition makes sure the link really leads to this request's review page.
+
+```yaml
+alias: Phoenix approval notifications
+triggers:
+  - trigger: event
+    event_type: phoenix_mcp_approval_requested
+conditions:
+  - condition: template
+    value_template: >-
+      {% set path = trigger.event.data.get('review_url', '') %}
+      {{ path is string and
+         path | regex_match('^/phoenix-mcp/approvals/appr_[0-9a-f]{16}$') and
+         path == '/phoenix-mcp/approvals/' ~ trigger.event.data.get('approval_id', '') }}
+actions:
+  - action: notify.mobile_app_your_device
+    data:
+      title: Phoenix MCP approval
+      message: Review the pending request in Phoenix MCP.
+      data:
+        tag: "phoenix_approval_{{ trigger.event.data.approval_id }}"
+        url: "{{ trigger.event.data.review_url }}"
+        clickAction: "{{ trigger.event.data.review_url }}"
+mode: queued
+```
 
 Related: [How an Approval Works](guide:topic.approvalLifecycle), [Safety copies](guide:topic.configurationHistory#recovery)
 

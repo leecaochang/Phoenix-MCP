@@ -1921,8 +1921,6 @@
       "copiedToClipboard": "In die Zwischenablage kopiert",
       "copy": "Kopieren",
       "diff": "Diff",
-      "docsAria": "{label}-Dokumentation",
-      "docsTitle": "Klicken, um die Dokumentation zu lesen",
       "empty": "(leer)",
       "httpStatus": "Der Server hat mit HTTP {status} geantwortet. Laden Sie die Seite neu und versuchen Sie es erneut.",
       "invalidResponse": "Der Server hat eine ungültige Antwort zurückgegeben. Aktualisiere die Seite und versuche es erneut.",

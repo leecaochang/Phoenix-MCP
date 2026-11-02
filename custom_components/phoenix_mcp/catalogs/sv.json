@@ -1253,8 +1253,6 @@
       "copiedToClipboard": "Kopierat till urklipp",
       "copy": "Kopiera",
       "diff": "Diff",
-      "docsAria": "Dokumentation för {label}",
-      "docsTitle": "Klicka för att läsa dokumentationen",
       "empty": "(tomt)",
       "httpStatus": "Servern svarade med HTTP {status}. Uppdatera och försök igen.",
       "invalidResponse": "Servern returnerade ett ogiltigt svar. Uppdatera och försök igen.",

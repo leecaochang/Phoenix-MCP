@@ -10,8 +10,6 @@
       "copiedToClipboard": "Copied to clipboard",
       "copy": "Copy",
       "diff": "Diff",
-      "docsAria": "{label} documentation",
-      "docsTitle": "Click to read the documentation",
       "empty": "(empty)",
       "httpStatus": "The server answered with HTTP {status}. Refresh and try again.",
       "invalidResponse": "The server returned an invalid response. Refresh and try again.",

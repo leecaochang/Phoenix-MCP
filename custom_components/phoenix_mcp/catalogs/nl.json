@@ -110,8 +110,6 @@
       "copiedToClipboard": "Naar klembord gekopieerd",
       "copy": "Kopiëren",
       "diff": "Diff",
-      "docsAria": "{label} documentatie",
-      "docsTitle": "Klik om de documentatie te lezen",
       "empty": "(leeg)",
       "httpStatus": "De server antwoordde met HTTP {status}. Vernieuw de pagina en probeer het opnieuw.",
       "invalidResponse": "De server heeft een ongeldig antwoord teruggegeven. Vernieuw en probeer opnieuw.",

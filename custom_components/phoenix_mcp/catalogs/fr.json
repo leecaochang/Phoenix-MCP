@@ -10,8 +10,6 @@
       "copiedToClipboard": "Copié dans le presse-papiers",
       "copy": "Copier",
       "diff": "Comparaison",
-      "docsAria": "Documentation de {label}",
-      "docsTitle": "Cliquez pour lire la documentation",
       "empty": "(vide)",
       "httpStatus": "Le serveur a répondu avec le code HTTP {status}. Actualisez et réessayez.",
       "invalidResponse": "Le serveur a renvoyé une réponse invalide. Actualisez et réessayez.",

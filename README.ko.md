@@ -19,9 +19,9 @@ Phoenix MCP는 Home Assistant 내부에서 완전히 실행됩니다. 별도로 
 
 ## 문서
 
-도구 레퍼런스, 권한, 기능, MESA, 관리 API를 포함한 전체 문서는 **[leecaochang.github.io/Phoenix-MCP](https://leecaochang.github.io/Phoenix-MCP/)**에 있습니다. 패널의 도움말 링크도 이곳을 가리킵니다.
+매뉴얼은 패널에 내장되어 있습니다. **Phoenix MCP** 패널을 열고 **문서** 메뉴에서 **가이드**를 선택하세요. 모든 창과 설정, 에이전트가 할 수 있는 일, 권한, 기능, MESA, 보안, 관리 API를 설명하며 검색할 수도 있습니다.
 
-처음이신가요? **[빠른 시작](https://leecaochang.github.io/Phoenix-MCP/quickstart.html)**부터 시작하세요. 첫 액세스 키를 만들고 기기 하나에 권한을 부여한 다음, Home Assistant 내부에서 채팅할지 외부 에이전트를 연결할지 선택할 수 있습니다. 어느 쪽이든 몇 분이면 됩니다.
+처음이신가요? **Phoenix MCP** 패널을 열고 액세스 키에서 **에이전트 설정**을 선택하세요. 첫 액세스 키를 만들고 키가 할 수 있는 일을 정한 다음, Home Assistant 내부에서 채팅하거나 외부 앱을 연결할 수 있게 하며, 직접 지켜볼 수 있는 테스트로 마무리됩니다.
 
 ## 요구 사항
 
@@ -38,7 +38,7 @@ Phoenix MCP는 Home Assistant 내부에서 완전히 실행됩니다. 별도로 
 
 ### 설정
 
-**설정 > 기기 및 서비스 > 통합 구성 요소 추가**로 이동하여 **Phoenix MCP**를 검색하세요. 단일 단계 구성 흐름을 완료한 다음 사이드바에서 **Phoenix MCP** 패널을 여세요. 이후에는 [빠른 시작](https://leecaochang.github.io/Phoenix-MCP/quickstart.html)을 따르면 됩니다.
+**설정 > 기기 및 서비스 > 통합 구성 요소 추가**로 이동하여 **Phoenix MCP**를 검색하세요. 단일 단계 구성 흐름을 완료한 다음 사이드바에서 **Phoenix MCP** 패널을 열고 **에이전트 설정**을 선택하세요.
 
 ## 문제 및 피드백
 

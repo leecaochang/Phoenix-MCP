@@ -42,32 +42,6 @@ it("defines every Phoenix CSS variable or provides a fallback", () => {
   expect(missing.map((m) => m[1])).toEqual([]);
 });
 
-it("keeps documentation buttons, signals and focus rings legible in both themes", () => {
-  const docs = readFileSync("docs/assets/phoenix-mcp-docs.css", "utf8");
-  const read = (block: string) => Object.fromEntries([...block.matchAll(/(--[\w-]+):\s*([^;]+);/g)].map((m) => [m[1], m[2].trim()]));
-  const base = read(docs.match(/:root\s*\{([^}]+)/)![1]);
-  const night = { ...base, ...read(docs.match(/:root\[data-theme="dark"\]\s*\{([^}]+)/)![1]) };
-  for (const values of [base, night]) {
-    expect(contrast(rgb(values["--button-ink"]), rgb(values["--button-bg"]))).toBeGreaterThanOrEqual(4.5);
-    for (const surface of ["--bg", "--surface", "--surface-2", "--surface-3"]) {
-      const background = rgb(values[surface]);
-      expect(contrast(rgb(values["--accent-deep"]), background)).toBeGreaterThanOrEqual(4.5);
-      expect(contrast(rgb(values["--ink-3"]), background)).toBeGreaterThanOrEqual(4.5);
-      for (const status of ["success", "error", "warn", "st-yellow", "st-green", "st-red"]) {
-        const tint = rgb(values[`--${status}-bg`]);
-        const blended = background.map((v, i) => tint[i] * tint[3] + v * (1 - tint[3]));
-        expect(contrast(rgb(values[`--${status}`]), blended), `${surface} ${status}`).toBeGreaterThanOrEqual(4.5);
-      }
-      const wash = rgb(values["--accent-wash"]);
-      const washed = background.map((v, i) => wash[i] * wash[3] + v * (1 - wash[3]));
-      expect(contrast(rgb(values["--accent-deep"]), washed)).toBeGreaterThanOrEqual(4.5);
-      const tint = rgb(values["--st-grey-bg"]);
-      const blended = background.map((v, i) => tint[i] * tint[3] + v * (1 - tint[3]));
-      expect(contrast(rgb(values["--st-grey"]), blended)).toBeGreaterThanOrEqual(4.5);
-    }
-  }
-});
-
 const forcedDark = { ...light, ...tokens(css.match(/:host\(.phx-theme-dark\)\s*\{([^}]+)/)![1]) };
 it.each([["light", light], ["auto dark", dark], ["forced dark", forcedDark]] as const)("keeps %s destructive controls readable", (_theme, values) => {
   const declarations = (selector: string) => {
@@ -79,18 +53,6 @@ it.each([["light", light], ["auto dark", dark], ["forced dark", forcedDark]] as 
     const rule = declarations(selector);
     expect(rule.background, selector).toBeTruthy();
     expect(contrast(color(rule.color), color(rule.background)), selector).toBeGreaterThanOrEqual(4.5);
-  }
-});
-
-it("provides a visible keyboard ring and hides closed documentation drawers", () => {
-  const styles = readFileSync("docs/assets/phoenix-mcp-docs.css", "utf8");
-  const ring = styles.match(/:focus-visible\s*\{([^}]+)\}/)![1];
-  expect(ring).toMatch(/outline:\s*[3-9]px solid /);
-  for (const selector of ["body[data-home] .sidebar", ".sidebar"]) {
-    const blocks = [...styles.matchAll(/([^{}]+)\{([^{}]+)\}/g)];
-    const drawers = blocks.filter((block) => block[1].trim() === selector && block[2].includes("translateX"));
-    expect(drawers.length, selector).toBeGreaterThan(0);
-    expect(drawers.some((block) => /visibility:\s*hidden/.test(block[2])), selector).toBe(true);
   }
 });
 

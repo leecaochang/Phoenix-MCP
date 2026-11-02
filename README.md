@@ -19,9 +19,9 @@ The panel currently supports English, Spanish, French, Italian, German, Dutch, P
 
 ## Documentation
 
-The full documentation, including the tool reference, permissions, capabilities, MESA, and the admin API, is at **[leecaochang.github.io/Phoenix-MCP](https://leecaochang.github.io/Phoenix-MCP/)**. The panel's help links point there.
+The manual is built into the panel: open the **Phoenix MCP** panel and choose **Guide** from the **Documentation** menu. It explains every window and setting, what agents can do, permissions, capabilities, MESA, security and the admin API, and you can search it.
 
-New here? Start with the **[Quick start](https://leecaochang.github.io/Phoenix-MCP/quickstart.html)**: it creates your first access key, grants it one device, then lets you choose whether to chat from inside Home Assistant or connect an external agent, in a few minutes either way.
+New here? Open the **Phoenix MCP** panel and choose **Set Up an Agent** in Access Keys. It creates your first access key, decides what it can do, then lets you chat from inside Home Assistant or connect an external app, and ends with a test you can watch.
 
 ## Requirements
 
@@ -38,7 +38,7 @@ Prefer to install by hand? Copy the `custom_components/phoenix_mcp` folder into 
 
 ### Set up
 
-Go to **Settings > Devices & services > Add integration** and search for **Phoenix MCP**. Click through the single-step config flow, then open the **Phoenix MCP** panel in your sidebar. The [Quick start](https://leecaochang.github.io/Phoenix-MCP/quickstart.html) takes it from there.
+Go to **Settings > Devices & services > Add integration** and search for **Phoenix MCP**. Click through the single-step config flow, then open the **Phoenix MCP** panel in your sidebar and choose **Set Up an Agent**.
 
 ## Issues and feedback
 

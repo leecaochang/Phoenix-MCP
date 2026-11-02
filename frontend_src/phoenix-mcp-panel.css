@@ -2500,24 +2500,6 @@ hui-card, .dash-preview-card-slot { display: block; min-width: 0; }
   display: flex; align-items: center; gap: 6px;
   font-size: 12px; font-weight: 600; color: var(--phx-text-2);
 }
-/* A muted treatment on purpose: these
-   are help affordances, not warnings, and a saturated yellow badge repeated on
-   every card read as a row of alerts. Theme tokens rather than fixed hexes, so
-   it follows dark mode instead of staying bright on a dark surface. It keeps a
-   comfortable hit target, and it takes --phx-text rather than the muted
-   --phx-text-2 for the glyph: the circle reads the same, but --phx-text-2 on
-   this background is 4.4:1, just under the contrast floor for text. */
-.docs-help-link {
-  display: inline-flex; align-items: center; justify-content: center;
-  width: 16px; height: 16px; margin-left: 6px; border-radius: 50%; flex: 0 0 auto;
-  background: var(--phx-border); color: var(--phx-text);
-  font-size: 11px; font-weight: 700; line-height: 1;
-  text-decoration: none; cursor: pointer;
-}
-.docs-help-link:hover, .docs-help-link:focus-visible {
-  background: var(--phx-accent); color: #fff;
-  outline: 2px solid var(--phx-accent); outline-offset: 1px;
-}
 .combo { position: relative; }
 .combo-list {
   position: absolute; z-index: var(--phx-z-dropdown); top: calc(100% + 2px); left: 0; right: 0;

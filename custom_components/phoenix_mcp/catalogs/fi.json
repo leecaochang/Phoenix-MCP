@@ -1253,8 +1253,6 @@
       "copiedToClipboard": "Kopioitu leikepöydälle",
       "copy": "Kopioi",
       "diff": "Vertailu",
-      "docsAria": "{label}-dokumentaatio",
-      "docsTitle": "Napsauta lukeaksesi dokumentaation",
       "empty": "(tyhjä)",
       "httpStatus": "Palvelin vastasi HTTP-tilakoodilla {status}. Päivitä ja yritä uudelleen.",
       "invalidResponse": "Palvelin palautti virheellisen vastauksen. Päivitä ja yritä uudelleen.",

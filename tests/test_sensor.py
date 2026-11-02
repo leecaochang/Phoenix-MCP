@@ -658,7 +658,7 @@ class TestAccessKeyRenameKeepsSensorIdentity:
 async def test_generated_entity_ids_match_the_documentation(hass, enable_custom_integrations, registered_prefix):
     """New IDs match the docs while registered legacy and custom IDs survive setup.
 
-    docs/operations.html lists these IDs for operators to use in dashboards and
+    The Guide's Running Phoenix page lists these IDs for operators to use in dashboards and
     automations. The entity platform composes the `has_entity_name` device name and
     entity name into the object id; a hand-built registry row skips that step, so
     the sensors are added through a real EntityPlatform.
@@ -727,7 +727,8 @@ async def test_generated_entity_ids_match_the_documentation(hass, enable_custom_
     # mention this string" check would bind nothing: HA could generate
     # `..._wrong_status` and every assertion would still pass.
     docs = (
-        pathlib.Path(__file__).resolve().parent.parent / "docs" / "operations.html"
+        pathlib.Path(__file__).resolve().parent.parent
+        / "frontend_src" / "guide" / "topics" / "en" / "topic.running.md"
     ).read_text(encoding="utf-8")
 
     generated = {s._sensor_type: s.entity_id for s in sensors}
@@ -737,7 +738,7 @@ async def test_generated_entity_ids_match_the_documentation(hass, enable_custom_
     }
     expected = registered or documented
     assert generated == expected, (
-        "Home Assistant generates different entity IDs than docs/operations.html "
+        "Home Assistant generates different entity IDs than the Guide "
         "documents. Operators copy these into dashboards and automations.\n"
         f"  generated: {generated}\n  expected: {expected}"
     )
@@ -751,7 +752,7 @@ async def test_generated_entity_ids_match_the_documentation(hass, enable_custom_
     # without correcting the page cannot pass.
     for sensor_type, entity_id in documented.items():
         assert entity_id in docs, (
-            f"docs/operations.html does not list {entity_id} for the "
+            f"The Guide's Running Phoenix page does not list {entity_id} for the "
             f"{sensor_type} sensor."
         )
 

@@ -19,9 +19,9 @@ Panelen stöder för närvarande engelska, spanska, franska, italienska, tyska, 
 
 ## Dokumentation
 
-Den fullständiga dokumentationen, inklusive verktygsreferensen, behörigheter, funktioner, MESA och admin-API:t, finns på **[leecaochang.github.io/Phoenix-MCP](https://leecaochang.github.io/Phoenix-MCP/)**. Panelens hjälplänkar pekar dit.
+Handboken är inbyggd i panelen: öppna panelen **Phoenix MCP** och välj **Guide** i menyn **Dokumentation**. Den förklarar varje fönster och inställning, vad agenter kan göra, behörigheter, funktioner, MESA, säkerhet och admin-API:t, och du kan söka i den.
 
-Ny här? Börja med **[Snabbstart](https://leecaochang.github.io/Phoenix-MCP/quickstart.html)**: den skapar din första åtkomstnyckel, ger den en enhet och låter dig sedan välja om du vill chatta inifrån Home Assistant eller ansluta en extern agent, på några minuter hur du än gör.
+Ny här? Öppna panelen **Phoenix MCP** och välj **Konfigurera en agent** under Åtkomstnycklar. Den skapar din första åtkomstnyckel, bestämmer vad den får göra, låter dig sedan chatta inifrån Home Assistant eller ansluta en extern app och avslutas med ett test som du kan följa.
 
 ## Krav
 
@@ -38,7 +38,7 @@ Föredrar du att installera manuellt? Kopiera mappen `custom_components/phoenix_
 
 ### Konfigurera
 
-Gå till **Inställningar > Enheter och tjänster > Lägg till integration** och sök efter **Phoenix MCP**. Klicka igenom konfigurationsflödet med ett steg och öppna sedan panelen **Phoenix MCP** i sidofältet. [Snabbstart](https://leecaochang.github.io/Phoenix-MCP/quickstart.html) tar det därifrån.
+Gå till **Inställningar > Enheter och tjänster > Lägg till integration** och sök efter **Phoenix MCP**. Klicka igenom konfigurationsflödet med ett steg, öppna sedan panelen **Phoenix MCP** i sidofältet och välj **Konfigurera en agent**.
 
 ## Problem och återkoppling
 

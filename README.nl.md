@@ -19,9 +19,9 @@ Het paneel ondersteunt momenteel Engels, Spaans, Frans, Italiaans, Duits, Nederl
 
 ## Documentatie
 
-De volledige documentatie, inclusief de toolreferentie, machtigingen, mogelijkheden, MESA en de admin-API, staat op **[leecaochang.github.io/Phoenix-MCP](https://leecaochang.github.io/Phoenix-MCP/)**. De helplinks van het paneel verwijzen daarheen.
+De handleiding is ingebouwd in het paneel: open het **Phoenix MCP**-paneel en kies **Gids** in het menu **Documentatie**. Hij legt elk venster en elke instelling uit, wat agents kunnen doen, machtigingen, mogelijkheden, MESA, beveiliging en de admin-API, en je kunt erin zoeken.
 
-Nieuw hier? Begin met de **[Snelstart](https://leecaochang.github.io/Phoenix-MCP/quickstart.html)**: hiermee maak je je eerste toegangssleutel, geef je deze toegang tot één apparaat en kies je vervolgens of je vanuit Home Assistant wilt chatten of een externe agent wilt verbinden; beide binnen enkele minuten.
+Nieuw hier? Open het **Phoenix MCP**-paneel en kies **Een agent instellen** bij Toegangssleutels. Hiermee maak je je eerste toegangssleutel, bepaal je wat deze mag doen, kun je daarna vanuit Home Assistant chatten of een externe app verbinden, en sluit je af met een test die je kunt volgen.
 
 ## Vereisten
 
@@ -38,7 +38,7 @@ Liever handmatig installeren? Kopieer de map `custom_components/phoenix_mcp` naa
 
 ### Instellen
 
-Ga naar **Instellingen > Apparaten en services > Integratie toevoegen** en zoek naar **Phoenix MCP**. Doorloop de configuratiestap en open vervolgens het **Phoenix MCP**-paneel in de zijbalk. De [Snelstart](https://leecaochang.github.io/Phoenix-MCP/quickstart.html) neemt het vanaf daar over.
+Ga naar **Instellingen > Apparaten en services > Integratie toevoegen** en zoek naar **Phoenix MCP**. Doorloop de configuratiestap, open vervolgens het **Phoenix MCP**-paneel in de zijbalk en kies **Een agent instellen**.
 
 ## Problemen en feedback
 

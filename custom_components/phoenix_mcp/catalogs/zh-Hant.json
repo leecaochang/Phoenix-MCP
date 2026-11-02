@@ -1050,8 +1050,6 @@
       "copiedToClipboard": "已複製到剪貼簿",
       "copy": "複製",
       "diff": "差異",
-      "docsAria": "{label} 文件",
-      "docsTitle": "點選檢視文件",
       "empty": "（空）",
       "httpStatus": "伺服器傳回了 HTTP {status}。請重新整理後再試。",
       "invalidResponse": "伺服器傳回了無效回應。請重新整理後再試。",

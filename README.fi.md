@@ -19,9 +19,9 @@ Paneeli tukee tällä hetkellä englantia, espanjaa, ranskaa, italiaa, saksaa, h
 
 ## Dokumentaatio
 
-Täydellinen dokumentaatio, mukaan lukien työkaluluettelo, käyttöoikeudet, ominaisuudet, MESA ja ylläpito-API, on osoitteessa **[leecaochang.github.io/Phoenix-MCP](https://leecaochang.github.io/Phoenix-MCP/)**. Paneelin ohjelinkit osoittavat sinne.
+Käyttöohje on rakennettu paneeliin: avaa **Phoenix MCP** -paneeli ja valitse **Dokumentaatio**-valikosta **Opas**. Se selittää jokaisen ikkunan ja asetuksen, mitä agentit voivat tehdä, käyttöoikeudet, ominaisuudet, MESA:n, tietoturvan ja ylläpito-API:n, ja voit hakea siitä.
 
-Uusi täällä? Aloita **[Pika-aloitus](https://leecaochang.github.io/Phoenix-MCP/quickstart.html)**: se luo ensimmäisen käyttöavaimesi, myöntää sille yhden laitteen ja antaa sinun valita, keskusteletko Home Assistant -sovelluksen sisällä vai yhdistätkö ulkoisen agentin, kummassakin tapauksessa muutamassa minuutissa.
+Uusi täällä? Avaa **Phoenix MCP** -paneeli ja valitse Käyttöavaimet-kohdasta **Määritä agentti**. Se luo ensimmäisen käyttöavaimesi, määrittää, mitä avain saa tehdä, antaa sinun sitten keskustella Home Assistant -sovelluksen sisällä tai yhdistää ulkoisen sovelluksen ja päättyy testiin, jota voit seurata.
 
 ## Vaatimukset
 
@@ -38,7 +38,7 @@ Haluatko asentaa käsin? Kopioi `custom_components/phoenix_mcp`-kansio Home Assi
 
 ### Käyttöönotto
 
-Siirry kohtaan **Asetukset > Laitteet ja palvelut > Lisää integraatio** ja etsi **Phoenix MCP**. Klikkaa läpi yksivaiheinen konfigurointivirta ja avaa sitten **Phoenix MCP** -paneeli sivupalkista. [Pika-aloitus](https://leecaochang.github.io/Phoenix-MCP/quickstart.html) jatkaa siitä.
+Siirry kohtaan **Asetukset > Laitteet ja palvelut > Lisää integraatio** ja etsi **Phoenix MCP**. Klikkaa läpi yksivaiheinen konfigurointivirta, avaa sitten **Phoenix MCP** -paneeli sivupalkista ja valitse **Määritä agentti**.
 
 ## Ongelmat ja palaute
 

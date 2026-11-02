@@ -10,8 +10,6 @@
       "copiedToClipboard": "クリップボードにコピーしました",
       "copy": "コピー",
       "diff": "差分",
-      "docsAria": "{label} のドキュメント",
-      "docsTitle": "クリックしてドキュメントを読む",
       "empty": "（空）",
       "httpStatus": "サーバーが HTTP {status} を返しました。更新して再試行してください。",
       "invalidResponse": "サーバーから無効な応答が返されました。更新して再試行してください。",

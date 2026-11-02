@@ -2147,8 +2147,6 @@
       "copiedToClipboard": "Copiado al portapapeles",
       "copy": "Copiar",
       "diff": "Diferencias",
-      "docsAria": "Documentación de {label}",
-      "docsTitle": "Haga clic para leer la documentación",
       "empty": "(vacío)",
       "httpStatus": "El servidor respondió con HTTP {status}. Actualice e inténtelo de nuevo.",
       "invalidResponse": "El servidor devolvió una respuesta no válida. Actualiza e inténtalo de nuevo.",

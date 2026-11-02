@@ -31,9 +31,9 @@ Phoenix MCP 脱胎于一个被弃置的开源项目，它的名字也由此而�
 
 ## 文档
 
-完整文档包括工具参考、权限、功能、MESA 和管理 API，位于 **[leecaochang.github.io/Phoenix-MCP](https://leecaochang.github.io/Phoenix-MCP/)**。面板中的帮助链接也会指向这里。
+使用手册内置于面板中：打开 **Phoenix MCP** 面板，从**文档**菜单中选择**指南**。它介绍每个窗口和设置、智能体可以做什么、权限、功能、MESA、安全和管理 API，并且支持搜索。
 
-第一次使用？请从**[快速入门](https://leecaochang.github.io/Phoenix-MCP/quickstart.html)**开始：它会创建您的第一个访问密钥，为其授予一台设备的访问权限，然后让您选择直接在 Home Assistant 内对话或连接外部智能体。无论选择哪种方式，几分钟即可完成。
+第一次使用？打开 **Phoenix MCP** 面板，在访问密钥中选择**设置智能体**。它会创建您的第一个访问密钥，确定它可以做什么，然后让您直接在 Home Assistant 内对话或连接外部应用，最后以一个您可以实时观察的测试结束。
 
 ## 要求
 
@@ -50,7 +50,7 @@ Phoenix MCP 脱胎于一个被弃置的开源项目，它的名字也由此而�
 
 ### 设置
 
-前往**设置 > 设备与服务 > 添加集成**，搜索 **Phoenix MCP**。完成这个单步骤配置流程，然后打开侧边栏中的 **Phoenix MCP** 面板。之后请按照[快速入门](https://leecaochang.github.io/Phoenix-MCP/quickstart.html)继续操作。
+前往**设置 > 设备与服务 > 添加集成**，搜索 **Phoenix MCP**。完成这个单步骤配置流程，然后打开侧边栏中的 **Phoenix MCP** 面板并选择**设置智能体**。
 
 ## 问题与反馈
 

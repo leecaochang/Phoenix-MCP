@@ -19,9 +19,9 @@ Das Bedienfeld unterstützt derzeit Englisch, Spanisch, Französisch, Italienisc
 
 ## Dokumentation
 
-Die vollständige Dokumentation, einschließlich Werkzeugreferenz, Berechtigungen, Fähigkeiten, MESA und der Admin-API, finden Sie unter **[leecaochang.github.io/Phoenix-MCP](https://leecaochang.github.io/Phoenix-MCP/)**. Die Hilfe-Links des Bedienfelds führen dorthin.
+Das Handbuch ist in das Bedienfeld integriert: Öffnen Sie das **Phoenix MCP**-Bedienfeld und wählen Sie im Menü **Dokumentation** den Eintrag **Leitfaden**. Es erklärt jedes Fenster und jede Einstellung, was Agenten tun können, Berechtigungen, Fähigkeiten, MESA, Sicherheit und die Admin-API, und Sie können es durchsuchen.
 
-Neu hier? Beginnen Sie mit dem **[Schnellstart](https://leecaochang.github.io/Phoenix-MCP/quickstart.html)**: Er erstellt Ihren ersten Zugriffsschlüssel, gewährt ihm Zugriff auf ein Gerät und lässt Sie anschließend wählen, ob Sie direkt in Home Assistant chatten oder einen externen Agenten verbinden möchten. Beides dauert nur wenige Minuten.
+Neu hier? Öffnen Sie das **Phoenix MCP**-Bedienfeld und wählen Sie unter Zugriffsschlüssel **Agenten einrichten**. Die Einrichtung erstellt Ihren ersten Zugriffsschlüssel, legt fest, was er darf, lässt Sie dann direkt in Home Assistant chatten oder eine externe App verbinden und endet mit einem Test, den Sie mitverfolgen können.
 
 ## Voraussetzungen
 
@@ -38,7 +38,7 @@ Möchten Sie lieber manuell installieren? Kopieren Sie den Ordner `custom_compon
 
 ### Einrichtung
 
-Öffnen Sie **Einstellungen > Geräte & Dienste > Integration hinzufügen** und suchen Sie nach **Phoenix MCP**. Durchlaufen Sie den einstufigen Einrichtungsablauf und öffnen Sie anschließend das **Phoenix MCP**-Bedienfeld in der Seitenleiste. Der [Schnellstart](https://leecaochang.github.io/Phoenix-MCP/quickstart.html) führt Sie von dort weiter.
+Öffnen Sie **Einstellungen > Geräte & Dienste > Integration hinzufügen** und suchen Sie nach **Phoenix MCP**. Durchlaufen Sie den einstufigen Einrichtungsablauf, öffnen Sie anschließend das **Phoenix MCP**-Bedienfeld in der Seitenleiste und wählen Sie **Agenten einrichten**.
 
 ## Probleme und Feedback
 

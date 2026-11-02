@@ -1987,8 +1987,6 @@
       "copiedToClipboard": "Copiato negli appunti",
       "copy": "Copia",
       "diff": "Differenze",
-      "docsAria": "Documentazione di {label}",
-      "docsTitle": "Fai clic per leggere la documentazione",
       "empty": "(vuoto)",
       "httpStatus": "Il server ha risposto con HTTP {status}. Aggiorna e riprova.",
       "invalidResponse": "Il server ha restituito una risposta non valida. Aggiorna e riprova.",

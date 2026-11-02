@@ -1253,8 +1253,6 @@
       "copiedToClipboard": "Kopieret til udklipsholderen",
       "copy": "Kopiér",
       "diff": "Diff",
-      "docsAria": "{label}-dokumentation",
-      "docsTitle": "Klik for at læse dokumentationen",
       "empty": "(tom)",
       "httpStatus": "Serveren svarede med HTTP {status}. Opdatér siden, og prøv igen.",
       "invalidResponse": "Serveren returnerede et ugyldigt svar. Opdatér og prøv igen.",
