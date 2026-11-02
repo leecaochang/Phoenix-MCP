@@ -173,8 +173,8 @@ export function LogDetailsContent() {
       <div className="phx-log-details-bar">
         <h3 className="audit-section-title">{value.kind === "audit" ? t("audit.detailTitle") : t("conversations.conversation")}</h3>
         <div className="phx-log-details-nav" data-guide="window.logDetails#step">
-          <ActionButton icon="previous" label={t("workspace.previousRecord")} disabled={at <= 0} onClick={() => selection.step(-1)} className="btn btn-outline btn-sm" />
-          <ActionButton icon="next" label={t("workspace.nextRecord")} disabled={at < 0 || at >= value.ordered.length - 1} onClick={() => selection.step(1)} className="btn btn-outline btn-sm" />
+          <ActionButton icon="previous" label={t("workspace.previousRecord")} help="help.previousRecord" disabled={at <= 0} onClick={() => selection.step(-1)} className="btn btn-outline btn-sm" />
+          <ActionButton icon="next" label={t("workspace.nextRecord")} help="help.nextRecord" disabled={at < 0 || at >= value.ordered.length - 1} onClick={() => selection.step(1)} className="btn btn-outline btn-sm" />
         </div>
       </div>
       {value.kind === "audit"

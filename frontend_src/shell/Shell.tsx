@@ -461,17 +461,17 @@ export function Shell() {
     if (env !== "desktop") return [];
     const items: MenuEntry[] = [];
     if (windowId === CHAT_WINDOW) {
-      if (controller.id === "my") items.push({ id: "float-chat", label: t("agentchat.floatChat"), onSelect: () => removeFromMy(CHAT_WINDOW) });
+      if (controller.id === "my") items.push({ id: "float-chat", label: t("agentchat.floatChat"), help: t("help.menuFloatChat"), onSelect: () => removeFromMy(CHAT_WINDOW) });
     } else {
       if (controller.id !== "my" && canAddToMy(windowId)) {
-        items.push({ id: "add-my", label: t("workspace.addToMy"), disabled: myWindowsRef.current.includes(windowId), onSelect: () => addToMy(windowId) });
+        items.push({ id: "add-my", label: t("workspace.addToMy"), help: t("help.menuAddToMy"), disabled: myWindowsRef.current.includes(windowId), onSelect: () => addToMy(windowId) });
       }
       const labels = controller.display.hasLabels(windowId);
-      items.push({ id: "labels", label: t("workspace.alwaysLabels"), checked: labels, toggle: true, onSelect: () => controller.display.setLabels(windowId, !labels) });
+      items.push({ id: "labels", label: t("workspace.alwaysLabels"), help: t("help.menuAlwaysLabels"), checked: labels, toggle: true, onSelect: () => controller.display.setLabels(windowId, !labels) });
     }
     if (controller.scrollable) {
       const scrolls = controller.display.scrolls;
-      items.push({ id: "scrolling", label: t("workspace.verticalScrolling"), checked: scrolls, toggle: true, onSelect: () => controller.setScrolls(!scrolls) });
+      items.push({ id: "scrolling", label: t("workspace.verticalScrolling"), help: t("help.menuVerticalScrolling"), checked: scrolls, toggle: true, onSelect: () => controller.setScrolls(!scrolls) });
     }
     return items;
   }, [env, addToMy, removeFromMy]);
@@ -483,13 +483,13 @@ export function Shell() {
     if (env === "desktop") {
       // Checked while Help is shown in this workspace; choosing it shows or hides Help everywhere.
       const shown = helpOpen(helpRef.current, workspaceRef.current);
-      items.push({ id: "help-bar", label: t("help.showHelpBar"), checked: shown, onSelect: () => setHelp({ show: !shown, workspaces: {} }) });
+      items.push({ id: "help-bar", label: t("help.showHelpBar"), help: t("help.menuHelpBar"), checked: shown, onSelect: () => setHelp({ show: !shown, workspaces: {} }) });
     }
     const here = workspaceRef.current;
     // The wizard keeps the Guide shown in Access Keys until it ends.
     const pinned = here === "accessKeys" && !!wizardRef.current;
     const guideOpen = pinned || guideRef.current.open;
-    items.push({ id: "guide", label: t("guide.title"), checked: guideOpen, disabled: pinned, onSelect: () => updateGuide({ open: !guideOpen }) });
+    items.push({ id: "guide", label: t("guide.title"), help: t("help.menuGuide"), checked: guideOpen, disabled: pinned, onSelect: () => updateGuide({ open: !guideOpen }) });
     return items;
   }, [env, updateGuide]);
 

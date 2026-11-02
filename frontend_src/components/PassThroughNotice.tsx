@@ -42,7 +42,7 @@ export const PassThroughNotice = React.memo(function PassThroughNotice({ accessK
       {error && <div className="banner banner-error" role="alert">{error}</div>}
       <div className="phx-inline-confirm-actions">
         <ActionButton icon="switchPreset" label={t("accessKeys.switchToScoped")} className="btn btn-outline btn-sm" busy={saving}
-          helpText={help} onClick={() => void convertToScoped()} />
+          help="help.switchToScoped" onClick={() => void convertToScoped()} />
       </div>
     </div>
   );

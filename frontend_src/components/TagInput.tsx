@@ -98,7 +98,7 @@ export function TagInput({
             <span key={tag} className="tag-chip" title={tag}>
               {ns && <span className="tag-chip-ns">{ns}</span>}
               <span className="tag-chip-qual">{qual}</span>
-              <button type="button" className="tag-chip-x" aria-label={t("mesa.tagRemove", { tag })}
+              <button type="button" className="tag-chip-x" aria-label={t("mesa.tagRemove", { tag })} data-help="mesa.tagRemoveHelp"
                 onClick={(e) => { e.stopPropagation(); removeAt(i); }}>&times;</button>
             </span>
           );

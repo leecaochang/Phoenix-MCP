@@ -2,6 +2,7 @@ import userEvent from "@testing-library/user-event";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, expect, it, vi } from "vitest";
 import type { GlobalSettings } from "../types";
+import { t } from "../i18n";
 
 const mocks = vi.hoisted(() => ({ list: vi.fn(), create: vi.fn(), remove: vi.fn(), probe: vi.fn(), models: vi.fn(), setModel: vi.fn(), refresh: vi.fn() }));
 vi.mock("../api", () => ({ api: {
@@ -32,7 +33,7 @@ it("offers only local routing and TypeSafe / JEV", async () => {
   const none = screen.getByRole("radio", { name: "No decision provider" });
   expect(none).toBeChecked();
   expect(screen.getAllByRole("radio")).toHaveLength(1);
-  expect(none.closest("[data-help-text]")?.getAttribute("data-help-text")).toMatch(/not sent to a decision provider/);
+  expect(none.closest("[data-help-text]")).toHaveAttribute("data-help-text", t("routing.noProviderHelp"));
   expect(screen.queryByRole("checkbox", { name: "Use decision provider" })).toBeNull();
   const picker = screen.getByLabelText("Provider type");
   expect(within(picker).getAllByRole("option").map(option => option.getAttribute("value"))).toEqual(["", "typesafe"]);
@@ -307,8 +308,8 @@ it("refreshes the catalog without inference, explaining in Help what that checks
   fireEvent.click(await screen.findByRole("radio", { name: "JEV" }));
   fireEvent.click(await screen.findByRole("button", { name: "Change Model" }));
   const refresh = await screen.findByRole("button", { name: "Refresh Models" });
-  expect(refresh.getAttribute("data-help-text")).toMatch(/^Decision providers use fixed routing choices/);
-  expect(screen.queryByText(/Decision providers use fixed routing choices/)).toBeNull();
+  expect(refresh).toHaveAttribute("data-help-text", t("routing.providerOptions"));
+  expect(screen.queryByText(t("routing.providerOptions"), { exact: false })).toBeNull();
   fireEvent.click(refresh);
   await screen.findByText(/Refreshed: 2 models/);
   expect(mocks.refresh).toHaveBeenCalledExactlyOnceWith("decision");

@@ -108,23 +108,23 @@ export function ConversationsView({ accessKeys = NO_KEYS }: { accessKeys?: Acces
     id: "conversationLog",
     label: t("conversations.title"),
     tools: [
-      { id: "filters", label: activeFilters ? t("logs.filtersCount", { count: localeNumber(activeFilters) }) : t("logs.filters"), short: t("logs.filters"), icon: "filter",
+      { id: "filters", label: activeFilters ? t("logs.filtersCount", { count: localeNumber(activeFilters) }) : t("logs.filters"), short: t("logs.filters"), icon: "filter", help: "help.filters",
         pressed: filtersOpen, badge: activeFilters || undefined, shared: { id: "filters", label: t("logs.filters"), countLabel: "logs.filtersCount" },
         onSelect: () => setFiltersOpen((open) => !open), onSet: setFiltersOpen },
       pauseUpdatesTool(paused, setPaused),
       // Refresh sits to the right of Pause Updates, and only while paused.
-      ...(paused ? [{ id: "refresh", label: t("workspace.refreshWindow", { window: t("conversations.title") }), short: t("common.refresh"), icon: "refresh" as const,
+      ...(paused ? [{ id: "refresh", label: t("workspace.refreshWindow", { window: t("conversations.title") }), short: t("common.refresh"), icon: "refresh" as const, help: "help.refreshPaused",
         shared: { id: "refresh", label: t("common.refresh") }, onSelect: () => { void load(); } }] : []),
       ...logSettings,
       // Neutral until it asks to confirm, like the other destructive buttons (user, 2026-10-28).
       // An empty filtered list says nothing about the rest of the history, which Clear removes too.
-      { id: "clear", label: t("conversations.clear"), short: t("conversations.clearShort"), icon: "delete", disabled: clearing || (!entries.length && !activeFilters), onSelect: () => setConfirmClear(true) },
+      { id: "clear", label: t("conversations.clear"), short: t("conversations.clearShort"), icon: "delete", help: "help.clearConversations", disabled: clearing || (!entries.length && !activeFilters), onSelect: () => setConfirmClear(true) },
     ],
   }]);
   const showFilters = !onToolbar || filtersOpen;
   const confirmBanner = confirmClear && (
     <InlineConfirm label={t("conversations.clear")} tone="danger" confirmLabel={t("conversations.clear")} confirmIcon="delete"
-      confirmClassName="btn btn-danger btn-sm" cancelLabel={t("common.cancel")} busy={clearing}
+      confirmClassName="btn btn-danger btn-sm" cancelLabel={t("common.cancel")} help={t("help.confirmClearConversations")} busy={clearing}
       onConfirm={() => void clear()} onCancel={() => setConfirmClear(false)}>
       <p>{t("conversations.clearConfirm")}</p>
     </InlineConfirm>
@@ -160,22 +160,22 @@ export function ConversationsView({ accessKeys = NO_KEYS }: { accessKeys?: Acces
     {confirmBanner && <div className="log-group" data-guide="window.conversationLog#clear">{confirmBanner}</div>}
     <div className="phx-filters" hidden={!showFilters} data-guide="window.conversationLog#filters">
       <div className="filter-row">
-        <select className="input input-auto" data-filter="source" aria-label={t("conversations.sourceFilter")} value={source} onChange={e => { setSource(e.target.value); resetPage(); }}>
+        <select className="input input-auto" data-filter="source" data-help="help.conversationSource" aria-label={t("conversations.sourceFilter")} value={source} onChange={e => { setSource(e.target.value); resetPage(); }}>
           <option value="">{t("conversations.allSources")}</option>
           {["agentcli", "voice", "ai_task", "assist", "mcp", "home_companion"].map(value => <option key={value} value={value}>{label("source", value)}</option>)}
         </select>
-        <select className="input input-auto" data-filter="outcome" aria-label={t("conversations.outcomeFilter")} value={outcome} onChange={e => { setOutcome(e.target.value); resetPage(); }}>
+        <select className="input input-auto" data-filter="outcome" data-help="help.conversationOutcome" aria-label={t("conversations.outcomeFilter")} value={outcome} onChange={e => { setOutcome(e.target.value); resetPage(); }}>
           <option value="">{t("conversations.allOutcomes")}</option>
           {["completed", "failed", "denied", "pending_approval", "cancelled", "interrupted", "unknown", "running"].map(value => <option key={value} value={value}>{label("outcome", value)}</option>)}
         </select>
-        <select className="input input-auto" data-filter="days" aria-label={t("conversations.timeFilter")} value={days} onChange={e => { setDays(e.target.value); resetPage(); }}>
+        <select className="input input-auto" data-filter="days" data-help="help.conversationTime" aria-label={t("conversations.timeFilter")} value={days} onChange={e => { setDays(e.target.value); resetPage(); }}>
           <option value="">{t("conversations.allDates")}</option><option value="1">{t("conversations.day")}</option><option value="7">{t("conversations.week")}</option><option value="30">{t("conversations.month")}</option>
         </select>
-        {activeFilters > 0 && <ActionButton icon="clearFilters" label={t("logs.clearFilters")} onClick={clearFilters} />}
+        {activeFilters > 0 && <ActionButton icon="clearFilters" label={t("logs.clearFilters")} help="help.clearFilters" onClick={clearFilters} />}
       </div>
       {/* The search sits below the filters, in the same wrapper, as in the Audit Log. */}
       <div className="filter-row conversation-toolbar">
-        <input className="input" type="search" aria-label={t("conversations.search")} placeholder={t("conversations.search")} value={search}
+        <input className="input" type="search" data-help="help.conversationSearch" aria-label={t("conversations.search")} placeholder={t("conversations.search")} value={search}
           onChange={e => { setSearch(e.target.value); resetPage(); }} />
         {!onToolbar && <BusyButton className="btn btn-ghost btn-sm btn-icon" busy={loading} onClick={() => void load()} aria-label={t("common.refresh")} title={t("common.refresh")}><RefreshIcon /></BusyButton>}
       </div>
@@ -192,13 +192,14 @@ export function ConversationsView({ accessKeys = NO_KEYS }: { accessKeys?: Acces
         onOrder={(ordered) => logSelection?.reorder("conversation", ordered)}
         onSelect={(entry, ordered) => logSelection?.set({ kind: "conversation", entry, ordered, accessKeyNames })}
         rowLabel={(e) => `${conversationTitle(e)}, ${label("outcome", rowStatus(e))}`}
+        rowHelp="help.conversationRow"
         empty={!loading && <div className="conversation-empty"><h3>{t("conversations.empty")}</h3><p>{t("conversations.emptyHelp")}</p></div>}
       />
     </div>
     <div className="phx-table-footer" data-guide="window.conversationLog#list">
       <span className="conversation-secondary">{t("conversations.showing", { shown: localeNumber(entries.length), total: localeNumber(total) })}</span>
       {partialSort && <span className="conversation-secondary">{t("table.sortedLoaded")}</span>}
-      {entries.length < total && <ActionButton icon="loadMore" label={t("common.loadMore")} busy={loading} onClick={() => setLimit(n => n + 25)} />}
+      {entries.length < total && <ActionButton icon="loadMore" label={t("common.loadMore")} helpText={t("help.loadMore", { count: localeNumber(25) })} busy={loading} onClick={() => setLimit(n => n + 25)} />}
       {!onToolbar && <button className="btn btn-text" onClick={() => setConfirmClear(true)}>{t("conversations.clear")}</button>}
     </div>
   </div>;

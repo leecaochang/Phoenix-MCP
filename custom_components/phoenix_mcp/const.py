@@ -719,7 +719,7 @@ MESA_SUGGESTION_TEMPLATES: dict[str, str] = {
     ),
     "naked_risky.domain": (
         "{domain} entities with no MESA profile at any level: {count}. This domain "
-        "{concern}. A domain-level profile covers them all at once.{baseline_note}"
+        "{concern}. A domain-level profile covers them all.{baseline_note}"
     ),
     "naked_risky.entity": (
         "No MESA profile covers this entity at any level, and it {concern}.{baseline_note}"

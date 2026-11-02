@@ -14,9 +14,9 @@ interface Props {
 }
 
 const LIMITS = [
-  ["conversation_log_max_entries", 100, 1, 2000, "conversations.limit.entries"],
-  ["conversation_log_max_days", 7, 1, 365, "conversations.limit.days"],
-  ["conversation_log_max_mb", 25, 1, 250, "conversations.limit.mb"],
+  ["conversation_log_max_entries", 100, 1, 2000, "conversations.limit.entries", "conversations.limitEntriesHelp"],
+  ["conversation_log_max_days", 7, 1, 365, "conversations.limit.days", "conversations.limitDaysHelp"],
+  ["conversation_log_max_mb", 25, 1, 250, "conversations.limit.mb", "conversations.limitMbHelp"],
 ] as const;
 
 /** How long after the last keystroke or arrow a limit saves itself. */
@@ -64,7 +64,7 @@ export function ConversationSettings({ settings, saving, onChange }: Props) {
     <div className={`toggle-row${off ? " toggle-row-greyed" : ""}`} {...helpRow(recordHelp)}>
       <SettingLabel help={recordHelp}><span>{t("conversations.enable")}</span></SettingLabel>
       <label className="toggle-switch">
-        <BusyInput type="checkbox" aria-label={t("conversations.enable")} data-help="conversations.privacyHelp" checked={settings.conversation_log_enabled ?? false}
+        <BusyInput type="checkbox" aria-label={t("conversations.enable")} data-help={off ? "conversations.loggingDisabled" : "conversations.privacyHelp"} checked={settings.conversation_log_enabled ?? false}
           busy={saving} disabled={settings.disable_all_logging} onChange={e => onChange("conversation_log_enabled", e.target.checked)} />
         <span className="toggle-switch-track" />
       </label>
@@ -73,10 +73,10 @@ export function ConversationSettings({ settings, saving, onChange }: Props) {
     <fieldset className={`phx-retention${off ? " toggle-row-greyed" : ""}`} data-help={off ? "conversations.loggingDisabled" : "conversations.retentionHelp"}>
       <legend className="sr-only">{t("conversations.retention")}</legend>
       <div className="phx-retention-fields">
-        {LIMITS.map(([field, , min, max, key], index) => <div className="conversation-limit" key={field}>
+        {LIMITS.map(([field, , min, max, key, helpKey], index) => <div className="conversation-limit" key={field}>
           <label htmlFor={field}>{t(key)}</label>
           <BusyInput id={field} className="input" type="number" min={min} max={max} step={1} value={draft[index]} busy={saving} disabled={off}
-            data-help={off ? "conversations.loggingDisabled" : "conversations.retentionHelp"}
+            data-help={off ? "conversations.loggingDisabled" : helpKey}
             onChange={(e) => edit(index, e.target.value)}
             onBlur={(e) => commit(index, e.target.value)}
             onKeyDown={(e) => { if (e.key === "Enter") commit(index, e.currentTarget.value); }} />

@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { PersonaPicker } from "../components/PersonaPicker";
+import { t } from "../i18n";
 import { api } from "../api";
 import type { AccessKeyRecord, PermissionTree } from "../types";
 import { Notifications, NotificationsContext } from "../ui/notify";
@@ -41,7 +42,7 @@ describe("Home Companion setup", () => {
     const companion = screen.getByRole("button", { name: /Home Companion/ });
     expect(buttons[buttons.length - 2]).toBe(companion);
     expect(buttons[buttons.length - 1]).toHaveTextContent("Custom");
-    expect(companion).toHaveTextContent("Designed for Agent Chat and Voice");
+    expect(companion).toHaveTextContent(t("personas.home_companion.description"));
     expect(companion).not.toHaveTextContent("Experimental");
     expect(companion.querySelector("svg")).toHaveAttribute("aria-hidden", "true");
   });

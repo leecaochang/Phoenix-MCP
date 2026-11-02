@@ -25,6 +25,8 @@ export interface MenuItem {
   toggle?: boolean;
   /** Longer explanation, shown on hover and in Help; under the label when the item is disabled, as the reason. */
   hint?: string;
+  /** What the item does, read only in the Help window; the hint when not given. Never shown as a reason. */
+  help?: string;
   onSelect: () => void;
 }
 export type MenuEntry = MenuItem | "separator";
@@ -97,7 +99,7 @@ function MenuList({ label, entries, place, focusFirst, onClose, listRef }: {
           <div key={item.id} role={item.checked === undefined ? "menuitem" : item.toggle ? "menuitemcheckbox" : "menuitemradio"} tabIndex={-1}
             className={`phx-menu-item${note ? " has-note" : ""}`}
             title={note ? undefined : item.hint}
-            data-help-text={item.hint}
+            data-help-text={item.help ?? item.hint}
             aria-label={note ? item.label : undefined}
             aria-checked={item.checked}
             aria-disabled={item.disabled || undefined}

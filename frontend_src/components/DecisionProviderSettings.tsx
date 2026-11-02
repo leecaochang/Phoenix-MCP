@@ -185,19 +185,19 @@ export function DecisionProviderSettings({ settings, onChange, saving }: {
         {error && <p className="banner banner-error" role="alert">{error}</p>}
         <div className="agentcli-settings-form-actions">
           <ActionButton icon="save" label={t("common.save")} className="btn btn-outline btn-sm"
-            busy={saving || busy} disabled={!modelDraft || modelDraft === account.model || !models[account.id]?.includes(modelDraft)}
+            busy={saving || busy} disabled={!modelDraft || modelDraft === account.model || !models[account.id]?.includes(modelDraft)} help="routing.saveModelHelp"
             onClick={() => void changeModel(account.id, modelDraft)} />
-          <ActionButton icon="undo" label={t("settings.cancel")} className="btn btn-outline btn-sm" busy={saving || busy}
+          <ActionButton icon="undo" label={t("settings.cancel")} className="btn btn-outline btn-sm" busy={saving || busy} help="settings.cancelModelHelp"
             onClick={() => { setEditing(null); setError(""); }} />
         </div>
       </div> : <div className="phx-window-actions agentcli-account-actions">
-        <ActionButton icon="edit" label={t("settings.accountChangeModel")} className="btn btn-outline btn-sm" busy={saving || busy}
+        <ActionButton icon="edit" label={t("settings.accountChangeModel")} className="btn btn-outline btn-sm" busy={saving || busy} help="routing.changeModelHelp"
           onClick={() => { setConfirmRemove(null); void editModel(account); }} />
         {/* Remove asks in place, as elsewhere in Phoenix; what it does reads in Help (user, 2026-10-31). */}
         {confirmRemove === account.id ? <span className="row-actions" ref={askBox}>
           <ActionButton icon="delete" label={t("settings.agentcliConfirmRemove", { name: account.name })} className="btn btn-danger btn-sm"
             helpText={t("routing.removeAccountHelp", { name: account.name })} busy={saving || busy} onClick={() => void remove(account.id)} />
-          <ActionButton icon="undo" label={t("settings.cancel")} className="btn btn-outline btn-sm" busy={saving || busy}
+          <ActionButton icon="undo" label={t("settings.cancel")} className="btn btn-outline btn-sm" busy={saving || busy} help="help.cancelAction"
             onClick={() => setConfirmRemove(null)} />
         </span> : <ActionButton icon="delete" label={t("settings.agentcliRemoveAccount", { name: account.name })} className="btn btn-outline btn-sm phx-action-danger"
           helpText={t("routing.removeAccountHelp", { name: account.name })} busy={saving || busy}
@@ -225,7 +225,7 @@ export function DecisionProviderSettings({ settings, onChange, saving }: {
         {/* Choosing an account opens its options under it; clicking it again closes them. */}
         <label className="routing-account-choice">
           <BusyInput type="radio" name="decision-account"
-            checked={inUse && account.id === settings.decision_provider_id} busy={saving || busy}
+            checked={inUse && account.id === settings.decision_provider_id} busy={saving || busy} data-help="routing.accountChoiceHelp"
             onChange={() => use(account.id)}
             onClick={() => { if (open === account.id) closeOptions(); else { closeOptions(); setOpen(account.id); } }} />
           <span>{account.name}</span>
@@ -243,7 +243,7 @@ export function DecisionProviderSettings({ settings, onChange, saving }: {
         await load();
       }} />}
     {inUse && <details className="routing-disclosure">
-      <summary data-guide="window.settingsProviders#decision-connection">{t("routing.connectionSettings")}</summary>
+      <summary data-guide="window.settingsProviders#decision-connection" data-help="routing.connectionSettingsHelp">{t("routing.connectionSettings")}</summary>
       <label className="agentcli-settings-field" htmlFor="routing-decision-timeout" {...helpRow(t("routing.timeoutHint"))}>
         <span>{t("routing.decisionBudget")}</span>
         <BusyInput id="routing-decision-timeout" className="input" type="number" min={250} max={30000} step={1}

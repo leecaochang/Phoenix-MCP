@@ -211,6 +211,7 @@ export function PermissionSummary({ permissions, entityTree, onEntityClick, mesa
       rows={items}
       rowKey={keyOf}
       selectedKey={chosen}
+      rowHelp="help.summaryRow"
       onSelect={(item) => {
         setChosen(keyOf(item));
         const found = target(item);

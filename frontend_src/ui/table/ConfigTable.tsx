@@ -48,6 +48,9 @@ export interface TableSelection<Row> {
   /** Accessible name of a row's box, and of the header's box. */
   label: (row: Row) => string;
   allLabel: string;
+  /** Catalog keys of what ticking a row's box, and the header's box, does; shown in the Help window. */
+  help?: string;
+  allHelp?: string;
 }
 
 const DEFAULT_WIDTH = 140;
@@ -86,7 +89,7 @@ function clean(settings: TableSettings): TableSettings {
   return out;
 }
 
-export function ConfigTable<Row>({ id, label, columns, rows, rowKey, defaultSort, selectedKey, onSelect, onOrder, rowLabel, rowClass, empty, selection, detail, fitColumns = true }: {
+export function ConfigTable<Row>({ id, label, columns, rows, rowKey, defaultSort, selectedKey, onSelect, onOrder, rowLabel, rowClass, rowHelp, empty, selection, detail, fitColumns = true }: {
   /** Settings are kept under this id. */
   id: string;
   /** Accessible name of the table. */
@@ -103,6 +106,8 @@ export function ConfigTable<Row>({ id, label, columns, rows, rowKey, defaultSort
   onOrder?: (ordered: Row[]) => void;
   rowLabel?: (row: Row) => string;
   rowClass?: (row: Row) => string;
+  /** Catalog key of what choosing a row does, shown in the Help window; a general text when not given. */
+  rowHelp?: string;
   /** Shown under the headers when there are no rows. */
   empty?: ReactNode;
   /** Tick boxes in a fixed first column, while picking several rows. */
@@ -182,28 +187,28 @@ export function ConfigTable<Row>({ id, label, columns, rows, rowKey, defaultSort
     const items: MenuEntry[] = [];
     if (col.sortValue) {
       items.push(
-        { id: "asc", label: t("table.sortAscending"), checked: sort?.column === col.id && sort.dir === "asc", onSelect: () => update({ sort: { column: col.id, dir: "asc" } }) },
-        { id: "desc", label: t("table.sortDescending"), checked: sort?.column === col.id && sort.dir === "desc", onSelect: () => update({ sort: { column: col.id, dir: "desc" } }) },
+        { id: "asc", label: t("table.sortAscending"), help: t("help.menuSortAscending"), checked: sort?.column === col.id && sort.dir === "asc", onSelect: () => update({ sort: { column: col.id, dir: "asc" } }) },
+        { id: "desc", label: t("table.sortDescending"), help: t("help.menuSortDescending"), checked: sort?.column === col.id && sort.dir === "desc", onSelect: () => update({ sort: { column: col.id, dir: "desc" } }) },
         "separator",
       );
     }
     items.push(
-      { id: "left", label: t("workspace.moveLeft"), disabled: i <= 0, onSelect: () => move(col.id, -1) },
-      { id: "right", label: t("workspace.moveRight"), disabled: i >= visible.length - 1, onSelect: () => move(col.id, 1) },
-      { id: "hide", label: t("table.hideColumn"), disabled: visible.length <= 1, onSelect: () => update({ hidden: [...hidden, col.id] }) },
+      { id: "left", label: t("workspace.moveLeft"), help: t("help.menuColumnLeft"), disabled: i <= 0, onSelect: () => move(col.id, -1) },
+      { id: "right", label: t("workspace.moveRight"), help: t("help.menuColumnRight"), disabled: i >= visible.length - 1, onSelect: () => move(col.id, 1) },
+      { id: "hide", label: t("table.hideColumn"), help: t("help.menuHideColumn"), disabled: visible.length <= 1, onSelect: () => update({ hidden: [...hidden, col.id] }) },
     );
     const extra = col.menu?.() ?? [];
     if (extra.length) items.push("separator", ...extra);
     const hiddenColumns = order.filter((x) => hidden.includes(x)).map((x) => byId.get(x)!);
     if (hiddenColumns.length) {
       items.push("separator", ...hiddenColumns.map((h): MenuEntry => ({
-        id: `show-${h.id}`, label: t("table.showColumn", { column: h.label }), onSelect: () => update({ hidden: hidden.filter((x) => x !== h.id) }),
+        id: `show-${h.id}`, label: t("table.showColumn", { column: h.label }), help: t("help.menuShowColumn", { column: h.label }), onSelect: () => update({ hidden: hidden.filter((x) => x !== h.id) }),
       })));
     }
     items.push(
       "separator",
-      { id: "reset-order", label: t("table.resetOrder"), disabled: !settings.order, onSelect: () => update({ order: undefined }) },
-      { id: "reset", label: t("table.resetColumns"), disabled: !Object.keys(settings).length, onSelect: () => saveSettings({}) },
+      { id: "reset-order", label: t("table.resetOrder"), help: t("help.menuResetOrder"), disabled: !settings.order, onSelect: () => update({ order: undefined }) },
+      { id: "reset", label: t("table.resetColumns"), help: t("help.menuResetColumns"), disabled: !Object.keys(settings).length, onSelect: () => saveSettings({}) },
     );
     return items;
   };
@@ -420,7 +425,7 @@ export function ConfigTable<Row>({ id, label, columns, rows, rowKey, defaultSort
           <tr ref={head}>
             {selection && (
               <th className="phx-table-pick" scope="col">
-                <input type="checkbox" checked={selection.all} aria-label={selection.allLabel}
+                <input type="checkbox" checked={selection.all} aria-label={selection.allLabel} data-help={selection.allHelp}
                   ref={(el) => { if (el) el.indeterminate = !selection.all && sorted.some((r) => selection.picked.has(rowKey(r))); }}
                   onChange={selection.onToggleAll} />
               </th>
@@ -432,16 +437,16 @@ export function ConfigTable<Row>({ id, label, columns, rows, rowKey, defaultSort
                   aria-sort={col.sortValue ? (sorting === "asc" ? "ascending" : sorting === "desc" ? "descending" : "none") : undefined}
                   onContextMenu={(e) => { if (showMenu) showMenu(e, t("table.columnMenu", { column: col.label }), menuEntries(col)); }}>
                   <div className="phx-th">
-                    <button type="button" className="phx-th-label" title={col.label}
+                    <button type="button" className="phx-th-label" title={col.label} data-help={col.sortValue ? "help.columnSort" : "help.columnMove"}
                       onPointerDown={startDrag(col)} onKeyDown={headerKeys(col)}
                       onClick={() => { if (justDragged.current) { justDragged.current = false; return; } toggleSort(col); }}>
                       <span className="phx-th-text">{col.label}</span>
                       {sorting && <Icon name={sorting === "asc" ? "sortUp" : "sortDown"} size={13} />}
                     </button>
-                    <MenuButton label={t("table.columnMenu", { column: col.label })} icon={<Icon name="more" size={14} />}
+                    <MenuButton label={t("table.columnMenu", { column: col.label })} help="help.columnMenu" icon={<Icon name="more" size={14} />}
                       items={() => menuEntries(col)} className="phx-th-menu" />
                   </div>
-                  <div className="phx-th-resize" role="separator" aria-orientation="vertical" tabIndex={0}
+                  <div className="phx-th-resize" role="separator" aria-orientation="vertical" tabIndex={0} data-help="help.columnResize"
                     aria-label={t("table.resizeColumn", { column: col.label })}
                     aria-valuenow={widthOf(col)} aria-valuemin={MIN_COLUMN_WIDTH} aria-valuemax={MAX_WIDTH}
                     onPointerDown={startResize(col)} onKeyDown={resizeKeys(col)} />
@@ -462,13 +467,14 @@ export function ConfigTable<Row>({ id, label, columns, rows, rowKey, defaultSort
                   className={`${rowClass?.(row) ?? ""}${selected ? " is-selected" : ""}`.trim() || undefined}
                   aria-selected={onSelect ? selected : undefined}
                   aria-label={rowLabel?.(row)}
+                  data-help={onSelect ? rowHelp ?? "help.tableRow" : undefined}
                   tabIndex={onSelect ? (key === focusKey ? 0 : -1) : undefined}
                   onClick={onSelect ? () => { pointerChoice.current = true; choose(row, false); } : undefined}
                   onKeyDown={onSelect ? rowKeys(index) : undefined}>
                   {selection && (
                     // Ticking stays apart from choosing: a click on the box never picks the row for review.
                     <td className="phx-table-pick" onClick={(e) => e.stopPropagation()}>
-                      <input type="checkbox" tabIndex={-1} checked={selection.picked.has(key)} disabled={!selection.selectable(row)}
+                      <input type="checkbox" tabIndex={-1} checked={selection.picked.has(key)} disabled={!selection.selectable(row)} data-help={selection.help}
                         aria-label={selection.label(row)} onChange={() => selection.onToggle(key)} />
                     </td>
                   )}

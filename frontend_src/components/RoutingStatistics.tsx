@@ -65,12 +65,12 @@ export function RoutingStatisticsContent({ surface }: { surface: "voice" | "chat
     {busy && !stats && <p role="status">{t("common.loading")}</p>}
     {error && !confirm && <p className="banner banner-error" role="alert">{t("routingStats.error")}</p>}
     {confirm ? <InlineConfirm label={t("routingStats.reset")} tone="danger" confirmLabel={t("routingStats.reset")} confirmIcon="restoreVersion"
-      confirmClassName="btn btn-danger btn-sm" cancelLabel={t("common.cancel")} busy={busy}
+      confirmClassName="btn btn-danger btn-sm" cancelLabel={t("common.cancel")} busy={busy} help={t("routingStats.resetHelp")}
       error={error ? t("routingStats.error") : null} onConfirm={() => void load(true)} onCancel={() => setConfirm(false)}>
       <p>{t("routingStats.confirm")}</p>
     </InlineConfirm> : <div className="routing-statistics-actions" data-guide="topic.routingStatistics#refresh-and-reset">
-      <ActionButton icon="refresh" label={t("common.refresh")} className="btn btn-outline btn-sm" busy={busy} onClick={() => void load()} />
-      <ActionButton icon="restoreVersion" label={t("routingStats.reset")} className="btn btn-outline btn-sm phx-action-danger" busy={busy}
+      <ActionButton icon="refresh" label={t("common.refresh")} className="btn btn-outline btn-sm" busy={busy} help="routingStats.refreshHelp" onClick={() => void load()} />
+      <ActionButton icon="restoreVersion" label={t("routingStats.reset")} className="btn btn-outline btn-sm phx-action-danger" busy={busy} help="routingStats.resetHelp"
         disabled={!stats} onClick={() => setConfirm(true)} />
     </div>}
   </div>;
@@ -81,7 +81,7 @@ export function RoutingStatistics({ surface }: { surface: "voice" | "chat" }) {
   const [open, setOpen] = useState(false);
   return <details className="routing-statistics" data-help-text={scopeHelp()} open={open}
     onToggle={event => { if (event.currentTarget.open !== open) setOpen(event.currentTarget.open); }}>
-    <summary>{t("routingStats.title")}</summary>
+    <summary data-help="routingStats.showHelp">{t("routingStats.title")}</summary>
     {open && <RoutingStatisticsContent surface={surface} />}
   </details>;
 }

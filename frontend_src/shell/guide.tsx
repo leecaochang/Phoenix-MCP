@@ -339,10 +339,10 @@ function followLink(guide: Guide, e: ReactMouseEvent<HTMLElement>): void {
 function GuideTools({ guide }: { guide: Guide }) {
   return (
     <details className="phx-guide-tools">
-      <summary>{t("guide.more")}</summary>
+      <summary data-help="help.guideMore">{t("guide.more")}</summary>
       <div className="phx-guide-tools-links">
-        <button type="button" className="phx-guide-tool" onClick={() => guide.show("contents")}>{t("guide.contents")}</button>
-        <button type="button" className="phx-guide-tool" onClick={() => guide.show("search")}>{t("guide.search")}</button>
+        <button type="button" className="phx-guide-tool" data-help="help.guideContents" onClick={() => guide.show("contents")}>{t("guide.contents")}</button>
+        <button type="button" className="phx-guide-tool" data-help="help.guideSearch" onClick={() => guide.show("search")}>{t("guide.search")}</button>
       </div>
     </details>
   );
@@ -353,7 +353,7 @@ function ContentsList({ nodes, guide }: { nodes: ContentsNode[]; guide: Guide })
     <ul className="phx-guide-contents">
       {nodes.map((node) => (
         <li key={node.id}>
-          <a href="#" className="phx-guide-link" onClick={(e) => { e.preventDefault(); guide.open(node.id); }}>{node.title}</a>
+          <a href="#" className="phx-guide-link" data-help="help.guideLink" onClick={(e) => { e.preventDefault(); guide.open(node.id); }}>{node.title}</a>
           {node.children.length > 0 && <ContentsList nodes={node.children} guide={guide} />}
         </li>
       ))}
@@ -385,14 +385,14 @@ function SearchView({ guide }: { guide: Guide }) {
   return (
     <article className="phx-guide-topic">
       <h3>{t("guide.search")}</h3>
-      <input type="search" className="input phx-guide-search" autoFocus value={query} placeholder={t("guide.searchPlaceholder")}
+      <input type="search" className="input phx-guide-search" data-help="help.guideSearchInput" autoFocus value={query} placeholder={t("guide.searchPlaceholder")}
         aria-label={t("guide.searchPlaceholder")} onChange={(e) => setQuery(e.target.value)}
         onKeyDown={(e) => { if (e.key === "Enter" && hits[0]) { e.preventDefault(); guide.open(hits[0].section.topic, hits[0].section.anchor); } }} />
       {query.trim() && !hits.length && <p className="phx-guide-note">{t("guide.noResults")}</p>}
       <ul className="phx-guide-results">
         {hits.map(({ section, snippet }) => (
           <li key={`${section.topic}#${section.anchor ?? ""}`}>
-            <a href="#" className="phx-guide-link" onClick={(e) => { e.preventDefault(); guide.open(section.topic, section.anchor); }}>
+            <a href="#" className="phx-guide-link" data-help="help.guideLink" onClick={(e) => { e.preventDefault(); guide.open(section.topic, section.anchor); }}>
               {section.heading ? `${section.title}: ${section.heading}` : section.title}
             </a>
             {snippet && <p className="phx-guide-snippet">{snippet}</p>}
@@ -442,10 +442,10 @@ function GuideBody({ guide }: { guide: Guide }) {
 function HistoryButtons({ guide, iconSize = WINDOW_ICON }: { guide: Guide; iconSize?: number }) {
   return (
     <>
-      <button type="button" className="phx-window-control" aria-label={t("guide.back")} title={t("guide.back")} disabled={!guide.canGoBack} onClick={guide.back}>
+      <button type="button" className="phx-window-control" aria-label={t("guide.back")} title={t("guide.back")} data-help="help.guideBack" disabled={!guide.canGoBack} onClick={guide.back}>
         <Icon name="back" size={iconSize} />
       </button>
-      <button type="button" className="phx-window-control" aria-label={t("guide.forward")} title={t("guide.forward")} disabled={!guide.canGoForward} onClick={guide.forward}>
+      <button type="button" className="phx-window-control" aria-label={t("guide.forward")} title={t("guide.forward")} data-help="help.guideForward" disabled={!guide.canGoForward} onClick={guide.forward}>
         <Icon name="forward" size={iconSize} />
       </button>
     </>
@@ -462,7 +462,7 @@ function Breadcrumbs({ guide, id }: { guide: Guide; id: string }) {
       {chain.map((at, i) => (
         <span key={at} className="phx-guide-crumb">
           {i > 0 && <Icon name="folded" size={12} className="phx-guide-crumb-sep" />}
-          <a href="#" className="phx-guide-link" onClick={(e) => { e.preventDefault(); guide.open(at); }}>{topicTitle(topics[at].title)}</a>
+          <a href="#" className="phx-guide-link" data-help="help.guideLink" onClick={(e) => { e.preventDefault(); guide.open(at); }}>{topicTitle(topics[at].title)}</a>
         </span>
       ))}
     </nav>
@@ -776,7 +776,7 @@ export function GuideWindow({ workspace, controller, language, rect, onRect, onC
             {keys && <span className="phx-window-resize-hint" role="status">{t(keys === "move" ? "workspace.moveHint" : "workspace.resizeHint")}</span>}
             <MenuButton label={t("workspace.windowMenu")} help="help.guideMenu" icon={<Icon name="more" size={14} />} items={menu}
               className="phx-window-control" buttonRef={(el) => { menuButton.current = el; }} pressed={!!keys} onButtonKeyDown={keyStep} />
-            <button type="button" className="phx-window-control" aria-label={t("agentchat.popOut")} title={t("agentchat.popOut")} onClick={popOut}>
+            <button type="button" className="phx-window-control" aria-label={t("agentchat.popOut")} title={t("agentchat.popOut")} data-help="help.guidePopOut" onClick={popOut}>
               <Icon name="popOut" size={14} />
             </button>
             <button type="button" className="phx-window-control" aria-label={maximized ? t("agentchat.restore") : t("agentchat.maximize")}

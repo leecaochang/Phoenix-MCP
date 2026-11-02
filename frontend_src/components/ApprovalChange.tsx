@@ -101,6 +101,7 @@ export function ApprovalChange({ record }: {
         value={mode}
         onChange={setMode}
         ariaLabel={t("approvals.diffModeAria")}
+        help="help.diffPreview"
         options={[{ value: "diff", label: t("common.diff") }, { value: "preview", label: t("common.preview") }]}
       />
     ) : undefined;
@@ -129,6 +130,7 @@ export function ApprovalChange({ record }: {
               value={previewSide}
               onChange={setSide}
               ariaLabel={t("approvals.diffSideAria")}
+              help="help.previewSide"
               options={[{ value: "before", label: t("common.before") }, { value: "after", label: t("common.after") }]}
             />
           </div>

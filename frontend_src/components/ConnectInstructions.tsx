@@ -24,10 +24,10 @@ export function CopyCodeBox(
       {label && <div className="command-field-label">{label}</div>}
       <div className="command-block-codewrap">
         {onChange
-          ? <input className="command-block-input" value={value} onChange={(e) => onChange(e.target.value)} aria-label={label} />
+          ? <input className="command-block-input" data-help="help.connectMcpUrl" value={value} onChange={(e) => onChange(e.target.value)} aria-label={label} />
           : <pre className="command-block-code">{value}</pre>}
         {/* Beside the value, not over it (user, 2026-10-28). */}
-        <ActionButton icon={copied ? "check" : "copy"} label={copied ? t("common.copied") : t("common.copy")} className="btn btn-outline btn-sm command-copy"
+        <ActionButton icon={copied ? "check" : "copy"} label={copied ? t("common.copied") : t("common.copy")} help="help.connectCopy" className="btn btn-outline btn-sm command-copy"
           onClick={() => { void copy(); }} />
         {/* Announce the visual Copy -> Copied! swap to assistive tech. */}
         <span className="sr-only" role="status">{copied ? t("common.copiedToClipboard") : ""}</span>
@@ -97,6 +97,7 @@ export function ConnectInstructions({ accessKey, accessKeyName }: { accessKey: s
             key={t.key}
             id={`agent-tab-${t.key}`}
             role="tab"
+            data-help="help.connectAgentTab"
             aria-selected={current?.key === t.key}
             aria-controls="agent-tab-panel"
             tabIndex={current?.key === t.key ? 0 : -1}
@@ -118,7 +119,7 @@ export function ConnectInstructions({ accessKey, accessKeyName }: { accessKey: s
           {current.blocks.map((b, i) => (
             <CommandBlock key={i} title={b.title} hint={b.hint} code={b.code} fields={b.fields} />
           ))}
-          <a className="btn btn-text btn-sm" href={current.href} target="_blank" rel="noopener noreferrer">
+          <a className="btn btn-text btn-sm" data-help="help.connectSetupGuide" href={current.href} target="_blank" rel="noopener noreferrer">
             {t("wizard.openSetupGuide", { label: current.label })}
           </a>
         </div>

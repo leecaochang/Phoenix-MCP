@@ -84,6 +84,7 @@ export function CodeToggle({ code, onToggle }: { code: boolean; onToggle: () => 
     <button
       type="button"
       className={`btn btn-ghost btn-sm diff-code-toggle${withText ? " phx-action" : " btn-icon"}`}
+      data-help="help.codeView"
       onClick={onToggle}
       aria-label={label}
       title={label}
@@ -105,6 +106,7 @@ export function LayoutToggle({ stacked, onToggle }: { stacked: boolean; onToggle
     <button
       type="button"
       className={`btn btn-ghost btn-sm diff-layout-toggle${withText ? " phx-action" : " btn-icon"}`}
+      data-help="help.layoutView"
       onClick={onToggle}
       aria-label={label}
       title={label}

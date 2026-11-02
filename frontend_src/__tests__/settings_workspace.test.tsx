@@ -379,8 +379,22 @@ describe("Safety and Data Management", () => {
   });
 
   it("warns while MESA is enforced", () => {
+    // Advisory: the MESA mode row explains the modes, without the Enforced warning.
+    const help = t("settings.mesaModeHelp");
+    const warning = t("settings.mesaEnforcedWarning");
+    const advisory = renderSettings({ settings: { ...BASE_SETTINGS, mesa_mode: "advisory" } as GlobalSettings });
+    let safety = settingsWindow("Safety");
+    expect(safety.getByLabelText(t("settings.mesaModeAria")).closest("[data-help-text]")).toHaveAttribute("data-help-text", help);
+    expect(safety.getByText(help)).toBeVisible();
+    expect(safety.queryByText(warning, { exact: false })).toBeNull();
+    advisory.unmount();
+
+    // Enforced: the same explanation, followed by the warning.
+    const both = `${help}${t("common.sentenceSeparator")}${warning}`;
     renderSettings({ settings: { ...BASE_SETTINGS, mesa_mode: "enforced" } as GlobalSettings });
-    expect(settingsWindow("Safety").getByText(/otherwise the built-in safety baseline/)).toBeVisible();
+    safety = settingsWindow("Safety");
+    expect(safety.getByLabelText(t("settings.mesaModeAria")).closest("[data-help-text]")).toHaveAttribute("data-help-text", both);
+    expect(safety.getByText(both)).toBeVisible();
   });
 });
 
@@ -450,8 +464,8 @@ describe("help in the Help window", () => {
     renderSettings();
     const safety = settingsWindow("Safety");
     expect(helpFor(safety.getByRole("checkbox", { name: "Refuse all agent connections" }))).toBe(t("settings.killSwitchInactiveHelp"));
-    // The mode's help says what Enforced means without profiles, which the window no longer shows (user, 2026-10-31).
-    const modeHelp = `${t("settings.mesaModeHelp")} ${t("settings.mesaEnforcedWarning")}`;
+    // The mode's help adds what Enforced means without profiles only while Enforced is chosen.
+    const modeHelp = t("settings.mesaModeHelp");
     expect(helpFor(safety.getByText(t("settings.mesaModeLabel")))).toBe(modeHelp);
     expect(helpFor(safety.getByRole("combobox", { name: t("settings.mesaModeAria") }))).toBe(modeHelp);
     const general = settingsWindow("General");

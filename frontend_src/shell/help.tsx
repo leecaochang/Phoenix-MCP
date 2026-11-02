@@ -128,5 +128,5 @@ export function HelpWindow() {
   useSyncExternalStore(tracker?.subscribe ?? (() => () => {}), tracker?.getVersion ?? (() => 0));
   const text = tracker?.text();
   // With nothing to explain, Help also names the keys that move between areas.
-  return <p className={`phx-help-text${text ? "" : " is-idle"}`}>{text ?? `${t("help.idle")} ${t("help.areaKeys")}`}</p>;
+  return <p className={`phx-help-text${text ? "" : " is-idle"}`}>{text ?? t("help.idle")}</p>;
 }

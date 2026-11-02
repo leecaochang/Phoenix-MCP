@@ -73,8 +73,8 @@ export function AccessKeyNotes({ accessKey, onUpdate }: { accessKey: AccessKeyRe
         </span>
         {dirty && (
           <span className="access-key-notes-actions">
-            <ActionButton icon="undo" label={t("accessKeys.notesDiscard")} className="btn btn-text btn-sm" busy={saving} onClick={() => setDraft(saved)} />
-            <ActionButton icon="save" label={saving ? t("common.saving") : t("common.save")} className="btn btn-primary btn-sm" busy={saving}
+            <ActionButton icon="undo" label={t("accessKeys.notesDiscard")} help="help.notesDiscard" className="btn btn-text btn-sm" busy={saving} onClick={() => setDraft(saved)} />
+            <ActionButton icon="save" label={saving ? t("common.saving") : t("common.save")} help="help.notesSave" className="btn btn-primary btn-sm" busy={saving}
               disabled={tooLong} onClick={() => void save()} />
           </span>
         )}

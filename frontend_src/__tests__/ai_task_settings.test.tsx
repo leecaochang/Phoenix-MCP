@@ -29,6 +29,7 @@ function prefStatus(over: Record<string, unknown> = {}) {
 import { Notifications, NotificationsContext } from "../ui/notify";
 import { AiTaskSettings } from "../components/AiTaskSettings";
 import type { GlobalSettings } from "../types";
+import { t } from "../i18n";
 
 function settings(over: Partial<GlobalSettings> = {}): GlobalSettings {
   return {
@@ -97,7 +98,7 @@ describe("AiTaskSettings", () => {
     expect(onChange).toHaveBeenCalledWith("ai_task_conversation_style", "technical");
     expect(onChange).toHaveBeenCalledWith("ai_task_detail_level", "detailed");
     expect(screen.queryByLabelText("AI Task Home-focused mode")).toBeNull();
-    expect(screen.getByText(/only to free-text output/)).toBeInTheDocument();
+    expect(screen.getByText(t("settings.aiTaskBehaviorFreeTextOnly"), { exact: false })).toBeInTheDocument();
   });
 
   it("model select is gated on a provider", async () => {

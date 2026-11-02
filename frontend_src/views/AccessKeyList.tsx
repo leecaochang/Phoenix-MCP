@@ -150,11 +150,11 @@ export function AccessKeyListView({
       id: "accessKeys",
       label: t("shell.tabAccessKeys"),
       tools: [
-        { id: "setUpAgent", label: t("accessKeys.setUpAgent"), icon: "setupAgent", onSelect: onLaunchWizard },
-        { id: "archived", label: showArchived ? t("accessKeys.hideArchived") : t("accessKeys.showArchived"), icon: "archive", pressed: showArchived, onSelect: () => setShowArchived(!showArchived) },
+        { id: "setUpAgent", label: t("accessKeys.setUpAgent"), icon: "setupAgent", help: "help.setUpAgent", onSelect: onLaunchWizard },
+        { id: "archived", label: showArchived ? t("accessKeys.hideArchived") : t("accessKeys.showArchived"), icon: "archive", help: "help.showArchived", pressed: showArchived, onSelect: () => setShowArchived(!showArchived) },
         // Opens and closes the form (user, 2026-10-31), except while a key is being created or its
         // one-time secret is shown: closing then would lose the secret.
-        { id: "create", label: t("accessKeys.createAccessKey"), icon: "add", pressed: showCreate,
+        { id: "create", label: t("accessKeys.createAccessKey"), icon: "add", help: "help.createAccessKey", pressed: showCreate,
           onSelect: () => { if (!showCreate) onOpenCreate(); else if (!createBusy) onCloseCreate(); } },
       ],
     },
@@ -192,7 +192,7 @@ export function AccessKeyListView({
             {t("accessKeys.heroSub")}
           </p>
           <div className="wizard-hero-actions">
-            <button className="btn btn-primary" onClick={onLaunchWizard}>{t("accessKeys.setUpFirstAgent")}</button>
+            <button className="btn btn-primary" data-help="help.setUpAgent" onClick={onLaunchWizard}>{t("accessKeys.setUpFirstAgent")}</button>
           </div>
         </div>
       </div>
@@ -226,6 +226,7 @@ export function AccessKeyListView({
           rows={filtered}
           rowKey={(k) => k.id}
           selectedKey={selectedId}
+          rowHelp="help.accessKeyRow"
           // Choosing an active key hides the archived ones (user, 2026-10-28).
           onSelect={(k) => { setShowArchived(false); onOpenDetail(k.id); }}
           rowLabel={(k) => `${k.name}, ${k.pass_through ? t("accessKeys.passThrough") : t("accessKeys.scoped")}, ${accessKeyStatusLabel(accessKeyStatus(k))}`}

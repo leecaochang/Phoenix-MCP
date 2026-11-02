@@ -4,6 +4,7 @@ import { createContext, useContext, useEffect, useRef, useState, useSyncExternal
 import type { IDockviewGroupDragGhostProps, IDockviewHeaderActionsProps, IDockviewPanelHeaderProps, DockviewGroupPanel } from "dockview-react";
 import { t } from "../../i18n";
 import { Icon } from "../../ui/Icon";
+import { HELP_WINDOW } from "../help";
 import { MenuButton, type MenuEntry } from "../../ui/Menu";
 import { neighbor, type Direction } from "./geometry";
 import { tooManyAcross } from "./rows";
@@ -102,31 +103,31 @@ export function windowMenuEntries(controller: WorkspaceController, group: Dockvi
   const then = (action: () => void) => () => { action(); refocusWindowMenu(controller, windowId); };
   const entries: MenuEntry[] = MOVES.map(([dir, key]) => {
     // A floating window moves by a step over the workspace, so the keyboard can place it too.
-    if (floating && host === "float") return { id: `move-${dir}`, label: t(key), onSelect: then(() => controller.nudgeFloat(group, FLOAT_MOVES[dir])) };
+    if (floating && host === "float") return { id: `move-${dir}`, label: t(key), help: t("help.menuMoveFloat"), onSelect: then(() => controller.nudgeFloat(group, FLOAT_MOVES[dir])) };
     const target = !floating && hostApi ? neighbor(hostApi, group, dir) : null;
     // Moving beside a window in a row that is already four across is refused, as a drop there is.
     const crowded = !!target && (dir === "left" || dir === "right") && tooManyAcross(hostApi!, target, group);
-    return { id: `move-${dir}`, label: t(key), disabled: !target || crowded, onSelect: then(() => controller.move(group, dir)) };
+    return { id: `move-${dir}`, label: t(key), help: t("help.menuMoveWindow"), disabled: !target || crowded, onSelect: then(() => controller.move(group, dir)) };
   });
   entries.push("separator");
-  entries.push({ id: "resize", label: t("workspace.resizeKeyboard"), disabled: floating && host !== "float", onSelect: () => startResize(controller, windowId) });
+  entries.push({ id: "resize", label: t("workspace.resizeKeyboard"), help: t("help.menuResizeKeyboard"), disabled: floating && host !== "float", onSelect: () => startResize(controller, windowId) });
   entries.push(floating
-    ? { id: "dock", label: t("workspace.dockWindow"), onSelect: then(() => controller.dock(group)) }
-    : { id: "float", label: t("workspace.floatWindow"), onSelect: then(() => controller.float(group)) });
+    ? { id: "dock", label: t("workspace.dockWindow"), help: t("help.dockWindow"), onSelect: then(() => controller.dock(group)) }
+    : { id: "float", label: t("workspace.floatWindow"), help: t("help.floatWindow"), onSelect: then(() => controller.float(group)) });
   // Pinned windows stay in place while the grid scrolls.
   if (controller.apiOf("top") && controller.apiOf("bottom")) {
-    if (pinned) entries.push({ id: "unpin", label: t("workspace.unpin"), onSelect: then(() => controller.unpin(group)) });
-    if (host !== "top") entries.push({ id: "pin-top", label: t("workspace.pinTop"), onSelect: then(() => controller.pin(group, "top")) });
-    if (host !== "bottom") entries.push({ id: "pin-bottom", label: t("workspace.pinBottom"), onSelect: then(() => controller.pin(group, "bottom")) });
+    if (pinned) entries.push({ id: "unpin", label: t("workspace.unpin"), help: t("help.menuUnpin"), onSelect: then(() => controller.unpin(group)) });
+    if (host !== "top") entries.push({ id: "pin-top", label: t("workspace.pinTop"), help: t("help.menuPinTop"), onSelect: then(() => controller.pin(group, "top")) });
+    if (host !== "bottom") entries.push({ id: "pin-bottom", label: t("workspace.pinBottom"), help: t("help.menuPinBottom"), onSelect: then(() => controller.pin(group, "bottom")) });
   }
   const extra = extras?.(controller, windowId) ?? [];
   if (extra.length) entries.push("separator", ...extra);
   const folded = controller.folds.isFolded(windowId);
   const maximized = group.api.isMaximized();
   entries.push("separator",
-    { id: "fold", label: folded ? t("workspace.unfold") : t("workspace.fold"), onSelect: () => controller.toggleFold(group) });
-  if (!floating && !pinned) entries.push({ id: "maximize", label: maximized ? t("agentchat.restore") : t("agentchat.maximize"), onSelect: () => (maximized ? controller.restoreMaximized(group) : controller.maximize(group)) });
-  entries.push({ id: "close", label: t("common.close"), onSelect: () => controller.close(group) });
+    { id: "fold", label: folded ? t("workspace.unfold") : t("workspace.fold"), help: t("help.fold"), onSelect: () => controller.toggleFold(group) });
+  if (!floating && !pinned) entries.push({ id: "maximize", label: maximized ? t("agentchat.restore") : t("agentchat.maximize"), help: t("help.maximizeWindow"), onSelect: () => (maximized ? controller.restoreMaximized(group) : controller.maximize(group)) });
+  entries.push({ id: "close", label: t("common.close"), help: t(windowId === HELP_WINDOW ? "help.closeHelpWindow" : "help.closeWindow"), onSelect: () => controller.close(group) });
   return entries;
 }
 const RESIZE_STEP = 24;
@@ -224,7 +225,7 @@ export function WindowControls(props: IDockviewHeaderActionsProps) {
         </>
       )}
       <button type="button" className="phx-window-control" aria-label={t("common.close")} title={t("common.close")}
-        data-help="help.closeWindow" onClick={() => controller.close(group)}>
+        data-help={panel?.id === HELP_WINDOW ? "help.closeHelpWindow" : "help.closeWindow"} onClick={() => controller.close(group)}>
         <Icon name="close" size={14} />
       </button>
     </div>

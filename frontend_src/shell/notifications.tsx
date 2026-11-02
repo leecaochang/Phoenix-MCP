@@ -24,7 +24,7 @@ export function NotificationsWindow() {
             <p>{n.text}</p>
             <time dateTime={new Date(n.time).toISOString()}>{noticeTime(n.time)}</time>
           </div>
-          <button type="button" className="phx-window-control" aria-label={t("notifications.clear")} title={t("notifications.clear")}
+          <button type="button" className="phx-window-control" data-help="help.clearNotification" aria-label={t("notifications.clear")} title={t("notifications.clear")}
             onClick={() => center?.clear(n.id)}>
             <Icon name="close" size={14} />
           </button>

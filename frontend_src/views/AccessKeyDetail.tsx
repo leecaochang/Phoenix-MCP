@@ -320,6 +320,7 @@ function EditablePresetName(
     <span className="preset-name-edit" data-guide="window.presets#rename-delete">
       <BusyInput
         className="preset-name-input"
+        data-help="help.presetName"
         value={value}
         busy={saving}
         spellCheck={false}
@@ -402,6 +403,7 @@ function PresetsCard({ accessKey, onUpdate }: { accessKey: AccessKeyRecord; onUp
     <InlineConfirm
       key={`${action.kind}:${action.preset.id}`}
       label={confirmTitle}
+      help={t(action.kind === "switch" ? "help.presetSwitchTo" : action.kind === "revert" ? "help.presetRevert" : "help.presetDelete")}
       tone={action.kind === "delete" ? "danger" : "warning"}
       acknowledge={needsPtConfirm ? t("accessKeys.presetPtUnderstand") : undefined}
       confirmLabel={action.kind === "switch" ? t("accessKeys.presetSwitch") : action.kind === "revert" ? t("accessKeys.presetRevert") : t("accessKeys.delete")}
@@ -463,13 +465,13 @@ function PresetsCard({ accessKey, onUpdate }: { accessKey: AccessKeyRecord; onUp
             )}
             <span className="preset-row-actions">
               {!isActive && (
-                <ActionButton icon="switchPreset" label={t("accessKeys.presetSwitchTo")} guide="window.presets#switch-to" busy={busy} onClick={() => setAction({ kind: "switch", preset: p })} />
+                <ActionButton icon="switchPreset" label={t("accessKeys.presetSwitchTo")} help="help.presetSwitchTo" guide="window.presets#switch-to" busy={busy} onClick={() => setAction({ kind: "switch", preset: p })} />
               )}
               {isActive && dirty && (
-                <ActionButton icon="restoreVersion" label={t("accessKeys.presetRevertToSaved")} guide="window.presets#revert" busy={busy} onClick={() => setAction({ kind: "revert", preset: p })} />
+                <ActionButton icon="restoreVersion" label={t("accessKeys.presetRevertToSaved")} help="help.presetRevert" guide="window.presets#revert" busy={busy} onClick={() => setAction({ kind: "revert", preset: p })} />
               )}
               {!isActive && (
-                <ActionButton icon="delete" label={t("accessKeys.delete")} name={t("accessKeys.presetDeleteAria", { name: p.name })} guide="window.presets#rename-delete" busy={busy}
+                <ActionButton icon="delete" label={t("accessKeys.delete")} name={t("accessKeys.presetDeleteAria", { name: p.name })} help="help.presetDelete" guide="window.presets#rename-delete" busy={busy}
                   onClick={() => setAction({ kind: "delete", preset: p })} />
               )}
             </span>
@@ -485,6 +487,7 @@ function PresetsCard({ accessKey, onUpdate }: { accessKey: AccessKeyRecord; onUp
       <div className="preset-create-row" data-guide="window.presets#save-current">
         <BusyInput
           className="input"
+          data-help="help.presetNewName"
           placeholder={t("accessKeys.presetNewName")}
           value={newName}
           maxLength={40}
@@ -493,7 +496,7 @@ function PresetsCard({ accessKey, onUpdate }: { accessKey: AccessKeyRecord; onUp
           onKeyDown={(e) => { if (e.key === "Enter") createPreset(); }}
           aria-label={t("accessKeys.presetNewName")}
         />
-        <ActionButton icon="add" label={t("accessKeys.presetSaveCurrent")} busy={busy}
+        <ActionButton icon="add" label={t("accessKeys.presetSaveCurrent")} help="help.presetSaveCurrent" busy={busy}
           disabled={!newName.trim() || accessKey.presets.length >= MAX_PRESETS} onClick={() => void createPreset()} />
       </div>
       {accessKey.presets.length >= MAX_PRESETS && (
@@ -559,6 +562,7 @@ export function EditableAccessKeyName({ accessKey, onRenamed, onDone, onError }:
       <BusyInput
         ref={input}
         className="access-key-name-input"
+        data-help="help.accessKeyRename"
         value={value}
         busy={saving}
         spellCheck={false}
@@ -994,7 +998,7 @@ function ClearPermissionsConfirmation({ detail }: { detail: AccessKeyDetail }) {
   if (a?.kind !== "clearPerms") return null;
   return (
     <div ref={box} data-guide="window.permissions#clear-all">
-      <InlineConfirm label={t("workspace.clearAllPermissions")} title={t("accessKeys.clearPermsTitle")} tone="danger" confirmLabel={t("accessKeys.clearAll")}
+      <InlineConfirm label={t("workspace.clearAllPermissions")} title={t("accessKeys.clearPermsTitle")} help={t("help.clearAllPermissions")} tone="danger" confirmLabel={t("accessKeys.clearAll")}
         confirmIcon="clearPermissions" confirmClassName="btn btn-danger btn-sm" cancelLabel={t("accessKeys.cancel")} busy={a.busy} error={a.error}
         onConfirm={detail.runAction} onCancel={detail.cancelAction} opener={tool}>
         <p>{t("accessKeys.clearPermsBody")}</p>
@@ -1022,6 +1026,7 @@ export function AccessKeyNotices() {
           </span>
           <button
             className="reconnect-banner-dismiss"
+            data-help="help.reconnectDismiss"
             onClick={detail.dismissReconnect}
             aria-label={t("accessKeys.reconnectDismiss")}
           >&times;</button>
@@ -1038,14 +1043,14 @@ export function useKeyActionsTool(): ToolGroup | null {
   if (!detail || !accessKey) return null;
   // While the next key loads, the actions stay on the toolbar but do nothing.
   const menu = (): MenuEntry[] => [
-    { id: "rename", label: t("workspace.rename"), onSelect: () => detail.setRenaming(true) },
-    { id: "rotate", label: t("accessKeys.rotate"), onSelect: () => detail.openAction("rotate") },
-    { id: "passThrough", label: t("accessKeys.enablePtLabel"), disabled: accessKey.pass_through || accessKey.persona === "home_companion",
+    { id: "rename", label: t("workspace.rename"), help: t("help.keyRename"), onSelect: () => detail.setRenaming(true) },
+    { id: "rotate", label: t("accessKeys.rotate"), help: t("help.keyRotate"), onSelect: () => detail.openAction("rotate") },
+    { id: "passThrough", label: t("accessKeys.enablePtLabel"), help: t("help.keyEnablePassThrough"), disabled: accessKey.pass_through || accessKey.persona === "home_companion",
       hint: accessKey.persona === "home_companion" ? t("accessKeys.companionUnavailable") : undefined, onSelect: () => detail.openAction("passThrough") },
     "separator",
-    { id: "revoke", label: t("accessKeys.revoke"), onSelect: () => detail.openAction("revoke") },
+    { id: "revoke", label: t("accessKeys.revoke"), help: t("help.keyRevoke"), onSelect: () => detail.openAction("revoke") },
   ];
-  return { id: "selectedKey", label: accessKey.name, tools: [{ id: "keyActions", label: t("workspace.keyActions"), icon: "keyActions", menu, disabled: detail.stale }] };
+  return { id: "selectedKey", label: accessKey.name, tools: [{ id: "keyActions", label: t("workspace.keyActions"), icon: "keyActions", help: "help.keyActions", menu, disabled: detail.stale }] };
 }
 
 export function PersonaWindow() {
@@ -1115,7 +1120,7 @@ export function PermissionsWindow() {
     label: t("accessKeys.permissionsTree"),
     tools: [
       // Clearing is not deleting, and like the other destructive buttons it turns red only to confirm (user, 2026-10-28).
-      { id: "clearAll", label: t("workspace.clearAllPermissions"), icon: "clearPermissions", disabled: detail.stale,
+      { id: "clearAll", label: t("workspace.clearAllPermissions"), icon: "clearPermissions", help: "help.clearAllPermissions", disabled: detail.stale,
         pressed: detail.action?.kind === "clearPerms",
         onSelect: () => (detail.action?.kind === "clearPerms" ? detail.cancelAction() : detail.openAction("clearPerms")) },
     ],
@@ -1130,7 +1135,7 @@ export function PermissionsWindow() {
     <KeyPad k={k}>
       {!onToolbar && k.detail.action?.kind !== "clearPerms" && (
         <div className="tree-header-actions">
-          <ActionButton icon="clearPermissions" label={t("accessKeys.clearAll")} className="btn btn-outline btn-sm" guide="window.permissions#clear-all" onClick={() => k.detail.openAction("clearPerms")} />
+          <ActionButton icon="clearPermissions" label={t("accessKeys.clearAll")} help="help.clearAllPermissions" className="btn btn-outline btn-sm" guide="window.permissions#clear-all" onClick={() => k.detail.openAction("clearPerms")} />
         </div>
       )}
       <ClearPermissionsConfirmation detail={k.detail} />

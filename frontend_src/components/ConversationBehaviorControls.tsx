@@ -55,12 +55,16 @@ export function ConversationBehaviorControls({
   onHomeFocusedChange?: (value: boolean) => void;
   aiTaskFreeTextOnly?: boolean;
 }) {
-  const detailHelp = t(DETAIL_HELP[detail]) + (aiTaskFreeTextOnly ? `${t("common.sentenceSeparator")}${t("settings.aiTaskBehaviorFreeTextOnly")}` : "");
+  const sep = t("common.sentenceSeparator");
+  // Each row says what it sets, then what the chosen option does, named as the select names it.
+  const styleHelp = t("settings.conversationStyleHelp") + sep + t("settings.selectedOptionHelp", { option: t(STYLE_LABELS[style]), description: t(STYLE_HELP[style]) });
+  const detailHelp = t("settings.detailLevelHelp") + sep + t("settings.selectedOptionHelp", { option: t(DETAIL_LABELS[detail]), description: t(DETAIL_HELP[detail]) })
+    + (aiTaskFreeTextOnly ? `${sep}${t("settings.aiTaskBehaviorFreeTextOnly")}` : "");
   return (
     <>
       <hr className="settings-divider" />
-      <div className="toggle-row toggle-row-stacked-control" {...helpRow(t(STYLE_HELP[style]))}>
-        <SettingLabel help={t(STYLE_HELP[style])}><span>{t("settings.conversationStyle")}</span></SettingLabel>
+      <div className="toggle-row toggle-row-stacked-control" {...helpRow(styleHelp)}>
+        <SettingLabel help={styleHelp}><span>{t("settings.conversationStyle")}</span></SettingLabel>
         <BusySelect
           className="input input-auto"
           value={style}

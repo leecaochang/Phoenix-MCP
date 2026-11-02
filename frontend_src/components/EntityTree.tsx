@@ -217,7 +217,7 @@ const HintButton = forwardRef<HTMLButtonElement, {
   const shown = currentHint || globalHint;
   const label = shown ? t("perms.editHint") : t("perms.addHint");
   return (
-    <button ref={ref} type="button" data-guide="window.permissions#hints" className={`tree-hint-btn${shown ? " has-hint" : ""}${iconsOnly ? " is-icon-only" : ""}`}
+    <button ref={ref} type="button" data-help="help.treeHint" data-guide="window.permissions#hints" className={`tree-hint-btn${shown ? " has-hint" : ""}${iconsOnly ? " is-icon-only" : ""}`}
       aria-label={label} aria-expanded={open} title={shown ? `${label}: ${shown}` : label} onClick={onToggle}>
       <Icon name={shown ? "hint" : "hintAdd"} size={14} />
       {!iconsOnly && <span>{label}</span>}
@@ -521,6 +521,7 @@ function DeviceIdentity({ deviceId, deviceName, expanded, onToggle }: DeviceIden
         <button
           type="button"
           className="tree-device-name tree-cursor-pointer"
+          data-help="help.treeExpand"
           onClick={onToggle}
           aria-expanded={expanded}
         >
@@ -622,7 +623,7 @@ function DeviceGroup({
   return (
     <div>
       <div ref={headerRef} className={`tree-node${isRevealed ? " tree-node-revealed" : ""}`}>
-        <button type="button" className="tree-expand" onClick={() => setExpanded((x) => !x)} aria-expanded={expanded} aria-label={expanded ? t("perms.treeCollapse", { name: deviceName }) : t("perms.treeExpand", { name: deviceName })}>
+        <button type="button" className="tree-expand" data-help="help.treeExpand" onClick={() => setExpanded((x) => !x)} aria-expanded={expanded} aria-label={expanded ? t("perms.treeCollapse", { name: deviceName }) : t("perms.treeExpand", { name: deviceName })}>
           <span className={`collapsible-chevron${expanded ? " open" : ""}`} aria-hidden="true" />
         </button>
         {onOpenMesa && (
@@ -885,7 +886,7 @@ function DomainGroup({
     <div className="tree-domain-group">
       <div ref={headerRef} className={`tree-node${isRevealed ? " tree-node-revealed" : ""}`}>
         {hasChildren ? (
-          <button type="button" className="tree-expand" onClick={() => setExpanded((x) => !x)} aria-expanded={expanded} aria-label={expanded ? t("perms.treeCollapse", { name: domainKey }) : t("perms.treeExpand", { name: domainKey })}>
+          <button type="button" className="tree-expand" data-help="help.treeExpand" onClick={() => setExpanded((x) => !x)} aria-expanded={expanded} aria-label={expanded ? t("perms.treeCollapse", { name: domainKey }) : t("perms.treeExpand", { name: domainKey })}>
             <span className={`collapsible-chevron${expanded ? " open" : ""}`} aria-hidden="true" />
           </button>
         ) : <span className="tree-spacer" />}
@@ -901,7 +902,7 @@ function DomainGroup({
           />
         )}
         {hasChildren ? (
-          <button type="button" className="tree-name tree-cursor-pointer" onClick={() => setExpanded((x) => !x)} aria-expanded={expanded}>
+          <button type="button" className="tree-name tree-cursor-pointer" data-help="help.treeExpand" onClick={() => setExpanded((x) => !x)} aria-expanded={expanded}>
             <span className="tree-friendly tree-domain-label">{domainKey}</span>
           </button>
         ) : (
@@ -1081,11 +1082,11 @@ function SelectByControls({ tree, choice, integrations, integrationsError, onCha
   }, [tree, mode, integrations]);
 
   const items: MenuEntry[] = [
-    { id: "reset", label: t("selectBy.reset"), disabled: !mode, onSelect: () => choose(null) },
+    { id: "reset", label: t("selectBy.reset"), help: t("help.selectByReset"), disabled: !mode, onSelect: () => choose(null) },
     "separator",
-    { id: "area", label: t("selectBy.area"), checked: mode === "area", onSelect: () => choose("area") },
-    { id: "label", label: t("selectBy.label"), checked: mode === "label", onSelect: () => choose("label") },
-    { id: "integration", label: t("selectBy.integration"), checked: mode === "integration", onSelect: () => choose("integration") },
+    { id: "area", label: t("selectBy.area"), help: t("help.selectByArea"), checked: mode === "area", onSelect: () => choose("area") },
+    { id: "label", label: t("selectBy.label"), help: t("help.selectByLabel"), checked: mode === "label", onSelect: () => choose("label") },
+    { id: "integration", label: t("selectBy.integration"), help: t("help.selectByIntegration"), checked: mode === "integration", onSelect: () => choose("integration") },
   ];
   const loadingIntegrations = mode === "integration" && !integrations && !integrationsError;
   const selectLabel = mode === "area" ? t("selectBy.area") : mode === "label" ? t("selectBy.label") : t("selectBy.integration");
@@ -1101,7 +1102,7 @@ function SelectByControls({ tree, choice, integrations, integrationsError, onCha
         {!iconsOnly && <span>{t("selectBy.menu")}</span>}
       </MenuButton>
       {choice && (
-        <select ref={valueSelect} className="input input-auto tree-filter-select" aria-label={selectLabel} value={choice.value}
+        <select ref={valueSelect} className="input input-auto tree-filter-select" data-help="help.selectByValue" aria-label={selectLabel} value={choice.value}
           disabled={loadingIntegrations} onChange={(e) => onChange({ mode: choice.mode, value: e.target.value })}>
           <option value="">{placeholder}</option>
           {groups.map((group) => <option key={group.id} value={group.id}>{group.name} ({group.count})</option>)}
@@ -1286,6 +1287,7 @@ export function EntityTree({ accessKeyId, permissions, onPermissionsChange, onEn
           value={filter}
           onChange={(e) => setFilter(e.target.value)}
           aria-label={t("perms.filterAria")}
+          data-help="help.treeFilter"
           data-guide="window.permissions#search"
         />
       </div>

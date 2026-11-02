@@ -436,6 +436,7 @@ function ModeRadio({ cap, mode, current, onSelect, disabled, busy, unavailable }
       onClick={() => { if (!busy && !disabled) onSelect(cap, mode); }}
       className={`mode-radio mode-${mode}${checked ? " mode-radio-checked" : ""}${unavailable ? " mode-radio-unavailable" : ""}`}
       title={unavailable ? t("caps.confirmUnavailable") : t(MODE_DESC_KEYS[mode])}
+      data-help={unavailable ? "caps.confirmUnavailable" : MODE_DESC_KEYS[mode]}
     >
       <span className="mode-radio-dot" />
       <span className="mode-radio-label">{t(MODE_LABEL_KEYS[mode])}</span>

@@ -16,6 +16,7 @@ import { ConnectInstructions, CopyCodeBox } from "./ConnectInstructions";
 import { ActionButton } from "../ui/ActionButton";
 import { Icon, type IconName } from "../ui/Icon";
 import { useClickAway } from "../ui/useClickAway";
+import { helpRow } from "../ui/SettingLabel";
 
 const NAME_REGEX = /^[A-Za-z0-9_\-]{3,32}$/;
 
@@ -40,7 +41,7 @@ function addMinutes(m: number): string {
 }
 
 
-export function CopyButton({ text, label = t("accessKeys.copyToClipboard") }: { text: string; label?: string }) {
+export function CopyButton({ text, label = t("accessKeys.copyToClipboard"), help }: { text: string; label?: string; help?: string }) {
   const [copied, setCopied] = useState(false);
   async function copy() {
     await copyToClipboard(text);
@@ -49,7 +50,7 @@ export function CopyButton({ text, label = t("accessKeys.copyToClipboard") }: { 
   }
   return (
     <>
-      <ActionButton icon={copied ? "check" : "copy"} label={copied ? t("accessKeys.copied") : label} className="btn btn-outline btn-sm" onClick={() => void copy()} />
+      <ActionButton icon={copied ? "check" : "copy"} label={copied ? t("accessKeys.copied") : label} help={help} className="btn btn-outline btn-sm" onClick={() => void copy()} />
       {/* Announce the visual Copy -> Copied! swap to assistive tech. */}
       <span className="sr-only" role="status">{copied ? t("accessKeys.copiedToClipboard") : ""}</span>
     </>
@@ -265,6 +266,7 @@ export function AccessKeyCreateForm({ existingNames, onCreated, onClose, onOpenS
           <label htmlFor="access-key-name-input">{t("accessKeys.nameLabel")}</label>
           <input
             id="access-key-name-input"
+            data-help="help.accessKeyName"
             className={`input${nameError ? " error" : ""}`}
             value={name}
             onChange={(e) => setName(e.target.value)}
@@ -282,6 +284,7 @@ export function AccessKeyCreateForm({ existingNames, onCreated, onClose, onOpenS
           <div className="access-key-create-expiry-row" data-guide="window.accessKeys#key-expiry">
             <select
               id="access-key-expiry-unit"
+              data-help="help.keyExpiry"
               className="input input-auto"
               value={ttlUnit}
               onChange={(e) => setTtlUnit(e.target.value as TtlUnit)}
@@ -295,6 +298,7 @@ export function AccessKeyCreateForm({ existingNames, onCreated, onClose, onOpenS
             {ttlUnit !== "none" && (
               <input
                 aria-label={t("accessKeys.expiryAmountAria")}
+                data-help="help.keyExpiry"
                 className="input access-key-create-expiry-value"
                 type="number"
                 min={1}
@@ -310,7 +314,7 @@ export function AccessKeyCreateForm({ existingNames, onCreated, onClose, onOpenS
 
         {!passThrough && (
           <>
-            <div className="field access-key-create-number" data-guide="window.accessKeys#key-rate-limits">
+            <div className="field access-key-create-number" data-guide="window.accessKeys#key-rate-limits" {...helpRow(t("help.createRateLimits"))}>
               <label htmlFor="create-rate-requests">{t("accessKeys.rateRequestsLabel")}</label>
               <input
                 id="create-rate-requests"
@@ -321,7 +325,7 @@ export function AccessKeyCreateForm({ existingNames, onCreated, onClose, onOpenS
                 onChange={(e) => setRateLimitRequests(e.target.value)}
               />
             </div>
-            <div className="field access-key-create-number" data-guide="window.accessKeys#key-rate-limits">
+            <div className="field access-key-create-number" data-guide="window.accessKeys#key-rate-limits" {...helpRow(t("help.createRateLimits"))}>
               <label htmlFor="create-rate-burst">{t("accessKeys.rateBurstLabel")}</label>
               <input
                 id="create-rate-burst"
@@ -353,7 +357,7 @@ export function AccessKeyCreateForm({ existingNames, onCreated, onClose, onOpenS
       </div>
 
       {passThrough && (
-        <div className="amber-block" data-help="accessKeys.createPtWarning" data-help-controls="">
+        <div className="amber-block">
           <p>
             {tRich("accessKeys.createPtWarning", { strong: (c) => <strong>{c}</strong> })}
           </p>
@@ -363,6 +367,7 @@ export function AccessKeyCreateForm({ existingNames, onCreated, onClose, onOpenS
               <input
                 type="checkbox"
                 aria-label={t("accessKeys.createPtUnderstand")}
+                data-help="help.createPassThroughAck"
                 checked={ptConfirmed}
                 onChange={(e) => setPtConfirmed(e.target.checked)}
               />
@@ -375,9 +380,9 @@ export function AccessKeyCreateForm({ existingNames, onCreated, onClose, onOpenS
       {error && <div className="banner banner-error mt-12">{error}</div>}
 
       <div className="phx-inline-form-actions">
-        <ActionButton icon="add" label={t("accessKeys.create")} busy={saving} disabled={!canSubmit}
+        <ActionButton icon="add" label={t("accessKeys.create")} help="help.createAccessKeySubmit" busy={saving} disabled={!canSubmit}
           onClick={() => { void submit(); }} className="btn btn-primary btn-sm" />
-        <ActionButton icon="undo" label={t("accessKeys.cancel")} busy={saving} onClick={onClose} className="btn btn-outline btn-sm" />
+        <ActionButton icon="undo" label={t("accessKeys.cancel")} help="help.createAccessKeyCancel" busy={saving} onClick={onClose} className="btn btn-outline btn-sm" />
       </div>
     </section>
   );

@@ -38,6 +38,10 @@ vi.mock("../api", () => ({
 import { AgentCliSettings } from "../components/AgentCliSettings";
 import { LlmProviderSettings } from "../components/LlmProviderSettings";
 import type { GlobalSettings } from "../types";
+import { t } from "../i18n";
+import { tPlain } from "../i18n/rich";
+
+const PROBE_HELP = () => tPlain("settings.agentcliProbeBody", { name: "DeepSeek", model: "deepseek-v4-flash" });
 
 function instances() {
   return {
@@ -293,7 +297,7 @@ describe("AgentCliSettings", () => {
     // removing does reads in Help (user, 2026-10-31).
     const confirm = await screen.findByRole("button", { name: "Confirm Remove DeepSeek" });
     expect(confirm).toHaveClass("btn-danger");
-    expect(confirm.getAttribute("data-help-text")).toMatch(/Agent Chat can no longer use it\. If the Voice Agent or AI Task uses this account/);
+    expect(confirm).toHaveAttribute("data-help-text", tPlain("settings.agentcliRemoveBody", { name: "DeepSeek" }));
     expect(screen.getByRole("button", { name: "Cancel" })).toBeTruthy();
     expect(deleteAgentCliProvider).not.toHaveBeenCalled();
     fireEvent.click(confirm);
@@ -373,7 +377,7 @@ describe("AgentCliSettings", () => {
     expect(onStyle).toHaveBeenCalledWith("warm");
     expect(onDetail).toHaveBeenCalledWith("detailed");
     expect(onFocus).toHaveBeenCalledWith(true);
-    expect(screen.getByText(/Focus preference, not a security control/)).toBeInTheDocument();
+    expect(screen.getByText(t("settings.homeFocusedHelp"))).toBeInTheDocument();
   });
 
   it("chat memory auto-saves after a change without an explicit blur (spinner fix)", () => {
@@ -805,10 +809,10 @@ describe("AgentCliSettings capability probe", () => {
     // both, not in the window (user, 2026-10-31): it is what separates this button from the
     // free refresh.
     const now = await screen.findByRole("button", { name: "Check Now" });
-    expect(now.getAttribute("data-help-text")).toMatch(/uses your own API credit/);
+    expect(now).toHaveAttribute("data-help-text", PROBE_HELP());
     expect(now).not.toHaveClass("btn-primary");
     expect(screen.getByRole("button", { name: "Cancel" })).toBeTruthy();
-    expect(screen.queryByText(/uses your own API credit/)).toBeNull();
+    expect(screen.queryByText(PROBE_HELP(), { exact: false })).toBeNull();
     expect(probeAgentCliCapabilities).not.toHaveBeenCalled();
   });
 
@@ -856,7 +860,7 @@ describe("AgentCliSettings capability probe", () => {
     renderCard();
     await openAccount();
     fireEvent.click(await screen.findByRole("button", { name: "Check Options" }));
-    expect((await screen.findByRole("button", { name: "Check Now" })).getAttribute("data-help-text")).toMatch(/test image and reads the answer/);
+    expect(await screen.findByRole("button", { name: "Check Now" })).toHaveAttribute("data-help-text", PROBE_HELP());
     fireEvent.click(await screen.findByText("Check Now"));
     expect(await screen.findByText(finding)).toBeTruthy();
   });

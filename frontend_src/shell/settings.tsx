@@ -322,7 +322,7 @@ export function useFindSettingTool(): Tool | null {
   if (!s) return null;
   const label = t("workspace.findSetting");
   return {
-    id: "findSetting", label, icon: "search", pressed: s.findOpen,
+    id: "findSetting", label, icon: "search", help: "help.findSetting", pressed: s.findOpen,
     onSelect: () => s.setFindOpen(!s.findOpen),
     onSet: (on) => s.setFindOpen(on),
     shared: { id: "findSetting", label },
@@ -339,7 +339,7 @@ export function useLogSettingsTool(): Tool[] {
   const toggle = () => controller.toggleFloating(LOG_SETTINGS_WINDOW, LOG_SETTINGS_SIZE.width, LOG_SETTINGS_SIZE.height);
   // Both logs share this tool and each receives the same request, so compare with the window as it is now, not as rendered.
   const set = (on: boolean) => { if (on !== !!controller.hostOf(LOG_SETTINGS_WINDOW)) toggle(); };
-  return [{ id: "logSettings", label, icon: "recordingSettings", pressed: open, shared: { id: "logSettings", label }, onSelect: toggle, onSet: set }];
+  return [{ id: "logSettings", label, icon: "recordingSettings", help: "help.logSettings", pressed: open, shared: { id: "logSettings", label }, onSelect: toggle, onSet: set }];
 }
 const LOG_SETTINGS_WINDOW = "settingsLogs";
 // Wide enough for both logs' columns side by side, as in the Settings workspace.
@@ -350,7 +350,7 @@ const noVersion = () => 0;
 /** Pause Updates on the Logs toolbar: a log stops updating itself while it is on; Refresh still works. */
 export function pauseUpdatesTool(paused: boolean, setPaused: (paused: boolean) => void): Tool {
   const label = t("logs.pauseUpdates");
-  return { id: "pause", label, icon: "paused", pressed: paused, shared: { id: "pause", label }, onSelect: () => setPaused(!paused), onSet: setPaused };
+  return { id: "pause", label, icon: "paused", help: "help.pauseUpdates", pressed: paused, shared: { id: "pause", label }, onSelect: () => setPaused(!paused), onSet: setPaused };
 }
 
 /** The search field and its results, beside the toolbar's Find Setting button. */

@@ -123,7 +123,7 @@ export function ChangesListWindow() {
     label: t("shell.tabChanges"),
     tools: [
       // No Refresh: the list follows Home Assistant's configuration events, and polls while shown.
-      { id: "filters", label: activeFilters ? t("logs.filtersCount", { count: localeNumber(activeFilters) }) : t("logs.filters"), short: t("logs.filters"), icon: "filter",
+      { id: "filters", label: activeFilters ? t("logs.filtersCount", { count: localeNumber(activeFilters) }) : t("logs.filters"), short: t("logs.filters"), icon: "filter", help: "help.filters",
         pressed: filtersOpen, badge: activeFilters || undefined, onSelect: () => setFiltersOpen((open) => !open) },
     ],
   }] : [];
@@ -154,19 +154,19 @@ export function ChangesListWindow() {
       {!onToolbar && <InlineTools groups={groups} />}
       <div className="phx-filters" hidden={!showFilters} data-guide="window.changes#filters">
         <div className="filter-row">
-          <select className="input input-auto" data-filter="type" value={type} onChange={(e) => { forget(); setType(e.target.value); }} aria-label={t("changes.colType")}>
+          <select className="input input-auto" data-filter="type" data-help="help.changesType" value={type} onChange={(e) => { forget(); setType(e.target.value); }} aria-label={t("changes.colType")}>
             <option value="">{t("changes.allTypes")}</option>
             {Object.keys(RESOURCE_TYPE_LABEL_KEYS).map((rt) => <option key={rt} value={rt}>{resourceTypeLabel(rt)}</option>)}
           </select>
-          <select className="input input-auto" data-filter="action" value={action} onChange={(e) => { forget(); setAction(e.target.value); }} aria-label={t("changes.colAction")}>
+          <select className="input input-auto" data-filter="action" data-help="help.changesAction" value={action} onChange={(e) => { forget(); setAction(e.target.value); }} aria-label={t("changes.colAction")}>
             <option value="">{t("changes.allActions")}</option>
             {Object.keys(ACTION_LABEL_KEYS).map((a) => <option key={a} value={a}>{actionLabel(a)}</option>)}
           </select>
-          {activeFilters > 0 && <ActionButton icon="clearFilters" label={t("logs.clearFilters")} onClick={clearFilters} />}
+          {activeFilters > 0 && <ActionButton icon="clearFilters" label={t("logs.clearFilters")} help="help.clearFilters" onClick={clearFilters} />}
         </div>
         <div className="filter-row">
           <input type="search" className="input" value={search} onChange={(e) => { forget(); setSearch(e.target.value); }}
-            placeholder={t("changes.search")} aria-label={t("changes.search")} />
+            placeholder={t("changes.search")} aria-label={t("changes.search")} data-help="help.changesSearch" />
         </div>
       </div>
       {c.error && <ErrorMsg msg={c.error} />}
@@ -183,6 +183,7 @@ export function ChangesListWindow() {
         selectedKey={c.selectedId}
         onSelect={(v, ordered) => { c.select(v.id, ordered.map((o) => o.id)); ensureOpen("comparison"); }}
         rowLabel={(v) => `${changeLabel(v)}, ${actionLabel(v.action)}, ${formatDateTime(v.timestamp)}`}
+        rowHelp="help.changesRow"
         empty={c.loading ? null : <p className="audit-empty">{c.feed.length ? t("changes.emptySearch") : t("changes.empty")}</p>}
       />
       </div>
@@ -190,7 +191,7 @@ export function ChangesListWindow() {
         <div className="phx-table-footer">
           <span className="conversation-secondary">{t("conversations.showing", { shown: localeNumber(shown.length), total: localeNumber(c.total) })}</span>
           {c.hasMore && (
-            <ActionButton icon="loadMore" label={c.loadingMore ? t("common.loading") : t("common.loadMore")} guide="window.changes#load-more" busy={c.loadingMore} onClick={c.loadMore} />
+            <ActionButton icon="loadMore" label={c.loadingMore ? t("common.loading") : t("common.loadMore")} guide="window.changes#load-more" helpText={t("help.loadMore", { count: localeNumber(100) })} busy={c.loadingMore} onClick={c.loadMore} />
           )}
         </div>
       )}
@@ -209,12 +210,13 @@ function RestoreMenu({ c }: { c: ChangesState }) {
       label: t(side === "before" ? "changes.restoreBefore" : "changes.restoreAfter"),
       disabled: !availability.ok,
       hint: availability.ok ? undefined : availability.reason,
+      help: t(side === "before" ? "help.restoreBefore" : "help.restoreAfter"),
       onSelect: () => c.askRestore(side),
     };
   };
   return (
     <span className="change-restore" data-guide="window.comparison#restore">
-    <MenuButton label={t("changes.restore")} icon={<Icon name="restoreVersion" size={16} />} items={() => [item("before"), item("after")]}
+    <MenuButton label={t("changes.restore")} help="help.restore" icon={<Icon name="restoreVersion" size={16} />} items={() => [item("before"), item("after")]}
       className={`btn btn-outline btn-sm phx-action${iconsOnly ? " is-icon-only" : ""}`} pressed={!!c.confirm}>
       {!iconsOnly && <span>{t("changes.restore")}</span>}
     </MenuButton>
@@ -228,7 +230,7 @@ function RestoreConfirmation({ c }: { c: ChangesState }) {
   return (
     <div data-guide="window.comparison#confirm">
     <InlineConfirm label={t("changes.restore")} title={t("changes.confirmRestoreQuestion", { name: changeLabel(record), side, time: formatDateTime(record.timestamp) })} confirmLabel={t("changes.confirmRestoreButton")} confirmClassName="btn btn-sm phx-decision-approve"
-      cancelLabel={t("changes.cancelRestore")} busy={c.restoring} onConfirm={() => { void c.restore(); }} onCancel={c.cancelRestore}>
+      cancelLabel={t("changes.cancelRestore")} help={t("help.confirmRestore")} busy={c.restoring} onConfirm={() => { void c.restore(); }} onCancel={c.cancelRestore}>
       <p>{t("changes.restoreReplaces")}</p>
     </InlineConfirm>
     </div>
@@ -291,13 +293,13 @@ function VersionComparison({ c, restore }: { c: ChangesState; restore: ReactNode
       {/* The view controls, then Restore at the end of the same row (user, 2026-10-27). */}
       <div className="change-diff-toolbar" data-guide="window.comparison#views">
         {canPreview && (
-          <SegmentedToggle value={mode} onChange={setMode} ariaLabel={t("approvals.diffModeAria")}
+          <SegmentedToggle value={mode} onChange={setMode} help="help.diffPreview" ariaLabel={t("approvals.diffModeAria")}
             options={[{ value: "diff", label: t("common.diff") }, { value: "preview", label: t("common.preview") }]} />
         )}
         {!showPreview && <CodeToggle code={code} onToggle={toggleCode} />}
         {!showPreview && <LayoutToggle stacked={stacked} onToggle={toggleStacked} />}
         {showPreview && (
-          <SegmentedToggle value={previewSide} onChange={setSide} ariaLabel={t("approvals.diffSideAria")}
+          <SegmentedToggle value={previewSide} onChange={setSide} help="help.previewSide" ariaLabel={t("approvals.diffSideAria")}
             options={[
               { value: "before", label: t("common.before"), disabled: !beforeOk },
               { value: "after", label: t("common.after"), disabled: !afterOk },
@@ -347,8 +349,8 @@ export function ComparisonWindow() {
         <div className="phx-log-details-bar">
           <h3 className="phx-review-title">{changeLabel(record)}</h3>
           <div className="phx-log-details-nav" data-guide="window.comparison#step">
-            <ActionButton icon="previous" label={t("workspace.previousRecord")} disabled={!c.neighbour(-1)} onClick={() => c.step(-1)} className="btn btn-outline btn-sm" />
-            <ActionButton icon="next" label={t("workspace.nextRecord")} disabled={!c.neighbour(1)} onClick={() => c.step(1)} className="btn btn-outline btn-sm" />
+            <ActionButton icon="previous" label={t("workspace.previousRecord")} help="help.previousRecord" disabled={!c.neighbour(-1)} onClick={() => c.step(-1)} className="btn btn-outline btn-sm" />
+            <ActionButton icon="next" label={t("workspace.nextRecord")} help="help.nextRecord" disabled={!c.neighbour(1)} onClick={() => c.step(1)} className="btn btn-outline btn-sm" />
           </div>
         </div>
         <p className="phx-review-context">
@@ -380,6 +382,7 @@ export function ItemHistoryWindow() {
     <div className="phx-list-view">
       <ConfigTable
         id="itemHistory"
+        rowHelp="help.itemHistoryRow"
         label={t("workspace.itemHistory")}
         defaultSort={NEWEST_FIRST}
         columns={columns}

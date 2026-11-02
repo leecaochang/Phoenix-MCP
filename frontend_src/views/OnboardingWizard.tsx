@@ -257,19 +257,19 @@ export function OnboardingWizard({ onCancel, onFinish }: Props) {
             <h3 className="wizard-title">{t("wizard.chooseTitle")}</h3>
             <p className="wizard-sub">{t("wizard.chooseSub")}</p>
             <div className="wizard-choice-row" data-guide-part>
-              <button type="button" className={`wizard-choice${branch === "chat" ? " is-chosen" : ""}`} aria-pressed={branch === "chat"} onClick={() => { setBranch("chat"); setStep("persona"); }}>
+              <button type="button" className={`wizard-choice${branch === "chat" ? " is-chosen" : ""}`} aria-pressed={branch === "chat"} data-help="help.wizardChoiceChat" onClick={() => { setBranch("chat"); setStep("persona"); }}>
                 <Icon name="agentChat" size={18} />
                 <strong>{t("wizard.choiceChatTitle")}</strong>
                 <small>{t("wizard.choiceChatBody")}</small>
               </button>
-              <button type="button" className={`wizard-choice${branch === "app" ? " is-chosen" : ""}`} aria-pressed={branch === "app"} onClick={() => { setBranch("app"); setStep("persona"); }}>
+              <button type="button" className={`wizard-choice${branch === "app" ? " is-chosen" : ""}`} aria-pressed={branch === "app"} data-help="help.wizardChoiceApp" onClick={() => { setBranch("app"); setStep("persona"); }}>
                 <Icon name="popOut" size={18} />
                 <strong>{t("wizard.choiceAppTitle")}</strong>
                 <small>{t("wizard.choiceAppBody")}</small>
               </button>
             </div>
             <div className="wizard-actions">
-              <ActionButton icon="undo" label={t("common.cancel")} className="btn btn-text" onClick={onCancel} />
+              <ActionButton icon="undo" label={t("common.cancel")} help="help.wizardCancel" className="btn btn-text" onClick={onCancel} />
             </div>
           </>
         );
@@ -280,8 +280,8 @@ export function OnboardingWizard({ onCancel, onFinish }: Props) {
             <p className="wizard-sub">{tRich("wizard.personaSub", { strong: (c) => <strong>{c}</strong> })}</p>
             <div data-guide-part><PersonaPicker selected={persona} onSelect={setPersona} /></div>
             <div className="wizard-actions">
-              <ActionButton icon="back" label={t("wizard.back")} className="btn btn-text" onClick={() => setStep("choose")} />
-              <ActionButton icon="forward" label={t("wizard.next")} className="btn btn-primary" disabled={!persona} onClick={() => setStep("accessKey")} />
+              <ActionButton icon="back" label={t("wizard.back")} help="help.wizardBack" className="btn btn-text" onClick={() => setStep("choose")} />
+              <ActionButton icon="forward" label={t("wizard.next")} help="help.wizardNextPersona" className="btn btn-primary" disabled={!persona} onClick={() => setStep("accessKey")} />
             </div>
           </>
         );
@@ -292,13 +292,13 @@ export function OnboardingWizard({ onCancel, onFinish }: Props) {
             <p className="wizard-sub">{t("wizard.accessKeySub")}</p>
             <div className="field" data-guide-part>
               <label htmlFor="wiz-name">{t("wizard.nameLabel")}</label>
-              <input id="wiz-name" className="input" value={name} disabled={!!accessKeyId}
+              <input id="wiz-name" className="input" data-help="help.accessKeyName" value={name} disabled={!!accessKeyId}
                 maxLength={32} onChange={(e) => { nameTyped.current = true; setName(e.target.value); }} placeholder={t("accessKeys.namePlaceholder")} />
             </div>
             <div className="field">
               <label htmlFor="wiz-expiry-unit">{t("wizard.expiryLabel")}</label>
               <div className="access-key-create-expiry-row">
-                <select id="wiz-expiry-unit" className="input input-auto" value={ttlUnit} disabled={!!accessKeyId}
+                <select id="wiz-expiry-unit" className="input input-auto" data-help="help.keyExpiry" value={ttlUnit} disabled={!!accessKeyId}
                   onChange={(e) => setTtlUnit(e.target.value as TtlUnit)}>
                   <option value="none">{t("wizard.expiryNone")}</option>
                   <option value="minutes">{t("wizard.expiryMinutes")}</option>
@@ -307,7 +307,7 @@ export function OnboardingWizard({ onCancel, onFinish }: Props) {
                   <option value="weeks">{t("wizard.expiryWeeks")}</option>
                 </select>
                 {ttlUnit !== "none" && (
-                  <input className="input access-key-create-expiry-value" type="number" min={1}
+                  <input className="input access-key-create-expiry-value" type="number" min={1} data-help="help.keyExpiry"
                     aria-label={t("wizard.expiryAmountAria")} aria-invalid={ttlInvalid}
                     value={ttlValue} disabled={!!accessKeyId} onChange={(e) => setTtlValue(e.target.value)} />
                 )}
@@ -315,8 +315,8 @@ export function OnboardingWizard({ onCancel, onFinish }: Props) {
             </div>
             {accessKeyId && <div className="banner banner-info">{t("wizard.accessKeyCreatedBanner")}</div>}
             <div className="wizard-actions">
-              <ActionButton icon="back" label={t("wizard.back")} className="btn btn-text" onClick={() => setStep("persona")} />
-              <ActionButton icon={accessKeyId ? "forward" : "add"} className="btn btn-primary" busy={saving} onClick={() => void createAndAdvance()}
+              <ActionButton icon="back" label={t("wizard.back")} help="help.wizardBack" className="btn btn-text" onClick={() => setStep("persona")} />
+              <ActionButton icon={accessKeyId ? "forward" : "add"} help="help.wizardCreateKey" className="btn btn-primary" busy={saving} onClick={() => void createAndAdvance()}
                 label={saving ? t("wizard.working") : accessKeyId ? t("wizard.next") : t("wizard.createAccessKey")} />
             </div>
           </>
@@ -329,7 +329,7 @@ export function OnboardingWizard({ onCancel, onFinish }: Props) {
             {!hasLights && !showAllDomains && (
               <div className="banner banner-warn">
                 {t("wizard.noLights")}{" "}
-                <ActionButton icon="preview" label={t("wizard.showAllDevices")} className="btn btn-text btn-sm" onClick={() => setShowAllDomains(true)} />
+                <ActionButton icon="preview" label={t("wizard.showAllDevices")} help="help.wizardShowAllDevices" className="btn btn-text btn-sm" onClick={() => setShowAllDomains(true)} />
               </div>
             )}
             {accessKeyId && (
@@ -343,8 +343,8 @@ export function OnboardingWizard({ onCancel, onFinish }: Props) {
               </div>
             )}
             <div className="wizard-actions">
-              <ActionButton icon="back" label={t("wizard.back")} className="btn btn-text" onClick={() => setStep("accessKey")} />
-              <ActionButton icon="forward" label={t("wizard.next")} className="btn btn-primary" disabled={!grantedEntityId}
+              <ActionButton icon="back" label={t("wizard.back")} help="help.wizardBack" className="btn btn-text" onClick={() => setStep("accessKey")} />
+              <ActionButton icon="forward" label={t("wizard.next")} help="help.wizardNextAccess" className="btn btn-primary" disabled={!grantedEntityId}
                 onClick={() => setStep(branch === "chat" ? "provider" : "connect")} />
             </div>
           </>
@@ -362,9 +362,9 @@ export function OnboardingWizard({ onCancel, onFinish }: Props) {
             <h3 className="wizard-title">{t("wizard.connectAgentTitle")}</h3>
             {rawAccessKey && <div data-guide-part><ConnectInstructions accessKey={rawAccessKey} accessKeyName={name} /></div>}
             <div className="wizard-actions">
-              <ActionButton icon="back" label={t("wizard.back")} className="btn btn-text" onClick={() => setStep("access")} />
-              <ActionButton icon="pending" label={t("wizard.connectLater")} className="btn btn-ghost" onClick={() => setStep("done")} />
-              <ActionButton icon="probe" label={t("wizard.testConnection")} className="btn btn-primary" onClick={() => setStep("test")} />
+              <ActionButton icon="back" label={t("wizard.back")} help="help.wizardBack" className="btn btn-text" onClick={() => setStep("access")} />
+              <ActionButton icon="pending" label={t("wizard.connectLater")} help="help.wizardConnectLater" className="btn btn-ghost" onClick={() => setStep("done")} />
+              <ActionButton icon="probe" label={t("wizard.testConnection")} help="help.wizardTestConnection" className="btn btn-primary" onClick={() => setStep("test")} />
             </div>
           </>
         );
@@ -376,7 +376,7 @@ export function OnboardingWizard({ onCancel, onFinish }: Props) {
               ? <p className="wizard-hint wizard-hint-warning" role="status">{t("shell.killSwitchTitle")}</p>
               : <p className="wizard-sub">{tRich("wizard.chatReadySub", { strong: (c) => <strong>{c}</strong> })}</p>}
             <div className="wizard-actions">
-              <ActionButton icon="accessKeys" label={t("wizard.goToAccessKey")} className="btn btn-primary" onClick={() => { if (accessKeyId) onFinish(accessKeyId); }} />
+              <ActionButton icon="accessKeys" label={t("wizard.goToAccessKey")} help="help.wizardGoToKey" className="btn btn-primary" onClick={() => { if (accessKeyId) onFinish(accessKeyId); }} />
             </div>
           </>
         );
@@ -388,13 +388,13 @@ export function OnboardingWizard({ onCancel, onFinish }: Props) {
             <div className="connect-field" data-guide-part>
               <span className="connect-field-label">{t("wizard.tryLabel")}</span>
               <code className="connect-field-value">{prompts.read}</code>
-              <CopyButton text={prompts.read} label={t("common.copy")} />
+              <CopyButton text={prompts.read} label={t("common.copy")} help="help.wizardCopyPrompt" />
             </div>
             {prompts.action && (
               <div className="connect-field">
                 <span className="connect-field-label">{t("wizard.thenLabel")}</span>
                 <code className="connect-field-value">{prompts.action}</code>
-                <CopyButton text={prompts.action} label={t("common.copy")} />
+                <CopyButton text={prompts.action} label={t("common.copy")} help="help.wizardCopyPrompt" />
               </div>
             )}
             {mesaEnforced && (
@@ -407,8 +407,8 @@ export function OnboardingWizard({ onCancel, onFinish }: Props) {
               {connected ? t("wizard.connected") : t("wizard.waitingForAgent")}
             </div>
             <div className="wizard-actions">
-              <ActionButton icon="back" label={t("wizard.back")} className="btn btn-text" onClick={() => setStep("connect")} />
-              <ActionButton icon="forward" label={t("wizard.next")} className="btn btn-primary" disabled={!connected} onClick={() => setStep("done")} />
+              <ActionButton icon="back" label={t("wizard.back")} help="help.wizardBack" className="btn btn-text" onClick={() => setStep("connect")} />
+              <ActionButton icon="forward" label={t("wizard.next")} help="help.wizardNextTest" className="btn btn-primary" disabled={!connected} onClick={() => setStep("done")} />
             </div>
           </>
         );
@@ -418,7 +418,7 @@ export function OnboardingWizard({ onCancel, onFinish }: Props) {
             <h3 className="wizard-title">{t("wizard.doneTitle")}</h3>
             <p className="wizard-sub">{tRich("wizard.doneSub", { code: (c) => <code>{c}</code> }, { name })}</p>
             <div className="wizard-actions">
-              <ActionButton icon="accessKeys" label={t("wizard.goToAccessKey")} className="btn btn-primary" onClick={() => { if (accessKeyId) onFinish(accessKeyId); }} />
+              <ActionButton icon="accessKeys" label={t("wizard.goToAccessKey")} help="help.wizardGoToKey" className="btn btn-primary" onClick={() => { if (accessKeyId) onFinish(accessKeyId); }} />
             </div>
           </>
         );
@@ -498,7 +498,7 @@ export function WizardProviderSetup({ onBack, onTryNow }: {
       {instances && instances.length > 0 && (
         <div className="field">
           <label htmlFor="wiz-provider-account">{t("wizard.providerAccount")}</label>
-          <BusySelect id="wiz-provider-account" className="input" value={selected}
+          <BusySelect id="wiz-provider-account" className="input" data-help="help.wizardProviderAccount" value={selected}
                   busy={busy} disabled={adding}
                   onChange={(e) => setSelected(e.target.value)}>
             {instances.map((i) => <option key={i.id} value={i.id}>{i.name}</option>)}
@@ -513,6 +513,7 @@ export function WizardProviderSetup({ onBack, onTryNow }: {
         disabled={busy}
         completeLabel={t("wizard.tryNow")}
         completeIcon="agentChat"
+        completeHelp="help.providerSaveAndTry"
         addingLabelKey="wizard.addingProvider"
         onActiveChange={setAdding}
         onCreated={providerCreated}
@@ -521,9 +522,9 @@ export function WizardProviderSetup({ onBack, onTryNow }: {
       {!adding && err && <div className="banner banner-error" role="alert">{err}</div>}
 
       <div className="wizard-actions">
-        <ActionButton icon="back" label={t("wizard.back")} className="btn btn-text" busy={busy} onClick={onBack} />
+        <ActionButton icon="back" label={t("wizard.back")} help="help.wizardBack" className="btn btn-text" busy={busy} onClick={onBack} />
         {!adding && (
-          <ActionButton icon="agentChat" label={busy ? t("wizard.working") : t("wizard.tryNow")} className="btn btn-primary" busy={busy}
+          <ActionButton icon="agentChat" label={busy ? t("wizard.working") : t("wizard.tryNow")} help="help.wizardTryNow" className="btn btn-primary" busy={busy}
             disabled={!selected} onClick={() => void tryExisting()} />
         )}
       </div>

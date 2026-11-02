@@ -16,6 +16,8 @@ import {
   AccessKeyDetailProvider, AccessKeyNotices, PermissionSummaryWindow, PermissionsWindow, PersonaWindow, PresetsWindow, useAccessKeyDetail, useKeyActionsTool,
 } from "../views/AccessKeyDetail";
 import { AccessKeyListView } from "../views/AccessKeyList";
+import { t } from "../i18n";
+import { tPlain } from "../i18n/rich";
 
 vi.mock("../api", () => ({
   // No Home Assistant connection: the tree does not follow the registries here.
@@ -211,8 +213,8 @@ describe("Access Keys workspace", () => {
     const confirm = within(inline).getByRole("button", { name: "Revoke Access Key" });
     expect(confirm).toBeDisabled();
     // What revoking does reads in Help, for the box and its controls, not in it (user, 2026-10-31).
-    expect(within(inline).queryByText(/Revoking permanently/)).toBeNull();
-    expect(inline.getAttribute("data-help-text")).toMatch(/^Revoking permanently deactivates/);
+    expect(within(inline).queryByText(t("accessKeys.revokeBody"))).toBeNull();
+    expect(inline).toHaveAttribute("data-help-text", t("accessKeys.revokeBody"));
     expect(inline).toHaveAttribute("data-help-controls");
     expect(within(inline).getByRole("checkbox")).toHaveFocus();
     expect(api.revokeAccessKey).not.toHaveBeenCalled();
@@ -259,8 +261,8 @@ describe("Access Keys workspace", () => {
     const confirm = within(inline).getByRole("button", { name: "Rotate Access Key" });
     expect(confirm).toBeDisabled();
     // In Help, not in the box, and confirmed in the same gold as Enable Pass-Through (user, 2026-10-31).
-    expect(within(inline).queryByText(/Rotating immediately/)).toBeNull();
-    expect(inline.getAttribute("data-help-text")).toMatch(/^Rotating immediately invalidates/);
+    expect(within(inline).queryByText(t("accessKeys.rotateBody"))).toBeNull();
+    expect(inline).toHaveAttribute("data-help-text", t("accessKeys.rotateBody"));
     expect(confirm).toHaveClass("btn-warning");
     fireEvent.click(within(inline).getByRole("checkbox"));
     fireEvent.click(confirm);
@@ -285,7 +287,7 @@ describe("Access Keys workspace", () => {
     await keyAction(registry, "passThrough");
     const inline = await screen.findByRole("group", { name: "Enable Pass-Through Mode" });
     expect(within(inline).queryByText(/read and control every entity/)).toBeNull();
-    expect(inline.getAttribute("data-help-text")).toMatch(/^Pass-through lets this access key read and control every entity\. It also turns on Configuration read, .* Diagnostics, Broadcast and Service response data/);
+    expect(inline).toHaveAttribute("data-help-text", tPlain("accessKeys.enablePtBody"));
     fireEvent.click(within(inline).getByRole("checkbox"));
     fireEvent.click(within(inline).getByRole("button", { name: "Enable Pass-Through" }));
     expect(api.patchAccessKey).toHaveBeenCalledWith("k1", { pass_through: true, confirm_pass_through: true });

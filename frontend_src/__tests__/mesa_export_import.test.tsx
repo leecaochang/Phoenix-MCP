@@ -7,7 +7,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, fireEvent, waitFor, screen, within } from "@testing-library/react";
 import { MesaImport } from "../views/MesaView";
 import { api, setHass } from "../api";
-import { setFormatLocale } from "../i18n";
+import { setFormatLocale, t } from "../i18n";
 import { mockEmptyMesa, profilesWindow, renderMesa } from "./mesa_harness";
 
 afterEach(() => setFormatLocale({}, "en"));
@@ -127,7 +127,7 @@ describe("Import", () => {
     pickFile(container, JSON.stringify(archive));
     await findByText(/Archive contains/);
     // What it leaves alone reads in the Help window (user, 2026-10-30).
-    expect(container.querySelector(".mesa-import")!.getAttribute("data-help-text")).toMatch(/left unchanged/);
+    expect(container.querySelector(".mesa-import")).toHaveAttribute("data-help-text", `${t("mesa.importIntro")} ${t("mesa.skipNote")}`);
 
     fireEvent.click(getByLabelText(/Replace existing profiles/i));
     expect(getByText(/Profiles with matching keys will be replaced/)).toBeInTheDocument();

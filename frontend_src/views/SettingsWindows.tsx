@@ -65,10 +65,10 @@ function SettingsBody({ error, children }: { error: string | null; children: Rea
  * A section folded into its title until opened; Find Setting opens it to reach a setting inside.
  * Its title names its Guide section; the settings inside name their own.
  */
-function Disclosure({ title, guide, children }: { title: string; guide: string; children: ReactNode }) {
+function Disclosure({ title, guide, help, children }: { title: string; guide: string; help?: string; children: ReactNode }) {
   return (
     <details className="phx-disclosure">
-      <summary data-guide={guide}>{title}</summary>
+      <summary data-guide={guide} data-help={help}>{title}</summary>
       <div className="phx-disclosure-body">{children}</div>
     </details>
   );
@@ -82,13 +82,13 @@ export function AiProvidersWindow() {
   const revealedAdd = s?.revealed?.id === "providerAdd" ? s.revealed.n : 0;
   useEffect(() => { if (revealedAdd) setAdding(true); }, [revealedAdd]);
   useSettingsTools("settingsProviders", [
-    { id: "addAccount", label: t("settings.addAccount"), icon: "add", pressed: adding, onSelect: () => setAdding((open) => !open) },
+    { id: "addAccount", label: t("settings.addAccount"), icon: "add", help: "settings.addAccountHelp", pressed: adding, onSelect: () => setAdding((open) => !open) },
   ]);
   if (!settings) return <Loading />;
   return (
     <SettingsBody error={error}>
       <LlmProviderSettings settings={settings} onChange={change} saving={saving} adding={adding} onAddingChange={setAdding} />
-      <Disclosure title={t("routing.providerSection")} guide="window.settingsProviders#decision-provider">
+      <Disclosure title={t("routing.providerSection")} guide="window.settingsProviders#decision-provider" help="routing.providerSectionHelp">
         <DecisionProviderSettings settings={settings} onChange={change} saving={saving} />
       </Disclosure>
     </SettingsBody>
@@ -139,7 +139,7 @@ function RoutingStatisticsButton({ surface }: { surface: "voice" | "chat" }) {
   return (
     <div className="phx-window-actions phx-window-actions-end routing-statistics-open">
       <ActionButton icon="statistics" label={t("routingStats.show")} className="btn btn-outline btn-sm"
-        pressed={toggle.open} onClick={toggle.toggle} />
+        help="routingStats.showHelp" pressed={toggle.open} onClick={toggle.toggle} />
     </div>
   );
 }
@@ -208,7 +208,10 @@ export function SafetyWindow() {
   useSettingsTools("settingsSafety");
   if (!settings) return <Loading />;
   const nothingSelected = !scopes.core && !scopes.providers && !scopes.mesa;
-  const mesaModeHelp = `${t("settings.mesaModeHelp")}${t("common.sentenceSeparator")}${t("settings.mesaEnforcedWarning")}`;
+  // The warning about Enforced without profiles applies only while Enforced is chosen.
+  const mesaModeHelp = settings.mesa_mode === "enforced"
+    ? `${t("settings.mesaModeHelp")}${t("common.sentenceSeparator")}${t("settings.mesaEnforcedWarning")}`
+    : t("settings.mesaModeHelp");
   return (
     <SettingsBody error={error}>
       <div id="phx-kill-switch-card" className="phx-kill-switch">
@@ -224,7 +227,7 @@ export function SafetyWindow() {
           <option value="enforced">{t("settings.mesaModeEnforced")}</option>
         </BusySelect>
       </div>
-      <Disclosure title={t("settings.dataCard")} guide="window.settingsSafety#data-management">
+      <Disclosure title={t("settings.dataCard")} guide="window.settingsSafety#data-management" help="settings.dataCardHelp">
         {/* The choices form one group, without rules between them (user, 2026-10-31). */}
         <div className="phx-setting-checks">
           {WIPE_SCOPES.map((scope) => (
@@ -240,7 +243,7 @@ export function SafetyWindow() {
         </div>
         <div className="phx-window-actions phx-window-actions-end">
           <ActionButton icon="delete" label={t("settings.wipeSubmit")} className="btn btn-danger btn-sm" disabled={nothingSelected}
-            onClick={() => setShowWipe(true)} />
+            help="settings.wipeSubmitHelp" onClick={() => setShowWipe(true)} />
         </div>
       </Disclosure>
       {showWipe && <WipeConfirmModal scopes={scopes} onWiped={() => window.location.reload()} onClose={() => setShowWipe(false)} />}
@@ -279,14 +282,14 @@ export function LogsSettingsWindow() {
           </div>
         </section>
         {/* The Conversation Log's settings fold under its name (user, 2026-10-31). */}
-        <Disclosure title={t("conversations.title")} guide="window.settingsLogs#conversation-log">
+        <Disclosure title={t("conversations.title")} guide="window.settingsLogs#conversation-log" help="conversations.settingsHelp">
           <ConversationSettings settings={settings} saving={saving} onChange={change} />
         </Disclosure>
       </div>
-      <Disclosure title={t("settings.privacySection")} guide="window.settingsLogs#privacy">
+      <Disclosure title={t("settings.privacySection")} guide="window.settingsLogs#privacy" help="settings.privacySectionHelp">
         <LoggingSettings settings={settings} onToggle={change} saving={saving} only={PRIVACY_TOGGLES} />
       </Disclosure>
-      <Disclosure title={t("settings.haNotifications")} guide="window.settingsLogs#notifications">
+      <Disclosure title={t("settings.haNotifications")} guide="window.settingsLogs#notifications" help="settings.haNotificationsHelp">
         <NotificationSettings settings={settings} onToggle={change} saving={saving} />
       </Disclosure>
     </SettingsBody>
@@ -349,13 +352,13 @@ export function GeneralSettingsWindow() {
         </div>
       </div>
       <details className="phx-disclosure">
-        <summary data-settings-anchor="about">{t("settings.about")}</summary>
+        <summary data-settings-anchor="about" data-help="settings.aboutHelp">{t("settings.about")}</summary>
         <div className="phx-disclosure-body settings-info-list" data-help-text={tPlain("settings.infoStorageNote")}>
           <div><strong>{t("settings.infoVersionLabel")}</strong> {info?.version ?? "..."}</div>
           <div><strong>{t("settings.infoJsBuildLabel")}</strong> {JS_BUILD}</div>
           <div><strong>{t("settings.infoMinHaLabel")}</strong> {info?.minHaVersion ?? "..."}</div>
           <div>
-            <a href={info?.githubUrl ?? "#"} target="_blank" rel="noopener noreferrer" className="settings-info-link">{t("settings.infoGithubLink")}</a>
+            <a href={info?.githubUrl ?? "#"} target="_blank" rel="noopener noreferrer" className="settings-info-link" data-help="settings.githubHelp">{t("settings.infoGithubLink")}</a>
           </div>
         </div>
       </details>

@@ -44,7 +44,7 @@ function DismissibleWarning({ text, onDismiss }: { text: string; onDismiss: () =
   return (
     <div className="banner banner-warn agentcli-warn">
       <span>{text}</span>
-      <button type="button" className="agentcli-warn-close" onClick={onDismiss}
+      <button type="button" className="agentcli-warn-close" onClick={onDismiss} data-help="settings.dismissWarningHelp"
               aria-label={t("settings.agentcliDismissWarning")}>&times;</button>
     </div>
   );
@@ -144,6 +144,8 @@ interface Props {
 /** Hours between automatic provider model checks: the allowed range. */
 const CHECK_HOURS_MIN = 6;
 const CHECK_HOURS_MAX = 720;
+/** The default interval, as PROVIDER_CATALOG_REFRESH_HOURS_DEFAULT in const.py. */
+const CHECK_HOURS_DEFAULT = 24;
 
 export function LlmProviderSettings({ settings, onChange, saving, adding, onAddingChange }: Props) {
   const [instances, setInstances] = useState<AgentCliInstance[] | null>(null);
@@ -481,7 +483,7 @@ export function LlmProviderSettings({ settings, onChange, saving, adding, onAddi
                   </option>
                 )}
               </BusySelect>
-              <ActionButton icon="refresh" className="btn btn-outline btn-sm" guide="window.settingsProviders#refresh-models"
+              <ActionButton icon="refresh" className="btn btn-outline btn-sm" guide="window.settingsProviders#refresh-models" help="settings.refreshModelsHelp"
                 label={refreshing === inst.id ? t("settings.agentcliRefreshing") : t("settings.accountRefreshModels")}
                 busy={busy || refreshing !== null} onClick={() => void refresh(inst)} />
             </div>
@@ -499,15 +501,15 @@ export function LlmProviderSettings({ settings, onChange, saving, adding, onAddi
             {modelError && <div className="banner banner-error" role="alert">{modelError}</div>}
             <div className="agentcli-settings-form-actions">
               <ActionButton icon="save" label={t("common.save")} className="btn btn-outline btn-sm"
-                busy={busy || refreshing !== null} disabled={modelDraft === currentDraft(inst)}
+                busy={busy || refreshing !== null} disabled={modelDraft === currentDraft(inst)} help="settings.saveModelHelp"
                 onClick={() => void saveModel(inst.id)} />
-              <ActionButton icon="undo" label={t("settings.cancel")} className="btn btn-outline btn-sm" busy={busy}
+              <ActionButton icon="undo" label={t("settings.cancel")} className="btn btn-outline btn-sm" busy={busy} help="settings.cancelModelHelp"
                 onClick={() => { setEditing(null); setModelError(null); }} />
             </div>
           </div>
         ) : (
           <div className="phx-window-actions agentcli-account-actions">
-            <ActionButton icon="edit" label={t("settings.accountChangeModel")} className="btn btn-outline btn-sm" busy={busy} guide="window.settingsProviders#change-model"
+            <ActionButton icon="edit" label={t("settings.accountChangeModel")} className="btn btn-outline btn-sm" busy={busy} guide="window.settingsProviders#change-model" help="settings.changeModelHelp"
               onClick={() => { setEditing(inst.id); setModelDraft(currentDraft(inst)); setModelError(null); setConfirmProbe(null); setConfirmRemove(null); }} />
             {/* Unlike everything else here, the check spends the operator's credit, so it asks first,
                 in place, as Remove does; what it costs reads in Help (user, 2026-10-31). The last-checked
@@ -517,7 +519,7 @@ export function LlmProviderSettings({ settings, onChange, saving, adding, onAddi
                 <ActionButton icon="probe" label={probing === inst.id ? t("settings.agentcliProbing") : t("settings.agentcliProbeRun")}
                   className="btn btn-outline btn-sm" helpText={probeHelp} busy={busy || probing !== null}
                   onClick={() => void probeCaps(inst)} />
-                <ActionButton icon="undo" label={t("settings.cancel")} className="btn btn-outline btn-sm" busy={probing !== null}
+                <ActionButton icon="undo" label={t("settings.cancel")} className="btn btn-outline btn-sm" busy={probing !== null} help="help.cancelAction"
                   onClick={() => setConfirmProbe(null)} />
               </span>
             ) : (
@@ -535,7 +537,7 @@ export function LlmProviderSettings({ settings, onChange, saving, adding, onAddi
                 <ActionButton icon="delete" label={t("settings.agentcliConfirmRemove", { name: inst.name })}
                   className="btn btn-danger btn-sm" helpText={removeHelp} busy={busy}
                   onClick={() => void remove(inst.id)} />
-                <ActionButton icon="undo" label={t("settings.cancel")} className="btn btn-outline btn-sm" busy={busy}
+                <ActionButton icon="undo" label={t("settings.cancel")} className="btn btn-outline btn-sm" busy={busy} help="help.cancelAction"
                   onClick={() => { setConfirmRemove(null); setRemoveError(null); }} />
               </span>
             ) : (
@@ -577,12 +579,13 @@ export function LlmProviderSettings({ settings, onChange, saving, adding, onAddi
         selectedKey={selected?.id ?? null}
         onSelect={(inst) => pick(inst.id)}
         rowLabel={(inst) => `${inst.name}, ${typeLabel(inst.kind)}`}
+        rowHelp="settings.accountRowHelp"
         empty={instances ? <p className="audit-empty">{t("settings.agentcliNoAccounts")}</p> : null}
         detail={options}
       />
 
       <details className="phx-disclosure">
-        <summary data-guide="window.settingsProviders#catalog-checks">{t("settings.catalogChecks")}</summary>
+        <summary data-guide="window.settingsProviders#catalog-checks" data-help="settings.catalogChecksHelp">{t("settings.catalogChecks")}</summary>
         <div className="phx-disclosure-body">
           <div className="toggle-row" {...helpRow(t("settings.providerChecksHelp"))}>
             <SettingLabel help={t("settings.providerChecksHelp")}><span>{t("settings.providerChecksLabel")}</span></SettingLabel>
@@ -597,8 +600,8 @@ export function LlmProviderSettings({ settings, onChange, saving, adding, onAddi
               <span className="toggle-switch-track" />
             </label>
           </div>
-          <div className="toggle-row" {...helpRow(t("settings.providerChecksHoursHelp", { min: CHECK_HOURS_MIN, max: CHECK_HOURS_MAX }))}>
-            <SettingLabel help={t("settings.providerChecksHoursHelp", { min: CHECK_HOURS_MIN, max: CHECK_HOURS_MAX })}>
+          <div className="toggle-row" {...helpRow(t("settings.providerChecksHoursHelp", { min: CHECK_HOURS_MIN, max: CHECK_HOURS_MAX, default: CHECK_HOURS_DEFAULT }))}>
+            <SettingLabel help={t("settings.providerChecksHoursHelp", { min: CHECK_HOURS_MIN, max: CHECK_HOURS_MAX, default: CHECK_HOURS_DEFAULT })}>
               <span>{t("settings.providerChecksHoursLabel")}</span>
             </SettingLabel>
             <BusyInput

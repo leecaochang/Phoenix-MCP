@@ -105,8 +105,8 @@ function TextEvidence({ value, code = false }: { value: unknown; code?: boolean 
   const feedback = copyState ? t(copyState === "copied" ? "conversations.copied" : "conversations.copyFailed") : "";
   const body = code ? <pre>{text}</pre> : <div className="conversation-prose">{text}</div>;
   return <div className="conversation-evidence">
-    <div className="conversation-evidence-content">{text.length > 1200 ? <details><summary>{tn("conversations.fullText", text.length, { count: localeNumber(text.length) })}</summary>{body}</details> : body}</div>
-    <button type="button" className="btn btn-icon conversation-copy" aria-label={t("conversations.copy")} title={feedback || t("conversations.copy")} onClick={async () => {
+    <div className="conversation-evidence-content">{text.length > 1200 ? <details><summary data-help="help.fullText">{tn("conversations.fullText", text.length, { count: localeNumber(text.length) })}</summary>{body}</details> : body}</div>
+    <button type="button" className="btn btn-icon conversation-copy" data-help="help.copyText" aria-label={t("conversations.copy")} title={feedback || t("conversations.copy")} onClick={async () => {
       setCopyState("");
       try { await copyToClipboard(text); setCopyState("copied"); }
       catch { setCopyState("failed"); }
@@ -170,7 +170,7 @@ function PromptEvidence({ value }: { value: unknown }) {
   if (!Array.isArray(value)) return <TextEvidence value={value} />;
   const text = value.filter(block => block && ["text", "input_text"].includes(block.type) && typeof block.text === "string").map(block => block.text).join("\n\n");
   const attachmentOnly = !text && value.some(block => block?.attachment === true);
-  return <>{text && <TextEvidence value={text} />}{attachmentOnly && <p className="conversation-secondary">{t("conversations.attachmentPrompt")}</p>}<details><summary>{t("conversations.details")}</summary><TextEvidence value={value} code /></details></>;
+  return <>{text && <TextEvidence value={text} />}{attachmentOnly && <p className="conversation-secondary">{t("conversations.attachmentPrompt")}</p>}<details><summary data-help="help.rawData">{t("conversations.details")}</summary><TextEvidence value={value} code /></details></>;
 }
 
 function routeHeading(payload: Record<string, unknown> | null): string {
@@ -211,7 +211,7 @@ function RoutingEvidence({ payload }: { payload: Record<string, unknown> }) {
     </>}
     {payload.route === "assist" && payload.matched === true && <p>{t("conversations.routing.assistMatched")}</p>}
     {ROUTING_REASON[reason] && <p>{t(ROUTING_REASON[reason])}</p>}
-    {typeof input?.text === "string" && <details><summary>{t("conversations.routing.input")}</summary>
+    {typeof input?.text === "string" && <details><summary data-help="help.textChecked">{t("conversations.routing.input")}</summary>
       <TextEvidence value={input.text} />
       {payload.route === "decision_provider" && <p className="conversation-secondary">{t("conversations.routing.contextHelp")}</p>}
     </details>}
@@ -255,7 +255,7 @@ function EventRow({ event, responseStatus }: { event: ConversationEvent; respons
     {event.kind === "error" && typeof payload?.provider_detail === "string" && payload.provider_detail
       && <div className="conversation-prose conversation-error-message">{t("agentchat.providerDetail", { detail: payload.provider_detail })}</div>}
     {event.payload !== null && event.payload !== undefined
-      ? event.kind === "assistant_text" ? <TextEvidence value={event.payload} /> : event.kind === "tool_call" && payload ? <TextEvidence value={`${name} ${raw(payload.arguments ?? {})}`} code /> : <details><summary>{t(event.kind === "change" ? "conversations.changeEvidence" : "conversations.details")}</summary>
+      ? event.kind === "assistant_text" ? <TextEvidence value={event.payload} /> : event.kind === "tool_call" && payload ? <TextEvidence value={`${name} ${raw(payload.arguments ?? {})}`} code /> : <details><summary data-help={event.kind === "change" ? "help.changeEvidence" : "help.rawData"}>{t(event.kind === "change" ? "conversations.changeEvidence" : "conversations.details")}</summary>
           <TextEvidence value={event.payload} code />
         </details>
       : <p className="conversation-secondary">{t("conversations.payloadUnavailable")}</p>}
@@ -299,7 +299,7 @@ function TimelineRow({ item, finalIndex, running, responseStatus }: { item: Time
       {payload && <div role="group" aria-label={t("conversations.parameters")}><TextEvidence value={`${name} ${raw(payload.arguments ?? {})}`} code /></div>}
       {item.children[0]?.event.kind === "routing" && <ul className="conversation-route-inline"><EventRow event={item.children[0].event} /></ul>}
       {item.children.slice(item.children[0]?.event.kind === "routing" ? 1 : 0).length > 0 && <ol className="conversation-timeline conversation-nested">{item.children.slice(item.children[0]?.event.kind === "routing" ? 1 : 0).map(child => <TimelineRow key={child.index} item={child} finalIndex={finalIndex} running={running} responseStatus={responseStatus} />)}</ol>}
-      {item.result && <details><summary>{t("conversations.toolResult")}</summary><ol className="conversation-timeline"><EventRow event={item.result} /></ol></details>}
+      {item.result && <details><summary data-help="help.toolResult">{t("conversations.toolResult")}</summary><ol className="conversation-timeline"><EventRow event={item.result} /></ol></details>}
     </div>
   </li>;
 }
@@ -314,7 +314,7 @@ export function EntryDetail({ id, revision, accessKeyNames }: { id: string; revi
       .catch(() => { if (active) setError(t("conversations.detailFailed")); });
     return () => { active = false; };
   }, [id, revision, retry]);
-  if (error) return <div role="alert">{error} <button className="btn btn-text" onClick={() => setRetry(n => n + 1)}>{t("conversations.retry")}</button></div>;
+  if (error) return <div role="alert">{error} <button className="btn btn-text" data-help="help.retryEntry" onClick={() => setRetry(n => n + 1)}>{t("conversations.retry")}</button></div>;
   if (!entry) return <p role="status" data-loading="">{t("common.loading")}</p>;
   const finalTextIndex = entry.events.reduce((last, event, index) => event.kind === "assistant_text" && event.payload === entry.response ? index : last, -1);
   const accessKeyName = accessKeyNames[String(entry.metadata.access_key_id ?? "")] ?? entry.metadata.access_key_name;
@@ -345,7 +345,7 @@ export function EntryDetail({ id, revision, accessKeyNames }: { id: string; revi
       <p className={`conversation-response-status conversation-signal-${outcomeSignal(entry.response_status)}`}><SignalIcon name={outcomeIcon(entry.response_status)} signal={outcomeSignal(entry.response_status)} />{label("responseStatus", entry.response_status)}</p>
       {entry.response !== null ? <TextEvidence value={entry.response} /> : <p className="conversation-secondary">{unavailable(entry, "response")}</p>}
     </section>}
-    <details className="conversation-technical"><summary>{t("conversations.technical")}</summary><p className="conversation-secondary">{t("conversations.deliveryUnverified")}</p><TextEvidence value={{
+    <details className="conversation-technical"><summary data-help="help.technicalDetails">{t("conversations.technical")}</summary><p className="conversation-secondary">{t("conversations.deliveryUnverified")}</p><TextEvidence value={{
       entry_id: entry.id, source: entry.source, ...entry.metadata, access_key_name: accessKeyName, started_at: entry.started_at, updated_at: entry.updated_at,
       coverage: entry.coverage, status: entry.status, execution_outcome: entry.execution_status, response_outcome: entry.response_status,
       tool_count: entry.tool_count, change_count: entry.change_count, omissions: entry.omissions,
@@ -362,6 +362,6 @@ export function ConversationDetail({ entry, accessKeyNames }: { entry: Conversat
       <div className="conversation-turn-heading"><time dateTime={turn.started_at}>{localeDateTime(turn.started_at)}</time><span className={`conversation-signal-${outcomeSignal(rowStatus(turn))}`}>{label("outcome", rowStatus(turn))}</span></div>
       <EntryDetail id={turn.id} revision={turn.updated_at} accessKeyNames={accessKeyNames} />
     </section>)}
-    {visible < turns.length && <button className="btn btn-ghost" onClick={() => setVisible(n => n + 25)}>{t("common.loadMore")}</button>}
+    {visible < turns.length && <button className="btn btn-ghost" data-help="help.loadMoreTurns" onClick={() => setVisible(n => n + 25)}>{t("common.loadMore")}</button>}
   </div>;
 }

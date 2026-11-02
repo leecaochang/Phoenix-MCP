@@ -31,6 +31,8 @@ const EMPTY_FORM: FormState = {
 
 export interface ProviderAddFormProps {
   providerTypes: AgentCliProviderType[];
+  /** Catalog key of what the finishing button does, shown in the Help window; adding the account when not given. */
+  completeHelp?: string;
   disabled?: boolean;
   allowCapabilityProbe?: boolean;
   requireModel?: boolean;
@@ -75,7 +77,7 @@ function initialValues(provider: AgentCliProviderType): Record<string, string> {
 }
 
 export function ProviderAddForm({
-  providerTypes, disabled, completeLabel, completeIcon = "check", addingLabelKey, onActiveChange, onClose, opener, onCreated,
+  providerTypes, completeHelp = "settings.addDoneHelp", disabled, completeLabel, completeIcon = "check", addingLabelKey, onActiveChange, onClose, opener, onCreated,
   allowCapabilityProbe = true, requireModel = false, allowAutomatic = false, idPrefix = "agentcli-add", compact = false,
 }: ProviderAddFormProps) {
   const [pickerValue, setPickerValue] = useState("");
@@ -211,17 +213,17 @@ export function ProviderAddForm({
 
 
   const actionClass = compact ? "btn btn-outline btn-sm" : "btn btn-primary btn-sm";
-  const cancel = <ActionButton icon="undo" label={t("settings.cancel")} className="btn btn-outline btn-sm" busy={form.saving} onClick={() => reset()} />;
+  const cancel = <ActionButton icon="undo" label={t("settings.cancel")} help="help.providerCancel" className="btn btn-outline btn-sm" busy={form.saving} onClick={() => reset()} />;
   const validateActions = (
     <div className="agentcli-settings-form-actions">
-      <ActionButton icon="probe" label={t("settings.agentcliValidate")} className={actionClass}
+      <ActionButton icon="probe" label={t("settings.agentcliValidate")} help="settings.validateHelp" className={actionClass}
         busy={form.validating || form.saving} onClick={() => void validate()} />
       {cancel}
     </div>
   );
   const completeActions = (
     <div className="agentcli-settings-form-actions">
-      <ActionButton icon={completeIcon} label={completeLabel} className={actionClass}
+      <ActionButton icon={completeIcon} label={completeLabel} help={completeHelp} className={actionClass}
         busy={form.saving || Boolean(disabled)} disabled={modelMissing} onClick={() => void complete()} />
       {cancel}
     </div>
@@ -255,6 +257,7 @@ export function ProviderAddForm({
       <BusySelect
         id={`${idPrefix}-model`}
         className="input input-auto"
+        data-help="settings.addModelHelp"
         value={form.model}
         busy={form.saving} disabled={!form.models.length && !allowAutomatic}
         onChange={(event) => setForm((current) => ({ ...current, model: event.target.value }))}
@@ -273,6 +276,7 @@ export function ProviderAddForm({
         <BusySelect
           ref={pickerRef}
           className="input input-auto"
+          data-help="settings.addProviderTypeHelp"
           value={pickerValue}
           busy={Boolean(disabled)} disabled={adding !== null || providerTypes.length === 0}
           onChange={(event) => selectProvider(event.target.value)}
@@ -320,6 +324,7 @@ export function ProviderAddForm({
                     id={id}
                     ref={index === 0 ? (element) => { firstFieldRef.current = element; } : undefined}
                     type={field.type === "secret" ? "password" : "url"}
+                    data-help={field.type === "secret" && !note ? "settings.apiKeyHelp" : undefined}
                     placeholder={field.placeholder ?? fieldLabel(field)}
                     value={form.values[field.id] ?? ""}
                     busy={form.validating || form.saving}

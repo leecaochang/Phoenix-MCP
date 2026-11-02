@@ -210,12 +210,12 @@ export function AuditView({ accessKeys }: Props) {
     label: t("shell.tabAudit"),
     tools: [
       // The log updates itself; Refresh is offered only while updates are paused.
-      { id: "filters", label: activeFilters ? t("logs.filtersCount", { count: localeNumber(activeFilters) }) : t("logs.filters"), short: t("logs.filters"), icon: "filter",
+      { id: "filters", label: activeFilters ? t("logs.filtersCount", { count: localeNumber(activeFilters) }) : t("logs.filters"), short: t("logs.filters"), icon: "filter", help: "help.filters",
         pressed: filtersOpen, badge: activeFilters || undefined, shared: { id: "filters", label: t("logs.filters"), countLabel: "logs.filtersCount" },
         onSelect: () => setFiltersOpen((open) => !open), onSet: setFiltersOpen },
       pauseUpdatesTool(paused, setPaused),
       // Refresh sits to the right of Pause Updates, and only while paused.
-      ...(paused ? [{ id: "refresh", label: t("workspace.refreshWindow", { window: t("shell.tabAudit") }), short: t("common.refresh"), icon: "refresh" as const,
+      ...(paused ? [{ id: "refresh", label: t("workspace.refreshWindow", { window: t("shell.tabAudit") }), short: t("common.refresh"), icon: "refresh" as const, help: "help.refreshPaused",
         shared: { id: "refresh", label: t("common.refresh") }, onSelect: () => { void load(0); } }] : []),
       ...logSettings,
     ],
@@ -244,6 +244,7 @@ export function AuditView({ accessKeys }: Props) {
           <select
             aria-label={t("audit.filterOutcomeAria")}
             data-filter="outcome"
+            data-help="help.auditOutcome"
             className="input input-auto"
             value={outcomeFilter}
             onChange={(e) => setOutcomeFilter(e.target.value as Outcome | "")}
@@ -260,6 +261,7 @@ export function AuditView({ accessKeys }: Props) {
           <select
             aria-label={t("audit.filterAccessKeyAria")}
             data-filter="accessKey"
+            data-help="help.auditAccessKey"
             className="input input-auto"
             value={accessKeyFilter}
             onChange={(e) => setAccessKeyFilter(e.target.value)}
@@ -272,6 +274,7 @@ export function AuditView({ accessKeys }: Props) {
           <select
             aria-label={t("audit.filterTimeAria")}
             data-filter="time"
+            data-help="help.auditTime"
             className="input input-auto"
             value={timeWindow}
             onChange={(e) => setTimeWindow(e.target.value as TimeWindow)}
@@ -286,6 +289,7 @@ export function AuditView({ accessKeys }: Props) {
             className="input"
             aria-label={t("audit.filterMethodAria")}
             data-filter="method"
+            data-help="help.auditMethod"
             placeholder={t("audit.methodPlaceholder")}
             value={methodFilter}
             onChange={(e) => setMethodFilter(e.target.value)}
@@ -294,6 +298,7 @@ export function AuditView({ accessKeys }: Props) {
             className="input"
             aria-label={t("audit.filterResourceAria")}
             data-filter="resource"
+            data-help="help.auditResource"
             placeholder={t("audit.resourcePlaceholder")}
             value={resourceFilter}
             onChange={(e) => setResourceFilter(e.target.value)}
@@ -302,6 +307,7 @@ export function AuditView({ accessKeys }: Props) {
             className="input"
             aria-label={t("audit.filterIpAria")}
             data-filter="source"
+            data-help="help.auditSource"
             placeholder={t("audit.ipPlaceholder")}
             value={ipFilter}
             onChange={(e) => setIpFilter(e.target.value)}
@@ -310,6 +316,7 @@ export function AuditView({ accessKeys }: Props) {
             className="input"
             aria-label={t("audit.filterRequestAria")}
             data-filter="request"
+            data-help="help.auditRequestId"
             placeholder={t("audit.requestPlaceholder")}
             value={requestFilter}
             onChange={(e) => setRequestFilter(e.target.value)}
@@ -325,7 +332,7 @@ export function AuditView({ accessKeys }: Props) {
             </button>
           )}
           {activeFilters > 0 && (
-            <ActionButton icon="clearFilters" label={t("logs.clearFilters")} onClick={clearFilters} />
+            <ActionButton icon="clearFilters" label={t("logs.clearFilters")} help="help.clearFilters" onClick={clearFilters} />
           )}
         </div>
       </div>
@@ -338,6 +345,7 @@ export function AuditView({ accessKeys }: Props) {
         <ConfigTable
           id="auditLog"
           label={t("shell.tabAudit")}
+          rowHelp="help.auditRow"
           columns={columns}
           rows={entries}
           rowKey={auditEntryKey}
@@ -358,6 +366,7 @@ export function AuditView({ accessKeys }: Props) {
               filters would append to rows from the old ones. */}
           {hasMore && (
             <ActionButton icon="loadMore" label={loadingMore ? t("common.loading") : t("common.loadMore")} busy={loadingMore}
+              helpText={t("help.loadMore", { count: localeNumber(PAGE_SIZE) })}
               onClick={() => { void load(entries.length); }} />
           )}
         </div>

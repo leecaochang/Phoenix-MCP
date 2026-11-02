@@ -24,6 +24,7 @@ import { loadLovelaceResources } from "../utils/card_harvest";
 import { t, tn } from "../i18n";
 import { DisplayModeContext } from "../ui/ActionButton";
 import { Icon, type IconName } from "../ui/Icon";
+import { helpRow } from "../ui/SettingLabel";
 
 export type PreviewCardEntry =
   | { kind: "card"; config: Record<string, unknown> }
@@ -255,15 +256,17 @@ export function rememberPreviewMode(mode: DiffPreviewMode): void {
 /** Icons for the choices these toggles offer, so every one follows the toolbar's display mode. */
 const SEGMENT_ICONS: Partial<Record<string, IconName>> = { diff: "diff", preview: "preview", before: "before", after: "after" };
 
-export function SegmentedToggle<T extends string>({ value, options, onChange, ariaLabel }: {
+export function SegmentedToggle<T extends string>({ value, options, onChange, ariaLabel, help }: {
   value: T;
   options: { value: T; label: string; disabled?: boolean; icon?: IconName }[];
   onChange: (v: T) => void;
   ariaLabel: string;
+  /** Catalog key of the group's help, which its buttons show in the Help window. */
+  help?: string;
 }) {
   const iconsOnly = useContext(DisplayModeContext) === "icons";
   return (
-    <div className="diff-mode-toggle" role="group" aria-label={ariaLabel}>
+    <div className="diff-mode-toggle" role="group" aria-label={ariaLabel} {...helpRow(help ? t(help) : null)}>
       {options.map((opt) => {
         const icon = opt.icon ?? SEGMENT_ICONS[opt.value];
         const bare = iconsOnly && !!icon;
@@ -406,7 +409,7 @@ function CardErrorPanel({ errors }: { errors: { label: string; message: string }
     <div className="dash-preview-error-panel">
       <div className="dash-preview-error-top">
         <p className="dash-preview-error-head">{tn("changes.previewErrorHead", errors.length)}</p>
-        <button type="button" className="btn btn-icon conversation-copy" aria-label={t("changes.previewErrorCopy")} title={feedback || t("changes.previewErrorCopy")} onClick={async () => {
+        <button type="button" className="btn btn-icon conversation-copy" aria-label={t("changes.previewErrorCopy")} data-help="help.copyCardErrors" title={feedback || t("changes.previewErrorCopy")} onClick={async () => {
           setCopyState("");
           try { await copyToClipboard(text); setCopyState("copied"); }
           catch { setCopyState("failed"); }
@@ -548,6 +551,7 @@ function DashboardPreviewInner({ config, onConfigErrors }: {
               type="button"
               aria-pressed={idx === active}
               className={`approval-detail-tab${idx === active ? " active" : ""}`}
+              data-help="help.previewView"
               onClick={() => setActive(idx)}
             >
               {v.title}

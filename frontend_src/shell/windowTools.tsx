@@ -19,12 +19,12 @@ export function InlineTools({ groups }: { groups: ToolGroup[] }) {
   return (
     <div className="phx-window-actions">
       {tools.map((tool: Tool) => tool.menu ? (
-        <MenuButton key={tool.id} label={tool.label} icon={<Icon name={tool.icon} size={16} />} items={tool.menu}
+        <MenuButton key={tool.id} label={tool.label} help={tool.help} icon={<Icon name={tool.icon} size={16} />} items={tool.menu}
           className={`btn btn-outline btn-sm phx-action${iconsOnly ? " is-icon-only" : ""}`}>
           {!iconsOnly && <span>{tool.short ?? tool.label}</span>}
         </MenuButton>
       ) : (
-        <ActionButton key={tool.id} icon={tool.icon} label={tool.label} disabled={tool.disabled} pressed={tool.pressed}
+        <ActionButton key={tool.id} icon={tool.icon} label={tool.label} help={tool.help} disabled={tool.disabled} pressed={tool.pressed}
           onClick={() => tool.onSelect?.()} className="btn btn-outline btn-sm" />
       ))}
     </div>

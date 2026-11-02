@@ -11,7 +11,7 @@ import type { ApprovalRecord, ApprovalStatus, BatchApproveResult } from "../type
 import { ApprovalChange } from "../components/ApprovalChange";
 import { ErrorMsg, Loading } from "../components/common";
 import { YamlView, toYaml } from "../components/YamlView";
-import { hasMessage, t, type Params } from "../i18n";
+import { hasMessage, localeNumber, t, type Params } from "../i18n";
 import { APPROVALS_SCOPES, MAX_BATCH_APPROVALS, isOverdue, useApprovals, type ApprovalsScope, type ApprovalsState } from "../shell/approvals";
 import { useToolbarTools, type Tool, type ToolGroup } from "../shell/tools";
 import { useWorkspaceReset } from "../shell/windowTools";
@@ -118,7 +118,7 @@ function BatchResultMsg({ result, onDismiss }: { result: BatchApproveResult; onD
           <span>{t("approvals.batchRemaining", { count: result.remaining.length })}</span>
         )}
       </div>
-      <button type="button" className="btn btn-ghost" onClick={onDismiss}>{t("common.close")}</button>
+      <button type="button" className="btn btn-ghost" data-help="help.batchResultClose" onClick={onDismiss}>{t("common.close")}</button>
     </div>
   );
 }
@@ -136,7 +136,7 @@ function InlineTools({ groups }: { groups: ToolGroup[] }) {
   return (
     <div className="phx-window-actions">
       {tools.map((tool: Tool) => (
-        <ActionButton key={tool.id} icon={tool.icon} label={tool.label} disabled={tool.disabled} pressed={tool.pressed}
+        <ActionButton key={tool.id} icon={tool.icon} label={tool.label} help={tool.help} disabled={tool.disabled} pressed={tool.pressed}
           onClick={() => tool.onSelect?.()} className="btn btn-outline btn-sm" />
       ))}
     </div>
@@ -166,10 +166,10 @@ export function ApprovalsListWindow() {
     tools: [
       ...(a.batchMode
         ? [
-          { id: "approveSelected", label: t("approvals.approveSelected", { count: a.pickedCount }), icon: "approveSelected" as IconName, disabled: a.pickedCount === 0 || a.batchBusy, onSelect: () => { void a.approveSelected(); } },
-          { id: "cancelSelection", label: t("approvals.cancelSelection"), icon: "undo" as IconName, disabled: a.batchBusy, onSelect: a.endBatch },
+          { id: "approveSelected", label: t("approvals.approveSelected", { count: a.pickedCount }), icon: "approveSelected" as IconName, help: "help.approveSelected", disabled: a.pickedCount === 0 || a.batchBusy, onSelect: () => { void a.approveSelected(); } },
+          { id: "cancelSelection", label: t("approvals.cancelSelection"), icon: "undo" as IconName, help: "help.cancelSelection", disabled: a.batchBusy, onSelect: a.endBatch },
         ]
-        : [{ id: "selectMultiple", label: t("approvals.selectMultiple"), icon: "selectMultiple" as IconName, disabled: !a.canBatch, onSelect: a.startBatch }]),
+        : [{ id: "selectMultiple", label: t("approvals.selectMultiple"), icon: "selectMultiple" as IconName, help: "help.selectMultiple", disabled: !a.canBatch, onSelect: a.startBatch }]),
     ],
   }] : [];
   const onToolbar = useToolbarTools(groups);
@@ -183,10 +183,10 @@ export function ApprovalsListWindow() {
     <div className="phx-list-view approvals-list-view">
       {!onToolbar && <InlineTools groups={groups} />}
       <div className="phx-filters"><div className="filter-row">
-        <select className="input input-auto" data-guide="window.approvals#show" aria-label={t("approvals.show")} value={a.scope} onChange={(e) => a.setScope(e.target.value as ApprovalsScope)}>
+        <select className="input input-auto" data-guide="window.approvals#show" data-help="help.approvalsShow" aria-label={t("approvals.show")} value={a.scope} onChange={(e) => a.setScope(e.target.value as ApprovalsScope)}>
           {APPROVALS_SCOPES.map((scope) => <option key={scope} value={scope}>{scopeLabel(scope)}</option>)}
         </select>
-        <input type="search" className="input" data-guide="window.approvals#search" placeholder={t("approvals.searchPlaceholder")} aria-label={t("approvals.searchAria")}
+        <input type="search" className="input" data-guide="window.approvals#search" data-help="help.approvalsSearch" placeholder={t("approvals.searchPlaceholder")} aria-label={t("approvals.searchAria")}
           value={a.search} onChange={(e) => a.setSearch(e.target.value)} />
       </div></div>
       {a.error && <ErrorMsg msg={a.error} />}
@@ -205,6 +205,7 @@ export function ApprovalsListWindow() {
         selectedKey={a.current?.id ?? null}
         onSelect={(r, ordered) => a.select(r, ordered.map((o) => o.id))}
         rowLabel={(r) => `${approvalListTitle(r.diff)}, ${a.isClaimed(r) ? t("approvals.processing") : approvalStatusLabel(r.status)}`}
+        rowHelp="help.approvalsRow"
         empty={a.loading ? null : empty}
         selection={a.batchMode ? {
           picked: a.picked,
@@ -214,12 +215,14 @@ export function ApprovalsListWindow() {
           all: a.allPicked,
           label: (r) => t("approvals.selectOne", { tool: friendlyToolName(r.tool_name) }),
           allLabel: t("approvals.selectAll"),
+          help: "help.batchPick",
+          allHelp: "help.batchPickAll",
         } : undefined}
       />
       </div>
       {a.hasMore && (
         <div className="phx-table-footer">
-          <ActionButton icon="loadMore" label={t("common.loadMore")} guide="window.approvals#load-more" busy={a.loadingMore} onClick={a.loadMore} />
+          <ActionButton icon="loadMore" label={t("common.loadMore")} guide="window.approvals#load-more" helpText={t("help.loadMore", { count: localeNumber(50) })} busy={a.loadingMore} onClick={a.loadMore} />
         </div>
       )}
     </div>
@@ -236,15 +239,15 @@ function ReasonRow({ a, locked, decisions }: { a: ApprovalsState; locked: boolea
   return (
     <div ref={row} className="approval-reject-row phx-review-reason" data-guide="window.review#reject">
       <label htmlFor="phx-review-reason" className="approval-reason-label">{t("approvalSummary.action.optionalReason")}</label>
-      <input ref={input} id="phx-review-reason" type="text" className="approval-reason-input" value={a.reason}
+      <input ref={input} id="phx-review-reason" type="text" className="approval-reason-input" data-help="help.rejectReason" value={a.reason}
         placeholder={t("approvalSummary.action.reasonPlaceholder")} disabled={locked}
         onChange={(e) => a.setReason(e.target.value)}
         onKeyDown={(e) => {
           if (e.key === "Enter") { e.preventDefault(); void a.reject(); }
           if (e.key === "Escape") { e.preventDefault(); a.setRejecting(false); }
         }} />
-      <ActionButton icon="check" label={t("approvals.confirmReject")} busy={locked} onClick={() => { void a.reject(); }} className="btn btn-sm phx-decision-reject" />
-      <ActionButton icon="undo" label={t("approvals.cancelReject")} busy={a.deciding !== null} onClick={() => a.setRejecting(false)} className="btn btn-outline btn-sm" />
+      <ActionButton icon="check" label={t("approvals.confirmReject")} help="help.confirmReject" busy={locked} onClick={() => { void a.reject(); }} className="btn btn-sm phx-decision-reject" />
+      <ActionButton icon="undo" label={t("approvals.cancelReject")} help="help.cancelReject" busy={a.deciding !== null} onClick={() => a.setRejecting(false)} className="btn btn-outline btn-sm" />
     </div>
   );
 }
@@ -272,8 +275,8 @@ export function ReviewWindow() {
         <div className="phx-log-details-bar">
           <h3 className="phx-review-title">{approvalListTitle(r.diff)}</h3>
           <div className="phx-log-details-nav" data-guide="window.review#step">
-            <ActionButton icon="previous" label={t("workspace.previousRecord")} disabled={!a.neighbour(-1)} onClick={() => a.step(-1)} className="btn btn-outline btn-sm" />
-            <ActionButton icon="next" label={t("workspace.nextRecord")} disabled={!a.neighbour(1)} onClick={() => a.step(1)} className="btn btn-outline btn-sm" />
+            <ActionButton icon="previous" label={t("workspace.previousRecord")} help="help.previousRecord" disabled={!a.neighbour(-1)} onClick={() => a.step(-1)} className="btn btn-outline btn-sm" />
+            <ActionButton icon="next" label={t("workspace.nextRecord")} help="help.nextRecord" disabled={!a.neighbour(1)} onClick={() => a.step(1)} className="btn btn-outline btn-sm" />
           </div>
         </div>
         <p className="phx-review-context" data-guide="window.review#context">
@@ -284,8 +287,8 @@ export function ReviewWindow() {
       </div>
       {pending && (
         <div ref={decisions} className="phx-review-actions" role="group" aria-label={t("workspace.review")}>
-          {!overdue && <ActionButton icon="check" label={t("approvals.approve")} guide="window.review#approve" busy={locked || a.rejecting} onClick={() => { void a.approve(); }} className="btn btn-sm phx-decision-approve" />}
-          <ActionButton icon="reject" label={t("approvals.reject")} guide="window.review#reject" busy={locked} pressed={a.rejecting} onClick={() => a.setRejecting(!a.rejecting)} className="btn btn-sm phx-decision-reject" />
+          {!overdue && <ActionButton icon="check" label={t("approvals.approve")} help="help.approve" guide="window.review#approve" busy={locked || a.rejecting} onClick={() => { void a.approve(); }} className="btn btn-sm phx-decision-approve" />}
+          <ActionButton icon="reject" label={t("approvals.reject")} help="help.reject" guide="window.review#reject" busy={locked} pressed={a.rejecting} onClick={() => a.setRejecting(!a.rejecting)} className="btn btn-sm phx-decision-reject" />
         </div>
       )}
       {pending && a.rejecting && <ReasonRow a={a} locked={locked} decisions={decisions} />}
@@ -310,14 +313,14 @@ export function ReviewWindow() {
 const sectionOpen: Record<string, boolean> = {};
 
 /** A section of Request Details; its body is built only while it is open. */
-function Section({ id, label, defaultOpen, guide, children }: { id: string; label: string; defaultOpen: boolean; guide: string; children: () => ReactNode }) {
+function Section({ id, label, defaultOpen, guide, help, children }: { id: string; label: string; defaultOpen: boolean; guide: string; help?: string; children: () => ReactNode }) {
   const [open, setOpen] = useState(sectionOpen[id] ?? defaultOpen);
   const toggle = (next: boolean) => { sectionOpen[id] = next; setOpen(next); };
   // Reset This Workspace forgets every section's choice, including those of sections not shown now (user, 2026-10-31).
   useWorkspaceReset(() => { for (const key of Object.keys(sectionOpen)) delete sectionOpen[key]; });
   return (
     <details className="phx-request-section" open={open} data-default-open={defaultOpen ? "" : undefined} data-guide={guide} onToggle={(e) => toggle(e.currentTarget.open)}>
-      <summary>{label}</summary>
+      <summary data-help={help}>{label}</summary>
       {open && <div className="phx-request-section-body">{children()}</div>}
     </details>
   );
@@ -330,7 +333,7 @@ export function RequestDetailsWindow() {
   const pending = r.status === "pending";
   return (
     <div className="phx-request-details" key={r.id}>
-      <Section id="request" label={t("approvals.colRequest")} guide="window.requestDetails#request" defaultOpen>
+      <Section id="request" label={t("approvals.colRequest")} guide="window.requestDetails#request" help="help.requestSection" defaultOpen>
         {() => (
           <>
             <h4 className="phx-request-title">{diffSummary(r.diff) || friendlyToolName(r.tool_name)}</h4>
@@ -352,11 +355,11 @@ export function RequestDetailsWindow() {
           </>
         )}
       </Section>
-      <Section id="args" label={t("approvals.detailTabArgs")} guide="window.requestDetails#raw-args" defaultOpen={false}>
+      <Section id="args" label={t("approvals.detailTabArgs")} guide="window.requestDetails#raw-args" help="help.argumentsSection" defaultOpen={false}>
         {() => <YamlView value={toYaml(r.args as Record<string, unknown>)} />}
       </Section>
       {!pending && (
-        <Section id="result" label={t("approvals.detailTabResult")} guide="window.requestDetails#result" defaultOpen>
+        <Section id="result" label={t("approvals.detailTabResult")} guide="window.requestDetails#result" help="help.resultSection" defaultOpen>
           {() => (r.result == null
             ? <p className="approvals-empty">{r.rejected_reason
               ? t("approvals.noResult", { status: approvalStatusLabel(r.status), reason: friendlyReason(r) })

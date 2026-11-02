@@ -115,12 +115,11 @@ LITERALS: dict[str, tuple[str, ...]] = {
     # is a hardcoded literal, so a translated WIPE tells the operator to type
     # something the button will never accept.
     "panel.settings.wipeTypeConfirm": ("WIPE",),
-    "panel.caps.cap_restart.description": ("homeassistant.restart", "homeassistant.stop"),
     "panel.caps.cap_filesystem.description": ("www/", "themes/", "custom_templates/"),
-    "panel.caps.cap_esphome_yaml.description": ("esphome/",),
-    "panel.caps.cap_yaml_edit.description": ("configuration.yaml", "secrets.yaml", "!secret"),
+    "panel.caps.cap_yaml_edit.description": ("secrets.yaml",),
     # YAML tags and setup values the operator has to recognize or type exactly.
     "panel.adminError.restoreYamlTags": ("!secret", "!include"),
+    "panel.help.auditMethod": ("approval/",),
     "panel.adminError.providerOllamaUnreachable": ("Ollama", "OLLAMA_HOST=0.0.0.0", "11434", "localhost", "HA"),
     "panel.adminError.providerOllamaCloudUnreachable": ("Ollama Cloud",),
     "panel.adminError.providerFireworksInactive": ("Fireworks",),
@@ -143,6 +142,7 @@ LITERALS: dict[str, tuple[str, ...]] = {
 # else that matches English exactly is almost certainly a copy that was never
 # translated, which nothing at runtime would ever report.
 ALLOW_IDENTICAL = frozenset({
+    "panel.settings.selectedOptionHelp",  # placeholders only: "{option}: {description}"
     "panel.settings.modelWithMode",   # "{model} ({mode})": placeholders and brackets only
     "panel.perms.colId",              # "ID"
     "panel.mesa.colId",               # "ID"

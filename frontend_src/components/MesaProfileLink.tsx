@@ -40,6 +40,7 @@ export function MesaProfileLink({
       className={`mesa-link${exists ? " mesa-link-exists" : ""}`}
       title={label}
       aria-label={label}
+      data-help="help.mesaLink"
       onClick={(e) => { e.stopPropagation(); onOpen(targetKey, scope, targetName); }}
     >
       {exists ? "MESA" : "+"}

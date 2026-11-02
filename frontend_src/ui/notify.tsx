@@ -119,7 +119,7 @@ export function Toasts({ center }: { center: Notifications }) {
           onFocus={() => setFocused(true)}
           onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setFocused(false); }}>
           <span className="phx-toast-text">{toast.text}</span>
-          <button type="button" className="phx-toast-dismiss" aria-label={t("notifications.dismiss")} title={t("notifications.dismiss")}
+          <button type="button" className="phx-toast-dismiss" data-help="help.dismissToast" aria-label={t("notifications.dismiss")} title={t("notifications.dismiss")}
             onClick={() => center.dismissToast(toast.id)}>
             <Icon name="close" size={14} />
           </button>

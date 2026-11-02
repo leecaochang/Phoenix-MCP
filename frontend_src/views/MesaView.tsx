@@ -180,6 +180,14 @@ const ADD_TITLE: Record<ProfileScope, string> = {
   integration: "mesa.addIntegrationProfile",
   domain: "mesa.addDomainProfile",
 };
+/** What adding a profile of each scope does, shown in Help over the Add Profile menu. */
+const ADD_HELP: Record<ProfileScope, string> = {
+  entity: "mesa.addEntityHelp",
+  device: "mesa.addDeviceHelp",
+  area: "mesa.addAreaHelp",
+  integration: "mesa.addIntegrationHelp",
+  domain: "mesa.addDomainHelp",
+};
 const EDIT_TITLE: Record<ProfileScope, string> = {
   entity: "mesa.editEntityProfile",
   device: "mesa.editDeviceProfile",
@@ -334,6 +342,8 @@ export const EDITOR_SCOPES = Object.keys(SCOPE_API) as ProfileScope[];
 export const SCOPE_LABEL_KEYS: Readonly<Record<ProfileScope, string>> = SCOPE_LABEL;
 /** The catalog key for adding a profile of each scope. */
 export const ADD_TITLE_KEYS: Readonly<Record<ProfileScope, string>> = ADD_TITLE;
+/** The catalog key for what adding a profile of each scope does. */
+export const ADD_HELP_KEYS: Readonly<Record<ProfileScope, string>> = ADD_HELP;
 
 // The levels that cascade to many entities, in the order the list renders
 // them. Entity profiles are absent: they render grouped by domain instead.
@@ -383,13 +393,15 @@ function SelectField({
 // Fuzzy combobox over a fixed option set. Selecting an option sets `value` to
 // the option's slug; free typing is allowed but the parent validates exactness.
 function Combo({
-  id, value, options, placeholder, invalid, onChange,
+  id, value, options, placeholder, invalid, help, onChange,
 }: {
   id: string;
   value: string;
   options: Opt[];
   placeholder?: string;
   invalid?: boolean;
+  /** The Help key for the input itself. */
+  help?: string;
   onChange: (v: string) => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -455,6 +467,7 @@ function Combo({
         className={`input${invalid ? " error" : ""}`}
         value={query}
         placeholder={placeholder}
+        data-help={help}
         autoComplete="off"
         role="combobox"
         aria-expanded={open}
@@ -856,11 +869,11 @@ export function ProfileEditor({
         {seedFailed && (
           <>
             <ErrorMsg msg={t("mesa.loadProfileFailed")} />
-            <button className="btn btn-ghost" onClick={() => setSeedAttempt((n) => n + 1)}>{t("common.refresh")}</button>
+            <button className="btn btn-ghost" data-help="mesa.reloadProfileHelp" onClick={() => setSeedAttempt((n) => n + 1)}>{t("common.refresh")}</button>
           </>
         )}
         {loading ? <Loading /> : !loaded ? (
-          <button className="btn btn-ghost" onClick={() => setLoadAttempt((n) => n + 1)}>{t("common.refresh")}</button>
+          <button className="btn btn-ghost" data-help="mesa.reloadProfileHelp" onClick={() => setLoadAttempt((n) => n + 1)}>{t("common.refresh")}</button>
         ) : (
           <>
             {isNew && !lockedKey && (
@@ -872,6 +885,7 @@ export function ProfileEditor({
                   options={keyOptions}
                   placeholder={t(SCOPE_PLACEHOLDER[scope])}
                   invalid={keyInvalidShown}
+                  help="mesa.targetSearchHelp"
                   onChange={(v) => set("key", v)}
                 />
                 {keyInvalidShown && (
@@ -901,7 +915,7 @@ export function ProfileEditor({
                 />
                 {recommendedTags.length > 0 && (
                   <ActionButton icon="suggestions" label={showReco ? t("mesa.hideSuggestions") : t("mesa.showSuggestions")}
-                    pressed={showReco} className="btn btn-outline btn-sm" onClick={() => setShowReco((s) => !s)} />
+                    pressed={showReco} className="btn btn-outline btn-sm" help="mesa.showTagSuggestionsHelp" onClick={() => setShowReco((s) => !s)} />
                 )}
               </div>
             </div>
@@ -931,7 +945,7 @@ export function ProfileEditor({
                     <li key={i}>{t("mesa.warningRow", { recommendation: w.recommendation, automationId: w.automation_id, role: MESA_ROLE_KEYS[w.role] ? t(MESA_ROLE_KEYS[w.role]) : w.role })}</li>
                   ))}
                 </ul>
-                <button className="btn btn-sm" onClick={() => { onSaved(); finish(); }}>{t("mesa.dismiss")}</button>
+                <button className="btn btn-sm" data-help="mesa.dismissSaveWarningsHelp" onClick={() => { onSaved(); finish(); }}>{t("mesa.dismiss")}</button>
               </div>
             )}
 
@@ -989,10 +1003,10 @@ export function ProfileEditor({
           </h3>
           <div className="phx-window-actions mesa-editor-actions" data-guide="window.mesaEditor#save">
             {/* A new profile is itself the change; an existing one waits for an edit (user, 2026-10-30). */}
-            <ActionButton icon="save" label={t("mesa.save")} busy={saving} disabled={!canSave || (!isNew && !dirty)} onClick={() => { void save(); }} className="btn btn-outline btn-sm" />
-            <ActionButton icon="undo" label={t("mesa.discardChanges")} busy={saving} disabled={!isNew && !dirty} onClick={discard} className="btn btn-outline btn-sm" />
+            <ActionButton icon="save" label={t("mesa.save")} help="mesa.saveHelp" busy={saving} disabled={!canSave || (!isNew && !dirty)} onClick={() => { void save(); }} className="btn btn-outline btn-sm" />
+            <ActionButton icon="undo" label={t("mesa.discardChanges")} help="mesa.discardHelp" busy={saving} disabled={!isNew && !dirty} onClick={discard} className="btn btn-outline btn-sm" />
             {/* Always offered, so the row does not change shape; there is nothing to delete until a profile is open. */}
-            <ActionButton icon="delete" label={t("mesa.delete")} busy={saving} disabled={isNew || confirmDelete || !loaded} onClick={() => setConfirmDelete(true)} className="btn btn-outline btn-sm" />
+            <ActionButton icon="delete" label={t("mesa.delete")} help="mesa.deleteHelp" busy={saving} disabled={isNew || confirmDelete || !loaded} onClick={() => setConfirmDelete(true)} className="btn btn-outline btn-sm" />
           </div>
         </div>
         {notice}
@@ -1182,13 +1196,14 @@ export function MesaImport({ onImported, onCancel }: { onImported: () => void; o
         <div className="toggle-row mesa-import-replace">
           <div className="toggle-label"><span>{t("mesa.replaceExisting")}</span></div>
           <label className="toggle-switch">
-            <input type="checkbox" aria-label={t("mesa.replaceExisting")} checked={replaceExisting} onChange={(e) => setReplaceExisting(e.target.checked)} />
+            <input type="checkbox" aria-label={t("mesa.replaceExisting")} data-help="mesa.replaceExistingHelp" checked={replaceExisting} onChange={(e) => setReplaceExisting(e.target.checked)} />
             <span className="toggle-switch-track" />
           </label>
         </div>
         <ActionButton icon="import" label={replaceExisting ? t("mesa.importAndReplace") : t("mesa.import")} busy={busy} disabled={!archive}
+          help={replaceExisting ? "mesa.importReplaceHelp" : "mesa.importHelp"}
           onClick={() => { void doImport(); }} className={`btn btn-sm ${replaceExisting ? "btn-danger" : "btn-outline"}`} />
-        {onCancel && <ActionButton icon="undo" label={t("mesa.cancel")} busy={busy} onClick={onCancel} className="btn btn-outline btn-sm" />}
+        {onCancel && <ActionButton icon="undo" label={t("mesa.cancel")} help="help.cancelAction" busy={busy} onClick={onCancel} className="btn btn-outline btn-sm" />}
       </div>
       {result && (
         <div className="mesa-import-result" role="status">

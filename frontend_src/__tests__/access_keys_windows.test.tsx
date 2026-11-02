@@ -29,6 +29,8 @@ import { AccessKeyListView } from "../views/AccessKeyList";
 import { MenuRootContext } from "../ui/Menu";
 import { PERSONA_CAP_DEFAULTS } from "../personas";
 import { guideTargetFor } from "../shell/guideTarget";
+import { t } from "../i18n";
+import { tPlain } from "../i18n/rich";
 
 const { registry } = vi.hoisted(() => ({ registry: new Map<string, () => void>() }));
 
@@ -151,7 +153,7 @@ describe("Key Settings", () => {
     const guidance = screen.getByRole("textbox", { name: /Notes for agents/ });
     expect(guidance).toHaveAttribute("data-help", "help.guidance");
     // Who receives it is part of its Help text, not a line under the box (user, 2026-10-28).
-    expect(guidance.getAttribute("aria-description")).toContain("Never put passwords or other secrets here.");
+    expect(guidance).toHaveAttribute("aria-description", t("help.guidance"));
     expect(screen.getByRole("combobox", { name: /inline approval wait/i })).toHaveAttribute("data-help", "help.inlineWait");
     expect(screen.getByRole("checkbox", { name: "Always announce all tools" })).toHaveAttribute("data-help", "accessKeys.announceAllHelp");
     // The labels say 0 turns rate limiting off; no separate line repeats it.
@@ -265,8 +267,8 @@ describe("Custom persona", () => {
     fireEvent.click(await screen.findByRole("button", { name: /Automation Builder/ }));
     await screen.findByRole("button", { name: /Automation Builder/, pressed: true });
     expect(api.patchAccessKey).toHaveBeenLastCalledWith("k1", { persona: "automation_builder", ...PERSONA_CAP_DEFAULTS.automation_builder });
-    fireEvent.click(screen.getByRole("button", { name: /Custom/ }));
-    await screen.findByRole("button", { name: /Custom/, pressed: true });
+    fireEvent.click(screen.getByRole("button", { name: /^Custom\b/ }));
+    await screen.findByRole("button", { name: /^Custom\b/, pressed: true });
     const body = vi.mocked(api.patchAccessKey).mock.lastCall![1] as Record<string, string>;
     expect(body).toMatchObject({ persona: "custom", ...mine, cap_yaml_edit: "deny" });
     expect(Object.keys(body).filter((k) => k.startsWith("cap_")).sort()).toEqual([...CAP_NAMES].sort());
@@ -282,7 +284,8 @@ describe("Confirmations", () => {
     expect(panel.querySelector(".phx-inline-confirm-title")?.textContent).toBe("Switch to Scoped Mode");
     // No prose in the window: it reads in Help, for the panel and its button.
     expect(container.querySelector("p")).toBeNull();
-    expect(panel.getAttribute("data-help-text")).toMatch(/^Pass-through access key\. .*permission tree immediately/);
+    expect(panel.getAttribute("data-help-text")).toBe(
+      [tPlain("accessKeys.ptNoticeIntro"), t("accessKeys.ptNoticeCaps"), t("accessKeys.ptNoticeUsage"), t("accessKeys.ptConvertBody")].join(t("common.sentenceSeparator")));
     expect(screen.queryByRole("button", { name: "Cancel" })).toBeNull();
     const button = within(panel).getByRole("button", { name: "Switch to Scoped Mode" });
     expect(button).not.toHaveClass("btn-primary");
@@ -360,7 +363,7 @@ describe("Create Access Key", () => {
     expect(container.querySelector("small")).toBeNull();
     const pt = screen.getByRole("checkbox", { name: /^Pass-through mode$/i });
     expect(pt.closest(".toggle-row")).toHaveAttribute("data-help", "accessKeys.passThroughModeHelp");
-    expect(pt).toHaveAttribute("aria-description", expect.stringContaining("Skip the permission tree"));
+    expect(pt).toHaveAttribute("aria-description", t("accessKeys.passThroughModeHelp"));
     const row = container.querySelector(".access-key-create-fields")!;
     for (const name of ["Name (required)", "Expiry", "Requests per minute (0 = disabled)", "Burst per second (0 = no per-second limit)"]) {
       expect(row.contains(screen.getByLabelText(name))).toBe(true);

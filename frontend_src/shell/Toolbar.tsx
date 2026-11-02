@@ -49,28 +49,29 @@ export function workspaceMenu(controller: WorkspaceController, actions: Workspac
   const items: MenuEntry[] = controller.closedWindows().filter((id) => id !== NOTIFICATIONS && id !== HELP_WINDOW && !toolWindows.includes(id)).map((id) => ({
     id: `reopen-${id}`,
     label: t("workspace.reopen", { window: windowTitle(id) }),
+    help: t("help.menuReopen", { window: windowTitle(id) }),
     onSelect: () => controller.reopen(id),
   }));
   // A window a toolbar tool opens is offered here too while it is hidden (user, 2026-10-31).
   for (const id of toolWindows) {
     if (!controller.groupOf(id) && controller.windows.includes(id)) {
-      items.push({ id: `reopen-${id}`, label: t("workspace.reopen", { window: windowTitle(id) }), onSelect: () => (actions ? actions.openToolWindow(controller, id) : controller.reopen(id)) });
+      items.push({ id: `reopen-${id}`, label: t("workspace.reopen", { window: windowTitle(id) }), help: t("help.menuReopen", { window: windowTitle(id) }), onSelect: () => (actions ? actions.openToolWindow(controller, id) : controller.reopen(id)) });
     }
   }
   // Needs Attention is closed per workspace: while items wait, every workspace offers it back.
   if (actions?.attentionHidden(controller)) {
-    items.push({ id: "show-attention", label: t("workspace.showAttention"), onSelect: () => actions.showAttention(controller) });
+    items.push({ id: "show-attention", label: t("workspace.showAttention"), help: t("help.menuShowAttention"), onSelect: () => actions.showAttention(controller) });
   }
   // Notifications is offered back like any other closed window, in its own words; it is
   // closed from its title bar, not from here (user, 2026-10-29).
   if (controller.windows.includes(NOTIFICATIONS) && !controller.groupOf(NOTIFICATIONS)) {
-    items.push({ id: "show-notifications", label: t("notifications.showHistory"), onSelect: () => controller.reopen(NOTIFICATIONS) });
+    items.push({ id: "show-notifications", label: t("notifications.showHistory"), help: t("help.menuShowNotifications"), onSelect: () => controller.reopen(NOTIFICATIONS) });
   }
   if (items.length) items.push("separator");
   if (actions) {
     items.push(
-      { id: "save-default", label: t("workspace.saveMyDefault"), onSelect: () => actions.saveMyDefault(controller) },
-      { id: "restore-default", label: t("workspace.restoreMyDefault"), disabled: !actions.hasMyDefault(controller), onSelect: () => actions.restoreMyDefault(controller) },
+      { id: "save-default", label: t("workspace.saveMyDefault"), help: t("help.menuSaveDefault"), onSelect: () => actions.saveMyDefault(controller) },
+      { id: "restore-default", label: t("workspace.restoreMyDefault"), help: t("help.menuRestoreDefault"), disabled: !actions.hasMyDefault(controller), onSelect: () => actions.restoreMyDefault(controller) },
     );
   }
   // My Workspace's reset empties it.
@@ -84,6 +85,9 @@ const NOTIFICATIONS = "notifications";
 const DOCKS: Array<[ToolbarDock, string]> = [
   ["top", "workspace.dockTop"], ["bottom", "workspace.dockBottom"], ["left", "workspace.dockLeft"], ["right", "workspace.dockRight"], ["floating", "workspace.floatToolbar"],
 ];
+const DOCK_HELP: Record<ToolbarDock, string> = {
+  top: "help.menuDockTop", bottom: "help.menuDockBottom", left: "help.menuDockLeft", right: "help.menuDockRight", floating: "help.menuFloatToolbar",
+};
 const MOVE_STEP = 16;
 /** Space kept between a floating toolbar and the panel's edges. */
 const FLOAT_MARGIN = 8;
@@ -104,29 +108,29 @@ function within(shell: DOMRect, bar: DOMRect, x: number, y: number): { x: number
 function appearanceMenu(state: ToolbarState, onChange: (next: ToolbarState) => void, env: Env): MenuEntry[] {
   const update = (patch: Partial<ToolbarState>) => onChange({ ...state, ...patch });
   const items: MenuEntry[] = [
-    { id: "icons", label: t("workspace.iconsOnly"), checked: state.mode === "icons", onSelect: () => update({ mode: "icons" }) },
-    { id: "icon-text", label: t("workspace.iconsAndText"), checked: state.mode === "icon-text", onSelect: () => update({ mode: "icon-text" }) },
+    { id: "icons", label: t("workspace.iconsOnly"), help: t("help.menuIconsOnly"), checked: state.mode === "icons", onSelect: () => update({ mode: "icons" }) },
+    { id: "icon-text", label: t("workspace.iconsAndText"), help: t("help.menuIconsAndText"), checked: state.mode === "icon-text", onSelect: () => update({ mode: "icon-text" }) },
   ];
   // Single Row, checked while chosen (user, 2026-11-01); an upright toolbar has columns instead. It stays
   // checked while the toolbar shows two rows because one does not fit.
   if (env === "desktop" && !toolbarVertical(state)) {
-    items.push("separator", { id: "single-row", label: t("workspace.singleRow"), checked: state.singleRow, toggle: true, onSelect: () => update({ singleRow: !state.singleRow }) });
+    items.push("separator", { id: "single-row", label: t("workspace.singleRow"), help: t("help.menuSingleRow"), checked: state.singleRow, toggle: true, onSelect: () => update({ singleRow: !state.singleRow }) });
   }
   if (env === "desktop") {
     items.push("separator");
     const floating = state.dock === "floating";
     for (const [dock, key] of DOCKS) {
       if (dock === "floating" && floating) continue;
-      items.push({ id: `dock-${dock}`, label: t(key), checked: state.dock === dock, onSelect: () => onChange(withToolbarDock(state, dock)) });
+      items.push({ id: `dock-${dock}`, label: t(key), help: t(DOCK_HELP[dock]), checked: state.dock === dock, onSelect: () => onChange(withToolbarDock(state, dock)) });
     }
     if (floating) {
       const vertical = state.vertical;
-      items.push({ id: vertical ? "horizontal" : "vertical", label: t(vertical ? "workspace.horizontal" : "workspace.vertical"), onSelect: () => update({ vertical: !vertical }) });
+      items.push({ id: vertical ? "horizontal" : "vertical", label: t(vertical ? "workspace.horizontal" : "workspace.vertical"), help: t(vertical ? "help.menuToolbarHorizontal" : "help.menuToolbarVertical"), onSelect: () => update({ vertical: !vertical }) });
     }
   }
   items.push("separator", state.collapsed
-    ? { id: "expand", label: t("workspace.expandToolbar"), onSelect: () => update({ collapsed: false }) }
-    : { id: "collapse", label: t("workspace.collapseToolbar"), onSelect: () => update({ collapsed: true }) });
+    ? { id: "expand", label: t("workspace.expandToolbar"), help: t("help.menuExpandToolbar"), onSelect: () => update({ collapsed: false }) }
+    : { id: "collapse", label: t("workspace.collapseToolbar"), help: t("help.menuCollapseToolbar"), onSelect: () => update({ collapsed: true }) });
   return items;
 }
 
@@ -360,7 +364,7 @@ export function Toolbar({ controller, shellRoot, env, state, onChange, documenta
             {!collapsed && (
               <div className="phx-toolbar-group">
                 {d.settings?.kill_switch ? (
-                  <button type="button" className="phx-toolbar-button phx-toolbar-warning" title={t("shell.killSwitchTitle")} data-help="shell.killSwitchTitle" onClick={openKillSwitch}>
+                  <button type="button" className="phx-toolbar-button phx-toolbar-warning" title={t("shell.killSwitchTitle")} data-help="shell.killSwitchHelp" onClick={openKillSwitch}>
                     <Icon name="killSwitch" size={16} />
                     <span className="phx-toolbar-label">{t(env === "mobile" ? "shell.killSwitchShort" : "shell.killSwitchFull")}</span>
                   </button>

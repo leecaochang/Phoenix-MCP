@@ -100,7 +100,7 @@ export function AttentionList({ state, onShowRequest }: {
         {reviewable && <p className="phx-attention-meta"><span className="stat-label">{t(item.kind === "calendar" ? "attention.calendarReceipt" : "attention.request")}</span> <code>{item.id}</code></p>}
         {reviewable && (confirming === key ? (
           <div className="log-group" data-guide="window.attention#review">
-          <InlineConfirm label={t("attention.continue")} acknowledge={t("attention.checked")}
+          <InlineConfirm label={t("attention.continue")} help={t("help.attentionMarkReviewed")} acknowledge={t("attention.checked")}
             confirmLabel={t("attention.continue")} cancelLabel={t("common.cancel")}
             busy={busy === key} onConfirm={() => { void review(item).finally(() => setConfirming(null)); }} onCancel={() => setConfirming(null)}>
             <p>{t("attention.noReplay")}</p>
@@ -111,10 +111,10 @@ export function AttentionList({ state, onShowRequest }: {
             <code className="phx-attention-ref">{item.tool}{item.entity_id && ` / ${item.entity_id}`}</code>
             <span className="phx-attention-buttons">
               {onShowRequest && item.kind === "agent" && (
-                <ActionButton icon="logs" label={t("attention.showInAudit")} className="btn btn-outline btn-sm"
+                <ActionButton icon="logs" label={t("attention.showInAudit")} help="help.attentionShowInAudit" className="btn btn-outline btn-sm"
                   disabled={busy !== null} onClick={() => onShowRequest(item.id)} />
               )}
-              <ActionButton icon="check" label={t("attention.continue")} className="btn btn-outline btn-sm"
+              <ActionButton icon="check" label={t("attention.continue")} help="help.attentionMarkReviewed" className="btn btn-outline btn-sm"
                 disabled={busy !== null} onClick={() => setConfirming(key)} />
             </span>
           </div>
