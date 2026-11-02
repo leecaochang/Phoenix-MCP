@@ -29,4 +29,4 @@ Choose **{{label:workspace.addToMy}}** in Agent Chat's own menu to dock it here.
 
 ## On a phone {#phones}
 
-Select **+** in a window's title bar to add it to My Workspace, and close it there to remove it. A phone keeps its own My Workspace, apart from the one on a computer.
+Choose **{{label:workspace.addToMy}}** in a window's menu to add it here, and close it here to remove it. Agent Chat can't be added on a phone. A phone keeps its own My Workspace, apart from the one on a computer.

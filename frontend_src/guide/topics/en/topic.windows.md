@@ -1,5 +1,5 @@
 ---
-{ "id": "topic.windows", "title": "Working with Windows", "parent": "workspace.my", "order": 10, "keywords": ["layout", "arrange", "workspace", "window", "toolbar"], "sectionKeywords": { "toolbar": ["workspace buttons", "documentation", "tools"], "toolbar-options": ["icons only", "icons and text", "single row", "dock", "float toolbar", "collapse"], "title-bar": ["fold", "maximize", "close", "float", "dock window"], "window-menu": ["move left", "move right", "move up", "move down", "pin", "unpin", "resize with keyboard", "always show icons and text"], "arranging": ["drag", "resize", "border", "scroll"], "closing": ["show window", "reopen", "hidden"], "defaults": ["my default", "reset", "reset this workspace", "reset all workspaces", "layout"], "saved": ["sync", "other computer", "browser"], "phones": ["mobile", "narrow"], "keyboard": ["shortcuts", "context menu", "escape"], "guide": ["guide", "pop out", "pop in", "separate window", "contents", "search"] }, "covers": ["frontend_src/shell/Toolbar.tsx", "frontend_src/shell/Shell.tsx", "frontend_src/shell/dock/TitleBar.tsx", "frontend_src/shell/dock/controller.ts", "frontend_src/shell/storage.ts", "frontend_src/shell/PhoneStack.tsx", "frontend_src/shell/dock/", "frontend_src/shell/areaFocus.ts", "frontend_src/shell/sync.ts", "frontend_src/shell/toolbarFit.ts", "frontend_src/shell/tools.ts", "frontend_src/shell/windowTools.tsx", "frontend_src/shell/Reconnecting.tsx", "frontend_src/shell/guide.tsx", "frontend_src/shell/guideTarget.ts", "frontend_src/guide/search.ts", "frontend_src/utils/connection.ts", "frontend_src/utils/list_search.ts", "frontend_src/ui/ActionButton.tsx", "frontend_src/ui/Menu.tsx", "frontend_src/ui/InlineConfirm.tsx", "frontend_src/ui/table/settings.ts", "frontend_src/ui/popup.ts"] }
+{ "id": "topic.windows", "title": "Working with Windows", "parent": "workspace.my", "order": 10, "keywords": ["layout", "arrange", "workspace", "window", "toolbar"], "sectionKeywords": { "toolbar": ["workspace buttons", "documentation", "tools"], "toolbar-options": ["icons only", "icons and text", "single row", "dock", "float toolbar", "collapse"], "title-bar": ["fold", "maximize", "close", "float", "dock window"], "window-menu": ["move left", "move right", "move up", "move down", "pin", "unpin", "resize with keyboard", "always show icons and text"], "arranging": ["drag", "resize", "border", "scroll"], "closing": ["show window", "reopen", "hidden"], "defaults": ["my default", "reset", "reset this workspace", "reset all workspaces", "layout"], "saved": ["sync", "other computer", "browser"], "phones": ["mobile", "narrow", "tablet", "move up", "move down", "load more", "rows"], "keyboard": ["shortcuts", "context menu", "escape"], "guide": ["guide", "pop out", "pop in", "separate window", "contents", "search"] }, "covers": ["frontend_src/shell/Toolbar.tsx", "frontend_src/shell/Shell.tsx", "frontend_src/shell/dock/TitleBar.tsx", "frontend_src/shell/dock/controller.ts", "frontend_src/shell/storage.ts", "frontend_src/shell/PhoneStack.tsx", "frontend_src/shell/phoneLayout.ts", "frontend_src/ui/table/rowLimit.ts", "frontend_src/shell/dock/", "frontend_src/shell/areaFocus.ts", "frontend_src/shell/sync.ts", "frontend_src/shell/toolbarFit.ts", "frontend_src/shell/tools.ts", "frontend_src/shell/windowTools.tsx", "frontend_src/shell/Reconnecting.tsx", "frontend_src/shell/guide.tsx", "frontend_src/shell/guideTarget.ts", "frontend_src/guide/search.ts", "frontend_src/utils/connection.ts", "frontend_src/utils/list_search.ts", "frontend_src/ui/ActionButton.tsx", "frontend_src/ui/Menu.tsx", "frontend_src/ui/InlineConfirm.tsx", "frontend_src/ui/table/settings.ts", "frontend_src/ui/popup.ts"] }
 ---
 Each workspace is a set of windows you can arrange as you like. Phoenix remembers the arrangement for you, on every computer you sign in from.
 
@@ -70,7 +70,19 @@ Your arrangement is saved as you work, for your Home Assistant user. Another com
 
 ## On a phone {#phones}
 
-Windows stack in one column you scroll, with the toolbar at the top. Fold a window from its title bar. Window menus, dragging and Workspace Options are desktop only.
+A phone shows each workspace's windows in one column you scroll, with the toolbar in two rows across the top. The column stays when you turn the phone sideways. A narrow browser window on a computer or tablet shows the same column.
+
+Each title bar has buttons to fold the window, open its menu and close it. There's no dragging on a phone. Use the window menu instead:
+
+- **{{label:workspace.moveUp}}** and **{{label:workspace.moveDown}}** swap the window with its neighbor in the column.
+- **{{label:workspace.addToMy}}** and **{{label:workspace.alwaysLabels}}** work as they do on a computer.
+- **{{label:agentchat.maximize}}** fills the screen with the window, and **{{label:agentchat.restore}}** brings the column back.
+
+**{{label:workspace.options}}**, the toolbar's last button, shows closed windows again and saves, restores or resets your arrangement.
+
+Long lists show 10 rows at a time. **{{label:common.loadMore}}** shows the next 10.
+
+The Guide opens at the bottom of the column. Help and Notification History aren't available on a phone.
 
 ## Keyboard {#keyboard}
 
