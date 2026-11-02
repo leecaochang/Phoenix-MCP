@@ -2613,7 +2613,7 @@
       "myDefaultRestored": "Se restauró Mi predeterminado.",
       "myDefaultSaved": "Se guardó esta disposición como su predeterminado para {workspace}.",
       "myEmpty": "Mi espacio de trabajo está vacío. Añada una ventana con «Añadir a Mi espacio de trabajo» en el menú de la ventana, o Agent Chat desde su propio menú.",
-      "myEmptyPhone": "Mi espacio de trabajo está vacío. Añada una ventana con el botón + de su barra de título.",
+      "myEmptyPhone": "Mi espacio de trabajo está vacío. Añada una ventana con «Añadir a Mi espacio de trabajo» en el menú de la ventana.",
       "myWorkspace": "Mi espacio de trabajo",
       "nextRecord": "Entrada siguiente",
       "options": "Opciones del espacio de trabajo",

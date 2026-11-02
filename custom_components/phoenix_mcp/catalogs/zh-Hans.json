@@ -2613,7 +2613,7 @@
       "myDefaultRestored": "已还原我的默认布局。",
       "myDefaultSaved": "已将此布局保存为 {workspace} 的默认布局。",
       "myEmpty": "我的工作区为空。请通过窗口菜单中的“添加到我的工作区”添加窗口，或通过 Agent Chat 自身的菜单添加 Agent Chat。",
-      "myEmptyPhone": "我的工作区为空。使用窗口标题栏中的 + 按钮添加窗口。",
+      "myEmptyPhone": "我的工作区为空。请通过窗口菜单中的“添加到我的工作区”添加窗口。",
       "myWorkspace": "我的工作区",
       "nextRecord": "下一个条目",
       "options": "工作区选项",

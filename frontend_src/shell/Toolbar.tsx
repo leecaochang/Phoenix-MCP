@@ -103,7 +103,8 @@ function within(shell: DOMRect, bar: DOMRect, x: number, y: number): { x: number
 /**
  * The toolbar's own menu: display mode, one row or two, where it sits, and
  * Collapse or Expand. While floating it offers the orientation it is not in,
- * and no Float Toolbar. Phones keep it docked at the top.
+ * and no Float Toolbar. Desktop only: phones keep the toolbar docked at the
+ * top, with icons only, and never collapsed.
  */
 function appearanceMenu(state: ToolbarState, onChange: (next: ToolbarState) => void, env: Env): MenuEntry[] {
   const update = (patch: Partial<ToolbarState>) => onChange({ ...state, ...patch });
@@ -192,7 +193,8 @@ export function Toolbar({ controller, shellRoot, env, state, onChange, documenta
     }
   }, [d.hass, d.narrow]);
 
-  const effective: ToolbarState = env === "mobile" ? { ...state, dock: "top" } : state;
+  // Phones: docked at the top, icons only, never collapsed, and no toolbar menu (user, 2026-11-02).
+  const effective: ToolbarState = env === "mobile" ? { ...state, dock: "top", mode: "icons", collapsed: false } : state;
   const update = (patch: Partial<ToolbarState>) => onChange({ ...state, ...patch });
 
   // Every open window's tools, grouped per window in reading order; tools several windows share show once.
@@ -272,7 +274,9 @@ export function Toolbar({ controller, shellRoot, env, state, onChange, documenta
   // when the panel's width or the rows' text changes.
   const vertical = env === "desktop" && toolbarVertical(effective);
   const fitOneLine = env === "desktop" && effective.mode === "icon-text" && !effective.collapsed && !vertical;
-  const oneRow = env === "desktop" && effective.singleRow && !effective.collapsed && !vertical;
+  // Phones always put the tools beside Agent Chat, Documentation and Workspace Options, so the toolbar is at
+  // most two rows: the workspaces, then the rest (user, 2026-11-02).
+  const oneRow = (env === "mobile" || (env === "desktop" && effective.singleRow)) && !effective.collapsed && !vertical;
   const fitKey = useRef("");
   const refit = useRef<(force?: boolean) => void>(() => {});
   useLayoutEffect(() => {
@@ -288,7 +292,7 @@ export function Toolbar({ controller, shellRoot, env, state, onChange, documenta
       if (oneRow && tools) {
         bar.dataset.rows = "1";
         if (fitOneLine) bar.dataset.fit = "0";
-        if (singleRowFits(body)) return;
+        if (env === "mobile" || singleRowFits(body)) return;
       }
       delete bar.dataset.rows;
       if (!fitOneLine) { delete bar.dataset.fit; return; }
@@ -307,7 +311,7 @@ export function Toolbar({ controller, shellRoot, env, state, onChange, documenta
   }, [shellRoot]);
 
   const onContextMenu = (e: React.MouseEvent) => {
-    if ((e.target as HTMLElement).closest("input, textarea, select")) return;
+    if (env !== "desktop" || (e.target as HTMLElement).closest("input, textarea, select")) return;
     showMenu?.(e, t("workspace.toolbarMenu"), appearanceMenu(state, onChange, env));
   };
 
@@ -390,9 +394,9 @@ export function Toolbar({ controller, shellRoot, env, state, onChange, documenta
                 )}
               </div>
             )}
-            {/* The toolbar's options, the same menu as the grip and right-click. Collapsed, the grip holds it;
-                phones have no grip, so there it stays. */}
-            {(!collapsed || env !== "desktop") && (
+            {/* The toolbar's options, the same menu as the grip and right-click. Collapsed, the grip holds it.
+                Phones have nothing to choose, so no menu. */}
+            {env === "desktop" && !collapsed && (
               <MenuButton label={t("workspace.toolbarOptions")} help="help.toolbarOptions" icon={<Icon name="more" size={16} />}
                 items={() => appearanceMenu(state, onChange, env)} className="phx-toolbar-button phx-toolbar-plain phx-toolbar-options" />
             )}

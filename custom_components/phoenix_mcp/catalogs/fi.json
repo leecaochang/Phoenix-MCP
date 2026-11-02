@@ -2619,7 +2619,7 @@
       "myDefaultRestored": "Oma oletus palautettiin.",
       "myDefaultSaved": "Tämä asettelu tallennettiin omaksi oletukseksesi työtilassa {workspace}.",
       "myEmpty": "Oma työtila on tyhjä. Lisää ikkuna valitsemalla ikkunan valikosta Lisää Omaan työtilaan tai lisää Agent Chat sen omasta valikosta.",
-      "myEmptyPhone": "Oma työtila on tyhjä. Lisää ikkuna sen otsikkorivin +-painikkeella.",
+      "myEmptyPhone": "Oma työtila on tyhjä. Lisää ikkuna valitsemalla ikkunan valikosta Lisää Omaan työtilaan.",
       "myWorkspace": "Oma työtila",
       "nextRecord": "Seuraava kirjaus",
       "options": "Työtilan asetukset",

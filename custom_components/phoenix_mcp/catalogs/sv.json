@@ -2619,7 +2619,7 @@
       "myDefaultRestored": "Min standard har återställts.",
       "myDefaultSaved": "Den här layouten sparades som din standard för {workspace}.",
       "myEmpty": "Min arbetsyta är tom. Lägg till ett fönster med Lägg till i Min arbetsyta i dess fönstermeny, eller Agent Chat från dess egen meny.",
-      "myEmptyPhone": "Min arbetsyta är tom. Lägg till ett fönster med knappen + i dess namnlist.",
+      "myEmptyPhone": "Min arbetsyta är tom. Lägg till ett fönster med Lägg till i Min arbetsyta i dess fönstermeny.",
       "myWorkspace": "Min arbetsyta",
       "nextRecord": "Nästa post",
       "options": "Alternativ för arbetsytan",

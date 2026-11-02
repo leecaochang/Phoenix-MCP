@@ -41,15 +41,12 @@ export function closedPhoneWindows(workspace: WorkspaceId, layout: PhoneLayout |
   return phoneWindows(workspace, myWindows).filter((id) => closed.includes(id) && id !== ATTENTION_WINDOW && id !== ARCHIVED_WINDOW);
 }
 
-function PhoneWindow({ id, workspace, folded, labels, maximized, menu, onFold, onClose, onAdd, added = false }: {
+function PhoneWindow({ id, workspace, folded, labels, maximized, menu, onFold, onClose }: {
   id: WindowId; workspace: WorkspaceId; folded: boolean; labels: boolean; maximized: boolean;
   /** The window menu's entries, built when it opens. */
   menu: () => MenuEntry[];
   onFold: () => void;
   onClose?: () => void;
-  /** Add this window to My Workspace; given outside My Workspace for a window that can be added. */
-  onAdd?: () => void;
-  added?: boolean;
 }) {
   const place = useMemo(() => ({ workspace, window: id }), [workspace, id]);
   const mode = useContext(DisplayModeContext);
@@ -69,12 +66,6 @@ function PhoneWindow({ id, workspace, folded, labels, maximized, menu, onFold, o
           <Icon name={folded ? "folded" : "expand"} size={14} />
         </button>
         <h2 id={titleId} className="phx-window-title-text">{windowTitle(id)}</h2>
-        {onAdd && (
-          <button type="button" className="phx-window-control" aria-label={t("workspace.addToMy")} title={t("workspace.addToMy")}
-            data-help="help.menuAddToMy" disabled={added} onClick={onAdd}>
-            <Icon name="add" size={14} />
-          </button>
-        )}
         <MenuButton label={t("workspace.windowMenu")} help="help.phoneWindowMenu" icon={<Icon name="more" size={14} />} items={menu}
           className="phx-window-control" buttonRef={(el) => el?.setAttribute("data-phx-window-menu", id)} />
         {onClose && (
@@ -115,7 +106,7 @@ export function PhoneStack({ workspace, layout, onLayout, maximized = null, onMa
   onCloseArchived?: () => void;
   /** The windows added to My Workspace on phones. */
   myWindows?: readonly string[];
-  /** Add a window to My Workspace from its title bar, and take one out by closing it there (user, 2026-11-01). */
+  /** Add a window to My Workspace from its window menu (user, 2026-11-02), and take one out by closing it there. */
   onAddToMy?: (id: string) => void;
   onRemoveFromMy?: (id: string) => void;
   guide?: ReactNode;
@@ -163,6 +154,10 @@ export function PhoneStack({ workspace, layout, onLayout, maximized = null, onMa
         "separator",
       );
     }
+    // Add to My Workspace sits in the window menu on phones too (user, 2026-11-02), as on a desktop.
+    if (workspace !== "my" && onAddToMy && canAddToMy(id)) {
+      entries.push({ id: "add-my", label: t("workspace.addToMy"), help: t("help.menuAddToMy"), disabled: myWindows.includes(id), onSelect: () => onAddToMy(id) });
+    }
     const hasLabels = labels.includes(id);
     entries.push(
       { id: "labels", label: t("workspace.alwaysLabels"), help: t("help.menuAlwaysLabels"), checked: hasLabels, toggle: true, onSelect: () => change({ labels: withMember(labels, id, !hasLabels) }) },
@@ -184,9 +179,7 @@ export function PhoneStack({ workspace, layout, onLayout, maximized = null, onMa
       {windows.map((id) => (
         <PhoneWindow key={`${workspace}:${id}`} id={id} workspace={workspace}
           folded={folded.includes(id) && current !== id} labels={labels.includes(id)} maximized={current === id}
-          menu={() => menu(id)} onFold={() => (current === id ? onMaximize(null) : fold(id))} onClose={close(id)}
-          onAdd={workspace !== "my" && onAddToMy && canAddToMy(id) ? () => onAddToMy(id) : undefined}
-          added={myWindows.includes(id)} />
+          menu={() => menu(id)} onFold={() => (current === id ? onMaximize(null) : fold(id))} onClose={close(id)} />
       ))}
       {workspace === "my" && !windows.length && <p className="phx-workspace-empty phx-phone-empty">{t("workspace.myEmptyPhone")}</p>}
     </div>

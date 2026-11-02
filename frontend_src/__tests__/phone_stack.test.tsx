@@ -4,7 +4,8 @@
  * with its neighbor on screen and leave closed windows where they were; Close
  * records the window as closed and Workspace Options offers it back; Maximize
  * shows one window and keeps the others mounted; folding and the per-window
- * labels choice are saved; and the record keeps phone stacks through reading
+ * labels choice are saved; Add to My Workspace is in the window menu, not the
+ * title bar (user, 2026-11-02); and the record keeps phone stacks through reading
  * and section merges.
  */
 import { describe, expect, it, vi } from "vitest";
@@ -34,6 +35,7 @@ function stack(layout: PhoneLayout | undefined, extra: Partial<Parameters<typeof
   );
   return { onLayout, onMaximize, view };
 }
+const lastLayout = (fn: ReturnType<typeof vi.fn>): PhoneLayout => fn.mock.calls[fn.mock.calls.length - 1][0] as PhoneLayout;
 const shownIds = (container: HTMLElement) =>
   [...container.querySelectorAll<HTMLElement>(".phx-phone-body")].map((b) => b.dataset.phxWindow);
 function openMenu(container: HTMLElement, id: string) {
@@ -85,7 +87,7 @@ describe("phone stack", () => {
     const menu = openMenu(view.container, "auditLog");
     expect(within(menu).getByRole("menuitem", { name: "Move Up" }).getAttribute("aria-disabled")).toBe("true");
     act(() => { fireEvent.click(within(menu).getByRole("menuitem", { name: "Move Down" })); });
-    const saved = onLayout.mock.calls.at(-1)![0] as PhoneLayout;
+    const saved = lastLayout(onLayout);
     expect(phoneOrder(LOGS, saved.order)).toEqual(["conversationLog", "auditLog", "logDetails"]);
     // The defaults come along, so the record holds a complete arrangement.
     expect(saved.closed).toEqual(["settingsLogs"]);
@@ -95,14 +97,14 @@ describe("phone stack", () => {
     const { view, onLayout } = stack(undefined);
     const menu = openMenu(view.container, "conversationLog");
     act(() => { fireEvent.click(within(menu).getByRole("menuitem", { name: "Close" })); });
-    expect((onLayout.mock.calls.at(-1)![0] as PhoneLayout).closed).toEqual(["settingsLogs", "conversationLog"]);
+    expect((lastLayout(onLayout)).closed).toEqual(["settingsLogs", "conversationLog"]);
   });
 
   it("folds from the title bar and saves the fold", () => {
     const { view, onLayout } = stack(undefined);
     const fold = view.container.querySelector<HTMLButtonElement>(".phx-phone-fold")!;
     act(() => { fireEvent.click(fold); });
-    expect((onLayout.mock.calls.at(-1)![0] as PhoneLayout).folded).toEqual(["auditLog"]);
+    expect((lastLayout(onLayout)).folded).toEqual(["auditLog"]);
   });
 
   it("shows only the maximized window and keeps the others mounted", () => {
@@ -119,14 +121,26 @@ describe("phone stack", () => {
     const menu = openMenu(view.container, "auditLog");
     act(() => { fireEvent.click(within(menu).getByRole("menuitem", { name: "Maximize" })); });
     expect(onMaximize).toHaveBeenCalledWith("auditLog");
-    expect((onLayout.mock.calls.at(-1)![0] as PhoneLayout).folded).toEqual([]);
+    expect((lastLayout(onLayout)).folded).toEqual([]);
   });
 
   it("saves Always Show Icons and Text for one window", () => {
     const { view, onLayout } = stack(undefined);
     const menu = openMenu(view.container, "logDetails");
     act(() => { fireEvent.click(within(menu).getByRole("menuitemcheckbox", { name: "Always Show Icons and Text" })); });
-    expect((onLayout.mock.calls.at(-1)![0] as PhoneLayout).labels).toEqual(["logDetails"]);
+    expect((lastLayout(onLayout)).labels).toEqual(["logDetails"]);
+  });
+
+  it("offers Add to My Workspace in the window menu, with no + in the title bar", () => {
+    const onAddToMy = vi.fn();
+    const { view } = stack(undefined, { onAddToMy, myWindows: ["auditLog"] });
+    expect(view.container.querySelector('[aria-label="Add to My Workspace"]')).toBeNull();
+    const added = within(openMenu(view.container, "auditLog")).getByRole("menuitem", { name: "Add to My Workspace" });
+    expect(added.getAttribute("aria-disabled")).toBe("true");
+    act(() => { fireEvent.keyDown(added, { key: "Escape" }); });
+    const menu = openMenu(view.container, "logDetails");
+    act(() => { fireEvent.click(within(menu).getByRole("menuitem", { name: "Add to My Workspace" })); });
+    expect(onAddToMy).toHaveBeenCalledWith("logDetails");
   });
 
   it("takes a window out of My Workspace when it is closed there", () => {

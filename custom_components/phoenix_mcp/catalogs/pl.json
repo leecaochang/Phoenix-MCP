@@ -2750,7 +2750,7 @@
       "myDefaultRestored": "Przywrócono Mój domyślny.",
       "myDefaultSaved": "Zapisano ten układ jako domyślny dla obszaru {workspace}.",
       "myEmpty": "Mój obszar roboczy jest pusty. Dodaj okno poleceniem „Dodaj do Mojego obszaru roboczego” w menu okna albo Agent Chat z jego własnego menu.",
-      "myEmptyPhone": "Mój obszar roboczy jest pusty. Dodaj okno przyciskiem + na jego pasku tytułu.",
+      "myEmptyPhone": "Mój obszar roboczy jest pusty. Dodaj okno poleceniem „Dodaj do Mojego obszaru roboczego” w menu okna.",
       "myWorkspace": "Mój obszar roboczy",
       "nextRecord": "Następny wpis",
       "options": "Opcje obszaru roboczego",

@@ -2619,7 +2619,7 @@
       "myDefaultRestored": "내 기본값을 복원했습니다.",
       "myDefaultSaved": "이 배치를 {workspace}의 내 기본값으로 저장했습니다.",
       "myEmpty": "내 작업 공간이 비어 있습니다. 창 메뉴의 \"내 작업 공간에 추가\"로 창을 추가하거나, Agent Chat의 자체 메뉴에서 Agent Chat을 추가하세요.",
-      "myEmptyPhone": "내 작업 공간이 비어 있습니다. 창의 제목 표시줄에 있는 + 버튼으로 창을 추가하세요.",
+      "myEmptyPhone": "내 작업 공간이 비어 있습니다. 창 메뉴의 \"내 작업 공간에 추가\"로 창을 추가하세요.",
       "myWorkspace": "내 작업 공간",
       "nextRecord": "다음 항목",
       "options": "작업 공간 옵션",

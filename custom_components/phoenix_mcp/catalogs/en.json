@@ -570,7 +570,7 @@
       "myDefaultRestored": "Restored My Default.",
       "myDefaultSaved": "Saved this arrangement as your default for {workspace}.",
       "myEmpty": "My Workspace is empty. Add a window with Add to My Workspace in its window menu, or Agent Chat from its own menu.",
-      "myEmptyPhone": "My Workspace is empty. Add a window with the + button in its title bar.",
+      "myEmptyPhone": "My Workspace is empty. Add a window with Add to My Workspace in its window menu.",
       "myWorkspace": "My Workspace",
       "nextRecord": "Next Record",
       "options": "Workspace Options",

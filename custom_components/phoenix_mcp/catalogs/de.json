@@ -2613,7 +2613,7 @@
       "myDefaultRestored": "Mein Standard wurde wiederhergestellt.",
       "myDefaultSaved": "Diese Anordnung wurde als Ihr Standard für {workspace} gespeichert.",
       "myEmpty": "Mein Arbeitsbereich ist leer. Fügen Sie ein Fenster über „Zu Meinem Arbeitsbereich hinzufügen“ in seinem Fenstermenü hinzu oder Agent Chat über sein eigenes Menü.",
-      "myEmptyPhone": "Mein Arbeitsbereich ist leer. Fügen Sie ein Fenster mit der Schaltfläche + in seiner Titelleiste hinzu.",
+      "myEmptyPhone": "Mein Arbeitsbereich ist leer. Fügen Sie ein Fenster über „Zu Meinem Arbeitsbereich hinzufügen“ in seinem Fenstermenü hinzu.",
       "myWorkspace": "Mein Arbeitsbereich",
       "nextRecord": "Nächster Eintrag",
       "options": "Arbeitsbereich-Optionen",

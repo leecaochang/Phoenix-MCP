@@ -473,6 +473,22 @@ export function Shell() {
   const helpTracker = useMemo(() => new HelpTracker(), []);
   useEffect(() => (rootEl ? helpTracker.attach(rootEl) : undefined), [rootEl, helpTracker]);
   useEffect(() => (rootEl ? attachToggleNames(rootEl) : undefined), [rootEl]);
+  // The toolbar keeps clear of the phone's status bar by only as much of the safe area as Home Assistant has
+  // not already left above the panel: padding the whole inset again pushed the panel a second inset down.
+  useLayoutEffect(() => {
+    if (!rootEl) return undefined;
+    const probe = document.createElement("div");
+    probe.style.cssText = "position:absolute;visibility:hidden;pointer-events:none;padding-top:var(--safe-area-inset-top, env(safe-area-inset-top, 0px))";
+    rootEl.appendChild(probe);
+    const fit = () => {
+      const inset = parseFloat(getComputedStyle(probe).paddingTop) || 0;
+      const top = rootEl.getBoundingClientRect().top + window.scrollY;
+      rootEl.style.setProperty("--phx-safe-top", `${Math.max(0, Math.round(inset - top))}px`);
+    };
+    fit();
+    window.addEventListener("resize", fit);
+    return () => { window.removeEventListener("resize", fit); probe.remove(); };
+  }, [rootEl]);
   // The Guide follows the control the reader selects; Settings maps its controls through the Find Setting index.
   const guideTargets = useMemo(() => new GuideTargetTracker(), []);
   useEffect(() => guideTargets.addResolver(settingsGuideAnchor), [guideTargets]);
@@ -783,7 +799,7 @@ export function Shell() {
     <ContextMenuHost>
     <ToolRegistryContext.Provider value={registry}>
     <NotificationsContext.Provider value={notifications}>
-    <DisplayModeContext.Provider value={toolbar.mode}>
+    <DisplayModeContext.Provider value={env === "mobile" ? "icons" : toolbar.mode}>
     <HelpContext.Provider value={helpTracker}>
     <GuideTargetContext.Provider value={guideTargets}>
     <AuditFocusContext.Provider value={auditFocus}>

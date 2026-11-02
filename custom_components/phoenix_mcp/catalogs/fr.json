@@ -2613,7 +2613,7 @@
       "myDefaultRestored": "Ma disposition par défaut a été restaurée.",
       "myDefaultSaved": "Cette disposition a été enregistrée comme votre disposition par défaut pour {workspace}.",
       "myEmpty": "Mon espace de travail est vide. Ajoutez une fenêtre avec « Ajouter à Mon espace de travail » dans le menu de la fenêtre, ou Agent Chat depuis son propre menu.",
-      "myEmptyPhone": "Mon espace de travail est vide. Ajoutez une fenêtre avec le bouton + de sa barre de titre.",
+      "myEmptyPhone": "Mon espace de travail est vide. Ajoutez une fenêtre avec « Ajouter à Mon espace de travail » dans le menu de la fenêtre.",
       "myWorkspace": "Mon espace de travail",
       "nextRecord": "Entrée suivante",
       "options": "Réglages de l’espace de travail",

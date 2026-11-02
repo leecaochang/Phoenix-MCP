@@ -70,7 +70,8 @@ describe("panel stylesheet", () => {
   });
 
   it("keeps the workspace toolbar clear of the companion app's status bar", () => {
-    expect(CSS).toMatch(/\.phx-toolbar\s*\{[^}]*--phx-toolbar-safe-top:\s*var\(--safe-area-inset-top,\s*env\(safe-area-inset-top,\s*0px\)\);/s);
+    // The shell's measured remainder of the inset first, then the whole inset before it is measured.
+    expect(CSS).toMatch(/\.phx-toolbar\s*\{[^}]*--phx-toolbar-safe-top:\s*var\(--phx-safe-top,\s*var\(--safe-area-inset-top,\s*env\(safe-area-inset-top,\s*0px\)\)\);/s);
     expect(CSS).toMatch(/\.phx-toolbar\[data-dock="top"\]\s*\{[^}]*margin-top:\s*calc\(8px \+ var\(--phx-toolbar-safe-top\)\)/s);
     expect(CSS).toMatch(/\.phx-env-mobile \.phx-toolbar\s*\{[^}]*margin:\s*calc\(4px \+ var\(--phx-toolbar-safe-top\)\)/s);
   });

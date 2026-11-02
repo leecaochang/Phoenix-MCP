@@ -255,8 +255,9 @@
 .phx-shell[data-toolbar="right"] { flex-direction: row-reverse; }
 
 .phx-toolbar {
-  /* The companion app's status-bar inset (HA's inherited property) pads a top toolbar clear of it. */
-  --phx-toolbar-safe-top: var(--safe-area-inset-top, env(safe-area-inset-top, 0px));
+  /* The companion app's status-bar inset (HA's inherited property) pads a top toolbar clear of it; the shell
+     sets --phx-safe-top to the part of the inset still above the panel once it knows where the panel starts. */
+  --phx-toolbar-safe-top: var(--phx-safe-top, var(--safe-area-inset-top, env(safe-area-inset-top, 0px)));
   z-index: var(--phx-z-tabbar);
   /* The grip, then the body holding the main row and the tools row; upright, the grip sits on top. */
   display: flex;
@@ -2745,14 +2746,9 @@ hui-card, .dash-preview-card-slot { display: block; min-width: 0; }
 /* A number field has no arrow of its own to leave room for: its spinner sits at the edge. */
 .agentcli-control .agentcli-number { padding-inline-end: 4px; }
 .agentcli-connection-note { flex: 1 1 100%; font-size: 12px; color: var(--phx-text-2); }
-/* Compact fields for a mouse; touch keeps full-size targets, and phones 16 px text so the browser does not zoom. */
-@media (pointer: fine) {
-  .agentcli-controls .agentcli-select { height: 28px; min-height: 28px; padding-top: 0; padding-bottom: 0; font-size: 12px; }
-}
-/* Only a touch screen zooms on a small field, and the pop-out window is a narrow page of its own. */
-@media (max-width: 700px) and (pointer: coarse) {
-  .agentcli-controls .agentcli-select { font-size: 16px; }
-}
+/* Compact fields everywhere, phones included (user, 2026-11-02); Home Assistant's page turns off zooming,
+   so a small field does not zoom the page when tapped. */
+.agentcli-controls .agentcli-select { height: 28px; min-height: 28px; padding-top: 0; padding-bottom: 0; font-size: 12px; }
 
 .agentcli-body {
   flex: 1 1 auto;

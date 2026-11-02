@@ -2619,7 +2619,7 @@
       "myDefaultRestored": "已還原我的預設佈局。",
       "myDefaultSaved": "已將此佈局儲存為 {workspace} 的預設佈局。",
       "myEmpty": "我的工作區是空的。請透過視窗選單中的「新增到我的工作區」新增視窗，或透過 Agent Chat 本身的選單新增 Agent Chat。",
-      "myEmptyPhone": "我的工作區是空的。使用視窗標題列中的 + 按鈕新增視窗。",
+      "myEmptyPhone": "我的工作區是空的。請透過視窗選單中的「新增到我的工作區」新增視窗。",
       "myWorkspace": "我的工作區",
       "nextRecord": "下一個條目",
       "options": "工作區選項",
