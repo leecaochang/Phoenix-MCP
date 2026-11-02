@@ -2,7 +2,9 @@
  * Narrow screens: the workspace's windows as one scrolling stack. Each window
  * folds into its title bar, moves up or down, maximizes over the stack and
  * closes, as its menu offers; the shell saves the result as the workspace's
- * phone arrangement (see PhoneLayout).
+ * phone arrangement (see PhoneLayout). Help and Notification History are not
+ * offered on phones, and the Guide sits at the bottom of the stack while it is
+ * open (user, 2026-11-02).
  */
 
 import { useContext, useEffect, useId, useMemo, useRef, type MouseEvent, type ReactNode } from "react";
@@ -103,6 +105,8 @@ export function phoneDefaults(workspace: WorkspaceId): { folded: string[]; close
 /** The windows a workspace can stack on a phone, before any is closed or found unavailable. */
 export function phoneWindows(workspace: WorkspaceId, myWindows: readonly string[]): WindowId[] {
   const ids: WindowId[] = workspace === "my" ? [...myWindows.filter(canAddToMy) as WindowId[], ATTENTION_WINDOW as WindowId] : WORKSPACES[workspace].windows;
+  // Help explains what is being touched, which a phone cannot show while the finger is down,
+  // so neither it nor Notification History is offered on phones (user, 2026-11-02).
   return ids.filter((id) => !SHARED_WINDOWS.includes(id) && !INLINE_ON_PHONES.includes(id));
 }
 
@@ -185,6 +189,7 @@ export function PhoneStack({ workspace, layout, onLayout, maximized = null, onMa
   /** Add a window to My Workspace from its window menu (user, 2026-11-02), and take one out by closing it there. */
   onAddToMy?: (id: string) => void;
   onRemoveFromMy?: (id: string) => void;
+  /** The Guide, at the bottom of the stack while it is open. */
   guide?: ReactNode;
 }) {
   const defaults = phoneDefaults(workspace);
@@ -250,14 +255,14 @@ export function PhoneStack({ workspace, layout, onLayout, maximized = null, onMa
 
   return (
     <div className={`phx-phone-stack${current ? " has-maximized" : ""}`} data-workspace={workspace}>
-      {/* The Guide heads the stack when it is open. A maximized window hides the rest, which keep their state. */}
-      {guide}
+      {/* A maximized window hides the rest, which keep their state. */}
       {windows.map((id) => (
         <PhoneWindow key={`${workspace}:${id}`} id={id} workspace={workspace}
           folded={folded.includes(id) && current !== id} labels={labels.includes(id)} maximized={current === id}
           menu={() => menu(id)} onFold={() => (current === id ? onMaximize(null) : fold(id))} onClose={close(id)} />
       ))}
       {workspace === "my" && !windows.length && <p className="phx-workspace-empty phx-phone-empty">{t("workspace.myEmptyPhone")}</p>}
+      {guide}
     </div>
   );
 }

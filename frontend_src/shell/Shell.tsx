@@ -550,8 +550,17 @@ export function Shell() {
     return items;
   }, [env, addToMy, removeFromMy]);
 
-  // Documentation: Show Help Bar (every workspace; desktop only for now) and the Guide (every workspace). The Guide is
-  // the manual, so the website is no longer offered (user, 2026-11-01).
+  // The Guide opened at the bottom of the phone stack is brought into view, so opening it
+  // visibly does something (user, 2026-11-02); one already open when the panel opens is not.
+  const [revealGuide, setRevealGuide] = useState(false);
+  useEffect(() => {
+    if (!revealGuide) return;
+    setRevealGuide(false);
+    root.current?.querySelector(".phx-guide-phone")?.scrollIntoView?.({ block: "start", behavior: "smooth" });
+  }, [revealGuide]);
+
+  // Documentation: Show Help Bar (every workspace; not on phones, user 2026-11-02) and the Guide (every workspace).
+  // The Guide is the manual, so the website is no longer offered (user, 2026-11-01).
   const documentationMenu = useCallback((): MenuEntry[] => {
     const items: MenuEntry[] = [];
     if (env === "desktop") {
@@ -563,7 +572,10 @@ export function Shell() {
     // The wizard keeps the Guide shown in Access Keys until it ends.
     const pinned = here === "accessKeys" && !!wizardRef.current;
     const guideOpen = pinned || guideRef.current.open;
-    items.push({ id: "guide", label: t("guide.title"), help: t("help.menuGuide"), checked: guideOpen, disabled: pinned, onSelect: () => updateGuide({ open: !guideOpen }) });
+    items.push({ id: "guide", label: t("guide.title"), help: t("help.menuGuide"), checked: guideOpen, disabled: pinned, onSelect: () => {
+      updateGuide({ open: !guideOpen });
+      if (!guideOpen && env === "mobile") setRevealGuide(true);
+    } });
     return items;
   }, [env, updateGuide]);
 

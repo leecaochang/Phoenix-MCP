@@ -6,7 +6,8 @@
  * shows one window and keeps the others mounted; folding and the per-window
  * labels choice are saved; Add to My Workspace is in the window menu, not the
  * title bar (user, 2026-11-02); the record keeps phone stacks through reading
- * and section merges; and a phone is told from a tablet by its touch-only
+ * and section merges; Help and Notification History are not stacked on a
+ * phone and the open Guide comes last; and a phone is told from a tablet by its touch-only
  * screen's shorter side, so a phone keeps the stack in landscape.
  */
 import { describe, expect, it, vi } from "vitest";
@@ -155,6 +156,19 @@ describe("phone stack", () => {
     );
     act(() => { fireEvent.click(screen.getByRole("button", { name: "Close" })); });
     expect(onRemoveFromMy).toHaveBeenCalledWith("auditLog");
+  });
+});
+
+describe("Help, Notification History and the Guide on a phone", () => {
+  it("never stacks Help or Notification History, whatever the arrangement says", () => {
+    const { view } = stack({ closed: [], order: ["help", "notifications", "auditLog"] });
+    expect(shownIds(view.container)).toEqual([...LOGS, "settingsLogs"]);
+    expect(closedPhoneWindows("logs", { closed: ["help", "notifications"] }, [])).toEqual([]);
+  });
+
+  it("puts the open Guide at the bottom of the stack", () => {
+    const { view } = stack(undefined, { guide: <div data-testid="guide" /> });
+    expect(view.container.querySelector(".phx-phone-stack")!.lastElementChild).toBe(screen.getByTestId("guide"));
   });
 });
 
