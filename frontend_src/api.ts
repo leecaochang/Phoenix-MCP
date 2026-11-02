@@ -415,8 +415,8 @@ export const api = {
     ),
 
   getApproval: (id: string) => req<ApprovalRecord>("GET", `/approvals/${encodeURIComponent(id)}`),
-  approveApproval: (id: string, body: { note?: string } = {}) =>
-    req<ApprovalRecord>("POST", `/approvals/${encodeURIComponent(id)}/approve`, body),
+  approveApproval: (id: string) =>
+    req<ApprovalRecord>("POST", `/approvals/${encodeURIComponent(id)}/approve`, {}),
   rejectApproval: (id: string, body: { reason?: string } = {}) =>
     req<ApprovalRecord>("POST", `/approvals/${encodeURIComponent(id)}/reject`, body),
   // Approves several pending approvals in one admin action. The server walks them
