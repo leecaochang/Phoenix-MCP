@@ -24,6 +24,7 @@ import { ConversationBehaviorControls } from "./ConversationBehaviorControls";
 export function VoiceAgentSettings({
   settings,
   onChange,
+  onSave,
   saving,
   onRefresh,
   statistics = <RoutingStatistics surface="voice" />,
@@ -31,6 +32,8 @@ export function VoiceAgentSettings({
   settings: GlobalSettings;
   /** Save a setting; false when it failed (the window reports why). */
   onChange: (key: keyof GlobalSettings, value: boolean | string) => Promise<boolean> | void;
+  /** Save and resolve to the server's answer, or null when it failed; without it, a kept assistant goes unreported. */
+  onSave?: (patch: Partial<GlobalSettings>) => Promise<GlobalSettings | null>;
   saving: boolean;
   /** Read the settings again; otherwise a refresh is asked for by event. */
   onRefresh?: () => Promise<void>;
@@ -84,9 +87,21 @@ export function VoiceAgentSettings({
 
   async function setEnabled(on: boolean) {
     const hadAssistant = !!pipelineId;
-    if ((await onChange("voice_agent_enabled", on)) === false) return;
+    // Turning Voice off removes the assistant too, and the save's answer says
+    // whether Home Assistant kept it as its only assistant.
+    let kept = false;
+    if (onSave) {
+      const saved = await onSave({ voice_agent_enabled: on });
+      if (!saved) return;
+      kept = !!saved.voice_agent_pipeline_kept;
+    } else if ((await onChange("voice_agent_enabled", on)) === false) {
+      return;
+    }
     if (!on && hadAssistant) await refreshSettings();
-    notify(on ? t("settings.voiceEnabledToast") : hadAssistant ? t("settings.voiceDisabledRemovedToast") : t("settings.voiceDisabledToast"));
+    notify(on ? t("settings.voiceEnabledToast")
+      : !hadAssistant ? t("settings.voiceDisabledToast")
+      : kept ? t("settings.voiceDisabledKeptToast")
+      : t("settings.voiceDisabledRemovedToast"));
   }
 
   /** Run one Home Assistant change, then show the settings it left. */

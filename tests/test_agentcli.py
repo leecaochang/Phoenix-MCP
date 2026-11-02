@@ -2992,6 +2992,74 @@ async def test_await_agent_approval_cancels_orphaned_approval(hass):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(("cancelled", "reason"), [
+    (True, "agent_chat_ended"),
+    (False, "agent_chat_wait_timed_out"),
+])
+async def test_await_agent_approval_names_why_it_stopped_waiting(hass, cancelled, reason):
+    """A wait that ran out with the chat still open is not recorded as the chat ending.
+
+    Both cases reach the same withdrawal, so the cancel event decides; a chat
+    that ended at the moment the wait ran out records the chat ending.
+    """
+    from homeassistant.util.dt import utcnow
+
+    from custom_components.phoenix_mcp.agentcli import _await_agent_approval
+    from custom_components.phoenix_mcp.approvals import STATUS_PENDING, PendingApproval, get_approval
+
+    now = utcnow()
+    appr = PendingApproval(
+        id="a1", access_key_id="t", access_key_name="n", tool_name="call_service",
+        cap_name="cap_physical_control", args={}, diff={}, status=STATUS_PENDING,
+        created_at=now, expires_at=now, request_id="r",
+    )
+
+    class _Store:
+        def __init__(self) -> None:
+            self._a = [appr.to_dict(redact_args=False)]
+            self.async_lock = asyncio.Lock()
+            self.async_save = AsyncMock()
+
+        def get_pending_approvals(self):
+            return self._a
+
+        def set_pending_approvals(self, v):
+            self._a = v
+
+    store = _Store()
+    data = MagicMock(store=store, approvals_in_progress=set())
+    cancel = asyncio.Event()
+    if cancelled:
+        cancel.set()
+
+    with patch("custom_components.phoenix_mcp.agentcli.dismiss_approval_notification"), \
+         patch("custom_components.phoenix_mcp.agentcli.fire_approval_resolved_event"):
+        await _await_agent_approval(hass, data, "a1", cancel, timeout=0.01)
+
+    assert get_approval(store, "a1").rejected_reason == reason
+
+
+@pytest.mark.parametrize(("reason", "kill_switch", "code"), [
+    ("cancelled", False, "cancelled"),
+    ("catalog_changed", False, "review_changed"),
+    ("context_changed", True, "review_changed"),
+    ("authority_changed", True, "kill_switch"),
+    ("authority_changed", False, "unauthorized"),
+])
+def test_review_stop_names_what_stopped_the_turn(reason, kill_switch, code):
+    """A tool review that stops a turn reports the kill switch and a changed tool list as themselves.
+
+    Reporting either as an unauthorized key sends the operator to fix a key that is fine.
+    """
+    from custom_components.phoenix_mcp.agentcli import _review_stop_error
+
+    data = MagicMock()
+    data.store.get_settings.return_value = MagicMock(kill_switch=kill_switch)
+    with patch("custom_components.phoenix_mcp.agentcli._kill_switch_on", return_value=kill_switch):
+        assert _review_stop_error(reason, data)["code"] == code
+
+
+@pytest.mark.asyncio
 async def test_await_agent_approval_does_not_cancel_an_in_progress_approval(hass):
     # An admin approve claims the id in approvals_in_progress, releases the lock,
     # and runs the side effect while the record is still pending. Cancellation

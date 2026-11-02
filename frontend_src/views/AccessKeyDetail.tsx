@@ -7,7 +7,7 @@ import type { LinkScope } from "../components/MesaProfileLink";
 import { Modal } from "../components/Modal";
 import { RawAccessKeyDisplay } from "../components/AccessKeyCreate";
 import { ConnectInstructions } from "../components/ConnectInstructions";
-import { CapabilityMatrix, CAP_NAMES } from "../components/CapabilityMatrix";
+import { CapabilityMatrix, CAP_NAMES, capLabel, capModeLabel } from "../components/CapabilityMatrix";
 import type { EsphomeAvailability } from "../components/CapabilityMatrix";
 import { PersonaPicker } from "../components/PersonaPicker";
 import { AccessKeyNotes } from "../components/AccessKeyNotes";
@@ -234,7 +234,9 @@ function nodeSig(n?: import("../types").PermissionNode): string {
 function snapDiffLines(from: SettingsSnap, to: SettingsSnap): string[] {
   const lines: string[] = [];
   for (const c of CAP_NAMES) {
-    if (from.caps[c] !== to.caps[c]) lines.push(`${c}: ${from.caps[c]} -> ${to.caps[c]}`);
+    if (from.caps[c] !== to.caps[c]) {
+      lines.push(t("accessKeys.diffCapability", { capability: capLabel(c), from: capModeLabel(from.caps[c]), to: capModeLabel(to.caps[c]) }));
+    }
   }
   if (from.pass_through !== to.pass_through) {
     lines.push(t("accessKeys.diffPassThrough", {

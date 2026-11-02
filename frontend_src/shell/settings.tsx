@@ -41,6 +41,8 @@ export interface SettingsState {
   saving: boolean;
   /** Save a change; resolves to its error message, or null once saved or superseded by a later change. */
   patch: (patch: Partial<GlobalSettings>) => Promise<string | null>;
+  /** Save a change; resolves to its error, or to the settings the server answered with once saved. */
+  save: (patch: Partial<GlobalSettings>) => Promise<{ error: string | null; saved: GlobalSettings | null }>;
   /** Read the settings again, after any change in flight. */
   refresh: () => Promise<void>;
   info: SettingsInfo | null;
@@ -174,11 +176,11 @@ export function SettingsProvider({ settings, onSettingsChange, theme, onThemeCha
     };
   }, [refresh]);
 
-  const patch = useCallback(async (requested: Partial<GlobalSettings>): Promise<string | null> => {
+  const save = useCallback(async (requested: Partial<GlobalSettings>): Promise<{ error: string | null; saved: GlobalSettings | null }> => {
     const body = { ...requested };
     // In-context profile buttons stay off for this session once the injector proved incompatible.
     if ("mesa_inject_enabled" in body && injectSessionBlocked()) delete body.mesa_inject_enabled;
-    if (!Object.keys(body).length) return null;
+    if (!Object.keys(body).length) return { error: null, saved: null };
     const isLatest = beginMutation();
     // A refresh that began before this change can no longer be authoritative.
     beginRefresh();
@@ -187,10 +189,10 @@ export function SettingsProvider({ settings, onSettingsChange, theme, onThemeCha
     try {
       const updated = await api.patchSettings(body);
       if (isLatest()) onSettingsChange(updated);
-      return null;
+      return { error: null, saved: updated };
     } catch (e: unknown) {
       refreshQueued.current = true;
-      return isLatest() ? (e instanceof Error ? e.message : t("settings.saveFailed")) : null;
+      return { error: isLatest() ? (e instanceof Error ? e.message : t("settings.saveFailed")) : null, saved: null };
     } finally {
       mutationsInFlight.current -= 1;
       if (mutationsInFlight.current === 0) {
@@ -202,6 +204,7 @@ export function SettingsProvider({ settings, onSettingsChange, theme, onThemeCha
       }
     }
   }, [beginMutation, beginRefresh, onSettingsChange, refresh]);
+  const patch = useCallback(async (requested: Partial<GlobalSettings>) => (await save(requested)).error, [save]);
 
   const [info, setInfo] = useState<SettingsInfo | null>(null);
   const infoAsked = useRef(false);
@@ -266,9 +269,9 @@ export function SettingsProvider({ settings, onSettingsChange, theme, onThemeCha
   const showWindow = useCallback((id: SettingsWindowId) => open(id, null), [open]);
 
   const value = useMemo<SettingsState>(() => ({
-    settings, saving, patch, refresh, info, theme, onThemeChange, language, onLanguageChange,
+    settings, saving, patch, save, refresh, info, theme, onThemeChange, language, onLanguageChange,
     homeTab, setHomeTab, findOpen, setFindOpen, reveal, revealed, showWindow,
-  }), [settings, saving, patch, refresh, info, theme, onThemeChange, language, onLanguageChange, homeTab, findOpen, reveal, revealed, showWindow]);
+  }), [settings, saving, patch, save, refresh, info, theme, onThemeChange, language, onLanguageChange, homeTab, findOpen, reveal, revealed, showWindow]);
 
   return (
     <SettingsContext.Provider value={value}>
@@ -287,10 +290,20 @@ export function useSettingsChange(): {
   saving: boolean;
   change: (key: keyof GlobalSettings, value: GlobalSettings[keyof GlobalSettings]) => Promise<boolean>;
   changeMany: (patch: Partial<GlobalSettings>) => Promise<boolean>;
+  /** Save a change; resolves to the settings the server answered with, or null if it failed or changed nothing. */
+  saveForResult: (patch: Partial<GlobalSettings>) => Promise<GlobalSettings | null>;
   error: string | null;
 } {
   const s = useSettings();
   const [error, setError] = useState<string | null>(null);
+  const save = s?.save;
+  const saveForResult = useCallback(async (p: Partial<GlobalSettings>) => {
+    if (!save) return null;
+    setError(null);
+    const { error: failure, saved } = await save(p);
+    setError(failure);
+    return failure === null ? saved : null;
+  }, [save]);
   const patch = s?.patch;
   const changeMany = useCallback(async (p: Partial<GlobalSettings>) => {
     if (!patch) return false;
@@ -300,7 +313,7 @@ export function useSettingsChange(): {
     return failure === null;
   }, [patch]);
   const change = useCallback((key: keyof GlobalSettings, value: GlobalSettings[keyof GlobalSettings]) => changeMany({ [key]: value }), [changeMany]);
-  return { settings: s?.settings ?? null, saving: s?.saving ?? false, change, changeMany, error };
+  return { settings: s?.settings ?? null, saving: s?.saving ?? false, change, changeMany, saveForResult, error };
 }
 
 /** Find Setting on the toolbar, offered by every Settings window and shown once. */

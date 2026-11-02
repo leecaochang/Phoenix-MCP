@@ -12,7 +12,7 @@ Choose an entry to read it in [{{label:workspace.logDetails}}](guide:window.logD
 - **{{label:audit.rowAccess}}** says whether the key used its permissions or [pass-through](guide:topic.passThrough).
 - **{{label:audit.rowMesa}}** shows {{label:mesa.modeAdvisory}} when MESA warned the agent but let the action run.
 - **{{label:audit.rowIp}}** is the caller's IP address, or the Phoenix feature that made the call, such as Agent Chat.
-- **{{label:audit.rowAccessKey}}** shows the key's current name, even if it was renamed since.
+- **{{label:audit.colAccessKey}}** shows the key's current name, even if it was renamed since.
 
 The log loads 100 entries at a time; select **{{label:common.loadMore}}** for more. Sorting by anything other than newest first sorts only the entries loaded so far.
 
@@ -20,7 +20,7 @@ Sort, move and hide columns from the column header's menu, and drag a header's e
 
 ## {{label:logs.filters}} {#filters}
 
-Narrow the list by **{{label:audit.rowOutcome}}**, **{{label:audit.rowAccessKey}}** and time, and by text in **{{label:audit.rowMethod}}**, **{{label:audit.rowResource}}** and **{{label:audit.rowIp}}**. **{{label:audit.rowRequestId}}** finds one exact request, such as one from the Conversation Log. A time window such as the past 5 minutes moves on as the log updates.
+Narrow the list by **{{label:audit.rowOutcome}}**, **{{label:audit.colAccessKey}}** and time, and by text in **{{label:audit.rowMethod}}**, **{{label:audit.rowResource}}** and **{{label:audit.rowIp}}**. **{{label:audit.rowRequestId}}** finds one exact request, such as one from the Conversation Log. A time window such as the past 5 minutes moves on as the log updates.
 
 Hiding the filters stops them applying until you show them again. When both logs are open, one **{{label:logs.filters}}** button shows the filters of both.
 

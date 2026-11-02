@@ -682,3 +682,42 @@ async def test_recovery_scans_run_outside_event_loop_and_preserve_owned_copies(h
     assert restored.get(rid)["before"]["content"].startswith("harmless file content")
     assert restored.get(rid)["source"]["content"] == "observed"
     assert restored.get(rid)["observations"] == {"state": "verified"}
+
+
+def test_recovery_refusals_name_their_own_operator_text():
+    """Each refusal an administrator can act on maps to its own translated message.
+
+    The text is matched exactly, so a reworded refusal would drop out of the map
+    and fall back to the general message: every mapped sentence must still be
+    the message of a ConfigurationRecoveryError some module raises.
+    """
+    import ast
+    from pathlib import Path
+
+    from custom_components.phoenix_mcp import config_recovery
+
+    root = Path(config_recovery.__file__).parent
+    raised = set()
+    for path in [*root.glob("*.py"), *root.glob("tools/*.py")]:
+        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+            if (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+                    and node.func.id == "ConfigurationRecoveryError" and node.args
+                    and isinstance(node.args[0], ast.Constant) and isinstance(node.args[0].value, str)):
+                raised.add(node.args[0].value)
+    assert raised, "no ConfigurationRecoveryError messages were found"
+    for message, key in config_recovery._OPERATOR_KEYS.items():
+        assert message in raised, message
+        assert config_recovery.recovery_error_key(message) == key
+    assert config_recovery.recovery_error_key("Unsupported Template creation form.") == "recoveryBlocked"
+
+
+def test_template_refusal_reaches_the_panel_without_its_json():
+    """A Template refusal that applied nothing is shown as its sentence, never the agent's JSON object."""
+    from custom_components.phoenix_mcp.admin_view import _recovery_refusal
+
+    detail = json.dumps({"error": "Template references are outside current write authority.",
+                         "recovery_id": "r1", "replacement_entry_id": None,
+                         "status": "not_applied", "retry_safe": False})
+    assert _recovery_refusal(detail) == "Template references are outside current write authority."
+    assert _recovery_refusal("This version is too large to restore inline.") is None
+    assert _recovery_refusal(json.dumps({"status": "partial"})) is None

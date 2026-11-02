@@ -106,6 +106,22 @@ def _unverified_restore(tool_result: dict) -> bool:
     return False
 
 
+def _recovery_refusal(detail: str) -> str | None:
+    """The refusal text inside a recovery executor's JSON error, or None for plain text.
+
+    Template restoration reports a refusal that applied nothing as a JSON object
+    with an `error` string, which the agent reads whole; the panel shows only
+    the refusal, never the object.
+    """
+    try:
+        body = json.loads(detail)
+    except (TypeError, ValueError):
+        return None
+    if isinstance(body, dict) and isinstance(body.get("error"), str) and body["error"]:
+        return body["error"]
+    return None
+
+
 # Restore refusals async_restore_version itself raises, by their exact agent text.
 _RESTORE_NO_CONFIG_SIDE = "This version has no configuration to restore on that side."
 _RESTORE_YAML_TAGS = (
@@ -2505,12 +2521,15 @@ async def _apply_settings_side_effects(
     patchable: dict,
     updated: Any,
     old_kill_switch: bool,
-) -> None:
+) -> bool:
     """Run the live re-syncs a settings change implies, in order.
 
     Each block is keyed on the settings that actually moved, so an unrelated
     patch is inert. Order matters where noted; everything else is independent.
+    Returns whether a voice assistant this change tore down is still in Home
+    Assistant (its only one), so the panel does not report it removed.
     """
+    voice_assistant_kept = False
     from .conversation_log import recorder
     recorder(data)
     await data.conversations.async_save()
@@ -2555,7 +2574,7 @@ async def _apply_settings_side_effects(
         )
         if not fully and now.voice_agent_pipeline_id is not None:
             from .voice_agent import async_remove_assist_pipeline  # noqa: PLC0415
-            await async_remove_assist_pipeline(hass, data)
+            voice_assistant_kept = await async_remove_assist_pipeline(hass, data)
 
     # Add/remove the Phoenix MCP AI Task entity to match its config (it exists only while
     # fully configured), so it appears in HA's AI Task picker only when usable.
@@ -2575,6 +2594,8 @@ async def _apply_settings_side_effects(
         # next full HA page load (already-open tabs are unaffected).
         from .panel import async_sync_agentchat_inject  # noqa: PLC0415
         await async_sync_agentchat_inject(hass)
+
+    return voice_assistant_kept
 
 
 class PhoenixAdminRoutingStatisticsView(PhoenixView):
@@ -2726,7 +2747,7 @@ class PhoenixAdminSettingsView(PhoenixView):
                     if seeded:
                         _LOGGER.info("Access key presets enabled; seeded a default preset on %d access key(s)", seeded)
 
-            await _apply_settings_side_effects(
+            voice_assistant_kept = await _apply_settings_side_effects(
                 self.hass, data, patchable, updated, old_kill_switch,
             )
 
@@ -2746,7 +2767,10 @@ class PhoenixAdminSettingsView(PhoenixView):
             settings=updated if logging_on else settings_before,
             payload={"changed": sorted(patchable)},
         )
-        return _ok(_settings_response(updated, self.hass), request_id=rid)
+        body = _settings_response(updated, self.hass)
+        if voice_assistant_kept:
+            body["voice_agent_pipeline_kept"] = True
+        return _ok(body, request_id=rid)
 
 
 class PhoenixAdminVoiceAgentPipelineView(PhoenixView):
@@ -3436,11 +3460,11 @@ async def _resolve_approval(
             auto_reason = None
         from .config_reconciliation import is_recovery_approval, acknowledge_recovery
         if terminal_status == "rejected" and is_recovery_approval(record, data):
-            from .config_recovery import ConfigurationRecoveryError
+            from .config_recovery import ConfigurationRecoveryError, recovery_error_key
             try:
                 await acknowledge_recovery(record, user.id, hass, data, rejected=True)
             except ConfigurationRecoveryError as exc:
-                return _err("conflict", str(exc), 409, rid, key="recoveryBlocked")
+                return _err("conflict", str(exc), 409, rid, key=recovery_error_key(str(exc)))
         updated = await async_update_approval_status(
             data.store,
             approval_id,
@@ -4711,7 +4735,7 @@ class PhoenixAdminConfigurationRecoveryView(PhoenixView):
         try:
             records = data.config_recovery.records()
         except ConfigurationRecoveryError:
-            return _err("service_unavailable", "Configuration recovery storage could not be loaded.", 503, request["phoenix_mcp_rid"], key="recoveryBlocked")
+            return _err("service_unavailable", "Configuration recovery storage could not be loaded.", 503, request["phoenix_mcp_rid"], key="recoveryStorageUnavailable")
         return _ok({"records": records}, request_id=request["phoenix_mcp_rid"])
 
 
@@ -4725,7 +4749,7 @@ class PhoenixAdminConfigurationRecoveryRecordView(PhoenixView):
     @require_admin
     async def post(self, request: web.Request, recovery_id: str) -> web.Response:
         from types import SimpleNamespace
-        from .config_recovery import ConfigurationRecoveryError
+        from .config_recovery import ConfigurationRecoveryError, recovery_error_key
         from .mcp_view import async_restore_version
         from .template_recovery import template_snapshot
 
@@ -4737,7 +4761,7 @@ class PhoenixAdminConfigurationRecoveryRecordView(PhoenixView):
             return body
         record = data.config_recovery.get(recovery_id)
         if record is None:
-            return _err("not_found", "Recovery record not found.", 404, rid, key="recoveryBlocked")
+            return _err("not_found", "Recovery record not found.", 404, rid, key="recoveryNotFound")
         action = body.get("action")
         try:
             if action == "inspect":
@@ -4774,7 +4798,7 @@ class PhoenixAdminConfigurationRecoveryRecordView(PhoenixView):
                     raise ConfigurationRecoveryError("Review the inactive recovery record before restoring it.")
                 side = body.get("side")
                 if side not in ("before", "source") or not isinstance(record.get(side), dict):
-                    return _err("invalid_request", "Select an available before or source snapshot.", 400, rid, key="recoveryBlocked")
+                    return _err("invalid_request", "Select an available before or source snapshot.", 400, rid, key="recoverySideRequired")
                 snapshot = record[side]
                 if snapshot.get("snapshot_type") == "storage_helper":
                     resource_type = "helper"
@@ -4793,16 +4817,16 @@ class PhoenixAdminConfigurationRecoveryRecordView(PhoenixView):
                     )
                     return _ok({"result": restored, "outcome": outcome}, request_id=rid)
                 else:
-                    return _err("invalid_request", "This recovery artifact requires manual restoration.", 400, rid, key="recoveryBlocked")
+                    return _err("invalid_request", "This recovery artifact requires manual restoration.", 400, rid, key="recoveryManualOnly")
                 restored, outcome, _ = await async_restore_version(SimpleNamespace(
                     before=snapshot, after=None, resource_type=resource_type,
                     resource_id=resource_id,
                 ), user.id, self.hass, data, "before")
                 result = {"result": restored, "outcome": outcome}
             else:
-                return _err("invalid_request", "Unknown recovery action.", 400, rid, key="recoveryBlocked")
+                return _err("invalid_request", "Unknown recovery action.", 400, rid, key="recoveryUnknownAction")
         except ConfigurationRecoveryError as exc:
-            return _err("conflict", str(exc), 409, rid, key="recoveryBlocked")
+            return _err("conflict", str(exc), 409, rid, key=recovery_error_key(str(exc)))
         data.audit.record(request_id=rid, access_key_id="admin", access_key_name=f"admin:{user.id}",
                           method=f"config_recovery/{action}", resource=recovery_id,
                           outcome=result.get("outcome", "allowed"),
@@ -4853,8 +4877,8 @@ class PhoenixAdminVersionsView(PhoenixView):
 
 _ESPHOME_VERSION_WITHHELD = (
     "# Phoenix MCP withheld this snapshot: its credentials could not be located, "
-    "because the content does not parse as YAML. The stored version is intact and "
-    "can still be restored."
+    "because the content does not parse as YAML. The stored version is unchanged; "
+    "read the file in the ESPHome dashboard."
 )
 
 
@@ -5027,6 +5051,10 @@ class PhoenixAdminVersionRestoreView(PhoenixView):
                 return _err("invalid_request", detail, 400, rid, key="restoreNoConfigSide")
             if detail == _RESTORE_YAML_TAGS:
                 return _err("invalid_request", detail, 400, rid, key="restoreYamlTags")
+            refusal = _recovery_refusal(detail)
+            if refusal is not None:
+                from .config_recovery import recovery_error_key  # noqa: PLC0415
+                return _err("invalid_request", refusal, 400, rid, key=recovery_error_key(refusal))
             if detail:
                 return _err(
                     "invalid_request", detail, 400, rid,

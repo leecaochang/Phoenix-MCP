@@ -2575,6 +2575,27 @@ async def test_voice_pipeline_delete_reports_kept_pipeline():
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("kept", [True, False])
+async def test_disabling_voice_reports_a_kept_assistant_in_the_save(kept):
+    """The save that turns the voice agent off says whether Home Assistant kept its only assistant.
+
+    The panel reads this from the one save rather than removing the assistant
+    first, which would leave Voice on without an assistant if the save failed.
+    """
+    data, holder = _settings_data([])
+    holder["s"] = GlobalSettings.from_dict({**holder["s"].to_dict(), "voice_agent_enabled": True,
+                                            "voice_agent_pipeline_id": "pl1"})
+    view = PhoenixAdminSettingsView()
+    view.hass = _make_hass(data)
+    remove = AsyncMock(return_value=kept)
+    with patch("custom_components.phoenix_mcp.voice_agent.async_remove_assist_pipeline", remove):
+        resp = await view.patch(_make_admin_request(body=json.dumps({"voice_agent_enabled": False}).encode()))
+    assert resp.status == 200
+    remove.assert_awaited_once()
+    assert json.loads(resp.text).get("voice_agent_pipeline_kept") is (True if kept else None)
+
+
+@pytest.mark.asyncio
 async def test_voice_pipeline_create_serializes_with_disable_cleanup():
     access_key = _make_active_access_key()
     data, holder = _settings_data([access_key])

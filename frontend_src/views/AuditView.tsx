@@ -229,7 +229,7 @@ export function AuditView({ accessKeys }: Props) {
     { id: "access", label: t("audit.rowAccess"), width: 120, sortValue: accessLabel, cell: accessLabel },
     { id: "resource", label: t("audit.rowResource"), width: 260, maxWidth: 360, sortValue: (e) => friendlyResource(e.resource), cell: (e) => friendlyResource(e.resource), title: (e) => friendlyResource(e.resource), className: "phx-cell-mono" },
     { id: "mesa", label: t("audit.rowMesa"), width: 100, sortValue: mesaLabel, cell: mesaLabel, title: (e) => (e.mesa_advisory ? t("audit.mesaAdvisory") : undefined) },
-    { id: "accessKey", label: t("audit.rowAccessKey"), width: 170, maxWidth: 240, sortValue: displayName, cell: (e) => formatAccessKeyNameShort(displayName(e)), title: (e) => formatAccessKeyName(displayName(e)) },
+    { id: "accessKey", label: t("audit.colAccessKey"), width: 170, maxWidth: 240, sortValue: displayName, cell: (e) => formatAccessKeyNameShort(displayName(e)), title: (e) => formatAccessKeyName(displayName(e)) },
     { id: "method", label: t("audit.rowMethod"), width: 130, maxWidth: 200, sortValue: (e) => e.method, cell: (e) => e.method, className: "phx-cell-mono" },
     { id: "source", label: t("audit.rowIp"), width: 150, maxWidth: 220, sortValue: (e) => auditSourceLabel(e.client_ip), cell: (e) => <span className={isNamedAuditSource(e.client_ip) ? "audit-source-name" : undefined}>{auditSourceLabel(e.client_ip)}</span>, title: (e) => auditSourceLabel(e.client_ip), className: "audit-cell-source" },
   ], [displayName]); // eslint-disable-line react-hooks/exhaustive-deps

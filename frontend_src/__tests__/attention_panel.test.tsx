@@ -51,6 +51,14 @@ it("names the request and offers to show it in the Audit Log (user, 2026-10-29)"
   expect(api.reviewAttention).not.toHaveBeenCalled();
 });
 
+it("labels a calendar item's ID as a calendar receipt, not a request", async () => {
+  vi.mocked(api.listAttention).mockResolvedValue({ items: [{ ...item, kind: "calendar", id: "receipt-1" }] });
+  const view = render(<AttentionPanel />);
+  expect(await view.findByText("receipt-1")).toBeVisible();
+  expect(view.getByText("Calendar receipt")).toBeVisible();
+  expect(view.queryByText("Request")).toBeNull();
+});
+
 it("asks for the acknowledgement in place and never repeats an action", async () => {
   const view = render(<AttentionPanel />);
   await view.findByText(/Check a previous action|MESA could not start|Could not load/);

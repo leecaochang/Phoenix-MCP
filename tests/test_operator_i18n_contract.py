@@ -76,7 +76,8 @@ def test_every_admin_error_is_keyed_or_explicit_upstream_passthrough() -> None:
 
             key = _literal_string(kwargs["key"])
             # The only dynamic keys are a ProbeConfigError or LocalizedReason
-            # instance's. Their constructors are checked separately below.
+            # instance's, or recovery_error_key's. Their constructors, and that
+            # function's table, are checked separately below.
             if key is None:
                 if not _is_checked_dynamic_key(kwargs["key"]):
                     findings.append(f"{path.name}:{call.lineno} has an uncheckable dynamic key")
@@ -89,13 +90,26 @@ def test_every_admin_error_is_keyed_or_explicit_upstream_passthrough() -> None:
 
 
 def _is_checked_dynamic_key(node: ast.AST | None) -> bool:
-    """`probe.key` or `reason.key`: keys whose constructors this file checks."""
+    """`probe.key`, `reason.key` or `recovery_error_key(...)`: keys whose sources this file checks."""
+    if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
+        return node.func.id == "recovery_error_key"
     return (
         isinstance(node, ast.Attribute)
         and isinstance(node.value, ast.Name)
         and node.value.id in {"probe", "reason"}
         and node.attr == "key"
     )
+
+
+def test_recovery_error_keys_have_catalog_keys() -> None:
+    """Every key recovery_error_key can return, its fallback included, is in every catalog."""
+    from custom_components.phoenix_mcp.config_recovery import _OPERATOR_KEYS, recovery_error_key
+
+    catalogs = [_panel_catalog(path)["adminError"] for path in CATALOG_FILES]
+    keys = {*_OPERATOR_KEYS.values(), recovery_error_key("")}
+    for key in keys:
+        for catalog_path, catalog in zip(CATALOG_FILES, catalogs):
+            assert key in catalog, f"recovery adminError.{key} missing from {catalog_path.name}"
 
 
 def test_localized_reasons_have_catalog_keys() -> None:

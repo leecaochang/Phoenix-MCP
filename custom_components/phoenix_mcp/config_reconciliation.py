@@ -147,7 +147,8 @@ async def _restore_receipt(hass, data, record: dict, side: str) -> tuple[dict, d
 async def _queue_recovery(hass, data, record: dict, observed: dict | None) -> None:
     from .approvals import (async_create_pending_approval, create_approval_notification,
                            fire_approval_requested_event, PendingApprovalCapacityError, PendingApproval,
-                           async_update_approval_status, dismiss_approval_notification, fire_approval_resolved_event)
+                           async_update_approval_status, dismiss_approval_notification, fire_approval_resolved_event,
+                           REASON_RECOVERY_REVIEW_REPLACED)
     from .helpers import diff_summary_fields as _summary
     side = "before" if isinstance(record.get("before"), dict) else "source"
     snapshot = record.get(side)
@@ -181,7 +182,7 @@ async def _queue_recovery(hass, data, record: dict, observed: dict | None) -> No
                 return
             if existing.get("args") != args:
                 replaced = await async_update_approval_status(data.store, existing["id"], status="cancelled",
-                    rejected_reason="Configuration changed; replaced by a fresh review.")
+                    rejected_reason=REASON_RECOVERY_REVIEW_REPLACED)
                 existing = None
         if existing is not None:
             approval = PendingApproval.from_dict(existing)

@@ -289,6 +289,16 @@ const MODE_LABEL_KEYS: Record<CapMode, string> = {
   confirm: "caps.modeConfirm",
 };
 
+/** A capability's name and a mode's label as the matrix shows them, for lists that describe a change. */
+export function capLabel(cap: CapName): string {
+  const def = CAPS.find((c) => c.key === cap);
+  return def ? t(def.labelKey) : cap;
+}
+
+export function capModeLabel(mode: string): string {
+  return mode in MODE_LABEL_KEYS ? t(MODE_LABEL_KEYS[mode as CapMode]) : mode;
+}
+
 const MODE_DESC_KEYS: Record<CapMode, string> = {
   deny: "caps.modeDescDeny",
   allow: "caps.modeDescAllow",

@@ -188,6 +188,20 @@ describe("Presets", () => {
   });
 });
 
+describe("Preset changes", () => {
+  it("lists a capability change with the matrix's names, not raw IDs", async () => {
+    const base = { created_at: null, caps: Object.fromEntries(CAP_NAMES.map((c) => [c, "deny"])), persona: "automation_builder",
+      permissions: { domains: {}, devices: {}, entities: {} }, pass_through: false, use_assist_exposure: false, announce_all_tools: false,
+      confirm_inline_wait_seconds: 0, rate_limit_requests: 60, rate_limit_burst: 10 };
+    const away = { ...base, id: "p2", name: "Away", caps: { ...base.caps, cap_physical_control: "confirm" } };
+    current = accessKey({ presets: [{ ...base, id: "p1", name: "Daily" }, away] as never, active_preset_id: "p1" });
+    show(<PresetsWindow />);
+    fireEvent.click(await screen.findByRole("button", { name: "Switch To" }));
+    const line = await screen.findByText(/: Deny, now Confirm$/);
+    expect(line.textContent).not.toMatch(/cap_physical_control|->/);
+  });
+});
+
 describe("Permissions tree", () => {
   it("has no Reload button, offers Filter, and follows Home Assistant's registries quietly", async () => {
     show(<PermissionsWindow />);

@@ -20,10 +20,10 @@ You add profiles for all of these in **{{label:workspace.profileEditor}}**, exce
 
 MESA combines profiles field by field, not profile by profile.
 
-- **Control mode**: the most restrictive mode any level sets wins. A specific profile can't loosen a broader one, so an Autonomous lock entity under a Prohibited lock domain stays Prohibited.
+- **Control mode**: the most restrictive mode any level sets wins. A specific profile can't loosen a broader one, so an Autonomous lock entity under a Prohibited lock domain stays Prohibited. The one exception is below.
 - **Privacy level**: the most restrictive level wins, in the same way.
 - **Triggers automations**: Likely at any level wins. Otherwise the most specific level wins.
-- **Everything else**: the most specific level wins.
+- **Everything else**: the most specific level wins, but a value written or confirmed by a person, or written by the device's maker, outranks an inferred one at any level.
 
 The one way to loosen a control mode is an entity override with a written reason, which can turn Confirm into Autonomous but never relaxes Prohibited or Read-Only. Profile Editor can't set it; it only arrives by import.
 

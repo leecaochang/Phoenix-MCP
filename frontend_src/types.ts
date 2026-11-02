@@ -197,6 +197,8 @@ export interface GlobalSettings {
   voice_agent_pipeline_supported?: boolean;
   /** Computed: the Phoenix-created pipeline is Home Assistant's preferred assistant. */
   voice_agent_pipeline_preferred?: boolean;
+  /** Only on the save that tore the assistant down: Home Assistant kept it as its only assistant. */
+  voice_agent_pipeline_kept?: boolean;
   // Phoenix MCP AI Task entity: Phoenix MCP registered as an HA AITaskEntity running its own model
   // on the chosen access key's scope. Independent of the voice agent and the bridge.
   ai_task_enabled?: boolean;

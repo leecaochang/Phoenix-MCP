@@ -197,3 +197,20 @@ it.each([true, false])("restores shadow-root focus after fallback copy (success=
   expect(shadow.activeElement).toBe(button);
   host.remove();
 });
+
+describe("approval status and reason labels", () => {
+  it("labels a Failed record as Failed, not as an execution failure", async () => {
+    const { approvalStatusLabel } = await import("../utils");
+    expect(approvalStatusLabel("failed")).toBe("Failed");
+  });
+
+  it("names every reason the server emits, and the recovery reason stored as English", async () => {
+    const { localizedApprovalReason } = await import("../utils/approval_reason");
+    expect(localizedApprovalReason("agent_chat_wait_timed_out")).toBe("No decision in time; Agent Chat stopped waiting");
+    expect(localizedApprovalReason("phoenix_mcp_data_wiped")).toBe("Cancelled when Phoenix MCP data was wiped");
+    expect(localizedApprovalReason("integration_removed")).toBe("Cancelled when Phoenix MCP was removed");
+    expect(localizedApprovalReason("Configuration changed; replaced by a fresh review."))
+      .toBe(localizedApprovalReason("recovery_review_replaced"));
+    expect(localizedApprovalReason("The admin's own words")).toBe("The admin's own words");
+  });
+});

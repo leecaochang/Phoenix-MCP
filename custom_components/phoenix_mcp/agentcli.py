@@ -57,6 +57,7 @@ from .audit import generate_request_id
 from .agent_recovery import RecoveryRequired, dispatch_agent_tool, recovery_turn, tool_is_read_only
 from .approvals import (
     REASON_AGENT_CHAT_ENDED,
+    REASON_AGENT_CHAT_WAIT_TIMED_OUT,
     STATUS_APPROVED,
     STATUS_CANCELLED,
     STATUS_FAILED,
@@ -4767,7 +4768,22 @@ async def _dispatch_with_progress(emit: Any, tool_id: Any, coro: Any) -> Any:
                 pass
 
 
-async def _cancel_agent_approval(hass: HomeAssistant, data: PhoenixData, approval_id: str) -> Any:
+def _review_stop_error(reason: str, data: PhoenixData) -> dict:
+    """The chat error for a tool review that stopped the turn, naming what stopped it."""
+    if reason == "cancelled":
+        return {"code": "cancelled", "message": "Cancelled."}
+    if reason in {"catalog_changed", "context_changed"}:
+        return {"code": "review_changed", "message": (
+            "The access key's tools or the conversation changed while the tool call was reviewed, "
+            "so nothing was run. Send the request again.")}
+    if _kill_switch_on(data):
+        return {"code": "kill_switch", "message": "The kill switch is on, so the agent stopped. Nothing more was run."}
+    return {"code": "unauthorized", "message": "This access key is no longer authorized."}
+
+
+async def _cancel_agent_approval(
+    hass: HomeAssistant, data: PhoenixData, approval_id: str, reason: str = REASON_AGENT_CHAT_ENDED,
+) -> Any:
     """Cancel only abandoned pending work whose executor has never been claimed."""
     async with data.store.async_lock:
         record = get_approval(data.store, approval_id)
@@ -4777,7 +4793,7 @@ async def _cancel_agent_approval(hass: HomeAssistant, data: PhoenixData, approva
             return None
         resolved = await async_update_approval_status(
             data.store, approval_id, status=STATUS_CANCELLED,
-            rejected_reason=REASON_AGENT_CHAT_ENDED,
+            rejected_reason=reason,
         )
     if resolved is not None and resolved.status == STATUS_CANCELLED:
         dismiss_approval_notification(hass, approval_id)
@@ -4820,7 +4836,10 @@ async def _await_agent_approval(
     if latest is None:
         return _resolved_result(STATUS_PENDING, None)
     if latest.status == STATUS_PENDING:
-        resolved = await _cancel_agent_approval(hass, data, approval_id)
+        # cancel_task is always done here (the finally cancels it), so the event
+        # decides. A chat that ended outranks a wait that ran out at the same time.
+        reason = REASON_AGENT_CHAT_ENDED if cancel.is_set() else REASON_AGENT_CHAT_WAIT_TIMED_OUT
+        resolved = await _cancel_agent_approval(hass, data, approval_id, reason)
         if resolved is not None and resolved.status == STATUS_CANCELLED:
             return _resolved_result(STATUS_CANCELLED, None, resolved)
         # In-progress, or an admin resolved it in the race: re-read the true outcome.
@@ -5719,7 +5738,7 @@ async def async_run_agent_turn(
     await data.agent_recovery.reconcile(data.store, access_key.id)
     if data.agent_recovery.blocks(access_key.id):
         await emit("error", {"code": "outcome_unknown", "retryable": False,
-                             "message": "An earlier action outcome is unknown. Check Phoenix MCP > Needs Attention before continuing."})
+                             "message": "An earlier action outcome is unknown. Check the Needs Attention window of the Phoenix MCP panel before continuing."})
         await emit("messages", {"messages": messages})
         await emit("done", {"stop_reason": "error"})
         return messages
@@ -5954,8 +5973,7 @@ async def async_run_agent_turn(
         if review.action != "continue":
             provider.append_tool_results(messages, _merged_results(slots, withheld_results(tool_calls, review)))
             if review.action == "stop":
-                await emit("error", {"code": "cancelled" if review.reason == "cancelled" else "unauthorized",
-                                    "message": "Tool selection stopped because cancellation or authority changed."})
+                await emit("error", _review_stop_error(review.reason, data))
                 turn_errored = True
                 break
             continue
@@ -5976,7 +5994,7 @@ async def async_run_agent_turn(
             # Appended above first, so the conversation handed back to the
             # browser stays valid for the provider once the barrier is reviewed.
             await emit("error", {"code": "outcome_unknown", "retryable": False,
-                                 "message": "An action outcome is unknown. Check Phoenix MCP > Needs Attention before retrying."})
+                                 "message": "An action outcome is unknown. Check the Needs Attention window of the Phoenix MCP panel before retrying."})
             turn_errored = True
             stop_reason = "error"
             break
@@ -6699,7 +6717,7 @@ async def async_run_ai_task(
     # deliberately English, like the rest of the agent-facing error text.
     if turn.outcome == TURN_OUTCOME_UNKNOWN:
         if turn.blocked_by_prior_action:
-            raise AiTaskError("This task was not executed because an earlier action has an unresolved outcome. Check Phoenix MCP > Needs Attention before trying again.")
+            raise AiTaskError("This task was not executed because an earlier action has an unresolved outcome. Check the Needs Attention window of the Phoenix MCP panel before trying again.")
         raise AiTaskError("An action outcome is unknown. Reconcile Home Assistant and approval results before retrying.")
     if turn.outcome == TURN_PROVIDER_ERROR:
         raise AiTaskError(turn.detail)

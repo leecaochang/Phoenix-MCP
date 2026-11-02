@@ -96,7 +96,7 @@ export function AttentionList({ state, onShowRequest }: {
         <h3 className="phx-attention-item-title">{TITLES[item.kind] ? t(TITLES[item.kind]) : item.kind}</h3>
         {item.access_key_name && <p className="phx-attention-meta">{item.access_key_name}{item.started_at && ` · ${localeDateTime(item.started_at)}`}</p>}
         <p className="phx-attention-help">{t(item.kind === "agent" || item.kind === "calendar" ? (item.dispatch_result === "received" ? "attention.received" : "attention.unknown") : HELP[item.kind])}</p>
-        {reviewable && <p className="phx-attention-meta"><span className="stat-label">{t("attention.request")}</span> <code>{item.id}</code></p>}
+        {reviewable && <p className="phx-attention-meta"><span className="stat-label">{t(item.kind === "calendar" ? "attention.calendarReceipt" : "attention.request")}</span> <code>{item.id}</code></p>}
         {reviewable && (confirming === key ? (
           <div className="log-group" data-guide="window.attention#review">
           <InlineConfirm label={t("attention.continue")} acknowledge={t("attention.checked")}

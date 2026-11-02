@@ -175,6 +175,38 @@ describe("VoiceAgentSettings", () => {
     expect(notify).not.toHaveBeenCalledWith("Phoenix MCP assistant removed from Home Assistant");
   });
 
+  it("says Home Assistant kept its only assistant when Voice is turned off", async () => {
+    const onSave = vi.fn().mockResolvedValue({ ...settings(), voice_agent_pipeline_kept: true });
+    render(<VoiceAgentSettings settings={settings({ ...FULL, voice_agent_pipeline_id: "pl1" })} onChange={vi.fn()} onSave={onSave}
+      saving={false} onRefresh={vi.fn().mockResolvedValue(undefined)} />);
+    fireEvent.click(screen.getByLabelText("Enable Phoenix MCP voice agent"));
+    await waitFor(() => expect(notify).toHaveBeenCalledTimes(1));
+    // One save, which removes the assistant itself; no separate removal call.
+    expect(onSave).toHaveBeenCalledExactlyOnceWith({ voice_agent_enabled: false });
+    expect(deleteVoiceAgentPipeline).not.toHaveBeenCalled();
+    expect(notify).toHaveBeenCalledWith(expect.stringContaining("Home Assistant kept its assistant"));
+  });
+
+  it("reports the assistant removed when turning Voice off removed it", async () => {
+    const onSave = vi.fn().mockResolvedValue(settings());
+    render(<VoiceAgentSettings settings={settings({ ...FULL, voice_agent_pipeline_id: "pl1" })} onChange={vi.fn()} onSave={onSave}
+      saving={false} onRefresh={vi.fn().mockResolvedValue(undefined)} />);
+    fireEvent.click(screen.getByLabelText("Enable Phoenix MCP voice agent"));
+    await waitFor(() => expect(notify).toHaveBeenCalledWith("Voice agent disabled, and its Home Assistant assistant removed"));
+  });
+
+  it("reports nothing when the save that turns Voice off fails", async () => {
+    const onSave = vi.fn().mockResolvedValue(null);
+    const onRefresh = vi.fn().mockResolvedValue(undefined);
+    render(<VoiceAgentSettings settings={settings({ ...FULL, voice_agent_pipeline_id: "pl1" })} onChange={vi.fn()} onSave={onSave}
+      saving={false} onRefresh={onRefresh} />);
+    fireEvent.click(screen.getByLabelText("Enable Phoenix MCP voice agent"));
+    await waitFor(() => expect(onSave).toHaveBeenCalled());
+    expect(notify).not.toHaveBeenCalled();
+    expect(onRefresh).not.toHaveBeenCalled();
+    expect(deleteVoiceAgentPipeline).not.toHaveBeenCalled();
+  });
+
   it("shows Home Assistant's actual preference and sets or clears it, keeping the assistant", async () => {
     const { onRefresh } = renderCard(settings({ ...FULL, voice_agent_pipeline_id: "pl1", voice_agent_pipeline_preferred: false }));
     expect(checkbox(PREFERRED)).not.toBeChecked();

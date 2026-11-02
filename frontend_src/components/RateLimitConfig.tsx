@@ -85,7 +85,7 @@ export function RateLimitConfig({ accessKey, onUpdate }: Props) {
   return (
     <div>
       {error && <div className="banner banner-error mb-8">{error}</div>}
-      <div className="rate-limit-row">
+      <div className="rate-limit-row" data-help="accessKeys.rateLimitHelp">
         <div className="field" data-guide="window.keySettings#rate-requests">
           <label htmlFor="rate-limit-requests">{t("accessKeys.rateRequestsLabel")}</label>
           <input

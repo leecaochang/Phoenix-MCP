@@ -36,6 +36,30 @@ class ConfigurationRecoveryError(ValueError):
     """A protected mutation cannot proceed safely."""
 
 
+# The refusals an administrator can act on, by their exact agent text, with the
+# adminError key that says the same in the reader's language. Any other refusal
+# is a rare adapter-specific case and gets the general recoveryBlocked text.
+_OPERATOR_KEYS = {
+    "Configuration recovery storage could not be loaded.": "recoveryStorageUnavailable",
+    "A configuration operation is already running for this resource.": "recoveryOperationActive",
+    "The configuration operation is still active.": "recoveryOperationActive",
+    "A Home Assistant command Phoenix sent is still running; review once it finishes.": "recoveryCommandRunning",
+    "Resolve the configuration recovery request in Approvals before retrying.": "recoveryResolveInApprovals",
+    "Configuration recovery is full of unresolved operations; resolve them in Approvals.": "recoveryFull",
+    "Review this unresolved recovery record before removing it.": "recoveryReviewBeforeRemoving",
+    "Review the inactive recovery record before restoring it.": "recoveryReviewBeforeRestoring",
+    "The configuration changed after review; review a fresh request.": "recoveryChangedAfterReview",
+    "Administrator restoration authority changed.": "recoveryAuthorityChanged",
+    "Helper storage could not be read.": "recoveryHelperUnreadable",
+    "A complete secret-safe recovery snapshot is unavailable; nothing was dispatched.": "recoverySnapshotUnsafe",
+}
+
+
+def recovery_error_key(message: str) -> str:
+    """The adminError key for a recovery refusal's agent text."""
+    return _OPERATOR_KEYS.get(message, "recoveryBlocked")
+
+
 def safe_snapshot(value: dict | None) -> dict | None:
     """Admit only bounded JSON that survives scrubbing without losing information.
 

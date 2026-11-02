@@ -30,7 +30,7 @@ const SCOPE_LABEL_KEYS: Record<ApprovalsScope, string> = {
   all: "approvals.scopeAll",
   approved: "approvals.filterApproved",
   rejected: "approvals.filterRejected",
-  failed: "approvals.reason.execution_failed",
+  failed: "approvals.filterFailed",
   expired: "approvals.filterExpired",
   cancelled: "approvals.filterCancelled",
 };
@@ -38,7 +38,7 @@ const SCOPE_LABEL_KEYS: Record<ApprovalsScope, string> = {
 const STATUS_LABEL_KEYS: Record<ApprovalStatus, string> = {
   pending: "approvals.statusPending",
   approved: "approvals.statusApproved",
-  failed: "approvals.reason.execution_failed",
+  failed: "approvals.statusFailed",
   rejected: "approvals.statusRejected",
   expired: "approvals.statusExpired",
   cancelled: "approvals.statusCancelled",
@@ -147,7 +147,7 @@ function listColumns(a: ApprovalsState): Column<ApprovalRecord>[] {
   return [
     { id: "request", label: t("approvals.colRequest"), width: 220, maxWidth: 360, sortValue: (r) => approvalListTitle(r.diff), cell: (r) => approvalListTitle(r.diff), title: (r) => approvalListTitle(r.diff) },
     { id: "status", label: t("approvals.metaStatus"), width: 140, sortValue: (r) => (a.isClaimed(r) ? t("approvals.processing") : approvalStatusLabel(r.status)), cell: (r) => <ApprovalStatusLabel record={r} claimed={a.isClaimed(r)} /> },
-    { id: "accessKey", label: t("approvals.metaAccessKey"), width: 140, hidden: true, sortValue: (r) => r.access_key_name, cell: (r) => r.access_key_name },
+    { id: "accessKey", label: t("approvals.colAccessKey"), width: 140, hidden: true, sortValue: (r) => r.access_key_name, cell: (r) => r.access_key_name },
     { id: "tool", label: t("approvals.metaTool"), width: 170, hidden: true, sortValue: (r) => friendlyToolName(r.tool_name), cell: (r) => <code>{friendlyToolName(r.tool_name)}</code> },
     { id: "requested", label: t("approvals.colRequested"), width: 160, hidden: true, sortValue: (r) => r.created_at, cell: (r) => formatDateTime(r.created_at) },
     { id: "expires", label: t("approvals.metaExpires"), width: 120, hidden: true, sortValue: (r) => r.expires_at, cell: (r) => <ExpiresIn record={r} /> },

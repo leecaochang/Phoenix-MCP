@@ -162,7 +162,7 @@ const HOME_TAB_GUIDE: Record<HomeTab, string> = { voice: "window.settingsHome#vo
 /** Voice Agent, AI Task and Assist Tool Provider on local tabs; each tab keeps its state while another is shown. */
 export function HomeAssistantWindow() {
   const s = useSettings();
-  const { settings, saving, change, error } = useSettingsChange();
+  const { settings, saving, change, saveForResult, error } = useSettingsChange();
   useSettingsTools("settingsHome");
   if (!s || !settings) return <Loading />;
   const current = s.homeTab;
@@ -188,7 +188,7 @@ export function HomeAssistantWindow() {
         ))}
       </div>
       <div id={panelId("voice")} role="tabpanel" aria-labelledby={tabId("voice")} hidden={current !== "voice"}>
-        <VoiceAgentSettings settings={settings} onChange={change} saving={saving} onRefresh={s.refresh}
+        <VoiceAgentSettings settings={settings} onChange={change} onSave={saveForResult} saving={saving} onRefresh={s.refresh}
           statistics={<RoutingStatisticsButton surface="voice" />} />
       </div>
       <div id={panelId("aiTask")} role="tabpanel" aria-labelledby={tabId("aiTask")} hidden={current !== "aiTask"}>

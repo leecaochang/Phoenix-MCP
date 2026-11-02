@@ -53,6 +53,13 @@ REASON_WIPED = "phoenix_mcp_data_wiped"
 # See async_reconcile_interrupted_approvals for why that resolves as failed.
 REASON_EXECUTION_INTERRUPTED = "execution_interrupted"
 REASON_AGENT_CHAT_ENDED = "agent_chat_ended"
+# Agent Chat waited AGENTCLI_APPROVAL_WAIT_SECONDS with the chat still open and
+# nobody decided, so it withdrew the request and told the model.
+REASON_AGENT_CHAT_WAIT_TIMED_OUT = "agent_chat_wait_timed_out"
+# The integration was removed; every key was archived with its queue.
+REASON_INTEGRATION_REMOVED = "integration_removed"
+# A configuration recovery review whose arguments changed was replaced by a new one.
+REASON_RECOVERY_REVIEW_REPLACED = "recovery_review_replaced"
 # Home Assistant restarted while the request was still queued. Nothing ran, and
 # the conversation that asked for it ended with the previous run.
 REASON_RESTARTED = "phoenix_mcp_restarted"

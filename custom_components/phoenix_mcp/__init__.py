@@ -1005,13 +1005,18 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
     """Delete credentials while preserving configuration and recovery evidence."""
     from .agentcli import async_wipe_agentcli_secrets
-    from .approvals import async_cancel_approvals_for_access_key, dismiss_approval_notification, fire_approval_resolved_event
+    from .approvals import (
+        REASON_INTEGRATION_REMOVED,
+        async_cancel_approvals_for_access_key,
+        dismiss_approval_notification,
+        fire_approval_resolved_event,
+    )
 
     store = await AccessKeyStore.async_create(hass)
     changed = []
     async with store.async_lock:
         for access_key in store.list_access_keys():
-            changed.extend(await async_cancel_approvals_for_access_key(store, access_key.id, reason="integration_removed"))
+            changed.extend(await async_cancel_approvals_for_access_key(store, access_key.id, reason=REASON_INTEGRATION_REMOVED))
             await store.async_archive_access_key(access_key.id, revoked=True)
         await store.async_patch_settings(assist_bound_access_key_id=None,
             voice_agent_enabled=False, voice_agent_access_key_id=None,
