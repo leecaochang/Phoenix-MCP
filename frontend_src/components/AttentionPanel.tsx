@@ -3,6 +3,7 @@ import { api } from "../api";
 import type { AttentionItem } from "../types";
 import { localeDateTime, t } from "../i18n";
 import { ActionButton } from "../ui/ActionButton";
+import { Icon } from "../ui/Icon";
 import { InlineConfirm } from "../ui/InlineConfirm";
 
 const TITLES = { agent: "attention.actionTitle", calendar: "attention.actionTitle", mesa: "attention.mesaTitle", calendar_storage: "attention.calendar_storageTitle" };
@@ -93,7 +94,7 @@ export function AttentionList({ state, onShowRequest }: {
       const key = `${item.kind}:${item.id}`;
       const reviewable = item.kind === "agent" || item.kind === "calendar";
       return <article className="phx-attention-item" key={key} data-guide={reviewable ? "window.attention#actions" : "window.attention#problems"}>
-        <h3 className="phx-attention-item-title">{TITLES[item.kind] ? t(TITLES[item.kind]) : item.kind}</h3>
+        <h3 className="phx-attention-item-title"><Icon name="warning" size={16} />{TITLES[item.kind] ? t(TITLES[item.kind]) : item.kind}</h3>
         {item.access_key_name && <p className="phx-attention-meta">{item.access_key_name}{item.started_at && ` · ${localeDateTime(item.started_at)}`}</p>}
         <p className="phx-attention-help">{t(item.kind === "agent" || item.kind === "calendar" ? (item.dispatch_result === "received" ? "attention.received" : "attention.unknown") : HELP[item.kind])}</p>
         {reviewable && <p className="phx-attention-meta"><span className="stat-label">{t(item.kind === "calendar" ? "attention.calendarReceipt" : "attention.request")}</span> <code>{item.id}</code></p>}

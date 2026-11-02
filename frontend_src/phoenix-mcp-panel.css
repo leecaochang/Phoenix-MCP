@@ -48,8 +48,8 @@
   --phx-z-guide:      90;
   --phx-grey-tint:    rgba(0,0,0,0.06);
   --phx-hover:        #efefef;
-  --phx-purple:       #5e5e5e;
-  --phx-purple-bg:    rgba(0,0,0,0.06);
+  /* A chosen row: clearly darker than hover, and still 4.5:1 for secondary text. */
+  --phx-selected:     #dcdcdc;
   /* Agent Chat window surfaces. The floating window is set apart from the
      panel behind it by its hairline border and shadow, not by a darker fill. */
   --phx-agentcli-surface:  #ffffff;
@@ -112,8 +112,7 @@
     --phx-shadow-lg:    0 12px 32px rgba(0,0,0,0.6);
     --phx-grey-tint:    rgba(255,255,255,0.08);
     --phx-hover:        #2a2a2a;
-    --phx-purple:       #9b9b9b;
-    --phx-purple-bg:    rgba(255,255,255,0.06);
+    --phx-selected:     #323232;
     /* Dark greys follow Home Assistant's default dark theme. */
     --phx-agentcli-surface:  #1c1c1c;
     --phx-agentcli-titlebar: #232323;
@@ -154,8 +153,7 @@
   --phx-shadow-lg:    0 12px 32px rgba(0,0,0,0.6);
   --phx-grey-tint:    rgba(255,255,255,0.08);
   --phx-hover:        #2a2a2a;
-  --phx-purple:       #9b9b9b;
-  --phx-purple-bg:    rgba(255,255,255,0.06);
+  --phx-selected:     #323232;
   --phx-agentcli-surface:  #1c1c1c;
   --phx-agentcli-titlebar: #232323;
   --phx-raised:       #242424;
@@ -337,7 +335,7 @@
   padding: 0 5px;
   border-radius: 9px;
   background: var(--phx-error);
-  color: #ffffff;
+  color: var(--phx-accent-fg);
   font-size: 11px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
@@ -821,7 +819,6 @@
 .change-action-create { color: var(--phx-success); }
 .change-action-delete { color: var(--phx-error); }
 .change-action-rollback { color: var(--phx-warning); }
-.change-action-edit { color: var(--phx-read); }
 .phx-table { table-layout: fixed; width: 100%; border-collapse: collapse; font-size: 13px; }
 /* Column headers stay at the top of their window while the rows scroll under them. */
 .phx-table th {
@@ -871,7 +868,7 @@
 .phx-table tbody tr[tabindex]:hover > td { background: var(--phx-hover); }
 /* The chosen row is marked by its grey alone (user, 2026-10-26): no border, and while the user
    moves with the keys a row under a still pointer is not highlighted as well. */
-.phx-table tbody tr.is-selected > td { background: var(--phx-accent-lt); }
+.phx-table tbody tr.is-selected > td { background: var(--phx-selected); }
 .phx-table tbody tr:focus-visible { outline: none; }
 .phx-table-wrap[data-keyboard] tbody tr[tabindex]:not(.is-selected):hover > td { background: transparent; }
 .phx-cell-mono { font-family: var(--phx-mono, monospace); font-size: 12px; }
@@ -931,7 +928,7 @@
 .phx-tab-badge {
   display: inline-flex; align-items: center; justify-content: center;
   margin-left: 8px; padding: 0 6px; min-width: 18px; height: 18px;
-  border-radius: 9px; background: var(--phx-error, #d32f2f); color: var(--phx-accent-fg);
+  border-radius: 9px; background: var(--phx-error); color: var(--phx-accent-fg);
   font-size: 10px; font-weight: 700; letter-spacing: 0;
   line-height: 1;
 }
@@ -1146,26 +1143,6 @@
 /* The outlined Agent Chat button carries a 1.5px border the solid Create access key
    button lacks; trim its vertical padding by that much so both are the same height. */
 .btn-header-action { padding: 7.5px 20px; }
-
-/* ============================================================
-   Badges
-   ============================================================ */
-.badge {
-  display: inline-flex;
-  align-items: center;
-  padding: 3px 9px;
-  border-radius: 20px;
-  font-size: 11px;
-  font-weight: 700;
-
-  white-space: nowrap;
-}
-.badge-blue   { background: var(--phx-info-bg);    color: var(--phx-info); }
-.badge-amber  { background: var(--phx-warning-bg); color: var(--phx-warning); }
-.badge-green  { background: var(--phx-success-bg); color: var(--phx-success); }
-.badge-red    { background: var(--phx-error-bg);   color: var(--phx-error); }
-.badge-grey   { background: var(--phx-grey-tint);   color: var(--phx-text-2); }
-.badge-purple { background: var(--phx-purple-bg);   color: var(--phx-purple); }
 
 /* ============================================================
    Tables
@@ -1563,7 +1540,7 @@ input.input[type="number"]:not(.agentcli-number) { flex: 0 0 auto; width: 7rem; 
    Permission state colors
    ============================================================ */
 .state-GREY   { color: var(--phx-text-2); }
-.state-YELLOW { color: var(--phx-warning); }
+.state-YELLOW { color: var(--phx-read); }
 .state-GREEN  { color: var(--phx-success); }
 .state-RED    { color: var(--phx-error); }
 
@@ -1594,7 +1571,7 @@ input.input[type="number"]:not(.agentcli-number) { flex: 0 0 auto; width: 7rem; 
 .perm-btn:last-child { border-right: none; }
 .perm-btn:hover { background: var(--phx-hover); }
 .perm-btn.active-GREY   { background: var(--phx-grey-tint);     color: var(--phx-text-2); }
-.perm-btn.active-YELLOW { background: var(--phx-warning-bg);   color: var(--phx-warning); }
+.perm-btn.active-YELLOW { background: var(--phx-read-bg);      color: var(--phx-read); }
 .perm-btn.active-GREEN  { background: var(--phx-success-bg);   color: var(--phx-success); }
 .perm-btn.active-RED    { background: var(--phx-error-bg);     color: var(--phx-error); }
 
@@ -1611,7 +1588,7 @@ input.input[type="number"]:not(.agentcli-number) { flex: 0 0 auto; width: 7rem; 
 .tree-node:hover { background: var(--phx-hover); }
 .tree-node-revealed { background: var(--phx-accent-lt); box-shadow: 0 0 0 1.5px var(--phx-accent); animation: tree-reveal-flash 1.2s ease-out; }
 @keyframes tree-reveal-flash {
-  0%   { background: var(--phx-warning-bg); box-shadow: 0 0 0 2px var(--phx-accent); }
+  0%   { background: var(--phx-selected); box-shadow: 0 0 0 2px var(--phx-accent); }
   100% { background: var(--phx-accent-lt);  box-shadow: 0 0 0 1.5px var(--phx-accent); }
 }
 .tree-expand {
@@ -1723,18 +1700,6 @@ input.input[type="number"]:not(.agentcli-number) { flex: 0 0 auto; width: 7rem; 
   border-radius: var(--phx-radius-sm); padding: 14px; word-break: break-all;
   user-select: all; margin: 14px 0; line-height: 1.6;
 }
-
-/* ============================================================
-   Outcome coloring and badges
-   ============================================================ */
-.outcome-allowed       { color: var(--phx-success); font-weight: 600; }
-.outcome-denied        { color: var(--phx-error);   font-weight: 600; }
-.outcome-not_found     { color: var(--phx-text-2);  font-weight: 500; }
-.outcome-rate_limited  { color: var(--phx-warning); font-weight: 600; }
-.outcome-not_implemented { color: var(--phx-info);  font-weight: 500; }
-.outcome-invalid_request { color: var(--phx-text-2); font-weight: 500; }
-.outcome-pending_approval { color: var(--phx-warning); font-weight: 600; }
-
 
 /* ============================================================
    Permission summary
@@ -2193,8 +2158,8 @@ input.input[type="number"]:not(.agentcli-number) { flex: 0 0 auto; width: 7rem; 
 /* Raw-text line diff (configuration.yaml / scoped file version snapshots). */
 .raw-diff { white-space: pre; }
 .raw-diff .diff-line { display: block; padding: 0 4px; min-height: 1.4em; }
-.raw-diff .diff-remove { background: rgba(229, 57, 53, 0.18); }
-.raw-diff .diff-add { background: rgba(67, 160, 71, 0.20); }
+.raw-diff .diff-remove { background: var(--phx-error-bg); }
+.raw-diff .diff-add { background: var(--phx-success-bg); }
 .approval-diff-label { font-size: 12px; font-weight: 600; color: var(--phx-text-2); }
 
 /* Comparison: the saved Before and After fill the window, which scrolls as one. */
@@ -2588,6 +2553,9 @@ hui-card, .dash-preview-card-slot { display: block; min-width: 0; }
 .mesa-control-confirm { color: var(--phx-warning); }
 .mesa-control-read_only { color: var(--phx-read); }
 .mesa-control-prohibited { color: var(--phx-error); }
+.mesa-control { max-width: 100%; }
+.mesa-control > svg { flex: none; }
+.mesa-control > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 /* Profile Editor as a window: the target and its actions, then the form. */
 .mesa-editor-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px; margin-bottom: 12px; }
 .mesa-editor-target { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; margin: 0; font-size: 14px; font-weight: 400; min-width: 0; }
@@ -3029,7 +2997,7 @@ hui-card, .dash-preview-card-slot { display: block; min-width: 0; }
   gap: 8px;
   padding: 8px 10px;
   border-top: 1px solid var(--phx-border);
-  background: var(--phx-accent-wash, rgba(217, 119, 6, 0.08));
+  background: var(--phx-accent-wash);
 }
 .agentcli-continue-text { flex: 1; font-size: 13px; color: var(--phx-text-2); }
 .agentcli-cancel-btn:hover { background: var(--phx-error); color: var(--phx-accent-fg); }
@@ -3293,6 +3261,8 @@ hui-card, .dash-preview-card-slot { display: block; min-width: 0; }
 .conversation-icon { width: 20px; height: 20px; flex: 0 0 20px; }
 .conversation-signal-neutral { color: var(--phx-text-2); }
 .conversation-signal-success { color: var(--phx-success); }
+/* In a log's rows success is the routine case, so it stays ink and only exceptions carry color; Log Details keeps the green. */
+.phx-table .conversation-signal-success { color: inherit; }
 .conversation-signal-warning { color: var(--phx-warning); }
 .conversation-signal-error { color: var(--phx-error); }
 .conversation-outcome { font-size: 13px; }
@@ -3339,7 +3309,9 @@ hui-card, .dash-preview-card-slot { display: block; min-width: 0; }
 .phx-attention-list { display: flex; flex-direction: column; gap: 12px; }
 .phx-attention-intro { margin: 0; font-size: 13px; color: var(--phx-text-2); }
 .phx-attention-item { border: 1px solid var(--phx-border); border-radius: var(--phx-radius-sm); background: var(--phx-surface); padding: 12px; }
-.phx-attention-item-title { margin: 0; font-size: 14px; font-weight: 600; color: var(--phx-text); }
+.phx-attention-item-title { display: flex; align-items: center; gap: 6px; margin: 0; font-size: 14px; font-weight: 600; color: var(--phx-text); }
+/* The one window that asks the operator to act marks each item with the warning sign, not a tinted fill. */
+.phx-attention-item-title > svg { flex: none; color: var(--phx-warning); }
 .phx-attention-help { margin: 6px 0 0; font-size: 13px; color: var(--phx-text-2); max-width: 70ch; }
 .phx-attention-ref { font-size: 12px; color: var(--phx-text-2); overflow-wrap: anywhere; }
 .phx-attention-meta { margin: 4px 0 0; color: var(--phx-text-2); font-size: 12px; }

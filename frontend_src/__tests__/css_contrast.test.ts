@@ -24,7 +24,7 @@ const dark = { ...light, ...tokens(css.match(/:host\(:not\(.phx-theme-light\)\)\
 it.each([["light", light], ["dark", dark]] as const)("keeps %s status and chat text above 4.5:1", (_theme, values) => {
   for (const surface of ["--phx-bg", "--phx-surface", "--phx-surface-2"]) {
     const background = rgb(values[surface]);
-    for (const status of ["success", "error", "warning", "info"]) {
+    for (const status of ["success", "error", "warning", "info", "read"]) {
       const tint = rgb(values[`--phx-${status}-bg`]);
       const blended = background.map((v, i) => tint[i] * tint[3] + v * (1 - tint[3]));
       expect(contrast(rgb(values[`--phx-${status}`]), blended), `${surface} ${status}`).toBeGreaterThanOrEqual(4.5);
@@ -49,7 +49,7 @@ it.each([["light", light], ["auto dark", dark], ["forced dark", forcedDark]] as 
     return Object.fromEntries([...block.slice(0, block.indexOf("}")).matchAll(/(?:^|[;{])\s*([\w-]+):\s*([^;]+)/g)].map(m => [m[1], m[2].trim()]));
   };
   const color = (value: string) => rgb(value.startsWith("var(") ? values[value.match(/--phx-[\w-]+/)![0]] : value);
-  for (const selector of [".btn-danger", ".phx-tab-badge", ".agentcli-cancel-btn", ".agentcli-popout-error"]) {
+  for (const selector of [".btn-danger", ".phx-tab-badge", ".phx-toolbar-badge", ".agentcli-cancel-btn", ".agentcli-popout-error"]) {
     const rule = declarations(selector);
     expect(rule.background, selector).toBeTruthy();
     expect(contrast(color(rule.color), color(rule.background)), selector).toBeGreaterThanOrEqual(4.5);
@@ -59,7 +59,7 @@ it.each([["light", light], ["auto dark", dark], ["forced dark", forcedDark]] as 
 it.each([["light", light], ["auto dark", dark], ["forced dark", forcedDark]] as const)("keeps %s neutral chrome legible and operable", (_theme, values) => {
   // Text and the read signal hold 4.5:1 on every surface a panel or window can
   // paint; the ink focus ring and field borders are non-text UI and hold 3:1.
-  const surfaces = ["--phx-bg", "--phx-surface", "--phx-surface-2", "--phx-raised", "--phx-hover", "--phx-accent-lt"];
+  const surfaces = ["--phx-bg", "--phx-surface", "--phx-surface-2", "--phx-raised", "--phx-hover", "--phx-accent-lt", "--phx-selected"];
   for (const surface of surfaces) {
     for (const text of ["--phx-text", "--phx-text-2"]) {
       expect(contrast(rgb(values[text]), rgb(values[surface])), `${text} on ${surface}`).toBeGreaterThanOrEqual(4.5);

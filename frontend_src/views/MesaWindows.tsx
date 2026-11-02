@@ -18,7 +18,7 @@ import { useMesa, type MesaState, type ProfileRow } from "../shell/mesa";
 import { useOnToolbar, useToolbarTools, type ToolGroup } from "../shell/tools";
 import { InlineTools, useEnsureOpen, useWindowToggle, useWorkspaceReset } from "../shell/windowTools";
 import { ActionButton, DisplayModeContext } from "../ui/ActionButton";
-import { Icon } from "../ui/Icon";
+import { Icon, type IconName } from "../ui/Icon";
 import { InlineConfirm } from "../ui/InlineConfirm";
 import type { MenuEntry } from "../ui/Menu";
 import { useClickAway } from "../ui/useClickAway";
@@ -33,15 +33,28 @@ const CONTROL_FILTERS = ["confirm", "prohibited", "read_only", "autonomous", "in
 
 const scopeLabel = (scope: MesaProfileScope): string => t(SCOPE_LABEL_KEYS[scope]);
 const controlLabel = (mode: string): string => t(CONTROL_MODE_LABEL_KEYS[mode] ?? "mesa.modeInherited");
+/** Each control mode's sign, so a narrow column still tells the modes apart without its color. */
+const CONTROL_ICONS: Record<string, IconName> = { autonomous: "success", confirm: "pending", read_only: "preview", prohibited: "denied" };
+
+/** A control mode in its meaning color, with its sign; an inherited mode has neither. */
+function ControlLabel({ mode, children }: { mode: string; children: ReactNode }) {
+  const icon = CONTROL_ICONS[mode];
+  return (
+    <span className={`phx-outcome mesa-control mesa-control-${mode}`}>
+      {icon && <Icon name={icon} size={14} />}
+      <span>{children}</span>
+    </span>
+  );
+}
 
 /** The control mode a profile sets, with its enforcement when it enforces. */
 function ControlMode({ row }: { row: ProfileRow }) {
   const mode = rawControlMode(row.document);
   return (
-    <span className={`mesa-control mesa-control-${mode}`}>
+    <ControlLabel mode={mode}>
       {controlLabel(mode)}
       {isEnforced(row.document) && <>{" · "}{t("mesa.modeEnforced")}</>}
-    </span>
+    </ControlLabel>
   );
 }
 
@@ -313,7 +326,7 @@ export function SuggestedProfilesWindow() {
       cell: (s) => <code>{s.scope === "domain" ? t("mesa.suggestDomainSubject", { id: s.subject_id }) : s.subject_id}</code> },
     { id: "name", label: t("mesa.colName"), width: 120, maxWidth: 240, sortValue: (s) => m.friendly(s.subject_id).toLowerCase(), cell: (s) => m.friendly(s.subject_id) },
     { id: "mode", label: t("mesa.colControl"), width: 140, maxWidth: 180, sortValue: (s) => s.suggested_mode,
-      cell: (s) => <span className={`mesa-control mesa-control-${s.suggested_mode}`}>{mode(s)}</span> },
+      cell: (s) => <ControlLabel mode={s.suggested_mode}>{mode(s)}</ControlLabel> },
     { id: "signal", label: t("mesa.colSignal"), width: 100, maxWidth: 140, sortValue: (s) => s.signal, cell: (s) => (SIGNAL_LABEL_KEYS[s.signal] ? t(SIGNAL_LABEL_KEYS[s.signal]) : s.signal) },
     { id: "actions", label: t("mesa.colActions"), width: 205, maxWidth: 205, className: "phx-td-actions",
       cell: (s) => (
