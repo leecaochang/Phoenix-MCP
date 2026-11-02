@@ -2683,6 +2683,7 @@
       "windowTitle": "Træk i titellinjen for at flytte vinduet, og slip det på kanten af et andet vindue for at fastgøre det der.",
       "fold": "Rul vinduet op i titellinjen, eller rul det ud igen.",
       "windowMenu": "Flyt, tilpas, gør flydende, fastgør, rul op, maksimér eller luk dette vindue.",
+      "phoneWindowMenu": "Flyt, rul op, maksimér eller luk dette vindue.",
       "floatWindow": "Gør vinduet flydende over arbejdsområdet. Det bliver på sin plads, mens arbejdsområdet ruller.",
       "dockWindow": "Sæt dette vindue tilbage, hvor det var, før det blev flydende.",
       "maximizeWindow": "Lad vinduet fylde den synlige del af arbejdsområdet, eller gendan det.",

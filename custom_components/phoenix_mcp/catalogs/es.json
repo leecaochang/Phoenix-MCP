@@ -2678,6 +2678,7 @@
       "windowTitle": "Arrastre la barra de título para mover esta ventana y suéltela en el borde de otra ventana para acoplarla allí.",
       "fold": "Pliegue esta ventana en su barra de título, o despliéguela.",
       "windowMenu": "Mueva, cambie el tamaño, desacople, fije, pliegue, maximice o cierre esta ventana.",
+      "phoneWindowMenu": "Mueva, pliegue, maximice o cierre esta ventana.",
       "floatWindow": "Desacople esta ventana sobre el espacio de trabajo. Se queda en su sitio mientras el espacio de trabajo se desplaza.",
       "dockWindow": "Devuelva esta ventana a donde estaba antes de desacoplarla.",
       "maximizeWindow": "Haga que esta ventana ocupe la parte visible del espacio de trabajo, o restáurela.",

@@ -8,14 +8,15 @@
  * Writes are debounced, because Home Assistant saves the whole store on every
  * write, and merge section by section: the sections this browser changed
  * (the toolbar, Help, the Guide, the last workspace, each workspace's arrangement, each
- * My Default) replace the stored ones, and everything else keeps the stored copy.
+ * My Default, and on phones each stack and its My Default) replace the stored ones, and everything else keeps the stored copy.
  * Nothing is written over a record from a newer build or above the size limit.
  */
 
 import { MAX_RECORD_BYTES, SHELL_SCHEMA, parseRecord, type Env, type ShellRecord, type WorkspaceId } from "./storage";
 
 /** A part of the record that changes independently. */
-export type Section = "toolbar" | "help" | "guide" | "lastWorkspace" | "myWindows" | `ws:${WorkspaceId}` | `my:${WorkspaceId}`;
+export type Section = "toolbar" | "help" | "guide" | "lastWorkspace" | "myWindows" | `ws:${WorkspaceId}` | `my:${WorkspaceId}`
+  | `phone:${WorkspaceId}` | `phoneDefault:${WorkspaceId}`;
 
 /** Wait this long after the last change before writing to Home Assistant, but never longer than the maximum. */
 export const SYNC_DELAY_MS = 2000;
@@ -62,6 +63,8 @@ export function mergeRecords(stored: ShellRecord | null, local: ShellRecord, cha
     savedAt: Date.now(),
     workspaces: { ...stored.workspaces },
     myDefaults: { ...stored.myDefaults },
+    phone: { ...stored.phone },
+    phoneDefaults: { ...stored.phoneDefaults },
   };
   for (const section of changed) {
     if (section === "toolbar") out.toolbar = local.toolbar;
@@ -69,7 +72,13 @@ export function mergeRecords(stored: ShellRecord | null, local: ShellRecord, cha
     else if (section === "guide") out.guide = local.guide;
     else if (section === "lastWorkspace") out.lastWorkspace = local.lastWorkspace;
     else if (section === "myWindows") out.myWindows = local.myWindows;
-    else {
+    else if (section.startsWith("phone")) {
+      const [kind, id] = section.split(":") as ["phone" | "phoneDefault", WorkspaceId];
+      const target = kind === "phone" ? out.phone! : out.phoneDefaults!;
+      const value = kind === "phone" ? local.phone?.[id] : local.phoneDefaults?.[id];
+      if (value) target[id] = value;
+      else delete target[id];
+    } else {
       const [kind, id] = section.split(":") as ["ws" | "my", WorkspaceId];
       const target = kind === "ws" ? out.workspaces : out.myDefaults!;
       const value = kind === "ws" ? local.workspaces[id] : local.myDefaults?.[id];
@@ -78,6 +87,8 @@ export function mergeRecords(stored: ShellRecord | null, local: ShellRecord, cha
     }
   }
   if (!Object.keys(out.myDefaults!).length) delete out.myDefaults;
+  if (!Object.keys(out.phone!).length) delete out.phone;
+  if (!Object.keys(out.phoneDefaults!).length) delete out.phoneDefaults;
   return out;
 }
 

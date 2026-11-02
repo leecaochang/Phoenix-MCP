@@ -17,7 +17,8 @@ import { WorkspaceController, layoutMembers } from "./dock/controller";
 import { useAreaKeys } from "./areaFocus";
 import { WorkspaceDock } from "./dock/WorkspaceDock";
 import { usePanelData } from "./PanelData";
-import { PhoneStack } from "./PhoneStack";
+import { PhoneStack, closedPhoneWindows, phoneDefaults } from "./PhoneStack";
+import { withMember, type PhoneLayout } from "./phoneLayout";
 import { DEFAULT_HELP, DEFAULT_TOOLBAR, helpOpen, readRecord, withHelpIn, writeRecord, WORKSPACE_IDS, type Env, type GuideState, GUIDE_CLOSED, type HelpPrefs, type ShellRecord, type ToolbarState, type WorkspaceId } from "./storage";
 import { RemoteRecord, shouldAdopt, writerId, type Section, type UserDataConnection } from "./sync";
 import { Toolbar, WorkspaceActionsContext, workspaceMenu, type WorkspaceActions } from "./Toolbar";
@@ -63,6 +64,8 @@ function allSections(record: ShellRecord): Section[] {
     "toolbar", "help", "guide", "lastWorkspace", "myWindows",
     ...Object.keys(record.workspaces).map((id) => `ws:${id}` as Section),
     ...Object.keys(record.myDefaults ?? {}).map((id) => `my:${id}` as Section),
+    ...Object.keys(record.phone ?? {}).map((id) => `phone:${id}` as Section),
+    ...Object.keys(record.phoneDefaults ?? {}).map((id) => `phoneDefault:${id}` as Section),
   ];
 }
 
@@ -150,6 +153,12 @@ export function Shell() {
   useEffect(() => { setMyWindows(record?.myWindows ?? []); }, [record]);
   const myWindowsRef = useRef(myWindows);
   myWindowsRef.current = myWindows;
+  // Phones: each workspace's stack as the user arranged it, and the window maximized over it (never saved).
+  const [phone, setPhone] = useState<Partial<Record<WorkspaceId, PhoneLayout>>>(() => record?.phone ?? {});
+  useEffect(() => { setPhone(record?.phone ?? {}); }, [record]);
+  const phoneRef = useRef(phone);
+  phoneRef.current = phone;
+  const [phoneMax, setPhoneMax] = useState<Partial<Record<WorkspaceId, string | null>>>({});
   /** Close Agent Chat, whichever window shows it; set once the chat state below is known. */
   const closeChatRef = useRef<() => void>(() => {});
   /** Take a window out of My Workspace; set once My Workspace's actions below are known. */
@@ -209,9 +218,12 @@ export function Shell() {
   // otherwise in the workspace it belongs to.
   const workspaceRef = useRef(d.workspace);
   workspaceRef.current = d.workspace;
+  // On a phone, opening a window reopens and unfolds it in the stack, and a window maximized over it steps back.
+  const phoneRevealRef = useRef<(ws: WorkspaceId, windowId: string) => void>(() => {});
   const revealIn = useCallback((source: WorkspaceId, windowId: string): WorkspaceId => {
     const here = workspaceRef.current === "my" && myWindowsRef.current.includes(windowId) ? "my" : source;
     if (env === "desktop") controllerFor(here).ensureOpen(windowId);
+    else phoneRevealRef.current(here, windowId);
     requestAnimationFrame(() => visibleWindowEl(root.current, windowId)?.scrollIntoView?.({ block: "nearest" }));
     return here;
   }, [env, controllerFor]);
@@ -276,12 +288,15 @@ export function Shell() {
 
   // A jump to a permission (from Permission Summary) brings the Permissions tree into view.
   const revealPermissions = useCallback(() => {
-    if (env === "desktop") controllerFor(workspaceRef.current === "my" && myWindowsRef.current.includes("permissions") ? "my" : "accessKeys").ensureOpen("permissions");
+    const here = workspaceRef.current === "my" && myWindowsRef.current.includes("permissions") ? "my" : "accessKeys";
+    if (env === "desktop") controllerFor(here).ensureOpen("permissions");
+    else phoneRevealRef.current(here, "permissions");
   }, [env, controllerFor]);
 
   // Find Setting and the kill-switch warning open a Settings window, unfolding it first.
   const revealSettings = useCallback((id: SettingsWindowId) => {
     if (env === "desktop") controllerFor("settings").ensureOpen(id);
+    else phoneRevealRef.current("settings", id);
   }, [env, controllerFor]);
   const navigate = d.navigate;
   const showSettings = useCallback(() => navigate("settings"), [navigate]);
@@ -330,6 +345,15 @@ export function Shell() {
         if (rec.lastWorkspace !== workspaceRef.current) { rec.lastWorkspace = workspaceRef.current; changed.push(section); }
       } else if (section === "myWindows") {
         if (!same(rec.myWindows ?? [], myWindowsRef.current)) { rec.myWindows = myWindowsRef.current; changed.push(section); }
+      } else if (section.startsWith("phone:")) {
+        const id = section.slice(6) as WorkspaceId;
+        const layout = phoneRef.current[id];
+        if (!same(layout, rec.phone?.[id])) {
+          const next = { ...rec.phone };
+          if (layout) next[id] = layout; else delete next[id];
+          rec.phone = next;
+          changed.push(section);
+        }
       } else if (section.startsWith("ws:")) {
         const id = section.slice(3) as WorkspaceId;
         const controller = controllers.get(id);
@@ -411,6 +435,24 @@ export function Shell() {
     controllers.get("my")?.setWindows(myWorkspaceWindows(myWindows));
     if (!same(myWindows, recordRef.current?.myWindows ?? [])) markChanged(["myWindows"]);
   }, [myWindows, controllers, markChanged]);
+  /** Change a workspace's phone arrangement, starting from its default when the user has not arranged it yet. */
+  const updatePhone = useCallback((ws: WorkspaceId, next: PhoneLayout | null) => {
+    setPhone((prev) => {
+      const out = { ...prev };
+      if (next) out[ws] = next; else delete out[ws];
+      phoneRef.current = out;
+      return out;
+    });
+    markChanged([`phone:${ws}`]);
+  }, [markChanged]);
+  const phoneLayoutOf = (ws: WorkspaceId): PhoneLayout => phoneRef.current[ws] ?? phoneDefaults(ws);
+  phoneRevealRef.current = (ws, windowId) => {
+    const layout = phoneLayoutOf(ws);
+    if (layout.closed?.includes(windowId) || layout.folded?.includes(windowId)) {
+      updatePhone(ws, { ...layout, closed: withMember(layout.closed, windowId, false), folded: withMember(layout.folded, windowId, false) });
+    }
+    setPhoneMax((prev) => (prev[ws] && prev[ws] !== windowId ? { ...prev, [ws]: null } : prev));
+  };
   const updateGuide = useCallback((next: Partial<GuideState>) => setGuide((prev) => ({ ...prev, ...next })), []);
 
   // The setup wizard runs in Access Keys and shows the Guide there while it runs; see useWizardGuide.
@@ -456,7 +498,7 @@ export function Shell() {
     controllers.get("my")?.setWindows(myWorkspaceWindows([]));
   }, [controllers]);
   // Every window's menu: Add to My Workspace (Float Chat for a docked Chat) and Always Show Icons and Text;
-  // in My Workspace, Vertical Scrolling. Desktop only: phones show their own My Workspace until they have window menus.
+  // in My Workspace, Vertical Scrolling. Desktop only: the phone stack builds its own window menus.
   const menuExtras = useCallback<WindowMenuExtras>((controller, windowId) => {
     if (env !== "desktop") return [];
     const items: MenuEntry[] = [];
@@ -503,6 +545,9 @@ export function Shell() {
     guideRef.current = GUIDE_CLOSED;
     // My Workspace goes back to empty, as Reset This Workspace leaves it.
     clearMy();
+    setPhone({});
+    phoneRef.current = {};
+    setPhoneMax({});
     // Needs Attention comes back everywhere while items are waiting, as Reset This Workspace brings it back there.
     for (const id of WORKSPACE_IDS) attentionRef.current.showAttentionIn(id);
     setShowArchived(false);
@@ -513,7 +558,7 @@ export function Shell() {
     }
     const sections: Section[] = ["toolbar", "help", "guide", "myWindows"];
     for (const id of WORKSPACE_IDS) {
-      sections.push(`ws:${id}`);
+      sections.push(`ws:${id}`, `phone:${id}`);
       if (rec && !controllers.has(id)) delete rec.workspaces[id];
     }
     toolbarRef.current = DEFAULT_TOOLBAR;
@@ -573,6 +618,64 @@ export function Shell() {
     attentionHidden: (controller) => attentionRef.current.waiting && !attentionRef.current.attentionShownIn(controller.id as WorkspaceId),
     showAttention: (controller) => attentionRef.current.showAttentionIn(controller.id as WorkspaceId),
   }), [clearMy, commit, deselectKey, markChanged, notify, restorePanelDefaults, setShowArchived]);
+
+  // Phones: Workspace Options with the same choices as on a desktop, over the stack's arrangement.
+  const phoneActions = useMemo(() => ({
+    saveMyDefault: (ws: WorkspaceId) => {
+      const rec = recordRef.current;
+      if (!rec) return;
+      const saved: PhoneLayout = { ...phoneLayoutOf(ws), ...(ws === "my" ? { windows: myWindowsRef.current } : {}) };
+      rec.phoneDefaults = { ...rec.phoneDefaults, [ws]: saved };
+      commit([`phoneDefault:${ws}`], true);
+      notify(t("workspace.myDefaultSaved", { workspace: t(WORKSPACES[ws].labelKey) }));
+    },
+    restoreMyDefault: (ws: WorkspaceId) => {
+      const saved = recordRef.current?.phoneDefaults?.[ws];
+      if (!saved) return;
+      const { windows, ...layout } = saved;
+      if (ws === "my") {
+        const members = (windows ?? []).filter(canAddToMy);
+        myWindowsRef.current = members;
+        setMyWindows(members);
+      }
+      setPhoneMax((prev) => ({ ...prev, [ws]: null }));
+      updatePhone(ws, layout);
+      notify(t("workspace.myDefaultRestored"));
+    },
+    restoreOriginal: (ws: WorkspaceId) => {
+      if (ws === "my") clearMy();
+      if (ws === "accessKeys") {
+        setShowArchived(false);
+        deselectKey();
+      }
+      attentionRef.current.showAttentionIn(ws);
+      setPhoneMax((prev) => ({ ...prev, [ws]: null }));
+      updatePhone(ws, null);
+      if (ws === "my") markChanged(["myWindows"]);
+    },
+  }), [clearMy, commit, deselectKey, markChanged, notify, setShowArchived, updatePhone]); // eslint-disable-line react-hooks/exhaustive-deps
+  const phoneOptions = useCallback((): MenuEntry[] => {
+    const ws = workspaceRef.current;
+    const layout = phoneLayoutOf(ws);
+    const items: MenuEntry[] = closedPhoneWindows(ws, phoneRef.current[ws], myWindowsRef.current).map((id) => ({
+      id: `reopen-${id}`,
+      label: t("workspace.reopen", { window: windowTitle(id) }),
+      help: t("help.menuReopen", { window: windowTitle(id) }),
+      onSelect: () => updatePhone(ws, { ...layout, closed: withMember(layout.closed, id, false) }),
+    }));
+    if (attentionRef.current.waiting && !attentionRef.current.attentionShownIn(ws)) {
+      items.push({ id: "show-attention", label: t("workspace.showAttention"), help: t("help.menuShowAttention"), onSelect: () => attentionRef.current.showAttentionIn(ws) });
+    }
+    if (items.length) items.push("separator");
+    items.push(
+      { id: "save-default", label: t("workspace.saveMyDefault"), help: t("help.menuSaveDefault"), onSelect: () => phoneActions.saveMyDefault(ws) },
+      { id: "restore-default", label: t("workspace.restoreMyDefault"), help: t("help.menuRestoreDefault"), disabled: !recordRef.current?.phoneDefaults?.[ws], onSelect: () => phoneActions.restoreMyDefault(ws) },
+      { id: "restore", label: t("workspace.restoreOriginal"), hint: t(ws === "my" ? "workspace.resetMyHint" : "workspace.resetWorkspaceHint"), onSelect: () => phoneActions.restoreOriginal(ws) },
+      "separator",
+      { id: "panel-defaults", label: t("workspace.restorePanelDefaults"), hint: t("workspace.resetAllHint"), onSelect: restorePanelDefaults },
+    );
+    return items;
+  }, [phoneActions, restorePanelDefaults, updatePhone]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Window titles follow the panel language.
   const languageSignature = t("shell.tabAccessKeys") + t("workspace.logs");
@@ -717,7 +820,8 @@ export function Shell() {
       <div ref={attachRoot} className={`phx-shell phx-env-${env}`} data-toolbar={dock}>
         <h1 className="sr-only">{t("shell.srTitle")}</h1>
         <Toolbar controller={env === "desktop" && visited.has(active) ? controllerFor(active) : null} shellRoot={root} env={env}
-          state={toolbar} onChange={setToolbar} documentation={documentationMenu} onAgentChat={openChat} />
+          state={toolbar} onChange={setToolbar} documentation={documentationMenu} onAgentChat={openChat}
+          options={env === "mobile" ? phoneOptions : undefined} />
         <WorkspaceArea menu={env === "desktop" ? () => workspaceMenu(controllerFor(active), actions) : null}>
           {env === "desktop"
             ? WORKSPACE_IDS.filter((id) => visited.has(id)).map((id) => (
@@ -735,6 +839,9 @@ export function Shell() {
               </WorkspaceVisibleContext.Provider>
             ))
             : <PhoneStack workspace={active} showAttention={attentionShownIn(active)}
+              layout={phone[active]} onLayout={(next) => updatePhone(active, next)}
+              maximized={phoneMax[active] ?? null} onMaximize={(id) => setPhoneMax((prev) => ({ ...prev, [active]: id }))}
+              onCloseArchived={() => setShowArchived(false)}
               onCloseAttention={() => { setDismissedAt((prev) => ({ ...prev, [active]: attentionKeys })); dismissAttention(); }}
               onAddToMy={addToMy} onRemoveFromMy={removeFromMy} settings={s} mesa={mesaFindings} showArchived={d.showArchived} myWindows={myWindows}
               guide={guideShown ? <PhoneGuide workspace={active} language={language} onClose={wizardGuideShown ? undefined : () => updateGuide({ open: false })}

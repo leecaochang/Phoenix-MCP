@@ -623,6 +623,11 @@
 .phx-phone-window:has(> .phx-phone-body[hidden]) .phx-phone-title { border-bottom: none; }
 .phx-phone-body { padding: 0 12px 12px; }
 .phx-phone-body[hidden] { display: none; }
+/* Maximized: one window fills the workspace; the others stay mounted, hidden, and keep their state. */
+.phx-phone-stack.has-maximized { flex: 1; min-height: 0; }
+.phx-phone-stack.has-maximized > :not(.is-maximized) { display: none; }
+.phx-phone-window.is-maximized { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.phx-phone-window.is-maximized > .phx-phone-body { flex: 1; min-height: 0; overflow: auto; }
 
 /* ============================================================
    Menus

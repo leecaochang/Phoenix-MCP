@@ -238,7 +238,7 @@ export function SettingsProvider({ settings, onSettingsChange, theme, onThemeCha
       const last = ++frames >= REVEAL_FRAMES;
       if (windowEl?.hidden) {
         // A folded window in the phone stack opens from its title bar.
-        windowEl.closest(".phx-phone-window")?.querySelector<HTMLButtonElement>('.phx-phone-title button[aria-expanded="false"]')?.click();
+        windowEl.closest(".phx-phone-window")?.querySelector<HTMLButtonElement>('.phx-phone-fold[aria-expanded="false"]')?.click();
         if (!last) requestAnimationFrame(step);
         return;
       }

@@ -635,6 +635,7 @@
       "windowTitle": "Drag the title bar to move this window, and drop it on another window's edge to dock it there.",
       "fold": "Fold this window into its title bar, or unfold it.",
       "windowMenu": "Move, resize, float, pin, fold, maximize or close this window.",
+      "phoneWindowMenu": "Move, fold, maximize or close this window.",
       "floatWindow": "Float this window above the workspace; it stays in place while the workspace scrolls.",
       "dockWindow": "Put this window back where it was before it floated.",
       "maximizeWindow": "Fill the visible workspace with this window, or restore it.",

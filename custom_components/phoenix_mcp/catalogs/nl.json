@@ -2758,6 +2758,7 @@
       "windowTitle": "Sleep de titelbalk om dit venster te verplaatsen en zet het neer op de rand van een ander venster om het daar vast te koppelen.",
       "fold": "Vouw dit venster op in de titelbalk, of vouw het weer uit.",
       "windowMenu": "Verplaats dit venster, wijzig het formaat, koppel het los, zet het vast, vouw het op, maximaliseer of sluit het.",
+      "phoneWindowMenu": "Verplaats dit venster, vouw het op, maximaliseer of sluit het.",
       "floatWindow": "Koppel dit venster los boven de werkruimte. Het blijft op zijn plaats terwijl de werkruimte schuift.",
       "dockWindow": "Zet dit venster terug waar het stond voordat je het loskoppelde.",
       "maximizeWindow": "Laat dit venster het zichtbare deel van de werkruimte vullen, of zet het terug.",

@@ -2683,6 +2683,7 @@
       "windowTitle": "Vedä otsikkoriviä siirtääksesi tätä ikkunaa ja pudota se toisen ikkunan reunaan kiinnittääksesi sen siihen.",
       "fold": "Taita tämä ikkuna otsikkoriviinsä tai avaa se uudelleen.",
       "windowMenu": "Siirrä, muuta kokoa, irrota, kiinnitä, taita, suurenna tai sulje tämä ikkuna.",
+      "phoneWindowMenu": "Siirrä, taita, suurenna tai sulje tämä ikkuna.",
       "floatWindow": "Irrota tämä ikkuna työtilan päälle. Se pysyy paikallaan, kun työtilaa vieritetään.",
       "dockWindow": "Palauta tämä ikkuna paikkaan, jossa se oli ennen irrottamista.",
       "maximizeWindow": "Täytä työtilan näkyvä osa tällä ikkunalla tai palauta se.",

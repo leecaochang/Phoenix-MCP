@@ -2677,6 +2677,7 @@
       "windowTitle": "Faites glisser la barre de titre pour déplacer cette fenêtre, et déposez-la sur le bord d’une autre fenêtre pour l’y ancrer.",
       "fold": "Repliez cette fenêtre dans sa barre de titre, ou dépliez-la.",
       "windowMenu": "Déplacez, redimensionnez, rendez flottante, épinglez, repliez, agrandissez ou fermez cette fenêtre.",
+      "phoneWindowMenu": "Déplacez, repliez, agrandissez ou fermez cette fenêtre.",
       "floatWindow": "Rendez cette fenêtre flottante au-dessus de l’espace de travail. Elle reste en place pendant le défilement de l’espace de travail.",
       "dockWindow": "Remettez cette fenêtre là où elle était avant de devenir flottante.",
       "maximizeWindow": "Faites occuper à cette fenêtre la partie visible de l’espace de travail, ou rétablissez-la.",

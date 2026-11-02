@@ -2677,6 +2677,7 @@
       "windowTitle": "Trascina la barra del titolo per spostare questa finestra e rilasciala sul bordo di un'altra finestra per agganciarla lì.",
       "fold": "Piega questa finestra nella sua barra del titolo, oppure aprila.",
       "windowMenu": "Sposta, ridimensiona, sgancia, fissa, piega, ingrandisci o chiudi questa finestra.",
+      "phoneWindowMenu": "Sposta, piega, ingrandisci o chiudi questa finestra.",
       "floatWindow": "Sgancia questa finestra sopra l'area di lavoro. Resta al suo posto mentre l'area di lavoro scorre.",
       "dockWindow": "Riporta questa finestra dov'era prima di sganciarla.",
       "maximizeWindow": "Fai occupare a questa finestra la parte visibile dell'area di lavoro, oppure ripristinala.",

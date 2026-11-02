@@ -162,9 +162,11 @@ function ToolRow({ registry, workspace, order, groups }: { registry: ToolRegistr
   );
 }
 
-export function Toolbar({ controller, shellRoot, env, state, onChange, documentation, onAgentChat }: {
+export function Toolbar({ controller, shellRoot, env, state, onChange, documentation, onAgentChat, options }: {
   /** The visible workspace's controller; absent in the phone stack. */
   controller: WorkspaceController | null;
+  /** Workspace Options for the phone stack, which has no controller. */
+  options?: () => MenuEntry[];
   shellRoot: RefObject<HTMLElement | null>;
   env: Env;
   state: ToolbarState;
@@ -380,9 +382,9 @@ export function Toolbar({ controller, shellRoot, env, state, onChange, documenta
                   items={documentation} className={`phx-toolbar-button ${fitClass(2)}`}>
                   <span className="phx-toolbar-label">{t("shell.documentation")}</span>
                 </MenuButton>
-                {controller && (
+                {(controller || options) && (
                   <MenuButton label={t("workspace.options")} help="help.workspaceOptions" icon={<Icon name="workspaceOptions" size={16} />}
-                    items={() => workspaceMenu(controller, actions)} className={`phx-toolbar-button ${fitClass(1)}`}>
+                    items={() => (controller ? workspaceMenu(controller, actions) : options!())} className={`phx-toolbar-button ${fitClass(1)}`}>
                     <span className="phx-toolbar-label">{t("workspace.options")}</span>
                   </MenuButton>
                 )}

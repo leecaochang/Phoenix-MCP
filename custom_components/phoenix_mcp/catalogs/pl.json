@@ -2814,6 +2814,7 @@
       "windowTitle": "Przeciągnij pasek tytułu, aby przenieść to okno, i upuść je przy krawędzi innego okna, aby je tam zadokować.",
       "fold": "Złóż to okno do paska tytułu lub rozłóż je ponownie.",
       "windowMenu": "Przenieś, zmień rozmiar, odłącz, przypnij, złóż, zmaksymalizuj lub zamknij to okno.",
+      "phoneWindowMenu": "Przenieś, złóż, zmaksymalizuj lub zamknij to okno.",
       "floatWindow": "Odłącz to okno nad obszarem roboczym. Pozostaje na miejscu podczas przewijania obszaru roboczego.",
       "dockWindow": "Przywróć to okno tam, gdzie było przed odłączeniem.",
       "maximizeWindow": "Wypełnij tym oknem widoczną część obszaru roboczego lub przywróć je.",

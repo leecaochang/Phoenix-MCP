@@ -2683,6 +2683,7 @@
       "windowTitle": "Dra i namnlisten för att flytta fönstret och släpp det vid kanten av ett annat fönster för att docka det där.",
       "fold": "Vik ihop fönstret till namnlisten, eller fäll ut det igen.",
       "windowMenu": "Flytta, ändra storlek, gör flytande, fäst, vik ihop, maximera eller stäng fönstret.",
+      "phoneWindowMenu": "Flytta, vik ihop, maximera eller stäng fönstret.",
       "floatWindow": "Gör fönstret flytande ovanför arbetsytan. Det stannar på plats medan arbetsytan rullar.",
       "dockWindow": "Lägg tillbaka fönstret där det var innan det blev flytande.",
       "maximizeWindow": "Låt fönstret fylla den synliga delen av arbetsytan, eller återställ det.",

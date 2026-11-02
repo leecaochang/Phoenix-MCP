@@ -2678,6 +2678,7 @@
       "windowTitle": "Die Titelleiste ziehen, um dieses Fenster zu verschieben, und am Rand eines anderen Fensters ablegen, um es dort anzudocken.",
       "fold": "Dieses Fenster in seine Titelleiste zusammenfalten oder wieder aufklappen.",
       "windowMenu": "Dieses Fenster verschieben, in der Größe ändern, lösen, anheften, zusammenfalten, maximieren oder schließen.",
+      "phoneWindowMenu": "Dieses Fenster verschieben, zusammenfalten, maximieren oder schließen.",
       "floatWindow": "Dieses Fenster über dem Arbeitsbereich lösen. Es bleibt an seinem Platz, während der Arbeitsbereich scrollt.",
       "dockWindow": "Dieses Fenster wieder dorthin setzen, wo es vor dem Lösen war.",
       "maximizeWindow": "Den sichtbaren Arbeitsbereich mit diesem Fenster füllen oder es wiederherstellen.",

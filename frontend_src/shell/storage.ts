@@ -10,6 +10,7 @@
  */
 
 import type { WorkspaceLayout } from "./dock/controller";
+import { readPhoneLayout, type PhoneLayout } from "./phoneLayout";
 
 export type Env = "desktop" | "mobile";
 export const WORKSPACE_IDS = ["accessKeys", "approvals", "changes", "mesa", "logs", "settings", "my"] as const;
@@ -92,6 +93,10 @@ export interface ShellRecord {
   myDefaults?: Partial<Record<WorkspaceId, WorkspaceLayout>>;
   /** The windows added to My Workspace, in the order they were added; arranging it never changes them. */
   myWindows?: string[];
+  /** Phones: each workspace's stack as the user arranged it (see PhoneLayout). */
+  phone?: Partial<Record<WorkspaceId, PhoneLayout>>;
+  /** Phones: the stacks the user saved as My Default. */
+  phoneDefaults?: Partial<Record<WorkspaceId, PhoneLayout>>;
 }
 
 /** Most windows My Workspace keeps; more than every window there is, so only damage is cut off. */
@@ -174,6 +179,13 @@ const layouts = (raw: unknown): Partial<Record<WorkspaceId, WorkspaceLayout>> =>
   }
   return out;
 };
+const phoneLayouts = (raw: unknown): Partial<Record<WorkspaceId, PhoneLayout>> => {
+  const out: Partial<Record<WorkspaceId, PhoneLayout>> = {};
+  if (raw && typeof raw === "object") {
+    for (const [id, layout] of Object.entries(raw)) if (isWorkspace(id)) out[id] = readPhoneLayout(layout);
+  }
+  return out;
+};
 const count = (v: unknown): number | undefined => (typeof v === "number" && Number.isInteger(v) && v >= 0 ? v : undefined);
 
 /**
@@ -186,6 +198,8 @@ export function parseRecord(raw: unknown): ShellRecord | "newer" | null {
   if (typeof parsed.schema !== "number") return null;
   if (parsed.schema > SHELL_SCHEMA) return "newer";
   const myDefaults = layouts(parsed.myDefaults);
+  const phone = phoneLayouts(parsed.phone);
+  const phoneDefaults = phoneLayouts(parsed.phoneDefaults);
   return {
     schema: SHELL_SCHEMA,
     savedAt: typeof parsed.savedAt === "number" ? parsed.savedAt : 0,
@@ -199,6 +213,8 @@ export function parseRecord(raw: unknown): ShellRecord | "newer" | null {
     workspaces: layouts(parsed.workspaces),
     ...(Object.keys(myDefaults).length ? { myDefaults } : {}),
     ...(parsed.myWindows !== undefined ? { myWindows: readMyWindows(parsed.myWindows) } : {}),
+    ...(Object.keys(phone).length ? { phone } : {}),
+    ...(Object.keys(phoneDefaults).length ? { phoneDefaults } : {}),
   };
 }
 
