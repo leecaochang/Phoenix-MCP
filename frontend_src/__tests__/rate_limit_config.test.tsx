@@ -6,6 +6,8 @@ import { act, fireEvent, render, screen } from "@testing-library/react";
 vi.mock("../api", () => ({ api: { patchAccessKey: vi.fn() } }));
 import { api } from "../api";
 import { RateLimitConfig } from "../components/RateLimitConfig";
+import { helpFor } from "../shell/help";
+import { t } from "../i18n";
 import type { AccessKeyRecord } from "../types";
 
 const KEY = { id: "k1", name: "alpha", rate_limit_requests: 10, rate_limit_burst: 3 } as AccessKeyRecord;
@@ -111,4 +113,10 @@ it("still saves a value typed back while an earlier save is on its way", async (
   expect(api.patchAccessKey).toHaveBeenCalledTimes(2);
   expect(vi.mocked(api.patchAccessKey).mock.calls[1]).toEqual(["k1", { rate_limit_requests: 10, rate_limit_burst: 3 }]);
   await act(async () => reply({ ...KEY, rate_limit_requests: 20 }));
+});
+
+it("reads the rate limit help on both fields, not just their names", () => {
+  render(<Parent />);
+  expect(helpFor(requests())).toBe(t("accessKeys.rateLimitHelp"));
+  expect(helpFor(burst())).toBe(t("accessKeys.rateLimitHelp"));
 });

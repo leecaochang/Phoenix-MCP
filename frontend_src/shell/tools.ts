@@ -22,6 +22,8 @@ export interface Tool {
   /** A toggle that is currently on. */
   pressed?: boolean;
   tone?: "danger";
+  /** Catalog key of what the tool does, shown in the Help window; its label when not given. */
+  help?: string;
   /** Shorter visible text for icons-and-text mode; `label` stays the accessible name and tooltip. */
   short?: string;
   /** A small count on the button, such as active filters. */
@@ -70,7 +72,7 @@ export class ToolRegistry {
   set(place: WindowPlace, groups: ToolGroup[] | null): void {
     const key = `${place.workspace}:${place.window}`;
     // Closures change on every render; only labels and states decide whether the toolbar redraws.
-    const signature = groups ? JSON.stringify(groups.map((g) => [g.id, g.label, g.tools.map((t) => [t.id, t.label, t.icon, !!t.disabled, !!t.pressed, t.tone, t.short, t.badge, t.shared?.id, t.shared?.label])])) : "";
+    const signature = groups ? JSON.stringify(groups.map((g) => [g.id, g.label, g.tools.map((t) => [t.id, t.label, t.icon, !!t.disabled, !!t.pressed, t.tone, t.short, t.badge, t.help, t.shared?.id, t.shared?.label])])) : "";
     if (groups) this.entries.set(key, { place, groups }); else this.entries.delete(key);
     if (this.signatures.get(key) === signature) return;
     this.signatures.set(key, signature);
@@ -99,6 +101,7 @@ export class ToolRegistry {
         label: badge && shared.countLabel ? t(shared.countLabel, { count: localeNumber(badge) }) : shared.label,
         short: shared.label,
         icon: tools[0].icon,
+        help: tools[0].help,
         disabled: tools.every((tool) => tool.disabled),
         pressed: tools.some((tool) => tool.pressed !== undefined) ? tools.some((tool) => tool.pressed) : undefined,
         badge: badge || undefined,

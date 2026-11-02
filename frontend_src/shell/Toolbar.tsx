@@ -139,13 +139,13 @@ function ToolRow({ registry, workspace, order, groups }: { registry: ToolRegistr
       {groups.map((group) => (
         <div key={group.id} className="phx-tool-group" role="group" aria-label={group.label}>
           {group.tools.map((tool) => tool.menu ? (
-            <MenuButton key={tool.id} label={tool.label} icon={<Icon name={tool.icon} size={16} />} items={() => registry.latest(workspace, group.id, tool.id)?.menu?.() ?? []}
+            <MenuButton key={tool.id} label={tool.label} help={tool.help} icon={<Icon name={tool.icon} size={16} />} items={() => registry.latest(workspace, group.id, tool.id)?.menu?.() ?? []}
               className={`phx-toolbar-button${tool.tone === "danger" ? " is-danger" : ""}`} disabled={tool.disabled}>
               <span className="phx-toolbar-label">{tool.short ?? tool.label}</span>
             </MenuButton>
           ) : (
             <button key={tool.id} type="button" className={`phx-toolbar-button${tool.tone === "danger" ? " is-danger" : ""}`} data-tool={tool.id}
-              aria-label={tool.label} title={tool.label} disabled={tool.disabled} aria-pressed={tool.pressed}
+              aria-label={tool.label} title={tool.label} data-help={tool.help} disabled={tool.disabled} aria-pressed={tool.pressed}
               onClick={() => run(group, tool)}>
               <Icon name={tool.icon} size={16} />
               <span className="phx-toolbar-label">{tool.short ?? tool.label}</span>
@@ -360,7 +360,7 @@ export function Toolbar({ controller, shellRoot, env, state, onChange, documenta
             {!collapsed && (
               <div className="phx-toolbar-group">
                 {d.settings?.kill_switch ? (
-                  <button type="button" className="phx-toolbar-button phx-toolbar-warning" title={t("shell.killSwitchTitle")} onClick={openKillSwitch}>
+                  <button type="button" className="phx-toolbar-button phx-toolbar-warning" title={t("shell.killSwitchTitle")} data-help="shell.killSwitchTitle" onClick={openKillSwitch}>
                     <Icon name="killSwitch" size={16} />
                     <span className="phx-toolbar-label">{t(env === "mobile" ? "shell.killSwitchShort" : "shell.killSwitchFull")}</span>
                   </button>

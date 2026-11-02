@@ -14,7 +14,7 @@ import type { IconName } from "./Icon";
 import { useClickAway } from "./useClickAway";
 
 export function InlineConfirm({
-  label, title, tone = "warning", children, help, lendHelp = false, acknowledge, confirmLabel, confirmIcon = "check", confirmClassName = "btn btn-primary btn-sm",
+  label, title, tone = "warning", children, help, acknowledge, confirmLabel, confirmIcon = "check", confirmClassName = "btn btn-primary btn-sm",
   cancelLabel, busy = false, error = null, onConfirm, onCancel, opener,
 }: {
   /** Accessible name of the confirmation, usually the action's name. */
@@ -24,10 +24,12 @@ export function InlineConfirm({
   tone?: "warning" | "danger";
   /** What the action will do; left out when it reads in the Help window instead. */
   children?: ReactNode;
-  /** What the action will do, read in the Help window rather than shown in the box. */
+  /**
+   * What the action will do, read in the Help window rather than shown in the box. It also
+   * reads for the box's own buttons and acknowledgement: focus lands on them, and their names
+   * alone would hide the consequence.
+   */
   help?: string;
-  /** The help also reads for the box's own buttons and acknowledgement, rather than their names. */
-  lendHelp?: boolean;
   /** The control that opened the box: a click on it is not a click elsewhere, so it can close the box itself. */
   opener?: RefObject<HTMLElement | null>;
   /** An acknowledgement to tick before Confirm is available. */
@@ -50,7 +52,7 @@ export function InlineConfirm({
   }, []);
   return (
     <div ref={root} className={`phx-inline-confirm is-${tone}`} role="group" aria-label={label} data-help-text={help}
-      data-help-controls={help && lendHelp ? "" : undefined}
+      data-help-controls={help ? "" : undefined}
       onKeyDown={(e) => {
         if (e.key !== "Escape" || busy) return;
         e.preventDefault();

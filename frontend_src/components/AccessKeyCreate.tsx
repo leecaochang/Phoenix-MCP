@@ -338,7 +338,7 @@ export function AccessKeyCreateForm({ existingNames, onCreated, onClose, onOpenS
       </div>
 
       {/* What pass-through does is in Help (user, 2026-10-28). */}
-      <div className="toggle-row access-key-create-pt" data-help="accessKeys.passThroughModeHelp" data-guide="window.accessKeys#key-pass-through">
+      <div className="toggle-row access-key-create-pt" data-help="accessKeys.passThroughModeHelp" data-help-controls="" data-guide="window.accessKeys#key-pass-through">
         <label className="toggle-switch">
           <input
             type="checkbox"
@@ -353,7 +353,7 @@ export function AccessKeyCreateForm({ existingNames, onCreated, onClose, onOpenS
       </div>
 
       {passThrough && (
-        <div className="amber-block">
+        <div className="amber-block" data-help="accessKeys.createPtWarning" data-help-controls="">
           <p>
             {tRich("accessKeys.createPtWarning", { strong: (c) => <strong>{c}</strong> })}
           </p>

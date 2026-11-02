@@ -97,6 +97,8 @@ function MenuList({ label, entries, place, focusFirst, onClose, listRef }: {
           <div key={item.id} role={item.checked === undefined ? "menuitem" : item.toggle ? "menuitemcheckbox" : "menuitemradio"} tabIndex={-1}
             className={`phx-menu-item${note ? " has-note" : ""}`}
             title={note ? undefined : item.hint}
+            data-help-text={item.hint}
+            aria-label={note ? item.label : undefined}
             aria-checked={item.checked}
             aria-disabled={item.disabled || undefined}
             aria-describedby={note ? `${noteId}-${i}` : undefined}

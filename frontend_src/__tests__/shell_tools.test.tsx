@@ -39,7 +39,7 @@ describe("tools several windows share", () => {
     id: window,
     label: window,
     tools: [
-      { id: "refresh", label: `Refresh ${window}`, short: "Refresh", icon: "refresh" as const, shared: { id: "refresh", label: "Refresh" }, onSelect: opts.onSelect },
+      { id: "refresh", label: `Refresh ${window}`, short: "Refresh", icon: "refresh" as const, help: "help.refresh", shared: { id: "refresh", label: "Refresh" }, onSelect: opts.onSelect },
       { id: "filters", label: "Filters", icon: "filter" as const, pressed: opts.pressed ?? false, badge: opts.badge,
         shared: { id: "filters", label: "Filters", countLabel: "logs.filtersCount" }, onSet: opts.onSet },
       ...(opts.clear ? [{ id: "clear", label: "Clear Conversation History", short: "Clear History", icon: "delete" as const }] : []),
@@ -56,6 +56,7 @@ describe("tools several windows share", () => {
       ["conversationLog", ["Clear History"]],
     ]);
     expect(groups[0].tools[1]).toMatchObject({ badge: 3, label: "Filters (3)", pressed: false });
+    expect(groups[0].tools[0].help).toBe("help.refresh");
   });
 
   it("keeps a tool in its own window's group while only one window offers it", () => {

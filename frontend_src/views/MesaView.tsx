@@ -23,6 +23,7 @@ import { compareStrings, t, tn } from "../i18n";
 import { ActionButton } from "../ui/ActionButton";
 import { useNotify } from "../ui/notify";
 import { InlineConfirm } from "../ui/InlineConfirm";
+import { helpRow } from "../ui/SettingLabel";
 // A cycle (shell/mesa reads exportMesaArchive), safe because neither module uses the other at load.
 import { useMesa } from "../shell/mesa";
 
@@ -863,7 +864,7 @@ export function ProfileEditor({
         ) : (
           <>
             {isNew && !lockedKey && (
-              <div className="field" data-guide="window.mesaEditor#target">
+              <div className="field" data-guide="window.mesaEditor#target" {...helpRow(t(SCOPE_HELP[scope]))}>
                 <FieldLabel id="mesa-key" text={t(SCOPE_LABEL[scope])} help={t(SCOPE_HELP[scope])} />
                 <Combo
                   id="mesa-key"
@@ -881,13 +882,13 @@ export function ProfileEditor({
             {(lockedKey || !isNew) && (
               // What the profile covers, by its familiar name, on every profile that has
               // one already: only a new one is chosen here (user, 2026-10-30).
-              <div className="field" data-guide="window.mesaEditor#target">
+              <div className="field" data-guide="window.mesaEditor#target" {...helpRow(t(SCOPE_HELP[scope]))}>
                 <FieldLabel id="mesa-key" text={t(SCOPE_LABEL[scope])} help={t(SCOPE_HELP[scope])} />
                 <input id="mesa-key" className="input" value={keyLabel || state.key || String(profileKey ?? "")} readOnly disabled />
               </div>
             )}
 
-            <div className="field" data-guide="window.mesaEditor#tags">
+            <div className="field" data-guide="window.mesaEditor#tags" {...helpRow(t(HELP.tags))}>
               <FieldLabel id="mesa-tags" text={t("mesa.semanticTags")} help={t(HELP.tags)} />
               {/* The suggested tags open from the end of the input itself, closed every time (user, 2026-10-30). */}
               <div className="mesa-tag-row">
@@ -1158,7 +1159,7 @@ export function MesaImport({ onImported, onCancel }: { onImported: () => void; o
 
   return (
     // What importing does, and what it leaves alone, reads in the Help window (user, 2026-10-30).
-    <div className="phx-window-pad mesa-import" data-help-text={`${t("mesa.importIntro")} ${t("mesa.skipNote")}`}>
+    <div className="phx-window-pad mesa-import" data-help-text={`${t("mesa.importIntro")} ${t("mesa.skipNote")}`} data-help-controls="">
       {error && <ErrorMsg msg={error} />}
       <div className="field mesa-import-file">
         <input ref={fileInput} type="file" accept="application/json,.json" className="sr-only" aria-label={t("mesa.archiveFileAria")} onChange={onFile} />

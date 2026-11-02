@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { MenuButton, type MenuEntry } from "../ui/Menu";
+import { helpFor } from "../shell/help";
 
 function setup(items: MenuEntry[] | (() => MenuEntry[])) {
   render(<MenuButton label="Window menu" icon={<span>m</span>} items={items} />);
@@ -75,6 +76,20 @@ describe("menu button", () => {
     expect(verbose).toHaveAttribute("title", "Show tool calls.");
     expect(screen.getByRole("menuitemradio", { name: "Icons Only" })).toHaveAttribute("aria-checked", "false");
     expect(screen.getByRole("menuitem", { name: "Clear" }).querySelector(".phx-menu-check")).not.toBeNull();
+  });
+
+  it("reads an item's hint in Help, and keeps an unavailable item's name free of its reason", () => {
+    const button = setup([
+      { id: "verbose", label: "Show Verbose Output", hint: "Show tool calls.", onSelect: vi.fn() },
+      { id: "after", label: "Restore After", disabled: true, hint: "This is the newest recorded change.", onSelect: vi.fn() },
+      { id: "plain", label: "Clear", onSelect: vi.fn() },
+    ]);
+    fireEvent.click(button);
+    expect(helpFor(screen.getByRole("menuitem", { name: "Show Verbose Output" }))).toBe("Show tool calls.");
+    const after = screen.getByRole("menuitem", { name: "Restore After" });
+    expect(after).toHaveAccessibleDescription("This is the newest recorded change.");
+    expect(helpFor(after)).toBe("This is the newest recorded change.");
+    expect(helpFor(screen.getByRole("menuitem", { name: "Clear" }))).toBe("Clear");
   });
 
   it("closes when the pointer presses outside", () => {

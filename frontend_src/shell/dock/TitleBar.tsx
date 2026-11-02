@@ -35,8 +35,12 @@ export function TitleTab(props: IDockviewPanelHeaderProps) {
     return () => sub.dispose();
   }, [props.api]);
   const folded = useFolded(controller, props.api.id);
+  // Dockview draws the focusable tab around this title; give it the title bar's help too, so
+  // keyboard focus on the tab reads it instead of the window's name.
+  const titleRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => { titleRef.current?.closest(".dv-tab")?.setAttribute("data-help", "help.windowTitle"); }, []);
   return (
-    <div className="phx-window-title" data-help="help.windowTitle">
+    <div ref={titleRef} className="phx-window-title" data-help="help.windowTitle">
       <button
         type="button"
         className="phx-window-control"

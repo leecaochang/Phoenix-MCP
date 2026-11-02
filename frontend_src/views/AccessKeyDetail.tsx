@@ -101,7 +101,7 @@ export function ToolAnnouncementToggle({ accessKey, onUpdate }: { accessKey: Acc
   return (
     <>
       {error && <div className="banner banner-error mb-8">{error}</div>}
-      <div className="toggle-row" data-help="accessKeys.announceAllHelp" data-guide="window.keySettings#announce-all">
+      <div className="toggle-row" data-help={companion ? "accessKeys.companionUnavailable" : "accessKeys.announceAllHelp"} data-guide="window.keySettings#announce-all">
         <div className="toggle-label">
           <span>{t("accessKeys.announceAllLabel")}</span>
         </div>
@@ -110,7 +110,7 @@ export function ToolAnnouncementToggle({ accessKey, onUpdate }: { accessKey: Acc
             type="checkbox"
             aria-label={t("accessKeys.announceAllLabel")}
             aria-description={companion ? t("accessKeys.companionUnavailable") : t("accessKeys.announceAllHelp")}
-            data-help="accessKeys.announceAllHelp"
+            data-help={companion ? "accessKeys.companionUnavailable" : "accessKeys.announceAllHelp"}
             checked={!!accessKey.announce_all_tools}
             busy={saving}
             disabled={companion}
@@ -970,7 +970,7 @@ function KeyActionConfirmation({ detail }: { detail: AccessKeyDetail }) {
   };
   return (
     <div data-guide={KEY_ACTION_GUIDE[a.kind]}>
-    <InlineConfirm key={a.kind} label={text.title} tone={text.tone} acknowledge={text.check} help={text.help} lendHelp
+    <InlineConfirm key={a.kind} label={text.title} tone={text.tone} acknowledge={text.check} help={text.help}
       confirmLabel={text.confirm} confirmIcon={text.icon} confirmClassName={text.className}
       cancelLabel={t("accessKeys.cancel")} busy={a.busy} onConfirm={detail.runAction} onCancel={detail.cancelAction} />
     </div>

@@ -7,6 +7,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { InlineConfirm } from "../ui/InlineConfirm";
+import { helpFor } from "../shell/help";
 
 describe("InlineConfirm", () => {
   it("heads itself with the label, with no icon", () => {
@@ -58,5 +59,16 @@ describe("InlineConfirm", () => {
     } finally {
       outside.remove();
     }
+  });
+
+  it("reads its help for its own buttons and acknowledgement, where focus lands", () => {
+    render(
+      <InlineConfirm label="Delete" tone="danger" help="Covered entities fall back to the next profile." acknowledge="I understand"
+        confirmLabel="Delete" cancelLabel="Cancel" onConfirm={vi.fn()} onCancel={vi.fn()} />,
+    );
+    for (const name of ["Delete", "Cancel"]) {
+      expect(helpFor(screen.getByRole("button", { name }))).toBe("Covered entities fall back to the next profile.");
+    }
+    expect(helpFor(screen.getByRole("checkbox"))).toBe("Covered entities fall back to the next profile.");
   });
 });
