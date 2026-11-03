@@ -7320,7 +7320,7 @@ class PhoenixAgentCliProviderView(PhoenixView):
             data: PhoenixData = self.hass.data[DOMAIN]
             async with data.settings_update_lock:
                 if store.get(instance_id) != record:
-                    return _err("invalid_request", "Provider account changed. Reload and try again.", 409, rid,
+                    return _err("conflict", "Provider account changed. Reload and try again.", 409, rid,
                                 key="providerAccountChanged")
                 if not await store.set_model(instance_id, model):
                     return _err("not_found", "Provider account not found.", 404, rid,

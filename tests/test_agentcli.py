@@ -5173,6 +5173,8 @@ async def test_decision_model_edits_validate_before_save_and_recheck_account(has
           patch.object(DecisionProvider, '_request', AsyncMock(side_effect=models))):
         response = await view.patch(request, instance_id=account)
     assert response.status == (200 if case == 'valid' else 409 if case in ('deleted', 'changed') else 400)
+    if case in ('deleted', 'changed'):
+        assert json.loads(response.body)['error'] == 'conflict'
     assert 'private-key' not in response.text
     if case == 'deleted': assert store.get(account) is None
     else: assert store.get(account)['model'] == ('new-model' if case == 'valid' else 'other-model' if case == 'changed' else 'old-model')

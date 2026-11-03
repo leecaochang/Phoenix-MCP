@@ -132,7 +132,7 @@ POST   /api/phoenix-mcp/admin/agentcli/probe
 | 400 | `invalid_request` | `adminError.providerModelRequired` | 两者都没有发送。 |
 | 400 | `invalid_request` | `adminError.decisionModelRequired` | `auto: true` 发给了决策账户，而决策账户需要具体模型。 |
 | 400 | `invalid_request` | `adminError.providerModelNotListed` 以及[添加账户](guide:#add-provider)下的决策提供商错误 | 决策账户的模型未列出，或检查失败。 |
-| 409 | `invalid_request` | `adminError.providerAccountChanged` | 决策账户在检查期间发生了变化。请重新读取并重试。 |
+| 409 | `conflict` | `adminError.providerAccountChanged` | 决策账户在检查期间发生了变化。请重新读取并重试。 |
 | 404 | `not_found` | `adminError.providerAccountNotFound` | 没有账户具有此 ID。 |
 
 ### 移除账户 {#remove-provider}

@@ -164,7 +164,7 @@ A missing flag, or one that isn't a boolean, uses its default. So `{"confirm": "
 - The audit log, the Conversation Log, version history and configuration recovery records.
 - Routing statistics, the decision request count, the card catalog cache and routing clarifications.
 - Rate limit counts, request counters and notification markers.
-- Per-key sensors and expiry timers. Phoenix restores any loggers it had changed for a set time.
+- Per-key sensors and expiry timers. Phoenix also puts back any integration log level an agent changed for a limited time.
 - The Phoenix Assist pipeline.
 
 Afterwards, Phoenix applies each changed default, such as MESA mode, the Voice Agent, AI Task and the modules added to Home Assistant's pages. It opens the agent routes if they were off.

@@ -24,7 +24,7 @@
 
 对域或设备的授权也会覆盖之后添加给它的实体；**{{label:perms.dynamicBadge}}** 徽标表示这一点。“!”标记的是 W 会延伸得比看起来更远的域，例如 homeassistant、backup、automation、script 和 scene。
 
-标记为“已失效”的行，是对不在 Home Assistant 已启用实体列表中的实体的授权。末尾的“未匹配的设备权限”列出对已不存在设备的授权；把它们设为 N 即可移除。
+标记为“{{label:perms.missingBadge}}”的行，是对不在 Home Assistant 已启用实体列表中的实体的授权。末尾的“{{label:perms.unmatchedDevicesTitle}}”列出对已不存在设备的授权；把它们设为 N 即可移除。
 
 实体、设备、区域或标签发生变化时，权限树会自行更新。
 

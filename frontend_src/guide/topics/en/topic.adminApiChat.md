@@ -132,7 +132,7 @@ The response is `200` with only `{"instance": {"id": ..., "model": ..., "model_m
 | 400 | `invalid_request` | `adminError.providerModelRequired` | Neither was sent. |
 | 400 | `invalid_request` | `adminError.decisionModelRequired` | `auto: true` went to a decision account, which needs a specific model. |
 | 400 | `invalid_request` | `adminError.providerModelNotListed` and the decision provider errors under [Add an account](guide:#add-provider) | A decision account's model isn't listed, or the check failed. |
-| 409 | `invalid_request` | `adminError.providerAccountChanged` | The decision account changed during the check. Read it again and retry. |
+| 409 | `conflict` | `adminError.providerAccountChanged` | The decision account changed during the check. Read it again and retry. |
 | 404 | `not_found` | `adminError.providerAccountNotFound` | No account has this ID. |
 
 ### Remove an account {#remove-provider}

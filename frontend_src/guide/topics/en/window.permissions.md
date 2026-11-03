@@ -24,7 +24,7 @@ Domains are at the top, with their devices and entities below. Entities without 
 
 A grant on a domain or device also covers entities added to it later; the **{{label:perms.dynamicBadge}}** badge says so. A "!" marks domains where W reaches further than it looks, such as homeassistant, backup, automation, script and scene.
 
-A row marked Missing is a grant on an entity that isn't in Home Assistant's list of enabled entities any more. Unmatched Device Permissions, at the end, lists grants on devices that no longer exist; set them to N to remove them.
+A row marked {{label:perms.missingBadge}} is a grant on an entity that isn't in Home Assistant's list of enabled entities any more. {{label:perms.unmatchedDevicesTitle}}, at the end, lists grants on devices that no longer exist; set them to N to remove them.
 
 The tree updates itself when entities, devices, areas or labels change.
 
