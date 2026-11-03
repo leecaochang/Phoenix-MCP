@@ -2957,25 +2957,27 @@
       "guideBack": "Ga terug naar de pagina die de Gids eerder toonde, zoals in een webbrowser.",
       "guideForward": "Ga weer vooruit naar de pagina die je met Terug verliet.",
       "guidePopOut": "Open de Gids in een eigen browservenster. Hij blijft volgen wat je selecteert.",
-      "guideMore": "Vouw Inhoud uit, de lijst van alle Gids-pagina's, en Zoeken, dat elke sectie vindt.",
       "guideContents": "Toon alle Gids-pagina's, elk onder de pagina waar ze bij hoort. Selecteer er een om hem te lezen.",
       "guideSearch": "Vind elke sectie van de Gids op woorden of trefwoorden.",
       "guideSearchInput": "Typ woorden om passende secties van de Gids te vinden. Enter opent de beste treffer.",
       "guideLink": "Open deze pagina in de Gids. Terug brengt je naar de pagina die je aan het lezen was.",
-      "accessKeyFilter": "Toon alleen toegangssleutels waarvan de naam of status deze tekst bevat."
+      "accessKeyFilter": "Toon alleen toegangssleutels waarvan de naam of status deze tekst bevat.",
+      "guideDismissWelcome": "Verberg deze welkomstpagina. Je vindt hem terug onder Inhoud."
     },
     "guide": {
       "title": "Gids",
       "back": "Terug",
       "unavailable": "De gids kon niet worden geladen. Laad de pagina opnieuw om het nog eens te proberen.",
       "noTopic": "Er is nog geen gidsonderwerp voor deze werkruimte.",
-      "more": "Inhoud en zoeken",
       "contents": "Inhoud",
       "search": "Zoeken",
       "searchPlaceholder": "Zoeken in de gids",
       "noResults": "Niets in de gids komt overeen.",
       "forward": "Vooruit",
-      "breadcrumbs": "Waar deze pagina staat"
+      "breadcrumbs": "Waar deze pagina staat",
+      "dismissWelcome": "Sluiten",
+      "welcomeReadAbout": "Lees meer over {page}",
+      "welcomeSearchHint": "Probeer ‘{word}’"
     },
     "logs": {
       "filters": "Filters",

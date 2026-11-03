@@ -2882,25 +2882,27 @@
       "guideBack": "Gå tilbake til siden Veiledning viste før, som i en nettleser.",
       "guideForward": "Gå frem igjen til siden du forlot med Tilbake.",
       "guidePopOut": "Åpne Veiledning i et eget nettleservindu. Den fortsetter å følge det du velger.",
-      "guideMore": "Fold ut Innhold, listen over alle sider i veiledningen, og Søk, som finner enhver seksjon.",
       "guideContents": "Vis alle sider i veiledningen, hver under siden den hører til. Velg én for å lese den.",
       "guideSearch": "Finn enhver seksjon i veiledningen etter ordene eller nøkkelordene.",
       "guideSearchInput": "Skriv ord for å finne samsvarende seksjoner i veiledningen. Enter åpner det beste treffet.",
       "guideLink": "Åpne denne siden i Veiledning. Tilbake tar deg til siden du leste.",
-      "accessKeyFilter": "Vis bare tilgangsnøkler der navnet eller statusen inneholder denne teksten."
+      "accessKeyFilter": "Vis bare tilgangsnøkler der navnet eller statusen inneholder denne teksten.",
+      "guideDismissWelcome": "Skjul denne velkomstsiden. Finn den igjen under Innhold."
     },
     "guide": {
       "title": "Veiledning",
       "back": "Tilbake",
       "unavailable": "Veiledningen kunne ikke lastes inn. Last inn siden på nytt for å prøve igjen.",
       "noTopic": "Det finnes ennå ikke noe emne i veiledningen for dette arbeidsområdet.",
-      "more": "Innhold og søk",
       "contents": "Innhold",
       "search": "Søk",
       "searchPlaceholder": "Søk i veiledningen",
       "noResults": "Ingenting i veiledningen samsvarer.",
       "forward": "Frem",
-      "breadcrumbs": "Hvor denne siden hører til"
+      "breadcrumbs": "Hvor denne siden hører til",
+      "dismissWelcome": "Lukk",
+      "welcomeReadAbout": "Les mer om {page}",
+      "welcomeSearchHint": "Prøv «{word}»"
     },
     "logs": {
       "filters": "Filtre",

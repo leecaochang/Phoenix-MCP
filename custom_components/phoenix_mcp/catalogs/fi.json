@@ -2882,25 +2882,27 @@
       "guideBack": "Palaa sivulle, jonka Opas näytti aiemmin, kuten verkkoselaimessa.",
       "guideForward": "Siirry taas eteenpäin sivulle, jolta poistuit Takaisin-painikkeella.",
       "guidePopOut": "Avaa Opas omaan selainikkunaansa. Se seuraa edelleen valintojasi.",
-      "guideMore": "Levitä Sisällys, luettelo kaikista oppaan sivuista, ja Hae, joka löytää minkä tahansa osion.",
       "guideContents": "Luettele kaikki oppaan sivut, kukin sen sivun alla, johon se kuuluu. Lue sivu valitsemalla se.",
       "guideSearch": "Etsi mikä tahansa oppaan osio sen sanojen tai avainsanojen perusteella.",
       "guideSearchInput": "Kirjoita sanoja löytääksesi vastaavat oppaan osiot. Enter avaa parhaan osuman.",
       "guideLink": "Avaa tämä sivu Oppaassa. Takaisin palauttaa sinut sivulle, jota luit.",
-      "accessKeyFilter": "Näytä vain käyttöavaimet, joiden nimi tai tila sisältää tämän tekstin."
+      "accessKeyFilter": "Näytä vain käyttöavaimet, joiden nimi tai tila sisältää tämän tekstin.",
+      "guideDismissWelcome": "Piilota tämä tervetulosivu. Löydät sen uudelleen Sisällyksestä."
     },
     "guide": {
       "title": "Opas",
       "back": "Takaisin",
       "unavailable": "Opasta ei voitu ladata. Yritä uudelleen lataamalla sivu uudelleen.",
       "noTopic": "Tälle työtilalle ei ole vielä oppaan aihetta.",
-      "more": "Sisällys ja haku",
       "contents": "Sisällys",
       "search": "Hae",
       "searchPlaceholder": "Hae oppaasta",
       "noResults": "Oppaasta ei löytynyt osumia.",
       "forward": "Eteenpäin",
-      "breadcrumbs": "Missä tämä sivu on"
+      "breadcrumbs": "Missä tämä sivu on",
+      "dismissWelcome": "Sulje",
+      "welcomeReadAbout": "Lue lisää aiheesta {page}",
+      "welcomeSearchHint": "Kokeile ”{word}”"
     },
     "logs": {
       "filters": "Suodattimet",

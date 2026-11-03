@@ -2876,25 +2876,27 @@
       "guideBack": "Vuelva a la página que mostraba antes la guía, como en un navegador web.",
       "guideForward": "Avance de nuevo a la página que dejó con Atrás.",
       "guidePopOut": "Abra la guía en su propia ventana del navegador. Sigue mostrando lo que usted seleccione.",
-      "guideMore": "Despliegue Contenido, la lista de todas las páginas de la guía, y Buscar, que encuentra cualquier sección.",
       "guideContents": "Enumere todas las páginas de la guía, cada una bajo la página a la que pertenece. Seleccione una para leerla.",
       "guideSearch": "Encuentre cualquier sección de la guía por sus palabras o palabras clave.",
       "guideSearchInput": "Escriba palabras para encontrar las secciones de la guía que coinciden. Intro abre la mejor coincidencia.",
       "guideLink": "Abra esta página en la guía. Atrás le devuelve a la página que estaba leyendo.",
-      "accessKeyFilter": "Muestre solo las claves de acceso cuyo nombre o estado contiene este texto."
+      "accessKeyFilter": "Muestre solo las claves de acceso cuyo nombre o estado contiene este texto.",
+      "guideDismissWelcome": "Oculte esta página de bienvenida. Vuelva a encontrarla en Contenido."
     },
     "guide": {
       "title": "Guía",
       "back": "Atrás",
       "unavailable": "No se pudo cargar la guía. Vuelva a cargar la página para intentarlo de nuevo.",
       "noTopic": "Todavía no hay ningún tema de la guía para este espacio de trabajo.",
-      "more": "Contenido y búsqueda",
       "contents": "Contenido",
       "search": "Buscar",
       "searchPlaceholder": "Buscar en la guía",
       "noResults": "Nada en la guía coincide.",
       "forward": "Adelante",
-      "breadcrumbs": "Dónde se encuentra esta página"
+      "breadcrumbs": "Dónde se encuentra esta página",
+      "dismissWelcome": "Descartar",
+      "welcomeReadAbout": "Leer más sobre {page}",
+      "welcomeSearchHint": "Pruebe «{word}»"
     },
     "logs": {
       "filters": "Filtros",

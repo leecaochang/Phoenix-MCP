@@ -88,7 +88,9 @@ describe("rendering a topic", () => {
     expect(findTopic([english], "logs", null)?.title).toBe("en workspace.logs");
     expect(findTopic([null, english], "mesa", null)).toBeNull();
     expect(topicById([fr, english], "window.auditLog")?.title).toBe("en window.auditLog");
-    expect(guideLanguages("fr")).toEqual(["en"]);
+    // French ships translated pages (Welcome, user 2026-11-03); a language with none reads English only.
+    expect(guideLanguages("fr")).toEqual(["fr", "en"]);
+    expect(guideLanguages("xx")).toEqual(["en"]);
     expect(guideLanguages("en")).toEqual(["en"]);
   });
 });

@@ -2876,25 +2876,27 @@
       "guideBack": "返回指南之前显示的页面，就像在网页浏览器中一样。",
       "guideForward": "再次前进到您用“返回”离开的页面。",
       "guidePopOut": "在独立的浏览器窗口中打开指南。它会继续跟随您的选择。",
-      "guideMore": "展开“目录”（所有指南页面的列表）和“搜索”（可查找任意章节）。",
       "guideContents": "列出所有指南页面，每页都位于其所属页面之下。选择一页即可阅读。",
       "guideSearch": "按文字或关键词查找指南的任意章节。",
       "guideSearchInput": "输入文字以查找匹配的指南章节。按 Enter 打开最佳匹配。",
       "guideLink": "在指南中打开此页面。“返回”会带您回到正在阅读的页面。",
-      "accessKeyFilter": "只显示名称或状态包含此文本的访问密钥。"
+      "accessKeyFilter": "只显示名称或状态包含此文本的访问密钥。",
+      "guideDismissWelcome": "隐藏此欢迎页面。可在目录中再次找到它。"
     },
     "guide": {
       "title": "指南",
       "back": "返回",
       "unavailable": "无法加载指南。请重新加载页面后重试。",
       "noTopic": "此工作区暂时还没有指南主题。",
-      "more": "目录与搜索",
       "contents": "目录",
       "search": "搜索",
       "searchPlaceholder": "搜索指南",
       "noResults": "指南中没有匹配的内容。",
       "forward": "前进",
-      "breadcrumbs": "此页面所在位置"
+      "breadcrumbs": "此页面所在位置",
+      "dismissWelcome": "关闭",
+      "welcomeReadAbout": "进一步了解{page}",
+      "welcomeSearchHint": "试试“{word}”"
     },
     "logs": {
       "filters": "筛选",

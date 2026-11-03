@@ -47,6 +47,14 @@
   --phx-ws-my: currentColor;
   --phx-ws-fg: var(--phx-toolbar-current-fg);
   --phx-tools-bg: var(--phx-toolbar-btn-bg);
+  /* Welcome to the Guide: one hue per step, green for done (user, 2026-11-02: make it really welcoming). */
+  --phx-welcome-point: #5452d6;
+  --phx-welcome-point-bg: rgba(84,82,214,0.11);
+  --phx-welcome-select: #0d8577;
+  --phx-welcome-select-bg: rgba(13,133,119,0.11);
+  --phx-welcome-search: #c23c6a;
+  --phx-welcome-search-bg: rgba(194,60,106,0.10);
+  --phx-welcome-done: #257343;
 }
 @media (prefers-color-scheme: dark) {
   :host(:not(.phx-theme-light)) {
@@ -59,6 +67,13 @@
     --phx-persona-new-bg: rgba(127,212,155,0.10);
     --phx-persona-custom: #8db8ff;
     --phx-persona-custom-bg: rgba(141,184,255,0.10);
+    --phx-welcome-point: #a8a7ff;
+    --phx-welcome-point-bg: rgba(168,167,255,0.14);
+    --phx-welcome-select: #5fd3c2;
+    --phx-welcome-select-bg: rgba(95,211,194,0.13);
+    --phx-welcome-search: #ff8fb3;
+    --phx-welcome-search-bg: rgba(255,143,179,0.13);
+    --phx-welcome-done: #85daa0;
   }
 }
 :host(.phx-theme-dark) {
@@ -71,6 +86,13 @@
   --phx-persona-new-bg: rgba(127,212,155,0.10);
   --phx-persona-custom: #8db8ff;
   --phx-persona-custom-bg: rgba(141,184,255,0.10);
+  --phx-welcome-point: #a8a7ff;
+  --phx-welcome-point-bg: rgba(168,167,255,0.14);
+  --phx-welcome-select: #5fd3c2;
+  --phx-welcome-select-bg: rgba(95,211,194,0.13);
+  --phx-welcome-search: #ff8fb3;
+  --phx-welcome-search-bg: rgba(255,143,179,0.13);
+  --phx-welcome-done: #85daa0;
 }
 
 /* Wayfinding */
@@ -566,3 +588,101 @@
 :host([data-phx-palette]) .persona-card-active[data-persona="home_companion"] { box-shadow: 0 0 0 1px var(--phx-persona-companion); }
 :host([data-phx-palette]) .persona-card-active[data-persona="new_user"] { box-shadow: 0 0 0 1px var(--phx-persona-new); }
 :host([data-phx-palette]) .persona-card-active[data-persona="custom"] { box-shadow: 0 0 0 1px var(--phx-persona-custom); }
+
+/* Welcome to the Guide (user, 2026-11-02/03): a bright demo that fits the Guide's default size without
+   scrolling. The header stays pinned so its Dismiss is always in reach. One hue per tip, on its own tile;
+   a green check shows a tip worked. Hues are the tokens above. */
+.phx-welcome-point { --phx-step: var(--phx-welcome-point); --phx-step-bg: var(--phx-welcome-point-bg); }
+.phx-welcome-select { --phx-step: var(--phx-welcome-select); --phx-step-bg: var(--phx-welcome-select-bg); }
+.phx-welcome-search { --phx-step: var(--phx-welcome-search); --phx-step-bg: var(--phx-welcome-search-bg); }
+.phx-welcome-hero {
+  position: sticky; top: -12px; z-index: 1;
+  margin: 0 -16px 2px; padding: 12px 16px 10px;
+  background:
+    radial-gradient(90% 120% at 0% 0%, color-mix(in srgb, var(--phx-welcome-point) 22%, transparent), transparent 70%),
+    radial-gradient(80% 120% at 100% 10%, color-mix(in srgb, var(--phx-welcome-search) 18%, transparent), transparent 70%),
+    radial-gradient(90% 90% at 55% 120%, color-mix(in srgb, var(--phx-welcome-select) 16%, transparent), transparent 70%),
+    var(--phx-guide-surface);
+  border-bottom: 1px solid var(--phx-divider);
+}
+.phx-welcome-hero-row { display: flex; align-items: center; gap: 8px; }
+.phx-guide-topic .phx-welcome-hero h3 { flex: 1; min-width: 0; margin: 0; font-size: 18px; line-height: 1.25; letter-spacing: -0.01em; text-wrap: balance; }
+.phx-welcome-hero .phx-window-control { margin-right: -6px; }
+.phx-welcome-intro { margin-top: 4px; }
+.phx-welcome-intro p:last-child { margin-bottom: 0; }
+.phx-guide-topic .phx-welcome-steps { list-style: none; margin: 4px 0 0; padding: 0; }
+.phx-guide-topic .phx-welcome-step + .phx-welcome-step { margin-top: 0; }
+.phx-welcome-step { display: grid; grid-template-columns: 56px minmax(0, 1fr); gap: 12px; align-items: start; padding: 7px 0; }
+.phx-welcome-tile {
+  position: relative; display: grid; place-items: center; width: 56px; height: 44px;
+  border-radius: 12px; background: var(--phx-step-bg); color: var(--phx-step);
+}
+.phx-welcome-picture { width: 46px; height: 35px; display: block; }
+.phx-welcome-fill { fill: var(--phx-surface); }
+.phx-welcome-fill-soft { fill: color-mix(in srgb, var(--phx-surface) 70%, transparent); }
+.phx-welcome-ink { stroke: var(--phx-text-2); }
+.phx-welcome-pointer { fill: var(--phx-step); stroke: var(--phx-surface); stroke-width: 1.5; }
+.phx-welcome-badge {
+  position: absolute; top: -5px; right: -5px; display: grid; place-items: center; width: 18px; height: 18px;
+  border-radius: 50%; border: 2px solid var(--phx-guide-surface); background: var(--phx-welcome-done); color: var(--phx-surface);
+  animation: phx-welcome-tick 0.45s cubic-bezier(0.16, 1, 0.3, 1);
+}
+@keyframes phx-welcome-tick { from { transform: scale(0.3); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+.phx-guide-topic .phx-welcome-step h4 { margin: 1px 0 2px; font-size: 14px; }
+.phx-welcome-step-text p:last-child { margin-bottom: 0; }
+/* What the reader selected, offered as an invitation in the line the tip's sentence held. */
+.phx-guide-topic .phx-welcome-held {
+  display: inline-flex; align-items: center; gap: 6px; max-width: 100%; padding: 1px 10px 1px 8px; line-height: 1.5;
+  border-radius: 999px; background: var(--phx-step); color: var(--phx-surface); font-weight: 600; font-size: 12px; text-decoration: none;
+  animation: phx-welcome-tick 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.phx-welcome-held:hover { filter: brightness(1.08); }
+.phx-welcome-held:focus-visible { outline: 2px solid var(--phx-focus); outline-offset: 2px; }
+.phx-welcome-held span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.phx-welcome-held svg { flex: none; }
+.phx-welcome-finder { margin-top: 6px; }
+.phx-welcome-search-field { position: relative; display: block; }
+.phx-welcome-search-field svg { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: var(--phx-step); pointer-events: none; }
+.phx-welcome-search-field .input { width: 100%; min-height: 30px; padding-left: 30px; border-color: color-mix(in srgb, var(--phx-step) 45%, var(--phx-field-border)); }
+.phx-welcome-search-field .input:focus { border-color: var(--phx-step); outline: 2px solid var(--phx-step-bg); outline-offset: 0; }
+.phx-guide-topic .phx-welcome-hits { list-style: none; margin: 6px 0 0; padding: 0; }
+.phx-guide-topic .phx-welcome-hits li + li { margin-top: 2px; }
+/* Customize appearance: one panel, so its controls read as one group; the themes sit to the right. */
+.phx-welcome-look { display: grid; gap: 8px; margin: 8px 0 0; padding: 10px 12px; border: 1px solid var(--phx-border); border-radius: var(--phx-radius-sm); background: var(--phx-surface); box-shadow: 0 1px 2px rgba(0,0,0,0.05); }
+.phx-guide-topic .phx-welcome-look h4 { margin: 0; font-size: 14px; }
+.phx-welcome-look-text { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; }
+.phx-welcome-look-text p { margin: 0; color: var(--phx-text-2); font-size: 12px; }
+.phx-welcome-look-controls { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
+.phx-welcome-actions { display: flex; justify-content: flex-end; margin-top: 8px; }
+.phx-welcome-actions .btn { display: inline-flex; align-items: center; gap: 6px; }
+/* Light, Auto and Dark as one pill of icons. */
+.phx-welcome-modes { display: inline-flex; padding: 2px; gap: 2px; border-radius: 999px; background: var(--phx-surface-2); border: 1px solid var(--phx-border); }
+.phx-welcome-mode {
+  display: grid; place-items: center; width: 24px; height: 22px; border: 0; border-radius: 999px;
+  background: none; color: var(--phx-text-2); cursor: pointer;
+}
+.phx-welcome-mode:hover { color: var(--phx-text); background: var(--phx-hover); }
+.phx-welcome-mode.is-current { background: var(--phx-surface); color: var(--phx-text); box-shadow: 0 1px 2px rgba(0,0,0,0.18); }
+.phx-welcome-mode:focus-visible { outline: 2px solid var(--phx-focus); outline-offset: 1px; }
+.phx-welcome-swatches { display: flex; flex-wrap: wrap; gap: 3px; }
+.phx-welcome-swatch { padding: 1px; border: 1.5px solid transparent; border-radius: 7px; background: none; cursor: pointer; }
+.phx-welcome-swatch:hover { border-color: var(--phx-line-strong); }
+.phx-welcome-swatch.is-current { border-color: var(--phx-accent); }
+.phx-welcome-swatch:focus-visible { outline: 2px solid var(--phx-focus); outline-offset: 1px; }
+/* Theme thumbnails: each theme's own light colors, so the choice reads the same in light or dark. */
+.phx-swatch { display: grid; grid-template-rows: 5px 1fr; width: 30px; height: 22px; border-radius: 4px; overflow: hidden; border: 1px solid rgba(0,0,0,0.14); background: var(--sw-bg); }
+.phx-swatch-bar { background: var(--sw-bar); border-bottom: 1px solid rgba(0,0,0,0.08); }
+.phx-swatch-window { position: relative; margin: 3px 3px 3px; border-radius: 2px; background: #ffffff; border: 1.5px solid var(--sw-frame); }
+.phx-swatch-dot { position: absolute; left: 2px; top: 2px; width: 8px; height: 3px; border-radius: 2px; background: var(--sw-dot); }
+.phx-swatch-spartan { --sw-bg: #f3f3f3; --sw-bar: #ffffff; --sw-frame: #d6d6d6; --sw-dot: #141414; }
+.phx-swatch-wayfinding { --sw-bg: #f3f3f3; --sw-bar: linear-gradient(90deg, #6d4bd8 0 20%, #a35200 20% 40%, #0e7490 40% 60%, #be123c 60% 80%, #4d7c0f 80%); --sw-frame: #d6d6d6; --sw-dot: #6d4bd8; }
+.phx-swatch-framed { --sw-bg: #eef0f6; --sw-bar: #ffffff; --sw-frame: #4656d6; --sw-dot: #4656d6; }
+.phx-swatch-mist { --sw-bg: #eef4fb; --sw-bar: #e9f0f9; --sw-frame: #c4d5ec; --sw-dot: #2a5cad; }
+.phx-swatch-office { --sw-bg: #f3f2f1; --sw-bar: #2b579a; --sw-frame: #d2d0ce; --sw-dot: #2b579a; }
+.phx-swatch-aubergine { --sw-bg: #f8f8f8; --sw-bar: #3f0e40; --sw-frame: #dddddd; --sw-dot: #611f69; }
+/* In the phone stack the page itself scrolls, so the header does not pin. */
+.phx-guide-phone .phx-welcome-hero { position: static; }
+.phx-guide-phone .phx-welcome-hero { margin-left: -12px; margin-right: -12px; padding-left: 12px; padding-right: 12px; }
+@media (prefers-reduced-motion: reduce) {
+  .phx-welcome-badge, .phx-guide-topic .phx-welcome-held { animation: none; }
+}

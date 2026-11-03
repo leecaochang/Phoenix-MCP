@@ -3013,25 +3013,27 @@
       "guideBack": "Wróć do strony, którą Przewodnik pokazywał wcześniej, jak w przeglądarce.",
       "guideForward": "Przejdź znowu do przodu, do strony opuszczonej przyciskiem Wstecz.",
       "guidePopOut": "Otwórz Przewodnik w osobnym oknie przeglądarki. Nadal podąża za tym, co wybierasz.",
-      "guideMore": "Rozwiń Spis treści, listę wszystkich stron Przewodnika, oraz Szukaj, które znajduje dowolną sekcję.",
       "guideContents": "Wyświetl wszystkie strony Przewodnika, każdą pod stroną, do której należy. Wybierz jedną, aby ją przeczytać.",
       "guideSearch": "Znajdź dowolną sekcję Przewodnika po jej słowach lub słowach kluczowych.",
       "guideSearchInput": "Wpisz słowa, aby znaleźć pasujące sekcje Przewodnika. Enter otwiera najlepsze dopasowanie.",
       "guideLink": "Otwórz tę stronę w Przewodniku. Wstecz wraca do wcześniej czytanej strony.",
-      "accessKeyFilter": "Pokaż tylko klucze dostępu, których nazwa lub stan zawiera ten tekst."
+      "accessKeyFilter": "Pokaż tylko klucze dostępu, których nazwa lub stan zawiera ten tekst.",
+      "guideDismissWelcome": "Ukryj tę stronę powitalną. Znajdziesz ją ponownie w Spisie treści."
     },
     "guide": {
       "title": "Przewodnik",
       "back": "Wstecz",
       "unavailable": "Nie udało się wczytać przewodnika. Odśwież stronę, aby spróbować ponownie.",
       "noTopic": "Dla tego obszaru roboczego nie ma jeszcze tematu w przewodniku.",
-      "more": "Spis treści i wyszukiwanie",
       "contents": "Spis treści",
       "search": "Szukaj",
       "searchPlaceholder": "Szukaj w przewodniku",
       "noResults": "Nic w przewodniku nie pasuje.",
       "forward": "Dalej",
-      "breadcrumbs": "Położenie tej strony"
+      "breadcrumbs": "Położenie tej strony",
+      "dismissWelcome": "Zamknij",
+      "welcomeReadAbout": "Przeczytaj więcej o: {page}",
+      "welcomeSearchHint": "Spróbuj „{word}”"
     },
     "logs": {
       "filters": "Filtry",

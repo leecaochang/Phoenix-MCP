@@ -71,7 +71,12 @@ export interface GuideRect { x: number; y: number; w: number; h: number }
  * 2026-11-01), so opening or closing it anywhere does so everywhere. It
  * remembers where the user put it and whether it is folded.
  */
-export interface GuideState { open: boolean; rect?: GuideRect; folded?: boolean }
+export interface GuideState { open: boolean; rect?: GuideRect; folded?: boolean; welcome?: WelcomeState }
+/** The things Welcome to the Guide shows the reader, each reacting when tried. */
+export const WELCOME_STEPS = ["point", "select", "search"] as const;
+export type WelcomeStep = (typeof WELCOME_STEPS)[number];
+/** Whether the reader has seen Welcome to the Guide, which opens first until then; Reset All Workspaces clears it. */
+export interface WelcomeState { seen: boolean }
 export const GUIDE_CLOSED: GuideState = { open: false };
 
 export interface ShellRecord {
@@ -134,16 +139,24 @@ export function readGuide(raw: unknown): GuideState {
   const rectOf = (r: Partial<Record<keyof GuideRect, unknown>> | undefined): GuideRect | undefined =>
     r && px(r.x, 20000) && px(r.y, 20000) && px(r.w, 20000) && px(r.h, 20000) && (r.w as number) >= 200 && (r.h as number) >= 120
       ? { x: r.x as number, y: r.y as number, w: r.w as number, h: r.h as number } : undefined;
-  type Saved = { open?: unknown; rect?: Partial<Record<keyof GuideRect, unknown>>; folded?: unknown } | null;
+  type Saved = { open?: unknown; rect?: Partial<Record<keyof GuideRect, unknown>>; folded?: unknown; welcome?: unknown } | null;
   const v = raw as Saved;
   if (typeof v?.open === "boolean") {
     const rect = rectOf(v.rect);
-    return { open: v.open, ...(rect ? { rect } : {}), ...(v.folded === true ? { folded: true } : {}) };
+    const welcome = readWelcome(v.welcome);
+    return { open: v.open, ...(rect ? { rect } : {}), ...(v.folded === true ? { folded: true } : {}), ...(welcome ? { welcome } : {}) };
   }
   // Saved by an earlier build, one Guide per workspace: open if it was open anywhere, at the first place found.
   const old = Object.entries(raw).filter(([id]) => isWorkspace(id)).map(([, value]) => value as Saved);
   const rect = old.map((o) => rectOf(o?.rect ?? undefined)).find(Boolean);
   return { open: old.some((o) => o?.open === true), ...(rect ? { rect } : {}) };
+}
+
+/** Whether Welcome was seen; an earlier build's dismissed checklist counts as seen. None when nothing was saved. */
+function readWelcome(raw: unknown): WelcomeState | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+  const r = raw as { seen?: unknown; dismissed?: unknown };
+  return r.seen === true || r.dismissed === true ? { seen: true } : undefined;
 }
 
 /** Saved Help preferences, with anything unreadable left out. */

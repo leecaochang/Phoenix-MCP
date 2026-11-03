@@ -18,11 +18,12 @@ function guideTopics(): Plugin {
     name: "phoenix-guide-topics",
     generateBundle() {
       const panel = (JSON.parse(readFileSync(CATALOG, "utf8")) as { panel: Record<string, unknown> }).panel;
-      const labelExists = (key: string) => {
+      const labelOf = (key: string): string | undefined => {
         let node: unknown = panel;
         for (const part of key.split(".")) node = node && typeof node === "object" ? (node as Record<string, unknown>)[part] : undefined;
-        return typeof node === "string";
+        return typeof node === "string" ? node : undefined;
       };
+      const labelExists = (key: string) => labelOf(key) !== undefined;
       const fileExists = (path: string) => !path.startsWith("/") && !path.includes("..") && existsSync(resolve(__dirname, path));
       const bundles: GuideBundle[] = [];
       for (const language of readdirSync(GUIDE_TOPICS)) {
@@ -32,7 +33,7 @@ function guideTopics(): Plugin {
           this.addWatchFile(path);
           return { file: `${language}/${f}`, source: readFileSync(path, "utf8") };
         });
-        const { bundle, problems } = compileGuide(language, files, labelExists, fileExists);
+        const { bundle, problems } = compileGuide(language, files, labelExists, fileExists, language === "en" ? (key) => labelOf(key)! : undefined);
         if (problems.length) this.error(`Guide topics:\n${problems.join("\n")}`);
         bundles.push(bundle);
         this.emitFile({ type: "asset", fileName: `guide/${language}.json`, source: JSON.stringify(bundle) });

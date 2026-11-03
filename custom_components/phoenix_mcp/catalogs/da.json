@@ -2882,25 +2882,27 @@
       "guideBack": "Gå tilbage til den side, guiden viste før, som i en webbrowser.",
       "guideForward": "Gå frem igen til den side, du forlod med Tilbage.",
       "guidePopOut": "Åbn guiden i sit eget browservindue. Den følger fortsat det, du vælger.",
-      "guideMore": "Fold Indhold ud, listen over alle sider i guiden, og Søg, som finder enhver sektion.",
       "guideContents": "Vis alle sider i guiden, hver under den side, den hører til. Vælg en for at læse den.",
       "guideSearch": "Find enhver sektion i guiden ud fra dens ord eller nøgleord.",
       "guideSearchInput": "Skriv ord for at finde matchende sektioner i guiden. Enter åbner det bedste match.",
       "guideLink": "Åbn denne side i guiden. Tilbage fører dig til den side, du læste.",
-      "accessKeyFilter": "Vis kun adgangsnøgler, hvis navn eller status indeholder denne tekst."
+      "accessKeyFilter": "Vis kun adgangsnøgler, hvis navn eller status indeholder denne tekst.",
+      "guideDismissWelcome": "Skjul denne velkomstside. Find den igen under Indhold."
     },
     "guide": {
       "title": "Guide",
       "back": "Tilbage",
       "unavailable": "Guiden kunne ikke indlæses. Genindlæs siden for at prøve igen.",
       "noTopic": "Der er endnu intet emne i guiden for dette arbejdsområde.",
-      "more": "Indhold og søgning",
       "contents": "Indhold",
       "search": "Søg",
       "searchPlaceholder": "Søg i guiden",
       "noResults": "Intet i guiden matcher.",
       "forward": "Frem",
-      "breadcrumbs": "Hvor siden hører til"
+      "breadcrumbs": "Hvor siden hører til",
+      "dismissWelcome": "Luk",
+      "welcomeReadAbout": "Læs mere om {page}",
+      "welcomeSearchHint": "Prøv »{word}«"
     },
     "logs": {
       "filters": "Filtre",

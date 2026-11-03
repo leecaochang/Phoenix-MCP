@@ -2882,25 +2882,27 @@
       "guideBack": "返回指南之前顯示的頁面，就像在網頁瀏覽器中一樣。",
       "guideForward": "再次前進到您用「返回」離開的頁面。",
       "guidePopOut": "在獨立的瀏覽器視窗中開啟指南。它會繼續跟隨您的選擇。",
-      "guideMore": "展開「目錄」（所有指南頁面的清單）和「搜尋」（可尋找任意章節）。",
       "guideContents": "列出所有指南頁面，每頁都位於其所屬頁面之下。選擇一頁即可閱讀。",
       "guideSearch": "依文字或關鍵字尋找指南的任意章節。",
       "guideSearchInput": "輸入文字以尋找相符的指南章節。按 Enter 開啟最佳相符項目。",
       "guideLink": "在指南中開啟此頁面。「返回」會帶您回到正在閱讀的頁面。",
-      "accessKeyFilter": "只顯示名稱或狀態包含此文字的存取金鑰。"
+      "accessKeyFilter": "只顯示名稱或狀態包含此文字的存取金鑰。",
+      "guideDismissWelcome": "隱藏此歡迎頁面。可在目錄中再次找到它。"
     },
     "guide": {
       "title": "指南",
       "back": "返回",
       "unavailable": "無法載入指南。請重新載入頁面後再試一次。",
       "noTopic": "此工作區目前還沒有指南主題。",
-      "more": "目錄與搜尋",
       "contents": "目錄",
       "search": "搜尋",
       "searchPlaceholder": "搜尋指南",
       "noResults": "指南中沒有符合的內容。",
       "forward": "前進",
-      "breadcrumbs": "此頁面所在位置"
+      "breadcrumbs": "此頁面所在位置",
+      "dismissWelcome": "關閉",
+      "welcomeReadAbout": "進一步了解{page}",
+      "welcomeSearchHint": "試試「{word}」"
     },
     "logs": {
       "filters": "篩選",

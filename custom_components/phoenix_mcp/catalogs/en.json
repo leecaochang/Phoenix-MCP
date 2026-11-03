@@ -833,12 +833,12 @@
       "guideBack": "Go back to the page the Guide showed before, as in a web browser.",
       "guideForward": "Go forward again to the page you left with Back.",
       "guidePopOut": "Open the Guide in its own browser window. It keeps following what you select.",
-      "guideMore": "Unfold Contents, the list of every Guide page, and Search, which finds any section.",
       "guideContents": "List every Guide page, each under the page it belongs to. Select one to read it.",
       "guideSearch": "Find any section of the Guide by its words or keywords.",
       "guideSearchInput": "Type words to find matching Guide sections. Enter opens the best match.",
       "guideLink": "Open this page in the Guide. Back returns you to the page you were reading.",
-      "accessKeyFilter": "Show only access keys whose name or status contains this text."
+      "accessKeyFilter": "Show only access keys whose name or status contains this text.",
+      "guideDismissWelcome": "Hide this welcome page. Find it again in Contents."
     },
     "guide": {
       "title": "Guide",
@@ -847,11 +847,13 @@
       "breadcrumbs": "Where this page sits",
       "unavailable": "The Guide could not be loaded. Reload the page to try again.",
       "noTopic": "There is no Guide topic for this workspace yet.",
-      "more": "Contents and Search",
       "contents": "Contents",
       "search": "Search",
       "searchPlaceholder": "Search the Guide",
-      "noResults": "Nothing in the Guide matches."
+      "noResults": "Nothing in the Guide matches.",
+      "dismissWelcome": "Dismiss",
+      "welcomeReadAbout": "Read more about {page}",
+      "welcomeSearchHint": "Try “{word}”"
     },
     "logs": {
       "filters": "Filters",

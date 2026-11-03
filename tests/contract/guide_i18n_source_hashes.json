@@ -1,0 +1,50 @@
+{
+  "_comment": "Fingerprints of the English Guide page each translated page was made from, and of that translation. Written by scripts/guide_i18n_stamp.py, read by tests/test_guide_i18n_drift.py.",
+  "locales": {
+    "da": {
+      "topic.welcome": "98090d0495d4/f073c7e6908f"
+    },
+    "de": {
+      "topic.welcome": "98090d0495d4/786c55459f4e"
+    },
+    "es": {
+      "topic.welcome": "98090d0495d4/4e3fcceb712d"
+    },
+    "fi": {
+      "topic.welcome": "98090d0495d4/9e14c38b31d7"
+    },
+    "fr": {
+      "topic.welcome": "98090d0495d4/854cbd1caa2c"
+    },
+    "it": {
+      "topic.welcome": "98090d0495d4/d50f2d687dae"
+    },
+    "ja": {
+      "topic.welcome": "98090d0495d4/27832f94ed1a"
+    },
+    "ko": {
+      "topic.welcome": "98090d0495d4/7a64020e7b00"
+    },
+    "nb": {
+      "topic.welcome": "98090d0495d4/24c7e09a8469"
+    },
+    "nl": {
+      "topic.welcome": "98090d0495d4/3e13fd29b583"
+    },
+    "pl": {
+      "topic.welcome": "98090d0495d4/41daf6364278"
+    },
+    "ru": {
+      "topic.welcome": "98090d0495d4/c83b4258cc8d"
+    },
+    "sv": {
+      "topic.welcome": "98090d0495d4/2570459af2ab"
+    },
+    "zh-Hans": {
+      "topic.welcome": "98090d0495d4/aaef0f096500"
+    },
+    "zh-Hant": {
+      "topic.welcome": "98090d0495d4/a88b27d62060"
+    }
+  }
+}

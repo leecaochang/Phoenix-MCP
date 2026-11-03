@@ -38,6 +38,8 @@ Open it from the title bar's menu button, or right-click the title bar.
 
 The Guide is one window over every workspace. It shows the page for the window you're working in, and selecting a control takes it to the section about that control. Use Back and Forward, Contents and Search at the top to find your way.
 
+The first time it opens, the Guide shows [Welcome to the Guide](guide:topic.welcome), a short demo of what it does. After that it opens on your page, and **{{label:guide.back}}** from the first page still reaches Welcome. **{{label:workspace.restorePanelDefaults}}** shows it first again.
+
 Fold, maximize and close it from its title bar, or move and resize it with the keyboard from its menu. Closing it anywhere closes it everywhere.
 
 **{{label:agentchat.popOut}}** moves the Guide to a browser window of its own, so it can sit beside Home Assistant. It keeps following what you select in the panel. **{{label:agentchat.popIn}}** brings it back, and closing that window closes the Guide.

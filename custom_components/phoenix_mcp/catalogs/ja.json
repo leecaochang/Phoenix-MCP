@@ -2876,25 +2876,27 @@
       "guideBack": "Web ブラウザーと同じように、ガイドが前に表示していたページに戻ります。",
       "guideForward": "「戻る」で離れたページに再び進みます。",
       "guidePopOut": "ガイドを別のブラウザーウィンドウで開きます。選択した内容に引き続き追従します。",
-      "guideMore": "ガイドの全ページの一覧である「目次」と、任意のセクションを探せる「検索」を展開します。",
       "guideContents": "ガイドの全ページを、それぞれ所属するページの下に一覧表示します。選ぶとそのページを読めます。",
       "guideSearch": "語句やキーワードでガイドの任意のセクションを探します。",
       "guideSearchInput": "語句を入力して一致するガイドのセクションを探します。Enter で最も一致するものを開きます。",
       "guideLink": "このページをガイドで開きます。「戻る」で読んでいたページに戻ります。",
-      "accessKeyFilter": "名前または状態にこのテキストを含むアクセスキーだけを表示します。"
+      "accessKeyFilter": "名前または状態にこのテキストを含むアクセスキーだけを表示します。",
+      "guideDismissWelcome": "このようこそページを非表示にします。目次からいつでも開けます。"
     },
     "guide": {
       "title": "ガイド",
       "back": "戻る",
       "unavailable": "ガイドを読み込めませんでした。ページを再読み込みしてもう一度お試しください。",
       "noTopic": "このワークスペースのガイドのトピックはまだありません。",
-      "more": "目次と検索",
       "contents": "目次",
       "search": "検索",
       "searchPlaceholder": "ガイドを検索",
       "noResults": "ガイドに一致する項目はありません。",
       "forward": "進む",
-      "breadcrumbs": "このページの位置"
+      "breadcrumbs": "このページの位置",
+      "dismissWelcome": "閉じる",
+      "welcomeReadAbout": "{page} について詳しく読む",
+      "welcomeSearchHint": "「{word}」で試す"
     },
     "logs": {
       "filters": "フィルター",

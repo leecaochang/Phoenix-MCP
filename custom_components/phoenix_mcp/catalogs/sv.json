@@ -2882,25 +2882,27 @@
       "guideBack": "Gå tillbaka till sidan som Guide visade innan, som i en webbläsare.",
       "guideForward": "Gå framåt igen till sidan du lämnade med Tillbaka.",
       "guidePopOut": "Öppna Guide i ett eget webbläsarfönster. Den fortsätter att följa det du väljer.",
-      "guideMore": "Fäll ut Innehåll, listan över alla sidor i Guide, och Sök, som hittar valfritt avsnitt.",
       "guideContents": "Lista alla sidor i Guide, var och en under sidan den hör till. Välj en för att läsa den.",
       "guideSearch": "Hitta valfritt avsnitt i Guide efter dess ord eller nyckelord.",
       "guideSearchInput": "Skriv ord för att hitta matchande avsnitt i Guide. Enter öppnar den bästa träffen.",
       "guideLink": "Öppna sidan i Guide. Tillbaka tar dig till sidan du läste.",
-      "accessKeyFilter": "Visa bara åtkomstnycklar vars namn eller status innehåller den här texten."
+      "accessKeyFilter": "Visa bara åtkomstnycklar vars namn eller status innehåller den här texten.",
+      "guideDismissWelcome": "Dölj den här välkomstsidan. Hitta den igen under Innehåll."
     },
     "guide": {
       "title": "Guide",
       "back": "Tillbaka",
       "unavailable": "Guiden kunde inte läsas in. Läs in sidan igen för att försöka på nytt.",
       "noTopic": "Det finns ännu inget guideavsnitt för den här arbetsytan.",
-      "more": "Innehåll och sökning",
       "contents": "Innehåll",
       "search": "Sök",
       "searchPlaceholder": "Sök i guiden",
       "noResults": "Inget i guiden matchar.",
       "forward": "Framåt",
-      "breadcrumbs": "Var sidan hör hemma"
+      "breadcrumbs": "Var sidan hör hemma",
+      "dismissWelcome": "Stäng",
+      "welcomeReadAbout": "Läs mer om {page}",
+      "welcomeSearchHint": "Prova ”{word}”"
     },
     "logs": {
       "filters": "Filter",

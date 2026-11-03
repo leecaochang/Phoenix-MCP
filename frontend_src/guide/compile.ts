@@ -39,6 +39,11 @@ export interface GuideBundle {
   format: number;
   language: string;
   topics: Record<string, GuideTopic>;
+  /**
+   * English only: the English text of every label its pages use, so an English page read in
+   * another language names controls in English, as its sentences do (user, 2026-11-03).
+   */
+  labels?: Record<string, string>;
 }
 
 export const TOPIC_ID = /^(workspace|window|wizard|topic)\.[A-Za-z0-9][A-Za-z0-9_-]*$/;
@@ -205,6 +210,8 @@ export function compileGuide(
   files: ReadonlyArray<{ file: string; source: string }>,
   labelExists: (key: string) => boolean,
   fileExists: (path: string) => boolean = () => true,
+  /** The English catalog's text for a label; given for English, whose bundle then carries its labels. */
+  englishLabel?: (key: string) => string,
 ): { bundle: GuideBundle; problems: string[] } {
   const topics: Record<string, GuideTopic> = {};
   const problems: string[] = [];
@@ -251,7 +258,13 @@ export function compileGuide(
       seen.add(at);
     }
   }
-  return { bundle: { format: GUIDE_FORMAT, language, topics }, problems };
+  const labels: Record<string, string> = {};
+  if (englishLabel) {
+    for (const topic of Object.values(topics)) {
+      for (const [, key] of `${topic.title}\n${topic.body}`.matchAll(LABEL)) if (labelExists(key)) labels[key] = englishLabel(key);
+    }
+  }
+  return { bundle: { format: GUIDE_FORMAT, language, topics, ...(englishLabel ? { labels } : {}) }, problems };
 }
 
 /**

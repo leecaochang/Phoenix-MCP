@@ -19,14 +19,15 @@ import { WorkspaceDock } from "./dock/WorkspaceDock";
 import { usePanelData } from "./PanelData";
 import { PhoneStack, closedPhoneWindows, phoneDefaults } from "./PhoneStack";
 import { withMember, type PhoneLayout } from "./phoneLayout";
-import { DEFAULT_HELP, DEFAULT_TOOLBAR, helpOpen, readRecord, withHelpIn, writeRecord, WORKSPACE_IDS, type Env, type GuideState, GUIDE_CLOSED, type HelpPrefs, type ShellRecord, type ToolbarState, type WorkspaceId } from "./storage";
+import { DEFAULT_HELP, DEFAULT_TOOLBAR, helpOpen, readRecord, withHelpIn, writeRecord, WORKSPACE_IDS, type Env, type GuideState, GUIDE_CLOSED, type HelpPrefs, type ShellRecord, type ToolbarState, type WelcomeStep, type WorkspaceId } from "./storage";
+import { WelcomeContext, type Welcome } from "./guideWelcome";
 import { RemoteRecord, shouldAdopt, writerId, type Section, type UserDataConnection } from "./sync";
 import { Toolbar, WorkspaceActionsContext, workspaceMenu, type WorkspaceActions } from "./Toolbar";
 import { ToolRegistry, ToolRegistryContext } from "./tools";
 import { AuditFocus, AuditFocusContext, LogSelection, LogSelectionContext } from "./logDetails";
 import { ApprovalsProvider } from "./approvals";
 import { ChangesProvider } from "./changes";
-import { HELP_WINDOW, HelpContext, HelpTracker } from "./help";
+import { HELP_WINDOW, HelpContext, HelpTracker, helpFor } from "./help";
 import { attachToggleNames } from "../ui/toggleNames";
 import { GuideTargetTracker } from "./guideTarget";
 import { GuideTargetContext, GuideWindow, PhoneGuide, WizardGuideContext, useWizardGuide } from "./guide";
@@ -104,6 +105,10 @@ function useEnvironment(root: React.RefObject<HTMLElement | null>): Env {
   }, [root]);
   return env;
 }
+
+/** What Welcome's Point step counts as a button, and how long the pointer must rest on one. */
+const WELCOME_BUTTONS = 'button, [role="button"], [role="menuitem"], [role="tab"], summary';
+const WELCOME_POINT_MS = 600;
 
 /** The workspace area; a right-click on its margin, outside any window, opens the workspace menu. */
 function WorkspaceArea({ menu, children }: { menu: (() => MenuEntry[]) | null; children: React.ReactNode }) {
@@ -488,6 +493,48 @@ export function Shell() {
   // Help follows the pointer and focus anywhere in the shell.
   const helpTracker = useMemo(() => new HelpTracker(), []);
   useEffect(() => (rootEl ? helpTracker.attach(rootEl) : undefined), [rootEl, helpTracker]);
+
+  // Welcome to the Guide: whether it was seen (saved), and the tips tried in this session (not saved: a demo, not a task).
+  const [welcomeTried, setWelcomeTried] = useState<WelcomeStep[]>([]);
+  const markWelcome = useCallback((step: WelcomeStep) => setWelcomeTried((prev) => (prev.includes(step) ? prev : [...prev, step])), []);
+  const markWelcomeSeen = useCallback(() => setGuide((prev) => (prev.welcome?.seen ? prev : { ...prev, welcome: { seen: true } })), []);
+  const [welcomeShowing, setWelcomeShowing] = useState(false);
+  const welcome = useMemo<Welcome>(() => ({
+    state: guide.welcome,
+    phone: env === "mobile",
+    tried: welcomeTried,
+    mark: markWelcome,
+    markSeen: markWelcomeSeen,
+    showing: setWelcomeShowing,
+    theme: d.theme,
+    setTheme: d.onThemeChange,
+  }), [guide.welcome, env, welcomeTried, markWelcome, markWelcomeSeen, d.theme, d.onThemeChange]);
+  // Point is done when, with Welcome on screen, the reader moves the pointer onto a button and rests
+  // it there while Quick Help explains it (user, 2026-11-02): a pointer already resting where the Help
+  // menu closed, passing over, keyboard focus or Welcome's own controls do not count.
+  const pointDone = welcomeTried.includes("point");
+  useEffect(() => {
+    if (!rootEl || env !== "desktop" || !welcomeShowing || pointDone) return undefined;
+    let target: Element | null = null;
+    let timer: number | undefined;
+    const over = (e: PointerEvent) => {
+      const el = e.target instanceof Element ? e.target.closest(WELCOME_BUTTONS) : null;
+      if (el === target) return;
+      window.clearTimeout(timer);
+      target = el && !el.closest(".phx-welcome") ? el : null;
+      if (!target) return;
+      const resting = target;
+      timer = window.setTimeout(() => {
+        if (target === resting && helpOpen(helpRef.current, workspaceRef.current) && helpFor(resting)) markWelcome("point");
+      }, WELCOME_POINT_MS);
+    };
+    const out = (e: PointerEvent) => {
+      if (target && !(e.relatedTarget instanceof Node && target.contains(e.relatedTarget))) { window.clearTimeout(timer); target = null; }
+    };
+    rootEl.addEventListener("pointerover", over);
+    rootEl.addEventListener("pointerout", out);
+    return () => { window.clearTimeout(timer); rootEl.removeEventListener("pointerover", over); rootEl.removeEventListener("pointerout", out); };
+  }, [rootEl, env, welcomeShowing, pointDone, markWelcome]);
   useEffect(() => (rootEl ? attachToggleNames(rootEl) : undefined), [rootEl]);
   // The toolbar keeps clear of the phone's status bar by only as much of the safe area as Home Assistant has
   // not already left above the panel: padding the whole inset again pushed the panel a second inset down.
@@ -586,6 +633,7 @@ export function Shell() {
     setHelp(DEFAULT_HELP);
     helpRef.current = DEFAULT_HELP;
     setGuide(GUIDE_CLOSED);
+    setWelcomeTried([]);
     guideRef.current = GUIDE_CLOSED;
     // My Workspace goes back to empty, as Reset This Workspace leaves it.
     clearMy();
@@ -819,6 +867,8 @@ export function Shell() {
   const dock = env === "mobile" ? "top" : toolbar.dock;
   // The wizard's Guide: shown in Access Keys while the wizard runs, and on a desktop the wizard makes room for it.
   const wizardGuideShown = active === "accessKeys" && !!wizardStep;
+  // The Guide met the reader beside the setup wizard, so it does not open on Welcome afterwards (user, 2026-11-03).
+  useEffect(() => { if (wizardGuideShown) markWelcomeSeen(); }, [wizardGuideShown, markWelcomeSeen]);
   const guideShown = wizardGuideShown || guide.open;
   const guideBeside = env === "desktop" && wizardGuideShown;
   const wizardGuide = useMemo(() => ({ report: wizard.report, guideBeside }), [wizard.report, guideBeside]);
@@ -830,6 +880,7 @@ export function Shell() {
     <DisplayModeContext.Provider value={env === "mobile" ? "icons" : toolbar.mode}>
     <HelpContext.Provider value={helpTracker}>
     <GuideTargetContext.Provider value={guideTargets}>
+    <WelcomeContext.Provider value={welcome}>
     <AuditFocusContext.Provider value={auditFocus}>
     <LogSelectionContext.Provider value={logSelection}>
     <ApprovalsProvider
@@ -934,6 +985,7 @@ export function Shell() {
     </ApprovalsProvider>
     </LogSelectionContext.Provider>
     </AuditFocusContext.Provider>
+    </WelcomeContext.Provider>
     </GuideTargetContext.Provider>
     </HelpContext.Provider>
     </DisplayModeContext.Provider>

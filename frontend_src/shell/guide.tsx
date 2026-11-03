@@ -34,6 +34,7 @@ import { renderMarkdown } from "../utils/markdown";
 import { JS_BUILD } from "../version";
 import type { WorkspaceController } from "./dock/controller";
 import type { GuideRect } from "./storage";
+import { WELCOME_TOPIC, WelcomeCard, useWelcome, welcomeFirst } from "./guideWelcome";
 
 declare const __GUIDE_LANGUAGES__: string[];
 /** Languages with Guide topics, read from the topic folders at build time; readers of any other language get English. */
@@ -72,7 +73,46 @@ function validBundle(raw: unknown): GuideBundle | null {
       ...(topic.sectionKeywords && typeof topic.sectionKeywords === "object" ? { sectionKeywords: sectionKeywordsOf(topic.sectionKeywords) } : {}),
     };
   }
-  return { format: GUIDE_FORMAT, language: String(b.language ?? ""), topics };
+  const labels = b.labels && typeof b.labels === "object"
+    ? Object.fromEntries(Object.entries(b.labels).filter(([, v]) => typeof v === "string"))
+    : undefined;
+  return { format: GUIDE_FORMAT, language: String(b.language ?? ""), topics, ...(labels ? { labels } : {}) };
+}
+
+/**
+ * English pages as a reader of another language gets them (user, 2026-11-03): each control is named in
+ * English like the sentence around it, never "縮小文字 and 放大文字 change the size", so titles, links,
+ * Contents and Search read in English too. The reader's own name for each control joins that section's
+ * search words, so typing what the screen says still finds it. Translated pages keep the reader's labels.
+ */
+export function readAsEnglish(bundle: GuideBundle, readerLabel: (key: string) => string): GuideBundle {
+  const english = bundle.labels ?? {};
+  const named = (text: string) => text.replace(LABEL, (m, key: string) => english[key] ?? m);
+  const theirs = (text: string) => [...text.matchAll(LABEL)].map(([, key]) => key)
+    .filter((key) => english[key] !== undefined && readerLabel(key) !== english[key]).map(readerLabel);
+  const topics: Record<string, GuideTopic> = {};
+  for (const [id, topic] of Object.entries(bundle.topics)) {
+    // The reader's words for the labels in each section, and in the title and opening for the page.
+    const sectionWords: Record<string, string[]> = {};
+    let anchor: string | null = null;
+    let opening = theirs(topic.title);
+    for (const line of topic.body.split("\n")) {
+      const h = HEADING.exec(line);
+      if (h) anchor = h[3];
+      const words = theirs(line);
+      if (!words.length) continue;
+      if (anchor === null) opening = [...opening, ...words];
+      else sectionWords[anchor] = [...(sectionWords[anchor] ?? []), ...words];
+    }
+    const sectionKeywords: Record<string, string[]> = { ...topic.sectionKeywords };
+    for (const [at, words] of Object.entries(sectionWords)) sectionKeywords[at] = [...new Set([...(sectionKeywords[at] ?? []), ...words])];
+    topics[id] = {
+      ...topic, title: named(topic.title), body: named(topic.body),
+      ...(opening.length ? { keywords: [...new Set([...(topic.keywords ?? []), ...opening])] } : {}),
+      ...(Object.keys(sectionKeywords).length ? { sectionKeywords } : {}),
+    };
+  }
+  return { ...bundle, topics };
 }
 
 /** One language's topics, fetched once per page; a failed fetch is tried again next time. */
@@ -267,7 +307,10 @@ function useGuideTopic(workspace: string, windowId: string | null, language: str
   const [bundles, setBundles] = useState<Array<GuideBundle | null> | null>(null);
   useEffect(() => {
     let live = true;
-    void Promise.all(guideLanguages(language).map(loadGuide)).then((b) => { if (live) setBundles(b); });
+    void Promise.all(guideLanguages(language).map(loadGuide)).then((b) => {
+      if (!live) return;
+      setBundles(language === "en" ? b : b.map((bundle) => (bundle?.language === "en" ? readAsEnglish(bundle, labelText) : bundle)));
+    });
     return () => { live = false; };
   }, [language]);
   const tracker = useContext(GuideTargetContext);
@@ -278,6 +321,25 @@ function useGuideTopic(workspace: string, windowId: string | null, language: str
   const [lead, setLead] = useState<"selection" | "window">("window");
   useEffect(() => { setLead("window"); }, [workspace, windowId]);
   useEffect(() => { if (selectionVersion) setLead("selection"); }, [selectionVersion]);
+  // Welcome stays on screen while the reader tries things (user, 2026-11-02): selecting something in a
+  // window ticks its Select step and offers that window's page as a link, instead of turning to it.
+  const welcome = useWelcome();
+  const markRef = useRef(welcome?.mark);
+  markRef.current = welcome?.mark;
+  const onWelcomeRef = useRef(false);
+  const [picked, setPicked] = useState(false);
+  const openedAt = useRef(selectionVersion);
+  useEffect(() => {
+    if (selectionVersion === openedAt.current || !onWelcomeRef.current) return;
+    markRef.current?.("select");
+    setPicked(true);
+  }, [selectionVersion]);
+  // Welcome is always the first page of the history, so Back reaches it (user, 2026-11-02). The Guide opens
+  // on it while it has steps left and was not dismissed. Beside the wizard it plays no part.
+  const welcomeBase = useRef(!topicId && !!welcome);
+  const startOnWelcome = useRef(welcomeBase.current && welcomeFirst(welcome!.state));
+  const markSeenRef = useRef(welcome?.markSeen);
+  markSeenRef.current = welcome?.markSeen;
   const latest = tracker?.current() ?? null;
   const selected: GuideTarget | null = latest && (lead === "selection" || latest.windowId === windowId) ? latest : null;
   if (selected?.windowId) windowId = selected.windowId;
@@ -298,12 +360,25 @@ function useGuideTopic(workspace: string, windowId: string | null, language: str
   // The automatic page is shown before the effect below records it, so a step the reader takes in
   // between records it first: otherwise the late effect would push it on top of the reader's page.
   const recordedAuto = useRef("");
+  const welcomePage: Step | null = welcomeBase.current && bundles && topicById(bundles, WELCOME_TOPIC) ? { kind: "topic", id: WELCOME_TOPIC, anchor: null } : null;
   useEffect(() => {
     if (!autoRef.current || recordedAuto.current === autoKey) return;
     recordedAuto.current = autoKey;
+    // Welcome goes first; shown first, the page in front of the reader now is left for when they move on.
+    if (welcomePage) {
+      welcomeBase.current = false;
+      setHistory(startOnWelcome.current ? { steps: [welcomePage], at: 0 } : { steps: [welcomePage, autoRef.current], at: 1 });
+      // Shown first once: from now on the Guide opens on the reader's page, and Back reaches Welcome.
+      if (startOnWelcome.current) markSeenRef.current?.();
+      return;
+    }
+    // Welcome holds the page; the reader opens the new one from its link.
+    if (onWelcomeRef.current) return;
     setHistory((h) => pushStep(h, autoRef.current!));
-  }, [autoKey]);
-  const step = history.steps[history.at] ?? auto;
+  }, [autoKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  const step = history.steps[history.at] ?? (startOnWelcome.current ? welcomePage : null) ?? auto;
+  const onWelcome = step?.kind === "topic" && step.id === WELCOME_TOPIC;
+  onWelcomeRef.current = onWelcome;
   const view = step?.kind === "contents" || step?.kind === "search" ? step.kind : "topic";
   let topic: FoundTopic | null = null;
   let anchor: string | null = null;
@@ -335,10 +410,15 @@ function useGuideTopic(workspace: string, windowId: string | null, language: str
       if (bundles && to && topicById(bundles, to)) go({ kind: "topic", id: to, anchor: at });
     },
     show: (kind: "contents" | "search") => go({ kind }),
+    /** Leave Welcome for the page the workspace points at now, or Contents when it points at none. */
+    leave: () => go(autoRef.current ?? { kind: "contents" }),
+    /** On Welcome, the page of what the reader selected there, which Welcome offers as a link. */
+    held: onWelcome && picked && auto?.kind === "topic" && bundles ? topicById(bundles, auto.id) : null,
+    heldAnchor: auto?.kind === "topic" ? auto.anchor : null,
   };
 }
 
-type Guide = ReturnType<typeof useGuideTopic>;
+export type Guide = ReturnType<typeof useGuideTopic>;
 
 /** Follow a link inside the Guide: to another page, or a section of this one. */
 function followLink(guide: Guide, e: ReactMouseEvent<HTMLElement>): void {
@@ -348,16 +428,13 @@ function followLink(guide: Guide, e: ReactMouseEvent<HTMLElement>): void {
   guide.open(link.dataset.guideTopic ?? null, link.dataset.guideAnchor ?? null);
 }
 
-/** Contents and Search, folded at the top of every page (user, 2026-11-01). */
+/** Contents and Search, two links at the top of every page (user, 2026-11-03: no fold to open first). */
 function GuideTools({ guide }: { guide: Guide }) {
   return (
-    <details className="phx-guide-tools">
-      <summary data-help="help.guideMore">{t("guide.more")}</summary>
-      <div className="phx-guide-tools-links">
-        <button type="button" className="phx-guide-tool" data-help="help.guideContents" onClick={() => guide.show("contents")}>{t("guide.contents")}</button>
-        <button type="button" className="phx-guide-tool" data-help="help.guideSearch" onClick={() => guide.show("search")}>{t("guide.search")}</button>
-      </div>
-    </details>
+    <div className="phx-guide-tools">
+      <button type="button" className="phx-guide-tool" data-help="help.guideContents" onClick={() => guide.show("contents")}>{t("guide.contents")}</button>
+      <button type="button" className="phx-guide-tool" data-help="help.guideSearch" onClick={() => guide.show("search")}>{t("guide.search")}</button>
+    </div>
   );
 }
 
@@ -384,22 +461,27 @@ function ContentsView({ guide }: { guide: Guide }) {
   );
 }
 
-function SearchView({ guide }: { guide: Guide }) {
-  const [query, setQuery] = useState("");
-  // In Contents order, so equally good matches are listed as the pages are.
-  const sections = useMemo<SearchSection[]>(() => {
-    const topics = mergedTopics(guide.bundles ?? []);
+/** What Search matches a query against, in Contents order so equally good matches are listed as the pages are. */
+export function useSearchSections(bundles: Guide["bundles"]): SearchSection[] {
+  return useMemo<SearchSection[]>(() => {
+    const topics = mergedTopics(bundles ?? []);
     const order: string[] = [];
     const walk = (nodes: ContentsNode[]) => { for (const n of nodes) { order.push(n.id); walk(n.children); } };
     walk(guideContents(topics));
     return order.flatMap((id) => topicSections(id, topics[id].title, topics[id].body, topics[id].keywords ?? [], labelText, topics[id].sectionKeywords));
-  }, [guide.bundles]);
+  }, [bundles]);
+}
+
+function SearchView({ guide }: { guide: Guide }) {
+  const [query, setQuery] = useState("");
+  const sections = useSearchSections(guide.bundles);
   const hits = useMemo(() => searchGuide(sections, query), [sections, query]);
+  const welcome = useWelcome();
   return (
     <article className="phx-guide-topic">
       <h3>{t("guide.search")}</h3>
       <input type="search" className="input phx-guide-search" data-help="help.guideSearchInput" autoFocus value={query} placeholder={t("guide.searchPlaceholder")}
-        aria-label={t("guide.searchPlaceholder")} onChange={(e) => setQuery(e.target.value)}
+        aria-label={t("guide.searchPlaceholder")} onChange={(e) => { setQuery(e.target.value); if (e.target.value.trim()) welcome?.mark("search"); }}
         onKeyDown={(e) => { if (e.key === "Enter" && hits[0]) { e.preventDefault(); guide.open(hits[0].section.topic, hits[0].section.anchor); } }} />
       {query.trim() && !hits.length && <p className="phx-guide-note">{t("guide.noResults")}</p>}
       <ul className="phx-guide-results">
@@ -438,6 +520,7 @@ function GuideBody({ guide }: { guide: Guide }) {
   if (guide.view === "contents") return <><GuideTools guide={guide} /><ContentsView guide={guide} /></>;
   if (guide.view === "search") return <><GuideTools guide={guide} /><SearchView guide={guide} /></>;
   if (!guide.topic) return <><GuideTools guide={guide} /><p className="phx-guide-note">{t("guide.noTopic")}</p></>;
+  if (guide.topic.id === WELCOME_TOPIC) return <><GuideTools guide={guide} /><WelcomeCard guide={guide} topic={guide.topic} onDismiss={guide.leave} /></>;
   return (
     <>
       <GuideTools guide={guide} />
@@ -761,6 +844,27 @@ export function GuideWindow({ workspace, controller, language, rect, onRect, onC
   ];
   const showMenu = useContextMenu();
 
+  // Welcome fits without scrolling (user, 2026-11-03), also in languages longer than English: shown in a
+  // Guide too short for it, the Guide grows by what is missing, as far as the screen allows. The growth is
+  // not saved and goes when Welcome does; a size the reader sets meanwhile wins.
+  const onWelcome = guide.view === "topic" && guide.topic?.id === WELCOME_TOPIC;
+  const [welcomeExtra, setWelcomeExtra] = useState(0);
+  const welcomeFitFor = useRef("");
+  useLayoutEffect(() => {
+    if (!onWelcome) { welcomeFitFor.current = ""; setWelcomeExtra(0); return; }
+    if (maximized || isFolded || following || popup || welcomeFitFor.current === language) return;
+    welcomeFitFor.current = language;
+    const body = frame.current?.querySelector<HTMLElement>(".phx-guide-body");
+    const missing = body ? body.scrollHeight - body.clientHeight : 0;
+    const room = window.innerHeight - MARGIN - (liveRef.current.y + liveRef.current.h);
+    if (missing > 0 && room > 0) setWelcomeExtra(Math.min(missing, room));
+  }, [onWelcome, language, maximized, isFolded, following, popup]);
+  const sizeSeen = useRef(`${live.w}x${live.h}`);
+  useEffect(() => {
+    const size = `${live.w}x${live.h}`;
+    if (sizeSeen.current !== size) { sizeSeen.current = size; setWelcomeExtra(0); }
+  }, [live.w, live.h]);
+
   if (popup) {
     return createPortal(
       <section className="phx-guide is-popped" aria-label={t("guide.title")}>
@@ -782,7 +886,7 @@ export function GuideWindow({ workspace, controller, language, rect, onRect, onC
     );
   }
 
-  const shown = maximized ? maxRect! : live;
+  const shown = maximized ? maxRect! : { ...live, h: live.h + welcomeExtra };
   const classes = ["phx-guide", following && "is-pinned", isFolded && "is-folded", maximized && "is-maximized"].filter(Boolean).join(" ");
   return (
     <section ref={frame} className={classes} aria-label={t("guide.title")}

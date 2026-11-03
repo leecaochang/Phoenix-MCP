@@ -555,6 +555,8 @@
 .phx-guide-title { flex: 1; min-width: 0; margin: 0 0 0 4px; font-size: 13px; font-weight: 600; }
 .phx-guide-body { flex: 1; min-height: 0; overflow: auto; padding: 12px 16px 16px; }
 .phx-guide-topic { font-size: 13px; line-height: 1.55; overflow-wrap: anywhere; }
+/* Korean wraps between words, as it is written; by default a line could break inside a word (메|뉴). */
+.phx-guide-topic:lang(ko) { word-break: keep-all; }
 .phx-guide-topic h3 { margin: 0 0 8px; font-size: 15px; font-weight: 600; }
 .phx-guide-topic p, .phx-guide-topic ul, .phx-guide-topic ol, .phx-guide-topic blockquote { margin: 0 0 10px; }
 .phx-guide-topic ul, .phx-guide-topic ol { padding-left: 20px; }
@@ -571,10 +573,8 @@
 .phx-guide-section { margin: 0 -8px; padding: 0 8px; border-left: 2px solid transparent; border-radius: var(--phx-radius-xs); transition: background 0.2s; }
 .phx-guide-section.is-target { background: var(--phx-accent-lt); border-left-color: var(--phx-accent); }
 .phx-guide-section.is-target .phx-guide-section.is-target { background: none; }
-/* Contents and Search, folded at the top of every page. */
-.phx-guide-tools { margin: 0 0 10px; font-size: 12px; color: var(--phx-text-2); }
-.phx-guide-tools > summary { cursor: pointer; width: fit-content; }
-.phx-guide-tools-links { display: flex; gap: 12px; margin-top: 6px; }
+/* Contents and Search, two links at the top of every page. */
+.phx-guide-tools { display: flex; gap: 14px; margin: 0 0 10px; font-size: 12px; }
 .phx-guide-tool { padding: 0; border: none; background: none; color: var(--phx-accent); font: inherit; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
 .phx-guide-contents { list-style: none; margin: 0; padding-left: 0; }
 .phx-guide-contents .phx-guide-contents { padding-left: 16px; }

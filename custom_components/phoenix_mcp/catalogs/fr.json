@@ -2876,25 +2876,27 @@
       "guideBack": "Revenez à la page que le guide affichait avant, comme dans un navigateur web.",
       "guideForward": "Avancez de nouveau vers la page quittée avec Retour.",
       "guidePopOut": "Ouvrez le guide dans sa propre fenêtre de navigateur. Il continue de suivre ce que vous sélectionnez.",
-      "guideMore": "Dépliez Sommaire, la liste de toutes les pages du guide, et Rechercher, qui trouve n’importe quelle section.",
       "guideContents": "Listez toutes les pages du guide, chacune sous la page dont elle relève. Sélectionnez-en une pour la lire.",
       "guideSearch": "Trouvez n’importe quelle section du guide par ses mots ou ses mots-clés.",
       "guideSearchInput": "Saisissez des mots pour trouver les sections du guide correspondantes. Entrée ouvre le meilleur résultat.",
       "guideLink": "Ouvrez cette page dans le guide. Retour vous ramène à la page que vous lisiez.",
-      "accessKeyFilter": "Affichez uniquement les clés d’accès dont le nom ou l’état contient ce texte."
+      "accessKeyFilter": "Affichez uniquement les clés d’accès dont le nom ou l’état contient ce texte.",
+      "guideDismissWelcome": "Masquez cette page d’accueil. Retrouvez-la dans le Sommaire."
     },
     "guide": {
       "title": "Guide",
       "back": "Retour",
       "unavailable": "Impossible de charger le guide. Rechargez la page pour réessayer.",
       "noTopic": "Il n’y a pas encore de rubrique du guide pour cet espace de travail.",
-      "more": "Sommaire et recherche",
       "contents": "Sommaire",
       "search": "Rechercher",
       "searchPlaceholder": "Rechercher dans le guide",
       "noResults": "Rien dans le guide ne correspond.",
       "forward": "Suivant",
-      "breadcrumbs": "Emplacement de cette page"
+      "breadcrumbs": "Emplacement de cette page",
+      "dismissWelcome": "Ignorer",
+      "welcomeReadAbout": "En savoir plus sur {page}",
+      "welcomeSearchHint": "Essayez « {word} »"
     },
     "logs": {
       "filters": "Filtres",

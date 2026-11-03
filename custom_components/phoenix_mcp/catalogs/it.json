@@ -2876,25 +2876,27 @@
       "guideBack": "Torna alla pagina che la Guida mostrava prima, come in un browser web.",
       "guideForward": "Vai di nuovo avanti alla pagina che hai lasciato con Indietro.",
       "guidePopOut": "Apri la Guida in una finestra del browser a parte. Continua a seguire ciò che selezioni.",
-      "guideMore": "Apri Indice, l'elenco di tutte le pagine della Guida, e Cerca, che trova qualsiasi sezione.",
       "guideContents": "Elenca tutte le pagine della Guida, ciascuna sotto la pagina a cui appartiene. Selezionane una per leggerla.",
       "guideSearch": "Trova qualsiasi sezione della Guida in base alle sue parole o parole chiave.",
       "guideSearchInput": "Digita delle parole per trovare le sezioni corrispondenti della Guida. Invio apre il risultato migliore.",
       "guideLink": "Apri questa pagina nella Guida. Indietro ti riporta alla pagina che stavi leggendo.",
-      "accessKeyFilter": "Mostra solo le chiavi di accesso il cui nome o stato contiene questo testo."
+      "accessKeyFilter": "Mostra solo le chiavi di accesso il cui nome o stato contiene questo testo.",
+      "guideDismissWelcome": "Nascondi questa pagina di benvenuto. La ritrovi nell'Indice."
     },
     "guide": {
       "title": "Guida",
       "back": "Indietro",
       "unavailable": "Impossibile caricare la guida. Ricarica la pagina per riprovare.",
       "noTopic": "Non c'è ancora un argomento della guida per quest'area di lavoro.",
-      "more": "Indice e ricerca",
       "contents": "Indice",
       "search": "Cerca",
       "searchPlaceholder": "Cerca nella guida",
       "noResults": "Nessun risultato nella guida.",
       "forward": "Avanti",
-      "breadcrumbs": "Dove si trova questa pagina"
+      "breadcrumbs": "Dove si trova questa pagina",
+      "dismissWelcome": "Chiudi",
+      "welcomeReadAbout": "Leggi di più su {page}",
+      "welcomeSearchHint": "Prova «{word}»"
     },
     "logs": {
       "filters": "Filtri",

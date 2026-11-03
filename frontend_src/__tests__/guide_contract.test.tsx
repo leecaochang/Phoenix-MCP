@@ -103,10 +103,11 @@ describe("the shipped Guide", () => {
     expect(broken).toEqual([]);
   });
 
-  it("puts only workspace overviews and the About page at the top of Contents", () => {
-    // Reference material that belongs to no workspace sits under one About page (user, 2026-11-01).
+  it("puts only Welcome, workspace overviews and the About page at the top of Contents", () => {
+    // Reference material that belongs to no workspace sits under one About page (user, 2026-11-01);
+    // Welcome, where a new reader starts, heads the list (user, 2026-11-02).
     const top = Object.entries(bundle.topics).filter(([, t]) => !t.parent).map(([id]) => id);
-    expect(top.filter((id) => !id.startsWith("workspace.") && id !== "topic.about")).toEqual([]);
+    expect(top.filter((id) => !id.startsWith("workspace.") && id !== "topic.about" && id !== "topic.welcome")).toEqual([]);
   });
 });
 
