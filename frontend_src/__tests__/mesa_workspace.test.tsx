@@ -126,9 +126,9 @@ describe("Profiles", () => {
     choose("Front door");
     await waitFor(() => expect(editorWindow().getByLabelText(/Control mode/)).toHaveValue("prohibited"));
     const discard = editorWindow().getByRole("button", { name: "Discard Changes" });
-    expect(discard).toBeDisabled();
+    expect(discard).toHaveAttribute("aria-disabled", "true");
     fireEvent.change(editorWindow().getByLabelText(/Control mode/), { target: { value: "confirm" } });
-    expect(discard).not.toBeDisabled();
+    expect(discard).not.toHaveAttribute("aria-disabled", "true");
     fireEvent.click(discard);
     expect(editorWindow().getByLabelText(/Control mode/)).toHaveValue("prohibited");
   });
@@ -173,7 +173,7 @@ describe("Profiles", () => {
     expect(offered(/Domain/, "l")).toEqual(["light"]);
     // Typed in full, a taken target is refused rather than saved over.
     offered(/Domain/, "lock");
-    expect(editorWindow().getByRole("button", { name: "Save" })).toBeDisabled();
+    expect(editorWindow().getByRole("button", { name: "Save" })).toHaveAttribute("aria-disabled", "true");
     add("Add Entity Profile");
     // Both entities have profiles; the editor's own entity picker offers neither.
     expect(offered(/Entity/, "e")).toEqual([]);

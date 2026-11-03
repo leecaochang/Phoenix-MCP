@@ -250,6 +250,24 @@ describe("agentCLI pill remembers its own position", () => {
     expect(dialog().style.top).toBe("120px");
     expect(dialog().style.width).toBe("440px");
   });
+
+  it("puts focus in the message box when the user opens it, not when it comes back on its own", async () => {
+    const outside = document.createElement("button");
+    document.body.appendChild(outside);
+    outside.focus();
+    const view = render(
+      <AgentCliWindow accessKeys={ACCESS_KEYS} instances={INSTANCES} scrollbackLines={500}
+                      initialAccessKeyId="t1" onClose={() => {}} summonVersion={0} focusRequest={0} />,
+    );
+    await act(async () => { await new Promise((r) => requestAnimationFrame(() => r(null))); });
+    expect(document.activeElement).toBe(outside);
+    view.rerender(
+      <AgentCliWindow accessKeys={ACCESS_KEYS} instances={INSTANCES} scrollbackLines={500}
+                      initialAccessKeyId="t1" onClose={() => {}} summonVersion={1} focusRequest={1} />,
+    );
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("textbox", { name: /message/i })));
+    outside.remove();
+  });
 });
 
 describe("AgentCliWindow latest-message scrolling", () => {

@@ -72,11 +72,18 @@ describe("the connection watcher", () => {
   it("names what is happening, keeps asking, and clears itself when it answers", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     const root = document.createElement("div");
+    const field = document.createElement("input");
+    root.appendChild(field);
     document.body.appendChild(root);
+    field.focus();
     try {
       render(<Reconnecting root={root} />);
       act(() => noteConnection(false));
       const dialog = screen.getByRole("alertdialog");
+      // It takes focus so it is read, and the panel under it is out of the keyboard's reach.
+      expect(dialog).toHaveAttribute("aria-modal", "true");
+      expect(document.activeElement).toBe(dialog);
+      expect(field).toHaveAttribute("inert");
       expect(dialog).toHaveTextContent("Phoenix is unavailable");
       expect(dialog).toHaveTextContent(/Retrying, please wait/);
       expect(dialog.querySelector(".phx-offline-spinner")).not.toBeNull();
@@ -86,6 +93,8 @@ describe("the connection watcher", () => {
       expect(api.getSettings).toHaveBeenCalled();
       act(() => noteConnection(true));
       await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
+      expect(field).not.toHaveAttribute("inert");
+      expect(document.activeElement).toBe(field);
 
       // Nothing is asked once it is back.
       const asked = vi.mocked(api.getSettings).mock.calls.length;

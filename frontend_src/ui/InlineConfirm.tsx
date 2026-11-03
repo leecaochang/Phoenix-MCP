@@ -8,7 +8,7 @@
  * and a hairline with a heading, no coloured accents.
  */
 
-import { useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 import { ActionButton } from "./ActionButton";
 import type { IconName } from "./Icon";
 import { useClickAway } from "./useClickAway";
@@ -48,7 +48,25 @@ export function InlineConfirm({
 }) {
   const [acknowledged, setAcknowledged] = useState(false);
   const root = useRef<HTMLDivElement | null>(null);
+  const ids = useId();
+  const bodyId = `${ids}-body`;
+  const helpId = `${ids}-help`;
+  // The body says what it will do when there is one; otherwise the Help text, read aloud too.
+  const spoken = !!help && !children;
+  const described = (children ? bodyId : spoken ? helpId : undefined);
   useClickAway(root, onCancel, !busy, opener);
+  // When the box closes with focus inside it, focus goes back to what opened it, while the box
+  // is still in the page; otherwise focus would fall to the page with the box.
+  useLayoutEffect(() => {
+    const box = root.current;
+    const scope = box?.getRootNode() as Document | ShadowRoot | undefined;
+    const back = opener?.current ?? scope?.activeElement ?? null;
+    return () => {
+      const active = scope?.activeElement;
+      if (!box || !active || !box.contains(active)) return;
+      if (back instanceof HTMLElement && back.isConnected && !box.contains(back)) back.focus({ preventScroll: true });
+    };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     // Focus alone does not bring the box into view on an iPhone, and a box opened from a
     // toolbar can start below the screen (user, 2026-11-02): show the whole box first.
@@ -56,7 +74,7 @@ export function InlineConfirm({
     root.current?.querySelector<HTMLElement>("input, button:not([disabled])")?.focus({ preventScroll: true });
   }, []);
   return (
-    <div ref={root} className={`phx-inline-confirm is-${tone}`} role="group" aria-label={label} data-help-text={help}
+    <div ref={root} className={`phx-inline-confirm is-${tone}`} role="group" aria-label={label} aria-describedby={described} data-help-text={help}
       data-help-controls={help ? "" : undefined}
       onKeyDown={(e) => {
         if (e.key !== "Escape" || busy) return;
@@ -65,7 +83,9 @@ export function InlineConfirm({
         onCancel();
       }}>
       <div className="phx-inline-confirm-title">{title ?? label}</div>
-      {children && <div className="phx-inline-confirm-body">{children}</div>}
+      {children && <div id={bodyId} className="phx-inline-confirm-body">{children}</div>}
+      {/* What it will do, for a screen reader too: Help is not read aloud. */}
+      {spoken && <p id={helpId} className="sr-only">{help}</p>}
       {acknowledge && (
         <div className="toggle-row phx-inline-confirm-ack">
           <div className="toggle-label"><span>{acknowledge}</span></div>
@@ -77,7 +97,7 @@ export function InlineConfirm({
       )}
       {error && <div className="banner banner-error" role="alert">{error}</div>}
       <div className="phx-inline-confirm-actions">
-        <ActionButton icon={confirmIcon} label={confirmLabel} busy={busy} disabled={!!acknowledge && !acknowledged}
+        <ActionButton icon={confirmIcon} label={confirmLabel} busy={busy} disabled={!!acknowledge && !acknowledged} describedBy={described}
           onClick={onConfirm} className={confirmClassName} />
         <ActionButton icon="undo" label={cancelLabel} busy={busy} onClick={onCancel} className="btn btn-outline btn-sm" />
       </div>

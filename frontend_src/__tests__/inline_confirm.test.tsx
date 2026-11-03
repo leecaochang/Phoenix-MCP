@@ -7,6 +7,7 @@
  * box opened below an iPhone screen can be reached (user, 2026-11-02).
  */
 import { describe, it, expect, vi } from "vitest";
+import { useState } from "react";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { InlineConfirm } from "../ui/InlineConfirm";
 import { helpFor } from "../shell/help";
@@ -104,5 +105,29 @@ describe("InlineConfirm", () => {
     } finally {
       Element.prototype.scrollIntoView = original;
     }
+  });
+
+  it("gives focus back to what opened it when it closes with focus inside, and reads its Help text aloud", () => {
+    function Host() {
+      const [open, setOpen] = useState(false);
+      return (
+        <>
+          <button onClick={() => setOpen(true)}>Delete Profile</button>
+          {open && <InlineConfirm label="Delete Profile" help="The entity falls back to its domain profile." confirmLabel="Delete" cancelLabel="Cancel"
+            onConfirm={() => setOpen(false)} onCancel={() => setOpen(false)} />}
+        </>
+      );
+    }
+    render(<Host />);
+    const opener = screen.getByRole("button", { name: "Delete Profile" });
+    opener.focus();
+    fireEvent.click(opener);
+    const group = screen.getByRole("group", { name: "Delete Profile" });
+    expect(group).toHaveAccessibleDescription("The entity falls back to its domain profile.");
+    expect(screen.getByRole("button", { name: "Delete" })).toHaveAccessibleDescription("The entity falls back to its domain profile.");
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "Delete" }));
+    fireEvent.keyDown(document.activeElement!, { key: "Escape" });
+    expect(screen.queryByRole("group", { name: "Delete Profile" })).toBeNull();
+    expect(document.activeElement).toBe(opener);
   });
 });

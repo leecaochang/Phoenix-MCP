@@ -183,10 +183,10 @@ describe("Log Details", () => {
     expect(screen.getByRole("heading", { name: "Audit Entry" })).toBeInTheDocument();
     expect(screen.getAllByRole("row").slice(1)[1]).toHaveClass("is-selected");
     expect(screen.getAllByRole("row").slice(1)[1]).toHaveAttribute("aria-selected", "true");
-    expect(screen.getByRole("button", { name: "Previous Record" })).toBeEnabled();
-    expect(screen.getByRole("button", { name: "Next Record" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Previous Record" })).not.toHaveAttribute("aria-disabled", "true");
+    expect(screen.getByRole("button", { name: "Next Record" })).not.toHaveAttribute("aria-disabled", "true");
     fireEvent.click(screen.getByRole("button", { name: "Next Record" }));
-    expect(screen.getByRole("button", { name: "Next Record" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Next Record" })).toHaveAttribute("aria-disabled", "true");
   });
 });
 

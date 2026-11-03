@@ -120,10 +120,10 @@ describe("the Welcome page", () => {
     renderGuide(welcome);
     await waitFor(() => expect(title()).toBe("Logs Workspace"));
     // Back is offered once the history holds Welcome beneath this page.
-    await waitFor(() => expect(screen.getByRole("button", { name: "Back" })).toBeEnabled());
+    await waitFor(() => expect(screen.getByRole("button", { name: "Back" })).not.toHaveAttribute("aria-disabled", "true"));
     fireEvent.click(screen.getByRole("button", { name: "Back" }));
     await waitFor(() => expect(title()).toBe("Welcome to the Guide"));
-    expect(screen.getByRole("button", { name: "Back" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Back" })).toHaveAttribute("aria-disabled", "true");
     expect(welcome.markSeen).not.toHaveBeenCalled();
   });
 
@@ -203,7 +203,7 @@ describe("the Welcome page", () => {
     const welcome = welcomeOf(undefined);
     renderGuide(welcome, new GuideTargetTracker(), "workspace.logs");
     await waitFor(() => expect(title()).toBe("Logs Workspace"));
-    expect(screen.getByRole("button", { name: "Back" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Back" })).toHaveAttribute("aria-disabled", "true");
     expect(welcome.markSeen).not.toHaveBeenCalled();
   });
 

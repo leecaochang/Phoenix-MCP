@@ -1,10 +1,13 @@
 import type { ComponentPropsWithRef } from "react";
 
-/** Keep the focused action mounted and focusable while its request runs. */
-export function BusyButton({ busy, disabled, onClick, ...props }: ComponentPropsWithRef<"button"> & { busy: boolean }) {
-  return <button {...props} disabled={disabled} aria-disabled={busy || disabled}
+/**
+ * Keep the focused action mounted and focusable while its request runs (`busy`), or while it
+ * is unavailable only for now (`inactive`, such as Next on the last record), so focus stays put.
+ */
+export function BusyButton({ busy, inactive = false, disabled, onClick, ...props }: ComponentPropsWithRef<"button"> & { busy: boolean; inactive?: boolean }) {
+  return <button {...props} disabled={disabled} aria-disabled={busy || inactive || disabled}
     aria-busy={busy || undefined} onClick={(event) => {
-      if (busy || disabled) { event.preventDefault(); return; }
+      if (busy || inactive || disabled) { event.preventDefault(); return; }
       onClick?.(event);
     }} />;
 }

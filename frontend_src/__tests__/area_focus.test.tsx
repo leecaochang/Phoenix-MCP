@@ -4,8 +4,8 @@
  * menu button; and back to where focus last was in an area.
  */
 import { describe, it, expect, afterEach } from "vitest";
-import { render, fireEvent } from "@testing-library/react";
-import { useRef } from "react";
+import { render, fireEvent, act } from "@testing-library/react";
+import { useRef, useState } from "react";
 import { focusAreas, nextArea, useAreaKeys } from "../shell/areaFocus";
 
 /** Give an element a box, since jsdom lays nothing out. */
@@ -93,5 +93,60 @@ describe("area focus", () => {
     layOut(container);
     const left = focusAreas(container).find((a) => a.key === "window:left")!;
     expect(left.target).toBe(container.querySelectorAll("[data-phx-window-menu]")[1]);
+  });
+
+  it("keeps focus in the panel when the focused control goes away: in its window, else the window now in its place", async () => {
+    function Closing() {
+      const root = useRef<HTMLDivElement | null>(null);
+      const [shown, setShown] = useState({ button: true, right: true });
+      useAreaKeys(root);
+      return (
+        <div ref={root}>
+          <div className="phx-toolbar"><button>Access Keys</button></div>
+          <div className="phx-workspace-frame">
+            <div className="dv-groupview"><button data-phx-window-menu="left">menu</button></div>
+            {shown.right && <div className="dv-groupview"><button data-phx-window-menu="right" onClick={() => setShown({ ...shown, right: false })}>close</button></div>}
+            <div className="phx-window-body" data-phx-window="left">
+              {shown.button && <button onClick={() => setShown({ ...shown, button: false })}>Approve</button>}
+            </div>
+            {shown.right && <div className="phx-window-body" data-phx-window="right" />}
+          </div>
+        </div>
+      );
+    }
+    const { container, getByText } = render(<Closing />);
+    const lay = () => {
+      place(container.querySelector(".phx-toolbar")!, 0, 0);
+      for (const el of container.querySelectorAll("button, .phx-window-body")) place(el, 100, el.closest('[data-phx-window="right"], .dv-groupview:nth-child(2)') ? 600 : 0);
+    };
+    lay();
+    const approve = getByText("Approve");
+    approve.focus();
+    await act(async () => { fireEvent.click(approve); });
+    await act(async () => { await Promise.resolve(); });
+    // Its window takes focus, as F6 would give it.
+    expect(document.activeElement).toBe(container.querySelector('[data-phx-window="left"]'));
+
+    const close = container.querySelector<HTMLElement>('[data-phx-window-menu="right"]')!;
+    lay();
+    close.focus();
+    await act(async () => { fireEvent.click(close); });
+    await act(async () => { await Promise.resolve(); });
+    // The window went with it: focus goes to the area now in its place, never to the page.
+    expect(document.activeElement).not.toBe(document.body);
+    expect(container.contains(document.activeElement)).toBe(true);
+  });
+
+  it("leaves focus alone when the user moved it elsewhere", async () => {
+    const outside = document.createElement("button");
+    document.body.appendChild(outside);
+    const { container } = render(<Panel />);
+    layOut(container);
+    const field = container.querySelector('[aria-label="field"]') as HTMLElement;
+    field.focus();
+    outside.focus();
+    await act(async () => { field.remove(); await Promise.resolve(); });
+    expect(document.activeElement).toBe(outside);
+    outside.remove();
   });
 });

@@ -76,7 +76,8 @@ function MenuList({ label, entries, place, focusFirst, onClose, listRef }: {
     else if (e.key === "Home") items[0]?.focus();
     else if (e.key === "End") items[items.length - 1]?.focus();
     else if (e.key === "Escape") onClose(true);
-    else if (e.key === "Tab") { onClose(false); return; }
+    // The menu lives at the end of the page: Tab goes on from its button, not from there.
+    else if (e.key === "Tab") { onClose(true); return; }
     else return;
     e.preventDefault();
     e.stopPropagation();

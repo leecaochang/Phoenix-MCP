@@ -14,7 +14,7 @@ export type DisplayMode = "icons" | "icon-text";
 /** The toolbar's display mode, provided by the shell. */
 export const DisplayModeContext = createContext<DisplayMode>("icon-text");
 
-export function ActionButton({ icon, label, name, title, help, helpText, guide, onClick, busy = false, disabled, pressed, className = "btn btn-ghost btn-sm" }: {
+export function ActionButton({ icon, label, name, title, help, helpText, guide, onClick, busy = false, inactive, disabled, pressed, describedBy, className = "btn btn-ghost btn-sm" }: {
   icon: IconName;
   label: string;
   /** A fuller accessible name than the label, such as one naming the item it acts on. */
@@ -30,15 +30,19 @@ export function ActionButton({ icon, label, name, title, help, helpText, guide, 
   onClick: () => void;
   /** A request it started is running: it stays focusable but does nothing. */
   busy?: boolean;
+  /** Unavailable for now but kept focusable, so focus is not lost when it changes under the user. */
+  inactive?: boolean;
   disabled?: boolean;
   /** A toggle that is currently on. */
   pressed?: boolean;
+  /** Ids of text that says more about what it does, such as a confirmation's consequence. */
+  describedBy?: string;
   className?: string;
 }) {
   const iconsOnly = useContext(DisplayModeContext) === "icons";
   return (
-    <BusyButton type="button" className={`${className} phx-action${iconsOnly ? " is-icon-only" : ""}`} busy={busy} disabled={disabled}
-      aria-label={name ?? (iconsOnly ? label : undefined)} aria-pressed={pressed} title={title ?? label} data-help={help} data-help-text={helpText} data-guide={guide} onClick={onClick}>
+    <BusyButton type="button" className={`${className} phx-action${iconsOnly ? " is-icon-only" : ""}`} busy={busy} inactive={inactive} disabled={disabled}
+      aria-label={name ?? (iconsOnly ? label : undefined)} aria-pressed={pressed} aria-describedby={describedBy} title={title ?? label} data-help={help} data-help-text={helpText} data-guide={guide} onClick={onClick}>
       <Icon name={icon} size={16} />
       {!iconsOnly && <span>{label}</span>}
     </BusyButton>

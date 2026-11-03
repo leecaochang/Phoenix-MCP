@@ -13,7 +13,7 @@ import { dimWhileDragging, edgeResolver, floatingMouseMove, refuseTabDrops } fro
 import { rowRules } from "./rows";
 import { MIN_WINDOW_HEIGHT, MIN_WINDOW_WIDTH } from "./fold";
 import { WorkspaceCanvas, bandEdgeResizing, bottomEdgeResizing, pushDownResizing, scrollWhileDragging } from "./scroll";
-import { ControllerContext, TitleTab, WindowControls, WindowGhost, WindowMenuExtrasContext, windowMenuEntries } from "./TitleBar";
+import { ControllerContext, TitleTab, WindowControls, WindowFold, WindowGhost, WindowMenuExtrasContext, windowMenuEntries } from "./TitleBar";
 import { t } from "../../i18n";
 import { useContextMenu, type MenuEntry } from "../../ui/Menu";
 import type { HostId, WorkspaceController, WorkspaceLayout } from "./controller";
@@ -227,6 +227,7 @@ export function WorkspaceDock({ controller, components, renderWindow, watermark,
       dropPositionResolver={resolver}
       components={components}
       defaultTabComponent={TitleTab}
+      prefixHeaderActionsComponent={WindowFold}
       rightHeaderActionsComponent={WindowControls}
       groupDragGhostComponent={WindowGhost}
       watermarkComponent={NoWatermark}

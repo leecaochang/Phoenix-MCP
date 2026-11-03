@@ -171,6 +171,7 @@ describe("Review and Request Details", () => {
     vi.mocked(api.approveApproval).mockReturnValue(new Promise((resolve) => { finish = resolve; }));
     const view = await open();
     const approve = view.getByRole("button", { name: "Approve" });
+    approve.focus();
     fireEvent.click(approve);
     await waitFor(() => expect(approve).toHaveAttribute("aria-busy", "true"));
     expect(approve).toHaveTextContent("Approve");
@@ -180,6 +181,10 @@ describe("Review and Request Details", () => {
     finish(record({ status: "approved", resolved_at: "2026-08-13T04:05:00Z" }));
     expect(await within(reviewWindow()).findByText("The request completed successfully.")).toBeTruthy();
     expect(view.queryByRole("button", { name: "Approve" })).toBeNull();
+    // Focus does not fall to the page with Approve: the request's title takes it, and the
+    // outcome is spoken from a status region that was there before the decision.
+    expect(document.activeElement).toBe(within(reviewWindow()).getByRole("heading", { name: "Restart Home Assistant" }));
+    expect(within(reviewWindow()).getByRole("status")).toHaveTextContent("The request completed successfully.");
   });
 
   it("uses friendly titles in History, with the technical summary in Request Details", async () => {

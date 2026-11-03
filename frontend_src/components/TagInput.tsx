@@ -18,16 +18,20 @@ interface Props {
   recommended?: string[];
   showRecommended?: boolean;
   max?: number;
+  /** The field's id, for a label outside it. */
+  id?: string;
 }
 
 export function TagInput({
-  value, onChange, canonicalTags, recommended = [], showRecommended = false, max = MAX_DEFAULT,
+  value, onChange, canonicalTags, recommended = [], showRecommended = false, max = MAX_DEFAULT, id,
 }: Props) {
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
+  const chipsRef = useRef<HTMLDivElement>(null);
   const listboxId = useId();
+  const noteId = useId();
 
   const atMax = value.length >= max;
 
@@ -51,6 +55,10 @@ export function TagInput({
     onChange([...value, tag]);
     setQuery("");
     setActive(0);
+    // The last tag allowed removes the field, with focus in it: the new tag's remove button takes focus.
+    if (value.length + 1 >= max && inputRef.current && inputRef.current === (inputRef.current.getRootNode() as Document | ShadowRoot).activeElement) {
+      requestAnimationFrame(() => [...(chipsRef.current?.querySelectorAll<HTMLElement>(".tag-chip-x") ?? [])].pop()?.focus());
+    }
   }
 
   function removeAt(i: number) {
@@ -91,14 +99,14 @@ export function TagInput({
         </div>
       )}
 
-      <div className="tag-input" onClick={() => inputRef.current?.focus()}>
+      <div ref={chipsRef} className="tag-input" onClick={() => inputRef.current?.focus()}>
         {value.map((tag, i) => {
           const { ns, qual } = splitTag(tag);
           return (
             <span key={tag} className="tag-chip" title={tag}>
               {ns && <span className="tag-chip-ns">{ns}</span>}
               <span className="tag-chip-qual">{qual}</span>
-              <button type="button" className="tag-chip-x" aria-label={t("mesa.tagRemove", { tag })} data-help="mesa.tagRemoveHelp"
+              <button type="button" className="tag-chip-x" aria-label={t("mesa.tagRemove", { tag })} aria-describedby={atMax ? noteId : undefined} data-help="mesa.tagRemoveHelp"
                 onClick={(e) => { e.stopPropagation(); removeAt(i); }}>&times;</button>
             </span>
           );
@@ -106,6 +114,7 @@ export function TagInput({
         {!atMax && (
           <input
             ref={inputRef}
+            id={id}
             className="tag-input-field"
             value={query}
             placeholder={value.length === 0 ? t("mesa.tagSearchPlaceholder") : ""}
@@ -140,7 +149,7 @@ export function TagInput({
         )}
       </div>
 
-      {atMax && <div className="tag-input-note">{t("mesa.tagMax", { max })}</div>}
+      <div id={noteId} className={atMax ? "tag-input-note" : "sr-only"} role="status">{atMax ? t("mesa.tagMax", { max }) : ""}</div>
     </div>
   );
 }

@@ -320,6 +320,8 @@ export function Toolbar({ controller, shellRoot, env, state, onChange, documenta
     <div
       ref={self}
       className="phx-toolbar"
+      role="region"
+      aria-label={t("workspace.toolbarMenu")}
       data-dock={effective.dock}
       data-orient={vertical ? "vertical" : "horizontal"}
       data-mode={effective.mode}

@@ -543,6 +543,8 @@ interface Props {
   hass?: unknown;
   getHass?: () => unknown;
   summonVersion?: number;
+  /** Raised each time the user opens or summons the window: the message box then takes focus. */
+  focusRequest?: number;
   /** My Workspace's Agent Chat slot while it is on screen: the window draws itself into it. */
   dockMount?: HTMLElement | null;
   /** Whether Agent Chat belongs in My Workspace, and the menu item that changes it; absent where it cannot dock. */
@@ -690,7 +692,7 @@ const TERMINAL_APPROVAL_STATUSES: ReadonlySet<string> = new Set(["approved", "re
 
 export function AgentCliWindow({
   accessKeys, instances, scrollbackLines, initialAccessKeyId, onClose, hass = null, getHass: getLiveHass,
-  summonVersion, dockMount = null, dock = null,
+  summonVersion, focusRequest = 0, dockMount = null, dock = null,
 }: Props) {
   // Restore persisted window state (survives navigation away/back and reopen).
   const persistenceOwner = useRef(getAgentCliOwner()).current;
@@ -927,6 +929,33 @@ export function AgentCliWindow({
   useEffect(() => {
     if (inputRef.current) fitComposerTextarea(inputRef.current);
   }, [input, popupMount, textSizePt]);
+
+  // Opening Agent Chat, or moving it into or out of its own window, puts focus in the message
+  // box (or on the window when there is nothing to type into): otherwise a keyboard user has to
+  // find it, last in the page after everything Home Assistant shows.
+  const focusComposer = useCallback(() => {
+    window.requestAnimationFrame(() => {
+      const box = inputRef.current;
+      if (box && !box.disabled) { box.focus({ preventScroll: true }); return; }
+      const win = rootEl;
+      if (!win) return;
+      if (!win.hasAttribute("tabindex")) win.tabIndex = -1;
+      win.focus({ preventScroll: true });
+    });
+  }, [rootEl]);
+  const handledFocus = useRef(0);
+  const folded = minimized && !poppedOut && !docked;
+  useEffect(() => {
+    if (!focusRequest || focusRequest === handledFocus.current || folded) return;
+    handledFocus.current = focusRequest;
+    focusComposer();
+  }, [focusRequest, folded, focusComposer]);
+  const lastMount = useRef(popupMount);
+  useEffect(() => {
+    if (lastMount.current === popupMount) return;
+    lastMount.current = popupMount;
+    focusComposer();
+  }, [popupMount, focusComposer]);
 
   // The global Agent Chat button can be pressed while this live component is
   // already mounted as a minimized pill. Rehydrate the geometry that the button
@@ -2129,9 +2158,17 @@ export function AgentCliWindow({
                       <button type="button" className="agentcli-attachment-remove"
                               aria-label={t("agentchat.removeAttachment", { name: attachment.name })}
                               title={t("agentchat.removeAttachment", { name: attachment.name })}
-                              onClick={() => {
+                              onClick={(e) => {
                                 setAttachError("");
+                                // The next picture's remove button takes focus, else the attach button.
+                                const list = e.currentTarget.closest(".agentcli-attachment-list");
+                                const at = attachments.findIndex((item) => item.id === attachment.id);
+                                const panel = e.currentTarget.closest(".agentcli-window");
                                 setAttachments((current) => current.filter((item) => item.id !== attachment.id));
+                                window.requestAnimationFrame(() => {
+                                  const left = [...(list?.querySelectorAll<HTMLElement>(".agentcli-attachment-remove") ?? [])];
+                                  (left[Math.min(at, left.length - 1)] ?? panel?.querySelector<HTMLElement>(".agentcli-attach-btn"))?.focus();
+                                });
                               }}>
                         <Icon name="close" size={14} />
                       </button>

@@ -6,7 +6,7 @@
  * result. Their shared state is `shell/approvals.tsx`.
  */
 
-import { useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
+import { Fragment, useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 import type { ApprovalRecord, ApprovalStatus, BatchApproveResult } from "../types";
 import { ApprovalChange } from "../components/ApprovalChange";
 import { ErrorMsg, Loading } from "../components/common";
@@ -244,10 +244,10 @@ function ReasonRow({ a, locked, decisions }: { a: ApprovalsState; locked: boolea
     <div ref={row} className="approval-reject-row phx-review-reason" data-guide="window.review#reject">
       <label htmlFor="phx-review-reason" className="approval-reason-label">{t("approvalSummary.action.optionalReason")}</label>
       <input ref={input} id="phx-review-reason" type="text" className="approval-reason-input" data-help="help.rejectReason" value={a.reason}
-        placeholder={t("approvalSummary.action.reasonPlaceholder")} disabled={locked}
+        placeholder={t("approvalSummary.action.reasonPlaceholder")} readOnly={locked} aria-disabled={locked || undefined}
         onChange={(e) => a.setReason(e.target.value)}
         onKeyDown={(e) => {
-          if (e.key === "Enter") { e.preventDefault(); void a.reject(); }
+          if (e.key === "Enter") { e.preventDefault(); if (!locked) void a.reject(); }
           if (e.key === "Escape") { e.preventDefault(); a.setRejecting(false); }
         }} />
       <ActionButton icon="check" label={t("approvals.confirmReject")} help="help.confirmReject" busy={locked} onClick={() => { void a.reject(); }} className="btn btn-sm phx-decision-reject" />
@@ -259,8 +259,18 @@ function ReasonRow({ a, locked, decisions }: { a: ApprovalsState; locked: boolea
 export function ReviewWindow() {
   const a = useApprovals();
   const decisions = useRef<HTMLDivElement | null>(null);
+  const title = useRef<HTMLHeadingElement | null>(null);
   const r = a?.current;
   const now = useNow(r?.status === "pending");
+  // Deciding removes Approve and Reject, with focus on one of them: focus goes to the request's
+  // title, from where the outcome below is the next thing read.
+  const decided = r ? `${r.id}:${r.status !== "pending"}` : "";
+  useLayoutEffect(() => {
+    const head = title.current;
+    if (!head || !decided.endsWith(":true")) return;
+    const active = (head.getRootNode() as Document | ShadowRoot).activeElement;
+    if (!active || active === document.body) head.focus({ preventScroll: true });
+  }, [decided]);
   if (!a || !r) return <p className="phx-window-empty">{t("workspace.reviewEmpty")}</p>;
 
   const pending = r.status === "pending";
@@ -271,16 +281,17 @@ export function ReviewWindow() {
   // The summary sentence says what deciding does, which some requests depend on (a recovery, for one).
   const summary = friendlyApprovalSummary(r.diff);
   return (
-    <div className="phx-review" key={r.id}>
+    // Not keyed by the request: stepping updates the head in place, so Previous and Next keep focus.
+    <div className="phx-review">
       {/* Request Details is closed and reopened from Workspace Options, like any other
           window; Review has no tools of its own (user, 2026-10-29). */}
       <div className="phx-review-head">
         {/* Previous and Next step through the list the request was chosen from, as in Log Details. */}
         <div className="phx-log-details-bar">
-          <h3 className="phx-review-title">{approvalListTitle(r.diff)}</h3>
+          <h3 ref={title} className="phx-review-title" tabIndex={-1} aria-live="polite">{approvalListTitle(r.diff)}</h3>
           <div className="phx-log-details-nav" data-guide="window.review#step">
-            <ActionButton icon="previous" label={t("workspace.previousRecord")} help="help.previousRecord" disabled={!a.neighbour(-1)} onClick={() => a.step(-1)} className="btn btn-outline btn-sm" />
-            <ActionButton icon="next" label={t("workspace.nextRecord")} help="help.nextRecord" disabled={!a.neighbour(1)} onClick={() => a.step(1)} className="btn btn-outline btn-sm" />
+            <ActionButton icon="previous" label={t("workspace.previousRecord")} help="help.previousRecord" inactive={!a.neighbour(-1)} onClick={() => a.step(-1)} className="btn btn-outline btn-sm" />
+            <ActionButton icon="next" label={t("workspace.nextRecord")} help="help.nextRecord" inactive={!a.neighbour(1)} onClick={() => a.step(1)} className="btn btn-outline btn-sm" />
           </div>
         </div>
         <p className="phx-review-context" data-guide="window.review#context">
@@ -289,6 +300,7 @@ export function ReviewWindow() {
           <span>{pending ? <ExpiresIn record={r} /> : t("approvalSummary.history.resolvedAt", { time: formatDateTime(r.resolved_at || r.created_at) })}</span>
         </p>
       </div>
+      <Fragment key={r.id}>
       {pending && (
         <div ref={decisions} className="phx-review-actions" role="group" aria-label={t("workspace.review")}>
           {!overdue && <ActionButton icon="check" label={t("approvals.approve")} help="help.approve" guide="window.review#approve" busy={locked || a.rejecting} onClick={() => { void a.approve(); }} className="btn btn-sm phx-decision-approve" />}
@@ -299,12 +311,16 @@ export function ReviewWindow() {
       {a.decisionError && <ErrorMsg msg={a.decisionError} />}
       {summary.body && <p className="phx-review-body">{summary.body}</p>}
       <div className="phx-review-change" data-guide="window.review#change"><ApprovalChange record={r} /></div>
-      {!pending && (
-        <p className={`phx-review-outcome approval-status-${r.status}`} data-guide="topic.approvalLifecycle#outcomes">
-          <Icon name={STATUS_ICONS[r.status]} size={16} />
-          <span>{approvalOutcome(r)}</span>
-        </p>
-      )}
+      {/* Mounted while the request waits, so the outcome is spoken the moment it is decided. */}
+      <div role="status">
+        {!pending && (
+          <p className={`phx-review-outcome approval-status-${r.status}`} data-guide="topic.approvalLifecycle#outcomes">
+            <Icon name={STATUS_ICONS[r.status]} size={16} />
+            <span>{approvalOutcome(r)}</span>
+          </p>
+        )}
+      </div>
+      </Fragment>
     </div>
   );
 }

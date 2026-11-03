@@ -17,7 +17,7 @@
  */
 
 import { createPortal } from "react-dom";
-import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type KeyboardEvent, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from "react";
+import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type KeyboardEvent, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent, type RefObject } from "react";
 import { clampPosToViewport, snapResizeRect } from "../components/AgentCliWindow";
 import { ANCHOR, GUIDE_FORMAT, HEADING, LABEL, type GuideBundle, type GuideTopic } from "../guide/compile";
 import { searchGuide, topicSections, type SearchSection } from "../guide/search";
@@ -388,11 +388,14 @@ function useGuideTopic(workspace: string, windowId: string | null, language: str
     anchor = step.anchor;
   }
   if (topic && anchor && !topic.anchors.includes(anchor)) anchor = null;
+  // Counts the reader's own moves, so the page they asked for can take focus from the link that went with the page before.
+  const [moves, setMoves] = useState(0);
   const go = (next: Step) => {
     const shown = autoRef.current;
     const unrecorded = shown && recordedAuto.current !== autoKey ? shown : null;
     recordedAuto.current = autoKey;
     setHistory((h) => pushStep(unrecorded ? pushStep(h, unrecorded) : h, next));
+    setMoves((n) => n + 1);
   };
   return {
     loading: bundles === null,
@@ -401,10 +404,11 @@ function useGuideTopic(workspace: string, windowId: string | null, language: str
     view,
     topic,
     anchor,
+    moves,
     canGoBack: history.at > 0,
     canGoForward: history.at < history.steps.length - 1,
-    back: () => setHistory((h) => ({ ...h, at: Math.max(0, h.at - 1) })),
-    forward: () => setHistory((h) => ({ ...h, at: Math.min(h.steps.length - 1, h.at + 1) })),
+    back: () => { setHistory((h) => ({ ...h, at: Math.max(0, h.at - 1) })); setMoves((n) => n + 1); },
+    forward: () => { setHistory((h) => ({ ...h, at: Math.min(h.steps.length - 1, h.at + 1) })); setMoves((n) => n + 1); },
     /** Open a page, or a section of it; a section alone stays on the page shown. */
     open: (id: string | null, at: string | null = null) => {
       const to = id || topic?.id;
@@ -499,9 +503,31 @@ function SearchView({ guide }: { guide: Guide }) {
   );
 }
 
+/**
+ * After the reader moves to another page, the link they followed has gone with the page before,
+ * and focus with it: the new page's heading, or the chosen section's, takes focus, so a screen
+ * reader reads where they are and Tab goes on from there.
+ */
+function useFocusAfterMove(guide: Guide, frame: RefObject<HTMLElement | null>) {
+  useLayoutEffect(() => {
+    const el = frame.current;
+    if (!el || !guide.moves) return;
+    const scope = el.getRootNode() as Document | ShadowRoot;
+    const active = scope.activeElement;
+    if (active && active !== document.body) return;
+    const section = guide.anchor ? el.querySelector(`[data-guide-section="${guide.anchor}"]`) : null;
+    const heading = section?.querySelector<HTMLElement>("h3, h4, h5, h6") ?? el.querySelector<HTMLElement>(".phx-guide-topic h3");
+    if (!heading) return;
+    heading.tabIndex = -1;
+    heading.focus({ preventScroll: true });
+  }, [guide.moves, guide.view, guide.topic?.id, guide.anchor]); // eslint-disable-line react-hooks/exhaustive-deps
+}
+
 function GuideBody({ guide }: { guide: Guide }) {
   const html = useMemo(() => (guide.topic ? renderTopic(guide.topic.body) : ""), [guide.topic]);
   const body = useRef<HTMLDivElement | null>(null);
+  const frame = useRef<HTMLDivElement | null>(null);
+  useFocusAfterMove(guide, frame);
   // The selected section is scrolled to the top of the Guide and highlighted until something else is selected.
   useLayoutEffect(() => {
     const el = body.current;
@@ -516,6 +542,10 @@ function GuideBody({ guide }: { guide: Guide }) {
       scroller.scrollTop = 0;
     }
   }, [html, guide.anchor]);
+  return <div ref={frame} className="phx-guide-page">{guidePage(guide, html, body)}</div>;
+}
+
+function guidePage(guide: Guide, html: string, body: RefObject<HTMLDivElement | null>) {
   if (guide.loading) return <p className="phx-guide-note">{t("common.loading")}</p>;
   if (guide.failed) return <p className="phx-guide-note">{t("guide.unavailable")}</p>;
   if (guide.view === "contents") return <><GuideTools guide={guide} /><ContentsView guide={guide} /></>;
@@ -535,14 +565,14 @@ function GuideBody({ guide }: { guide: Guide }) {
   );
 }
 
-/** Back and Forward through the pages the Guide showed, as in a browser; each is greyed out at its end. */
+/** Back and Forward through the pages the Guide showed, as in a browser; each is greyed out at its end, keeping focus. */
 function HistoryButtons({ guide, iconSize = WINDOW_ICON }: { guide: Guide; iconSize?: number }) {
   return (
     <>
-      <button type="button" className="phx-window-control" aria-label={t("guide.back")} title={t("guide.back")} data-help="help.guideBack" disabled={!guide.canGoBack} onClick={guide.back}>
+      <button type="button" className="phx-window-control" aria-label={t("guide.back")} title={t("guide.back")} data-help="help.guideBack" aria-disabled={!guide.canGoBack} onClick={() => { if (guide.canGoBack) guide.back(); }}>
         <Icon name="back" size={iconSize} />
       </button>
-      <button type="button" className="phx-window-control" aria-label={t("guide.forward")} title={t("guide.forward")} data-help="help.guideForward" disabled={!guide.canGoForward} onClick={guide.forward}>
+      <button type="button" className="phx-window-control" aria-label={t("guide.forward")} title={t("guide.forward")} data-help="help.guideForward" aria-disabled={!guide.canGoForward} onClick={() => { if (guide.canGoForward) guide.forward(); }}>
         <Icon name="forward" size={iconSize} />
       </button>
     </>

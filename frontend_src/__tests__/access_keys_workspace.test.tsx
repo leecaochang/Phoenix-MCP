@@ -213,7 +213,8 @@ describe("Access Keys workspace", () => {
     const confirm = within(inline).getByRole("button", { name: "Revoke Access Key" });
     expect(confirm).toBeDisabled();
     // What revoking does reads in Help, for the box and its controls, not in it (user, 2026-10-31).
-    expect(within(inline).queryByText(t("accessKeys.revokeBody"))).toBeNull();
+    // Not drawn in the box (Help shows it), but read with it by a screen reader.
+    expect(within(inline).getByText(t("accessKeys.revokeBody"))).toHaveClass("sr-only");
     expect(inline).toHaveAttribute("data-help-text", t("accessKeys.revokeBody"));
     expect(inline).toHaveAttribute("data-help-controls");
     expect(within(inline).getByRole("checkbox")).toHaveFocus();
@@ -261,7 +262,8 @@ describe("Access Keys workspace", () => {
     const confirm = within(inline).getByRole("button", { name: "Rotate Access Key" });
     expect(confirm).toBeDisabled();
     // In Help, not in the box, and confirmed in the same gold as Enable Pass-Through (user, 2026-10-31).
-    expect(within(inline).queryByText(t("accessKeys.rotateBody"))).toBeNull();
+    // Not drawn in the box (Help shows it), but read with it by a screen reader.
+    expect(within(inline).getByText(t("accessKeys.rotateBody"))).toHaveClass("sr-only");
     expect(inline).toHaveAttribute("data-help-text", t("accessKeys.rotateBody"));
     expect(confirm).toHaveClass("btn-warning");
     fireEvent.click(within(inline).getByRole("checkbox"));
@@ -286,7 +288,7 @@ describe("Access Keys workspace", () => {
 
     await keyAction(registry, "passThrough");
     const inline = await screen.findByRole("group", { name: "Enable Pass-Through Mode" });
-    expect(within(inline).queryByText(/read and control every entity/)).toBeNull();
+    expect(within(inline).getByText(/read and control every entity/)).toHaveClass("sr-only");
     expect(inline).toHaveAttribute("data-help-text", tPlain("accessKeys.enablePtBody"));
     fireEvent.click(within(inline).getByRole("checkbox"));
     fireEvent.click(within(inline).getByRole("button", { name: "Enable Pass-Through" }));

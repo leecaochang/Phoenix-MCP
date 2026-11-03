@@ -398,8 +398,8 @@ describe("finding the way back", () => {
     const back = () => screen.getByRole("button", { name: "Back" });
     const forward = () => screen.getByRole("button", { name: "Forward" });
     await waitFor(() => expect(title()).toBe("Settings"));
-    expect(back()).toBeDisabled();
-    expect(forward()).toBeDisabled();
+    expect(back()).toHaveAttribute("aria-disabled", "true");
+    expect(forward()).toHaveAttribute("aria-disabled", "true");
     expect(screen.queryByRole("navigation", { name: "Where this page sits" })).toBeNull();
     act(() => { fireEvent.pointerDown(document.getElementById("memory")!); });
     expect(title()).toBe("Agent Chat");
@@ -410,16 +410,25 @@ describe("finding the way back", () => {
     expect(document.querySelector('[data-guide-section="chat-memory"]')).toHaveClass("is-target");
     fireEvent.click(back());
     expect(title()).toBe("Settings");
-    expect(back()).toBeDisabled();
+    expect(back()).toHaveAttribute("aria-disabled", "true");
     fireEvent.click(forward());
     fireEvent.click(forward());
     expect(title()).toBe("Safety");
-    expect(forward()).toBeDisabled();
+    expect(forward()).toHaveAttribute("aria-disabled", "true");
     // A link after going back drops the pages ahead.
     fireEvent.click(back());
-    fireEvent.click(screen.getByText("routing"));
+    // The link goes with the page it was on: the new page's title takes focus instead of the page.
+    const link = screen.getByText("routing");
+    link.focus();
+    fireEvent.click(link);
     expect(title()).toBe("How a Command Is Routed");
-    expect(forward()).toBeDisabled();
+    expect(document.activeElement).toBe(screen.getByRole("heading", { level: 3 }));
+    expect(forward()).toHaveAttribute("aria-disabled", "true");
+    // At the end of the history Forward keeps focus and does nothing.
+    forward().focus();
+    fireEvent.click(forward());
+    expect(document.activeElement).toBe(forward());
+    expect(title()).toBe("How a Command Is Routed");
     const crumbs = screen.getByRole("navigation", { name: "Where this page sits" });
     expect([...crumbs.querySelectorAll("a")].map((a) => a.textContent)).toEqual(["Settings", "Agent Chat"]);
     fireEvent.click(within(crumbs).getByText("Settings"));

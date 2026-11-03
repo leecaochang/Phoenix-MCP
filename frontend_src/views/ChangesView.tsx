@@ -351,10 +351,10 @@ export function ComparisonWindow() {
       <div className="phx-review-head">
         {/* Previous and Next step through the list the change was chosen from, as in Log Details. */}
         <div className="phx-log-details-bar">
-          <h3 className="phx-review-title">{changeLabel(record)}</h3>
+          <h3 className="phx-review-title" aria-live="polite">{changeLabel(record)}</h3>
           <div className="phx-log-details-nav" data-guide="window.comparison#step">
-            <ActionButton icon="previous" label={t("workspace.previousRecord")} help="help.previousRecord" disabled={!c.neighbour(-1)} onClick={() => c.step(-1)} className="btn btn-outline btn-sm" />
-            <ActionButton icon="next" label={t("workspace.nextRecord")} help="help.nextRecord" disabled={!c.neighbour(1)} onClick={() => c.step(1)} className="btn btn-outline btn-sm" />
+            <ActionButton icon="previous" label={t("workspace.previousRecord")} help="help.previousRecord" inactive={!c.neighbour(-1)} onClick={() => c.step(-1)} className="btn btn-outline btn-sm" />
+            <ActionButton icon="next" label={t("workspace.nextRecord")} help="help.nextRecord" inactive={!c.neighbour(1)} onClick={() => c.step(1)} className="btn btn-outline btn-sm" />
           </div>
         </div>
         <p className="phx-review-context">

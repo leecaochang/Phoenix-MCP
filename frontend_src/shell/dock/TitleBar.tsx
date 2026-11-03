@@ -27,35 +27,56 @@ function useFolded(controller: WorkspaceController, id: string | undefined): boo
   return id !== undefined && controller.folds.isFolded(id);
 }
 
-/** The title, with the fold control before it. The whole title bar drags the window. */
+/** The title. The whole title bar drags the window. */
 export function TitleTab(props: IDockviewPanelHeaderProps) {
-  const controller = useController();
   const [title, setTitle] = useState(props.api.title ?? "");
   useEffect(() => {
     const sub = props.api.onDidTitleChange((e) => setTitle(e.title));
     return () => sub.dispose();
   }, [props.api]);
-  const folded = useFolded(controller, props.api.id);
   // Dockview draws the focusable tab around this title; give it the title bar's help too, so
   // keyboard focus on the tab reads it instead of the window's name.
   const titleRef = useRef<HTMLDivElement | null>(null);
-  useEffect(() => { titleRef.current?.closest(".dv-tab")?.setAttribute("data-help", "help.windowTitle"); }, []);
+  useEffect(() => {
+    const tab = titleRef.current?.closest(".dv-tab");
+    if (!tab) return undefined;
+    tab.setAttribute("data-help", "help.windowTitle");
+    // Dockview closes a tab on Delete or Backspace, around the workspace's own Close, which
+    // records where the window was and what closing it means. A stray key never closes a window.
+    const keys = (e: Event) => {
+      const key = (e as globalThis.KeyboardEvent).key;
+      if (key !== "Delete" && key !== "Backspace") return;
+      e.preventDefault();
+      e.stopPropagation();
+    };
+    tab.addEventListener("keydown", keys);
+    return () => tab.removeEventListener("keydown", keys);
+  }, []);
   return (
     <div ref={titleRef} className="phx-window-title" data-help="help.windowTitle">
-      <button
-        type="button"
-        className="phx-window-control"
-        aria-label={folded ? t("workspace.unfold") : t("workspace.fold")}
-        title={folded ? t("workspace.unfold") : t("workspace.fold")}
-        data-help="help.fold"
-        aria-expanded={!folded}
-        onPointerDown={(e) => e.stopPropagation()}
-        onClick={() => controller.toggleFold(props.api.group)}
-      >
-        <Icon name={folded ? "folded" : "expand"} size={14} />
-      </button>
       <span className="phx-window-title-text">{title}</span>
     </div>
+  );
+}
+
+/** The fold control, before the title and outside Dockview's tab, which may hold no other control. */
+export function WindowFold(props: IDockviewHeaderActionsProps) {
+  const controller = useController();
+  const folded = useFolded(controller, props.activePanel?.id);
+  if (!props.activePanel) return null;
+  return (
+    <button
+      type="button"
+      className="phx-window-control phx-window-fold"
+      aria-label={folded ? t("workspace.unfold") : t("workspace.fold")}
+      title={folded ? t("workspace.unfold") : t("workspace.fold")}
+      data-help="help.fold"
+      aria-expanded={!folded}
+      onPointerDown={(e) => e.stopPropagation()}
+      onClick={() => controller.toggleFold(props.group)}
+    >
+      <Icon name={folded ? "folded" : "expand"} size={14} />
+    </button>
   );
 }
 
@@ -187,7 +208,8 @@ export function WindowControls(props: IDockviewHeaderActionsProps) {
 
   return (
     <div className="phx-window-controls" onPointerDown={(e) => e.stopPropagation()}>
-      {resizing && <span className="phx-window-resize-hint" role="status">{t("workspace.resizeHint")}</span>}
+      {/* Mounted before it speaks, so a screen reader hears the hint when resizing starts. */}
+      <span className={resizing ? "phx-window-resize-hint" : "sr-only"} role="status">{resizing ? t("workspace.resizeHint") : ""}</span>
       <MenuButton
         label={t("workspace.windowMenu")}
         help="help.windowMenu"
@@ -201,6 +223,7 @@ export function WindowControls(props: IDockviewHeaderActionsProps) {
         }}
         pressed={resizing}
         onButtonKeyDown={resizeKeys}
+        onButtonBlur={() => setResizing(false)}
       />
       {floating ? (
         <button type="button" className="phx-window-control" aria-label={t("workspace.dockWindowAria")} title={t("workspace.dockWindowAria")}

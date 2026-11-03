@@ -208,6 +208,18 @@ describe("Window menu", () => {
   const labels = (el: Panel) => [...sr(el).querySelectorAll<HTMLElement>('.phx-menu [role^="menuitem"]')].map((i) => i.textContent!.replace("\u2713", "").trim());
   const closeMenu = (el: Panel) => act(() => { fireEvent.keyDown(sr(el).querySelector(".phx-menu")!, { key: "Escape" }); });
 
+  it("keeps a window open on Delete or Backspace in its title, and keeps the fold control out of the title's tab", async () => {
+    const el = mountPanel();
+    await waitFor(() => expect(visible(el, "accessKeys")?.textContent).toContain("shell-access-key"));
+    const tab = titleControl(el, "Access Keys", ".phx-window-title-text").closest<HTMLElement>(".dv-tab")!;
+    // The tab is a title, not a container of controls: Fold sits beside it.
+    expect(tab.querySelector("button")).toBeNull();
+    expect(titleControl(el, "Access Keys", ".dv-pre-actions-container [aria-expanded]")).not.toBeNull();
+    act(() => { fireEvent.keyDown(tab, { key: "Delete" }); });
+    act(() => { fireEvent.keyDown(tab, { key: "Backspace" }); });
+    expect(visible(el, "accessKeys")).not.toBeNull();
+  });
+
   it("offers the same items from the title bar's menu button and from a right-click on the title bar", async () => {
     const el = mountPanel();
     await waitFor(() => expect(visible(el, "accessKeys")?.textContent).toContain("shell-access-key"));

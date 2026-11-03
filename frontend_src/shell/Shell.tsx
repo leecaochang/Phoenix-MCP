@@ -913,11 +913,11 @@ export function Shell() {
       esphomeBuilder={s ? !!s.esphome_builder : null}
     >
       <div ref={attachRoot} className={`phx-shell phx-env-${env}`} data-toolbar={dock}>
-        <h1 className="sr-only">{t("shell.srTitle")}</h1>
         <Toolbar controller={env === "desktop" && visited.has(active) ? controllerFor(active) : null} shellRoot={root} env={env}
           state={toolbar} onChange={setToolbar} documentation={documentationMenu} onAgentChat={openChat}
           options={env === "mobile" ? phoneOptions : undefined} />
         <WorkspaceArea menu={env === "desktop" ? () => workspaceMenu(controllerFor(active), actions) : null}>
+          <h1 className="sr-only">{t("shell.srTitle")}</h1>
           {env === "desktop"
             ? WORKSPACE_IDS.filter((id) => visited.has(id)).map((id) => (
               <WorkspaceVisibleContext.Provider key={`${userId}:${store.generation}:${id}`} value={id === active}>
@@ -958,6 +958,7 @@ export function Shell() {
               onClose={d.closeAgentCli}
               hass={d.hass}
               summonVersion={d.agentCliSummon}
+              focusRequest={d.agentCliFocus}
               dockMount={chatSlot}
               dock={env === "desktop" ? { docked: chatDocked, toggle: dockToggle } : null}
             />

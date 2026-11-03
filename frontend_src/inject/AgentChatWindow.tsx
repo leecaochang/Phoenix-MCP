@@ -46,11 +46,12 @@ export interface AgentChatDock {
 }
 
 function Boot({
-  accessKeyId, onClose, summonVersion, dock,
+  accessKeyId, onClose, summonVersion, focusRequest, dock,
 }: {
   accessKeyId: string;
   onClose: () => void;
   summonVersion: number;
+  focusRequest: number;
   dock: AgentChatDock | null;
 }) {
   const [data, setData] = useState<BootData | null>(null);
@@ -108,6 +109,7 @@ function Boot({
       hass={getHass()}
       getHass={getHass}
       summonVersion={summonVersion}
+      focusRequest={focusRequest}
       dockMount={dock?.slot ?? null}
       dock={dock ? { docked: dock.docked, toggle: dock.toggle } : null}
     />
@@ -121,6 +123,9 @@ let root: Root | null = null;
 let themeObserver: MutationObserver | null = null;
 let activeAccessKeyId = "";
 let summonVersion = 0;
+let focusRequest = 0;
+/** What had focus on the Home Assistant page when the window opened, given back when it closes. */
+let opener: HTMLElement | null = null;
 let reviewResumeFrame: number | null = null;
 let dockState: AgentChatDock | null = null;
 
@@ -170,6 +175,7 @@ function paintAgentChat(): void {
       accessKeyId={activeAccessKeyId}
       onClose={hideAgentChat}
       summonVersion={summonVersion}
+      focusRequest={focusRequest}
       dock={dockState}
     />
     </ErrorBoundary>,
@@ -245,16 +251,29 @@ export function hideAgentChat(): void {
     window.removeEventListener("phx-language-changed", reloadStrings);
     reloadStrings = null;
   }
+  // Focus inside the window shows on the page as focus on its host.
+  const hadFocus = !!host && document.activeElement === host;
   root?.unmount();
   root = null;
   host?.remove();
   host = null;
   activeAccessKeyId = "";
   summonVersion = 0;
+  const back = opener;
+  opener = null;
+  if (hadFocus && back?.isConnected) back.focus();
+}
+
+/** The focused element, looking inside shadow roots, as Home Assistant's own elements use them. */
+function deepActive(doc: Document): Element | null {
+  let at: Element | null = doc.activeElement;
+  while (at?.shadowRoot?.activeElement) at = at.shadowRoot.activeElement;
+  return at && at !== doc.body ? at : null;
 }
 
 export function showAgentChat(accessKeyId?: string): void {
   if (accessKeyId !== undefined) activeAccessKeyId = accessKeyId;
+  focusRequest += 1;
   if (host) {
     // Keep the mounted chat and its live conversation intact. A fresh render of
     // the same Boot tree only changes this signal; AgentCliWindow uses it to
@@ -263,6 +282,8 @@ export function showAgentChat(accessKeyId?: string): void {
     paintAgentChat();
     return;
   }
+  const was = deepActive(document);
+  opener = was instanceof HTMLElement ? was : null;
   const hass = getHass();
   setHass(hass);
   persistenceOwner = getAgentCliOwner();

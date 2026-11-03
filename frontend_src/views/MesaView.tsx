@@ -1003,8 +1003,8 @@ export function ProfileEditor({
           </h3>
           <div className="phx-window-actions mesa-editor-actions" data-guide="window.mesaEditor#save">
             {/* A new profile is itself the change; an existing one waits for an edit (user, 2026-10-30). */}
-            <ActionButton icon="save" label={t("mesa.save")} help="mesa.saveHelp" busy={saving} disabled={!canSave || (!isNew && !dirty)} onClick={() => { void save(); }} className="btn btn-outline btn-sm" />
-            <ActionButton icon="undo" label={t("mesa.discardChanges")} help="mesa.discardHelp" busy={saving} disabled={!isNew && !dirty} onClick={discard} className="btn btn-outline btn-sm" />
+            <ActionButton icon="save" label={t("mesa.save")} help="mesa.saveHelp" busy={saving} inactive={!canSave || (!isNew && !dirty)} onClick={() => { void save(); }} className="btn btn-outline btn-sm" />
+            <ActionButton icon="undo" label={t("mesa.discardChanges")} help="mesa.discardHelp" busy={saving} inactive={!isNew && !dirty} onClick={discard} className="btn btn-outline btn-sm" />
             {/* Always offered, so the row does not change shape; there is nothing to delete until a profile is open. */}
             <ActionButton icon="delete" label={t("mesa.delete")} help="mesa.deleteHelp" busy={saving} disabled={isNew || confirmDelete || !loaded} onClick={() => setConfirmDelete(true)} className="btn btn-outline btn-sm" />
           </div>

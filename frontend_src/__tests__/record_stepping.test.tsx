@@ -78,11 +78,11 @@ describe("the Changes list and Comparison", () => {
     await waitFor(() => expect(within(comparisonWindow()).getByRole("heading", { name: "Second" })).toBeTruthy());
     fireEvent.click(within(comparisonWindow()).getByRole("button", { name: "Next Record" }));
     await waitFor(() => expect(within(comparisonWindow()).getByRole("heading", { name: "First" })).toBeTruthy());
-    expect(within(comparisonWindow()).getByRole("button", { name: "Next Record" })).toBeDisabled();
+    expect(within(comparisonWindow()).getByRole("button", { name: "Next Record" })).toHaveAttribute("aria-disabled", "true");
     fireEvent.click(within(comparisonWindow()).getByRole("button", { name: "Previous Record" }));
     fireEvent.click(await within(comparisonWindow()).findByRole("button", { name: "Previous Record" }));
     await waitFor(() => expect(within(comparisonWindow()).getByRole("heading", { name: "Third" })).toBeTruthy());
-    expect(within(comparisonWindow()).getByRole("button", { name: "Previous Record" })).toBeDisabled();
+    expect(within(comparisonWindow()).getByRole("button", { name: "Previous Record" })).toHaveAttribute("aria-disabled", "true");
     expect(view).toBeTruthy();
   });
 });
@@ -94,9 +94,9 @@ describe("Approvals Review", () => {
     // Newest first by default.
     fireEvent.click((await view.findAllByText("Newer request"))[0]);
     await waitFor(() => expect(within(reviewWindow()).getByRole("heading", { name: "Newer request" })).toBeTruthy());
-    expect(within(reviewWindow()).getByRole("button", { name: "Previous Record" })).toBeDisabled();
+    expect(within(reviewWindow()).getByRole("button", { name: "Previous Record" })).toHaveAttribute("aria-disabled", "true");
     fireEvent.click(within(reviewWindow()).getByRole("button", { name: "Next Record" }));
     await waitFor(() => expect(within(reviewWindow()).getByRole("heading", { name: "Older request" })).toBeTruthy());
-    expect(within(reviewWindow()).getByRole("button", { name: "Next Record" })).toBeDisabled();
+    expect(within(reviewWindow()).getByRole("button", { name: "Next Record" })).toHaveAttribute("aria-disabled", "true");
   });
 });

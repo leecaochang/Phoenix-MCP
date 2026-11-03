@@ -129,6 +129,8 @@ export interface PanelData {
   agentCliKey: number;
   /** Bumped to bring an open panel Chat back without remounting it. */
   agentCliSummon: number;
+  /** Raised each time the user opens Agent Chat, so its message box takes focus. */
+  agentCliFocus: number;
   agentCliInstances: AgentCliInstance[];
   globalChatReady: boolean;
 }
@@ -190,6 +192,7 @@ export function PanelDataProvider({ hass, narrow, theme, onThemeChange, language
   // re-reads the (re-centered, un-minimized) durable geometry.
   const [agentCliKey, setAgentCliKey] = useState<number>(0);
   const [agentCliSummon, setAgentCliSummon] = useState<number>(0);
+  const [agentCliFocus, setAgentCliFocus] = useState<number>(0);
   const [agentCliInstances, setAgentCliInstances] = useState<AgentCliInstance[]>([]);
   // Baseline pendingCount "seen" while actually viewing Pending; null until the
   // first count is known, so a reload with History persisted and count > 0
@@ -360,6 +363,7 @@ export function PanelDataProvider({ hass, narrow, theme, onThemeChange, language
     // An open window is brought back, not remounted: a remount would end a running reply and
     // cancel its approvals. Opening it on a given key, as the
     // setup does, starts afresh.
+    setAgentCliFocus((v) => v + 1);
     if (agentCliOpen && accessKeyId === undefined) {
       setAgentCliSummon((v) => v + 1);
       return;
@@ -563,7 +567,7 @@ export function PanelDataProvider({ hass, narrow, theme, onThemeChange, language
     pendingCount, refreshPendingCount, approvalSignal, claimedApprovals, deepApprovalId, consumeDeepApprovalLink,
     approvalsTab, setApprovalsTab,
     attention, attentionRequested, dismissAttentionRequest,
-    openAgentCli, keepAgentCliOpen, closeAgentCli, agentCliOpen, agentCliKey, agentCliSummon, agentCliInstances, globalChatReady,
+    openAgentCli, keepAgentCliOpen, closeAgentCli, agentCliOpen, agentCliKey, agentCliSummon, agentCliFocus, agentCliInstances, globalChatReady,
   };
   return <PanelDataContext.Provider value={value}>{children}</PanelDataContext.Provider>;
 }

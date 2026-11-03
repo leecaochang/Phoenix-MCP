@@ -73,7 +73,7 @@ export function nextArea(areas: FocusArea[], active: Element | null, back: boole
 
 /** Move focus into an area: where it last was there, else the area itself. */
 export function enterArea(area: FocusArea, remembered: Element | undefined): void {
-  if (remembered instanceof HTMLElement && remembered.isConnected && shown(remembered) && area.holds(remembered)) {
+  if (remembered instanceof HTMLElement && !gone(remembered) && area.holds(remembered)) {
     remembered.focus();
     return;
   }
@@ -82,19 +82,54 @@ export function enterArea(area: FocusArea, remembered: Element | undefined): voi
   target.focus();
 }
 
-/** Listen for F6 and Shift+F6 inside the panel's root element. */
+/** Whether focus left `el` because it went away: removed, hidden, made inert or disabled. */
+function gone(el: Element): boolean {
+  return !el.isConnected || !!el.closest("[hidden], [inert]") || el.matches(":disabled") || !shown(el);
+}
+
+/**
+ * Where focus goes when the focused control goes away (a closed window, a decided approval, a
+ * confirmation that closed): the area that held it, else the area now in its place, else the
+ * first. Left alone, the browser drops focus to the page and a keyboard user starts over.
+ */
+export function rescueFocus(root: ParentNode, lost: { area: string | null; index: number }, remembered: Map<string, Element>): void {
+  const areas = focusAreas(root);
+  if (!areas.length) return;
+  const same = lost.area ? areas.find((a) => a.key === lost.area) : undefined;
+  const area = same ?? areas[Math.min(Math.max(lost.index, 0), areas.length - 1)];
+  enterArea(area, remembered.get(area.key));
+}
+
+/** Listen for F6 and Shift+F6 inside the panel's root element, and keep focus in the panel when its control goes away. */
 export function useAreaKeys(root: RefObject<HTMLElement | null>): void {
   const remembered = useRef(new Map<string, Element>());
   useEffect(() => {
     const el = root.current;
     if (!el) return undefined;
     const scope = el.getRootNode() as Document | ShadowRoot;
+    let last: { el: Element; area: string | null; index: number } | null = null;
     const onFocus = (e: FocusEvent) => {
       const target = e.composedPath()[0];
       if (!(target instanceof Element)) return;
-      const area = focusAreas(scope).find((a) => a.holds(target));
+      const areas = focusAreas(scope);
+      const index = areas.findIndex((a) => a.holds(target));
+      const area = index >= 0 ? areas[index] : null;
       if (area) remembered.current.set(area.key, target);
+      last = { el: target, area: area?.key ?? null, index };
     };
+    // Focus that leaves on purpose lands somewhere; focus whose control went away lands on the page.
+    const check = () => {
+      if (!last) return;
+      const active = scope.activeElement;
+      if (active && active !== document.body) return;
+      const page = document.activeElement;
+      const lost = last;
+      last = null;
+      if ((page && page !== document.body) || !gone(lost.el)) return;
+      rescueFocus(scope, lost, remembered.current);
+    };
+    const observer = new MutationObserver(check);
+    observer.observe(el, { childList: true, subtree: true, attributes: true, attributeFilter: ["hidden", "disabled", "inert"] });
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "F6" || e.ctrlKey || e.altKey || e.metaKey) return;
       const areas = focusAreas(scope);
@@ -114,6 +149,7 @@ export function useAreaKeys(root: RefObject<HTMLElement | null>): void {
     el.addEventListener("keydown", onKey);
     document.addEventListener("keydown", onPageKey);
     return () => {
+      observer.disconnect();
       el.removeEventListener("focusin", onFocus);
       el.removeEventListener("keydown", onKey);
       document.removeEventListener("keydown", onPageKey);

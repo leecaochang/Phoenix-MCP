@@ -144,7 +144,9 @@
 }
 .phx-dock .dv-groupview.dv-active-group { border-color: var(--phx-line-strong); }
 .phx-dock .dv-tabs-and-actions-container { border-bottom: 1px solid var(--phx-border); }
-.phx-dock .dv-tab { padding: 0 8px 0 4px; }
+.phx-dock .dv-tab { padding: 0 8px 0 6px; }
+/* The fold control sits before the title, outside Dockview's tab. */
+.phx-dock .dv-pre-actions-container { display: flex; align-items: center; padding-left: 4px; }
 .phx-dock .dv-void-container { cursor: grab; }
 
 .phx-window-title {
@@ -179,9 +181,9 @@
   color: var(--phx-text-2);
   cursor: pointer;
 }
-.phx-window-control:hover:not(:disabled) { background: var(--phx-hover); color: var(--phx-text); }
-/* At the end of the Guide's history, Back or Forward is greyed out and does nothing. */
-.phx-window-control:disabled { opacity: 0.35; cursor: default; }
+.phx-window-control:hover:not(:disabled):not([aria-disabled="true"]) { background: var(--phx-hover); color: var(--phx-text); }
+/* At the end of the Guide's history, Back or Forward is greyed out and does nothing, keeping focus. */
+.phx-window-control:disabled, .phx-window-control[aria-disabled="true"] { opacity: 0.35; cursor: default; }
 .phx-window-control.is-active { background: var(--phx-accent-lt); color: var(--phx-text); }
 .phx-window-resize-hint { padding: 0 6px; font-size: 12px; color: var(--phx-text-2); white-space: nowrap; }
 
