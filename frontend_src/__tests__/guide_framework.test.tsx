@@ -200,6 +200,19 @@ describe("searching the Guide", () => {
     expect(found("mesaa")).toEqual(["workspace.mesa#"]);
   });
 
+  it("matches Chinese best on whole words, and inside a word only when nothing better exists", () => {
+    const zh = (id: string, text: string) => topicSections(id, id, text, [], (k) => k);
+    const all = [...zh("a", "关闭紧急开关。"), ...zh("b", "打开关键设置。"), ...zh("c", "管理访问密钥。"), ...zh("d", "密码学入门。")];
+    const found = (q: string) => searchGuide(all, q).map((h) => h.section.topic);
+    // 开关 is a word in a; in b it only straddles 打开 and 关键.
+    expect(found("开关")).toEqual(["a"]);
+    // Written nowhere as a word, the straddling match still counts.
+    expect(found("开关键")).toEqual(["b"]);
+    // The splitter breaks 密钥 into 密 and 钥; typed whole it still matches them as one, and 密 starts 密码 too.
+    expect(found("密钥")).toEqual(["c"]);
+    expect(found("密")).toEqual(["c", "d"]);
+  });
+
   it("matches inside words only for scripts written without spaces", () => {
     expect(searchGuide(topicSections("topic.x", "X", "Rapid changes.", [], (k) => k), "api")).toEqual([]);
     expect(searchGuide(topicSections("topic.j", "J", "設定を変更します。", [], (k) => k), "変更")).toHaveLength(1);

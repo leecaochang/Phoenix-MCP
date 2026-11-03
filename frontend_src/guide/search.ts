@@ -8,9 +8,12 @@
  * not use, but only alongside a word of its own. Every word typed must match,
  * so adding a word narrows the results. A near miss counts only for a word
  * the Guide has nowhere, so "meta" finds Meta and not every page about MESA
- * (user, 2026-11-03). Words are compared without case or
- * accents; text without spaces between words (Chinese, Japanese) is matched
- * as written.
+ * (user, 2026-11-03). Words are compared without case or accents. Text
+ * written without spaces (Chinese, Japanese) is split into words by the
+ * browser (user, 2026-11-03), but only to find where words begin and end: the
+ * browser's dictionary breaks terms such as 密钥 into single characters, so
+ * what the reader types is matched as written, best when it covers whole
+ * words, and in the middle of a word only when it is found nowhere better.
  */
 
 import { HEADING } from "./compile";
@@ -71,9 +74,37 @@ function wordScore(typed: string, word: string, near: boolean): number {
 /** Scripts written without spaces between words. */
 const UNSPACED = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Thai}]/u;
 
-/** A piece of text ready to match: its words, and the text itself for unspaced scripts. */
-interface Field { words: string[]; folded: string }
-const field = (text: string): Field => ({ words: tokens(text), folded: fold(text) });
+/** The browser's word splitter, where it has one; without it unspaced text matches anywhere. */
+interface WordSegment { segment: string; index: number; isWordLike?: boolean }
+interface WordSegmenter { segment(text: string): Iterable<WordSegment> }
+// Declared here: the project's TypeScript library predates Intl.Segmenter, which every supported browser has.
+const Segmenter = (Intl as unknown as { Segmenter?: new (locale: undefined, options: { granularity: "word" }) => WordSegmenter }).Segmenter;
+const SEGMENTER = Segmenter ? new Segmenter(undefined, { granularity: "word" }) : null;
+
+/** A piece of text ready to match: its words, the text itself, and for unspaced scripts where its words begin and end. */
+interface Field { words: string[]; folded: string; starts?: Set<number>; ends?: Set<number> }
+function field(text: string): Field {
+  const folded = fold(text);
+  const f: Field = { words: tokens(text), folded };
+  if (SEGMENTER && UNSPACED.test(folded)) {
+    f.starts = new Set();
+    f.ends = new Set();
+    for (const { segment, index, isWordLike } of SEGMENTER.segment(folded)) {
+      if (isWordLike) { f.starts.add(index); f.ends.add(index + segment.length); }
+    }
+  }
+  return f;
+}
+
+/** Unspaced text typed: 3 covering whole words, 2 from the start of one, 1 from inside one, 0 not found. */
+function runScore(typed: string, f: Field): number {
+  let best = 0;
+  for (let at = f.folded.indexOf(typed); at >= 0 && best < 3; at = f.folded.indexOf(typed, at + 1)) {
+    if (!f.starts || !f.ends) return 1;
+    best = Math.max(best, f.starts.has(at) ? (f.ends.has(at + typed.length) ? 3 : 2) : 1);
+  }
+  return best;
+}
 
 /** The best match for one typed word in a field. */
 function bestIn(typed: string, f: Field, near = true): number {
@@ -82,8 +113,28 @@ function bestIn(typed: string, f: Field, near = true): number {
     best = Math.max(best, wordScore(typed, w, near));
     if (best === 3) return 3;
   }
-  // Text without spaces between words: a match anywhere counts.
-  return best || (UNSPACED.test(typed) && f.folded.includes(typed) ? 1 : 0);
+  if (!UNSPACED.test(typed)) return best;
+  // Inside a word counts like a near miss; without the splitter any match counts, as before.
+  const run = runScore(typed, f);
+  return Math.max(best, run === 1 && f.starts && !near ? 0 : run);
+}
+
+/** Each section's fields, built once: splitting the text into words is the slow part. */
+interface Fields { head: Field; keys: Field; text: Field; context: Field }
+const FIELDS = new WeakMap<SearchSection, Fields>();
+function fieldsOf(section: SearchSection): Fields {
+  let f = FIELDS.get(section);
+  if (!f) {
+    f = {
+      // A page's opening is headed by the page's title; a section by its own heading.
+      head: field(section.anchor === null ? section.title : section.heading ?? ""),
+      keys: field(section.keywords.join(" ")),
+      text: field(section.text),
+      context: field(section.anchor === null ? "" : `${section.title} ${section.pageKeywords.join(" ")}`),
+    };
+    FIELDS.set(section, f);
+  }
+  return f;
 }
 
 /** Rank the sections against a query; the best first, at most `limit`. Ties keep the order given. */
@@ -92,14 +143,9 @@ export function searchGuide(sections: readonly SearchSection[], query: string, l
   if (!typed.length) return [];
   const phrase = typed.length > 1 ? typed.join(" ") : null;
   const hits: Array<SearchHit & { at: number }> = [];
-  const fields = sections.map((section) => ({
-    // A page's opening is headed by the page's title; a section by its own heading.
-    head: field(section.anchor === null ? section.title : section.heading ?? ""),
-    keys: field(section.keywords.join(" ")),
-    text: field(section.text),
-    context: field(section.anchor === null ? "" : `${section.title} ${section.pageKeywords.join(" ")}`),
-  }));
-  // Near misses only for a word written nowhere in the Guide, as it is or as the start of a word.
+  const fields = sections.map(fieldsOf);
+  // Near misses, and matches inside an unspaced word, only for a word written nowhere in the Guide,
+  // as it is or as the start of a word.
   const near = typed.map((word) => !fields.some((f) => [f.head, f.keys, f.text, f.context].some((x) => bestIn(word, x, false) >= 2)));
   sections.forEach((section, at) => {
     const { head, keys, text, context } = fields[at];
