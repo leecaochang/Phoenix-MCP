@@ -1,5 +1,5 @@
 ---
-{ "id": "topic.tools", "title": "智能体能做什么", "parent": "topic.about", "order": 30, "keywords": ["工具", "工具列表", "MCP 工具", "智能体能做什么", "tools/list"], "sectionKeywords": { "rules": ["拒绝", "隐藏工具", "声明全部工具", "结果大小"], "reading": ["get_state", "get_history", "get_statistics", "get_camera_image", "get_calendar_events", "get_todo_items", "GetLiveContext", "GetDateTime", "历史", "统计", "摄像头"], "controlling": ["HassTurnOn", "HassTurnOff", "HassLightSet", "HassFanSetSpeed", "HassClimateSetTemperature", "HassSetPosition", "HassStopMoving", "HassMediaPause", "HassMediaSearchAndPlay", "HassSetVolume", "HassVacuumStart", "HassCancelAllTimers", "HassBroadcast", "原生工具", "锁", "卷帘", "HassMediaNext", "HassMediaPrevious", "HassMediaUnpause", "HassMediaPlayerMute", "HassMediaPlayerUnmute", "HassSetVolumeRelative", "HassVacuumCleanArea", "HassVacuumReturnToBase"], "actions": ["call_service", "dry_run_service", "服务", "操作", "重新加载", "重启", "响应数据"], "lists": ["set_todo_item", "create_calendar_event", "update_calendar_event", "delete_calendar_event", "get_calendar_write", "待办", "日历"], "waiting": ["watch_entity", "等待状态"], "home-companion": ["home_request", "家庭请求"], "automations": ["list_automations", "get_automation", "create_automation", "edit_automation", "delete_automation", "list_scripts", "get_script", "create_script", "edit_script", "delete_script", "create_blueprint", "edit_blueprint", "delete_blueprint", "蓝图", "间接控制"], "scenes": ["list_scenes", "get_scene", "create_scene", "edit_scene", "delete_scene"], "helpers": ["list_helpers", "create_helper", "edit_helper", "delete_helper", "get_helper_settings", "set_helper_settings", "input_boolean", "计数器", "定时器", "地点", "模板辅助元素"], "dashboards": ["list_dashboards", "create_dashboard", "edit_dashboard", "delete_dashboard", "get_dashboard_config", "set_dashboard_config", "卡片", "仪表盘"], "restore": ["还原", "回执", "回滚"], "mesa": ["MESA 策略", "租约"], "configuration": ["配置", "模板", "日志", "能源"], "diagnostics": ["搜索", "注册表", "跟踪", "诊断"], "files": ["文件", "YAML", "www", "themes"], "esphome": ["ESPHome", "固件"], "system": ["集成", "注册表", "无线电", "备份", "重启", "通知"], "introspection": ["自己的请求", "审计条目"], "household": ["语音", "Assist", "AI 任务", "非管理员"] } }
+{ "id": "topic.tools", "title": "智能体能做什么", "parent": "topic.about", "order": 30, "keywords": ["工具", "工具列表", "MCP 工具", "智能体能做什么", "tools/list"], "sectionKeywords": { "rules": ["拒绝访问", "隐藏工具", "声明全部工具", "结果大小"], "reading": ["get_state", "get_history", "get_statistics", "get_camera_image", "get_calendar_events", "get_todo_items", "GetLiveContext", "GetDateTime", "历史", "统计", "摄像头"], "controlling": ["HassTurnOn", "HassTurnOff", "HassLightSet", "HassFanSetSpeed", "HassClimateSetTemperature", "HassSetPosition", "HassStopMoving", "HassMediaPause", "HassMediaSearchAndPlay", "HassSetVolume", "HassVacuumStart", "HassCancelAllTimers", "HassBroadcast", "原生工具", "锁", "卷帘", "HassMediaNext", "HassMediaPrevious", "HassMediaUnpause", "HassMediaPlayerMute", "HassMediaPlayerUnmute", "HassSetVolumeRelative", "HassVacuumCleanArea", "HassVacuumReturnToBase"], "actions": ["call_service", "dry_run_service", "服务", "操作", "重新加载", "重启", "响应数据"], "lists": ["set_todo_item", "create_calendar_event", "update_calendar_event", "delete_calendar_event", "get_calendar_write", "待办", "日历"], "waiting": ["watch_entity", "等待状态"], "home-companion": ["home_request", "家庭请求"], "automations": ["list_automations", "get_automation", "create_automation", "edit_automation", "delete_automation", "list_scripts", "get_script", "create_script", "edit_script", "delete_script", "create_blueprint", "edit_blueprint", "delete_blueprint", "蓝图", "间接控制"], "scenes": ["list_scenes", "get_scene", "create_scene", "edit_scene", "delete_scene"], "helpers": ["list_helpers", "create_helper", "edit_helper", "delete_helper", "get_helper_settings", "set_helper_settings", "input_boolean", "计数器", "定时器", "地点", "模板辅助元素"], "dashboards": ["list_dashboards", "create_dashboard", "edit_dashboard", "delete_dashboard", "get_dashboard_config", "set_dashboard_config", "卡片", "仪表盘"], "restore": ["还原", "回执", "回滚"], "mesa": ["MESA 策略", "租约"], "configuration": ["配置", "模板", "日志", "能源"], "diagnostics": ["搜索", "注册表", "跟踪", "诊断"], "files": ["文件", "YAML", "www", "themes"], "esphome": ["ESPHome", "固件"], "system": ["集成", "注册表", "无线电", "备份", "重启", "通知"], "introspection": ["自己的请求", "审计条目"], "household": ["语音", "Assist", "AI 任务", "非管理员"] } }
 ---
 智能体通过工具工作。本页按组说明它们：智能体可以用它们做什么、哪些能力允许它们，以及值得了解的限制。客户端从工具本身读取每个工具的详细信息。
 
@@ -7,14 +7,14 @@
 
 ## 能力如何生效 {#rules}
 
-- 能力为拒绝的工具不会提供给智能体，对它的调用会在运行前被拒绝。
+- 能力为拒绝访问的工具不会提供给智能体，对它的调用会在运行前被拒绝。
 - **{{label:accessKeys.announceAllLabel}}** 会仍然列出所有工具，用于排查问题。智能体仍然无法使用隐藏的工具。
 - 确认会暂缓更改以等待你的审批。使用同一能力的读取会直接运行。
 - 列出许多实体的结果会在约 64 KB 时停止。
 
 直通模式允许大多数读取能力，而无需设置它们。每个会更改内容的能力都保留自己的设置。
 
-相关：[拒绝、允许和确认](guide:window.capabilities#modes)、[直通模式会开放什么](guide:topic.passThrough)
+相关：[拒绝访问、允许和确认](guide:window.capabilities#modes)、[直通模式会开放什么](guide:topic.passThrough)
 
 ## 读取家庭信息 {#reading}
 
@@ -32,7 +32,7 @@
 
 智能体可以打开和关闭设备，设置灯、风扇、温控、卷帘和音量，控制媒体播放器和吸尘器，并取消定时器。这些命令与 Home Assistant 自带助手使用的命令相同。每个目标都需要权限树中的 W。
 
-锁、警报、卷帘和阀门还需要物理控制。设为确认时，包含其中一项的命令会等待你的审批。设为拒绝时，智能体无法控制它们。
+锁、警报、卷帘和阀门还需要物理控制。设为确认时，包含其中一项的命令会等待你的审批。设为拒绝访问时，智能体无法控制它们。
 
 通过 Assist 卫星设备播报消息需要广播。MESA 在能力和权限树之后最后检查每个命令。
 
@@ -159,7 +159,7 @@
 - 自动化跟踪会读取自动化的运行方式。
 - 诊断会检查配置并读取系统健康状况、修复项、无线电网络和 ESPHome 概览。
 
-只有在 YAML 配置不为拒绝时，配置检查才会指出文件和行号。
+只有在 YAML 配置不为拒绝访问时，配置检查才会指出文件和行号。
 
 允许它的能力：[{{label:caps.cap_search.label}}](guide:window.capabilities#search)、[{{label:caps.cap_registry_read.label}}](guide:window.capabilities#registry-read)、[{{label:caps.cap_traces.label}}](guide:window.capabilities#traces)、[{{label:caps.cap_diagnostics.label}}](guide:window.capabilities#diagnostics)
 
@@ -199,7 +199,7 @@ YAML 配置让智能体读取你的 YAML 文件，secrets.yaml、esphome 文件�
 
 ## 在语音、Assist 和 AI 任务中 {#household}
 
-家庭中的任何人都可以对 Assist 或语音智能体说话。对于不是 Home Assistant 管理员的人，密钥最多保留五项能力。它们是搜索与发现、读取注册表、物理控制、广播和服务响应数据。其余都算作拒绝。
+家庭中的任何人都可以对 Assist 或语音智能体说话。对于不是 Home Assistant 管理员的人，密钥最多保留五项能力。它们是搜索与发现、读取注册表、物理控制、广播和服务响应数据。其余都算作拒绝访问。
 
 审批和审计工具也会被隐藏，Home Assistant 仅限管理员的操作会被拒绝。Home Assistant 无法识别的说话者也会被同样对待。AI 任务始终如此运行。
 

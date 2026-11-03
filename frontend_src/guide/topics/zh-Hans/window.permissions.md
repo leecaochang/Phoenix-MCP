@@ -1,5 +1,5 @@
 ---
-{ "id": "window.permissions", "title": "{{label:accessKeys.permissionsTree}}", "parent": "workspace.accessKeys", "order": 4, "keywords": ["实体", "设备", "域", "授权", "范围"], "sectionKeywords": { "states": ["读取", "写入", "拒绝", "N R W D"], "select-by": ["区域", "标签", "集成", "房间"], "hints": ["实体提示", "备注"], "clear-all": ["重置权限"], "pass-through": ["限定范围模式"] } }
+{ "id": "window.permissions", "title": "{{label:accessKeys.permissionsTree}}", "parent": "workspace.accessKeys", "order": 4, "keywords": ["实体", "设备", "域", "授权", "范围"], "sectionKeywords": { "states": ["读取", "写入", "拒绝访问", "N R W D"], "select-by": ["区域", "标签", "集成", "房间"], "hints": ["实体提示", "备注"], "clear-all": ["重置权限"], "pass-through": ["限定范围模式"] } }
 ---
 决定密钥可以访问哪些设备和实体，以及它只能读取还是也可以控制。新密钥在你在权限树中授予内容之前无法访问任何东西。
 
@@ -10,11 +10,11 @@
 - **N**：没有自己的设置。该行沿用上一级。
 - **R**：只读。
 - **W**：读取并控制。
-- **D**：拒绝。它会覆盖其上和其下的所有授权。
+- **D**：拒绝访问。它会覆盖其上和其下的所有授权。
 
 每次更改都会立即保存。再次点击当前按钮可回到 N，或在多行上拖动以一次设置多项。
 
-每个名称后的文字显示结果：读写、只读、拒绝、无访问权限或未找到。
+每个名称后的文字显示结果：读写、只读、拒绝访问、无访问权限或未找到。
 
 相关：[权限如何判定](guide:topic.permissionResolution)
 

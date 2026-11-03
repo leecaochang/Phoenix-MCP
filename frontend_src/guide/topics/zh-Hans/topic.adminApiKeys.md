@@ -97,7 +97,7 @@ DELETE /api/phoenix-mcp/admin/access-keys/archived/{id}
 | `cap_esphome_yaml` | 否 | [{{label:caps.cap_esphome_yaml.label}}](guide:window.capabilities#esphome-yaml) |
 | `cap_esphome_flash` | 是 | [{{label:caps.cap_esphome_flash.label}}](guide:window.capabilities#esphome-flash) |
 
-相关：[拒绝、允许和确认](guide:window.capabilities#modes)
+相关：[拒绝访问、允许和确认](guide:window.capabilities#modes)
 
 ### 列出密钥 {#key-list}
 
@@ -215,7 +215,7 @@ PATCH 拒绝不在此表中的任何字段，且 `expires_at` 根本无法更改
 | `access_key_id` | string | |
 | `access_key_name` | string | |
 | `request_count` | integer | 自重启以来的请求数。 |
-| `denied_count` | integer | 自重启以来被拒绝的请求数。 |
+| `denied_count` | integer | 自重启以来被拒绝访问的请求数。 |
 | `rate_limit_hits` | integer | 自重启以来因速率限制被拒绝的请求数。 |
 | `last_used_at` | string 或 null | |
 | `status` | string | `active` 或 `expired`。 |

@@ -172,7 +172,7 @@
       "esphomeBadgeTitle": "没有 Device Builder 加载项时，用于校验、编译、刷写或检查设备的 ESPHome 工具对此访问密钥保持隐藏。有 ESPHome 集成时，仍可读取和搜索设备 YAML。现在仍可先设置该能力。",
       "modeAllow": "允许",
       "modeConfirm": "确认",
-      "modeDeny": "拒绝",
+      "modeDeny": "拒绝访问",
       "modeDescAllow": "让此密钥的智能体无需询问您即可使用此能力。",
       "modeDescConfirm": "每项更改都会在“审批”中等待您处理后才执行。读取无需询问。",
       "modeDescDeny": "阻止此能力。除非开启“始终声明全部工具”，否则此密钥的智能体看不到它的工具。",
@@ -205,7 +205,7 @@
       },
       "dashboard_designer": {
         "label": "仪表盘设计者",
-        "description": "搭建仪表盘。自定义卡片文件和能源仪表盘需要审批；其他配置均被拒绝。"
+        "description": "搭建仪表盘。自定义卡片文件和能源仪表盘需要审批；其他配置均拒绝访问。"
       },
       "esphome": {
         "label": "ESPHome 设备",
@@ -229,7 +229,7 @@
       },
       "read_only": {
         "label": "只读观察者",
-        "description": "读取状态、历史记录和日志。配置变更、语音播报、门锁、警报、卷帘和阀门均被拒绝。"
+        "description": "读取状态、历史记录和日志。配置变更、语音播报、门锁、警报、卷帘和阀门均拒绝访问。"
       },
       "voice_assistant": {
         "label": "语音助手",
@@ -333,7 +333,7 @@
       "discardTitle": "放弃更改？",
       "dismiss": "忽略",
       "dismissInspectionNotice": "在此浏览器中关闭检查提示",
-      "dismissOrphanNotice": "在此浏览器中关闭孤立配置档案提示",
+      "dismissOrphanNotice": "在此浏览器中关闭孤立策略提示",
       "dismissSuggestionFailed": "忽略建议失败。",
       "dismissValidationNotice": "在此浏览器中关闭验证提示",
       "editAreaProfile": "编辑区域策略：{key}",
@@ -599,7 +599,7 @@
       "approvalAlreadyResolved": "此审批已处理。",
       "approvalExpired": "此请求在您批准前已过期，因此未执行任何操作。",
       "approvalBatchMaximum": "每批最多可包含 {max} 项审批。",
-      "approvalCapabilityDenied": "此访问密钥的该能力现已设为“拒绝”，因此请求已关闭，未执行。",
+      "approvalCapabilityDenied": "此访问密钥的该能力现已设为“拒绝访问”，因此请求已关闭，未执行。",
       "approvalExecutionInterrupted": "上一次尝试可能已经生效。更改或重试此请求前，请先检查结果。",
       "approvalWipeInProgress": "审批执行与清除核心数据不能同时进行。请等待其中一项完成后重试。",
       "approvalWipeExecutionUncertain": "审批可能已经生效但尚未报告结果，因此无法清除核心数据。请先检查结果。",
@@ -637,7 +637,7 @@
       "killSwitchEngaged": "紧急停止开关已开启，因此请求已取消，未执行。",
       "maximumRequired": "{field} 不能超过 {max}。",
       "mesaArchiveRequired": "archive 为必填项。",
-      "mesaProfileExists": "配置已存在。请在编辑模式中打开。",
+      "mesaProfileExists": "策略已存在。请在编辑模式中打开。",
       "mesaConflictModeInvalid": "on_conflict 必须为 skip 或 overwrite。",
       "mesaUnavailable": "MESA 当前不可用。",
       "nonNegativeRequired": "{field} 不能为负数。",
@@ -795,7 +795,7 @@
       "methodPlaceholder": "方法…",
       "openEntryAria": "审计条目：{outcome}，{name}",
       "outcomeAllowed": "已允许",
-      "outcomeDenied": "已拒绝",
+      "outcomeDenied": "已拒绝访问",
       "outcomeInvalidRequest": "无效请求",
       "outcomeNotFound": "未找到",
       "outcomeNotImplemented": "未实现",
@@ -945,7 +945,7 @@
       "saveFailedShort": "保存失败",
       "selGreen": "Write：读写",
       "selGrey": "None：无显式授权（继承自上级）",
-      "selRed": "Deny：拒绝（覆盖上级和下级的授权）",
+      "selRed": "Deny：拒绝访问（覆盖上级和下级的授权）",
       "selSelected": "{title}，已选中",
       "selYellow": "Read：只读",
       "simulateEntityTitle": "在树中显示 {id}",
@@ -962,7 +962,7 @@
       "summaryEmpty": "尚未配置任何显式权限，因此此访问密钥无法访问任何实体。不使用实体的工具仍按其能力设置执行。",
       "stateRead": "只读",
       "stateWrite": "读写",
-      "stateDeny": "拒绝",
+      "stateDeny": "拒绝访问",
       "stateNoAccess": "无访问权限",
       "stateNotFound": "未找到",
       "effectiveTitle": "生效权限：{state}",
@@ -973,7 +973,7 @@
       "levelInherit": "继承",
       "levelRead": "只读",
       "levelWrite": "读写",
-      "levelDeny": "拒绝"
+      "levelDeny": "拒绝访问"
     },
     "version": {
       "card.added": "添加了 {subject}（{where}）",
@@ -1156,7 +1156,7 @@
       "noResultRecorded": "未记录结果（状态：{status}）。",
       "reason": {
         "admin_cancelled": "已被管理员取消",
-        "capability_denied": "能力已被拒绝",
+        "capability_denied": "能力已设为拒绝访问",
         "execution_failed": "执行失败",
         "kill_switch": "紧急停止开关已启用",
         "rate_limited_at_execution": "执行时达到速率限制",
@@ -1513,8 +1513,8 @@
       "logAllowedLabel": "记录已允许的请求",
       "logClientIpHelp": "在审计日志中记录调用方的 IP 地址。关闭后显示为 [redacted]。",
       "logClientIpLabel": "记录客户端 IP",
-      "logDeniedHelp": "在审计日志中记录被拒绝、未找到、无效和未实现的请求。",
-      "logDeniedLabel": "记录被拒绝的请求",
+      "logDeniedHelp": "在审计日志中记录被拒绝访问、未找到、无效和未实现的请求。",
+      "logDeniedLabel": "记录被拒绝访问的请求",
       "logEnableHelp": "向审计日志和对话日志写入新条目。关闭后停止写入；传感器计数仍会继续更新。",
       "logEnableLabel": "启用日志记录",
       "logEntityIdsHelp": "在审计日志中记录实体 ID，并在对话日志中记录对话内容。",
@@ -2849,7 +2849,7 @@
       "logSettings": "打开“日志和通知”设置，以开启记录或更改日志的保留时长。",
       "clearConversations": "删除所有已记录的对话，包括被筛选器隐藏的对话。此操作无法撤销；备份中的副本会保留。",
       "confirmClearConversations": "“清除对话历史”会立即删除所有已记录的对话，进行中的对话也会停止记录。“取消”会保留所有内容。",
-      "auditOutcome": "只显示某一种结果的条目，例如“已拒绝”或“待审批”。",
+      "auditOutcome": "只显示某一种结果的条目，例如“已拒绝访问”或“待审批”。",
       "auditAccessKey": "只显示使用某个访问密钥发出的请求。",
       "auditTime": "只显示最近一段时间的条目。时间段会随新条目的到达而向前推移。",
       "auditMethod": "显示方法中包含此文本的条目，例如工具名称或 approval/。",

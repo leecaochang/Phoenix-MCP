@@ -52,7 +52,7 @@
         "name": "請求數"
       },
       "denied_count": {
-        "name": "拒絕數"
+        "name": "拒絕存取次數"
       },
       "rate_limit_hits": {
         "name": "觸發速率限制次數"

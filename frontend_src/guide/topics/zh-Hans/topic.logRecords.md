@@ -1,5 +1,5 @@
 ---
-{ "id": "topic.logRecords", "title": "日志记录的内容", "parent": "workspace.logs", "order": 10, "keywords": ["审计", "历史", "保留", "隐私", "隐去"], "sectionKeywords": { "audit-entries": ["工具调用", "管理", "审批", "MESA"], "not-audited": ["缺失", "401", "未授权"], "outcomes": ["已允许", "已拒绝", "速率受限", "待审批", "无效请求", "未找到", "未实现"], "audit-keeping": ["保留", "存储", "磁盘", "清除"], "conversation-sources": ["Agent Chat", "语音", "AI 任务", "Assist", "MCP 客户端", "Home Companion"], "conversation-contents": ["工具结果", "提供商", "模型", "机密", "代码"], "conversation-keeping": ["保留", "存储", "限制"], "linked": ["请求 ID", "审批 ID"] } }
+{ "id": "topic.logRecords", "title": "日志记录的内容", "parent": "workspace.logs", "order": 10, "keywords": ["审计", "历史", "保留", "隐私", "隐去"], "sectionKeywords": { "audit-entries": ["工具调用", "管理", "审批", "MESA"], "not-audited": ["缺失", "401", "未授权"], "outcomes": ["已允许", "已拒绝访问", "速率受限", "待审批", "无效请求", "未找到", "未实现"], "audit-keeping": ["保留", "存储", "磁盘", "清除"], "conversation-sources": ["Agent Chat", "语音", "AI 任务", "Assist", "MCP 客户端", "Home Companion"], "conversation-contents": ["工具结果", "提供商", "模型", "机密", "代码"], "conversation-keeping": ["保留", "存储", "限制"], "linked": ["请求 ID", "审批 ID"] } }
 ---
 Phoenix 保留两种日志。审计日志是每个操作及其结果的简短记录。对话日志在开启后会完整保留智能体说过和做过的事情。
 

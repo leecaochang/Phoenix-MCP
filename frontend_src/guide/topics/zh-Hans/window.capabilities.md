@@ -1,19 +1,19 @@
 ---
-{ "id": "window.capabilities", "title": "{{label:accessKeys.cardCapabilities}}", "parent": "workspace.accessKeys", "order": 3, "keywords": ["工具", "权限", "审批", "拒绝", "允许", "确认"], "sectionKeywords": { "modes": ["审批", "队列"], "physical-control": ["锁", "警报", "卷帘", "阀门", "车库门"], "restart": ["重启"], "backup": ["快照"], "camera-read": ["图像", "快照"], "filesystem": ["www", "themes", "文件"], "lovelace-write": ["Lovelace", "仪表盘"], "dashboard-resources": ["自定义卡片", "JavaScript"], "yaml-edit": ["configuration.yaml", "重新加载"], "esphome-flash": ["固件", "OTA"], "registry-write": ["重命名实体", "实体 ID"], "radio-write": ["Zigbee", "ZHA"], "log-control": ["调试日志"] } }
+{ "id": "window.capabilities", "title": "{{label:accessKeys.cardCapabilities}}", "parent": "workspace.accessKeys", "order": 3, "keywords": ["工具", "权限", "审批", "拒绝访问", "允许", "确认"], "sectionKeywords": { "modes": ["审批", "队列"], "physical-control": ["锁", "警报", "卷帘", "阀门", "车库门"], "restart": ["重启"], "backup": ["快照"], "camera-read": ["图像", "快照"], "filesystem": ["www", "themes", "文件"], "lovelace-write": ["Lovelace", "仪表盘"], "dashboard-resources": ["自定义卡片", "JavaScript"], "yaml-edit": ["configuration.yaml", "重新加载"], "esphome-flash": ["固件", "OTA"], "registry-write": ["重命名实体", "实体 ID"], "radio-write": ["Zigbee", "ZHA"], "log-control": ["调试日志"] } }
 ---
-能力决定密钥可以使用哪些工具。每项能力可设为拒绝、允许或确认，新密钥的每项能力都从拒绝开始。
+能力决定密钥可以使用哪些工具。每项能力可设为拒绝访问、允许或确认，新密钥的每项能力都从拒绝访问开始。
 
 能力和[{{label:accessKeys.permissionsTree}}](guide:window.permissions)共同作用。能力决定智能体可以做哪类事情；权限树决定它可以对哪些设备和实体做。
 
-## 拒绝、允许和确认 {#modes}
+## 拒绝访问、允许和确认 {#modes}
 
 - **{{label:caps.modeDeny}}**：智能体不能使用这些工具。它们不会提供给智能体。
 - **{{label:caps.modeAllow}}**：智能体可以自由使用它们。
 - **{{label:caps.modeConfirm}}**：更改会在[审批](guide:workspace.approvals)中等待你决定。使用同一能力的读取会直接运行。
 
-读取和日常操作只能设为拒绝或允许；它们的确认按钮为灰色。
+读取和日常操作只能设为拒绝访问或允许；它们的确认按钮为灰色。
 
-更改会立即生效。放宽能力会让智能体继续。收紧能力会拒绝智能体已在进行的请求。你批准请求时，Phoenix 会再次检查能力，如果现在为拒绝，请求会失败。
+更改会立即生效。放宽能力会让智能体继续。收紧能力会拒绝智能体已在进行的请求。你批准请求时，Phoenix 会再次检查能力，如果现在为拒绝访问，请求会失败。
 
 相关：[同步等待审批](guide:window.keySettings#inline-wait)、[直通模式会开放什么](guide:topic.passThrough)
 
@@ -83,7 +83,7 @@
 
 ### {{label:caps.cap_blueprint_write.label}} {#blueprint-write}
 
-创建、编辑和删除蓝图。写入蓝图还需要匹配的自动化或脚本能力：任一为拒绝都会拒绝它，任一为确认都会暂缓它以等待审批。
+创建、编辑和删除蓝图。写入蓝图还需要匹配的自动化或脚本能力：任一为拒绝访问都会拒绝它，任一为确认都会暂缓它以等待审批。
 
 ### {{label:caps.cap_scene_write.label}} {#scene-write}
 

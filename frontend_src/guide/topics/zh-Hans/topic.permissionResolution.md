@@ -1,5 +1,5 @@
 ---
-{ "id": "topic.permissionResolution", "title": "权限如何判定", "parent": "window.permissions", "order": 1, "keywords": ["优先级", "继承", "解析", "为何被拒绝"], "sectionKeywords": { "examples": ["示例", "完整示例", "做法"], "indirect": ["间接控制", "自动化", "脚本", "场景", "触发", "!"], "always-blocked": ["阻止", "从不", "phoenix_mcp", "内部传感器"] } }
+{ "id": "topic.permissionResolution", "title": "权限如何判定", "parent": "window.permissions", "order": 1, "keywords": ["优先级", "继承", "解析", "为何被拒绝访问"], "sectionKeywords": { "examples": ["示例", "完整示例", "做法"], "indirect": ["间接控制", "自动化", "脚本", "场景", "触发", "!"], "always-blocked": ["阻止", "从不", "phoenix_mcp", "内部传感器"] } }
 ---
 无论请求来自哪个应用或功能，Phoenix 都以相同方式判定每个请求。
 
@@ -11,9 +11,9 @@
 4. 直通密钥可以访问其他所有内容，或者如果你限制了它，只能访问向 Assist 公开的实体。
 5. 否则 Phoenix 读取权限树：实体、其设备、它所属的主设备（如有），然后是它的域。
 
-## 拒绝优先 {#deny}
+## 拒绝访问优先 {#deny}
 
-该链中任何位置的 D 都会拒绝，即使实体本身设为 W。
+该链中任何位置的 D 都会拒绝访问，即使实体本身设为 W。
 
 ## 最近的授权决定结果 {#nearest}
 
@@ -27,7 +27,7 @@
 
 ### 控制所有灯，除了一间卧室 {#example-except}
 
-把灯域设为 W，把客卧的设备设为 D。其他每盏灯都是读写，客卧的灯是拒绝。
+把灯域设为 W，把客卧的设备设为 D。其他每盏灯都是读写，客卧的灯是拒绝访问。
 
 ### 在你允许的设备上屏蔽一个传感器 {#example-one-sensor}
 

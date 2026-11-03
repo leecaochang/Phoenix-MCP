@@ -24,7 +24,7 @@
 - **{{label:settings.colorTheme.office}}**：蓝色工具栏带和白色窗口，类似桌面办公套件。
 - **{{label:settings.colorTheme.aubergine}}**：深梅色工具栏带配梅色按钮，类似流行的团队聊天应用。
 
-状态颜色在每个主题中都保持含义：绿色表示允许，红色表示拒绝，琥珀色表示等待你。在 {{label:settings.colorTheme.mist}} 和 {{label:settings.colorTheme.office}} 中，读取权限显示为紫色，因为蓝色已经是它们的按钮颜色。
+状态颜色在每个主题中都保持含义：绿色表示允许，红色表示拒绝访问，琥珀色表示等待你。在 {{label:settings.colorTheme.mist}} 和 {{label:settings.colorTheme.office}} 中，读取权限显示为紫色，因为蓝色已经是它们的按钮颜色。
 
 除 {{label:settings.colorTheme.spartan}} 外的每个主题还会为三个角色着色：{{label:personas.home_companion.label}}为金色，{{label:personas.new_user.label}}为绿色，{{label:personas.custom.label}}为蓝色。
 

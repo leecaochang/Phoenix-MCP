@@ -85,6 +85,6 @@ API 对四种权限状态的命名与面板不同：
 | `GREY` | N | 没有自己的设置；沿用上一级。 |
 | `YELLOW` | R | 只读。 |
 | `GREEN` | W | 读取和控制。 |
-| `RED` | D | 拒绝。 |
+| `RED` | D | 拒绝访问。 |
 
 相关：[权限如何判定](guide:topic.permissionResolution)

@@ -15,7 +15,7 @@
       "approvalAlreadyResolved": "此核准已處理。",
       "approvalExpired": "此請求在您核准前已過期，因此未執行任何操作。",
       "approvalBatchMaximum": "每批最多可包含 {max} 項核准。",
-      "approvalCapabilityDenied": "此存取金鑰的該能力現已設為「拒絕」，因此請求已關閉，未執行。",
+      "approvalCapabilityDenied": "此存取金鑰的該能力現已設為「拒絕存取」，因此請求已關閉，未執行。",
       "approvalExecutionInterrupted": "先前的嘗試可能已經生效。更改或重試此請求前，請先檢查結果。",
       "approvalWipeInProgress": "核准執行與清除核心資料無法同時進行。請等待其中一項完成後再試。",
       "approvalWipeExecutionUncertain": "核准可能已生效但尚未回報結果，因此無法清除核心資料。請先檢查結果。",
@@ -66,7 +66,7 @@
       "killSwitchEngaged": "緊急停止開關已開啟，因此請求已取消，未執行。",
       "maximumRequired": "{field} 不能超過 {max}。",
       "mesaArchiveRequired": "archive 為必填項。",
-      "mesaProfileExists": "設定已存在。請在編輯模式中開啟。",
+      "mesaProfileExists": "策略已存在。請在編輯模式中開啟。",
       "mesaConflictModeInvalid": "on_conflict 必須為 skip 或 overwrite。",
       "mesaUnavailable": "MESA 目前不可用。",
       "nameRequired": "name 為必填項。",
@@ -714,7 +714,7 @@
         "phoenix_mcp_data_wiped": "清除 Phoenix MCP 資料時已取消",
         "integration_removed": "移除 Phoenix MCP 時已取消",
         "recovery_review_replaced": "設定已變更；已由新的審查取代",
-        "capability_denied": "能力已被拒絕",
+        "capability_denied": "能力已設為拒絕存取",
         "execution_failed": "執行失敗",
         "execution_interrupted": "已中斷，可能已生效",
         "approval_format_incompatible": "升級後因審批格式不相容而取消",
@@ -777,7 +777,7 @@
       "methodPlaceholder": "方法…",
       "openEntryAria": "稽核條目：{outcome}，{name}",
       "outcomeAllowed": "已允許",
-      "outcomeDenied": "已拒絕",
+      "outcomeDenied": "已拒絕存取",
       "outcomeInvalidRequest": "無效請求",
       "outcomeNotFound": "未找到",
       "outcomeNotImplemented": "未實現",
@@ -927,7 +927,7 @@
       "esphomeBadgeTitle": "沒有 Device Builder 載入項時，用於校驗、編譯、刷寫或檢查裝置的 ESPHome 工具對此存取金鑰保持隱藏。有 ESPHome 整合時，仍可讀取和搜尋裝置 YAML。現在仍可先設定該能力。",
       "modeAllow": "允許",
       "modeConfirm": "確認",
-      "modeDeny": "拒絕",
+      "modeDeny": "拒絕存取",
       "modeDescAllow": "讓此金鑰的智慧體無需詢問您即可使用此能力。",
       "modeDescConfirm": "每項變更都會在「核准」中等待您處理後才執行。讀取無需詢問。",
       "modeDescDeny": "阻止此能力。除非開啟「始終宣告全部工具」，否則此金鑰的智慧體看不到它的工具。",
@@ -1273,7 +1273,7 @@
       "discardTitle": "放棄更改？",
       "dismiss": "忽略",
       "dismissInspectionNotice": "在此瀏覽器中關閉檢查提示",
-      "dismissOrphanNotice": "在此瀏覽器中關閉孤立設定檔提示",
+      "dismissOrphanNotice": "在此瀏覽器中關閉孤立策略提示",
       "dismissSuggestionFailed": "忽略建議失敗。",
       "dismissValidationNotice": "在此瀏覽器中關閉驗證提示",
       "editAreaProfile": "編輯分區策略：{key}",
@@ -1540,11 +1540,11 @@
       "saveFailedShort": "儲存失敗",
       "selGreen": "Write：讀寫",
       "selGrey": "None：無顯式授權（繼承自上級）",
-      "selRed": "Deny：拒絕（覆蓋上級和下級的授權）",
+      "selRed": "Deny：拒絕存取（覆蓋上級和下級的授權）",
       "selSelected": "{title}，已選中",
       "selYellow": "Read：唯讀",
       "simulateEntityTitle": "在樹中顯示 {id}",
-      "stateDeny": "拒絕",
+      "stateDeny": "拒絕存取",
       "stateNoAccess": "無存取權限",
       "stateNotFound": "未找到",
       "stateRead": "唯讀",
@@ -1566,7 +1566,7 @@
       "levelInherit": "繼承",
       "levelRead": "唯讀",
       "levelWrite": "讀寫",
-      "levelDeny": "拒絕"
+      "levelDeny": "拒絕存取"
     },
     "personas": {
       "automation_builder": {
@@ -1578,7 +1578,7 @@
         "label": "自定義"
       },
       "dashboard_designer": {
-        "description": "搭建儀表板。自定義卡片檔案和能源儀表板需要核准；其他設定均被拒絕。",
+        "description": "搭建儀表板。自定義卡片檔案和能源儀表板需要核准；其他設定均拒絕存取。",
         "label": "儀表板設計者"
       },
       "esphome": {
@@ -1603,7 +1603,7 @@
         "label": "高階使用者"
       },
       "read_only": {
-        "description": "讀取狀態、歷史記錄和日誌。設定變更、語音播報、門鎖、警報、捲簾和閥門均被拒絕。",
+        "description": "讀取狀態、歷史記錄和日誌。設定變更、語音播報、門鎖、警報、捲簾和閥門均拒絕存取。",
         "label": "唯讀觀察者"
       },
       "voice_assistant": {
@@ -1757,8 +1757,8 @@
       "logAllowedLabel": "記錄已允許的請求",
       "logClientIpHelp": "在稽核日誌中記錄呼叫端的 IP 位址。關閉後顯示為 [redacted]。",
       "logClientIpLabel": "記錄用戶端 IP",
-      "logDeniedHelp": "在稽核日誌中記錄被拒絕、未找到、無效和未實現的請求。",
-      "logDeniedLabel": "記錄被拒絕的請求",
+      "logDeniedHelp": "在稽核日誌中記錄被拒絕存取、未找到、無效和未實現的請求。",
+      "logDeniedLabel": "記錄被拒絕存取的請求",
       "logEnableHelp": "向稽核日誌和對話記錄寫入新條目。關閉後停止寫入；感測器計數仍會繼續更新。",
       "logEnableLabel": "啟用日誌記錄",
       "logEntityIdsHelp": "在稽核日誌中記錄實體 ID，並在對話記錄中記錄對話內容。",
@@ -2855,7 +2855,7 @@
       "logSettings": "開啟「日誌和通知」設定，以開啟記錄或變更日誌的保留時長。",
       "clearConversations": "刪除所有已記錄的對話，包括被篩選器隱藏的對話。此操作無法撤銷；備份中的副本會保留。",
       "confirmClearConversations": "「清除對話歷史」會立即刪除所有已記錄的對話，進行中的對話也會停止記錄。「取消」會保留所有內容。",
-      "auditOutcome": "只顯示某一種結果的條目，例如「已拒絕」或「待核准」。",
+      "auditOutcome": "只顯示某一種結果的條目，例如「已拒絕存取」或「待核准」。",
       "auditAccessKey": "只顯示使用某個存取金鑰發出的請求。",
       "auditTime": "只顯示最近一段時間的條目。時間段會隨新條目的到達而向前推移。",
       "auditMethod": "顯示方法中包含此文字的條目，例如工具名稱或 approval/。",

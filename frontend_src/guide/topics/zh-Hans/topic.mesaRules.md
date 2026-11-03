@@ -1,5 +1,5 @@
 ---
-{ "id": "topic.mesaRules", "title": "MESA 如何决定", "parent": "workspace.mesa", "order": 10, "keywords": ["MESA", "策略", "安全", "继承", "优先级"], "sectionKeywords": { "levels": ["继承", "主设备", "父设备", "范围"], "combining": ["最严格", "冲突", "放宽", "覆盖"], "baseline": ["默认", "无策略", "内置", "部署默认设置"], "modes": ["建议", "强制执行", "关闭", "警告", "阻止"], "privacy": ["受限", "敏感", "拒绝"], "coverage": ["读取", "摄像头", "自动化", "直通模式"], "not-in-editor": ["声明限制", "时间约束", "时间窗口", "访问角色", "仅导入"] } }
+{ "id": "topic.mesaRules", "title": "MESA 如何决定", "parent": "workspace.mesa", "order": 10, "keywords": ["MESA", "策略", "安全", "继承", "优先级"], "sectionKeywords": { "levels": ["继承", "主设备", "父设备", "范围"], "combining": ["最严格", "冲突", "放宽", "覆盖"], "baseline": ["默认", "无策略", "内置", "部署默认设置"], "modes": ["建议", "强制执行", "关闭", "警告", "阻止"], "privacy": ["受限", "敏感", "拒绝访问"], "coverage": ["读取", "摄像头", "自动化", "直通模式"], "not-in-editor": ["声明限制", "时间约束", "时间窗口", "访问角色", "仅导入"] } }
 ---
 在访问密钥允许之后，MESA 会检查智能体对设备采取的每个操作。策略描述对其覆盖范围要有多谨慎。本页说明不同层级的策略如何叠加，以及操作违反策略时会发生什么。
 
@@ -47,7 +47,7 @@ MESA 按字段组合策略，而不是按策略整体组合。
 MESA 的行为取决于[设置](guide:window.settingsSafety#mesa-mode)中的 **{{label:settings.mesaModeLabel}}**，以及策略自身的 **{{label:mesa.fieldEnforcement}}**。
 
 - **{{label:settings.mesaModeOff}}**：MESA 允许一切。
-- **{{label:settings.mesaModeAdvisory}}**（默认）：被禁止的操作和违反的限制只会警告智能体，确认操作无需审批即可运行。只读实体和隐私拒绝仍会阻止。
+- **{{label:settings.mesaModeAdvisory}}**（默认）：被禁止的操作和违反的限制只会警告智能体，确认操作无需审批即可运行。只读实体和隐私方面的拒绝访问仍会阻止。
 - **{{label:settings.mesaModeEnforced}}**：被禁止、只读的操作和违反的限制会被阻止。确认操作会在[审批](guide:topic.approvalLifecycle)中等待你的审批。
 
 设为 **{{label:mesa.modeEnforced}}** 的策略，在设置为建议模式时仍会强制执行。设置为关闭时，不会强制执行任何内容。
@@ -58,7 +58,7 @@ MESA 的行为取决于[设置](guide:window.settingsSafety#mesa-mode)中的 **{
 
 **{{label:mesa.privRestricted}}** 隐私级别会让自主实体需要确认。人员始终至少为 **{{label:mesa.privSensitive}}**。
 
-导入的策略还可以拒绝对某些角色的访问。这种拒绝会在除关闭之外的每种模式下阻止操作，包括摄像头图像。
+导入的策略还可以对某些角色拒绝访问。这种拒绝访问会在除关闭之外的每种模式下阻止操作，包括摄像头图像。
 
 ## MESA 覆盖什么 {#coverage}
 
@@ -70,7 +70,7 @@ MESA 覆盖智能体更改内容的所有方式：MCP 客户端、Agent Chat、�
 
 ## 策略编辑器无法设置什么 {#not-in-editor}
 
-策略还可以包含声明限制（例如最高温度）、适用更严格规则的时间窗口、对某些角色的隐私拒绝，以及实体覆盖。这些只能通过导入的存档出现。
+策略还可以包含声明限制（例如最高温度）、适用更严格规则的时间窗口、对某些角色的隐私拒绝访问，以及实体覆盖。这些只能通过导入的存档出现。
 
 在策略编辑器中保存策略，会用表单显示的内容替换整个策略，因此会移除这些字段。
 

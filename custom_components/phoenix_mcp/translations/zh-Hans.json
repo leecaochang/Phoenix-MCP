@@ -52,7 +52,7 @@
         "name": "请求数"
       },
       "denied_count": {
-        "name": "拒绝数"
+        "name": "拒绝访问次数"
       },
       "rate_limit_hits": {
         "name": "触发速率限制次数"
