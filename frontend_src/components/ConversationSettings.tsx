@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { BusyInput } from "./BusyButton";
 import type { GlobalSettings } from "../types";
 import { api } from "../api";
@@ -23,6 +23,8 @@ const LIMITS = [
 const SAVE_DELAY_MS = 600;
 
 export function ConversationSettings({ settings, saving, onChange }: Props) {
+  // Its window can show in two workspaces at once; Find Setting finds the fields by `data-setting`.
+  const uid = useId();
   const [storage, setStorage] = useState<{ bytes: number; max_bytes?: number } | null>(null);
   useEffect(() => {
     let active = true;
@@ -74,8 +76,8 @@ export function ConversationSettings({ settings, saving, onChange }: Props) {
       <legend className="sr-only">{t("conversations.retention")}</legend>
       <div className="phx-retention-fields">
         {LIMITS.map(([field, , min, max, key, helpKey], index) => <div className="conversation-limit" key={field}>
-          <label htmlFor={field}>{t(key)}</label>
-          <BusyInput id={field} className="input" type="number" min={min} max={max} step={1} value={draft[index]} busy={saving} disabled={off}
+          <label htmlFor={`${uid}${field}`}>{t(key)}</label>
+          <BusyInput id={`${uid}${field}`} data-setting={field} className="input" type="number" min={min} max={max} step={1} value={draft[index]} busy={saving} disabled={off}
             data-help={off ? "conversations.loggingDisabled" : helpKey}
             onChange={(e) => edit(index, e.target.value)}
             onBlur={(e) => commit(index, e.target.value)}

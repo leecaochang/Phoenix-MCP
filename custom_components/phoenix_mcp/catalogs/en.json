@@ -25,7 +25,12 @@
       "save": "Save",
       "saving": "Saving...",
       "sentenceSeparator": " ",
-      "serverUnreachable": "Home Assistant could not be reached. Check the connection and try again."
+      "serverUnreachable": "Home Assistant could not be reached. Check the connection and try again.",
+      "copyNamed": "Copy {item}",
+      "resultCount": {
+        "one": "{count} result",
+        "other": "{count} results"
+      }
     },
     "approvals": {
       "approve": "Approve",
@@ -118,7 +123,12 @@
       "energySolar": "Solar",
       "energyBattery": "Battery",
       "energyGas": "Gas",
-      "energyWater": "Water"
+      "energyWater": "Water",
+      "pickedCount": {
+        "one": "{count} selected",
+        "other": "{count} selected"
+      },
+      "rowPicked": "selected for batch approval"
     },
     "caps": {
       "cap_config_read": {
@@ -838,7 +848,8 @@
       "guideSearchInput": "Type words to find matching Guide sections. Enter opens the best match.",
       "guideLink": "Open this page in the Guide. Back returns you to the page you were reading.",
       "accessKeyFilter": "Show only access keys whose name or status contains this text.",
-      "guideDismissWelcome": "Hide this welcome page. Find it again in Contents."
+      "guideDismissWelcome": "Hide this welcome page. Find it again in Contents.",
+      "showSecret": "Show the key as plain text, to check what was pasted."
     },
     "guide": {
       "title": "Guide",
@@ -1028,7 +1039,9 @@
       },
       "previewErrorCopy": "Copy Errors",
       "previewErrorCopyLead": "Card configuration errors were found in the dashboard preview, please investigate:",
-      "previewNotReady": "Dashboard preview is unavailable in this session. Open any dashboard once, then return here."
+      "previewNotReady": "Dashboard preview is unavailable in this session. Open any dashboard once, then return here.",
+      "previewTextAlternative": "The preview shows the cards as pictures. Choose {diff} to read the change as text.",
+      "byAdmin": "Admin"
     },
     "audit": {
       "accessPassThrough": "Pass-Through",
@@ -1187,7 +1200,9 @@
       "harnessLaunchTitle": "CLI Alternative",
       "skillHarnessHint": "Install the guide at ~/.dsh/skills/phoenix/SKILL.md. With a custom DSH_HOME, use its skills directory instead.",
       "agentAntigravityIntro": "Add this to ~/.gemini/config/mcp_config.json, keeping any existing servers, then open the /mcp manager in Antigravity CLI and check that the server lists tools.",
-      "skillAntigravityHint": "Install the guide at ~/.gemini/antigravity-cli/skills/phoenix/SKILL.md, then run /skills reload in Antigravity CLI."
+      "skillAntigravityHint": "Install the guide at ~/.gemini/antigravity-cli/skills/phoenix/SKILL.md, then run /skills reload in Antigravity CLI.",
+      "copyFirstPrompt": "Copy the first prompt",
+      "copyNextPrompt": "Copy the next prompt"
     },
     "inject": {
       "profileSet": "MESA profile set for {key} - click to edit",
@@ -1545,7 +1560,6 @@
       "agentcliDismissWarning": "Dismiss this warning",
       "agentcliDone": "Done",
       "agentcliFieldRequired": "Enter {field}.",
-      "agentcliGlobalAria": "Use Agent Chat throughout Home Assistant",
       "agentcliGlobalHelp": "Keep Agent Chat available on every Home Assistant page, not only in this panel.",
       "agentcliGlobalLabel": "Use throughout Home Assistant",
       "agentcliIntro": "Chat with Home Assistant using your own AI provider, within the chosen access key's permissions.",
@@ -1556,12 +1570,10 @@
       "agentcliRemoveAccountFailed": "Failed to remove the account.",
       "agentcliRemoveBody": "Delete {name} and its API key; anything using it stops. This can't be undone.",
       "agentcliSaveFailed": "Failed to save provider.",
-      "agentcliScrollbackAria": "Chat history line limit",
       "agentcliScrollbackHelp": "How many chat lines Agent Chat keeps as context, 0 to 5,000 (default 100).",
       "agentcliScrollbackLabel": "Chat history limit",
       "agentcliSelectModel": "Select default model:",
       "agentcliServerUrl": "Server URL",
-      "agentcliStepsAria": "Steps before continue check-in",
       "agentcliStepsHelp": "How many tool steps Agent Chat takes before asking to continue, 3 to 100 (default 20).",
       "agentcliStepsLabel": "Steps before check-in",
       "agentcliValidate": "Validate",
@@ -1765,7 +1777,6 @@
       "providerChecksHelp": "Check providers for new and retired models on a schedule. On by default.",
       "providerChecksHoursLabel": "Check every (hours)",
       "providerChecksHoursHelp": "How often Phoenix checks each provider for model changes, {min} to {max} hours (default {default}).",
-      "providerChecksHoursAria": "Hours between provider checks",
       "agentcliProbedVisionSeen": "Image check: the model read the test image, so attached images and camera results are sent to it.",
       "agentcliProbedVisionUnseen": "Image check: the model could not read the test image, so Phoenix treats it as text-only.",
       "agentcliProbedVisionInconclusive": "Image check: no usable answer came back, so image support is still unknown.",
@@ -1831,7 +1842,8 @@
       "privacySectionHelp": "Show or hide whether the logs record entity IDs and callers' IP addresses.",
       "haNotificationsHelp": "Show or hide when Phoenix MCP sends you a Home Assistant notification.",
       "aboutHelp": "Show or hide the version numbers and where Phoenix MCP keeps its data.",
-      "githubHelp": "Open the Phoenix MCP source code and issue tracker on GitHub in a new tab."
+      "githubHelp": "Open the Phoenix MCP source code and issue tracker on GitHub in a new tab.",
+      "showSecret": "Show key"
     },
     "agentchat": {
       "accessKey": "Access Key",
@@ -1995,7 +2007,8 @@
       "verbose": "Show Verbose Output",
       "verboseHint": "Show the agent's tool calls, tool results, and thinking. Replies, images, progress, approvals, and notices show either way.",
       "workingOn": "Working: {name}",
-      "workingSpinner": "Working…"
+      "workingSpinner": "Working…",
+      "announceReplyStart": "{text}… The full reply is in the conversation."
     },
     "diff": {
       "blueprint.create": "Create {domain} blueprint '{rel}'",

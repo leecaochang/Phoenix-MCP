@@ -557,7 +557,8 @@
       "pausedAfter": {
         "one": "Pausad efter {count} steg. Fortsätta?",
         "other": "Pausad efter {count} steg. Fortsätta?"
-      }
+      },
+      "announceReplyStart": "{text}… Hela svaret finns i konversationen."
     },
     "approvalSummary": {
       "action.optionalReason": "Valfri orsak",
@@ -937,7 +938,12 @@
       "confirmReject": "Bekräfta avvisning",
       "selectMultiple": "Välj flera",
       "show": "Visa",
-      "scopeAll": "Alla begäranden"
+      "scopeAll": "Alla begäranden",
+      "pickedCount": {
+        "one": "{count} vald",
+        "other": "{count} valda"
+      },
+      "rowPicked": "vald för batchgodkännande"
     },
     "attention": {
       "actionTitle": "Kontrollera en tidigare åtgärd",
@@ -1241,7 +1247,9 @@
       "previewErrorHead": {
         "one": "Ett kort i den här förhandsgranskningen rapporterade ett konfigurationsfel. Kopiera vid behov meddelandet nedan och klistra in det till agenten så att den kan rätta kortet.",
         "other": "Kort i den här förhandsgranskningen rapporterade konfigurationsfel. Kopiera vid behov meddelandet nedan och klistra in det till agenten så att den kan rätta korten."
-      }
+      },
+      "previewTextAlternative": "Förhandsgranskningen visar korten som bilder. Välj {diff} för att läsa ändringen som text.",
+      "byAdmin": "Administratör"
     },
     "common": {
       "after": "Efter",
@@ -1268,7 +1276,12 @@
       "save": "Spara",
       "saving": "Sparar...",
       "sentenceSeparator": " ",
-      "serverUnreachable": "Det gick inte att nå Home Assistant. Kontrollera anslutningen och försök igen."
+      "serverUnreachable": "Det gick inte att nå Home Assistant. Kontrollera anslutningen och försök igen.",
+      "copyNamed": "Kopiera {item}",
+      "resultCount": {
+        "one": "{count} resultat",
+        "other": "{count} resultat"
+      }
     },
     "conversations": {
       "accessKeyLabel": "Åtkomstnyckel",
@@ -2099,7 +2112,6 @@
       "agentcliDismissWarning": "Avfärda den här varningen",
       "agentcliDone": "Klar",
       "agentcliFieldRequired": "Ange {field}.",
-      "agentcliGlobalAria": "Använd Agent Chat i hela Home Assistant",
       "agentcliGlobalHelp": "Håll Agent Chat tillgänglig på alla Home Assistant-sidor, inte bara i den här panelen.",
       "agentcliGlobalLabel": "Använd i hela Home Assistant",
       "agentcliGuangzhou": "Guangzhou",
@@ -2139,7 +2151,6 @@
       "agentcliRemoveAccountFailed": "Det gick inte att ta bort kontot.",
       "agentcliRemoveBody": "Radera {name} och dess API-nyckel; allt som använder det slutar fungera. Detta kan inte ångras.",
       "agentcliSaveFailed": "Det gick inte att spara leverantören.",
-      "agentcliScrollbackAria": "Radgräns för chatthistoriken",
       "agentcliScrollbackHelp": "Hur många chattrader Agent Chat behåller som kontext, 0 till 5 000 (standard 100).",
       "agentcliScrollbackLabel": "Gräns för chatthistoriken",
       "agentcliSelectModel": "Välj standardmodell:",
@@ -2147,7 +2158,6 @@
       "agentcliSiliconValley": "Silicon Valley",
       "agentcliSingapore": "Singapore",
       "agentcliSite": "Plats",
-      "agentcliStepsAria": "Steg före avstämning om att fortsätta",
       "agentcliStepsHelp": "Hur många verktygssteg Agent Chat tar innan den frågar om den ska fortsätta, 3 till 100 (standard 20).",
       "agentcliStepsLabel": "Steg före avstämning",
       "agentcliTencentHint": "Välj den plats där du skapade din TokenHub API-nyckel. Nycklar är specifika för varje plats. Aktivera de modeller du vill använda i TokenHub-konsolen.",
@@ -2249,7 +2259,6 @@
       "providerAnthropic": "Anthropic",
       "providerCerebras": "Cerebras",
       "providerChecksHelp": "Kontrollera leverantörer efter nya och indragna modeller enligt ett schema. På som standard.",
-      "providerChecksHoursAria": "Timmar mellan leverantörskontroller",
       "providerChecksHoursHelp": "Hur ofta Phoenix kontrollerar varje leverantör efter modelländringar, {min} till {max} timmar (standard {default}).",
       "providerChecksHoursLabel": "Kontrollintervall (timmar)",
       "providerChecksLabel": "Kontrollera leverantörer för nya modeller",
@@ -2404,7 +2413,8 @@
       "privacySectionHelp": "Visa eller dölj om loggarna registrerar entitets-ID:n och anroparnas IP-adresser.",
       "haNotificationsHelp": "Visa eller dölj när Phoenix MCP skickar en Home Assistant-avisering till dig.",
       "aboutHelp": "Visa eller dölj versionsnumren och var Phoenix MCP lagrar sina data.",
-      "githubHelp": "Öppna källkoden och ärendehanteringen för Phoenix MCP på GitHub i en ny flik."
+      "githubHelp": "Öppna källkoden och ärendehanteringen för Phoenix MCP på GitHub i en ny flik.",
+      "showSecret": "Visa nyckel"
     },
     "shell": {
       "agentChat": "Agent Chat",
@@ -2568,7 +2578,9 @@
       "stepInstall": "Installera Phoenix",
       "stepCompleted": "Slutfört",
       "agentAntigravityIntro": "Lägg till detta i ~/.gemini/config/mcp_config.json och behåll befintliga servrar. Öppna sedan hanteraren /mcp i Antigravity CLI och kontrollera att servern listar verktyg.",
-      "skillAntigravityHint": "Installera guiden på ~/.gemini/antigravity-cli/skills/phoenix/SKILL.md och kör sedan /skills reload i Antigravity CLI."
+      "skillAntigravityHint": "Installera guiden på ~/.gemini/antigravity-cli/skills/phoenix/SKILL.md och kör sedan /skills reload i Antigravity CLI.",
+      "copyFirstPrompt": "Kopiera den första prompten",
+      "copyNextPrompt": "Kopiera nästa prompt"
     },
     "workspace": {
       "addToMy": "Lägg till i Min arbetsyta",
@@ -2887,7 +2899,8 @@
       "guideSearchInput": "Skriv ord för att hitta matchande avsnitt i Guide. Enter öppnar den bästa träffen.",
       "guideLink": "Öppna sidan i Guide. Tillbaka tar dig till sidan du läste.",
       "accessKeyFilter": "Visa bara åtkomstnycklar vars namn eller status innehåller den här texten.",
-      "guideDismissWelcome": "Dölj den här välkomstsidan. Hitta den igen under Innehåll."
+      "guideDismissWelcome": "Dölj den här välkomstsidan. Hitta den igen under Innehåll.",
+      "showSecret": "Visa nyckeln som vanlig text för att kontrollera vad som klistrades in."
     },
     "guide": {
       "title": "Guide",

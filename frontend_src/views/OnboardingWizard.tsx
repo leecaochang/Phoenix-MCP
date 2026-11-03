@@ -74,6 +74,10 @@ export function OnboardingWizard({ onCancel, onFinish }: Props) {
   const ttlInvalid = ttlUnit !== "none" && !(ttlValue.trim() !== "" && Number.isInteger(ttlAmount) && ttlAmount >= 1);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // A check on one field shows under it, is tied to it for a screen reader, and takes focus there.
+  const [fieldError, setFieldError] = useState<{ field: "name" | "expiry"; text: string } | null>(null);
+  const nameInput = useRef<HTMLInputElement | null>(null);
+  const expiryInput = useRef<HTMLInputElement | null>(null);
 
   const [rawAccessKey, setRawAccessKey] = useState<string | null>(null);
   const [accessKeyId, setAccessKeyId] = useState<string | null>(null);
@@ -123,16 +127,19 @@ export function OnboardingWizard({ onCancel, onFinish }: Props) {
     if (!persona) return;
     setSaving(true);
     setError(null);
+    setFieldError(null);
     try {
       const caps = PERSONA_CAP_DEFAULTS[persona];
       const patchBody: Record<string, unknown> = { persona, ...(caps || {}) };
       if (!accessKeyId) {
         if (name && !NAME_REGEX.test(name)) {
-          setError(t("wizard.nameError"));
+          setFieldError({ field: "name", text: t("wizard.nameError") });
+          nameInput.current?.focus();
           return;
         }
         if (ttlInvalid) {
-          setError(t("accessKeys.expiryAmountError"));
+          setFieldError({ field: "expiry", text: t("accessKeys.expiryAmountError") });
+          expiryInput.current?.focus();
           return;
         }
         let expiresAt: string | undefined;
@@ -292,8 +299,10 @@ export function OnboardingWizard({ onCancel, onFinish }: Props) {
             <p className="wizard-sub">{t("wizard.accessKeySub")}</p>
             <div className="field" data-guide-part>
               <label htmlFor="wiz-name">{t("wizard.nameLabel")}</label>
-              <input id="wiz-name" className="input" data-help="help.accessKeyName" value={name} disabled={!!accessKeyId}
-                maxLength={32} onChange={(e) => { nameTyped.current = true; setName(e.target.value); }} placeholder={t("accessKeys.namePlaceholder")} />
+              <input ref={nameInput} id="wiz-name" className={`input${fieldError?.field === "name" ? " error" : ""}`} data-help="help.accessKeyName" value={name} disabled={!!accessKeyId}
+                aria-invalid={fieldError?.field === "name" || undefined} aria-describedby={fieldError?.field === "name" ? "wiz-name-error" : undefined}
+                maxLength={32} onChange={(e) => { nameTyped.current = true; setName(e.target.value); if (fieldError?.field === "name") setFieldError(null); }} placeholder={t("accessKeys.namePlaceholder")} />
+              {fieldError?.field === "name" && <span id="wiz-name-error" className="field-error" role="alert">{fieldError.text}</span>}
             </div>
             <div className="field">
               <label htmlFor="wiz-expiry-unit">{t("wizard.expiryLabel")}</label>
@@ -307,11 +316,13 @@ export function OnboardingWizard({ onCancel, onFinish }: Props) {
                   <option value="weeks">{t("wizard.expiryWeeks")}</option>
                 </select>
                 {ttlUnit !== "none" && (
-                  <input className="input access-key-create-expiry-value" type="number" min={1} data-help="help.keyExpiry"
+                  <input ref={expiryInput} className={`input access-key-create-expiry-value${fieldError?.field === "expiry" ? " error" : ""}`} type="number" min={1} data-help="help.keyExpiry"
                     aria-label={t("wizard.expiryAmountAria")} aria-invalid={ttlInvalid}
-                    value={ttlValue} disabled={!!accessKeyId} onChange={(e) => setTtlValue(e.target.value)} />
+                    aria-describedby={fieldError?.field === "expiry" ? "wiz-expiry-error" : undefined}
+                    value={ttlValue} disabled={!!accessKeyId} onChange={(e) => { setTtlValue(e.target.value); if (fieldError?.field === "expiry") setFieldError(null); }} />
                 )}
               </div>
+              {fieldError?.field === "expiry" && <span id="wiz-expiry-error" className="field-error" role="alert">{fieldError.text}</span>}
             </div>
             {accessKeyId && <div className="banner banner-info">{t("wizard.accessKeyCreatedBanner")}</div>}
             <div className="wizard-actions">
@@ -388,13 +399,13 @@ export function OnboardingWizard({ onCancel, onFinish }: Props) {
             <div className="connect-field" data-guide-part>
               <span className="connect-field-label">{t("wizard.tryLabel")}</span>
               <code className="connect-field-value">{prompts.read}</code>
-              <CopyButton text={prompts.read} label={t("common.copy")} help="help.wizardCopyPrompt" />
+              <CopyButton text={prompts.read} label={t("common.copy")} name={t("wizard.copyFirstPrompt")} help="help.wizardCopyPrompt" />
             </div>
             {prompts.action && (
               <div className="connect-field">
                 <span className="connect-field-label">{t("wizard.thenLabel")}</span>
                 <code className="connect-field-value">{prompts.action}</code>
-                <CopyButton text={prompts.action} label={t("common.copy")} help="help.wizardCopyPrompt" />
+                <CopyButton text={prompts.action} label={t("common.copy")} name={t("wizard.copyNextPrompt")} help="help.wizardCopyPrompt" />
               </div>
             )}
             {mesaEnforced && (
@@ -403,7 +414,7 @@ export function OnboardingWizard({ onCancel, onFinish }: Props) {
             {persona === "home_companion" && !voiceProvider && (
               <p className="wizard-hint wizard-hint-warning" role="status">{t("wizard.companionNoVoiceProvider")}</p>
             )}
-            <div className={`wizard-connect-status${connected ? " wizard-connect-status-ok" : ""}`}>
+            <div className={`wizard-connect-status${connected ? " wizard-connect-status-ok" : ""}`} role="status">
               {connected ? t("wizard.connected") : t("wizard.waitingForAgent")}
             </div>
             <div className="wizard-actions">

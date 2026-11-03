@@ -9,7 +9,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../api";
 import type { AccessKeyRecord, ConversationSummary } from "../types";
 import { BusyButton } from "../components/BusyButton";
-import { RefreshIcon } from "../components/common";
+import { RefreshIcon, ResultCount } from "../components/common";
 import { SignalIcon, label, outcomeIcon, outcomeSignal, rowStatus } from "../components/ConversationRecord";
 import { localeDateTime, localeDateTimeShort, localeNumber, t } from "../i18n";
 import { useWindowVisible } from "../shell/visibility";
@@ -199,6 +199,7 @@ export function ConversationsView({ accessKeys = NO_KEYS }: { accessKeys?: Acces
         empty={!loading && <div className="conversation-empty"><h3>{t("conversations.empty")}</h3><p>{t("conversations.emptyHelp")}</p></div>}
       />
     </div>
+    <ResultCount count={total} query={`${debouncedSearch}|${source}|${outcome}|${days}`} loading={loading} />
     <div className="phx-table-footer" data-guide="window.conversationLog#list">
       <span className="conversation-secondary">{t("conversations.showing", { shown: localeNumber(shownCount(entries.length, rowLimit.limit)), total: localeNumber(total) })}</span>
       {partialSort && <span className="conversation-secondary">{t("table.sortedLoaded")}</span>}

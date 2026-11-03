@@ -276,7 +276,21 @@ describe("revealing a setting", () => {
     await new Promise((r) => setTimeout(r, 100));
     expect(revealWindow).toHaveBeenCalledTimes(60);
     expect(revealWindow).toHaveBeenCalledWith("settingsProviders");
-    expect(document.activeElement).toBe(before);
+    // With focus nowhere (it went with Find Setting), the window itself takes it, so Tab goes on from there.
+    expect(document.activeElement).not.toBe(before);
+    expect(document.activeElement?.getAttribute("tabindex")).toBe("-1");
+  });
+
+  it("leaves focus where it is when the setting is not shown and something has focus", async () => {
+    const revealWindow = vi.fn();
+    const { state } = renderSettings({ revealWindow });
+    const outside = document.createElement("button");
+    document.body.appendChild(outside);
+    outside.focus();
+    act(() => state.current!.reveal("decisionTimeout"));
+    await waitFor(() => expect(revealWindow).toHaveBeenCalledTimes(60), { timeout: 4000 });
+    expect(document.activeElement).toBe(outside);
+    outside.remove();
   });
 });
 
@@ -474,7 +488,7 @@ describe("help in the Help window", () => {
     const home = settingsWindow("Home Assistant");
     expect(helpFor(home.getByRole("tab", { name: "Assist Tool Provider" }))).toBe(tPlain("settings.assistIntro"));
     expect(tPlain("settings.assistIntro")).not.toMatch(/<strong>/);
-    expect(helpFor(settingsWindow("Agent Chat").getByRole("checkbox", { name: t("settings.agentcliGlobalAria") }))).toBe(t("settings.agentcliGlobalHelp"));
+    expect(helpFor(settingsWindow("Agent Chat").getByRole("checkbox", { name: t("settings.agentcliGlobalLabel") }))).toBe(t("settings.agentcliGlobalHelp"));
     // A control with help of its own keeps it, and the explanation is still read to screen readers.
     const routing = settingsWindow("Agent Chat").getByRole("checkbox", { name: t("routing.enableChat") });
     expect(routing).toHaveAccessibleDescription(t("routing.commandHelp"));

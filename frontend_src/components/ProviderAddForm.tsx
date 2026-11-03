@@ -1,9 +1,9 @@
 import { BusyInput, BusySelect } from "./BusyButton";
 import { ActionButton } from "../ui/ActionButton";
-import type { IconName } from "../ui/Icon";
+import { Icon, type IconName } from "../ui/Icon";
 import { helpRow } from "../ui/SettingLabel";
 import { useClickAway } from "../ui/useClickAway";
-import { Fragment, useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
+import { Fragment, useEffect, useId, useRef, useState, type ReactNode, type RefObject } from "react";
 import { api, localizedApiMessage } from "../api";
 import { t } from "../i18n";
 import type {
@@ -78,11 +78,14 @@ function initialValues(provider: AgentCliProviderType): Record<string, string> {
 
 export function ProviderAddForm({
   providerTypes, completeHelp = "settings.addDoneHelp", disabled, completeLabel, completeIcon = "check", addingLabelKey, onActiveChange, onClose, opener, onCreated,
-  allowCapabilityProbe = true, requireModel = false, allowAutomatic = false, idPrefix = "agentcli-add", compact = false,
+  allowCapabilityProbe = true, requireModel = false, allowAutomatic = false, idPrefix: prefix = "agentcli-add", compact = false,
 }: ProviderAddFormProps) {
+  // Settings can show in two workspaces at once, and the wizard has a form too: ids of its own keep each label on its field.
+  const idPrefix = `${useId()}${prefix}`;
   const [pickerValue, setPickerValue] = useState("");
   const [adding, setAdding] = useState<AgentCliProviderType | null>(null);
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
+  const [revealed, setRevealed] = useState<ReadonlySet<string>>(new Set());
   const generation = useRef(0);
   useEffect(() => () => { generation.current++; }, []);
   const pickerRef = useRef<HTMLSelectElement>(null);
@@ -235,9 +238,9 @@ export function ProviderAddForm({
   const probeLabel = compact ? t("settings.agentcliVerifyOptions") : t("settings.agentcliProbeOnAdd");
   const probeToggle = allowCapabilityProbe && (
     <div className="agentcli-settings-probe-opt" {...(compact ? helpRow(t("settings.agentcliProbeOnAdd")) : {})}>
-      <label className="toggle-switch" htmlFor="agentcli-add-probe-on-save">
+      <label className="toggle-switch" htmlFor={`${idPrefix}-probe-on-save`}>
         <BusyInput
-          id="agentcli-add-probe-on-save"
+          id={`${idPrefix}-probe-on-save`}
           busy={form.saving}
           type="checkbox"
           checked={form.probe}
@@ -245,7 +248,7 @@ export function ProviderAddForm({
         />
         <span className="toggle-switch-track" />
       </label>
-      <label className="agentcli-settings-probe-copy" htmlFor="agentcli-add-probe-on-save">
+      <label className="agentcli-settings-probe-copy" htmlFor={`${idPrefix}-probe-on-save`}>
         {probeLabel}
         {compact && <span className="sr-only">{t("settings.agentcliProbeOnAdd")}</span>}
       </label>
@@ -319,12 +322,11 @@ export function ProviderAddForm({
                       </option>
                     ))}
                   </BusySelect>
-                ) : (
+                ) : field.type === "secret" ? null : (
                   <BusyInput
                     id={id}
                     ref={index === 0 ? (element) => { firstFieldRef.current = element; } : undefined}
-                    type={field.type === "secret" ? "password" : "url"}
-                    data-help={field.type === "secret" && !note ? "settings.apiKeyHelp" : undefined}
+                    type="url"
                     placeholder={field.placeholder ?? fieldLabel(field)}
                     value={form.values[field.id] ?? ""}
                     busy={form.validating || form.saving}
@@ -335,10 +337,40 @@ export function ProviderAddForm({
                 )}
               </label>
             );
+            // A key is hidden as it is typed, with a button to check what was pasted. The browser
+            // must not offer to fill or save it as a Home Assistant password.
+            const shown = revealed.has(field.id);
+            const secret = field.type === "secret" && (
+              <div className="agentcli-settings-field" key={field.id}>
+                <label htmlFor={id}>{fieldLabel(field)}</label>
+                <span className="agentcli-secret-row">
+                  <BusyInput
+                    id={id}
+                    ref={index === 0 ? (element) => { firstFieldRef.current = element; } : undefined}
+                    type={shown ? "text" : "password"}
+                    autoComplete="off"
+                    spellCheck={false}
+                    data-help={!note ? "settings.apiKeyHelp" : undefined}
+                    placeholder={field.placeholder ?? fieldLabel(field)}
+                    value={form.values[field.id] ?? ""}
+                    busy={form.validating || form.saving}
+                    aria-describedby={form.error ? `${idPrefix}-error` : undefined}
+                    aria-invalid={form.error ? true : undefined}
+                    onChange={(event) => setValue(field.id, event.target.value)}
+                  />
+                  <button type="button" className="btn btn-outline btn-sm agentcli-secret-show" aria-pressed={shown}
+                    aria-label={t("settings.showSecret")} title={t("settings.showSecret")} data-help="help.showSecret"
+                    onClick={() => setRevealed((current) => { const next = new Set(current); if (shown) next.delete(field.id); else next.add(field.id); return next; })}>
+                    <Icon name="preview" size={16} />
+                  </button>
+                </span>
+              </div>
+            );
+            const fieldRow = secret || row;
             // Validate and Cancel beside the last field, the API key on most providers.
             return compact && !form.validated && index === adding.fields.length - 1
-              ? <Fragment key={field.id}>{inline(row, validateActions)}</Fragment>
-              : row;
+              ? <Fragment key={field.id}>{inline(fieldRow, validateActions)}</Fragment>
+              : fieldRow;
           })}
           {form.validating && (
             <div className="agentcli-settings-hint" role="status">

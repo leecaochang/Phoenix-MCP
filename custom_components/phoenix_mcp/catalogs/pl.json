@@ -126,7 +126,14 @@
       "save": "Zapisz",
       "saving": "Zapisywanie...",
       "sentenceSeparator": " ",
-      "serverUnreachable": "Nie można połączyć się z Home Assistant. Sprawdź połączenie i spróbuj ponownie."
+      "serverUnreachable": "Nie można połączyć się z Home Assistant. Sprawdź połączenie i spróbuj ponownie.",
+      "copyNamed": "Kopiuj: {item}",
+      "resultCount": {
+        "one": "{count} wynik",
+        "other": "{count} wyniku",
+        "few": "{count} wyniki",
+        "many": "{count} wyników"
+      }
     },
     "inject": {
       "mesaProfile": "Profil MESA",
@@ -354,7 +361,9 @@
         "other": "Karty w tym podglądzie zgłosiły błędy konfiguracji. W razie potrzeby skopiuj poniższy komunikat i wklej go agentowi, aby mógł naprawić karty.",
         "few": "Karty w tym podglądzie zgłosiły błędy konfiguracji. W razie potrzeby skopiuj poniższy komunikat i wklej go agentowi, aby mógł naprawić karty.",
         "many": "Karty w tym podglądzie zgłosiły błędy konfiguracji. W razie potrzeby skopiuj poniższy komunikat i wklej go agentowi, aby mógł naprawić karty."
-      }
+      },
+      "previewTextAlternative": "Podgląd pokazuje karty jako obrazy. Wybierz {diff}, aby przeczytać zmianę jako tekst.",
+      "byAdmin": "Administrator"
     },
     "audit": {
       "accessPassThrough": "Pass-through",
@@ -820,7 +829,14 @@
       "confirmReject": "Potwierdź odrzucenie",
       "selectMultiple": "Wybierz wiele",
       "show": "Pokaż",
-      "scopeAll": "Wszystkie żądania"
+      "scopeAll": "Wszystkie żądania",
+      "pickedCount": {
+        "one": "Wybrano: {count}",
+        "other": "Wybrano: {count}",
+        "few": "Wybrano: {count}",
+        "many": "Wybrano: {count}"
+      },
+      "rowPicked": "wybrane do zatwierdzenia zbiorczego"
     },
     "agentchat": {
       "accessKey": "Klucz dostępu",
@@ -990,7 +1006,8 @@
         "other": "Wstrzymano po {count} krokach. Kontynuować?",
         "few": "Wstrzymano po {count} krokach. Kontynuować?",
         "many": "Wstrzymano po {count} krokach. Kontynuować?"
-      }
+      },
+      "announceReplyStart": "{text}… Pełna odpowiedź jest w rozmowie."
     },
     "adminError": {
       "activeAccessKeyRequired": "{field} musi odnosić się do aktywnego klucza dostępu.",
@@ -1308,7 +1325,9 @@
       "stepInstall": "Zainstaluj Phoenix",
       "stepCompleted": "Ukończono",
       "agentAntigravityIntro": "Dodaj to do ~/.gemini/config/mcp_config.json, zachowując istniejące serwery, a następnie otwórz menedżer /mcp w Antigravity CLI i sprawdź, czy serwer wyświetla narzędzia.",
-      "skillAntigravityHint": "Zainstaluj przewodnik w ~/.gemini/antigravity-cli/skills/phoenix/SKILL.md, potem wykonaj /skills reload w Antigravity CLI."
+      "skillAntigravityHint": "Zainstaluj przewodnik w ~/.gemini/antigravity-cli/skills/phoenix/SKILL.md, potem wykonaj /skills reload w Antigravity CLI.",
+      "copyFirstPrompt": "Kopiuj pierwszy prompt",
+      "copyNextPrompt": "Kopiuj następny prompt"
     },
     "accessKeys": {
       "announceAllHelp": "Oferuj agentom tego klucza każde narzędzie, także te, których nie może używać. Tylko do rozwiązywania problemów; zużywa więcej tokenów.",
@@ -1830,7 +1849,6 @@
       "agentcliDismissWarning": "Odrzuć to ostrzeżenie",
       "agentcliDone": "Gotowe",
       "agentcliFieldRequired": "Wpisz {field}.",
-      "agentcliGlobalAria": "Używaj Agent Chat w całym Home Assistant",
       "agentcliGlobalHelp": "Utrzymuj Agent Chat dostępny na każdej stronie Home Assistant, a nie tylko w tym panelu.",
       "agentcliGlobalLabel": "Używaj w całym Home Assistant",
       "agentcliIntro": "Rozmawiaj z Home Assistant przy użyciu własnego dostawcy AI, w granicach uprawnień wybranego klucza dostępu.",
@@ -1859,12 +1877,10 @@
       "agentcliRemoveAccountFailed": "Nie udało się usunąć konta.",
       "agentcliRemoveBody": "Usuń {name} i jego klucz API; wszystko, co go używa, przestanie działać. Tego nie można cofnąć.",
       "agentcliSaveFailed": "Nie udało się zapisać dostawcy.",
-      "agentcliScrollbackAria": "Limit wierszy historii czatu",
       "agentcliScrollbackHelp": "Ile wierszy czatu Agent Chat zachowuje jako kontekst, od 0 do 5000 (domyślnie 100).",
       "agentcliScrollbackLabel": "Limit historii czatu",
       "agentcliSelectModel": "Wybierz model domyślny:",
       "agentcliServerUrl": "Adres URL serwera",
-      "agentcliStepsAria": "Kroki przed pytaniem o kontynuację",
       "agentcliStepsHelp": "Ile kroków z narzędziami Agent Chat wykonuje, zanim zapyta o kontynuację, od 3 do 100 (domyślnie 20).",
       "agentcliStepsLabel": "Kroki przed pytaniem o kontynuację",
       "agentcliValidate": "Waliduj",
@@ -2054,7 +2070,6 @@
       "providerChecksHelp": "Sprawdzaj według harmonogramu u dostawców nowe i wycofane modele. Domyślnie włączone.",
       "providerChecksHoursLabel": "Sprawdzaj co (godziny)",
       "providerChecksHoursHelp": "Jak często Phoenix sprawdza zmiany modeli u każdego dostawcy, od {min} do {max} godz. (domyślnie {default}).",
-      "providerChecksHoursAria": "Godziny między sprawdzeniami dostawców",
       "agentcliProbedVisionSeen": "Test obrazu: model odczytał obraz testowy, więc załączone obrazy i obrazy kamer są do niego wysyłane.",
       "agentcliProbedVisionUnseen": "Test obrazu: model nie odczytał obrazu testowego, więc Phoenix traktuje go jako model wyłącznie tekstowy.",
       "agentcliProbedVisionInconclusive": "Test obrazu: nie wróciła użyteczna odpowiedź, więc obsługa obrazów nadal jest nieznana.",
@@ -2138,7 +2153,8 @@
         "mist": "Mgła",
         "office": "Biuro",
         "aubergine": "Bakłażan"
-      }
+      },
+      "showSecret": "Pokaż klucz"
     },
     "approvalSummary": {
       "action.optionalReason": "Opcjonalny powód",
@@ -3018,7 +3034,8 @@
       "guideSearchInput": "Wpisz słowa, aby znaleźć pasujące sekcje Przewodnika. Enter otwiera najlepsze dopasowanie.",
       "guideLink": "Otwórz tę stronę w Przewodniku. Wstecz wraca do wcześniej czytanej strony.",
       "accessKeyFilter": "Pokaż tylko klucze dostępu, których nazwa lub stan zawiera ten tekst.",
-      "guideDismissWelcome": "Ukryj tę stronę powitalną. Znajdziesz ją ponownie w Spisie treści."
+      "guideDismissWelcome": "Ukryj tę stronę powitalną. Znajdziesz ją ponownie w Spisie treści.",
+      "showSecret": "Pokaż klucz jako zwykły tekst, aby sprawdzić, co zostało wklejone."
     },
     "guide": {
       "title": "Przewodnik",

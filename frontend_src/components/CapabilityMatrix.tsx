@@ -340,7 +340,7 @@ export function CapabilityMatrix({ accessKey, onUpdate, esphome }: Props) {
 
   return (
     <div className="capability-matrix">
-      {error && <div className="banner banner-error mb-8">{error}</div>}
+      {error && <div role="alert" className="banner banner-error mb-8">{error}</div>}
       {accessKey.pass_through && (
         <div className="amber-block mb-8" data-guide="topic.passThrough">
           <p>

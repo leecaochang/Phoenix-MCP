@@ -80,9 +80,10 @@ describe("batch approve", () => {
       [record("a"), record("b"), record("c")],
     );
     fireEvent.click(getByRole("button", { name: "Select Multiple" }));
+    // Each box is named by its request, not by the tool all three share.
+    expect(new Set(pickBoxes().map((b) => b.getAttribute("aria-label"))).size).toBe(3);
     // Tick c first, then a: the request must still follow list order, so that a
-    // "stopped at" names a row the operator can find. Addressed positionally
-    // because all three rows carry the same tool name and so the same label.
+    // "stopped at" names a row the operator can find.
     fireEvent.click(pickBoxes()[2]);
     fireEvent.click(pickBoxes()[0]);
     fireEvent.click(getByRole("button", { name: "Approve 2 Selected" }));
@@ -98,6 +99,10 @@ describe("batch approve", () => {
     fireEvent.click(pickBoxes()[0]);
     fireEvent.keyDown(listRows()[2], { key: " " });
     expect(pickBoxes().map((b) => b.checked)).toEqual([true, false, true]);
+    // The row a keyboard user ticked with Space says so, and the count is spoken.
+    expect(listRows()[2].getAttribute("aria-label")).toMatch(/selected for batch approval$/);
+    expect(listRows()[1].getAttribute("aria-label")).not.toMatch(/selected for batch approval/);
+    expect(document.querySelector('.approvals-list-view > .sr-only[role="status"]')?.textContent).toBe("2 selected");
     expect(within(reviewWindow()).getByText("Edit b")).toBeTruthy();
     expect(getByRole("button", { name: "Approve 2 Selected" })).toBeTruthy();
   });

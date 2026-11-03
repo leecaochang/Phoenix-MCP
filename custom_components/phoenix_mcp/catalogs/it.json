@@ -368,7 +368,8 @@
       "pausedAfter": {
         "one": "In pausa dopo {count} passaggio. Continuare?",
         "other": "In pausa dopo {count} passaggi. Continuare?"
-      }
+      },
+      "announceReplyStart": "{text}… La risposta completa è nella conversazione."
     },
     "audit": {
       "accessPassThrough": "Pass-through",
@@ -813,7 +814,12 @@
       "confirmReject": "Conferma rifiuto",
       "selectMultiple": "Selezione multipla",
       "show": "Mostra",
-      "scopeAll": "Tutte le richieste"
+      "scopeAll": "Tutte le richieste",
+      "pickedCount": {
+        "one": "{count} selezionata",
+        "other": "{count} selezionate"
+      },
+      "rowPicked": "selezionata per l'approvazione in blocco"
     },
     "caps": {
       "cap_automation_write": {
@@ -1411,7 +1417,6 @@
       "agentcliDismissWarning": "Ignora questo avviso",
       "agentcliDone": "Fatto",
       "agentcliFieldRequired": "Inserisci {field}.",
-      "agentcliGlobalAria": "Usa Agent Chat in tutto Home Assistant",
       "agentcliGlobalHelp": "Mantieni Agent Chat disponibile in ogni pagina di Home Assistant, non solo in questo pannello.",
       "agentcliGlobalLabel": "Usa in tutto Home Assistant",
       "agentcliIntro": "Chatta con Home Assistant usando il tuo provider di IA, entro le autorizzazioni della chiave di accesso scelta.",
@@ -1440,12 +1445,10 @@
       "agentcliRemoveAccountFailed": "Rimozione dell'account non riuscita.",
       "agentcliRemoveBody": "Elimina {name} e la sua chiave API; tutto ciò che lo usa smette di funzionare. Non si può annullare.",
       "agentcliSaveFailed": "Salvataggio del provider non riuscito.",
-      "agentcliScrollbackAria": "Limite di righe dello storico chat",
       "agentcliScrollbackHelp": "Quante righe di chat Agent Chat conserva come contesto, da 0 a 5.000 (predefinito 100).",
       "agentcliScrollbackLabel": "Limite dello storico chat",
       "agentcliSelectModel": "Seleziona il modello predefinito:",
       "agentcliServerUrl": "URL del server",
-      "agentcliStepsAria": "Passaggi prima della richiesta di continuare",
       "agentcliStepsHelp": "Quanti passaggi con strumenti Agent Chat esegue prima di chiedere se continuare, da 3 a 100 (predefinito 20).",
       "agentcliStepsLabel": "Passaggi prima della richiesta di continuare",
       "agentcliValidate": "Convalida",
@@ -1635,7 +1638,6 @@
       "providerChecksHelp": "Controlla periodicamente i provider per modelli nuovi e ritirati. Attivo per impostazione predefinita.",
       "providerChecksHoursLabel": "Controlla ogni (ore)",
       "providerChecksHoursHelp": "Ogni quanto Phoenix controlla le modifiche ai modelli di ogni provider, da {min} a {max} ore (predefinito {default}).",
-      "providerChecksHoursAria": "Ore tra i controlli dei provider",
       "agentcliProbedVisionSeen": "Controllo immagine: il modello ha letto l'immagine di prova, quindi gli vengono inviate le immagini allegate e quelle della telecamera.",
       "agentcliProbedVisionUnseen": "Controllo immagine: il modello non è riuscito a leggere l'immagine di prova, quindi Phoenix lo tratta come solo testo.",
       "agentcliProbedVisionInconclusive": "Controllo immagine: non è arrivata una risposta utilizzabile, quindi il supporto per le immagini resta sconosciuto.",
@@ -1717,7 +1719,8 @@
         "mist": "Nebbia",
         "office": "Ufficio",
         "aubergine": "Melanzana"
-      }
+      },
+      "showSecret": "Mostra chiave"
     },
     "version": {
       "card.added": "aggiunto {subject} ({where})",
@@ -1840,7 +1843,9 @@
       "previewErrorHead": {
         "one": "Una scheda in questa anteprima ha segnalato un errore di configurazione. Se necessario, copia il messaggio qui sotto e incollalo all'agente in modo che possa correggere la scheda.",
         "other": "Alcune schede in questa anteprima hanno segnalato errori di configurazione. Se necessario, copia il messaggio qui sotto e incollalo all'agente in modo che possa correggere le schede."
-      }
+      },
+      "previewTextAlternative": "L'anteprima mostra le schede come immagini. Scegli {diff} per leggere la modifica come testo.",
+      "byAdmin": "Amministratore"
     },
     "shell": {
       "agentChat": "Agent Chat",
@@ -2070,7 +2075,12 @@
       "save": "Salva",
       "saving": "Salvataggio...",
       "sentenceSeparator": " ",
-      "serverUnreachable": "Impossibile raggiungere Home Assistant. Controlla la connessione e riprova."
+      "serverUnreachable": "Impossibile raggiungere Home Assistant. Controlla la connessione e riprova.",
+      "copyNamed": "Copia {item}",
+      "resultCount": {
+        "one": "{count} risultato",
+        "other": "{count} risultati"
+      }
     },
     "diff": {
       "blueprint.create": "Crea il progetto {domain} '{rel}'",
@@ -2298,7 +2308,9 @@
       "stepInstall": "Installa Phoenix",
       "stepCompleted": "Completato",
       "agentAntigravityIntro": "Aggiungi questo a ~/.gemini/config/mcp_config.json, mantenendo i server esistenti, poi apri il gestore /mcp in Antigravity CLI e verifica che il server elenchi degli strumenti.",
-      "skillAntigravityHint": "Installa la guida in ~/.gemini/antigravity-cli/skills/phoenix/SKILL.md, poi esegui /skills reload in Antigravity CLI."
+      "skillAntigravityHint": "Installa la guida in ~/.gemini/antigravity-cli/skills/phoenix/SKILL.md, poi esegui /skills reload in Antigravity CLI.",
+      "copyFirstPrompt": "Copia il primo prompt",
+      "copyNextPrompt": "Copia il prompt successivo"
     },
     "routing": {
       "providerOptions": "Ricarica l'elenco dei modelli di questo account. Non esegue comandi e non verifica quanto bene un modello instrada.",
@@ -2881,7 +2893,8 @@
       "guideSearchInput": "Digita delle parole per trovare le sezioni corrispondenti della Guida. Invio apre il risultato migliore.",
       "guideLink": "Apri questa pagina nella Guida. Indietro ti riporta alla pagina che stavi leggendo.",
       "accessKeyFilter": "Mostra solo le chiavi di accesso il cui nome o stato contiene questo testo.",
-      "guideDismissWelcome": "Nascondi questa pagina di benvenuto. La ritrovi nell'Indice."
+      "guideDismissWelcome": "Nascondi questa pagina di benvenuto. La ritrovi nell'Indice.",
+      "showSecret": "Mostra la chiave come testo semplice, per controllare cosa è stato incollato."
     },
     "guide": {
       "title": "Guida",

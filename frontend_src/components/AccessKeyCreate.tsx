@@ -5,7 +5,7 @@
  * moving a window.
  */
 
-import React, { useEffect, useMemo, useRef, useState, type RefObject } from "react";
+import React, { useEffect, useId, useMemo, useRef, useState, type RefObject } from "react";
 import type { AccessKeyRecord, CreateAccessKeyBody } from "../types";
 import { api } from "../api";
 import { copyToClipboard } from "../utils";
@@ -41,18 +41,25 @@ function addMinutes(m: number): string {
 }
 
 
-export function CopyButton({ text, label = t("accessKeys.copyToClipboard"), help }: { text: string; label?: string; help?: string }) {
-  const [copied, setCopied] = useState(false);
+/** `name` says what is copied, for a screen reader's list of buttons where several read "Copy". */
+export function CopyButton({ text, label = t("accessKeys.copyToClipboard"), name, help }: { text: string; label?: string; name?: string; help?: string }) {
+  const [state, setState] = useState<"idle" | "copied" | "failed">("idle");
   async function copy() {
-    await copyToClipboard(text);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    try {
+      await copyToClipboard(text);
+      setState("copied");
+    } catch {
+      // Plain-HTTP Home Assistant has no clipboard: say so rather than nothing.
+      setState("failed");
+    }
+    setTimeout(() => setState("idle"), 2000);
   }
+  const copied = state === "copied";
   return (
     <>
-      <ActionButton icon={copied ? "check" : "copy"} label={copied ? t("accessKeys.copied") : label} help={help} className="btn btn-outline btn-sm" onClick={() => void copy()} />
+      <ActionButton icon={copied ? "check" : "copy"} label={copied ? t("accessKeys.copied") : label} name={copied ? undefined : name} help={help} className="btn btn-outline btn-sm" onClick={() => void copy()} />
       {/* Announce the visual Copy -> Copied! swap to assistive tech. */}
-      <span className="sr-only" role="status">{copied ? t("accessKeys.copiedToClipboard") : ""}</span>
+      <span className="sr-only" role="status">{copied ? t("accessKeys.copiedToClipboard") : state === "failed" ? t("conversations.copyFailed") : ""}</span>
     </>
   );
 }
@@ -67,7 +74,7 @@ export function RawAccessKeyDisplay({ rawAccessKey, note }: { rawAccessKey: stri
       <div className="amber-block">
         {note ?? <p>{tRich("accessKeys.rawAccessKeyNote", { strong: (c) => <strong>{c}</strong> })}</p>}
       </div>
-      <CopyCodeBox value={rawAccessKey} />
+      <CopyCodeBox title={t("wizard.accessKeyLabel")} value={rawAccessKey} />
     </>
   );
 }
@@ -185,6 +192,11 @@ export function AccessKeyCreateForm({ existingNames, onCreated, onClose, onOpenS
     if (existingNames.some((n) => slugify(n) === slug)) return t("accessKeys.nameDuplicateError");
     return null;
   })();
+  // A name being typed is too short at first: its error waits until the name could be complete or
+  // the field is left, so a screen reader does not interrupt the first keystroke with it.
+  const [nameLeft, setNameLeft] = useState(false);
+  const shownNameError = nameError && (nameLeft || name.length >= 3) ? nameError : null;
+  const uid = useId();
 
   const reqNum = parseInt(rateLimitRequests, 10);
   const burstDisabled = isNaN(reqNum) || reqNum === 0;
@@ -251,39 +263,40 @@ export function AccessKeyCreateForm({ existingNames, onCreated, onClose, onOpenS
   }
 
   return (
-    <section ref={form} className="phx-inline-form" aria-labelledby="create-access-key-title" data-guide="window.accessKeys#create-key"
+    <section ref={form} className="phx-inline-form" aria-labelledby={`${uid}title`} data-guide="window.accessKeys#create-key"
       onKeyDown={(e) => {
         if (e.key !== "Escape" || saving) return;
         e.preventDefault();
         e.stopPropagation();
         onClose();
       }}>
-      <h3 className="phx-section-title" id="create-access-key-title">{t("accessKeys.createAccessKey")}</h3>
+      <h3 className="phx-section-title" id={`${uid}title`}>{t("accessKeys.createAccessKey")}</h3>
 
       {/* One row of fields that wraps on narrow windows (user, 2026-10-28). */}
       <div className="access-key-create-fields">
         <div className="field access-key-create-name" data-guide="window.accessKeys#key-name">
-          <label htmlFor="access-key-name-input">{t("accessKeys.nameLabel")}</label>
+          <label htmlFor={`${uid}name`}>{t("accessKeys.nameLabel")}</label>
           <input
-            id="access-key-name-input"
+            id={`${uid}name`}
             data-help="help.accessKeyName"
-            className={`input${nameError ? " error" : ""}`}
+            className={`input${shownNameError ? " error" : ""}`}
             value={name}
             onChange={(e) => setName(e.target.value)}
+            onBlur={() => setNameLeft(true)}
             placeholder={t("accessKeys.namePlaceholder")}
             maxLength={32}
             autoFocus
-            aria-invalid={nameError ? true : undefined}
-            aria-describedby={nameError ? "access-key-name-error" : undefined}
+            aria-invalid={shownNameError ? true : undefined}
+            aria-describedby={shownNameError ? `${uid}name-error` : undefined}
           />
-          {nameError && <span className="field-error" id="access-key-name-error" role="alert">{nameError}</span>}
+          {shownNameError && <span className="field-error" id={`${uid}name-error`} role="alert">{shownNameError}</span>}
         </div>
 
         <div className="field">
-          <label htmlFor="access-key-expiry-unit" data-guide="window.accessKeys#key-expiry">{t("accessKeys.expiryLabel")}</label>
+          <label htmlFor={`${uid}expiry`} data-guide="window.accessKeys#key-expiry">{t("accessKeys.expiryLabel")}</label>
           <div className="access-key-create-expiry-row" data-guide="window.accessKeys#key-expiry">
             <select
-              id="access-key-expiry-unit"
+              id={`${uid}expiry`}
               data-help="help.keyExpiry"
               className="input input-auto"
               value={ttlUnit}
@@ -304,20 +317,20 @@ export function AccessKeyCreateForm({ existingNames, onCreated, onClose, onOpenS
                 min={1}
                 value={ttlValue}
                 aria-invalid={ttlInvalid}
-                aria-describedby={ttlInvalid ? "access-key-expiry-error" : undefined}
+                aria-describedby={ttlInvalid ? `${uid}expiry-error` : undefined}
                 onChange={(e) => setTtlValue(e.target.value)}
               />
             )}
           </div>
-          {ttlInvalid && <span id="access-key-expiry-error" className="field-error">{t("accessKeys.expiryAmountError")}</span>}
+          {ttlInvalid && <span id={`${uid}expiry-error`} className="field-error">{t("accessKeys.expiryAmountError")}</span>}
         </div>
 
         {!passThrough && (
           <>
             <div className="field access-key-create-number" data-guide="window.accessKeys#key-rate-limits" {...helpRow(t("help.createRateLimits"))}>
-              <label htmlFor="create-rate-requests">{t("accessKeys.rateRequestsLabel")}</label>
+              <label htmlFor={`${uid}requests`}>{t("accessKeys.rateRequestsLabel")}</label>
               <input
-                id="create-rate-requests"
+                id={`${uid}requests`}
                 className="input"
                 type="number"
                 min={0}
@@ -326,9 +339,9 @@ export function AccessKeyCreateForm({ existingNames, onCreated, onClose, onOpenS
               />
             </div>
             <div className="field access-key-create-number" data-guide="window.accessKeys#key-rate-limits" {...helpRow(t("help.createRateLimits"))}>
-              <label htmlFor="create-rate-burst">{t("accessKeys.rateBurstLabel")}</label>
+              <label htmlFor={`${uid}burst`}>{t("accessKeys.rateBurstLabel")}</label>
               <input
-                id="create-rate-burst"
+                id={`${uid}burst`}
                 className="input"
                 type="number"
                 min={0}
@@ -377,7 +390,7 @@ export function AccessKeyCreateForm({ existingNames, onCreated, onClose, onOpenS
         </div>
       )}
 
-      {error && <div className="banner banner-error mt-12">{error}</div>}
+      {error && <div role="alert" className="banner banner-error mt-12">{error}</div>}
 
       <div className="phx-inline-form-actions">
         <ActionButton icon="add" label={t("accessKeys.create")} help="help.createAccessKeySubmit" busy={saving} disabled={!canSubmit}

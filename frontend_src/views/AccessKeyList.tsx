@@ -3,7 +3,7 @@ import type { AccessKeyRecord, ArchivedAccessKeyRecord } from "../types";
 import { AccessKeyCreateForm } from "../components/AccessKeyCreate";
 import { ArchivedAccessKeyTable } from "../components/ArchivedAccessKeyTable";
 import { api } from "../api";
-import { Loading, ErrorMsg } from "../components/common";
+import { Loading, ErrorMsg, ResultCount } from "../components/common";
 import { formatDate, accessKeyStatus, accessKeyStatusLabel } from "../utils";
 import { localeDateTime, t } from "../i18n";
 import { useToolbarTools, type ToolGroup } from "../shell/tools";
@@ -187,7 +187,7 @@ export function AccessKeyListView({
       <div className="view-root">
         {createForm}
         <div className="card wizard-hero">
-          <div className="wizard-hero-title">{t("accessKeys.heroTitle")}</div>
+          <h3 className="wizard-hero-title">{t("accessKeys.heroTitle")}</h3>
           <p className="wizard-hero-sub">
             {t("accessKeys.heroSub")}
           </p>
@@ -214,6 +214,7 @@ export function AccessKeyListView({
       <div className="phx-filters"><div className="filter-row">
         <input type="search" className="input" data-guide="window.accessKeys#key-list" data-help="help.accessKeyFilter" aria-label={t("accessKeys.filterAria")} placeholder={t("accessKeys.filterPlaceholder")}
           value={filter} onChange={(e) => setFilter(e.target.value)} />
+        <ResultCount count={filtered.length} query={filter} />
       </div></div>
       {/* Reading the list again keeps the table in place; only a first load shows the loading state. */}
       {error && accessKeys.length > 0 && <ErrorMsg msg={error} />}

@@ -24,6 +24,7 @@ import { searchGuide, topicSections, type SearchSection } from "../guide/search"
 import type { GuideTarget, GuideTargetTracker } from "./guideTarget";
 import { hasMessage, t } from "../i18n";
 import { compareStrings } from "../i18n/format";
+import { ResultCount } from "../components/common";
 import { Icon } from "../ui/Icon";
 import { MenuButton, useContextMenu, type MenuEntry } from "../ui/Menu";
 import { openPopupWindow, type OpenPopup } from "../ui/popup";
@@ -488,6 +489,7 @@ function SearchView({ guide }: { guide: Guide }) {
       <input type="search" className="input phx-guide-search" data-help="help.guideSearchInput" autoFocus value={query} placeholder={t("guide.searchPlaceholder")}
         aria-label={t("guide.searchPlaceholder")} onChange={(e) => { setQuery(e.target.value); if (e.target.value.trim()) welcome?.mark("search"); }}
         onKeyDown={(e) => { if (e.key === "Enter" && hits[0]) { e.preventDefault(); guide.open(hits[0].section.topic, hits[0].section.anchor); } }} />
+      <ResultCount count={hits.length} query={query} />
       {query.trim() && !hits.length && <p className="phx-guide-note">{t("guide.noResults")}</p>}
       <ul className="phx-guide-results">
         {hits.map(({ section, snippet }) => (

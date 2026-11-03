@@ -1,5 +1,5 @@
 import { BusyInput, BusySelect } from "./BusyButton";
-import { useMemo, useEffect, useRef, useState, type RefObject } from "react";
+import { useId, useMemo, useEffect, useRef, useState, type RefObject } from "react";
 import { api } from "../api";
 import { ActionButton } from "../ui/ActionButton";
 import { useClickAway } from "../ui/useClickAway";
@@ -148,6 +148,7 @@ const CHECK_HOURS_MAX = 720;
 const CHECK_HOURS_DEFAULT = 24;
 
 export function LlmProviderSettings({ settings, onChange, saving, adding, onAddingChange }: Props) {
+  const uid = useId();
   const [instances, setInstances] = useState<AgentCliInstance[] | null>(null);
   const [providerTypes, setProviderTypes] = useState<AgentCliProviderType[]>([]);
   const [busy, setBusy] = useState(false);
@@ -488,12 +489,12 @@ export function LlmProviderSettings({ settings, onChange, saving, adding, onAddi
                 busy={busy || refreshing !== null} onClick={() => void refresh(inst)} />
             </div>
             <div className="agentcli-settings-probe-opt" {...helpRow(t("settings.agentcliProbeOnAdd"))}>
-              <label className="toggle-switch" htmlFor={`agentcli-probe-on-save-${inst.id}`}>
-                <input id={`agentcli-probe-on-save-${inst.id}`} type="checkbox" checked={probeOnSave}
+              <label className="toggle-switch" htmlFor={`${uid}probe-on-save-${inst.id}`}>
+                <input id={`${uid}probe-on-save-${inst.id}`} type="checkbox" checked={probeOnSave}
                        onChange={(e) => setProbeOnSave(e.target.checked)} />
                 <span className="toggle-switch-track" />
               </label>
-              <label className="agentcli-settings-probe-copy" htmlFor={`agentcli-probe-on-save-${inst.id}`}>
+              <label className="agentcli-settings-probe-copy" htmlFor={`${uid}probe-on-save-${inst.id}`}>
                 {t("settings.agentcliVerifyOptions")}
                 <span className="sr-only">{t("settings.agentcliProbeOnAdd")}</span>
               </label>
@@ -607,7 +608,7 @@ export function LlmProviderSettings({ settings, onChange, saving, adding, onAddi
             <BusyInput
               className="input input-auto"
               type="number" min={CHECK_HOURS_MIN} max={CHECK_HOURS_MAX} step={1}
-              aria-label={t("settings.providerChecksHoursAria")}
+              aria-label={t("settings.providerChecksHoursLabel")}
               value={hoursInput}
               busy={saving}
               disabled={!checksOn}

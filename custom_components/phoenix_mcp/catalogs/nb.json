@@ -557,7 +557,8 @@
       "pausedAfter": {
         "one": "Satt på pause etter {count} trinn. Fortsette?",
         "other": "Satt på pause etter {count} trinn. Fortsette?"
-      }
+      },
+      "announceReplyStart": "{text}… Hele svaret står i samtalen."
     },
     "approvalSummary": {
       "action.optionalReason": "Valgfri begrunnelse",
@@ -937,7 +938,12 @@
       "confirmReject": "Bekreft avvisning",
       "selectMultiple": "Velg flere",
       "show": "Vis",
-      "scopeAll": "Alle forespørsler"
+      "scopeAll": "Alle forespørsler",
+      "pickedCount": {
+        "one": "{count} valgt",
+        "other": "{count} valgt"
+      },
+      "rowPicked": "valgt for å godkjenne flere samtidig"
     },
     "attention": {
       "actionTitle": "Sjekk en tidligere handling",
@@ -1241,7 +1247,9 @@
       "previewErrorHead": {
         "one": "Et kort i denne forhåndsvisningen rapporterte en konfigurasjonsfeil. Kopier om nødvendig meldingen nedenfor og lim den inn hos agenten, slik at den kan rette kortet.",
         "other": "Kort i denne forhåndsvisningen rapporterte konfigurasjonsfeil. Kopier om nødvendig meldingen nedenfor og lim den inn hos agenten, slik at den kan rette kortene."
-      }
+      },
+      "previewTextAlternative": "Forhåndsvisningen viser kortene som bilder. Velg {diff} for å lese endringen som tekst.",
+      "byAdmin": "Administrator"
     },
     "common": {
       "after": "Etter",
@@ -1268,7 +1276,12 @@
       "save": "Lagre",
       "saving": "Lagrer...",
       "sentenceSeparator": " ",
-      "serverUnreachable": "Kunne ikke nå Home Assistant. Kontroller tilkoblingen og prøv igjen."
+      "serverUnreachable": "Kunne ikke nå Home Assistant. Kontroller tilkoblingen og prøv igjen.",
+      "copyNamed": "Kopier {item}",
+      "resultCount": {
+        "one": "{count} resultat",
+        "other": "{count} resultater"
+      }
     },
     "conversations": {
       "accessKeyLabel": "Tilgangsnøkkel",
@@ -2099,7 +2112,6 @@
       "agentcliDismissWarning": "Lukk denne advarselen",
       "agentcliDone": "Ferdig",
       "agentcliFieldRequired": "Oppgi {field}.",
-      "agentcliGlobalAria": "Bruk Agent Chat i hele Home Assistant",
       "agentcliGlobalHelp": "Hold Agent Chat tilgjengelig på alle sider i Home Assistant, ikke bare i dette panelet.",
       "agentcliGlobalLabel": "Bruk i hele Home Assistant",
       "agentcliGuangzhou": "Guangzhou",
@@ -2139,7 +2151,6 @@
       "agentcliRemoveAccountFailed": "Kunne ikke fjerne kontoen.",
       "agentcliRemoveBody": "Slett {name} og API-nøkkelen; alt som bruker den, slutter å virke. Dette kan ikke angres.",
       "agentcliSaveFailed": "Kunne ikke lagre leverandøren.",
-      "agentcliScrollbackAria": "Grense for antall linjer i chattehistorikken",
       "agentcliScrollbackHelp": "Hvor mange chatlinjer Agent Chat beholder som kontekst, 0 til 5 000 (standard 100).",
       "agentcliScrollbackLabel": "Grense for chattehistorikken",
       "agentcliSelectModel": "Velg standardmodell:",
@@ -2147,7 +2158,6 @@
       "agentcliSiliconValley": "Silicon Valley",
       "agentcliSingapore": "Singapore",
       "agentcliSite": "Nettsted",
-      "agentcliStepsAria": "Antall trinn før avsjekk om å fortsette",
       "agentcliStepsHelp": "Hvor mange verktøysteg Agent Chat tar før den spør om å fortsette, 3 til 100 (standard 20).",
       "agentcliStepsLabel": "Trinn før avsjekk",
       "agentcliTencentHint": "Velg nettstedet der du opprettet TokenHub API-nøkkelen. Nøkler er knyttet til ett bestemt nettsted. Aktiver modellene du vil bruke i TokenHub-konsollen.",
@@ -2249,7 +2259,6 @@
       "providerAnthropic": "Anthropic",
       "providerCerebras": "Cerebras",
       "providerChecksHelp": "Sjekk leverandører for nye og utgåtte modeller etter en tidsplan. På som standard.",
-      "providerChecksHoursAria": "Timer mellom leverandørsjekker",
       "providerChecksHoursHelp": "Hvor ofte Phoenix sjekker hver leverandør for modellendringer, {min} til {max} timer (standard {default}).",
       "providerChecksHoursLabel": "Sjekk hver (timer)",
       "providerChecksLabel": "Sjekk leverandører for nye modeller",
@@ -2404,7 +2413,8 @@
       "privacySectionHelp": "Vis eller skjul om loggene registrerer entitets-ID-er og IP-adressene til dem som kaller.",
       "haNotificationsHelp": "Vis eller skjul når Phoenix MCP sender deg et Home Assistant-varsel.",
       "aboutHelp": "Vis eller skjul versjonsnumrene og hvor Phoenix MCP lagrer dataene sine.",
-      "githubHelp": "Åpne kildekoden og saksoversikten for Phoenix MCP på GitHub i en ny fane."
+      "githubHelp": "Åpne kildekoden og saksoversikten for Phoenix MCP på GitHub i en ny fane.",
+      "showSecret": "Vis nøkkel"
     },
     "shell": {
       "agentChat": "Agent Chat",
@@ -2568,7 +2578,9 @@
       "stepInstall": "Installer Phoenix",
       "stepCompleted": "Fullført",
       "agentAntigravityIntro": "Legg dette til i ~/.gemini/config/mcp_config.json, og behold eksisterende servere. Åpne deretter behandleren /mcp i Antigravity CLI, og sjekk at serveren viser verktøy.",
-      "skillAntigravityHint": "Installer veiledningen i ~/.gemini/antigravity-cli/skills/phoenix/SKILL.md, og kjør deretter /skills reload i Antigravity CLI."
+      "skillAntigravityHint": "Installer veiledningen i ~/.gemini/antigravity-cli/skills/phoenix/SKILL.md, og kjør deretter /skills reload i Antigravity CLI.",
+      "copyFirstPrompt": "Kopier den første ledeteksten",
+      "copyNextPrompt": "Kopier den neste ledeteksten"
     },
     "workspace": {
       "addToMy": "Legg til i Mitt arbeidsområde",
@@ -2887,7 +2899,8 @@
       "guideSearchInput": "Skriv ord for å finne samsvarende seksjoner i veiledningen. Enter åpner det beste treffet.",
       "guideLink": "Åpne denne siden i Veiledning. Tilbake tar deg til siden du leste.",
       "accessKeyFilter": "Vis bare tilgangsnøkler der navnet eller statusen inneholder denne teksten.",
-      "guideDismissWelcome": "Skjul denne velkomstsiden. Finn den igjen under Innhold."
+      "guideDismissWelcome": "Skjul denne velkomstsiden. Finn den igjen under Innhold.",
+      "showSecret": "Vis nøkkelen som vanlig tekst for å kontrollere hva som ble limt inn."
     },
     "guide": {
       "title": "Veiledning",

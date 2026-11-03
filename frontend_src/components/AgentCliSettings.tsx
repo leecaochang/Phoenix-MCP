@@ -91,7 +91,7 @@ export function AgentCliSettings({
         <label className={`toggle-switch${saving ? " disabled" : ""}`}>
           <BusyInput
             type="checkbox"
-            aria-label={t("settings.agentcliGlobalAria")}
+            aria-label={t("settings.agentcliGlobalLabel")}
             checked={globalVisible}
             busy={saving}
             onChange={(e) => onGlobalChange(e.target.checked)}
@@ -104,7 +104,7 @@ export function AgentCliSettings({
         <BusyInput
           className="input input-auto"
           type="number" min={0} max={5000} step={100}
-          aria-label={t("settings.agentcliScrollbackAria")}
+          aria-label={t("settings.agentcliScrollbackLabel")}
           value={scrollInput}
           busy={saving}
           onChange={(e) => onScrollInput(e.target.value)}
@@ -117,7 +117,7 @@ export function AgentCliSettings({
         <BusyInput
           className="input input-auto"
           type="number" min={3} max={100} step={1}
-          aria-label={t("settings.agentcliStepsAria")}
+          aria-label={t("settings.agentcliStepsLabel")}
           value={maxIterInput}
           busy={saving}
           onChange={(e) => onMaxIterInput(e.target.value)}

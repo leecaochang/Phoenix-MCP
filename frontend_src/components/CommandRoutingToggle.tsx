@@ -1,3 +1,4 @@
+import { useId } from "react";
 import { BusyInput } from "./BusyButton";
 import { t } from "../i18n";
 import { SettingLabel, helpRow } from "../ui/SettingLabel";
@@ -10,13 +11,14 @@ export function CommandRoutingToggle({ surface, mode, onChange, saving, divider 
   /** The rule under the row; Agent Chat's settings go on without one (user, 2026-10-31). */
   divider?: boolean;
 }) {
-  const id = `routing-${surface}`;
+  // Its window can show in two workspaces at once; Find Setting finds it by `data-setting`.
+  const id = `${useId()}routing-${surface}`;
   return <div className={divider ? "toggle-row" : "toggle-row toggle-row-flat"} {...helpRow(t("routing.commandHelp"))}>
     <SettingLabel help={t("routing.commandHelp")} helpId={`${id}-help`}>
       <label htmlFor={id}>{t(surface === "voice" ? "routing.enableVoice" : "routing.enableChat")}</label>
     </SettingLabel>
     <label className="toggle-switch">
-      <BusyInput id={id} type="checkbox" aria-describedby={`${id}-help`} busy={saving}
+      <BusyInput id={id} data-setting={`routing-${surface}`} type="checkbox" aria-describedby={`${id}-help`} busy={saving}
         checked={["auto", "local", "hybrid"].includes(mode ?? "off")}
         onChange={event => onChange(event.target.checked ? "auto" : "off")} />
       <span className="toggle-switch-track" />

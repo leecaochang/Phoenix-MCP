@@ -248,6 +248,8 @@ function EnergyPreviewSection({ label, rows }: { label: string; rows: EnergyRow[
       {rows.length === 0 && <div className="energy-preview-empty">{t("common.none")}</div>}
       {rows.map((r) => (
         <div key={r.key} className={`energy-preview-row is-${r.state}`}>
+          {/* The row's tint and mark show what changed; this says it. */}
+          {r.state !== "same" && <span className="sr-only">{t(r.state === "added" ? "changes.added" : "changes.removed")}: </span>}
           <span className="energy-preview-name">{r.title}</span>
           <code className="energy-preview-stat">{r.line}</code>
         </div>

@@ -11,7 +11,7 @@ import { useState, useEffect, useCallback, useContext, useMemo, useRef, useSyncE
 import type { AuditEntry, AccessKeyRecord, Outcome } from "../types";
 import { api } from "../api";
 import { AuditOutcome, accessLabel, auditEntryKey, mesaLabel, formatAccessKeyName, formatAccessKeyNameShort, outcomeLabel } from "../components/AuditEntry";
-import { RefreshIcon } from "../components/common";
+import { RefreshIcon, ResultCount } from "../components/common";
 import { localeDateTime, localeDateTimeShort, localeNumber, t } from "../i18n";
 import { friendlyResource, resourceFilterValue } from "../utils";
 import { auditSourceFilterValue, auditSourceLabel, isNamedAuditSource } from "../utils/audit_source";
@@ -361,6 +361,7 @@ export function AuditView({ accessKeys }: Props) {
         />
         </div>
       )}
+      <ResultCount count={total} query={[filtersApply, outcomeFilter, accessKeyFilter, timeWindow, debouncedMethod, debouncedResource, debouncedIp, requestFilter].join("|")} loading={loading} />
       {!loading && entries.length > 0 && (
         <div className="phx-table-footer" data-guide="window.auditLog#list">
           <span className="conversation-secondary">{t("conversations.showing", { shown: localeNumber(shownCount(entries.length, rowLimit.limit)), total: localeNumber(total) })}</span>

@@ -68,7 +68,7 @@ export function ArchivedAccessKeyTable({ accessKeys, onDeleted }: Props) {
 
   return (
     <div>
-      {error && <div className="banner banner-error mb-8">{error}</div>}
+      {error && <div role="alert" className="banner banner-error mb-8">{error}</div>}
       <ConfigTable
         id="archivedAccessKeys"
         label={t("accessKeys.archivedTitle")}

@@ -1,5 +1,5 @@
 import { BusyInput, BusySelect } from "./BusyButton";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { api } from "../api";
 import { t } from "../i18n";
 import { helpRow } from "../ui/SettingLabel";
@@ -13,6 +13,8 @@ export function DecisionProviderSettings({ settings, onChange, saving }: {
   onChange: (key: keyof GlobalSettings, value: string | number | boolean) => void;
   saving: boolean;
 }) {
+  // Its window can show in two workspaces at once; Find Setting finds the fields by `data-setting`.
+  const uid = useId();
   const [accounts, setAccounts] = useState<AgentCliInstance[]>([]);
   const [accountsLoaded, setAccountsLoaded] = useState(false);
   const [types, setTypes] = useState<AgentCliProviderType[]>([]);
@@ -210,9 +212,9 @@ export function DecisionProviderSettings({ settings, onChange, saving }: {
   const hint = t("routing.providerHint", { voice: t("settings.voiceCard"), chat: t("settings.agentcliCard") });
   // What the Decision Provider is shows in Help over the section's empty space (user, 2026-10-31).
   return <div className="routing-provider-section" data-help-text={hint}>
-    <span className="sr-only" id="routing-provider-hint">{hint}</span>
+    <span className="sr-only" id={`${uid}provider-hint`}>{hint}</span>
     <div className="routing-choices" role="radiogroup" aria-label={t("routing.decisionAccount")}
-      aria-describedby="routing-provider-hint">
+      aria-describedby={`${uid}provider-hint`}>
       <div className="routing-choice" {...helpRow(t("routing.noProviderHelp"))}>
         <label className="routing-account-choice">
           <BusyInput type="radio" name="decision-account" checked={!inUse}
@@ -244,9 +246,9 @@ export function DecisionProviderSettings({ settings, onChange, saving }: {
       }} />}
     {inUse && <details className="routing-disclosure">
       <summary data-guide="window.settingsProviders#decision-connection" data-help="routing.connectionSettingsHelp">{t("routing.connectionSettings")}</summary>
-      <label className="agentcli-settings-field" htmlFor="routing-decision-timeout" {...helpRow(t("routing.timeoutHint"))}>
+      <label className="agentcli-settings-field" htmlFor={`${uid}timeout`} {...helpRow(t("routing.timeoutHint"))}>
         <span>{t("routing.decisionBudget")}</span>
-        <BusyInput id="routing-decision-timeout" className="input" type="number" min={250} max={30000} step={1}
+        <BusyInput id={`${uid}timeout`} data-setting="routing-decision-timeout" className="input" type="number" min={250} max={30000} step={1}
           value={budget} busy={saving || busy} onChange={e => setBudget(e.target.value)}
           onBlur={() => {
             const value = Number(budget);
@@ -256,10 +258,10 @@ export function DecisionProviderSettings({ settings, onChange, saving }: {
           }} />
       </label>
       <span className="sr-only">{t("routing.timeoutHint")}</span>
-      <label className="agentcli-settings-field" htmlFor="routing-request-limit" {...helpRow(t("routing.requestLimitHint"))}>
+      <label className="agentcli-settings-field" htmlFor={`${uid}limit`} {...helpRow(t("routing.requestLimitHint"))}>
         <span>{t("routing.requestLimit")}</span>
-        <BusyInput id="routing-request-limit" className="input" type="number" min={0} max={100000} step={1}
-          aria-describedby="routing-request-limit-hint" value={requestLimit} busy={saving || busy}
+        <BusyInput id={`${uid}limit`} data-setting="routing-request-limit" className="input" type="number" min={0} max={100000} step={1}
+          aria-describedby={`${uid}limit-hint`} value={requestLimit} busy={saving || busy}
           onChange={event => setRequestLimit(event.target.value)} onBlur={() => {
             const value = Number(requestLimit);
             if (requestLimit.trim() && Number.isInteger(value) && value >= 0 && value <= 100000) {
@@ -267,7 +269,7 @@ export function DecisionProviderSettings({ settings, onChange, saving }: {
             } else setRequestLimit(String(settings.decision_request_budget ?? 0));
           }} />
       </label>
-      <span className="sr-only" id="routing-request-limit-hint">{t("routing.requestLimitHint")}</span>
+      <span className="sr-only" id={`${uid}limit-hint`}>{t("routing.requestLimitHint")}</span>
     </details>}
     {error && open === null && <p className="banner banner-error" role="alert">{error}</p>}
   </div>;

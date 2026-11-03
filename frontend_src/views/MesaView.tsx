@@ -377,13 +377,13 @@ function FieldLabel({ id, text, help }: { id?: string; text: string; help: strin
 // A select rendered with friendly labels but storing slug values, full width so
 // every control lines up on the grid.
 function SelectField({
-  id, label, helpKey, guide, value, options, onChange,
-}: { id: string; label: string; helpKey: string; guide: string; value: string; options: LabeledOpt[]; onChange: (v: string) => void }) {
+  id, field, label, helpKey, guide, value, options, onChange,
+}: { id: string; field: string; label: string; helpKey: string; guide: string; value: string; options: LabeledOpt[]; onChange: (v: string) => void }) {
   return (
     <div className="field" data-guide={guide}>
       <FieldLabel id={id} text={label} help={t(helpKey)} />
       {/* The field's explanation also shows in the Help window while it has the pointer or focus. */}
-      <select id={id} className="input" value={value} data-help={helpKey} onChange={(e) => onChange(e.target.value)}>
+      <select id={id} data-field={field} className="input" value={value} data-help={helpKey} onChange={(e) => onChange(e.target.value)}>
         {options.map((o) => <option key={o.value} value={o.value}>{t(o.labelKey)}</option>)}
       </select>
     </div>
@@ -393,9 +393,11 @@ function SelectField({
 // Fuzzy combobox over a fixed option set. Selecting an option sets `value` to
 // the option's slug; free typing is allowed but the parent validates exactness.
 function Combo({
-  id, value, options, placeholder, invalid, help, onChange,
+  id, value, options, placeholder, invalid, describedBy, help, onChange,
 }: {
   id: string;
+  /** The message that explains an invalid value. */
+  describedBy?: string;
   value: string;
   options: Opt[];
   placeholder?: string;
@@ -465,6 +467,8 @@ function Combo({
       <input
         id={id}
         className={`input${invalid ? " error" : ""}`}
+        aria-invalid={invalid || undefined}
+        aria-describedby={describedBy}
         value={query}
         placeholder={placeholder}
         data-help={help}
@@ -606,6 +610,9 @@ export function ProfileEditor({
   };
   const [detail, setDetail] = useState<MesaProfileDetail | null>(null);
   const [state, setState] = useState<EditorState>(initialState);
+  // The editor can be in a window and in a dialog at once: ids of its own keep each label on its field.
+  const uid = useId();
+  const fid = (name: string) => `${uid}${name}`;
   const [loading, setLoading] = useState(!isNew);
   // An existing profile is only editable once its stored document has loaded:
   // saving the blank form a failed read leaves behind would replace the authored
@@ -878,9 +885,10 @@ export function ProfileEditor({
           <>
             {isNew && !lockedKey && (
               <div className="field" data-guide="window.mesaEditor#target" {...helpRow(t(SCOPE_HELP[scope]))}>
-                <FieldLabel id="mesa-key" text={t(SCOPE_LABEL[scope])} help={t(SCOPE_HELP[scope])} />
+                <FieldLabel id={fid("mesa-key")} text={t(SCOPE_LABEL[scope])} help={t(SCOPE_HELP[scope])} />
                 <Combo
-                  id="mesa-key"
+                  id={fid("mesa-key")}
+                  describedBy={keyInvalidShown ? fid("mesa-key-error") : undefined}
                   value={state.key}
                   options={keyOptions}
                   placeholder={t(SCOPE_PLACEHOLDER[scope])}
@@ -889,7 +897,7 @@ export function ProfileEditor({
                   onChange={(v) => set("key", v)}
                 />
                 {keyInvalidShown && (
-                  <span className="field-error">{t(NO_MATCH[scope])}</span>
+                  <span id={fid("mesa-key-error")} className="field-error">{t(NO_MATCH[scope])}</span>
                 )}
               </div>
             )}
@@ -897,16 +905,17 @@ export function ProfileEditor({
               // What the profile covers, by its familiar name, on every profile that has
               // one already: only a new one is chosen here (user, 2026-10-30).
               <div className="field" data-guide="window.mesaEditor#target" {...helpRow(t(SCOPE_HELP[scope]))}>
-                <FieldLabel id="mesa-key" text={t(SCOPE_LABEL[scope])} help={t(SCOPE_HELP[scope])} />
-                <input id="mesa-key" className="input" value={keyLabel || state.key || String(profileKey ?? "")} readOnly disabled />
+                <FieldLabel id={fid("mesa-key")} text={t(SCOPE_LABEL[scope])} help={t(SCOPE_HELP[scope])} />
+                <input id={fid("mesa-key")} className="input" value={keyLabel || state.key || String(profileKey ?? "")} readOnly disabled />
               </div>
             )}
 
             <div className="field" data-guide="window.mesaEditor#tags" {...helpRow(t(HELP.tags))}>
-              <FieldLabel id="mesa-tags" text={t("mesa.semanticTags")} help={t(HELP.tags)} />
+              <FieldLabel id={fid("mesa-tags")} text={t("mesa.semanticTags")} help={t(HELP.tags)} />
               {/* The suggested tags open from the end of the input itself, closed every time (user, 2026-10-30). */}
               <div className="mesa-tag-row">
                 <TagInput
+                  id={fid("mesa-tags")}
                   value={state.tags}
                   onChange={(t) => set("tags", t)}
                   canonicalTags={canonicalTags}
@@ -921,24 +930,24 @@ export function ProfileEditor({
             </div>
 
             <div className="mesa-grid">
-              <SelectField id="mesa-cm" guide="window.mesaEditor#control-mode" label={t("mesa.fieldControlMode")} helpKey={HELP.control_mode}
+              <SelectField id={fid("mesa-cm")} field="mesa-cm" guide="window.mesaEditor#control-mode" label={t("mesa.fieldControlMode")} helpKey={HELP.control_mode}
                 value={state.control_mode} options={CONTROL_MODES} onChange={(v) => set("control_mode", v)} />
-              <SelectField id="mesa-em" guide="window.mesaEditor#enforcement" label={t("mesa.fieldEnforcement")} helpKey={HELP.enforcement_mode}
+              <SelectField id={fid("mesa-em")} field="mesa-em" guide="window.mesaEditor#enforcement" label={t("mesa.fieldEnforcement")} helpKey={HELP.enforcement_mode}
                 value={state.enforcement_mode} options={ENFORCEMENT_MODES} onChange={(v) => set("enforcement_mode", v)} />
-              <SelectField id="mesa-ta" guide="window.mesaEditor#triggers-automations" label={t("mesa.fieldTriggersAutomations")} helpKey={HELP.triggers_automations}
+              <SelectField id={fid("mesa-ta")} field="mesa-ta" guide="window.mesaEditor#triggers-automations" label={t("mesa.fieldTriggersAutomations")} helpKey={HELP.triggers_automations}
                 value={state.triggers_automations} options={TRIGGERS} onChange={(v) => set("triggers_automations", v)} />
-              <SelectField id="mesa-rev" guide="window.mesaEditor#effect" label={t("mesa.fieldReversible")} helpKey={HELP.reversible}
+              <SelectField id={fid("mesa-rev")} field="mesa-rev" guide="window.mesaEditor#effect" label={t("mesa.fieldReversible")} helpKey={HELP.reversible}
                 value={state.reversible} options={REVERSIBLE} onChange={(v) => set("reversible", v)} />
-              <SelectField id="mesa-rc" guide="window.mesaEditor#effect" label={t("mesa.fieldReversibilityCost")} helpKey={HELP.reversibility_cost}
+              <SelectField id={fid("mesa-rc")} field="mesa-rc" guide="window.mesaEditor#effect" label={t("mesa.fieldReversibilityCost")} helpKey={HELP.reversibility_cost}
                 value={state.reversibility_cost} options={REVERSIBILITY_COSTS} onChange={(v) => set("reversibility_cost", v)} />
-              <SelectField id="mesa-ses" guide="window.mesaEditor#effect" label={t("mesa.fieldSideEffectScope")} helpKey={HELP.side_effect_scope}
+              <SelectField id={fid("mesa-ses")} field="mesa-ses" guide="window.mesaEditor#effect" label={t("mesa.fieldSideEffectScope")} helpKey={HELP.side_effect_scope}
                 value={state.side_effect_scope} options={SCOPES} onChange={(v) => set("side_effect_scope", v)} />
-              <SelectField id="mesa-pl" guide="window.mesaEditor#privacy-level" label={t("mesa.fieldPrivacyLevel")} helpKey={HELP.privacy_level}
+              <SelectField id={fid("mesa-pl")} field="mesa-pl" guide="window.mesaEditor#privacy-level" label={t("mesa.fieldPrivacyLevel")} helpKey={HELP.privacy_level}
                 value={state.privacy_level} options={PRIVACY_LEVELS} onChange={(v) => set("privacy_level", v)} />
             </div>
 
             {warnings.length > 0 && (
-              <div className="banner banner-warn" data-guide="window.mesaEditor#save-warnings">
+              <div role="alert" className="banner banner-warn" data-guide="window.mesaEditor#save-warnings">
                 <strong>{t("mesa.savedWithWarnings")}</strong>
                 <ul>
                   {warnings.map((w, i) => (

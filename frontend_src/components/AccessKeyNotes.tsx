@@ -51,7 +51,7 @@ export function AccessKeyNotes({ accessKey, onUpdate }: { accessKey: AccessKeyRe
 
   return (
     <div className="access-key-notes">
-      {error && <div className="banner banner-error mb-8">{error}</div>}
+      {error && <div role="alert" className="banner banner-error mb-8">{error}</div>}
       {/* What Guidance is for, and who can read it, is in Help (user, 2026-10-28). */}
       <textarea
         className={`input access-key-notes-input${tooLong ? " error" : ""}`}
@@ -66,7 +66,8 @@ export function AccessKeyNotes({ accessKey, onUpdate }: { accessKey: AccessKeyRe
         onChange={(e) => setDraft(e.target.value)}
       />
       <div className="access-key-notes-footer">
-        <span className={`access-key-notes-count${tooLong ? " field-error" : ""}`} aria-live="polite">
+        {/* Spoken only near the limit: a count read after every keystroke drowns out the typing. */}
+        <span className={`access-key-notes-count${tooLong ? " field-error" : ""}`} aria-live={tooLong || length >= ACCESS_KEY_NOTES_MAX_LENGTH * 0.9 ? "polite" : "off"}>
           {tooLong
             ? t("accessKeys.notesTooLong", { max: ACCESS_KEY_NOTES_MAX_LENGTH })
             : tn("accessKeys.notesCount", ACCESS_KEY_NOTES_MAX_LENGTH, { count: length, max: ACCESS_KEY_NOTES_MAX_LENGTH })}

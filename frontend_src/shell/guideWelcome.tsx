@@ -20,6 +20,7 @@ import { createContext, useContext, useEffect, useMemo, useState, useSyncExterna
 import { HEADING } from "../guide/compile";
 import { searchGuide } from "../guide/search";
 import { t } from "../i18n";
+import { ResultCount } from "../components/common";
 import { Icon, type IconName } from "../ui/Icon";
 import { PALETTES, readPalette, setPalette, subscribeTheme } from "../ui/theme";
 import { renderTopic, topicTitle, useSearchSections, type FoundTopic, type Guide } from "./guide";
@@ -133,6 +134,7 @@ function SearchTry({ guide, onType }: { guide: Guide; onType: () => void }) {
           onChange={(e) => { setQuery(e.target.value); if (e.target.value.trim()) onType(); }}
           onKeyDown={(e) => { if (e.key === "Enter" && hits[0]) { e.preventDefault(); guide.open(hits[0].section.topic, hits[0].section.anchor); } }} />
       </label>
+      <ResultCount count={hits.length} query={query} />
       {query.trim() && !hits.length && <p className="phx-guide-note">{t("guide.noResults")}</p>}
       {hits.length > 0 && (
         <ul className="phx-welcome-hits">

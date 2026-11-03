@@ -357,7 +357,9 @@
       "previewErrorHead": {
         "one": "Una tarjeta de esta vista previa informó de un error de configuración. Si es necesario, copie el mensaje de abajo y péguelo al agente para que pueda corregir la tarjeta.",
         "other": "Algunas tarjetas de esta vista previa informaron de errores de configuración. Si es necesario, copie el mensaje de abajo y péguelo al agente para que pueda corregir las tarjetas."
-      }
+      },
+      "previewTextAlternative": "La vista previa muestra las tarjetas como imágenes. Elija {diff} para leer el cambio como texto.",
+      "byAdmin": "Administrador"
     },
     "selectBy": {
       "area": "Área",
@@ -519,7 +521,12 @@
       "confirmReject": "Confirmar rechazo",
       "selectMultiple": "Seleccionar varias",
       "show": "Mostrar",
-      "scopeAll": "Todas las solicitudes"
+      "scopeAll": "Todas las solicitudes",
+      "pickedCount": {
+        "one": "{count} seleccionada",
+        "other": "{count} seleccionadas"
+      },
+      "rowPicked": "seleccionada para la aprobación por lotes"
     },
     "wizard": {
       "accessSub": "Seleccione el triángulo junto a <code>light</code> para abrir el grupo de luces. Muestra sus dispositivos de luz; seleccione el triángulo junto a un dispositivo para ver sus entidades. O escriba el nombre de su luz en el cuadro de filtro. Después seleccione <strong>W</strong> en una luz que pueda comprobar, para que el agente pueda leerla y controlarla. Puede añadir más permisos más adelante.",
@@ -631,7 +638,9 @@
       "stepInstall": "Instalar Phoenix",
       "stepCompleted": "Completado",
       "agentAntigravityIntro": "Añada esto a ~/.gemini/config/mcp_config.json, conservando los servidores existentes, y después abra el gestor /mcp en Antigravity CLI y compruebe que el servidor muestra herramientas.",
-      "skillAntigravityHint": "Instale la guía en ~/.gemini/antigravity-cli/skills/phoenix/SKILL.md y ejecute /skills reload en Antigravity CLI."
+      "skillAntigravityHint": "Instale la guía en ~/.gemini/antigravity-cli/skills/phoenix/SKILL.md y ejecute /skills reload en Antigravity CLI.",
+      "copyFirstPrompt": "Copiar la primera instrucción",
+      "copyNextPrompt": "Copiar la siguiente instrucción"
     },
     "agentchat": {
       "accessKey": "Clave de acceso",
@@ -795,7 +804,8 @@
       "pausedAfter": {
         "one": "En pausa tras {count} paso. ¿Continuar?",
         "other": "En pausa tras {count} pasos. ¿Continuar?"
-      }
+      },
+      "announceReplyStart": "{text}… La respuesta completa está en la conversación."
     },
     "diff": {
       "blueprint.create": "Crear plano de {domain} «{rel}»",
@@ -1627,7 +1637,6 @@
       "agentcliDismissWarning": "Descartar esta advertencia",
       "agentcliDone": "Hecho",
       "agentcliFieldRequired": "Introduzca {field}.",
-      "agentcliGlobalAria": "Usar Agent Chat en todo Home Assistant",
       "agentcliGlobalHelp": "Mantenga Agent Chat disponible en todas las páginas de Home Assistant, no solo en este panel.",
       "agentcliGlobalLabel": "Usar en todo Home Assistant",
       "agentcliIntro": "Converse con Home Assistant mediante su propio proveedor de IA, dentro de los permisos de la clave de acceso elegida.",
@@ -1638,12 +1647,10 @@
       "agentcliRemoveAccountFailed": "No se pudo eliminar la cuenta.",
       "agentcliRemoveBody": "Elimine {name} y su clave de API; todo lo que la use dejará de funcionar. No se puede deshacer.",
       "agentcliSaveFailed": "No se pudo guardar el proveedor.",
-      "agentcliScrollbackAria": "Límite de líneas del historial de chat",
       "agentcliScrollbackHelp": "Cuántas líneas de chat conserva Agent Chat como contexto, de 0 a 5.000 (100 por defecto).",
       "agentcliScrollbackLabel": "Límite del historial de chat",
       "agentcliSelectModel": "Seleccionar modelo predeterminado:",
       "agentcliServerUrl": "URL del servidor",
-      "agentcliStepsAria": "Pasos antes del punto de control de continuación",
       "agentcliStepsHelp": "Cuántos pasos de herramientas da Agent Chat antes de preguntar si continúa, de 3 a 100 (20 por defecto).",
       "agentcliStepsLabel": "Pasos antes del punto de control",
       "agentcliValidate": "Validar",
@@ -1833,7 +1840,6 @@
       "providerChecksHelp": "Compruebe periódicamente en los proveedores si hay modelos nuevos o retirados. Activado por defecto.",
       "providerChecksHoursLabel": "Comprobar cada (horas)",
       "providerChecksHoursHelp": "Con qué frecuencia comprueba Phoenix cambios de modelos en cada proveedor, de {min} a {max} horas ({default} por defecto).",
-      "providerChecksHoursAria": "Horas entre comprobaciones de proveedores",
       "agentcliProbedVisionSeen": "Comprobación de imagen: el modelo leyó la imagen de prueba, por lo que se le envían las imágenes adjuntas y las imágenes de la cámara.",
       "agentcliProbedVisionUnseen": "Comprobación de imagen: el modelo no pudo leer la imagen de prueba, por lo que Phoenix lo trata como solo texto.",
       "agentcliProbedVisionInconclusive": "Comprobación de imagen: no llegó una respuesta utilizable, por lo que la compatibilidad con imágenes sigue siendo desconocida.",
@@ -1915,7 +1921,8 @@
         "mist": "Niebla",
         "office": "Oficina",
         "aubergine": "Berenjena"
-      }
+      },
+      "showSecret": "Mostrar clave"
     },
     "approvalSummary": {
       "action.optionalReason": "Motivo opcional",
@@ -2229,7 +2236,12 @@
       "save": "Guardar",
       "saving": "Guardando...",
       "sentenceSeparator": " ",
-      "serverUnreachable": "No se pudo conectar con Home Assistant. Compruebe la conexión e inténtelo de nuevo."
+      "serverUnreachable": "No se pudo conectar con Home Assistant. Compruebe la conexión e inténtelo de nuevo.",
+      "copyNamed": "Copiar {item}",
+      "resultCount": {
+        "one": "{count} resultado",
+        "other": "{count} resultados"
+      }
     },
     "personas": {
       "automation_builder": {
@@ -2881,7 +2893,8 @@
       "guideSearchInput": "Escriba palabras para encontrar las secciones de la guía que coinciden. Intro abre la mejor coincidencia.",
       "guideLink": "Abra esta página en la guía. Atrás le devuelve a la página que estaba leyendo.",
       "accessKeyFilter": "Muestre solo las claves de acceso cuyo nombre o estado contiene este texto.",
-      "guideDismissWelcome": "Oculte esta página de bienvenida. Vuelva a encontrarla en Contenido."
+      "guideDismissWelcome": "Oculte esta página de bienvenida. Vuelva a encontrarla en Contenido.",
+      "showSecret": "Mostrar la clave como texto sin formato para comprobar lo que se pegó."
     },
     "guide": {
       "title": "Guía",

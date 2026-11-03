@@ -25,7 +25,12 @@
       "save": "保存",
       "saving": "保存中...",
       "sentenceSeparator": "",
-      "serverUnreachable": "Home Assistant に接続できませんでした。接続を確認して、もう一度お試しください。"
+      "serverUnreachable": "Home Assistant に接続できませんでした。接続を確認して、もう一度お試しください。",
+      "copyNamed": "{item} をコピー",
+      "resultCount": {
+        "one": "{count} 件の結果",
+        "other": "{count} 件の結果"
+      }
     },
     "approvals": {
       "approve": "承認",
@@ -118,7 +123,12 @@
       "confirmReject": "拒否を確定",
       "selectMultiple": "複数選択",
       "show": "表示",
-      "scopeAll": "すべてのリクエスト"
+      "scopeAll": "すべてのリクエスト",
+      "pickedCount": {
+        "one": "{count} 件を選択",
+        "other": "{count} 件を選択"
+      },
+      "rowPicked": "一括承認の対象に選択済み"
     },
     "caps": {
       "cap_config_read": {
@@ -489,7 +499,9 @@
       "previewErrorHead": {
         "one": "このプレビューのカードで設定エラーが報告されました。必要に応じて下のメッセージをコピーし、エージェントに貼り付けてカードを修正させてください。",
         "other": "このプレビューの複数のカードで設定エラーが報告されました。必要に応じて下のメッセージをコピーし、エージェントに貼り付けてカードを修正させてください。"
-      }
+      },
+      "previewTextAlternative": "プレビューではカードを画像として表示します。変更をテキストで読むには {diff} を選んでください。",
+      "byAdmin": "管理者"
     },
     "audit": {
       "accessPassThrough": "パススルー",
@@ -836,7 +848,9 @@
       "stepInstall": "Phoenix をインストール",
       "stepCompleted": "完了",
       "agentAntigravityIntro": "既存のサーバーを残したまま ~/.gemini/config/mcp_config.json に追加し、Antigravity CLI で /mcp マネージャーを開いて、サーバーがツールを一覧表示することを確認してください。",
-      "skillAntigravityHint": "ガイドを ~/.gemini/antigravity-cli/skills/phoenix/SKILL.md にインストールし、Antigravity CLI で /skills reload を実行します。"
+      "skillAntigravityHint": "ガイドを ~/.gemini/antigravity-cli/skills/phoenix/SKILL.md にインストールし、Antigravity CLI で /skills reload を実行します。",
+      "copyFirstPrompt": "最初のプロンプトをコピー",
+      "copyNextPrompt": "次のプロンプトをコピー"
     },
     "selectBy": {
       "area": "エリア",
@@ -1280,7 +1294,8 @@
       "pausedAfter": {
         "one": "{count} ステップ後に一時停止しました。続行しますか？",
         "other": "{count} ステップ後に一時停止しました。続行しますか？"
-      }
+      },
+      "announceReplyStart": "{text}... 返答の全文は会話にあります。"
     },
     "diff": {
       "blueprint.create": "{domain} ブループリント「{rel}」を作成",
@@ -1427,7 +1442,6 @@
       "agentcliDismissWarning": "警告を閉じる",
       "agentcliDone": "完了",
       "agentcliFieldRequired": "{field}を入力してください。",
-      "agentcliGlobalAria": "Home Assistant 全体で Agent Chat を使用",
       "agentcliGlobalHelp": "このパネルだけでなく、Home Assistant のすべてのページで Agent Chat を使えるようにします。",
       "agentcliGlobalLabel": "Home Assistant 全体で使用",
       "agentcliIntro": "選んだアクセスキーの権限の範囲内で、自分の AI プロバイダーを使って Home Assistant とチャットします。",
@@ -1438,12 +1452,10 @@
       "agentcliRemoveAccountFailed": "アカウントを削除できませんでした。",
       "agentcliRemoveBody": "{name} とその API キーを削除します。これを使うものはすべて動作しなくなります。元に戻せません。",
       "agentcliSaveFailed": "プロバイダーを保存できませんでした。",
-      "agentcliScrollbackAria": "チャット履歴の行数上限",
       "agentcliScrollbackHelp": "Agent Chat がコンテキストとして保持するチャットの行数です。0 から 5,000 (既定 100)。",
       "agentcliScrollbackLabel": "チャット履歴の上限",
       "agentcliSelectModel": "既定のモデルを選択:",
       "agentcliServerUrl": "サーバー URL",
-      "agentcliStepsAria": "続行確認までのステップ数",
       "agentcliStepsHelp": "Agent Chat が続行を確認するまでに実行するツールのステップ数です。3 から 100 (既定 20)。",
       "agentcliStepsLabel": "確認までのステップ数",
       "agentcliValidate": "検証",
@@ -1633,7 +1645,6 @@
       "providerChecksHelp": "新しいモデルと提供終了したモデルを定期的にプロバイダーで確認します。既定ではオンです。",
       "providerChecksHoursLabel": "確認間隔（時間）",
       "providerChecksHoursHelp": "Phoenix が各プロバイダーのモデルの変更を確認する間隔です。{min} から {max} 時間 (既定 {default})。",
-      "providerChecksHoursAria": "プロバイダー確認の間隔（時間）",
       "agentcliProbedVisionSeen": "画像チェック：モデルはテスト画像を読み取れたため、添付画像とカメラ画像を送信します。",
       "agentcliProbedVisionUnseen": "画像チェック：モデルはテスト画像を読み取れなかったため、Phoenix はテキスト専用として扱います。",
       "agentcliProbedVisionInconclusive": "画像チェック：有効な回答が得られなかったため、画像への対応状況は不明のままです。",
@@ -1715,7 +1726,8 @@
         "mist": "ミスト",
         "office": "オフィス",
         "aubergine": "オーベルジーヌ"
-      }
+      },
+      "showSecret": "キーを表示"
     },
     "mesa": {
       "addAreaProfile": "エリアプロファイルを追加",
@@ -2881,7 +2893,8 @@
       "guideSearchInput": "語句を入力して一致するガイドのセクションを探します。Enter で最も一致するものを開きます。",
       "guideLink": "このページをガイドで開きます。「戻る」で読んでいたページに戻ります。",
       "accessKeyFilter": "名前または状態にこのテキストを含むアクセスキーだけを表示します。",
-      "guideDismissWelcome": "このようこそページを非表示にします。目次からいつでも開けます。"
+      "guideDismissWelcome": "このようこそページを非表示にします。目次からいつでも開けます。",
+      "showSecret": "貼り付けた内容を確認できるよう、キーをプレーンテキストで表示します。"
     },
     "guide": {
       "title": "ガイド",

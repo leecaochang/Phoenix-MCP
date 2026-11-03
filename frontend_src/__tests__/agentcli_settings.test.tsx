@@ -176,6 +176,21 @@ describe("AgentCliSettings", () => {
     expect(createAgentCliProvider.mock.calls[0][0]).toBe("claude");
   });
 
+  it("keeps the API key out of the browser's password filling, with a button to check it", async () => {
+    renderCard();
+    await waitFor(() => expect(getAgentCliProviders).toHaveBeenCalled());
+    await beginAdd();
+    const key = screen.getByPlaceholderText("API key");
+    expect(key).toHaveAttribute("type", "password");
+    expect(key).toHaveAttribute("autocomplete", "off");
+    expect(key).toHaveAccessibleName("API key");
+    const show = screen.getByRole("button", { name: "Show key" });
+    expect(show).toHaveAttribute("aria-pressed", "false");
+    fireEvent.click(show);
+    expect(key).toHaveAttribute("type", "text");
+    expect(show).toHaveAttribute("aria-pressed", "true");
+  });
+
   it("shows a duplicate error before default-model selection", async () => {
     probeAgentCliProvider.mockRejectedValueOnce(new Error("This provider account is already configured."));
     renderCard();
@@ -346,7 +361,7 @@ describe("AgentCliSettings", () => {
         saving={false}
       />,
     );
-    fireEvent.click(screen.getByLabelText("Use Agent Chat throughout Home Assistant"));
+    fireEvent.click(screen.getByLabelText("Use throughout Home Assistant"));
     expect(onGlobal).toHaveBeenCalledWith(true);
   });
 
@@ -403,7 +418,7 @@ describe("AgentCliSettings", () => {
           saving={false}
         />,
       );
-      const input = screen.getByLabelText("Chat history line limit");
+      const input = screen.getByLabelText("Chat history limit");
       fireEvent.change(input, { target: { value: "300" } });
       expect(onScroll).not.toHaveBeenCalled();  // debounced, nothing yet
       vi.advanceTimersByTime(700);
@@ -482,7 +497,7 @@ describe("LLM providers card controls", () => {
     renderCard();
     const toggle = (await screen.findByLabelText("Check providers for new models")) as HTMLInputElement;
     expect(toggle.checked).toBe(true);
-    const hours = screen.getByLabelText("Hours between provider checks") as HTMLInputElement;
+    const hours = screen.getByLabelText("Check every (hours)") as HTMLInputElement;
     expect(hours.value).toBe("24");
     expect(hours.disabled).toBe(false);
     fireEvent.click(toggle);
@@ -494,14 +509,14 @@ describe("LLM providers card controls", () => {
 
   it("clamps the period to 6-720 hours and disables it when checks are off", async () => {
     renderCard({ provider_catalog_refresh_enabled: false, provider_catalog_refresh_hours: 72 });
-    const hours = (await screen.findByLabelText("Hours between provider checks")) as HTMLInputElement;
+    const hours = (await screen.findByLabelText("Check every (hours)")) as HTMLInputElement;
     expect(hours.disabled).toBe(true);
     expect(hours.value).toBe("72");
   });
 
   it("clamps an out-of-range period", async () => {
     renderCard();
-    const hours = (await screen.findByLabelText("Hours between provider checks")) as HTMLInputElement;
+    const hours = (await screen.findByLabelText("Check every (hours)")) as HTMLInputElement;
     fireEvent.change(hours, { target: { value: "9999" } });
     fireEvent.blur(hours);
     expect(onSettingChange).toHaveBeenCalledWith("provider_catalog_refresh_hours", 720);

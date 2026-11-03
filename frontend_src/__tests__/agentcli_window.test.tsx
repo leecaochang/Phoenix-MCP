@@ -1241,8 +1241,7 @@ describe("AgentCliWindow streaming", () => {
     expect(screen.getByText("turn on the light")).toBeInTheDocument();
     await waitFor(() => expect(screen.getAllByText(/Turning on the light\./).length).toBeGreaterThan(0));
     // The finished reply is announced to assistive tech via the status region.
-    const announcer = document.querySelector(".agentcli-window .sr-only[role='status']");
-    expect(announcer?.textContent).toBe("Turning on the light.");
+    await waitFor(() => expect(document.querySelector(".agentcli-window .sr-only[role='status']")?.textContent).toBe("Turning on the light."));
     // The approval card resolved (buttons replaced by the status label, which
     // is the catalog's, never the server's raw slug).
     await waitFor(() => expect(screen.getByText("Approved")).toBeInTheDocument());

@@ -258,7 +258,7 @@ describe("Access Keys", () => {
     const form = () => visible(el, "accessKeys")!.querySelector("section.phx-inline-form");
     act(() => { create()!.click(); });
     await waitFor(() => expect(form()).not.toBeNull());
-    const name = form()!.querySelector<HTMLInputElement>("#access-key-name-input")!;
+    const name = form()!.querySelector<HTMLInputElement>(".access-key-create-name input")!;
     act(() => { fireEvent.change(name, { target: { value: "new_agent" } }); });
     const submit = [...form()!.querySelectorAll<HTMLButtonElement>("button")].find((b) => (b.getAttribute("aria-label") ?? b.textContent?.trim()) === "Create")!;
     act(() => { fireEvent.click(submit); });

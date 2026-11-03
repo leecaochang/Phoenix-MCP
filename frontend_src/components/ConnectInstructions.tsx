@@ -1,7 +1,7 @@
 // The "connect Phoenix MCP to your agent" UI: editable URL, access key, per-agent tabs with
 // prefilled commands/configs. Shared by the onboarding wizard's Connect step and
 // the standard access-key-created modal so both show identical, copy-ready instructions.
-import React, { useState } from "react";
+import React, { useId, useState } from "react";
 import { copyToClipboard } from "../utils";
 import { buildAgentTabs, buildMcpUrl, buildSkillInstall, skillUrlFromMcp } from "../wizard_helpers";
 import { t } from "../i18n";
@@ -11,13 +11,18 @@ import { ActionButton } from "../ui/ActionButton";
 // A full-width value box (read-only or editable) with the Copy button inside it,
 // matching the look of the command/JSON blocks.
 export function CopyCodeBox(
-  { label, value, onChange }: { label?: string; value: string; onChange?: (v: string) => void },
+  { label, title, value, onChange }: { label?: string; title?: string; value: string; onChange?: (v: string) => void },
 ) {
-  const [copied, setCopied] = useState(false);
+  const [state, setState] = useState<"idle" | "copied" | "failed">("idle");
+  const copied = state === "copied";
   async function copy() {
-    await copyToClipboard(value);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    try {
+      await copyToClipboard(value);
+      setState("copied");
+    } catch {
+      setState("failed");
+    }
+    setTimeout(() => setState("idle"), 2000);
   }
   return (
     <div className="command-field">
@@ -28,9 +33,10 @@ export function CopyCodeBox(
           : <pre className="command-block-code">{value}</pre>}
         {/* Beside the value, not over it (user, 2026-10-28). */}
         <ActionButton icon={copied ? "check" : "copy"} label={copied ? t("common.copied") : t("common.copy")} help="help.connectCopy" className="btn btn-outline btn-sm command-copy"
+          name={!copied && (label || title) ? t("common.copyNamed", { item: label || title! }) : undefined}
           onClick={() => { void copy(); }} />
         {/* Announce the visual Copy -> Copied! swap to assistive tech. */}
-        <span className="sr-only" role="status">{copied ? t("common.copiedToClipboard") : ""}</span>
+        <span className="sr-only" role="status">{copied ? t("common.copiedToClipboard") : state === "failed" ? t("conversations.copyFailed") : ""}</span>
       </div>
     </div>
   );
@@ -45,7 +51,7 @@ function CommandBlock(
       {title && <div className="command-block-title">{title}</div>}
       {hint && <small className="wizard-hint">{hint}</small>}
       {fields && fields.map((f) => <CopyCodeBox key={f.label} label={f.label} value={f.value} />)}
-      {code && <CopyCodeBox value={code} />}
+      {code && <CopyCodeBox title={title} value={code} />}
     </div>
   );
 }
@@ -53,6 +59,7 @@ function CommandBlock(
 export function ConnectInstructions({ accessKey, accessKeyName }: { accessKey: string; accessKeyName: string }) {
   const [mcpUrl, setMcpUrl] = useState(buildMcpUrl(window.location.origin));
   const [agentTab, setAgentTab] = useState("claude");
+  const uid = useId();
   const tabs = buildAgentTabs(mcpUrl, accessKey, accessKeyName);
   const current = tabs.find((t) => t.key === agentTab) ?? tabs[0];
   const skillUrl = skillUrlFromMcp(mcpUrl);
@@ -60,7 +67,7 @@ export function ConnectInstructions({ accessKey, accessKeyName }: { accessKey: s
   function switchAgentTab(next: string, tablist?: HTMLDivElement) {
     setAgentTab(next);
     window.requestAnimationFrame(() => {
-      tablist?.querySelector<HTMLButtonElement>(`#agent-tab-${next}`)?.focus();
+      tablist?.querySelector<HTMLButtonElement>(`[data-agent-tab="${next}"]`)?.focus();
     });
   }
 
@@ -95,11 +102,12 @@ export function ConnectInstructions({ accessKey, accessKeyName }: { accessKey: s
         {tabs.map((t) => (
           <button
             key={t.key}
-            id={`agent-tab-${t.key}`}
+            id={`${uid}tab-${t.key}`}
+            data-agent-tab={t.key}
             role="tab"
             data-help="help.connectAgentTab"
             aria-selected={current?.key === t.key}
-            aria-controls="agent-tab-panel"
+            aria-controls={`${uid}panel`}
             tabIndex={current?.key === t.key ? 0 : -1}
             className={`wizard-tab${current?.key === t.key ? " wizard-tab-active" : ""}`}
             onClick={() => switchAgentTab(t.key)}
@@ -110,10 +118,10 @@ export function ConnectInstructions({ accessKey, accessKeyName }: { accessKey: s
       </div>
       {current && (
         <div
-          id="agent-tab-panel"
+          id={`${uid}panel`}
           className="wizard-tab-panel"
           role="tabpanel"
-          aria-labelledby={`agent-tab-${current.key}`}
+          aria-labelledby={`${uid}tab-${current.key}`}
         >
           {current.intro && <p className="wizard-sub">{current.intro}</p>}
           {current.blocks.map((b, i) => (

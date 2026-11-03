@@ -25,7 +25,12 @@
       "save": "保存",
       "saving": "保存中…",
       "sentenceSeparator": "",
-      "serverUnreachable": "无法连接到 Home Assistant。请检查连接后重试。"
+      "serverUnreachable": "无法连接到 Home Assistant。请检查连接后重试。",
+      "copyNamed": "复制{item}",
+      "resultCount": {
+        "one": "{count} 个结果",
+        "other": "{count} 个结果"
+      }
     },
     "shell": {
       "agentChat": "Agent Chat",
@@ -909,7 +914,9 @@
       "previewErrorHead": {
         "one": "此预览中的一张卡片报告了配置错误。如有需要，请复制下方消息并粘贴给智能体，让它修复该卡片。",
         "other": "此预览中的卡片报告了配置错误。如有需要，请复制下方消息并粘贴给智能体，让它修复这些卡片。"
-      }
+      },
+      "previewTextAlternative": "预览将卡片显示为图片。选择“{diff}”可以文字形式阅读此更改。",
+      "byAdmin": "管理员"
     },
     "perms": {
       "addHint": "添加提示",
@@ -1214,7 +1221,12 @@
       "confirmReject": "确认拒绝",
       "selectMultiple": "多选",
       "show": "显示",
-      "scopeAll": "所有请求"
+      "scopeAll": "所有请求",
+      "pickedCount": {
+        "one": "已选 {count} 项",
+        "other": "已选 {count} 项"
+      },
+      "rowPicked": "已选中以批量批准"
     },
     "accessKeys": {
       "announceAllHelp": "向此密钥的智能体提供所有工具，包括它无法使用的工具。仅用于排查问题；会消耗更多 token。",
@@ -1428,7 +1440,6 @@
       "agentcliDismissWarning": "关闭此提示",
       "agentcliDone": "完成",
       "agentcliFieldRequired": "请输入 {field}。",
-      "agentcliGlobalAria": "在整个 Home Assistant 中使用 Agent Chat",
       "agentcliGlobalHelp": "让 Agent Chat 在每个 Home Assistant 页面上都可用，而不仅限于此面板。",
       "agentcliGlobalLabel": "在整个 Home Assistant 中使用",
       "agentcliIntro": "使用您自己的 AI 提供商与 Home Assistant 对话，并受所选访问密钥的权限约束。",
@@ -1439,12 +1450,10 @@
       "agentcliRemoveAccountFailed": "移除账户失败。",
       "agentcliRemoveBody": "删除 {name} 及其 API 密钥；所有使用它的功能都会停止。此操作无法撤销。",
       "agentcliSaveFailed": "保存提供商失败。",
-      "agentcliScrollbackAria": "聊天记录行数上限",
       "agentcliScrollbackHelp": "Agent Chat 保留作为上下文的聊天行数，0 到 5,000（默认 100）。",
       "agentcliScrollbackLabel": "聊天记录上限",
       "agentcliSelectModel": "选择默认模型：",
       "agentcliServerUrl": "服务器地址",
-      "agentcliStepsAria": "询问前的工具轮次",
       "agentcliStepsHelp": "Agent Chat 在询问是否继续之前执行的工具步骤数，3 到 100（默认 20）。",
       "agentcliStepsLabel": "询问前的工具轮次",
       "agentcliValidate": "验证",
@@ -1634,7 +1643,6 @@
       "providerChecksHelp": "按计划检查提供商的新模型和已下线模型。默认开启。",
       "providerChecksHoursLabel": "检查间隔（小时）",
       "providerChecksHoursHelp": "Phoenix 检查各提供商模型变化的频率，{min} 到 {max} 小时（默认 {default}）。",
-      "providerChecksHoursAria": "提供商检查间隔（小时）",
       "agentcliProbedVisionSeen": "图像检查：模型读取了测试图像，因此会向其发送附加的图像和摄像头图像。",
       "agentcliProbedVisionUnseen": "图像检查：模型无法读取测试图像，因此 Phoenix 将其视为纯文本模型。",
       "agentcliProbedVisionInconclusive": "图像检查：没有收到可用的回答，因此图像支持情况仍然未知。",
@@ -1716,7 +1724,8 @@
         "mist": "薄雾",
         "office": "办公",
         "aubergine": "茄紫"
-      }
+      },
+      "showSecret": "显示密钥"
     },
     "agentchat": {
       "accessKey": "访问密钥",
@@ -1880,7 +1889,8 @@
       "pausedAfter": {
         "one": "已在 {count} 步后暂停。要继续吗？",
         "other": "已在 {count} 步后暂停。要继续吗？"
-      }
+      },
+      "announceReplyStart": "{text}…… 完整回复见对话。"
     },
     "wizard": {
       "accessSub": "选择 <code>light</code> 旁边的三角形，打开灯光分组。其中列出您的灯光设备；选择设备旁边的三角形，即可查看它的实体。也可以在筛选框中输入灯的名称。然后在一个您可以亲自验证的灯上选择 <strong>W</strong>，让智能体可以读取并控制它。之后还可以添加更多权限。",
@@ -1992,7 +2002,9 @@
       "stepInstall": "安装 Phoenix",
       "stepCompleted": "已完成",
       "agentAntigravityIntro": "将以下内容添加到 ~/.gemini/config/mcp_config.json，并保留现有服务器，然后在 Antigravity CLI 中打开 /mcp 管理器，检查该服务器是否列出工具。",
-      "skillAntigravityHint": "将指南安装到 ~/.gemini/antigravity-cli/skills/phoenix/SKILL.md，然后在 Antigravity CLI 中运行 /skills reload。"
+      "skillAntigravityHint": "将指南安装到 ~/.gemini/antigravity-cli/skills/phoenix/SKILL.md，然后在 Antigravity CLI 中运行 /skills reload。",
+      "copyFirstPrompt": "复制第一条提示",
+      "copyNextPrompt": "复制下一条提示"
     },
     "mesaSuggestion": {
       "blast_radius.risky.one": "此 {noun} 会操作 {count} 个高风险实体（{shown}），且自身没有 MESA 策略；被允许触发它的智能体就能间接控制这些实体，从而绕过它们各自的策略。",
@@ -2881,7 +2893,8 @@
       "guideSearchInput": "输入文字以查找匹配的指南章节。按 Enter 打开最佳匹配。",
       "guideLink": "在指南中打开此页面。“返回”会带您回到正在阅读的页面。",
       "accessKeyFilter": "只显示名称或状态包含此文本的访问密钥。",
-      "guideDismissWelcome": "隐藏此欢迎页面。可在目录中再次找到它。"
+      "guideDismissWelcome": "隐藏此欢迎页面。可在目录中再次找到它。",
+      "showSecret": "以纯文本显示密钥，以便检查粘贴的内容。"
     },
     "guide": {
       "title": "指南",

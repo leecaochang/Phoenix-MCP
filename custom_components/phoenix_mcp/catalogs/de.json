@@ -91,7 +91,12 @@
       "confirmReject": "Ablehnung bestätigen",
       "selectMultiple": "Mehrere auswählen",
       "show": "Anzeigen",
-      "scopeAll": "Alle Anfragen"
+      "scopeAll": "Alle Anfragen",
+      "pickedCount": {
+        "one": "{count} ausgewählt",
+        "other": "{count} ausgewählt"
+      },
+      "rowPicked": "für die Stapelgenehmigung ausgewählt"
     },
     "inject": {
       "profileSet": "MESA-Profil für {key} festgelegt - zum Bearbeiten klicken",
@@ -261,7 +266,8 @@
       "pausedAfter": {
         "one": "Nach {count} Schritt pausiert. Fortfahren?",
         "other": "Nach {count} Schritten pausiert. Fortfahren?"
-      }
+      },
+      "announceReplyStart": "{text}… Die vollständige Antwort steht in der Unterhaltung."
     },
     "caps": {
       "cap_config_read": {
@@ -569,7 +575,9 @@
       "stepInstall": "Phoenix installieren",
       "stepCompleted": "Abgeschlossen",
       "agentAntigravityIntro": "Fügen Sie dies zu ~/.gemini/config/mcp_config.json hinzu und behalten Sie vorhandene Server bei. Öffnen Sie dann in Antigravity CLI die Verwaltung /mcp und prüfen Sie, ob der Server Tools auflistet.",
-      "skillAntigravityHint": "Die Anleitung unter ~/.gemini/antigravity-cli/skills/phoenix/SKILL.md installieren, dann in Antigravity CLI /skills reload ausführen."
+      "skillAntigravityHint": "Die Anleitung unter ~/.gemini/antigravity-cli/skills/phoenix/SKILL.md installieren, dann in Antigravity CLI /skills reload ausführen.",
+      "copyFirstPrompt": "Ersten Prompt kopieren",
+      "copyNextPrompt": "Nächsten Prompt kopieren"
     },
     "accessKeys": {
       "announceAllHelp": "Den Agenten dieses Schlüssels jedes Tool anbieten, auch solche, die er nicht nutzen darf. Nur zur Fehlersuche; es kostet mehr Tokens.",
@@ -1079,7 +1087,6 @@
       "agentcliDismissWarning": "Diese Warnung verwerfen",
       "agentcliDone": "Fertig",
       "agentcliFieldRequired": "Geben Sie {field} ein.",
-      "agentcliGlobalAria": "Agent Chat in ganz Home Assistant verwenden",
       "agentcliGlobalHelp": "Agent Chat auf jeder Home Assistant-Seite verfügbar halten, nicht nur in diesem Panel.",
       "agentcliGlobalLabel": "In ganz Home Assistant verwenden",
       "agentcliIntro": "Mit Home Assistant über Ihren eigenen KI-Anbieter chatten, im Rahmen der Berechtigungen des gewählten Zugriffsschlüssels.",
@@ -1090,12 +1097,10 @@
       "agentcliRemoveAccountFailed": "Das Konto konnte nicht entfernt werden.",
       "agentcliRemoveBody": "{name} und seinen API-Schlüssel löschen; alles, was es nutzt, funktioniert dann nicht mehr. Dies lässt sich nicht rückgängig machen.",
       "agentcliSaveFailed": "Der Anbieter konnte nicht gespeichert werden.",
-      "agentcliScrollbackAria": "Zeilenlimit für den Chatverlauf",
       "agentcliScrollbackHelp": "Wie viele Chatzeilen Agent Chat als Kontext behält, 0 bis 5.000 (Standard 100).",
       "agentcliScrollbackLabel": "Chatverlaufslimit",
       "agentcliSelectModel": "Standardmodell auswählen:",
       "agentcliServerUrl": "Server-URL",
-      "agentcliStepsAria": "Schritte vor der Fortsetzungsabfrage",
       "agentcliStepsHelp": "Wie viele Tool-Schritte Agent Chat ausführt, bevor er fragt, ob er weitermachen soll, 3 bis 100 (Standard 20).",
       "agentcliStepsLabel": "Schritte vor der Abfrage",
       "agentcliValidate": "Überprüfen",
@@ -1295,7 +1300,6 @@
       "providerChecksHelp": "Anbieter regelmäßig auf neue und eingestellte Modelle prüfen. Standardmäßig an.",
       "providerChecksHoursLabel": "Prüfen alle (Stunden)",
       "providerChecksHoursHelp": "Wie oft Phoenix jeden Anbieter auf Modelländerungen prüft, {min} bis {max} Stunden (Standard {default}).",
-      "providerChecksHoursAria": "Stunden zwischen den Anbieterprüfungen",
       "agentcliProbedVisionSeen": "Bildprüfung: Das Modell hat das Testbild gelesen, daher werden ihm angehängte Bilder und Kamerabilder gesendet.",
       "agentcliProbedVisionUnseen": "Bildprüfung: Das Modell konnte das Testbild nicht lesen, daher behandelt Phoenix es als reines Textmodell.",
       "agentcliProbedVisionInconclusive": "Bildprüfung: Es kam keine verwertbare Antwort, daher ist die Bildunterstützung weiterhin unbekannt.",
@@ -1367,7 +1371,8 @@
       "privacySectionHelp": "Ein- oder ausblenden, ob die Protokolle Entitäts-IDs und IP-Adressen der Aufrufer aufzeichnen.",
       "haNotificationsHelp": "Ein- oder ausblenden, wann Phoenix MCP Ihnen eine Home Assistant-Benachrichtigung sendet.",
       "aboutHelp": "Die Versionsnummern und den Speicherort der Phoenix MCP-Daten ein- oder ausblenden.",
-      "githubHelp": "Quellcode und Issue-Tracker von Phoenix MCP auf GitHub in einem neuen Tab öffnen."
+      "githubHelp": "Quellcode und Issue-Tracker von Phoenix MCP auf GitHub in einem neuen Tab öffnen.",
+      "showSecret": "Schlüssel anzeigen"
     },
     "diff": {
       "blueprint.create": "{domain}-Blueprint '{rel}' erstellen",
@@ -2003,7 +2008,12 @@
       "save": "Speichern",
       "saving": "Wird gespeichert...",
       "sentenceSeparator": " ",
-      "serverUnreachable": "Home Assistant war nicht erreichbar. Prüfen Sie die Verbindung und versuchen Sie es erneut."
+      "serverUnreachable": "Home Assistant war nicht erreichbar. Prüfen Sie die Verbindung und versuchen Sie es erneut.",
+      "copyNamed": "{item} kopieren",
+      "resultCount": {
+        "one": "{count} Ergebnis",
+        "other": "{count} Ergebnisse"
+      }
     },
     "shell": {
       "agentChat": "Agent Chat",
@@ -2178,7 +2188,9 @@
       "previewErrorHead": {
         "one": "Eine Karte in dieser Vorschau hat einen Konfigurationsfehler gemeldet. Kopieren Sie bei Bedarf die folgende Meldung und fügen Sie sie beim Agenten ein, damit er die Karte korrigieren kann.",
         "other": "Karten in dieser Vorschau haben Konfigurationsfehler gemeldet. Kopieren Sie bei Bedarf die folgende Meldung und fügen Sie sie beim Agenten ein, damit er die Karten korrigieren kann."
-      }
+      },
+      "previewTextAlternative": "Die Vorschau zeigt die Karten als Bilder. Wählen Sie {diff}, um die Änderung als Text zu lesen.",
+      "byAdmin": "Administrator"
     },
     "audit": {
       "accessPassThrough": "Durchreichung",
@@ -2881,7 +2893,8 @@
       "guideSearchInput": "Wörter eingeben, um passende Abschnitte im Leitfaden zu finden. Eingabe öffnet den besten Treffer.",
       "guideLink": "Diese Seite im Leitfaden öffnen. Zurück bringt Sie zu der Seite, die Sie gerade gelesen haben.",
       "accessKeyFilter": "Nur Zugriffsschlüssel zeigen, deren Name oder Status diesen Text enthält.",
-      "guideDismissWelcome": "Diese Willkommensseite ausblenden. Sie ist weiter unter Inhalt zu finden."
+      "guideDismissWelcome": "Diese Willkommensseite ausblenden. Sie ist weiter unter Inhalt zu finden.",
+      "showSecret": "Den Schlüssel als Klartext anzeigen, um zu prüfen, was eingefügt wurde."
     },
     "guide": {
       "title": "Leitfaden",

@@ -9,7 +9,7 @@
 
 import { useRef, useState, type ReactNode, type RefObject } from "react";
 import type { MesaProfileScope, MesaSuggestion, MesaValidationIssue } from "../types";
-import { ErrorMsg, Loading } from "../components/common";
+import { ErrorMsg, Loading, ResultCount } from "../components/common";
 import { MesaIdentity } from "../components/MesaIdentity";
 import { MODE_LABEL_KEYS, SIGNAL_LABEL_KEYS, suggestionReason } from "../components/MesaSuggestions";
 import { localeNumber, t, tn, tnKey } from "../i18n";
@@ -247,6 +247,7 @@ export function MesaProfilesWindow() {
         <div className="filter-row">
           <input type="search" className="input" data-help="mesa.searchHelp" value={search} onChange={(e) => setSearch(e.target.value)}
             placeholder={t("mesa.searchPlaceholder")} aria-label={t("mesa.searchAria")} />
+          <ResultCount count={shown.length} query={`${search}|${control}|${enforcement}|${scope}`} />
         </div>
       </div>
       {m.error && <ErrorMsg msg={m.error} />}

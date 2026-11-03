@@ -557,7 +557,8 @@
       "pausedAfter": {
         "one": "Keskeytetty {count} vaiheen jälkeen. Jatketaanko?",
         "other": "Keskeytetty {count} vaiheen jälkeen. Jatketaanko?"
-      }
+      },
+      "announceReplyStart": "{text}… Koko vastaus on keskustelussa."
     },
     "approvalSummary": {
       "action.optionalReason": "Valinnainen syy",
@@ -937,7 +938,12 @@
       "confirmReject": "Vahvista hylkäys",
       "selectMultiple": "Valitse useita",
       "show": "Näytä",
-      "scopeAll": "Kaikki pyynnöt"
+      "scopeAll": "Kaikki pyynnöt",
+      "pickedCount": {
+        "one": "{count} valittu",
+        "other": "{count} valittu"
+      },
+      "rowPicked": "valittu erähyväksyntään"
     },
     "attention": {
       "actionTitle": "Tarkista aiempi toiminto",
@@ -1241,7 +1247,9 @@
       "previewErrorHead": {
         "one": "Tämän esikatselun kortti ilmoitti kokoonpanovirheestä. Kopioi tarvittaessa alla oleva viesti ja liitä se agentille, jotta se voi korjata kortin.",
         "other": "Tämän esikatselun kortit ilmoittivat kokoonpanovirheistä. Kopioi tarvittaessa alla oleva viesti ja liitä se agentille, jotta se voi korjata kortit."
-      }
+      },
+      "previewTextAlternative": "Esikatselu näyttää kortit kuvina. Valitse {diff}, niin voit lukea muutoksen tekstinä.",
+      "byAdmin": "Ylläpitäjä"
     },
     "common": {
       "after": "Jälkeen",
@@ -1268,7 +1276,12 @@
       "save": "Tallenna",
       "saving": "Tallennetaan...",
       "sentenceSeparator": " ",
-      "serverUnreachable": "Home Assistantiin ei saatu yhteyttä. Tarkista yhteys ja yritä uudelleen."
+      "serverUnreachable": "Home Assistantiin ei saatu yhteyttä. Tarkista yhteys ja yritä uudelleen.",
+      "copyNamed": "Kopioi: {item}",
+      "resultCount": {
+        "one": "{count} tulos",
+        "other": "{count} tulosta"
+      }
     },
     "conversations": {
       "accessKeyLabel": "Käyttöavain",
@@ -2099,7 +2112,6 @@
       "agentcliDismissWarning": "Sivuuta tämä varoitus",
       "agentcliDone": "Valmis",
       "agentcliFieldRequired": "Anna {field}.",
-      "agentcliGlobalAria": "Käytä Agent Chatia kaikkialla Home Assistantissa",
       "agentcliGlobalHelp": "Pidä Agent Chat käytettävissä kaikilla Home Assistant -sivuilla, ei vain tässä paneelissa.",
       "agentcliGlobalLabel": "Käytä kaikkialla Home Assistantissa",
       "agentcliGuangzhou": "Guangzhou",
@@ -2139,7 +2151,6 @@
       "agentcliRemoveAccountFailed": "Tilin poistaminen ei onnistunut.",
       "agentcliRemoveBody": "Poista {name} ja sen API-avain; kaikki sitä käyttävä lakkaa toimimasta. Tätä ei voi kumota.",
       "agentcliSaveFailed": "Palveluntarjoajan tallennus epäonnistui.",
-      "agentcliScrollbackAria": "Keskusteluhistorian riviraja",
       "agentcliScrollbackHelp": "Montako keskustelun riviä Agent Chat säilyttää kontekstina, 0-5 000 (oletus 100).",
       "agentcliScrollbackLabel": "Keskusteluhistorian raja",
       "agentcliSelectModel": "Valitse oletusmalli:",
@@ -2147,7 +2158,6 @@
       "agentcliSiliconValley": "Silicon Valley",
       "agentcliSingapore": "Singapore",
       "agentcliSite": "Sivusto",
-      "agentcliStepsAria": "Askeleet ennen jatkamisen tarkistusta",
       "agentcliStepsHelp": "Montako työkaluvaihetta Agent Chat suorittaa ennen kuin kysyy, jatketaanko, 3-100 (oletus 20).",
       "agentcliStepsLabel": "Askeleet ennen tarkistusta",
       "agentcliTencentHint": "Valitse sivusto, jolla loit TokenHub API -avaimen. Avaimet ovat sivustokohtaisia. Ota haluamasi mallit käyttöön TokenHub-konsolissa.",
@@ -2249,7 +2259,6 @@
       "providerAnthropic": "Anthropic",
       "providerCerebras": "Cerebras",
       "providerChecksHelp": "Tarkista palveluntarjoajilta uudet ja poistuneet mallit säännöllisesti. Oletuksena käytössä.",
-      "providerChecksHoursAria": "Tuntia palveluntarjoajan tarkistusten välillä",
       "providerChecksHoursHelp": "Kuinka usein Phoenix tarkistaa kunkin palveluntarjoajan mallimuutokset, {min}-{max} tuntia (oletus {default}).",
       "providerChecksHoursLabel": "Tarkista joka (tuntia)",
       "providerChecksLabel": "Tarkista palveluntarjoajilta uudet mallit",
@@ -2404,7 +2413,8 @@
         "mist": "Usva",
         "office": "Toimisto",
         "aubergine": "Munakoiso"
-      }
+      },
+      "showSecret": "Näytä avain"
     },
     "shell": {
       "agentChat": "Agent Chat",
@@ -2568,7 +2578,9 @@
       "stepInstall": "Asenna Phoenix",
       "stepCompleted": "Valmis",
       "agentAntigravityIntro": "Lisää tämä tiedostoon ~/.gemini/config/mcp_config.json ja säilytä olemassa olevat palvelimet. Avaa sitten Antigravity CLI:ssä hallintanäkymä /mcp ja tarkista, että palvelin luettelee työkaluja.",
-      "skillAntigravityHint": "Asenna opas sijaintiin ~/.gemini/antigravity-cli/skills/phoenix/SKILL.md ja suorita sitten /skills reload Antigravity CLI:ssä."
+      "skillAntigravityHint": "Asenna opas sijaintiin ~/.gemini/antigravity-cli/skills/phoenix/SKILL.md ja suorita sitten /skills reload Antigravity CLI:ssä.",
+      "copyFirstPrompt": "Kopioi ensimmäinen kehote",
+      "copyNextPrompt": "Kopioi seuraava kehote"
     },
     "workspace": {
       "addToMy": "Lisää Omaan työtilaan",
@@ -2887,7 +2899,8 @@
       "guideSearchInput": "Kirjoita sanoja löytääksesi vastaavat oppaan osiot. Enter avaa parhaan osuman.",
       "guideLink": "Avaa tämä sivu Oppaassa. Takaisin palauttaa sinut sivulle, jota luit.",
       "accessKeyFilter": "Näytä vain käyttöavaimet, joiden nimi tai tila sisältää tämän tekstin.",
-      "guideDismissWelcome": "Piilota tämä tervetulosivu. Löydät sen uudelleen Sisällyksestä."
+      "guideDismissWelcome": "Piilota tämä tervetulosivu. Löydät sen uudelleen Sisällyksestä.",
+      "showSecret": "Näytä avain tavallisena tekstinä, jotta voit tarkistaa, mitä liitettiin."
     },
     "guide": {
       "title": "Opas",

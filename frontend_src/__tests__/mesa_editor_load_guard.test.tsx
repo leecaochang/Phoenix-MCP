@@ -74,7 +74,7 @@ describe("a new entity profile seeded after the user started editing", () => {
     vi.mocked(api.getMesaProfile).mockReturnValue(new Promise((r) => { resolve = r; }));
     const { container } = render(<ProfileEditor scope="entity" profileKey="lock.front" isNew lockedKey
       keyLabel="Front door" entityTree={entityTree} canonicalTags={[]} onClose={onClose} onSaved={() => {}} />);
-    const select = (id: string) => container.querySelector(`#${id}`) as HTMLSelectElement;
+    const select = (id: string) => container.querySelector(`[data-field="${id}"]`) as HTMLSelectElement;
     return { resolve, select, onClose };
   }
 
@@ -104,7 +104,7 @@ describe("a new entity profile seeded after the user started editing", () => {
     const { container, rerender } = render(<ProfileEditor {...props} integrationOptions={[]} />);
     rerender(<ProfileEditor {...props} integrationOptions={[{ id: "zwave_js", name: "Z-Wave" }] as never} />);
     resolve(detail);
-    const select = (id: string) => container.querySelector(`#${id}`) as HTMLSelectElement;
+    const select = (id: string) => container.querySelector(`[data-field="${id}"]`) as HTMLSelectElement;
     await waitFor(() => expect(select("mesa-cm").value).toBe("prohibited"));
     expect(select("mesa-em").value).toBe("enforced");
   });
@@ -126,7 +126,7 @@ describe("a new entity profile seeded after the user started editing", () => {
     expect(saveButton()).toBeDisabled();
     fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
     await waitFor(() => expect(saveButton()).toBeEnabled());
-    expect((container.querySelector("#mesa-cm") as HTMLSelectElement).value).toBe("prohibited");
+    expect((container.querySelector('[data-field="mesa-cm"]') as HTMLSelectElement).value).toBe("prohibited");
   });
 
   it("keeps a mode the user set back to its starting value", async () => {

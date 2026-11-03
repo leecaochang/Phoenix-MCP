@@ -177,13 +177,19 @@ describe("accessibility regressions", () => {
     // Valid name: no error state advertised.
     fireEvent.change(input, { target: { value: "my_access_key" } });
     expect(input).not.toHaveAttribute("aria-invalid");
-    // Too-short name: aria-invalid + described-by the alert-role error.
+    // A name still being typed is not flagged on its first keystrokes...
     fireEvent.change(input, { target: { value: "ab" } });
+    expect(input).not.toHaveAttribute("aria-invalid");
+    expect(screen.queryByRole("alert")).toBeNull();
+    // ...but once the field is left, aria-invalid + described-by the alert-role error.
+    fireEvent.blur(input);
     expect(input).toHaveAttribute("aria-invalid", "true");
-    expect(input).toHaveAttribute("aria-describedby", "access-key-name-error");
     const error = screen.getByRole("alert");
-    expect(error).toHaveAttribute("id", "access-key-name-error");
+    expect(input).toHaveAttribute("aria-describedby", error.id);
     expect(error.textContent).toMatch(/3-32 characters/);
+    // A complete but malformed name is flagged as it is typed.
+    fireEvent.change(input, { target: { value: "bad name" } });
+    expect(input).toHaveAttribute("aria-invalid", "true");
   });
 
   it("exposes the shared loading indicator as a status with a decorative spinner", () => {

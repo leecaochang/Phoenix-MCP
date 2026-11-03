@@ -15,6 +15,7 @@
 import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { api } from "../api";
+import { ResultCount } from "../components/common";
 import type { GlobalSettings } from "../types";
 import { t } from "../i18n";
 import { injectSessionBlocked } from "../inject/compatibility";
@@ -245,8 +246,14 @@ export function SettingsProvider({ settings, onSettingsChange, theme, onThemeCha
       const control = windowEl && entry ? findControl(windowEl, entry) : null;
       if (!control) {
         if (!windowEl || (entry && !last)) { if (!last) requestAnimationFrame(step); return; }
-        // The window alone was asked for, or the setting is not shown in this state (a provider not in use, say).
+        // The window alone was asked for, or the setting is not shown in this state (a provider not in use, say):
+        // the window takes focus when focus had been in Find Setting and went with it.
         windowEl.scrollIntoView?.({ block: "nearest" });
+        const active = (windowEl.getRootNode() as Document | ShadowRoot).activeElement;
+        if (!active || active === document.body) {
+          if (!windowEl.hasAttribute("tabindex")) windowEl.tabIndex = -1;
+          windowEl.focus({ preventScroll: true });
+        }
         return;
       }
       for (let d = control.parentElement?.closest("details"); d; d = d.parentElement?.closest("details")) {
@@ -395,6 +402,7 @@ function FindSettingPanel({ root, onClose, onPick }: { root: HTMLElement; onClos
           value={query} onChange={(e) => setQuery(e.target.value)}
           onKeyDown={(e) => { if (e.key === "Enter" && results[0]) { e.preventDefault(); onPick(results[0].id); } }} />
       </label>
+      <ResultCount count={results.length} query={query} />
       <div className="phx-find-setting-results" role="group" aria-label={t("workspace.findSettingResults")}>
         {results.length ? results.map((e) => (
           <button key={e.id} type="button" className="phx-find-result" onClick={() => onPick(e.id)}>

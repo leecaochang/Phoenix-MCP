@@ -13,12 +13,19 @@ import { Icon } from "./Icon";
 export interface Notice {
   id: number;
   text: string;
+  /** A failure stays until it is dismissed and is spoken at once; other notices go by themselves. */
+  tone?: "error";
   /** When it was raised, in epoch milliseconds. */
   time: number;
 }
 
-/** How long a toast stays on screen. */
+/** How long a short toast stays on screen; a longer one stays long enough to read. */
 export const TOAST_MS = 2800;
+const TOAST_MS_PER_CHAR = 60;
+const TOAST_MAX_MS = 10000;
+export function toastMs(text: string): number {
+  return Math.min(TOAST_MAX_MS, Math.max(TOAST_MS, text.length * TOAST_MS_PER_CHAR));
+}
 /** A toast left by the pointer or focus gets at least this long before it goes. */
 const TOAST_RESUME_MS = 1200;
 /** Notices kept in the history. */
@@ -43,8 +50,8 @@ export class Notifications {
     for (const listener of this.listeners) listener();
   }
 
-  notify(text: string): void {
-    const notice = { id: ++this.sequence, text, time: Date.now() };
+  notify(text: string, tone?: "error"): void {
+    const notice: Notice = { id: ++this.sequence, text, time: Date.now(), ...(tone ? { tone } : {}) };
     this.history = [notice, ...this.history].slice(0, HISTORY_LIMIT);
     this.toast = notice;
     this.changed();
@@ -74,9 +81,9 @@ export function useNotifications(): Notifications | null {
 }
 
 /** Raise a notice from anywhere inside the shell. Outside it, notices are dropped. */
-export function useNotify(): (text: string) => void {
+export function useNotify(): (text: string, tone?: "error") => void {
   const center = useContext(NotificationsContext);
-  return useCallback((text: string) => center?.notify(text), [center]);
+  return useCallback((text: string, tone?: "error") => center?.notify(text, tone), [center]);
 }
 
 /** The toast, near the bottom of the panel. The live region stays mounted so each new notice is announced. */
@@ -90,12 +97,12 @@ export function Toasts({ center }: { center: Notifications }) {
   const remaining = useRef(TOAST_MS);
   if (toast && shown.current !== toast.id) {
     shown.current = toast.id;
-    remaining.current = TOAST_MS;
+    remaining.current = toastMs(toast.text);
   }
 
   // Count down while nothing holds the toast; the pointer or focus pauses it.
   useEffect(() => {
-    if (!toast || held) return;
+    if (!toast || held || toast.tone === "error") return;
     const id = toast.id;
     const started = Date.now();
     const timer = window.setTimeout(() => center.dismissToast(id), remaining.current);
@@ -110,15 +117,20 @@ export function Toasts({ center }: { center: Notifications }) {
     setFocused(false);
   }, [toast]);
 
+  const error = toast?.tone === "error";
   return (
+    <>
+    {/* A failure is spoken at once from its own region; other notices wait their turn. */}
+    <div className="sr-only" role="alert">{error ? toast!.text : ""}</div>
     <div className="phx-toasts" role="status" aria-live="polite">
       {toast && (
-        <div className="phx-toast"
+        <div className={`phx-toast${error ? " is-error" : ""}`}
           onPointerEnter={() => setHovered(true)}
           onPointerLeave={() => setHovered(false)}
           onFocus={() => setFocused(true)}
           onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setFocused(false); }}>
-          <span className="phx-toast-text">{toast.text}</span>
+          {error && <Icon name="warning" size={16} />}
+          <span className="phx-toast-text" aria-hidden={error || undefined}>{toast.text}</span>
           <button type="button" className="phx-toast-dismiss" data-help="help.dismissToast" aria-label={t("notifications.dismiss")} title={t("notifications.dismiss")}
             onClick={() => center.dismissToast(toast.id)}>
             <Icon name="close" size={14} />
@@ -126,5 +138,6 @@ export function Toasts({ center }: { center: Notifications }) {
         </div>
       )}
     </div>
+    </>
   );
 }

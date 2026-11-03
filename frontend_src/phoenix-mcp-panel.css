@@ -2328,7 +2328,7 @@ hui-card, .dash-preview-card-slot { display: block; min-width: 0; }
 
 /* Onboarding wizard */
 .wizard-hero { text-align: center; padding: 40px 24px; }
-.wizard-hero-title { font-size: 22px; font-weight: 600; color: var(--phx-text); margin-bottom: 10px; }
+.wizard-hero-title { font-size: 22px; font-weight: 600; color: var(--phx-text); margin: 0 0 10px; }
 .wizard-hero-sub { font-size: 14px; color: var(--phx-text-2); max-width: 520px; margin: 0 auto 20px; }
 .wizard-hero-actions { display: flex; justify-content: center; }
 
@@ -3049,7 +3049,11 @@ hui-card, .dash-preview-card-slot { display: block; min-width: 0; }
   background: var(--phx-surface); color: var(--phx-text);
 }
 .agentcli-settings-field { display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
-.agentcli-settings-field > span { color: var(--phx-text-2); font-weight: 600; }
+/* An API key field with its Show button beside it. */
+.agentcli-secret-row { display: flex; gap: 6px; align-items: center; }
+.agentcli-secret-row > input { flex: 1; min-width: 0; }
+.agentcli-secret-show { flex: none; display: inline-flex; align-items: center; justify-content: center; }
+.agentcli-settings-field > :is(span, label) { color: var(--phx-text-2); font-weight: 600; }
 .agentcli-settings-field > input:not([type="number"]) { width: 100%; min-width: 0; }
 .agentcli-settings-field > :is(select, input[type="number"]) { align-self: flex-start; }
 .agentcli-settings-form-actions { display: flex; gap: 6px; }
@@ -3155,11 +3159,11 @@ hui-card, .dash-preview-card-slot { display: block; min-width: 0; }
   font-weight: 600;
 }
 .energy-preview-row.is-added { background: var(--phx-success-bg); }
-.energy-preview-row.is-added::before { content: "+"; color: var(--phx-success); }
+.energy-preview-row.is-added::before { content: "+" / ""; color: var(--phx-success); }
 .energy-preview-row.is-removed,
 .energy-preview-row.is-changed { background: var(--phx-error-bg); }
 .energy-preview-row.is-removed::before,
-.energy-preview-row.is-changed::before { content: "-"; color: var(--phx-error); }
+.energy-preview-row.is-changed::before { content: "-" / ""; color: var(--phx-error); }
 .energy-preview-name { font-size: 13px; font-weight: 500; overflow-wrap: anywhere; }
 .energy-preview-stat {
   font-family: var(--phx-mono); font-size: 12px;

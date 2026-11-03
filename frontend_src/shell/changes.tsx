@@ -338,7 +338,7 @@ export function ChangesProvider({ hass, active = true, children }: {
       setHistory(fresh);
       if ((fresh[0]?.id ?? null) !== c.latestId || !restoreAvailability(r, fresh, c.side).ok) {
         setConfirm(null);
-        notify(t("changes.restoreStale", { name }));
+        notify(t("changes.restoreStale", { name }), "error");
         return;
       }
       await api.restoreVersion(r.id, c.side, c.latestId);
@@ -355,7 +355,7 @@ export function ChangesProvider({ hass, active = true, children }: {
       setConfirm(null);
       // The server's own stale check: another change landed between the panel's check and the restore.
       if (errorCode(e) === "stale_version") {
-        notify(t("changes.restoreStale", { name }));
+        notify(t("changes.restoreStale", { name }), "error");
         void reloadHistory();
       } else {
         setRestoreError(e instanceof Error ? e.message : t("changes.restoreFailed"));

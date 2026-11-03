@@ -374,7 +374,8 @@
       "pausedAfter": {
         "one": "已在 {count} 步後暫停。要繼續嗎？",
         "other": "已在 {count} 步後暫停。要繼續嗎？"
-      }
+      },
+      "announceReplyStart": "{text}…… 完整回覆請見對話。"
     },
     "approvalSummary": {
       "action.optionalReason": "可選原因",
@@ -754,7 +755,12 @@
       "confirmReject": "確認拒絕",
       "selectMultiple": "多選",
       "show": "顯示",
-      "scopeAll": "所有請求"
+      "scopeAll": "所有請求",
+      "pickedCount": {
+        "one": "已選 {count} 項",
+        "other": "已選 {count} 項"
+      },
+      "rowPicked": "已選取以批次核准"
     },
     "audit": {
       "accessPassThrough": "直通",
@@ -1038,7 +1044,9 @@
       "previewErrorHead": {
         "one": "此預覽中的一張卡片回報了設定錯誤。如有需要，請複製下方訊息並貼給智慧體，讓它修正該卡片。",
         "other": "此預覽中的卡片回報了設定錯誤。如有需要，請複製下方訊息並貼給智慧體，讓它修正這些卡片。"
-      }
+      },
+      "previewTextAlternative": "預覽將卡片顯示為圖片。選擇「{diff}」即可以文字閱讀此變更。",
+      "byAdmin": "管理員"
     },
     "common": {
       "after": "更改後",
@@ -1065,7 +1073,12 @@
       "save": "儲存",
       "saving": "儲存中…",
       "sentenceSeparator": "",
-      "serverUnreachable": "無法連線到 Home Assistant。請檢查連線後再試。"
+      "serverUnreachable": "無法連線到 Home Assistant。請檢查連線後再試。",
+      "copyNamed": "複製{item}",
+      "resultCount": {
+        "one": "{count} 個結果",
+        "other": "{count} 個結果"
+      }
     },
     "diff": {
       "blueprint.create": "建立 {domain} 藍圖「{rel}」",
@@ -1651,7 +1664,6 @@
       "agentcliDismissWarning": "關閉此提示",
       "agentcliDone": "完成",
       "agentcliFieldRequired": "請輸入 {field}。",
-      "agentcliGlobalAria": "在整個 Home Assistant 中使用 Agent Chat",
       "agentcliGlobalHelp": "讓 Agent Chat 在每個 Home Assistant 頁面上都可使用，而不僅限於此面板。",
       "agentcliGlobalLabel": "在整個 Home Assistant 中使用",
       "agentcliIntro": "使用您自己的 AI 提供者與 Home Assistant 對話，並受所選存取金鑰的權限約束。",
@@ -1680,12 +1692,10 @@
       "agentcliRemoveAccountFailed": "移除帳戶失敗。",
       "agentcliRemoveBody": "刪除 {name} 及其 API 金鑰；所有使用它的功能都會停止。此操作無法撤銷。",
       "agentcliSaveFailed": "儲存提供者失敗。",
-      "agentcliScrollbackAria": "聊天記錄行數上限",
       "agentcliScrollbackHelp": "Agent Chat 保留作為上下文的聊天行數，0 到 5,000（預設 100）。",
       "agentcliScrollbackLabel": "聊天記錄上限",
       "agentcliSelectModel": "選擇預設模型：",
       "agentcliServerUrl": "伺服器 URL",
-      "agentcliStepsAria": "詢問前的工具輪次",
       "agentcliStepsHelp": "Agent Chat 在詢問是否繼續之前執行的工具步驟數，3 到 100（預設 20）。",
       "agentcliStepsLabel": "詢問前的工具輪次",
       "agentcliValidate": "驗證",
@@ -1875,7 +1885,6 @@
       "providerChecksHelp": "依排程檢查提供者的新模型和已下線模型。預設開啟。",
       "providerChecksHoursLabel": "檢查間隔（小時）",
       "providerChecksHoursHelp": "Phoenix 檢查各提供者模型變化的頻率，{min} 到 {max} 小時（預設 {default}）。",
-      "providerChecksHoursAria": "提供者檢查間隔（小時）",
       "agentcliProbedVisionSeen": "影像檢查：模型讀取了測試影像，因此會向其傳送附加的影像和攝影機影像。",
       "agentcliProbedVisionUnseen": "影像檢查：模型無法讀取測試影像，因此 Phoenix 將其視為純文字模型。",
       "agentcliProbedVisionInconclusive": "影像檢查：沒有收到可用的回答，因此影像支援情況仍然未知。",
@@ -1957,7 +1966,8 @@
         "mist": "薄霧",
         "office": "辦公",
         "aubergine": "茄紫"
-      }
+      },
+      "showSecret": "顯示金鑰"
     },
     "shell": {
       "agentChat": "Agent Chat",
@@ -2304,7 +2314,9 @@
       "stepInstall": "安裝 Phoenix",
       "stepCompleted": "已完成",
       "agentAntigravityIntro": "將以下內容新增到 ~/.gemini/config/mcp_config.json，並保留現有伺服器，然後在 Antigravity CLI 中開啟 /mcp 管理器，檢查該伺服器是否列出工具。",
-      "skillAntigravityHint": "將指南安裝至 ~/.gemini/antigravity-cli/skills/phoenix/SKILL.md，接著在 Antigravity CLI 中執行 /skills reload。"
+      "skillAntigravityHint": "將指南安裝至 ~/.gemini/antigravity-cli/skills/phoenix/SKILL.md，接著在 Antigravity CLI 中執行 /skills reload。",
+      "copyFirstPrompt": "複製第一則提示",
+      "copyNextPrompt": "複製下一則提示"
     },
     "routing": {
       "providerOptions": "重新載入此帳戶的模型清單。不會執行任何命令，也不會測試模型的路由效果。",
@@ -2887,7 +2899,8 @@
       "guideSearchInput": "輸入文字以尋找相符的指南章節。按 Enter 開啟最佳相符項目。",
       "guideLink": "在指南中開啟此頁面。「返回」會帶您回到正在閱讀的頁面。",
       "accessKeyFilter": "只顯示名稱或狀態包含此文字的存取金鑰。",
-      "guideDismissWelcome": "隱藏此歡迎頁面。可在目錄中再次找到它。"
+      "guideDismissWelcome": "隱藏此歡迎頁面。可在目錄中再次找到它。",
+      "showSecret": "以純文字顯示金鑰，以便檢查貼上的內容。"
     },
     "guide": {
       "title": "指南",

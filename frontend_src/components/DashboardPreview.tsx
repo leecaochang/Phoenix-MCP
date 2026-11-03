@@ -568,6 +568,8 @@ function DashboardPreviewInner({ config, onConfigErrors }: {
       {view.kind === "empty" && <p className="dash-preview-note">{t("changes.previewNoCards")}</p>}
       {view.kind === "cards" && (
         <>
+          {/* The cards are a picture, out of reach of a screen reader: say where the change reads as text. */}
+          <p className="sr-only">{t("changes.previewTextAlternative", { diff: t("common.diff") })}</p>
           <div
             className="dash-preview-scroll"
             onClickCapture={swallow}

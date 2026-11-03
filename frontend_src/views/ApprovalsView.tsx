@@ -9,9 +9,9 @@
 import { Fragment, useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 import type { ApprovalRecord, ApprovalStatus, BatchApproveResult } from "../types";
 import { ApprovalChange } from "../components/ApprovalChange";
-import { ErrorMsg, Loading } from "../components/common";
+import { ErrorMsg, Loading, ResultCount } from "../components/common";
 import { YamlView, toYaml } from "../components/YamlView";
-import { hasMessage, localeNumber, t, type Params } from "../i18n";
+import { hasMessage, localeNumber, t, tn, type Params } from "../i18n";
 import { APPROVALS_SCOPES, MAX_BATCH_APPROVALS, isOverdue, useApprovals, type ApprovalsScope, type ApprovalsState } from "../shell/approvals";
 import { useToolbarTools, type Tool, type ToolGroup } from "../shell/tools";
 import { useWorkspaceReset } from "../shell/windowTools";
@@ -190,7 +190,10 @@ export function ApprovalsListWindow() {
         </select>
         <input type="search" className="input" data-guide="window.approvals#search" data-help="help.approvalsSearch" placeholder={t("approvals.searchPlaceholder")} aria-label={t("approvals.searchAria")}
           value={a.search} onChange={(e) => a.setSearch(e.target.value)} />
+        <ResultCount count={a.shown.length} query={`${a.scope}|${a.search}`} loading={a.loading} />
       </div></div>
+      {/* How many requests are ticked, said as each is ticked. */}
+      <span className="sr-only" role="status">{a.batchMode ? tn("approvals.pickedCount", a.pickedCount) : ""}</span>
       {a.error && <ErrorMsg msg={a.error} />}
       {a.batchResult && <BatchResultMsg result={a.batchResult} onDismiss={a.dismissBatchResult} />}
       {a.loading && !a.shown.length && <Loading />}
@@ -207,7 +210,7 @@ export function ApprovalsListWindow() {
         rowKey={(r) => r.id}
         selectedKey={a.current?.id ?? null}
         onSelect={(r, ordered) => a.select(r, ordered.map((o) => o.id))}
-        rowLabel={(r) => `${approvalListTitle(r.diff)}, ${a.isClaimed(r) ? t("approvals.processing") : approvalStatusLabel(r.status)}`}
+        rowLabel={(r) => `${approvalListTitle(r.diff)}, ${a.isClaimed(r) ? t("approvals.processing") : approvalStatusLabel(r.status)}${a.batchMode && a.picked.has(r.id) ? `, ${t("approvals.rowPicked")}` : ""}`}
         rowHelp="help.approvalsRow"
         empty={a.loading ? null : empty}
         selection={a.batchMode ? {
@@ -216,7 +219,7 @@ export function ApprovalsListWindow() {
           onToggle: a.togglePick,
           onToggleAll: a.toggleAll,
           all: a.allPicked,
-          label: (r) => t("approvals.selectOne", { tool: friendlyToolName(r.tool_name) }),
+          label: (r) => t("approvals.selectOne", { tool: approvalListTitle(r.diff) }),
           allLabel: t("approvals.selectAll"),
           help: "help.batchPick",
           allHelp: "help.batchPickAll",

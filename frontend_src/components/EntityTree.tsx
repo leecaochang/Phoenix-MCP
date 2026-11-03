@@ -1255,7 +1255,7 @@ export function EntityTree({ accessKeyId, permissions, onPermissionsChange, onEn
   }, [tree, choice, integrations]);
 
   if (loading) return <div className="loading-wrap"><div className="spinner" /></div>;
-  if (error) return <div className="banner banner-error">{error}</div>;
+  if (error) return <div role="alert" className="banner banner-error">{error}</div>;
   if (!tree) return null;
 
   const domainKeys = Object.keys(tree)
@@ -1324,9 +1324,8 @@ export function EntityTree({ accessKeyId, permissions, onPermissionsChange, onEn
             onPermChange={onPermissionsChange}
           />
         )}
-        {!hasFilterResults && (
-          <p className="tree-empty" role="status">{t("perms.filterEmpty")}</p>
-        )}
+        {/* Mounted before it speaks, so a filter that empties the tree is heard. */}
+        <p className={hasFilterResults ? "sr-only" : "tree-empty"} role="status">{hasFilterResults ? "" : t("perms.filterEmpty")}</p>
       </div>
     </div>
     </HintEditorContext.Provider>

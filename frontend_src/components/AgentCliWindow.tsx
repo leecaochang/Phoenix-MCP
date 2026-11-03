@@ -556,6 +556,20 @@ interface AgentCliHass {
   themes?: { darkMode?: boolean };
 }
 
+/** How much of a finished reply is read aloud; the rest is in the transcript. */
+const ANNOUNCE_MAX_CHARS = 300;
+
+/** The plain text a reply renders to, cut at a word when it is long. */
+export function replyAnnouncement(markdown: string): string {
+  const box = document.createElement("div");
+  box.innerHTML = renderMarkdown(markdown);
+  const text = (box.textContent ?? "").replace(/\s+/g, " ").trim();
+  if (text.length <= ANNOUNCE_MAX_CHARS) return text;
+  const cut = text.slice(0, ANNOUNCE_MAX_CHARS);
+  const space = cut.lastIndexOf(" ");
+  return t("agentchat.announceReplyStart", { text: space > ANNOUNCE_MAX_CHARS / 2 ? cut.slice(0, space) : cut });
+}
+
 const POPUP_WINDOW_NAME = "phoenix-mcp-agent-chat";
 const POPUP_MOUNT_ID = "phx-agentchat-popout-root";
 let activePopupWindow: Window | null = null;
@@ -751,6 +765,12 @@ export function AgentCliWindow({
   // approvals, errors). Deliberately NOT the streaming transcript itself:
   // a live region over token-by-token deltas would announce every chunk.
   const [announcement, setAnnouncement] = useState("");
+  // A finished reply is said as the text it renders to, not its Markdown, and only its start: a
+  // long answer read in full would hold the screen reader. Cleared first, so a repeated reply is said again.
+  const announceReply = useCallback((markdown: string) => {
+    setAnnouncement("");
+    window.requestAnimationFrame(() => setAnnouncement(replyAnnouncement(markdown)));
+  }, []);
   const [popupMount, setPopupMount] = useState<HTMLElement | null>(null);
   const [popOutError, setPopOutError] = useState("");
   const poppedOut = popupMount !== null;
@@ -1483,10 +1503,10 @@ export function AgentCliWindow({
         // Announce the completed reply now that streaming is over.
         const finals = entries.filter((e) => e.kind === "assistant" && e.text.trim());
         const finalText = finals.length ? (finals[finals.length - 1] as Extract<ChatEntry, { kind: "assistant" }>).text : "";
-        if (finalText) setAnnouncement(finalText);
+        if (finalText) announceReply(finalText);
       }
     }
-  }, [sending, accessKeys, turns, scrollbackLines, accessKeyId, persistenceOwner, resetUsage, instanceId, model, kind, options, caps, updateLive]);
+  }, [sending, accessKeys, turns, scrollbackLines, accessKeyId, persistenceOwner, resetUsage, instanceId, model, kind, options, caps, updateLive, announceReply]);
 
   // Why images cannot go with the next message, when they cannot. Unknown model
   // support is allowed: the composer says so, and a provider refusal is learned.
@@ -2498,7 +2518,9 @@ function ChatItem({
       // "calling <tool>" entries already say it, so rendering both is noise.
       if (entry.activity && verbose) return null;
       return (
-        <div className="agentcli-progress" role="status" aria-live="polite">
+        // Not a live region: a long build rewrites this line many times, and every finished turn
+        // keeps its lines; the working line below the transcript speaks for the turn in progress.
+        <div className="agentcli-progress">
           <span className="agentcli-progress-dot" aria-hidden="true" />
           {entry.message}
         </div>

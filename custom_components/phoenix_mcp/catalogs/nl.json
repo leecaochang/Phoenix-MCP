@@ -126,7 +126,12 @@
       "save": "Opslaan",
       "saving": "Opslaan...",
       "sentenceSeparator": " ",
-      "serverUnreachable": "Home Assistant was niet bereikbaar. Controleer de verbinding en probeer het opnieuw."
+      "serverUnreachable": "Home Assistant was niet bereikbaar. Controleer de verbinding en probeer het opnieuw.",
+      "copyNamed": "{item} kopiëren",
+      "resultCount": {
+        "one": "{count} resultaat",
+        "other": "{count} resultaten"
+      }
     },
     "inject": {
       "mesaProfile": "MESA-profiel",
@@ -346,7 +351,9 @@
       "previewErrorHead": {
         "one": "Een kaart in dit voorbeeld meldde een configuratiefout. Kopieer zo nodig het onderstaande bericht en plak het bij de agent, zodat die de kaart kan herstellen.",
         "other": "Kaarten in dit voorbeeld meldden configuratiefouten. Kopieer zo nodig het onderstaande bericht en plak het bij de agent, zodat die de kaarten kan herstellen."
-      }
+      },
+      "previewTextAlternative": "Het voorbeeld toont de kaarten als afbeeldingen. Kies {diff} om de wijziging als tekst te lezen.",
+      "byAdmin": "Beheerder"
     },
     "audit": {
       "accessPassThrough": "Pass-through",
@@ -812,7 +819,12 @@
       "confirmReject": "Afwijzing bevestigen",
       "selectMultiple": "Meerdere selecteren",
       "show": "Weergeven",
-      "scopeAll": "Alle aanvragen"
+      "scopeAll": "Alle aanvragen",
+      "pickedCount": {
+        "one": "{count} geselecteerd",
+        "other": "{count} geselecteerd"
+      },
+      "rowPicked": "geselecteerd voor batchgoedkeuring"
     },
     "agentchat": {
       "accessKey": "Toegangssleutel",
@@ -976,7 +988,8 @@
       "pausedAfter": {
         "one": "Gepauzeerd na {count} stap. Doorgaan?",
         "other": "Gepauzeerd na {count} stappen. Doorgaan?"
-      }
+      },
+      "announceReplyStart": "{text}… Het volledige antwoord staat in het gesprek."
     },
     "adminError": {
       "activeAccessKeyRequired": "{field} moet naar een actief toegangssleutel verwijzen.",
@@ -1294,7 +1307,9 @@
       "stepInstall": "Phoenix installeren",
       "stepCompleted": "Voltooid",
       "agentAntigravityIntro": "Voeg dit toe aan ~/.gemini/config/mcp_config.json en behoud bestaande servers. Open daarna in Antigravity CLI de beheerder /mcp en controleer of de server tools toont.",
-      "skillAntigravityHint": "Installeer de handleiding in ~/.gemini/antigravity-cli/skills/phoenix/SKILL.md en voer /skills reload uit in Antigravity CLI."
+      "skillAntigravityHint": "Installeer de handleiding in ~/.gemini/antigravity-cli/skills/phoenix/SKILL.md en voer /skills reload uit in Antigravity CLI.",
+      "copyFirstPrompt": "Eerste prompt kopiëren",
+      "copyNextPrompt": "Volgende prompt kopiëren"
     },
     "accessKeys": {
       "announceAllHelp": "Bied de agents van deze sleutel elke tool aan, ook tools die hij niet kan gebruiken. Alleen voor probleemoplossing; het kost meer tokens.",
@@ -1786,7 +1801,6 @@
       "agentcliDismissWarning": "Deze waarschuwing negeren",
       "agentcliDone": "Klaar",
       "agentcliFieldRequired": "Voer {field} in.",
-      "agentcliGlobalAria": "Agent Chat in heel Home Assistant gebruiken",
       "agentcliGlobalHelp": "Houd Agent Chat beschikbaar op elke Home Assistant-pagina, niet alleen in dit paneel.",
       "agentcliGlobalLabel": "In heel Home Assistant gebruiken",
       "agentcliIntro": "Chat met Home Assistant via je eigen AI-provider, binnen de machtigingen van de gekozen toegangssleutel.",
@@ -1815,12 +1829,10 @@
       "agentcliRemoveAccountFailed": "Account verwijderen is mislukt.",
       "agentcliRemoveBody": "Verwijder {name} en de API-sleutel; alles wat het gebruikt, stopt. Dit kan niet ongedaan worden gemaakt.",
       "agentcliSaveFailed": "Provider opslaan is mislukt.",
-      "agentcliScrollbackAria": "Limiet voor chatgeschiedenisregels",
       "agentcliScrollbackHelp": "Hoeveel chatregels Agent Chat als context bewaart, 0 tot 5.000 (standaard 100).",
       "agentcliScrollbackLabel": "Chatgeschiedenislimiet",
       "agentcliSelectModel": "Selecteer standaardmodel:",
       "agentcliServerUrl": "Server-URL",
-      "agentcliStepsAria": "Stappen vóór doorgaan-check-in",
       "agentcliStepsHelp": "Hoeveel toolstappen Agent Chat zet voordat het vraagt om door te gaan, 3 tot 100 (standaard 20).",
       "agentcliStepsLabel": "Stappen vóór check-in",
       "agentcliValidate": "Valideren",
@@ -2020,7 +2032,6 @@
       "providerChecksHelp": "Controleer providers volgens een schema op nieuwe en uitgefaseerde modellen. Standaard aan.",
       "providerChecksHoursLabel": "Controleer elke (uren)",
       "providerChecksHoursHelp": "Hoe vaak Phoenix elke provider op modelwijzigingen controleert, {min} tot {max} uur (standaard {default}).",
-      "providerChecksHoursAria": "Uren tussen providercontroles",
       "agentcliProbedVisionSeen": "Afbeeldingscontrole: het model las de testafbeelding, dus bijgevoegde afbeeldingen en camerabeelden worden ernaar gestuurd.",
       "agentcliProbedVisionUnseen": "Afbeeldingscontrole: het model kon de testafbeelding niet lezen, dus Phoenix behandelt het als alleen tekst.",
       "agentcliProbedVisionInconclusive": "Afbeeldingscontrole: er kwam geen bruikbaar antwoord terug, dus ondersteuning voor afbeeldingen is nog onbekend.",
@@ -2092,7 +2103,8 @@
       "privacySectionHelp": "Toon of verberg of de logboeken entiteit-ID's en IP-adressen van aanroepers vastleggen.",
       "haNotificationsHelp": "Toon of verberg wanneer Phoenix MCP je een Home Assistant-melding stuurt.",
       "aboutHelp": "Toon of verberg de versienummers en waar Phoenix MCP zijn gegevens bewaart.",
-      "githubHelp": "Open de broncode en issuetracker van Phoenix MCP op GitHub in een nieuw tabblad."
+      "githubHelp": "Open de broncode en issuetracker van Phoenix MCP op GitHub in een nieuw tabblad.",
+      "showSecret": "Sleutel tonen"
     },
     "approvalSummary": {
       "action.optionalReason": "Optionele reden",
@@ -2962,7 +2974,8 @@
       "guideSearchInput": "Typ woorden om passende secties van de Gids te vinden. Enter opent de beste treffer.",
       "guideLink": "Open deze pagina in de Gids. Terug brengt je naar de pagina die je aan het lezen was.",
       "accessKeyFilter": "Toon alleen toegangssleutels waarvan de naam of status deze tekst bevat.",
-      "guideDismissWelcome": "Verberg deze welkomstpagina. Je vindt hem terug onder Inhoud."
+      "guideDismissWelcome": "Verberg deze welkomstpagina. Je vindt hem terug onder Inhoud.",
+      "showSecret": "Toon de sleutel als platte tekst om te controleren wat er is geplakt."
     },
     "guide": {
       "title": "Gids",

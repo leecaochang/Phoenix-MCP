@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useId, useState, useEffect, useRef } from "react";
 import type { AccessKeyRecord, PatchAccessKeyBody } from "../types";
 import { api } from "../api";
 import { t } from "../i18n";
@@ -9,6 +9,8 @@ interface Props {
 }
 
 export function RateLimitConfig({ accessKey, onUpdate }: Props) {
+  // Key Settings can show in two workspaces at once: ids of its own keep each label on its field.
+  const uid = useId();
   const [requests, setRequests] = useState(String(accessKey.rate_limit_requests));
   const [burst, setBurst] = useState(String(accessKey.rate_limit_burst));
   const [error, setError] = useState<string | null>(null);
@@ -84,12 +86,12 @@ export function RateLimitConfig({ accessKey, onUpdate }: Props) {
 
   return (
     <div>
-      {error && <div className="banner banner-error mb-8">{error}</div>}
+      {error && <div role="alert" className="banner banner-error mb-8">{error}</div>}
       <div className="rate-limit-row" data-help="accessKeys.rateLimitHelp" data-help-controls="">
         <div className="field" data-guide="window.keySettings#rate-requests">
-          <label htmlFor="rate-limit-requests">{t("accessKeys.rateRequestsLabel")}</label>
+          <label htmlFor={`${uid}requests`}>{t("accessKeys.rateRequestsLabel")}</label>
           <input
-            id="rate-limit-requests"
+            id={`${uid}requests`}
             className="input"
             type="number"
             min={0}
@@ -99,9 +101,9 @@ export function RateLimitConfig({ accessKey, onUpdate }: Props) {
           />
         </div>
         <div className="field" data-guide="window.keySettings#rate-burst">
-          <label htmlFor="rate-limit-burst">{t("accessKeys.rateBurstLabel")}</label>
+          <label htmlFor={`${uid}burst`}>{t("accessKeys.rateBurstLabel")}</label>
           <input
-            id="rate-limit-burst"
+            id={`${uid}burst`}
             className="input"
             type="number"
             min={0}

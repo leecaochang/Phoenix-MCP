@@ -25,7 +25,12 @@
       "save": "Enregistrer",
       "saving": "Enregistrement...",
       "sentenceSeparator": " ",
-      "serverUnreachable": "Impossible de joindre Home Assistant. Vérifiez la connexion et réessayez."
+      "serverUnreachable": "Impossible de joindre Home Assistant. Vérifiez la connexion et réessayez.",
+      "copyNamed": "Copier : {item}",
+      "resultCount": {
+        "one": "{count} résultat",
+        "other": "{count} résultats"
+      }
     },
     "approvals": {
       "approve": "Approuver",
@@ -118,7 +123,12 @@
       "confirmReject": "Confirmer le rejet",
       "selectMultiple": "Sélection multiple",
       "show": "Afficher",
-      "scopeAll": "Toutes les demandes"
+      "scopeAll": "Toutes les demandes",
+      "pickedCount": {
+        "one": "{count} sélectionné",
+        "other": "{count} sélectionnés"
+      },
+      "rowPicked": "sélectionnée pour l'approbation groupée"
     },
     "caps": {
       "cap_config_read": {
@@ -672,7 +682,9 @@
       "previewErrorHead": {
         "one": "Une carte de cet aperçu a signalé une erreur de configuration. Si nécessaire, copiez le message ci-dessous et collez-le à l'agent pour qu'il corrige la carte.",
         "other": "Des cartes de cet aperçu ont signalé des erreurs de configuration. Si nécessaire, copiez le message ci-dessous et collez-le à l'agent pour qu'il corrige les cartes."
-      }
+      },
+      "previewTextAlternative": "L'aperçu montre les cartes sous forme d'images. Choisissez {diff} pour lire la modification sous forme de texte.",
+      "byAdmin": "Administrateur"
     },
     "audit": {
       "accessPassThrough": "Transmission directe",
@@ -830,7 +842,9 @@
       "stepInstall": "Installer Phoenix",
       "stepCompleted": "Terminé",
       "agentAntigravityIntro": "Ajoutez ceci à ~/.gemini/config/mcp_config.json en conservant les serveurs existants, puis ouvrez le gestionnaire /mcp dans Antigravity CLI et vérifiez que le serveur liste des outils.",
-      "skillAntigravityHint": "Installez le guide dans ~/.gemini/antigravity-cli/skills/phoenix/SKILL.md, puis exécutez /skills reload dans Antigravity CLI."
+      "skillAntigravityHint": "Installez le guide dans ~/.gemini/antigravity-cli/skills/phoenix/SKILL.md, puis exécutez /skills reload dans Antigravity CLI.",
+      "copyFirstPrompt": "Copier la première invite",
+      "copyNextPrompt": "Copier l'invite suivante"
     },
     "inject": {
       "profileSet": "Profil MESA défini pour {key} - cliquer pour modifier",
@@ -1186,7 +1200,6 @@
       "agentcliDismissWarning": "Ignorer cet avertissement",
       "agentcliDone": "Terminé",
       "agentcliFieldRequired": "Saisissez {field}.",
-      "agentcliGlobalAria": "Utiliser Agent Chat dans tout Home Assistant",
       "agentcliGlobalHelp": "Gardez Agent Chat disponible sur chaque page de Home Assistant, pas seulement dans ce panneau.",
       "agentcliGlobalLabel": "Utiliser dans tout Home Assistant",
       "agentcliIntro": "Discutez avec Home Assistant via votre propre fournisseur d’IA, dans les limites des autorisations de la clé d’accès choisie.",
@@ -1197,12 +1210,10 @@
       "agentcliRemoveAccountFailed": "Échec de la suppression du compte.",
       "agentcliRemoveBody": "Supprimez {name} et sa clé d’API ; tout ce qui l’utilise cesse de fonctionner. Action irréversible.",
       "agentcliSaveFailed": "Échec de l'enregistrement du fournisseur.",
-      "agentcliScrollbackAria": "Limite de lignes de l'historique du chat",
       "agentcliScrollbackHelp": "Nombre de lignes de discussion qu’Agent Chat garde comme contexte, de 0 à 5 000 (100 par défaut).",
       "agentcliScrollbackLabel": "Limite de l'historique du chat",
       "agentcliSelectModel": "Sélectionner le modèle par défaut :",
       "agentcliServerUrl": "URL du serveur",
-      "agentcliStepsAria": "Étapes avant le point de contrôle de continuation",
       "agentcliStepsHelp": "Nombre d’étapes d’outils qu’Agent Chat effectue avant de demander s’il doit continuer, de 3 à 100 (20 par défaut).",
       "agentcliStepsLabel": "Étapes avant le point de contrôle",
       "agentcliValidate": "Valider",
@@ -1402,7 +1413,6 @@
       "providerChecksHelp": "Vérifiez régulièrement les nouveaux modèles et les modèles retirés chez les fournisseurs. Activé par défaut.",
       "providerChecksHoursLabel": "Vérifier toutes les (heures)",
       "providerChecksHoursHelp": "Fréquence à laquelle Phoenix vérifie les changements de modèles de chaque fournisseur, de {min} à {max} heures ({default} par défaut).",
-      "providerChecksHoursAria": "Heures entre deux vérifications des fournisseurs",
       "agentcliProbedVisionSeen": "Vérification d'image : le modèle a lu l'image de test, les images jointes et les images de la caméra lui sont donc envoyées.",
       "agentcliProbedVisionUnseen": "Vérification d'image : le modèle n'a pas pu lire l'image de test, Phoenix le traite donc comme un modèle texte uniquement.",
       "agentcliProbedVisionInconclusive": "Vérification d'image : aucune réponse exploitable n'est revenue, la prise en charge des images reste donc inconnue.",
@@ -1474,7 +1484,8 @@
       "privacySectionHelp": "Affichez ou masquez si les journaux enregistrent les ID d’entité et les adresses IP des appelants.",
       "haNotificationsHelp": "Affichez ou masquez quand Phoenix MCP vous envoie une notification Home Assistant.",
       "aboutHelp": "Affichez ou masquez les numéros de version et l’endroit où Phoenix MCP conserve ses données.",
-      "githubHelp": "Ouvrez le code source et le suivi des problèmes de Phoenix MCP sur GitHub dans un nouvel onglet."
+      "githubHelp": "Ouvrez le code source et le suivi des problèmes de Phoenix MCP sur GitHub dans un nouvel onglet.",
+      "showSecret": "Afficher la clé"
     },
     "agentchat": {
       "accessKey": "Clé d’accès",
@@ -1638,7 +1649,8 @@
       "pausedAfter": {
         "one": "En pause après {count} étape. Continuer ?",
         "other": "En pause après {count} étapes. Continuer ?"
-      }
+      },
+      "announceReplyStart": "{text}… La réponse complète figure dans la conversation."
     },
     "diff": {
       "blueprint.create": "Créer le blueprint {domain} « {rel} »",
@@ -2881,7 +2893,8 @@
       "guideSearchInput": "Saisissez des mots pour trouver les sections du guide correspondantes. Entrée ouvre le meilleur résultat.",
       "guideLink": "Ouvrez cette page dans le guide. Retour vous ramène à la page que vous lisiez.",
       "accessKeyFilter": "Affichez uniquement les clés d’accès dont le nom ou l’état contient ce texte.",
-      "guideDismissWelcome": "Masquez cette page d’accueil. Retrouvez-la dans le Sommaire."
+      "guideDismissWelcome": "Masquez cette page d’accueil. Retrouvez-la dans le Sommaire.",
+      "showSecret": "Afficher la clé en clair pour vérifier ce qui a été collé."
     },
     "guide": {
       "title": "Guide",

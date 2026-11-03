@@ -8,7 +8,7 @@
 
 import { useContext, useEffect, useState, type ReactNode } from "react";
 import type { VersionSummary } from "../types";
-import { ErrorMsg, Loading } from "../components/common";
+import { ErrorMsg, Loading, ResultCount } from "../components/common";
 import { CodeToggle, diffLines, LayoutToggle, RawDiffPane, rememberCodeView, rememberDiffLayout, storedCodeView, storedDiffLayout } from "../components/DiffView";
 import { collectPreviewViews, DashboardPreview, rememberPreviewMode, SegmentedToggle, storedPreviewMode, useHuiCardReady } from "../components/DashboardPreview";
 import { YamlView, toYaml } from "../components/YamlView";
@@ -84,7 +84,7 @@ function whoNow(
   current: Map<string, string>,
 ): string {
   const cur = v.access_key_id ? current.get(v.access_key_id) : undefined;
-  return cur || v.access_key_name || (v.approved_by_user_id ? "admin" : "-");
+  return cur || v.access_key_name || (v.approved_by_user_id ? t("changes.byAdmin") : "-");
 }
 
 // In Comparison: when the access key has since been renamed, show "current (original)".
@@ -94,7 +94,7 @@ function whoDetail(
 ): string {
   const cur = v.access_key_id ? current.get(v.access_key_id) : undefined;
   if (cur && v.access_key_name && cur !== v.access_key_name) return `${cur} (${v.access_key_name})`;
-  return cur || v.access_key_name || (v.approved_by_user_id ? "admin" : "-");
+  return cur || v.access_key_name || (v.approved_by_user_id ? t("changes.byAdmin") : "-");
 }
 
 /** A change's one-line summary, localized when the backend supplied a catalog key this bundle knows. */
@@ -190,6 +190,7 @@ export function ChangesListWindow() {
         empty={c.loading ? null : <p className="audit-empty">{c.feed.length ? t("changes.emptySearch") : t("changes.empty")}</p>}
       />
       </div>
+      <ResultCount count={shown.length} query={`${search}|${type}|${action}`} loading={c.loading} />
       {!c.loading && c.feed.length > 0 && (
         <div className="phx-table-footer">
           <span className="conversation-secondary">{t("conversations.showing", { shown: localeNumber(shownCount(shown.length, rowLimit.limit)), total: localeNumber(c.total) })}</span>

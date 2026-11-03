@@ -423,7 +423,8 @@ export function ConfigTable<Row>({ id, label, columns, rows, rowKey, defaultSort
         if (last && last.x === e.clientX && last.y === e.clientY) return;
         e.currentTarget.removeAttribute("data-keyboard");
       }}>
-      <table className="phx-table" role="grid" aria-label={label} style={{ minWidth: total }}>
+      {/* A grid only where rows are chosen with the arrow keys; otherwise a plain table reads better. */}
+      <table className="phx-table" role={onSelect ? "grid" : undefined} aria-label={label} style={{ minWidth: total }}>
         <colgroup>
           {selection && <col style={{ width: PICK_WIDTH }} />}
           {visible.map((c, i) => <col key={c.id} style={fitColumns || i < visible.length - 1 ? { width: widthOf(c) } : undefined} />)}

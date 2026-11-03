@@ -27,7 +27,7 @@ beforeEach(() => {
   vi.mocked(api.putMesaArea).mockResolvedValue([] as never);
 });
 
-const control = (c: HTMLElement) => c.querySelector("#mesa-cm") as HTMLSelectElement;
+const control = (c: HTMLElement) => c.querySelector('[data-field="mesa-cm"]') as HTMLSelectElement;
 const savedBoundaries = (fn: typeof api.putMesaDomain | typeof api.putMesaArea) =>
   (vi.mocked(fn).mock.calls[0][1] as Doc).semantic_profile.operational_boundaries;
 

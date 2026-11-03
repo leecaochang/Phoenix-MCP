@@ -100,7 +100,7 @@ export function ToolAnnouncementToggle({ accessKey, onUpdate }: { accessKey: Acc
   // What each setting does is in Help (user, 2026-10-28), and read out with the control.
   return (
     <>
-      {error && <div className="banner banner-error mb-8">{error}</div>}
+      {error && <div role="alert" className="banner banner-error mb-8">{error}</div>}
       <div className="toggle-row" data-help={companion ? "accessKeys.companionUnavailable" : "accessKeys.announceAllHelp"} data-guide="window.keySettings#announce-all">
         <div className="toggle-label">
           <span>{t("accessKeys.announceAllLabel")}</span>
