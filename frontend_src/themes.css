@@ -19,6 +19,8 @@
   --phx-chat-frame: var(--phx-text);
   --phx-toolbar-bg: var(--phx-raised);
   --phx-toolbar-border: var(--phx-border);
+  /* Bars between the toolbar's sections (user, 2026-11-03), in the toolbar's own ink: in the border grey they all but vanished. */
+  --phx-toolbar-divider: color-mix(in srgb, var(--phx-toolbar-btn-fg) 40%, transparent);
   --phx-toolbar-btn-bg: var(--phx-surface);
   --phx-toolbar-btn-border: var(--phx-border);
   --phx-toolbar-btn-fg: var(--phx-text);
@@ -33,11 +35,8 @@
   --phx-window-titlebar: var(--phx-surface);
   --phx-action-icon: currentColor;
   --phx-persona-companion: #a87400;
-  --phx-persona-companion-bg: rgba(201,145,0,0.08);
   --phx-persona-new: #2f8a4e;
-  --phx-persona-new-bg: rgba(47,138,78,0.07);
   --phx-persona-custom: #2f6fbd;
-  --phx-persona-custom-bg: rgba(47,111,189,0.07);
   --phx-ws-accessKeys: currentColor;
   --phx-ws-approvals: currentColor;
   --phx-ws-changes: currentColor;
@@ -62,11 +61,8 @@
     --phx-guide-titlebar: #1f242b;
     --phx-guide-border: #3f5f8a;
     --phx-persona-companion: #f0c24b;
-    --phx-persona-companion-bg: rgba(240,194,75,0.10);
     --phx-persona-new: #7fd49b;
-    --phx-persona-new-bg: rgba(127,212,155,0.10);
     --phx-persona-custom: #8db8ff;
-    --phx-persona-custom-bg: rgba(141,184,255,0.10);
     --phx-welcome-point: #a8a7ff;
     --phx-welcome-point-bg: rgba(168,167,255,0.14);
     --phx-welcome-select: #5fd3c2;
@@ -81,11 +77,8 @@
   --phx-guide-titlebar: #1f242b;
   --phx-guide-border: #3f5f8a;
   --phx-persona-companion: #f0c24b;
-  --phx-persona-companion-bg: rgba(240,194,75,0.10);
   --phx-persona-new: #7fd49b;
-  --phx-persona-new-bg: rgba(127,212,155,0.10);
   --phx-persona-custom: #8db8ff;
-  --phx-persona-custom-bg: rgba(141,184,255,0.10);
   --phx-welcome-point: #a8a7ff;
   --phx-welcome-point-bg: rgba(168,167,255,0.14);
   --phx-welcome-select: #5fd3c2;
@@ -580,14 +573,13 @@
 :host([data-phx-palette="wayfinding"]) :is(.phx-workspace-frame, .phx-phone-stack)[data-workspace="my"] { --phx-action-icon: var(--phx-ws-my); }
 .phx-window-body :is(.btn, button.phx-action):not(:disabled):not([aria-disabled="true"]):not([aria-pressed="true"]):not(.btn-primary):not(.btn-danger):not(.btn-warning):not(.btn-text-danger):not(.btn-text-warning) > svg:not(.phx-icon-delete) { color: var(--phx-action-icon); }
 
-/* Personas with a character of their own, in every theme but Spartan: Home Companion gold, New User green, Custom blue. */
-:host([data-phx-palette]) .persona-card[data-persona="home_companion"] { border-color: var(--phx-persona-companion); background: var(--phx-persona-companion-bg); }
+/* Personas with a character of their own, in every theme but Spartan: Home Companion gold, New User green, Custom blue,
+   in a half-transparent border only, so the chosen card's frame and fill stand out (user, 2026-11-03). */
+:host([data-phx-palette]) .persona-card[data-persona="home_companion"] { border-color: color-mix(in srgb, var(--phx-persona-companion) 50%, transparent); }
 :host([data-phx-palette]) .persona-card[data-persona="home_companion"] .persona-card-marker { color: var(--phx-persona-companion); }
-:host([data-phx-palette]) .persona-card[data-persona="new_user"] { border-color: var(--phx-persona-new); background: var(--phx-persona-new-bg); }
-:host([data-phx-palette]) .persona-card[data-persona="custom"] { border-color: var(--phx-persona-custom); background: var(--phx-persona-custom-bg); }
-:host([data-phx-palette]) .persona-card-active[data-persona="home_companion"] { box-shadow: 0 0 0 1px var(--phx-persona-companion); }
-:host([data-phx-palette]) .persona-card-active[data-persona="new_user"] { box-shadow: 0 0 0 1px var(--phx-persona-new); }
-:host([data-phx-palette]) .persona-card-active[data-persona="custom"] { box-shadow: 0 0 0 1px var(--phx-persona-custom); }
+:host([data-phx-palette]) .persona-card[data-persona="new_user"] { border-color: color-mix(in srgb, var(--phx-persona-new) 50%, transparent); }
+:host([data-phx-palette]) .persona-card[data-persona="custom"] { border-color: color-mix(in srgb, var(--phx-persona-custom) 50%, transparent); }
+:host([data-phx-palette]) .persona-card-active[data-persona] { border-color: var(--phx-text); }
 
 /* Welcome to the Guide (user, 2026-11-02/03): a bright demo that fits the Guide's default size without
    scrolling. The header stays pinned so its Dismiss is always in reach. One hue per tip, on its own tile;
