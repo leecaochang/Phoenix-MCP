@@ -27,7 +27,7 @@ Each access key also gets a device in Home Assistant, with sensors for its statu
 
 ## Language {#language}
 
-The panel speaks 16 languages. By default it follows your Home Assistant profile; choose another in [{{label:settings.languageLabel}}](guide:window.settingsGeneral#language). The choice applies to this browser only. The Guide is in English for now.
+The panel speaks 16 languages. By default it follows your Home Assistant profile; choose another in [{{label:settings.languageLabel}}](guide:window.settingsGeneral#language). The choice applies to this browser only. The Guide shows each page in your language when it's translated, and in English otherwise.
 
 ## Removing Phoenix MCP {#removing}
 
