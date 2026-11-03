@@ -962,19 +962,22 @@ const KEY_ACTION_GUIDE: Record<Exclude<AccessKeyAction, "clearPerms">, string> =
 function KeyActionConfirmation({ detail }: { detail: AccessKeyDetail }) {
   const a = detail.action;
   if (!a || a.kind === "clearPerms") return null;
+  // The acknowledgement names the key, so the box says which key it acts on (user, 2026-11-03).
+  const name = { name: detail.accessKey?.name ?? "" };
+  const ack = (key: string) => ({ check: tRich(key, { code: (c) => <code>{c}</code> }, name), checkLabel: tPlain(key, name) });
   const text = a.kind === "rotate" ? {
-    title: t("accessKeys.rotateAccessKeyTitle"), help: t("accessKeys.rotateBody"), check: t("accessKeys.rotateCheck"),
+    title: t("accessKeys.rotateAccessKeyTitle"), help: t("accessKeys.rotateBody"), ...ack("accessKeys.rotateCheck"),
     confirm: t("accessKeys.rotateAccessKeyTitle"), icon: "check" as const, className: "btn btn-warning btn-sm", tone: "warning" as const,
   } : a.kind === "revoke" ? {
-    title: t("accessKeys.revokeAccessKeyTitle"), help: t("accessKeys.revokeBody"), check: t("accessKeys.revokeCheck"),
-    confirm: t("accessKeys.revokeAccessKeyTitle"), icon: "denied" as const, className: "btn btn-danger btn-sm", tone: "danger" as const,
+    title: t("accessKeys.revokeAccessKeyTitle"), help: t("accessKeys.revokeBody"), ...ack("accessKeys.revokeCheck"),
+    confirm: t("accessKeys.revokeAccessKeyTitle"), icon: "delete" as const, className: "btn btn-danger btn-sm", tone: "danger" as const,
   } : {
-    title: t("accessKeys.enablePtTitle"), help: tPlain("accessKeys.enablePtBody"), check: t("accessKeys.enablePtCheck"),
+    title: t("accessKeys.enablePtTitle"), help: tPlain("accessKeys.enablePtBody"), ...ack("accessKeys.enablePtCheck"),
     confirm: t("accessKeys.enablePtLabel"), icon: "check" as const, className: "btn btn-warning btn-sm", tone: "warning" as const,
   };
   return (
     <div data-guide={KEY_ACTION_GUIDE[a.kind]}>
-    <InlineConfirm key={a.kind} label={text.title} tone={text.tone} acknowledge={text.check} help={text.help}
+    <InlineConfirm key={a.kind} label={text.title} tone={text.tone} acknowledge={text.check} acknowledgeLabel={text.checkLabel} help={text.help}
       confirmLabel={text.confirm} confirmIcon={text.icon} confirmClassName={text.className}
       cancelLabel={t("accessKeys.cancel")} busy={a.busy} onConfirm={detail.runAction} onCancel={detail.cancelAction} />
     </div>

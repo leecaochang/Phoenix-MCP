@@ -127,10 +127,10 @@ describe("phone stack", () => {
     expect((lastLayout(onLayout)).folded).toEqual([]);
   });
 
-  it("saves Always Show Icons and Text for one window", () => {
+  it("saves Show Icons and Text for one window", () => {
     const { view, onLayout } = stack(undefined);
     const menu = openMenu(view.container, "logDetails");
-    act(() => { fireEvent.click(within(menu).getByRole("menuitemcheckbox", { name: "Always Show Icons and Text" })); });
+    act(() => { fireEvent.click(within(menu).getByRole("menuitemcheckbox", { name: "Show Icons and Text" })); });
     expect((lastLayout(onLayout)).labels).toEqual(["logDetails"]);
   });
 

@@ -576,7 +576,7 @@ export function Shell() {
     setMyWindows([]);
     controllers.get("my")?.setWindows(myWorkspaceWindows([]));
   }, [controllers]);
-  // Every window's menu: Add to My Workspace (Float Chat for a docked Chat) and Always Show Icons and Text;
+  // Every window's menu: Add to My Workspace (Float Chat for a docked Chat) and Show Icons and Text;
   // in My Workspace, Vertical Scrolling. Desktop only: the phone stack builds its own window menus.
   const menuExtras = useCallback<WindowMenuExtras>((controller, windowId) => {
     if (env !== "desktop") return [];

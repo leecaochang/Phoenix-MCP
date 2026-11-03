@@ -36,6 +36,27 @@ describe("menu button", () => {
     expect(document.activeElement).toBe(button);
   });
 
+  it("visits checkable items with the arrow keys too", () => {
+    const button = setup([
+      { id: "float", label: "Float Window", onSelect: vi.fn() },
+      "separator",
+      { id: "labels", label: "Show Icons and Text", checked: false, toggle: true, onSelect: vi.fn() },
+      { id: "scrolling", label: "Vertical Scrolling", checked: true, toggle: true, onSelect: vi.fn() },
+      "separator",
+      { id: "close", label: "Close", onSelect: vi.fn() },
+    ]);
+    button.focus();
+    fireEvent.keyDown(button, { key: "Enter" });
+    const visited = [document.activeElement!.textContent];
+    for (let i = 0; i < 4; i++) {
+      fireEvent.keyDown(document.activeElement!, { key: "ArrowDown" });
+      visited.push(document.activeElement!.textContent);
+    }
+    expect(visited).toEqual(["Float Window", "Show Icons and Text", "Vertical Scrolling", "Close", "Float Window"]);
+    fireEvent.keyDown(document.activeElement!, { key: "End" });
+    expect(document.activeElement).toHaveTextContent("Close");
+  });
+
   it("closes on Escape and returns focus to the button", () => {
     const button = setup([{ id: "a", label: "A", onSelect: vi.fn() }]);
     button.focus();

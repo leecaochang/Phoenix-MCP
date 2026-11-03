@@ -1678,6 +1678,29 @@ export class WorkspaceController {
     this.changed();
   }
 
+  /**
+   * Size a floating window from the keyboard, in place: Dockview resizes a
+   * floating group through its own size call, so the window is not laid out
+   * again and does not flicker (user, 2026-11-03). It grows only into the room
+   * right of and below it, so its top-left corner stays put; a folded window
+   * keeps its height.
+   */
+  resizeFloat(group: DockviewGroupPanel, delta: { width?: number; height?: number }): void {
+    const panel = group.activePanel;
+    const box = this.floatBox(group);
+    if (!panel || !box || this.hostOfGroup(group) !== "float") return;
+    const room = this.canvas?.host.clientWidth || Infinity;
+    const visible = this.visibleHeight() || Infinity;
+    const header = box.height - group.height;
+    const width = Math.max(FLOAT_BOUNDS.minWidth, Math.min(box.width + (delta.width ?? 0), room - box.left));
+    const height = Math.max(MIN_WINDOW_HEIGHT, Math.min(box.height + (delta.height ?? 0), visible - box.top));
+    const folded = this.folds.isFolded(panel.id);
+    this.noteUserSized(panel.id);
+    this.floatBoxes.set(panel.id, { ...box, width, height });
+    group.api.setSize(folded ? { width } : { width, height: height - header });
+    this.changed();
+  }
+
   float(group: DockviewGroupPanel): void {
     if (group.activePanel) this.noteUserSized(group.activePanel.id);
     const panel = group.activePanel;

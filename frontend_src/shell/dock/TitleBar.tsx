@@ -171,9 +171,7 @@ export function WindowControls(props: IDockviewHeaderActionsProps) {
     const g: DockviewGroupPanel = group;
     const delta = { ArrowRight: { width: RESIZE_STEP }, ArrowLeft: { width: -RESIZE_STEP }, ArrowDown: { height: RESIZE_STEP }, ArrowUp: { height: -RESIZE_STEP } }[e.key];
     if (floating && delta) {
-      // Laid out again at its new size, the window gets a new title bar: resizing carries on there.
-      controller.nudgeFloat(g, delta);
-      requestAnimationFrame(() => startResize(controller, windowId));
+      controller.resizeFloat(g, delta);
       e.preventDefault();
       return true;
     }

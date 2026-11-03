@@ -15,7 +15,7 @@ import { useClickAway } from "./useClickAway";
 
 export function InlineConfirm({
   label, title, tone = "warning", children, help, acknowledge, confirmLabel, confirmIcon = "check", confirmClassName = "btn btn-primary btn-sm",
-  cancelLabel, busy = false, error = null, onConfirm, onCancel, opener,
+  acknowledgeLabel, cancelLabel, busy = false, error = null, onConfirm, onCancel, opener,
 }: {
   /** Accessible name of the confirmation, usually the action's name. */
   label: string;
@@ -33,7 +33,9 @@ export function InlineConfirm({
   /** The control that opened the box: a click on it is not a click elsewhere, so it can close the box itself. */
   opener?: RefObject<HTMLElement | null>;
   /** An acknowledgement to tick before Confirm is available. */
-  acknowledge?: string;
+  acknowledge?: ReactNode;
+  /** The acknowledgement as plain text, for its switch's name; needed when `acknowledge` has markup. */
+  acknowledgeLabel?: string;
   confirmLabel: string;
   confirmIcon?: IconName;
   confirmClassName?: string;
@@ -68,7 +70,7 @@ export function InlineConfirm({
         <div className="toggle-row phx-inline-confirm-ack">
           <div className="toggle-label"><span>{acknowledge}</span></div>
           <label className="toggle-switch">
-            <input type="checkbox" aria-label={acknowledge} checked={acknowledged} onChange={(e) => setAcknowledged(e.target.checked)} />
+            <input type="checkbox" aria-label={acknowledgeLabel ?? (typeof acknowledge === "string" ? acknowledge : undefined)} checked={acknowledged} onChange={(e) => setAcknowledged(e.target.checked)} />
             <span className="toggle-switch-track" />
           </label>
         </div>

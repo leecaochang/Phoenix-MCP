@@ -131,7 +131,7 @@ describe("the Guide window", () => {
     expect(screen.getByRole("heading", { level: 3 }).textContent).toBe("Access Keys");
   });
 
-  it("is pinned beside the wizard step, level with the part it explains, and cannot be moved, resized or closed", async () => {
+  it("starts beside the wizard step, level with the part it explains, cannot be closed, and stays where the reader drags it", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true, json: async () => ({ format: GUIDE_FORMAT, language: "en", topics: {} }) })));
     const box = (left: number, top: number, right: number, bottom: number) => ({ left, top, right, bottom, width: right - left, height: bottom - top, x: left, y: top, toJSON: () => ({}) });
     const frame = document.createElement("div");
@@ -154,14 +154,27 @@ describe("the Guide window", () => {
     // Its own width beside the wizard, whatever size the user gave it elsewhere.
     expect(guide.style.width).toBe("400px");
     expect(within(guide).queryByRole("button", { name: "Close" })).toBeNull();
-    expect(guide.querySelector(".agentcli-resize")).toBeNull();
+    // It can still be resized from its edges (user, 2026-11-03).
+    expect(guide.querySelectorAll(".agentcli-resize").length).toBeGreaterThan(0);
 
+    // A click on the title bar saves nothing: the place beside the step is not the reader's.
     const title = guide.querySelector("header")!;
     fireEvent(title, new MouseEvent("pointerdown", { bubbles: true, button: 0, clientX: 1100, clientY: 270 }));
-    window.dispatchEvent(new MouseEvent("pointermove", { clientX: 900, clientY: 300 }));
     window.dispatchEvent(new MouseEvent("pointerup", {}));
     expect(guide.style.left).toBe("1052px");
     expect(onRect).not.toHaveBeenCalled();
+
+    // Dragged, it moves and its place is saved, and the wizard's layout no longer places it.
+    fireEvent(title, new MouseEvent("pointerdown", { bubbles: true, button: 0, clientX: 1100, clientY: 270 }));
+    act(() => { window.dispatchEvent(new MouseEvent("pointermove", { clientX: 900, clientY: 300 })); });
+    act(() => { window.dispatchEvent(new MouseEvent("pointerup", {})); });
+    const dragged = guide.style.left;
+    expect(dragged).not.toBe("1052px");
+    expect(onRect).toHaveBeenCalledTimes(1);
+    act(() => { window.dispatchEvent(new Event("resize")); });
+    view.rerender(<GuideWindow workspace="accessKeys" controller={null} language="en" rect={{ x: 10, y: 10, w: 360, h: 560 }}
+      onRect={onRect} onClose={() => {}} topicId="wizard.access" follow={{ step: "access", part, content }} />);
+    expect(guide.style.left).toBe(dragged);
 
     // After the wizard it is back where the user left it, and can be closed again.
     view.rerender(<GuideWindow workspace="accessKeys" controller={null} language="en" rect={{ x: 10, y: 10, w: 360, h: 560 }}
@@ -288,12 +301,29 @@ describe("the Guide's window controls", () => {
     fireEvent.click(menu);
     fireEvent.click(screen.getByRole("menuitem", { name: "Move with Keyboard" }));
     expect(screen.getByRole("status").textContent).toBe("Arrow keys move. Esc, Enter, or Tab finishes.");
+    // The hint takes the title's place, beside only the menu button and Close, so nothing is pushed out of the window.
+    expect(within(guide).queryByRole("heading", { level: 2 })).toBeNull();
+    expect(within(guide.querySelector("header")!).getAllByRole("button").map((b) => b.getAttribute("aria-label"))).toEqual(["Window Menu", "Close"]);
     fireEvent.keyDown(menu, { key: "ArrowRight" });
     fireEvent.keyDown(menu, { key: "ArrowDown" });
     expect([guide.style.left, guide.style.top]).toEqual(["34px", "34px"]);
     expect(onRect).not.toHaveBeenCalled();
     fireEvent.keyDown(menu, { key: "Escape" });
     expect(onRect).toHaveBeenLastCalledWith({ x: 34, y: 34, w: 360, h: 400 });
+    expect(within(guide).getByRole("heading", { level: 2 }).textContent).toBe("Guide");
+    expect(within(guide).getByRole("button", { name: "Pop Out to a Separate Window" })).toBeInTheDocument();
+
+    // Focus leaving the menu button, such as a click elsewhere, also finishes and saves.
+    fireEvent.click(menu);
+    fireEvent.click(screen.getByRole("menuitem", { name: "Move with Keyboard" }));
+    fireEvent.keyDown(menu, { key: "ArrowLeft" });
+    fireEvent.blur(menu);
+    expect(onRect).toHaveBeenLastCalledWith({ x: 10, y: 34, w: 360, h: 400 });
+    expect(screen.queryByRole("status")).toBeNull();
+    fireEvent.click(menu);
+    fireEvent.click(screen.getByRole("menuitem", { name: "Move with Keyboard" }));
+    fireEvent.keyDown(menu, { key: "ArrowRight" });
+    fireEvent.keyDown(menu, { key: "Escape" });
 
     fireEvent.click(menu);
     fireEvent.click(screen.getByRole("menuitem", { name: "Resize with Keyboard" }));

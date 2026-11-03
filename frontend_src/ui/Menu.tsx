@@ -51,7 +51,9 @@ function MenuList({ label, entries, place, focusFirst, onClose, listRef }: {
   const root = useContext(MenuRootContext);
   const noteId = useId();
   const [pos, setPos] = useState(place);
-  const available = () => [...(listRef.current?.querySelectorAll<HTMLElement>('[role="menuitem"]:not([aria-disabled="true"])') ?? [])];
+  // Every kind of item the arrow keys visit, checkable ones included.
+  const available = () => [...(listRef.current?.querySelectorAll<HTMLElement>(
+    ["menuitem", "menuitemcheckbox", "menuitemradio"].map((r) => `[role="${r}"]:not([aria-disabled="true"])`).join(", ")) ?? [])];
 
   // Keep the menu on screen once its size is known.
   useLayoutEffect(() => {
@@ -144,7 +146,7 @@ function mergeRefs<T>(...refs: Array<Ref<T> | undefined>) {
   };
 }
 
-export function MenuButton({ label, title, help, icon, children, items, className = "", buttonRef, onButtonKeyDown, onPointerDown, pressed = false, disabled = false }: {
+export function MenuButton({ label, title, help, icon, children, items, className = "", buttonRef, onButtonKeyDown, onButtonBlur, onPointerDown, pressed = false, disabled = false }: {
   /** Accessible name of the button and of the menu. */
   label: string;
   title?: string;
@@ -159,6 +161,8 @@ export function MenuButton({ label, title, help, icon, children, items, classNam
   buttonRef?: Ref<HTMLButtonElement>;
   /** Handles a key first while the menu is closed; return true to consume it. */
   onButtonKeyDown?: (e: KeyboardEvent<HTMLButtonElement>) => boolean;
+  /** Focus left the button, such as to end a keyboard mode it drives. */
+  onButtonBlur?: () => void;
   /** For a button that is also a drag handle. */
   onPointerDown?: (e: ReactPointerEvent<HTMLButtonElement>) => void;
   /** Shows the button as active, for a mode started from the menu. */
@@ -196,6 +200,7 @@ export function MenuButton({ label, title, help, icon, children, items, classNam
         aria-expanded={!!open}
         disabled={disabled}
         onPointerDown={onPointerDown}
+        onBlur={onButtonBlur}
         onClick={() => (open ? close(false) : openMenu(false))}
         onKeyDown={(e) => {
           if (onButtonKeyDown?.(e)) return;

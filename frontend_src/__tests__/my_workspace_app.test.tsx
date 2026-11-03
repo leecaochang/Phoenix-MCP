@@ -4,7 +4,7 @@
  * Reset This Workspace emptying it, Vertical Scrolling, the empty hint, and
  * Agent Chat docking, both the panel's own Chat and the global one through its
  * bridge. Chat floats while My Workspace is not shown and returns to its
- * window when it is. Also Always Show Icons and Text in any window's menu.
+ * window when it is. Also Show Icons and Text in any window's menu.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { act, fireEvent, waitFor } from "@testing-library/react";
@@ -218,7 +218,7 @@ describe("Window menu", () => {
     act(() => { fireEvent.contextMenu(titleControl(el, "Access Keys", ".phx-window-title-text"), { clientX: 40, clientY: 40 }); });
     const fromRightClick = labels(el);
     expect(fromRightClick).toEqual(fromButton);
-    expect(fromButton).toEqual(expect.arrayContaining(["Resize with Keyboard", "Add to My Workspace", "Always Show Icons and Text", "Fold", "Close"]));
+    expect(fromButton).toEqual(expect.arrayContaining(["Resize with Keyboard", "Add to My Workspace", "Show Icons and Text", "Fold", "Close"]));
     // Resize with Keyboard from the right-click menu starts resizing on the window's menu button.
     act(() => { menuItem(el, "Resize with Keyboard")!.click(); });
     await waitFor(() => expect(titleControl(el, "Access Keys", ".phx-window-resize-hint")).toBeTruthy());
@@ -234,12 +234,12 @@ describe("Window menu", () => {
     await waitFor(() => expect(iconOnly("approvals")).toBeGreaterThan(0));
     expect(withText("approvals")).toBe(0);
     openWindowMenu(el, "Approvals");
-    expect(menuItem(el, "Always Show Icons and Text")).toHaveAttribute("aria-checked", "false");
-    act(() => { menuItem(el, "Always Show Icons and Text")!.click(); });
+    expect(menuItem(el, "Show Icons and Text")).toHaveAttribute("aria-checked", "false");
+    act(() => { menuItem(el, "Show Icons and Text")!.click(); });
     await waitFor(() => expect(iconOnly("approvals")).toBe(0));
     expect(withText("approvals")).toBeGreaterThan(0);
     openWindowMenu(el, "Approvals");
-    expect(menuItem(el, "Always Show Icons and Text")).toHaveAttribute("aria-checked", "true");
+    expect(menuItem(el, "Show Icons and Text")).toHaveAttribute("aria-checked", "true");
     await waitFor(() => expect((JSON.parse(localStorage.getItem("phx-ui:u1:desktop") ?? "{}") as { workspaces?: Record<string, { labels?: string[] }> }).workspaces?.approvals?.labels).toEqual(["approvals"]), { timeout: 4000 });
   });
 });

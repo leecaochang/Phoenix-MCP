@@ -538,8 +538,8 @@
   user-select: none;
   touch-action: none;
 }
-/* Pinned beside the wizard: it cannot be moved. */
-.phx-guide.is-pinned .phx-guide-titlebar { cursor: default; padding: 0 8px; }
+/* Beside the wizard it has no window buttons, only the title; it still moves by its title bar. */
+.phx-guide.is-pinned .phx-guide-titlebar { padding: 0 8px; }
 /* Folded into its title bar, or maximized over the workspace area, where it does not move. */
 .phx-guide.is-folded { min-height: 0; }
 .phx-guide.is-folded .phx-guide-titlebar { border-bottom: 0; }
@@ -553,6 +553,9 @@
 .phx-guide.is-popped .phx-window-controls { gap: 2px; }
 .phx-guide.is-popped .phx-window-control { width: 28px; height: 24px; border-radius: var(--phx-radius-xs); }
 .phx-guide-title { flex: 1; min-width: 0; margin: 0 0 0 4px; font-size: 13px; font-weight: 600; }
+/* Moving or sizing by keyboard, the hint takes the title's place and wraps to a second line rather than
+   pushing the buttons out of the window. */
+.phx-guide-titlebar .phx-guide-keys-hint { flex: 1; min-width: 0; padding: 0 4px; white-space: normal; font-size: 11px; line-height: 1.25; }
 .phx-guide-body { flex: 1; min-height: 0; overflow: auto; padding: 12px 16px 16px; }
 .phx-guide-topic { font-size: 13px; line-height: 1.55; overflow-wrap: anywhere; }
 .phx-guide-topic h3 { margin: 0 0 8px; font-size: 15px; font-weight: 600; }

@@ -372,8 +372,9 @@ function useGuideTopic(workspace: string, windowId: string | null, language: str
       if (startOnWelcome.current) markSeenRef.current?.();
       return;
     }
-    // Welcome holds the page; the reader opens the new one from its link.
-    if (onWelcomeRef.current) return;
+    // Welcome holds the page; the reader opens the new one from its link. A wizard step's page is not
+    // the reader's selection, so it always turns to it (user, 2026-11-03).
+    if (onWelcomeRef.current && !topicId) return;
     setHistory((h) => pushStep(h, autoRef.current!));
   }, [autoKey]); // eslint-disable-line react-hooks/exhaustive-deps
   const step = history.steps[history.at] ?? (startOnWelcome.current ? welcomePage : null) ?? auto;
@@ -607,7 +608,10 @@ export function GuideWindow({ workspace, controller, language, rect, onRect, onC
   onFold?: (folded: boolean) => void;
   /** A topic shown ahead of the focused window's, such as the wizard step's. */
   topicId?: string | null;
-  /** The wizard step to sit beside: the Guide is pinned there, and cannot be moved or closed. */
+  /**
+   * The wizard step to sit beside: the Guide is placed there for each step and cannot be closed.
+   * The reader can still drag or resize it (user, 2026-11-03); from then on it stays where they put it.
+   */
   follow?: WizardGuideStep | null;
   /**
    * Windows the shell opens by itself, such as Needs Attention while items wait. Their opening is
@@ -625,6 +629,9 @@ export function GuideWindow({ workspace, controller, language, rect, onRect, onC
   const following = !!follow;
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { if (!following) setLive(placed()); }, [rect, following]);
+  // Moved or resized by the reader during the wizard: it stops following the steps until the wizard ends.
+  const [placedByReader, setPlacedByReader] = useState(false);
+  useEffect(() => { if (!following) setPlacedByReader(false); }, [following]);
   const liveRef = useRef(live);
   liveRef.current = live;
   const frame = useRef<HTMLElement | null>(null);
@@ -678,7 +685,7 @@ export function GuideWindow({ workspace, controller, language, rect, onRect, onC
   // Beside the wizard step: placed again when the step, its layout or the screen changes.
   // The placement is not saved; only a move by the user is.
   useLayoutEffect(() => {
-    if (!follow) return;
+    if (!follow || placedByReader) return;
     const place = () => {
       const frame = follow.content.closest(".phx-workspace")?.getBoundingClientRect()
         ?? { left: 0, top: 0, right: window.innerWidth, bottom: window.innerHeight };
@@ -691,17 +698,24 @@ export function GuideWindow({ workspace, controller, language, rect, onRect, onC
     if (root) observer?.observe(root);
     window.addEventListener("resize", place);
     return () => { observer?.disconnect(); window.removeEventListener("resize", place); };
-  }, [follow]);
+  }, [follow, placedByReader]);
 
   const track = (move: (ev: PointerEvent) => GuideRect, settle: (r: GuideRect) => GuideRect) => {
     let latest = liveRef.current;
-    const onMove = (ev: PointerEvent) => { latest = move(ev); setLive(latest); };
+    let moved = false;
+    const onMove = (ev: PointerEvent) => {
+      latest = move(ev);
+      setLive(latest);
+      if (!moved && following) setPlacedByReader(true);
+      moved = true;
+    };
     const onUp = () => {
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onUp);
       const final = settle(latest);
       setLive(final);
-      onRect(final);
+      // A click on the title bar beside the wizard saves nothing: the place there is the step's, not the reader's.
+      if (moved || !following) onRect(final);
     };
     window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", onUp);
@@ -709,7 +723,7 @@ export function GuideWindow({ workspace, controller, language, rect, onRect, onC
 
   // Drag by the title bar; on release an edge near the screen's side snaps to it.
   const startDrag = (e: ReactPointerEvent<HTMLElement>) => {
-    if (following || maximized || e.button !== 0 || (e.target as HTMLElement).closest("button")) return;
+    if (maximized || e.button !== 0 || (e.target as HTMLElement).closest("button")) return;
     e.preventDefault();
     const o = liveRef.current;
     const x0 = e.clientX, y0 = e.clientY;
@@ -768,11 +782,14 @@ export function GuideWindow({ workspace, controller, language, rect, onRect, onC
       return true;
     }
     if (e.key === "Escape" || e.key === "Enter" || e.key === "Tab") {
-      setKeys(null);
-      onRect(liveRef.current);
+      endKeys();
       return e.key !== "Tab";
     }
     return false;
+  };
+  const endKeys = () => {
+    setKeys(null);
+    onRect(liveRef.current);
   };
   const popOut = () => {
     if (following) return;
@@ -891,28 +908,35 @@ export function GuideWindow({ workspace, controller, language, rect, onRect, onC
   return (
     <section ref={frame} className={classes} aria-label={t("guide.title")}
       style={{ left: shown.x, top: shown.y, width: shown.w, height: isFolded ? undefined : shown.h }}>
-      <header className="phx-guide-titlebar" onPointerDown={startDrag} data-help={following ? undefined : "help.guideTitle"}
+      <header className="phx-guide-titlebar" onPointerDown={startDrag} data-help="help.guideTitle"
         onContextMenu={following || !showMenu ? undefined : (e) => showMenu(e, t("workspace.windowMenu"), menu())}>
-        {!following && (
+        {!following && !keys && (
           <button type="button" className="phx-window-control" aria-label={isFolded ? t("workspace.unfold") : t("workspace.fold")}
             title={isFolded ? t("workspace.unfold") : t("workspace.fold")} data-help="help.fold" aria-expanded={!isFolded} onClick={toggleFold}>
             <Icon name={isFolded ? "folded" : "expand"} size={14} />
           </button>
         )}
-        <HistoryButtons guide={guide} />
-        <h2 className="phx-guide-title">{t("guide.title")}</h2>
+        {/* Moving or sizing by keyboard, the title bar holds the hint in the title's place, beside the
+            menu button that takes the keys and Close; the rest returns when it ends (user, 2026-11-03). */}
+        {keys
+          ? <span className="phx-window-resize-hint phx-guide-keys-hint" role="status">{t(keys === "move" ? "workspace.moveHint" : "workspace.resizeHint")}</span>
+          : <><HistoryButtons guide={guide} /><h2 className="phx-guide-title">{t("guide.title")}</h2></>}
         {!following && (
           <div className="phx-window-controls">
-            {keys && <span className="phx-window-resize-hint" role="status">{t(keys === "move" ? "workspace.moveHint" : "workspace.resizeHint")}</span>}
             <MenuButton label={t("workspace.windowMenu")} help="help.guideMenu" icon={<Icon name="more" size={14} />} items={menu}
-              className="phx-window-control" buttonRef={(el) => { menuButton.current = el; }} pressed={!!keys} onButtonKeyDown={keyStep} />
-            <button type="button" className="phx-window-control" aria-label={t("agentchat.popOut")} title={t("agentchat.popOut")} data-help="help.guidePopOut" onClick={popOut}>
-              <Icon name="popOut" size={14} />
-            </button>
-            <button type="button" className="phx-window-control" aria-label={maximized ? t("agentchat.restore") : t("agentchat.maximize")}
-              title={maximized ? t("agentchat.restore") : t("agentchat.maximize")} data-help="help.maximizeWindow" onClick={toggleMaximize}>
-              <Icon name={maximized ? "restore" : "maximize"} size={14} />
-            </button>
+              className="phx-window-control" buttonRef={(el) => { menuButton.current = el; }} pressed={!!keys} onButtonKeyDown={keyStep}
+              onButtonBlur={keys ? endKeys : undefined} />
+            {!keys && (
+              <button type="button" className="phx-window-control" aria-label={t("agentchat.popOut")} title={t("agentchat.popOut")} data-help="help.guidePopOut" onClick={popOut}>
+                <Icon name="popOut" size={14} />
+              </button>
+            )}
+            {!keys && (
+              <button type="button" className="phx-window-control" aria-label={maximized ? t("agentchat.restore") : t("agentchat.maximize")}
+                title={maximized ? t("agentchat.restore") : t("agentchat.maximize")} data-help="help.maximizeWindow" onClick={toggleMaximize}>
+                <Icon name={maximized ? "restore" : "maximize"} size={14} />
+              </button>
+            )}
             <button type="button" className="phx-window-control" aria-label={t("common.close")} title={t("common.close")} data-help="help.closeGuide" onClick={onClose}>
               <Icon name="close" size={14} />
             </button>
@@ -923,7 +947,7 @@ export function GuideWindow({ workspace, controller, language, rect, onRect, onC
         {popupBlocked && <p className="banner banner-error" role="alert">{t("agentchat.popOutBlocked")}</p>}
         <GuideBody guide={guide} />
       </div>
-      {!following && !isFolded && !maximized && RESIZE_EDGES.map((d) => <div key={d} className={`agentcli-resize agentcli-resize-${d}`} onPointerDown={startResize(d)} />)}
+      {!isFolded && !maximized && RESIZE_EDGES.map((d) => <div key={d} className={`agentcli-resize agentcli-resize-${d}`} onPointerDown={startResize(d)} />)}
     </section>
   );
 }

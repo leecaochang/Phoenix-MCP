@@ -436,7 +436,7 @@ function contentHeight(el: HTMLElement): number {
 
 /**
  * A window's content frame: one error boundary per window, hidden but mounted
- * while folded. A window set to Always Show Icons and Text shows its buttons'
+ * while folded. A window set to Show Icons and Text shows its buttons'
  * labels whatever the toolbar's display mode.
  */
 export function WindowBody({ id, children }: { id: string; children: ReactNode }) {

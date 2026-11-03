@@ -207,6 +207,23 @@ describe("the Welcome page", () => {
     expect(welcome.markSeen).not.toHaveBeenCalled();
   });
 
+  it("gives way to the wizard's page when the wizard starts while it is showing (user, 2026-11-03)", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true, json: async () => ({ format: GUIDE_FORMAT, language: "en", topics }) })));
+    const welcome = welcomeOf(undefined);
+    const view = (topicId: string | null) => (
+      <WelcomeContext.Provider value={welcome}>
+        <GuideWindow workspace="logs" controller={null} language="en" rect={rect} onRect={() => {}} onClose={() => {}} topicId={topicId} />
+      </WelcomeContext.Provider>
+    );
+    const { rerender } = render(view(null));
+    await waitFor(() => expect(title()).toBe("Welcome to the Guide"));
+    // The wizard reports its step: its page replaces Welcome, and Back still returns to Welcome.
+    rerender(view("window.auditLog"));
+    await waitFor(() => expect(title()).toBe("Audit Log"));
+    fireEvent.click(screen.getByRole("button", { name: "Back" }));
+    await waitFor(() => expect(title()).toBe("Welcome to the Guide"));
+  });
+
   it("leaves Quick Help's tip out on a phone", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true, json: async () => ({ format: GUIDE_FORMAT, language: "en", topics }) })));
     render(

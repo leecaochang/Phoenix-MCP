@@ -3,7 +3,7 @@
 ---
 Phoenix is installed. This wizard sets up your first agent and ends with a test you can watch.
 
-This is the Guide. It explains each step here, and later whatever you work on.
+This is the Guide. It explains each step here, and later whatever you work on. If it's in your way, drag it by its title bar or resize it from an edge.
 
 - **{{label:wizard.choiceChatTitle}}** runs the agent in a chat window inside Home Assistant. You need an API key from a model provider, or the address of a local Ollama server.
 - **{{label:wizard.choiceAppTitle}}** connects an MCP app you already use, such as Claude Code or an IDE, with a bearer access key.
