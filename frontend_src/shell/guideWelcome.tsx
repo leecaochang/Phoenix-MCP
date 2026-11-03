@@ -196,7 +196,7 @@ export function WelcomeCard({ guide, topic, onDismiss }: { guide: Guide; topic: 
   const tried = new Set(welcome?.tried ?? []);
   const look = parts.sections.get(LOOK);
   return (
-    <article className="phx-guide-topic phx-welcome">
+    <article className="phx-guide-topic phx-welcome" lang={topic.lang}>
       <header className="phx-welcome-hero">
         <div className="phx-welcome-hero-row">
           <h3>{topicTitle(topic.title)}</h3>

@@ -154,11 +154,11 @@ export function BeforeAfter({ before, after, toolbarExtra }: {
       <div className={`yaml-diff-cols${stacked ? " stacked" : ""}`}>
         <div className="yaml-diff-col">
           <div className="yaml-pane-head"><span className="approval-diff-label">{t("common.before")}</span></div>
-          {code ? <YamlView value={beforeYaml} /> : <RawDiffPane rows={beforeRows} tone="remove" />}
+          {code ? <YamlView value={beforeYaml} label={t("common.before")} /> : <RawDiffPane rows={beforeRows} tone="remove" label={t("common.before")} />}
         </div>
         <div className="yaml-diff-col">
           <div className="yaml-pane-head"><span className="approval-diff-label">{t("common.after")}</span></div>
-          {code ? <YamlView value={afterYaml} /> : <RawDiffPane rows={afterRows} tone="add" />}
+          {code ? <YamlView value={afterYaml} label={t("common.after")} /> : <RawDiffPane rows={afterRows} tone="add" label={t("common.after")} />}
         </div>
       </div>
     </div>
@@ -218,10 +218,11 @@ export function diffLines(before: string, after: string): { beforeRows: DiffLine
 }
 
 /** Renders one side of a raw-text line diff; changed lines are tinted by tone. */
-export function RawDiffPane({ rows, tone }: { rows: DiffLine[]; tone: "remove" | "add" }) {
+export function RawDiffPane({ rows, tone, label }: { rows: DiffLine[]; tone: "remove" | "add"; label?: string }) {
   if (rows.length === 0) return <pre className="yaml-pre yaml-pre-empty">{t("common.empty")}</pre>;
   return (
-    <pre className="yaml-pre raw-diff">
+    // Scrolls inside its box: focusable, so the arrow keys scroll it, and named by its side.
+    <pre className="yaml-pre raw-diff" tabIndex={0} role="region" aria-label={label ?? t("common.codeBlock")}>
       {rows.map((r, idx) => (
         <div key={idx} className={r.changed ? `diff-line diff-${tone}` : "diff-line"}>
           <span className="diff-line-marker" aria-hidden="true">{r.changed ? (tone === "add" ? "+" : "-") : " "}</span>

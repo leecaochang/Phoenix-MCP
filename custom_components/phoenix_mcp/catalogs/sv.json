@@ -558,7 +558,10 @@
         "one": "Pausad efter {count} steg. Fortsätta?",
         "other": "Pausad efter {count} steg. Fortsätta?"
       },
-      "announceReplyStart": "{text}… Hela svaret finns i konversationen."
+      "announceReplyStart": "{text}… Hela svaret finns i konversationen.",
+      "authorUser": "Du skrev",
+      "authorAgent": "Agenten svarade",
+      "errorLabel": "Fel"
     },
     "approvalSummary": {
       "action.optionalReason": "Valfri orsak",
@@ -1281,7 +1284,8 @@
       "resultCount": {
         "one": "{count} resultat",
         "other": "{count} resultat"
-      }
+      },
+      "codeBlock": "Kod"
     },
     "conversations": {
       "accessKeyLabel": "Åtkomstnyckel",
@@ -1947,7 +1951,6 @@
       "selGreen": "Write: läs och skriv",
       "selGrey": "None: inget uttryckligt beviljande (ärvs från överordnad)",
       "selRed": "Deny: åsidosätter beviljanden över och under",
-      "selSelected": "{title}, vald",
       "selYellow": "Read: skrivskyddad",
       "simulateEntityTitle": "Visa {id} i trädet",
       "stateDeny": "NEKA",

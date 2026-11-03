@@ -11,7 +11,7 @@ Changing a filter or the search clears the chosen change. Closing the filters st
 
 ## The list {#list}
 
-Each row shows when the change was made, the item, the action, its type, and who made it: the access key, or (admin restore) for a restore from this panel.
+Each row shows when the change was made, the item, the action, its type, and who made it: the access key, or **{{label:changes.byAdmin}}** for a restore from this panel.
 
 Sort, move and hide columns from the column header's menu, and drag a header's edge to resize one. The count under the list includes changes not loaded yet.
 

@@ -30,7 +30,8 @@
       "resultCount": {
         "one": "{count} 件の結果",
         "other": "{count} 件の結果"
-      }
+      },
+      "codeBlock": "コード"
     },
     "approvals": {
       "approve": "承認",
@@ -383,7 +384,6 @@
       "selGreen": "Write: 読み取りと書き込み",
       "selGrey": "None: 明示的な許可なし（親から継承）",
       "selRed": "Deny: アクセス拒否（上位と下位の許可より優先）",
-      "selSelected": "{title}、選択済み",
       "selYellow": "Read: 読み取り専用",
       "simulateEntityTitle": "ツリーで {id} を表示",
       "stateDeny": "アクセス拒否",
@@ -1295,7 +1295,10 @@
         "one": "{count} ステップ後に一時停止しました。続行しますか？",
         "other": "{count} ステップ後に一時停止しました。続行しますか？"
       },
-      "announceReplyStart": "{text}... 返答の全文は会話にあります。"
+      "announceReplyStart": "{text}... 返答の全文は会話にあります。",
+      "authorUser": "あなたの発言",
+      "authorAgent": "エージェントの返答",
+      "errorLabel": "エラー"
     },
     "diff": {
       "blueprint.create": "{domain} ブループリント「{rel}」を作成",

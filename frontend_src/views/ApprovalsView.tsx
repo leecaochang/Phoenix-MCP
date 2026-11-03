@@ -379,7 +379,7 @@ export function RequestDetailsWindow() {
         )}
       </Section>
       <Section id="args" label={t("approvals.detailTabArgs")} guide="window.requestDetails#raw-args" help="help.argumentsSection" defaultOpen={false}>
-        {() => <YamlView value={toYaml(r.args as Record<string, unknown>)} />}
+        {() => <YamlView value={toYaml(r.args as Record<string, unknown>)} label={t("approvals.detailTabArgs")} />}
       </Section>
       {!pending && (
         <Section id="result" label={t("approvals.detailTabResult")} guide="window.requestDetails#result" help="help.resultSection" defaultOpen>
@@ -387,7 +387,7 @@ export function RequestDetailsWindow() {
             ? <p className="approvals-empty">{r.rejected_reason
               ? t("approvals.noResult", { status: approvalStatusLabel(r.status), reason: friendlyReason(r) })
               : t("approvals.noResultRecorded", { status: approvalStatusLabel(r.status) })}</p>
-            : <YamlView value={toYaml(r.result as Record<string, unknown>)} />)}
+            : <YamlView value={toYaml(r.result as Record<string, unknown>)} label={t("approvals.detailTabResult")} />)}
         </Section>
       )}
     </div>

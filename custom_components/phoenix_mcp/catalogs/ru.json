@@ -456,7 +456,10 @@
         "few": "Приостановлено после {count} шагов. Продолжить?",
         "many": "Приостановлено после {count} шагов. Продолжить?"
       },
-      "announceReplyStart": "{text}… Полный ответ находится в беседе."
+      "announceReplyStart": "{text}… Полный ответ находится в беседе.",
+      "authorUser": "Вы написали",
+      "authorAgent": "Агент ответил",
+      "errorLabel": "Ошибка"
     },
     "approvalSummary": {
       "action.optionalReason": "Причина (необязательно)",
@@ -1165,7 +1168,8 @@
         "other": "{count} результата",
         "few": "{count} результата",
         "many": "{count} результатов"
-      }
+      },
+      "codeBlock": "Код"
     },
     "inject": {
       "mesaProfile": "Профиль MESA",
@@ -1665,7 +1669,6 @@
       "selGreen": "Write: чтение и запись",
       "selGrey": "None: нет явного разрешения (наследуется от родителя)",
       "selRed": "Deny: запретить (переопределяет разрешения выше и ниже)",
-      "selSelected": "{title}, выбрано",
       "selYellow": "Read: только чтение",
       "simulateEntityTitle": "Показать {id} в дереве",
       "stateDeny": "ЗАПРЕТ",

@@ -30,7 +30,7 @@ export function CopyCodeBox(
       <div className="command-block-codewrap">
         {onChange
           ? <input className="command-block-input" data-help="help.connectMcpUrl" value={value} onChange={(e) => onChange(e.target.value)} aria-label={label} />
-          : <pre className="command-block-code">{value}</pre>}
+          : <pre className="command-block-code" tabIndex={0} role="region" aria-label={label || title || t("common.codeBlock")}>{value}</pre>}
         {/* Beside the value, not over it (user, 2026-10-28). */}
         <ActionButton icon={copied ? "check" : "copy"} label={copied ? t("common.copied") : t("common.copy")} help="help.connectCopy" className="btn btn-outline btn-sm command-copy"
           name={!copied && (label || title) ? t("common.copyNamed", { item: label || title! }) : undefined}

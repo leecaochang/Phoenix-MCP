@@ -369,7 +369,10 @@
         "one": "In pausa dopo {count} passaggio. Continuare?",
         "other": "In pausa dopo {count} passaggi. Continuare?"
       },
-      "announceReplyStart": "{text}… La risposta completa è nella conversazione."
+      "announceReplyStart": "{text}… La risposta completa è nella conversazione.",
+      "authorUser": "Hai scritto",
+      "authorAgent": "L'agente ha risposto",
+      "errorLabel": "Errore"
     },
     "audit": {
       "accessPassThrough": "Pass-through",
@@ -1005,7 +1008,6 @@
       "selGreen": "Write: lettura e scrittura",
       "selGrey": "None: nessuna autorizzazione esplicita (eredita dal genitore)",
       "selRed": "Deny: nega (sostituisce le autorizzazioni sopra e sotto)",
-      "selSelected": "{title}, selezionato",
       "selYellow": "Read: sola lettura",
       "simulateEntityTitle": "Mostra {id} nell'albero",
       "stateDeny": "NEGA",
@@ -2080,7 +2082,8 @@
       "resultCount": {
         "one": "{count} risultato",
         "other": "{count} risultati"
-      }
+      },
+      "codeBlock": "Codice"
     },
     "diff": {
       "blueprint.create": "Crea il progetto {domain} '{rel}'",

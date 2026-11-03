@@ -39,7 +39,7 @@ describe("accessibility regressions", () => {
     );
 
     expect(screen.getByRole("group", { name: "Permission for light.kitchen" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Read and write, selected/ })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: /Read and write$/, pressed: true })).toBeInTheDocument();
     // Each button names the entity, not just its own letter.
     expect(screen.getByRole("button", { name: /^Permission for light\.kitchen: Read and write/ })).toBeInTheDocument();
   });

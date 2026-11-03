@@ -30,7 +30,8 @@
       "resultCount": {
         "one": "{count} result",
         "other": "{count} results"
-      }
+      },
+      "codeBlock": "Code"
     },
     "approvals": {
       "approve": "Approve",
@@ -925,7 +926,6 @@
       "selGreen": "Read and write",
       "selGrey": "No explicit grant (inherits from parent)",
       "selRed": "Deny (overrides grants above and below)",
-      "selSelected": "{title}, selected",
       "selYellow": "Read-only",
       "simulateEntityTitle": "Show {id} in the tree",
       "stateDeny": "DENY",
@@ -948,7 +948,11 @@
       "unmatchedDeviceBadgeTitle": "This device ID is not represented in the current entity tree.",
       "unmatchedDeviceName": "Device not in current tree",
       "unmatchedDevicesNote": "These explicit grants refer to device IDs that are not in the current entity tree. Set N to remove a stale grant.",
-      "unmatchedDevicesTitle": "Unmatched Device Permissions"
+      "unmatchedDevicesTitle": "Unmatched Device Permissions",
+      "letterGrey": "N",
+      "letterYellow": "R",
+      "letterGreen": "W",
+      "letterRed": "D"
     },
     "changes": {
       "added": "Added",
@@ -2008,7 +2012,10 @@
       "verboseHint": "Show the agent's tool calls, tool results, and thinking. Replies, images, progress, approvals, and notices show either way.",
       "workingOn": "Working: {name}",
       "workingSpinner": "Working…",
-      "announceReplyStart": "{text}… The full reply is in the conversation."
+      "announceReplyStart": "{text}… The full reply is in the conversation.",
+      "authorUser": "You said",
+      "authorAgent": "Agent replied",
+      "errorLabel": "Error"
     },
     "diff": {
       "blueprint.create": "Create {domain} blueprint '{rel}'",

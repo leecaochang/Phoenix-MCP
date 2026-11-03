@@ -43,8 +43,8 @@ describe("accessible names are localized, not just present", () => {
       <PermissionSelector value="GREEN" onChange={() => undefined} label="light.kitchen 的权限" />,
     );
     expect(screen.getByRole("group", { name: "light.kitchen 的权限" })).toBeInTheDocument();
-    // Built from perms.selGreen + perms.selSelected, so an untranslated half shows here.
-    const chosen = screen.getByRole("button", { name: /读写，已选中/ });
+    // Built from perms.selGreen; its chosen state is aria-pressed, not words in the name.
+    const chosen = screen.getByRole("button", { name: /读写/, pressed: true });
     expect(chosen).toHaveAttribute("aria-pressed", "true");
   });
 

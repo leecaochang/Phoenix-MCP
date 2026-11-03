@@ -131,7 +131,8 @@
       "resultCount": {
         "one": "{count} resultaat",
         "other": "{count} resultaten"
-      }
+      },
+      "codeBlock": "Code"
     },
     "inject": {
       "mesaProfile": "MESA-profiel",
@@ -585,7 +586,6 @@
       "selGreen": "Write: Lezen en schrijven",
       "selGrey": "None: Geen expliciete toekenning (erft van bovenliggend niveau)",
       "selRed": "Deny: Weigeren (overschrijft toekenningen erboven en eronder)",
-      "selSelected": "{title}, geselecteerd",
       "selYellow": "Read: Alleen-lezen",
       "simulateEntityTitle": "{id} tonen in de boom",
       "stateDeny": "WEIGEREN",
@@ -989,7 +989,10 @@
         "one": "Gepauzeerd na {count} stap. Doorgaan?",
         "other": "Gepauzeerd na {count} stappen. Doorgaan?"
       },
-      "announceReplyStart": "{text}… Het volledige antwoord staat in het gesprek."
+      "announceReplyStart": "{text}… Het volledige antwoord staat in het gesprek.",
+      "authorUser": "U schreef",
+      "authorAgent": "De agent antwoordde",
+      "errorLabel": "Fout"
     },
     "adminError": {
       "activeAccessKeyRequired": "{field} moet naar een actief toegangssleutel verwijzen.",

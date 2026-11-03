@@ -78,6 +78,19 @@ describe("permission tree search and device cleanup", () => {
     expect(matchesTreeSearch("garage", DEVICE_ID, "Phoenix Removal Smoke")).toBe(false);
   });
 
+  it("names each level's rows by the domain and device they belong to, with one Tab stop to open each", async () => {
+    renderTree();
+    await screen.findByRole("textbox", { name: "Filter domains, devices, and entities" });
+    expect(screen.getByRole("group", { name: t("perms.treeAria") })).toBeInTheDocument();
+    // The chevron opens the domain too, but only its name is in the Tab order.
+    expect(screen.getByRole("button", { name: "Expand binary_sensor" })).toHaveAttribute("tabindex", "-1");
+    fireEvent.click(screen.getByRole("button", { name: "binary_sensor" }));
+    const domain = await screen.findByRole("group", { name: "binary_sensor" });
+    fireEvent.click(within(domain).getByRole("button", { name: "Phoenix Removal Smoke 1.1.1.1" }));
+    const device = await screen.findByRole("group", { name: "Phoenix Removal Smoke 1.1.1.1" });
+    expect(within(device).getByText("Phoenix Removal Smoke status")).toBeInTheDocument();
+  });
+
   it("finds a device by raw registry ID through its domain ancestor", async () => {
     renderTree();
     const filter = await screen.findByRole("textbox", { name: "Filter domains, devices, and entities" });

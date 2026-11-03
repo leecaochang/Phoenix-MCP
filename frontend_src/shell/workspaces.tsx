@@ -481,8 +481,9 @@ export function WindowBody({ id, children }: { id: string; children: ReactNode }
     <WindowVisibleContext.Provider value={workspaceVisible && !folded}>
     <TableSettingsContext.Provider value={controller?.tables ?? null}>
     <DisplayModeContext.Provider value={labels ? "icon-text" : mode}>
-      <div ref={body} className="phx-window-body" data-phx-window={id} data-labels={labels ? "" : undefined} hidden={folded}
-        role="region" aria-label={windowTitle(id)}>
+      {/* Dockview already makes each window a region named by its title; a second one inside it
+          listed every window twice and read its name three times. */}
+      <div ref={body} className="phx-window-body" data-phx-window={id} data-labels={labels ? "" : undefined} hidden={folded}>
         <h2 className="sr-only">{windowTitle(id)}</h2>
         <ErrorBoundary>{children}</ErrorBoundary>
       </div>

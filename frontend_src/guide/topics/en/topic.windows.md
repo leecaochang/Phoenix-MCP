@@ -91,3 +91,5 @@ The Guide opens at the bottom of the column. Quick Help and Notification History
 F6 moves to the next area: the toolbar, each window in the order you see them, the Guide and Agent Chat. Shift+F6 moves back. Coming back to an area returns you to where you were in it, and Tab still moves between the controls inside it.
 
 Every menu opens with Enter, Space or Down Arrow. Use the arrow keys, Home and End to move through it, and Escape to close it. The keyboard's menu key opens the menu of the control in focus.
+
+When the control you're on goes away, such as a window you close or a request you decide, focus moves to that window or the one in its place. Delete and Backspace never close a window.

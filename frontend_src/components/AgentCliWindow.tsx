@@ -2141,7 +2141,8 @@ export function AgentCliWindow({
             </div>
           </div>
 
-          <div className="agentcli-body" ref={bodyRef}>
+          {/* The transcript, read in order; replies are announced by the status line above, so it stays quiet. */}
+          <div className="agentcli-body" ref={bodyRef} role="log" aria-live="off" aria-label={t("conversations.conversation")}>
             {noInstances && (
               <div className="agentcli-empty">{t("agentchat.noProvider")}</div>
             )}
@@ -2465,6 +2466,8 @@ function ChatItem({
         ? entry.images.filter((image) => image && typeof image.name === "string") : [];
       return (
         <div className="agentcli-msg agentcli-msg-user">
+          {/* Who wrote it shows by alignment and colour; this says it. */}
+          <span className="sr-only">{t("agentchat.authorUser")}: </span>
           {images.length > 0 && (
             <div className="agentcli-msg-images">
               {images.map((image, index) => (typeof image.dataUrl === "string" && image.dataUrl.startsWith("data:image/")
@@ -2485,6 +2488,7 @@ function ChatItem({
       if (!hasReply && !hasVisibleThinking) return null;
       return (
         <div className="agentcli-msg agentcli-msg-assistant">
+          <span className="sr-only">{t("agentchat.authorAgent")}: </span>
           {hasVisibleThinking && (
             <details className="agentcli-thinking">
               <summary>{t("agentchat.reasoning")}</summary>
@@ -2528,6 +2532,8 @@ function ChatItem({
     case "tool_result":
       return verbose ? (
         <div className={`agentcli-tool-result${entry.isError ? " is-error" : ""}`}>
+          {/* A failure is marked by a sign as well as its colour. */}
+          {entry.isError && <><Icon name="warning" size={13} /><span className="sr-only">{t("agentchat.errorLabel")}: </span></>}
           {tRich("agentchat.toolResult", { code: (c) => <code>{c}</code> },
                  { name: entry.name, summary: entry.summary || (entry.isError ? t("agentchat.resultError") : t("agentchat.resultOk")) })}
         </div>
@@ -2573,7 +2579,7 @@ function ChatItem({
     case "notice":
       return <div className="agentcli-notice">{serverText(entry.code, entry.message, entry.messageParams)}</div>;
     case "error":
-      return <div className="agentcli-error">{
+      return <div className="agentcli-error"><Icon name="warning" size={14} /><span className="sr-only">{t("agentchat.errorLabel")}: </span>{
         serverText(entry.code, entry.message, entry.messageParams, entry.rateLimit, entry.providerDetail)
       }{(entry.code === "outcome_unknown" || entry.code === "provider_after_dispatch") && <p>
         <a href="/phoenix-mcp#attention" target="_blank" rel="noopener noreferrer">{t("attention.title")}</a>

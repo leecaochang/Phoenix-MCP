@@ -46,10 +46,10 @@ describe("accessible names are localized in Italian, not just present", () => {
       <PermissionSelector value="GREEN" onChange={() => undefined} label="Permessi di light.kitchen" />,
     );
     expect(screen.getByRole("group", { name: "Permessi di light.kitchen" })).toBeInTheDocument();
-    // Built from perms.selGreen + perms.selSelected, so an untranslated half
-    // shows here. The tooltip deliberately leads with the English mnemonic.
+    // Built from perms.selGreen; the tooltip deliberately leads with the English
+    // mnemonic. Its chosen state is aria-pressed, not words in the name.
     const chosen = screen.getByRole("button", {
-      name: /Write: lettura e scrittura, selezionato/,
+      name: /Write: lettura e scrittura$/, pressed: true,
     });
     expect(chosen).toHaveAttribute("aria-pressed", "true");
   });

@@ -558,7 +558,10 @@
         "one": "Satt på pause etter {count} trinn. Fortsette?",
         "other": "Satt på pause etter {count} trinn. Fortsette?"
       },
-      "announceReplyStart": "{text}… Hele svaret står i samtalen."
+      "announceReplyStart": "{text}… Hele svaret står i samtalen.",
+      "authorUser": "Du skrev",
+      "authorAgent": "Agenten svarte",
+      "errorLabel": "Feil"
     },
     "approvalSummary": {
       "action.optionalReason": "Valgfri begrunnelse",
@@ -1281,7 +1284,8 @@
       "resultCount": {
         "one": "{count} resultat",
         "other": "{count} resultater"
-      }
+      },
+      "codeBlock": "Kode"
     },
     "conversations": {
       "accessKeyLabel": "Tilgangsnøkkel",
@@ -1947,7 +1951,6 @@
       "selGreen": "Write: Les og skriv",
       "selGrey": "None: Ingen eksplisitt tildeling (arver fra overordnet)",
       "selRed": "Deny: Nekt (overstyrer tildelinger over og under)",
-      "selSelected": "{title}, valgt",
       "selYellow": "Read: Skrivebeskyttet",
       "simulateEntityTitle": "Vis {id} i treet",
       "stateDeny": "NEKT",

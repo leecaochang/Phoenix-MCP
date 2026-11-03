@@ -15,7 +15,12 @@ export function toYaml(value: Record<string, unknown> | null): string {
   }
 }
 
-export function YamlView({ value }: { value: string }) {
+/**
+ * `label` names the text for a screen reader, such as Before or After. The text scrolls inside its
+ * box, so the box takes keyboard focus to be scrolled with the arrow keys (Safari and the Home
+ * Assistant app do not make a scrolling box focusable on their own).
+ */
+export function YamlView({ value, label }: { value: string; label?: string }) {
   const ref = useRef<HTMLElement | null>(null);
   const [useEditor, setUseEditor] = useState(() => !!customElements.get("ha-code-editor"));
 
@@ -49,8 +54,9 @@ export function YamlView({ value }: { value: string }) {
 
   if (!value) return <pre className="yaml-pre yaml-pre-empty">{t("common.none")}</pre>;
 
+  const name = label ?? t("common.codeBlock");
   if (useEditor) {
-    return <ha-code-editor ref={ref as React.RefObject<HTMLElement>} />;
+    return <div role="group" aria-label={name}><ha-code-editor ref={ref as React.RefObject<HTMLElement>} /></div>;
   }
-  return <pre className="yaml-pre">{value}</pre>;
+  return <pre className="yaml-pre" tabIndex={0} role="region" aria-label={name}>{value}</pre>;
 }

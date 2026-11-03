@@ -461,7 +461,7 @@ function EntityRow({
         />
       )}
       <PermissionSelector value={state} onChange={setEntityState} label={t("perms.permFor", { name: friendlyName ?? entityId })} />
-      {permError && <span className="tree-perm-error" role="alert" title={permError}>{t("perms.saveFailedShort")}</span>}
+      {permError && <span className="tree-perm-error" role="alert" title={permError}>{t("perms.saveFailedShort")}<span className="sr-only">: {permError}</span></span>}
     </div>
     {hintOpen && state !== "GREY" && (
       <HintEditor
@@ -512,9 +512,11 @@ interface DeviceIdentityProps {
   deviceName: string;
   expanded?: boolean;
   onToggle?: () => void;
+  /** The name's id, which names the group of the device's entities. */
+  nameId?: string;
 }
 
-function DeviceIdentity({ deviceId, deviceName, expanded, onToggle }: DeviceIdentityProps) {
+function DeviceIdentity({ deviceId, deviceName, expanded, onToggle, nameId }: DeviceIdentityProps) {
   return (
     <div className="tree-name">
       {onToggle ? (
@@ -525,7 +527,7 @@ function DeviceIdentity({ deviceId, deviceName, expanded, onToggle }: DeviceIden
           onClick={onToggle}
           aria-expanded={expanded}
         >
-          <span className="tree-friendly">{deviceName}</span>
+          <span id={nameId} className="tree-friendly">{deviceName}</span>
         </button>
       ) : (
         <span className="tree-friendly">{deviceName}</span>
@@ -541,6 +543,7 @@ function DeviceGroup({
 }: DeviceGroupProps) {
   const [expanded, setExpanded] = useState(false);
   const [permError, setPermError] = useState<string | null>(null);
+  const nameId = useId();
   const deviceNode = permissions.devices[deviceId];
   const state: NodeState = deviceNode?.state ?? "GREY";
   const parentDeviceId = domainData.devices[deviceId]?.parent_device_id ?? null;
@@ -623,7 +626,8 @@ function DeviceGroup({
   return (
     <div>
       <div ref={headerRef} className={`tree-node${isRevealed ? " tree-node-revealed" : ""}`}>
-        <button type="button" className="tree-expand" data-help="help.treeExpand" onClick={() => setExpanded((x) => !x)} aria-expanded={expanded} aria-label={expanded ? t("perms.treeCollapse", { name: deviceName }) : t("perms.treeExpand", { name: deviceName })}>
+        {/* The name beside it opens the device too; one Tab stop for the two. */}
+        <button type="button" className="tree-expand" tabIndex={-1} data-help="help.treeExpand" onClick={() => setExpanded((x) => !x)} aria-expanded={expanded} aria-label={expanded ? t("perms.treeCollapse", { name: deviceName }) : t("perms.treeExpand", { name: deviceName })}>
           <span className={`collapsible-chevron${expanded ? " open" : ""}`} aria-hidden="true" />
         </button>
         {onOpenMesa && (
@@ -643,16 +647,18 @@ function DeviceGroup({
           deviceName={deviceName}
           expanded={expanded}
           onToggle={() => setExpanded((x) => !x)}
+          nameId={nameId}
         />
         {isDynamic && (
           <span className="tree-badge tree-badge-dynamic" title={t("perms.dynamicTitle")}>{t("perms.dynamicBadge")}</span>
         )}
         <span className="tree-effective" title={t("perms.effectiveTitle", { state: effectiveLabel(effective) })}>({effectiveLabel(effective)})</span>
         <PermissionSelector value={state} onChange={setDeviceState} label={t("perms.permForDevice", { name: deviceName })} />
-        {permError && <span className="tree-perm-error" role="alert" title={permError}>{t("perms.saveFailedShort")}</span>}
+        {permError && <span className="tree-perm-error" role="alert" title={permError}>{t("perms.saveFailedShort")}<span className="sr-only">: {permError}</span></span>}
       </div>
       {expanded && (
-        <div className="tree-children-flat">
+        // Named by the device, so a screen reader says which device an entity row belongs to.
+        <div className="tree-children-flat" role="group" aria-labelledby={nameId}>
           {sortedEntityIds.map((eid) => {
             const detail = domainData.entity_details[eid];
             return (
@@ -776,7 +782,7 @@ function GhostDeviceRow({
         onChange={setDeviceState}
         label={t("perms.permForDevice", { name: deviceId })}
       />
-      {permError && <span className="tree-perm-error" role="alert" title={permError}>{t("perms.saveFailedShort")}</span>}
+      {permError && <span className="tree-perm-error" role="alert" title={permError}>{t("perms.saveFailedShort")}<span className="sr-only">: {permError}</span></span>}
     </div>
   );
 }
@@ -808,6 +814,7 @@ function DomainGroup({
 }: DomainGroupProps) {
   const [expanded, setExpanded] = useState(false);
   const [permError, setPermError] = useState<string | null>(null);
+  const nameId = useId();
   const domainNode = permissions.domains[domainKey];
   const state: NodeState = domainNode?.state ?? "GREY";
   const companion = useContext(CompanionContext);
@@ -886,7 +893,7 @@ function DomainGroup({
     <div className="tree-domain-group">
       <div ref={headerRef} className={`tree-node${isRevealed ? " tree-node-revealed" : ""}`}>
         {hasChildren ? (
-          <button type="button" className="tree-expand" data-help="help.treeExpand" onClick={() => setExpanded((x) => !x)} aria-expanded={expanded} aria-label={expanded ? t("perms.treeCollapse", { name: domainKey }) : t("perms.treeExpand", { name: domainKey })}>
+          <button type="button" className="tree-expand" tabIndex={-1} data-help="help.treeExpand" onClick={() => setExpanded((x) => !x)} aria-expanded={expanded} aria-label={expanded ? t("perms.treeCollapse", { name: domainKey }) : t("perms.treeExpand", { name: domainKey })}>
             <span className={`collapsible-chevron${expanded ? " open" : ""}`} aria-hidden="true" />
           </button>
         ) : <span className="tree-spacer" />}
@@ -903,7 +910,7 @@ function DomainGroup({
         )}
         {hasChildren ? (
           <button type="button" className="tree-name tree-cursor-pointer" data-help="help.treeExpand" onClick={() => setExpanded((x) => !x)} aria-expanded={expanded}>
-            <span className="tree-friendly tree-domain-label">{domainKey}</span>
+            <span id={nameId} className="tree-friendly tree-domain-label">{domainKey}</span>
           </button>
         ) : (
           <span className="tree-name">
@@ -913,18 +920,19 @@ function DomainGroup({
         {isDynamic && (
           <span className="tree-badge tree-badge-dynamic" title={t("perms.dynamicDomainTitle")}>{t("perms.dynamicBadge")}</span>
         )}
+        {/* The mark's meaning is read aloud; a tooltip alone reaches neither the keyboard nor a screen reader. */}
         {isRisk && (
-          <span className="tree-badge tree-badge-risk" title={t("perms.riskDomainTitle")}>!</span>
+          <span className="tree-badge tree-badge-risk" title={t("perms.riskDomainTitle")}><span aria-hidden="true">!</span><span className="sr-only">{t("perms.riskDomainTitle")}</span></span>
         )}
         {isIndirect && (
-          <span className="tree-badge tree-badge-risk" title={t("perms.indirectTitle")}>!</span>
+          <span className="tree-badge tree-badge-risk" title={t("perms.indirectTitle")}><span aria-hidden="true">!</span><span className="sr-only">{t("perms.indirectTitle")}</span></span>
         )}
         <span className="tree-effective" title={t("perms.effectiveTitle", { state: effectiveLabel(effective) })}>({effectiveLabel(effective)})</span>
         <PermissionSelector value={state} onChange={setDomainState} label={t("perms.permForDomain", { name: domainKey })} />
-        {permError && <span className="tree-perm-error" role="alert" title={permError}>{t("perms.saveFailedShort")}</span>}
+        {permError && <span className="tree-perm-error" role="alert" title={permError}>{t("perms.saveFailedShort")}<span className="sr-only">: {permError}</span></span>}
       </div>
       {hasChildren && expanded && (
-        <div className="tree-children">
+        <div className="tree-children" role="group" aria-labelledby={nameId}>
           {domainData.deviceless_entities.length > 0 && (
             <div>
               {Object.keys(domainData.devices).length > 0 && (
@@ -1291,7 +1299,7 @@ export function EntityTree({ accessKeyId, permissions, onPermissionsChange, onEn
           data-guide="window.permissions#search"
         />
       </div>
-      <div aria-label={t("perms.treeAria")} data-guide="window.permissions#tree">
+      <div role="group" aria-label={t("perms.treeAria")} data-guide="window.permissions#tree">
         {domainKeys.map((domain) => (
           <DomainGroup
             key={domain}
@@ -1324,9 +1332,9 @@ export function EntityTree({ accessKeyId, permissions, onPermissionsChange, onEn
             onPermChange={onPermissionsChange}
           />
         )}
-        {/* Mounted before it speaks, so a filter that empties the tree is heard. */}
-        <p className={hasFilterResults ? "sr-only" : "tree-empty"} role="status">{hasFilterResults ? "" : t("perms.filterEmpty")}</p>
       </div>
+      {/* Mounted before it speaks, so a filter that empties the tree is heard. */}
+      <p className={hasFilterResults ? "sr-only" : "tree-empty"} role="status">{hasFilterResults ? "" : t("perms.filterEmpty")}</p>
     </div>
     </HintEditorContext.Provider>
     </CompanionContext.Provider>

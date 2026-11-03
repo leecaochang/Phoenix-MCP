@@ -135,15 +135,25 @@ export function guideLanguages(language: string): string[] {
   return [...new Set([...(GUIDE_LANGUAGES.includes(language) ? [language] : []), "en"])];
 }
 
-export type FoundTopic = GuideTopic & { id: string };
+/** A topic found for the reader, with the language it is written in (English where theirs has none). */
+export type FoundTopic = GuideTopic & { id: string; lang?: string };
 
 /** A topic by id, in the first language that has it. */
 export function topicById(bundles: ReadonlyArray<GuideBundle | null>, id: string): FoundTopic | null {
   for (const bundle of bundles) {
     const topic = bundle?.topics[id];
-    if (topic) return { id, ...topic };
+    if (topic) return { id, ...topic, lang: bundle!.language || undefined };
   }
   return null;
+}
+
+/**
+ * The language a topic is written in, for its `lang`: a page the reader's language lacks is English,
+ * and a screen reader must read it with an English voice, not the reader's.
+ */
+export function topicLang(bundles: ReadonlyArray<GuideBundle | null> | null, id: string): string | undefined {
+  for (const bundle of bundles ?? []) if (bundle?.topics[id]) return bundle.language || undefined;
+  return undefined;
 }
 
 /** The focused window's topic, else the workspace overview: in the reader's language first, then in English. */
@@ -152,7 +162,7 @@ export function findTopic(bundles: ReadonlyArray<GuideBundle | null>, workspace:
   for (const bundle of bundles) {
     for (const id of ids) {
       const topic = bundle?.topics[id];
-      if (topic) return { id, ...topic };
+      if (topic) return { id, ...topic, lang: bundle!.language || undefined };
     }
   }
   return null;
@@ -449,7 +459,7 @@ function ContentsList({ nodes, guide }: { nodes: ContentsNode[]; guide: Guide })
     <ul className="phx-guide-contents">
       {nodes.map((node) => (
         <li key={node.id}>
-          <a href="#" className="phx-guide-link" data-help="help.guideLink" onClick={(e) => { e.preventDefault(); guide.open(node.id); }}>{node.title}</a>
+          <a href="#" className="phx-guide-link" data-help="help.guideLink" lang={topicLang(guide.bundles, node.id)} onClick={(e) => { e.preventDefault(); guide.open(node.id); }}>{node.title}</a>
           {node.children.length > 0 && <ContentsList nodes={node.children} guide={guide} />}
         </li>
       ))}
@@ -494,10 +504,10 @@ function SearchView({ guide }: { guide: Guide }) {
       <ul className="phx-guide-results">
         {hits.map(({ section, snippet }) => (
           <li key={`${section.topic}#${section.anchor ?? ""}`}>
-            <a href="#" className="phx-guide-link" data-help="help.guideLink" onClick={(e) => { e.preventDefault(); guide.open(section.topic, section.anchor); }}>
+            <a href="#" className="phx-guide-link" data-help="help.guideLink" lang={topicLang(guide.bundles, section.topic)} onClick={(e) => { e.preventDefault(); guide.open(section.topic, section.anchor); }}>
               {section.heading ? `${section.title}: ${section.heading}` : section.title}
             </a>
-            {snippet && <p className="phx-guide-snippet">{snippet}</p>}
+            {snippet && <p className="phx-guide-snippet" lang={topicLang(guide.bundles, section.topic)}>{snippet}</p>}
           </li>
         ))}
       </ul>
@@ -557,7 +567,7 @@ function guidePage(guide: Guide, html: string, body: RefObject<HTMLDivElement | 
   return (
     <>
       <GuideTools guide={guide} />
-      <article className="phx-guide-topic">
+      <article className="phx-guide-topic" lang={guide.topic.lang}>
         <Breadcrumbs guide={guide} id={guide.topic.id} />
         <h3>{topicTitle(guide.topic.title)}</h3>
         {/* Escape-first renderer output: source text is escaped before the fixed set of tags is added. */}
@@ -591,7 +601,7 @@ function Breadcrumbs({ guide, id }: { guide: Guide; id: string }) {
       {chain.map((at, i) => (
         <span key={at} className="phx-guide-crumb">
           {i > 0 && <Icon name="folded" size={12} className="phx-guide-crumb-sep" />}
-          <a href="#" className="phx-guide-link" data-help="help.guideLink" onClick={(e) => { e.preventDefault(); guide.open(at); }}>{topicTitle(topics[at].title)}</a>
+          <a href="#" className="phx-guide-link" data-help="help.guideLink" lang={topicLang(guide.bundles, at)} onClick={(e) => { e.preventDefault(); guide.open(at); }}>{topicTitle(topics[at].title)}</a>
         </span>
       ))}
     </nav>

@@ -40,7 +40,7 @@ Agent Chat、语音智能体和 AI 任务各使用其中一个账户，并搭配
 ## 添加账户 {#provider-add}
 
 1. 选择工具栏上的 **{{label:settings.addAccount}}** 以显示提供商。
-2. 选择一个提供商并填写其字段。
+2. 选择一个提供商并填写其字段。选择 **{{label:settings.showSecret}}** 可检查你粘贴的 API 密钥。
 3. 选择 **{{label:settings.agentcliValidate}}**。这会向提供商核实详细信息，但暂时不保存任何内容。
 4. 选择一个模型，或保留 **{{label:settings.agentcliModelAuto}}**，然后选择 **{{label:settings.agentcliDone}}**。
 

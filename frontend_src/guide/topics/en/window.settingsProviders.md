@@ -40,7 +40,7 @@ Related: [Voice Agent](guide:window.settingsHome#voice-agent), [AI Task](guide:w
 ## Adding an account {#provider-add}
 
 1. Select **{{label:settings.addAccount}}** on the toolbar to show the providers.
-2. Pick a provider and fill in its fields.
+2. Pick a provider and fill in its fields. Select **{{label:settings.showSecret}}** to check the API key you pasted.
 3. Select **{{label:settings.agentcliValidate}}**. This checks the details with the provider, but saves nothing yet.
 4. Choose a model, or keep **{{label:settings.agentcliModelAuto}}**, then select **{{label:settings.agentcliDone}}**.
 

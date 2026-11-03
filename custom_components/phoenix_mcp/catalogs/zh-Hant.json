@@ -375,7 +375,10 @@
         "one": "已在 {count} 步後暫停。要繼續嗎？",
         "other": "已在 {count} 步後暫停。要繼續嗎？"
       },
-      "announceReplyStart": "{text}…… 完整回覆請見對話。"
+      "announceReplyStart": "{text}…… 完整回覆請見對話。",
+      "authorUser": "你說",
+      "authorAgent": "代理回覆",
+      "errorLabel": "錯誤"
     },
     "approvalSummary": {
       "action.optionalReason": "可選原因",
@@ -1078,7 +1081,8 @@
       "resultCount": {
         "one": "{count} 個結果",
         "other": "{count} 個結果"
-      }
+      },
+      "codeBlock": "程式碼"
     },
     "diff": {
       "blueprint.create": "建立 {domain} 藍圖「{rel}」",
@@ -1554,7 +1558,6 @@
       "selGreen": "Write：讀寫",
       "selGrey": "None：無顯式授權（繼承自上級）",
       "selRed": "Deny：拒絕存取（覆蓋上級和下級的授權）",
-      "selSelected": "{title}，已選中",
       "selYellow": "Read：唯讀",
       "simulateEntityTitle": "在樹中顯示 {id}",
       "stateDeny": "拒絕存取",

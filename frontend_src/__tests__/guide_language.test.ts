@@ -9,7 +9,7 @@
 import { describe, it, expect } from "vitest";
 import { GUIDE_FORMAT, compileGuide, type GuideBundle } from "../guide/compile";
 import { searchGuide, topicSections } from "../guide/search";
-import { readAsEnglish } from "../shell/guide";
+import { readAsEnglish, topicById, topicLang } from "../shell/guide";
 
 const file = (id: string, title: string, body: string) => `---\n{ "id": "${id}", "title": "${title}" }\n---\n${body}\n`;
 const ENGLISH: Record<string, string> = { "agentchat.smaller": "Smaller Text", "agentchat.larger": "Larger Text", "agentchat.title": "Agent Chat" };
@@ -57,5 +57,15 @@ describe("an English page read in another language", () => {
     // The Guide only reads the English bundle this way; a translation is shown as written.
     expect(translated.labels).toBeUndefined();
     expect(readAsEnglish({ ...translated, labels: undefined }, (k) => READER[k] ?? k).topics["window.agentChat"].body).toContain("{{label:agentchat.smaller}}");
+  });
+});
+
+describe("the language of a page", () => {
+  it("is English where the reader's language has no page, so a screen reader reads it with an English voice", () => {
+    const de: GuideBundle = { format: GUIDE_FORMAT, language: "de", topics: { "topic.welcome": { title: "Willkommen", body: "Hallo.", anchors: [] } } };
+    const en: GuideBundle = { format: GUIDE_FORMAT, language: "en", topics: { "topic.welcome": { title: "Welcome", body: "Hi.", anchors: [] }, "topic.tools": { title: "Tools", body: "Tools.", anchors: [] } } };
+    expect(topicLang([de, en], "topic.welcome")).toBe("de");
+    expect(topicLang([de, en], "topic.tools")).toBe("en");
+    expect(topicById([de, en], "topic.tools")?.lang).toBe("en");
   });
 });

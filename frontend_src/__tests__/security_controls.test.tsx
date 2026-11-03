@@ -13,7 +13,7 @@ import { CapabilityMatrix } from "../components/CapabilityMatrix";
 
 it("activates entity permissions through keyboard clicks and assistive clicks", async () => {
   const onChange = vi.fn();
-  render(<PermissionSelector value="GREY" onChange={onChange} />);
+  render(<PermissionSelector value="GREY" onChange={onChange} label="Permission" />);
   const write = screen.getByRole("button", { name: "Permission: Read and write" });
   write.focus();
   const user = userEvent.setup();
@@ -23,9 +23,28 @@ it("activates entity permissions through keyboard clicks and assistive clicks", 
   expect(write).toHaveFocus();
 });
 
+it("makes a row one Tab stop whose arrow keys move without saving anything", async () => {
+  const onChange = vi.fn();
+  render(<PermissionSelector value="YELLOW" onChange={onChange} label="Permission" />);
+  const buttons = screen.getAllByRole("button");
+  // Only the chosen state is in the Tab order.
+  expect(buttons.map((b) => b.tabIndex)).toEqual([-1, 0, -1, -1]);
+  const read = screen.getByRole("button", { name: "Permission: Read-only", pressed: true });
+  read.focus();
+  const user = userEvent.setup();
+  await user.keyboard("{ArrowRight}{ArrowRight}");
+  // Passing Write on the way to Deny grants nothing.
+  expect(onChange).not.toHaveBeenCalled();
+  expect(screen.getByRole("button", { name: /^Permission: Deny/ })).toHaveFocus();
+  await user.keyboard("{End}{Home}");
+  expect(screen.getByRole("button", { name: /^Permission: No explicit grant/ })).toHaveFocus();
+  await user.keyboard("{ArrowLeft}{Enter}");
+  expect(onChange.mock.calls).toEqual([["RED"]]);
+});
+
 it("changes a permission only on a primary press of the primary contact", () => {
   const onChange = vi.fn();
-  render(<PermissionSelector value="GREY" onChange={onChange} />);
+  render(<PermissionSelector value="GREY" onChange={onChange} label="Permission" />);
   const write = screen.getByRole("button", { name: "Permission: Read and write" });
   write.releasePointerCapture ??= () => {};
   fireEvent.pointerDown(write, { button: 2, pointerId: 1, isPrimary: true });

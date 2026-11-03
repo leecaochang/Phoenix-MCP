@@ -76,15 +76,16 @@ function ChangeAction({ action }: { action: string }) {
   );
 }
 
-// Author display name. Prefer the access key's CURRENT name (it may have been renamed
-// since the change was recorded), falling back to the name captured at the time,
-// then to "admin" for admin-driven restores.
+// Author display name. A restore from this panel is the admin's, whatever English name the
+// record stores for agents. Otherwise prefer the access key's CURRENT name (it may have been
+// renamed since the change was recorded), falling back to the name captured at the time.
 function whoNow(
   v: { access_key_id?: string | null; access_key_name: string | null; approved_by_user_id: string | null },
   current: Map<string, string>,
 ): string {
+  if (v.approved_by_user_id) return t("changes.byAdmin");
   const cur = v.access_key_id ? current.get(v.access_key_id) : undefined;
-  return cur || v.access_key_name || (v.approved_by_user_id ? t("changes.byAdmin") : "-");
+  return cur || v.access_key_name || "-";
 }
 
 // In Comparison: when the access key has since been renamed, show "current (original)".
@@ -92,9 +93,10 @@ function whoDetail(
   v: { access_key_id: string | null; access_key_name: string | null; approved_by_user_id: string | null },
   current: Map<string, string>,
 ): string {
+  if (v.approved_by_user_id) return t("changes.byAdmin");
   const cur = v.access_key_id ? current.get(v.access_key_id) : undefined;
   if (cur && v.access_key_name && cur !== v.access_key_name) return `${cur} (${v.access_key_name})`;
-  return cur || v.access_key_name || (v.approved_by_user_id ? t("changes.byAdmin") : "-");
+  return cur || v.access_key_name || "-";
 }
 
 /** A change's one-line summary, localized when the backend supplied a catalog key this bundle knows. */
@@ -277,6 +279,7 @@ function VersionComparison({ c, restore }: { c: ChangesState; restore: ReactNode
   // One place deciding how a pane renders, across raw-vs-structured payloads and diff-vs-code view.
   const renderSide = (which: RestoreSide): ReactNode => {
     const tone = which === "before" ? "remove" : "add";
+    const sideLabel = t(which === "before" ? "common.before" : "common.after");
     if (isRaw) {
       const raw = which === "before" ? beforeRaw : afterRaw;
       if (raw?.content == null) {
@@ -286,11 +289,11 @@ function VersionComparison({ c, restore }: { c: ChangesState; restore: ReactNode
           </pre>
         );
       }
-      if (code) return <YamlView value={raw.content} />;
-      return <RawDiffPane rows={which === "before" ? rawDiff!.beforeRows : rawDiff!.afterRows} tone={tone} />;
+      if (code) return <YamlView value={raw.content} label={sideLabel} />;
+      return <RawDiffPane rows={which === "before" ? rawDiff!.beforeRows : rawDiff!.afterRows} tone={tone} label={sideLabel} />;
     }
-    if (code) return <YamlView value={toYaml((which === "before" ? record.before : record.after) ?? null)} />;
-    return <RawDiffPane rows={which === "before" ? structuredDiff!.beforeRows : structuredDiff!.afterRows} tone={tone} />;
+    if (code) return <YamlView value={toYaml((which === "before" ? record.before : record.after) ?? null)} label={sideLabel} />;
+    return <RawDiffPane rows={which === "before" ? structuredDiff!.beforeRows : structuredDiff!.afterRows} tone={tone} label={sideLabel} />;
   };
 
   return (

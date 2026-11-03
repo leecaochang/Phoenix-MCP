@@ -115,7 +115,7 @@ export function AuditEntryDetail({ entry, accessKeyName }: { entry: AuditEntry; 
       {prettyPayload && (
         <section className="audit-payload-section" aria-label={t("audit.rowPayload")}>
           <h5 className="phx-log-section-title">{t("audit.rowPayload")}</h5>
-          <YamlView value={prettyPayload} />
+          <YamlView value={prettyPayload} label={t("audit.rowPayload")} />
         </section>
       )}
     </div>

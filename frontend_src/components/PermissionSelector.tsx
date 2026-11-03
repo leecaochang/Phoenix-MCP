@@ -6,15 +6,35 @@ interface Props {
   value: NodeState;
   onChange: (state: NodeState) => void;
   disabled?: boolean;
-  label?: string;
+  /** Names the row it sets, such as "Permission for Kitchen light". */
+  label: string;
 }
 
-const BUTTONS: { state: NodeState; label: string; titleKey: string; helpKey: string }[] = [
-  { state: "GREY", label: "N", titleKey: "perms.selGrey", helpKey: "help.permInherit" },
-  { state: "YELLOW", label: "R", titleKey: "perms.selYellow", helpKey: "help.permRead" },
-  { state: "GREEN", label: "W", titleKey: "perms.selGreen", helpKey: "help.permWrite" },
-  { state: "RED", label: "D", titleKey: "perms.selRed", helpKey: "help.permDeny" },
+// The letters are the same symbols in every language, as the Guide names them; each button's
+// accessible name is its translated title.
+const BUTTONS: { state: NodeState; letterKey: string; titleKey: string; helpKey: string }[] = [
+  { state: "GREY", letterKey: "perms.letterGrey", titleKey: "perms.selGrey", helpKey: "help.permInherit" },
+  { state: "YELLOW", letterKey: "perms.letterYellow", titleKey: "perms.selYellow", helpKey: "help.permRead" },
+  { state: "GREEN", letterKey: "perms.letterGreen", titleKey: "perms.selGreen", helpKey: "help.permWrite" },
+  { state: "RED", letterKey: "perms.letterRed", titleKey: "perms.selRed", helpKey: "help.permDeny" },
 ];
+
+/**
+ * One Tab stop per row: the arrow keys move between its four buttons, and Enter or Space sets
+ * the one with focus. Moving does not set anything, since each choice saves at once and passing
+ * Write on the way to Deny must not grant it.
+ */
+function arrowKeys(e: React.KeyboardEvent<HTMLDivElement>) {
+  const step = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }[e.key];
+  const buttons = [...e.currentTarget.querySelectorAll<HTMLButtonElement>("button.perm-btn")];
+  const at = buttons.indexOf(e.target as HTMLButtonElement);
+  if (at < 0) return;
+  const next = step !== undefined ? (at + step + buttons.length) % buttons.length : e.key === "Home" ? 0 : e.key === "End" ? buttons.length - 1 : -1;
+  if (next < 0) return;
+  e.preventDefault();
+  for (const [i, b] of buttons.entries()) b.tabIndex = i === next ? 0 : -1;
+  buttons[next].focus();
+}
 
 // A paint gesture belongs to the pointer that started it: another finger
 // entering a row, or releasing, neither paints nor ends it. A release the page
@@ -48,7 +68,7 @@ function lockScroll(container: HTMLElement | null) {
   requestAnimationFrame(hold);
 }
 
-export const PermissionSelector = React.memo(function PermissionSelector({ value, onChange, disabled, label = "Permission" }: Props) {
+export const PermissionSelector = React.memo(function PermissionSelector({ value, onChange, disabled, label }: Props) {
   return (
     <div
       className="perm-selector"
@@ -56,6 +76,7 @@ export const PermissionSelector = React.memo(function PermissionSelector({ value
       data-guide="window.permissions#states"
       aria-label={label}
       style={{ touchAction: "none" }}
+      onKeyDown={arrowKeys}
       onPointerEnter={(e) => {
         if (_drag === null || _drag.pointerId !== e.pointerId) return;
         if ((e.buttons & 1) === 0) {
@@ -68,7 +89,7 @@ export const PermissionSelector = React.memo(function PermissionSelector({ value
         }
       }}
     >
-      {BUTTONS.map(({ state, label: letter, titleKey, helpKey }) => {
+      {BUTTONS.map(({ state, letterKey, titleKey, helpKey }) => {
         const title = t(titleKey);
         return (
         <button
@@ -99,9 +120,10 @@ export const PermissionSelector = React.memo(function PermissionSelector({ value
           }}
           disabled={disabled}
           aria-pressed={value === state}
-          aria-label={`${label}: ${value === state ? t("perms.selSelected", { title }) : title}`}
+          aria-label={`${label}: ${title}`}
+          tabIndex={value === state ? 0 : -1}
         >
-          {letter}
+          {t(letterKey)}
         </button>
         );
       })}

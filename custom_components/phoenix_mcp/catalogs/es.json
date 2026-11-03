@@ -241,7 +241,6 @@
       "selGreen": "Write: Lectura y escritura",
       "selGrey": "None: Sin permiso explícito (hereda del elemento superior)",
       "selRed": "Deny: Denegar (anula las concesiones superiores e inferiores)",
-      "selSelected": "{title}, seleccionado",
       "selYellow": "Read: Solo lectura",
       "simulateEntityTitle": "Mostrar {id} en el árbol",
       "stateDeny": "DENEGAR",
@@ -805,7 +804,10 @@
         "one": "En pausa tras {count} paso. ¿Continuar?",
         "other": "En pausa tras {count} pasos. ¿Continuar?"
       },
-      "announceReplyStart": "{text}… La respuesta completa está en la conversación."
+      "announceReplyStart": "{text}… La respuesta completa está en la conversación.",
+      "authorUser": "Usted escribió",
+      "authorAgent": "El agente respondió",
+      "errorLabel": "Error"
     },
     "diff": {
       "blueprint.create": "Crear plano de {domain} «{rel}»",
@@ -2241,7 +2243,8 @@
       "resultCount": {
         "one": "{count} resultado",
         "other": "{count} resultados"
-      }
+      },
+      "codeBlock": "Código"
     },
     "personas": {
       "automation_builder": {

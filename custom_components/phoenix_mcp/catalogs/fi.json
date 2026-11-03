@@ -558,7 +558,10 @@
         "one": "Keskeytetty {count} vaiheen jälkeen. Jatketaanko?",
         "other": "Keskeytetty {count} vaiheen jälkeen. Jatketaanko?"
       },
-      "announceReplyStart": "{text}… Koko vastaus on keskustelussa."
+      "announceReplyStart": "{text}… Koko vastaus on keskustelussa.",
+      "authorUser": "Kirjoitit",
+      "authorAgent": "Agentti vastasi",
+      "errorLabel": "Virhe"
     },
     "approvalSummary": {
       "action.optionalReason": "Valinnainen syy",
@@ -1281,7 +1284,8 @@
       "resultCount": {
         "one": "{count} tulos",
         "other": "{count} tulosta"
-      }
+      },
+      "codeBlock": "Koodi"
     },
     "conversations": {
       "accessKeyLabel": "Käyttöavain",
@@ -1947,7 +1951,6 @@
       "selGreen": "Write: luku ja kirjoitus",
       "selGrey": "None: ei erillistä käyttöoikeutta (perii ylätasolta)",
       "selRed": "Deny: ohittaa ylemmän ja alemman tason oikeudet",
-      "selSelected": "{title}, valittu",
       "selYellow": "Read: vain luku",
       "simulateEntityTitle": "Näytä {id} puussa",
       "stateDeny": "KIELLÄ",

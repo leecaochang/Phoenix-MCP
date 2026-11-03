@@ -87,6 +87,16 @@ describe("the Changes list", () => {
     expect(view.getByText("Load More")).toBeVisible();
   });
 
+  it("names a restore from this panel by the localized Admin, not the English name stored for agents", async () => {
+    vi.mocked(api.listVersions).mockResolvedValue(page([
+      version({ id: "v1", alias: "Kitchen", access_key_id: "__restore__:u1", access_key_name: "(admin restore)", approved_by_user_id: "u1" }),
+    ]));
+    const { findByText, queryByText } = renderChanges();
+    await findByText("Kitchen");
+    expect(await findByText("Admin")).toBeInTheDocument();
+    expect(queryByText("(admin restore)")).toBeNull();
+  });
+
   it("loads the first page and shows Load More only while more rows remain", async () => {
     vi.mocked(api.listVersions).mockResolvedValue(page([version({ id: "v1", alias: "First change" })], 2));
     const { findByText, queryByText } = renderChanges();

@@ -36,7 +36,8 @@
       "resultCount": {
         "one": "결과 {count}개",
         "other": "결과 {count}개"
-      }
+      },
+      "codeBlock": "코드"
     },
     "shell": {
       "agentChat": "Agent Chat",
@@ -487,7 +488,6 @@
       "selGreen": "Write: 읽기 및 쓰기",
       "selGrey": "None: 명시적 권한 없음(부모에서 상속)",
       "selRed": "Deny: 접근 거부(상위 및 하위 권한 부여 재정의)",
-      "selSelected": "{title}, 선택됨",
       "selYellow": "Read: 읽기 전용",
       "simulateEntityTitle": "트리에서 {id} 표시",
       "stateDeny": "접근 거부",
@@ -700,7 +700,10 @@
         "one": "{count}단계 후 일시 중지되었습니다. 계속할까요?",
         "other": "{count}단계 후 일시 중지되었습니다. 계속할까요?"
       },
-      "announceReplyStart": "{text}... 전체 답변은 대화에 있습니다."
+      "announceReplyStart": "{text}... 전체 답변은 대화에 있습니다.",
+      "authorUser": "내가 보낸 메시지",
+      "authorAgent": "에이전트의 답변",
+      "errorLabel": "오류"
     },
     "diff": {
       "blueprint.create": "{domain} 블루프린트 '{rel}' 생성",

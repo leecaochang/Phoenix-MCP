@@ -267,7 +267,10 @@
         "one": "Nach {count} Schritt pausiert. Fortfahren?",
         "other": "Nach {count} Schritten pausiert. Fortfahren?"
       },
-      "announceReplyStart": "{text}… Die vollständige Antwort steht in der Unterhaltung."
+      "announceReplyStart": "{text}… Die vollständige Antwort steht in der Unterhaltung.",
+      "authorUser": "Sie schrieben",
+      "authorAgent": "Der Agent antwortete",
+      "errorLabel": "Fehler"
     },
     "caps": {
       "cap_config_read": {
@@ -2013,7 +2016,8 @@
       "resultCount": {
         "one": "{count} Ergebnis",
         "other": "{count} Ergebnisse"
-      }
+      },
+      "codeBlock": "Code"
     },
     "shell": {
       "agentChat": "Agent Chat",
@@ -2072,7 +2076,6 @@
       "selGreen": "Write: Lesen und Schreiben",
       "selGrey": "None: Keine explizite Berechtigung (wird vom übergeordneten Element geerbt)",
       "selRed": "Deny: Verweigern (überschreibt Freigaben darüber und darunter)",
-      "selSelected": "{title}, ausgewählt",
       "selYellow": "Read: Nur Lesen",
       "simulateEntityTitle": "{id} im Baum anzeigen",
       "stateDeny": "Verweigern",

@@ -30,7 +30,8 @@
       "resultCount": {
         "one": "{count} résultat",
         "other": "{count} résultats"
-      }
+      },
+      "codeBlock": "Code"
     },
     "approvals": {
       "approve": "Approuver",
@@ -566,7 +567,6 @@
       "selGreen": "Write: Lecture et écriture",
       "selGrey": "None: Aucune autorisation explicite (hérite du parent)",
       "selRed": "Deny: Refuser (remplace les autorisations au-dessus et en dessous)",
-      "selSelected": "{title}, sélectionné",
       "selYellow": "Read: Lecture seule",
       "simulateEntityTitle": "Afficher {id} dans l'arbre",
       "stateDeny": "REFUSER",
@@ -1650,7 +1650,10 @@
         "one": "En pause après {count} étape. Continuer ?",
         "other": "En pause après {count} étapes. Continuer ?"
       },
-      "announceReplyStart": "{text}… La réponse complète figure dans la conversation."
+      "announceReplyStart": "{text}… La réponse complète figure dans la conversation.",
+      "authorUser": "Vous avez écrit",
+      "authorAgent": "L'agent a répondu",
+      "errorLabel": "Erreur"
     },
     "diff": {
       "blueprint.create": "Créer le blueprint {domain} « {rel} »",

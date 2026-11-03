@@ -14,6 +14,8 @@ Each row has four buttons:
 
 Each change saves straight away. Click the active button again to go back to N, or drag across rows to set many at once.
 
+With the keyboard, a row's four buttons are one Tab stop. Use the arrow keys to move between N, R, W and D, then press Enter or Space to set the one you're on. Moving alone changes nothing.
+
 The word after each name shows the result: WRITE, READ, DENY, NO ACCESS or NOT FOUND.
 
 Related: [How a permission is decided](guide:topic.permissionResolution)

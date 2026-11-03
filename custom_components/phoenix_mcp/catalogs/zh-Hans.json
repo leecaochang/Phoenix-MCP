@@ -30,7 +30,8 @@
       "resultCount": {
         "one": "{count} 个结果",
         "other": "{count} 个结果"
-      }
+      },
+      "codeBlock": "代码"
     },
     "shell": {
       "agentChat": "Agent Chat",
@@ -953,7 +954,6 @@
       "selGreen": "Write：读写",
       "selGrey": "None：无显式授权（继承自上级）",
       "selRed": "Deny：拒绝访问（覆盖上级和下级的授权）",
-      "selSelected": "{title}，已选中",
       "selYellow": "Read：只读",
       "simulateEntityTitle": "在树中显示 {id}",
       "treeAria": "实体权限",
@@ -1890,7 +1890,10 @@
         "one": "已在 {count} 步后暂停。要继续吗？",
         "other": "已在 {count} 步后暂停。要继续吗？"
       },
-      "announceReplyStart": "{text}…… 完整回复见对话。"
+      "announceReplyStart": "{text}…… 完整回复见对话。",
+      "authorUser": "你说",
+      "authorAgent": "智能体回复",
+      "errorLabel": "错误"
     },
     "wizard": {
       "accessSub": "选择 <code>light</code> 旁边的三角形，打开灯光分组。其中列出您的灯光设备；选择设备旁边的三角形，即可查看它的实体。也可以在筛选框中输入灯的名称。然后在一个您可以亲自验证的灯上选择 <strong>W</strong>，让智能体可以读取并控制它。之后还可以添加更多权限。",

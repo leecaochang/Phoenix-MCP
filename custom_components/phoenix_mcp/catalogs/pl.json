@@ -133,7 +133,8 @@
         "other": "{count} wyniku",
         "few": "{count} wyniki",
         "many": "{count} wyników"
-      }
+      },
+      "codeBlock": "Kod"
     },
     "inject": {
       "mesaProfile": "Profil MESA",
@@ -595,7 +596,6 @@
       "selGreen": "Write: Odczyt i zapis",
       "selGrey": "None: Brak jawnego uprawnienia (dziedziczone od elementu nadrzędnego)",
       "selRed": "Deny: Odmów (nadpisuje uprawnienia powyżej i poniżej)",
-      "selSelected": "{title}, wybrane",
       "selYellow": "Read: Tylko do odczytu",
       "simulateEntityTitle": "Pokaż {id} w drzewie",
       "stateDeny": "ODMÓW",
@@ -1007,7 +1007,10 @@
         "few": "Wstrzymano po {count} krokach. Kontynuować?",
         "many": "Wstrzymano po {count} krokach. Kontynuować?"
       },
-      "announceReplyStart": "{text}… Pełna odpowiedź jest w rozmowie."
+      "announceReplyStart": "{text}… Pełna odpowiedź jest w rozmowie.",
+      "authorUser": "Napisano",
+      "authorAgent": "Agent odpowiedział",
+      "errorLabel": "Błąd"
     },
     "adminError": {
       "activeAccessKeyRequired": "{field} musi odnosić się do aktywnego klucza dostępu.",

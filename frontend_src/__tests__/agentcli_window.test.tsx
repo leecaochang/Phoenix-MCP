@@ -1454,7 +1454,7 @@ describe("AgentCliWindow streaming", () => {
       "Tokens this month: 3,991,234 remaining of 4,000,000.\n" +
       "Requests this second: 0 remaining of 1.\n" +
       "Provider retry-after: 48 s.";
-    await waitFor(() => expect(document.querySelector(".agentcli-error")?.textContent).toBe(expected));
+    await waitFor(() => expect(document.querySelector(".agentcli-error")?.textContent).toBe(`Error: ${expected}`));
     expect(screen.queryByText(/must never render/)).not.toBeInTheDocument();
   });
 
@@ -1481,7 +1481,7 @@ describe("AgentCliWindow streaming", () => {
     // A refused request is not an outage, and the operator sees why it was refused.
     const expected = "The provider refused this request. It will not be retried.\n"
       + "Provider detail: input_schema does not support oneOf, allOf, or anyOf at the top level";
-    await waitFor(() => expect(document.querySelector(".agentcli-error")?.textContent).toBe(expected));
+    await waitFor(() => expect(document.querySelector(".agentcli-error")?.textContent).toBe(`Error: ${expected}`));
   });
 
   it("shows tool activity only when verbose output is enabled", async () => {
@@ -1724,7 +1724,8 @@ describe("AgentCliWindow streaming", () => {
     // The partial turn stays visible with a Cancelled marker appended. The
     // user bubble is asserted via its class because the restored textarea
     // value also matches the raw text.
-    expect(document.querySelector(".agentcli-msg-user")?.textContent).toBe("add a chart card");
+    // A screen reader hears who wrote it first.
+    expect(document.querySelector(".agentcli-msg-user")?.textContent).toBe("You said: add a chart card");
     expect(screen.getByText("Working on it.")).toBeInTheDocument();
     await waitFor(() => expect(screen.getByText("Cancelled.")).toBeInTheDocument());
     // The pending approval card resolved to cancelled: buttons gone.
