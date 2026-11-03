@@ -2903,7 +2903,8 @@
       "guideLink": "在指南中開啟此頁面。「返回」會帶您回到正在閱讀的頁面。",
       "accessKeyFilter": "只顯示名稱或狀態包含此文字的存取金鑰。",
       "guideDismissWelcome": "隱藏此歡迎頁面。可在目錄中再次找到它。",
-      "showSecret": "以純文字顯示金鑰，以便檢查貼上的內容。"
+      "showSecret": "以純文字顯示金鑰，以便檢查貼上的內容。",
+      "guideSearchAgain": "再次在指南中搜尋此內容。"
     },
     "guide": {
       "title": "指南",
@@ -2918,7 +2919,8 @@
       "breadcrumbs": "此頁面所在位置",
       "dismissWelcome": "關閉",
       "welcomeReadAbout": "進一步了解{page}",
-      "welcomeSearchHint": "試試「{word}」"
+      "welcomeSearchHint": "試試「{word}」",
+      "searchHistory": "搜尋記錄"
     },
     "logs": {
       "filters": "篩選",

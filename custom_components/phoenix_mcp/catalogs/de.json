@@ -2897,7 +2897,8 @@
       "guideLink": "Diese Seite im Leitfaden öffnen. Zurück bringt Sie zu der Seite, die Sie gerade gelesen haben.",
       "accessKeyFilter": "Nur Zugriffsschlüssel zeigen, deren Name oder Status diesen Text enthält.",
       "guideDismissWelcome": "Diese Willkommensseite ausblenden. Sie ist weiter unter Inhalt zu finden.",
-      "showSecret": "Den Schlüssel als Klartext anzeigen, um zu prüfen, was eingefügt wurde."
+      "showSecret": "Den Schlüssel als Klartext anzeigen, um zu prüfen, was eingefügt wurde.",
+      "guideSearchAgain": "Erneut im Leitfaden danach suchen."
     },
     "guide": {
       "title": "Leitfaden",
@@ -2912,7 +2913,8 @@
       "breadcrumbs": "Wo diese Seite steht",
       "dismissWelcome": "Schließen",
       "welcomeReadAbout": "Mehr über {page} lesen",
-      "welcomeSearchHint": "Versuchen Sie „{word}“"
+      "welcomeSearchHint": "Versuchen Sie „{word}“",
+      "searchHistory": "Suchverlauf"
     },
     "logs": {
       "filters": "Filter",

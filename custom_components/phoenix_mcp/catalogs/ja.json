@@ -2897,7 +2897,8 @@
       "guideLink": "このページをガイドで開きます。「戻る」で読んでいたページに戻ります。",
       "accessKeyFilter": "名前または状態にこのテキストを含むアクセスキーだけを表示します。",
       "guideDismissWelcome": "このようこそページを非表示にします。目次からいつでも開けます。",
-      "showSecret": "貼り付けた内容を確認できるよう、キーをプレーンテキストで表示します。"
+      "showSecret": "貼り付けた内容を確認できるよう、キーをプレーンテキストで表示します。",
+      "guideSearchAgain": "これをもう一度ガイドで検索します。"
     },
     "guide": {
       "title": "ガイド",
@@ -2912,7 +2913,8 @@
       "breadcrumbs": "このページの位置",
       "dismissWelcome": "閉じる",
       "welcomeReadAbout": "{page} について詳しく読む",
-      "welcomeSearchHint": "「{word}」で試す"
+      "welcomeSearchHint": "「{word}」で試す",
+      "searchHistory": "検索履歴"
     },
     "logs": {
       "filters": "フィルター",

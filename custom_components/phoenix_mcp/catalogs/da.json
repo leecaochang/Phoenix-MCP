@@ -2903,7 +2903,8 @@
       "guideLink": "Åbn denne side i guiden. Tilbage fører dig til den side, du læste.",
       "accessKeyFilter": "Vis kun adgangsnøgler, hvis navn eller status indeholder denne tekst.",
       "guideDismissWelcome": "Skjul denne velkomstside. Find den igen under Indhold.",
-      "showSecret": "Vis nøglen som almindelig tekst for at kontrollere, hvad der blev indsat."
+      "showSecret": "Vis nøglen som almindelig tekst for at kontrollere, hvad der blev indsat.",
+      "guideSearchAgain": "Søg efter dette i guiden igen."
     },
     "guide": {
       "title": "Guide",
@@ -2918,7 +2919,8 @@
       "breadcrumbs": "Hvor siden hører til",
       "dismissWelcome": "Luk",
       "welcomeReadAbout": "Læs mere om {page}",
-      "welcomeSearchHint": "Prøv »{word}«"
+      "welcomeSearchHint": "Prøv »{word}«",
+      "searchHistory": "Søgehistorik"
     },
     "logs": {
       "filters": "Filtre",

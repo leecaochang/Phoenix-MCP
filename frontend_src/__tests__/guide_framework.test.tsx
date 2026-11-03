@@ -190,6 +190,16 @@ describe("searching the Guide", () => {
     expect(found("decision provider")[0]).toBe("window.p#decision-provider");
   });
 
+  it("counts a near miss only for a word the Guide has nowhere", () => {
+    const mesa = topicSections("workspace.mesa", "MESA", "Rules for every agent.", [], (k) => k);
+    const providers = topicSections("window.p", "AI Providers", "Accounts.\n\n## Add an account {#provider-add}\n\nChoose a provider.", [], (k) => k, { "provider-add": ["Meta", "Llama"] });
+    const found = (q: string) => searchGuide([...mesa, ...providers], q).map((h) => `${h.section.topic}#${h.section.anchor ?? ""}`);
+    // "meta" is a keyword, so MESA, one letter away, is not a match.
+    expect(found("meta")).toEqual(["window.p#provider-add"]);
+    // "mesaa" is written nowhere, so the near miss still finds MESA.
+    expect(found("mesaa")).toEqual(["workspace.mesa#"]);
+  });
+
   it("matches inside words only for scripts written without spaces", () => {
     expect(searchGuide(topicSections("topic.x", "X", "Rapid changes.", [], (k) => k), "api")).toEqual([]);
     expect(searchGuide(topicSections("topic.j", "J", "設定を変更します。", [], (k) => k), "変更")).toHaveLength(1);
@@ -246,6 +256,11 @@ describe("following the reader's selection", () => {
     fireEvent.pointerOver(el("tagged"));
     expect(tracker.current()?.topic).toBe("topic.routing");
     expect(seen).toHaveBeenCalledTimes(2);
+    // Focus coming back to the same control changes nothing; selecting it again is a new selection.
+    fireEvent.focusIn(el("page"));
+    expect(seen).toHaveBeenCalledTimes(2);
+    fireEvent.pointerDown(el("page"));
+    expect(seen).toHaveBeenCalledTimes(3);
     stop();
     fireEvent.pointerDown(el("tagged"));
     expect(tracker.current()?.topic).toBe("topic.routing");
@@ -275,6 +290,54 @@ describe("the Guide window with sections, Contents and Search", () => {
     });
     expect(screen.getByRole("heading", { level: 3 }).textContent).toBe("AI Providers");
     expect(document.querySelector('[data-guide-section="decision-provider"]')).toHaveClass("is-target");
+  });
+
+  it("lists recent searches under an empty field, and a search from the list replaces them with its results", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true, json: async () => ({ format: GUIDE_FORMAT, language: "en", topics }) })));
+    localStorage.setItem("phx-guide-searches", JSON.stringify(["accounts", 7, ""]));
+    const controller = new WorkspaceController("settings", [], () => {}, (id) => id);
+    render(<GuideWindow workspace="settings" controller={controller} language="en" rect={{ x: 10, y: 10, w: 360, h: 400 }} onRect={() => {}} onClose={() => {}} />);
+    await waitFor(() => expect(screen.getByRole("heading", { level: 3 }).textContent).toBe("Settings"));
+    fireEvent.click(screen.getByText("Search"));
+    const history = screen.getByRole("list", { name: "Search History" });
+    expect(within(history).getAllByRole("link").map((a) => a.textContent)).toEqual(["accounts"]);
+    // A search that found nothing is not kept; one the reader opened a result of goes first.
+    const field = screen.getByRole("searchbox");
+    fireEvent.change(field, { target: { value: "zzzz" } });
+    fireEvent.change(field, { target: { value: "" } });
+    fireEvent.change(field, { target: { value: "decision" } });
+    expect(screen.queryByRole("list", { name: "Search History" })).toBeNull();
+    fireEvent.keyDown(field, { key: "Enter" });
+    expect(screen.getByRole("heading", { level: 3 }).textContent).toBe("AI Providers");
+    expect(JSON.parse(localStorage.getItem("phx-guide-searches")!)).toEqual(["decision", "accounts"]);
+    fireEvent.click(screen.getByRole("button", { name: "Back" }));
+    fireEvent.click(within(screen.getByRole("list", { name: "Search History" })).getByText("accounts"));
+    expect(screen.getByRole("searchbox")).toHaveValue("accounts");
+    expect(screen.queryByRole("list", { name: "Search History" })).toBeNull();
+    expect(screen.getAllByRole("link").some((a) => a.textContent === "AI Providers")).toBe(true);
+    localStorage.removeItem("phx-guide-searches");
+  });
+
+  it("returns to a control's section when the reader selects it again after going to Search", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true, json: async () => ({ format: GUIDE_FORMAT, language: "en", topics }) })));
+    const controller = new WorkspaceController("settings", [], () => {}, (id) => id);
+    const tracker = new GuideTargetTracker();
+    document.body.innerHTML = '<div id="root"><div data-phx-window="settingsProviders"><summary id="s" data-guide="window.settingsProviders#decision-provider">D</summary></div></div>';
+    tracker.attach(document.getElementById("root")!);
+    render(<GuideTargetContext.Provider value={tracker}>
+      <GuideWindow workspace="settings" controller={controller} language="en" rect={{ x: 10, y: 10, w: 360, h: 400 }} onRect={() => {}} onClose={() => {}} />
+    </GuideTargetContext.Provider>);
+    await waitFor(() => expect(screen.getByRole("heading", { level: 3 }).textContent).toBe("Settings"));
+    act(() => { controller.setActiveWindow("settingsProviders"); fireEvent.pointerDown(document.getElementById("s")!); });
+    expect(screen.getByRole("heading", { level: 3 }).textContent).toBe("AI Providers");
+    fireEvent.click(screen.getByText("Search"));
+    expect(screen.getByRole("heading", { level: 3 }).textContent).toBe("Search");
+    act(() => { fireEvent.pointerDown(document.getElementById("s")!); });
+    expect(screen.getByRole("heading", { level: 3 }).textContent).toBe("AI Providers");
+    expect(document.querySelector('[data-guide-section="decision-provider"]')).toHaveClass("is-target");
+    // Back returns to Search, the page shown before.
+    fireEvent.click(screen.getByRole("button", { name: "Back" }));
+    expect(screen.getByRole("heading", { level: 3 }).textContent).toBe("Search");
   });
 
   it("keeps the workspace's page when the shell opens a window by itself, until the reader selects in it", async () => {

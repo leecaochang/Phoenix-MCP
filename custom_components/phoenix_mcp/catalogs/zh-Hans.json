@@ -2897,7 +2897,8 @@
       "guideLink": "在指南中打开此页面。“返回”会带您回到正在阅读的页面。",
       "accessKeyFilter": "只显示名称或状态包含此文本的访问密钥。",
       "guideDismissWelcome": "隐藏此欢迎页面。可在目录中再次找到它。",
-      "showSecret": "以纯文本显示密钥，以便检查粘贴的内容。"
+      "showSecret": "以纯文本显示密钥，以便检查粘贴的内容。",
+      "guideSearchAgain": "再次在指南中搜索此内容。"
     },
     "guide": {
       "title": "指南",
@@ -2912,7 +2913,8 @@
       "breadcrumbs": "此页面所在位置",
       "dismissWelcome": "关闭",
       "welcomeReadAbout": "进一步了解{page}",
-      "welcomeSearchHint": "试试“{word}”"
+      "welcomeSearchHint": "试试“{word}”",
+      "searchHistory": "搜索历史"
     },
     "logs": {
       "filters": "筛选",

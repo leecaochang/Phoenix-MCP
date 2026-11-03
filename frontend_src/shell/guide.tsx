@@ -17,10 +17,10 @@
  */
 
 import { createPortal } from "react-dom";
-import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type KeyboardEvent, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent, type RefObject } from "react";
+import { createContext, useCallback, useContext, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type KeyboardEvent, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent, type RefObject } from "react";
 import { clampPosToViewport, snapResizeRect } from "../components/AgentCliWindow";
 import { ANCHOR, GUIDE_FORMAT, HEADING, LABEL, type GuideBundle, type GuideTopic } from "../guide/compile";
-import { searchGuide, topicSections, type SearchSection } from "../guide/search";
+import { fold, searchGuide, topicSections, type SearchSection } from "../guide/search";
 import type { GuideTarget, GuideTargetTracker } from "./guideTarget";
 import { hasMessage, t } from "../i18n";
 import { compareStrings } from "../i18n/format";
@@ -371,9 +371,13 @@ function useGuideTopic(workspace: string, windowId: string | null, language: str
   // The automatic page is shown before the effect below records it, so a step the reader takes in
   // between records it first: otherwise the late effect would push it on top of the reader's page.
   const recordedAuto = useRef("");
+  // A selection the reader makes again turns the Guide back to its page, even from Search or another page.
+  const recordedSelection = useRef(selectionVersion);
   const welcomePage: Step | null = welcomeBase.current && bundles && topicById(bundles, WELCOME_TOPIC) ? { kind: "topic", id: WELCOME_TOPIC, anchor: null } : null;
   useEffect(() => {
-    if (!autoRef.current || recordedAuto.current === autoKey) return;
+    const reselected = !!selected && selectionVersion !== recordedSelection.current;
+    recordedSelection.current = selectionVersion;
+    if (!autoRef.current || (recordedAuto.current === autoKey && !reselected)) return;
     recordedAuto.current = autoKey;
     // Welcome goes first; shown first, the page in front of the reader now is left for when they move on.
     if (welcomePage) {
@@ -387,7 +391,7 @@ function useGuideTopic(workspace: string, windowId: string | null, language: str
     // the reader's selection, so it always turns to it (user, 2026-11-03).
     if (onWelcomeRef.current && !topicId) return;
     setHistory((h) => pushStep(h, autoRef.current!));
-  }, [autoKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [autoKey, selectionVersion]); // eslint-disable-line react-hooks/exhaustive-deps
   const step = history.steps[history.at] ?? (startOnWelcome.current ? welcomePage : null) ?? auto;
   const onWelcome = step?.kind === "topic" && step.id === WELCOME_TOPIC;
   onWelcomeRef.current = onWelcome;
@@ -488,17 +492,65 @@ export function useSearchSections(bundles: Guide["bundles"]): SearchSection[] {
   }, [bundles]);
 }
 
+/** Where this browser keeps the reader's recent Guide searches, newest first. */
+const SEARCH_HISTORY_KEY = "phx-guide-searches";
+const SEARCH_HISTORY_LIMIT = 10;
+
+export function readSearchHistory(): string[] {
+  try {
+    const saved: unknown = JSON.parse(localStorage.getItem(SEARCH_HISTORY_KEY) ?? "[]");
+    return Array.isArray(saved) ? saved.filter((q): q is string => typeof q === "string" && !!q.trim()).slice(0, SEARCH_HISTORY_LIMIT) : [];
+  } catch { return []; }
+}
+
+/** Put a search first in the history, dropping an earlier copy of it. */
+export function rememberSearch(query: string): void {
+  const q = query.trim().replace(/\s+/g, " ");
+  if (!q) return;
+  const next = [q, ...readSearchHistory().filter((old) => fold(old) !== fold(q))].slice(0, SEARCH_HISTORY_LIMIT);
+  try { localStorage.setItem(SEARCH_HISTORY_KEY, JSON.stringify(next)); } catch { /* storage blocked: no history */ }
+}
+
+/**
+ * Search, with the reader's recent searches under an empty field (user, 2026-11-03). A search is kept once
+ * it found something and the reader moved on: opened a result, left Search, or typed a different search.
+ */
 function SearchView({ guide }: { guide: Guide }) {
   const [query, setQuery] = useState("");
   const sections = useSearchSections(guide.bundles);
   const hits = useMemo(() => searchGuide(sections, query), [sections, query]);
   const welcome = useWelcome();
+  const [history] = useState(readSearchHistory);
+  const input = useRef<HTMLInputElement>(null);
+  const historyId = useId();
+  const found = useRef("");
+  found.current = hits.length ? query : "";
+  useEffect(() => () => rememberSearch(found.current), []);
+  const change = (next: string) => {
+    // A search that found something is kept when the reader starts another, not when they add to it or trim it.
+    const was = fold(found.current.trim()), now = fold(next.trim());
+    if (was && !now.startsWith(was) && !was.startsWith(now)) rememberSearch(found.current);
+    setQuery(next);
+    if (next.trim()) welcome?.mark("search");
+  };
   return (
     <article className="phx-guide-topic">
       <h3>{t("guide.search")}</h3>
-      <input type="search" className="input phx-guide-search" data-help="help.guideSearchInput" autoFocus value={query} placeholder={t("guide.searchPlaceholder")}
-        aria-label={t("guide.searchPlaceholder")} onChange={(e) => { setQuery(e.target.value); if (e.target.value.trim()) welcome?.mark("search"); }}
+      <input ref={input} type="search" className="input phx-guide-search" data-help="help.guideSearchInput" autoFocus value={query} placeholder={t("guide.searchPlaceholder")}
+        aria-label={t("guide.searchPlaceholder")} onChange={(e) => change(e.target.value)}
         onKeyDown={(e) => { if (e.key === "Enter" && hits[0]) { e.preventDefault(); guide.open(hits[0].section.topic, hits[0].section.anchor); } }} />
+      {!query.trim() && history.length > 0 && (
+        <>
+          <h4 className="phx-guide-history-title" id={historyId}>{t("guide.searchHistory")}</h4>
+          <ul className="phx-guide-history" aria-labelledby={historyId}>
+            {history.map((q) => (
+              <li key={q}>
+                <a href="#" className="phx-guide-link" data-help="help.guideSearchAgain" onClick={(e) => { e.preventDefault(); change(q); input.current?.focus(); }}>{q}</a>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
       <ResultCount count={hits.length} query={query} />
       {query.trim() && !hits.length && <p className="phx-guide-note">{t("guide.noResults")}</p>}
       <ul className="phx-guide-results">

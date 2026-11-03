@@ -2903,7 +2903,8 @@
       "guideLink": "이 페이지를 가이드에서 엽니다. 뒤로를 누르면 읽던 페이지로 돌아갑니다.",
       "accessKeyFilter": "이름이나 상태에 이 텍스트가 포함된 액세스 키만 표시합니다.",
       "guideDismissWelcome": "이 환영 페이지를 숨깁니다. 목차에서 다시 찾을 수 있습니다.",
-      "showSecret": "붙여 넣은 내용을 확인할 수 있도록 키를 일반 텍스트로 표시합니다."
+      "showSecret": "붙여 넣은 내용을 확인할 수 있도록 키를 일반 텍스트로 표시합니다.",
+      "guideSearchAgain": "가이드에서 이 내용을 다시 검색합니다."
     },
     "guide": {
       "title": "가이드",
@@ -2918,7 +2919,8 @@
       "breadcrumbs": "이 페이지의 위치",
       "dismissWelcome": "닫기",
       "welcomeReadAbout": "{page} 자세히 알아보기",
-      "welcomeSearchHint": "\"{word}\" 검색해 보기"
+      "welcomeSearchHint": "\"{word}\" 검색해 보기",
+      "searchHistory": "검색 기록"
     },
     "logs": {
       "filters": "필터",

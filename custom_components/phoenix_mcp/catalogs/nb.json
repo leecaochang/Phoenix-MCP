@@ -2903,7 +2903,8 @@
       "guideLink": "Åpne denne siden i Veiledning. Tilbake tar deg til siden du leste.",
       "accessKeyFilter": "Vis bare tilgangsnøkler der navnet eller statusen inneholder denne teksten.",
       "guideDismissWelcome": "Skjul denne velkomstsiden. Finn den igjen under Innhold.",
-      "showSecret": "Vis nøkkelen som vanlig tekst for å kontrollere hva som ble limt inn."
+      "showSecret": "Vis nøkkelen som vanlig tekst for å kontrollere hva som ble limt inn.",
+      "guideSearchAgain": "Søk etter dette i veiledningen igjen."
     },
     "guide": {
       "title": "Veiledning",
@@ -2918,7 +2919,8 @@
       "breadcrumbs": "Hvor denne siden hører til",
       "dismissWelcome": "Lukk",
       "welcomeReadAbout": "Les mer om {page}",
-      "welcomeSearchHint": "Prøv «{word}»"
+      "welcomeSearchHint": "Prøv «{word}»",
+      "searchHistory": "Søkehistorikk"
     },
     "logs": {
       "filters": "Filtre",

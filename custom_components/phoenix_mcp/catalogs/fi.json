@@ -2903,7 +2903,8 @@
       "guideLink": "Avaa tämä sivu Oppaassa. Takaisin palauttaa sinut sivulle, jota luit.",
       "accessKeyFilter": "Näytä vain käyttöavaimet, joiden nimi tai tila sisältää tämän tekstin.",
       "guideDismissWelcome": "Piilota tämä tervetulosivu. Löydät sen uudelleen Sisällyksestä.",
-      "showSecret": "Näytä avain tavallisena tekstinä, jotta voit tarkistaa, mitä liitettiin."
+      "showSecret": "Näytä avain tavallisena tekstinä, jotta voit tarkistaa, mitä liitettiin.",
+      "guideSearchAgain": "Hae tätä oppaasta uudelleen."
     },
     "guide": {
       "title": "Opas",
@@ -2918,7 +2919,8 @@
       "breadcrumbs": "Missä tämä sivu on",
       "dismissWelcome": "Sulje",
       "welcomeReadAbout": "Lue lisää aiheesta {page}",
-      "welcomeSearchHint": "Kokeile ”{word}”"
+      "welcomeSearchHint": "Kokeile ”{word}”",
+      "searchHistory": "Hakuhistoria"
     },
     "logs": {
       "filters": "Suodattimet",

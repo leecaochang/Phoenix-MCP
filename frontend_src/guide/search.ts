@@ -6,7 +6,9 @@
  * that only share its page (user, 2026-11-01: "JEV" must lead to the JEV
  * section). The page's title and keywords let a section match a word it does
  * not use, but only alongside a word of its own. Every word typed must match,
- * so adding a word narrows the results. Words are compared without case or
+ * so adding a word narrows the results. A near miss counts only for a word
+ * the Guide has nowhere, so "meta" finds Meta and not every page about MESA
+ * (user, 2026-11-03). Words are compared without case or
  * accents; text without spaces between words (Chinese, Japanese) is matched
  * as written.
  */
@@ -58,11 +60,11 @@ function distance(a: string, b: string, max: number): number {
   return prev[b.length];
 }
 
-/** How well one typed word matches one word of the text: 3 exact, 2 the start of it, 1 near it, 0 not at all. */
-function wordScore(typed: string, word: string): number {
+/** How well one typed word matches one word of the text: 3 exact, 2 the start of it, 1 near it (when allowed), 0 not at all. */
+function wordScore(typed: string, word: string, near: boolean): number {
   if (word === typed) return 3;
   if (typed.length >= 2 && word.startsWith(typed)) return 2;
-  const allowed = typed.length >= 8 ? 2 : typed.length >= 4 ? 1 : 0;
+  const allowed = !near ? 0 : typed.length >= 8 ? 2 : typed.length >= 4 ? 1 : 0;
   return allowed && distance(typed, word, allowed) <= allowed ? 1 : 0;
 }
 
@@ -74,10 +76,10 @@ interface Field { words: string[]; folded: string }
 const field = (text: string): Field => ({ words: tokens(text), folded: fold(text) });
 
 /** The best match for one typed word in a field. */
-function bestIn(typed: string, f: Field): number {
+function bestIn(typed: string, f: Field, near = true): number {
   let best = 0;
   for (const w of f.words) {
-    best = Math.max(best, wordScore(typed, w));
+    best = Math.max(best, wordScore(typed, w, near));
     if (best === 3) return 3;
   }
   // Text without spaces between words: a match anywhere counts.
@@ -90,18 +92,23 @@ export function searchGuide(sections: readonly SearchSection[], query: string, l
   if (!typed.length) return [];
   const phrase = typed.length > 1 ? typed.join(" ") : null;
   const hits: Array<SearchHit & { at: number }> = [];
-  sections.forEach((section, at) => {
+  const fields = sections.map((section) => ({
     // A page's opening is headed by the page's title; a section by its own heading.
-    const head = field(section.anchor === null ? section.title : section.heading ?? "");
-    const keys = field(section.keywords.join(" "));
-    const text = field(section.text);
-    const context = field(section.anchor === null ? "" : `${section.title} ${section.pageKeywords.join(" ")}`);
+    head: field(section.anchor === null ? section.title : section.heading ?? ""),
+    keys: field(section.keywords.join(" ")),
+    text: field(section.text),
+    context: field(section.anchor === null ? "" : `${section.title} ${section.pageKeywords.join(" ")}`),
+  }));
+  // Near misses only for a word written nowhere in the Guide, as it is or as the start of a word.
+  const near = typed.map((word) => !fields.some((f) => [f.head, f.keys, f.text, f.context].some((x) => bestIn(word, x, false) >= 2)));
+  sections.forEach((section, at) => {
+    const { head, keys, text, context } = fields[at];
     let score = 0;
     let own = false;
-    for (const word of typed) {
-      const s = 3 * bestIn(word, head) + 2 * bestIn(word, keys) + bestIn(word, text);
+    for (const [i, word] of typed.entries()) {
+      const s = 3 * bestIn(word, head, near[i]) + 2 * bestIn(word, keys, near[i]) + bestIn(word, text, near[i]);
       if (s) { score += s; own = true; continue; }
-      if (!bestIn(word, context)) return;
+      if (!bestIn(word, context, near[i])) return;
       score += 1;
     }
     if (!own) return;

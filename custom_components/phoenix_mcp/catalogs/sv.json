@@ -2903,7 +2903,8 @@
       "guideLink": "Öppna sidan i Guide. Tillbaka tar dig till sidan du läste.",
       "accessKeyFilter": "Visa bara åtkomstnycklar vars namn eller status innehåller den här texten.",
       "guideDismissWelcome": "Dölj den här välkomstsidan. Hitta den igen under Innehåll.",
-      "showSecret": "Visa nyckeln som vanlig text för att kontrollera vad som klistrades in."
+      "showSecret": "Visa nyckeln som vanlig text för att kontrollera vad som klistrades in.",
+      "guideSearchAgain": "Sök efter detta i guiden igen."
     },
     "guide": {
       "title": "Guide",
@@ -2918,7 +2919,8 @@
       "breadcrumbs": "Var sidan hör hemma",
       "dismissWelcome": "Stäng",
       "welcomeReadAbout": "Läs mer om {page}",
-      "welcomeSearchHint": "Prova ”{word}”"
+      "welcomeSearchHint": "Prova ”{word}”",
+      "searchHistory": "Sökhistorik"
     },
     "logs": {
       "filters": "Filter",

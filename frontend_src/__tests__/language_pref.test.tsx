@@ -206,7 +206,7 @@ describe("the dropdown in Settings", () => {
     // find their own, so these labels are endonyms and never catalog entries.
     const { select } = await renderSettings();
     const labels = [...select.options].slice(1).map((o) => o.textContent);
-    expect(labels).toEqual(["Dansk", "Deutsch", "English", "Español", "Suomi", "Français", "Italiano", "日本語", "한국어", "Norsk Bokmål", "Nederlands", "Polski", "Русский", "Svenska", "中文（简体）", "繁體中文"]);
+    expect(labels).toEqual(["Dansk", "Deutsch", "English", "Español", "Suomi", "Français", "Italiano", "日本語", "한국어", "Norsk Bokmål", "Nederlands", "Polski", "Русский", "Svenska", "简体中文", "繁體中文"]);
   });
 
   it("defaults to Auto", async () => {

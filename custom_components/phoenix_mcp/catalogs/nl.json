@@ -2978,7 +2978,8 @@
       "guideLink": "Open deze pagina in de Gids. Terug brengt je naar de pagina die je aan het lezen was.",
       "accessKeyFilter": "Toon alleen toegangssleutels waarvan de naam of status deze tekst bevat.",
       "guideDismissWelcome": "Verberg deze welkomstpagina. Je vindt hem terug onder Inhoud.",
-      "showSecret": "Toon de sleutel als platte tekst om te controleren wat er is geplakt."
+      "showSecret": "Toon de sleutel als platte tekst om te controleren wat er is geplakt.",
+      "guideSearchAgain": "Zoek hier opnieuw naar in de gids."
     },
     "guide": {
       "title": "Gids",
@@ -2993,7 +2994,8 @@
       "breadcrumbs": "Waar deze pagina staat",
       "dismissWelcome": "Sluiten",
       "welcomeReadAbout": "Lees meer over {page}",
-      "welcomeSearchHint": "Probeer ‘{word}’"
+      "welcomeSearchHint": "Probeer ‘{word}’",
+      "searchHistory": "Zoekgeschiedenis"
     },
     "logs": {
       "filters": "Filters",

@@ -78,8 +78,10 @@ export class GuideTargetTracker {
       // A click on a window's empty space keeps the section the reader had chosen there.
       if (!next || (next.anchor === null && next.topic === null && this.target?.windowId === next.windowId)) return;
       const same = this.target && this.target.windowId === next.windowId && this.target.topic === next.topic && this.target.anchor === next.anchor;
-      if (same) return;
-      this.target = next;
+      // Selecting the same control again counts, so the Guide returns to it from another page (user, 2026-11-03);
+      // focus coming back to it does not.
+      if (same && e.type !== "pointerdown") return;
+      if (!same) this.target = next;
       this.version++;
       for (const listener of this.listeners) listener();
     };

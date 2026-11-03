@@ -2897,7 +2897,8 @@
       "guideLink": "Abra esta página en la guía. Atrás le devuelve a la página que estaba leyendo.",
       "accessKeyFilter": "Muestre solo las claves de acceso cuyo nombre o estado contiene este texto.",
       "guideDismissWelcome": "Oculte esta página de bienvenida. Vuelva a encontrarla en Contenido.",
-      "showSecret": "Mostrar la clave como texto sin formato para comprobar lo que se pegó."
+      "showSecret": "Mostrar la clave como texto sin formato para comprobar lo que se pegó.",
+      "guideSearchAgain": "Vuelva a buscar esto en la guía."
     },
     "guide": {
       "title": "Guía",
@@ -2912,7 +2913,8 @@
       "breadcrumbs": "Dónde se encuentra esta página",
       "dismissWelcome": "Descartar",
       "welcomeReadAbout": "Leer más sobre {page}",
-      "welcomeSearchHint": "Pruebe «{word}»"
+      "welcomeSearchHint": "Pruebe «{word}»",
+      "searchHistory": "Historial de búsqueda"
     },
     "logs": {
       "filters": "Filtros",

@@ -3038,7 +3038,8 @@
       "guideLink": "Otwórz tę stronę w Przewodniku. Wstecz wraca do wcześniej czytanej strony.",
       "accessKeyFilter": "Pokaż tylko klucze dostępu, których nazwa lub stan zawiera ten tekst.",
       "guideDismissWelcome": "Ukryj tę stronę powitalną. Znajdziesz ją ponownie w Spisie treści.",
-      "showSecret": "Pokaż klucz jako zwykły tekst, aby sprawdzić, co zostało wklejone."
+      "showSecret": "Pokaż klucz jako zwykły tekst, aby sprawdzić, co zostało wklejone.",
+      "guideSearchAgain": "Wyszukaj to ponownie w przewodniku."
     },
     "guide": {
       "title": "Przewodnik",
@@ -3053,7 +3054,8 @@
       "breadcrumbs": "Położenie tej strony",
       "dismissWelcome": "Zamknij",
       "welcomeReadAbout": "Przeczytaj więcej o: {page}",
-      "welcomeSearchHint": "Spróbuj „{word}”"
+      "welcomeSearchHint": "Spróbuj „{word}”",
+      "searchHistory": "Historia wyszukiwania"
     },
     "logs": {
       "filters": "Filtry",
