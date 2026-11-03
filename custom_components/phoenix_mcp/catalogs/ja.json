@@ -65,7 +65,7 @@
       "processing": "処理中",
       "reason": {
         "access_key_inactive": "アクセスキーが無効でした",
-        "capability_denied": "機能が拒否されました",
+        "capability_denied": "機能がアクセス拒否に設定されました",
         "target_out_of_scope": "対象がスコープ外です",
         "target_missing": "対象は存在しなくなりました",
         "rate_limited_at_execution": "実行時にレート制限に達しました",
@@ -248,7 +248,7 @@
       "tierConfigWrite": "設定の変更",
       "tierSystem": "システムアクション",
       "tierIrreversible": "高リスク",
-      "modeDeny": "拒否",
+      "modeDeny": "アクセス拒否",
       "modeAllow": "許可",
       "modeConfirm": "確認",
       "modeDescDeny": "この機能をブロックします。「常にすべてのツールを通知」がオンでない限り、そのツールはこのキーのエージェントに表示されません。",
@@ -278,7 +278,7 @@
       },
       "dashboard_designer": {
         "label": "ダッシュボード設計者",
-        "description": "ダッシュボードを作成します。カスタムカードのファイルとエネルギーダッシュボードには承認が必要で、その他の設定は拒否されます。"
+        "description": "ダッシュボードを作成します。カスタムカードのファイルとエネルギーダッシュボードには承認が必要で、その他の設定はアクセス拒否です。"
       },
       "esphome": {
         "label": "ESPHome デバイス",
@@ -303,7 +303,7 @@
       },
       "read_only": {
         "label": "読み取り専用の閲覧者",
-        "description": "状態、履歴、ログを読み取ります。設定変更、アナウンス、ロック、アラーム、カバー、バルブは拒否されます。"
+        "description": "状態、履歴、ログを読み取ります。設定変更、アナウンス、ロック、アラーム、カバー、バルブはアクセス拒否です。"
       },
       "voice_assistant": {
         "label": "音声アシスタント",
@@ -372,11 +372,11 @@
       "saveFailedShort": "保存できませんでした",
       "selGreen": "Write: 読み取りと書き込み",
       "selGrey": "None: 明示的な許可なし（親から継承）",
-      "selRed": "Deny: 拒否（上位と下位の許可より優先）",
+      "selRed": "Deny: アクセス拒否（上位と下位の許可より優先）",
       "selSelected": "{title}、選択済み",
       "selYellow": "Read: 読み取り専用",
       "simulateEntityTitle": "ツリーで {id} を表示",
-      "stateDeny": "拒否",
+      "stateDeny": "アクセス拒否",
       "stateNoAccess": "アクセス不可",
       "stateNotFound": "見つかりません",
       "stateRead": "読み取り",
@@ -398,7 +398,7 @@
       "levelInherit": "継承",
       "levelRead": "読み取り",
       "levelWrite": "書き込み",
-      "levelDeny": "拒否"
+      "levelDeny": "アクセス拒否"
     },
     "changes": {
       "added": "追加",
@@ -512,7 +512,7 @@
       "methodPlaceholder": "メソッド...",
       "openEntryAria": "監査エントリ: {outcome}、{name}",
       "outcomeAllowed": "許可",
-      "outcomeDenied": "拒否",
+      "outcomeDenied": "アクセス拒否",
       "outcomeInvalidRequest": "無効なリクエスト",
       "outcomeNotFound": "見つかりません",
       "outcomeNotImplemented": "未実装",
@@ -943,7 +943,7 @@
       "approvalAlreadyResolved": "承認はすでに解決済みです。",
       "approvalExpired": "このリクエストは承認される前に期限切れになったため、何も実行されていません。",
       "approvalBatchMaximum": "一括処理に含められる承認は最大 {max} 件です。",
-      "approvalCapabilityDenied": "アクセスキーの機能が「拒否」に設定されたため、リクエストは実行されずに終了しました。",
+      "approvalCapabilityDenied": "アクセスキーの機能が「アクセス拒否」に設定されたため、リクエストは実行されずに終了しました。",
       "approvalExecutionInterrupted": "以前の試行がすでに適用されている可能性があります。このリクエストを変更または再試行する前に、結果を確認してください。",
       "approvalWipeInProgress": "承認の実行とコアデータの消去は同時に行えません。どちらかが完了するまで待ってから、もう一度お試しください。",
       "approvalWipeExecutionUncertain": "承認が適用された可能性があり、結果が返されていない場合はコアデータを消去できません。先に結果を確認してください。",
@@ -1515,8 +1515,8 @@
       "logAllowedLabel": "許可されたリクエストを記録",
       "logClientIpHelp": "呼び出し元の IP アドレスを監査ログに記録します。オフでは [redacted] と表示されます。",
       "logClientIpLabel": "クライアント IP を記録",
-      "logDeniedHelp": "拒否された、見つからなかった、無効な、未実装のリクエストを監査ログに記録します。",
-      "logDeniedLabel": "拒否されたリクエストを記録",
+      "logDeniedHelp": "アクセス拒否された、見つからなかった、無効な、未実装のリクエストを監査ログに記録します。",
+      "logDeniedLabel": "アクセス拒否されたリクエストを記録",
       "logEnableHelp": "監査ログと会話ログに新しいエントリを記録します。オフにすると記録を停止します。センサーカウンターは引き続き更新されます。",
       "logEnableLabel": "ログ記録を有効化",
       "logEntityIdsHelp": "監査ログにエンティティ ID を、会話ログに会話内容を記録します。",
@@ -2849,7 +2849,7 @@
       "logSettings": "「ログと通知」の設定を開き、記録をオンにしたり、ログの保持期間を変えたりします。",
       "clearConversations": "フィルターで隠れているものも含め、記録されたすべての会話を削除します。元に戻せません。バックアップのコピーは残ります。",
       "confirmClearConversations": "「会話履歴を消去」は記録されたすべての会話をすぐに削除し、進行中の会話の記録も止めます。「キャンセル」ではすべて残ります。",
-      "auditOutcome": "「拒否」や「承認待ち」など、一つの結果のエントリだけを表示します。",
+      "auditOutcome": "「アクセス拒否」や「承認待ち」など、一つの結果のエントリだけを表示します。",
       "auditAccessKey": "一つのアクセスキーで行われたリクエストだけを表示します。",
       "auditTime": "最近の期間のエントリだけを表示します。新しいエントリが届くと期間も進みます。",
       "auditMethod": "ツール名や approval/ など、メソッドにこのテキストを含むエントリを表示します。",

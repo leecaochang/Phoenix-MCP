@@ -52,7 +52,7 @@
         "name": "リクエスト数"
       },
       "denied_count": {
-        "name": "拒否数"
+        "name": "アクセス拒否数"
       },
       "rate_limit_hits": {
         "name": "レート制限到達回数"

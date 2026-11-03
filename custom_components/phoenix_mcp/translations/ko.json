@@ -52,7 +52,7 @@
         "name": "요청 수"
       },
       "denied_count": {
-        "name": "거부 수"
+        "name": "접근 거부 수"
       },
       "rate_limit_hits": {
         "name": "속도 제한 도달 횟수"
