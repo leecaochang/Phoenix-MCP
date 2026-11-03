@@ -90,6 +90,16 @@ describe("renderMarkdown", () => {
     expect(renderMarkdown("| A |\n|---|\n| `code` |")).toContain("<code>code</code>");
   });
 
+  it("labels a Guide table's cells for stacking and wraps it to scroll, leaving chat tables bare", () => {
+    const src = "| Field | Type | Notes |\n|---|---|---|\n| `kind` | string | |";
+    const html = renderMarkdown(src, { stackTables: true });
+    expect(html.startsWith('<div class="phx-md-table"><table>')).toBe(true);
+    // The first cell is the card's heading and an empty cell gets no label.
+    expect(html).toContain('<td><code>kind</code></td><td><span class="phx-cell-label">Type</span><span>string</span></td><td></td>');
+    expect(renderMarkdown(src)).not.toContain("phx-cell-label");
+    expect(renderMarkdown(src)).not.toContain("phx-md-table");
+  });
+
   it("still renders intended emphasis", () => {
     expect(renderMarkdown("this is **bold** here")).toContain("<strong>bold</strong>");
     expect(renderMarkdown("this is _italic_ here")).toContain("<em>italic</em>");

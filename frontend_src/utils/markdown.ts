@@ -8,11 +8,17 @@
 // (headings, emphasis, code, lists, links, blockquotes, tables) and renders
 // anything it does not recognise as plain text. The Guide also turns
 // `guide:<topic id>`, `guide:<topic id>#<section>` and `guide:#<section>` links
-// into in-panel links (`guideLinks`).
+// into in-panel links (`guideLinks`), and gives its tables what they need to
+// scroll sideways or stack into one card per row (`stackTables`).
 
 export interface MarkdownOptions {
   /** Render `[text](guide:<topic id>#<section>)` as a link the Guide follows itself. */
   guideLinks?: boolean;
+  /**
+   * Wrap each table in a box that scrolls sideways, and start each filled cell
+   * after the first with its column's name, shown only when the rows stack.
+   */
+  stackTables?: boolean;
 }
 /**
  * A `guide:` link: a topic id (letters, digits, dot, dash and underscore), a
@@ -102,13 +108,19 @@ function splitTableRow(line: string): string[] {
   return s.split("|").map((c) => c.trim());
 }
 function renderTable(header: string[], rows: string[][], opts: MarkdownOptions): string {
-  const th = header.map((h) => `<th>${inline(esc(h), opts)}</th>`).join("");
+  const names = header.map((h) => inline(esc(h), opts));
+  const th = names.map((h) => `<th>${h}</th>`).join("");
   const body = rows.map((r) => {
     const cells: string[] = [];
-    for (let i = 0; i < header.length; i++) cells.push(`<td>${inline(esc(r[i] ?? ""), opts)}</td>`);
+    for (let i = 0; i < header.length; i++) {
+      const cell = inline(esc(r[i] ?? ""), opts);
+      const labeled = opts.stackTables && i > 0 && cell;
+      cells.push(labeled ? `<td><span class="phx-cell-label">${names[i]}</span><span>${cell}</span></td>` : `<td>${cell}</td>`);
+    }
     return `<tr>${cells.join("")}</tr>`;
   }).join("");
-  return `<table><thead><tr>${th}</tr></thead><tbody>${body}</tbody></table>`;
+  const table = `<table><thead><tr>${th}</tr></thead><tbody>${body}</tbody></table>`;
+  return opts.stackTables ? `<div class="phx-md-table">${table}</div>` : table;
 }
 
 export function renderMarkdown(src: string, opts: MarkdownOptions = {}): string {

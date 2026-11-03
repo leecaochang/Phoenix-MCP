@@ -558,12 +558,38 @@
    pushing the buttons out of the window. */
 .phx-guide-titlebar .phx-guide-keys-hint { flex: 1; min-width: 0; padding: 0 4px; white-space: normal; font-size: 11px; line-height: 1.25; }
 .phx-guide-body { flex: 1; min-height: 0; overflow: auto; padding: 12px 16px 16px; }
-.phx-guide-topic { font-size: 13px; line-height: 1.55; overflow-wrap: anywhere; }
+.phx-guide-topic { container: guide-topic / inline-size; font-size: 13px; line-height: 1.55; overflow-wrap: anywhere; }
 .phx-guide-topic h3 { margin: 0 0 8px; font-size: 15px; font-weight: 600; }
 .phx-guide-topic p, .phx-guide-topic ul, .phx-guide-topic ol, .phx-guide-topic blockquote { margin: 0 0 10px; }
 .phx-guide-topic ul, .phx-guide-topic ol { padding-left: 20px; }
 .phx-guide-topic li + li { margin-top: 4px; }
 .phx-guide-topic a { color: var(--phx-accent); text-decoration: underline; text-underline-offset: 2px; }
+/* A code block wider than the page scrolls sideways by itself rather than the whole page. */
+.phx-guide-topic pre { max-width: 100%; overflow-x: auto; }
+/* Tables keep whole words: the page breaks long tokens anywhere, which would let every column shrink to
+   one character. A table wider than the page scrolls sideways in its own box. */
+.phx-md-table { max-width: 100%; overflow-x: auto; margin: 0 0 10px; }
+.phx-md-table table { border-collapse: collapse; font-size: 12px; line-height: 1.45; }
+.phx-md-table th, .phx-md-table td {
+  min-width: 4em; padding: 4px 8px; border: 1px solid var(--phx-border);
+  text-align: left; vertical-align: top; overflow-wrap: normal;
+}
+.phx-md-table th { background: var(--phx-surface-2); font-weight: 600; }
+.phx-cell-label { display: none; }
+/* In a narrow Guide each row stacks into a card: the first cell as its heading, then each filled cell
+   beside its column's name. */
+@container guide-topic (max-width: 559px) {
+  .phx-md-table { overflow-x: visible; }
+  .phx-md-table table, .phx-md-table tbody, .phx-md-table tr, .phx-md-table td { display: block; }
+  .phx-md-table thead { display: none; }
+  .phx-md-table tr { padding: 6px 0; border-top: 1px solid var(--phx-border); }
+  .phx-md-table tr:last-child { border-bottom: 1px solid var(--phx-border); }
+  .phx-md-table td { min-width: 0; padding: 1px 0; border: 0; overflow-wrap: anywhere; }
+  .phx-md-table td:first-child { font-weight: 600; }
+  .phx-md-table td:empty { display: none; }
+  .phx-md-table td:has(> .phx-cell-label) { display: grid; grid-template-columns: minmax(5em, 30%) 1fr; column-gap: 8px; }
+  .phx-cell-label { display: block; color: var(--phx-text-2); }
+}
 .phx-guide-missing { color: var(--phx-error); }
 /* Breadcrumbs: the pages above this one in Contents (user, 2026-11-01). */
 .phx-guide-crumbs { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 4px; margin: 0 0 4px; font-size: 12px; color: var(--phx-text-2); }

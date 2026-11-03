@@ -188,7 +188,7 @@ export function renderTopic(body: string): string {
   const open: number[] = [];
   let chunk: string[] = [];
   let inCode = false;
-  const flush = () => { if (chunk.length) { out.push(renderMarkdown(chunk.join("\n"), { guideLinks: true })); chunk = []; } };
+  const flush = () => { if (chunk.length) { out.push(renderMarkdown(chunk.join("\n"), { guideLinks: true, stackTables: true })); chunk = []; } };
   for (const line of body.split("\n")) {
     if (/^```/.test(line)) inCode = !inCode;
     const h = inCode ? null : HEADING.exec(line);
@@ -197,7 +197,7 @@ export function renderTopic(body: string): string {
     const level = h[1].length;
     while (open.length && open[open.length - 1] >= level) { out.push("</section>"); open.pop(); }
     out.push(`<section class="phx-guide-section" data-guide-section="${h[3]}">`);
-    out.push(renderMarkdown(`${"#".repeat(level + 2)} ${h[2]}`, { guideLinks: true }));
+    out.push(renderMarkdown(`${"#".repeat(level + 2)} ${h[2]}`, { guideLinks: true, stackTables: true }));
     open.push(level);
   }
   flush();
