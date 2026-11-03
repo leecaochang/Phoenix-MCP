@@ -22,12 +22,16 @@ const TOGGLES: {
   labelKey: string;
   descriptionKey: string;
   master?: boolean;
+  /** Shown the other way round from how it is stored: on means the stored flag is off. */
+  inverted?: boolean;
 }[] = [
   {
+    // Stored as disable_all_logging, shown as Enable logging, on by default (user, 2026-11-03).
     key: "disable_all_logging",
-    labelKey: "settings.logDisableAllLabel",
-    descriptionKey: "settings.logDisableAllHelp",
+    labelKey: "settings.logEnableLabel",
+    descriptionKey: "settings.logEnableHelp",
     master: true,
+    inverted: true,
   },
   {
     key: "log_allowed",
@@ -61,7 +65,7 @@ export function LoggingSettings({ settings, onToggle, saving, only }: Props) {
 
   return (
     <div>
-      {TOGGLES.filter(({ key }) => !only || only.includes(key)).map(({ key, labelKey, descriptionKey, master }) => {
+      {TOGGLES.filter(({ key }) => !only || only.includes(key)).map(({ key, labelKey, descriptionKey, master, inverted }) => {
         const greyed = !master && masterOff;
         return (
           <div
@@ -76,9 +80,9 @@ export function LoggingSettings({ settings, onToggle, saving, only }: Props) {
               <BusyInput
                 type="checkbox"
                 aria-label={t(labelKey)}
-                checked={settings[key] as boolean}
+                checked={inverted ? !settings[key] : settings[key] as boolean}
                 busy={saving} disabled={greyed}
-                onChange={(e) => onToggle(key, e.target.checked)}
+                onChange={(e) => onToggle(key, inverted ? !e.target.checked : e.target.checked)}
               />
               <span className="toggle-switch-track" />
             </label>

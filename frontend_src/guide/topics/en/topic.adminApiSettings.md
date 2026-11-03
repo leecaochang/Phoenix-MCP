@@ -64,7 +64,7 @@ The audit log records the change with the names of the changed settings, not the
 | Setting | Type and range | Default | Notes |
 |---|---|---|---|
 | `kill_switch` | boolean | `false` | Turning it off opens the agent routes. While on, the chat route answers `503`. See [Kill switch](guide:window.settingsSafety#kill-switch). |
-| `disable_all_logging` | boolean | `false` | See [Logs](guide:window.settingsLogs#log-disable-all). |
+| `disable_all_logging` | boolean | `false` | The panel shows it the other way round, as **{{label:settings.logEnableLabel}}**. See [Logs](guide:window.settingsLogs#log-enable). |
 | `log_allowed` | boolean | `true` | See [Logs](guide:window.settingsLogs#log-allowed). |
 | `log_denied` | boolean | `true` | See [Logs](guide:window.settingsLogs#log-denied). |
 | `log_rate_limited` | boolean | `true` | See [Logs](guide:window.settingsLogs#log-rate-limited). |

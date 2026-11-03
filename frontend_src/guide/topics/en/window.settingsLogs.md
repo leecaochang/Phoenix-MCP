@@ -9,9 +9,9 @@ The audit log records what agents do through Phoenix and what administrators cha
 
 Related: [What the logs record](guide:topic.logRecords)
 
-### {{label:settings.logDisableAllLabel}} {#log-disable-all}
+### {{label:settings.logEnableLabel}} {#log-enable}
 
-Stops all recording: no audit entries and no conversations. The other logging settings are greyed out. Off by default.
+Records audit entries and conversations. Turn it off to stop all recording; the other logging settings are then greyed out. On by default.
 
 Phoenix's sensors keep counting, and notifications still arrive.
 

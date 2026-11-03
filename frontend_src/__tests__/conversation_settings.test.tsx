@@ -21,7 +21,7 @@ it("greys recording and every limit while all logging is off, with the reason in
   const view = render(<ConversationSettings settings={{ ...SETTINGS, disable_all_logging: true }} saving={false} onChange={vi.fn()} />);
   for (const name of ["Record conversations", "Maximum entries", "Maximum age (days)", "Maximum storage (MB)"]) expect(view.getByLabelText(name)).toBeDisabled();
   // Read out with the switch for screen readers, but not shown.
-  expect(view.queryAllByText(/Disable all logging is on/).filter((el) => !el.closest(".sr-only"))).toEqual([]);
+  expect(view.queryAllByText(/Enable logging is off/).filter((el) => !el.closest(".sr-only"))).toEqual([]);
   expect(view.getByLabelText("Record conversations").closest(".toggle-row")).toHaveClass("toggle-row-greyed");
   expect(view.getByLabelText("Maximum entries").closest("fieldset")).toHaveAttribute("data-help", "conversations.loggingDisabled");
 });

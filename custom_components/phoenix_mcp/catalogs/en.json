@@ -1639,8 +1639,8 @@
       "logClientIpLabel": "Log client IP",
       "logDeniedHelp": "Record denied, not-found, invalid, and not-implemented requests in the audit log.",
       "logDeniedLabel": "Log denied requests",
-      "logDisableAllHelp": "Stops new audit log and Conversation Log entries. Sensor counters continue to update.",
-      "logDisableAllLabel": "Disable all logging",
+      "logEnableHelp": "Records new audit log and Conversation Log entries. Turned off, it stops them; sensor counters keep updating.",
+      "logEnableLabel": "Enable logging",
       "logEntityIdsHelp": "Record entity IDs in the audit log, and conversation content in the Conversation Log.",
       "logEntityIdsLabel": "Log entity IDs",
       "logRateLimitedHelp": "Record requests blocked by a rate limit.",
@@ -2852,7 +2852,7 @@
         "one": "Event limit reached: {count} event is not shown. Recorded outcomes are retained separately.",
         "other": "Event limit reached: {count} events are not shown. Recorded outcomes are retained separately."
       },
-      "loggingDisabled": "Recording is unavailable while Disable all logging is on.",
+      "loggingDisabled": "Recording is unavailable while Enable logging is off.",
       "storage": "<strong>Storage:</strong> {used} of {limit} MB",
       "toolCount": {
         "one": "{count} tool call",

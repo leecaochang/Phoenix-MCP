@@ -86,7 +86,7 @@ export const SETTING_INDEX: readonly SettingEntry[] = [
   { id: "wipeProviders", labelKey: "settings.wipeProvidersLabel", window: "settingsSafety", aria: ["settings.wipeProvidersLabel"] },
   { id: "wipeMesa", labelKey: "settings.wipeMesaLabel", window: "settingsSafety", aria: ["settings.wipeMesaLabel"] },
 
-  { id: "logDisableAll", labelKey: "settings.logDisableAllLabel", window: "settingsLogs", aria: ["settings.logDisableAllLabel"] },
+  { id: "logEnable", labelKey: "settings.logEnableLabel", window: "settingsLogs", aria: ["settings.logEnableLabel"] },
   { id: "logAllowed", labelKey: "settings.logAllowedLabel", window: "settingsLogs", aria: ["settings.logAllowedLabel"] },
   { id: "logDenied", labelKey: "settings.logDeniedLabel", window: "settingsLogs", aria: ["settings.logDeniedLabel"] },
   { id: "logRateLimited", labelKey: "settings.logRateLimitedLabel", window: "settingsLogs", aria: ["settings.logRateLimitedLabel"] },
