@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import logging
+
+from homeassistant.util import dt as dt_util
+
 from .helpers import log_internal_failure
 
 import asyncio
@@ -102,7 +105,7 @@ def _temporal_current(hass: Any, proposal: dict) -> bool:
     if spec is None:
         return True
     from .temporal_values import temporal_value_current
-    return all(temporal_value_current(proposal, hass.states.get(eid), hass.config.time_zone)
+    return all(temporal_value_current(proposal, hass.states.get(eid), dt_util.get_default_time_zone())
                for eid in proposal.get("entity_ids", []))
 
 

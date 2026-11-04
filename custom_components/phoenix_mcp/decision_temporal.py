@@ -3,6 +3,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from homeassistant.util import dt as dt_util
+
 from .command_execution import _capture_plan, _digest
 from .command_routing import RoutingAuthority
 from .const import DECISION_BATCH_EXECUTION_MODELS, COMMAND_ROUTING_TEMPORAL_OPERATIONS
@@ -11,7 +13,7 @@ from .decision_identity import explicit_write_target
 from .temporal_values import valid_temporal_value
 
 
-def temporal_proposal(answer: dict, targets: dict, source: dict, timezone: str, sentence: str = "", language: str = "en") -> tuple[str, dict | None]:
+def temporal_proposal(answer: dict, targets: dict, source: dict, sentence: str = "", language: str = "en") -> tuple[str, dict | None]:
     """Validate independent operation, target and exact source-value choices."""
     from .const import DECISION_TEMPORAL_CATEGORIES
     route, target, value = answer["route"], answer["target"], answer["value"]
@@ -31,7 +33,7 @@ def temporal_proposal(answer: dict, targets: dict, source: dict, timezone: str, 
         from .temporal_values import explicit_timer_duration
         if not explicit_timer_duration(sentence, source):
             return "numeric_unverified", None
-    if (source["kind"] != kind and not (kind == "duration" and source["kind"] == "time")) or not valid_temporal_value(kind, source["value"], timezone):
+    if (source["kind"] != kind and not (kind == "duration" and source["kind"] == "time")) or not valid_temporal_value(kind, source["value"], dt_util.get_default_time_zone()):
         return "numeric_unverified", None
     proposal = {"intent": intent, "entity_ids": [descriptor["entity_id"]], "value": source["value"]}
     if not explicit_write_target(sentence, targets, proposal, language):
@@ -48,7 +50,7 @@ async def async_prepare_temporal(hass: Any, authority: RoutingAuthority, provide
     if current is None:
         raise DecisionError("authority_changed")
     timezone = hass.config.time_zone
-    if not valid_temporal_value(source["kind"], source["value"], timezone):
+    if not valid_temporal_value(source["kind"], source["value"], dt_util.get_default_time_zone()):
         raise DecisionError("numeric_unverified")
     snapshot = capture_batch_targets(hass, current, extended=True, temporal=True)
     targets, catalogs = snapshot
@@ -72,7 +74,7 @@ async def async_prepare_temporal(hass: Any, authority: RoutingAuthority, provide
     category = answer["route"]
     if not revision_admitted(DECISION_BATCH_EXECUTION_MODELS, provider.cfg, category["model"]):
         raise DecisionError("model_unverified")
-    reason, proposal = temporal_proposal(answer, targets, source, timezone, sentence, language)
+    reason, proposal = temporal_proposal(answer, targets, source, sentence, language)
     selection: dict = {"reason": reason, "decision": answer["target"], "executed": False}
     if proposal is None:
         return category, selection

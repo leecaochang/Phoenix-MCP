@@ -393,7 +393,8 @@
       "decisionProviderCheckFailed": "Päätöstarjoajan tarkistus epäonnistui ({detail}).",
       "restoreNoConfigSide": "Tässä versiossa ei ole kyseisellä puolella kokoonpanoa, jonka voisi palauttaa.",
       "restoreYamlTags": "Tämä versio sisältää YAML-tageja, kuten !secret tai !include, eikä sitä voi palauttaa automaattisesti. Luo se uudelleen käsin.",
-      "restoreToolReported": "Palautusta ei voitu toteuttaa. Työkalu ilmoitti: {detail}"
+      "restoreToolReported": "Palautusta ei voitu toteuttaa. Työkalu ilmoitti: {detail}",
+      "capabilityAllowUnsupported": "{capability} ei tue Salli-tilaa."
     },
     "agentchat": {
       "accessKey": "Käyttöavain",
@@ -1158,8 +1159,9 @@
       "updateFailed": "Ominaisuuden päivitys epäonnistui.",
       "cap_dashboard_resources": {
         "label": "Kojelaudan resurssit",
-        "description": "Hallitse JavaScript- ja CSS-tiedostoja, jotka jokainen kojelauta lataa. Ne toimivat jokaisen katsojan selaimessa, joten Vahvista on turvallisin."
-      }
+        "description": "Hallitse JavaScript- ja CSS-tiedostoja, jotka jokainen kojelauta lataa, vain paikallisista poluista. Jokainen muutos vaatii hyväksynnän."
+      },
+      "allowUnavailable": "Tämä ominaisuus vaatii aina hyväksynnän."
     },
     "changes": {
       "actionCreate": "Luo",

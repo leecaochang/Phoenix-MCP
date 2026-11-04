@@ -1098,6 +1098,11 @@ CONFIRM_AVAILABLE_CAPS = frozenset({
     "cap_esphome_flash",
 })
 
+# Capabilities that never run without a person's approval: Allow is not offered,
+# and a stored Allow reads as Confirm. A dashboard resource runs in every viewer's
+# browser, so an agent, or a prompt injection reaching one, must not add it unreviewed.
+CONFIRM_ONLY_CAPS = frozenset({"cap_dashboard_resources"})
+
 # Capabilities ALWAYS evaluated regardless of pass_through state.
 # All other capabilities are bypassed (treated as "allow") when pass_through is True,
 # except that "confirm" is honored even for non-exempt caps under pass_through
@@ -2910,6 +2915,9 @@ DASHBOARD_RESOURCE_BINDING = "_dashboard_resource_binding"
 # HTML imports no current browser loads.
 DASHBOARD_RESOURCE_TYPES = ("module", "css", "js")
 DASHBOARD_RESOURCE_URL_MAX_LENGTH = 2048
+# The static roots a resource may load from: www/ and the files HACS serves.
+DASHBOARD_RESOURCE_LOCAL_PREFIXES = ("/local/", "/hacsfiles/")
+DASHBOARD_RESOURCE_OWNERSHIP_STORAGE_KEY = "phoenix_mcp_dashboard_resources"
 LOCATION_REGISTRY_FIELDS = frozenset({
     "name", "icon", "aliases", "floor_id", "level", "labels", "add_labels", "remove_labels",
 })

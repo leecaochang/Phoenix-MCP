@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import importlib
+import sys
 from typing import Any
 
 import voluptuous as vol
@@ -15,7 +15,8 @@ def schema_engine(schema: Any = None) -> Any:
 
         schema = cv.PLATFORM_SCHEMA
     if type(schema).__module__.startswith("probatio."):
-        return importlib.import_module("probatio")
+        # The schema's own class already loaded the package, so this reads no files.
+        return sys.modules["probatio"]
     if isinstance(schema, vol.Schema):
         return vol
     raise TypeError("Unsupported Home Assistant validation engine")

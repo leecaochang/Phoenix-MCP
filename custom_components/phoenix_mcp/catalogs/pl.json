@@ -556,8 +556,9 @@
       },
       "cap_dashboard_resources": {
         "label": "Zasoby paneli",
-        "description": "Zarządzaj plikami JavaScript i CSS ładowanymi przez każdy panel. Działają w przeglądarce każdego oglądającego, więc Potwierdź jest najbezpieczniejsze."
-      }
+        "description": "Zarządzaj plikami JavaScript i CSS ładowanymi przez każdy panel, tylko ze ścieżek lokalnych. Każda zmiana wymaga zatwierdzenia."
+      },
+      "allowUnavailable": "Ta możliwość zawsze wymaga zatwierdzenia."
     },
     "perms": {
       "addHint": "Dodaj podpowiedź",
@@ -1216,7 +1217,8 @@
       "decisionProviderCheckFailed": "Sprawdzanie dostawcy decyzji nie powiodło się ({detail}).",
       "restoreNoConfigSide": "Ta wersja nie ma konfiguracji do przywrócenia po tej stronie.",
       "restoreYamlTags": "Ta wersja zawiera tagi YAML, takie jak !secret lub !include, i nie można jej przywrócić automatycznie. Utwórz ją ponownie ręcznie.",
-      "restoreToolReported": "Nie można było zastosować przywrócenia. Narzędzie zgłosiło: {detail}"
+      "restoreToolReported": "Nie można było zastosować przywrócenia. Narzędzie zgłosiło: {detail}",
+      "capabilityAllowUnsupported": "{capability} nie obsługuje trybu Zezwól."
     },
     "wizard": {
       "accessSub": "Wybierz trójkąt obok <code>light</code>, aby otworzyć grupę świateł. Zawiera ona Twoje urządzenia oświetleniowe; wybierz trójkąt obok urządzenia, aby zobaczyć jego encje. Możesz też wpisać nazwę światła w polu filtra. Następnie wybierz <strong>W</strong> przy świetle, które możesz sprawdzić, aby agent mógł je odczytywać i nim sterować. Więcej uprawnień możesz dodać później.",

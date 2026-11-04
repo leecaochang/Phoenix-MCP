@@ -546,8 +546,9 @@
       },
       "cap_dashboard_resources": {
         "label": "Dashboardbronnen",
-        "description": "De JavaScript- en CSS-bestanden beheren die elk dashboard laadt. Ze draaien in de browser van elke kijker, dus Bevestigen is het veiligst."
-      }
+        "description": "De JavaScript- en CSS-bestanden beheren die elk dashboard laadt, alleen vanaf lokale paden. Elke wijziging heeft goedkeuring nodig."
+      },
+      "allowUnavailable": "Deze mogelijkheid heeft altijd goedkeuring nodig."
     },
     "perms": {
       "addHint": "Hint toevoegen",
@@ -1198,7 +1199,8 @@
       "decisionProviderCheckFailed": "Controle van de beslissingsprovider mislukt ({detail}).",
       "restoreNoConfigSide": "Deze versie heeft aan die kant geen configuratie om te herstellen.",
       "restoreYamlTags": "Deze versie bevat YAML-tags zoals !secret of !include en kan niet automatisch worden hersteld. Maak deze handmatig opnieuw aan.",
-      "restoreToolReported": "Het herstel kon niet worden toegepast. De tool meldde: {detail}"
+      "restoreToolReported": "Het herstel kon niet worden toegepast. De tool meldde: {detail}",
+      "capabilityAllowUnsupported": "{capability} ondersteunt de Toestaan-modus niet."
     },
     "wizard": {
       "accessSub": "Selecteer het driehoekje naast <code>light</code> om de lichtgroep te openen. Daarin staan je lichtapparaten; selecteer het driehoekje naast een apparaat om de entiteiten te zien. Of typ de naam van je licht in het filterveld. Selecteer daarna <strong>W</strong> bij een licht dat je kunt controleren, zodat de agent het kan lezen en bedienen. Je kunt later meer machtigingen toevoegen.",

@@ -416,8 +416,9 @@
       },
       "cap_dashboard_resources": {
         "label": "Dashboard-Ressourcen",
-        "description": "Die JavaScript- und CSS-Dateien verwalten, die jedes Dashboard lädt. Sie laufen im Browser jedes Betrachters, daher ist Bestätigen am sichersten."
-      }
+        "description": "Die JavaScript- und CSS-Dateien verwalten, die jedes Dashboard lädt, nur aus lokalen Pfaden. Jede Änderung braucht eine Genehmigung."
+      },
+      "allowUnavailable": "Diese Fähigkeit braucht immer eine Genehmigung."
     },
     "personas": {
       "automation_builder": {
@@ -1697,7 +1698,8 @@
       "decisionProviderCheckFailed": "Prüfung des Entscheidungsanbieters fehlgeschlagen ({detail}).",
       "restoreNoConfigSide": "Diese Version enthält auf dieser Seite keine Konfiguration, die wiederhergestellt werden kann.",
       "restoreYamlTags": "Diese Version enthält YAML-Tags wie !secret oder !include und kann nicht automatisch wiederhergestellt werden. Erstellen Sie sie manuell neu.",
-      "restoreToolReported": "Die Wiederherstellung konnte nicht angewendet werden. Das Werkzeug meldete: {detail}"
+      "restoreToolReported": "Die Wiederherstellung konnte nicht angewendet werden. Das Werkzeug meldete: {detail}",
+      "capabilityAllowUnsupported": "{capability} unterstützt den Modus Erlauben nicht."
     },
     "approvalSummary": {
       "action.optionalReason": "Optionaler Grund",

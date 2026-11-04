@@ -2638,12 +2638,16 @@ hui-card, .dash-preview-card-slot { display: block; min-width: 0; }
     border-radius: 50%;
     background: var(--phx-agentcli-titlebar);
     color: var(--phx-text);
-    cursor: pointer;
+    cursor: move;
+    touch-action: none;
+    user-select: none;
+    -webkit-touch-callout: none;
   }
-  .agentcli-mobile-pill .agentcli-title-icon {
-    width: 28px;
-    height: 28px;
-    border-radius: 6px;
+  .agentcli-mobile-pill-logo {
+    display: block;
+    width: 44px;
+    height: 44px;
+    pointer-events: none;
   }
 }
 /* Full screen geometry comes from inset alone. Narrow viewports override the
@@ -2711,8 +2715,6 @@ hui-card, .dash-preview-card-slot { display: block; min-width: 0; }
 }
 .agentcli-title { font-weight: 600; font-size: 13px; display: flex; align-items: center; gap: 6px; min-width: 0; }
 /* The title art sets the titlebar's minimum content height. */
-.agentcli-title-icon { width: 22px; height: 22px; flex-shrink: 0; border-radius: 4px; }
-.agentcli-window.agentcli-minimized .agentcli-title-icon { width: 16px; height: 16px; border-radius: 3px; }
 .agentcli-titlebar-actions { display: flex; align-items: center; gap: 2px; }
 .agentcli-icon-btn {
   display: inline-flex;

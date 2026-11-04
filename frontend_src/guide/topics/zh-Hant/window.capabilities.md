@@ -155,4 +155,4 @@
 
 ### {{label:caps.cap_dashboard_resources.label}} {#dashboard-resources}
 
-新增和變更儀表板資源，即自訂卡片載入的 JavaScript 檔案。
+新增和變更儀表板資源，即自訂卡片載入的 JavaScript 檔案。每次變更都需要您核准，因此沒有「允許」選項。檔案必須來自 `/local/` 或 `/hacsfiles/`，Phoenix MCP 只變更它自己新增的資源。

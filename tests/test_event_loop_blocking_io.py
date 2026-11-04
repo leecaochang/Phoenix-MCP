@@ -29,6 +29,12 @@ BLOCKING_PREFIXES = (
     ("os", "remove"), ("os", "unlink"), ("os", "rename"), ("os", "replace"),
     ("os", "makedirs"), ("os", "mkdir"), ("os", "rmdir"),
     ("shutil",), ("glob",),
+    # Loading a zone can read zone files; Home Assistant's default zone is already loaded.
+    ("ZoneInfo",), ("zoneinfo",),
+    ("time", "sleep"), ("importlib", "import_module"),
+    ("ssl", "create_default_context"), ("ssl", "SSLContext"),
+    ("subprocess", "run"), ("subprocess", "check_output"), ("subprocess", "check_call"), ("subprocess", "Popen"),
+    ("urllib", "request"), ("requests",), ("socket", "create_connection"), ("socket", "getaddrinfo"),
 )
 # pathlib methods that touch the disk; the names are unambiguous across the package.
 PATH_METHODS = {"read_text", "read_bytes", "write_text", "write_bytes", "is_file", "is_dir", "iterdir", "rglob"}

@@ -21,6 +21,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass, field
 from typing import Any
+from urllib.parse import unquote, urlsplit
 
 from homeassistant.core import HomeAssistant
 
@@ -30,6 +31,7 @@ from ..const import (
     CAP_CONFIRM,
     CAP_DENY,
     DASHBOARD_RESOURCE_BINDING,
+    DASHBOARD_RESOURCE_LOCAL_PREFIXES,
     DASHBOARD_RESOURCE_TYPES,
     DASHBOARD_RESOURCE_URL_MAX_LENGTH,
     REDACTION_SENTINEL,
@@ -62,6 +64,14 @@ _UNREADABLE = "Dashboard resources could not be read; Home Assistant may be in s
 _YAML_MODE = (
     "Dashboard resources on this instance are defined in YAML (lovelace: resources), which Phoenix MCP "
     "cannot change. An administrator edits that list in the YAML file and then reloads resources."
+)
+_NOT_OWNED = (
+    "Phoenix MCP changes only the dashboard resources it created. Manage this one in "
+    "Settings > Dashboards > Resources, or through HACS if HACS installed it."
+)
+_LOCAL_ONLY = (
+    "url must be a local path under /local/ or /hacsfiles/. Phoenix MCP does not register remote files; "
+    "an administrator can add one in Settings > Dashboards > Resources."
 )
 _RELOAD_NOTE = (
     "Open dashboards load the change on their next page reload. The installed card list updates when "
@@ -142,6 +152,7 @@ async def _tool_list_dashboard_resources(
     rows = []
     for item in resources.items:
         row = redact_structure(_row(item))
+        row["phoenix_created"] = data.dashboard_resources.owns(item.get("id"))
         if item["url"] in failed:
             row["load_failed"] = True
         rows.append(row)
@@ -175,6 +186,33 @@ class ResourcePlan:
         return str((self.current or self.proposed or {}).get("url"))
 
 
+def is_local_resource_url(url: str) -> bool:
+    """True for a same-origin path under a local root, once percent-encoding is undone.
+
+    The literal text must carry the root too: a browser sends an encoded path as
+    written, so only its decoded form may be checked for a hidden way out.
+    """
+    if not url.startswith(DASHBOARD_RESOURCE_LOCAL_PREFIXES) or "\\" in url:
+        return False
+    try:
+        parts = urlsplit(url)
+    except ValueError:
+        return False
+    if parts.scheme or parts.netloc:
+        return False
+    path = parts.path
+    for _ in range(3):
+        decoded = unquote(path)
+        if decoded == path:
+            break
+        path = decoded
+    else:
+        return False
+    if "\\" in path or "//" in path or any(part in (".", "..") for part in path.split("/")):
+        return False
+    return path.startswith(DASHBOARD_RESOURCE_LOCAL_PREFIXES) and path not in DASHBOARD_RESOURCE_LOCAL_PREFIXES
+
+
 def _url_arg(value: Any) -> str:
     if not isinstance(value, str) or not value.strip():
         raise ResourceRefusal("url must be a non-empty string.")
@@ -188,11 +226,13 @@ def _url_arg(value: Any) -> str:
         raise ResourceRefusal(
             "This URL carries a credential, which Phoenix MCP cannot keep in a recovery copy. "
             "Register it in Settings > Dashboards > Resources instead.")
+    if not is_local_resource_url(value):
+        raise ResourceRefusal(_LOCAL_ONLY)
     return value
 
 
 def _prepare(args: dict, access_key: AccessKeyRecord, items: list[dict[str, Any]],
-             hass: HomeAssistant, *, internal: bool = False) -> ResourcePlan:
+             hass: HomeAssistant, data: PhoenixData, *, internal: bool = False) -> ResourcePlan:
     """Validate a change against the current list without any side effect."""
     if effective_cap(access_key, _CAP) == CAP_DENY:
         raise ResourceRefusal(_CAP_FORBIDDEN_MESSAGE, "denied")
@@ -223,6 +263,8 @@ def _prepare(args: dict, access_key: AccessKeyRecord, items: list[dict[str, Any]
         found = [item for item in items if item.get("id") == resource_id]
         if not found:
             raise ResourceRefusal(f"No dashboard resource has that resource_id; read {_LIST_TOOL}.", "not_found")
+        if not data.dashboard_resources.owns(resource_id):
+            raise ResourceRefusal(_NOT_OWNED, "denied")
         current = _row(found[0])
         others = [item for item in items if item.get("id") != resource_id]
         lookup, key = "id", resource_id
@@ -292,7 +334,7 @@ async def _tool_set_dashboard_resource(
     if effective_cap(access_key, _CAP) == CAP_DENY:
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", _SET_TOOL
     try:
-        plan = _prepare(args, access_key, await _storage_items(hass), hass)
+        plan = _prepare(args, access_key, await _storage_items(hass), hass, data)
     except ResourceRefusal as exc:
         return _tool_error(str(exc)), exc.outcome, _SET_TOOL
     except ConfigurationRecoveryError as exc:
@@ -314,7 +356,7 @@ async def _execute_set_dashboard_resource(
     check_request_authority()
     approved = _approved_exec_ctx.get()
     try:
-        plan = _prepare(args, access_key, await _storage_items(hass), hass, internal=True)
+        plan = _prepare(args, access_key, await _storage_items(hass), hass, data, internal=True)
         if effective_cap(access_key, _CAP) == CAP_CONFIRM and not (approved or _restore_ctx.get() is not None):
             raise ResourceRefusal("This dashboard resource change requires approval.", "denied")
         if approved and args.get(DASHBOARD_RESOURCE_BINDING) != plan.binding:
@@ -325,6 +367,17 @@ async def _execute_set_dashboard_resource(
     except ConfigurationRecoveryError as exc:
         return _tool_error(str(exc)), "invalid_request", _SET_TOOL
     return await _recoverable_resource_write(plan, access_key, hass, data)
+
+
+async def _record_ownership(data: PhoenixData, command: str, key: str, observed: dict) -> None:
+    """Keep the record of Phoenix's own resources in step with a change that landed."""
+    if command.endswith("/delete"):
+        if not observed.get("exists"):
+            await data.dashboard_resources.async_discard(key)
+    elif command.endswith("/create"):
+        resource_id = (observed.get("resource") or {}).get("id")
+        if isinstance(resource_id, str) and resource_id:
+            await data.dashboard_resources.async_add(resource_id)
 
 
 def _matches_expected(observed: dict, expected: dict) -> bool:
@@ -374,6 +427,7 @@ async def _recoverable_resource_write(
                         "status": "unknown", "recovery_id": rid,
                         "message": "The dashboard resource change could not be read back; inspect before retrying.",
                     })), "allowed", resource_name
+                await _record_ownership(data, plan.command, plan.key, after)
                 if not _matches_expected(after, plan.expected) or (
                         plan.operation == "create" and isinstance(result, dict)
                         and (after.get("resource") or {}).get("id") != result.get("id")):
@@ -450,6 +504,17 @@ def restore_receipt_diff(target: dict, snapshot: dict) -> dict:
     }
 
 
+def restore_refusal(data: PhoenixData, target: dict, snapshot: dict) -> str | None:
+    """Why a restore may not run: restoring obeys the same limits as changing."""
+    current = target.get("resource")
+    if current is not None and not data.dashboard_resources.owns(current.get("id")):
+        return _NOT_OWNED
+    wanted = snapshot.get("resource")
+    if isinstance(wanted, dict) and not is_local_resource_url(wanted["url"]):
+        return _LOCAL_ONLY
+    return None
+
+
 async def execute_restore(
     record: dict[str, Any], side: str, snapshot: dict, *, snapshot_digest: Any, target_fingerprint: Any,
     access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData,
@@ -466,6 +531,8 @@ async def execute_restore(
         target = await restore_target(hass, record, side, snapshot)
         if content_hash(target) != target_fingerprint:
             return _tool_error("The dashboard resource changed after approval."), "invalid_request", tool
+        if (refusal := restore_refusal(data, target, snapshot)) is not None:
+            return _tool_error(refusal), "denied", tool
         check_request_authority()
         wanted: dict[str, Any] = snapshot.get("resource") or {}
         current: dict[str, Any] | None = target.get("resource")
@@ -508,6 +575,7 @@ async def execute_restore(
                                         error="command_rejected")
                     return _tool_error(f"Dashboard resource restore failed: {exc}"), "invalid_request", tool
                 observed = await read_resource_snapshot(hass, lookup, key)
+                await _record_ownership(data, command, key, observed)
                 if not _matches_expected(observed, expected):
                     await recovery.mark(rid, "partial", observed=observed)
                     return _tool_success(json.dumps({

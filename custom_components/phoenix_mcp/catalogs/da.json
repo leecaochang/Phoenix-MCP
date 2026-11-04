@@ -393,7 +393,8 @@
       "decisionProviderCheckFailed": "Kontrollen af beslutningsudbyderen mislykkedes ({detail}).",
       "restoreNoConfigSide": "Denne version har ingen konfiguration at gendanne på den side.",
       "restoreYamlTags": "Denne version indeholder YAML-tags som !secret eller !include og kan ikke gendannes automatisk. Genopret den manuelt.",
-      "restoreToolReported": "Gendannelsen kunne ikke anvendes. Værktøjet rapporterede: {detail}"
+      "restoreToolReported": "Gendannelsen kunne ikke anvendes. Værktøjet rapporterede: {detail}",
+      "capabilityAllowUnsupported": "{capability} understøtter ikke Tillad-tilstand."
     },
     "agentchat": {
       "accessKey": "Adgangsnøgle",
@@ -1158,8 +1159,9 @@
       "updateFailed": "Kunne ikke opdatere funktionen.",
       "cap_dashboard_resources": {
         "label": "Betjeningspanelressourcer",
-        "description": "Administrér de JavaScript- og CSS-filer, som alle betjeningspaneler indlæser. De kører i hver seers browser, så Bekræft er sikrest."
-      }
+        "description": "Administrér de JavaScript- og CSS-filer, som alle betjeningspaneler indlæser, kun fra lokale stier. Hver ændring kræver godkendelse."
+      },
+      "allowUnavailable": "Denne funktion kræver altid godkendelse."
     },
     "changes": {
       "actionCreate": "Opret",

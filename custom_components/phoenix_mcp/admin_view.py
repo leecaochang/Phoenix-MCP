@@ -35,10 +35,12 @@ from .const import (
     PROVIDER_CATALOG_REFRESH_HOURS_MIN,
     PHOENIX_VERSION,
     BLOCKED_DOMAINS,
+    CAP_ALLOW,
     CAP_CONFIRM,
     CAP_MODES,
     CAPABILITY_NAMES,
     CONFIRM_AVAILABLE_CAPS,
+    CONFIRM_ONLY_CAPS,
     DOMAIN,
     GITHUB_URL,
     MAX_CONFIRM_INLINE_WAIT_SECONDS,
@@ -1009,6 +1011,11 @@ def _validated_access_key_patch(
             return {}, _err(
                 "invalid_request", f"{cap_name} does not support 'confirm' mode.",
                 400, rid, key="capabilityConfirmUnsupported", params={"capability": cap_name},
+            )
+        if value == CAP_ALLOW and cap_name in CONFIRM_ONLY_CAPS:
+            return {}, _err(
+                "invalid_request", f"{cap_name} does not support 'allow' mode.",
+                400, rid, key="capabilityAllowUnsupported", params={"capability": cap_name},
             )
 
     if "persona" in patchable and patchable["persona"] not in PERSONA_NAMES:

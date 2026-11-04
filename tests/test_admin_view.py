@@ -3337,6 +3337,17 @@ async def test_access_key_patch_confirm_mode_refused_for_a_cap_that_cannot_confi
 
 
 @pytest.mark.asyncio
+async def test_access_key_patch_allow_refused_for_a_confirm_only_cap():
+    """Allow would let an agent load code into every viewer's browser unreviewed."""
+    access_key = _make_active_access_key()
+    data = _access_key_patch_data(access_key)
+    resp = await _access_key_patch(data, access_key.id, {"cap_dashboard_resources": "allow"})
+    assert resp.status == 400
+    body = json.loads(resp.text)
+    assert "does not support 'allow' mode" in body["message"]
+
+
+@pytest.mark.asyncio
 async def test_access_key_patch_use_assist_exposure_allowed_when_enabling_pass_through_together():
     """The check reads the RESULTING pass_through, not just the stored one."""
     access_key = _make_active_access_key(pass_through=False)

@@ -309,8 +309,9 @@
       },
       "cap_dashboard_resources": {
         "label": "대시보드 리소스",
-        "description": "모든 대시보드가 불러오는 JavaScript 및 CSS 파일을 관리합니다. 모든 사용자의 브라우저에서 실행되므로 확인이 가장 안전합니다."
-      }
+        "description": "모든 대시보드가 불러오는 JavaScript 및 CSS 파일을 로컬 경로에 한해 관리합니다. 변경할 때마다 승인이 필요합니다."
+      },
+      "allowUnavailable": "이 기능은 항상 승인이 필요합니다."
     },
     "audit": {
       "accessPassThrough": "패스스루",
@@ -1025,7 +1026,8 @@
       "decisionProviderCheckFailed": "결정 제공업체 확인에 실패했습니다({detail}).",
       "restoreNoConfigSide": "이 버전에는 해당 쪽에 복원할 구성이 없습니다.",
       "restoreYamlTags": "이 버전에는 !secret 또는 !include 같은 YAML 태그가 포함되어 있어 자동으로 복원할 수 없습니다. 수동으로 다시 만드십시오.",
-      "restoreToolReported": "복원을 적용할 수 없습니다. 도구 보고 내용: {detail}"
+      "restoreToolReported": "복원을 적용할 수 없습니다. 도구 보고 내용: {detail}",
+      "capabilityAllowUnsupported": "{capability}은(는) 허용 모드를 지원하지 않습니다."
     },
     "mesa": {
       "addAreaProfile": "영역 프로필 추가",

@@ -1,5 +1,6 @@
 """Date/time evidence uses calendar validation, native helper types and DST checks."""
-from datetime import date, datetime, time
+from datetime import UTC, date, datetime, time
+from zoneinfo import ZoneInfo
 
 import pytest
 from homeassistant.core import State
@@ -32,7 +33,7 @@ def test_temporal_literal_evidence(text, expected):
     ('2026-03-08 03:30:00', True), ('2026-11-01 03:30:00', True),
 ])
 def test_dst_gaps_and_overlaps_are_not_guessed(value, valid):
-    assert valid_temporal_value('datetime', value, 'America/New_York') is valid
+    assert valid_temporal_value('datetime', value, ZoneInfo('America/New_York')) is valid
 
 
 @pytest.mark.parametrize('intent,domain,field,value,parsed', [
@@ -60,8 +61,8 @@ async def test_projection_matches_installed_ha_service_schema(hass, intent, doma
 def test_partial_helper_state_observation_does_not_compare_unrequested_field():
     state = State('input_datetime.test', '2026-12-25 18:30:00', {'year': 2026, 'month': 12, 'day': 25,
                                                              'hour': 18, 'minute': 30, 'second': 0})
-    assert temporal_state_matches({'intent': 'PhoenixInputDate', 'entity_ids': [state.entity_id], 'value': '2026-12-25'}, state, 'UTC')
-    assert temporal_state_matches({'intent': 'PhoenixInputTime', 'entity_ids': [state.entity_id], 'value': '18:30:00'}, state, 'UTC')
+    assert temporal_state_matches({'intent': 'PhoenixInputDate', 'entity_ids': [state.entity_id], 'value': '2026-12-25'}, state, UTC)
+    assert temporal_state_matches({'intent': 'PhoenixInputTime', 'entity_ids': [state.entity_id], 'value': '18:30:00'}, state, UTC)
 
 
 @pytest.mark.parametrize('intent,value,state_value,valid', [
@@ -73,7 +74,7 @@ def test_partial_helper_update_checks_combined_dst_value(intent, value, state_va
     from custom_components.phoenix_mcp.temporal_values import temporal_value_current
     state = State('input_datetime.test', state_value, {'has_date': True, 'has_time': True})
     proposal = {'intent': intent, 'entity_ids': [state.entity_id], 'value': value}
-    assert temporal_value_current(proposal, state, 'America/New_York') is valid
+    assert temporal_value_current(proposal, state, ZoneInfo('America/New_York')) is valid
 
 
 @pytest.mark.parametrize('sentence,expected', [
@@ -112,6 +113,6 @@ def test_duration_bounds_are_distinct_from_clock_time(value, allowed):
     proposal = {'intent': 'PhoenixTimerDuration', 'entity_ids': ['timer.test'], 'value': value}
     assert valid_temporal_value('duration', value) is allowed
     assert (service_arguments(proposal) is not None) is allowed
-    assert temporal_value_current(proposal, State('timer.test', 'idle'), 'UTC') is allowed
+    assert temporal_value_current(proposal, State('timer.test', 'idle'), UTC) is allowed
     assert valid_temporal_value('time', '00:00:00')
     assert service_arguments({'intent': 'PhoenixInputTime', 'entity_ids': ['input_datetime.test'], 'value': '00:00:00'})

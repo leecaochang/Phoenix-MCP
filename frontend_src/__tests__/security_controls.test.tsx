@@ -174,3 +174,16 @@ it("saves a capability only on explicit activation and retains focus while savin
   finish({ ...accessKey, cap_automation_write: "confirm" });
   await waitFor(() => expect(onUpdate).toHaveBeenCalled());
 });
+
+it("offers no Allow on a capability that always needs approval", async () => {
+  vi.mocked(api.patchAccessKey).mockClear();
+  const accessKey = { id: "test", cap_dashboard_resources: "deny" } as AccessKeyRecord;
+  render(<CapabilityMatrix accessKey={accessKey} onUpdate={vi.fn()} />);
+  const group = screen.getByRole("group", { name: "Dashboard resources" });
+  const allow = within(group).getByRole("button", { name: "Allow" });
+  expect(allow).toBeDisabled();
+  expect(allow).toHaveAttribute("title", "This capability always needs approval.");
+  expect(within(group).getByRole("button", { name: "Confirm" })).not.toBeDisabled();
+  fireEvent.click(allow);
+  expect(api.patchAccessKey).not.toHaveBeenCalled();
+});

@@ -16,7 +16,9 @@ import homeassistant.components.system_log
 from custom_components.phoenix_mcp.const import (
     CAPABILITY_TIERS,
     CONFIRM_AVAILABLE_CAPS,
+    CONFIRM_ONLY_CAPS,
     LOG_LEVELS,
+    PASS_THROUGH_EXEMPT_CAPS,
     PHYSICAL_GATE_DOMAINS,
     PHYSICAL_GATE_SERVICES,
 )
@@ -98,6 +100,13 @@ def test_confirm_is_offered_exactly_outside_the_read_and_everyday_tiers():
         if (tier in ("read", "everyday")) == (cap in CONFIRM_AVAILABLE_CAPS)
     }
     assert not drifted, f"Confirm availability disagrees with the tier: {drifted}"
+
+
+def test_a_confirm_only_capability_can_confirm_and_ignores_pass_through():
+    # Without Confirm it would have no usable mode, and without the exemption a
+    # pass-through key would read it as Allow.
+    assert CONFIRM_ONLY_CAPS <= CONFIRM_AVAILABLE_CAPS
+    assert CONFIRM_ONLY_CAPS <= PASS_THROUGH_EXEMPT_CAPS
 
 
 def test_configuration_file_capabilities_sit_in_their_tiers():

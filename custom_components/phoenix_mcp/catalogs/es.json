@@ -144,8 +144,9 @@
       },
       "cap_dashboard_resources": {
         "label": "Recursos del panel de control",
-        "description": "Gestiona los archivos JavaScript y CSS que carga cada panel de control. Se ejecutan en el navegador de cada persona que lo ve, así que Confirmar es lo más seguro."
-      }
+        "description": "Gestiona los archivos JavaScript y CSS que carga cada panel de control, solo desde rutas locales. Cada cambio necesita aprobación."
+      },
+      "allowUnavailable": "Esta capacidad siempre necesita aprobación."
     },
     "inject": {
       "profileSet": "Perfil MESA establecido para {key} - clic para editar",
@@ -1129,7 +1130,8 @@
       "decisionProviderCheckFailed": "Falló la comprobación del proveedor de decisiones ({detail}).",
       "restoreNoConfigSide": "Esta versión no tiene ninguna configuración que restaurar en ese lado.",
       "restoreYamlTags": "Esta versión contiene etiquetas YAML como !secret o !include y no se puede restaurar automáticamente. Vuelva a crearla manualmente.",
-      "restoreToolReported": "No se pudo aplicar la restauración. La herramienta informó: {detail}"
+      "restoreToolReported": "No se pudo aplicar la restauración. La herramienta informó: {detail}",
+      "capabilityAllowUnsupported": "{capability} no admite el modo Permitir."
     },
     "accessKeys": {
       "announceAllHelp": "Ofrezca a los agentes de esta clave todas las herramientas, incluso las que no puede usar. Solo para solucionar problemas; consume más tokens.",

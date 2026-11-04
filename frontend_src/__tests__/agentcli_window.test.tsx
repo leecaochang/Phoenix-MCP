@@ -1941,6 +1941,37 @@ describe("AgentCliWindow streaming", () => {
     expect(dialog).toHaveClass("agentcli-maximized");
   });
 
+  it("drags the phone circle, keeps it there, and a tap still opens Chat", () => {
+    vi.stubGlobal("matchMedia", vi.fn().mockReturnValue({ matches: true }));
+    render(
+      <AgentCliWindow accessKeys={ACCESS_KEYS} instances={INSTANCES} scrollbackLines={500}
+                      initialAccessKeyId="t1" onClose={() => {}} />,
+    );
+    const dialog = screen.getByRole("dialog", { name: "Agent Chat" });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Minimize" }));
+    const left = parseInt(dialog.style.left, 10);
+    const drag = (dx: number, dy: number) => {
+      const circle = within(dialog).getByRole("button", { name: "Restore" });
+      fireEvent.pointerDown(circle, { clientX: 300, clientY: 100 });
+      fireEvent.pointerMove(window, { clientX: 300 + dx, clientY: 100 + dy });
+      fireEvent.pointerUp(window);
+      fireEvent.click(circle);
+    };
+
+    drag(3, 2);  // a shaky tap is a tap
+    expect(dialog).toHaveClass("agentcli-maximized");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Minimize" }));
+    expect(parseInt(dialog.style.left, 10)).toBe(left);
+
+    drag(-200, 150);
+    expect(dialog).toHaveClass("agentcli-minimized");
+    expect(parseInt(dialog.style.left, 10)).toBe(left - 200);
+
+    fireEvent.click(within(dialog).getByRole("button", { name: "Restore" }));
+    fireEvent.click(within(dialog).getByRole("button", { name: "Minimize" }));
+    expect(parseInt(dialog.style.left, 10)).toBe(left - 200);
+  });
+
   it("redirects swipes from fixed controls into the transcript", async () => {
     render(
       <AgentCliWindow accessKeys={ACCESS_KEYS} instances={INSTANCES} scrollbackLines={500}

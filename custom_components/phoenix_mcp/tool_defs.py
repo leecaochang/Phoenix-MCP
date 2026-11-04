@@ -2787,7 +2787,7 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
     },
     {
         "name": "check_ha_config",
-        "description": "Validate Home Assistant configuration and return validity, bounded error/warning counts and safe domain labels. Each error carries a value-free reason (for example a missing required key), and, for an access key with YAML editing, the config-relative file and line to fix. Messages that could echo configured values are withheld.",
+        "description": "Validate Home Assistant configuration and return validity, bounded error/warning counts and safe domain labels. Each error carries a value-free reason (for example a missing required key), and, for an access key with the YAML configuration capability, the config-relative file and line to fix. Messages that could echo configured values are withheld.",
         "cap": "cap_diagnostics",
         "inputSchema": {"type": "object", "properties": {}},
     },
@@ -3519,7 +3519,7 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
         "name": "list_dashboard_resources",
         "description": (
             "List the dashboard resources: the JavaScript and CSS files every dashboard loads, which is how "
-            "custom cards are installed. Returns each resource's resource_id, type and url, plus load_failed "
+            "custom cards are installed. Returns each resource's resource_id, type, url and phoenix_created, plus load_failed "
             "when the last check of installed cards saw that file fail to load. When resources are defined in "
             "YAML they are counted but not listed; read them with get_yaml_config. An unreadable list is an "
             "error, never an empty one."
@@ -3532,11 +3532,13 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
         "description": (
             "Add, change or remove one dashboard resource. Every browser that opens a dashboard runs a "
             "registered JavaScript file with that person's Home Assistant access, so register only a file the operator "
-            "asked for. HACS registers the cards it installs itself; do not add those again. create needs url "
-            "and type; update needs resource_id and url, type or both; delete needs resource_id. Take "
-            "resource_id from list_dashboard_resources. A URL that is already registered cannot be added "
-            "again, and resources defined in YAML cannot be changed. Open dashboards load a change on their "
-            "next page reload. Changes can be undone with restore_configuration. May require admin approval."
+            "asked for. An administrator reviews every change. url must be a local path under /local/ or "
+            "/hacsfiles/; remote URLs are refused. HACS registers the cards it installs itself; do not add those "
+            "again. create needs url and type; update needs resource_id and url, type or both; delete needs "
+            "resource_id. update and delete reach only resources with phoenix_created true in "
+            "list_dashboard_resources. A URL that is already registered cannot be added again, and resources "
+            "defined in YAML cannot be changed. Open dashboards load a change on their next page reload. "
+            "Changes can be undone with restore_configuration."
         ),
         "cap": "cap_dashboard_resources",
         "inputSchema": {

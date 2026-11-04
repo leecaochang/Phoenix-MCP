@@ -607,6 +607,8 @@ const VIEWPORT_MARGIN = 8;
 // position within the viewport. Mobile uses the compact icon-only pill below.
 const PILL_SIZE = { w: 220, h: 44 };
 const MOBILE_PILL_SIZE = { w: 44, h: 44 };
+// A finger drifts a little during a tap; only a longer move drags the phone circle.
+const PILL_DRAG_THRESHOLD = 6;
 
 function currentPillSize(): { w: number; h: number } {
   return isNarrowViewport() ? MOBILE_PILL_SIZE : PILL_SIZE;
@@ -787,6 +789,7 @@ export function AgentCliWindow({
   const [pos, setPos] = useState(() =>
     saved.pos.x >= 0 ? saved.pos : { x: Math.max(16, window.innerWidth - 480), y: 96 });
   const [pillPos, setPillPos] = useState(saved.pillPos);
+  const circleDragged = useRef(false);
   const [size, setSize] = useState(saved.size);
   const [reviewingApprovalId, setReviewingApprovalId] = useState<string | null>(null);
 
@@ -1740,10 +1743,11 @@ export function AgentCliWindow({
   }), [updateApprovalEntry]);
 
   // --- drag ---
-  const startDrag = useCallback((e: React.PointerEvent) => {
+  const startDrag = useCallback((e: React.PointerEvent, phoneCircle = false) => {
     if (maximized || poppedOut || docked) return;  // full screen, popup or docked: nothing to drag
-    if ((e.target as HTMLElement).closest("button, select")) return;
+    if (!phoneCircle && (e.target as HTMLElement).closest("button, select")) return;
     e.preventDefault();
+    circleDragged.current = false;
     const startX = e.clientX, startY = e.clientY;
     // The pill remembers its own position independently of the restored window,
     // so a drag moves (and persists) whichever one is showing.
@@ -1754,6 +1758,10 @@ export function AgentCliWindow({
       : { ...pos };
     let latest = { ...origin };
     const move = (ev: PointerEvent) => {
+      if (phoneCircle && !circleDragged.current) {
+        if (Math.hypot(ev.clientX - startX, ev.clientY - startY) < PILL_DRAG_THRESHOLD) return;
+        circleDragged.current = true;
+      }
       // Keep the whole window on screen on every side. Uses the live element size
       // (so it is correct whether minimized or full height); if the window is
       // larger than the usable viewport it pins to the safe top edge.
@@ -1771,6 +1779,7 @@ export function AgentCliWindow({
     const up = () => {
       window.removeEventListener("pointermove", move);
       window.removeEventListener("pointerup", up);
+      window.removeEventListener("pointercancel", up);
       // Snap to a nearby edge or corner on release: each axis independently snaps
       // to its margin when the window's edge is within SNAP of the viewport edge,
       // so dragging into a corner clicks neatly into it. Skipped while minimized
@@ -1788,10 +1797,16 @@ export function AgentCliWindow({
         final = { x, y };
         setActive(final);
       }
-      patchDurable({ [persistKey]: final }, persistenceOwner);  // persist only when the drag settles
+      // Persist only when the drag settles; a tap leaves the circle's place alone.
+      if (phoneCircle) {
+        if (circleDragged.current) patchDurable({ pillPos: final, mobilePillPos: final }, persistenceOwner);
+      } else {
+        patchDurable({ [persistKey]: final }, persistenceOwner);
+      }
     };
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", up);
+    window.addEventListener("pointercancel", up);
   }, [maximized, poppedOut, docked, minimized, pillPos, pos, size, persistenceOwner]);
 
   // --- resize ---
@@ -1824,16 +1839,17 @@ export function AgentCliWindow({
   // Mode transitions. The pill and the restored window each remember their own
   // position, so each transition seeds or clamps only the geometry it enters.
   const minimize = useCallback(() => {
-    // The mobile pill is not draggable, so a remembered desktop-width pill
-    // position has no useful meaning there and can strand the compact icon over
-    // the Phoenix title. Always dock the narrow pill at the top-right. Desktop
+    // A remembered desktop-width pill position has no useful meaning on a phone
+    // and can strand the compact circle over the Phoenix title. The circle keeps
+    // its own dragged position and otherwise starts at the top-right. Desktop
     // retains the independent remembered pill position.
     const pillSize = currentPillSize();
+    const dragged = getDurable().mobilePillPos;
     const base = isNarrowViewport()
-      ? {
+      ? (dragged.x >= 0 ? dragged : {
           x: window.innerWidth - pillSize.w - VIEWPORT_MARGIN,
           y: VIEWPORT_MARGIN,
-        }
+        })
       : pillPos.x >= 0 ? pillPos : pos;
     const np = clampPosToViewport(
       base, pillSize, window.innerWidth, window.innerHeight,
@@ -2023,12 +2039,18 @@ export function AgentCliWindow({
       <div className="sr-only" role="status">{announcement}</div>
       {collapsed && narrowViewport ? (
         // On a phone Chat comes back full screen, as when the toolbar opens it.
-        <button type="button" className="agentcli-mobile-pill" onClick={() => (isNarrowViewport() ? setMode("max") : restore())}
+        <button type="button" className="agentcli-mobile-pill"
+                onPointerDown={(e) => startDrag(e, true)}
+                onClick={() => {
+                  // The click that ends a drag leaves the circle where it was put.
+                  if (circleDragged.current) { circleDragged.current = false; return; }
+                  if (isNarrowViewport()) setMode("max"); else restore();
+                }}
                 title={t("agentchat.restore")} aria-label={t("agentchat.restore")}>
-          <img src={PHOENIX_ICON} className="agentcli-title-icon" alt="" />
+          <img src={PHOENIX_ICON} className="agentcli-mobile-pill-logo" alt="" draggable={false} />
         </button>
       ) : <div className="agentcli-titlebar" onPointerDown={startDrag}>
-        <span className="agentcli-title">{collapsed && <img src={PHOENIX_ICON} className="agentcli-title-icon" alt="" />}{agentChatTitle}</span>
+        <span className="agentcli-title">{agentChatTitle}</span>
         <div className="agentcli-titlebar-actions">
           {!collapsed && (
             <MenuButton label={t("agentchat.options")} icon={<Icon name="chatMenu" />} items={chatMenu}

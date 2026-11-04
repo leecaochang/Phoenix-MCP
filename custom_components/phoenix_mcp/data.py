@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Callable
 
 from .agent_recovery import AgentRecovery
 from .config_recovery import ConfigurationRecovery
+from .dashboard_resource_ownership import DashboardResourceOwnership
 from .audit import AuditLog
 from .conversation_log import ConversationLog
 from .command_routing import CommandRouting
@@ -53,6 +54,7 @@ class PhoenixData:
     routing_statistics: RoutingStatistics = field(default_factory=RoutingStatistics)
     config_recovery: ConfigurationRecovery = field(default_factory=ConfigurationRecovery)
     agent_recovery: AgentRecovery = field(default_factory=AgentRecovery)
+    dashboard_resources: DashboardResourceOwnership = field(default_factory=DashboardResourceOwnership)
     calendar_writes: CalendarWriteJournal | None = None
     # Which Lovelace cards this instance can render, harvested by the panel
     # frontend. Always present: __init__ supplies a persistent store; direct

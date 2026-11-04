@@ -197,8 +197,9 @@
       },
       "cap_dashboard_resources": {
         "label": "仪表盘资源",
-        "description": "管理每个仪表盘都会加载的 JavaScript 和 CSS 文件。它们会在每位查看者的浏览器中运行，因此设为“确认”最安全。"
-      }
+        "description": "管理每个仪表盘都会加载的 JavaScript 和 CSS 文件，仅限本地路径。每次更改都需要审批。"
+      },
+      "allowUnavailable": "此能力始终需要审批。"
     },
     "personas": {
       "automation_builder": {
@@ -778,7 +779,8 @@
       "decisionProviderCheckFailed": "决策提供商检查失败（{detail}）。",
       "restoreNoConfigSide": "此版本在该侧没有可还原的配置。",
       "restoreYamlTags": "此版本包含 !secret 或 !include 等 YAML 标签，无法自动还原。请手动重新创建。",
-      "restoreToolReported": "无法应用还原。工具报告：{detail}"
+      "restoreToolReported": "无法应用还原。工具报告：{detail}",
+      "capabilityAllowUnsupported": "{capability} 不支持“允许”模式。"
     },
     "audit": {
       "accessPassThrough": "直通",

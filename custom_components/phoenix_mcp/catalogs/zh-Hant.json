@@ -210,7 +210,8 @@
       "decisionProviderCheckFailed": "決策提供者檢查失敗（{detail}）。",
       "restoreNoConfigSide": "此版本在該側沒有可還原的設定。",
       "restoreYamlTags": "此版本包含 !secret 或 !include 等 YAML 標籤，無法自動還原。請手動重新建立。",
-      "restoreToolReported": "無法套用還原。工具回報：{detail}"
+      "restoreToolReported": "無法套用還原。工具回報：{detail}",
+      "capabilityAllowUnsupported": "{capability} 不支援「允許」模式。"
     },
     "agentchat": {
       "accessKey": "存取金鑰",
@@ -955,8 +956,9 @@
       },
       "cap_dashboard_resources": {
         "label": "儀表板資源",
-        "description": "管理每個儀表板都會載入的 JavaScript 和 CSS 檔案。它們會在每位檢視者的瀏覽器中執行，因此設為「確認」最安全。"
-      }
+        "description": "管理每個儀表板都會載入的 JavaScript 和 CSS 檔案，僅限本機路徑。每次變更都需要核准。"
+      },
+      "allowUnavailable": "此能力一律需要核准。"
     },
     "changes": {
       "added": "已新增",

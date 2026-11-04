@@ -185,6 +185,7 @@ Renaming a key changes the display name of its sensors and device in Home Assist
 | 400 | `invalid_request` | `adminError.notesInvalidCharacters` | `notes` contains a refused character. |
 | 400 | `invalid_request` | `adminError.capabilityModeInvalid` | A `cap_*` value isn't `deny`, `allow` or `confirm`. `message_params` names the `capability`. |
 | 400 | `invalid_request` | `adminError.capabilityConfirmUnsupported` | `confirm` on a capability that doesn't accept it. `message_params` names the `capability`. |
+| 400 | `invalid_request` | `adminError.capabilityAllowUnsupported` | `allow` on `cap_dashboard_resources`, which always needs approval. `message_params` names the `capability`. |
 | 404 | `not_found` | `adminError.accessKeyNotFound` | No active key has this ID. |
 
 ### Revoke a key {#key-revoke}

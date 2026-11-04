@@ -185,6 +185,7 @@ PATCH 拒绝不在此表中的任何字段，且 `expires_at` 根本无法更改
 | 400 | `invalid_request` | `adminError.notesInvalidCharacters` | `notes` 包含被拒绝的字符。 |
 | 400 | `invalid_request` | `adminError.capabilityModeInvalid` | 某个 `cap_*` 值不是 `deny`、`allow` 或 `confirm`。`message_params` 指明 `capability`。 |
 | 400 | `invalid_request` | `adminError.capabilityConfirmUnsupported` | 对不接受 `confirm` 的能力使用了 `confirm`。`message_params` 指明 `capability`。 |
+| 400 | `invalid_request` | `adminError.capabilityAllowUnsupported` | 对始终需要审批的 `cap_dashboard_resources` 使用了 `allow`。`message_params` 指明 `capability`。 |
 | 404 | `not_found` | `adminError.accessKeyNotFound` | 没有活动密钥具有此 ID。 |
 
 ### 吊销密钥 {#key-revoke}

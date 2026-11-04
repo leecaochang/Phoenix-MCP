@@ -1,7 +1,8 @@
 """Tests for list_dashboard_resources and set_dashboard_resource.
 
 Both run against Home Assistant's real lovelace resource collection. They pin the
-capability boundary (cap_dashboard_resources, exempt from pass-through), the
+capability boundary (cap_dashboard_resources, confirm-only and exempt from
+pass-through), the local-path and own-resource limits, the
 unreadable/empty/YAML distinctions, every mutation's refusals before approval,
 the private approval binding, recoverable and verified writes with their
 uncertain outcomes, restoration, and card-catalog freshness after a change.
@@ -19,12 +20,16 @@ from homeassistant.core import HomeAssistant
 from homeassistant.setup import async_setup_component
 from homeassistant.util.dt import utcnow
 
-from custom_components.phoenix_mcp.access_key_store import AccessKeyRecord, PermissionTree
+from custom_components.phoenix_mcp.access_key_store import (
+    AccessKeyRecord, AccessKeyStore, PermissionTree, _stored_cap_mode,
+)
 from custom_components.phoenix_mcp.card_catalog import CardCatalogStore, assess_freshness
 from custom_components.phoenix_mcp.config_reconciliation import _matches, observe_configuration
 from custom_components.phoenix_mcp.config_recovery import ConfigurationRecoveryError
 from custom_components.phoenix_mcp.const import DASHBOARD_RESOURCE_BINDING, REDACTION_SENTINEL
+from custom_components.phoenix_mcp.dashboard_resource_ownership import DashboardResourceOwnership
 from custom_components.phoenix_mcp.data import PhoenixData
+from custom_components.phoenix_mcp.helpers import effective_cap
 from custom_components.phoenix_mcp.mcp_view import _call_tool
 from custom_components.phoenix_mcp.request_authority import (
     AuthorityChangedError, RequestAuthority, policy_version, request_authority,
@@ -38,7 +43,7 @@ from custom_components.phoenix_mcp.ws_dispatch import (
 
 
 def _key(**caps) -> AccessKeyRecord:
-    base = {"cap_dashboard_resources": "allow"}
+    base = {"cap_dashboard_resources": "confirm"}
     base.update(caps)
     return AccessKeyRecord(
         id=str(uuid.uuid4()), name="t", access_key_hash="x", created_at=utcnow(),
@@ -79,9 +84,33 @@ async def lovelace(hass: HomeAssistant, hass_admin_user):
     return hass
 
 
+async def _approved(hass, data, args, key):
+    token = _approved_exec_ctx.set(True)
+    try:
+        return await resources_tool._execute_set_dashboard_resource(args, key, hass, data)
+    finally:
+        _approved_exec_ctx.reset(token)
+
+
+async def _reviewed(hass, data, args, key=None):
+    """Run a change as its approval would; a request refused before approval stays refused."""
+    key = key or _key()
+    try:
+        plan = resources_tool._prepare(args, key, await resources_tool._storage_items(hass), hass, data)
+    except (resources_tool.ResourceRefusal, ConfigurationRecoveryError):
+        return await _call("set_dashboard_resource", args, key, hass, data)
+    return await _approved(hass, data, {**args, DASHBOARD_RESOURCE_BINDING: plan.binding}, key)
+
+
 async def _create(hass, data, key=None, url="/local/new-card.js", type_="module"):
-    return await _call("set_dashboard_resource", {"operation": "create", "url": url, "type": type_},
-                       key or _key(), hass, data)
+    return await _reviewed(hass, data, {"operation": "create", "url": url, "type": type_}, key)
+
+
+async def _owned(hass, data, url="/local/theme.css") -> dict:
+    """The fixture resource with that URL, recorded as Phoenix's own."""
+    item = next(i for i in await _items(hass) if i["url"] == url)
+    await data.dashboard_resources.async_add(item["id"])
+    return item
 
 
 # --- listing -----------------------------------------------------------------
@@ -197,25 +226,27 @@ async def test_create_registers_a_verified_recoverable_resource(lovelace):
 
 
 async def test_update_changes_only_the_given_fields(lovelace):
-    target = next(i for i in await _items(lovelace) if i["url"] == "/local/theme.css")
-    result = await _call("set_dashboard_resource", {"operation": "update", "resource_id": target["id"],
-                                                    "url": "/local/theme2.css"}, _key(), lovelace, _data())
+    data = _data()
+    target = await _owned(lovelace, data)
+    result = await _reviewed(lovelace, data, {"operation": "update", "resource_id": target["id"],
+                                              "url": "/local/theme2.css"})
     assert _body(result)["status"] == "verified"
     updated = next(i for i in await _items(lovelace) if i["id"] == target["id"])
     assert updated["url"] == "/local/theme2.css" and updated["type"] == "css"
 
 
 async def test_delete_removes_the_resource(lovelace):
-    target = (await _items(lovelace))[0]
-    result = await _call("set_dashboard_resource", {"operation": "delete", "resource_id": target["id"]},
-                         _key(), lovelace, _data())
+    data = _data()
+    target = await _owned(lovelace, data)
+    result = await _reviewed(lovelace, data, {"operation": "delete", "resource_id": target["id"]})
     assert _body(result)["status"] == "verified"
     assert target["id"] not in {i["id"] for i in await _items(lovelace)}
+    assert not data.dashboard_resources.owns(target["id"])
 
 
-async def _refusal(hass, args, key=None):
+async def _refusal(hass, args, key=None, data=None):
     before = await _items(hass)
-    data = _data()
+    data = data or _data()
     result = await _call("set_dashboard_resource", args, key or _key(), hass, data)
     assert result[0].get("isError"), result
     assert await _items(hass) == before
@@ -250,9 +281,9 @@ async def test_unknown_resource_id_is_not_found(lovelace):
 
 
 async def test_update_and_delete_refusals_change_nothing(lovelace):
-    items = await _items(lovelace)
-    theme = next(i for i in items if i["url"] == "/local/theme.css")
-    other = next(i for i in items if i["id"] != theme["id"])
+    data = _data()
+    theme = await _owned(lovelace, data)
+    other = next(i for i in await _items(lovelace) if i["id"] != theme["id"])
     cases = [
         ({"operation": "update", "resource_id": theme["id"]}, "url, type, or both"),
         ({"operation": "update", "resource_id": theme["id"], "url": "/local/theme.css"}, "nothing would change"),
@@ -260,7 +291,125 @@ async def test_update_and_delete_refusals_change_nothing(lovelace):
         ({"operation": "delete", "resource_id": theme["id"], "type": "css"}, "only resource_id"),
     ]
     for args, needle in cases:
-        assert needle in _text(await _refusal(lovelace, args)), args
+        assert needle in _text(await _refusal(lovelace, args, data=data)), args
+
+
+@pytest.mark.parametrize("url", [
+    "https://cdn.example/card.js", "http://attacker.example/x.js", "//attacker.example/x.js",
+    "/local", "/local/", "/hacsfiles/", "/api/states", "/lovelace.js", "local/x.js", "javascript:alert(1)",
+    "/local/../api/x.js", "/local/a/../../api/x.js", "/local/%2e%2e/api/x.js", "/local/%252e%252e/api/x.js",
+    "/local/..%2fapi/x.js", "/local/.%2e/x.js", "/local//attacker.example/x.js", "/local\\x.js", "/local/x\\..\\y.js",
+    "/%6cocal/x.js", "/local/%25252e%25252e%25252fx.js",
+])
+async def test_only_a_local_path_can_be_registered(lovelace, url):
+    result = await _refusal(lovelace, {"operation": "create", "url": url, "type": "module"})
+    assert "local path under" in _text(result)
+
+
+@pytest.mark.parametrize("url", [
+    "/local/card.js", "/local/cards/a%20b.js?v=2", "/hacsfiles/mushroom/card.js?hacstag=12", "/local/.well/x.js",
+])
+def test_a_local_path_is_accepted(url):
+    assert resources_tool.is_local_resource_url(url)
+
+
+async def test_an_update_cannot_point_at_a_remote_file(lovelace):
+    data = _data()
+    theme = await _owned(lovelace, data)
+    result = await _refusal(lovelace, {"operation": "update", "resource_id": theme["id"],
+                                       "url": "https://cdn.example/x.css"}, data=data)
+    assert "local path under" in _text(result)
+
+
+@pytest.mark.parametrize("args", [
+    {"operation": "update", "url": "/local/replaced.js"},
+    {"operation": "update", "type": "css"},
+    {"operation": "delete"},
+])
+async def test_a_resource_phoenix_did_not_create_is_left_alone(lovelace, args):
+    """HACS and people register their own resources; those are theirs to change."""
+    hacs = next(i for i in await _items(lovelace) if i["url"].startswith("/hacsfiles/"))
+    result = await _refusal(lovelace, {**args, "resource_id": hacs["id"]})
+    assert result[1] == "denied" and "only the dashboard resources it created" in _text(result)
+
+
+async def test_an_approval_rechecks_ownership(lovelace):
+    """Losing the record after review must not reach a resource Phoenix does not own."""
+    key, data = _key(), _data()
+    theme = await _owned(lovelace, data)
+    args = {"operation": "delete", "resource_id": theme["id"]}
+    plan = resources_tool._prepare(args, key, await _items(lovelace), lovelace, data)
+    await data.dashboard_resources.async_discard(theme["id"])
+    result = await _approved(lovelace, data, {**args, DASHBOARD_RESOURCE_BINDING: plan.binding}, key)
+    assert result[1] == "denied"
+    assert theme["id"] in {i["id"] for i in await _items(lovelace)}
+
+
+async def test_a_created_resource_is_recorded_and_listed_as_phoenix_created(lovelace):
+    data = _data()
+    created = _body(await _create(lovelace, data))
+    assert data.dashboard_resources.owns(created["resource"]["id"])
+    rows = _body(await _call("list_dashboard_resources", {}, _key(), lovelace, data))["resources"]
+    assert {r["url"]: r["phoenix_created"] for r in rows} == {
+        "/hacsfiles/mushroom/mushroom.js?hacstag=1": False, "/local/theme.css": False, "/local/new-card.js": True}
+
+
+async def test_the_ownership_record_survives_a_reload_and_reads_nothing_from_junk():
+    class Store:
+        def __init__(self, value):
+            self.value = value
+
+        async def async_load(self):
+            return self.value
+
+        async def async_save(self, value):
+            self.value = value
+
+    store = Store(None)
+    first = DashboardResourceOwnership(store)
+    await first.async_load()
+    await first.async_add("abc")
+    second = DashboardResourceOwnership(store)
+    await second.async_load()
+    assert second.owns("abc") and not second.owns("other") and not second.owns(None)
+    await second.async_discard("abc")
+    assert store.value == {"ids": []}
+    for junk in ("text", {"ids": "abc"}, ["abc"]):
+        third = DashboardResourceOwnership(Store(junk))
+        await third.async_load()
+        assert not third.owns("abc")
+
+
+@pytest.mark.parametrize("pass_through", [False, True])
+async def test_allow_never_skips_the_review(lovelace, pass_through):
+    """Even a stored Allow on a pass-through key waits for a person."""
+    key = _key(cap_dashboard_resources="allow")
+    key.pass_through = pass_through
+    assert effective_cap(key, "cap_dashboard_resources") == "confirm"
+    before = await _items(lovelace)
+    result, approval = await _pending(lovelace, _data(), {"operation": "create", "url": "/local/x.js",
+                                                          "type": "module"}, key)
+    assert result[1] == "pending_approval" and approval["cap_name"] == "cap_dashboard_resources"
+    assert await _items(lovelace) == before
+
+
+async def test_a_direct_executor_call_with_a_stored_allow_is_refused(lovelace):
+    result = await resources_tool._execute_set_dashboard_resource(
+        {"operation": "create", "url": "/local/x.js", "type": "module"},
+        _key(cap_dashboard_resources="allow"), lovelace, _data())
+    assert result[1] == "denied" and "requires approval" in _text(result)
+
+
+def test_a_stored_allow_loads_as_confirm():
+    assert _stored_cap_mode("cap_dashboard_resources", "allow") == "confirm"
+    assert _stored_cap_mode("cap_lovelace_write", "allow") == "allow"
+
+
+async def test_the_key_store_refuses_allow(hass):
+    store = await AccessKeyStore.async_create(hass)
+    record, _raw = await store.async_create_access_key(name="t", created_by="u")
+    with pytest.raises(ValueError, match="'allow'"):
+        await store.async_patch_access_key(record.id, cap_dashboard_resources="allow")
 
 
 async def test_the_same_file_under_another_tag_is_a_warning(lovelace):
@@ -307,7 +456,7 @@ async def _pending(hass, data, args, key):
 
 
 async def test_confirm_creates_a_bound_approval_and_changes_nothing(lovelace):
-    key, data = _key(cap_dashboard_resources="confirm"), _data()
+    key, data = _key(), _data()
     before = await _items(lovelace)
     result, approval = await _pending(lovelace, data, {"operation": "create", "url": "/local/x.js",
                                                        "type": "module"}, key)
@@ -329,20 +478,13 @@ async def test_a_stylesheet_carries_no_javascript_warning(lovelace):
 
 
 async def test_update_preview_shows_current_and_proposed(lovelace):
-    theme = next(i for i in await _items(lovelace) if i["url"] == "/local/theme.css")
-    _, approval = await _pending(lovelace, _data(), {"operation": "update", "resource_id": theme["id"],
-                                                     "type": "module"}, _key(cap_dashboard_resources="confirm"))
+    data = _data()
+    theme = await _owned(lovelace, data)
+    _, approval = await _pending(lovelace, data, {"operation": "update", "resource_id": theme["id"],
+                                                  "type": "module"}, _key())
     diff = approval["diff"]
     assert json.loads(diff["before"])["type"] == "css" and json.loads(diff["after"])["type"] == "module"
     assert diff["target"] == {"type": "dashboard_resource", "id": theme["id"], "label": "/local/theme.css"}
-
-
-async def _approved(hass, data, args, key):
-    token = _approved_exec_ctx.set(True)
-    try:
-        return await resources_tool._execute_set_dashboard_resource(args, key, hass, data)
-    finally:
-        _approved_exec_ctx.reset(token)
 
 
 async def test_the_approved_change_runs_once_reviewed(lovelace):
@@ -401,8 +543,7 @@ async def test_authority_lost_before_dispatch_sends_nothing(lovelace):
         with patch.object(resources_tool, "read_resource_snapshot", side_effect=bump_policy), \
                 patch.object(resources_tool, "async_ws_command") as dispatch, \
                 pytest.raises(AuthorityChangedError):
-            await resources_tool._execute_set_dashboard_resource(
-                {"operation": "create", "url": "/local/x.js", "type": "module"}, key, lovelace, data)
+            await _reviewed(lovelace, data, {"operation": "create", "url": "/local/x.js", "type": "module"}, key)
     finally:
         request_authority.reset(authority)
         policy_version.reset(epoch)
@@ -509,7 +650,8 @@ async def _restore(hass, data, key, rid, side):
     assert receipt[1] == "allowed", receipt
     info = _body(receipt)
     args.update({k: info[k] for k in ("snapshot_digest", "target_fingerprint")})
-    return await _tool_restore_configuration(args, key, hass, data)
+    with patch("custom_components.phoenix_mcp.tools.recovery._gate", AsyncMock(return_value=None)):
+        return await _tool_restore_configuration(args, key, hass, data)
 
 
 async def test_restoring_before_a_create_removes_it(lovelace):
@@ -522,10 +664,9 @@ async def test_restoring_before_a_create_removes_it(lovelace):
 
 async def test_restoring_before_an_update_reverts_it(lovelace):
     key, data = _key(), _data()
-    theme = next(i for i in await _items(lovelace) if i["url"] == "/local/theme.css")
-    changed = _body(await _call("set_dashboard_resource", {"operation": "update", "resource_id": theme["id"],
-                                                           "url": "/local/theme2.css", "type": "module"},
-                                key, lovelace, data))
+    theme = await _owned(lovelace, data)
+    changed = _body(await _reviewed(lovelace, data, {"operation": "update", "resource_id": theme["id"],
+                                                     "url": "/local/theme2.css", "type": "module"}, key))
     await _restore(lovelace, data, key, changed["recovery_id"], "before")
     current = next(i for i in await _items(lovelace) if i["id"] == theme["id"])
     assert (current["url"], current["type"]) == ("/local/theme.css", "css")
@@ -533,15 +674,45 @@ async def test_restoring_before_an_update_reverts_it(lovelace):
 
 async def test_restoring_before_a_delete_recreates_it_once(lovelace):
     key, data = _key(), _data()
-    theme = next(i for i in await _items(lovelace) if i["url"] == "/local/theme.css")
-    deleted = _body(await _call("set_dashboard_resource", {"operation": "delete", "resource_id": theme["id"]},
-                                key, lovelace, data))
+    theme = await _owned(lovelace, data)
+    deleted = _body(await _reviewed(lovelace, data, {"operation": "delete", "resource_id": theme["id"]}, key))
     restored = _body(await _restore(lovelace, data, key, deleted["recovery_id"], "before"))
     assert restored["status"] == "verified"
+    assert data.dashboard_resources.owns(restored["resource"]["id"])
     again = await _tool_restore_configuration({"recovery_id": deleted["recovery_id"], "side": "before"},
                                               key, lovelace, data)
     assert _body(again)["diff"]["before"] is not None  # the recreated resource is the target now
     assert [i["url"] for i in await _items(lovelace)].count("/local/theme.css") == 1
+
+
+async def test_a_restore_that_removes_a_resource_forgets_it(lovelace):
+    key, data = _key(), _data()
+    created = _body(await _create(lovelace, data, key=key))
+    await _restore(lovelace, data, key, created["recovery_id"], "before")
+    assert not data.dashboard_resources.owns(created["resource"]["id"])
+
+
+async def test_a_restore_cannot_change_a_resource_phoenix_did_not_create(lovelace):
+    key, data = _key(), _data()
+    theme = await _owned(lovelace, data)
+    changed = _body(await _reviewed(lovelace, data, {"operation": "update", "resource_id": theme["id"],
+                                                     "type": "module"}, key))
+    await data.dashboard_resources.async_discard(theme["id"])
+    result = await _tool_restore_configuration({"recovery_id": changed["recovery_id"], "side": "before"},
+                                               key, lovelace, data)
+    assert result[1] == "denied" and "only the dashboard resources it created" in _text(result)
+
+
+async def test_a_restore_cannot_bring_back_a_remote_file(lovelace):
+    """A record from before the local-path limit must not reinstate a remote URL."""
+    key, data = _key(), _data()
+    created = _body(await _create(lovelace, data, key=key))
+    record = data.config_recovery._records[created["recovery_id"]]
+    record["source"] = {**record["source"], "resource": {**record["source"]["resource"],
+                                                         "url": "https://cdn.example/x.js"}}
+    result = await _tool_restore_configuration({"recovery_id": created["recovery_id"], "side": "source"},
+                                               key, lovelace, data)
+    assert result[1] == "denied" and "local path under" in _text(result)
 
 
 async def test_restore_needs_the_capability(lovelace):
@@ -582,12 +753,13 @@ async def test_every_change_makes_the_card_catalog_stale(lovelace, change):
     catalog = CardCatalogStore()
     await catalog.async_replace(entries=[], resource_count=2, failed_imports=[], resources=await _items(lovelace))
     assert assess_freshness(catalog.catalog, await _items(lovelace)).complete is True
-    theme = next(i for i in await _items(lovelace) if i["url"] == "/local/theme.css")
+    data = _data()
+    theme = await _owned(lovelace, data)
     args = {
         "create": {"operation": "create", "url": "/local/x.js", "type": "module"},
         "type": {"operation": "update", "resource_id": theme["id"], "type": "module"},
         "url": {"operation": "update", "resource_id": theme["id"], "url": "/local/theme2.css"},
         "delete": {"operation": "delete", "resource_id": theme["id"]},
     }[change]
-    assert _body(await _call("set_dashboard_resource", args, _key(), lovelace, _data()))["status"] == "verified"
+    assert _body(await _reviewed(lovelace, data, args))["status"] == "verified"
     assert assess_freshness(catalog.catalog, await _items(lovelace)).reasons == ("resources_changed",)

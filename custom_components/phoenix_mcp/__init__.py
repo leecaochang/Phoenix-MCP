@@ -370,6 +370,12 @@ async def _async_setup_entry_impl(hass: HomeAssistant, entry: ConfigEntry) -> bo
     agent_recovery = AgentRecovery(DurableStore(hass, 1, AGENT_RECOVERY_STORAGE_KEY, atomic_writes=True))
     await agent_recovery.async_load()
 
+    from .const import DASHBOARD_RESOURCE_OWNERSHIP_STORAGE_KEY
+    from .dashboard_resource_ownership import DashboardResourceOwnership
+    dashboard_resources = DashboardResourceOwnership(
+        DurableStore(hass, 1, DASHBOARD_RESOURCE_OWNERSHIP_STORAGE_KEY, atomic_writes=True))
+    await dashboard_resources.async_load()
+
     from .routing_statistics import RoutingStatistics
     from .const import ROUTING_STATISTICS_STORAGE_KEY, ROUTING_STATISTICS_FLUSH_INTERVAL
     routing_statistics = RoutingStatistics(Store(hass, 1, ROUTING_STATISTICS_STORAGE_KEY))
@@ -388,6 +394,7 @@ async def _async_setup_entry_impl(hass: HomeAssistant, entry: ConfigEntry) -> bo
         versions=versions,
         agent_recovery=agent_recovery,
         config_recovery=config_recovery,
+        dashboard_resources=dashboard_resources,
         routing_statistics=routing_statistics,
         conversations=conversations,
         card_catalog=card_catalog,

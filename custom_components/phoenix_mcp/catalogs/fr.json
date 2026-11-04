@@ -275,8 +275,9 @@
       },
       "cap_dashboard_resources": {
         "label": "Ressources du tableau de bord",
-        "description": "Gérer les fichiers JavaScript et CSS que charge chaque tableau de bord. Ils s’exécutent dans le navigateur de chaque visiteur, Confirmer est donc le plus sûr."
-      }
+        "description": "Gérer les fichiers JavaScript et CSS que charge chaque tableau de bord, depuis des chemins locaux uniquement. Chaque modification nécessite une approbation."
+      },
+      "allowUnavailable": "Cette capacité nécessite toujours une approbation."
     },
     "personas": {
       "automation_builder": {
@@ -2007,7 +2008,8 @@
       "decisionProviderCheckFailed": "Échec de la vérification du fournisseur de décisions ({detail}).",
       "restoreNoConfigSide": "Cette version ne contient aucune configuration à restaurer de ce côté.",
       "restoreYamlTags": "Cette version contient des balises YAML telles que !secret ou !include et ne peut pas être restaurée automatiquement. Recréez-la manuellement.",
-      "restoreToolReported": "La restauration n'a pas pu être appliquée. L'outil a signalé : {detail}"
+      "restoreToolReported": "La restauration n'a pas pu être appliquée. L'outil a signalé : {detail}",
+      "capabilityAllowUnsupported": "{capability} ne prend pas en charge le mode Autoriser."
     },
     "mesaSuggestion": {
       "baseline_note": " Interdit correspond à la ligne de base intégrée pour ce domaine, le profil rend donc cette intention explicite. Pour autoriser plutôt le contrôle de l'agent soumis à l'approbation de l'administrateur, choisissez Confirmer dans l'Éditeur de profil avant d'enregistrer ; l'approbation s'applique lorsque MESA est appliqué.",

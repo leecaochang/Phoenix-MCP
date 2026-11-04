@@ -275,8 +275,9 @@
       },
       "cap_dashboard_resources": {
         "label": "ダッシュボードリソース",
-        "description": "すべてのダッシュボードが読み込む JavaScript と CSS のファイルを管理します。閲覧者全員のブラウザーで実行されるため、「確認」が最も安全です。"
-      }
+        "description": "すべてのダッシュボードが読み込む JavaScript と CSS のファイルを、ローカルパスに限って管理します。変更のたびに承認が必要です。"
+      },
+      "allowUnavailable": "この機能には常に承認が必要です。"
     },
     "personas": {
       "automation_builder": {
@@ -1130,7 +1131,8 @@
       "decisionProviderCheckFailed": "判断プロバイダーの確認に失敗しました（{detail}）。",
       "restoreNoConfigSide": "このバージョンには、その側で復元できる設定がありません。",
       "restoreYamlTags": "このバージョンには !secret や !include などの YAML タグが含まれているため、自動的に復元できません。手動で作成し直してください。",
-      "restoreToolReported": "復元を適用できませんでした。ツールの報告: {detail}"
+      "restoreToolReported": "復元を適用できませんでした。ツールの報告: {detail}",
+      "capabilityAllowUnsupported": "{capability} は許可モードに対応していません。"
     },
     "agentchat": {
       "accessKey": "アクセスキー",

@@ -393,7 +393,8 @@
       "decisionProviderCheckFailed": "Kontrollen av beslutsleverantören misslyckades ({detail}).",
       "restoreNoConfigSide": "Den här versionen har ingen konfiguration att återställa på den sidan.",
       "restoreYamlTags": "Den här versionen innehåller YAML-taggar som !secret eller !include och kan inte återställas automatiskt. Skapa den igen manuellt.",
-      "restoreToolReported": "Återställningen kunde inte tillämpas. Verktyget rapporterade: {detail}"
+      "restoreToolReported": "Återställningen kunde inte tillämpas. Verktyget rapporterade: {detail}",
+      "capabilityAllowUnsupported": "{capability} stöder inte läget Tillåt."
     },
     "agentchat": {
       "accessKey": "Åtkomstnyckel",
@@ -1158,8 +1159,9 @@
       "updateFailed": "Det gick inte att uppdatera funktionen.",
       "cap_dashboard_resources": {
         "label": "Kontrollpanelsresurser",
-        "description": "Hantera JavaScript- och CSS-filerna som varje kontrollpanel läser in. De körs i varje besökares webbläsare, så Bekräfta är säkrast."
-      }
+        "description": "Hantera JavaScript- och CSS-filerna som varje kontrollpanel läser in, endast från lokala sökvägar. Varje ändring kräver godkännande."
+      },
+      "allowUnavailable": "Den här funktionen kräver alltid godkännande."
     },
     "changes": {
       "actionCreate": "Skapa",

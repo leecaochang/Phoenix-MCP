@@ -51,6 +51,7 @@ from .const import (
     CAPABILITY_NAMES,
     CAP_GRANT_TRANSITIONS,
     CONFIRM_AVAILABLE_CAPS,
+    CONFIRM_ONLY_CAPS,
     DEFAULT_PRESET_NAME,
     DEFAULT_CONFIRM_INLINE_WAIT_SECONDS,
     DEFAULT_RATE_LIMIT_BURST,
@@ -209,9 +210,12 @@ def _stored_cap_mode(cap_name: str, value: Any) -> str:
     An unknown value is deny. Confirm on a capability that no longer offers it
     reads as allow: such a capability now gates reads only, and Confirm already
     allowed reads, so the stored intent is kept without inventing an approval step.
+    Allow on a confirm-only capability reads as confirm, which only ever tightens it.
     """
     if value not in CAP_MODES:
         return CAP_DENY
+    if value == CAP_ALLOW and cap_name in CONFIRM_ONLY_CAPS:
+        return CAP_CONFIRM
     if value == CAP_CONFIRM and cap_name not in CONFIRM_AVAILABLE_CAPS:
         return CAP_ALLOW
     return value
@@ -1270,6 +1274,10 @@ class AccessKeyStore:
                 if value == "confirm" and key not in CONFIRM_AVAILABLE_CAPS:
                     raise ValueError(
                         f"Capability {key!r} does not support 'confirm' mode"
+                    )
+                if value == CAP_ALLOW and key in CONFIRM_ONLY_CAPS:
+                    raise ValueError(
+                        f"Capability {key!r} does not support 'allow' mode"
                     )
                 setattr(access_key, key, value)
                 cap_changed = True

@@ -367,7 +367,7 @@ async def async_preview_batch(hass: Any, data: Any, access_key: Any, sentence: s
                 return result("targets_changed")
             if temporal is not None:
                 from .decision_temporal import temporal_proposal
-                reason, temporal_candidate = temporal_proposal(answer, targets, temporal, timezone, sentence, lang)
+                reason, temporal_candidate = temporal_proposal(answer, targets, temporal, sentence, lang)
                 return result(reason, decision=answer, proposal=temporal_candidate)
             category, target = answer["route"], answer["target"]
             is_summary = category['choice'] == 'state_summary'

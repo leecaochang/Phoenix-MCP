@@ -155,4 +155,4 @@ Lists and creates backups.
 
 ### {{label:caps.cap_dashboard_resources.label}} {#dashboard-resources}
 
-Adds and changes dashboard resources, the JavaScript files that custom cards load.
+Adds and changes dashboard resources, the JavaScript files that custom cards load. Every change needs your approval, so Allow isn't available. Files must come from `/local/` or `/hacsfiles/`, and Phoenix MCP changes only the resources it added itself.

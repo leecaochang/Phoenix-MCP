@@ -34,6 +34,8 @@ interface CapDef {
   descriptionKey: string;
   tier: CapTier;
   confirmAvailable: boolean;
+  /** False for a capability that always asks for approval. */
+  allowAvailable?: boolean;
   /** Its description warns of a risk; in icons-only mode, where descriptions are hidden, the row is marked. */
   warns?: boolean;
 }
@@ -243,6 +245,7 @@ const CAPS: CapDef[] = [
     descriptionKey: "caps.cap_dashboard_resources.description",
     tier: "irreversible",
     confirmAvailable: true,
+    allowAvailable: false,
   },
   {
     key: "cap_esphome_yaml",
@@ -390,8 +393,9 @@ export function CapabilityMatrix({ accessKey, onUpdate, esphome }: Props) {
                       mode="allow"
                       current={current}
                       onSelect={setMode}
-                      disabled={false}
+                      disabled={cap.allowAvailable === false}
                       busy={isSaving}
+                      unavailable={cap.allowAvailable === false}
                     />
                     <ModeRadio
                       cap={cap.key}
@@ -426,6 +430,7 @@ interface ModeRadioProps {
 function ModeRadio({ cap, mode, current, onSelect, disabled, busy, unavailable }: ModeRadioProps) {
   const checked = current === mode;
   const id = `${cap}-${mode}`;
+  const unavailableKey = mode === "allow" ? "caps.allowUnavailable" : "caps.confirmUnavailable";
   return (
     <button
       type="button"
@@ -435,8 +440,8 @@ function ModeRadio({ cap, mode, current, onSelect, disabled, busy, unavailable }
       aria-pressed={checked}
       onClick={() => { if (!busy && !disabled) onSelect(cap, mode); }}
       className={`mode-radio mode-${mode}${checked ? " mode-radio-checked" : ""}${unavailable ? " mode-radio-unavailable" : ""}`}
-      title={unavailable ? t("caps.confirmUnavailable") : t(MODE_DESC_KEYS[mode])}
-      data-help={unavailable ? "caps.confirmUnavailable" : MODE_DESC_KEYS[mode]}
+      title={unavailable ? t(unavailableKey) : t(MODE_DESC_KEYS[mode])}
+      data-help={unavailable ? unavailableKey : MODE_DESC_KEYS[mode]}
     >
       <span className="mode-radio-dot" />
       <span className="mode-radio-label">{t(MODE_LABEL_KEYS[mode])}</span>

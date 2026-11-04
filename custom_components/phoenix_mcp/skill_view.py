@@ -317,12 +317,12 @@ error to retry around.
 ## Risky and irreversible actions
 
 Backups (`create_backup`), integration enable/disable
-(`set_integration_enabled`), dashboard edits, scoped filesystem writes
-(`www/`, `themes/`, `custom_templates/` only), and raw `configuration.yaml`
+(`set_integration_enabled`), dashboard edits, and automation, script and scene
 edits are the most consequential tools and are almost always behind the confirm
-gate. Before requesting one: state plainly what it will change, prefer a backup
-first for config edits, and never use a filesystem or YAML tool to reach outside
-the allowed directories. There is no restore-backup tool by design.
+gate. Before requesting one: state plainly what it will change, and prefer a
+backup first for configuration edits. File and YAML tools only read; neither
+`configuration.yaml` nor any other hand-written YAML can be changed through
+Phoenix MCP. There is no restore-backup tool by design.
 
 ## Bounded subscriptions
 
@@ -490,7 +490,10 @@ mode: single
   dashboard runs. `list_dashboard_resources` shows each registered file, and
   `load_failed` marks one that failed to load at the last check. Register a file
   with `set_dashboard_resource` only when the user asks: a JavaScript file runs in
-  every browser that opens a dashboard. HACS registers the cards it installs itself.
+  every browser that opens a dashboard, so an administrator reviews every change.
+  URLs must be local paths under `/local/` or `/hacsfiles/`, and update and delete
+  reach only resources with `phoenix_created` true. HACS registers the cards it
+  installs itself.
 
 ### Voice names for an entity
 

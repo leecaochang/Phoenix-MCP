@@ -38,6 +38,7 @@ from .const import (
     CAP_ALLOW,
     CAP_CONFIRM,
     CAP_DENY,
+    CONFIRM_ONLY_CAPS,
     CAPABILITY_NAMES,
     DOMAIN,
     DOMAIN_SERVICE_HINTS,
@@ -1740,8 +1741,9 @@ def effective_cap(access_key: AccessKeyRecord, cap_name: str) -> str:
 
     Exempt caps are unaffected by pass_through. For non-exempt caps under
     pass_through, "deny" becomes "allow" but "confirm" is preserved (the admin's
-    intent to gate is honored). On household ingress a non-administrator gets
-    "deny" for every cap outside HOUSEHOLD_CAPABILITIES.
+    intent to gate is honored). A confirm-only cap never reads as "allow". On
+    household ingress a non-administrator gets "deny" for every cap outside
+    HOUSEHOLD_CAPABILITIES.
     """
     from .const import HOUSEHOLD_CAPABILITIES
     from .household_authority import household_authority
@@ -1750,6 +1752,8 @@ def effective_cap(access_key: AccessKeyRecord, cap_name: str) -> str:
     if household is not None and not household.is_admin() and cap_name not in HOUSEHOLD_CAPABILITIES:
         return CAP_DENY
     raw = getattr(access_key, cap_name, CAP_DENY)
+    if raw == CAP_ALLOW and cap_name in CONFIRM_ONLY_CAPS:
+        return CAP_CONFIRM
     if cap_name in PASS_THROUGH_EXEMPT_CAPS:
         return raw
     if access_key.pass_through:

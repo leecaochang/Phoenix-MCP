@@ -20,6 +20,8 @@ export interface AgentCliDurable {
   maximized: boolean | null;
   pos: { x: number; y: number };
   pillPos: { x: number; y: number };
+  /** Where the phone circle was last dragged; a desktop position means nothing at that size. */
+  mobilePillPos: { x: number; y: number };
   size: { w: number; h: number };
   accessKeyId: string;
   instanceId: string;
@@ -92,6 +94,7 @@ export function defaultDurable(): AgentCliDurable {
     maximized: null,
     pos: { x: -1, y: -1 }, // -1 => "unset", the window computes a default
     pillPos: { x: -1, y: -1 }, // -1 => "unset", seeded from the window on minimize
+    mobilePillPos: { x: -1, y: -1 }, // -1 => "unset", the circle starts at the top right
     size: { w: 440, h: 560 },
     accessKeyId: "",
     instanceId: "",
@@ -125,6 +128,7 @@ export function getDurable(): AgentCliDurable {
         : typeof legacyAccessKeyId === "string" ? legacyAccessKeyId : d.accessKeyId,
       pos: { ...d.pos, ...(p.pos || {}) },
       pillPos: { ...d.pillPos, ...(p.pillPos || {}) },
+      mobilePillPos: { ...d.mobilePillPos, ...(p.mobilePillPos || {}) },
       size: { ...d.size, ...(p.size || {}) },
       options: { ...d.options, ...(p.options || {}) },
       showFooter,

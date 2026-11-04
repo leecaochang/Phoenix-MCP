@@ -204,7 +204,8 @@
       "decisionProviderCheckFailed": "Verifica del provider di decisioni non riuscita ({detail}).",
       "restoreNoConfigSide": "Questa versione non ha alcuna configurazione da ripristinare su quel lato.",
       "restoreYamlTags": "Questa versione contiene tag YAML come !secret o !include e non può essere ripristinata automaticamente. Ricreala manualmente.",
-      "restoreToolReported": "Impossibile applicare il ripristino. Lo strumento ha segnalato: {detail}"
+      "restoreToolReported": "Impossibile applicare il ripristino. Lo strumento ha segnalato: {detail}",
+      "capabilityAllowUnsupported": "{capability} non supporta la modalità Consenti."
     },
     "agentchat": {
       "accessKey": "Chiave di accesso",
@@ -968,8 +969,9 @@
       },
       "cap_dashboard_resources": {
         "label": "Risorse della plancia",
-        "description": "Gestisce i file JavaScript e CSS che ogni plancia carica. Vengono eseguiti nel browser di ogni visitatore, quindi Conferma è la scelta più sicura."
-      }
+        "description": "Gestisce i file JavaScript e CSS che ogni plancia carica, solo da percorsi locali. Ogni modifica richiede l'approvazione."
+      },
+      "allowUnavailable": "Questa capacità richiede sempre l'approvazione."
     },
     "perms": {
       "addHint": "Aggiungi suggerimento",

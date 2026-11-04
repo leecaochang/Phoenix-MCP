@@ -242,7 +242,7 @@
       },
       "cap_dashboard_resources": {
         "label": "Dashboard resources",
-        "description": "Manage the JavaScript and CSS files every dashboard loads. They run in every viewer's browser, so Confirm is safest."
+        "description": "Manage the JavaScript and CSS files every dashboard loads, from local paths only. Every change needs approval."
       },
       "cap_esphome_yaml": {
         "label": "ESPHome device YAML",
@@ -273,6 +273,7 @@
       "passThroughNotice": "<strong>Pass-through is on.</strong> Configuration read, Template render, Search & discovery, Registry read, Automation traces, Diagnostics, Broadcast and Service response data count as Allow unless set to Confirm. Every other capability uses its setting below.",
       "esphomeBadgeTitle": "Without the Device Builder add-on, the ESPHome tools that validate, compile, flash, or inspect devices stay hidden from this access key. With the ESPHome integration, reading and searching device YAML still works. The capability can still be set now.",
       "confirmUnavailable": "This capability cannot require approval.",
+      "allowUnavailable": "This capability always needs approval.",
       "cap_calendar_write": {
         "label": "Calendar write",
         "description": "Create, update and delete events on writable calendars."
@@ -2222,6 +2223,7 @@
       "companionSettingRefused": "A Home Companion key can't use pass-through or announce all tools.",
       "unknownFields": "The request contains fields Phoenix does not recognize: {fields}.",
       "capabilityConfirmUnsupported": "{capability} does not support Confirm mode.",
+      "capabilityAllowUnsupported": "{capability} does not support Allow mode.",
       "capabilityModeInvalid": "{capability} must be deny, allow, or confirm.",
       "catalogNotFound": "Catalog not found.",
       "configuredProviderRequired": "{field} must reference a configured provider account.",

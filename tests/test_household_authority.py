@@ -21,7 +21,7 @@ from custom_components.phoenix_mcp.admin_view import _approve_approval
 from custom_components.phoenix_mcp.approvals import async_create_pending_approval, get_approval
 from custom_components.phoenix_mcp.approval_targets import bind_targets
 from custom_components.phoenix_mcp.audit import AuditLog
-from custom_components.phoenix_mcp.const import CAPABILITY_NAMES, DOMAIN, HOUSEHOLD_CAPABILITIES
+from custom_components.phoenix_mcp.const import CAPABILITY_NAMES, CONFIRM_ONLY_CAPS, DOMAIN, HOUSEHOLD_CAPABILITIES
 from custom_components.phoenix_mcp.data import PhoenixData
 from custom_components.phoenix_mcp.helpers import effective_cap
 from custom_components.phoenix_mcp.household_authority import household_authority, household_scope
@@ -63,7 +63,9 @@ async def test_household_caps_intersect_access_key_even_in_pass_through(hass, ha
     context = Context(user_id=user.id) if identity != "unknown" else None
     async with household_scope(hass, context):
         for cap in CAPABILITY_NAMES:
-            assert effective_cap(access_key, cap) == ("allow" if identity == "admin" or cap in HOUSEHOLD_CAPABILITIES else "deny"), cap
+            permitted = identity == "admin" or cap in HOUSEHOLD_CAPABILITIES
+            allowed = "confirm" if cap in CONFIRM_ONLY_CAPS else "allow"
+            assert effective_cap(access_key, cap) == (allowed if permitted else "deny"), cap
         access_key.cap_physical_control = "confirm"
         assert effective_cap(access_key, "cap_physical_control") == "confirm"
     assert household_authority.get() is None

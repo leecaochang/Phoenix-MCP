@@ -1,10 +1,9 @@
 """Typed date/time helper values, independent of model decisions and scheduling."""
 from __future__ import annotations
 
-from datetime import UTC, date, datetime, time
+from datetime import UTC, date, datetime, time, tzinfo
 import re
 from typing import Any
-from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from .const import COMMAND_ROUTING_TEMPORAL_OPERATIONS, COMMAND_ROUTING_TIMER_OBSERVATION_TOLERANCE_SECONDS, MAX_SEARCH_QUERY_LEN
 
@@ -98,7 +97,7 @@ def explicit_timer_duration(sentence: str, source: dict) -> bool:
     return len(matches) == 1 and re.fullmatch(r"[0-9]{1,2}:[0-9]{2}:[0-9]{2}", matches[0].group()) is not None
 
 
-def valid_temporal_value(kind: str, value: Any, timezone: str | None = None) -> bool:
+def valid_temporal_value(kind: str, value: Any, zone: tzinfo | None = None) -> bool:
     """Require canonical values and refuse nonexistent or ambiguous local datetimes."""
     if not isinstance(value, str):
         return False
@@ -114,15 +113,14 @@ def valid_temporal_value(kind: str, value: Any, timezone: str | None = None) -> 
         parsed = datetime.fromisoformat(value)
         if parsed.tzinfo is not None or parsed.isoformat(sep=" ", timespec="seconds") != value:
             return False
-        if timezone is not None:
-            zone = ZoneInfo(timezone)
+        if zone is not None:
             first, second = parsed.replace(tzinfo=zone, fold=0), parsed.replace(tzinfo=zone, fold=1)
             if first.utcoffset() != second.utcoffset():
                 return False
             if first.astimezone(UTC).astimezone(zone).replace(tzinfo=None) != parsed:
                 return False
         return True
-    except (ValueError, ZoneInfoNotFoundError):
+    except ValueError:
         return False
 
 
@@ -151,10 +149,10 @@ def temporal_arguments(proposal: dict) -> dict | None:
     return {"domain": domain, "service": service, "entity_id": ids, "service_data": {field: proposal["value"]}}
 
 
-def temporal_value_current(proposal: dict, state: Any, timezone: str) -> bool:
+def temporal_value_current(proposal: dict, state: Any, zone: tzinfo) -> bool:
     """Check the effective local datetime when updating one field of a combined helper."""
     spec = COMMAND_ROUTING_TEMPORAL_OPERATIONS.get(proposal.get("intent", ""))
-    if spec is None or state is None or not valid_temporal_value(spec[3], proposal.get("value"), timezone):
+    if spec is None or state is None or not valid_temporal_value(spec[3], proposal.get("value"), zone):
         return False
     if (state.domain != "input_datetime" or spec[3] == "datetime"
             or not (state.attributes.get("has_date") and state.attributes.get("has_time"))):
@@ -164,12 +162,12 @@ def temporal_value_current(proposal: dict, state: Any, timezone: str) -> bool:
         value = proposal["value"]
         day = value if spec[3] == "date" else existing.date().isoformat()
         clock = value if spec[3] == "time" else existing.time().isoformat(timespec="seconds")
-        return valid_temporal_value("datetime", day + " " + clock, timezone)
+        return valid_temporal_value("datetime", day + " " + clock, zone)
     except (TypeError, ValueError):
         return False
 
 
-def temporal_state_matches(proposal: dict, state: Any, timezone: str) -> bool:
+def temporal_state_matches(proposal: dict, state: Any, zone: tzinfo) -> bool:
     """Compare only the requested helper field, never infer a scheduled action."""
     spec = COMMAND_ROUTING_TEMPORAL_OPERATIONS.get(proposal.get("intent", ""))
     if spec is None or not temporal_arguments(proposal):
@@ -199,7 +197,7 @@ def temporal_state_matches(proposal: dict, state: Any, timezone: str) -> bool:
         if state.domain == "datetime":
             actual_dt = datetime.fromisoformat(state.state)
             return (actual_dt.tzinfo is not None and actual_dt ==
-                    datetime.fromisoformat(expected).replace(tzinfo=ZoneInfo(timezone)))
+                    datetime.fromisoformat(expected).replace(tzinfo=zone))
         return state.state == expected
-    except (ValueError, KeyError, TypeError, ZoneInfoNotFoundError):
+    except (ValueError, KeyError, TypeError):
         return False

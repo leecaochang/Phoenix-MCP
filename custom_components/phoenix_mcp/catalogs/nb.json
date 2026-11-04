@@ -393,7 +393,8 @@
       "decisionProviderCheckFailed": "Kontrollen av beslutningsleverandøren mislyktes ({detail}).",
       "restoreNoConfigSide": "Denne versjonen har ingen konfigurasjon å gjenopprette på den siden.",
       "restoreYamlTags": "Denne versjonen inneholder YAML-tagger som !secret eller !include og kan ikke gjenopprettes automatisk. Opprett den på nytt manuelt.",
-      "restoreToolReported": "Gjenopprettingen kunne ikke utføres. Verktøyet meldte: {detail}"
+      "restoreToolReported": "Gjenopprettingen kunne ikke utføres. Verktøyet meldte: {detail}",
+      "capabilityAllowUnsupported": "{capability} støtter ikke Tillat-modus."
     },
     "agentchat": {
       "accessKey": "Tilgangsnøkkel",
@@ -1158,8 +1159,9 @@
       "updateFailed": "Kunne ikke oppdatere kapabiliteten.",
       "cap_dashboard_resources": {
         "label": "Dashbordressurser",
-        "description": "Administrer JavaScript- og CSS-filene hvert dashbord laster inn. De kjører i nettleseren til alle som ser på, så Bekreft er tryggest."
-      }
+        "description": "Administrer JavaScript- og CSS-filene hvert dashbord laster inn, bare fra lokale stier. Hver endring krever godkjenning."
+      },
+      "allowUnavailable": "Denne kapabiliteten krever alltid godkjenning."
     },
     "changes": {
       "actionCreate": "Opprett",

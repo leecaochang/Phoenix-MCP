@@ -502,7 +502,7 @@ async def _tool_restore_dashboard_resource(
     request_id: str, client_ip: str | None,
 ) -> tuple[dict, str, str]:
     """Preflight a dashboard resource restore under cap_dashboard_resources."""
-    from .dashboard_resources import _valid_snapshot, restore_receipt_diff, restore_target
+    from .dashboard_resources import _valid_snapshot, restore_receipt_diff, restore_refusal, restore_target
 
     tool = "restore_configuration"
     if effective_cap(access_key, "cap_dashboard_resources") == "deny":
@@ -518,6 +518,8 @@ async def _tool_restore_dashboard_resource(
         return _tool_error(str(exc)), "invalid_request", tool
     except Exception:  # noqa: BLE001 - an incomplete resource read is not absence
         return _tool_error("Could not read the current dashboard resources."), "invalid_request", tool
+    if (refusal := restore_refusal(data, target, snapshot)) is not None:
+        return _tool_error(refusal), "denied", tool
     if args.get("snapshot_digest") is None and args.get("target_fingerprint") is None:
         return _tool_success(json.dumps({
             "status": "needs_confirmation", "recovery_id": record["id"], "side": side,

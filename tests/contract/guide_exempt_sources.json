@@ -1,5 +1,6 @@
 {
   "custom_components/phoenix_mcp/access_key_schema.py": "Storage normalization with no operator-visible behavior.",
+  "custom_components/phoenix_mcp/dashboard_resource_ownership.py": "Internal record of the resources Phoenix created; the limit it enforces is described with the capability.",
   "custom_components/phoenix_mcp/data.py": "Runtime data container.",
   "custom_components/phoenix_mcp/durable_storage.py": "Storage write barriers; failures surface through the features that write.",
   "custom_components/phoenix_mcp/locales.py": "Maps Home Assistant language tags to catalogs; the language setting is documented where it is chosen.",

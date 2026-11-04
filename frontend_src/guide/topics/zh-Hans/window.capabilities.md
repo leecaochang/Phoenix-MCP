@@ -155,4 +155,4 @@
 
 ### {{label:caps.cap_dashboard_resources.label}} {#dashboard-resources}
 
-添加和更改仪表盘资源，即自定义卡片加载的 JavaScript 文件。
+添加和更改仪表盘资源，即自定义卡片加载的 JavaScript 文件。每次更改都需要您审批，因此没有“允许”选项。文件必须来自 `/local/` 或 `/hacsfiles/`，Phoenix MCP 只更改它自己添加的资源。
