@@ -63,7 +63,7 @@ Broadcasts a message through Assist satellites. Pass-through allows it.
 
 ### {{label:caps.cap_service_response.label}} {#service-response}
 
-Returns the data an action responds with. Without it, actions still run but return no data. Pass-through allows it.
+Returns the data an action responds with. Without it, actions still run but return no data, and a Music Assistant library search is refused. Pass-through allows it.
 
 ### {{label:caps.cap_esphome_yaml.label}} {#esphome-yaml}
 

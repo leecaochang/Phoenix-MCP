@@ -20,6 +20,7 @@ from .const import (
     BLOCKED_DOMAINS,
     DOMAIN,
     ESPHOME_DOMAIN,
+    MUSIC_ASSISTANT_DOMAIN,
     PHYSICAL_GATE_DOMAINS,
     SCRIPT_ENTITY_SERVICES,
     SENSITIVE_ATTRIBUTES,
@@ -1418,6 +1419,25 @@ def esphome_entry_writable(hass: HomeAssistant, entry: Any, access_key: AccessKe
         resolve(reg_entry.entity_id, access_key, hass) is Permission.WRITE
         for reg_entry in er.async_entries_for_config_entry(registry, entry.entry_id)
     )
+
+
+def music_assistant_readable_entries(hass: HomeAssistant, access_key: AccessKeyRecord) -> list[str]:
+    """Loaded Music Assistant entries on which the access key can read an entity.
+
+    Core's library services look the entry up by id without checking its
+    domain, so the domain is checked here before the id reaches them.
+    """
+    from homeassistant.config_entries import ConfigEntryState  # noqa: PLC0415
+
+    registry = er.async_get(hass)
+    return [
+        entry.entry_id
+        for entry in hass.config_entries.async_entries(MUSIC_ASSISTANT_DOMAIN)
+        if entry.state is ConfigEntryState.LOADED and any(
+            resolve(reg_entry.entity_id, access_key, hass) in (Permission.READ, Permission.WRITE)
+            for reg_entry in er.async_entries_for_config_entry(registry, entry.entry_id)
+        )
+    ]
 
 
 class LocationRegistryContext(NamedTuple):

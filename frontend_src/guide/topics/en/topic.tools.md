@@ -49,6 +49,7 @@ Agents can also run any Home Assistant action on targets they can write, and pre
 - An action's returned data needs Service response data. Without it, the action still runs.
 - Notify actions, which send messages, need Notifications.
 - ESPHome device actions need only Write on the device. MESA doesn't check them, and doesn't check reloads or restarts either.
+- Searching or listing the Music Assistant library needs Service response data and Read on a Music Assistant entity, such as a speaker. Nothing plays, so MESA doesn't check these either.
 
 Other actions without a target are refused. So are calendar changes, which have their own tools. An action still running after 30 seconds is reported as possibly incomplete.
 

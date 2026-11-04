@@ -63,7 +63,7 @@
 
 ### {{label:caps.cap_service_response.label}} {#service-response}
 
-傳回操作回應的資料。沒有它，操作仍會執行，但不傳回資料。直通模式允許它。
+傳回操作回應的資料。沒有它，操作仍會執行，但不傳回資料，Music Assistant 音樂庫搜尋也會被拒絕。直通模式允許它。
 
 ### {{label:caps.cap_esphome_yaml.label}} {#esphome-yaml}
 

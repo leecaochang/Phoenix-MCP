@@ -9,7 +9,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.service import async_get_all_descriptions
 from homeassistant.helpers.template import is_template_string
 
-from .const import SECONDARY_TARGET_SELECTOR_KEYS, TARGET_SELECTOR_KEYS
+from .const import MUSIC_ASSISTANT_LIBRARY_SERVICES, SECONDARY_TARGET_SELECTOR_KEYS, TARGET_SELECTOR_KEYS
 
 _TARGET_SELECTOR_TYPES = frozenset({"area", "device", "entity", "target", "config_entry"})
 
@@ -63,9 +63,12 @@ async def unsupported_secondary_targets(
     change. If that compatibility seam fails, the static fallback still blocks
     every target field known at build time rather than disabling the guard.
     """
+    if f"{domain}/{service}" in MUSIC_ASSISTANT_LIBRARY_SERVICES and isinstance(service_data, dict):
+        # Its config entry is authorized by the Music Assistant library check.
+        service_data = {key: value for key, value in service_data.items() if key != "config_entry_id"}
     if not isinstance(service_data, dict) or not service_data:
         return ()
-    primary = tuple(sorted(str(key) for key in service_data if key in TARGET_SELECTOR_KEYS))
+    primary =tuple(sorted(str(key) for key in service_data if key in TARGET_SELECTOR_KEYS))
     if primary:
         return primary
     try:

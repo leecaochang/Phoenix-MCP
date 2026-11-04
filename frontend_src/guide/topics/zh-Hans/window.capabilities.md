@@ -63,7 +63,7 @@
 
 ### {{label:caps.cap_service_response.label}} {#service-response}
 
-返回操作响应的数据。没有它，操作仍会运行，但不返回数据。直通模式允许它。
+返回操作响应的数据。没有它，操作仍会运行，但不返回数据，Music Assistant 音乐库搜索也会被拒绝。直通模式允许它。
 
 ### {{label:caps.cap_esphome_yaml.label}} {#esphome-yaml}
 

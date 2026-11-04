@@ -889,6 +889,14 @@ DUAL_GATE_SERVICES = frozenset({
     "homeassistant/restart",
     "homeassistant/stop",
 })
+# Music Assistant library reads name a config entry instead of an entity target
+# and only return a response. call_service admits them with cap_service_response
+# when the access key can read an entity of that Music Assistant entry.
+MUSIC_ASSISTANT_DOMAIN = "music_assistant"
+MUSIC_ASSISTANT_LIBRARY_SERVICES = frozenset({
+    "music_assistant/search",
+    "music_assistant/get_library",
+})
 # call_service reaches these no-target services by capability alone, so it is
 # announced to an access key holding one of them even without entity write scope.
 CALL_SERVICE_NO_TARGET_CAPS = ("cap_restart", "cap_yaml_edit")

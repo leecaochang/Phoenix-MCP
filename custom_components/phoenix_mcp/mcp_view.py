@@ -47,7 +47,7 @@ from homeassistant.util.dt import utcnow
 from homeassistant.util.ulid import ulid_to_bytes_or_none
 
 from .audit import generate_request_id
-from .const import AGENTCLI_CLIENT_IP, BACKUP_COMPLETION_WAIT_SECONDS, BACKUP_SINGLE_SLOT_AGENT_DOMAINS, LOCAL_BACKUP_AGENT_IDS, AI_TASK_CLIENT_IP, ASSIST_CLIENT_IP, PHOENIX_VERSION, BLOCKED_DOMAINS, VOICE_AGENT_CLIENT_IP, HOME_COMPANION_CLIENT_IP, CAP_ALLOW, CAP_CONFIRM, CAP_DENY, CAPABILITY_NAMES, DOMAIN, DUAL_GATE_SERVICES, HIGH_RISK_DOMAINS, MCP_AUTHORITY_CHANGED_ERROR, MCP_DISCOVER_TTL_MS, MCP_LEGACY_PROTOCOL_VERSION_PREFERRED, MCP_LEGACY_PROTOCOL_VERSIONS, MCP_PROTOCOL_VERSIONS, MCP_SSE_KEEPALIVE_SECONDS, MAX_APPROVAL_RESULT_CHARS, MAX_BATCH_APPROVALS, MAX_BATCH_ITEMS, LOG_LEVELS, LOG_LEVEL_ERROR_MESSAGE, GET_LOGS_LEVEL_ERROR_MESSAGE, ORIENTATION_GUIDANCE, MAX_LOG_ENTRIES, MAX_LOGBOOK_HOME_DAYS, MAX_LOGBOOK_NARROWED_DAYS, MAX_LOGBOOK_RESOURCE_IDS, MAX_SEARCH_QUERY_LEN, MAX_SUBSCRIPTION_SECONDS, MAX_ENTITY_ALIASES, MAX_ENTITY_ALIAS_LENGTH, MAX_TOOL_NAME_LENGTH, MESA_APPROVED_EXECUTOR, MESA_MODE_OFF, NO_TARGET_SERVICES, PROXY_TIMEOUT_SECONDS
+from .const import AGENTCLI_CLIENT_IP, BACKUP_COMPLETION_WAIT_SECONDS, BACKUP_SINGLE_SLOT_AGENT_DOMAINS, LOCAL_BACKUP_AGENT_IDS, AI_TASK_CLIENT_IP, ASSIST_CLIENT_IP, PHOENIX_VERSION, BLOCKED_DOMAINS, VOICE_AGENT_CLIENT_IP, HOME_COMPANION_CLIENT_IP, CAP_ALLOW, CAP_CONFIRM, CAP_DENY, CAPABILITY_NAMES, DOMAIN, DUAL_GATE_SERVICES, HIGH_RISK_DOMAINS, MCP_AUTHORITY_CHANGED_ERROR, MCP_DISCOVER_TTL_MS, MCP_LEGACY_PROTOCOL_VERSION_PREFERRED, MCP_LEGACY_PROTOCOL_VERSIONS, MCP_PROTOCOL_VERSIONS, MCP_SSE_KEEPALIVE_SECONDS, MAX_APPROVAL_RESULT_CHARS, MAX_BATCH_APPROVALS, MAX_BATCH_ITEMS, LOG_LEVELS, LOG_LEVEL_ERROR_MESSAGE, GET_LOGS_LEVEL_ERROR_MESSAGE, ORIENTATION_GUIDANCE, MAX_LOG_ENTRIES, MAX_LOGBOOK_HOME_DAYS, MAX_LOGBOOK_NARROWED_DAYS, MAX_LOGBOOK_RESOURCE_IDS, MAX_SEARCH_QUERY_LEN, MAX_SUBSCRIPTION_SECONDS, MAX_ENTITY_ALIASES, MAX_ENTITY_ALIAS_LENGTH, MAX_TOOL_NAME_LENGTH, MESA_APPROVED_EXECUTOR, MESA_MODE_OFF, MUSIC_ASSISTANT_LIBRARY_SERVICES, NO_TARGET_SERVICES, PROXY_TIMEOUT_SECONDS
 from .data import PhoenixData
 from .tools.esphome import _tool_search_esphome_yaml, _tool_list_esphome_jobs, _tool_list_esphome_devices
 from .tools.todo import _tool_get_todo_items, _tool_set_todo_item
@@ -259,7 +259,7 @@ from .tool_defs import (
 )
 from .audit import Outcome
 from .tool_common import MESA_DENIED_MESSAGE, _CAP_FORBIDDEN_MESSAGE, _resolve_area_id, _ProgressBus, _approved_exec_ctx, _approval_resource, _gate, _mesa_advisory_ctx, _mesa_confirm_annotation, _operator_accepted_result, _pending_or_inline, _progress_ctx, _record_version, _restore_ctx, _set_progress_status, _tool_error, _tool_refused_before_write, _tool_success
-from .policy_engine import (Permission, assist_expose_check, call_needs_physical_gate, config_entry_registry_context, device_cascade_entity_ids, device_config_entry_ids, esphome_entry_writable, filter_entities_for_access_key, filter_service_response, resolve, resolve_config_entry_registry_access, resolve_config_entry_registry_write, resolve_device_registry_access, resolve_device_registry_write, resolve_esphome_user_service, resolve_read, resolve_registry_access, resolve_service_targets, service_target_binding_valid, scrub_sensitive_attributes, scrub_state_dict as _scrub_state_dict)
+from .policy_engine import (Permission, assist_expose_check, call_needs_physical_gate, config_entry_registry_context, device_cascade_entity_ids, device_config_entry_ids, esphome_entry_writable, filter_entities_for_access_key, filter_service_response, music_assistant_readable_entries, resolve, resolve_config_entry_registry_access, resolve_config_entry_registry_write, resolve_device_registry_access, resolve_device_registry_write, resolve_esphome_user_service, resolve_read, resolve_registry_access, resolve_service_targets, service_target_binding_valid, scrub_sensitive_attributes, scrub_state_dict as _scrub_state_dict)
 from .rate_limiter import RateLimitResult
 from .access_key_store import AccessKeyRecord
 from . import yaml_includes
@@ -1986,6 +1986,7 @@ async def _tool_call_service(
             return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "call_service"
         return _tool_error("Use the dedicated calendar event authoring tools for calendar writes."), "invalid_request", "call_service"
 
+    service_key = f"{domain}/{service}"
     secondary_targets = await unsupported_secondary_targets(
         hass, args.get("service_data"), domain=domain, service=service
     )
@@ -1998,11 +1999,9 @@ async def _tool_call_service(
     if templated := template_fields(args.get("service_data")):
         return _tool_error(template_fields_error(templated)), "invalid_request", "call_service"
 
-    service_key = f"{domain}/{service}"
-
     from .command_execution import bind_service_plan
 
-    if (service_key not in DUAL_GATE_SERVICES | NO_TARGET_SERVICES
+    if (service_key not in DUAL_GATE_SERVICES | NO_TARGET_SERVICES | MUSIC_ASSISTANT_LIBRARY_SERVICES
             and domain != _ESPHOME_DOMAIN
             and not any((args.get("entity_id"), args.get("device_id"), args.get("area_id")))):
         if (call_needs_physical_gate(domain=domain, service=service, access_key=access_key, hass=hass)
@@ -2134,6 +2133,63 @@ async def _dispatch_no_target_tool_call(
     })), "allowed", resource
 
 
+async def _execute_music_assistant_library_read(
+    args: dict,
+    service_data: dict,
+    access_key: AccessKeyRecord,
+    hass: HomeAssistant,
+    *,
+    domain: str,
+    service: str,
+    resource: str,
+) -> tuple[dict, Outcome, str]:
+    """Run music_assistant.search or get_library, scoped by its config entry.
+
+    These name a Music Assistant entry instead of an entity target and only
+    return a response, so they need cap_service_response and Read on at least
+    one entity of that entry. An unknown, unloaded, foreign or unreadable entry
+    is refused alike, so the refusal reveals no entry. With one readable entry
+    the caller may leave config_entry_id out. MESA does not apply: nothing is
+    actuated, and for the same reason every refusal here is refused-before-write:
+    an agent turn may correct the call instead of stopping at an unknown outcome.
+    The response passes through the service-response redaction.
+    """
+    if effective_cap(access_key, "cap_service_response") == CAP_DENY:
+        return _tool_refused_before_write(_CAP_FORBIDDEN_MESSAGE), "denied", resource
+    if any((args.get("entity_id"), args.get("device_id"), args.get("area_id"))):
+        return (
+            _tool_refused_before_write(f"{domain}.{service} takes config_entry_id in service_data, not an entity_id, device_id or area_id target."),
+            "invalid_request", resource,
+        )
+    readable = music_assistant_readable_entries(hass, access_key)
+    entry_id = service_data.get("config_entry_id")
+    if entry_id is None and len(readable) == 1:
+        service_data = {**service_data, "config_entry_id": readable[0]}
+    elif entry_id is None and readable:
+        return _tool_refused_before_write("Several Music Assistant servers are readable; pass config_entry_id in service_data."), "invalid_request", resource
+    elif entry_id not in readable:
+        return _tool_refused_before_write("Forbidden."), "denied", resource
+    try:
+        async with asyncio.timeout(PROXY_TIMEOUT_SECONDS):
+            service_context = household_service_kwargs(hass, domain, service)
+            mark_dispatch_started()
+            response = await hass.services.async_call(
+                domain, service, service_data, blocking=True, return_response=True,
+                **service_context,
+            )
+    except asyncio.TimeoutError:
+        return _tool_refused_before_write("Music Assistant did not answer within the timeout window."), "invalid_request", resource
+    except ServiceNotFound:
+        return _tool_refused_before_write("Forbidden."), "denied", resource
+    except (ServiceValidationError, vol.Invalid) as err:
+        # Authorized by now; the message is about the caller's own arguments.
+        return _tool_refused_before_write(_validation_error_message(err)), "invalid_request", resource
+    except HomeAssistantError:
+        return _tool_refused_before_write("Forbidden."), "denied", resource
+    body = {"success": True, "service_response": filter_service_response(response, access_key, hass)}
+    return _tool_success(json.dumps(body, default=str)), "allowed", resource
+
+
 async def _execute_call_service(
     args: dict,
     access_key: AccessKeyRecord,
@@ -2232,6 +2288,11 @@ async def _execute_call_service(
             hass, access_key, domain=domain, service=service, service_data=service_data,
             resource=resource, timeout_noun="Service",
             surface_validation_errors=True,
+        )
+
+    if service_key in MUSIC_ASSISTANT_LIBRARY_SERVICES:
+        return await _execute_music_assistant_library_read(
+            args, service_data, access_key, hass, domain=domain, service=service, resource=resource,
         )
 
     # ESPHome user-defined actions (esphome.<device>_<action>) take NO entity

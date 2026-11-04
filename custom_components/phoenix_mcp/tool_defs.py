@@ -535,7 +535,7 @@ _ENTITY_TOOL_DEFS: list[dict] = [
             "Call a Home Assistant service. Target groups (kind entity, device, area or all) are resolved "
             "and flattened to the entities this access key can write; out-of-scope targets are dropped "
             "silently. A service without a target is refused, except the core reloads (cap_yaml_edit), "
-            "homeassistant.restart and stop (cap_restart) and ESPHome device actions (write on the device). The call passes the capability gate and "
+            "homeassistant.restart and stop (cap_restart), ESPHome device actions (write on the device) and the Music Assistant library reads music_assistant.search and get_library (cap_service_response and read on a Music Assistant entity; there is no genre search, so for a genre search for artists that fit and pass the found uris as the music_assistant.play_media media_id list). The call passes the capability gate and "
             "per-entity MESA policy, so it may return pending_approval or be refused. Preview a risky "
             "call first with dry_run_service (and whatif to see which automations it would trigger). "
             "For runtime controls use automation.trigger (run actions, skip_condition defaults true), "
