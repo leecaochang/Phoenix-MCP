@@ -37,7 +37,7 @@ from homeassistant.core import HomeAssistant
 from ..audit import generate_request_id
 from ..const import (
     ANNOUNCE_BIT, CAP_CONFIRM, CAP_DENY, DOMAIN, PHYSICAL_GATE_DOMAINS,
-    PROXY_TIMEOUT_SECONDS, RELATIVE_VOLUME_MAX_CONCURRENCY,
+    MUSIC_ASSISTANT_DOMAIN, PROXY_TIMEOUT_SECONDS, RELATIVE_VOLUME_MAX_CONCURRENCY,
     RELATIVE_VOLUME_PLAN_VERSION, SENSITIVE_ATTRIBUTES,
     VACUUM_CLEAN_AREA_BIT, VACUUM_RETURN_HOME_BIT, VACUUM_START_BIT,
 )
@@ -1551,9 +1551,30 @@ async def _tool_hass_media_search_and_play(
         name=args.get("name"),
         area=args.get("area"),
         floor=args.get("floor"),
+        allow_duplicate_names=True,
     )
+    if len(entities) > 1 and args.get("name"):
+        # One speaker can appear twice, once per integration; only one of them
+        # can search, so that is the one to play on. Anything else is a real
+        # ambiguity for the user, and a name never fans out to every match.
+        searchable = [entity_id for entity_id in entities if _can_search_media(hass, entity_id)]
+        if len(searchable) != 1:
+            return (
+                _tool_refused_before_write(
+                    f"Several players are named {json.dumps(args['name'])}: {', '.join(entities)}. "
+                    "Ask the user which one; nothing was played."
+                ),
+                "invalid_request", "HassMediaSearchAndPlay",
+            )
+        entities = searchable
     media_class = args.get("media_class")
-    if len(entities) == 1 and "://" not in search_query and _can_search_media(hass, entities[0]):
+    source = args.get("source")
+    if source is not None and entities:
+        found = await _first_source_result(hass, entities, search_query, media_class, source)
+        if isinstance(found, tuple):
+            return found
+        service_data = found
+    elif len(entities) == 1 and "://" not in search_query and _can_search_media(hass, entities[0]):
         found = await _first_search_result(hass, entities[0], search_query, media_class)
         if isinstance(found, tuple):
             return found
@@ -1570,6 +1591,60 @@ def _can_search_media(hass: HomeAssistant, entity_id: str) -> bool:
     state = hass.states.get(entity_id)
     features = state.attributes.get("supported_features", 0) if state else 0
     return isinstance(features, int) and bool(features & MediaPlayerEntityFeature.SEARCH_MEDIA)
+
+
+# Which part of a Music Assistant search answers each media class, best guess first.
+_SOURCE_RESULT_KEYS = {"album": ("albums",), "track": ("tracks",), "artist": ("artists",), "playlist": ("playlists",),
+                       "podcast": ("podcasts",)}
+_SOURCE_DEFAULT_KEYS = ("albums", "tracks", "playlists", "artists")
+
+
+async def _first_source_result(
+    hass: HomeAssistant, entities: list[str], search_query: str, media_class: object, source: object,
+) -> dict[str, Any] | tuple[dict, str, str]:
+    """The play_media data for a Music Assistant item from one source, or a refusal.
+
+    Only Music Assistant says where a result comes from: `library` searches the
+    library alone, and `streaming` keeps the results a connected service answered.
+    As with a plain search, MESA gates the play and a refusal here wrote nothing.
+    """
+    resource = "HassMediaSearchAndPlay"
+    if source not in ("library", "streaming"):
+        return _tool_refused_before_write("source must be library or streaming."), "invalid_request", resource
+    # Unresolved selectors have already refused; several targets cannot share one result.
+    entry = er.async_get(hass).async_get(entities[0]) if len(entities) == 1 else None
+    if entry is None or entry.platform != MUSIC_ASSISTANT_DOMAIN or not entry.config_entry_id:
+        return (
+            _tool_refused_before_write("source needs one Music Assistant speaker; nothing was played."),
+            "invalid_request", resource,
+        )
+    keys = _SOURCE_RESULT_KEYS.get(str(media_class), _SOURCE_DEFAULT_KEYS)
+    search_data: dict[str, Any] = {
+        "config_entry_id": entry.config_entry_id, "name": search_query, "library_only": source == "library",
+        "media_type": [key[:-1] for key in keys],
+    }
+    try:
+        async with asyncio.timeout(PROXY_TIMEOUT_SECONDS):
+            check_request_authority()
+            response = await hass.services.async_call(
+                MUSIC_ASSISTANT_DOMAIN, "search", search_data, blocking=True, return_response=True,
+                **household_service_kwargs(hass, MUSIC_ASSISTANT_DOMAIN, "search"),
+            )
+    except (asyncio.TimeoutError, HomeAssistantError, vol.Invalid):
+        return _tool_refused_before_write("The media search failed; nothing was played."), "invalid_request", resource
+    for key in keys:
+        items = (response or {}).get(key)
+        for item in items if isinstance(items, list) else []:
+            uri = item.get("uri") if isinstance(item, dict) else None
+            if isinstance(uri, str) and (source == "library") == uri.startswith("library://"):
+                return {"media_content_id": uri, "media_content_type": "music"}
+    return (
+        _tool_refused_before_write(
+            f"No {source} results for {json.dumps(search_query)}; nothing was played. "
+            "Search for the title alone or as Artist - Title."
+        ),
+        "invalid_request", resource,
+    )
 
 
 async def _first_search_result(

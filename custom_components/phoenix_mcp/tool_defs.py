@@ -3988,6 +3988,7 @@ _NATIVE_TOOL_DEFS: list[dict] = [
                 "floor": {"type": "string", "description": _TARGET_FLOOR},
                 "search_query": {"type": "string", "description": "Media title, artist, channel, URL, or other search text. For one artist's work use Artist - Title, not both words run together."},
                 "media_class": {"type": "string", "enum": ["album", "app", "artist", "channel", "composer", "contributing_artist", "directory", "episode", "game", "genre", "image", "movie", "music", "playlist", "podcast", "season", "track", "tv_show", "url", "video"], "description": "Kind of media to search for."},
+                "source": {"type": "string", "enum": ["library", "streaming"], "description": "Music Assistant speakers only: play from the user's own library, or from a connected streaming service such as YouTube Music. Leave out unless the user names a source."},
             },
             "required": ["search_query"],
             "anyOf": _requires_one("name", "area", "floor"),

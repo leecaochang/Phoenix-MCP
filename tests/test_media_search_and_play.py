@@ -11,6 +11,7 @@ from homeassistant.components.media_player import BrowseMedia, MediaClass, Media
 from homeassistant.core import SupportsResponse
 from homeassistant.helpers import entity_registry as er
 from homeassistant.util.dt import utcnow
+from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.phoenix_mcp.const import DOMAIN
 from custom_components.phoenix_mcp.access_key_store import AccessKeyRecord, PermissionNode, PermissionTree
@@ -123,3 +124,113 @@ async def test_a_read_only_player_is_neither_searched_nor_played(hass, player):
         TOOL, {"name": "Kitchen", "search_query": "Rumours"}, _access_key("YELLOW"), hass, MagicMock())
     assert outcome == "denied"
     assert player.searches == [] and player.plays == []
+
+
+class TestSource:
+    """Choosing between a Music Assistant library and a connected streaming service."""
+
+    def speaker(self, hass, player, *, platform: str = "music_assistant") -> str:
+        entry = MockConfigEntry(domain=platform)
+        entry.add_to_hass(hass)
+        registry = er.async_get(hass)
+        row = registry.async_get_or_create("media_player", platform, "den", suggested_object_id="den",
+                                           original_name="Den", config_entry=entry)
+        hass.states.async_set(row.entity_id, "idle", {"supported_features": SEARCHABLE})
+        self.entry_id = entry.entry_id
+        return row.entity_id
+
+    def stub(self, hass, albums: list[str]) -> list:
+        searches: list = []
+
+        async def _search(call):
+            searches.append(call)
+            uris = [uri for uri in albums if not call.data["library_only"] or uri.startswith("library://")]
+            return {"albums": [{"uri": uri} for uri in uris], "tracks": []}
+
+        hass.services.async_register("music_assistant", "search", _search, supports_response=SupportsResponse.ONLY)
+        return searches
+
+    @pytest.mark.parametrize(("source", "library_only", "uri"), [
+        ("library", True, "library://album/1"), ("streaming", False, "ytmusic--a://album/2"),
+    ])
+    async def test_plays_from_the_named_source(self, hass, player, source, library_only, uri):
+        entity_id = self.speaker(hass, player)
+        searches = self.stub(hass, ["library://album/1", "ytmusic--a://album/2"])
+        content, outcome, _ = await _call_tool(
+            TOOL, {"name": "Den", "search_query": "Rumours", "media_class": "album", "source": source},
+            _access_key(), hass, MagicMock())
+        assert outcome == "allowed", content
+        assert searches[0].data["config_entry_id"] == self.entry_id
+        assert searches[0].data["library_only"] is library_only
+        assert searches[0].data["media_type"] == ["album"]
+        assert player.searches == []
+        assert player.plays[0].data["media_content_id"] == uri
+        assert player.plays[0].data["entity_id"] == [entity_id]
+
+    async def test_streaming_does_not_fall_back_to_the_library(self, hass, player):
+        self.speaker(hass, player)
+        self.stub(hass, ["library://album/1"])
+        content, outcome, _ = await _call_tool(
+            TOOL, {"name": "Den", "search_query": "Rumours", "source": "streaming"},
+            _access_key(), hass, MagicMock())
+        assert outcome == "invalid_request"
+        assert isinstance(content, RefusedBeforeWrite)
+        assert player.plays == []
+
+    async def test_a_speaker_outside_music_assistant_is_refused(self, hass, player):
+        self.speaker(hass, player, platform="cast")
+        searches = self.stub(hass, ["library://album/1"])
+        content, outcome, _ = await _call_tool(
+            TOOL, {"name": "Den", "search_query": "Rumours", "source": "library"},
+            _access_key(), hass, MagicMock())
+        assert outcome == "invalid_request"
+        assert "Music Assistant speaker" in content["content"][0]["text"]
+        assert searches == [] and player.plays == []
+
+    async def test_an_unknown_source_is_refused(self, hass, player):
+        self.speaker(hass, player)
+        searches = self.stub(hass, ["library://album/1"])
+        content, outcome, _ = await _call_tool(
+            TOOL, {"name": "Den", "search_query": "Rumours", "source": "everywhere"},
+            _access_key(), hass, MagicMock())
+        assert outcome == "invalid_request"
+        assert searches == [] and player.plays == []
+
+    async def test_a_read_only_speaker_is_neither_searched_nor_played(self, hass, player):
+        self.speaker(hass, player)
+        searches = self.stub(hass, ["library://album/1"])
+        _, outcome, _ = await _call_tool(
+            TOOL, {"name": "Den", "search_query": "Rumours", "source": "library"},
+            _access_key("YELLOW"), hass, MagicMock())
+        assert outcome == "denied"
+        assert searches == [] and player.plays == []
+
+
+class TestSharedName:
+    """One speaker listed twice, once per integration, under the same name."""
+
+    async def test_the_searchable_player_is_used(self, hass, player):
+        wanted = player.add("kitchen", SEARCHABLE)
+        twin = "media_player.kitchen_two"
+        er.async_get(hass).async_get_or_create("media_player", "other", "two", suggested_object_id="kitchen_two",
+                                               original_name="KITCHEN")
+        hass.states.async_set(twin, "idle", {"supported_features": PLAIN})
+        content, outcome, _ = await _call_tool(
+            TOOL, {"name": "Kitchen", "search_query": "Rumours"}, _access_key(), hass, MagicMock())
+        assert outcome == "allowed", content
+        assert player.plays[0].data["entity_id"] == [wanted]
+
+    @pytest.mark.parametrize("features", [PLAIN, SEARCHABLE])
+    async def test_a_real_ambiguity_is_named_and_nothing_plays(self, hass, player, features):
+        first = player.add("kitchen", features)
+        twin = "media_player.kitchen_two"
+        er.async_get(hass).async_get_or_create("media_player", "other", "two", suggested_object_id="kitchen_two",
+                                               original_name="Kitchen")
+        hass.states.async_set(twin, "idle", {"supported_features": features})
+        content, outcome, _ = await _call_tool(
+            TOOL, {"name": "Kitchen", "search_query": "Rumours"}, _access_key(), hass, MagicMock())
+        text = content["content"][0]["text"]
+        assert outcome == "invalid_request"
+        assert first in text and twin in text
+        assert isinstance(content, RefusedBeforeWrite)
+        assert player.plays == [] and player.searches == []

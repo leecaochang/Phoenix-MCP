@@ -2414,6 +2414,15 @@ async def _execute_call_service(
                 domain, service, exc_info=True,
             )
 
+    # HA runs this same check before the handler, so a failure here proves nothing
+    # ran: an agent turn can correct the call instead of stopping at an unknown outcome.
+    registered = hass.services.async_services().get(domain, {}).get(service)
+    if registered is not None and registered.schema is not None:
+        try:
+            registered.schema(dict(call_data))
+        except vol.Invalid as err:
+            return _tool_refused_before_write(_validation_error_message(err)), "invalid_request", resource
+
     try:
         async with asyncio.timeout(PROXY_TIMEOUT_SECONDS):
             service_context = household_service_kwargs(hass, domain, service)
