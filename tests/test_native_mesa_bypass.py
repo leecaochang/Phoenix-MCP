@@ -184,6 +184,7 @@ MESA_EXEMPT_ACTUATORS = {
     "helpers.py::fire_rate_limit_events": "persistent_notification Phoenix raises about itself",
     "mcp_view.py::_dispatch_no_target_tool_call": "NO_TARGET_SERVICES take no entity (rule 15)",
     "mcp_view.py::_execute_restart_ha": "homeassistant.restart has no entity target",
+    "tools/native.py::_first_search_result": "media search before the gated play; nothing actuated",
     "mcp_view.py::_execute_music_assistant_library_read": "response-only library read; no entity target, nothing actuated",
     "tools/native.py::_relative_volume_worker": (
         "private relative-volume worker runs only after its enclosing executor "

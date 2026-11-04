@@ -3986,7 +3986,7 @@ _NATIVE_TOOL_DEFS: list[dict] = [
                 "name": {"type": "string", "description": _TARGET_NAME},
                 "area": {"type": "string", "description": _TARGET_AREA},
                 "floor": {"type": "string", "description": _TARGET_FLOOR},
-                "search_query": {"type": "string", "description": "Media title, artist, channel, URL, or other search text."},
+                "search_query": {"type": "string", "description": "Media title, artist, channel, URL, or other search text. For one artist's work use Artist - Title, not both words run together."},
                 "media_class": {"type": "string", "enum": ["album", "app", "artist", "channel", "composer", "contributing_artist", "directory", "episode", "game", "genre", "image", "movie", "music", "playlist", "podcast", "season", "track", "tv_show", "url", "video"], "description": "Kind of media to search for."},
             },
             "required": ["search_query"],

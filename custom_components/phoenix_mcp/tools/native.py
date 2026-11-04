@@ -47,7 +47,7 @@ from ..household_authority import household_service_kwargs
 from ..mesa import async_apply_mesa_to_call, fire_mesa_blocked_event
 from ..request_authority import check_request_authority
 from ..helpers import diff_summary_fields as _summary, effective_cap, str_arg, validation_error_message as _validation_error_message
-from ..tool_common import _approved_exec_ctx, _gate, _mesa_advisory_ctx, _mesa_confirm_annotation, _pending_or_inline, _tool_error, _tool_success
+from ..tool_common import _approved_exec_ctx, _gate, _mesa_advisory_ctx, _mesa_confirm_annotation, _pending_or_inline, _tool_error, _tool_refused_before_write, _tool_success
 from ..policy_engine import Permission, normalize_intent_selectors, resolve, resolve_intent_entities
 from ..access_key_store import AccessKeyRecord
 
@@ -1552,12 +1552,57 @@ async def _tool_hass_media_search_and_play(
         area=args.get("area"),
         floor=args.get("floor"),
     )
-    media_class = args.get("media_class") or "music"
-    service_data: dict[str, Any] = {
-        "media_content_id": search_query,
-        "media_content_type": media_class,
-    }
+    media_class = args.get("media_class")
+    if len(entities) == 1 and "://" not in search_query and _can_search_media(hass, entities[0]):
+        found = await _first_search_result(hass, entities[0], search_query, media_class)
+        if isinstance(found, tuple):
+            return found
+        service_data = found
+    else:
+        service_data = {"media_content_id": search_query, "media_content_type": media_class or "music"}
     return await _tool_intent_action("HassMediaSearchAndPlay", "media_player", "play_media", service_data, entities, hass, access_key, args=args)
+
+
+def _can_search_media(hass: HomeAssistant, entity_id: str) -> bool:
+    """Whether a player answers media_player.search_media, as Core's intent requires."""
+    from homeassistant.components.media_player import MediaPlayerEntityFeature
+
+    state = hass.states.get(entity_id)
+    features = state.attributes.get("supported_features", 0) if state else 0
+    return isinstance(features, int) and bool(features & MediaPlayerEntityFeature.SEARCH_MEDIA)
+
+
+async def _first_search_result(
+    hass: HomeAssistant, entity_id: str, search_query: str, media_class: object,
+) -> dict[str, Any] | tuple[dict, str, str]:
+    """The play_media data for a player's first search result, or a refusal.
+
+    Searching changes nothing, so MESA gates the play that follows and every
+    refusal here is refused-before-write: the agent can correct its query.
+    """
+    resource = "HassMediaSearchAndPlay"
+    search_data: dict[str, Any] = {"entity_id": entity_id, "search_query": search_query}
+    if media_class:
+        search_data["media_filter_classes"] = [media_class]
+    try:
+        async with asyncio.timeout(PROXY_TIMEOUT_SECONDS):
+            check_request_authority()
+            response = await hass.services.async_call(
+                "media_player", "search_media", search_data, blocking=True, return_response=True,
+                **household_service_kwargs(hass, "media_player", "search_media"),
+            )
+    except (asyncio.TimeoutError, HomeAssistantError, vol.Invalid):
+        return _tool_refused_before_write("The media search failed; nothing was played."), "invalid_request", resource
+    results = getattr((response or {}).get(entity_id), "result", None)
+    if not results:
+        return (
+            _tool_refused_before_write(
+                f"No results for {json.dumps(search_query)}; nothing was played. "
+                "Search for the title alone or as Artist - Title."
+            ),
+            "invalid_request", resource,
+        )
+    return {"media_content_id": results[0].media_content_id, "media_content_type": results[0].media_content_type}
 
 
 async def _tool_hass_media_player_mute(
