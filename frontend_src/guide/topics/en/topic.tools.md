@@ -48,6 +48,7 @@ Agents can also run any Home Assistant action on targets they can write, and pre
 - Reloading automations, scripts, scenes, helpers or the core configuration needs YAML configuration.
 - An action's returned data needs Service response data. Without it, the action still runs.
 - Notify actions, which send messages, need Notifications.
+- Announcements need Broadcast: `assist_satellite.announce`, `music_assistant.play_announcement`, and `media_player.play_media` with `announce`. Ordinary playback needs only Write.
 - ESPHome device actions need only Write on the device. MESA doesn't check them, and doesn't check reloads or restarts either.
 - Searching or listing the Music Assistant library needs Service response data and Read on a Music Assistant entity, such as a speaker. Nothing plays, so MESA doesn't check these either.
 

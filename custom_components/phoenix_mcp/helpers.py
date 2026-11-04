@@ -1726,6 +1726,15 @@ def str_list_arg(value: object) -> list[str]:
 # enforcing a check, because it does not go through the approval queue.
 
 
+def is_announcement(domain: str, service: str, service_data: object) -> bool:
+    """Whether a service call interrupts a speaker with an announcement."""
+    from .const import ANNOUNCEMENT_SERVICES
+
+    if f"{domain}/{service}" in ANNOUNCEMENT_SERVICES:
+        return True
+    return (domain, service) == ("media_player", "play_media") and isinstance(service_data, dict) and bool(service_data.get("announce"))
+
+
 def effective_cap(access_key: AccessKeyRecord, cap_name: str) -> str:
     """Return the cap mode after applying pass_through interaction rules.
 

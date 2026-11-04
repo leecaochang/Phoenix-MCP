@@ -897,6 +897,12 @@ MUSIC_ASSISTANT_LIBRARY_SERVICES = frozenset({
     "music_assistant/search",
     "music_assistant/get_library",
 })
+# Services that interrupt a speaker with an announcement. Write on the speaker is
+# not enough; they also need cap_broadcast, as HassBroadcast does.
+ANNOUNCEMENT_SERVICES = frozenset({
+    "assist_satellite/announce",
+    "music_assistant/play_announcement",
+})
 # call_service reaches these no-target services by capability alone, so it is
 # announced to an access key holding one of them even without entity write scope.
 CALL_SERVICE_NO_TARGET_CAPS = ("cap_restart", "cap_yaml_edit")

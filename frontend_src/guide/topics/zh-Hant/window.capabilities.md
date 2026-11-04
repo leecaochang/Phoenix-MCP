@@ -59,7 +59,7 @@
 
 ### {{label:caps.cap_broadcast.label}} {#broadcast}
 
-透過 Assist 衛星裝置廣播訊息。直通模式允許它。
+透過 Assist 衛星裝置廣播訊息，並在喇叭上播放公告，這需要在喇叭的 W 之外另行授予。一般播放只需要 W。直通模式允許它。
 
 ### {{label:caps.cap_service_response.label}} {#service-response}
 

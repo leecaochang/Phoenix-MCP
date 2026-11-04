@@ -59,7 +59,7 @@ Reads files in the www, themes and custom_templates folders. Pass-through doesn'
 
 ### {{label:caps.cap_broadcast.label}} {#broadcast}
 
-Broadcasts a message through Assist satellites. Pass-through allows it.
+Broadcasts a message through Assist satellites and plays announcements on speakers, on top of Write on the speaker. Ordinary playback needs only Write. Pass-through allows it.
 
 ### {{label:caps.cap_service_response.label}} {#service-response}
 

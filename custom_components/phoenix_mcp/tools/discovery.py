@@ -49,7 +49,7 @@ import voluptuous as vol
 from homeassistant.exceptions import HomeAssistantError
 
 from ..authoring_validation import async_validation_message, authoring_input_error
-from ..const import CAP_ALLOW, CAP_CONFIRM, CAP_DENY, DEVICE_LIST_DEFAULT_LIMIT, DEVICE_LIST_MAX_LIMIT, DUAL_GATE_SERVICES, MAX_COMPARE_LIST_VALUES, MAX_COMPARE_VALUE_CHARS, MAX_DANGLING_PATHS, MAX_CONFIG_CHECK_MESSAGES, MAX_SEARCH_QUERY_LEN, MAX_SEARCH_MEMBERS, MAX_SEARCH_MEMBER_CHECKS, MAX_SEARCH_MEMBER_ID_LEN, MESA_MODE_OFF, MUSIC_ASSISTANT_LIBRARY_SERVICES, STORAGE_HELPER_TYPES, NO_TARGET_SERVICES, PHYSICAL_GATE_DOMAINS, RUNTIME_SERVICE_GUIDANCE, SCRIPT_ENTITY_SERVICES, SEARCH_ENTITIES_MAX_LIMIT, SEARCH_FUZZY_MATCH_CUTOFF, SEARCH_POWER_TYPES, SEARCH_RADIO_TYPES, SERVICE_FIELDS_MAX, SERVICE_FIELD_MAX_DESCRIPTION, SERVICE_FIELD_MAX_OPTIONS, REFERENCE_WARNING_MAX
+from ..const import ANNOUNCEMENT_SERVICES, CAP_ALLOW, CAP_CONFIRM, CAP_DENY, DEVICE_LIST_DEFAULT_LIMIT, DEVICE_LIST_MAX_LIMIT, DUAL_GATE_SERVICES, MAX_COMPARE_LIST_VALUES, MAX_COMPARE_VALUE_CHARS, MAX_DANGLING_PATHS, MAX_CONFIG_CHECK_MESSAGES, MAX_SEARCH_QUERY_LEN, MAX_SEARCH_MEMBERS, MAX_SEARCH_MEMBER_CHECKS, MAX_SEARCH_MEMBER_ID_LEN, MESA_MODE_OFF, MUSIC_ASSISTANT_LIBRARY_SERVICES, STORAGE_HELPER_TYPES, NO_TARGET_SERVICES, PHYSICAL_GATE_DOMAINS, RUNTIME_SERVICE_GUIDANCE, SCRIPT_ENTITY_SERVICES, SEARCH_ENTITIES_MAX_LIMIT, SEARCH_FUZZY_MATCH_CUTOFF, SEARCH_POWER_TYPES, SEARCH_RADIO_TYPES, SERVICE_FIELDS_MAX, SERVICE_FIELD_MAX_DESCRIPTION, SERVICE_FIELD_MAX_OPTIONS, REFERENCE_WARNING_MAX
 from ..consumer_identity import ConsumerIdentityIndex, IDENTITY_COVERAGE
 from ..household_authority import household_admin_access
 from ..data import PhoenixData
@@ -66,7 +66,7 @@ from ..tool_contracts import normalize_tool_args, state_projection
 from ..mesa import async_semantic_moments, build_expand_target, entity_control_mode, evaluate_service_entities
 from ..mesa_core.trigger_validator import entities_by_role
 from ..mesa_tools import MESA_TOOLS_CAP, authored_restrictions
-from ..helpers import effective_cap, entity_hint_for_agent, parse_time_param as _parse_time_param, redact_diagnostics as _redact_diagnostics, redact_inaccessible_entity_ids_in_text, sanitize_service_data as _sanitize_service_data, str_arg, str_list_arg
+from ..helpers import effective_cap, entity_hint_for_agent, is_announcement, parse_time_param as _parse_time_param, redact_diagnostics as _redact_diagnostics, redact_inaccessible_entity_ids_in_text, sanitize_service_data as _sanitize_service_data, str_arg, str_list_arg
 from .esphome import _ESPHOME_DOMAIN, _esphome_action_signature, _esphome_actions_for_entity, esphome_availability
 from ..tool_common import _project_state, _resolve_area_id, _tool_error, _tool_success, fitted_offset_page, longest_fitting, offset_page
 from ..ws_dispatch import WsDispatchError, async_get_lovelace_config, async_ws_command
@@ -1977,6 +1977,7 @@ async def _tool_find_available_actions(
     restart_ok = effective_cap(access_key, "cap_restart") != CAP_DENY
     yaml_edit_ok = effective_cap(access_key, "cap_yaml_edit") != CAP_DENY
     notify_ok = effective_cap(access_key, "cap_notify") != CAP_DENY
+    broadcast_ok = effective_cap(access_key, "cap_broadcast") != CAP_DENY
 
     actions: list[dict] = []
     for svc in sorted(hass.services.async_services().get(domain, {}).keys()):
@@ -2000,6 +2001,8 @@ async def _tool_find_available_actions(
             available, reason = False, "requires restart capability"
         elif domain == "notify" and not notify_ok:
             available, reason = False, "requires notifications capability"
+        elif key in ANNOUNCEMENT_SERVICES and not broadcast_ok:
+            available, reason = False, "requires broadcast capability"
         entry = {"service": f"{domain}.{svc}", "available": available}
         if guidance := RUNTIME_SERVICE_GUIDANCE.get(key):
             entry["description"] = guidance
@@ -3332,6 +3335,8 @@ async def _tool_dry_run_service(
         predicted = _cap_outcome(effective_cap(access_key, "cap_physical_control"))
     elif domain == "notify" and effective_cap(access_key, "cap_notify") != CAP_ALLOW:
         predicted = _cap_outcome(effective_cap(access_key, "cap_notify"))
+    elif is_announcement(domain, service, service_data) and effective_cap(access_key, "cap_broadcast") != CAP_ALLOW:
+        predicted = _cap_outcome(effective_cap(access_key, "cap_broadcast"))
     elif not permitted:
         predicted = "denied"
     else:

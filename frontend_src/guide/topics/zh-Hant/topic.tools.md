@@ -48,6 +48,7 @@
 - 重新載入自動化、腳本、場景、輔助項目或核心設定需要 YAML 設定。
 - 操作傳回的資料需要服務回應資料。沒有它，操作仍會執行。
 - 傳送訊息的通知操作需要通知能力。
+- 公告播放需要廣播能力：`assist_satellite.announce`、`music_assistant.play_announcement`，以及帶 `announce` 的 `media_player.play_media`。一般播放只需要 W。
 - ESPHome 裝置操作只需要裝置上的 W。MESA 不檢查它們，也不檢查重新載入或重新啟動。
 - 搜尋或列出 Music Assistant 音樂庫需要服務回應資料，以及某個 Music Assistant 實體（例如喇叭）上的 R。這些操作不會播放任何內容，所以 MESA 也不檢查它們。
 

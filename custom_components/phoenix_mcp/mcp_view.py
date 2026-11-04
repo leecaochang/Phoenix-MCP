@@ -81,7 +81,7 @@ from .mesa import (
 from .ws_dispatch import WsDispatchError, async_ws_command
 from .agent_recovery import tool_is_read_only
 from .mesa_tools import MESA_TOOL_NAMES, async_call_mesa_tool, mesa_tool_defs
-from .helpers import _strict_phoenix_log_text, access_key_notes_block, access_key_notes_for_agent, build_error_response as _error, build_permitted_states as _build_permitted_states, build_safe_config, collect_log_entries as _collect_log_entries, content_hash, diff_summary_fields as _summary, effective_cap, effective_caps, entity_hint_for_agent, fire_rate_limit_events as _fire_rate_limit_events, async_get_authenticated_access_key as _async_get_authenticated_access_key, get_client_ip as _get_client_ip, log_internal_failure, log_request as _log, parse_time_param as _parse_time_param, redact_diagnostics, redact_structure, sanitize_service_data as _sanitize_service_data, service_not_found_hint as _service_not_found_hint, str_arg, str_list_arg, SystemLogDegradedError, SystemLogUnavailableError, access_key_has_write_scope, validation_error_message as _validation_error_message, version_summary_fields as _version_summary
+from .helpers import _strict_phoenix_log_text, access_key_notes_block, access_key_notes_for_agent, build_error_response as _error, build_permitted_states as _build_permitted_states, build_safe_config, collect_log_entries as _collect_log_entries, content_hash, diff_summary_fields as _summary, effective_cap, effective_caps, entity_hint_for_agent, fire_rate_limit_events as _fire_rate_limit_events, async_get_authenticated_access_key as _async_get_authenticated_access_key, get_client_ip as _get_client_ip, log_internal_failure, log_request as _log, parse_time_param as _parse_time_param, redact_diagnostics, redact_structure, is_announcement, sanitize_service_data as _sanitize_service_data, service_not_found_hint as _service_not_found_hint, str_arg, str_list_arg, SystemLogDegradedError, SystemLogUnavailableError, access_key_has_write_scope, validation_error_message as _validation_error_message, version_summary_fields as _version_summary
 from .proxy_diagnostics import discovered_flows, full_pass_through, integration_serial_ports
 from .history_summary import SummaryUnavailableError, compact_summary_row, read_attribute_change_page, read_state_change_page, scan_state_changes, summary_body
 from .recorder_queries import (
@@ -2055,6 +2055,14 @@ async def _tool_call_service(
         )
         if blocked is not None:
             return blocked
+    elif is_announcement(domain, service, args.get("service_data")):
+        blocked = await _gate(
+            "cap_broadcast", access_key, hass, data,
+            tool_name="call_service", args=args, request_id=request_id,
+            client_ip=client_ip, diff=lambda: _build_diff_call_service(args, access_key, hass),
+        )
+        if blocked is not None:
+            return blocked
     elif service_key in NO_TARGET_SERVICES:
         blocked = await _gate(
             "cap_yaml_edit", access_key, hass, data,
@@ -2228,6 +2236,8 @@ async def _execute_call_service(
         required_cap = "cap_physical_control"
     elif service_key in NO_TARGET_SERVICES:
         required_cap = "cap_yaml_edit"
+    elif is_announcement(domain, service, args.get("service_data")):
+        required_cap = "cap_broadcast"
     else:
         required_cap = None
     if required_cap is not None and effective_cap(access_key, required_cap) == CAP_DENY:

@@ -59,7 +59,7 @@
 
 ### {{label:caps.cap_broadcast.label}} {#broadcast}
 
-通过 Assist 卫星设备播报消息。直通模式允许它。
+通过 Assist 卫星设备播报消息，并在音箱上播放通知，这需要在音箱的 W 之外另行授予。普通播放只需要 W。直通模式允许它。
 
 ### {{label:caps.cap_service_response.label}} {#service-response}
 

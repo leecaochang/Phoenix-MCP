@@ -48,6 +48,7 @@
 - 重新加载自动化、脚本、场景、辅助元素或核心配置需要 YAML 配置。
 - 操作返回的数据需要服务响应数据。没有它，操作仍会运行。
 - 发送消息的通知操作需要通知能力。
+- 通知播放需要广播能力：`assist_satellite.announce`、`music_assistant.play_announcement`，以及带 `announce` 的 `media_player.play_media`。普通播放只需要 W。
 - ESPHome 设备操作只需要设备上的 W。MESA 不检查它们，也不检查重新加载或重启。
 - 搜索或列出 Music Assistant 音乐库需要服务响应数据，以及某个 Music Assistant 实体（例如音箱）上的 R。这些操作不会播放任何内容，所以 MESA 也不检查它们。
 
