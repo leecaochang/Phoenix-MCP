@@ -19,7 +19,7 @@ Das Bedienfeld unterstützt derzeit Englisch, Spanisch, Französisch, Italienisc
 
 ## Dokumentation
 
-Das Handbuch ist in das Bedienfeld integriert: Öffnen Sie das **Phoenix MCP**-Bedienfeld und wählen Sie im Menü **Dokumentation** den Eintrag **Leitfaden**. Es erklärt jedes Fenster und jede Einstellung, was Agenten tun können, Berechtigungen, Fähigkeiten, MESA, Sicherheit und die Admin-API, und Sie können es durchsuchen.
+Das Handbuch ist in das Bedienfeld integriert: Öffnen Sie das **Phoenix MCP**-Bedienfeld und wählen Sie im Menü **Hilfe** den Eintrag **Leitfaden**. Es erklärt jedes Fenster und jede Einstellung, was Agenten tun können, Berechtigungen, Fähigkeiten, MESA, Sicherheit und die Admin-API, und Sie können es durchsuchen.
 
 Neu hier? Öffnen Sie das **Phoenix MCP**-Bedienfeld und wählen Sie unter Zugriffsschlüssel **Agenten einrichten**. Die Einrichtung erstellt Ihren ersten Zugriffsschlüssel, legt fest, was er darf, lässt Sie dann direkt in Home Assistant chatten oder eine externe App verbinden und endet mit einem Test, den Sie mitverfolgen können.
 

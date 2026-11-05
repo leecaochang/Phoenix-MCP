@@ -19,7 +19,7 @@ Het paneel ondersteunt momenteel Engels, Spaans, Frans, Italiaans, Duits, Nederl
 
 ## Documentatie
 
-De handleiding is ingebouwd in het paneel: open het **Phoenix MCP**-paneel en kies **Gids** in het menu **Documentatie**. Hij legt elk venster en elke instelling uit, wat agents kunnen doen, machtigingen, mogelijkheden, MESA, beveiliging en de admin-API, en je kunt erin zoeken.
+De handleiding is ingebouwd in het paneel: open het **Phoenix MCP**-paneel en kies **Gids** in het menu **Help**. Hij legt elk venster en elke instelling uit, wat agents kunnen doen, machtigingen, mogelijkheden, MESA, beveiliging en de admin-API, en je kunt erin zoeken.
 
 Nieuw hier? Open het **Phoenix MCP**-paneel en kies **Een agent instellen** bij Toegangssleutels. Hiermee maak je je eerste toegangssleutel, bepaal je wat deze mag doen, kun je daarna vanuit Home Assistant chatten of een externe app verbinden, en sluit je af met een test die je kunt volgen.
 

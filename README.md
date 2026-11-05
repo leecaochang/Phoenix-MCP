@@ -19,7 +19,7 @@ The panel currently supports English, Spanish, French, Italian, German, Dutch, P
 
 ## Documentation
 
-The manual is built into the panel: open the **Phoenix MCP** panel and choose **Guide** from the **Documentation** menu. It explains every window and setting, what agents can do, permissions, capabilities, MESA, security and the admin API, and you can search it.
+The manual is built into the panel: open the **Phoenix MCP** panel and choose **Guide** from the **Help** menu. It explains every window and setting, what agents can do, permissions, capabilities, MESA, security and the admin API, and you can search it.
 
 New here? Open the **Phoenix MCP** panel and choose **Set Up an Agent** in Access Keys. It creates your first access key, decides what it can do, then lets you chat from inside Home Assistant or connect an external app, and ends with a test you can watch.
 

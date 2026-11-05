@@ -19,7 +19,7 @@ Paneeli tukee tällä hetkellä englantia, espanjaa, ranskaa, italiaa, saksaa, h
 
 ## Dokumentaatio
 
-Käyttöohje on rakennettu paneeliin: avaa **Phoenix MCP** -paneeli ja valitse **Dokumentaatio**-valikosta **Opas**. Se selittää jokaisen ikkunan ja asetuksen, mitä agentit voivat tehdä, käyttöoikeudet, ominaisuudet, MESA:n, tietoturvan ja ylläpito-API:n, ja voit hakea siitä.
+Käyttöohje on rakennettu paneeliin: avaa **Phoenix MCP** -paneeli ja valitse **Ohje**-valikosta **Opas**. Se selittää jokaisen ikkunan ja asetuksen, mitä agentit voivat tehdä, käyttöoikeudet, ominaisuudet, MESA:n, tietoturvan ja ylläpito-API:n, ja voit hakea siitä.
 
 Uusi täällä? Avaa **Phoenix MCP** -paneeli ja valitse Käyttöavaimet-kohdasta **Määritä agentti**. Se luo ensimmäisen käyttöavaimesi, määrittää, mitä avain saa tehdä, antaa sinun sitten keskustella Home Assistant -sovelluksen sisällä tai yhdistää ulkoisen sovelluksen ja päättyy testiin, jota voit seurata.
 

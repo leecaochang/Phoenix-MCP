@@ -19,7 +19,7 @@ Panel obsługuje obecnie angielski, hiszpański, francuski, włoski, niemiecki, 
 
 ## Dokumentacja
 
-Podręcznik jest wbudowany w panel: otwórz panel **Phoenix MCP** i wybierz **Przewodnik** z menu **Dokumentacja**. Wyjaśnia każde okno i ustawienie, to, co mogą robić agenci, uprawnienia, możliwości, MESA, bezpieczeństwo i API administratora, a do tego można go przeszukiwać.
+Podręcznik jest wbudowany w panel: otwórz panel **Phoenix MCP** i wybierz **Przewodnik** z menu **Pomoc**. Wyjaśnia każde okno i ustawienie, to, co mogą robić agenci, uprawnienia, możliwości, MESA, bezpieczeństwo i API administratora, a do tego można go przeszukiwać.
 
 Nowy tutaj? Otwórz panel **Phoenix MCP** i wybierz **Skonfiguruj agenta** w sekcji Klucze dostępu. Kreator tworzy Twój pierwszy klucz dostępu, określa, co klucz może robić, następnie pozwala rozmawiać z poziomu Home Assistant lub połączyć zewnętrzną aplikację, a na koniec przeprowadza test, który możesz obserwować.
 

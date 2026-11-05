@@ -19,7 +19,7 @@ Panelet støtter for tiden engelsk, spansk, fransk, italiensk, tysk, nederlandsk
 
 ## Dokumentasjon
 
-Håndboken er innebygd i panelet: åpne panelet **Phoenix MCP** og velg **Veiledning** fra menyen **Dokumentasjon**. Den forklarer hvert vindu og hver innstilling, hva agenter kan gjøre, tillatelser, kapabiliteter, MESA, sikkerhet og admin-API-et, og du kan søke i den.
+Håndboken er innebygd i panelet: åpne panelet **Phoenix MCP** og velg **Veiledning** fra menyen **Hjelp**. Den forklarer hvert vindu og hver innstilling, hva agenter kan gjøre, tillatelser, kapabiliteter, MESA, sikkerhet og admin-API-et, og du kan søke i den.
 
 Ny her? Åpne panelet **Phoenix MCP** og velg **Sett opp en agent** under Tilgangsnøkler. Den oppretter din første tilgangsnøkkel, bestemmer hva den kan gjøre, lar deg deretter chatte inne fra Home Assistant eller koble til en ekstern app, og avslutter med en test du kan følge med på.
 

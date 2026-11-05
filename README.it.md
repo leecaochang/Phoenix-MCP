@@ -19,7 +19,7 @@ Attualmente il pannello supporta inglese, spagnolo, francese, italiano, tedesco,
 
 ## Documentazione
 
-Il manuale è integrato nel pannello: apri il pannello **Phoenix MCP** e scegli **Guida** dal menu **Documentazione**. Spiega ogni finestra e impostazione, cosa possono fare gli agenti, le autorizzazioni, le capacità, MESA, la sicurezza e l'API di amministrazione, e puoi effettuare ricerche al suo interno.
+Il manuale è integrato nel pannello: apri il pannello **Phoenix MCP** e scegli **Guida** dal menu **Aiuto**. Spiega ogni finestra e impostazione, cosa possono fare gli agenti, le autorizzazioni, le capacità, MESA, la sicurezza e l'API di amministrazione, e puoi effettuare ricerche al suo interno.
 
 Nuovo da queste parti? Apri il pannello **Phoenix MCP** e scegli **Configura un agente** in Chiavi di accesso. Crea la tua prima chiave di accesso, stabilisce cosa può fare, poi ti permette di chattare da dentro Home Assistant o collegare un'app esterna, e termina con un test che puoi seguire.
 
