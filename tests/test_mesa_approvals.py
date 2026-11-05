@@ -100,7 +100,7 @@ async def test_off_mode_allows_all(hass: HomeAssistant):
 @pytest.mark.parametrize("approved", [False, True])
 async def test_registry_id_cannot_bypass_entity_profile(hass, mode, profile, approved):
     from homeassistant.helpers import entity_registry as er
-    from pytest_homeassistant_custom_component.common import async_mock_service
+    from pytest_homeassistant.common import async_mock_service
     from custom_components.phoenix_mcp.mcp_view import _execute_call_service, async_execute_approved_tool
 
     data = await _make_data(hass, mode)
@@ -122,7 +122,7 @@ async def test_registry_id_cannot_bypass_entity_profile(hass, mode, profile, app
 
 async def test_registry_id_dispatches_one_canonical_authorized_target(hass):
     from homeassistant.helpers import entity_registry as er
-    from pytest_homeassistant_custom_component.common import async_mock_service
+    from pytest_homeassistant.common import async_mock_service
     from custom_components.phoenix_mcp.mcp_view import _execute_call_service
 
     data = await _make_data(hass, "enforced")
@@ -252,7 +252,7 @@ async def test_admin_approval_satisfies_mesa_confirm_in_one_step(hass: HomeAssis
     reset).
     """
     from homeassistant.helpers import entity_registry as er
-    from pytest_homeassistant_custom_component.common import async_mock_service
+    from pytest_homeassistant.common import async_mock_service
 
     from custom_components.phoenix_mcp.mcp_view import _execute_call_service, async_execute_approved_tool
 
@@ -353,7 +353,7 @@ async def test_gate_diff_unmarked_when_mesa_not_involved(hass: HomeAssistant):
 async def test_approved_execution_still_rejects_prohibited(hass: HomeAssistant):
     """Confirm-approved semantics never loosen prohibited (or read_only) entities."""
     from homeassistant.helpers import entity_registry as er
-    from pytest_homeassistant_custom_component.common import async_mock_service
+    from pytest_homeassistant.common import async_mock_service
 
     from custom_components.phoenix_mcp.mcp_view import async_execute_approved_tool
 

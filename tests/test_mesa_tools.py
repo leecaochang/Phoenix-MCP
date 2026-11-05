@@ -993,7 +993,7 @@ def strip_env(hass: HomeAssistant):
     """A main device with one outlet part and one hub-connected dependent."""
     from homeassistant.helpers import device_registry as dr
     from homeassistant.helpers import entity_registry as er
-    from pytest_homeassistant_custom_component.common import MockConfigEntry
+    from pytest_homeassistant.common import MockConfigEntry
 
     entry = MockConfigEntry(domain="test_integration", entry_id="strip")
     entry.add_to_hass(hass)

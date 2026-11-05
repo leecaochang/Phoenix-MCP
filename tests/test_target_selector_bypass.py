@@ -37,6 +37,7 @@ _ALL_SELECTORS = {
     "area_id": "kitchen",
     "floor_id": "ground_floor",
     "label_id": "everything",
+    "exclude": {"entity_id": "light.kitchen"},
 }
 
 
@@ -123,7 +124,8 @@ def test_selector_keys_match_home_assistant_own_definition():
     """
     from homeassistant.helpers import config_validation as cv
 
-    assert TARGET_SELECTOR_KEYS == {str(k) for k in cv.TARGET_SERVICE_FIELDS}
+    # Older releases have no exclude block; the key stays refused on them.
+    assert TARGET_SELECTOR_KEYS == {str(k) for k in cv.TARGET_SERVICE_FIELDS} | {"exclude"}
 
 
 def test_target_selection_reads_exactly_those_keys():
@@ -136,7 +138,7 @@ def test_target_selection_reads_exactly_those_keys():
     from homeassistant.helpers.target import TargetSelection
 
     selected = {name.removesuffix("s") for name in TargetSelection.__slots__}
-    assert selected == set(TARGET_SELECTOR_KEYS)
+    assert selected | {"exclude"} == set(TARGET_SELECTOR_KEYS)
 
 
 def test_static_secondary_selector_fallback_covers_installed_home_assistant():
@@ -218,6 +220,21 @@ def test_sanitizer_returns_a_new_dict_and_never_mutates():
 def test_sanitizer_degrades_a_wrong_shaped_value_to_empty():
     for bad in (None, "entity_id=light.a", ["light.a"], 7, True):
         assert sanitize_service_data(bad) == {}
+
+
+@pytest.mark.asyncio
+async def test_exclude_block_is_refused_on_its_own(hass):
+    """HA would drop entities after Phoenix resolved, reviewed and audited them."""
+    from custom_components.phoenix_mcp.service_targets import unsupported_secondary_targets
+
+    refused = await unsupported_secondary_targets(
+        hass, {"exclude": {"entity_id": "light.desk"}, "brightness_pct": 40}, domain="light", service="turn_on",
+    )
+    assert refused == ("exclude",)
+
+
+def test_sanitizer_strips_an_exclude_block_on_its_own():
+    assert sanitize_service_data({"exclude": {"area_id": "kitchen"}, "brightness_pct": 40}) == {"brightness_pct": 40}
 
 
 @pytest.mark.asyncio
@@ -319,7 +336,7 @@ async def test_approved_reexecution_refuses_misplaced_selectors(hass, access_key
     er.async_get(hass).async_get_or_create("light", "test", "kitchen", suggested_object_id="kitchen")
     hass.states.async_set("light.kitchen", "off")
     hass.data[DOMAIN] = data
-    from pytest_homeassistant_custom_component.common import async_mock_service
+    from pytest_homeassistant.common import async_mock_service
     calls = async_mock_service(hass, "light", "turn_on")
     access_key.pass_through = True
 

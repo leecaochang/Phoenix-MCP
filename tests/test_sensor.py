@@ -13,7 +13,7 @@ from dataclasses import replace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from pytest_homeassistant_custom_component.common import MockConfigEntry
+from pytest_homeassistant.common import MockConfigEntry
 
 from homeassistant.components.sensor import SensorStateClass
 from homeassistant.const import UnitOfTime
@@ -426,7 +426,7 @@ class TestCounterWriteDebounce:
     """
 
     async def test_writes_coalesce_into_one_flush(self, hass):
-        from pytest_homeassistant_custom_component.common import async_fire_time_changed
+        from pytest_homeassistant.common import async_fire_time_changed
         from homeassistant.util.dt import utcnow
 
         from custom_components.phoenix_mcp.const import SENSOR_WRITE_DEBOUNCE_SECONDS
@@ -458,7 +458,7 @@ class TestCounterWriteDebounce:
         assert data.sensor_flush_cancel is None
 
     async def test_flush_skips_archived_access_key(self, hass):
-        from pytest_homeassistant_custom_component.common import async_fire_time_changed
+        from pytest_homeassistant.common import async_fire_time_changed
         from homeassistant.util.dt import utcnow
 
         from custom_components.phoenix_mcp.const import SENSOR_WRITE_DEBOUNCE_SECONDS

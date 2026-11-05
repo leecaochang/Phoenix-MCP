@@ -29,7 +29,7 @@ from homeassistant.components.backup import (
     async_get_manager,
 )
 from homeassistant.setup import async_setup_component
-from pytest_homeassistant_custom_component.common import MockModule, mock_integration, mock_platform
+from pytest_homeassistant.common import MockModule, mock_integration, mock_platform
 
 from custom_components.phoenix_mcp import mcp_view
 from custom_components.phoenix_mcp.access_key_store import AccessKeyStore

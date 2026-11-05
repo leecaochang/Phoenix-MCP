@@ -13,7 +13,7 @@ import voluptuous as vol
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.helpers import entity_registry as er
 from homeassistant.util.dt import utcnow
-from pytest_homeassistant_custom_component.common import MockConfigEntry
+from pytest_homeassistant.common import MockConfigEntry
 
 from custom_components.phoenix_mcp.data import PhoenixData
 from custom_components.phoenix_mcp.helpers import content_hash

@@ -52,7 +52,7 @@ def test_mesa_area_callback_uses_child_device_effective_area(
     from homeassistant.helpers import area_registry as ar
     from homeassistant.helpers import device_registry as dr
     from homeassistant.helpers import entity_registry as er
-    from pytest_homeassistant_custom_component.common import MockConfigEntry
+    from pytest_homeassistant.common import MockConfigEntry
 
     config_entry = MockConfigEntry(domain="test_integration", entry_id="mesa-child")
     config_entry.add_to_hass(hass)
@@ -244,7 +244,7 @@ def _registry_env(hass: HomeAssistant):
     from homeassistant.helpers import entity_registry as er
     from homeassistant.helpers import floor_registry as fr
     from homeassistant.helpers import label_registry as lr
-    from pytest_homeassistant_custom_component.common import MockConfigEntry
+    from pytest_homeassistant.common import MockConfigEntry
 
     entry = MockConfigEntry(domain="test_integration", entry_id="exp1")
     entry.add_to_hass(hass)

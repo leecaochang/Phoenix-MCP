@@ -899,6 +899,16 @@ def _exact_identifier_patterns(hosts: tuple[str, ...], addresses: tuple[str, ...
     return host_re, address_re
 
 
+def _cloud_urls(hass: HomeAssistant) -> list[str]:
+    """Every Home Assistant Cloud URL of this instance; only HA 2026.11 and later have several."""
+    if "cloud" not in hass.config.components:
+        return []
+    from homeassistant.components import cloud  # noqa: PLC0415
+    if remote_ui_urls := getattr(cloud, "async_remote_ui_urls", None):
+        return list(remote_ui_urls(hass))
+    return [cloud.async_remote_ui_url(hass)]
+
+
 def _instance_identifier_patterns(hass: HomeAssistant | None) -> _IdentifierPatterns:
     """This instance's own URL hosts and interface addresses as exact-value patterns.
 
@@ -917,6 +927,11 @@ def _instance_identifier_patterns(hass: HomeAssistant | None) -> _IdentifierPatt
             values.add(str(yarl.URL(get_url(hass, allow_ip=True, **options)).host or ""))
         except Exception:
             continue
+    # get_url names only the first Cloud URL; a custom domain hides the instance's own host.
+    try:
+        values.update(str(yarl.URL(url).host or "") for url in _cloud_urls(hass))
+    except Exception:
+        pass
     try:
         from homeassistant.components.network import async_get_loaded_adapters
         for adapter in async_get_loaded_adapters(hass):

@@ -151,7 +151,7 @@ async def test_approved_execution_reuses_levels_instead_of_recomputing_state(has
     for name, level in (("one", 0.8), ("two", 0.1)):
         er.async_get(hass).async_get_or_create("media_player", "test", name, suggested_object_id=name)
         hass.states.async_set(f"media_player.{name}", "playing", {"volume_level": level})
-    from pytest_homeassistant_custom_component.common import async_mock_service
+    from pytest_homeassistant.common import async_mock_service
     recorded = async_mock_service(hass, "media_player", "volume_set")
     saved_args = bind_targets(_plan(), ["media_player.one", "media_player.two"], hass)
     data = _data(with_mesa=True)

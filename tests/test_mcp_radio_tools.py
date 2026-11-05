@@ -24,7 +24,7 @@ from homeassistant.components.mqtt.models import DATA_MQTT
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 from homeassistant.util.dt import utcnow
-from pytest_homeassistant_custom_component.common import MockConfigEntry
+from pytest_homeassistant.common import MockConfigEntry
 
 import custom_components.phoenix_mcp.radio as radio
 import custom_components.phoenix_mcp.tools.radio as radio_tools
@@ -3014,7 +3014,7 @@ class TestAnnouncementGating:
 def test_the_radio_preview_reads_a_child_device_without_core_reports(hass):
     # manufacturer and model are compatibility shims on a child device.
     from unittest.mock import patch as _patch
-    from pytest_homeassistant_custom_component.common import MockConfigEntry
+    from pytest_homeassistant.common import MockConfigEntry
     from custom_components.phoenix_mcp.tools.radio import _radio_device_diff_preview
 
     entry = MockConfigEntry(domain="zha", entry_id="zha-preview")

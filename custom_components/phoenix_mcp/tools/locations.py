@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import inspect
 import json
 import logging
 from dataclasses import dataclass
@@ -169,7 +170,8 @@ def _prepare(
             raise LocationRefusal("A label cannot be both added and removed.")
         current = set(context.entry.labels) if context is not None else set()
         updates["labels"] = collections.get("labels", (current | added) - removed)
-    method = getattr(type(_registry(kind, hass)), f"async_{operation}")
+    # Registry methods may sit behind HA's event-loop guard, whose wrapper names no fields.
+    method = inspect.unwrap(getattr(type(_registry(kind, hass)), f"async_{operation}"))
     # Optional fields vary across HA releases. Refuse unsupported API fields.
     if any(field not in method.__code__.co_varnames[:method.__code__.co_argcount + method.__code__.co_kwonlyargcount]
            for field in updates):

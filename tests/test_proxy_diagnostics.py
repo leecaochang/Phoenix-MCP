@@ -22,7 +22,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers import device_registry as dr, entity_registry as er
 from homeassistant.setup import async_setup_component
 from homeassistant.util.dt import utcnow
-from pytest_homeassistant_custom_component.common import MockConfigEntry
+from pytest_homeassistant.common import MockConfigEntry
 
 from custom_components.phoenix_mcp.access_key_store import AccessKeyRecord, PermissionNode, PermissionTree
 from custom_components.phoenix_mcp.data import PhoenixData
@@ -299,7 +299,7 @@ async def discoveries(hass: HomeAssistant, proxy: dict) -> None:
     from homeassistant import config_entries
     from homeassistant.components import bluetooth
     from homeassistant.helpers.service_info.usb import UsbServiceInfo
-    from pytest_homeassistant_custom_component.common import MockModule, mock_config_flow, mock_integration, mock_platform
+    from pytest_homeassistant.common import MockModule, mock_config_flow, mock_integration, mock_platform
 
     class DiscoveryFlow(config_entries.ConfigFlow):
         VERSION = 1

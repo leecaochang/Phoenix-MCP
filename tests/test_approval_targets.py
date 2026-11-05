@@ -90,7 +90,7 @@ async def test_unchanged_capability_approval_reaches_only_reviewed_entity(hass, 
 @pytest.mark.parametrize('selector', ['device', 'floor', 'domain'])
 async def test_added_structural_member_requires_new_review(hass, target_runtime, selector):
     from homeassistant.helpers import device_registry as dr, floor_registry as fr
-    from pytest_homeassistant_custom_component.common import MockConfigEntry
+    from pytest_homeassistant.common import MockConfigEntry
 
     access_key, data, area, first, second, calls = target_runtime
     registry = er.async_get(hass)

@@ -22,7 +22,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
-from pytest_homeassistant_custom_component.components.recorder.common import async_wait_recording_done
+from pytest_homeassistant.components.recorder.common import async_wait_recording_done
 
 from custom_components.phoenix_mcp import mcp_view
 from custom_components.phoenix_mcp.access_key_store import AccessKeyRecord, PermissionNode, PermissionTree
@@ -888,7 +888,7 @@ async def test_select_summarizes_what_the_filters_match_and_skips_diagnostics(
 
 async def test_select_by_radio_reads_the_device_registry(recorder_mock, hass: HomeAssistant) -> None:
     from homeassistant.helpers import device_registry as dr
-    from pytest_homeassistant_custom_component.common import MockConfigEntry
+    from pytest_homeassistant.common import MockConfigEntry
     _anchor(hass)
     entry = MockConfigEntry(domain="zha", entry_id="zha-entry")
     entry.add_to_hass(hass)

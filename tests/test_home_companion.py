@@ -921,7 +921,7 @@ async def test_tied_natural_target_evidence_cannot_be_replaced_with_one_candidat
 
 async def test_room_targets_follow_registry_area_even_when_names_suggest_other_rooms(hass, companion, monkeypatch):
     from homeassistant.helpers import area_registry as ar, device_registry as dr, entity_registry as er
-    from pytest_homeassistant_custom_component.common import MockConfigEntry
+    from pytest_homeassistant.common import MockConfigEntry
     config = MockConfigEntry(domain='test')
     config.add_to_hass(hass)
     area = ar.async_get(hass).async_create('Steve Office')

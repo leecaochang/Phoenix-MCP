@@ -15,7 +15,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from homeassistant.config_entries import ConfigEntryDisabler
 from homeassistant.util.dt import utcnow
-from pytest_homeassistant_custom_component.common import MockConfigEntry
+from pytest_homeassistant.common import MockConfigEntry
 
 from custom_components.phoenix_mcp.const import MAX_FILE_BYTES
 from custom_components.phoenix_mcp.helpers import content_hash

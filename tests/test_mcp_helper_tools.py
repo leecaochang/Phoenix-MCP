@@ -241,6 +241,7 @@ class TestConfigFlowHelperCreation:
         # flow handler and config-entry manager, but replace dependency setup and
         # the entity platform with the smallest materializer.
         import homeassistant.components.history_stats as history_stats
+        from homeassistant import config_entries
         from homeassistant.helpers import entity_registry as er
 
         async def _setup_history_entry(hass, entry):
@@ -253,7 +254,8 @@ class TestConfigFlowHelperCreation:
             entry.async_on_unload(
                 lambda: hass.states.async_remove(registry_entry.entity_id)
             )
-            return True
+            # From 2026.11 only custom integrations may return a boolean here.
+            return None if hasattr(config_entries, "_async_process_entry_method_result") else True
 
         steps = [{
             "step_id": "user",

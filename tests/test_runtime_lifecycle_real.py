@@ -8,7 +8,7 @@ from homeassistant.setup import async_setup_component
 from homeassistant.util.dt import utcnow
 import pytest
 from homeassistant.config_entries import ConfigEntryState
-from pytest_homeassistant_custom_component.common import MockConfigEntry
+from pytest_homeassistant.common import MockConfigEntry
 
 from custom_components.phoenix_mcp.agentcli import _get_secret_store
 from custom_components.phoenix_mcp.const import DOMAIN
@@ -208,7 +208,7 @@ async def test_registry_changes_drop_the_cached_permission_tree(hass, enable_cus
 
 
 async def test_idle_usage_ticks_do_not_write_and_changed_usage_flushes_once(hass, enable_custom_integrations, monkeypatch):
-    from pytest_homeassistant_custom_component.common import async_fire_time_changed
+    from pytest_homeassistant.common import async_fire_time_changed
     from custom_components.phoenix_mcp.const import FLUSH_INTERVAL
 
     entry, data = await _setup_runtime(hass)
@@ -359,7 +359,7 @@ async def test_unload_cancels_inflight_mesa_priming(hass, enable_custom_integrat
 
 async def test_sweep_records_an_expired_approval_in_the_audit_log(hass, enable_custom_integrations):
     """Expiry found by the sweep is audited like expiry found at approve time."""
-    from pytest_homeassistant_custom_component.common import async_fire_time_changed
+    from pytest_homeassistant.common import async_fire_time_changed
     from custom_components.phoenix_mcp.approvals import async_create_pending_approval
     from custom_components.phoenix_mcp.const import APPROVAL_SWEEP_INTERVAL
 

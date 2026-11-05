@@ -577,9 +577,11 @@ async def test_completed_artifacts_rotate_automatically_at_capacity(monkeypatch)
 
 async def test_private_atomic_store_uses_real_filesystem(hass, tmp_path):
     from homeassistant.helpers.storage import Store
-    store = Store(hass, 1, "recovery-atomic-test", private=True, atomic_writes=True)
+    from tests.ha_storage import real_storage, write_prepared
+    with real_storage():
+        store = Store(hass, 1, "recovery-atomic-test", private=True, atomic_writes=True)
     # Bypass the suite's mocked HA disk-write boundary, not the implementation.
-    await hass.async_add_executor_job(store._write_prepared_data, "w", '{"data":{"records":{}}}')
+    await hass.async_add_executor_job(write_prepared, store, "w", '{"data":{"records":{}}}')
     path = tmp_path / ".storage" / "recovery-atomic-test"
     assert json.loads(path.read_text())["data"]["records"] == {}
     assert path.stat().st_mode & 0o777 == 0o600
@@ -587,7 +589,7 @@ async def test_private_atomic_store_uses_real_filesystem(hass, tmp_path):
     old = path.read_bytes()
     with patch("homeassistant.util.file.AtomicWriter.commit", side_effect=OSError):
         with pytest.raises(Exception):
-            await hass.async_add_executor_job(store._write_prepared_data, "w", '{"changed":true}')
+            await hass.async_add_executor_job(write_prepared, store, "w", '{"changed":true}')
     assert path.read_bytes() == old
 
 

@@ -9,7 +9,7 @@ from aiohttp.test_utils import TestServer
 from homeassistant.components.homeassistant.exposed_entities import async_expose_entity
 from homeassistant.helpers import area_registry as ar, device_registry as dr, entity_registry as er
 from homeassistant.setup import async_setup_component
-from pytest_homeassistant_custom_component.common import MockConfigEntry
+from pytest_homeassistant.common import MockConfigEntry
 
 from custom_components.phoenix_mcp import agentcli, device_semantics
 from custom_components.phoenix_mcp.const import (

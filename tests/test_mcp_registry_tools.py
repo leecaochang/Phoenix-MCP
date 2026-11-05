@@ -23,7 +23,7 @@ from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers import floor_registry as fr
 from homeassistant.util.dt import utcnow
-from pytest_homeassistant_custom_component.common import MockConfigEntry
+from pytest_homeassistant.common import MockConfigEntry
 
 from custom_components.phoenix_mcp.mcp_view import _call_tool
 from custom_components.phoenix_mcp.household_authority import household_scope
@@ -324,7 +324,7 @@ class TestListDevices:
     ):
         entity_id = reg_env["light_kitchen"]
         er.async_get(hass).async_update_entity(
-            entity_id, disabled_by=er.RegistryEntryDisabler.DEVICE
+            entity_id, disabled_by=er.RegistryEntryDisabler.USER
         )
         access_key = _access_key(permissions=PermissionTree(
             entities={entity_id: PermissionNode(state="GREEN")}

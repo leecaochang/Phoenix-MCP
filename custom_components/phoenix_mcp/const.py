@@ -310,8 +310,8 @@ MAX_CARD_CATALOG_FAILURES = 50
 # tests/test_builtin_card_types.py checks it covers the installed HA frontend's
 # card picker; a type an older HA lacks only misses its built-in answer.
 BUILTIN_CARD_TYPES = frozenset({
-    "alarm-panel", "area", "button", "calendar", "clock", "conditional", "distribution",
-    "entities", "entity", "entity-filter", "gauge", "glance", "grid", "heading",
+    "alarm-panel", "alert", "area", "button", "calendar", "clock", "conditional", "date",
+    "distribution", "entities", "entity", "entity-filter", "gauge", "glance", "grid", "heading",
     "history-graph", "horizontal-stack", "humidifier", "iframe", "light", "logbook", "map",
     "markdown", "media-control", "picture", "picture-elements", "picture-entity",
     "picture-glance", "plant-status", "sensor", "shortcut", "statistic", "statistics-graph",
@@ -1347,10 +1347,14 @@ PHYSICAL_GATE_DOMAINS = frozenset({"lock", "alarm_control_panel", "cover", "valv
 # Both are refused by MESA's own enforcement, which is a stricter rule applied to
 # what MESA is shown rather than to what Home Assistant is asked to do.
 #
+# "exclude" (HA 2026.11) only narrows a selection, but HA applies it after Phoenix
+# resolved the targets, so the call would reach fewer entities than were reviewed,
+# audited and shown to MESA. List the entities wanted in the target instead.
+#
 # HA-VERSION-SENSITIVE: a const-invariant test pins this against HA's own
-# cv.TARGET_SERVICE_FIELDS, so a release that adds a sixth selector fails loudly
+# cv.TARGET_SERVICE_FIELDS, so a release that adds another selector fails loudly
 # here rather than silently widening what a call can reach.
-TARGET_SELECTOR_KEYS = frozenset({"entity_id", "device_id", "area_id", "floor_id", "label_id"})
+TARGET_SELECTOR_KEYS = frozenset({"entity_id", "device_id", "area_id", "floor_id", "label_id", "exclude"})
 
 # Server-owned exact control bindings, persisted with approval executor arguments.
 APPROVAL_TARGETS_KEY = "_phoenix_approval_targets"

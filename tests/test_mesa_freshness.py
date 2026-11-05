@@ -14,7 +14,7 @@ from unittest.mock import patch
 import pytest
 from homeassistant.helpers import entity_registry as er
 from homeassistant.util.dt import utcnow
-from pytest_homeassistant_custom_component.common import async_fire_time_changed
+from pytest_homeassistant.common import async_fire_time_changed
 
 from custom_components.phoenix_mcp.access_key_store import AccessKeyRecord
 from custom_components.phoenix_mcp.const import MESA_LEASE_SWEEP_INTERVAL

@@ -951,7 +951,7 @@ async def test_permission_patch_with_hint():
 @pytest.mark.asyncio
 async def test_integration_permission_options_use_exact_entry_and_warn_shared_device(hass):
     from homeassistant.helpers import device_registry as dr, entity_registry as er
-    from pytest_homeassistant_custom_component.common import MockConfigEntry
+    from pytest_homeassistant.common import MockConfigEntry
 
     access_key = _make_active_access_key()
     data = _make_data([access_key])
@@ -1011,7 +1011,7 @@ async def test_integration_permission_options_use_exact_entry_and_warn_shared_de
 @pytest.mark.asyncio
 async def test_integration_bulk_selection_is_one_atomic_write_and_preserves_children(hass):
     from homeassistant.helpers import device_registry as dr, entity_registry as er
-    from pytest_homeassistant_custom_component.common import MockConfigEntry
+    from pytest_homeassistant.common import MockConfigEntry
 
     access_key = _make_active_access_key()
     access_key.permissions.entities["light.preserved_child"] = PermissionNode(state="RED")
@@ -1066,7 +1066,7 @@ async def test_area_bulk_selection_includes_child_device_inherited_area(hass):
     from homeassistant.helpers import area_registry as ar
     from homeassistant.helpers import device_registry as dr
     from homeassistant.helpers import entity_registry as er
-    from pytest_homeassistant_custom_component.common import MockConfigEntry
+    from pytest_homeassistant.common import MockConfigEntry
 
     entry = MockConfigEntry(domain="test_integration", entry_id="child-bulk")
     entry.add_to_hass(hass)
@@ -1104,7 +1104,7 @@ async def test_tree_and_resolution_path_show_child_device_parent(hass):
 
     from homeassistant.helpers import device_registry as dr
     from homeassistant.helpers import entity_registry as er
-    from pytest_homeassistant_custom_component.common import MockConfigEntry
+    from pytest_homeassistant.common import MockConfigEntry
 
     from custom_components.phoenix_mcp.access_key_store import PermissionNode, PermissionTree
 
@@ -2980,7 +2980,7 @@ async def test_revoke_clears_ai_task_access_key():
 @pytest.mark.asyncio
 async def test_ai_task_preferred_get_excludes_registry_only_entity(hass):
     from homeassistant.helpers import entity_registry as er
-    from pytest_homeassistant_custom_component.common import MockConfigEntry
+    from pytest_homeassistant.common import MockConfigEntry
 
     data = _make_data([])
     hass.data[DOMAIN] = data
@@ -3820,7 +3820,7 @@ async def test_voice_routes_plain_pipeline_error_falls_back_to_route_key(view_cl
 @pytest.mark.asyncio
 async def test_ai_task_preferred_post_not_configured_key(hass):
     """Making an unloaded AI Task entity preferred answers aiTaskNotConfigured."""
-    from pytest_homeassistant_custom_component.common import MockConfigEntry
+    from pytest_homeassistant.common import MockConfigEntry
 
     data = _make_data([])
     hass.data[DOMAIN] = data

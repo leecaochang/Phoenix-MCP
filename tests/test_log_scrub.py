@@ -12,6 +12,7 @@ from __future__ import annotations
 import sys
 import types
 
+import homeassistant.components
 import pytest
 from homeassistant.components import network
 from homeassistant.components.network.models import Adapter, IPv4ConfiguredAddress, IPv6ConfiguredAddress
@@ -232,12 +233,27 @@ async def test_identifiers_are_read_again_on_every_call(instance):
     assert redact_diagnostics("ha.example.net") == "<redacted-host>"
 
 
+async def test_every_cloud_host_is_scrubbed_with_a_custom_domain(hass, monkeypatch):
+    # From 2026.11 get_url answers with the custom domain, so the instance's own host
+    # is only in the full list.
+    urls = ["https://home.example.net", "https://abcdefgh.ui.nabu.casa"]
+    cloud = types.ModuleType("homeassistant.components.cloud")
+    cloud.CloudNotAvailable = type("CloudNotAvailable", (Exception,), {})
+    cloud.async_remote_ui_url = lambda hass: urls[-1]
+    cloud.async_remote_ui_urls = lambda hass: urls
+    monkeypatch.setitem(sys.modules, "homeassistant.components.cloud", cloud)
+    monkeypatch.setattr(homeassistant.components, "cloud", cloud, raising=False)
+    hass.config.components.add("cloud")
+    assert redact_diagnostics("home.example.net abcdefgh.ui.nabu.casa") == "<redacted-host> <redacted-host>"
+
+
 async def test_the_cloud_remote_host_is_scrubbed(hass, monkeypatch):
     # The installed cloud component cannot import here (its TTS dependency is
     # missing), so get_url's own cloud lookup reaches this stand-in module.
     cloud = types.ModuleType("homeassistant.components.cloud")
     cloud.CloudNotAvailable = type("CloudNotAvailable", (Exception,), {})
     cloud.async_remote_ui_url = lambda hass: "https://abcdefgh.ui.nabu.casa"
+    cloud.async_remote_ui_urls = lambda hass: ["https://abcdefgh.ui.nabu.casa"]
     monkeypatch.setitem(sys.modules, "homeassistant.components.cloud", cloud)
     hass.config.components.add("cloud")
     assert redact_diagnostics("remote abcdefgh.ui.nabu.casa") == "remote <redacted-host>"

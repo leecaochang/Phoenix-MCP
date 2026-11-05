@@ -3,13 +3,20 @@
 from __future__ import annotations
 
 import importlib
+import importlib.util
+import sys
 from unittest.mock import AsyncMock, patch
 
 import pytest
 
 importlib.import_module("custom_components.phoenix_mcp")
 
-pytest_plugins = "pytest_homeassistant_custom_component"
+# Home Assistant's own test package loads itself and starts at 2026.11. The 2026.7
+# floor job keeps the third-party package it replaced, under the same import names.
+if importlib.util.find_spec("pytest_homeassistant") is None:
+    pytest_plugins = "pytest_homeassistant_custom_component"
+    for module in ("", ".common", ".components.recorder.common"):
+        sys.modules[f"pytest_homeassistant{module}"] = importlib.import_module(f"pytest_homeassistant_custom_component{module}")
 
 
 @pytest.fixture(autouse=True, scope="session")
@@ -214,7 +221,7 @@ def phoenix_ai_task_platform(hass, enable_custom_integrations):
     from homeassistant.components.ai_task.const import DATA_COMPONENT
     from homeassistant.helpers.entity_component import EntityComponent
     from homeassistant.helpers.entity_platform import EntityPlatform
-    from pytest_homeassistant_custom_component.common import MockConfigEntry
+    from pytest_homeassistant.common import MockConfigEntry
 
     domain = "phoenix_mcp"
     entry = MockConfigEntry(domain=domain)

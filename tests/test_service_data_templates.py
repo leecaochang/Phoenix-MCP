@@ -13,7 +13,7 @@ from unittest.mock import MagicMock
 import pytest
 from homeassistant.helpers import entity_registry as er
 from homeassistant.util.dt import utcnow
-from pytest_homeassistant_custom_component.common import async_mock_service
+from pytest_homeassistant.common import async_mock_service
 
 from tests.runtime_fixtures import mesa_off_store
 

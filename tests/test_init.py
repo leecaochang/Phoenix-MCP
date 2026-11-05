@@ -16,7 +16,7 @@ from unittest.mock import AsyncMock, MagicMock, call, patch
 
 import pytest
 from homeassistant.core import HomeAssistant, callback
-from pytest_homeassistant_custom_component.common import MockConfigEntry
+from pytest_homeassistant.common import MockConfigEntry
 
 import custom_components.phoenix_mcp as phoenix_init
 from custom_components.phoenix_mcp.const import DOMAIN, RUNTIME_READY_KEY

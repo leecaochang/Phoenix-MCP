@@ -14,15 +14,12 @@ from custom_components.phoenix_mcp.config_recovery import ConfigurationRecovery,
 from custom_components.phoenix_mcp.const import CONFIG_RECOVERY_STORAGE_KEY, CONFIG_RECOVERY_SNAPSHOT_PREFIX
 from custom_components.phoenix_mcp.durable_storage import DurableStorageError, DurableStore
 from custom_components.phoenix_mcp.recovery_storage import RecoveryStorage
-
-_REAL_WRITE = Store._async_write_data
-_REAL_LOAD = Store._async_load
-_REAL_REMOVE = Store.async_remove
+from tests.ha_storage import WRITE, WRITER, key_of, real_storage as real_ha_storage, real_writer
 
 
 @pytest.fixture(autouse=True)
 def real_storage(hass):
-    with patch.object(Store, "_async_write_data", _REAL_WRITE), patch.object(Store, "_async_load", _REAL_LOAD), patch.object(Store, "async_remove", _REAL_REMOVE):
+    with real_ha_storage():
         yield
 
 
@@ -63,15 +60,14 @@ async def test_legacy_migration_commits_snapshots_before_replacing_index(hass, b
     old_bytes = Path(legacy_store.path).read_bytes()
     recovery = ConfigurationRecovery(RecoveryStorage(hass), hass=hass)
     await recovery.async_load()
-    real_writer = Store._write_prepared_data
 
     def write(store, *args):
-        if (boundary == "blob" and store.key.startswith(CONFIG_RECOVERY_SNAPSHOT_PREFIX)
-                or boundary == "index" and store.key == CONFIG_RECOVERY_STORAGE_KEY):
+        if (boundary == "blob" and key_of(store).startswith(CONFIG_RECOVERY_SNAPSHOT_PREFIX)
+                or boundary == "index" and key_of(store) == CONFIG_RECOVERY_STORAGE_KEY):
             raise WriteError("disk unavailable")
         real_writer(store, *args)
 
-    with patch.object(Store, "_write_prepared_data", write):
+    with patch.object(WRITER, WRITE, write):
         if boundary == "success":
             await recovery.mark(rid, "dispatching")
         else:
@@ -147,15 +143,14 @@ async def test_cancelled_writer_finishes_before_next_record_can_publish(hass):
     recovery = ConfigurationRecovery(storage, hass=hass)
     entered = threading.Event()
     release = threading.Event()
-    real_writer = Store._write_prepared_data
 
     def write(store, *args):
-        if store.key == CONFIG_RECOVERY_STORAGE_KEY and not entered.is_set():
+        if key_of(store) == CONFIG_RECOVERY_STORAGE_KEY and not entered.is_set():
             entered.set()
             assert release.wait(10)
         real_writer(store, *args)
 
-    with patch.object(Store, "_write_prepared_data", write):
+    with patch.object(WRITER, WRITE, write):
         first = asyncio.create_task(recovery.begin("file:a", "write", "access_key", {"content": "a"}))
         try:
             assert await asyncio.to_thread(entered.wait, 5)
@@ -186,14 +181,13 @@ async def test_failed_phase_commit_preserves_previous_index_and_snapshots(hass):
     rid = await recovery.begin("file:a", "write", "access_key", {"content": "before"}, expected={"content": "after"})
     old = Path(storage.index.path).read_bytes()
     original_blobs = {p.name: p.read_bytes() for p in blobs(storage)}
-    real_writer = Store._write_prepared_data
 
     def write(store, *args):
-        if store.key == CONFIG_RECOVERY_STORAGE_KEY:
+        if key_of(store) == CONFIG_RECOVERY_STORAGE_KEY:
             raise WriteError("disk unavailable")
         real_writer(store, *args)
 
-    with patch.object(Store, "_write_prepared_data", write):
+    with patch.object(WRITER, WRITE, write):
         with pytest.raises(DurableStorageError):
             await recovery.set_source(rid, {"content": "observed"})
     assert Path(storage.index.path).read_bytes() == old

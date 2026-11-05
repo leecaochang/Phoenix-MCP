@@ -13,7 +13,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from homeassistant.helpers import entity_registry as er
 from homeassistant.util.dt import utcnow
-from pytest_homeassistant_custom_component.common import MockConfigEntry
+from pytest_homeassistant.common import MockConfigEntry
 
 from custom_components.phoenix_mcp.audit import AuditLog
 from custom_components.phoenix_mcp.const import DOMAIN, REDACTION_SENTINEL, STORAGE_KEY, STORAGE_VERSION

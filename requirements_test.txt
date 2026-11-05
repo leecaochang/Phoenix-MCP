@@ -1,13 +1,16 @@
 # Test environment for the Phoenix MCP integration tests (pytest).
 #
-# pytest-homeassistant-custom-component (PHACC) is the single source of truth for
-# the Home Assistant test stack: each PHACC version pins an exact homeassistant
-# version plus the matched pytest, pytest-asyncio, aiohttp, sqlalchemy, etc. So
-# pinning PHACC pins the primary test stack; deeper transitive packages can
-# still float within the ranges their dependents allow.
+# pytest-homeassistant, Home Assistant's own test package, is the single source of
+# truth for the test stack: each release pins the exact homeassistant of the same
+# version plus the matched pytest, pytest-asyncio and test helpers. So pinning it
+# pins the primary test stack; deeper transitive packages can still float within
+# the ranges their dependents allow. It must never be installed together with
+# pytest-homeassistant-custom-component.
 #
-#   PHACC 0.13.374 pins homeassistant==2026.10.3.
-#   Python: 3.14
+#   pytest-homeassistant 2026.11.0b6 pins homeassistant==2026.11.0b6.
+#   2026.11.0b6 and 2026.11.0 differ only in the version string; the final test
+#   package failed to reach PyPI. Move to 2026.11.0 once it is published.
+#   Python: 3.14.2 or newer
 #
 # This is a TEST pin only. hacs.json and const.MIN_HA_VERSION declare the
 # supported runtime floor, tested separately in CI. Keep this stack tracking
@@ -17,19 +20,18 @@
 # Set up / upgrade:
 #   python3.14 -m venv venv
 #   venv/bin/python -m pip install -r requirements_test.txt
-#   # to bump: edit the pins below (or pip install --upgrade the packages,
-#   # then pip freeze the two lines back into this file)
+#   # to bump: edit the pins below, using the matching HA component manifests
 #   venv/bin/python -m pytest
 
-pytest-homeassistant-custom-component==0.13.374
+pytest-homeassistant[bluetooth,radio-frequency]==2026.11.0b6
 
 # Dependencies of HA's `conversation` component, needed by the Phoenix MCP voice-agent
-# tests (voice_agent.py imports homeassistant.components.conversation). PHACC does
-# not pull component-level requirements, so pin them here to match the conversation
+# tests (voice_agent.py imports homeassistant.components.conversation). The test
+# package does not pull component-level requirements, so pin them here to match the conversation
 # manifest for the pinned HA version. Re-verify on HA bumps.
-gazetteer-matcher==1.2.0
+gazetteer-matcher==1.1.0
 hassil==3.12.1
-home-assistant-intents==2026.10.6
+home-assistant-intents==2026.10.27
 
 # Draft 2020-12 validation for legacy Assist and independent modern-engine checks.
 jsonschema==4.26.0
@@ -38,23 +40,23 @@ jsonschema==4.26.0
 PyTurboJPEG==1.8.3
 
 # Real integration setup/reload tests; matches the pinned HA frontend manifest.
-home-assistant-frontend==20260930.5
+home-assistant-frontend==20261028.4
 
 # Native Local Calendar update and recurrence regression tests; matches pinned HA.
-ical==14.3.0
+ical==14.3.1
 
 # Real radio-frequency, Bluetooth and USB serial diagnostics tests (bluetooth imports
 # usb); matches the pinned HA radio_frequency, bluetooth and usb manifests.
 rf-protocols==4.3.0
 aiousbwatcher==1.1.2
-serialx==1.11.0
+serialx==1.15.1
 dbus-fast==5.0.22
 
-# Standalone lint tool used by the dev workflow (not pulled in by PHACC).
+# Standalone lint tool used by the dev workflow (not pulled in by the test package).
 pyflakes==4.0.3
 
 # Standalone type checker, same rationale as pyflakes above (not pulled in by
-# PHACC). Config lives in pyproject.toml.
+# the test package). Config lives in pyproject.toml.
 mypy==2.4.0
 
 # Locale-aware routing replies; matches the integration manifest.
