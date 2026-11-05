@@ -5,7 +5,7 @@ Every change Phoenix recorded, newest first. Choose one to compare it in [{{labe
 
 ## {{label:logs.filters}} {#filters}
 
-**{{label:logs.filters}}** on the toolbar shows the filters: a type, an action (create, edit, delete or rollback), and a search box. Search looks through the changes loaded so far, by item, type, action, who made it and summary.
+**{{label:logs.filters}}** on the toolbar shows the filters: a type, an action (create, edit, delete or rollback), and a search box. The filters look through every recorded change, not only the rows on screen, and search matches item, type, action, who made it and summary.
 
 Changing a filter or the search clears the chosen change. Closing the filters stops them from applying; they come back as they were when you reopen them. **{{label:logs.clearFilters}}** resets all three.
 

@@ -38,6 +38,11 @@ function record(summary: VersionSummary, sides: Partial<Pick<VersionRecord, "bef
 
 const page = (versions: VersionSummary[], total = versions.length): VersionListResponse => ({ resource_type: null, resource_id: null, versions, total });
 
+/** Answer every read from this history, as the server pages it. */
+function pagedHistory(all: VersionSummary[], firstPage?: number) {
+  vi.mocked(api.listVersions).mockImplementation(async ({ limit = 100, offset = 0 } = {}) => page(all.slice(offset, offset + (offset ? limit : firstPage ?? limit)), all.length));
+}
+
 function deferred<T>() {
   let resolve!: (value: T) => void;
   const promise = new Promise<T>((r) => { resolve = r; });
@@ -68,8 +73,9 @@ function openRestore(): HTMLElement[] {
 describe("the Changes list", () => {
   beforeEach(() => { vi.clearAllMocks(); localStorage.clear(); });
 
-  it("filters loaded changes by whole words, sorts names, and keeps pagination reachable", async () => {
-    vi.mocked(api.listVersions).mockResolvedValue(page([version({ id: "v1", alias: "Zebra lamp" }), version({ id: "v2", alias: "Alpha lamp", action: "edit" })], 3));
+  it("filters changes by whole words, sorts names, and finds a match on a later page", async () => {
+    const all = [version({ id: "v1", alias: "Zebra lamp" }), version({ id: "v2", alias: "Alpha lamp", action: "edit" }), version({ id: "v3", alias: "Older socket" })];
+    pagedHistory(all, 2);
     const view = renderChanges();
     await view.findByText("Zebra lamp");
     fireEvent.click(view.getByRole("button", { name: "Item" }));
@@ -80,11 +86,61 @@ describe("the Changes list", () => {
     fireEvent.change(view.getByRole("searchbox"), { target: { value: "lamp zebra" } });
     expect(view.queryByText("Alpha lamp")).toBeNull();
     expect(view.getByText("Zebra lamp")).toBeVisible();
-    expect(view.getByText("Load More")).toBeVisible();
-    fireEvent.change(view.getByLabelText("Action"), { target: { value: "edit" } });
-    expect(view.queryByText("Zebra lamp")).toBeNull();
-    expect(view.getByText("No loaded changes match these filters.")).toBeVisible();
-    expect(view.getByText("Load More")).toBeVisible();
+    fireEvent.change(view.getByRole("searchbox"), { target: { value: "socket" } });
+    expect(await view.findByText("Older socket")).toBeVisible();
+    fireEvent.change(view.getByRole("searchbox"), { target: { value: "lamp" } });
+    fireEvent.change(view.getByLabelText("Action"), { target: { value: "delete" } });
+    expect(await view.findByText("No changes match these filters.")).toBeVisible();
+  });
+
+  it("gives a filter a full page at a time, however few changes each page of the history holds", async () => {
+    pagedHistory(Array.from({ length: 600 }, (_, i) => version({ id: `v${i}`, resource_type: i % 2 ? "dashboard" : "automation", alias: `Item ${i}` })));
+    const view = renderChanges();
+    await view.findByText("Item 0");
+    expect(view.getByText("Showing 100 of 600")).toBeTruthy();
+
+    fireEvent.change(view.getByLabelText("Type"), { target: { value: "dashboard" } });
+    expect(await view.findByText("Showing 100 of 300")).toBeTruthy();
+    expect(api.listVersions).toHaveBeenLastCalledWith({ limit: 500, offset: 100 });
+    expect(rowsOf(listWindow())).toHaveLength(100);
+
+    // The rest of the filtered list is loaded already, so Load More only shows it.
+    const reads = vi.mocked(api.listVersions).mock.calls.length;
+    fireEvent.click(view.getByText("Load More"));
+    expect(rowsOf(listWindow())).toHaveLength(200);
+    fireEvent.click(view.getByText("Load More"));
+    expect(view.getByText("Showing 300 of 300")).toBeTruthy();
+    expect(view.queryByText("Load More")).toBeNull();
+    expect(api.listVersions).toHaveBeenCalledTimes(reads);
+
+    // Clearing the filter goes back to one page, of everything.
+    fireEvent.change(view.getByLabelText("Type"), { target: { value: "" } });
+    expect(rowsOf(listWindow())).toHaveLength(100);
+    expect(view.getByText("Showing 100 of 600")).toBeTruthy();
+  });
+
+  it("keeps a filter short of a page when that is all there is", async () => {
+    pagedHistory(Array.from({ length: 250 }, (_, i) => version({ id: `v${i}`, resource_type: i < 21 ? "dashboard" : "automation", alias: `Item ${i}` })));
+    const view = renderChanges();
+    await view.findByText("Item 0");
+    fireEvent.change(view.getByLabelText("Type"), { target: { value: "dashboard" } });
+    expect(await view.findByText("Showing 21 of 21")).toBeTruthy();
+    expect(view.queryByText("Load More")).toBeNull();
+  });
+
+  it("stops reading for a filter when a read fails, and Load More tries again", async () => {
+    const all = Array.from({ length: 150 }, (_, i) => version({ id: `v${i}`, alias: `Item ${i}` }));
+    pagedHistory(all);
+    const view = renderChanges();
+    await view.findByText("Item 0");
+    vi.mocked(api.listVersions).mockRejectedValueOnce(new Error("Read failed"));
+    fireEvent.change(view.getByLabelText("Type"), { target: { value: "automation" } });
+    expect(await view.findByText("Read failed")).toBeVisible();
+    await new Promise((r) => setTimeout(r, 20));
+    expect(api.listVersions).toHaveBeenCalledTimes(2);
+    fireEvent.click(view.getByText("Load More"));
+    expect(await view.findByText("Showing 150 of 150")).toBeTruthy();
+    expect(view.queryByText("Read failed")).toBeNull();
   });
 
   it("names a restore from this panel by the localized Admin, not the English name stored for agents", async () => {
@@ -184,7 +240,7 @@ describe("Comparison and Restore", () => {
     vi.mocked(api.getVersion).mockResolvedValue(record(edit));
     const view = renderChanges();
     await choose("My automation");
-    fireEvent.change(view.getByLabelText("Search loaded changes..."), { target: { value: "automation" } });
+    fireEvent.change(view.getByLabelText("Search changes..."), { target: { value: "automation" } });
     await waitFor(() => expect(comparisonWindow().querySelector(".change-comparison")).toBeNull());
   });
 

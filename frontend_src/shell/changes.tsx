@@ -78,7 +78,9 @@ function errorCode(e: unknown): string | undefined {
   return typeof code === "string" ? code : undefined;
 }
 
-const CHANGES_PAGE = 100;
+export const CHANGES_PAGE = 100;
+/** How many changes one read asks for while a filter reads the rest of the history: the server's limit. */
+const CHANGES_FILTER_READ = 500;
 const FEED_POLL_MS = 5_000;
 
 // hass.connection.subscribeEvents, typed loosely (the panel receives an untyped
@@ -104,6 +106,8 @@ export interface ChangesState {
   total: number;
   refresh: () => void;
   loadMore: () => void;
+  /** Read the changes not loaded yet, for a filter that looks through all of them. */
+  loadRest: () => void;
   /** access_key_id to the key's current name, active and archived keys alike. */
   names: Map<string, string>;
 
@@ -175,13 +179,13 @@ export function ChangesProvider({ hass, active = true, children }: {
   // loaded from several places with no ordering between them, so a superseded
   // response is dropped rather than allowed to put an older page back.
   const beginLoad = useLatestRequest();
-  const loadFeed = useCallback(async (offset = 0, background = false) => {
+  const loadFeed = useCallback(async (offset = 0, background = false, limit = CHANGES_PAGE) => {
     const isLatest = beginLoad();
     if (!background && offset === 0) setLoading(true);
     if (offset > 0) setLoadingMore(true);
     setError(null);
     try {
-      const resp = await api.listVersions({ limit: CHANGES_PAGE, offset });
+      const resp = await api.listVersions({ limit, offset });
       if (!isLatest()) return;
       setFeed((prev) => {
         if (offset > 0) return [...prev, ...resp.versions];
@@ -369,6 +373,7 @@ export function ChangesProvider({ hass, active = true, children }: {
     feed, loading, loadingMore, error, hasMore, total,
     refresh: () => { void loadFeed(0); void loadNames(); void reloadHistory(); },
     loadMore: () => { if (!loadingMore) void loadFeed(feed.length); },
+    loadRest: () => { if (!loadingMore) void loadFeed(feed.length, false, CHANGES_FILTER_READ); },
     names,
     selectedId, select, neighbour, step, record, recordLoading, recordError, history,
     confirm, askRestore, cancelRestore: () => setConfirm(null), restore, restoring, restoreError,

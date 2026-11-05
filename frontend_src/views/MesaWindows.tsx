@@ -106,6 +106,11 @@ function NothingHere({ window: windowId, text, floating = false }: { window: str
   );
 }
 
+/** What a findings window shows until the findings are read: saying there are none would not be known yet. */
+function FindingsPending({ error }: { error: string | null }) {
+  return error ? <div className="phx-window-pad"><ErrorMsg msg={error} /></div> : <Loading />;
+}
+
 const BY_ID = { column: "id", dir: "asc" } as const;
 
 export function MesaProfilesWindow() {
@@ -353,7 +358,7 @@ export function SuggestedProfilesWindow() {
         onSelect={(s) => { m.selectSuggestion(s.key); review(s); }}
         // Why it was suggested reads in Help while the row is under the pointer (user, 2026-10-30).
         rowLabel={(s) => `${s.subject_id}, ${mode(s)}. ${suggestionReason(s)}`}
-        empty={<NothingHere window="mesaSuggestions" text={t("mesa.noSuggestionsNow")} />}
+        empty={m.findingsLoaded ? <NothingHere window="mesaSuggestions" text={t("mesa.noSuggestionsNow")} /> : <FindingsPending error={m.error} />}
       />
       </div>
     </div>
@@ -463,6 +468,7 @@ export function AdvisoryWindow() {
   const m = useMesa();
   const ensureOpen = useEnsureOpen();
   if (!m) return null;
+  if (!m.findingsLoaded) return <FindingsPending error={m.error} />;
   const { inspection, validation, orphans } = m.findingIds;
   const shown = (ids: string[]) => ids.length > 0 && !m.allDismissed(ids);
   if (!shown(inspection) && !shown(validation) && !shown(orphans)) {

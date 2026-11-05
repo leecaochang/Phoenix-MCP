@@ -12,7 +12,7 @@ import { ApprovalChange } from "../components/ApprovalChange";
 import { ErrorMsg, Loading, ResultCount } from "../components/common";
 import { YamlView, toYaml } from "../components/YamlView";
 import { hasMessage, localeNumber, t, tn, type Params } from "../i18n";
-import { APPROVALS_SCOPES, MAX_BATCH_APPROVALS, isOverdue, useApprovals, type ApprovalsScope, type ApprovalsState } from "../shell/approvals";
+import { APPROVALS_PAGE, APPROVALS_SCOPES, MAX_BATCH_APPROVALS, isOverdue, useApprovals, type ApprovalsScope, type ApprovalsState } from "../shell/approvals";
 import { useToolbarTools, type Tool, type ToolGroup } from "../shell/tools";
 import { useWorkspaceReset } from "../shell/windowTools";
 import { ActionButton } from "../ui/ActionButton";
@@ -159,7 +159,10 @@ function listColumns(a: ApprovalsState): Column<ApprovalRecord>[] {
 
 export function ApprovalsListWindow() {
   const a = useApprovals();
-  const rowLimit = useRowLimit();
+  const rowLimit = useRowLimit(APPROVALS_PAGE);
+  const listQuery = `${a?.scope}|${a?.search}`;
+  const resetRows = rowLimit.reset;
+  useEffect(() => { resetRows(); }, [listQuery, resetRows]);
   // Resetting the workspace clears what it had chosen, as it clears the arrangement.
   useWorkspaceReset(() => a?.select(null));
   const groups: ToolGroup[] = a ? [{
@@ -177,6 +180,9 @@ export function ApprovalsListWindow() {
   const onToolbar = useToolbarTools(groups);
   if (!a) return null;
 
+  const reading = !!a.search.trim() && a.hasMore && !a.error;
+  // Select Multiple acts on the whole list, so it shows the whole list: nothing ticked stays out of sight.
+  const moreLoaded = !a.batchMode && rowLimit.hidden(a.shown.length);
   const empty = a.search.trim() ? t("approvals.emptySearch") : a.scope === "pending" ? t("approvals.emptyPending") : t("approvals.emptyHistory");
   const scopeLabel = (scope: ApprovalsScope) => (scope === "pending" && a.scope === "pending" && a.pendingTotal > 0
     ? t("approvals.tabPendingCount", { count: a.pendingTotal })
@@ -190,13 +196,13 @@ export function ApprovalsListWindow() {
         </select>
         <input type="search" className="input" data-guide="window.approvals#search" data-help="help.approvalsSearch" placeholder={t("approvals.searchPlaceholder")} aria-label={t("approvals.searchAria")}
           value={a.search} onChange={(e) => a.setSearch(e.target.value)} />
-        <ResultCount count={a.shown.length} query={`${a.scope}|${a.search}`} loading={a.loading} />
+        <ResultCount count={a.shown.length} query={listQuery} loading={a.loading || reading} />
       </div></div>
       {/* How many requests are ticked, said as each is ticked. */}
       <span className="sr-only" role="status">{a.batchMode ? tn("approvals.pickedCount", a.pickedCount) : ""}</span>
       {a.error && <ErrorMsg msg={a.error} />}
       {a.batchResult && <BatchResultMsg result={a.batchResult} onDismiss={a.dismissBatchResult} />}
-      {a.loading && !a.shown.length && <Loading />}
+      {(a.loading || reading) && !a.shown.length && <Loading />}
       {/* Ticking requests for a batch reads about Select Multiple; choosing one, about the list. */}
       <div className="approvals-table" data-guide={a.batchMode ? "window.approvals#select-multiple" : "window.approvals#list"}>
       <ConfigTable
@@ -206,13 +212,13 @@ export function ApprovalsListWindow() {
         defaultSort={{ column: "requested", dir: "desc" }}
         columns={listColumns(a)}
         rows={a.shown}
-        maxRows={rowLimit.limit}
+        maxRows={a.batchMode ? null : rowLimit.limit}
         rowKey={(r) => r.id}
         selectedKey={a.current?.id ?? null}
         onSelect={(r, ordered) => a.select(r, ordered.map((o) => o.id))}
         rowLabel={(r) => `${approvalListTitle(r.diff)}, ${a.isClaimed(r) ? t("approvals.processing") : approvalStatusLabel(r.status)}${a.batchMode && a.picked.has(r.id) ? `, ${t("approvals.rowPicked")}` : ""}`}
         rowHelp="help.approvalsRow"
-        empty={a.loading ? null : empty}
+        empty={a.loading || reading ? null : empty}
         selection={a.batchMode ? {
           picked: a.picked,
           selectable: (r) => a.selectableIds.includes(r.id) && (a.picked.has(r.id) || a.pickedCount < MAX_BATCH_APPROVALS),
@@ -226,10 +232,10 @@ export function ApprovalsListWindow() {
         } : undefined}
       />
       </div>
-      {(a.hasMore || rowLimit.hidden(a.shown.length)) && (
+      {(a.hasMore || moreLoaded) && (
         <div className="phx-table-footer">
-          <ActionButton icon="loadMore" label={t("common.loadMore")} guide="window.approvals#load-more" helpText={t("help.loadMore", { count: localeNumber(rowLimit.step ?? 50) })} busy={a.loadingMore}
-            onClick={() => { if (!rowLimit.hidden(a.shown.length)) a.loadMore(); rowLimit.more(); }} />
+          <ActionButton icon="loadMore" label={t("common.loadMore")} guide="window.approvals#load-more" helpText={t("help.loadMore", { count: localeNumber(rowLimit.step ?? APPROVALS_PAGE) })} busy={a.loadingMore}
+            onClick={() => { if (a.hasMore && (a.batchMode || a.shown.length < (rowLimit.limit ?? 0) + (rowLimit.step ?? 0))) a.loadMore(); rowLimit.more(); }} />
         </div>
       )}
     </div>

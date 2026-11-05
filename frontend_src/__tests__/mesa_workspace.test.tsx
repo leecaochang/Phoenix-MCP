@@ -10,7 +10,8 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import { api, setHass } from "../api";
 import { windowAvailable } from "../shell/workspaces";
 import { ProfileEditor } from "../views/MesaView";
-import { editorWindow, mockEmptyMesa, profilesWindow, renderMesa, rowsIn } from "./mesa_harness";
+import { advisoryWindow, editorWindow, mockEmptyMesa, profilesWindow, renderMesa, rowsIn, suggestedWindow } from "./mesa_harness";
+import type { MesaIssuesResponse } from "../types";
 
 vi.mock("../api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../api")>();
@@ -207,6 +208,72 @@ describe("the injected modal editor", () => {
     fireEvent.click(within(screen.getByRole("group", { name: "Delete this entity profile?" })).getByRole("button", { name: "Delete Entity Profile" }));
     await waitFor(() => expect(api.deleteMesaProfile).toHaveBeenCalledWith("lock.front"));
     expect(onClose).toHaveBeenCalled();
+  });
+});
+
+describe("loading the findings", () => {
+  const profile = { entity_id: "light.kept", document: doc("prohibited") };
+  const pending = <T,>() => {
+    let resolve!: (value: T) => void, reject!: (reason: Error) => void;
+    const promise = new Promise<T>((yes, no) => { resolve = yes; reject = no; });
+    return { promise, resolve, reject };
+  };
+  const issues = (orphans: string[]): MesaIssuesResponse => ({ issues: [], orphans, orphan_devices: [], orphan_areas: [], orphan_integrations: [], suggestions: [], dismissed_suggestions: [] });
+  /** The server's two reads: what it holds, which is quick, and a scan, which is not. */
+  function holdReads() {
+    const held = pending<MesaIssuesResponse>();
+    const scan = pending<MesaIssuesResponse>();
+    vi.mocked(api.getMesaIssues).mockImplementation((refresh) => (refresh ? scan.promise : held.promise));
+    held.promise.catch(() => null);
+    vi.mocked(api.listMesaProfiles).mockResolvedValue({ profiles: [profile], total_matched: 1, has_more: false, next_cursor: null });
+    return { held, scan };
+  }
+
+  it("lists the profiles without waiting for the scan, and claims no findings until they are known", async () => {
+    const { held, scan } = holdReads();
+    const onFindings = vi.fn();
+    renderMesa({ onFindings });
+    expect(await profilesWindow().findByText("light.kept")).toBeVisible();
+    expect(advisoryWindow().queryByText(/No advisories right now/)).toBeNull();
+    expect(suggestedWindow().queryByText(/No suggestions right now/)).toBeNull();
+    expect(advisoryWindow().getByRole("status")).toBeVisible();
+    expect(onFindings).not.toHaveBeenCalledWith({ advisory: false });
+
+    held.resolve(issues([]));
+    scan.resolve(issues([]));
+    expect(await advisoryWindow().findByText(/No advisories right now/)).toBeVisible();
+    expect(await suggestedWindow().findByText(/No suggestions right now/)).toBeVisible();
+    await waitFor(() => expect(onFindings).toHaveBeenLastCalledWith({ advisory: false }));
+  });
+
+  it("shows the findings the server holds while the scan runs, then what the scan found", async () => {
+    const { held, scan } = holdReads();
+    renderMesa();
+    held.resolve(issues(["sensor.held"]));
+    expect(await advisoryWindow().findByText(/sensor.held/)).toBeVisible();
+    scan.resolve(issues(["sensor.scanned"]));
+    expect(await advisoryWindow().findByText(/sensor.scanned/)).toBeVisible();
+    expect(advisoryWindow().queryByText(/sensor.held/)).toBeNull();
+  });
+
+  it("does not let the held findings replace a scan that finished first", async () => {
+    const { held, scan } = holdReads();
+    renderMesa();
+    scan.resolve(issues(["sensor.scanned"]));
+    expect(await advisoryWindow().findByText(/sensor.scanned/)).toBeVisible();
+    held.resolve(issues(["sensor.held"]));
+    await new Promise((r) => setTimeout(r, 20));
+    expect(advisoryWindow().queryByText(/sensor.held/)).toBeNull();
+  });
+
+  it("says why when the findings cannot be read, rather than that there are none", async () => {
+    const { held, scan } = holdReads();
+    renderMesa();
+    held.reject(new Error("No reply"));
+    scan.reject(new Error("No reply"));
+    expect(await advisoryWindow().findByText("No reply")).toBeVisible();
+    expect(advisoryWindow().queryByText(/No advisories right now/)).toBeNull();
+    expect(await profilesWindow().findByText("light.kept")).toBeVisible();
   });
 });
 

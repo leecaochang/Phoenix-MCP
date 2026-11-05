@@ -76,7 +76,10 @@ function domainOf(entityId: string): string {
 }
 
 export interface MesaState {
+  /** The profiles have been read. */
   loaded: boolean;
+  /** The findings have been read, so an empty list means there are none. */
+  findingsLoaded: boolean;
   loading: boolean;
   error: string | null;
   refresh: () => void;
@@ -147,6 +150,8 @@ export function MesaProvider({ active = true, onFindings, children }: {
   const [integrations, setIntegrations] = useState<{ integration: string; document: MesaProfileDocument }[]>([]);
   const [domains, setDomains] = useState<{ domain: string; document: MesaProfileDocument }[]>([]);
   const [issues, setIssues] = useState<MesaIssuesResponse>(EMPTY_ISSUES);
+  const [findingsLoaded, setFindingsLoaded] = useState(false);
+  const findingsShown = useRef(false);
   const [loaded, setLoaded] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -161,6 +166,10 @@ export function MesaProvider({ active = true, onFindings, children }: {
    * itself every half minute while it is shown, so there is no Refresh button
    * (user, 2026-10-30): it never shows a loading state, and a failed quiet read
    * keeps what is already on screen instead of replacing it with an error.
+   *
+   * The full scan of the findings takes seconds in a large home, so the profiles
+   * do not wait for it, and on the first read the findings the server already
+   * holds show until the scan finishes.
    */
   const reload = useCallback(async (quiet = false) => {
     const isLatest = beginLoad();
@@ -168,28 +177,41 @@ export function MesaProvider({ active = true, onFindings, children }: {
       setLoading(true);
       setError(null);
     }
+    const showFindings = (found: MesaIssuesResponse) => {
+      findingsShown.current = true;
+      setIssues(found);
+      setFindingsLoaded(true);
+    };
+    if (!findingsShown.current) {
+      api.getMesaIssues().then((held) => { if (isLatest() && !findingsShown.current) showFindings(held); }).catch(() => null);
+    }
     try {
-      const [list, iss, doms, ints, ars, devs] = await Promise.all([
-        api.listMesaProfiles({ all: true }),
+      const readProfiles = async () => {
+        const [list, doms, ints, ars, devs] = await Promise.all([
+          api.listMesaProfiles({ all: true }),
+          api.listMesaDomains().catch(() => ({ domains: [] })),
+          api.listMesaIntegrations().catch(() => ({ integrations: [] })),
+          api.listMesaAreas().catch(() => ({ areas: [] })),
+          api.listMesaDevices().catch(() => ({ devices: [] })),
+        ]);
+        if (!isLatest()) return;
+        setProfiles(list.profiles);
+        setDomains(doms.domains);
+        setIntegrations(ints.integrations);
+        setAreas(ars.areas);
+        setDevices(devs.devices);
+        setLoaded(true);
+      };
+      const [, found] = await Promise.all([
+        readProfiles(),
         // A full read follows every profile save, delete and import, and every
         // return to the workspace: the profile set changed, so the trigger
         // findings and orphaned profiles are recomputed with the suggestions,
         // or a deleted orphan would stay listed until a restart. The quiet
         // half-minute read recomputes only the suggestions, the cheap part.
         api.getMesaIssues(quiet ? "suggestions" : true),
-        api.listMesaDomains().catch(() => ({ domains: [] })),
-        api.listMesaIntegrations().catch(() => ({ integrations: [] })),
-        api.listMesaAreas().catch(() => ({ areas: [] })),
-        api.listMesaDevices().catch(() => ({ devices: [] })),
       ]);
-      if (!isLatest()) return;
-      setProfiles(list.profiles);
-      setIssues(iss);
-      setDomains(doms.domains);
-      setIntegrations(ints.integrations);
-      setAreas(ars.areas);
-      setDevices(devs.devices);
-      setLoaded(true);
+      if (isLatest()) showFindings(found);
     } catch (e) {
       if (isLatest() && !quiet) setError(e instanceof Error ? e.message : t("mesa.loadFailed"));
     } finally {
@@ -337,8 +359,8 @@ export function MesaProvider({ active = true, onFindings, children }: {
   const advisoryShown = (findingIds.inspection.length > 0 && !allDismissed(findingIds.inspection))
     || (findingIds.validation.length > 0 && !allDismissed(findingIds.validation));
   useEffect(() => {
-    onFindings?.(loaded ? { advisory: advisoryShown || orphansShown } : null);
-  }, [onFindings, loaded, orphansShown, advisoryShown]);
+    onFindings?.(findingsLoaded ? { advisory: advisoryShown || orphansShown } : null);
+  }, [onFindings, findingsLoaded, orphansShown, advisoryShown]);
 
   // ---- The profile in Profile Editor --------------------------------------
 
@@ -419,7 +441,7 @@ export function MesaProvider({ active = true, onFindings, children }: {
   }, []);
 
   const value: MesaState = {
-    loaded, loading, error, refresh,
+    loaded, findingsLoaded, loading, error, refresh,
     rows, keysIn, entityTree, canonicalTags, integrationOptions, deviceOptions, friendly, nameOf, automationName,
     issues, inspection, validation, findingIds, allDismissed, dismiss, restoreNotices,
     anyDismissed: [findingIds.inspection, findingIds.validation, findingIds.orphans].some((ids) => ids.length > 0 && allDismissed(ids)),

@@ -249,7 +249,8 @@ const OWN_WINDOWS: Record<WorkspaceId, WorkspaceDef> = {
     contentWindows: ["mesaSuggestions", "mesaAdvisory"],
     contentMax: { mesaSuggestions: 1 / 3, mesaAdvisory: 1 },
     // 4: one floating Advisory window holds every finding; Orphaned Profiles and Diagnostics are gone.
-    layoutVersion: 4,
+    // 5: Advisory drops the width it saved when floating windows opened without a maximum.
+    layoutVersion: 5,
   },
   logs: {
     labelKey: "workspace.logs",

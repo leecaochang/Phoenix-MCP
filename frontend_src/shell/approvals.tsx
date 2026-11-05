@@ -27,7 +27,7 @@ export type ApprovalsScope = "pending" | "history" | "all" | Exclude<ApprovalSta
 export const APPROVALS_SCOPES: readonly ApprovalsScope[] = ["pending", "history", "all", "approved", "rejected", "failed", "expired", "cancelled"];
 
 const POLL_INTERVAL_MS = 10_000;
-const PAGE = 50;
+export const APPROVALS_PAGE = 50;
 /** The server's MAX_BATCH_APPROVALS: a larger batch is refused whole. */
 export const MAX_BATCH_APPROVALS = 50;
 
@@ -138,9 +138,9 @@ export function ApprovalsProvider({ scope, onScopeChange, onCountChange, refresh
   // them all: a response a newer request has superseded is dropped.
   const beginLoad = useLatestRequest();
 
-  const pendingWindow = useRef(PAGE);
+  const pendingWindow = useRef(APPROVALS_PAGE);
   const loadPending = useCallback(async (offset = 0, quiet = false) => {
-    if (offset > 0) pendingWindow.current = Math.max(pendingWindow.current, offset + PAGE);
+    if (offset > 0) pendingWindow.current = Math.max(pendingWindow.current, offset + APPROVALS_PAGE);
     const isLatest = beginLoad();
     setError(null);
     try {
@@ -149,14 +149,14 @@ export function ApprovalsProvider({ scope, onScopeChange, onCountChange, refresh
       let total = 0;
       let pages = 0;
       do {
-        const resp = await api.listApprovals({ status: "pending", limit: PAGE, offset: nextOffset });
+        const resp = await api.listApprovals({ status: "pending", limit: APPROVALS_PAGE, offset: nextOffset });
         if (!isLatest()) return;
         approvals.push(...resp.approvals);
         total = resp.total;
         pages += 1;
         nextOffset += resp.approvals.length;
         if (!resp.approvals.length) break;
-      } while (nextOffset < total && pages < Math.ceil(pendingWindow.current / PAGE));
+      } while (nextOffset < total && pages < Math.ceil(pendingWindow.current / APPROVALS_PAGE));
       setRecords([...new Map(approvals.map((record) => [record.id, record])).values()]);
       setRawOffset(nextOffset);
       setPendingTotal(total);
@@ -180,7 +180,7 @@ export function ApprovalsProvider({ scope, onScopeChange, onCountChange, refresh
     try {
       const resp = await api.listApprovals({
         status: scope === "history" || scope === "all" ? undefined : scope,
-        limit: PAGE,
+        limit: APPROVALS_PAGE,
         offset,
       });
       if (!isLatest()) return;
@@ -214,7 +214,7 @@ export function ApprovalsProvider({ scope, onScopeChange, onCountChange, refresh
   // (Re)load when the scope changes.
   useEffect(() => {
     setLoading(true);
-    pendingWindow.current = PAGE;
+    pendingWindow.current = APPROVALS_PAGE;
     setRecords([]);
     if (scope === "pending") void loadPending();
     else void loadOthers(0);
@@ -249,6 +249,12 @@ export function ApprovalsProvider({ scope, onScopeChange, onCountChange, refresh
     if (scope === "pending") void loadPending(rawOffset);
     else void loadOthers(rawOffset);
   }, [loadingMore, scope, loadPending, loadOthers, rawOffset]);
+
+  // Search looks through every request, not only the pages loaded, so older ones are found
+  // and a page of results fills up.
+  useEffect(() => {
+    if (search.trim() && hasMore && !loading && !loadingMore && !error) loadMore();
+  }, [search, hasMore, loading, loadingMore, error, loadMore]);
 
   const shown = useMemo(() => records.filter((r) => matchesListSearch(
     `${r.access_key_name} ${r.tool_name} ${friendlyToolName(r.tool_name)} ${friendlyApprovalSummary(r.diff).title} ${diffSummary(r.diff)} ${r.rejected_reason ?? ""}`, search)), [records, search]);

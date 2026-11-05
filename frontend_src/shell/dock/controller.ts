@@ -75,6 +75,11 @@ export interface WorkspaceLayout extends DisplaySnapshot {
 /** A floating window's place and size, relative to the floating layer. */
 export interface FloatBox { left: number; top: number; width: number; height: number }
 
+/** The width a window opens at as a share of the workspace: never past `widest`, however wide the screen. */
+export function floatOpenWidth(room: number, fraction: number, widest: number = FLOAT_BOUNDS.maxWidth): number {
+  return Math.max(FLOAT_BOUNDS.minWidth, Math.min(widest, Math.round(room * fraction)));
+}
+
 interface Host {
   api: DockviewApi;
   canvas: WorkspaceCanvas | null;
@@ -1544,12 +1549,14 @@ export class WorkspaceController {
   /**
    * Open a window over the workspace, at a third of its width and height and in
    * the bottom corner: the size and place a window the workspace floats takes
-   * when it has none of its own yet. The corner keeps it off the list the
-   * workspace is built around (user, 2026-10-30); from there the user moves it.
+   * when it has none of its own yet. The width stays within the floating bounds,
+   * or the window's own width, so a wide screen does not stretch it. The corner
+   * keeps it off the list the workspace is built around (user, 2026-10-30); from
+   * there the user moves it.
    */
   openFloating(id: string, fraction = 1 / 3): void {
     const room = this.canvas?.host.clientWidth ?? 0;
-    const width = Math.round(room * fraction);
+    const width = floatOpenWidth(room, fraction, this.extras.floatWidths?.[id]);
     const height = Math.round(this.visibleHeight() * fraction);
     if (!this.floatBoxes.has(id) && room > 0 && height > 0) {
       this.floatBoxes.set(id, { left: Math.max(0, room - width - FLOAT_BOUNDS.left), top: Math.max(0, this.visibleHeight() - height - FLOAT_MARGIN), width, height });

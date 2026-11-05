@@ -49,6 +49,35 @@ describe("Approvals pending pagination", () => {
     expect(queryByText("Load More")).toBeTruthy();
   });
 
+  it("searches every page, and shows the results a page at a time", async () => {
+    const all = Array.from({ length: 130 }, (_, i) => record({ id: `appr_${i}`, status: "approved", diff: { summary: `${i % 2 ? "Odd" : "Even"} request ${i}` } }));
+    vi.mocked(api.listApprovals).mockImplementation(async ({ limit = 50, offset = 0 } = {}) => ({ approvals: all.slice(offset, offset + limit), total: all.length, limit, offset }));
+    const { findByText, getByRole, getByText, queryByText, container } = renderApprovals({ scope: "all" });
+    await findByText("Even request 0");
+    expect(queryByText("Odd request 129")).toBeNull();
+
+    fireEvent.change(getByRole("searchbox"), { target: { value: "Odd" } });
+    await waitFor(() => expect(api.listApprovals).toHaveBeenCalledWith(expect.objectContaining({ offset: 100 })));
+    await waitFor(() => expect(container.querySelectorAll("tbody tr[data-row]")).toHaveLength(50));
+    fireEvent.click(getByText("Load More"));
+    await waitFor(() => expect(container.querySelectorAll("tbody tr[data-row]")).toHaveLength(65));
+    expect(queryByText("Load More")).toBeNull();
+  });
+
+  it("shows every loaded request while Select Multiple can pick them", async () => {
+    const all = Array.from({ length: 60 }, (_, i) => record({ id: `appr_${i}`, diff: { summary: `Pending ${i}` } }));
+    vi.mocked(api.listApprovals).mockImplementation(async ({ limit = 50, offset = 0 } = {}) => ({ approvals: all.slice(offset, offset + limit), total: all.length, limit, offset }));
+    const { findByText, findAllByRole, getByRole, getByText, container } = renderApprovals();
+    await findByText("Pending 0");
+    fireEvent.click(getByText("Load More"));
+    await waitFor(() => expect(container.querySelectorAll("tbody tr[data-row]")).toHaveLength(60));
+    fireEvent.change(getByRole("searchbox"), { target: { value: "Pending" } });
+    await waitFor(() => expect(container.querySelectorAll("tbody tr[data-row]")).toHaveLength(50));
+    fireEvent.click(getByRole("button", { name: "Select Multiple" }));
+    await findAllByRole("checkbox");
+    expect(container.querySelectorAll("tbody tr[data-row]")).toHaveLength(60);
+  });
+
   it("Load more appends the next page at the accumulated offset", async () => {
     vi.mocked(api.listApprovals).mockImplementation(async ({ offset = 0 } = {}) => ({
       approvals: [record({ id: offset ? "appr_2" : "appr_1", diff: { summary: offset ? "Second pending" : "First pending" } })],

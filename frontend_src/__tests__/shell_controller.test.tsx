@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { render } from "@testing-library/react";
 import { DockviewReact, type AddPanelOptions, type DockviewApi } from "dockview-react";
-import { WorkspaceController, layoutMembers, type WorkspaceLayout } from "../shell/dock/controller";
+import { WorkspaceController, floatOpenWidth, layoutMembers, type WorkspaceLayout } from "../shell/dock/controller";
 
 // The controller drives a real Dockview instance in jsdom. jsdom has no layout,
 // so geometry (neighbours, rows) is covered against fixed rectangles in
@@ -38,6 +38,19 @@ const ids = (c: WorkspaceController) => c.api!.panels.map((p) => p.id);
 /** Windows in layout order, read from the saved grid (api.panels lists them in creation order). */
 const order = (c: WorkspaceController) =>
   (c.layout()!.dock.grid.root as unknown as { data: Array<{ data: { views: string[] } }> }).data.map((leaf) => leaf.data.views[0]);
+
+describe("the width a window floats at", () => {
+  it("follows the workspace between the floating window limits", () => {
+    expect(floatOpenWidth(1500, 1 / 3)).toBe(500);
+    expect(floatOpenWidth(2560, 1 / 3)).toBe(640);
+    expect(floatOpenWidth(5120, 1 / 3)).toBe(640);
+    expect(floatOpenWidth(800, 1 / 3)).toBe(360);
+  });
+
+  it("lets a window with a width of its own open wider", () => {
+    expect(floatOpenWidth(5120, 1 / 3, 960)).toBe(960);
+  });
+});
 
 describe("workspace controller", () => {
   it("lays out the default arrangement when nothing is saved", () => {

@@ -162,22 +162,25 @@ it("opens an orphaned profile in Profile Editor so it can be reviewed and remove
   expect(await screen.findByRole("region", { name: "Profile Editor window" })).toHaveTextContent("gone-device");
 });
 
+/** How many full scans of the findings the panel has asked for. */
+const fullReads = () => vi.mocked(api.getMesaIssues).mock.calls.filter(([refresh]) => refresh === true).length;
+
 it("permanently dismisses orphan findings across refresh, remount, subsets and reordering without deleting profiles", async () => {
   vi.mocked(api.getMesaIssues).mockResolvedValue({ ...empty, orphans: ["sensor.kept_a", "sensor.kept_b"] });
   const first = renderMesa();
   fireEvent.click(await advisoryWindow().findByRole("button", { name: "Dismiss orphaned-profile notice in this browser" }));
   expect(advisoryWindow().queryByText(/sensor.kept_a/)).toBeNull();
   refresh();
-  await waitFor(() => expect(api.getMesaIssues).toHaveBeenCalledTimes(2));
+  await waitFor(() => expect(fullReads()).toBe(2));
   expect(advisoryWindow().queryByText(/sensor.kept_a/)).toBeNull();
   first.unmount();
   vi.mocked(api.getMesaIssues).mockResolvedValue({ ...empty, orphans: ["sensor.kept_b", "sensor.kept_a"] });
   const second = renderMesa();
-  await waitFor(() => expect(api.getMesaIssues).toHaveBeenCalledTimes(3));
+  await waitFor(() => expect(fullReads()).toBe(3));
   expect(advisoryWindow().queryByRole("button", { name: "Dismiss orphaned-profile notice in this browser" })).toBeNull();
   vi.mocked(api.getMesaIssues).mockResolvedValue({ ...empty, orphans: ["sensor.kept_b"] });
   refresh();
-  await waitFor(() => expect(api.getMesaIssues).toHaveBeenCalledTimes(4));
+  await waitFor(() => expect(fullReads()).toBe(4));
   expect(advisoryWindow().queryByText(/sensor.kept_b/)).toBeNull();
   second.unmount();
   vi.mocked(api.getMesaIssues).mockResolvedValue({ ...empty, orphans: ["sensor.new_finding"] });
@@ -198,7 +201,7 @@ it("keeps dismissals scoped to the current authenticated account", async () => {
   second.unmount();
   setHass({ user: { id: "test-admin" } });
   renderMesa();
-  await waitFor(() => expect(api.getMesaIssues).toHaveBeenCalledTimes(3));
+  await waitFor(() => expect(fullReads()).toBe(3));
   expect(advisoryWindow().queryByText(/sensor.retained/)).toBeNull();
 });
 
@@ -213,7 +216,7 @@ it("dismisses inspection and validation notices independently and resurfaces cha
   fireEvent.click(advisoryWindow().getByRole("button", { name: "Dismiss validation notice in this browser" }));
   first.unmount();
   const second = renderMesa();
-  await waitFor(() => expect(api.getMesaIssues).toHaveBeenCalledTimes(2));
+  await waitFor(() => expect(fullReads()).toBe(2));
   expect(advisoryWindow().queryByText(validation.recommendation)).toBeNull();
   expect(advisoryWindow().queryByText("View Automations")).toBeNull();
   second.unmount();

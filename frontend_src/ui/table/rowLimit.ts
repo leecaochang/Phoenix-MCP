@@ -4,7 +4,7 @@
  * rows pushed the windows below it far down the stack. The phone stack
  * provides the step; a list asks for its limit and grows it with Load More,
  * which shows rows already loaded before it fetches more. Outside the phone
- * stack there is no limit.
+ * stack a list has no limit unless it asks for a page size of its own.
  */
 
 import { createContext, useCallback, useContext, useState } from "react";
@@ -22,16 +22,20 @@ export interface RowLimit {
   step: number | null;
   /** Show one step more. */
   more: () => void;
+  /** Go back to the first step, as when a filter changes what the list holds. */
+  reset: () => void;
   /** Whether rows already loaded are still hidden: Load More shows those before fetching. */
   hidden: (loaded: number) => boolean;
 }
 
-export function useRowLimit(): RowLimit {
-  const step = useContext(RowLimitContext);
+/** A phone window's step applies first; `pageSize` is the step everywhere else, null for no limit. */
+export function useRowLimit(pageSize: number | null = null): RowLimit {
+  const step = useContext(RowLimitContext) ?? pageSize;
   const [steps, setSteps] = useState(1);
   const more = useCallback(() => setSteps((n) => n + 1), []);
+  const reset = useCallback(() => setSteps(1), []);
   const limit = step === null ? null : step * steps;
-  return { limit, step, more, hidden: (loaded) => limit !== null && loaded > limit };
+  return { limit, step, more, reset, hidden: (loaded) => limit !== null && loaded > limit };
 }
 
 /** How many of `loaded` rows a list with `limit` shows. */

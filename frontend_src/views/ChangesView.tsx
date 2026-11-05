@@ -13,7 +13,7 @@ import { CodeToggle, diffLines, LayoutToggle, RawDiffPane, rememberCodeView, rem
 import { collectPreviewViews, DashboardPreview, rememberPreviewMode, SegmentedToggle, storedPreviewMode, useHuiCardReady } from "../components/DashboardPreview";
 import { YamlView, toYaml } from "../components/YamlView";
 import { hasMessage, localeNumber, t } from "../i18n";
-import { changeLabel, RAW_CONTENT_TYPES, rawSide, restoreAvailability, useChanges, type ChangesState, type RestoreSide } from "../shell/changes";
+import { CHANGES_PAGE, changeLabel, RAW_CONTENT_TYPES, rawSide, restoreAvailability, useChanges, type ChangesState, type RestoreSide } from "../shell/changes";
 import { useOnToolbar, useToolbarTools, type ToolGroup } from "../shell/tools";
 import { InlineTools, useEnsureOpen, useWindowToggle, useWorkspaceReset } from "../shell/windowTools";
 import { ActionButton, DisplayModeContext } from "../ui/ActionButton";
@@ -110,7 +110,7 @@ const NEWEST_FIRST = { column: "time", dir: "desc" } as const;
 
 export function ChangesListWindow() {
   const c = useChanges();
-  const rowLimit = useRowLimit();
+  const rowLimit = useRowLimit(CHANGES_PAGE);
   // Resetting the workspace clears what it had chosen, as it clears the arrangement.
   useWorkspaceReset(() => c?.select(null));
   // Choosing a change brings Comparison back if the user closed it, as Log Details comes back in Logs.
@@ -122,6 +122,15 @@ export function ChangesListWindow() {
   // Hidden filters, the search included, stop applying and come back as they were (user, 2026-10-27).
   const filtersApply = !useOnToolbar() || filtersOpen;
   const activeFilters = filtersApply ? (type ? 1 : 0) + (action ? 1 : 0) + (search.trim() ? 1 : 0) : 0;
+  // Filters match text only the panel knows, translated labels and current key names, so they run here.
+  // They look through the whole history: read only what is loaded, a filtered page came up short.
+  const filterQuery = `${search}|${type}|${action}`;
+  const filtering = activeFilters > 0;
+  const reading = filtering && !!c?.hasMore && !c.error;
+  const canRead = reading && !c?.loading && !c?.loadingMore;
+  useEffect(() => { if (canRead) c?.loadRest(); }, [canRead, c?.feed.length]); // eslint-disable-line react-hooks/exhaustive-deps
+  const resetRows = rowLimit.reset;
+  useEffect(() => { resetRows(); }, [filterQuery, resetRows]);
   const groups: ToolGroup[] = c ? [{
     id: "changes",
     label: t("shell.tabChanges"),
@@ -174,7 +183,7 @@ export function ChangesListWindow() {
         </div>
       </div>
       {c.error && <ErrorMsg msg={c.error} />}
-      {c.loading && !c.feed.length && <Loading />}
+      {((c.loading && !c.feed.length) || (reading && !shown.length)) && <Loading />}
       {/* Grouped for the Guide only; the table stays the list's flex item. */}
       <div className="changes-table" data-guide="window.changes#list">
       <ConfigTable
@@ -189,16 +198,16 @@ export function ChangesListWindow() {
         onSelect={(v, ordered) => { c.select(v.id, ordered.map((o) => o.id)); ensureOpen("comparison"); }}
         rowLabel={(v) => `${changeLabel(v)}, ${actionLabel(v.action)}, ${formatDateTime(v.timestamp)}`}
         rowHelp="help.changesRow"
-        empty={c.loading ? null : <p className="audit-empty">{c.feed.length ? t("changes.emptySearch") : t("changes.empty")}</p>}
+        empty={c.loading || reading ? null : <p className="audit-empty">{c.feed.length ? t("changes.emptySearch") : t("changes.empty")}</p>}
       />
       </div>
-      <ResultCount count={shown.length} query={`${search}|${type}|${action}`} loading={c.loading} />
+      <ResultCount count={shown.length} query={filterQuery} loading={c.loading || reading} />
       {!c.loading && c.feed.length > 0 && (
         <div className="phx-table-footer">
-          <span className="conversation-secondary">{t("conversations.showing", { shown: localeNumber(shownCount(shown.length, rowLimit.limit)), total: localeNumber(c.total) })}</span>
+          <span className="conversation-secondary">{t("conversations.showing", { shown: localeNumber(shownCount(shown.length, rowLimit.limit)), total: localeNumber(filtering ? shown.length : c.total) })}</span>
           {(c.hasMore || rowLimit.hidden(shown.length)) && (
-            <ActionButton icon="loadMore" label={c.loadingMore ? t("common.loading") : t("common.loadMore")} guide="window.changes#load-more" helpText={t("help.loadMore", { count: localeNumber(rowLimit.step ?? 100) })} busy={c.loadingMore}
-              onClick={() => { if (!rowLimit.hidden(shown.length)) c.loadMore(); rowLimit.more(); }} />
+            <ActionButton icon="loadMore" label={c.loadingMore ? t("common.loading") : t("common.loadMore")} guide="window.changes#load-more" helpText={t("help.loadMore", { count: localeNumber(rowLimit.step ?? CHANGES_PAGE) })} busy={c.loadingMore}
+              onClick={() => { if (c.hasMore && c.feed.length < (rowLimit.limit ?? 0) + (rowLimit.step ?? 0)) c.loadMore(); rowLimit.more(); }} />
           )}
         </div>
       )}
