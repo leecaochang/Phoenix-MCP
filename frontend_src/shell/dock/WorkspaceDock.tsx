@@ -168,7 +168,8 @@ export function WorkspaceDock({ controller, components, renderWindow, watermark,
     });
     out.push(() => maximized.dispose());
     if (typeof ResizeObserver !== "undefined") {
-      const refitMain = new ResizeObserver(() => mainCanvas.refit());
+      // A new visible height moves every window held to a share of it.
+      const refitMain = new ResizeObserver(() => { mainCanvas.refit(); controller.requestFollow(); });
       refitMain.observe(mainEl);
       const refitBands = new ResizeObserver(() => { for (const c of bandCanvases) c.refit(); });
       refitBands.observe(frame.current);

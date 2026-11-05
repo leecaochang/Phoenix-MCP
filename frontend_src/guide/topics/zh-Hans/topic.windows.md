@@ -13,7 +13,7 @@
 
 从工具栏的最后一个按钮打开它们，或右键点击工具栏。
 
-- **{{label:workspace.iconsOnly}}**（默认）或 **{{label:workspace.iconsAndText}}**。
+- **{{label:workspace.iconsAndText}}**（默认）或 **{{label:workspace.iconsOnly}}**。
 - **{{label:workspace.singleRow}}** 在放得下时把工具与工作区按钮放在同一行，放不下时恢复为两行。
 - 把工具栏停靠到任意边缘，或用 **{{label:workspace.floatToolbar}}** 把它放到任意位置。你也可以拖动它的手柄使其浮动。
 - **{{label:workspace.collapseToolbar}}** 把它收缩到手柄。

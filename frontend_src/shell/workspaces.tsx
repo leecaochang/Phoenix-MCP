@@ -115,6 +115,8 @@ export interface WorkspaceDef {
   contentWindows?: readonly WindowId[];
   /** The most of the visible height a window following its content takes, as a fraction; beyond it the window scrolls inside. */
   contentMax?: Partial<Record<WindowId, number>>;
+  /** Windows that always take their whole `contentMax` share, however little they hold. */
+  contentFill?: readonly WindowId[];
   /** The width a window opens at when it floats for the first time, within the workspace's own. */
   floatWidths?: Partial<Record<WindowId, number>>;
   /** Windows that open beside a partner in its pinned band (see WorkspaceExtras.pairs). */
@@ -242,12 +244,13 @@ const OWN_WINDOWS: Record<WorkspaceId, WorkspaceDef> = {
       mesaAdvisory: { neighbor: "mesaProfiles", side: "bottom", host: "float" },
     },
     heights: { mesaProfiles: 560, mesaEditor: 560, mesaSuggestions: 260 },
-    // The windows always fit the screen; Suggested Profiles is as tall as what it
-    // lists, up to a third of its column, and Profiles takes the rest. Advisory
-    // floats at the height of its findings, up to the workspace's own (user, 2026-10-30).
+    // The windows always fit the screen; Suggested Profiles takes a third of its column
+    // and Profiles the rest (user, 2026-11-05). Advisory floats at the height of its
+    // findings, up to the workspace's own (user, 2026-10-30).
     fit: true,
     contentWindows: ["mesaSuggestions", "mesaAdvisory"],
     contentMax: { mesaSuggestions: 1 / 3, mesaAdvisory: 1 },
+    contentFill: ["mesaSuggestions"],
     // 4: one floating Advisory window holds every finding; Orphaned Profiles and Diagnostics are gone.
     // 5: Advisory drops the width it saved when floating windows opened without a maximum.
     layoutVersion: 5,

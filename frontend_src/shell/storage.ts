@@ -34,7 +34,7 @@ export interface ToolbarState {
   singleRow: boolean;
 }
 /** Docked at the top, icons only, tools shown: the accepted starting point. */
-export const DEFAULT_TOOLBAR: ToolbarState = { dock: "top", x: 16, y: 12, collapsed: false, mode: "icons", vertical: false, singleRow: false };
+export const DEFAULT_TOOLBAR: ToolbarState = { dock: "top", x: 16, y: 12, collapsed: false, mode: "icon-text", vertical: false, singleRow: false };
 
 /** Whether the toolbar stands upright: docked at a side, or floating upright. */
 export const toolbarVertical = (state: ToolbarState): boolean => (state.dock === "floating" ? state.vertical : state.dock === "left" || state.dock === "right");

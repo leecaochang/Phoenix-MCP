@@ -250,7 +250,7 @@ describe("phoenix-mcp-panel full app shell", () => {
     });
 
     it("Reset All Workspaces resets the toolbar at once and keeps My Defaults", async () => {
-      const toolbar = { dock: "left", x: 16, y: 12, collapsed: false, toolsShown: true, mode: "icon-text" };
+      const toolbar = { dock: "left", x: 16, y: 12, collapsed: false, toolsShown: true, mode: "icons" };
       const saved = { schema: 1, savedAt: 1, rev: 2, toolbar, workspaces: {}, myDefaults: { logs: { dock: {}, folds: { folded: [], collapsed: {} }, closed: {} } } };
       const { connection, sets } = userData({ "phoenix_mcp_ui:desktop": saved });
       const el = mountWith(connection);
@@ -261,8 +261,9 @@ describe("phoenix-mcp-panel full app shell", () => {
       act(() => { menuItem(el, "Reset All Workspaces")!.click(); });
       expect(el.shadowRoot!.querySelector('[role="alertdialog"]')).toBeNull();
       await waitFor(() => expect(el.shadowRoot!.querySelector(".phx-toolbar")).toHaveAttribute("data-dock", "top"));
-      expect(el.shadowRoot!.querySelector(".phx-toolbar")).toHaveAttribute("data-mode", "icons");
-      expect(el.shadowRoot!.querySelector(".phx-toolbar")).not.toHaveAttribute("data-fit");
+      expect(el.shadowRoot!.querySelector(".phx-toolbar")).toHaveAttribute("data-mode", "icon-text");
+      // Back across the top with its text, the fit rule applies again.
+      expect(el.shadowRoot!.querySelector(".phx-toolbar")).toHaveAttribute("data-fit");
       await waitFor(() => expect(sets.length).toBeGreaterThan(0), { timeout: 4000 });
       const last = sets[sets.length - 1].value;
       expect((last.toolbar as { dock: string }).dock).toBe("top");

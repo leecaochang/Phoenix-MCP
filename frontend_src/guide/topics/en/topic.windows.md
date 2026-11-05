@@ -13,7 +13,7 @@ The second row holds the tools of the windows you have open, such as Filters or 
 
 Open them from the toolbar's last button, or right-click the toolbar.
 
-- **{{label:workspace.iconsOnly}}** (default) or **{{label:workspace.iconsAndText}}**.
+- **{{label:workspace.iconsAndText}}** (default) or **{{label:workspace.iconsOnly}}**.
 - **{{label:workspace.singleRow}}** puts the tools on the same row as the workspace buttons while they fit, and goes back to two rows when they don't.
 - Dock the toolbar along any edge, or **{{label:workspace.floatToolbar}}** to place it anywhere. You can also drag its grip to float it.
 - **{{label:workspace.collapseToolbar}}** shrinks it to its grip.

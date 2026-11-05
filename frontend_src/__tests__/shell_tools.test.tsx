@@ -193,6 +193,9 @@ describe("Log Details", () => {
 describe("saved toolbar placement", () => {
   it("keeps valid values and replaces anything else with the defaults", () => {
     expect(readToolbar(undefined)).toEqual(DEFAULT_TOOLBAR);
+    // Icons and text unless the user chose otherwise (user, 2026-11-05).
+    expect(DEFAULT_TOOLBAR.mode).toBe("icon-text");
+    expect(readToolbar({ mode: "icons" }).mode).toBe("icons");
     // A saved choice to hide the tools is dropped with the button that made it (user, 2026-11-01).
     expect(readToolbar({ dock: "left", x: 40, y: 50, collapsed: true, toolsShown: false, mode: "icon-text", vertical: true, singleRow: true }))
       .toEqual({ dock: "left", x: 40, y: 50, collapsed: true, mode: "icon-text", vertical: true, singleRow: true });

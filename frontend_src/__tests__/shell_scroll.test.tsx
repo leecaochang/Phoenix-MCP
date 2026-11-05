@@ -47,9 +47,9 @@ describe("canvas geometry", () => {
 type Arrange = (api: DockviewApi, add: (id: string, position?: AddPanelOptions["position"]) => void) => void;
 
 /** A workspace with a stubbed visible height, the way WorkspaceDock wires it. */
-function mount(windows: string[], arrange: Arrange, opts: { visible?: number; heights?: Record<string, number>; folded?: string[]; fit?: boolean; contentHeights?: boolean; contentMax?: Record<string, number>; contentWindows?: string[] } = {}) {
+function mount(windows: string[], arrange: Arrange, opts: { visible?: number; heights?: Record<string, number>; folded?: string[]; fit?: boolean; contentHeights?: boolean; contentMax?: Record<string, number>; contentWindows?: string[]; contentFill?: string[] } = {}) {
   let visible = opts.visible ?? 600;
-  const controller = new WorkspaceController("test", windows, arrange, (id) => id, { heights: opts.heights, folded: opts.folded, fit: opts.fit, contentHeights: opts.contentHeights, contentMax: opts.contentMax, contentWindows: opts.contentWindows });
+  const controller = new WorkspaceController("test", windows, arrange, (id) => id, { heights: opts.heights, folded: opts.folded, fit: opts.fit, contentHeights: opts.contentHeights, contentMax: opts.contentMax, contentWindows: opts.contentWindows, contentFill: opts.contentFill });
   const components = Object.fromEntries(windows.map((id) => [id, () => <div>{id}</div>]));
   let hostEl: HTMLElement | null = null;
   render(
@@ -432,6 +432,27 @@ describe("windows that follow their content (Access Keys)", () => {
     await nextFrame();
     expect(w.heights().a).toBe(200);
     expect(a.element.classList.contains("phx-window-capped")).toBe(false);
+  });
+
+  it("give a window its whole share however little it reports, and the window above it the rest (Suggested Profiles)", async () => {
+    const w = mount(["a", "b"], stacked, { heights: { a: 560, b: 260 }, fit: true, contentWindows: ["b"], contentMax: { b: 1 / 3 }, contentFill: ["b"] });
+    // A list that scrolls by itself reports little more than its title bar.
+    w.controller.contentResized("b", 60);
+    await nextFrame();
+    expect(w.heights()).toEqual({ a: 400, b: 200 });
+    const b = w.controller.api!.getPanel("b")!.group;
+    expect(b.element.style.getPropertyValue("--phx-slack")).toBe("");
+    expect(b.element.classList.contains("phx-window-capped")).toBe(false);
+    // Resetting the workspace comes back to the same shares.
+    w.controller.restoreOriginal();
+    await nextFrame();
+    expect(w.heights()).toEqual({ a: 400, b: 200 });
+    // A height the user drags stays theirs.
+    w.controller.api!.getPanel("a")!.group.api.setSize({ height: 320 });
+    w.controller.markUserSized(["a", "b"]);
+    w.controller.contentResized("b", 80);
+    await nextFrame();
+    expect(w.heights()).toEqual({ a: 320, b: 280 });
   });
 
   it("leave a folded window folded, and other workspaces ignore content sizes", async () => {

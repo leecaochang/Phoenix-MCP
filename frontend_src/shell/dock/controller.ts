@@ -187,6 +187,11 @@ export interface WorkspaceExtras {
    * Attention's share applies only while it floats.
    */
   contentMax?: Readonly<Record<string, number>>;
+  /**
+   * Windows that always take their whole `contentMax` share, however little they
+   * hold: a list that scrolls by itself reports almost no height of its own.
+   */
+  contentFill?: readonly string[];
   /** The width a window opens at when it floats for the first time, within the workspace's own. */
   floatWidths?: Readonly<Record<string, number>>;
   /**
@@ -326,6 +331,11 @@ export class WorkspaceController {
     return this.contentSized || this.transient.has(id) || this.contentOwn.has(id);
   }
 
+  /** Whether a window takes its whole share of the visible height, however little it holds. */
+  private fillsShare(id: string): boolean {
+    return !!this.extras.contentFill?.includes(id);
+  }
+
   /**
    * A window's content now needs `height` pixels, title bar included. While
    * windows follow their content, the docked one gets that height at the next
@@ -376,15 +386,16 @@ export class WorkspaceController {
         continue;
       }
       let target = Math.max(MIN_WINDOW_HEIGHT, h);
+      const fills = this.fillsShare(id);
       // A window the workspace names may shrink to its content, but never take room another
       // window needs: a long request must not resize Needs Attention (user, 2026-10-29).
       // Needs Attention itself is not held back, so what it holds is always shown.
-      if (this.contentOwn.has(id)) target = Math.min(target, canvas.roomFor(id));
+      if (this.contentOwn.has(id) && !fills) target = Math.min(target, canvas.roomFor(id));
       // Held to its share of the visible height, a window scrolls inside (user, 2026-10-31: the key list).
       const share = this.transient.has(id) ? undefined : this.extras.contentMax?.[id];
       const cap = share ? Math.round(canvas.visibleHeight() * share) : 0;
-      if (cap > MIN_WINDOW_HEIGHT) { target = Math.min(target, cap); this.caps.set(id, cap); } else this.caps.delete(id);
-      this.markCapped(id, group, cap > MIN_WINDOW_HEIGHT && h > cap ? cap : 0);
+      if (cap > MIN_WINDOW_HEIGHT) { target = fills ? cap : Math.min(target, cap); this.caps.set(id, cap); } else this.caps.delete(id);
+      this.markCapped(id, group, !fills && cap > MIN_WINDOW_HEIGHT && h > cap ? cap : 0);
       if (Math.abs((canvas.intended[id] ?? 0) - target) >= 2) targets[id] = target;
     }
     if (Object.keys(targets).length) this.batch(() => canvas.apply(targets));
@@ -459,7 +470,7 @@ export class WorkspaceController {
       const chosen = id && this.heldHeights.has(id) ? this.canvas?.intended[id] : undefined;
       // Content taller than the chosen height scrolls inside, at the height chosen so far.
       if (id && chosen !== undefined) this.markCapped(id, group, (this.natural.get(id) ?? 0) > chosen ? chosen : 0);
-      const content = chosen ?? (id && this.followsContent(id) ? this.natural.get(id) : undefined);
+      const content = chosen ?? (id && this.followsContent(id) && !this.fillsShare(id) ? this.natural.get(id) : undefined);
       // A window held to its share ends there even when it is the last of its column, and scrolls inside.
       const cap = id ? this.caps.get(id) : undefined;
       const natural = content && cap && chosen === undefined ? Math.min(content, cap) : content;

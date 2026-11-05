@@ -13,7 +13,7 @@
 
 從工具列的最後一個按鈕開啟它們，或在工具列上按右鍵。
 
-- **{{label:workspace.iconsOnly}}**（預設）或 **{{label:workspace.iconsAndText}}**。
+- **{{label:workspace.iconsAndText}}**（預設）或 **{{label:workspace.iconsOnly}}**。
 - **{{label:workspace.singleRow}}** 在放得下時把工具與工作區按鈕放在同一列，放不下時恢復為兩列。
 - 把工具列停駐到任意邊緣，或用 **{{label:workspace.floatToolbar}}** 將它放到任意位置。你也可以拖曳它的握把使其浮動。
 - **{{label:workspace.collapseToolbar}}** 將它收起到握把。
