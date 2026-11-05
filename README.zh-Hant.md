@@ -28,7 +28,19 @@ Phoenix MCP 完全執行於 Home Assistant 內部：無需另行部署服務，�
 - Home Assistant 2026.7.0 或更高版本。
 - 每個 Home Assistant 只能設定一個 Phoenix MCP 實例。Home Assistant 會根據自身的相依性限制安裝 Python 相依套件 `Babel>=2.18.0`, `jsonschema>=4.26.0`；MESA 已隨 Phoenix MCP 一起提供。
 
+## 透過 Marketplace 安裝
+
+在 Home Assistant 2026.11 或更新版本上：
+
+1. 前往 **設定 > Marketplace**，然後選擇 **從連結新增**。
+2. 輸入 `https://github.com/leecaochang/Phoenix-MCP`，然後選擇 **增加**。第一次新增時，Marketplace 會要求您連接 GitHub。
+3. 開啟 Phoenix MCP，選擇 **安裝**，然後重新啟動 Home Assistant。
+
+如果您從 HACS 升級，Phoenix MCP 會自動轉到 Marketplace。請在那裡連接 GitHub，以便繼續取得更新。
+
 ## 透過 HACS 安裝
+
+在 Home Assistant 2026.10 或更舊版本上：
 
 1. 在 HACS 中開啟右上角選單，然後選擇 **自訂儲存庫**。
 2. 輸入 `https://github.com/leecaochang/Phoenix-MCP`，類別選擇**整合**，然後點選**新增**。

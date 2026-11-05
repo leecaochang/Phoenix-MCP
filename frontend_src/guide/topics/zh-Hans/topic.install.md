@@ -1,5 +1,5 @@
 ---
-{ "id": "topic.install", "title": "安装 Phoenix MCP", "parent": "topic.about", "order": 10, "keywords": ["安装", "设置", "HACS", "要求"], "sectionKeywords": { "requirements": ["版本", "最低"], "hacs": ["自定义仓库", "下载"], "manual": ["custom_components", "复制"], "setup": ["添加集成", "设备与服务"], "panel": ["侧边栏", "管理员"], "language": ["翻译", "16 种语言"], "removing": ["卸载", "删除", "移除集成"] } }
+{ "id": "topic.install", "title": "安装 Phoenix MCP", "parent": "topic.about", "order": 10, "keywords": ["安装", "设置", "HACS", "市场", "Marketplace", "要求"], "sectionKeywords": { "requirements": ["版本", "最低"], "marketplace": ["从链接添加", "自定义仓库", "GitHub"], "hacs": ["自定义仓库", "下载"], "manual": ["custom_components", "复制"], "setup": ["添加集成", "设备与服务"], "panel": ["侧边栏", "管理员"], "language": ["翻译", "16 种语言"], "removing": ["卸载", "删除", "移除集成"] } }
 ---
 Phoenix MCP 是一个 Home Assistant 集成。安装它，添加一次，它的面板就会出现在侧边栏中。
 
@@ -7,9 +7,15 @@ Phoenix MCP 是一个 Home Assistant 集成。安装它，添加一次，它的�
 
 Home Assistant 2026.7.0 或更高版本。Phoenix 不需要安装其他东西：它的安全层 MESA 随附其中。
 
+## 通过市场安装 {#marketplace}
+
+从 Home Assistant 2026.11 起，前往设置中的市场，选择“从链接添加”。输入 `https://github.com/leecaochang/Phoenix-MCP`，然后选择“添加”。首次添加时，市场会要求你连接 GitHub。打开 Phoenix MCP，选择“安装”，然后重启 Home Assistant。
+
+如果你从 HACS 升级，Phoenix 会自动转到市场。请在那里连接 GitHub，以便继续获得更新。
+
 ## 使用 HACS 安装 {#hacs}
 
-在 HACS 中找到 Phoenix MCP，或把它的仓库添加为集成类型的自定义仓库。下载后重启 Home Assistant。HACS 会替你检查 Home Assistant 版本。
+在 Home Assistant 2026.10 或更早版本上，在 HACS 中找到 Phoenix MCP，或把它的仓库添加为集成类型的自定义仓库。下载后重启 Home Assistant。HACS 会替你检查 Home Assistant 版本。
 
 ## 手动安装 {#manual}
 

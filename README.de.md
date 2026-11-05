@@ -28,7 +28,19 @@ Neu hier? Öffnen Sie das **Phoenix MCP**-Bedienfeld und wählen Sie unter Zugri
 - Home Assistant 2026.7.0 oder neuer.
 - Eine Phoenix MCP-Instanz pro Home Assistant. Home Assistant installiert die Python-Abhängigkeiten `Babel>=2.18.0`, `jsonschema>=4.26.0` unter seinen Abhängigkeitsvorgaben; MESA ist in Phoenix MCP enthalten.
 
+## Installation über den Marketplace
+
+Unter Home Assistant 2026.11 oder neuer:
+
+1. Öffnen Sie **Einstellungen > Marketplace** und wählen Sie **Über Link hinzufügen**.
+2. Geben Sie `https://github.com/leecaochang/Phoenix-MCP` ein und wählen Sie **Hinzufügen**. Beim ersten Mal bittet der Marketplace Sie, GitHub zu verbinden.
+3. Öffnen Sie Phoenix MCP, wählen Sie **Installieren** und starten Sie Home Assistant neu.
+
+Beim Upgrade von HACS wechselt Phoenix MCP von selbst in den Marketplace. Verbinden Sie dort GitHub, um weiterhin Updates zu erhalten.
+
 ## Installation über HACS
+
+Unter Home Assistant 2026.10 oder älter:
 
 1. Öffnen Sie in HACS das Menü oben rechts und wählen Sie **Benutzerdefinierte Repositories**.
 2. Geben Sie `https://github.com/leecaochang/Phoenix-MCP` ein, wählen Sie **Integration** als Kategorie und klicken Sie dann auf **Hinzufügen**.

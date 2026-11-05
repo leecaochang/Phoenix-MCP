@@ -28,7 +28,19 @@ Phoenix MCP полностью работает внутри Home Assistant: б�
 - Home Assistant 2026.7.0 или новее.
 - Один экземпляр Phoenix MCP на Home Assistant. Home Assistant устанавливает зависимости Python `Babel>=2.18.0`, `jsonschema>=4.26.0` с учётом своих ограничений зависимостей; MESA включена в Phoenix MCP.
 
+## Установка из Marketplace
+
+В Home Assistant 2026.11 или новее:
+
+1. Откройте **Настройки > Marketplace** и выберите **Добавить по ссылке**.
+2. Введите `https://github.com/leecaochang/Phoenix-MCP` и выберите **Добавить**. При первом добавлении Marketplace попросит подключить GitHub.
+3. Откройте Phoenix MCP, выберите **Установить** и перезапустите Home Assistant.
+
+При обновлении с HACS Phoenix MCP сам перейдёт в Marketplace. Подключите там GitHub, чтобы и дальше получать обновления.
+
 ## Установка через HACS
+
+В Home Assistant 2026.10 или старше:
 
 1. В HACS откройте меню в правом верхнем углу и выберите **Пользовательские репозитории**.
 2. Введите `https://github.com/leecaochang/Phoenix-MCP`, выберите категорию **Интеграция** и нажмите **Добавить**.

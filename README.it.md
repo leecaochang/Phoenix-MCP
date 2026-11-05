@@ -28,7 +28,19 @@ Nuovo da queste parti? Apri il pannello **Phoenix MCP** e scegli **Configura un 
 - Home Assistant 2026.7.0 o versioni successive.
 - Un’istanza di Phoenix MCP per Home Assistant. Home Assistant installa le dipendenze Python `Babel>=2.18.0`, `jsonschema>=4.26.0` nel rispetto dei propri vincoli sulle dipendenze; MESA è incluso in Phoenix MCP.
 
+## Installazione dal Marketplace
+
+Su Home Assistant 2026.11 o versioni successive:
+
+1. Vai in **Impostazioni > Marketplace** e scegli **Aggiungi dal collegamento**.
+2. Inserisci `https://github.com/leecaochang/Phoenix-MCP` e scegli **Aggiungi**. La prima volta il Marketplace ti chiede di collegare GitHub.
+3. Apri Phoenix MCP, scegli **Installa** e riavvia Home Assistant.
+
+Se aggiorni da HACS, Phoenix MCP passa da solo al Marketplace. Collega GitHub lì per continuare a ricevere gli aggiornamenti.
+
 ## Installazione tramite HACS
+
+Su Home Assistant 2026.10 o versioni precedenti:
 
 1. In HACS, apri il menu in alto a destra e scegli **Repository personalizzati**.
 2. Inserisci `https://github.com/leecaochang/Phoenix-MCP` e seleziona **Integrazione** come categoria, poi fai clic su **Aggiungi**.

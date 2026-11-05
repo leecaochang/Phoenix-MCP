@@ -1,5 +1,5 @@
 ---
-{ "id": "topic.install", "title": "Installing Phoenix MCP", "parent": "topic.about", "order": 10, "keywords": ["install", "setup", "HACS", "requirements"], "sectionKeywords": { "requirements": ["version", "minimum"], "hacs": ["custom repository", "download"], "manual": ["custom_components", "copy"], "setup": ["add integration", "devices and services"], "panel": ["sidebar", "administrator"], "language": ["translation", "16 languages"], "removing": ["uninstall", "delete", "remove integration"] }, "covers": ["custom_components/phoenix_mcp/config_flow.py", "custom_components/phoenix_mcp/panel.py", "custom_components/phoenix_mcp/const.py", "custom_components/phoenix_mcp/__init__.py", "frontend_src/i18n/index.ts"] }
+{ "id": "topic.install", "title": "Installing Phoenix MCP", "parent": "topic.about", "order": 10, "keywords": ["install", "setup", "HACS", "Marketplace", "requirements"], "sectionKeywords": { "requirements": ["version", "minimum"], "marketplace": ["add from link", "custom repository", "GitHub"], "hacs": ["custom repository", "download"], "manual": ["custom_components", "copy"], "setup": ["add integration", "devices and services"], "panel": ["sidebar", "administrator"], "language": ["translation", "16 languages"], "removing": ["uninstall", "delete", "remove integration"] }, "covers": ["custom_components/phoenix_mcp/config_flow.py", "custom_components/phoenix_mcp/panel.py", "custom_components/phoenix_mcp/const.py", "custom_components/phoenix_mcp/__init__.py", "frontend_src/i18n/index.ts"] }
 ---
 Phoenix MCP is a Home Assistant integration. Install it, add it once, and its panel appears in the sidebar.
 
@@ -7,9 +7,15 @@ Phoenix MCP is a Home Assistant integration. Install it, add it once, and its pa
 
 Home Assistant 2026.7.0 or newer. Phoenix needs nothing else installed: its safety layer, MESA, comes with it.
 
+## Installing from the Marketplace {#marketplace}
+
+From Home Assistant 2026.11, go to Settings, Marketplace, and choose Add from link. Enter `https://github.com/leecaochang/Phoenix-MCP`, then choose Add. The Marketplace asks you to connect GitHub the first time. Open Phoenix MCP, choose Install, then restart Home Assistant.
+
+If you upgrade from HACS, Phoenix moves to the Marketplace by itself. Connect GitHub there to keep getting updates.
+
 ## Installing with HACS {#hacs}
 
-In HACS, find Phoenix MCP, or add its repository as a custom repository of type Integration. Download it, then restart Home Assistant. HACS checks the Home Assistant version for you.
+On Home Assistant 2026.10 or older, find Phoenix MCP in HACS, or add its repository as a custom repository of type Integration. Download it, then restart Home Assistant. HACS checks the Home Assistant version for you.
 
 ## Installing by hand {#manual}
 

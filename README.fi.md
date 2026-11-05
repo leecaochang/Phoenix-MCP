@@ -28,7 +28,19 @@ Uusi täällä? Avaa **Phoenix MCP** -paneeli ja valitse Käyttöavaimet-kohdast
 - Home Assistant 2026.7.0 tai uudempi.
 - Yksi Phoenix MCP -instanssi jokaista Home Assistant -asennusta kohden. Home Assistant asentaa Python-riippuvuudet `Babel>=2.18.0`, `jsonschema>=4.26.0` omien riippuvuusrajoitustensa mukaisesti; MESA sisältyy Phoenix MCP:hen.
 
+## Asennus Markkinapaikasta
+
+Home Assistant 2026.11:ssä tai uudemmassa:
+
+1. Avaa **Asetukset > Markkinapaikka** ja valitse **Lisää linkistä**.
+2. Syötä `https://github.com/leecaochang/Phoenix-MCP` ja valitse **Lisää**. Ensimmäisellä kerralla Markkinapaikka pyytää yhdistämään GitHubiin.
+3. Avaa Phoenix MCP, valitse **Asenna** ja käynnistä Home Assistant uudelleen.
+
+Kun päivität HACS:stä, Phoenix MCP siirtyy Markkinapaikkaan itsestään. Yhdistä siellä GitHubiin, jotta saat päivitykset jatkossakin.
+
 ## Asennus HACS:n kautta
+
+Home Assistant 2026.10:ssä tai vanhemmassa:
 
 1. Avaa HACS -sovelluksessa oikean yläkulman valikko ja valitse **Mukautetut tietovarastot**.
 2. Anna `https://github.com/leecaochang/Phoenix-MCP` ja valitse kategoriaksi **Integraatio**, napsauta sitten **Lisää**.

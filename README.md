@@ -28,7 +28,19 @@ New here? Open the **Phoenix MCP** panel and choose **Set Up an Agent** in Acces
 - Home Assistant 2026.7.0 or later.
 - One Phoenix MCP instance per Home Assistant. Home Assistant installs the Python requirements `Babel>=2.18.0`, `jsonschema>=4.26.0` under its dependency constraints; MESA is bundled with Phoenix MCP.
 
+## Install from the Marketplace
+
+On Home Assistant 2026.11 or later:
+
+1. Go to **Settings > Marketplace** and choose **Add from link**.
+2. Enter `https://github.com/leecaochang/Phoenix-MCP` and choose **Add**. The Marketplace asks you to connect GitHub the first time.
+3. Open Phoenix MCP, choose **Install**, and restart Home Assistant.
+
+If you upgrade from HACS, Phoenix MCP moves to the Marketplace by itself. Connect GitHub there to keep getting updates.
+
 ## Install via HACS
+
+On Home Assistant 2026.10 or earlier:
 
 1. In HACS, open the top-right menu and choose **Custom repositories**.
 2. Enter `https://github.com/leecaochang/Phoenix-MCP` and select **Integration** as the category, then click **Add**.

@@ -28,7 +28,19 @@ Phoenix MCP は Home Assistant 内で完結して動作します。別途デプ�
 - Home Assistant 2026.7.0 以降。
 - Home Assistant ごとに Phoenix MCP インスタンスを一つだけ設定できます。Home Assistant は自身の依存関係制約に従って Python 依存関係 `Babel>=2.18.0`, `jsonschema>=4.26.0` をインストールします。MESA は Phoenix MCP に同梱されています。
 
+## マーケットプレイスからインストール
+
+Home Assistant 2026.11 以降の場合:
+
+1. **設定 > マーケットプレイス** を開き、**リンクから追加** を選択します。
+2. `https://github.com/leecaochang/Phoenix-MCP` を入力し、**追加** を選択します。初回は、マーケットプレイスから GitHub への接続を求められます。
+3. Phoenix MCP を開き、**インストール** を選択して、Home Assistant を再起動します。
+
+HACS からアップグレードすると、Phoenix MCP は自動的にマーケットプレイスへ移行します。更新を受け取り続けるには、そこで GitHub に接続してください。
+
 ## HACS からインストール
+
+Home Assistant 2026.10 以前の場合:
 
 1. HACS の右上のメニューを開き、**カスタムリポジトリ**を選択します。
 2. `https://github.com/leecaochang/Phoenix-MCP` を入力し、カテゴリとして**インテグレーション**を選択して、**追加**をクリックします。
