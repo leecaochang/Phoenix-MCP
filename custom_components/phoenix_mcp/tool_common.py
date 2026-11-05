@@ -58,11 +58,19 @@ def serialize_ha_schema(schema: Any, custom_serializer: Any) -> Any:
     voluptuous_serialize as a core dependency, which is why Phoenix does not
     declare it. Probatio being importable does not mean HA uses it, since another
     package can install it on an older release, so the schema's type decides.
+
+    Serialization leaves out a field's `visible` condition (HA 2026.11). HA's own
+    frontend receives it from a second step, so an agent reads it the same way.
     """
     if type(schema).__module__.startswith("probatio"):
         import probatio  # noqa: PLC0415
+        from homeassistant import data_entry_flow  # noqa: PLC0415
 
-        return probatio.to_field_list(schema, custom_serializer=custom_serializer)
+        converted = probatio.to_field_list(schema, custom_serializer=custom_serializer)
+        add_conditions = getattr(data_entry_flow, "add_visible_conditions_to_serialized_schema", None)
+        if add_conditions is not None and isinstance(converted, list):
+            add_conditions(schema, converted)
+        return converted
     import voluptuous_serialize  # noqa: PLC0415
 
     return voluptuous_serialize.convert(schema, custom_serializer=custom_serializer)

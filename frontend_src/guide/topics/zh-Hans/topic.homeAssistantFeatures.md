@@ -19,4 +19,6 @@ Phoenix 使用你的账户和模型，为自动化和脚本运行 Home Assistant
 
 如果你已有喜欢的对话智能体，并希望它通过 Phoenix 的控制访问你的家，请使用它。
 
+从 Home Assistant 2026.11 起，一次对话会保留开始时的工具。修改后的备注和权限会随下一次工具调用送达模型，已失去的工具会被立即拒绝。新增的工具需要开始新的对话。
+
 相关：[{{label:workspace.homeAssistant}}](guide:window.settingsHome)

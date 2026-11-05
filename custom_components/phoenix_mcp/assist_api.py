@@ -25,6 +25,7 @@ import logging
 from collections.abc import Callable
 from copy import deepcopy
 from functools import cache
+from dataclasses import dataclass
 from typing import Any, cast
 
 from homeassistant.core import HomeAssistant
@@ -97,16 +98,24 @@ _UNBOUND_PROMPT = (
     "No Phoenix MCP access key is currently bound to Phoenix MCP. An administrator must bind "
     "an access key in the Phoenix MCP panel (Settings workspace, Home Assistant window, Assist Tool "
     "Provider tab) before this "
-    "assistant can control anything. Until then you have no tools available."
+    "assistant can control anything. Until then you have no tools available, and after "
+    "that a new conversation is needed to get them."
 )
 
 _UNAVAILABLE_PROMPT = (
     "Phoenix MCP is currently unavailable or disabled. No Phoenix MCP tools are available. "
-    "An administrator must restore availability before this assistant can use them."
+    "An administrator must restore availability, and then a new conversation is needed "
+    "before this assistant can use them."
 )
 _USER_UNAVAILABLE_PROMPT = (
     "The requesting Home Assistant user is no longer available. No Phoenix MCP tools are available. "
-    "Ask an administrator to check the user's account before continuing."
+    "Ask an administrator to check the user's account, then start a new conversation."
+)
+
+_TOOLS_CHANGED_NOTICE = (
+    "Notice: the operator changed this access key's permissions or settings during this "
+    "conversation. Your tool list dates from the start of the conversation: a tool you have "
+    "lost is refused, and a tool you have gained needs a new conversation."
 )
 
 _ASSIST_ADDENDUM = (
@@ -181,13 +190,43 @@ def _unwrap_result(result: dict) -> dict:
     return {"result": text}
 
 
+@dataclass
+class _InstanceBuild:
+    """The access key versions one API instance was built from, shared by its tools.
+
+    From HA 2026.11 a conversation keeps its instance, prompt and tools until it
+    ends, so what changed since reaches the model on its next tool call instead.
+    Authority needs none of this: every call re-resolves the key.
+    """
+
+    settings_version: int
+    notes_version: int
+
+    def notice(self, access_key: Any, hass: HomeAssistant) -> str | None:
+        """What changed since the last notice, or None; each change is told once."""
+        from .helpers import access_key_notes_block  # noqa: PLC0415
+        from .home_companion import is_companion  # noqa: PLC0415
+        from .mcp_view import _NOTES_CHANGED_NOTICE, _NOTES_REMOVED_NOTICE  # noqa: PLC0415
+
+        parts: list[str] = []
+        if access_key.notes_version > self.notes_version and not is_companion(access_key):
+            block = access_key_notes_block(access_key, hass)
+            parts.append(f"{_NOTES_CHANGED_NOTICE}\n{block}" if block else _NOTES_REMOVED_NOTICE)
+        if access_key.settings_version > self.settings_version:
+            parts.append(_TOOLS_CHANGED_NOTICE)
+        self.settings_version = access_key.settings_version
+        self.notes_version = access_key.notes_version
+        return "\n".join(parts) or None
+
+
 class PhoenixAssistTool(_llm.Tool):
     """One announced Phoenix MCP tool, dispatched through the bound access key's scope."""
 
     integration = DOMAIN
 
     def __init__(self, name: str, description: str | None, parameters: Any, access_key_id: str,
-                 json_paths: tuple[tuple[str, ...], ...] = (), annotations: Any = None) -> None:
+                 json_paths: tuple[tuple[str, ...], ...] = (), annotations: Any = None,
+                 build: _InstanceBuild | None = None) -> None:
         self.name = name
         self.description = description
         self.parameters = parameters
@@ -196,6 +235,7 @@ class PhoenixAssistTool(_llm.Tool):
         self._access_key_id = access_key_id
         # Open objects Gemini was shown as JSON text, decoded before dispatch.
         self._json_paths = json_paths
+        self._build = build
 
     async def async_call(self, hass, tool_input, llm_context) -> Any:
         """Run one tool call end-to-end through Phoenix MCP's scoped dispatch path."""
@@ -244,8 +284,11 @@ class PhoenixAssistTool(_llm.Tool):
                 tool_name=self.name,
                 request_id=request_id,
             )
+            notice = self._build.notice(access_key, hass) if self._build else None
+            told = {"operator_notice": notice} if notice else {}
             if pending:
                 return _tool_result({
+                    **told,
                     "status": "queued_for_approval",
                     "approval_id": pending["approval_id"],
                     "message": (
@@ -253,7 +296,7 @@ class PhoenixAssistTool(_llm.Tool):
                         "approve it in the Phoenix MCP panel before it takes effect."
                     ),
                 }, error=False)
-            return _tool_result(_unwrap_result(result), error=bool(result.get("isError")))
+            return _tool_result({**_unwrap_result(result), **told}, error=bool(result.get("isError")))
 
 class PhoenixAssistAPI(_llm.API):
     """An llm.API whose tools are the bound Phoenix MCP access key's scoped tool surface."""
@@ -265,11 +308,15 @@ class PhoenixAssistAPI(_llm.API):
     async def async_get_api_instance(
         self, llm_context: "_llm.LLMContext"
     ) -> "_llm.APIInstance":
-        """Build the per-turn tool set + primer for the currently bound access key."""
+        """Build the tool set and primer for the currently bound access key.
+
+        HA runs this at the start of a conversation and, from 2026.11, reuses the
+        instance for its later turns.
+        """
         data = self._data
         settings = data.store.get_settings()
         access_key = None
-        # Resolve the bound access key FRESH every turn (never cache access key state).
+        # Resolve the bound access key FRESH for every instance (never cache access key state).
         # Unbound, missing, invalid, or Phoenix MCP disabled yields zero tools and
         # never raises (raising would fail the whole conversation turn).
         if data.ready and not data.shutting_down and not settings.kill_switch:
@@ -298,6 +345,7 @@ class PhoenixAssistAPI(_llm.API):
 
             tools: list[Any] = []
             public_schemas: dict[int, tuple[Any, dict[str, Any]]] = {}
+            build = _InstanceBuild(access_key.settings_version, access_key.notes_version)
             for tool_def in build_mcp_tool_list(access_key, data):
                 name = tool_def.get("name")
                 try:
@@ -331,7 +379,7 @@ class PhoenixAssistAPI(_llm.API):
                 tools.append(
                     PhoenixAssistTool(
                         str(name), tool_def.get("description"), parameters, access_key.id,
-                        json_paths=json_paths, annotations=tool_def.get("annotations"),
+                        json_paths=json_paths, annotations=tool_def.get("annotations"), build=build,
                     )
                 )
 

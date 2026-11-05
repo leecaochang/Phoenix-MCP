@@ -47,9 +47,13 @@ Phoenix 透過 Streamable HTTP 使用 MCP。使用 SSE 傳輸的舊應用程式�
 
 ## 透過 Home Assistant 的 MCP Server {#ha-mcp-server}
 
-登入 Home Assistant 本身的應用程式，例如託管連接器，可以透過 Home Assistant 的 MCP Server 存取 Phoenix 的工具，位址為 /api/mcp/phoenix_mcp。它們使用綁定到 [Assist 工具提供方](guide:topic.homeAssistantFeatures#assist-tool-provider)的金鑰，並且需要管理員登入。
+登入 Home Assistant 本身的應用程式，例如託管連接器，可以透過 Home Assistant 的 Model Context Protocol 整合存取 Phoenix 的工具，位址為 /api/mcp/phoenix_mcp。在 2026.11 之前，它叫 MCP Server。它們使用綁定到 [Assist 工具提供方](guide:topic.homeAssistantFeatures#assist-tool-provider)的金鑰，並且需要管理員登入。
 
 在這條路徑上，金鑰的速率限制不適用，稽核日誌會把呼叫顯示為 Assist，應用程式只有主動要求時才會收到 Phoenix 的說明。
+
+從 2026.11 起，請檢查該整合的選項。除非你另行選擇，新條目會提供所有 API，包括 Phoenix 的 API。唯讀選項只給應用程式留下標記為唯讀的工具，但它不能取代金鑰的能力設定。
+
+在這條路徑上，Home Assistant 其他 API 的工具不經過 Phoenix，因此金鑰、審批、MESA 和稽核日誌都不涵蓋它們。當兩個 API 提供同名工具時，Home Assistant 會加上前綴，例如 `phoenix-mcp__`。
 
 ## 無法連線時 {#problems}
 

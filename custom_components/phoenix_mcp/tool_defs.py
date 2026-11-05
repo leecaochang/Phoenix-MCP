@@ -3441,7 +3441,7 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
     {
         "name": "list_dashboard_cards",
         "description": (
-            "List the custom (HACS and integration-provided) dashboard cards actually "
+            "List the custom (HACS, Marketplace and integration-provided) dashboard cards actually "
             "installed on this instance, with what each one is for. CALL THIS BEFORE "
             "AUTHORING A DASHBOARD CARD: this instance may have a card far better suited "
             "to the request than any built-in one, and a card type that is NOT listed here "
@@ -3533,7 +3533,7 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
             "Add, change or remove one dashboard resource. Every browser that opens a dashboard runs a "
             "registered JavaScript file with that person's Home Assistant access, so register only a file the operator "
             "asked for. An administrator reviews every change. url must be a local path under /local/ or "
-            "/hacsfiles/; remote URLs are refused. HACS registers the cards it installs itself; do not add those "
+            "/hacsfiles/; remote URLs are refused. HACS and the Marketplace register the cards they install; do not add those "
             "again. create needs url and type; update needs resource_id and url, type or both; delete needs "
             "resource_id. update and delete reach only resources with phoenix_created true in "
             "list_dashboard_resources. A URL that is already registered cannot be added again, and resources "

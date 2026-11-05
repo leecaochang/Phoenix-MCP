@@ -8,6 +8,7 @@ from datetime import timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from homeassistant.config_entries import ConfigEntryDisabler
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers import issue_registry as ir
@@ -539,6 +540,30 @@ class TestDiagnostics:
         assert "/config/.storage" not in text      # filesystem path scrubbed
         assert "ok" in text                         # benign value preserved
         assert "4.8.0.1" in text                    # version string NOT a private IP, preserved
+
+    async def test_repairs_of_a_disabled_entry_are_hidden_as_in_ha(self, hass):
+        issues = ir.async_get(hass)
+        if not hasattr(issues, "async_is_hidden"):
+            pytest.skip("this Home Assistant has no hidden issues")
+        entry = MockConfigEntry(domain="demo")
+        entry.add_to_hass(hass)
+        ir.async_create_issue(
+            hass, "demo", "tied_to_entry", config_entry_id=entry.entry_id, is_fixable=False,
+            severity=ir.IssueSeverity.ERROR, translation_key="tied",
+        )
+
+        async def listed():
+            content, _, _ = await _call("get_repairs", {"domain": "demo"}, _access_key(cap_diagnostics="allow"), hass)
+            return [issue["translation_key"] for issue in _json(content)["issues"]]
+
+        assert await listed() == ["tied"]
+        await hass.config_entries.async_set_disabled_by(entry.entry_id, ConfigEntryDisabler.USER)
+        await hass.async_block_till_done()
+        assert await listed() == []
+        assert issues.async_get_issue("demo", "tied_to_entry") is not None
+        await hass.config_entries.async_set_disabled_by(entry.entry_id, None)
+        await hass.async_block_till_done()
+        assert await listed() == ["tied"]
 
     async def test_repairs_deny(self, hass):
         _, outcome, _ = await _call(

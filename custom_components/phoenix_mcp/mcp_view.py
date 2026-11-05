@@ -9453,9 +9453,10 @@ def _maybe_append_stale_advisory(
     gets it; its notes reach the inner turn on every request.
 
     Skipped for Phoenix's own internal surfaces (the sentinel client IPs): they
-    rebuild tools and instructions every turn from the live access key and have no
-    MCP server to reconnect. Nothing is marked for them, so an external client
-    sharing the access key still gets advised.
+    rebuild tools and instructions from the live access key and have no MCP server
+    to reconnect, and Assist, which HA keeps for a conversation, tells its own model
+    (assist_api). Nothing is marked for them, so an external client sharing the
+    access key still gets advised.
     """
     from .home_companion import is_companion
     internal = client_ip in (

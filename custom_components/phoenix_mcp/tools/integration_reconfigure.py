@@ -213,7 +213,8 @@ def _form_payload(
             found, fallback = _step_owned_fallback(marker, inherited_suggestions)
             if found:
                 payload[name] = fallback
-            elif isinstance(marker, vol.Required):
+            elif isinstance(marker, vol.Required) and getattr(marker, "visible", None) is None:
+                # HA decides whether a conditional field is shown, and refuses it if so.
                 if getattr(marker, "default", vol.UNDEFINED) is vol.UNDEFINED:
                     missing.append(name)
         return payload, missing

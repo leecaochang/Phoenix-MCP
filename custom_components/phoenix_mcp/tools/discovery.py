@@ -2143,9 +2143,12 @@ async def _tool_get_repairs(
         )
 
     registry = ir.async_get(hass)
+    # HA 2026.11 keeps a disabled config entry's issues and hides them from its Repairs list.
+    is_hidden = getattr(registry, "async_is_hidden", lambda _issue: False)
     matches = [
         issue for issue in registry.issues.values()
         if issue.active
+        and not is_hidden(issue)
         and (include_ignored or issue.dismissed_version is None)
         and (severity is None or str(issue.severity) == severity)
         and (

@@ -508,6 +508,83 @@ async def test_tool_call_on_revoked_access_key_returns_error(hass):
     assert error is not False
 
 
+async def _retained_tools(hass, access_key, data):
+    """One instance kept across turns, as HA 2026.11's chat log keeps it."""
+    api = PhoenixAssistAPI(hass, data)
+    instance = await api.async_get_api_instance(_ctx())
+    return {tool.name: tool for tool in instance.tools}
+
+
+async def _call_retained(hass, tool):
+    async def dispatch(method, msg_id, params, *a, **k):
+        return ({"result": {"content": [{"type": "text", "text": '{"ok": true}'}]}}, "m", "r", "allowed")
+
+    with patch("custom_components.phoenix_mcp.mcp_view._dispatch_mcp", side_effect=dispatch):
+        return assist_result_parts(await tool.async_call(hass, _tool_input({}), _ctx()))
+
+
+async def test_retained_instance_tells_the_model_of_new_notes_once(hass):
+    access_key = _make_access_key()
+    data = _make_data(access_key, bound_id=access_key.id)
+    hass.data[DOMAIN] = data
+    tools = await _retained_tools(hass, access_key, data)
+    first, second = list(tools.values())[:2]
+
+    body, _ = await _call_retained(hass, first)
+    assert "operator_notice" not in body
+
+    access_key.notes, access_key.notes_version = "Only touch the porch.", 1
+    body, _ = await _call_retained(hass, second)
+    assert "Only touch the porch." in body["operator_notice"]
+    assert "new conversation" not in body["operator_notice"]
+    # The instance shares one record, so another of its tools does not repeat it.
+    body, _ = await _call_retained(hass, first)
+    assert "operator_notice" not in body
+
+    access_key.notes, access_key.notes_version = "", 2
+    body, _ = await _call_retained(hass, first)
+    assert "removed" in body["operator_notice"]
+
+
+async def test_retained_instance_says_a_new_tool_needs_a_new_conversation(hass):
+    access_key = _make_access_key()
+    data = _make_data(access_key, bound_id=access_key.id)
+    hass.data[DOMAIN] = data
+    tool = next(iter((await _retained_tools(hass, access_key, data)).values()))
+    access_key.settings_version += 1
+    body, _ = await _call_retained(hass, tool)
+    assert "new conversation" in body["operator_notice"]
+    body, _ = await _call_retained(hass, tool)
+    assert "operator_notice" not in body
+
+
+async def test_retained_tool_goes_through_dispatch_with_the_live_key(hass):
+    """A tool the instance listed is checked against the key as it is now."""
+    access_key = _make_access_key(announce_all=True)
+    data = _make_data(access_key, bound_id=access_key.id)
+    hass.data[DOMAIN] = data
+    tool = next(iter((await _retained_tools(hass, access_key, data)).values()))
+    access_key.cap_config_read = "deny"
+    access_key.settings_version += 1
+
+    dispatch = AsyncMock(return_value=(
+        {"result": {"isError": True, "content": [{"type": "text", "text": "Forbidden."}]}}, "m", "r", "denied",
+    ))
+    with patch("custom_components.phoenix_mcp.mcp_view._dispatch_mcp", dispatch):
+        body, _ = assist_result_parts(await tool.async_call(hass, _tool_input({}), _ctx()))
+    assert dispatch.await_args.args[3].cap_config_read == "deny"
+    assert body["error"] == "Forbidden."
+    assert "new conversation" in body["operator_notice"]
+
+
+async def test_instance_built_without_a_key_says_a_new_conversation_is_needed(hass):
+    data = _make_data(None)
+    hass.data[DOMAIN] = data
+    instance = await PhoenixAssistAPI(hass, data).async_get_api_instance(_ctx())
+    assert instance.tools == []
+    assert "new conversation" in instance.api_prompt
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize("rebound_to", ["other-key", None])
 async def test_retained_tool_refuses_after_rebind_or_unbind(hass, rebound_to):

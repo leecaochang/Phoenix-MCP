@@ -492,8 +492,8 @@ mode: single
   with `set_dashboard_resource` only when the user asks: a JavaScript file runs in
   every browser that opens a dashboard, so an administrator reviews every change.
   URLs must be local paths under `/local/` or `/hacsfiles/`, and update and delete
-  reach only resources with `phoenix_created` true. HACS registers the cards it
-  installs itself.
+  reach only resources with `phoenix_created` true. HACS and the Marketplace
+  register the cards they install themselves.
 
 ### Voice names for an entity
 

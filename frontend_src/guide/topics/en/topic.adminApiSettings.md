@@ -37,7 +37,7 @@ An accepted change has these effects:
 - It cancels decision work in progress, and invalidates routing results and command approvals still in flight.
 - Turning `access_key_presets_enabled` on gives every key a Default preset.
 - Turning `kill_switch` off opens the agent routes again.
-- Phoenix applies `mesa_mode` straight away, and updates the Voice Agent, AI Task and the Assist API.
+- Phoenix applies `mesa_mode` straight away, and updates the Voice Agent, AI Task and Assist Tool Provider.
 - `mesa_inject_enabled` and `agentcli_global` take effect on the next full page load.
 
 The audit log records the change with the names of the changed settings, not their values. The response is the same as for a read. It adds `voice_agent_pipeline_kept: true` when the Voice Agent is no longer fully set up, but Home Assistant kept Phoenix's assistant as its only one.

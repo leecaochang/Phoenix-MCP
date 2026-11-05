@@ -37,7 +37,7 @@ Phoenix 在寫入任何內容之前檢查每個值。第一個問題會拒絕整
 - 它會取消正在進行的決策工作，並使進行中的路由結果和命令核准失效。
 - 開啟 `access_key_presets_enabled` 會給每個金鑰一個名為 Default 的預設。
 - 關閉 `kill_switch` 會重新開啟智慧體路由。
-- Phoenix 會立即套用 `mesa_mode`，並更新語音智慧體、AI 任務和 Assist API。
+- Phoenix 會立即套用 `mesa_mode`，並更新語音智慧體、AI 任務和 Assist 工具提供方。
 - `mesa_inject_enabled` 和 `agentcli_global` 會在頁面下次完整載入時生效。
 
 稽核日誌會記錄變更，包含已變更設定的名稱，而不是其值。回應與讀取相同。當語音智慧體不再完全設定好，但 Home Assistant 保留 Phoenix 的助理作為其唯一助理時，它會新增 `voice_agent_pipeline_kept: true`。

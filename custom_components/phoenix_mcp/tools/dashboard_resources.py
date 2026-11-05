@@ -67,7 +67,7 @@ _YAML_MODE = (
 )
 _NOT_OWNED = (
     "Phoenix MCP changes only the dashboard resources it created. Manage this one in "
-    "Settings > Dashboards > Resources, or through HACS if HACS installed it."
+    "Settings > Dashboards > Resources, or through HACS or the Marketplace if either installed it."
 )
 _LOCAL_ONLY = (
     "url must be a local path under /local/ or /hacsfiles/. Phoenix MCP does not register remote files; "

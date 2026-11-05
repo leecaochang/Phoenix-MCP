@@ -9,6 +9,7 @@ import pytest
 import voluptuous as vol
 
 from homeassistant.config_entries import ConfigEntryState
+from homeassistant import data_entry_flow
 from homeassistant.data_entry_flow import FlowResultType, section
 
 from custom_components.phoenix_mcp.tools import integration_reconfigure as subject
@@ -94,6 +95,41 @@ def _success():
         "type": FlowResultType.ABORT,
         "reason": subject.RECONFIGURE_SUCCESS_REASON,
     }
+
+
+def _conditional_form():
+    """A form from HA's own markers, or None on a release without `visible`."""
+    if "visible" not in data_entry_flow.Required.__init__.__code__.co_varnames:
+        return None
+    return _form({
+        vol.Required("mode"): str,
+        data_entry_flow.Required("host", visible={"field": "mode", "value": "remote"}): str,
+        vol.Required("nested"): section(vol.Schema({
+            data_entry_flow.Optional("port", visible={"field": "extra", "value": True}): int,
+        })),
+    })
+
+
+def test_conditional_fields_reach_the_agent_as_they_reach_the_frontend():
+    form = _conditional_form()
+    if form is None:
+        pytest.skip("this Home Assistant has no conditional fields")
+    public = {field["name"]: field for field in subject._public_schema(form)}
+    assert public["host"]["visible"] == data_entry_flow.Required(
+        "host", visible={"field": "mode", "value": "remote"}).visible
+    assert "visible" not in public["mode"]
+    assert public["nested"]["schema"][0]["visible"]
+
+
+def test_a_conditional_required_field_is_left_for_ha_to_judge():
+    form = _conditional_form()
+    if form is None:
+        pytest.skip("this Home Assistant has no conditional fields")
+    payload, missing = subject._form_payload(form, {"mode": "local"}, set())
+    assert missing == []
+    assert payload == {"mode": "local", "nested": {}}
+    # An unconditional required field is still reported.
+    assert subject._form_payload(form, {}, set())[1] == ["mode"]
 
 
 @pytest.mark.asyncio
