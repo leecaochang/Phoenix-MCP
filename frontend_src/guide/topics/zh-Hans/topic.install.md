@@ -9,7 +9,7 @@ Home Assistant 2026.7.0 或更高版本。Phoenix 不需要安装其他东西：
 
 ## 通过市场安装 {#marketplace}
 
-从 Home Assistant 2026.11 起，前往设置中的市场，选择“从链接添加”。输入 `https://github.com/leecaochang/Phoenix-MCP`，然后选择“添加”。首次添加时，市场会要求你连接 GitHub。打开 Phoenix MCP，选择“安装”，然后重启 Home Assistant。
+从 Home Assistant 2026.11 起，前往设置中的市场，选择“从链接添加”。输入 `https://github.com/leecaochang/Phoenix-MCP`，然后选择“添加”。首次添加时，市场会要求你连接 GitHub。打开 Phoenix MCP，选择“安装”。只有在 Home Assistant 要求时才需要重启。
 
 如果你从 HACS 升级，Phoenix 会自动转到市场。请在那里连接 GitHub，以便继续获得更新。
 

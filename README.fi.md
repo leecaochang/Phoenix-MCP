@@ -9,9 +9,29 @@
 
 [English](README.md) | [Español](README.es.md) | [Français](README.fr.md) | [Italiano](README.it.md) | [Deutsch](README.de.md) | [Nederlands](README.nl.md) | [Polski](README.pl.md) | [简体中文](README.zh-CN.md) | [繁體中文](README.zh-Hant.md) | [日本語](README.ja.md) | [한국어](README.ko.md) | [Русский](README.ru.md) | [Svenska](README.sv.md) | [Dansk](README.da.md) | [Norsk Bokmål](README.nb.md) | **Suomi**
 
-Phoenix MCP antaa AI-agenteillesi rajatun, vähimmän oikeuden pääsyn Home Assistant -järjestelmään. Jokainen asiakas saa oman käyttöavaimensa, joka on rajattu täsmälleen sallimiisi entiteetteihin ja jolla on omat ominaisuudet, oma pyyntörajoitus ja valinnainen voimassaoloaika. Tarkastus on oletuksena käytössä ja määritettävissä tuloksittain, mikä tahansa käyttöavain voidaan peruuttaa välittömästi, ja entiteettikohtainen semanttinen turvakerros (MESA) voi tehdä laitteesta vain-vahvistettavan tai kokonaan kielletyn sen luonteen perusteella riippumatta siitä, mitä oikeuksia käyttöavaimelle on myönnetty. Neuvoa-antava on MESA:n oletustila: useimmat käytäntörajoitukset vain varoittavat, kunnes Pakotettu valitaan; vain luku -luonne ja nimenomaiset yksityisyyskiellot estävät silti.
+Phoenix MCP antaa AI-agenteillesi turvallisen ja rajatun pääsyn Home Assistant -järjestelmään MCP:n (Model Context Protocol) kautta. Se on avoin standardi, joka yhdistää AI-sovellukset työkaluihin ja tietoihin. Turvallisuus on ratkaisevan tärkeää AI:ta käytettäessä, ja Phoenix MCP on käynyt läpi monta kuukautta kehitystä ja toistuvia tietoturvatarkastuksia. Jokaisella agentilla on oma käyttöavaimensa, joka on rajattu vain sallimiisi entiteetteihin ja ominaisuuksiin. Lisäturvakerros (MESA) voi vaatia vahvistuksesi valitulle entiteetille tai sulkea sen kokonaan pois käytöstä riippumatta siitä, mitä oikeuksia käyttöavaimelle on annettu.
 
-Phoenix MCP toimii kokonaan Home Assistant -järjestelmän sisällä: erillistä käyttöön otettavaa palvelua ei tarvita, ydinpalvelimessa ei ole pilviriippuvuutta eikä käyttöönotto vaadi muuta kuin Phoenix MCP -paneelin (valinnaiset Agent Chat -, ääni- ja tekoälytehtäväominaisuudet lähettävät keskusteluja määrittämällesi mallitarjoajalle, ellet ohjaa niitä paikalliseen Ollama-palveluun). Se toimii niiden MCP-asiakkaiden kanssa, joita käytät jo (Claude Code, Cursor, ChatGPT/Codex, Gemini ja muut), tai voit jättää asiakkaan asentamatta ja keskustella suoraan Home Assistant -sovelluksen sisällä. Kummassakin tapauksessa opastettu käyttöönotto vie sinut uudesta käyttöavaimesta toimivaan agenttiin muutamassa minuutissa, ja tukena on 174 työkalun luettelo kokoonpanosi lukemiseen, ohjaamiseen ja luomiseen. Paneeli on saatavilla useilla kielillä, seuraa oletuksena Home Assistant -profiilisi kieltä ja palaa englantiin, kun kieltä ei ole saatavilla. Home Companion ja valinnainen päätösohjaus voivat myös lähettää pyyntöjä ja rajattuja tuloksia isännöidylle tarjoajalle. Ulkoiset MCP-asiakkaat noudattavat omia tarjoaja- ja tiedonjakamisasetuksiaan.
+Phoenix MCP toimii kokonaan Home Assistant -järjestelmän sisällä, eikä erillistä palvelua tarvitse ottaa käyttöön. Käytä sovelluksia, jotka sinulla jo on, kuten Claude Code, Cursor, ChatGPT tai Gemini, tai keskustele suoraan Home Assistant -järjestelmässä valitsemasi AI-palveluntarjoajan kanssa pilvessä tai paikallisesti Ollama-palvelun kautta.
+
+Opastettu käyttöönotto vie sinut asennuksesta toimivaan agenttiin muutamassa minuutissa, ja tukena on 174 työkalun valikoima kokoonpanosi lukemiseen, ohjaamiseen ja laatimiseen. Phoenix MCP käyttää tuttua ja mukautettavaa ikkunoihin perustuvaa käyttöliittymää, joten alkuun pääsee helposti. Täydellinen dokumentaatio on sisäänrakennettu ja aina käytettävissä.
+
+## Kuvakaappaukset
+
+![Käyttöavaimet-ikkuna ja Käyttöoikeuspuu](https://raw.githubusercontent.com/leecaochang/Phoenix-MCP/main/screenshots/01-access-keys.png)
+
+**Käyttöavaimet**-kohdassa jokaisella agentilla on oma avaimensa. Valitse **Persona** ja päätä sitten **Käyttöoikeuspuu**-ikkunassa, mihin agentti pääsee, aina yksittäiseen entiteettiin asti.
+
+![Hyväksyntäpyyntö ja kojelaudan kortin esikatselu](https://raw.githubusercontent.com/leecaochang/Phoenix-MCP/main/screenshots/02-approvals.png)
+
+**Hyväksynnät**-kohdassa esikatselet kojelaudan kortin ennen sen lisäämistä. Tässä agentti pyysi lisäämään kortin, eikä mikään muutu ennen kuin valitset **Hyväksy**.
+
+![Agent Chat avattuna kojelaudan päälle](https://raw.githubusercontent.com/leecaochang/Phoenix-MCP/main/screenshots/03-agent-chat.png)
+
+**Agent Chat** on käytettävissä kaikkialla Home Assistant -järjestelmässä. Tässä se luo kortin ja odottaa sitten hyväksyntääsi ennen kuin muuttaa mitään.
+
+![Oma työtila, johon Agent Chat on telakoitu](https://raw.githubusercontent.com/leecaochang/Phoenix-MCP/main/screenshots/04-my-workspace.png)
+
+**Oma työtila** kokoaa eniten käyttämäsi ikkunat. Tässä **Agent Chat** on **Tarkastusloki**- ja **Muutokset**-ikkunoiden vieressä.
 
 ## Kielet
 
@@ -19,14 +39,14 @@ Paneeli tukee tällä hetkellä englantia, espanjaa, ranskaa, italiaa, saksaa, h
 
 ## Dokumentaatio
 
-Käyttöohje on rakennettu paneeliin: avaa **Phoenix MCP** -paneeli ja valitse **Ohje**-valikosta **Opas**. Se selittää jokaisen ikkunan ja asetuksen, mitä agentit voivat tehdä, käyttöoikeudet, ominaisuudet, MESA:n, tietoturvan ja ylläpito-API:n, ja voit hakea siitä.
+Käyttöohje on rakennettu paneeliin: avaa **Phoenix MCP** -paneeli ja valitse **Ohje**-valikosta **Opas**. Se selittää jokaisen ikkunan ja asetuksen, mitä agentit voivat tehdä, käyttöoikeudet, ominaisuudet, MESA:n ja tietoturvan. Se seuraa valintojasi, ja voit hakea siitä.
 
-Uusi täällä? Avaa **Phoenix MCP** -paneeli ja valitse Käyttöavaimet-kohdasta **Määritä agentti**. Se luo ensimmäisen käyttöavaimesi, määrittää, mitä avain saa tehdä, antaa sinun sitten keskustella Home Assistant -sovelluksen sisällä tai yhdistää ulkoisen sovelluksen ja päättyy testiin, jota voit seurata.
+Ensimmäinen kertasi täällä? Avaa alla olevan käyttöönoton jälkeen **Phoenix MCP** -paneeli ja valitse **Määritä agentti**. Ohjattu toiminto opastaa sinua luomaan käyttöavaimen, valitsemaan, mitä se saa tehdä, ja yhdistämään Agent Chatin tai oman sovelluksesi.
 
 ## Vaatimukset
 
 - Home Assistant 2026.7.0 tai uudempi.
-- Yksi Phoenix MCP -instanssi jokaista Home Assistant -asennusta kohden. Home Assistant asentaa Python-riippuvuudet `Babel>=2.18.0`, `jsonschema>=4.26.0` omien riippuvuusrajoitustensa mukaisesti; MESA sisältyy Phoenix MCP:hen.
+- Yksi Phoenix MCP -instanssi jokaista Home Assistant -asennusta kohden. Home Assistant asentaa riippuvuudet `Babel>=2.18.0` ja `jsonschema>=4.26.0` puolestasi.
 
 ## Asennus Markkinapaikasta
 
@@ -34,7 +54,7 @@ Home Assistant 2026.11:ssä tai uudemmassa:
 
 1. Avaa **Asetukset > Markkinapaikka** ja valitse **Lisää linkistä**.
 2. Syötä `https://github.com/leecaochang/Phoenix-MCP` ja valitse **Lisää**. Ensimmäisellä kerralla Markkinapaikka pyytää yhdistämään GitHubiin.
-3. Avaa Phoenix MCP, valitse **Asenna** ja käynnistä Home Assistant uudelleen.
+3. Avaa Phoenix MCP ja valitse **Asenna**. Käynnistä Home Assistant uudelleen vain, jos sitä pyydetään.
 
 Kun päivität HACS:stä, Phoenix MCP siirtyy Markkinapaikkaan itsestään. Yhdistä siellä GitHubiin, jotta saat päivitykset jatkossakin.
 
@@ -48,9 +68,9 @@ Home Assistant 2026.10:ssä tai vanhemmassa:
 
 Haluatko asentaa käsin? Kopioi `custom_components/phoenix_mcp`-kansio Home Assistant -konfiguraatiohakemistoosi `custom_components/phoenix_mcp`-polun alle ja käynnistä sitten uudelleen.
 
-### Käyttöönotto
+## Käyttöönotto
 
-Siirry kohtaan **Asetukset > Laitteet ja palvelut > Lisää integraatio** ja etsi **Phoenix MCP**. Klikkaa läpi yksivaiheinen konfigurointivirta, avaa sitten **Phoenix MCP** -paneeli sivupalkista ja valitse **Määritä agentti**.
+Siirry kohtaan **Asetukset > Laitteet ja palvelut > Lisää integraatio** ja etsi **Phoenix MCP**. Viimeistele yksivaiheinen käyttöönotto, avaa sitten **Phoenix MCP** -paneeli sivupalkista ja valitse **Määritä agentti**.
 
 ## Ongelmat ja palaute
 

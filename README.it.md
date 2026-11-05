@@ -9,9 +9,29 @@
 
 [English](README.md) | [Español](README.es.md) | [Français](README.fr.md) | **Italiano** | [Deutsch](README.de.md) | [Nederlands](README.nl.md) | [Polski](README.pl.md) | [简体中文](README.zh-CN.md) | [繁體中文](README.zh-Hant.md) | [日本語](README.ja.md) | [한국어](README.ko.md) | [Русский](README.ru.md) | [Svenska](README.sv.md) | [Dansk](README.da.md) | [Norsk Bokmål](README.nb.md) | [Suomi](README.fi.md)
 
-Phoenix MCP offre ai tuoi agenti IA un accesso a Home Assistant con ambito limitato e privilegi minimi. Ogni client riceve una propria chiave di accesso, limitata esattamente alle entità che autorizzi, con capacità, limite di frequenza e scadenza opzionale propri. La registrazione di audit è attiva per impostazione predefinita ed è configurabile per esito, qualsiasi chiave di accesso può essere revocata all'istante e il livello di sicurezza semantica per entità (MESA) può rendere un dispositivo a sola conferma o vietato in base alla sua natura, indipendentemente dalle autorizzazioni concesse alla chiave di accesso. La modalità MESA predefinita è Consultiva: la maggior parte delle restrizioni genera solo avvisi finché non si seleziona Applicata; la natura di sola lettura e i divieti espliciti di privacy continuano a bloccare.
+Phoenix MCP offre ai tuoi agenti IA un accesso sicuro e limitato a Home Assistant tramite MCP (Model Context Protocol), uno standard aperto per collegare le app di IA a strumenti e dati. La sicurezza è fondamentale quando si usa l'IA, e Phoenix MCP ha alle spalle molti mesi di sviluppo e ripetute revisioni di sicurezza. Ogni agente ha la propria chiave di accesso, limitata alle sole entità e capacità che autorizzi. Un ulteriore livello di sicurezza (MESA) può richiedere la tua conferma per un'entità selezionata o renderla off-limits, indipendentemente dalle autorizzazioni concesse a una chiave di accesso.
 
-Phoenix MCP funziona interamente dentro Home Assistant, senza servizi separati da distribuire, senza dipendenze cloud nel server principale e senza alcuna configurazione oltre al pannello di Phoenix MCP (le funzioni opzionali Agent Chat, voce e AI Task inviano le conversazioni al fornitore del modello che configuri, a meno che tu non le indirizzi a un Ollama locale). Funziona con i client MCP che già usi (Claude Code, Cursor, ChatGPT/Codex, Gemini e altri), oppure puoi evitare del tutto di installare un client e chattare direttamente dentro Home Assistant. In entrambi i casi una configurazione guidata ti porta da una nuova chiave di accesso a un agente funzionante in pochi minuti, con il supporto di un catalogo di 174 strumenti per leggere, controllare e scrivere la tua configurazione. Il pannello è disponibile in più lingue, segue per impostazione predefinita la lingua del tuo profilo di Home Assistant e ripiega sull'inglese quando quella lingua non è disponibile. Anche Home Companion e l’instradamento decisionale facoltativo possono inviare richieste e risultati autorizzati a un fornitore ospitato. I client MCP esterni seguono le proprie impostazioni del fornitore e di condivisione dei dati.
+Phoenix MCP funziona interamente all'interno di Home Assistant, senza servizi separati da distribuire. Usa le app che hai già, come Claude Code, Cursor, ChatGPT o Gemini, oppure chatta direttamente da Home Assistant con il fornitore di IA che preferisci, nel cloud o in locale tramite Ollama.
+
+Una configurazione guidata ti porta dall'installazione a un agente funzionante in pochi minuti, con un catalogo di 174 strumenti per leggere, controllare e creare la tua configurazione. Phoenix MCP usa un'interfaccia a finestre familiare e personalizzabile, che rende facile iniziare. La documentazione completa è integrata e sempre disponibile.
+
+## Schermate
+
+![Finestra Chiavi di accesso con l'Albero delle autorizzazioni](https://raw.githubusercontent.com/leecaochang/Phoenix-MCP/main/screenshots/01-access-keys.png)
+
+In **Chiavi di accesso**, ogni agente ha la propria chiave. Scegli una **Persona**, poi usa l'**Albero delle autorizzazioni** per decidere a cosa può accedere, fino a una singola entità.
+
+![Richiesta di approvazione con l'anteprima di una scheda della plancia](https://raw.githubusercontent.com/leecaochang/Phoenix-MCP/main/screenshots/02-approvals.png)
+
+In **Approvazioni** vedi l'anteprima di una scheda della plancia prima che venga aggiunta. Qui un agente ha chiesto di aggiungerne una, e nulla cambia finché non scegli **Approva**.
+
+![Agent Chat aperto sopra una plancia](https://raw.githubusercontent.com/leecaochang/Phoenix-MCP/main/screenshots/03-agent-chat.png)
+
+**Agent Chat** è disponibile ovunque in Home Assistant. Qui crea una scheda, poi attende la tua approvazione prima di modificare qualcosa.
+
+![Mia area di lavoro con Agent Chat ancorato](https://raw.githubusercontent.com/leecaochang/Phoenix-MCP/main/screenshots/04-my-workspace.png)
+
+**Mia area di lavoro** raccoglie le finestre che usi di più. Qui **Agent Chat** è accanto a **Registro di controllo** e **Modifiche**.
 
 ## Lingue
 
@@ -19,14 +39,14 @@ Attualmente il pannello supporta inglese, spagnolo, francese, italiano, tedesco,
 
 ## Documentazione
 
-Il manuale è integrato nel pannello: apri il pannello **Phoenix MCP** e scegli **Guida** dal menu **Aiuto**. Spiega ogni finestra e impostazione, cosa possono fare gli agenti, le autorizzazioni, le capacità, MESA, la sicurezza e l'API di amministrazione, e puoi effettuare ricerche al suo interno.
+Il manuale è integrato nel pannello: apri il pannello **Phoenix MCP** e scegli **Guida** dal menu **Aiuto**. Spiega ogni finestra e impostazione, cosa possono fare gli agenti, le autorizzazioni, le capacità, MESA e la sicurezza. Segue ciò che selezioni, e puoi effettuare ricerche al suo interno.
 
-Nuovo da queste parti? Apri il pannello **Phoenix MCP** e scegli **Configura un agente** in Chiavi di accesso. Crea la tua prima chiave di accesso, stabilisce cosa può fare, poi ti permette di chattare da dentro Home Assistant o collegare un'app esterna, e termina con un test che puoi seguire.
+Prima volta qui? Dopo la configurazione descritta più avanti, apri il pannello **Phoenix MCP** e scegli **Configura un agente**. Una procedura guidata ti accompagna nella creazione di una chiave di accesso, nella scelta di cosa può fare e nel collegamento di Agent Chat o della tua app.
 
 ## Requisiti
 
 - Home Assistant 2026.7.0 o versioni successive.
-- Un’istanza di Phoenix MCP per Home Assistant. Home Assistant installa le dipendenze Python `Babel>=2.18.0`, `jsonschema>=4.26.0` nel rispetto dei propri vincoli sulle dipendenze; MESA è incluso in Phoenix MCP.
+- Un’istanza di Phoenix MCP per Home Assistant. Home Assistant installa per te le dipendenze `Babel>=2.18.0` e `jsonschema>=4.26.0`.
 
 ## Installazione dal Marketplace
 
@@ -34,7 +54,7 @@ Su Home Assistant 2026.11 o versioni successive:
 
 1. Vai in **Impostazioni > Marketplace** e scegli **Aggiungi dal collegamento**.
 2. Inserisci `https://github.com/leecaochang/Phoenix-MCP` e scegli **Aggiungi**. La prima volta il Marketplace ti chiede di collegare GitHub.
-3. Apri Phoenix MCP, scegli **Installa** e riavvia Home Assistant.
+3. Apri Phoenix MCP e scegli **Installa**. Riavvia Home Assistant solo se te lo chiede.
 
 Se aggiorni da HACS, Phoenix MCP passa da solo al Marketplace. Collega GitHub lì per continuare a ricevere gli aggiornamenti.
 
@@ -48,9 +68,9 @@ Su Home Assistant 2026.10 o versioni precedenti:
 
 Preferisci installare a mano? Copia la cartella `custom_components/phoenix_mcp` nella cartella di configurazione di Home Assistant sotto `custom_components/phoenix_mcp`, poi riavvia.
 
-### Configurazione
+## Configurazione
 
-Vai su **Impostazioni > Dispositivi e servizi > Aggiungi integrazione** e cerca **Phoenix MCP**. Completa il flusso di configurazione a un solo passaggio, poi apri il pannello **Phoenix MCP** nella barra laterale e scegli **Configura un agente**.
+Vai su **Impostazioni > Dispositivi e servizi > Aggiungi integrazione** e cerca **Phoenix MCP**. Completa la configurazione a un solo passaggio, poi apri il pannello **Phoenix MCP** nella barra laterale e scegli **Configura un agente**.
 
 ## Problemi e commenti
 

@@ -9,9 +9,29 @@
 
 [English](README.md) | [Español](README.es.md) | [Français](README.fr.md) | [Italiano](README.it.md) | [Deutsch](README.de.md) | [Nederlands](README.nl.md) | [Polski](README.pl.md) | [简体中文](README.zh-CN.md) | [繁體中文](README.zh-Hant.md) | [日本語](README.ja.md) | [한국어](README.ko.md) | [Русский](README.ru.md) | [Svenska](README.sv.md) | **Dansk** | [Norsk Bokmål](README.nb.md) | [Suomi](README.fi.md)
 
-Phoenix MCP giver dine AI-agenter afgrænset adgang til Home Assistant efter princippet om færrest mulige tilladelser. Hver klient får sin egen adgangsnøgle, begrænset til præcis de enheder, du tillader, med egne funktioner, egen hastighedsgrænse og valgfri udløbsdato. Revision er aktiveret som standard og kan konfigureres pr. resultat, enhver adgangsnøgle kan tilbagekaldes øjeblikkeligt, og det semantiske sikkerhedslag pr. entitet (MESA) kan gøre en enhed til kun-bekræft eller helt forbudt ud fra sin art, uanset hvilke tilladelser en adgangsnøgle har. Rådgivende er MESA's standardtilstand: de fleste politikbegrænsninger advarer, indtil Håndhævet vælges; skrivebeskyttet art og udtrykkelige privatlivsnægtelser blokerer stadig.
+Phoenix MCP giver dine AI-agenter sikker, begrænset adgang til Home Assistant gennem MCP (Model Context Protocol), en åben standard til at forbinde AI-apps med værktøjer og data. Sikkerhed er afgørende, når du bruger AI, og Phoenix MCP har gennemgået mange måneders udvikling og gentagne sikkerhedsgennemgange. Hver agent har sin egen adgangsnøgle, begrænset til kun de entiteter og funktioner, du tillader. Et ekstra sikkerhedslag (MESA) kan kræve din bekræftelse for en valgt entitet eller gøre den helt forbudt, uanset hvilke tilladelser en adgangsnøgle har fået.
 
-Phoenix MCP kører udelukkende inde i Home Assistant, uden en separat tjeneste at udrulle, uden cloud-afhængighed i kerneserveren og uden opsætning ud over Phoenix MCP-panelet (de valgfrie funktioner Agent Chat, stemme og AI-opgave sender samtaler til den modeludbyder, du konfigurerer, medmindre du peger dem på en lokal Ollama). Det fungerer med de MCP-klienter, du allerede bruger (Claude Code, Cursor, ChatGPT/Codex, Gemini med flere), eller du kan helt springe installationen af en klient over og chatte inde fra Home Assistant. Uanset hvad fører en guidet opsætning dig fra en ny adgangsnøgle til en fungerende agent på få minutter, understøttet af et katalog med 174 værktøjer til at læse, styre og oprette din konfiguration. Panelet findes på flere sprog, følger som standard sproget i din Home Assistant-profil og falder tilbage til engelsk, når sproget ikke er tilgængeligt. Home Companion og valgfri beslutningsrouting kan også sende anmodninger og afgrænsede resultater til en hostet udbyder. Eksterne MCP-klienter følger deres egne indstillinger for udbyder og datadeling.
+Phoenix MCP kører helt inde i Home Assistant, uden en separat tjeneste, der skal installeres. Brug de apps, du allerede har, som Claude Code, Cursor, ChatGPT eller Gemini, eller chat direkte i Home Assistant med den AI-udbyder, du vælger, i skyen eller lokalt via Ollama.
+
+En guidet opsætning fører dig fra installation til en fungerende agent på få minutter, understøttet af et katalog med 174 værktøjer til at læse, styre og redigere din konfiguration. Phoenix MCP har en velkendt og tilpasselig vinduesbaseret brugerflade, der gør det let at komme i gang. Fuld dokumentation er indbygget og altid tilgængelig.
+
+## Skærmbilleder
+
+![Vinduet Adgangsnøgler med Tilladelsestræ](https://raw.githubusercontent.com/leecaochang/Phoenix-MCP/main/screenshots/01-access-keys.png)
+
+I **Adgangsnøgler** får hver agent sin egen nøgle. Vælg en **Persona**, og bestem derefter i **Tilladelsestræ**, hvad agenten kan nå, helt ned til en enkelt entitet.
+
+![Godkendelsesanmodning med forhåndsvisning af et kort til betjeningspanelet](https://raw.githubusercontent.com/leecaochang/Phoenix-MCP/main/screenshots/02-approvals.png)
+
+I **Godkendelser** får du vist et kort til betjeningspanelet, før det tilføjes. Her bad en agent om at tilføje et, og intet ændres, før du vælger **Godkend**.
+
+![Agent Chat åbnet oven på et betjeningspanel](https://raw.githubusercontent.com/leecaochang/Phoenix-MCP/main/screenshots/03-agent-chat.png)
+
+**Agent Chat** er tilgængelig overalt i Home Assistant. Her opretter den et kort og venter derefter på din godkendelse, før noget ændres.
+
+![Mit arbejdsområde med Agent Chat forankret](https://raw.githubusercontent.com/leecaochang/Phoenix-MCP/main/screenshots/04-my-workspace.png)
+
+**Mit arbejdsområde** samler de vinduer, du bruger mest. Her står **Agent Chat** ved siden af **Revisionslog** og **Ændringer**.
 
 ## Sprog
 
@@ -19,14 +39,14 @@ Panelet understøtter i øjeblikket engelsk, spansk, fransk, italiensk, tysk, ho
 
 ## Dokumentation
 
-Manualen er indbygget i panelet: åbn panelet **Phoenix MCP**, og vælg **Guide** i menuen **Hjælp**. Den forklarer hvert vindue og hver indstilling, hvad agenter kan gøre, tilladelser, funktioner, MESA, sikkerhed og admin-API'et, og du kan søge i den.
+Manualen er indbygget i panelet: åbn panelet **Phoenix MCP**, og vælg **Guide** i menuen **Hjælp**. Den forklarer hvert vindue og hver indstilling, hvad agenter kan gøre, tilladelser, funktioner, MESA og sikkerhed. Den følger det, du vælger, og du kan søge i den.
 
-Ny her? Åbn panelet **Phoenix MCP**, og vælg **Opsæt en agent** under Adgangsnøgler. Den opretter din første adgangsnøgle, fastlægger, hvad den må, lader dig derefter chatte inde fra Home Assistant eller tilslutte en ekstern app og slutter med en test, du kan følge med i.
+Første gang her? Efter opsætningen nedenfor skal du åbne panelet **Phoenix MCP** og vælge **Opsæt en agent**. En guide fører dig gennem at oprette en adgangsnøgle, vælge, hvad den må, og tilslutte Agent Chat eller din egen app.
 
 ## Krav
 
 - Home Assistant 2026.7.0 eller nyere.
-- Én Phoenix MCP-instans pr. Home Assistant. Home Assistant installerer Python-afhængighederne `Babel>=2.18.0`, `jsonschema>=4.26.0` under sine afhængighedsbegrænsninger; MESA er inkluderet i Phoenix MCP.
+- Én Phoenix MCP-instans pr. Home Assistant. Home Assistant installerer afhængighederne `Babel>=2.18.0` og `jsonschema>=4.26.0` for dig.
 
 ## Installer fra Markedspladsen
 
@@ -34,7 +54,7 @@ På Home Assistant 2026.11 eller nyere:
 
 1. Gå til **Indstillinger > Markedspladsen**, og vælg **Tilføj fra link**.
 2. Indtast `https://github.com/leecaochang/Phoenix-MCP`, og vælg **Tilføj**. Første gang beder Markedspladsen dig om at forbinde til GitHub.
-3. Åbn Phoenix MCP, vælg **Installér**, og genstart Home Assistant.
+3. Åbn Phoenix MCP, og vælg **Installér**. Genstart kun Home Assistant, hvis det beder dig om det.
 
 Hvis du opgraderer fra HACS, flytter Phoenix MCP selv til Markedspladsen. Forbind til GitHub dér for at blive ved med at få opdateringer.
 
@@ -48,9 +68,9 @@ På Home Assistant 2026.10 eller ældre:
 
 Vil du hellere installere manuelt? Kopiér mappen `custom_components/phoenix_mcp` til din Home Assistant-konfigurationsmappe under `custom_components/phoenix_mcp`, og genstart derefter.
 
-### Opsætning
+## Opsætning
 
-Gå til **Indstillinger > Enheder og tjenester > Tilføj integration**, og søg efter **Phoenix MCP**. Klik dig gennem konfigurationsflowet med ét trin, og åbn derefter panelet **Phoenix MCP** i sidepanelet, og vælg **Opsæt en agent**.
+Gå til **Indstillinger > Enheder og tjenester > Tilføj integration**, og søg efter **Phoenix MCP**. Gennemfør opsætningen med ét trin, og åbn derefter panelet **Phoenix MCP** i sidepanelet, og vælg **Opsæt en agent**.
 
 ## Problemer og feedback
 

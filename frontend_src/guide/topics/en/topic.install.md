@@ -9,7 +9,7 @@ Home Assistant 2026.7.0 or newer. Phoenix needs nothing else installed: its safe
 
 ## Installing from the Marketplace {#marketplace}
 
-From Home Assistant 2026.11, go to Settings, Marketplace, and choose Add from link. Enter `https://github.com/leecaochang/Phoenix-MCP`, then choose Add. The Marketplace asks you to connect GitHub the first time. Open Phoenix MCP, choose Install, then restart Home Assistant.
+From Home Assistant 2026.11, go to Settings, Marketplace, and choose Add from link. Enter `https://github.com/leecaochang/Phoenix-MCP`, then choose Add. The Marketplace asks you to connect GitHub the first time. Open Phoenix MCP and choose Install. Restart Home Assistant only if it asks you to.
 
 If you upgrade from HACS, Phoenix moves to the Marketplace by itself. Connect GitHub there to keep getting updates.
 
