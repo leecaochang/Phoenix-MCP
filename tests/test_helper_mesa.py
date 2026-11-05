@@ -17,11 +17,8 @@ from pytest_homeassistant.common import MockConfigEntry
 
 from custom_components.phoenix_mcp.const import DOMAIN
 from custom_components.phoenix_mcp.data import PhoenixData
-from custom_components.phoenix_mcp.mcp_view import (
-    _call_tool,
-    async_execute_approved_tool,
-    async_restore_version,
-)
+from custom_components.phoenix_mcp.tool_dispatch import _call_tool, async_execute_approved_tool
+from custom_components.phoenix_mcp.tools.restore import async_restore_version
 from custom_components.phoenix_mcp.mesa import async_setup_mesa
 from custom_components.phoenix_mcp.mesa_core import MetadataOrigin, SemanticProfile
 from custom_components.phoenix_mcp.access_key_store import (
@@ -456,7 +453,7 @@ async def test_template_menu_uses_selected_entity_domain_for_mesa(hass, kind):
 @pytest.mark.parametrize("changed", [False, True])
 async def test_template_restore_retains_approved_mesa_fingerprint(hass, changed):
     from homeassistant.config_entries import SOURCE_USER
-    from custom_components.phoenix_mcp.template_recovery import template_snapshot
+    from custom_components.phoenix_mcp.template_snapshots import template_snapshot
 
     assert await async_setup_component(hass, "homeassistant", {})
     flow = hass.config_entries.flow

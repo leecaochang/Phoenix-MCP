@@ -107,6 +107,9 @@ function knownLanguage(language: unknown): string | null {
     if (!region || SIMPLIFIED_CHINESE_REGIONS.has(region.toUpperCase())) return "zh-Hans";
   }
 
+  // Plain "no" is the macrolanguage, written as Bokmal by default. Nynorsk ("nn") is a language of its own and stays out.
+  if (normalized.base === "no") return "nb";
+
   return LANGUAGES.find((item) => item.code.toLowerCase() === normalized.base)?.code ?? null;
 }
 
@@ -182,8 +185,13 @@ export function isI18nReady(): boolean {
 const RTL_LANGUAGES = new Set(["ar", "fa", "he", "ur", "yi"]);
 const languageRoots = new Set<HTMLElement>();
 
+/** The language of the catalog on display, which Home Assistant's own document does not follow. */
+export function displayedLanguage(): string {
+  return loaded ?? "en";
+}
+
 function applyLanguage(root: HTMLElement): void {
-  const language = loaded ?? "en";
+  const language = displayedLanguage();
   root.lang = language;
   root.dir = RTL_LANGUAGES.has(language.split("-")[0]) ? "rtl" : "ltr";
 }

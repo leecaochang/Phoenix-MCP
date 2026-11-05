@@ -12,7 +12,7 @@ from homeassistant.setup import async_setup_component
 
 from custom_components.phoenix_mcp.access_key_store import PermissionNode, PermissionTree
 from custom_components.phoenix_mcp.tools.discovery import _tool_recognize_intent
-from tests.test_mcp_view import _make_access_key
+from tests.runtime_fixtures import make_mcp_access_key as _make_access_key
 
 
 def _result(

@@ -12,9 +12,14 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-import custom_components.phoenix_mcp.agentcli as ac
-from custom_components.phoenix_mcp.agentcli import ClaudeProvider, OpenAICompatProvider, ProviderConfig
-from custom_components.phoenix_mcp.const import AGENTCLI_PROBE_IMAGE_MAX_TOKENS
+from tests.runtime_fixtures import patch_readers
+
+from custom_components.phoenix_mcp import agent_turn, agentcli_views
+from custom_components.phoenix_mcp.llm import probes as llm_probes
+from custom_components.phoenix_mcp.llm.provider_claude import ClaudeProvider
+from custom_components.phoenix_mcp.llm.provider_openai import OpenAICompatProvider
+from custom_components.phoenix_mcp.llm.accounts import ProviderConfig
+from custom_components.phoenix_mcp.provider_constants import AGENTCLI_PROBE_IMAGE_MAX_TOKENS
 
 STRIPES = ["blue", "white", "red"]
 
@@ -30,12 +35,8 @@ class _Content:
 class _Resp:
     def __init__(self, status: int, payload: object = None, text: str = "") -> None:
         self.status = status
-        self._payload = payload
         self._text = text
-        self.content = _Content(text.encode())
-
-    async def json(self, content_type=None):
-        return self._payload
+        self.content = _Content(text.encode() or json.dumps(payload).encode())
 
     async def text(self):
         return self._text
@@ -52,7 +53,7 @@ class _Session:
         self.resp = resp
         self.sent: list[tuple[str, dict]] = []
 
-    def post(self, url, headers=None, json=None, timeout=None, allow_redirects=None):  # noqa: A002
+    def post(self, url, headers=None, json=None, timeout=None, allow_redirects=None):
         self.sent.append((url, json))
         return self.resp
 
@@ -70,9 +71,9 @@ class _Provider:
 async def _vision(status, text: str = ""):
     provider = _Provider(status, text)
     cfg = ProviderConfig(kind="deepseek", model="m", base_url="https://x", api_key="k")
-    with patch.object(ac, "build_provider", return_value=provider), \
-         patch.object(ac, "_probe_stripes", return_value=list(STRIPES)):
-        return await ac.async_probe_vision(MagicMock(), cfg), provider
+    with patch_readers("custom_components.phoenix_mcp.llm.factory.build_provider", return_value=provider), \
+         patch.object(llm_probes, "_probe_stripes", return_value=list(STRIPES)):
+        return await llm_probes.async_probe_vision(MagicMock(), cfg), provider
 
 
 # --------------------------------------------------------------------------- #
@@ -90,7 +91,7 @@ async def test_naming_the_stripes_in_order_establishes_vision(text):
     vision, provider = await _vision(200, text)
     assert vision is True
     image, question = provider.asked[0]
-    assert ac._image_kind_and_size(base64.b64decode(image)) == ("image/png", 240, 80)
+    assert agent_turn._image_kind_and_size(base64.b64decode(image)) == ("image/png", 240, 80)
     assert "three vertical stripes" in question
 
 
@@ -121,8 +122,8 @@ async def test_no_usable_answer_establishes_nothing(status, text):
 
 def test_the_stripes_are_three_different_listed_colours():
     for _ in range(20):
-        stripes = ac._probe_stripes()
-        assert len(set(stripes)) == 3 and set(stripes) <= set(ac._PROBE_COLOURS)
+        stripes = llm_probes._probe_stripes()
+        assert len(set(stripes)) == 3 and set(stripes) <= set(llm_probes._PROBE_COLOURS)
 
 
 # --------------------------------------------------------------------------- #
@@ -200,12 +201,12 @@ async def _probe_endpoint(hass, *, vision, answered=True, found=None):
                                                 vision=vision)
     store.get.return_value = {"capabilities": {"m": {"tools": True}}}
     store.set_capabilities = AsyncMock(return_value=True)
-    view = ac.PhoenixAgentCliProbeCapsView()
+    view = agentcli_views.PhoenixAgentCliProbeCapsView()
     view.hass = hass
-    with patch.object(ac, "_get_secret_store", AsyncMock(return_value=store)), \
-         patch.object(ac, "async_get_clientsession", return_value=MagicMock()), \
-         patch.object(ac, "async_probe_capabilities", AsyncMock(return_value=({}, 3, answered))), \
-         patch.object(ac, "async_probe_vision", AsyncMock(return_value=found)) as check:
+    with patch_readers("custom_components.phoenix_mcp.llm.accounts._get_secret_store", AsyncMock(return_value=store)), \
+         patch.object(agentcli_views, "async_get_clientsession", return_value=MagicMock()), \
+         patch("custom_components.phoenix_mcp.agentcli_views.async_probe_capabilities", AsyncMock(return_value=({}, 3, answered))), \
+         patch("custom_components.phoenix_mcp.agentcli_views.async_probe_vision", AsyncMock(return_value=found)) as check:
         response = await view.post(_request(), instance_id="i1")
     return json.loads(response.text), store, check
 

@@ -33,8 +33,15 @@ from custom_components.phoenix_mcp.access_key_store import GlobalSettings, Permi
 
 def _access_key(**kw) -> AccessKeyRecord:
     return AccessKeyRecord(
-        id="tok", name="Road test", access_key_hash="x", created_at=utcnow(),
+        id="tok", name="Kitchen agent", access_key_hash="x", created_at=utcnow(),
         created_by="admin", permissions=PermissionTree(), **kw,
+    )
+
+
+def _prohibited(key: str) -> SemanticProfile:
+    return SemanticProfile.from_dict(
+        key, {"semantic_profile": {"operational_boundaries": {"control_mode": "prohibited"}}},
+        default_origin=MetadataOrigin.USER,
     )
 
 
@@ -98,7 +105,7 @@ class TestFiltering:
         assert e.method == "mesa:enforcement_decision"
         assert e.resource == "lock.front"
         assert e.request_id == "req-1"
-        assert e.access_key_id == "tok" and e.access_key_name == "Road test"
+        assert e.access_key_id == "tok" and e.access_key_name == "Kitchen agent"
         assert e.client_ip == "10.0.0.5"
         # The rule is the whole point of the row: "denied" alone does not say which
         # MESA rule fired.
@@ -393,7 +400,7 @@ class TestThroughTheRealEnforcer:
 async def test_real_ingress_attributes_mesa_denials_and_resets_context(hass, access_key_store, surface):
     """Real lease/privacy decisions carry the admitted request, never later previews."""
     from custom_components.phoenix_mcp.data import PhoenixData
-    from custom_components.phoenix_mcp.mcp_view import _call_tool
+    from custom_components.phoenix_mcp.tool_dispatch import _call_tool
     from custom_components.phoenix_mcp.rate_limiter import RateLimiter
     from custom_components.phoenix_mcp.access_key_store import PermissionNode
 
@@ -431,3 +438,66 @@ async def test_real_ingress_attributes_mesa_denials_and_resets_context(hass, acc
         detach_mesa_audit_bridge(bridge)
         audit_logger.setLevel(previous)
         runtime.lease_manager.release_session("other-owner")
+
+
+class TestRegistryGate:
+    async def test_a_registry_refusal_reaches_the_trail_under_its_request(self, hass: HomeAssistant, bridge_data):
+        from custom_components.phoenix_mcp.mesa import evaluate_registry_action
+        from custom_components.phoenix_mcp.request_authority import dispatch_client_ip, dispatch_request_id
+
+        data, _ = bridge_data
+        data.store = _Store(GlobalSettings(mesa_mode="enforced"))
+        data.mesa = await async_setup_mesa(hass, "enforced")
+        data.mesa.store.set("light.a", _prohibited("light.a"))
+
+        request = dispatch_request_id.set("req-registry")
+        client = dispatch_client_ip.set("10.0.0.9")
+        try:
+            decision = evaluate_registry_action(data, _access_key(), "light.a", action="delete", session_id="gate")
+        finally:
+            dispatch_request_id.reset(request)
+            dispatch_client_ip.reset(client)
+
+        assert decision.decision == "deny"
+        [row] = data.audit.query()
+        assert (row.method, row.resource, row.outcome) == ("mesa:enforcement_decision", "light.a", "denied")
+        assert (row.request_id, row.client_ip) == ("req-registry", "10.0.0.9")
+        assert "entity_registry.delete" in (row.payload or "")
+
+    async def test_a_resumed_approval_still_gets_a_request_id(self, hass: HomeAssistant, bridge_data):
+        from custom_components.phoenix_mcp.mesa import evaluate_registry_action
+
+        data, _ = bridge_data
+        data.store = _Store(GlobalSettings(mesa_mode="enforced"))
+        data.mesa = await async_setup_mesa(hass, "enforced")
+        data.mesa.store.set("light.a", _prohibited("light.a"))
+        evaluate_registry_action(data, _access_key(), "light.a", action="delete", session_id="gate")
+        request_id = data.audit.query()[0].request_id
+        assert isinstance(request_id, str) and request_id.strip()
+
+    async def test_a_profile_that_cannot_be_read_blocks_with_a_row(self, hass: HomeAssistant, bridge_data):
+        from custom_components.phoenix_mcp.mesa import evaluate_service_entities
+
+        data, _ = bridge_data
+        runtime = await async_setup_mesa(hass, "enforced")
+        runtime.backend.write("light.bad", {"semantic_profile": {"operational_boundaries": {"control_mode": "bogus"}}})
+        with request_context(_access_key(), "req-bad", None):
+            verdict = evaluate_service_entities(
+                runtime, "enforced", _access_key(), ["light.bad"],
+                domain="light", service="turn_on", service_data={}, session_id="s",
+            )
+        assert verdict.blocked[0][1] == "policy_unavailable"
+        [row] = data.audit.query()
+        assert row.resource == "light.bad" and "policy_unavailable" in (row.payload or "")
+
+    async def test_a_preview_of_the_same_failure_leaves_no_row(self, hass: HomeAssistant, bridge_data):
+        from custom_components.phoenix_mcp.mesa import evaluate_service_entities
+
+        data, _ = bridge_data
+        runtime = await async_setup_mesa(hass, "enforced")
+        runtime.backend.write("light.bad", {"semantic_profile": {"operational_boundaries": {"control_mode": "bogus"}}})
+        evaluate_service_entities(
+            runtime, "enforced", _access_key(), ["light.bad"],
+            domain="light", service="turn_on", service_data={}, session_id="s",
+        )
+        assert data.audit.query() == []

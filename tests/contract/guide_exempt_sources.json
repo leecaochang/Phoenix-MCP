@@ -4,6 +4,7 @@
   "custom_components/phoenix_mcp/data.py": "Runtime data container.",
   "custom_components/phoenix_mcp/durable_storage.py": "Storage write barriers; failures surface through the features that write.",
   "custom_components/phoenix_mcp/locales.py": "Maps Home Assistant language tags to catalogs; the language setting is documented where it is chosen.",
+  "custom_components/phoenix_mcp/routing/__init__.py": "Package marker with no code.",
   "custom_components/phoenix_mcp/schema_compat.py": "Chooses a validation engine; no behavior of its own.",
   "custom_components/phoenix_mcp/tool_input.py": "Input admission shared by every tool; limits are documented per tool group.",
   "custom_components/phoenix_mcp/view_base.py": "Base class for HTTP views.",
@@ -27,11 +28,14 @@
   "frontend_src/types.ts": "Type definitions.",
   "frontend_src/ui/Icon.tsx": "Icon set.",
   "frontend_src/ui/fonts.ts": "Font registration.",
+  "frontend_src/ui/motion.ts": "Reduced-motion helper with no behaviour of its own to describe.",
   "frontend_src/ui/toggleNames.ts": "Accessible names for switches.",
   "frontend_src/ui/useClickAway.ts": "Shared interaction hook.",
   "frontend_src/utils/approval_events.ts": "Event subscription plumbing.",
+  "frontend_src/utils/ime.ts": "Input-method guard for key handlers; nothing an operator configures.",
   "frontend_src/utils/latest_request.ts": "Discards superseded responses.",
   "frontend_src/utils/markdown.ts": "Guide link rendering.",
+  "frontend_src/utils/page_suspend.ts": "Keeps the page awake during a chat turn; the behaviour is described with Agent Chat.",
   "frontend_src/version.ts": "Build number.",
   "frontend_src/vite-env.d.ts": "Build type declarations."
 }

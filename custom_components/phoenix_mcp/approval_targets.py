@@ -13,6 +13,7 @@ from .const import (
     APPROVAL_TARGETS_VERSION,
 )
 from .device_semantics import device_registry_snapshot
+from .request_authority import _approved_exec_ctx
 
 TARGETS_CHANGED = "Approval targets changed or cannot be verified. Submit a new request."
 
@@ -91,7 +92,6 @@ def bind_targets(args: dict, entities: list[str], hass: HomeAssistant) -> dict:
 
 def targets_current(args: dict, entities: list[str], hass: HomeAssistant) -> bool:
     """Refuse changed or missing exact bindings; ordinary unapproved calls stay dynamic."""
-    from .tool_common import _approved_exec_ctx
 
     if APPROVAL_TARGETS_KEY not in args:
         return not _approved_exec_ctx.get()

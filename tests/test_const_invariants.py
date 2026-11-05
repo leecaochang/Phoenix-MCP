@@ -1,18 +1,27 @@
-"""Invariants between hand-maintained security constants in const.py.
+"""Invariants of the constants modules.
 
-These constants are edited by humans and must stay mutually consistent; a drift
-between them is a silent security gap (e.g. a physical service gated in
-call_service but not in the native Hass* tool path). Assert the relationships
-directly so an edit to one without the other fails loudly.
+The security constants in const.py are edited by humans and must stay mutually
+consistent; a drift between them is a silent security gap (e.g. a physical service
+gated in call_service but not in the native Hass* tool path). Assert the
+relationships directly so an edit to one without the other fails loudly.
+
+The modules themselves carry structural promises too: const stays standard-library
+only, the template worker never loads it, and no shared table can be mutated.
 """
 
 from __future__ import annotations
 
 import ast
+import importlib
 import pathlib
+import subprocess
+import sys
+import types
 
 import homeassistant.components.system_log
+import pytest
 
+from custom_components.phoenix_mcp import const
 from custom_components.phoenix_mcp.const import (
     CAPABILITY_TIERS,
     CONFIRM_AVAILABLE_CAPS,
@@ -20,33 +29,15 @@ from custom_components.phoenix_mcp.const import (
     LOG_LEVELS,
     PASS_THROUGH_EXEMPT_CAPS,
     PHYSICAL_GATE_DOMAINS,
-    PHYSICAL_GATE_SERVICES,
 )
 from custom_components.phoenix_mcp.helpers import _LOG_LEVEL_RANK
 
 
-def test_physical_gate_domains_cover_every_service_domain():
+def test_physical_gate_domains_are_exactly_the_safety_relevant_ones():
     # Both the call_service gate (policy_engine.call_needs_physical_gate) and the
-    # native Hass* tools gate on PHYSICAL_GATE_DOMAINS. PHYSICAL_GATE_SERVICES is
-    # the catalog of actuation services on those domains; every one of its
-    # domains MUST be in PHYSICAL_GATE_DOMAINS or that service would slip both
-    # gates. Gating the whole domain also covers services an exact name list
-    # misses (cover.toggle, *_cover_tilt, valve.toggle, alarm_arm_custom_bypass).
-    service_domains = {s.split("/")[0] for s in PHYSICAL_GATE_SERVICES}
-    assert service_domains <= PHYSICAL_GATE_DOMAINS, (
-        f"domains gated via services but not via PHYSICAL_GATE_DOMAINS: "
-        f"{sorted(service_domains - PHYSICAL_GATE_DOMAINS)}"
-    )
-
-
-def test_physical_gate_domains_has_no_orphans():
-    # The reverse: every gate domain needs at least one gated service, or the
-    # native-tool filter blocks a domain call_service allows.
-    service_domains = {s.split("/")[0] for s in PHYSICAL_GATE_SERVICES}
-    assert PHYSICAL_GATE_DOMAINS <= service_domains, (
-        f"domains in PHYSICAL_GATE_DOMAINS with no gated service: "
-        f"{sorted(PHYSICAL_GATE_DOMAINS - service_domains)}"
-    )
+    # native Hass* tools gate whole domains on this set, so dropping a domain here
+    # silently opens every service of that domain to pass-through keys.
+    assert PHYSICAL_GATE_DOMAINS == {"lock", "alarm_control_panel", "cover", "valve"}
 
 
 def _system_log_handler_level() -> str:
@@ -120,3 +111,88 @@ def test_configuration_file_capabilities_sit_in_their_tiers():
     assert "cap_filesystem" not in CONFIRM_AVAILABLE_CAPS
     assert "cap_esphome_yaml" not in CONFIRM_AVAILABLE_CAPS
     assert "cap_yaml_edit" in CONFIRM_AVAILABLE_CAPS
+
+
+PACKAGE = pathlib.Path(const.__file__).parent
+TABLE_MODULES = (
+    "const", "catalog_templates", "esphome_constants", "provider_constants", "routing.routing_tables", "template_limits",
+)
+
+
+def _imports(path: pathlib.Path) -> list[ast.Import | ast.ImportFrom]:
+    """Every import statement anywhere in one module, by AST rather than by text."""
+    return [node for node in ast.walk(ast.parse(path.read_text())) if isinstance(node, (ast.Import, ast.ImportFrom))]
+
+
+def test_const_imports_only_the_standard_library():
+    """A package import here would also pull the integration in behind it."""
+    roots = set()
+    for node in _imports(PACKAGE / "const.py"):
+        if isinstance(node, ast.Import):
+            roots.update(alias.name.partition(".")[0] for alias in node.names)
+        else:
+            assert node.level == 0, f"const.py line {node.lineno} imports from the package"
+            roots.add((node.module or "").partition(".")[0])
+    assert roots <= sys.stdlib_module_names, roots - sys.stdlib_module_names
+
+
+def test_template_limits_import_nothing():
+    """The worker runs this file before its OS limits apply."""
+    assert _imports(PACKAGE / "template_limits.py") == []
+
+
+def test_template_worker_limits_load_without_third_party_modules():
+    """The worker's first load, with only this interpreter's standard library."""
+    probe = (
+        "import runpy, sys\n"
+        f"limits = runpy.run_path({str(PACKAGE / 'template_limits.py')!r})\n"
+        "assert limits['TEMPLATE_WORKER_CPU_SECONDS'] > 0\n"
+        "assert 'home_assistant_intents' not in sys.modules\n"
+        "assert not any(name.startswith(('homeassistant', 'custom_components')) for name in sys.modules)\n"
+    )
+    result = subprocess.run([sys.executable, "-I", "-c", probe], capture_output=True, text=True, timeout=30)
+    assert result.returncode == 0, result.stderr
+
+
+def test_template_worker_does_not_load_const():
+    source = (PACKAGE / "template_worker.py").read_text()
+    loaded = [
+        node.args[0].value for node in ast.walk(ast.parse(source))
+        if isinstance(node, ast.Call) and getattr(node.func, "attr", None) == "with_name"
+    ]
+    assert loaded == ["template_limits.py"]
+
+
+def _mutable_parts(value: object, path: str) -> list[str]:
+    """Paths of every writable container reachable through one constant."""
+    if isinstance(value, (dict, list, set, bytearray)):
+        return [path]
+    if isinstance(value, types.MappingProxyType):
+        return [
+            found for key, item in value.items()
+            for found in (*_mutable_parts(key, f"{path} key"), *_mutable_parts(item, f"{path}[{key!r}]"))
+        ]
+    if isinstance(value, (tuple, frozenset)):
+        return [found for item in value for found in _mutable_parts(item, f"{path} member")]
+    return []
+
+
+@pytest.mark.parametrize("name", TABLE_MODULES)
+def test_shared_tables_are_deeply_read_only(name):
+    module = importlib.import_module(f"custom_components.phoenix_mcp.{name}")
+    found = [
+        part for key, value in vars(module).items()
+        if not key.startswith("__") and not isinstance(value, types.ModuleType)
+        for part in _mutable_parts(value, f"{name}.{key}")
+    ]
+    assert found == []
+
+
+def test_a_routing_table_refuses_mutation():
+    from custom_components.phoenix_mcp.routing.routing_tables import COMMAND_ROUTING_ENTITY_COMMANDS, COMMAND_ROUTING_FIXED_INTENT_DATA
+
+    with pytest.raises(TypeError):
+        COMMAND_ROUTING_ENTITY_COMMANDS["injected"] = ("lock", "unlock", "", "", "", "")  # type: ignore[index]
+    nested = next(iter(COMMAND_ROUTING_FIXED_INTENT_DATA.values()))
+    with pytest.raises(TypeError):
+        nested["injected"] = True  # type: ignore[index]

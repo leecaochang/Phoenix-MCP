@@ -11,7 +11,7 @@ import logging
 import math
 import re
 import string
-from collections.abc import Awaitable, Callable, Collection, Iterable, Iterator
+from collections.abc import Callable, Collection, Iterable, Iterator, Mapping
 from functools import lru_cache
 import time
 from dataclasses import dataclass
@@ -27,28 +27,19 @@ from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.event import async_call_later
 from homeassistant.helpers.network import get_url
 from homeassistant.util.dt import get_default_time_zone, parse_datetime, utcnow
+from homeassistant.util import dt as dt_util
+from types import SimpleNamespace
 
 from .const import (
-    LOG_DETAIL_STALE_MESSAGE,
-    CATALOGS_DIR,
-    DIFF_SUMMARY_TEMPLATES,
-    NOTIFICATION_TEMPLATES,
-    VERSION_SUMMARY_TEMPLATES,
-    VOICE_TEMPLATES,
-    CAP_ALLOW,
-    CAP_CONFIRM,
-    CAP_DENY,
-    CONFIRM_ONLY_CAPS,
-    CAPABILITY_NAMES,
-    DOMAIN,
-    DOMAIN_SERVICE_HINTS,
-    PASS_THROUGH_EXEMPT_CAPS,
-    SENSOR_WRITE_DEBOUNCE_SECONDS,
-    SYSTEM_LOG_MAX_RESPONSE_BYTES,
-    TARGET_SELECTOR_KEYS,
-    ACCESS_KEY_LENGTH,
-    ACCESS_KEY_PREFIX,
+    LOG_DETAIL_STALE_MESSAGE, CATALOGS_DIR, CAP_ALLOW, CAP_CONFIRM, CAP_DENY, CONFIRM_ONLY_CAPS,
+    CAPABILITY_NAMES, DOMAIN, DOMAIN_SERVICE_HINTS, PASS_THROUGH_EXEMPT_CAPS,
+    SENSOR_WRITE_DEBOUNCE_SECONDS, SYSTEM_LOG_MAX_RESPONSE_BYTES, TARGET_SELECTOR_KEYS,
+    DUAL_GATE_SERVICES, NO_TARGET_SERVICES,
 )
+from .catalog_templates import (
+    DIFF_SUMMARY_TEMPLATES, NOTIFICATION_TEMPLATES, VERSION_SUMMARY_TEMPLATES, VOICE_TEMPLATES,
+)
+from .request_authority import household_authority
 from .policy_engine import (
     Permission,
     RelativeTimeError,
@@ -57,10 +48,11 @@ from .policy_engine import (
     is_sensitive_key,
     parse_relative_time,
     resolve,
+    scrub_attributes,
     template_blocklist_vars,
 )
 from .locales import canonical_language
-from .request_authority import check_request_authority
+from .request_authority import dispatch_request_id
 from .system_log_payload import (
     compact_log_entry,
     log_detail_chunk,
@@ -68,7 +60,8 @@ from .system_log_payload import (
     log_payload_budget,
     log_result_size,
 )
-from .access_key_store import access_key_name_slug
+from .const import ANNOUNCEMENT_SERVICES, HOUSEHOLD_CAPABILITIES
+from .template_diagnostics import TemplateOutputLimitError
 
 if TYPE_CHECKING:
     import voluptuous as vol
@@ -79,7 +72,6 @@ if TYPE_CHECKING:
     # introduce a cycle.
     from .audit import Outcome
     from .data import PhoenixData
-    from .rate_limiter import RateLimitResult
     from .access_key_store import AccessKeyRecord
 
 _LOGGER = logging.getLogger(__name__)
@@ -94,7 +86,7 @@ def build_permitted_states(access_key: AccessKeyRecord, hass: HomeAssistant) -> 
     """
     expose = assist_expose_check(access_key, hass)
     return {
-        s.entity_id: ScrubbedState(s)
+        s.entity_id: ScrubbedState(s, scrub_attributes(s.attributes, access_key, hass))
         for s in hass.states.async_all()
         if resolve(s.entity_id, access_key, hass) in (Permission.READ, Permission.WRITE)
         and (expose is None or expose(s.entity_id))
@@ -267,204 +259,11 @@ def parse_time_param(value: str) -> datetime:
     return dt
 
 
-async def async_get_authenticated_access_key(
-    hass: HomeAssistant,
-    request: web.Request,
-    data: PhoenixData,
-    request_id: str,
-    resource: str,
-) -> tuple[AccessKeyRecord, RateLimitResult] | web.Response:
-    """Validate the Phoenix MCP bearer access key and check rate limits.
-
-    Returns (access_key, rl_result) on success, or an aiohttp Response on failure.
-    Checks readiness, kill switch, query-param access key leakage, format
-    pre-validation, hash lookup, revocation, expiry, and rate limits in that order.
-    """
-    if not data.ready or data.shutting_down:
-        return build_error_response("service_unavailable", "Service unavailable.", 503, request_id)
-
-    if data.store.get_settings().kill_switch:
-        # Kill-switch mode should make Phoenix MCP invisible on the network. At
-        # startup that means registering no routes; aiohttp cannot unregister routes
-        # at runtime, so the routes stay and refuse service with 503.
-        return build_error_response("service_unavailable", "Service unavailable.", 503, request_id)
-
-    _401 = build_error_response("unauthorized", "Unauthorized.", 401, request_id)
-    _401.headers["WWW-Authenticate"] = 'Bearer realm="Phoenix MCP"'
-
-    for key in ("token", "access_token"):
-        if key in request.query:
-            return _401
-
-    auth_header = request.headers.get("Authorization", "")
-    if not auth_header.startswith("Bearer "):
-        return _401
-
-    presented = auth_header[7:]
-    if not presented.startswith(ACCESS_KEY_PREFIX) or len(presented) != ACCESS_KEY_LENGTH:
-        return _401
-
-    access_key_hash = hashlib.sha256(presented.encode()).hexdigest()
-    access_key = data.store.get_access_key_by_hash(access_key_hash)
-
-    if access_key is None:
-        return _401
-
-    if not access_key.is_valid():
-        if access_key.is_expired():
-            await async_archive_expired_access_key(hass, data, access_key)
-        return _401
-
-    # Update last_used before the rate limit check so last_access reflects every
-    # attempted request, not just allowed ones. This keeps last_access consistent
-    # with request_count, which also increments on rate-limited requests.
-    data.store.update_last_used(access_key.id, utcnow())
-
-    rl_result = data.rate_limiter.check(
-        access_key.id,
-        access_key.rate_limit_requests,
-        access_key.rate_limit_burst,
-    )
-
-    if not rl_result.allowed:
-        fire_rate_limit_events(hass, data, access_key)
-        log_request(
-            data,
-            access_key,
-            request_id=request_id,
-            method=request.method,
-            resource=resource,
-            outcome="rate_limited",
-            client_ip=get_client_ip(request),
-        )
-        resp = build_error_response("rate_limited", "Rate limit exceeded.", 429, request_id)
-        resp.headers["Retry-After"] = str(rl_result.retry_after)
-        return resp
-
-    return access_key, rl_result
-
-
 def cancel_expiry_timer(data: PhoenixData, access_key_id: str) -> None:
     """Cancel and remove the pending expiry timer for an access key, if one exists."""
     cancel = data.expiry_timers.pop(access_key_id, None)
     if cancel is not None:
         cancel()
-
-
-def schedule_expiry_timer(hass: HomeAssistant, data: PhoenixData, access_key: AccessKeyRecord) -> None:
-    """Schedule a timer to archive an access key at its expiry time.
-
-    An access key without an expiry is left untouched. Otherwise any earlier timer for
-    it is cancelled first, and none is scheduled when it has already expired.
-    """
-    if access_key.expires_at is None:
-        return
-    cancel_expiry_timer(data, access_key.id)
-    delay = (access_key.expires_at - utcnow()).total_seconds()
-    if delay <= 0:
-        return
-
-    @callback
-    def _on_expiry(_now=None) -> None:
-        data.expiry_timers.pop(access_key.id, None)
-        hass.async_create_background_task(
-            async_archive_expired_access_key(hass, data, access_key),
-            f"phoenix_mcp_expire_{access_key.id}",
-        )
-
-    data.expiry_timers[access_key.id] = async_call_later(hass, delay, _on_expiry)
-
-
-async def async_archive_expired_access_key(
-    hass: HomeAssistant,
-    data: PhoenixData,
-    access_key: AccessKeyRecord,
-) -> None:
-    """Move an expired access key to the archive and perform full cleanup.
-
-    Archives the record to storage, closes its queued approvals, destroys rate
-    limiter and counter state, fires the phoenix_mcp_access_key_expired bus event, and
-    removes sensor entities.
-    """
-    from .approvals import (  # noqa: PLC0415 - avoid import cycle at module load
-        REASON_ACCESS_KEY_EXPIRED,
-        async_cancel_approvals_for_access_key,
-        dismiss_approval_notification,
-        fire_approval_resolved_event,
-    )
-
-    cancel_expiry_timer(data, access_key.id)
-    # Expiry removes the same live access key references as explicit revocation, so it
-    # follows the same settings-lock then access-key-store-lock order.
-    async with data.settings_update_lock:
-        async with data.store.async_lock:
-            # The timer, request-path expiry check, and periodic sweep may all arrive
-            # for the same access key. Re-read under the mutation lock so only the first
-            # expired transition archives it, and so PATCH/revoke cannot interleave
-            # with the stored snapshot and dependent cleanup below.
-            current = data.store.get_access_key_by_id(access_key.id)
-            now = utcnow()
-            if (
-                current is None
-                or current.expires_at is None
-                or current.expires_at > now
-            ):
-                return
-            slug = access_key_name_slug(current.name)
-            archived = await data.store.async_archive_access_key(
-                current.id, revoked=False, revoked_at=now
-            )
-            if archived is None:
-                return
-            # Same queue hygiene as revoke: an expired access key's approvals cannot be
-            # legitimately approved anymore (re-validation would auto-reject them).
-            # Clear bindings in the same transaction as access key archival.
-            _s = data.store.get_settings()
-            _patch: dict[str, Any] = {}
-            if _s.assist_bound_access_key_id == current.id:
-                _patch["assist_bound_access_key_id"] = None
-            if _s.voice_agent_access_key_id == current.id:
-                _patch["voice_agent_access_key_id"] = None
-            if _s.ai_task_access_key_id == current.id:
-                _patch["ai_task_access_key_id"] = None
-            if _patch:
-                await data.store.async_patch_settings(**_patch)
-            changed_approvals = await async_cancel_approvals_for_access_key(
-                data.store, current.id, REASON_ACCESS_KEY_EXPIRED,
-                skip_ids=data.approvals_in_progress,
-            )
-    for approval in changed_approvals:
-        dismiss_approval_notification(hass, approval.id)
-        fire_approval_resolved_event(hass, approval)
-    # Advisory leases the access key still held; in-memory, so outside the store lock.
-    from .mesa import release_access_key_leases  # noqa: PLC0415
-    release_access_key_leases(data, current.id)
-    if data.async_sync_voice_agent is not None:
-        data.async_sync_voice_agent()
-    if "voice_agent_access_key_id" in _patch:
-        # The voice agent lost its access key and is unregistered; remove any
-        # Phoenix-created Assist pipeline so a broken assistant is not left behind.
-        from .voice_agent import async_remove_assist_pipeline  # noqa: PLC0415
-        await async_remove_assist_pipeline(hass, data)
-    if "ai_task_access_key_id" in _patch and data.async_sync_ai_task is not None:
-        # The AI Task lost its access key; remove the AI Task entity from HA (and picker).
-        data.async_sync_ai_task()
-    data.rate_limiter.destroy(current.id)
-    data.rate_limit_notified.pop(current.id, None)
-    data.access_key_counters.pop(current.id, None)
-    data.stale_tools_advised.pop(current.id, None)
-    hass.bus.async_fire("phoenix_mcp_access_key_expired", {
-        "access_key_id": current.id,
-        "access_key_name": current.name,
-        "timestamp": now.isoformat(),
-    })
-    if data.async_on_access_key_archived:
-        try:
-            await data.async_on_access_key_archived(slug)
-        except Exception:
-            _LOGGER.warning(
-                "Sensor cleanup failed for expired access key %s", current.id, exc_info=True,
-            )
 
 
 class _ContextProxy(dict):
@@ -484,10 +283,13 @@ class _ContextProxy(dict):
 class ScrubbedState:
     """Lightweight State wrapper that strips sensitive attributes for use in template sandboxes."""
 
-    def __init__(self, raw: Any) -> None:
+    def __init__(self, raw: Any, attributes: dict[str, Any] | None = None) -> None:
         self.entity_id = raw.entity_id
         self.state = raw.state
-        self.attributes = {k: v for k, v in raw.attributes.items() if not is_sensitive_key(k)}
+        self.attributes = {
+            k: v for k, v in (raw.attributes if attributes is None else attributes).items()
+            if not is_sensitive_key(k)
+        }
         self.last_updated = getattr(raw, "last_updated", None)
         self.last_changed = getattr(raw, "last_changed", None)
         self.last_reported = getattr(raw, "last_reported", None)
@@ -521,7 +323,6 @@ class ScrubbedState:
     @classmethod
     def from_dict(cls, row: dict) -> ScrubbedState:
         """Restore the template facade without HA constructor timestamp defaults."""
-        from types import SimpleNamespace
 
         context = row.get("context")
         return cls(SimpleNamespace(
@@ -620,29 +421,25 @@ def safe_template_env() -> Any:
     globals with render variables is NOT safe: Jinja2 variables never shadow
     filters or tests, so {{ 'sensor.x' | states }} would bypass the sandbox.
     """
+    # Local: not part of the recorded Home Assistant import floor.
+    from homeassistant.helpers.template import TemplateEnvironment
     global _SAFE_TEMPLATE_ENV
     if _SAFE_TEMPLATE_ENV is None:
-        from homeassistant.helpers.template import TemplateEnvironment  # noqa: PLC0415
         _SAFE_TEMPLATE_ENV = TemplateEnvironment(None)
     return _SAFE_TEMPLATE_ENV
 
 
-def render_template_for_access_key(template_str: str, access_key: AccessKeyRecord, hass: HomeAssistant) -> str:
-    """Render a Jinja2 template against the access key's permitted entity state.
+def render_template_snapshot(template_str: str, permitted: dict) -> str:
+    """Render a Jinja2 template against a detached snapshot of permitted state.
 
     Renders in safe_template_env() with permission-restricted replacements for the
     HA state helpers and pure dt_util shims for the time helpers the hass-less
-    environment lacks. Raises (TemplateError, ValueError, jinja2 errors) on any
-    failure; callers map exceptions to an invalid_request response.
+    environment lacks. Production calls run in the worker. Raises (TemplateError,
+    ValueError, jinja2 errors) on any failure; callers map exceptions to an
+    invalid_request response.
     """
-    return render_template_snapshot(template_str, build_permitted_states(access_key, hass))
-
-
-def render_template_snapshot(template_str: str, permitted: dict) -> str:
-    """Render a detached state snapshot; production calls run in the worker."""
+    # Local: not part of the recorded Home Assistant import floor.
     from homeassistant.helpers.template import MAX_TEMPLATE_OUTPUT
-    from homeassistant.util import dt as dt_util
-    from .template_diagnostics import TemplateOutputLimitError
 
     filtered_states = FilteredStates(permitted)
 
@@ -903,7 +700,8 @@ def _cloud_urls(hass: HomeAssistant) -> list[str]:
     """Every Home Assistant Cloud URL of this instance; only HA 2026.11 and later have several."""
     if "cloud" not in hass.config.components:
         return []
-    from homeassistant.components import cloud  # noqa: PLC0415
+    # Local: optional component, imported only when this path runs.
+    from homeassistant.components import cloud
     if remote_ui_urls := getattr(cloud, "async_remote_ui_urls", None):
         return list(remote_ui_urls(hass))
     return [cloud.async_remote_ui_url(hass)]
@@ -925,20 +723,22 @@ def _instance_identifier_patterns(hass: HomeAssistant | None) -> _IdentifierPatt
                     {"require_cloud": True}):
         try:
             values.add(str(yarl.URL(get_url(hass, allow_ip=True, **options)).host or ""))
-        except Exception:
+        except Exception as exc:
+            _LOGGER.debug("An instance URL is unavailable to the diagnostics scrub: %s", type(exc).__name__)
             continue
     # get_url names only the first Cloud URL; a custom domain hides the instance's own host.
     try:
         values.update(str(yarl.URL(url).host or "") for url in _cloud_urls(hass))
-    except Exception:
-        pass
+    except Exception as exc:
+        _LOGGER.debug("Cloud URLs are unavailable to the diagnostics scrub: %s", type(exc).__name__)
     try:
+        # Local: optional component, imported only when this path runs.
         from homeassistant.components.network import async_get_loaded_adapters
         for adapter in async_get_loaded_adapters(hass):
             for entry in (*(adapter.get("ipv4") or ()), *(adapter.get("ipv6") or ())):
                 values.add(str(entry.get("address") or ""))
-    except Exception:
-        _LOGGER.debug("Network adapters are unavailable to the diagnostics scrub", exc_info=True)
+    except Exception as exc:
+        _LOGGER.debug("Network adapters are unavailable to the diagnostics scrub: %s", type(exc).__name__)
     hosts: set[str] = set()
     addresses: set[str] = set()
     for value in values:
@@ -1066,7 +866,7 @@ def check_system_log_compat(hass: HomeAssistant) -> str | None:
         if not callable(getattr(records, "values", None)):
             return "system_log records is no longer a dict-like mapping"
         return None
-    except Exception as err:  # noqa: BLE001 - advisory probe must never abort setup
+    except Exception as err:  # advisory probe must never abort setup
         return f"system_log probe could not run: {err}"
 
 
@@ -1305,6 +1105,19 @@ def _strict_phoenix_log_text(text: str, access_key: AccessKeyRecord, hass: HomeA
     return redact_inaccessible_entity_ids_in_text(_strict_diagnostic_text(text), access_key, hass)
 
 
+def _scoped_log_text(text: str, access_key: AccessKeyRecord, hass: HomeAssistant) -> str:
+    """Home Assistant log text without the entities this access key may not see.
+
+    A log is full of dotted names that are no entity at all, such as modules and
+    file names, so only a name that resolves to something hidden is replaced.
+    """
+    return _redact_entity_ids(
+        _scrub_log_text(text), hass,
+        lambda entity_id: resolve(entity_id, access_key, hass) not in (Permission.NO_ACCESS, Permission.DENY),
+        "<redacted-entity>",
+    )
+
+
 def _log_filter_fingerprint(filters: dict[str, Any], phoenix_only: bool) -> str:
     """Hash the effective filters so a cursor cannot silently change queries."""
     payload = {**filters, "phoenix_only": phoenix_only}
@@ -1525,6 +1338,8 @@ def collect_log_entries(
             if access_key is None:
                 raise SystemLogDegradedError("Phoenix diagnostics access key context is unavailable")
             scrub = lambda value: _strict_phoenix_log_text(value, access_key, hass)
+        elif access_key is not None:
+            scrub = lambda value: _scoped_log_text(value, access_key, hass)
         safe_messages = [scrub(message) for message in messages]
         exception = _log_exception(getattr(record, "exception", None))
         safe_exception = scrub(exception) if exception else None
@@ -1744,11 +1559,33 @@ def str_list_arg(value: object) -> list[str]:
 
 def is_announcement(domain: str, service: str, service_data: object) -> bool:
     """Whether a service call interrupts a speaker with an announcement."""
-    from .const import ANNOUNCEMENT_SERVICES
-
     if f"{domain}/{service}" in ANNOUNCEMENT_SERVICES:
         return True
     return (domain, service) == ("media_player", "play_media") and isinstance(service_data, dict) and bool(service_data.get("announce"))
+
+
+def service_capability(domain: str, service: str, service_data: object) -> str | None:
+    """The capability a service needs beyond Write on its targets, physical control aside.
+
+    One definition for admission, execution and preview, so the executor is the
+    single authority an approval is checked against. The physical gate depends on
+    resolved targets and has its own predicate.
+    """
+
+    service_key = f"{domain}/{service}"
+    if service_key in DUAL_GATE_SERVICES:
+        return "cap_restart"
+    if domain == "notify":
+        return "cap_notify"
+    if is_announcement(domain, service, service_data):
+        return "cap_broadcast"
+    if service_key in NO_TARGET_SERVICES:
+        return "cap_yaml_edit"
+    if service_key == "scene/delete":
+        return "cap_scene_write"
+    if service_key == "recorder/purge_entities":
+        return "cap_registry_write"
+    return None
 
 
 def effective_cap(access_key: AccessKeyRecord, cap_name: str) -> str:
@@ -1760,8 +1597,6 @@ def effective_cap(access_key: AccessKeyRecord, cap_name: str) -> str:
     household ingress a non-administrator gets "deny" for every cap outside
     HOUSEHOLD_CAPABILITIES.
     """
-    from .const import HOUSEHOLD_CAPABILITIES
-    from .household_authority import household_authority
 
     household = household_authority.get()
     if household is not None and not household.is_admin() and cap_name not in HOUSEHOLD_CAPABILITIES:
@@ -1802,115 +1637,6 @@ def effective_caps(access_key: AccessKeyRecord) -> dict[str, str]:
     return {name: effective_cap(access_key, name) for name in CAPABILITY_NAMES}
 
 
-@dataclass
-class CapabilityResult:
-    """Outcome of an async_evaluate_capability call.
-
-    mode is one of "allow" / "deny" / "confirm". When mode is "confirm",
-    approval is the freshly created PendingApproval record and the caller
-    must return a pending response without executing.
-    """
-
-    mode: str
-    approval: Any | None = None
-
-    @property
-    def is_allow(self) -> bool:
-        return self.mode == CAP_ALLOW
-
-    @property
-    def is_deny(self) -> bool:
-        return self.mode == CAP_DENY
-
-    @property
-    def is_pending(self) -> bool:
-        return self.mode == CAP_CONFIRM
-
-
-# An approval diff, either already built or deferred behind a zero-arg builder.
-# Most builders read config off disk (or call the ESPHome add-on) while the diff
-# is read only when an approval is created, so deferring spares an allow or a deny
-# a result nobody looks at.
-DiffSource = dict | Callable[[], "dict | Awaitable[dict]"] | None
-
-
-async def _resolve_diff(diff: DiffSource) -> dict:
-    """Resolve a diff given either as a built dict or as a deferred builder.
-
-    Expensive builders (config off disk, a lovelace config, the ESPHome add-on)
-    are passed as a zero-arg callable and invoked here, on the confirm path alone;
-    cheap builders may pass a plain dict. Awaitability is tested with
-    collections.abc.Awaitable rather than inspect, so sync and async builders can
-    be mixed at the call sites.
-    """
-    if diff is None:
-        return {}
-    if not callable(diff):
-        return diff or {}
-    built = diff()
-    if isinstance(built, Awaitable):
-        built = await built
-    return built or {}
-
-
-async def async_evaluate_capability(
-    cap_name: str,
-    access_key: AccessKeyRecord,
-    hass: HomeAssistant,
-    data: PhoenixData,
-    *,
-    tool_name: str,
-    args: dict,
-    request_id: str,
-    diff: DiffSource = None,
-    client_ip: str | None = None,
-    target_entities: list[str] | None = None,
-) -> CapabilityResult:
-    """Resolve a capability check into Allow / Deny / Pending(approval).
-
-    Reads the effective cap mode (after pass-through interaction) and either
-    permits, denies, or creates a pending approval and returns a Confirm result.
-    Diff is supplied by the caller; it appears in the admin review UI. It may be
-    a dict or a zero-arg builder, and a builder is invoked only on the Confirm
-    path, so an allowed or denied call never pays for a diff nobody reads.
-    """
-    from .approvals import (  # noqa: PLC0415
-        create_approval_notification,
-        async_create_pending_approval,
-        fire_approval_requested_event,
-    )
-
-    mode = effective_cap(access_key, cap_name)
-    if mode == CAP_ALLOW:
-        return CapabilityResult(CAP_ALLOW)
-    if mode == CAP_DENY:
-        return CapabilityResult(CAP_DENY)
-    # The diff is needed only on the confirm path, so a deferred builder runs here
-    # and nowhere else. Both early returns above leave it untouched.
-    if target_entities is not None:
-        from .approval_targets import bind_targets, bound_preview
-        args = bind_targets(args, target_entities, hass)
-    resolved_diff = await _resolve_diff(diff)
-    if target_entities is not None:
-        resolved_diff = bound_preview(resolved_diff, args)
-    async with data.store.async_lock:
-        check_request_authority()
-        approval = await async_create_pending_approval(
-            data.store,
-            access_key_id=access_key.id,
-            access_key_name=access_key.name,
-            tool_name=tool_name,
-            cap_name=cap_name,
-            args=args,
-            diff=resolved_diff,
-            request_id=request_id,
-            client_ip=client_ip,
-        )
-    create_approval_notification(hass, approval)
-    fire_approval_requested_event(hass, approval)
-    return CapabilityResult(CAP_CONFIRM, approval=approval)
-
-
 def validation_error_message(err: ServiceValidationError | vol.Invalid) -> str:
     """Human-readable message for a service validation error shown to the agent.
 
@@ -1929,7 +1655,7 @@ def diff_summary_fields(key: str, **params: object) -> dict[str, object]:
 
     Returns the English `summary` plus the `summary_key` and `summary_params` the
     panel needs to render the same sentence in the operator's language; splat it
-    into a diff dict. One template per key in const.DIFF_SUMMARY_TEMPLATES keeps
+    into a diff dict. One template per key in catalog_templates.DIFF_SUMMARY_TEMPLATES keeps
     the stored English and the translated form from drifting. An unknown key
     raises KeyError on purpose: a blank summary on the surface an admin approves
     from would be worse.
@@ -1947,7 +1673,7 @@ def version_summary_fields(key: str, **params: object) -> dict[str, object]:
 
 
 def _summary_fields(
-    namespace: str, templates: dict[str, str], key: str, params: dict[str, object]
+    namespace: str, templates: Mapping[str, str], key: str, params: dict[str, object]
 ) -> dict[str, object]:
     return {
         "summary": templates[key].format(**params),
@@ -2012,7 +1738,7 @@ class LocalizedReason(str):
 
 
 def _localized(
-    templates: dict[str, str], section: str, key: str, language: object, params: dict
+    templates: Mapping[str, str], section: str, key: str, language: object, params: dict
 ) -> str:
     """Resolve one backend-rendered string, falling back to its English template.
 
@@ -2131,9 +1857,44 @@ def panel_catalog(language: str) -> dict[str, str]:
     return merged
 
 
-def log_internal_failure(logger: logging.Logger, phase: str, exc: Exception) -> None:
+def instance_base_url(hass: HomeAssistant) -> str:
+    """Home Assistant's best available URL for links in prompts, or "" if it has none."""
+    try:
+        # Local: inside a guard for releases that lack it.
+        from homeassistant.helpers.network import get_url
+
+        return get_url(hass)
+    except Exception:  # NoURLAvailableError and anything else
+        return ""
+
+
+class RepeatedFailureLog:
+    """Log a recurring job's failure at WARNING once, then at debug until it recovers.
+
+    A full disk fails the same timer job indefinitely, and a traceback on every
+    tick buries everything else in the log. The exception's text stays out of the
+    warning because third-party errors can carry hosts or credentials; its type
+    identifies the cause and the debug line keeps the traceback for diagnosis.
+    """
+
+    def __init__(self, logger: logging.Logger, message: str) -> None:
+        self._logger = logger
+        self._message = message
+        self._failing = False
+
+    def failed(self, exc: BaseException) -> None:
+        if self._failing:
+            self._logger.debug("%s (%s)", self._message, type(exc).__name__, exc_info=exc)
+            return
+        self._failing = True
+        self._logger.warning("%s (%s)", self._message, type(exc).__name__)
+
+    def recovered(self) -> None:
+        self._failing = False
+
+
+def log_internal_failure(logger: logging.Logger, phase: str, exc: BaseException) -> None:
     """Log fixed failure metadata and Phoenix frame locations, never error text or locals."""
-    from .request_authority import dispatch_request_id
     frames = []
     traceback = exc.__traceback__
     while traceback is not None:

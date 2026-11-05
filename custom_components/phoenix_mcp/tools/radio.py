@@ -11,10 +11,8 @@ mutating tool is Confirm-eligible and builds a registry-scoped diff naming its
 specific devices or group, because radio topology changes are not reversible
 from here.
 
-mcp_view owns the transport, the dispatch registry and the executor registry, and
-imports the names it registers or calls from here. The dependency runs one way:
-this module never imports the transport that dispatches it. Shared primitives
-come from ..tool_common.
+tool_registration registers these tools and this module never imports the
+dispatcher. Shared primitives come from ..tool_common.
 """
 
 from __future__ import annotations
@@ -32,37 +30,32 @@ from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 from homeassistant.core import HomeAssistant
 
-from ..const import CAP_CONFIRM, CAP_DENY, PROXY_TIMEOUT_SECONDS, Z2M_BASE_TOPIC
+from ..const import CAP_CONFIRM, CAP_DENY, MESA_MODE_OFF, PROXY_TIMEOUT_SECONDS, Z2M_BASE_TOPIC
 from ..data import PhoenixData
 from ..device_semantics import device_entry_value, device_registry_snapshot
 from ..mesa import (
+    UNRESOLVED_CONTEXT_WARNING,
+    unresolved_context_refused,
     async_apply_mesa_to_call,
     entity_control_mode,
     fire_mesa_blocked_event,
 )
 from ..radio import RadioError
+from ..mesa_audit import note_mesa_advisory
 from ..helpers import (
+    _scrub_log_text,
     diff_summary_fields as _summary,
     effective_cap,
     version_summary_fields as _version_summary,
 )
 from .discovery import _accessible_entity_ids
 from ..tool_common import (
-    MESA_DENIED_MESSAGE,
-    _CAP_FORBIDDEN_MESSAGE,
-    _approved_exec_ctx,
-    _gate,
-    _mesa_advisory_ctx,
-    _mesa_confirm_annotation,
-    _pending_or_inline,
-    _record_version,
-    _set_progress_status,
-    _tool_error,
-    _tool_success,
-    _truncate,
+    MESA_DENIED_MESSAGE, _CAP_FORBIDDEN_MESSAGE, _gate, _mesa_confirm_annotation, _pending_or_inline, _record_version, _set_progress_status, _tool_error, _tool_success, _truncate, _with_mesa_advisory,
 )
+from ..request_authority import _approved_exec_ctx
 from ..policy_engine import (
     Permission,
+    device_cascade_entity_ids,
     device_config_entry_ids,
     resolve,
     resolve_device_registry_access,
@@ -229,8 +222,9 @@ def _z2m_property_coverage(
     # Private MQTT runtime detail, kept lazy so a compatibility drift cannot
     # prevent Phoenix itself from loading. Any failure below becomes ambiguity.
     try:
-        from homeassistant.components.mqtt.const import ATTR_DISCOVERY_PAYLOAD  # noqa: PLC0415
-        from homeassistant.components.mqtt.models import DATA_MQTT  # noqa: PLC0415
+        # Local: optional component, imported only when this path runs.
+        from homeassistant.components.mqtt.const import ATTR_DISCOVERY_PAYLOAD
+        from homeassistant.components.mqtt.models import DATA_MQTT
     except ImportError:
         return _Z2MPropertyCoverage({}, frozenset(radio_backend.z2m_exposed_property_map(entry)))
     definitions = radio_backend.z2m_exposed_property_map(entry)
@@ -622,6 +616,66 @@ def _radio_mesa_entities(
     )
 
 
+async def _radio_device_mesa_gate(
+    hass: HomeAssistant,
+    data: PhoenixData,
+    access_key: AccessKeyRecord,
+    device: Any,
+    *,
+    tool_name: str,
+    service: str,
+    service_data: dict[str, Any],
+    args: dict,
+    diff: Any,
+    request_id: str,
+    client_ip: str | None,
+) -> tuple[dict, str, str] | list[str]:
+    """Apply MESA to an action on a whole Zigbee device.
+
+    Returns the refusal or pending approval to answer with, else the advisory
+    warnings for the result.
+
+    Called from the tool and again from its executor, where an approval satisfies
+    Confirm for this exact action and nothing stricter. The action reaches the
+    device rather than one of its entities, so every registry entity on it and its
+    child devices is evaluated, enabled or not and writable by this key or not, and
+    one refusal stops it. A device with no registry entity cannot be judged: it warns
+    in advisory mode and is refused where policy must be met.
+    """
+    entities = device_cascade_entity_ids(hass, device.id)
+    if (
+        not entities
+        and data.store.get_settings().mesa_mode != MESA_MODE_OFF
+        and not unresolved_context_refused(data, device.id)
+    ):
+        note_mesa_advisory([UNRESOLVED_CONTEXT_WARNING])
+        return [UNRESOLVED_CONTEXT_WARNING]
+    outcome = await async_apply_mesa_to_call(
+        hass,
+        data,
+        access_key,
+        domain="zigbee",
+        service=service,
+        service_data=service_data,
+        entities=entities,
+        request_id=request_id or tool_name,
+        client_ip=client_ip,
+        session_id=request_id or tool_name,
+        confirm_approved=_approved_exec_ctx.get(),
+        approval_tool_name=tool_name,
+        approval_args=args,
+        approval_diff=diff,
+        require_all=True,
+    )
+    if outcome.blocked:
+        fire_mesa_blocked_event(hass, access_key, outcome.blocked)
+    if outcome.decision == "pending":
+        return await _pending_or_inline(hass, data, access_key, outcome.approval)
+    if outcome.decision == "deny":
+        return _tool_error(MESA_DENIED_MESSAGE), "denied", device.id
+    return outcome.warnings
+
+
 def _same_radio_network(
     source: _ResolvedRadioDevice, target: _ResolvedRadioDevice
 ) -> bool:
@@ -640,8 +694,9 @@ def _same_radio_network(
 def _mqtt_discovery_payload(hass: HomeAssistant, entity_id: str) -> dict[str, Any] | None:
     """Return one MQTT entity's live discovery payload, or fail closed."""
     try:
-        from homeassistant.components.mqtt.const import ATTR_DISCOVERY_PAYLOAD  # noqa: PLC0415
-        from homeassistant.components.mqtt.models import DATA_MQTT  # noqa: PLC0415
+        # Local: optional component, imported only when this path runs.
+        from homeassistant.components.mqtt.const import ATTR_DISCOVERY_PAYLOAD
+        from homeassistant.components.mqtt.models import DATA_MQTT
     except ImportError:
         return None
     mqtt_data = hass.data.get(DATA_MQTT)
@@ -1924,14 +1979,14 @@ async def _tool_get_radio_network(
     if full_pass_through(access_key, hass):
         try:
             bluetooth = bluetooth_network(hass)
-        except Exception:  # noqa: BLE001 - one backend must not fail the others
+        except Exception:  # one backend must not fail the others
             _LOGGER.exception("Bluetooth snapshot failed")
             bluetooth = {"protocol": "bluetooth", "error": "The Bluetooth snapshot could not be read."}
         if bluetooth is not None:
             networks.append(bluetooth)
         try:
             serial = await serial_inventory(hass)
-        except Exception:  # noqa: BLE001 - one backend must not fail the others
+        except Exception:  # one backend must not fail the others
             _LOGGER.exception("Serial port inventory failed")
             serial = {"error": "The serial port inventory could not be read."}
         if serial is not None:
@@ -2022,7 +2077,7 @@ async def _execute_scan_zigbee_topology(
             resolved.backend, raw, resolved.visible_map
         )
     except RadioError as exc:
-        _LOGGER.error("%s topology scan failed: %s", resolved.backend, exc)
+        _LOGGER.error("%s topology scan failed: %s", resolved.backend, _scrub_log_text(str(exc)))
         return (
             _tool_error(f"The {resolved.backend} topology scan failed."),
             "invalid_request",
@@ -2210,7 +2265,7 @@ async def _execute_permit_zigbee_join(
     except TimeoutError:
         return _tool_error("Timed out talking to the Zigbee network."), "invalid_request", "permit_zigbee_join"
     except HomeAssistantError as exc:
-        _LOGGER.error("permit_zigbee_join failed: %s", exc)
+        _LOGGER.error("permit_zigbee_join failed: %s", _scrub_log_text(str(exc)))
         return _tool_error("Failed to change the Zigbee join window."), "denied", "permit_zigbee_join"
     verified = await radio_backend.async_confirm_permit_join(hass, backend, duration)
     body: dict[str, Any] = {"success": True, "backend": backend, "duration": duration, "verified": verified}
@@ -2237,25 +2292,54 @@ async def _tool_reconfigure_zigbee_device(
     )
     if isinstance(pre, tuple):
         return pre
+    diff = lambda: _build_diff_reconfigure_zigbee_device(args, access_key, hass)
+    refused = await _radio_device_mesa_gate(
+        hass, data, access_key, pre.device,
+        tool_name="reconfigure_zigbee_device", service="reconfigure", service_data={},
+        args=args, diff=diff, request_id=request_id, client_ip=client_ip,
+    )
+    if isinstance(refused, tuple):
+        return refused
     blocked = await _gate(
         "cap_radio_write", access_key, hass, data,
         tool_name="reconfigure_zigbee_device", args=args, request_id=request_id,
-        client_ip=client_ip, diff=lambda: _build_diff_reconfigure_zigbee_device(args, access_key, hass),
+        client_ip=client_ip, diff=diff,
     )
     if blocked is not None:
         return blocked
-    return await _execute_reconfigure_zigbee_device(args, access_key, hass, data)
+    return await _execute_reconfigure_zigbee_device(
+        args, access_key, hass, data, request_id=request_id, client_ip=client_ip
+    )
 
 
 async def _execute_reconfigure_zigbee_device(
-    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData,
+    request_id: str = "", client_ip: str | None = None,
 ) -> tuple[dict, str, str]:
+    # A MESA approval carries no capability of its own, so the current one is read here.
+    if effective_cap(access_key, "cap_radio_write") == CAP_DENY:
+        return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "reconfigure_zigbee_device"
     resolved = _resolve_radio_device(
         args, access_key, hass, "reconfigure_zigbee_device", require_write=True
     )
     if isinstance(resolved, tuple):
         return resolved
     device, backend, ieee = resolved.device, resolved.backend, resolved.ieee
+    advisory = await _radio_device_mesa_gate(
+        hass, data, access_key, device,
+        tool_name="reconfigure_zigbee_device", service="reconfigure", service_data={},
+        args=args, diff=lambda: _build_diff_reconfigure_zigbee_device(args, access_key, hass),
+        request_id=request_id, client_ip=client_ip,
+    )
+    if isinstance(advisory, tuple):
+        return advisory
+    return _with_mesa_advisory(await _reconfigure_zigbee_device(hass, device, backend, ieee), advisory)
+
+
+async def _reconfigure_zigbee_device(
+    hass: HomeAssistant, device: Any, backend: str, ieee: str
+) -> tuple[dict, str, str]:
+    """Run the re-interview after every gate."""
     try:
         async with asyncio.timeout(PROXY_TIMEOUT_SECONDS):
             result = await radio_backend.async_reconfigure_device(hass, backend, ieee)
@@ -2273,7 +2357,7 @@ async def _execute_reconfigure_zigbee_device(
         }
         return _tool_success(json.dumps(body)), "allowed", device.id
     except HomeAssistantError as exc:
-        _LOGGER.error("reconfigure_zigbee_device failed for %s: %s", ieee, exc)
+        _LOGGER.error("reconfigure_zigbee_device failed for %s: %s", ieee, _scrub_log_text(str(exc)))
         return _tool_error("Failed to reconfigure the device."), "denied", device.id
     if result.get("completed"):
         message = "Reconfigure completed."
@@ -2296,6 +2380,17 @@ async def _tool_set_zigbee_device_options(
     pre = await _resolve_z2m_option_change(args, access_key, hass)
     if isinstance(pre, tuple):
         return pre
+    diff = lambda: _build_diff_set_zigbee_device_options(
+        args, access_key, hass, change=pre
+    )
+    refused = await _radio_device_mesa_gate(
+        hass, data, access_key, pre.device,
+        tool_name="set_zigbee_device_options", service="set_options",
+        service_data={"changes": pre.changes},
+        args=args, diff=diff, request_id=request_id, client_ip=client_ip,
+    )
+    if isinstance(refused, tuple):
+        return refused
     blocked = await _gate(
         "cap_radio_write",
         access_key,
@@ -2305,22 +2400,42 @@ async def _tool_set_zigbee_device_options(
         args=args,
         request_id=request_id,
         client_ip=client_ip,
-        diff=lambda: _build_diff_set_zigbee_device_options(
-            args, access_key, hass, change=pre
-        ),
+        diff=diff,
     )
     if blocked is not None:
         return blocked
-    return await _execute_set_zigbee_device_options(args, access_key, hass, data)
+    return await _execute_set_zigbee_device_options(
+        args, access_key, hass, data, request_id=request_id, client_ip=client_ip
+    )
 
 
 async def _execute_set_zigbee_device_options(
-    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData,
+    request_id: str = "", client_ip: str | None = None,
 ) -> tuple[dict, str, str]:
     """Apply one validated option update and record its bounded history."""
+    if effective_cap(access_key, "cap_radio_write") == CAP_DENY:
+        return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "set_zigbee_device_options"
     change = await _resolve_z2m_option_change(args, access_key, hass)
     if isinstance(change, tuple):
         return change
+    advisory = await _radio_device_mesa_gate(
+        hass, data, access_key, change.device,
+        tool_name="set_zigbee_device_options", service="set_options",
+        service_data={"changes": change.changes},
+        args=args,
+        diff=lambda: _build_diff_set_zigbee_device_options(args, access_key, hass, change=change),
+        request_id=request_id, client_ip=client_ip,
+    )
+    if isinstance(advisory, tuple):
+        return advisory
+    return _with_mesa_advisory(await _apply_zigbee_device_options(change, access_key, hass, data), advisory)
+
+
+async def _apply_zigbee_device_options(
+    change: _ResolvedZ2MOptionChange, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData
+) -> tuple[dict, str, str]:
+    """Send one validated option update after every gate."""
     confirmation = "response"
     try:
         async with asyncio.timeout(PROXY_TIMEOUT_SECONDS):
@@ -2369,7 +2484,7 @@ async def _execute_set_zigbee_device_options(
         _LOGGER.error(
             "set_zigbee_device_options received an unsafe result for %s: %s",
             change.ieee,
-            exc,
+            _scrub_log_text(str(exc)),
         )
         return (
             _tool_error(
@@ -2485,8 +2600,6 @@ async def _tool_set_zigbee_device_property(
         return await _pending_or_inline(hass, data, access_key, mesa_outcome.approval)
     if mesa_outcome.decision == "deny":
         return _tool_error(MESA_DENIED_MESSAGE), "denied", pre.device.id
-    if mesa_outcome.warnings:
-        _mesa_advisory_ctx.set(True)
     if not _approved_exec_ctx.get():
         for cap in caps:
             if effective_cap(access_key, cap) != CAP_CONFIRM:
@@ -2558,8 +2671,6 @@ async def _execute_set_zigbee_device_property(
         )
     if mesa_outcome.decision == "deny":
         return _tool_error(MESA_DENIED_MESSAGE), "denied", change.device.id
-    if mesa_outcome.warnings:
-        _mesa_advisory_ctx.set(True)
 
     try:
         confirmed = await radio_backend.async_set_z2m_exposed_property(
@@ -2664,8 +2775,6 @@ async def _tool_set_zigbee_binding(
         return await _pending_or_inline(hass, data, access_key, mesa_outcome.approval)
     if mesa_outcome.decision == "deny":
         return _tool_error(MESA_DENIED_MESSAGE), "denied", pre.source.device.id
-    if mesa_outcome.warnings:
-        _mesa_advisory_ctx.set(True)
     if not _approved_exec_ctx.get():
         for cap in caps:
             if effective_cap(access_key, cap) != CAP_CONFIRM:
@@ -2736,8 +2845,6 @@ async def _execute_set_zigbee_binding(
         return await _pending_or_inline(hass, data, access_key, mesa_outcome.approval)
     if mesa_outcome.decision == "deny":
         return _tool_error(MESA_DENIED_MESSAGE), "denied", change.source.device.id
-    if mesa_outcome.warnings:
-        _mesa_advisory_ctx.set(True)
 
     source_after_hash: str | None = None
     target_after_hash: str | None = None
@@ -2861,6 +2968,17 @@ async def _tool_configure_zigbee_reporting(
     pre = await _resolve_zigbee_reporting_change(args, access_key, hass)
     if isinstance(pre, tuple):
         return pre
+    diff = lambda: _build_diff_configure_zigbee_reporting(
+        args, access_key, hass, change=pre
+    )
+    refused = await _radio_device_mesa_gate(
+        hass, data, access_key, pre.device,
+        tool_name="configure_zigbee_reporting", service="configure_reporting",
+        service_data=dict(pre.desired),
+        args=args, diff=diff, request_id=request_id, client_ip=client_ip,
+    )
+    if isinstance(refused, tuple):
+        return refused
     blocked = await _gate(
         "cap_radio_write",
         access_key,
@@ -2870,13 +2988,13 @@ async def _tool_configure_zigbee_reporting(
         args=args,
         request_id=request_id,
         client_ip=client_ip,
-        diff=lambda: _build_diff_configure_zigbee_reporting(
-            args, access_key, hass, change=pre
-        ),
+        diff=diff,
     )
     if blocked is not None:
         return blocked
-    return await _execute_configure_zigbee_reporting(args, access_key, hass, data)
+    return await _execute_configure_zigbee_reporting(
+        args, access_key, hass, data, request_id=request_id, client_ip=client_ip
+    )
 
 
 async def _execute_configure_zigbee_reporting(
@@ -2884,6 +3002,8 @@ async def _execute_configure_zigbee_reporting(
     access_key: AccessKeyRecord,
     hass: HomeAssistant,
     data: PhoenixData,
+    request_id: str = "",
+    client_ip: str | None = None,
 ) -> tuple[dict, str, str]:
     """Revalidate, apply, exactly confirm, and audit reporting configuration."""
     if effective_cap(access_key, "cap_radio_write") == CAP_DENY:
@@ -2891,6 +3011,23 @@ async def _execute_configure_zigbee_reporting(
     change = await _resolve_zigbee_reporting_change(args, access_key, hass)
     if isinstance(change, tuple):
         return change
+    advisory = await _radio_device_mesa_gate(
+        hass, data, access_key, change.device,
+        tool_name="configure_zigbee_reporting", service="configure_reporting",
+        service_data=dict(change.desired),
+        args=args,
+        diff=lambda: _build_diff_configure_zigbee_reporting(args, access_key, hass, change=change),
+        request_id=request_id, client_ip=client_ip,
+    )
+    if isinstance(advisory, tuple):
+        return advisory
+    return _with_mesa_advisory(await _apply_zigbee_reporting(change, access_key, hass, data), advisory)
+
+
+async def _apply_zigbee_reporting(
+    change: _ResolvedZigbeeReportingChange, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData
+) -> tuple[dict, str, str]:
+    """Send one reporting update after every gate, then confirm and record it."""
     try:
         _entry, _after, after_hash = await radio_backend.async_configure_z2m_reporting(
             hass, ieee=change.ieee, desired=change.desired
@@ -3022,8 +3159,6 @@ async def _tool_zigbee_group_change(
         return await _pending_or_inline(hass, data, access_key, mesa_outcome.approval)
     if mesa_outcome.decision == "deny":
         return _tool_error(MESA_DENIED_MESSAGE), "denied", tool_name
-    if mesa_outcome.warnings:
-        _mesa_advisory_ctx.set(True)
     if not _approved_exec_ctx.get():
         for cap in caps:
             if effective_cap(access_key, cap) != CAP_CONFIRM:
@@ -3104,8 +3239,6 @@ async def _execute_zigbee_group_change(
         return await _pending_or_inline(hass, data, access_key, mesa_outcome.approval)
     if mesa_outcome.decision == "deny":
         return _tool_error(MESA_DENIED_MESSAGE), "denied", tool_name
-    if mesa_outcome.warnings:
-        _mesa_advisory_ctx.set(True)
 
     try:
         if change.operation == "create":
@@ -3242,25 +3375,53 @@ async def _tool_remove_zigbee_device(
     )
     if isinstance(pre, tuple):
         return pre
+    diff = lambda: _build_diff_remove_zigbee_device(args, access_key, hass, data)
+    refused = await _radio_device_mesa_gate(
+        hass, data, access_key, pre.device,
+        tool_name="remove_zigbee_device", service="remove", service_data={},
+        args=args, diff=diff, request_id=request_id, client_ip=client_ip,
+    )
+    if isinstance(refused, tuple):
+        return refused
     blocked = await _gate(
         "cap_radio_write", access_key, hass, data,
         tool_name="remove_zigbee_device", args=args, request_id=request_id,
-        client_ip=client_ip, diff=lambda: _build_diff_remove_zigbee_device(args, access_key, hass, data),
+        client_ip=client_ip, diff=diff,
     )
     if blocked is not None:
         return blocked
-    return await _execute_remove_zigbee_device(args, access_key, hass, data)
+    return await _execute_remove_zigbee_device(
+        args, access_key, hass, data, request_id=request_id, client_ip=client_ip
+    )
 
 
 async def _execute_remove_zigbee_device(
-    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData,
+    request_id: str = "", client_ip: str | None = None,
 ) -> tuple[dict, str, str]:
+    if effective_cap(access_key, "cap_radio_write") == CAP_DENY:
+        return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "remove_zigbee_device"
     resolved = _resolve_radio_device(
         args, access_key, hass, "remove_zigbee_device", require_write=True
     )
     if isinstance(resolved, tuple):
         return resolved
     device, backend, ieee = resolved.device, resolved.backend, resolved.ieee
+    advisory = await _radio_device_mesa_gate(
+        hass, data, access_key, device,
+        tool_name="remove_zigbee_device", service="remove", service_data={},
+        args=args, diff=lambda: _build_diff_remove_zigbee_device(args, access_key, hass, data),
+        request_id=request_id, client_ip=client_ip,
+    )
+    if isinstance(advisory, tuple):
+        return advisory
+    return _with_mesa_advisory(await _remove_zigbee_device(hass, device, backend, ieee), advisory)
+
+
+async def _remove_zigbee_device(
+    hass: HomeAssistant, device: Any, backend: str, ieee: str
+) -> tuple[dict, str, str]:
+    """Remove the device from its network after every gate."""
     try:
         async with asyncio.timeout(PROXY_TIMEOUT_SECONDS):
             await radio_backend.async_remove_device(hass, backend, ieee)
@@ -3277,7 +3438,7 @@ async def _execute_remove_zigbee_device(
         }
         return _tool_success(json.dumps(body)), "allowed", device.id
     except HomeAssistantError as exc:
-        _LOGGER.error("remove_zigbee_device failed for %s: %s", ieee, exc)
+        _LOGGER.error("remove_zigbee_device failed for %s: %s", ieee, _scrub_log_text(str(exc)))
         return _tool_error("Failed to remove the device."), "denied", device.id
     verified = await radio_backend.async_confirm_device_removed(hass, backend, ieee)
     return (

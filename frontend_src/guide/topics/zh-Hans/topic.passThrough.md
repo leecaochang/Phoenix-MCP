@@ -5,7 +5,7 @@
 
 ## 会开启什么 {#allows}
 
-除非你把它们设为确认，直通模式还会允许以下能力：
+直通模式还会开启以下能力。只要直通模式开启，它们就保持开启，都不能设为确认或拒绝：
 
 - {{label:caps.cap_config_read.label}}、{{label:caps.cap_template_render.label}}、{{label:caps.cap_search.label}} 和 {{label:caps.cap_registry_read.label}}。
 - {{label:caps.cap_traces.label}}、{{label:caps.cap_diagnostics.label}}、{{label:caps.cap_broadcast.label}} 和 {{label:caps.cap_service_response.label}}。

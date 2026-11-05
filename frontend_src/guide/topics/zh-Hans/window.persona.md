@@ -11,7 +11,7 @@
 
 ## {{label:personas.read_only.label}} {#read-only}
 
-只读取：配置、模板、系统日志、搜索、注册表、自动化跟踪、诊断和服务响应数据。它不更改任何配置。
+只读取：配置、模板、系统日志、搜索、注册表、自动化跟踪、诊断和服务响应数据。它不更改任何配置，但仍可控制权限树中设为 W 的任何对象。
 
 ## {{label:personas.voice_assistant.label}} {#voice-assistant}
 

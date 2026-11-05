@@ -2,7 +2,7 @@
  * Whether Home Assistant is answering. A restart makes every request fail at
  * the network layer, which is neither a Phoenix error nor a model provider
  * error: the panel says so once, in its own words, instead of each window
- * showing a raw fetch failure (user, 2026-10-29). The API layer reports every
+ * showing a raw fetch failure. The API layer reports every
  * request here, so all three bundles share one answer.
  */
 
@@ -12,7 +12,7 @@ import { useEffect, useRef, useState } from "react";
  * The panel, the injector and Agent Chat are separate bundles with separate
  * module state, and an idle window makes no requests of its own, so the answer
  * is shared through the page: one object every bundle reads, and an event that
- * tells the others when it changes (user, 2026-10-29).
+ * tells the others when it changes.
  */
 const SHARED = "__phxConnection";
 const EVENT = "phx-connection";
@@ -22,6 +22,9 @@ const shared: Shared = scope[SHARED] ?? (scope[SHARED] = { reachable: true });
 const listeners = new Set<(up: boolean) => void>();
 /** What this bundle's listeners were last told, so an echo of its own event is not repeated. */
 let told = shared.reachable;
+
+/** A reply being streamed stopped because the connection went, not because anything refused it. */
+export class ConnectionLostError extends Error {}
 
 /** Whether the last request reached Home Assistant. */
 export function homeAssistantReachable(): boolean {

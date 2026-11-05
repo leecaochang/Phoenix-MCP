@@ -16,7 +16,9 @@ from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.service import async_register_admin_service
 from homeassistant.util.dt import utcnow
 
-from custom_components.phoenix_mcp import ai_task, assist_api, mcp_view, voice_agent
+from custom_components.phoenix_mcp import ai_task, assist_api, tool_dispatch, voice_agent
+from custom_components.phoenix_mcp.tools import logs as logs_tools
+from custom_components.phoenix_mcp.tools import service as service_tools
 from custom_components.phoenix_mcp.admin_view import _approve_approval
 from custom_components.phoenix_mcp.approvals import async_create_pending_approval, get_approval
 from custom_components.phoenix_mcp.approval_targets import bind_targets
@@ -29,7 +31,7 @@ from custom_components.phoenix_mcp.policy_engine import Permission, resolve, res
 from custom_components.phoenix_mcp.rate_limiter import RateLimiter
 from custom_components.phoenix_mcp.request_authority import AuthorityChangedError, check_request_authority
 from custom_components.phoenix_mcp.access_key_store import PermissionNode, AccessKeyStore
-from tests.runtime_fixtures import assist_result_parts
+from tests.runtime_fixtures import patch_readers, assist_result_parts
 
 
 async def _environment(hass):
@@ -91,7 +93,7 @@ async def test_assist_gate_and_audit_use_requesting_user(hass, hass_admin_user, 
     tool = assist_api.PhoenixAssistTool("get_logs", "", {}, access_key.id)
     downstream = AsyncMock(return_value=({"content": [{"type": "text", "text": "private-log-fixture"}]}, "allowed", "get_logs"))
     # Keep the owning capability gate, replace only the admin-only backend read.
-    with patch.object(mcp_view, "_tool_log_query", downstream):
+    with patch.object(logs_tools, "_tool_log_query", downstream):
         result, error = assist_result_parts(await tool.async_call(
             hass, llm.ToolInput(tool_name="get_logs", tool_args={}), _context(user.id if identity != "unknown" else None)))
     if identity == "admin":
@@ -233,14 +235,14 @@ async def test_service_authority_uses_native_admin_registration(
         effects.append(call.context.user_id)
     register = async_register_admin_service if admin_only else hass.services.async_register
     if admin_only:
-        register(hass, "homeassistant", "reload_config_entry", service, schema=None)
+        register(hass, "light", "household_effect", service, schema=None)
     else:
-        register("homeassistant", "reload_config_entry", service)
+        register("light", "household_effect", service)
     user = hass_admin_user if identity == "admin" else await hass.auth.async_create_user("member", group_ids=[GROUP_ID_USER])
-    args = {"service": {"domain": "homeassistant", "name": "reload_config_entry"},
+    args = {"service": {"domain": "light", "name": "household_effect"},
             "targets": [{"kind": "entity", "ids": [entity.entity_id]}]}
     if identity == "bearer":
-        result, outcome, _ = await mcp_view._tool_call_service(args, access_key, hass, data)
+        result, outcome, _ = await service_tools._tool_call_service(args, access_key, hass, data)
     else:
         await data.store.async_patch_settings(assist_bound_access_key_id=access_key.id)
         tool = assist_api.PhoenixAssistTool("call_service", "", {}, access_key.id)
@@ -306,7 +308,7 @@ async def test_service_registration_change_after_gate_cannot_gain_system_authori
     async def service(call):
         effects.append(call)
     hass.services.async_register("light", "turn_on", service)
-    module = native if native_tool else mcp_view
+    module = native if native_tool else service_tools
     gate_name = "_mesa_gate_native" if native_tool else "async_apply_mesa_to_call"
     original_gate = getattr(module, gate_name)
     async def gate(*args, **kwargs):
@@ -319,7 +321,7 @@ async def test_service_registration_change_after_gate_cannot_gain_system_authori
                 result, outcome, _ = await native._tool_intent_action(
                     "HassTurnOn", "light", "turn_on", {}, [entity.entity_id], hass, access_key)
             else:
-                result, outcome, _ = await mcp_view._execute_call_service(
+                result, outcome, _ = await service_tools._execute_call_service(
                     {"domain": "light", "service": "turn_on", "entity_id": entity.entity_id}, access_key, hass, data)
     assert outcome == "denied", result
     assert effects == []
@@ -343,7 +345,7 @@ async def test_inactive_household_approval_is_a_known_refusal(hass, hass_admin_u
     request = make_mocked_request("POST", "/approve")
     request[KEY_HASS_USER] = hass_admin_user
     request["phoenix_mcp_rid"] = "accept"
-    with patch.object(mcp_view, "async_execute_approved_tool", AsyncMock()) as execute:
+    with patch("custom_components.phoenix_mcp.admin_view.async_execute_approved_tool", AsyncMock()) as execute:
         response = await _approve_approval(hass, request, record.id)
     execute.assert_not_awaited()
     assert response.status == 200
@@ -397,16 +399,16 @@ async def test_owned_provider_loop_keeps_household_restriction(hass, hass_admin_
     secret_store = MagicMock()
     secret_store.resolve.return_value = cfg
     async def run(*args, **kwargs):
-        response, _, _, outcome = await mcp_view._dispatch_mcp("tools/call", "tool", {"name": "get_logs", "arguments": {}}, access_key, hass, data, ingress, "")
+        response, _, _, outcome = await tool_dispatch._dispatch_mcp("tools/call", "tool", {"name": "get_logs", "arguments": {}}, access_key, hass, data, ingress, "")
         assert outcome == "denied"
         assert response["result"]["isError"]
         assert household_authority.get().user_id == (user.id if ingress == "voice" else None)
         return "denied"
     module = voice_agent if ingress == "voice" else ai_task
     loop = "async_run_voice_turn" if ingress == "voice" else "async_run_ai_task"
-    with patch("custom_components.phoenix_mcp.agentcli._get_secret_store", AsyncMock(return_value=secret_store)), \
-         patch("custom_components.phoenix_mcp.agentcli.build_provider", return_value=MagicMock()), \
-         patch("custom_components.phoenix_mcp.agentcli."+loop, side_effect=run), \
+    with patch_readers("custom_components.phoenix_mcp.llm.accounts._get_secret_store", AsyncMock(return_value=secret_store)), \
+         patch_readers("custom_components.phoenix_mcp.llm.factory.build_provider", return_value=MagicMock()), \
+         patch("custom_components.phoenix_mcp."+("voice_agent." if ingress == "voice" else "ai_task.")+loop, side_effect=run), \
          patch.object(module, "async_get_clientsession", return_value=MagicMock()):
         if ingress == "voice":
             assert await module.async_voice_answer(hass, data, "read logs", context=Context(user_id=user.id)) == "denied"
@@ -433,3 +435,51 @@ async def test_conversation_agent_carries_real_ha_context_into_household_scope(h
         await voice_agent.PhoenixConversationAgent(hass, data).async_process(user_input)
     assert seen == [(user.id, "allow" if admin else "deny")]
     assert household_authority.get() is None
+
+
+async def test_ai_task_reads_the_requesting_user_from_its_own_chat_session(hass, hass_admin_user):
+    """The session is local to the call, unlike the context slot overlapping tasks share."""
+    from dataclasses import fields
+
+    from homeassistant.helpers import chat_session
+
+    from custom_components.phoenix_mcp.ai_task import _task_user_id
+
+    assert _task_user_id() is None
+    if "user_id" not in {field.name for field in fields(chat_session.ChatSession)}:
+        # Releases before this field name no user, which the reader treats as household.
+        token = chat_session.current_session.set(chat_session.ChatSession("conversation"))
+        try:
+            assert _task_user_id() is None
+        finally:
+            chat_session.current_session.reset(token)
+        return
+    session = chat_session.ChatSession("conversation", user_id=hass_admin_user.id)
+    token = chat_session.current_session.set(session)
+    try:
+        assert _task_user_id() == hass_admin_user.id
+    finally:
+        chat_session.current_session.reset(token)
+    token = chat_session.current_session.set(chat_session.ChatSession("automation"))
+    try:
+        assert _task_user_id() is None
+    finally:
+        chat_session.current_session.reset(token)
+
+
+async def test_ai_task_intersects_the_key_with_the_requesting_user(hass, hass_read_only_user):
+    from custom_components.phoenix_mcp import ai_task
+    from custom_components.phoenix_mcp.household_authority import household_authority
+
+    seen = []
+
+    async def generate(*_args):
+        seen.append(household_authority.get().user)
+        return "ok"
+
+    with patch.object(ai_task, "_async_generate_ai_task_data", side_effect=generate):
+        data = SimpleNamespace(conversations=None, store=MagicMock())
+        assert await ai_task.async_generate_ai_task_data(
+            hass, data, "read", None, user_id=hass_read_only_user.id) == "ok"
+        assert await ai_task.async_generate_ai_task_data(hass, data, "read", None) == "ok"
+    assert seen[0].id == hass_read_only_user.id and seen[1] is None

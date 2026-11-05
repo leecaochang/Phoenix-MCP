@@ -4,9 +4,11 @@ import json
 
 import pytest
 
-from custom_components.phoenix_mcp.const import DECISION_CONTEXT_MAX_BYTES, DECISION_CONTEXT_MAX_DEPTH
-from custom_components.phoenix_mcp.decision_context import context_history
-from custom_components.phoenix_mcp.decision_history import history_texts, structured_context_history
+from custom_components.phoenix_mcp.routing.routing_tables import (
+    DECISION_CONTEXT_MAX_BYTES, DECISION_CONTEXT_MAX_DEPTH,
+)
+from custom_components.phoenix_mcp.routing.decision_context import context_history
+from custom_components.phoenix_mcp.routing.decision_history import history_texts, structured_context_history
 
 
 def test_native_adapter_history_is_preserved_and_independently_copied(provider_context_history):

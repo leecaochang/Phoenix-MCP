@@ -5,7 +5,7 @@ from unittest.mock import patch
 
 import pytest
 
-from custom_components.phoenix_mcp.intent_recognition import RecognitionUnavailable, async_recognize
+from custom_components.phoenix_mcp.routing.intent_recognition import RecognitionUnavailable, async_recognize
 
 
 async def test_strict_mode_is_never_downgraded(hass):

@@ -1,8 +1,7 @@
 /**
  * Switch to Scoped Mode, shown in place of a pass-through key's Permissions
  * tree. The panel shows at once, without a first press to open it, and what
- * pass-through allows and what switching does read in the Help window
- * (user, 2026-10-31).
+ * pass-through allows and what switching does read in the Help window.
  */
 import React, { useState } from "react";
 import type { AccessKeyRecord, PatchAccessKeyBody } from "../types";

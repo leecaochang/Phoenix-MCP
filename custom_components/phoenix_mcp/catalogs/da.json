@@ -47,7 +47,7 @@
       "createAccessKey": "Opret adgangsnøgle",
       "createFailed": "Kunne ikke oprette adgangsnøgle.",
       "createPtUnderstand": "Jeg forstår, at denne adgangsnøgle har bred adgang til Home Assistant",
-      "createPtWarning": "<strong>Denne adgangsnøgle kan læse og styre alle Home Assistant-entiteter.</strong> Pass-through slår også Læs konfiguration, Gengiv skabelon, Søgning og opdagelse, Læs register, Automatiseringsspor, Diagnostik, Udsendelse og Svardata fra tjeneste til, medmindre du sætter dem til Bekræft. Diagnostik og Svardata fra tjeneste kan afsløre følsomme oplysninger. Alle andre funktioner beholder deres egen indstilling, og MESA-regler, bloklisten i Phoenix MCP, fjernelse af følsomme attributter, hastighedsgrænser, tilbagekaldelse og udløb gælder stadig. Brug den kun med MCP-klienter, du stoler på med hele dit hjem.",
+      "createPtWarning": "<strong>Denne adgangsnøgle kan læse og styre alle Home Assistant-entiteter.</strong> Pass-through slår også Læs konfiguration, Gengiv skabelon, Søgning og opdagelse, Læs register, Automatiseringsspor, Diagnostik, Udsendelse og Svardata fra tjeneste til. Diagnostik og Svardata fra tjeneste kan afsløre følsomme oplysninger. Alle andre funktioner beholder deres egen indstilling, og MESA-regler, bloklisten i Phoenix MCP, fjernelse af følsomme attributter, hastighedsgrænser, tilbagekaldelse og udløb gælder stadig. Brug den kun med MCP-klienter, du stoler på med hele dit hjem.",
       "daysAgo": "{d} d siden",
       "delete": "Slet",
       "deletePermanently": "Slet permanent",
@@ -60,7 +60,7 @@
       "done": "Færdig",
       "empty": "Ingen adgangsnøgler endnu. Opret en for at komme i gang.",
       "emptyFiltered": "Ingen adgangsnøgler matcher filteret.",
-      "enablePtBody": "<strong>Denne nøgle vil læse og styre alle entiteter.</strong> Otte læse- og diagnostikfunktioner slås også til, medmindre de er sat til Bekræft.",
+      "enablePtBody": "<strong>Denne nøgle vil læse og styre alle entiteter.</strong> Otte læse- og diagnostikfunktioner slås også til.",
       "enablePtCheck": "Jeg forstår, at adgangsnøglen <code>{name}</code> får bred adgang til Home Assistant",
       "enablePtFailed": "Kunne ikke aktivere pass-through.",
       "enablePtLabel": "Aktivér pass-through",
@@ -125,7 +125,7 @@
       "presetNewName": "Navn på ny forudindstilling",
       "presetNoChange": "Denne forudindstilling svarer til de aktuelle indstillinger, så ingen indstilling ændres. Anvendelsen tæller stadig som en ændring af indstillingerne: forbundne agenter får besked ved deres næste kald, og optællingen til hastighedsbegrænsningen starter forfra.",
       "presetPtUnderstand": "Jeg forstår, at denne forudindstilling aktiverer pass-through",
-      "presetPtWarning": "<strong>Denne forudindstilling slår pass-through til.</strong> Adgangsnøglen kan så læse og styre alle entiteter, og otte andre funktioner slås til, blandt andet Diagnostik og Svardata fra tjeneste, medmindre de er sat til Bekræft. Andre funktioner, MESA-regler, Phoenix MCP-bloklisten og fjernelse af følsomme attributter gælder stadig.",
+      "presetPtWarning": "<strong>Denne forudindstilling slår pass-through til.</strong> Adgangsnøglen kan så læse og styre alle entiteter, og otte andre funktioner slås til, blandt andet Diagnostik og Svardata fra tjeneste. Andre funktioner, MESA-regler, Phoenix MCP-bloklisten og fjernelse af følsomme attributter gælder stadig.",
       "presetRenameTitle": "Omdøb denne forudindstilling; gemmes, når du klikker væk",
       "presetRevert": "Rul tilbage",
       "presetRevertBody": "Dette kasserer de ikke-gemte ændringer i <strong>{name}</strong>:",
@@ -138,7 +138,7 @@
       "presetSwitchTo": "Skift til",
       "ptConvertBody": "Nøglen følger sit tilladelsestræ med det samme. Uden tildelinger der mister den al adgang til entiteter.",
       "ptConvertFailed": "Kunne ikke konvertere adgangsnøglen.",
-      "ptNoticeCaps": "Otte læse- og diagnostikfunktioner er også slået til, medmindre de er sat til Bekræft. Resten beholder deres egen indstilling.",
+      "ptNoticeCaps": "Otte læse- og diagnostikfunktioner er også slået til. Resten beholder deres egen indstilling.",
       "ptNoticeIntro": "<strong>Pass-through-adgangsnøgle.</strong> Den springer tilladelsestræet over og når alle entiteter, med følsomme attributter fjernet.",
       "ptNoticeUsage": "Pass-through kan sende oplysninger om alle entiteter til modellen, hvilket koster flere tokens end et afgrænset træ.",
       "rateBurstLabel": "Spidsbelastning pr. sekund (0 = ingen grænse pr. sekund)",
@@ -263,6 +263,7 @@
       "mesaArchiveRequired": "archive er påkrævet.",
       "mesaConflictModeInvalid": "on_conflict skal være skip eller overwrite.",
       "mesaProfileExists": "Der findes allerede en profil. Åbn den i Redigér-tilstand.",
+      "mesaSaveFailed": "MESA-ændringen kunne ikke gemmes, så de tidligere indstillinger gælder stadig.",
       "mesaUnavailable": "MESA er ikke tilgængelig.",
       "nameRequired": "name er påkrævet.",
       "nodeIdInvalidChars": "Node-ID indeholder ugyldige tegn.",
@@ -394,7 +395,9 @@
       "restoreNoConfigSide": "Denne version har ingen konfiguration at gendanne på den side.",
       "restoreYamlTags": "Denne version indeholder YAML-tags som !secret eller !include og kan ikke gendannes automatisk. Genopret den manuelt.",
       "restoreToolReported": "Gendannelsen kunne ikke anvendes. Værktøjet rapporterede: {detail}",
-      "capabilityAllowUnsupported": "{capability} understøtter ikke Tillad-tilstand."
+      "capabilityAllowUnsupported": "{capability} understøtter ikke Tillad-tilstand.",
+      "recoverySnapshotUnsafeAt": "Der findes ingen komplet kopi af dette element uden hemmeligheder, så intet blev ændret. Phoenix afviste det ved {location}.",
+      "invalidHostHeader": "Anmodningens Host-header er ikke en gyldig adresse."
     },
     "agentchat": {
       "accessKey": "Adgangsnøgle",
@@ -427,6 +430,7 @@
       "clearHistory": "Ryd chathistorik",
       "configureFirst": "Konfigurér først en udbyder",
       "connection": "Forbindelse",
+      "connectionLost": "Forbindelsen til Home Assistant blev afbrudt, før dette svar var færdigt.",
       "continue": "Fortsæt",
       "decreaseTextSize": "Formindsk tekststørrelse",
       "dockedClosed": "Agent Chat er lukket.",
@@ -458,6 +462,7 @@
         "empty_turn": "Modellen afsluttede runden uden et tekstsvar.",
         "internal": "Intern fejl.",
         "max_tokens_stop": "Modellen stoppede, fordi den nåede sin grænse for svarlængde. Bed den fortsætte, eller forøg modellens grænse for output-tokens (for Ollama: indstillingerne num_predict/context).",
+        "memory_trimmed": "Samtalen er blevet større, end én anmodning kan rumme, så modellen husker ikke længere de ældste beskeder. De bliver stående på skærmen.",
         "model_api_unsupported": "Denne model er ikke kvalificeret til OpenCode Chat Completions. Vælg en understøttet model.",
         "network": "Udbyderen er midlertidigt utilgængelig.",
         "ollama_backend": "Udbyderen er midlertidigt utilgængelig.",
@@ -476,6 +481,7 @@
         "provider_transient": "Udbyderen er midlertidigt utilgængelig.",
         "quota": "Udbyderkontoen er løbet tør for kredit eller har nået sin forbrugsgrænse. Den bliver ikke forsøgt igen.",
         "rate_limit": "Udbyderen er midlertidigt utilgængelig.",
+        "request_too_large": "Denne besked er for stor til at blive sendt. Gør den kortere, fjern billeder, eller start en ny samtale med /clear.",
         "too_many_tools": "Denne adgangsnøgle tilbyder {count} værktøjer, men {provider} accepterer højst {limit} pr. anmodning. Begræns adgangsnøglens funktioner, eller vælg en anden udbyder.",
         "tool_call_cut": "Forbindelsen til modellen blev afbrudt midt i et værktøjskald, så handlingen blev ikke udført. Der blev ikke anvendt noget, og selve anmodningen var ikke årsagen; send den igen.",
         "tool_call_truncated": "Modellen nåede sin grænse for svarlængde midt i et værktøjskald, så handlingen blev ikke udført. Den ønskede ændring var for stor til at sende i ét kald; prøv at bede om en mindre ændring.",
@@ -483,7 +489,9 @@
         "review_changed": "Adgangsnøglens værktøjer eller samtalen ændrede sig, mens værktøjskaldet blev gennemgået, så intet blev kørt. Send anmodningen igen.",
         "kill_switch": "Nødstoppet er slået til, så agenten stoppede. Der blev ikke kørt mere.",
         "unreachable": "Home Assistant kunne ikke nås, så dette blev ikke færdigt. Alt, der ventede på din godkendelse, blev annulleret.",
-        "upstream": "Udbyderen er midlertidigt utilgængelig."
+        "upstream": "Udbyderen er midlertidigt utilgængelig.",
+        "provider_slow": "Udbyderen svarede ikke inden for {seconds} s.",
+        "result_withheld": "Et resultat på {length} byte var for stort til anmodningens kontekst og blev ikke sendt til modellen."
       },
       "options": "Indstillinger",
       "popIn": "Åbn igen i Home Assistant",
@@ -967,7 +975,9 @@
       "saveFailed": "Gennemgangen kunne ikke gemmes. Handlingen kræver stadig gennemgang.",
       "showInAudit": "Vis i revisionsloggen",
       "title": "Kræver opmærksomhed",
-      "unknown": "Samtalen sluttede, før Phoenix registrerede, om handlingen kørte, så den kan være kørt. Vis i revisionsloggen viser, hvor den tilbydes, hvad Phoenix registrerede; en handling, der ventede på godkendelse, har sin status i Godkendelser. Kontrollér Home Assistant, før du prøver igen."
+      "unknown": "Samtalen sluttede, før Phoenix registrerede, om handlingen kørte, så den kan være kørt. Vis i revisionsloggen viser, hvor den tilbydes, hvad Phoenix registrerede; en handling, der ventede på godkendelse, har sin status i Godkendelser. Kontrollér Home Assistant, før du prøver igen.",
+      "audit_storageTitle": "Revisionsloggen når ikke frem til lageret",
+      "audit_storageHelp": "Nye revisionsposter findes kun i hukommelsen, så en genstart ville miste dem. Kontrollér Home Assistant-loggen. Dette forsvinder, når næste gemning lykkes."
     },
     "audit": {
       "accessPassThrough": "Pass-through",
@@ -1105,7 +1115,7 @@
         "label": "Læs register"
       },
       "cap_registry_write": {
-        "description": "Redigér entiteter og enheder, administrér områder, etager, labels og kategorier, og fjern forældede poster.",
+        "description": "Redigér entiteter og enheder, administrér områder, etager, labels og kategorier, fjern forældede poster, og slet en entitets registrerede historik.",
         "label": "Administrér entitetsregister"
       },
       "cap_restart": {
@@ -1150,7 +1160,7 @@
       "modeDescDeny": "Bloker denne funktion. Dens værktøjer er skjult for nøglens agenter, medmindre Annoncér altid alle værktøjer er slået til.",
       "noBuilder": "Device Builder-tilføjelsesprogrammet blev ikke fundet",
       "noEsphome": "ESPHome blev ikke fundet",
-      "passThroughNotice": "<strong>Pass-through er slået til.</strong> Læs konfiguration, Gengiv skabelon, Søgning og opdagelse, Læs register, Automatiseringsspor, Diagnostik, Udsendelse og Svardata fra tjeneste behandles som Tillad, medmindre de er sat til Bekræft. Alle andre funktioner bruger deres indstilling nedenfor.",
+      "passThroughNotice": "<strong>Pass-through er slået til.</strong> Læs konfiguration, Gengiv skabelon, Søgning og opdagelse, Læs register, Automatiseringsspor, Diagnostik, Udsendelse og Svardata fra tjeneste behandles som Tillad. Alle andre funktioner bruger deres indstilling nedenfor.",
       "tierConfigWrite": "Konfigurationsændringer",
       "tierEveryday": "Hverdagslige handlinger",
       "tierIrreversible": "Høj risiko",
@@ -1269,6 +1279,7 @@
       "empty": "(tom)",
       "httpStatus": "Serveren svarede med HTTP {status}. Opdatér siden, og prøv igen.",
       "invalidResponse": "Serveren returnerede et ugyldigt svar. Opdatér og prøv igen.",
+      "labelValue": "{label}: {value}",
       "listSeparator": ", ",
       "loadMore": "Indlæs flere",
       "loading": "Indlæser...",
@@ -1599,7 +1610,8 @@
       "mesaProfile": "MESA-profil",
       "profileCreate": "Opret en MESA-profil for {key}",
       "profileSet": "MESA-profil angivet for {key} - klik for at redigere",
-      "registryLoadFailed": "Kunne ikke indlæse entitetsregisteret."
+      "registryLoadFailed": "Kunne ikke indlæse entitetsregisteret.",
+      "openFailed": "MESA-profileditoren kunne ikke åbnes. Genindlæs siden, og prøv igen."
     },
     "mesa": {
       "addAreaProfile": "Tilføj områdeprofil",
@@ -2020,7 +2032,7 @@
         "label": "Avanceret bruger"
       },
       "read_only": {
-        "description": "Læser tilstande, historik og logge. Konfigurationsændringer, meddelelser, låse, alarmer, gardiner/porte og ventiler nægtes.",
+        "description": "Læser tilstande, historik og logge. Konfigurationsændringer, meddelelser, låse, alarmer, gardiner/porte og ventiler nægtes. Den kan stadig styre alt, der er sat til W.",
         "label": "Skrivebeskyttet observatør"
       },
       "voice_assistant": {
@@ -2337,7 +2349,7 @@
       "voiceRemoveFailed": "Kunne ikke fjerne Phoenix MCP-assistenten.",
       "voiceSetUpFailed": "Kunne ikke opsætte Phoenix MCP-assistenten.",
       "wipeBusy": "Rydder...",
-      "wipeCoreHelp": "Slet alle adgangsnøgler, indstillinger, godkendelser, ændringsposter og logge. Det kan ikke fortrydes.",
+      "wipeCoreHelp": "Slet alle adgangsnøgler, indstillinger, godkendelser, ændringsposter og logge. Gendannelseskopier bevares. Det kan ikke fortrydes.",
       "wipeCoreLabel": "Slet Phoenix MCP-kerndata",
       "wipeFailed": "Rydning mislykkedes.",
       "wipeMesaHelp": "Slet alle MESA-profiler. Slået fra som standard; eksportér dine profiler først for at beholde en kopi.",
@@ -2429,9 +2441,11 @@
       "killSwitchShort": "NØDSTOP TIL",
       "killSwitchTitle": "Phoenix MCP betjener ikke agentanmodninger. Deaktivér nødstoppet i Indstillinger for at genoptage.",
       "loadAccessKeysFailed": "Kunne ikke indlæse adgangsnøgler.",
+      "loadSettingsFailed": "Kunne ikke indlæse indstillinger.",
       "offlineBody": "Home Assistant svarer ikke, som regel fordi den genstarter. Prøver igen, vent venligst...",
       "offlineTitle": "Phoenix er ikke tilgængelig",
       "renderFailed": "Denne visning kunne ikke vises. Opdatér for at prøve igen, eller vælg et andet afsnit.",
+      "retrySettingsHelp": "Læs indstillingerne fra Home Assistant igen.",
       "sectionsAria": "Phoenix MCP-afsnit",
       "srTitle": "Administration af Phoenix MCP-adgangsnøgler",
       "tabAccessKeys": "Adgangsnøgler",
@@ -2439,7 +2453,8 @@
       "tabAudit": "Revisionslog",
       "tabChanges": "Ændringer",
       "tabSettings": "Indstillinger",
-      "killSwitchHelp": "Nødstoppet er slået til, så agenter afvises. Vælg for at åbne Sikkerhed og slå det fra."
+      "killSwitchHelp": "Nødstoppet er slået til, så agenter afvises. Vælg for at åbne Sikkerhed og slå det fra.",
+      "chatListsFailed": "Agent Chat kunne ikke indlæse sine adgangsnøgler eller AI-udbydere. Den prøver igen, når du åbner den, eller når Home Assistant genopretter forbindelsen."
     },
     "version": {
       "card.added": "tilføjede {subject} ({where})",

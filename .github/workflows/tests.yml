@@ -63,12 +63,14 @@ jobs:
       - name: Typecheck (mypy)
         # Config, including the first-party module checks, lives in pyproject.toml so the
         # local run and CI agree. Non-strict on purpose: this exists to catch HA
-        # drift (a renamed attribute, a wrong argument) now that `hass` is typed
-        # as HomeAssistant rather than Any, not to enforce full annotations.
+        # drift (a renamed attribute, a wrong argument) wherever `hass` is typed
+        # as HomeAssistant, not to enforce full annotations.
         run: python -m mypy
       - name: Run pytest with coverage
         # fail_under lives in pyproject.toml so the local run and CI agree.
-        run: python -m pytest -q --cov --cov-report=term-missing:skip-covered
+        run: python -m pytest -q --cov --cov-report=term-missing:skip-covered --cov-report=json:coverage.json
+      - name: Check per-module coverage floors
+        run: python scripts/check_coverage_floors.py coverage.json
 
   frontend:
     name: Frontend (vitest)
@@ -90,7 +92,8 @@ jobs:
       - name: Check React hooks
         run: npm run lint
       - name: Run vitest
-        run: npm run test
+        # Coverage is reported, not gated.
+        run: npm run test -- --coverage
       - name: Audit shipped dependencies
         # Production tree only: the dev toolchain is not installed alongside the
         # integration, so a dev-only advisory must not fail a release check.

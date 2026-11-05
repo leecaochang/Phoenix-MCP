@@ -12,7 +12,7 @@ from homeassistant.setup import async_setup_component
 
 from custom_components.phoenix_mcp.const import DOMAIN
 from custom_components.phoenix_mcp.data import PhoenixData
-from custom_components.phoenix_mcp.mcp_view import _call_tool, async_execute_approved_tool
+from custom_components.phoenix_mcp.tool_dispatch import _call_tool, async_execute_approved_tool
 from custom_components.phoenix_mcp.mesa import async_setup_mesa
 from custom_components.phoenix_mcp.mesa_core import MetadataOrigin, SemanticProfile
 from custom_components.phoenix_mcp.access_key_store import PermissionNode, PermissionTree
@@ -190,18 +190,19 @@ async def test_runtime_actions_preserve_mesa_and_approval_gates(hass, runtime, d
 
 
 async def test_named_script_rechecks_binding_after_mesa_wait(hass, runtime, monkeypatch):
-    from custom_components.phoenix_mcp import mcp_view
+    from custom_components.phoenix_mcp import mesa
+    from custom_components.phoenix_mcp.tools import service as service_tools
 
     access_key, data = runtime
     entered, release = asyncio.Event(), asyncio.Event()
-    apply_mesa = mcp_view.async_apply_mesa_to_call
+    apply_mesa = mesa.async_apply_mesa_to_call
 
     async def paused_mesa(*args, **kwargs):
         entered.set()
         await release.wait()
         return await apply_mesa(*args, **kwargs)
 
-    monkeypatch.setattr(mcp_view, "async_apply_mesa_to_call", paused_mesa)
+    monkeypatch.setattr(service_tools, "async_apply_mesa_to_call", paused_mesa)
     task = asyncio.create_task(_call_tool("call_service", _args("script", "visible", "script.visible"), access_key, hass, data))
     try:
         await asyncio.wait_for(entered.wait(), 1)

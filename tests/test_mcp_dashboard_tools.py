@@ -22,7 +22,8 @@ from pytest_homeassistant.common import MockConfigEntry
 from custom_components.phoenix_mcp.const import REDACTION_SENTINEL
 from custom_components.phoenix_mcp.data import PhoenixData
 from custom_components.phoenix_mcp.helpers import content_hash
-from custom_components.phoenix_mcp.mcp_view import _call_tool, async_restore_version
+from custom_components.phoenix_mcp.tool_dispatch import _call_tool
+from custom_components.phoenix_mcp.tools.restore import async_restore_version
 from custom_components.phoenix_mcp.tools import lovelace as lovelace_tools
 from custom_components.phoenix_mcp.tools.lovelace import (
     _build_diff_set_dashboard_config,
@@ -264,7 +265,7 @@ class TestDashboardReadFailureIsNotAbsence:
 
     def _patch_read(self, exc):
         # Patch the module that CALLS it: the dashboard tools live in
-        # tools/lovelace.py and never read mcp_view's binding.
+        # tools/lovelace.py and never read another module's binding.
         return patch.object(
             lovelace_tools, "async_get_lovelace_config", new=AsyncMock(side_effect=exc))
 

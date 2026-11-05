@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import MagicMock
 
 import pytest
 from homeassistant.core import HomeAssistant
@@ -33,35 +33,7 @@ from custom_components.phoenix_mcp.data import PhoenixData
 from custom_components.phoenix_mcp.mesa import async_setup_mesa
 from custom_components.phoenix_mcp.rate_limiter import RateLimiter
 from custom_components.phoenix_mcp.access_key_store import GlobalSettings, AccessKeyStore
-
-
-def _admin_request(body: bytes = b"", query: dict | None = None) -> MagicMock:
-    from homeassistant.components.http.const import KEY_AUTHENTICATED, KEY_HASS_USER
-
-    user = MagicMock()
-    user.is_admin = True
-    user.id = "admin-user"
-    state: dict = {KEY_HASS_USER: user, KEY_AUTHENTICATED: True, "phoenix_mcp_rid": "rid"}
-
-    def _get(k, default=None):
-        if k == KEY_HASS_USER:
-            return user
-        if k == KEY_AUTHENTICATED:
-            return True
-        return default
-
-    request = MagicMock()
-    request.method = "GET"
-    request.path = "/api/phoenix-mcp/admin/mesa"
-    request.remote = "127.0.0.1"
-    request.query = query or {}
-    request.content_length = len(body)
-    request.content = MagicMock()
-    request.content.read = AsyncMock(return_value=body)
-    request.__getitem__ = MagicMock(side_effect=lambda k: state.get(k))
-    request.__setitem__ = MagicMock(side_effect=lambda k, v: state.__setitem__(k, v))
-    request.get = MagicMock(side_effect=_get)
-    return request
+from tests.runtime_fixtures import mesa_admin_request as _admin_request
 
 
 async def _setup(hass: HomeAssistant, mesa_mode: str = "advisory") -> PhoenixData:

@@ -1,7 +1,7 @@
 /**
  * F6 and Shift+F6 move focus between the panel's areas: the toolbar, each
- * window in the order the workspace shows them, the Guide and Agent Chat
- * (user, 2026-11-01). Tab still moves between the controls inside an area.
+ * window in the order the workspace shows them, the Guide and Agent Chat.
+ * Tab still moves between the controls inside an area.
  * The convention follows browsers, Windows applications and the ARIA
  * Authoring Practices for moving between an application's panes.
  */
@@ -61,6 +61,11 @@ export function focusAreas(root: ParentNode): FocusArea[] {
   const chat = root.querySelector(".agentcli-window:not(.agentcli-docked)");
   if (shown(chat)) areas.push({ key: "chat", holds: (el) => chat.contains(el), target: chat });
   return areas;
+}
+
+/** An open dialog, unless it belongs to a workspace not on show. Keys stay inside it. */
+function openModal(root: ParentNode): boolean {
+  return [...root.querySelectorAll('.modal[aria-modal="true"]')].some((modal) => !modal.closest("[hidden]"));
 }
 
 /** The area after (or before) the one holding `active`; from outside every area, the first (or last). */
@@ -132,6 +137,12 @@ export function useAreaKeys(root: RefObject<HTMLElement | null>): void {
     observer.observe(el, { childList: true, subtree: true, attributes: true, attributeFilter: ["hidden", "disabled", "inert"] });
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "F6" || e.ctrlKey || e.altKey || e.metaKey) return;
+      // Everything behind an open dialog is out of reach, and the key must not lead the browser away from it either.
+      if (openModal(scope)) {
+        e.preventDefault();
+        e.stopPropagation();
+        return;
+      }
       const areas = focusAreas(scope);
       const next = nextArea(areas, scope.activeElement, e.shiftKey);
       if (!next) return;

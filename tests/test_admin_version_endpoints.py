@@ -18,6 +18,7 @@ from custom_components.phoenix_mcp.admin_view import (
 from custom_components.phoenix_mcp.const import DOMAIN, VERSION_STORAGE_VERSION
 from custom_components.phoenix_mcp.data import PhoenixData
 from custom_components.phoenix_mcp.version_store import VersionRecord, VersionStore
+from tests.runtime_fixtures import patch_readers
 
 
 def _data() -> PhoenixData:
@@ -109,7 +110,7 @@ class TestVersionDetailEsphomeMasking:
         rec = await _seed_esphome(data, DEVICE_YAML, DEVICE_YAML.replace("Kx9fQ2mVb7", "Zz1yTt8wQq"))
         view = PhoenixAdminVersionView()
         view.hass = _hass_exec(data)
-        with patch("custom_components.phoenix_mcp.tools.esphome._read_esphome_secrets",
+        with patch_readers("custom_components.phoenix_mcp.tools.esphome._read_esphome_secrets",
                    return_value=(set(), set())):
             body = _body(await view.get(_request(), version_id=rec.id))
 
@@ -128,7 +129,7 @@ class TestVersionDetailEsphomeMasking:
         rec = await _seed_esphome(data, DEVICE_YAML, DEVICE_YAML)
         view = PhoenixAdminVersionView()
         view.hass = _hass_exec(data)
-        with patch("custom_components.phoenix_mcp.tools.esphome._read_esphome_secrets",
+        with patch_readers("custom_components.phoenix_mcp.tools.esphome._read_esphome_secrets",
                    return_value=(set(), set())):
             await view.get(_request(), version_id=rec.id)
 
@@ -142,7 +143,7 @@ class TestVersionDetailEsphomeMasking:
         rec = await _seed_esphome(data, None, "api:\n  key: [unclosed\n")
         view = PhoenixAdminVersionView()
         view.hass = _hass_exec(data)
-        with patch("custom_components.phoenix_mcp.tools.esphome._read_esphome_secrets",
+        with patch_readers("custom_components.phoenix_mcp.tools.esphome._read_esphome_secrets",
                    return_value=(set(), set())):
             body = _body(await view.get(_request(), version_id=rec.id))
 
@@ -185,7 +186,7 @@ class TestVersionRestoreErrorDetail:
         failure = ({"content": [{"type": "text", "text": (
                         "This automation is defined in hand-written YAML (packages/lights.yaml).")}],
                     "isError": True}, "invalid_request", "automation:aid1")
-        with patch("custom_components.phoenix_mcp.mcp_view.async_restore_version",
+        with patch("custom_components.phoenix_mcp.admin_view.async_restore_version",
                    AsyncMock(return_value=failure)):
             resp = await view.post(self._post_request(), version_id=rec.id)
 
@@ -333,7 +334,7 @@ async def test_restore_audit_keeps_admin_actor_and_opaque_source_identity():
     req.content_length = 0
     req.content.read = AsyncMock(side_effect=[b"", b""])
     result = ({"content": [{"type": "text", "text": "restored"}]}, "allowed", "fixture")
-    with patch("custom_components.phoenix_mcp.mcp_view.async_restore_version", AsyncMock(return_value=result)):
+    with patch("custom_components.phoenix_mcp.admin_view.async_restore_version", AsyncMock(return_value=result)):
         response = await view.post(req, version_id=record.id)
     assert response.status == 200
     entry = data.audit.query(limit=1)[0].to_dict()
@@ -356,7 +357,7 @@ async def test_a_restore_whose_readback_is_unverified_is_not_reported_as_restore
     req.content.read = AsyncMock(side_effect=[b"", b""])
     body = {"status": status, "recovery_id": "r1", "message": "readback differs; do not retry automatically."}
     result = ({"content": [{"type": "text", "text": json.dumps(body)}]}, "allowed", "energy:preferences")
-    with patch("custom_components.phoenix_mcp.mcp_view.async_restore_version", AsyncMock(return_value=result)):
+    with patch("custom_components.phoenix_mcp.admin_view.async_restore_version", AsyncMock(return_value=result)):
         resp = await view.post(req, version_id=rec.id)
     assert resp.status == expected
     if expected == 409:
@@ -384,7 +385,7 @@ async def test_a_recreated_helper_whose_readback_differs_is_unverified_not_raw_j
     partial = json.dumps({"status": "partial", "recovery_id": "r1", "replacement_helper_id": "h1", "retry_safe": False})
     for text in (partial, "Helper restoration was not verified. Inspect configuration recovery before retrying."):
         result = ({"content": [{"type": "text", "text": text}], "isError": True}, "invalid_request", "helper:x")
-        with patch("custom_components.phoenix_mcp.mcp_view.async_restore_version", AsyncMock(return_value=result)):
+        with patch("custom_components.phoenix_mcp.admin_view.async_restore_version", AsyncMock(return_value=result)):
             resp = await view.post(_restore_request(), version_id=rec.id)
         assert resp.status == 409
         assert _body(resp)["message_key"] == "adminError.restoreUnverified"
@@ -398,7 +399,7 @@ async def test_restore_refuses_when_the_item_changed_after_it_was_chosen():
     view = PhoenixAdminVersionRestoreView()
     view.hass = _hass(data)
     restore = AsyncMock(return_value=({"content": [{"type": "text", "text": "restored"}]}, "allowed", "automation:aid1"))
-    with patch("custom_components.phoenix_mcp.mcp_view.async_restore_version", restore):
+    with patch("custom_components.phoenix_mcp.admin_view.async_restore_version", restore):
         # The newest change the caller saw was the create, but the edit came after it.
         older = data.versions.list_for("automation", "aid1")[1].id
         stale = await view.post(_restore_request(json.dumps({"side": "before", "expected_latest_id": older}).encode()), version_id=rec.id)
@@ -417,7 +418,7 @@ async def test_restore_refuses_when_the_item_changed_after_it_was_chosen():
 async def test_restore_refusals_name_the_sides_restore_would_refuse(hass):
     """Changes is told up front which sides the server refuses, and why."""
     from homeassistant.helpers import entity_registry as er
-    from custom_components.phoenix_mcp.mcp_view import restore_refusal
+    from custom_components.phoenix_mcp.tools.restore import restore_refusal
 
     store = VersionStore()
     tagged = await store.record(resource_type="automation", resource_id="a", action="edit",

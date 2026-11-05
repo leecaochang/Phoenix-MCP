@@ -23,7 +23,7 @@ import pytest
 from homeassistant.util.dt import utcnow
 
 from custom_components.phoenix_mcp.const import MAX_COMPARE_LIST_VALUES, MAX_COMPARE_VALUE_CHARS
-from custom_components.phoenix_mcp.mcp_view import _call_tool
+from custom_components.phoenix_mcp.tool_dispatch import _call_tool
 from custom_components.phoenix_mcp.access_key_store import PermissionNode, PermissionTree, AccessKeyRecord
 from unittest.mock import MagicMock
 

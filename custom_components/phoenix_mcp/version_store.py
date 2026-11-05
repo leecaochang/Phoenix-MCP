@@ -23,6 +23,7 @@ from dataclasses import asdict, dataclass
 from homeassistant.helpers.storage import Store
 from homeassistant.util.dt import utcnow
 
+from .access_key_schema import normalize_access_key_fields
 from .const import (
     MAX_VERSIONS_PER_RESOURCE,
     VERSION_STORAGE_VERSION,
@@ -68,7 +69,6 @@ class VersionRecord:
 
     @classmethod
     def from_dict(cls, raw: dict) -> "VersionRecord":
-        from .access_key_schema import normalize_access_key_fields
 
         raw = normalize_access_key_fields(raw)
         return cls(

@@ -11,7 +11,7 @@ Use it if you want Phoenix's own model and tools behind voice and Assist.
 
 ## AI Task {#ai-task}
 
-Phoenix runs Home Assistant's AI Task actions for automations and scripts, with your account and model. It acts for the household, within its access key.
+Phoenix runs Home Assistant's AI Task actions for automations and scripts, with your account and model. It acts for the household, within its access key. If Home Assistant says who started a task, the task has only that person's rights.
 
 ## Assist Tool Provider {#assist-tool-provider}
 

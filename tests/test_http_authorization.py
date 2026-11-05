@@ -9,7 +9,7 @@ from homeassistant.util.dt import utcnow
 from custom_components.phoenix_mcp.audit import AuditLog
 from custom_components.phoenix_mcp.const import DOMAIN, ACCESS_KEY_PREFIX
 from custom_components.phoenix_mcp.data import PhoenixData
-from custom_components.phoenix_mcp.mcp_view import ALL_MCP_VIEWS
+from custom_components.phoenix_mcp.mcp_transport import ALL_MCP_VIEWS
 from custom_components.phoenix_mcp.rate_limiter import RateLimiter
 from custom_components.phoenix_mcp.access_key_store import AccessKeyStore
 
@@ -19,7 +19,6 @@ async def http_authority(hass, hass_client_no_auth):
     assert await async_setup_component(hass, "http", {})
     store = await AccessKeyStore.async_create(hass)
     data = PhoenixData(store=store, rate_limiter=RateLimiter(), audit=AuditLog())
-    assert data.enforce_mcp_lifecycle is True
     hass.data[DOMAIN] = data
     for view_cls in ALL_MCP_VIEWS:
         view = view_cls()
@@ -111,11 +110,11 @@ async def test_delete_refuses_foreign_origin(http_authority):
 
 async def test_request_notification_refused_before_dispatch_and_session_allocation(http_authority, monkeypatch):
     from unittest.mock import AsyncMock
-    from custom_components.phoenix_mcp import mcp_view
+    from custom_components.phoenix_mcp import mcp_transport
     client, data = http_authority
     _, raw = await data.store.async_create_access_key("notifications", "admin", rate_limit_requests=0)
     dispatch = AsyncMock()
-    monkeypatch.setattr(mcp_view, "_dispatch_mcp", dispatch)
+    monkeypatch.setattr(mcp_transport, "_dispatch_mcp", dispatch)
     response = await client.post("/api/phoenix-mcp", headers=_headers(raw),
                                  json={"jsonrpc": "2.0", "method": "tools/call", "params": {"name": "GetDateTime"}})
     assert response.status == 400 and await response.read() == b""
@@ -144,12 +143,12 @@ async def test_legacy_initialized_first_batch_unknown_method_and_resource_preser
 
 
 async def test_non_tool_exception_is_scrubbed_and_retains_rpc_id(http_authority, monkeypatch, caplog):
-    from custom_components.phoenix_mcp import mcp_view
+    from custom_components.phoenix_mcp import tool_dispatch
     client, data = http_authority
     _, raw = await data.store.async_create_access_key("exception", "admin", rate_limit_requests=0)
     async def broken(*args, **kwargs):
         raise RuntimeError("private-value-and-path")
-    monkeypatch.setattr(mcp_view, "_dispatch_mcp_authorized", broken)
+    monkeypatch.setattr(tool_dispatch, "_dispatch_mcp_authorized", broken)
     response = await client.post("/api/phoenix-mcp", headers=_headers(raw), json=_initialize())
     value = await response.json()
     assert response.status == 200 and value["id"] == 1 and value["error"]["code"] == -32603
@@ -161,7 +160,10 @@ async def test_all_admin_routes_reject_real_read_only_ha_identity(hass, hass_cli
     import inspect
     import re
     from custom_components.phoenix_mcp.admin_view import ALL_ADMIN_VIEWS
-    from custom_components.phoenix_mcp.agentcli import ALL_AGENTCLI_ADMIN_VIEWS, ALL_AGENTCLI_CHAT_VIEWS
+    from custom_components.phoenix_mcp.agentcli_views import (
+        ALL_AGENTCLI_ADMIN_VIEWS,
+        ALL_AGENTCLI_CHAT_VIEWS,
+    )
     assert await async_setup_component(hass, "http", {})
     store = await AccessKeyStore.async_create(hass)
     hass.data[DOMAIN] = PhoenixData(store=store, rate_limiter=RateLimiter(), audit=AuditLog())
@@ -215,7 +217,7 @@ async def test_legacy_foreign_version_reports_unsupported_and_preserves_session(
 @pytest.mark.parametrize("sse", [False, True])
 async def test_authority_loss_wire_code_matches_era_after_real_dispatch(http_authority, monkeypatch, modern, sse):
     import json
-    from custom_components.phoenix_mcp import mcp_view
+    from custom_components.phoenix_mcp import tool_dispatch
     from custom_components.phoenix_mcp.const import MCP_AUTHORITY_CHANGED_ERROR
 
     client, data = http_authority
@@ -239,14 +241,14 @@ async def test_authority_loss_wire_code_matches_era_after_real_dispatch(http_aut
 
     response = await client.post("/api/phoenix-mcp", headers=headers, json=body)
     assert response.status == 200 and "result" in await read_reply(response)
-    original = mcp_view._dispatch_mcp_authorized
+    original = tool_dispatch._dispatch_mcp_authorized
 
     async def revoke_after_dispatch(*args, **kwargs):
         result = await original(*args, **kwargs)
         await data.store.async_archive_access_key(access_key.id, revoked=True)
         return result
 
-    monkeypatch.setattr(mcp_view, "_dispatch_mcp_authorized", revoke_after_dispatch)
+    monkeypatch.setattr(tool_dispatch, "_dispatch_mcp_authorized", revoke_after_dispatch)
     response = await client.post("/api/phoenix-mcp", headers=headers, json=body)
     reply = await read_reply(response)
     assert response.status == 200
@@ -258,10 +260,10 @@ async def test_authority_loss_wire_code_matches_era_after_real_dispatch(http_aut
 
 async def test_legacy_session_capacity_evicts_the_keys_oldest_idle_session(http_authority, monkeypatch):
     """A client restarting without DELETE reclaims its own stale slot; the evicted client re-initializes."""
-    from custom_components.phoenix_mcp import mcp_view
+    from custom_components.phoenix_mcp import mcp_transport
 
     client, data = http_authority
-    monkeypatch.setattr(mcp_view, "_MCP_LEGACY_SESSION_ACCESS_KEY_LIMIT", 2)
+    monkeypatch.setattr(mcp_transport, "_MCP_LEGACY_SESSION_ACCESS_KEY_LIMIT", 2)
     _, raw, oldest = await _initialized_session(client, data)
     second = await client.post("/api/phoenix-mcp", headers=_headers(raw), json=_initialize())
     assert second.status == 200
@@ -277,37 +279,37 @@ async def test_legacy_session_capacity_evicts_the_keys_oldest_idle_session(http_
 
 
 async def test_legacy_session_capacity_refuses_while_every_own_session_is_busy(http_authority, monkeypatch):
-    from custom_components.phoenix_mcp import mcp_view
+    from custom_components.phoenix_mcp import mcp_transport
 
     client, data = http_authority
-    monkeypatch.setattr(mcp_view, "_MCP_LEGACY_SESSION_ACCESS_KEY_LIMIT", 1)
+    monkeypatch.setattr(mcp_transport, "_MCP_LEGACY_SESSION_ACCESS_KEY_LIMIT", 1)
     _, raw, _headers_in_use = await _initialized_session(client, data)
     (state,) = data.mcp_sessions.values()
     state["in_use"] = 1
     sessions = set(data.mcp_sessions)
     response = await client.post("/api/phoenix-mcp", headers=_headers(raw), json=_initialize())
     assert response.status == 429
-    assert 0 < int(response.headers["Retry-After"]) <= mcp_view._MCP_LEGACY_SESSION_TTL_SECONDS
+    assert 0 < int(response.headers["Retry-After"]) <= mcp_transport._MCP_LEGACY_SESSION_TTL_SECONDS
     assert set(data.mcp_sessions) == sessions
 
 
 async def test_unfinished_legacy_handshake_expires_early(http_authority, monkeypatch):
     from types import SimpleNamespace
-    from custom_components.phoenix_mcp import mcp_view
+    from custom_components.phoenix_mcp import mcp_transport
 
     client, data = http_authority
     _, raw = await data.store.async_create_access_key("handshake", "admin", rate_limit_requests=0, rate_limit_burst=0)
     response = await client.post("/api/phoenix-mcp", headers=_headers(raw), json=_initialize())
     session = response.headers["Mcp-Session-Id"]
-    clock = data.mcp_sessions[session]["last_seen"] + mcp_view._MCP_LEGACY_UNINITIALIZED_TTL_SECONDS + 1
-    monkeypatch.setattr(mcp_view, "time", SimpleNamespace(monotonic=lambda: clock))
+    clock = data.mcp_sessions[session]["last_seen"] + mcp_transport._MCP_LEGACY_UNINITIALIZED_TTL_SECONDS + 1
+    monkeypatch.setattr(mcp_transport, "time", SimpleNamespace(monotonic=lambda: clock))
     ping = {"jsonrpc": "2.0", "id": 2, "method": "ping"}
     assert (await client.post("/api/phoenix-mcp", headers=_headers(raw, **{"Mcp-Session-Id": session}), json=ping)).status == 404
     assert session not in data.mcp_sessions
 
 
 async def test_legacy_session_idle_expiry_and_activity_refresh(http_authority, monkeypatch):
-    from custom_components.phoenix_mcp import mcp_view
+    from custom_components.phoenix_mcp import mcp_transport
 
     client, data = http_authority
     _, _, headers = await _initialized_session(client, data)
@@ -315,13 +317,13 @@ async def test_legacy_session_idle_expiry_and_activity_refresh(http_authority, m
     clock = data.mcp_sessions[session]["last_seen"]
     # Replace this module's clock object, not asyncio's shared time module.
     from types import SimpleNamespace
-    monkeypatch.setattr(mcp_view, "time", SimpleNamespace(monotonic=lambda: clock))
+    monkeypatch.setattr(mcp_transport, "time", SimpleNamespace(monotonic=lambda: clock))
     body = {"jsonrpc": "2.0", "id": 2, "method": "ping"}
     for _ in range(2):
-        clock += mcp_view._MCP_LEGACY_SESSION_TTL_SECONDS - 1
+        clock += mcp_transport._MCP_LEGACY_SESSION_TTL_SECONDS - 1
         assert (await client.post("/api/phoenix-mcp", headers=headers, json=body)).status == 200
         assert data.mcp_sessions[session]["last_seen"] == clock
-    clock += mcp_view._MCP_LEGACY_SESSION_TTL_SECONDS + 1
+    clock += mcp_transport._MCP_LEGACY_SESSION_TTL_SECONDS + 1
     response = await client.post("/api/phoenix-mcp", headers=headers, json=body)
     assert response.status == 404
     assert session not in data.mcp_sessions
@@ -330,14 +332,14 @@ async def test_legacy_session_idle_expiry_and_activity_refresh(http_authority, m
 @pytest.mark.parametrize("sse", [False, True])
 async def test_batch_within_capacity_refuses_exhausted_remaining_budget_before_dispatch(http_authority, monkeypatch, sse):
     from unittest.mock import AsyncMock
-    from custom_components.phoenix_mcp import mcp_view
+    from custom_components.phoenix_mcp import mcp_transport, tool_dispatch
 
     client, data = http_authority
     _, _, headers = await _initialized_session(client, data, rate=5)
     if sse:
         headers["Accept"] = "application/json, text/event-stream"
-    dispatch = AsyncMock(wraps=mcp_view._dispatch_mcp)
-    monkeypatch.setattr(mcp_view, "_dispatch_mcp", dispatch)
+    dispatch = AsyncMock(wraps=tool_dispatch._dispatch_mcp)
+    monkeypatch.setattr(mcp_transport, "_dispatch_mcp", dispatch)
     body = [{"jsonrpc": "2.0", "id": i, "method": "ping"} for i in range(4)]
     response = await client.post("/api/phoenix-mcp", headers=headers, json=body)
     assert response.status == 429
@@ -357,12 +359,12 @@ async def test_initialize_negotiates_legacy_despite_foreign_header(http_authorit
 
 async def test_batch_drops_request_notifications_before_dispatch(http_authority, monkeypatch):
     from unittest.mock import AsyncMock
-    from custom_components.phoenix_mcp import mcp_view
+    from custom_components.phoenix_mcp import mcp_transport, tool_dispatch
 
     client, data = http_authority
     _, _, headers = await _initialized_session(client, data)
-    dispatch = AsyncMock(wraps=mcp_view._dispatch_mcp)
-    monkeypatch.setattr(mcp_view, "_dispatch_mcp", dispatch)
+    dispatch = AsyncMock(wraps=tool_dispatch._dispatch_mcp)
+    monkeypatch.setattr(mcp_transport, "_dispatch_mcp", dispatch)
     response = await client.post("/api/phoenix-mcp", headers=headers, json=[
         {"jsonrpc": "2.0", "method": "tools/call", "params": {"name": "restart_ha", "arguments": {}}},
         {"jsonrpc": "2.0", "id": "ping", "method": "ping"},

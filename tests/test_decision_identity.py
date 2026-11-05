@@ -1,8 +1,8 @@
 """Literal target evidence is independent of a model's selected probability."""
 import pytest
 
-from custom_components.phoenix_mcp.decision_identity import explicit_write_target
-from custom_components.phoenix_mcp.const import DECISION_ENTITY_CATEGORIES
+from custom_components.phoenix_mcp.routing.decision_identity import explicit_write_target
+from custom_components.phoenix_mcp.routing.routing_tables import DECISION_ENTITY_CATEGORIES
 
 
 def check(sentence, *, name='Audit Lamp', aliases=(), language='en', other=None, intent='PhoenixEntityLightColor', value='blue'):

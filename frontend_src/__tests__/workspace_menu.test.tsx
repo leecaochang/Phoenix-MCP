@@ -24,7 +24,7 @@ function mount() {
 const items = (c: WorkspaceController) => workspaceMenu(c, null).filter((e): e is Item => e !== "separator");
 
 describe("Workspace Options", () => {
-  it("offers Notification History only while it is closed (user, 2026-10-29)", () => {
+  it("offers Notification History only while it is closed", () => {
     const c = mount();
     const show = () => items(c).find((i) => i.id === "show-notifications");
     // Open: nothing to offer, and no second entry for it among the reopenable windows.
@@ -48,7 +48,7 @@ describe("Workspace Options", () => {
     expect(all.find((i) => i.id === "panel-defaults")).toMatchObject({ label: "Reset All Workspaces", hint: expect.stringContaining("the toolbar, Quick Help and the Guide") });
   });
 
-  it("offers Needs Attention back, in this workspace, while items are waiting (user, 2026-10-29)", () => {
+  it("offers Needs Attention back, in this workspace, while items are waiting", () => {
     const c = mount();
     const base = { saveMyDefault: () => {}, restoreMyDefault: () => {}, hasMyDefault: () => false, restoreOriginal: () => {}, restorePanelDefaults: () => {}, openToolWindow: () => {} };
     const entry = (hidden: boolean, show = () => {}) =>
@@ -62,7 +62,7 @@ describe("Workspace Options", () => {
     expect(shown).toEqual([c.id]);
   });
 
-  it("offers Request Details back in Approvals, which no tool opens any more (user, 2026-10-29)", () => {
+  it("offers Request Details back in Approvals, which no tool opens any more", () => {
     const windows = ["approvals", "review", "requestDetails"];
     const parts = Object.fromEntries(windows.map((id) => [id, () => <div>{id}</div>]));
     const c = new WorkspaceController("approvals", windows, (_, add) => {
@@ -76,7 +76,7 @@ describe("Workspace Options", () => {
     expect(items(c).map((i) => i.id)).toContain("reopen-requestDetails");
   });
 
-  it("offers a hidden window a toolbar tool opens, once, opening it as the tool would (user, 2026-10-31)", () => {
+  it("offers a hidden window a toolbar tool opens, once, opening it as the tool would", () => {
     const c = mount();
     const opened: string[] = [];
     const actions = { saveMyDefault: () => {}, restoreMyDefault: () => {}, hasMyDefault: () => false, restoreOriginal: () => {},
@@ -93,7 +93,7 @@ describe("Workspace Options", () => {
     expect(items(c).some((i) => i.id === "reopen-settingsLogs")).toBe(false);
   });
 
-  it("offers each surface's Routing Statistics in Settings by its own name (user, 2026-10-31)", () => {
+  it("offers each surface's Routing Statistics in Settings by its own name", () => {
     const windows = ["settingsChat", "settingsHome", "chatRoutingStatistics", "voiceRoutingStatistics"];
     const c = new WorkspaceController("settings", windows, (_, add) => { add("settingsChat"); add("settingsHome", { referencePanel: "settingsChat", direction: "right" }); }, (id) => id);
     render(<DockviewReact components={Object.fromEntries(windows.map((id) => [id, () => <div>{id}</div>]))}

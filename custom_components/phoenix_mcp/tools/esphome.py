@@ -9,8 +9,8 @@ fleet status read. Device YAML is the operator's own configuration, so no tool h
 edits, deletes or restores it. Compiling rides cap_esphome_yaml; only putting an
 image on hardware (install) needs cap_esphome_flash.
 
-mcp_view registers these tools and this module never imports it. Shared
-primitives come from ..tool_common.
+tool_registration registers these tools and this module never imports the
+dispatcher. Shared primitives come from ..tool_common.
 """
 
 
@@ -29,53 +29,32 @@ from homeassistant.helpers import entity_registry as er
 from homeassistant.config_entries import ConfigEntryState
 
 from ..const import (
-    AI_TASK_CLIENT_IP,
-    ASSIST_CLIENT_IP,
-    CAP_DENY,
-    ESPHOME_AUTOMATION_LIST_MAX_CHARS,
-    ESPHOME_AUTOMATION_REF_TYPES,
-    ESPHOME_AUTOMATION_YAML_MAX_CHARS,
-    ESPHOME_BUILDER_ANALYZE_OUTPUT_MAX_CHARS,
-    ESPHOME_BUILDER_ANALYZE_TIMEOUT_SECONDS,
-    ESPHOME_BUILDER_AUTOMATION_DOCS_MAX_PAGES,
-    ESPHOME_BUILDER_HISTORY_AUTHOR,
-    ESPHOME_BUILDER_LOADED_COMPONENTS_MAX,
-    ESPHOME_BUILDER_MAX_AUTOMATION_REFS,
-    ESPHOME_BUILDER_TROUBLESHOOT_HEADLESS_SECONDS,
-    ESPHOME_BUILDER_TROUBLESHOOT_TIMEOUT_SECONDS,
-    ESPHOME_DIFF_MAX_CHARS,
-    ESPHOME_BUILDER_DECODE_TIMEOUT_SECONDS,
-    ESPHOME_BUILDER_JOB_LOG_TIMEOUT_SECONDS,
-    ESPHOME_BUILDER_JOB_OUTPUT_MAX_CHARS,
-    ESPHOME_BUILDER_JOB_POLL_SECONDS,
-    ESPHOME_BUILDER_CANCEL_POLL_SECONDS,
-    ESPHOME_BUILDER_CANCEL_SETTLE_SECONDS,
-    ESPHOME_BUILDER_JOB_PROGRESS_MAX_CHARS,
-    ESPHOME_BUILDER_JOB_WAIT_HEADLESS_SECONDS,
-    ESPHOME_BUILDER_JOB_WAIT_SECONDS,
-    ESPHOME_BUILDER_LOG_CAPTURE_MAX_SECONDS,
-    ESPHOME_BUILDER_LOG_CAPTURE_SECONDS,
-    ESPHOME_BUILDER_MAX_BACKTRACE_LINES,
-    ESPHOME_BUILDER_MAX_COMPONENT_IDS,
-    ESPHOME_BUILDER_METADATA_MAX_CHARS,
-    ESPHOME_BUILDER_DEVICE_STATES,
-    ESPHOME_BUILDER_OUTPUT_MAX_CHARS,
-    ESPHOME_BUILDER_PAGE_LIMIT,
-    ESPHOME_BUILDER_PAGE_LIMIT_MAX,
-    ESPHOME_BUILDER_REQUEST_TIMEOUT_SECONDS,
-    ESPHOME_BUILDER_VALIDATE_TIMEOUT_SECONDS,
-    ESPHOME_YAML_INVENTORY_MAX_ENTRIES,
-    ESPHOME_YAML_SEARCH_CONTEXT_LINES_MAX,
-    ESPHOME_YAML_SEARCH_MAX_BYTES,
-    ESPHOME_YAML_SEARCH_MAX_QUERY_CHARS,
-    ESPHOME_YAML_SEARCH_MAX_MATCHES,
+    AI_TASK_CLIENT_IP, ASSIST_CLIENT_IP, CAP_DENY, MAX_FILE_BYTES, VOICE_AGENT_CLIENT_IP,
+)
+from ..esphome_constants import (
+    ESPHOME_AUTOMATION_LIST_MAX_CHARS, ESPHOME_AUTOMATION_REF_TYPES,
+    ESPHOME_AUTOMATION_YAML_MAX_CHARS, ESPHOME_BUILDER_ANALYZE_OUTPUT_MAX_CHARS,
+    ESPHOME_BUILDER_ANALYZE_TIMEOUT_SECONDS, ESPHOME_BUILDER_AUTOMATION_DOCS_MAX_PAGES,
+    ESPHOME_BUILDER_HISTORY_AUTHOR, ESPHOME_BUILDER_LOADED_COMPONENTS_MAX,
+    ESPHOME_BUILDER_MAX_AUTOMATION_REFS, ESPHOME_BUILDER_TROUBLESHOOT_HEADLESS_SECONDS,
+    ESPHOME_BUILDER_TROUBLESHOOT_TIMEOUT_SECONDS, ESPHOME_DIFF_MAX_CHARS,
+    ESPHOME_BUILDER_DECODE_TIMEOUT_SECONDS, ESPHOME_BUILDER_JOB_LOG_TIMEOUT_SECONDS,
+    ESPHOME_BUILDER_JOB_OUTPUT_MAX_CHARS, ESPHOME_BUILDER_JOB_POLL_SECONDS,
+    ESPHOME_BUILDER_CANCEL_POLL_SECONDS, ESPHOME_BUILDER_CANCEL_SETTLE_SECONDS,
+    ESPHOME_BUILDER_JOB_PROGRESS_MAX_CHARS, ESPHOME_BUILDER_JOB_WAIT_HEADLESS_SECONDS,
+    ESPHOME_BUILDER_JOB_WAIT_SECONDS, ESPHOME_BUILDER_LOG_CAPTURE_MAX_SECONDS,
+    ESPHOME_BUILDER_LOG_CAPTURE_SECONDS, ESPHOME_BUILDER_MAX_BACKTRACE_LINES,
+    ESPHOME_BUILDER_MAX_COMPONENT_IDS, ESPHOME_BUILDER_METADATA_MAX_CHARS,
+    ESPHOME_BUILDER_DEVICE_STATES, ESPHOME_BUILDER_OUTPUT_MAX_CHARS, ESPHOME_BUILDER_PAGE_LIMIT,
+    ESPHOME_BUILDER_PAGE_LIMIT_MAX, ESPHOME_BUILDER_REQUEST_TIMEOUT_SECONDS,
+    ESPHOME_BUILDER_VALIDATE_TIMEOUT_SECONDS, ESPHOME_YAML_INVENTORY_MAX_ENTRIES,
+    ESPHOME_YAML_SEARCH_CONTEXT_LINES_MAX, ESPHOME_YAML_SEARCH_MAX_BYTES,
+    ESPHOME_YAML_SEARCH_MAX_QUERY_CHARS, ESPHOME_YAML_SEARCH_MAX_MATCHES,
     ESPHOME_YAML_SEARCH_SNIPPET_MAX_CHARS,
-    MAX_FILE_BYTES,
-    VOICE_AGENT_CLIENT_IP,
 )
 from ..data import PhoenixData
 from ..tool_contracts import normalize_tool_args
-from ..mesa import entity_control_mode
+from ..mesa import async_apply_mesa_to_call, entity_control_mode, fire_mesa_blocked_event
 from ..helpers import (
     diff_summary_fields as _summary, content_hash, effective_cap,
     redact_entity_ids_outside, redact_inaccessible_entity_ids_in_text, redact_diagnostics, visible_entity_ids,
@@ -110,14 +89,9 @@ from ..esphome_yaml import (
 from .. import yaml_includes
 
 from ..tool_common import (
-    _CAP_FORBIDDEN_MESSAGE,
-    _gate,
-    _read_text_capped,
-    _set_progress_status,
-    _tool_error,
-    _tool_success,
-    _usable_path_arg,
+    MESA_DENIED_MESSAGE, _CAP_FORBIDDEN_MESSAGE, _gate, _pending_or_inline, _read_text_capped, _set_progress_status, _tool_error, _tool_success, _usable_path_arg, _with_mesa_advisory,
 )
+from ..request_authority import _approved_exec_ctx
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -154,14 +128,15 @@ def _esphome_dashboard(hass: HomeAssistant) -> Any:
     get_encryption_key) is reachable through it.
     """
     try:
-        from homeassistant.components.esphome.dashboard import (  # noqa: PLC0415
+        # Local: optional component, imported only when this path runs.
+        from homeassistant.components.esphome.dashboard import (
             async_get_dashboard,
         )
     except ImportError:
         return None
     try:
         return async_get_dashboard(hass)
-    except Exception:  # noqa: BLE001 - manager may not be set up yet
+    except Exception:  # manager may not be set up yet
         return None
 
 
@@ -197,7 +172,7 @@ def esphome_availability(hass: HomeAssistant) -> EsphomeAvailability:
         integration = _ESPHOME_DOMAIN in hass.config.components or bool(
             hass.config_entries.async_entries(_ESPHOME_DOMAIN)
         )
-    except Exception:  # noqa: BLE001 - never let a probe hide the tool surface
+    except Exception:  # never let a probe hide the tool surface
         integration = True
     dashboard = _esphome_dashboard(hass)
     builder = dashboard is not None
@@ -787,6 +762,10 @@ _ESPHOME_BUILDER_ABSENT = "The ESPHome Device Builder add-on is not available."
 
 
 _ESPHOME_BUILDER_UNREACHABLE = "The ESPHome Device Builder did not respond."
+_ESPHOME_BUILDER_WAIT_LOST = (
+    "The ESPHome Device Builder stopped responding, so this job's status is unknown. A build it already "
+    "started may still be running: check it with get_esphome_job rather than starting another."
+)
 
 
 _ESPHOME_BUILDER_AUTH = (
@@ -1845,7 +1824,10 @@ async def _esphome_job_precheck(
         return (_tool_error(message), "invalid_request", tool_name), {}
     # One message for every refusal below, so the three cases stay byte-identical.
     missing = _ESPHOME_JOB_NOT_FOUND_BY_FILE if allow_file else _ESPHOME_JOB_NOT_FOUND
-    job = await _esphome_job_record(hass, url, job_id.strip())
+    try:
+        job = await _esphome_job_record(hass, url, job_id.strip())
+    except BuilderError as err:
+        return _builder_refusal(err, tool_name), {}
     if job is None:
         return (_tool_error(missing), "not_found", tool_name), {}
     # Separate name: `rel` is already bound to a str on the by-file branch above,
@@ -2094,6 +2076,58 @@ async def _install_esphome_precheck(
     return None, url, rel
 
 
+async def _install_esphome_mesa_gate(
+    hass: HomeAssistant,
+    data: PhoenixData,
+    access_key: AccessKeyRecord,
+    args: dict,
+    rel: str,
+    diff: Any,
+    request_id: str,
+    client_ip: str | None,
+) -> tuple[dict, str, str] | list[str]:
+    """Apply MESA to a firmware install on every adopted owner of a file.
+
+    Returns the refusal or pending approval to answer with, else the advisory
+    warnings for the result. Flashing replaces what the whole device runs, so every registry entity of every
+    owner is evaluated, and one refusal stops the install. An orphan file has no
+    device in Home Assistant yet, so no profile can cover it and the install of a
+    new device proceeds. An approval satisfies Confirm for this exact action only.
+    """
+    registry = er.async_get(hass)
+    entities = sorted({
+        reg_entry.entity_id
+        for entry in _esphome_entries_for_file(hass, rel)
+        for reg_entry in er.async_entries_for_config_entry(registry, entry.entry_id)
+    })
+    if not entities:
+        return []
+    outcome = await async_apply_mesa_to_call(
+        hass,
+        data,
+        access_key,
+        domain="esphome",
+        service="install",
+        service_data={},
+        entities=entities,
+        request_id=request_id or "install_esphome_firmware",
+        client_ip=client_ip,
+        session_id=request_id or "install_esphome_firmware",
+        confirm_approved=_approved_exec_ctx.get(),
+        approval_tool_name="install_esphome_firmware",
+        approval_args=args,
+        approval_diff=diff,
+        require_all=True,
+    )
+    if outcome.blocked:
+        fire_mesa_blocked_event(hass, access_key, outcome.blocked)
+    if outcome.decision == "pending":
+        return await _pending_or_inline(hass, data, access_key, outcome.approval)
+    if outcome.decision == "deny":
+        return _tool_error(MESA_DENIED_MESSAGE), "denied", f"esphome:{rel}"
+    return outcome.warnings
+
+
 async def _tool_install_esphome_firmware(
     args: dict,
     access_key: AccessKeyRecord,
@@ -2110,31 +2144,55 @@ async def _tool_install_esphome_firmware(
             or effective_cap(access_key, "cap_esphome_yaml") == CAP_DENY):
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "install_esphome_firmware"
 
-    pre, _url, _rel = await _install_esphome_precheck(hass, access_key, args)
+    pre, _url, rel = await _install_esphome_precheck(hass, access_key, args)
     if pre is not None:
         return pre
 
+    diff = lambda: _build_diff_install_esphome_firmware(args, access_key, hass, data)
+    refused = await _install_esphome_mesa_gate(
+        hass, data, access_key, args, rel, diff, request_id, client_ip
+    )
+    if isinstance(refused, tuple):
+        return refused
     blocked = await _gate(
         "cap_esphome_flash", access_key, hass, data,
         tool_name="install_esphome_firmware", args=args, request_id=request_id,
-        client_ip=client_ip, diff=lambda: _build_diff_install_esphome_firmware(args, access_key, hass, data),
+        client_ip=client_ip, diff=diff,
     )
     if blocked is not None:
         return blocked
-    return await _execute_install_esphome_firmware(args, access_key, hass, data)
+    return await _execute_install_esphome_firmware(
+        args, access_key, hass, data, request_id=request_id, client_ip=client_ip
+    )
 
 
 async def _execute_install_esphome_firmware(
-    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData,
+    request_id: str = "", client_ip: str | None = None,
 ) -> tuple[dict, str, str]:
     """Side-effect path for install_esphome_firmware."""
-    # An approval checks cap_esphome_flash again; the YAML capability is checked here.
-    if effective_cap(access_key, "cap_esphome_yaml") == CAP_DENY:
+    # A capability approval checks cap_esphome_flash again, but a MESA approval
+    # carries no capability of its own, so both are read here.
+    if (effective_cap(access_key, "cap_esphome_flash") == CAP_DENY
+            or effective_cap(access_key, "cap_esphome_yaml") == CAP_DENY):
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "install_esphome_firmware"
     pre, url, rel = await _install_esphome_precheck(hass, access_key, args)
     if pre is not None:
         return pre
+    advisory = await _install_esphome_mesa_gate(
+        hass, data, access_key, args, rel,
+        lambda: _build_diff_install_esphome_firmware(args, access_key, hass, data),
+        request_id, client_ip,
+    )
+    if isinstance(advisory, tuple):
+        return advisory
+    return _with_mesa_advisory(await _install_esphome_firmware(hass, args, url, rel), advisory)
 
+
+async def _install_esphome_firmware(
+    hass: HomeAssistant, args: dict, url: str, rel: str
+) -> tuple[dict, str, str]:
+    """Queue the install after every gate."""
     payload = {"configuration": rel, "port": _ESPHOME_OTA_PORT}
     if "force_local" in args:
         payload["force_local"] = args["force_local"]
@@ -2496,7 +2554,14 @@ async def _tool_wait_for_esphome_job(
             await asyncio.sleep(ESPHOME_BUILDER_JOB_POLL_SECONDS)
             elapsed += ESPHOME_BUILDER_JOB_POLL_SECONDS
 
-            fresh = await _esphome_job_record(hass, url, str(watching.get("job_id") or ""))
+            try:
+                fresh = await _esphome_job_record(hass, url, str(watching.get("job_id") or ""))
+            except BuilderUnavailable:
+                # A restart or one slow reply says nothing about the build, which
+                # runs on inside the add-on, so the wait keeps its budget.
+                continue
+            except BuilderError as err:
+                return _builder_refusal(err, f"esphome:{rel}")
             if fresh is None:
                 # The add-on forgot the job mid-wait (a re-submission evicts the
                 # previous record). Report what the original job looks like now
@@ -2508,7 +2573,12 @@ async def _tool_wait_for_esphome_job(
 
     # Always answer about the job the caller named, so the reply carries the
     # upload block and the flashed verdict rather than a bare upload status.
-    current = await _esphome_job_record(hass, url, str(started.get("job_id") or "")) or started
+    try:
+        current = await _esphome_job_record(hass, url, str(started.get("job_id") or "")) or started
+    except BuilderUnavailable:
+        return _tool_error(_ESPHOME_BUILDER_WAIT_LOST), "invalid_request", f"esphome:{rel}"
+    except BuilderError as err:
+        return _builder_refusal(err, f"esphome:{rel}")
     # One shared wording with get_esphome_job: two divergent versions of "stop
     # here" leave a gap a model can exploit.
     note = _ESPHOME_HEADLESS_STOP if client_ip in _ESPHOME_HEADLESS_CLIENT_IPS else None

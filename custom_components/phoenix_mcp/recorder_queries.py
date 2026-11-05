@@ -11,6 +11,7 @@ from collections.abc import Mapping
 from typing import Any, Literal, cast
 
 from homeassistant.util import dt as dt_util
+from homeassistant.core import HomeAssistant
 
 from .helpers import parse_time_param
 
@@ -367,7 +368,7 @@ def statistic_page(window: RecorderWindow, period: str) -> tuple[datetime, datet
 
 
 def read_statistic_window(
-    hass: Any, start: datetime, end: datetime, statistic_id: str, types: set[Any],
+    hass: HomeAssistant, start: datetime, end: datetime, statistic_id: str, types: set[Any],
 ) -> tuple[dict[str, Any], str | None] | None:
     """Mean, min, max and change of one statistic over [start, end). Recorder executor only.
 
@@ -377,6 +378,7 @@ def read_statistic_window(
     it is never asked for, since Core's query fails outright when none of the
     requested mean, min or max columns exists.
     """
+    # Local: optional component, imported only when this path runs.
     from homeassistant.components.recorder import statistics as recorder_stats
 
     metadata = recorder_stats.get_metadata(hass, statistic_ids={statistic_id}).get(statistic_id)
@@ -391,7 +393,7 @@ def read_statistic_window(
 
 
 def read_statistics_page(
-    hass: Any, start: datetime, end: datetime, statistic_id: str,
+    hass: HomeAssistant, start: datetime, end: datetime, statistic_id: str,
     period: Literal["5minute", "day", "hour", "week", "month", "year"], types: set[Any],
 ) -> tuple[list[dict[str, Any]], dict[str, Any] | None, list[str]]:
     """Read one statistics page with Core's unit label. Recorder executor only.
@@ -405,13 +407,14 @@ def read_statistics_page(
     converts nothing; a reset that cannot be re-read is omitted, never returned
     converted.
     """
+    # Local: optional component, imported only when this path runs.
     from homeassistant.components.recorder import statistics as recorder_stats
 
     result = recorder_stats.statistics_during_period(hass, start, end, {statistic_id}, period, None, types)
     rows = [dict(row) for row in result.get(statistic_id, [])]
     try:
         metadata = recorder_stats.get_metadata(hass, statistic_ids={statistic_id}).get(statistic_id)
-    except Exception:  # noqa: BLE001 - the values stay usable without their label
+    except Exception:  # the values stay usable without their label
         _LOGGER.warning("Recorder metadata for %s could not be read", statistic_id, exc_info=True)
         dropped = [row.pop("last_reset", None) for row in rows]
         dropped_any = any(value is not None for value in dropped)
@@ -438,7 +441,7 @@ def read_statistics_page(
         reset_rows = recorder_stats.statistics_during_period(
             hass, start, end, {statistic_id}, period, same_unit, {"last_reset"}).get(statistic_id, [])
         resets: dict[Any, Any] = {row["start"]: row.get("last_reset") for row in reset_rows}
-    except Exception:  # noqa: BLE001 - omit rather than return converted timestamps
+    except Exception:  # omit rather than return converted timestamps
         _LOGGER.warning("Unconverted last_reset values for %s could not be read", statistic_id, exc_info=True)
         resets = {}
     omitted = False

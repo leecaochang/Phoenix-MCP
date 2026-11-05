@@ -35,6 +35,7 @@ from typing import Any, Callable
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import ServiceNotFound
 from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers import entity_registry as er
 
 from .const import (
     Z2M_BASE_TOPIC,
@@ -206,7 +207,6 @@ def visible_zigbee_device_map(hass: HomeAssistant, accessible_entity_ids: set[st
     accessible set (the get_device rule). Decides which neighbor identifiers a
     scoped access key may see un-redacted.
     """
-    from homeassistant.helpers import entity_registry as er  # noqa: PLC0415
 
     ent_reg = er.async_get(hass)
     visible_device_ids: set[str] = set()
@@ -234,14 +234,16 @@ def visible_zigbee_device_map(hass: HomeAssistant, accessible_entity_ids: set[st
 
 async def _mqtt_subscribe(hass: HomeAssistant, topic: str, msg_callback: Callable) -> Callable:
     """Subscribe to an MQTT topic via HA's public mqtt API; returns unsubscribe."""
-    from homeassistant.components import mqtt  # noqa: PLC0415
+    # Local: optional component, imported only when this path runs.
+    from homeassistant.components import mqtt
 
     return await mqtt.async_subscribe(hass, topic, msg_callback)
 
 
 async def _mqtt_publish(hass: HomeAssistant, topic: str, payload: str) -> None:
     """Publish an MQTT message via HA's public mqtt API."""
-    from homeassistant.components import mqtt  # noqa: PLC0415
+    # Local: optional component, imported only when this path runs.
+    from homeassistant.components import mqtt
 
     await mqtt.async_publish(hass, topic, payload)
 
@@ -287,13 +289,13 @@ async def async_z2m_request(
         unsubscribe = await _mqtt_subscribe(
             hass, f"{Z2M_BASE_TOPIC}/bridge/response/{path}", _on_response
         )
-    except Exception as exc:  # noqa: BLE001 - broker/integration unavailable
+    except Exception as exc:  # broker/integration unavailable
         raise RadioError(f"MQTT is not available: {exc}") from exc
     try:
         request = json.dumps({**payload, "transaction": transaction})
         try:
             await _mqtt_publish(hass, f"{Z2M_BASE_TOPIC}/bridge/request/{path}", request)
-        except Exception as exc:  # noqa: BLE001 - broker/integration unavailable
+        except Exception as exc:  # broker/integration unavailable
             raise RadioError(f"MQTT publish failed: {exc}") from exc
         response = await asyncio.wait_for(future, timeout)
     finally:
@@ -327,7 +329,7 @@ async def async_z2m_retained(
 
     try:
         unsubscribe = await _mqtt_subscribe(hass, f"{Z2M_BASE_TOPIC}/{topic_suffix}", _on_message)
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         raise RadioError(f"MQTT is not available: {exc}") from exc
     try:
         try:
@@ -1022,7 +1024,7 @@ async def async_read_z2m_exposed_property(
 
     try:
         unsubscribe = await _mqtt_subscribe(hass, topic, _on_state)
-    except Exception as exc:  # noqa: BLE001 - broker/integration unavailable
+    except Exception as exc:  # broker/integration unavailable
         raise RadioError(f"MQTT is not available: {exc}") from exc
     try:
         try:
@@ -1031,7 +1033,7 @@ async def async_read_z2m_exposed_property(
                 f"{topic}/get",
                 json.dumps({property_name: ""}, ensure_ascii=False),
             )
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             raise RadioError(f"MQTT is not available: {exc}") from exc
         try:
             return await asyncio.wait_for(future, timeout)
@@ -1075,7 +1077,7 @@ async def async_set_z2m_exposed_property(
 
     try:
         unsubscribe = await _mqtt_subscribe(hass, topic, _on_state)
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         raise RadioError(f"MQTT is not available: {exc}") from exc
     try:
         try:
@@ -1084,7 +1086,7 @@ async def async_set_z2m_exposed_property(
                 f"{topic}/set",
                 json.dumps({property_name: expected}, ensure_ascii=False),
             )
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             raise RadioError(f"MQTT is not available: {exc}") from exc
         try:
             return await asyncio.wait_for(future, timeout)
@@ -1877,7 +1879,8 @@ def _zha_device_type(device: Any, coordinator: Any) -> str:
 
 def _get_zha_gateway(hass: HomeAssistant) -> Any:
     """Resolve the live ZHA gateway behind one narrow, testable HA seam."""
-    from homeassistant.components.zha.helpers import get_zha_gateway  # noqa: PLC0415
+    # Local: optional component, imported only when this path runs.
+    from homeassistant.components.zha.helpers import get_zha_gateway
 
     return get_zha_gateway(hass)
 
@@ -1917,7 +1920,7 @@ async def async_scan_zha_topology(
         )
     except TimeoutError:
         raise
-    except Exception as exc:  # noqa: BLE001 - HA/zigpy internals vary by release
+    except Exception as exc:  # HA/zigpy internals vary by release
         raise RadioError(f"ZHA topology scan failed: {exc}") from exc
 
     nodes: list[dict[str, Any]] = []
@@ -2092,7 +2095,7 @@ async def async_create_zigbee_group(
                 {"group": group_id, "device": ieee, "endpoint": endpoint},
             )
             added.append((ieee, endpoint))
-    except Exception as exc:  # noqa: BLE001 - compensate a partially-created group
+    except Exception as exc:  # compensate a partially-created group
         rollback_failed = False
         for ieee, endpoint in reversed(added):
             try:
@@ -2106,13 +2109,13 @@ async def async_create_zigbee_group(
                         "skip_disable_reporting": True,
                     },
                 )
-            except Exception:  # noqa: BLE001
+            except Exception:
                 rollback_failed = True
         try:
             await async_z2m_request(
                 hass, "group/remove", {"id": group_id, "force": False}
             )
-        except Exception:  # noqa: BLE001
+        except Exception:
             rollback_failed = True
         suffix = " Cleanup was incomplete; inspect groups before retrying." if rollback_failed else " The empty group was rolled back."
         raise RadioError(f"Zigbee2MQTT could not add every requested member.{suffix}") from exc
@@ -2209,7 +2212,7 @@ async def async_set_zigbee_group_members(
                 payload["skip_disable_reporting"] = True
             await async_z2m_request(hass, f"group/members/{operation}", payload)
             applied.append((ieee, endpoint))
-    except Exception as exc:  # noqa: BLE001 - compensate a partial batch
+    except Exception as exc:  # compensate a partial batch
         inverse = "remove" if operation == "add" else "add"
         rollback_failed = False
         for ieee, endpoint in reversed(applied):
@@ -2224,7 +2227,7 @@ async def async_set_zigbee_group_members(
                 await async_z2m_request(
                     hass, f"group/members/{inverse}", payload
                 )
-            except Exception:  # noqa: BLE001
+            except Exception:
                 rollback_failed = True
         suffix = (
             " Rollback was incomplete; read groups before retrying."

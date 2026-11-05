@@ -23,24 +23,15 @@ from custom_components.phoenix_mcp.esphome_builder import (
 )
 from custom_components.phoenix_mcp.tools import esphome
 from custom_components.phoenix_mcp.data import PhoenixData
-from custom_components.phoenix_mcp.mcp_view import _call_tool
+from custom_components.phoenix_mcp.tool_dispatch import _call_tool
 from custom_components.phoenix_mcp.access_key_store import PermissionNode, PermissionTree
-from tests.test_mcp_esphome_tools import (
-    _call,
-    _device_info,
-    _esphome_entry,
-    _json,
-    _runtime,
-    _access_key,
-    _yaml_access_key,
-)
+from tests.runtime_fixtures import esphome_call as _call, esphome_device_info as _device_info, esphome_entry as _esphome_entry, esphome_json as _json, esphome_runtime as _runtime, esphome_access_key as _access_key, esphome_yaml_access_key as _yaml_access_key
+from tests.runtime_fixtures import FIRMWARE_FILE as FILE, FIRMWARE_JOB as JOB, FakeBuilder, firmware_dash as _dash
 
 _DASHBOARD_PATCH = "custom_components.phoenix_mcp.tools.esphome._esphome_dashboard"
 _COMMAND_PATCH = "custom_components.phoenix_mcp.tools.esphome.async_builder_command"
 _CAPTURE_PATCH = "custom_components.phoenix_mcp.tools.esphome.async_builder_capture"
 
-FILE = "rf-blaster1.yaml"
-JOB = "abc123def456"
 UPLOAD = "999888777666"
 
 REAL_API_KEY = "REALAPIKEY123456="
@@ -66,10 +57,6 @@ def _flash_access_key(**caps):
     return _yaml_access_key(**base)
 
 
-def _dash():
-    return SimpleNamespace(url="http://127.0.0.1:6052", data={}, last_update_success=True)
-
-
 class _ApprStore:
     """Minimal store the confirm gate can persist a real approval into."""
 
@@ -92,30 +79,6 @@ def _job(**over):
     base = {"job_id": JOB, "configuration": FILE, "status": "running", "output": []}
     base.update(over)
     return base
-
-
-class FakeBuilder:
-    """Scripts async_builder_command per command name and records every call made."""
-
-    def __init__(self, **by_command):
-        self.by_command = by_command
-        self.calls: list[tuple[str, dict]] = []
-
-    async def __call__(self, hass, url, command, args, **kw):
-        self.calls.append((command, args))
-        reply = self.by_command.get(command, {})
-        if isinstance(reply, Exception):
-            raise reply
-        if callable(reply):
-            reply = reply(args)
-        return reply if isinstance(reply, BuilderResult) else BuilderResult(result=reply)
-
-    @property
-    def commands(self) -> list[str]:
-        return [c for c, _ in self.calls]
-
-    def args_for(self, command: str) -> dict:
-        return next(a for c, a in self.calls if c == command)
 
 
 async def _run(tool, args, access_key, hass, builder, data=None):
@@ -169,7 +132,7 @@ class TestGating:
 
     async def test_an_approved_install_needs_the_authoring_cap(self, hass, esphome_dir):
         """The install executor refuses on its own when cap_esphome_yaml is denied, as an approved request runs it."""
-        from custom_components.phoenix_mcp.mcp_view import _execute_install_esphome_firmware
+        from custom_components.phoenix_mcp.tools.esphome import _execute_install_esphome_firmware
 
         builder = FakeBuilder(**{"firmware/install": {"job_id": JOB, "status": "queued"}})
         with patch(_DASHBOARD_PATCH, return_value=_dash()), patch(_COMMAND_PATCH, builder):
@@ -394,7 +357,7 @@ class TestInstall:
 
     async def test_executor_rechecks_for_a_build_started_during_the_window(self, hass, esphome_dir):
         """An approval can sit for minutes; the world moves while it does."""
-        from custom_components.phoenix_mcp.mcp_view import _execute_install_esphome_firmware
+        from custom_components.phoenix_mcp.tools.esphome import _execute_install_esphome_firmware
 
         builder = FakeBuilder(**{"firmware/get_jobs": [_job(status="running")]})
         with patch(_DASHBOARD_PATCH, return_value=_dash()), patch(_COMMAND_PATCH, builder):
@@ -405,7 +368,7 @@ class TestInstall:
         assert "firmware/install" not in builder.commands
 
     async def test_executor_rechecks_scope(self, hass, esphome_dir, esphome_entries):
-        from custom_components.phoenix_mcp.mcp_view import _execute_install_esphome_firmware
+        from custom_components.phoenix_mcp.tools.esphome import _execute_install_esphome_firmware
 
         _esphome_entry(hass, esphome_entries, runtime=_runtime())
         access_key = _access_key(cap_esphome_flash="allow", permissions=PermissionTree(
@@ -1104,7 +1067,7 @@ class TestWaiting:
         seen: list[str | None] = []
         # Patch the name in the module that CALLS it. tools.esphome imports
         # _set_progress_status from tool_common into its own namespace, so
-        # patching mcp_view's binding leaves the real one running and the
+        # patching another module's binding leaves the real one running and the
         # "no progress was emitted" assertions pass without testing anything.
         monkeypatch.setattr(
             esphome, "_set_progress_status",
@@ -1151,6 +1114,49 @@ class TestWaiting:
         assert outcome == "allowed"
         assert _json(content)["finished"] is True
         assert f"Compiling {FILE}: 20%" in progress
+
+    async def test_an_outage_at_the_start_is_the_add_on_refusal(self, hass, esphome_dir, progress):
+        builder = FakeBuilder(**{"firmware/get_job": BuilderUnavailable("down")})
+        content, outcome, _ = await _run(
+            "wait_for_esphome_job", {"job_id": JOB}, _yaml_access_key(), hass, builder)
+        assert outcome == "invalid_request"
+        assert content["content"][0]["text"] == esphome._ESPHOME_BUILDER_UNREACHABLE
+
+    async def test_one_failed_poll_does_not_end_the_wait(self, hass, esphome_dir, progress):
+        """The build runs on inside the add-on, so a restart mid-wait keeps the wait's budget."""
+        replies = iter([_job(status="running", progress=20), None, _job(status="completed", exit_code=0)])
+
+        def reply(_args):
+            value = next(replies, _job(status="completed", exit_code=0))
+            if value is None:
+                raise BuilderUnavailable("restarting")
+            return value
+
+        builder = FakeBuilder(**{
+            "firmware/get_job": reply,
+            "firmware/follow_job": BuilderResult(output="ok", success=True, exit_code=0),
+            "firmware/get_jobs": [],
+        })
+        content, outcome, _ = await _run(
+            "wait_for_esphome_job", {"job_id": JOB}, _yaml_access_key(), hass, builder)
+        assert outcome == "allowed"
+        assert _json(content)["finished"] is True
+
+    async def test_an_outage_past_the_budget_says_the_status_is_unknown(self, hass, esphome_dir, progress):
+        """Reporting the last status read would present a stale job as the current one."""
+        replies = iter([_job(status="running", progress=20)])
+
+        def reply(_args):
+            value = next(replies, None)
+            if value is None:
+                raise BuilderUnavailable("gone")
+            return value
+
+        builder = FakeBuilder(**{"firmware/get_job": reply, "firmware/get_jobs": []})
+        content, outcome, _ = await _run(
+            "wait_for_esphome_job", {"job_id": JOB, "timeout": 1}, _yaml_access_key(), hass, builder)
+        assert outcome == "invalid_request"
+        assert content["content"][0]["text"] == esphome._ESPHOME_BUILDER_WAIT_LOST
 
     async def test_follows_the_chain_into_the_upload(self, hass, esphome_dir, progress):
         """One call covers compile then flash, so returning means actually flashed."""

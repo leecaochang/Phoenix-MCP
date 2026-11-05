@@ -6,12 +6,19 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from custom_components.phoenix_mcp import agentcli, tool_routing
-from custom_components.phoenix_mcp.const import DOMAIN, TOOL_ROUTING_SETTINGS
+from custom_components.phoenix_mcp import agent_chat, agent_turn, tool_catalog
+from custom_components.phoenix_mcp.llm import accounts as llm_accounts
+from custom_components.phoenix_mcp.llm import base as llm_base
+from custom_components.phoenix_mcp.llm import provider_claude as llm_provider_claude
+from custom_components.phoenix_mcp.llm import provider_openai as llm_provider_openai
+from custom_components.phoenix_mcp.routing import tool_routing
+from custom_components.phoenix_mcp.const import DOMAIN
+from custom_components.phoenix_mcp.routing.routing_tables import TOOL_ROUTING_SETTINGS
 from custom_components.phoenix_mcp.data import PhoenixData
-from custom_components.phoenix_mcp.decision_history import pending_context_history
-from custom_components.phoenix_mcp.decision_provider import DecisionError, DecisionProvider
+from custom_components.phoenix_mcp.routing.decision_history import pending_context_history
+from custom_components.phoenix_mcp.routing.decision_provider import DecisionError, DecisionProvider
 from custom_components.phoenix_mcp.access_key_store import GlobalSettings
+from tests.runtime_fixtures import patch_readers
 
 CATALOG = [{"name": name, "description": description, "inputSchema": {"type": "object"},
             "annotations": {"readOnlyHint": name != "call_service"}}
@@ -36,11 +43,11 @@ async def home(hass, access_key_store):
     access_key, _ = await access_key_store.async_create_access_key("router", "test")
     data = PhoenixData(store=access_key_store, rate_limiter=MagicMock(), audit=MagicMock())
     hass.data[DOMAIN] = data
-    store = agentcli.AgentCliStore(AsyncMock())
+    store = llm_accounts.AgentCliStore(AsyncMock())
     account = await store.add("typesafe", {"api_key": "private-test-key", "model": "jev-latest"})
     hass.data['_phoenix_agentcli_store'] = store
     await access_key_store.async_patch_settings(decision_provider_id=account, agentcli_tool_routing_mode="observe")
-    with patch.object(agentcli, 'build_mcp_tool_list', return_value=deepcopy(CATALOG)):
+    with patch_readers("custom_components.phoenix_mcp.tool_catalog.build_mcp_tool_list", return_value=deepcopy(CATALOG)):
         yield data, access_key, store, account
 
 
@@ -107,7 +114,7 @@ async def test_wait_rechecks(hass, home, change):
         elif change == 'account':
             await store.delete(account)
         elif change == 'catalog':
-            agentcli.build_mcp_tool_list.return_value.pop()
+            tool_catalog.build_mcp_tool_list.return_value.pop()
         else:
             messages[0]['content'] = 'Changed'
         return {'tool': 'get_history', 'model': 'test-model'}
@@ -161,7 +168,7 @@ async def test_turn_bounds_and_cancel(hass, home, monkeypatch):
 
 @pytest.mark.parametrize('capacity', [2, 3, 255])
 async def test_provider_groups_keep_complete_catalog_and_declines(capacity):
-    provider = DecisionProvider(agentcli.ProviderConfig('typesafe', 'm', 'https://api.typesafe.ai/v1'), 'systemone')
+    provider = DecisionProvider(llm_accounts.ProviderConfig('typesafe', 'm', 'https://api.typesafe.ai/v1'), 'systemone')
     state = {'catalog': {f't{i}': t for i, t in enumerate(CATALOG)}}
     async def request(session, method, path, timeout, payload):
         assert payload['state'] == state
@@ -190,8 +197,8 @@ async def test_loops_withhold_whole_batch_then_dispatch_fresh_arguments(hass, ho
     qualify(monkeypatch)
     data, access_key, _, _ = home
     await data.store.async_patch_settings(**{TOOL_ROUTING_SETTINGS[surface]: 'advise'})
-    provider = (agentcli.ClaudeProvider if dialect == 'claude' else agentcli.OpenAICompatProvider)(
-        agentcli.ProviderConfig('claude' if dialect == 'claude' else 'chatgpt', 'model', 'https://unused'))
+    provider = (llm_provider_claude.ClaudeProvider if dialect == 'claude' else llm_provider_openai.OpenAICompatProvider)(
+        llm_accounts.ProviderConfig('claude' if dialect == 'claude' else 'chatgpt', 'model', 'https://unused'))
     rounds = []
     new_calls = [{'id': 'fresh', 'name': 'get_state' if next_choice == 'original' else 'get_history', 'input': {'hours': 12}}]
     async def stream(*args, **kwargs):
@@ -200,30 +207,30 @@ async def test_loops_withhold_whole_batch_then_dispatch_fresh_arguments(hass, ho
         if index == 1:
             assert not kwargs['dispatch_started']
             if next_choice == 'provider_error':
-                yield {'type': agentcli.EV_ERROR, 'message': 'Provider unavailable', 'code': 'provider_error'}
+                yield {'type': llm_base.EV_ERROR, 'message': 'Provider unavailable', 'code': 'provider_error'}
                 return
         if index < 2:
             calls = CALLS if index == 0 else new_calls
             for call in calls:
-                yield {'type': agentcli.EV_TOOL, **call}
-            yield {'type': agentcli.EV_DONE, 'stop_reason': 'tool_use', 'assistant_msg': history(calls, dialect)[-1]}
+                yield {'type': llm_base.EV_TOOL, **call}
+            yield {'type': llm_base.EV_DONE, 'stop_reason': 'tool_use', 'assistant_msg': history(calls, dialect)[-1]}
         else:
-            yield {'type': agentcli.EV_TEXT, 'text': '{"ok":true}'}
-            yield {'type': agentcli.EV_DONE, 'stop_reason': 'end_turn', 'assistant_msg': {'role': 'assistant', 'content': '{"ok":true}'}}
+            yield {'type': llm_base.EV_TEXT, 'text': '{"ok":true}'}
+            yield {'type': llm_base.EV_DONE, 'stop_reason': 'end_turn', 'assistant_msg': {'role': 'assistant', 'content': '{"ok":true}'}}
     dispatch = AsyncMock(return_value=({'result': {'content': [{'type': 'text', 'text': 'read'}]}}, 'tools/call', '', 'allowed'))
     with patch.object(DecisionProvider, 'select_tool', AsyncMock(return_value={'tool': 'get_history', 'model': 'test-model'})) as choose, \
-            patch.object(agentcli, '_stream_turn_resilient', stream), patch.object(agentcli, 'dispatch_agent_tool', dispatch), \
-            patch.object(agentcli, '_agentcli_time_context', return_value=''), \
-            patch('custom_components.phoenix_mcp.mcp_view._build_instructions', return_value='Respect restrictions.'):
+            patch.object(agent_turn, '_stream_turn_resilient', stream), patch.object(agent_turn, 'dispatch_agent_tool', dispatch), \
+            patch("custom_components.phoenix_mcp.agent_chat._agentcli_time_context", return_value=''), \
+            patch_readers('custom_components.phoenix_mcp.tool_dispatch._build_instructions', return_value='Respect restrictions.'):
         if surface == 'chat':
-            await agentcli.async_run_agent_turn(hass=hass, data=data, access_key=access_key, provider=provider, session=None,
+            await agent_chat.async_run_agent_turn(hass=hass, data=data, access_key=access_key, provider=provider, session=None,
                 messages=history()[:1], options={}, client_ip='test', base_url='', emit=AsyncMock(), cancel=asyncio.Event(),
                 routing_language='en', max_iterations=3)
         else:
-            result = await agentcli._run_headless_turn(hass, data, access_key, provider, None, '', system='Respect restrictions.',
+            result = await agent_turn._run_headless_turn(hass, data, access_key, provider, None, '', system='Respect restrictions.',
                 seed=history()[0]['content'], client_ip='test', max_iterations=3, routing_surface=surface, routing_language='en')
             if next_choice == 'provider_error':
-                assert result.outcome == agentcli.TURN_PROVIDER_ERROR
+                assert result.outcome == agent_turn.TURN_PROVIDER_ERROR
             else:
                 assert result.text == '{"ok":true}'
     assert choose.await_count == 1
@@ -238,15 +245,15 @@ async def test_loops_withhold_whole_batch_then_dispatch_fresh_arguments(hass, ho
 
 async def test_review_uses_exact_surface_catalog_and_rejects_new_announcements(hass, home):
     data, access_key, _, _ = home
-    agentcli.build_mcp_tool_list.return_value.append({
+    tool_catalog.build_mcp_tool_list.return_value.append({
         'name': 'llm__GetDateTime', 'description': 'Current local time', 'inputSchema': {'type': 'object'}})
-    announced = agentcli.build_agent_tool_list(access_key, data, 'chat')
+    announced = tool_catalog.build_agent_tool_list(access_key, data, 'chat')
     assert len(announced) == 3
-    assert len(agentcli.build_agent_tool_list(access_key, data, 'voice')) == 4
+    assert len(tool_catalog.build_agent_tool_list(access_key, data, 'voice')) == 4
     with patch.object(DecisionProvider, 'select_tool', AsyncMock(return_value={'tool': 'get_state', 'model': 'test-model'})) as choose:
         assert (await review(hass, home, announced_tools=announced)).reason == 'agreement'
         assert list(choose.call_args.args[1]['catalog'].values()) == announced
-        agentcli.build_mcp_tool_list.return_value.append({'name': 'new_tool'})
+        tool_catalog.build_mcp_tool_list.return_value.append({'name': 'new_tool'})
         assert (await review(hass, home, announced_tools=announced)).action == 'stop'
         assert choose.await_count == 1
 
@@ -267,7 +274,7 @@ async def test_multimodal_context_falls_back_without_sending(hass, home, content
     ('multiple', 'category_mismatch'), ('unknown', 'malformed'), ('missing', 'malformed'),
     ('total', 'malformed'), ('overflow', 'catalog_unavailable')])
 async def test_provider_refuses_incomplete_or_unsound_choices(case, reason):
-    provider = DecisionProvider(agentcli.ProviderConfig('typesafe', 'm', 'https://api.typesafe.ai/v1'), 'systemone')
+    provider = DecisionProvider(llm_accounts.ProviderConfig('typesafe', 'm', 'https://api.typesafe.ai/v1'), 'systemone')
     state = {'catalog': {f't{i}': t for i, t in enumerate(CATALOG)}}
     if case == 'overflow':
         state['extra'] = 'x' * 262145
@@ -297,7 +304,7 @@ async def test_post_reservation_guard_stops_http(hass, home):
         access_key.settings_version += 1
     session = MagicMock()
     with patch.object(data.decision_budget, 'reserve', reserve), \
-            patch('custom_components.phoenix_mcp.tool_routing.async_get_clientsession', return_value=session):
+            patch('custom_components.phoenix_mcp.routing.tool_routing.async_get_clientsession', return_value=session):
         assert (await review(hass, home)).action == 'stop'
     session.request.assert_not_called()
 
@@ -333,7 +340,7 @@ async def test_settings_validation_and_qualification(hass, home, surface):
 
 
 def test_telemetry_cannot_retain_private_values():
-    from custom_components.phoenix_mcp.decision_shadow import DecisionShadow
+    from custom_components.phoenix_mcp.routing.decision_shadow import DecisionShadow
     runtime = DecisionShadow()
     runtime.observe_tool_review('chat', 'private-key', 1)
     runtime.observe_tool_review('private-surface', 'agreement', 1)

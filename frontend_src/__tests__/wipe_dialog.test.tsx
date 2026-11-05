@@ -1,12 +1,14 @@
 /**
- * Behaviour: the typed WIPE confirmation is a plain UI2 dialog drawn over the
- * whole workspace (user, 2026-10-28): no coloured title or banner, only the
+ * Behaviour: the typed WIPE confirmation is a plain dialog drawn over the
+ * whole workspace: no coloured title or banner, only the
  * Wipe button is red, and it stays locked until WIPE is typed.
  */
 import { describe, it, expect, vi } from "vitest";
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MenuRootContext } from "../ui/Menu";
 import { WipeConfirmModal } from "../components/WipeConfirmModal";
+import { api } from "../api";
+import { setAgentCliOwner, setSessionTurns } from "../utils/agentcli_state";
 
 vi.mock("../api", () => ({ api: { wipe: vi.fn() } }));
 
@@ -34,5 +36,32 @@ describe("WIPE dialog", () => {
     } finally {
       shell.remove();
     }
+  });
+});
+
+describe("what a wipe does to this browser's chat", () => {
+  const confirm = async (scopes: { core: boolean; providers: boolean; mesa: boolean }) => {
+    const onWiped = vi.fn();
+    vi.mocked(api.wipe).mockResolvedValue({} as never);
+    render(<WipeConfirmModal scopes={scopes} onWiped={onWiped} onClose={vi.fn()} />);
+    const dialog = screen.getByRole("dialog");
+    fireEvent.change(within(dialog).getByRole("textbox"), { target: { value: "WIPE" } });
+    fireEvent.click(dialog.querySelector(".btn-danger")!);
+    await waitFor(() => expect(onWiped).toHaveBeenCalled());
+  };
+  const chatKeys = () => Object.keys(localStorage).filter((key) => key.startsWith("phx-agentcli-conversation"));
+
+  it("goes with a wipe of the core data", async () => {
+    setSessionTurns([{ text: "tool output" }]);
+    await confirm({ core: true, providers: false, mesa: false });
+    expect(chatKeys()).toEqual([]);
+  });
+
+  it("stays through a wipe of something else", async () => {
+    setAgentCliOwner(null);
+    setAgentCliOwner("test-admin");
+    setSessionTurns([{ text: "tool output" }]);
+    await confirm({ core: false, providers: true, mesa: true });
+    expect(chatKeys()).toHaveLength(1);
   });
 });

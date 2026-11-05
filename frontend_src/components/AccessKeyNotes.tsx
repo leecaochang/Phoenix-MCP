@@ -52,7 +52,7 @@ export function AccessKeyNotes({ accessKey, onUpdate }: { accessKey: AccessKeyRe
   return (
     <div className="access-key-notes">
       {error && <div role="alert" className="banner banner-error mb-8">{error}</div>}
-      {/* What Guidance is for, and who can read it, is in Help (user, 2026-10-28). */}
+      {/* What Guidance is for, and who can read it, is in Help. */}
       <textarea
         className={`input access-key-notes-input${tooLong ? " error" : ""}`}
         aria-label={t("accessKeys.notesLabel")}

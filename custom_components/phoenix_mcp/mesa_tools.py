@@ -25,27 +25,19 @@ from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
 from .const import CAP_DENY, MAX_PREVIEW_ENTITY_IDS
-from .helpers import effective_cap
+from .helpers import effective_cap, redact_inaccessible_entity_ids_in_text
 from .mesa import async_semantic_moments, build_caller_context
 from .mesa_core import InheritanceResolver, ProfileQueryResult, ProfileStore
 from .mesa_core.mcp.schemas import TOOL_DESCRIPTIONS, TOOL_SCHEMAS
 from .mesa_core.mcp.tools import MesaToolHandlers
 from .policy_engine import Permission, resolve, resolve_read
+from .tool_defs import _MESA_TOOL_ANNOTATIONS
 
 if TYPE_CHECKING:
     from .data import PhoenixData
     from .mesa import MesaRuntime
     from .mesa_core import SemanticProfile
     from .access_key_store import AccessKeyRecord
-
-MESA_TOOL_NAMES = frozenset({
-    "mesa_query_profiles",
-    "mesa_get_profile",
-    "mesa_explain_profile",
-    "mesa_get_caller_context",
-    "mesa_request_lease",
-    "mesa_release_lease",
-})
 
 # Tools whose entity_id argument must be scope-checked before the handler runs.
 _ENTITY_TARGETED = frozenset({"mesa_get_profile", "mesa_explain_profile"})
@@ -68,21 +60,6 @@ _LEASE_TOOLS = frozenset({"mesa_request_lease", "mesa_release_lease"})
 # class as get_config.
 MESA_TOOLS_CAP = "cap_config_read"
 
-
-# MCP tool annotations for the six mesa_* tools, in the same shape as
-# tool_defs._TOOL_ANNOTATIONS (see it for the conventions). The four retrieval
-# tools are pure reads; the lease tools mutate in-memory lease state, so they are
-# not read-only, but a lease is advisory metadata, never a device action, so
-# neither is destructive.
-_MESA_TOOL_ANNOTATIONS: dict[str, dict[str, bool]] = {
-    "mesa_query_profiles": {"readOnlyHint": True, "destructiveHint": False, "idempotentHint": True, "openWorldHint": False},
-    "mesa_get_profile": {"readOnlyHint": True, "destructiveHint": False, "idempotentHint": True, "openWorldHint": False},
-    "mesa_explain_profile": {"readOnlyHint": True, "destructiveHint": False, "idempotentHint": True, "openWorldHint": False},
-    "mesa_get_caller_context": {"readOnlyHint": True, "destructiveHint": False, "idempotentHint": True, "openWorldHint": False},
-    # Each request mints a new lease with its own expiry, so repeating is not a no-op.
-    "mesa_request_lease": {"readOnlyHint": False, "destructiveHint": False, "idempotentHint": False, "openWorldHint": False},
-    "mesa_release_lease": {"readOnlyHint": False, "destructiveHint": False, "idempotentHint": True, "openWorldHint": False},
-}
 
 _MESA_PARAM_DESCRIPTIONS: dict[str, dict[str, str]] = {
     "mesa_query_profiles": {
@@ -131,7 +108,7 @@ def mesa_tool_defs() -> list[dict[str, Any]]:
     """tools/list entries for the mesa_* tools, tagged with the gating cap.
 
     Built from the vendored MCP schemas/descriptions so Phoenix MCP never re-specifies
-    them. mcp_view strips the 'cap' key before exposing the tool.
+    them. The tool list strips the 'cap' key before exposing the tool.
     """
     return [
         {
@@ -352,11 +329,12 @@ def _integration_version(hass: HomeAssistant, entity_id: str) -> str | None:
         entry = er_mod.async_get(hass).async_get(entity_id)
         if entry is None or not entry.platform:
             return None
-        from homeassistant.loader import async_get_loaded_integration  # noqa: PLC0415
+        # Local: inside a guard for releases that lack it.
+        from homeassistant.loader import async_get_loaded_integration
 
         version = async_get_loaded_integration(hass, entry.platform).version
         return str(version) if version else None
-    except Exception:  # noqa: BLE001 - an absent version is not an error
+    except Exception:  # an absent version is not an error
         return None
 
 
@@ -392,6 +370,38 @@ _ERROR_OUTCOMES: dict[str, str] = {"not_found": "not_found", "lease_not_found": 
 
 def _is_error_envelope(result: Any) -> bool:
     return isinstance(result, dict) and set(result) == {"error", "message", "details"} and isinstance(result["error"], str)
+
+
+def _scope_lease_result(result: Any, access_key: AccessKeyRecord, hass: HomeAssistant) -> Any:
+    """Remove automations the access key cannot read from a lease response.
+
+    mesa-core's own scrub walks the store it is handed, and the scoped store never
+    lists an out-of-scope automation, while the shared lease manager still checks
+    every protected one. The response therefore has to be scoped here, including
+    the copy a total refusal carries in its error details.
+    """
+    if not isinstance(result, dict):
+        return result
+    details = result.get("details")
+    for body in (result, details):
+        if not isinstance(body, dict):
+            continue
+        reasons = body.get("denial_reasons")
+        if isinstance(reasons, dict):
+            body["denial_reasons"] = {
+                entity_id: redact_inaccessible_entity_ids_in_text(str(reason), access_key, hass)
+                for entity_id, reason in reasons.items()
+            }
+        warnings = body.get("warnings")
+        if isinstance(warnings, list):
+            body["warnings"] = [redact_inaccessible_entity_ids_in_text(str(item), access_key, hass) for item in warnings]
+        conflicts = body.get("active_conflicts")
+        if isinstance(conflicts, list):
+            body["active_conflicts"] = [
+                item for item in conflicts
+                if isinstance(item, dict) and _is_visible(str(item.get("automation_id")), access_key, hass)
+            ]
+    return result
 
 
 def _tool_error(message: str) -> dict[str, Any]:
@@ -459,13 +469,15 @@ async def async_call_mesa_tool(
             and bool(args.get("include_semantic_moments", False))
         ):
             moments = await async_semantic_moments(hass, entity_id)
-            get_semantic_moments = lambda eid: moments if eid == entity_id else None  # noqa: E731
+            get_semantic_moments = lambda eid: moments if eid == entity_id else None
 
     handlers = _build_handlers(
         runtime, access_key, hass, session_id, get_semantic_moments=get_semantic_moments
     )
     handler = getattr(handlers, tool_name)
     result = await handler(args)
+    if tool_name == "mesa_request_lease":
+        result = _scope_lease_result(result, access_key, hass)
     text = json.dumps(result, default=str)
     if _is_error_envelope(result):
         return _tool_error(text), _ERROR_OUTCOMES.get(result["error"], "invalid_request"), tool_name

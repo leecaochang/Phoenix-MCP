@@ -10,15 +10,17 @@ from __future__ import annotations
 
 import asyncio
 import json
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from custom_components.phoenix_mcp import agentcli
+from custom_components.phoenix_mcp import agent_chat, agent_turn
+from custom_components.phoenix_mcp.llm import base as llm_base
 from custom_components.phoenix_mcp.agent_recovery import AgentRecovery
-from custom_components.phoenix_mcp.const import AGENTCLI_LOAD_TOOLS_NAME
+from custom_components.phoenix_mcp.provider_constants import AGENTCLI_LOAD_TOOLS_NAME
 from custom_components.phoenix_mcp.access_key_store import GlobalSettings
 from custom_components.phoenix_mcp.tool_loading import ToolLoader
+from tests.runtime_fixtures import patch_readers
 
 
 def _tool(name: str, required: tuple[str, ...] = ()) -> dict:
@@ -131,11 +133,11 @@ class _Scripted:
 
 
 def _call(call_id: str, name: str, arguments: dict) -> dict:
-    return {"type": agentcli.EV_TOOL, "id": call_id, "name": name, "input": arguments}
+    return {"type": llm_base.EV_TOOL, "id": call_id, "name": name, "input": arguments}
 
 
 def _done(stop_reason: str) -> dict:
-    return {"type": agentcli.EV_DONE, "stop_reason": stop_reason, "assistant_msg": {"role": "assistant", "content": []}}
+    return {"type": llm_base.EV_DONE, "stop_reason": stop_reason, "assistant_msg": {"role": "assistant", "content": []}}
 
 
 def _script() -> list[list[dict]]:
@@ -145,7 +147,7 @@ def _script() -> list[list[dict]]:
         [_call("a", AGENTCLI_LOAD_TOOLS_NAME, {"names": ["esphome_tool_0"]}),
          _call("b", "esphome_tool_1", {"file": "x.yaml"}), _done("tool_use")],
         [_call("c", "esphome_tool_0", {"file": "x.yaml"}), _done("tool_use")],
-        [{"type": agentcli.EV_TEXT, "text": "Done."}, _done("end_turn")],
+        [{"type": llm_base.EV_TEXT, "text": "Done."}, _done("end_turn")],
     ]
 
 
@@ -183,10 +185,10 @@ async def test_agent_chat_declares_in_parts_and_never_dispatches_an_undeclared_c
     async def emit(name, payload):
         events.append((name, payload))
 
-    with patch.object(agentcli, "build_mcp_tool_list", return_value=_catalog(120, 20, 3)), \
-            patch("custom_components.phoenix_mcp.mcp_view._build_instructions", return_value="sys"), \
-            patch("custom_components.phoenix_mcp.mcp_view._dispatch_mcp", dispatch):
-        messages = await agentcli.async_run_agent_turn(
+    with patch_readers("custom_components.phoenix_mcp.tool_catalog.build_mcp_tool_list", return_value=_catalog(120, 20, 3)), \
+            patch_readers("custom_components.phoenix_mcp.tool_dispatch._build_instructions", return_value="sys"), \
+            patch_readers("custom_components.phoenix_mcp.tool_dispatch._dispatch_mcp", dispatch):
+        messages = await agent_chat.async_run_agent_turn(
             hass=hass, data=_data(), access_key=MagicMock(), provider=provider, session=MagicMock(), messages=[],
             options={}, client_ip="agentcli", base_url="http://h", emit=emit, cancel=asyncio.Event())
 
@@ -210,22 +212,22 @@ async def test_the_headless_loop_loads_the_same_way(hass):
         original(messages, results)
 
     provider.append_tool_results = append
-    with patch.object(agentcli, "build_mcp_tool_list", return_value=_catalog(120, 20, 3)), \
-            patch("custom_components.phoenix_mcp.mcp_view._dispatch_mcp", dispatch):
-        result = await agentcli._run_headless_turn(hass, data, access_key, provider, None, "http://h",
+    with patch_readers("custom_components.phoenix_mcp.tool_catalog.build_mcp_tool_list", return_value=_catalog(120, 20, 3)), \
+            patch_readers("custom_components.phoenix_mcp.tool_dispatch._dispatch_mcp", dispatch):
+        result = await agent_turn._run_headless_turn(hass, data, access_key, provider, None, "http://h",
                                                    system="s", seed="build it", client_ip="voice", max_iterations=4)
 
-    assert result.outcome == agentcli.TURN_OK and result.text == "Done."
+    assert result.outcome == agent_turn.TURN_OK and result.text == "Done."
     _assert_loading_turn(provider, dispatch, captured)
 
 
 @pytest.mark.asyncio
 async def test_a_provider_without_a_cap_keeps_the_complete_catalog(hass):
-    provider = _Scripted([[{"type": agentcli.EV_TEXT, "text": "Hi."}, _done("end_turn")]])
+    provider = _Scripted([[{"type": llm_base.EV_TEXT, "text": "Hi."}, _done("end_turn")]])
     provider.kind = "deepseek"
     data = _data()
-    with patch.object(agentcli, "build_mcp_tool_list", return_value=_catalog(120, 20, 3)):
-        await agentcli._run_headless_turn(hass, data, data.store.get_access_key_by_id.return_value, provider, None,
+    with patch_readers("custom_components.phoenix_mcp.tool_catalog.build_mcp_tool_list", return_value=_catalog(120, 20, 3)):
+        await agent_turn._run_headless_turn(hass, data, data.store.get_access_key_by_id.return_value, provider, None,
                                           "http://h", system="s", seed="hi", client_ip="voice", max_iterations=2)
     assert len(provider.declared[0]) == 143 and AGENTCLI_LOAD_TOOLS_NAME not in provider.declared[0]
     assert "Deferred tools" not in provider.system_prompts[0]

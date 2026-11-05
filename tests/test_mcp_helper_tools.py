@@ -22,10 +22,11 @@ from homeassistant.util.dt import utcnow
 from tests.runtime_fixtures import mesa_off_store
 
 from custom_components.phoenix_mcp.data import PhoenixData
-from custom_components.phoenix_mcp.mcp_view import _EXECUTOR_REGISTRY, _call_tool
+from custom_components.phoenix_mcp.tool_catalog import _EXECUTOR_REGISTRY
+from custom_components.phoenix_mcp.tool_dispatch import _call_tool
 from custom_components.phoenix_mcp.access_key_store import PermissionNode, PermissionTree, AccessKeyRecord
 from custom_components.phoenix_mcp.version_store import VersionStore
-from custom_components.phoenix_mcp.tools.helper import _build_diff_delete_helper
+from custom_components.phoenix_mcp.tools.helper_delete import _build_diff_delete_helper
 
 
 def _access_key(**caps) -> AccessKeyRecord:
@@ -715,7 +716,7 @@ class TestVersionCapture:
         assert delete_rec.after is None
 
     async def test_restore_existing_helper_reapplies_as_rollback(self, hass, helper_env, hass_admin_user):
-        from custom_components.phoenix_mcp.mcp_view import async_restore_version
+        from custom_components.phoenix_mcp.tools.restore import async_restore_version
 
         data, versions = self._data()
         access_key = _access_key()
@@ -759,7 +760,7 @@ class TestInputButtonLifecycle:
 
     async def test_crud_and_deleted_restore(self, hass, hass_admin_user):
         from homeassistant.helpers import entity_registry as er
-        from custom_components.phoenix_mcp.mcp_view import async_restore_version
+        from custom_components.phoenix_mcp.tools.restore import async_restore_version
 
         assert await async_setup_component(hass, "input_button", {"input_button": {}})
         await hass.async_block_till_done()
@@ -948,7 +949,7 @@ class TestZoneLifecycle:
         self, hass: HomeAssistant, hass_admin_user,
     ):
         from homeassistant.helpers import entity_registry as er
-        from custom_components.phoenix_mcp.mcp_view import async_restore_version
+        from custom_components.phoenix_mcp.tools.restore import async_restore_version
 
         await self._setup(hass)
         versions = VersionStore()
@@ -1115,7 +1116,7 @@ class TestZoneLifecycle:
     async def test_stale_confirmed_edit_is_refused(
         self, hass: HomeAssistant, hass_admin_user,
     ):
-        from custom_components.phoenix_mcp.mcp_view import async_execute_approved_tool
+        from custom_components.phoenix_mcp.tool_dispatch import async_execute_approved_tool
         from custom_components.phoenix_mcp.ws_dispatch import async_ws_command
 
         class ApprovalStore:
@@ -1270,7 +1271,7 @@ class TestTagLifecycle:
     async def test_confirmed_create_rechecks_tag_id_absence(
         self, hass: HomeAssistant, hass_admin_user,
     ):
-        from custom_components.phoenix_mcp.mcp_view import async_execute_approved_tool
+        from custom_components.phoenix_mcp.tool_dispatch import async_execute_approved_tool
         from custom_components.phoenix_mcp.ws_dispatch import async_ws_command
 
         class ApprovalStore:
@@ -1344,7 +1345,7 @@ class TestTagLifecycle:
         self, hass: HomeAssistant, hass_admin_user,
     ):
         from homeassistant.helpers import entity_registry as er
-        from custom_components.phoenix_mcp.mcp_view import async_restore_version
+        from custom_components.phoenix_mcp.tools.restore import async_restore_version
 
         await self._setup(hass)
         versions = VersionStore()
@@ -1480,9 +1481,8 @@ class TestTagLifecycle:
     ):
         from homeassistant.components.tag import async_scan_tag
         from homeassistant.helpers import entity_registry as er
-        from custom_components.phoenix_mcp.mcp_view import (
-            async_execute_approved_tool, async_restore_version,
-        )
+        from custom_components.phoenix_mcp.tool_dispatch import async_execute_approved_tool
+        from custom_components.phoenix_mcp.tools.restore import async_restore_version
         from custom_components.phoenix_mcp.ws_dispatch import async_ws_command
 
         class ApprovalStore:
@@ -1638,7 +1638,7 @@ class TestPersonLifecycle:
         self, hass: HomeAssistant, hass_admin_user,
     ):
         from homeassistant.helpers import entity_registry as er
-        from custom_components.phoenix_mcp.mcp_view import async_restore_version
+        from custom_components.phoenix_mcp.tools.restore import async_restore_version
         from custom_components.phoenix_mcp.ws_dispatch import async_ws_command
 
         await self._setup(hass)
@@ -1733,7 +1733,7 @@ class TestPersonLifecycle:
     async def test_private_user_link_drift_invalidates_approval_without_leaking_id(
         self, hass: HomeAssistant, hass_admin_user,
     ):
-        from custom_components.phoenix_mcp.mcp_view import async_execute_approved_tool
+        from custom_components.phoenix_mcp.tool_dispatch import async_execute_approved_tool
         from custom_components.phoenix_mcp.ws_dispatch import async_ws_command
 
         class ApprovalStore:
@@ -1791,7 +1791,7 @@ class TestScheduleLifecycle:
 
     async def test_schema_crud_and_deleted_restore(self, hass, hass_admin_user):
         from homeassistant.helpers import entity_registry as er
-        from custom_components.phoenix_mcp.mcp_view import async_restore_version
+        from custom_components.phoenix_mcp.tools.restore import async_restore_version
 
         assert await async_setup_component(hass, "schedule", {"schedule": {}})
         await hass.async_block_till_done()
@@ -2023,7 +2023,7 @@ async def test_template_create_helper_covers_available_types(hass, kind):
     assert entry is not None and entry.options["template_type"] == kind
     registry_entries = er.async_entries_for_config_entry(er.async_get(hass), entry_id)
     assert len(registry_entries) == 1
-    from custom_components.phoenix_mcp.template_recovery import template_snapshot, validate_snapshot
+    from custom_components.phoenix_mcp.template_snapshots import template_snapshot, validate_snapshot
     snapshot = template_snapshot(hass, entry)
     validate_snapshot(snapshot)
     await hass.config_entries.async_remove(entry_id)
@@ -2043,7 +2043,7 @@ async def test_template_create_helper_covers_available_types(hass, kind):
 async def test_template_helper_list_edit_delete_and_agent_restore(hass):
     """Template helpers use the public helper tools and owner-scoped recovery path."""
     from homeassistant.helpers import entity_registry as er
-    from custom_components.phoenix_mcp.template_recovery import template_snapshot
+    from custom_components.phoenix_mcp.template_snapshots import template_snapshot
 
     assert await async_setup_component(hass, "homeassistant", {})
     access_key = _access_key(
@@ -2149,7 +2149,7 @@ async def test_template_creation_authority_loss_before_final_submit(hass):
     from custom_components.phoenix_mcp.tools import helper
     steps = [{"step_id": "user", "data": {"next_step_id": "sensor"}},
              {"step_id": "sensor", "data": {"name": "Authority Probe", "state": "{{ 7 }}"}}]
-    with patch("custom_components.phoenix_mcp.request_authority.check_request_authority",
+    with patch("custom_components.phoenix_mcp.tools.helper.check_request_authority",
                side_effect=[None, RuntimeError("Authority changed")]) as authority:
         content, outcome, _ = await helper._execute_create_helper(
             {"helper_type": "template", "flow_steps": steps}, _access_key(), hass,
@@ -2197,7 +2197,7 @@ class TestHelperIconsAndRestoreCompleteness:
         data.store.async_save.assert_not_called()
 
     async def test_restoring_an_older_version_removes_fields_added_since(self, hass: HomeAssistant, helper_env, hass_admin_user):
-        from custom_components.phoenix_mcp.mcp_view import async_restore_version
+        from custom_components.phoenix_mcp.tools.restore import async_restore_version
         from custom_components.phoenix_mcp.tools.helper import _read_helper_config
 
         data = self._data()
@@ -2220,7 +2220,7 @@ class TestHelperIconsAndRestoreCompleteness:
         assert "icon" not in hass.states.get(f"input_boolean.{helper_id}").attributes
 
     async def test_zone_restore_refuses_an_icon_core_cannot_remove(self, hass: HomeAssistant, hass_admin_user):
-        from custom_components.phoenix_mcp.mcp_view import async_restore_version
+        from custom_components.phoenix_mcp.tools.restore import async_restore_version
         from custom_components.phoenix_mcp.tools.helper import _read_helper_config
 
         await self._zone_setup(hass)
@@ -2259,7 +2259,7 @@ class TestHelperIconsAndRestoreCompleteness:
         assert (stored["name"], stored["icon"], stored["radius"]) == ("Allotment", "mdi:sprout", 30.0)
 
     async def test_tag_restore_refuses_a_description_core_cannot_remove(self, hass: HomeAssistant, hass_admin_user):
-        from custom_components.phoenix_mcp.mcp_view import async_restore_version
+        from custom_components.phoenix_mcp.tools.restore import async_restore_version
         from custom_components.phoenix_mcp.tools.helper import _read_helper_config
 
         assert await async_setup_component(hass, "tag", {"tag": {}})
@@ -2279,7 +2279,7 @@ class TestHelperIconsAndRestoreCompleteness:
 
     async def test_a_renamed_zone_returns_under_its_original_id_and_entity(self, hass: HomeAssistant, hass_admin_user):
         from homeassistant.helpers import entity_registry as er
-        from custom_components.phoenix_mcp.mcp_view import async_restore_version
+        from custom_components.phoenix_mcp.tools.restore import async_restore_version
         from custom_components.phoenix_mcp.tools.helper import _restored_helper_entity_id
 
         await self._zone_setup(hass)
@@ -2317,7 +2317,7 @@ class TestHelperIconsAndRestoreCompleteness:
     async def test_recreation_reports_partial_when_saved_fields_do_not_read_back(
         self, hass: HomeAssistant, helper_env, hass_admin_user,
     ):
-        from custom_components.phoenix_mcp.mcp_view import async_restore_version
+        from custom_components.phoenix_mcp.tools.restore import async_restore_version
 
         data = self._data()
         created, _, _ = await _call_tool("create_helper", {
@@ -2327,7 +2327,7 @@ class TestHelperIconsAndRestoreCompleteness:
         await _call_tool("delete_helper", {"helper_type": "input_boolean", "helper_id": helper_id},
                          _access_key(), hass, data)
         deleted = data.versions.list_for("helper", f"input_boolean:{helper_id}")[0]
-        with patch("custom_components.phoenix_mcp.mcp_view._read_helper_config",
+        with patch("custom_components.phoenix_mcp.tools.restore._read_helper_config",
                    AsyncMock(return_value={"id": helper_id, "name": "Night mode"})):
             result, outcome, _ = await async_restore_version(deleted, "admin-1", hass, data)
         assert outcome == "invalid_request"

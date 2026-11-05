@@ -26,7 +26,7 @@ const TOGGLES: {
   inverted?: boolean;
 }[] = [
   {
-    // Stored as disable_all_logging, shown as Enable logging, on by default (user, 2026-11-03).
+    // Stored as disable_all_logging, shown as Enable logging, on by default.
     key: "disable_all_logging",
     labelKey: "settings.logEnableLabel",
     descriptionKey: "settings.logEnableHelp",

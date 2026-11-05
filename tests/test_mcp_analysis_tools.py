@@ -18,7 +18,7 @@ from homeassistant.util.dt import utcnow
 from pytest_homeassistant.common import MockConfigEntry
 
 from custom_components.phoenix_mcp.agent_recovery import AgentRecovery
-from custom_components.phoenix_mcp.mcp_view import _call_tool
+from custom_components.phoenix_mcp.tool_dispatch import _call_tool
 from custom_components.phoenix_mcp.access_key_store import PermissionNode, PermissionTree, AccessKeyRecord
 
 
@@ -451,7 +451,7 @@ class TestDryRunService:
         data = _data(mesa=MagicMock())
         data.store.get_settings.return_value = SimpleNamespace(mesa_mode="enforced")
         verdict = SimpleNamespace(allowed=[], confirm=["light.den"], blocked=[], warnings=[])
-        with patch("custom_components.phoenix_mcp.tools.discovery.evaluate_service_entities", return_value=verdict):
+        with patch("custom_components.phoenix_mcp.tools.discovery.evaluate_service_call", return_value=verdict):
             content, _, _ = await _call(
                 "dry_run_service",
                 {"domain": "light", "service": "turn_on", "entity_id": "light.den"}, _access_key(), hass, data)

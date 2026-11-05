@@ -11,69 +11,21 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 import voluptuous as vol
 from homeassistant.config_entries import ConfigEntryState
-from homeassistant.helpers import entity_registry as er
 from homeassistant.util.dt import utcnow
-from pytest_homeassistant.common import MockConfigEntry
 
 from custom_components.phoenix_mcp.data import PhoenixData
 from custom_components.phoenix_mcp.helpers import content_hash
 from custom_components.phoenix_mcp.tools import esphome
-from custom_components.phoenix_mcp.mcp_view import _call_tool, async_restore_version
+from custom_components.phoenix_mcp.tools.restore import async_restore_version
 from custom_components.phoenix_mcp.tools.esphome import esphome_availability
 from custom_components.phoenix_mcp.const import VERSION_STORAGE_VERSION
 from custom_components.phoenix_mcp.version_store import VersionRecord, VersionStore
 from custom_components.phoenix_mcp.policy_engine import resolve_esphome_user_service
 from custom_components.phoenix_mcp.ws_dispatch import ALLOWED_WS_COMMANDS
-from custom_components.phoenix_mcp.access_key_store import PermissionNode, PermissionTree, AccessKeyRecord
+from custom_components.phoenix_mcp.access_key_store import PermissionNode, PermissionTree
+from tests.runtime_fixtures import DEVICE_YAML, esphome_access_key as _access_key, esphome_call as _call, esphome_device_info as _device_info, esphome_entry as _esphome_entry, esphome_json as _json, esphome_runtime as _runtime, esphome_yaml_access_key as _yaml_access_key
 
 _DASHBOARD_PATCH = "custom_components.phoenix_mcp.tools.esphome._esphome_dashboard"
-
-
-def _access_key(permissions: PermissionTree | None = None, **caps) -> AccessKeyRecord:
-    tree = permissions or PermissionTree(domains={"sensor": PermissionNode(state="GREEN")})
-    base = {"cap_diagnostics": "allow"}
-    base.update(caps)
-    return AccessKeyRecord(
-        id=str(uuid.uuid4()), name="t", access_key_hash="x",
-        created_at=utcnow(), created_by="u", permissions=tree, **base,
-    )
-
-
-def _json(content: dict) -> dict:
-    return json.loads(content["content"][0]["text"])
-
-
-async def _call(name, args, access_key, hass):
-    if name in {"call_service", "dry_run_service"} and isinstance(args.get("service"), str):
-        args = {"service": {"domain": args.pop("domain"), "name": args.pop("service"), "data": args.pop("service_data", {})}, **args}
-    return await _call_tool(name, args, access_key, hass, MagicMock())
-
-
-def _device_info(**overrides):
-    """A stand-in for aioesphomeapi DeviceInfo, read by the tool via getattr.
-
-    Duck-typed because aioesphomeapi is an ESPHome integration requirement, not
-    a Phoenix one, and is not installed in the test environment.
-    """
-    base = {
-        "name": "rf-blaster1",
-        "friendly_name": "RF Blaster 1",
-        "esphome_version": "2026.6.0",
-        "compilation_time": "Jul 1 2026, 10:00:00",
-        "manufacturer": "espressif",
-        "model": "esp32dev",
-        "project_name": None,
-        "project_version": None,
-        "suggested_area": None,
-        "has_deep_sleep": False,
-        "webserver_port": 0,
-        "uses_password": False,
-        "api_encryption_supported": True,
-        "mac_address": "AA:BB:CC:DD:EE:FF",
-        "bluetooth_mac_address": "AA:BB:CC:DD:EE:00",
-    }
-    base.update(overrides)
-    return SimpleNamespace(**base)
 
 
 def _user_service(name="transmit_raw", args=(("timings", "INT_ARRAY"), ("repeats", "INT"))):
@@ -81,43 +33,6 @@ def _user_service(name="transmit_raw", args=(("timings", "INT_ARRAY"), ("repeats
         name=name,
         args=[SimpleNamespace(name=n, type=SimpleNamespace(name=t)) for n, t in args],
     )
-
-
-def _runtime(device_info=None, **overrides):
-    base = {
-        "available": True,
-        "expected_disconnect": False,
-        "device_info": device_info if device_info is not None else _device_info(),
-        "bluetooth_device": None,
-        "services": {},
-    }
-    base.update(overrides)
-    return SimpleNamespace(**base)
-
-
-
-
-def _esphome_entry(
-    hass, entries, *, entity_ids=("sensor.rf_blaster1_rssi",), runtime=None,
-    state=ConfigEntryState.LOADED, title="RF Blaster1",
-):
-    """Register real registry entities and append a fake entry the tool will see."""
-    backing = MockConfigEntry(domain="esphome", title=title)
-    backing.add_to_hass(hass)
-    registry = er.async_get(hass)
-    for eid in entity_ids:
-        domain, object_id = eid.split(".", 1)
-        registry.async_get_or_create(
-            domain, "esphome", f"unique-{object_id}",
-            config_entry=backing, suggested_object_id=object_id,
-        )
-
-    fake = SimpleNamespace(
-        entry_id=backing.entry_id, domain="esphome", title=title, state=state, data={})
-    if runtime is not None:
-        fake.runtime_data = runtime
-    entries.append(fake)
-    return fake
 
 
 def _dashboard(data=None, last_update_success=True):
@@ -482,37 +397,6 @@ class TestUserServiceDiscovery:
             "find_available_actions", {"entity_id": "sensor.unrelated"},
             _access_key(cap_search="allow"), hass)
         assert [a for a in _json(content)["actions"] if a["service"].startswith("esphome.")] == []
-
-
-DEVICE_YAML = '''esphome:
-  name: rf-blaster1
-
-# Enable Home Assistant API
-api:
-  encryption:
-    key: "REALAPIKEY123456="
-
-ota:
-  - platform: esphome
-    password: "realotapassword"
-
-wifi:
-  ssid: !secret wifi_ssid
-  password: !secret wifi_password
-
-uart:
-  baud_rate: 9600
-'''
-
-SECRETS_YAML = 'wifi_ssid: MyHomeNetwork\nwifi_password: housepassword1\n'
-
-
-
-
-def _yaml_access_key(**caps) -> AccessKeyRecord:
-    base = {"cap_esphome_yaml": "allow"}
-    base.update(caps)
-    return _access_key(**base)
 
 
 class TestDeviceYamlRead:

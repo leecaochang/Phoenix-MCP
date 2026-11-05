@@ -14,12 +14,9 @@ from tests.runtime_fixtures import mesa_off_store
 
 from custom_components.phoenix_mcp.data import PhoenixData
 from custom_components.phoenix_mcp.device_semantics import entity_name_source
-from custom_components.phoenix_mcp.mcp_view import (
-    _build_diff_set_entity,
-    _call_tool,
-    async_execute_approved_tool,
-    async_restore_version,
-)
+from custom_components.phoenix_mcp.tools.registry import _build_diff_set_entity
+from custom_components.phoenix_mcp.tool_dispatch import _call_tool, async_execute_approved_tool
+from custom_components.phoenix_mcp.tools.restore import async_restore_version
 from custom_components.phoenix_mcp.access_key_store import (
     PermissionNode,
     PermissionTree,
@@ -74,7 +71,7 @@ async def test_invalid_name_refuses_complete_request(hass, registry_name_env, na
     if kind == "entity":
         changes["new_entity_id"] = "light.renamed_validation"
     gate = AsyncMock()
-    with patch("custom_components.phoenix_mcp.mcp_view._gate", gate):
+    with patch("custom_components.phoenix_mcp.tools.registry._gate", gate):
         if mode == "approved":
             content, outcome, _ = await async_execute_approved_tool(
                 f"set_{kind}", {f"{kind}_id": target, **changes}, access_key, hass, data
@@ -231,7 +228,7 @@ async def test_use_device_name_refusals_leave_the_entity_unchanged(
         pytest.skip("Home Assistant before 2026.10 has no device-name mode")
     before = er.async_get(hass).async_get(entity_id)
     gate = AsyncMock()
-    with patch("custom_components.phoenix_mcp.mcp_view._gate", gate):
+    with patch("custom_components.phoenix_mcp.tools.registry._gate", gate):
         content, outcome, _ = await _call_tool(
             "set_entity", {"entity_id": entity_id, "changes": changes}, access_key, hass, data
         )

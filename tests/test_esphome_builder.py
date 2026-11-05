@@ -8,13 +8,11 @@ asyncio.timeout are what a hand-rolled fake would have to guess at.
 from __future__ import annotations
 
 import asyncio
-import json
 
 import pytest
-from aiohttp import web
 
 from custom_components.phoenix_mcp import esphome_builder
-from custom_components.phoenix_mcp.const import (
+from custom_components.phoenix_mcp.esphome_constants import (
     ESPHOME_BUILDER_VERIFIED_VERSION, ESPHOME_COMPILER_VERIFIED_VERSION,
 )
 from custom_components.phoenix_mcp.esphome_builder import (
@@ -25,80 +23,13 @@ from custom_components.phoenix_mcp.esphome_builder import (
     async_builder_command,
     version_mismatch_note,
 )
-
-# Announces the VERIFIED version by default, so ordinary tests model a verified
-# deployment and no version note is appended to their errors.
-SERVER_INFO = {
-    "server_version": ESPHOME_BUILDER_VERIFIED_VERSION,
-    "esphome_version": ESPHOME_COMPILER_VERIFIED_VERSION,
-    "port": 6052,
-    "ha_addon": True,
-    "ha_ingress": False,
-    "requires_auth": False,
-}
-
-
-class FakeDeviceBuilder:
-    """A scriptable stand-in for the add-on's /ws endpoint."""
-
-    def __init__(self, *, requires_auth=False, replies=None, hang=False, keep_open=False):
-        self.requires_auth = requires_auth
-        # Each entry is either a frame dict or a list of frames to send in order.
-        self.replies = replies or {}
-        self.hang = hang
-        # keep_open models an open-ended stream like devices/logs: frames are
-        # sent, then the socket stays up and no result frame ever arrives.
-        self.keep_open = keep_open
-        self.received: list[dict] = []
-        # Overridable per test to exercise the unverified-version path.
-        self.server_version = SERVER_INFO["server_version"]
-
-    async def handler(self, request):
-        ws = web.WebSocketResponse()
-        await ws.prepare(request)
-        await ws.send_str(json.dumps({
-            **SERVER_INFO,
-            "server_version": self.server_version,
-            "requires_auth": self.requires_auth,
-        }))
-        if self.hang:
-            await asyncio.sleep(30)
-            return ws
-        async for msg in ws:
-            frame = json.loads(msg.data)
-            self.received.append(frame)
-            reply = self.replies.get(frame["command"], {"message_id": "1", "result": {}})
-            for out in reply if isinstance(reply, list) else [reply]:
-                await ws.send_str(json.dumps(out))
-            if self.keep_open:
-                # Stay readable so the client's own stream-stop frame is recorded
-                # rather than lost when the socket is torn down.
-                continue
-            await ws.close()
-            break
-        return ws
-
-    def app(self):
-        app = web.Application()
-        app.router.add_get("/ws", self.handler)
-        return app
-
+from tests.runtime_fixtures import FakeDeviceBuilder, builder_stream as stream
 
 async def connect(fake, aiohttp_client, monkeypatch):
     """Point the client's session getter at a local server running `fake`."""
     client = await aiohttp_client(fake.app())
     monkeypatch.setattr(esphome_builder, "async_get_clientsession", lambda hass: client.session)
     return str(client.make_url("")).rstrip("/")
-
-
-def stream(*outputs, success=True, code=0):
-    frames = [{"message_id": "1", "event": "output", "data": o} for o in outputs]
-    frames.append({
-        "message_id": "1",
-        "event": "result",
-        "data": {"success": success, "code": code},
-    })
-    return frames
 
 
 async def test_request_response_command_round_trips(hass, aiohttp_client, monkeypatch, socket_enabled):

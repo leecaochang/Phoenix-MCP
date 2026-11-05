@@ -20,16 +20,18 @@ from typing import Any
 from uuid import UUID, uuid4
 
 from homeassistant.util.dt import utcnow, parse_datetime
+from homeassistant.core import HomeAssistant
 
 from .const import (
+    DOMAIN,
     CONVERSATION_LOG_DEFAULTS, CONVERSATION_LOG_LIMITS, CONVERSATION_LOG_RESERVE_BYTES,
     CONVERSATION_LOG_MAX_NODES, CONVERSATION_LOG_MAX_DEPTH, CONVERSATION_LOG_METADATA,
-    CONVERSATION_LOG_ENTRY_BYTES, CONVERSATION_LOG_PAYLOAD_BYTES, CONVERSATION_LOG_SCAN_BYTES,
+    CONVERSATION_LOG_ENTRY_BYTES, CONVERSATION_LOG_PAYLOAD_BYTES, CONVERSATION_LOG_TEXT_SCAN_CHARS, CONVERSATION_LOG_SCAN_BYTES,
     CONVERSATION_LOG_MAX_EVENTS, CONVERSATION_LOG_MAX_OPERATIONS, CONVERSATION_LOG_MAX_APPROVALS,
     CONVERSATION_LOG_OUTCOMES, CONVERSATION_LOG_FLUSH_SECONDS, CONVERSATION_LOG_STATUS_PRIORITY,
     TURN_DELIVERED_EVENT,
 )
-from .helpers import is_sensitive_key, log_internal_failure, redact_secrets_in_text
+from .helpers import RepeatedFailureLog, is_sensitive_key, log_internal_failure, redact_secrets_in_text
 
 _LOGGER = logging.getLogger(__name__)
 _REDACTED = "<redacted>"
@@ -39,6 +41,7 @@ _SECRET = re.compile(
     r"AIza[A-Za-z0-9_-]{30,}|(?:gsk_|xai-|nvapi-)[A-Za-z0-9_-]{20,})\b|"
     r"((?<![\w])(?:[\"']?)(?:api[_ -]?key|password|passwd|secret|access[_ -]?key|access[_ -]?token|refresh[_ -]?token|authorization|private[_ -]?key|pin|psk|encryption[_ -]?key)(?:[\"']?)\s*(?::|=|\bis\b)\s*)(?:\"[^\"]*\"|'[^']*'|[^\s,;}]+)"
 )
+_SHORTENED = "\n<text shortened>"
 _PRIVATE_KEY = re.compile(r"-----BEGIN [^-]*PRIVATE KEY-----.*?(?:-----END [^-]*PRIVATE KEY-----|\Z)", re.S)
 _DATA_URI = re.compile(r"data:[^\s\"')<>]+", re.I)
 _IP = re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}\b|(?<!\w)(?:[0-9a-f]{0,4}:){2,}[0-9a-f:]{0,39}(?!\w)", re.I)
@@ -53,7 +56,7 @@ _SPOKEN_CODE = re.compile(r"(?i)(\b(?:code|pin|passcode)\s+(?:is\s+)?)(\d[\d -]*
 
 def sensitive_key(key: str, service: bool = False) -> bool:
     """Service codes are credentials; protocol error codes remain readable."""
-    return is_sensitive_key(key) or key.casefold() in {"pin", "psk", "encryption_key"} or (service and key.casefold() == "code")
+    return is_sensitive_key(key) or (service and key.casefold() == "code")
 
 
 def service_context(obj: dict, inherited: bool = False) -> bool:
@@ -111,8 +114,17 @@ _assistant_flush: ContextVar[Callable | None] = ContextVar("phoenix_assistant_fl
 _tool: ContextVar[str | None] = ContextVar("phoenix_conversation_tool", default=None)
 
 
-def sanitized(value: Any, *, max_bytes: int, hide_ip: bool = False) -> Any:
-    """Copy supported data through bounded redaction; never stringify unknown objects."""
+def sanitized(
+    value: Any, *, max_bytes: int, hide_ip: bool = False, service: bool = False, text_chars: int | None = None,
+) -> Any:
+    """Copy supported data through bounded redaction; never stringify unknown objects.
+
+    `service` treats all of `value` as service context, for a caller that clipped
+    it and so may have removed the words that would mark it as one. `text_chars`
+    cuts each longer string before scanning, on the same terms, and marks the cut.
+    A caller on the event loop that keeps only a bounded part sets it, so the size
+    of an argument cannot decide how long the loop stalls.
+    """
     remaining = max_bytes
     nodes = 0
 
@@ -121,9 +133,16 @@ def sanitized(value: Any, *, max_bytes: int, hide_ip: bool = False) -> Any:
         remaining -= len(raw.encode("utf-8"))
         if remaining < 0:
             raise ValueError("payload budget")
+        if text_chars is not None and len(raw) > text_chars:
+            return scanned(raw[:text_chars], True) + _SHORTENED
+        return scanned(raw, service)
+
+    def scanned(raw: str, service: bool) -> str:
         clean = _PRIVATE_KEY.sub(_REDACTED, raw)
         clean = re.sub(r"(?i)\b(bearer|basic)\s+[^\s\"'<>]+", r"\1 <redacted>", clean)
         lines = clean.split("\n")
+        # Decided once: rescanning `raw` per line would make the cost quadratic.
+        code_is_secret = service or "service" in raw or "alarm_control_panel" in raw
         block_indent = None
         for index, line in enumerate(lines):
             indent = len(line) - len(line.lstrip())
@@ -133,7 +152,7 @@ def sanitized(value: Any, *, max_bytes: int, hide_ip: bool = False) -> Any:
                     continue
                 block_indent = None
             match = re.match(r"^\s*(?:-\s*)?([\w.-]+)\s*:\s*([|>][-+0-9]*|)\s*$", line)
-            if match and sensitive_key(match.group(1), service or "service" in raw or "alarm_control_panel" in raw):
+            if match and sensitive_key(match.group(1), code_is_secret):
                 block_indent = indent
         clean = redact_secrets_in_text("\n".join(lines)) or ""
         clean = _SECRET.sub(lambda m: (m.group(1) or m.group(2) or "") + _REDACTED, clean)
@@ -183,7 +202,7 @@ def sanitized(value: Any, *, max_bytes: int, hide_ip: bool = False) -> Any:
             return result
         raise ValueError("unsupported data")
 
-    result = visit(value)
+    result = visit(value, service=service)
     if len(json.dumps(result, ensure_ascii=False).encode("utf-8")) > max_bytes:
         raise ValueError("payload budget")
     return result
@@ -195,9 +214,9 @@ def best_effort(method: Callable) -> Callable:
     def guarded(self: Any, *args: Any, **kwargs: Any) -> Any:
         try:
             return method(self, *args, **kwargs)
-        except Exception:
-            self.available = False
-            _LOGGER.warning("Conversation recording unavailable")
+        except Exception as error:
+            self._fault = True
+            log_internal_failure(_LOGGER, f"conversation_log_{method.__name__}", error)
             return None
     return guarded
 
@@ -239,7 +258,7 @@ def json_size(value: Any) -> int:
 def clipped(value: Any, limit: int) -> Any:
     """Shorten only already sanitized text; never retain a raw truncated prefix."""
     if isinstance(value, str):
-        marker = "\n<text shortened>"
+        marker = _SHORTENED
         low, high = 0, min(len(value), max(0, limit))
         while low < high:
             middle = (low + high + 1) // 2
@@ -316,7 +335,21 @@ class ConversationLog:
         self._dirty = False
         self._last_save = 0.0
         self._lock = asyncio.Lock()
-        self.available = True
+        # A recording or loading fault stands until the log is cleared, because
+        # something is missing from it. A failed save lasts until the next good one.
+        self._fault = False
+        self._save_failed = False
+        # The last copy of each entry and the entries changed since, so a flush
+        # copies what changed rather than the whole log on the event loop. A
+        # saved copy is replaced, never edited: the writer reads it off the loop.
+        self._saved: dict[str, dict] = {}
+        self._stale: set[str] = set()
+        self._save_failures = RepeatedFailureLog(_LOGGER, "Conversation history could not be saved; will retry")
+
+    @property
+    def available(self) -> bool:
+        """Whether this log is complete and reaching storage."""
+        return not (self._fault or self._save_failed)
 
     @best_effort
     def configure(self, settings: Any) -> None:
@@ -352,6 +385,8 @@ class ConversationLog:
 
     def _remove(self, key: str) -> None:
         self._entries.pop(key, None)
+        self._saved.pop(key, None)
+        self._stale.discard(key)
         self._sizes.pop(key, None)
         self._field_sizes.pop(key, None)
         self._search.pop(key, None)
@@ -406,13 +441,14 @@ class ConversationLog:
             result, reason = None, "privacy"
         else:
             try:
-                result = sanitized(value, max_bytes=CONVERSATION_LOG_SCAN_BYTES, hide_ip=not self._settings.log_client_ip)
+                result = sanitized(value, max_bytes=CONVERSATION_LOG_SCAN_BYTES, hide_ip=not self._settings.log_client_ip,
+                                   text_chars=CONVERSATION_LOG_TEXT_SCAN_CHARS)
                 if json_size(result) > limit:
                     result = clipped(result, limit)
                     reason = "size_limit"
             except ValueError as error:
                 result, reason = None, "size_limit" if str(error) == "payload budget" else "sanitization"
-            except Exception as error:  # noqa: BLE001 - never keep the raw value
+            except Exception as error:  # never keep the raw value
                 # A sanitizer defect, not a refusal: record where without the data.
                 log_internal_failure(_LOGGER, "conversation_log_sanitize", error)
                 result, reason = None, "sanitization"
@@ -429,6 +465,7 @@ class ConversationLog:
             sizes[key] = json_size(key) + 2 + json_size(entry[key])
         self._sizes[entry["id"]] = 2 + sum(sizes.values()) + max(0, len(sizes) - 1) * 2
         self._search.pop(entry["id"], None)
+        self._stale.add(entry["id"])
         self._dirty = True
 
     def _bound(self, entry: dict) -> None:
@@ -668,6 +705,13 @@ class ConversationLog:
         self.prune()
         return deepcopy(self._entries.get(entry_id))
 
+    def _snapshot(self) -> list[dict]:
+        """Return every entry, copying only those changed since the last call."""
+        for key in self._stale:
+            self._saved[key] = deepcopy(self._entries[key])
+        self._stale.clear()
+        return [self._saved[key] for key in self._entries]
+
     async def async_save(self, *, coalesced: bool = False) -> None:
         self.prune()
         if self._store is None or not self._dirty:
@@ -676,15 +720,16 @@ class ConversationLog:
             if not self._dirty or (coalesced and time.monotonic() - self._last_save < CONVERSATION_LOG_FLUSH_SECONDS):
                 return
             try:
-                snapshot = deepcopy(list(self._entries.values()))
+                snapshot = self._snapshot()
                 self._dirty = False
                 await self._store.async_save({"entries": snapshot})
                 self._last_save = time.monotonic()
-                self.available = True
-            except Exception:
+                self._save_failed = False
+                self._save_failures.recovered()
+            except Exception as error:
                 self._dirty = True
-                self.available = False
-                _LOGGER.warning("Conversation history could not be saved; will retry")
+                self._save_failed = True
+                self._save_failures.failed(error)
 
     async def async_load(self) -> None:
         if self._store is None:
@@ -692,13 +737,28 @@ class ConversationLog:
         try:
             saved = await self._store.async_load()
         except Exception:
-            self.available = False
+            self._fault = True
             _LOGGER.warning("Conversation history could not be loaded")
             return
         rows = saved.get("entries", []) if isinstance(saved, dict) else []
         if not isinstance(rows, list):
-            self.available = False
+            self._fault = True
             return
+        # Every row goes back through the sanitizer, which costs about a second
+        # per megabyte, so it runs off the event loop. The worker fills a private
+        # log that nothing else can reach, published here in one step.
+        loader = ConversationLog()
+        loader._settings, loader._enabled = self._settings, self._enabled
+        await asyncio.get_running_loop().run_in_executor(None, loader._load_rows, rows)
+        self._entries, self._sizes = loader._entries, loader._sizes
+        self._field_sizes, self._saved = loader._field_sizes, loader._saved
+        self._search.clear()
+        self._stale.clear()
+        self._fault = self._fault or loader._fault
+        self._dirty = True
+
+    def _load_rows(self, rows: list) -> None:
+        """Sanitize saved rows into this log. Runs in a worker on a private instance."""
         for raw in rows:
             try:
                 if not isinstance(raw, dict):
@@ -760,13 +820,16 @@ class ConversationLog:
                 self._changed(entry)
                 entry["updated_at"] = updated
                 self._bound(entry)
-            except Exception:
-                self.available = False
+            except Exception as error:
+                self._fault = True
+                log_internal_failure(_LOGGER, "conversation_log_load", error)
         self.prune()
-        self._dirty = True
+        self._saved = deepcopy(self._entries)
+        self._stale.clear()
 
     async def async_clear(self) -> None:
         self._generation += 1
+        self._fault = False
         for key in list(self._entries):
             self._remove(key)
         self._dirty = True
@@ -786,18 +849,17 @@ def record_event(data: Any, kind: str, payload: Any = None, **facts: Any) -> Non
     """Optional observability must never alter an execution outcome."""
     try:
         recorder(data).event(_current.get(), kind, payload, **facts)
-    except Exception:
-        _LOGGER.warning("Conversation event omitted")
+    except Exception as error:
+        log_internal_failure(_LOGGER, "conversation_event", error)
 
 
-def approval_event(hass: Any, approval: Any, *, resolved: bool = False) -> None:
-    from .const import DOMAIN
+def approval_event(hass: HomeAssistant, approval: Any, *, resolved: bool = False) -> None:
     try:
         data = hass.data.get(DOMAIN)
         if data is not None:
             recorder(data).approval(approval, resolved=resolved)
-    except Exception:
-        _LOGGER.warning("Conversation approval evidence omitted")
+    except Exception as error:
+        log_internal_failure(_LOGGER, "conversation_approval", error)
 
 
 def _arguments(run: Callable, args: tuple, kwargs: dict) -> dict:
@@ -1005,8 +1067,8 @@ def record_identity(*, access_key: Any = None, config: Any = None) -> None:
             if key not in metadata and isinstance(value, str):
                 metadata[key] = value
         log.assign(handle, "metadata", metadata, content=False)
-    except Exception:
-        _LOGGER.warning("Conversation identity omitted")
+    except Exception as error:
+        log_internal_failure(_LOGGER, "conversation_identity", error)
 
 
 def record_current(kind: str, payload: Any = None) -> None:
@@ -1028,8 +1090,8 @@ def routing_span(route: str, **facts: Any):
             entry = log.entry(handle)
             if entry is not None:
                 event = log.event(handle, "routing", payload)
-    except Exception:
-        _LOGGER.warning("Conversation routing start omitted")
+    except Exception as error:
+        log_internal_failure(_LOGGER, "conversation_routing_start", error)
     try:
         yield payload
     except asyncio.CancelledError:
@@ -1059,8 +1121,8 @@ def routing_span(route: str, **facts: Any):
                     log._changed(entry, "events")
                     log._bound(entry)
                     log.prune()
-            except Exception:
-                _LOGGER.warning("Conversation routing evidence omitted")
+            except Exception as error:
+                log_internal_failure(_LOGGER, "conversation_routing", error)
 
 
 def _scrub_argument_text(raw: str, *, hide_ip: bool) -> str:
@@ -1130,14 +1192,15 @@ def record_rejected_tool(call_id: Any, name: Any, arguments: Any, *, reason: str
                 payload["arguments_omission"] = "Arguments could not be safely sanitized within recording limits."
         payload["arguments"] = arguments
         log.event(handle, "error", payload)
-    except Exception:
-        _LOGGER.warning("Rejected tool evidence omitted")
+    except Exception as error:
+        log_internal_failure(_LOGGER, "conversation_rejected_tool", error)
 
 
 @contextmanager
 def transport_session(session_id: Any):
     """Retain only a one-way session reference, never its bearer-like identifier."""
-    ref = hashlib.sha256(session_id.encode()).hexdigest() if isinstance(session_id, str) and len(session_id) <= 256 else None
+    # A header value can hold bytes that are not UTF-8, which aiohttp keeps as surrogates.
+    ref = hashlib.sha256(session_id.encode("utf-8", "backslashreplace")).hexdigest() if isinstance(session_id, str) and len(session_id) <= 256 else None
     context = _transport.set(ref)
     try:
         yield
@@ -1151,5 +1214,5 @@ def flush_assistant() -> None:
     if flush is not None:
         try:
             flush()
-        except Exception:
-            _LOGGER.warning("Conversation narration omitted")
+        except Exception as error:
+            log_internal_failure(_LOGGER, "conversation_narration", error)

@@ -83,6 +83,7 @@ MESA 为确认而暂缓的审批，以及恢复审核，会跳过能力检查。
 
 - 操作运行时 `status: "approved"`。
 - 工具返回错误时 `status: "failed"`，且 `rejected_reason: "execution_failed"`。这仍是 `200`。
+- 工具已发送更改但无法确认是否生效时 `status: "failed"`，且 `rejected_reason: "execution_interrupted"`。重试前请先检查结果。这仍是 `200`。
 - `result` 为 `{ tool_result, outcome }`。当工具在写入任何内容之前拒绝时，它会添加 `refused_before_write: true`。
 - 已经结束的审批会原样返回。
 
@@ -288,6 +289,7 @@ POST   /api/phoenix-mcp/admin/attention/{kind}/{record_id}
 - 结果未知的智能体操作：`{ id, "kind": "agent", tool, access_key_name, started_at, dispatch_result }`。
 - 结果未知的日历写入：`{ id, "kind": "calendar", tool, access_key_name, started_at, entity_id, "dispatch_result": "unknown" }`。其 `tool` 为 `<operation>_calendar_event`。
 - 当 Phoenix 无法读取其日历记录时：`{ "id": "calendar_storage", "kind": "calendar_storage" }`。
+- 当 Phoenix 上一次保存审计日志失败时：`{ "id": "audit_storage", "kind": "audit_storage" }`。
 - 当 MESA 启动失败时：`{ "id": "mesa", "kind": "mesa" }`。
 
 请求写入日历时，其日历项目会替换同一请求的智能体项目。
@@ -360,7 +362,7 @@ Phoenix 始终保留活动记录和处于 `unknown` 的记录。其余记录保�
 | 400 | `invalid_request` | `adminError.recoveryManualOnly` | Phoenix 无法还原此类副本。请手工还原。 |
 | 409 | `conflict` | 某个恢复键 | 记录拒绝该操作。键名说明原因。 |
 
-恢复键为 `adminError.recoveryStorageUnavailable`、`adminError.recoveryOperationActive`、`adminError.recoveryCommandRunning`、`adminError.recoveryResolveInApprovals`、`adminError.recoveryFull`、`adminError.recoveryReviewBeforeRemoving`、`adminError.recoveryReviewBeforeRestoring`、`adminError.recoveryChangedAfterReview`、`adminError.recoveryAuthorityChanged`、`adminError.recoveryHelperUnreadable` 和 `adminError.recoverySnapshotUnsafe`。任何其他拒绝使用 `adminError.recoveryBlocked`。
+恢复键为 `adminError.recoveryStorageUnavailable`、`adminError.recoveryOperationActive`、`adminError.recoveryCommandRunning`、`adminError.recoveryResolveInApprovals`、`adminError.recoveryFull`、`adminError.recoveryReviewBeforeRemoving`、`adminError.recoveryReviewBeforeRestoring`、`adminError.recoveryChangedAfterReview`、`adminError.recoveryAuthorityChanged`、`adminError.recoveryHelperUnreadable`、`adminError.recoverySnapshotUnsafe` 和 `adminError.recoverySnapshotUnsafeAt`。任何其他拒绝使用 `adminError.recoveryBlocked`。`adminError.recoverySnapshotUnsafeAt` 在 `message_params.location` 中给出被拒绝的位置。
 
 ### 检查 {#recovery-inspect}
 

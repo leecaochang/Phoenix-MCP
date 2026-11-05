@@ -161,7 +161,7 @@ DELETE /api/phoenix-mcp/admin/wipe
 
 - 存取金鑰、已歸檔金鑰、實體提示，以及所有重設為預設值的設定。
 - 待處理核准。Phoenix 會關閉其通知並回報它們已解決。
-- 稽核日誌、對話記錄、版本歷史和設定復原記錄。
+- 稽核日誌、對話記錄、版本歷史，以及結果未知的智慧體寫入記錄。
 - 路由統計、決策請求計數、卡片目錄快取和路由釐清。
 - 速率限制計數、請求計數和通知標記。
 - 每個金鑰的感測器和過期計時器。Phoenix 也會還原智慧體限時變更的整合日誌級別。
@@ -173,6 +173,8 @@ DELETE /api/phoenix-mcp/admin/wipe
 
 `wipe_mesa` 會清除每條 MESA 策略和已忽略的建議。
 
+沒有哪個旗標會清除設定復原記錄、行事曆寫入記錄或儀表板資源記錄。請使用單獨的端點移除已解決的復原記錄。
+
 回應為 `204`，沒有本文。
 
 | 狀態 | `error` | `message_key` | 條件 |
@@ -180,6 +182,7 @@ DELETE /api/phoenix-mcp/admin/wipe
 | 400 | `invalid_request` | `adminError.wipeConfirmationRequired` | `confirm` 不完全是 `"WIPE"`。 |
 | 409 | `conflict` | `adminError.approvalWipeInProgress` | 有核准正在執行。請等待它完成。僅在使用 `wipe_core` 時。 |
 | 409 | `conflict` | `adminError.approvalWipeExecutionUncertain` | 某個核准可能已套用但未回報。請先檢查其結果。僅在使用 `wipe_core` 時。 |
+| 503 | `service_unavailable` | `adminError.mesaSaveFailed` | Phoenix 無法儲存 MESA 變更。僅限 `wipe_mesa`。 |
 
 相關：[安全設定](guide:window.settingsSafety#data-management)
 
@@ -206,7 +209,7 @@ GET    /api/phoenix-mcp/admin/info
 | `version` | Phoenix 的版本。 |
 | `min_ha_version` | Phoenix 支援的最舊 Home Assistant 版本。 |
 | `github_url` | 專案儲存庫。 |
-| `tool_count` | `total`、`native` 和 `additional`，依目前執行的工具計數。 |
+| `tool_count` | `total`、`native` 和 `additional`，依完整工具目錄計數，與開啟了哪些功能無關。 |
 | `home_companion_reach` | Home Companion 金鑰的 `control_domains`、`read_domains` 和 `sensor_classes`。 |
 
 ## 面板字串 {#catalog}

@@ -163,8 +163,8 @@ export function MesaProvider({ active = true, onFindings, children }: {
   const beginLoad = useLatestRequest();
   /**
    * Read everything again. A quiet read is the one the workspace makes by
-   * itself every half minute while it is shown, so there is no Refresh button
-   * (user, 2026-10-30): it never shows a loading state, and a failed quiet read
+   * itself every half minute while it is shown, so there is no Refresh button:
+   * it never shows a loading state, and a failed quiet read
    * keeps what is already on screen instead of replacing it with an error.
    *
    * The full scan of the findings takes seconds in a large home, so the profiles
@@ -189,17 +189,19 @@ export function MesaProvider({ active = true, onFindings, children }: {
       const readProfiles = async () => {
         const [list, doms, ints, ars, devs] = await Promise.all([
           api.listMesaProfiles({ all: true }),
-          api.listMesaDomains().catch(() => ({ domains: [] })),
-          api.listMesaIntegrations().catch(() => ({ integrations: [] })),
-          api.listMesaAreas().catch(() => ({ areas: [] })),
-          api.listMesaDevices().catch(() => ({ devices: [] })),
+          api.listMesaDomains().catch(() => null),
+          api.listMesaIntegrations().catch(() => null),
+          api.listMesaAreas().catch(() => null),
+          api.listMesaDevices().catch(() => null),
         ]);
         if (!isLatest()) return;
         setProfiles(list.profiles);
-        setDomains(doms.domains);
-        setIntegrations(ints.integrations);
-        setAreas(ars.areas);
-        setDevices(devs.devices);
+        // A scope that could not be read keeps the rows it has.
+        if (doms) setDomains(doms.domains);
+        if (ints) setIntegrations(ints.integrations);
+        if (ars) setAreas(ars.areas);
+        if (devs) setDevices(devs.devices);
+        if (!quiet && !(doms && ints && ars && devs)) setError(t("mesa.loadFailed"));
         setLoaded(true);
       };
       const [, found] = await Promise.all([
@@ -238,7 +240,7 @@ export function MesaProvider({ active = true, onFindings, children }: {
   }, [active, reload]);
 
   // Every half minute while the workspace is shown, so a profile changed in another
-  // tab or by an agent appears without a Refresh button (user, 2026-10-30).
+  // tab or by an agent appears without a Refresh button.
   useEffect(() => {
     if (!active) return;
     const id = setInterval(() => { if (!document.hidden) void reload(true); }, UPDATE_MS);
@@ -341,7 +343,7 @@ export function MesaProvider({ active = true, onFindings, children }: {
   const storageKey = noticeStorageKey();
   const dismissed = new Set([...readDismissedNotices(storageKey), ...(session.key === storageKey ? session.findings : [])]);
   const allDismissed = (findings: string[]) => findings.every((f) => dismissed.has(f));
-  /** Let every dismissed notice be shown again, from the MESA Actions menu (user, 2026-10-30). */
+  /** Let every dismissed notice be shown again, from the MESA Actions menu. */
   const restoreNotices = () => {
     const key = noticeStorageKey();
     try { if (key) localStorage.removeItem(key); } catch { /* nothing to clear */ }
@@ -371,7 +373,7 @@ export function MesaProvider({ active = true, onFindings, children }: {
   /**
    * Open a profile in Profile Editor, or close it with null. Unsaved changes
    * never hold another profile back: choosing a row shows that row, and the
-   * editor's own Discard Changes is the way back (user, 2026-10-30).
+   * editor's own Discard Changes is the way back.
    */
   const open = useCallback((next: Editing | null) => {
     const current = editingRef.current;

@@ -29,7 +29,8 @@ from tests.runtime_fixtures import mesa_off_store
 
 from custom_components.phoenix_mcp.const import MAX_DIFF_INLINE_BYTES, MAX_REQUEST_BODY_BYTES, VERSION_STORAGE_VERSION
 from custom_components.phoenix_mcp.data import PhoenixData
-from custom_components.phoenix_mcp.mcp_view import _call_tool as _mcp_call_tool, async_restore_version
+from custom_components.phoenix_mcp.tool_dispatch import _call_tool as _mcp_call_tool
+from custom_components.phoenix_mcp.tools.restore import async_restore_version
 from custom_components.phoenix_mcp.tools.authoring import _read_automations_yaml
 from custom_components.phoenix_mcp.access_key_store import PermissionNode, PermissionTree, AccessKeyRecord
 from custom_components.phoenix_mcp.version_store import VersionRecord, VersionStore
@@ -691,7 +692,7 @@ class TestEntityRegistryWrite:
             cap_registry_write="confirm",
         )
         gate = AsyncMock(return_value=({}, "pending_approval", "approval"))
-        with patch("custom_components.phoenix_mcp.mcp_view._gate", gate):
+        with patch("custom_components.phoenix_mcp.tools.registry._gate", gate):
             content, outcome, _ = await _call_tool(
                 "set_entity",
                 {"entity_id": eid, "enabled": False},
@@ -809,7 +810,7 @@ class TestEntityRegistryWrite:
             tree=PermissionTree(domains={"light": PermissionNode(state="GREEN")}),
             cap_registry_write="confirm",
         )
-        with patch("custom_components.phoenix_mcp.mcp_view._gate", gate):
+        with patch("custom_components.phoenix_mcp.tools.registry._gate", gate):
             content, outcome, _ = await _call_tool(
                 "set_entity", {"entity_id": eid, **args}, access_key, hass, data
             )
@@ -820,7 +821,7 @@ class TestEntityRegistryWrite:
     async def test_registry_references_are_revalidated_at_apply_time(
         self, hass, env
     ):
-        from custom_components.phoenix_mcp.mcp_view import (
+        from custom_components.phoenix_mcp.tools.registry import (
             _execute_set_entity,
             _registry_write_precheck,
         )
@@ -921,7 +922,7 @@ class TestEntityRegistryWrite:
         eid, _area = env
         data, _ = _data()
         gate = AsyncMock(return_value=({}, "pending_approval", "approval"))
-        with patch("custom_components.phoenix_mcp.mcp_view._gate", gate):
+        with patch("custom_components.phoenix_mcp.tools.registry._gate", gate):
             content, outcome, _ = await _call_tool(
                 "set_entity",
                 {"entity_id": eid, "area_id": area_id},
@@ -955,7 +956,7 @@ class TestEntityRegistryWrite:
         eid, _area = env
         data, _ = _data()
         gate = AsyncMock(return_value=({}, "pending_approval", "approval"))
-        with patch("custom_components.phoenix_mcp.mcp_view._gate", gate):
+        with patch("custom_components.phoenix_mcp.tools.registry._gate", gate):
             content, outcome, _ = await _call_tool(
                 "set_entity",
                 {"entity_id": eid, "changes": unsupported},
@@ -973,7 +974,7 @@ class TestEntityRegistryWrite:
 
     async def test_set_entity_unknown_only_argument_revalidated_at_apply_time(self, hass, env):
         """Persisted approval arguments receive the same no-op check."""
-        from custom_components.phoenix_mcp.mcp_view import _execute_set_entity
+        from custom_components.phoenix_mcp.tools.registry import _execute_set_entity
 
         eid, _area = env
         data, _ = _data()
@@ -1005,7 +1006,7 @@ class TestEntityRegistryWrite:
 
     async def test_set_entity_area_revalidated_after_precheck(self, hass, env):
         """An area deleted during an approval window is not written back."""
-        from custom_components.phoenix_mcp.mcp_view import (
+        from custom_components.phoenix_mcp.tools.registry import (
             _execute_set_entity,
             _registry_write_precheck,
         )

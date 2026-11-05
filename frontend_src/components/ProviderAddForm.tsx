@@ -45,14 +45,14 @@ export interface ProviderAddFormProps {
   /** The "Adding {name}" line over the form; none when left out. */
   addingLabelKey?: string;
   /**
-   * The Settings layout (user, 2026-10-31): the buttons sit beside the last field and
+   * The Settings layout: the buttons sit beside the last field and
    * beside the model, none in inverse colours, the provider's notes read in Help, and a
    * click anywhere else cancels. The wizard keeps the full form.
    */
   compact?: boolean;
   onActiveChange?: (active: boolean) => void;
   /**
-   * The form is shown on request (Settings' Add Account, user 2026-10-31): Cancel, a
+   * The form is shown on request (Settings' Add Account): Cancel, a
    * finished account and a click elsewhere close it, and the provider list takes the focus
    * when it opens. A click on `opener`, the control that shows it, leaves that to the control.
    */

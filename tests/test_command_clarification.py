@@ -5,14 +5,19 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+
+from tests.runtime_fixtures import patch_readers
 from homeassistant.helpers import entity_registry as er
 from homeassistant.setup import async_setup_component
 
-from custom_components.phoenix_mcp import agentcli, command_clarification as cc, mcp_view, voice_agent
+from custom_components.phoenix_mcp import agent_chat, tool_dispatch, voice_agent
+from custom_components.phoenix_mcp.tools import service as service_tools
+from custom_components.phoenix_mcp.routing import command_clarification as cc
 from custom_components.phoenix_mcp.audit import AuditLog
-from custom_components.phoenix_mcp.command_execution import _capture_plan, plan_is_current
-from custom_components.phoenix_mcp.command_routing import async_evaluate_command
-from custom_components.phoenix_mcp.const import DOMAIN, COMMAND_CLARIFICATION_LIMIT
+from custom_components.phoenix_mcp.routing.command_execution import _capture_plan, plan_is_current
+from custom_components.phoenix_mcp.routing.command_routing import async_evaluate_command
+from custom_components.phoenix_mcp.const import DOMAIN
+from custom_components.phoenix_mcp.routing.routing_tables import COMMAND_CLARIFICATION_LIMIT
 from custom_components.phoenix_mcp.data import PhoenixData
 from custom_components.phoenix_mcp.rate_limiter import RateLimiter
 from custom_components.phoenix_mcp.access_key_store import PermissionNode, PermissionTree
@@ -89,10 +94,10 @@ async def test_changed_choices_never_select_from_old_list(hass, ambiguous_home, 
         hass.states.async_set(entry.entity_id, 'off', {'friendly_name': 'Desk lamp'})
     if change == 'unavailable': hass.states.async_set(h.ids[1], 'unavailable')
     if change == 'custom':
-        from custom_components.phoenix_mcp.intent_recognition import async_recognize
+        from custom_components.phoenix_mcp.routing.intent_recognition import async_recognize
         recognized = await async_recognize(hass, request['sentence'], 'en', strict=True)
         recognized.intent_metadata = {'hass_custom_sentence': True}
-        context = patch('custom_components.phoenix_mcp.command_routing.async_recognize', AsyncMock(return_value=recognized))
+        context = patch('custom_components.phoenix_mcp.routing.command_routing.async_recognize', AsyncMock(return_value=recognized))
     else:
         context = nullcontext()
     with context:
@@ -142,13 +147,13 @@ async def test_two_turn_choice_runs_existing_dispatch_and_approval(hass, ambiguo
         if ingress == 'voice':
             return await voice_agent.async_voice_answer(hass, h.data, sentence, language='en', conversation_id='c')
         messages.append({'role': 'user', 'content': sentence})
-        await agentcli.async_run_agent_turn(hass=hass, data=h.data, access_key=h.access_key, provider=provider,
+        await agent_chat.async_run_agent_turn(hass=hass, data=h.data, access_key=h.access_key, provider=provider,
             session=None, messages=messages, options={}, client_ip='agentcli', base_url='http://test',
             emit=AsyncMock(), cancel=asyncio.Event(), routing_language='en')
         return messages[-1]['content']
-    with (patch.object(agentcli, '_get_secret_store', AsyncMock(return_value=store)),
-          patch.object(agentcli, 'build_provider', return_value=provider) as build,
-          patch.object(mcp_view, 'unsupported_secondary_targets', AsyncMock(return_value=[])),
+    with (patch_readers("custom_components.phoenix_mcp.llm.accounts._get_secret_store", AsyncMock(return_value=store)),
+          patch_readers("custom_components.phoenix_mcp.llm.factory.build_provider", return_value=provider) as build,
+          patch.object(service_tools, 'unsupported_secondary_targets', AsyncMock(return_value=[])),
           patch.object(type(hass.services), 'async_call', new_callable=AsyncMock) as call):
         prompt = await turn('turn on the desk lamp')
         assert 'Which target' in prompt and all(eid in prompt for eid in h.ids)
@@ -160,7 +165,7 @@ async def test_two_turn_choice_runs_existing_dispatch_and_approval(hass, ambiguo
             record, = h.data.store.get_pending_approvals()
             if confirm == 'stale':
                 er.async_get(hass).async_update_entity(h.ids[1], aliases={'Changed competitor'})
-            _, outcome, _ = await mcp_view.async_execute_approved_tool(record['tool_name'], record['args'], h.access_key, hass, h.data)
+            _, outcome, _ = await tool_dispatch.async_execute_approved_tool(record['tool_name'], record['args'], h.access_key, hass, h.data)
             assert outcome == ('denied' if confirm == 'stale' else 'allowed')
         if confirm == 'stale':
             call.assert_not_called()
@@ -182,15 +187,15 @@ async def test_cancelled_choice_is_counted_without_a_model_or_action(hass, ambig
     store.resolve.return_value = SimpleNamespace(model='m')
     provider = MagicMock()
     messages = []
-    with (patch.object(agentcli, '_get_secret_store', AsyncMock(return_value=store)),
-          patch.object(agentcli, 'build_provider', return_value=provider) as build,
+    with (patch_readers("custom_components.phoenix_mcp.llm.accounts._get_secret_store", AsyncMock(return_value=store)),
+          patch_readers("custom_components.phoenix_mcp.llm.factory.build_provider", return_value=provider) as build,
           patch.object(type(hass.services), 'async_call', new_callable=AsyncMock) as call):
         for sentence in ('turn on the desk lamp', 'cancel'):
             if ingress == 'voice':
                 await voice_agent.async_voice_answer(hass, h.data, sentence, language='en', conversation_id='cancel-test')
             else:
                 messages.append({'role': 'user', 'content': sentence})
-                await agentcli.async_run_agent_turn(hass=hass, data=h.data, access_key=h.access_key, provider=provider,
+                await agent_chat.async_run_agent_turn(hass=hass, data=h.data, access_key=h.access_key, provider=provider,
                     session=None, messages=messages, options={}, client_ip='agentcli', base_url='http://test',
                     emit=AsyncMock(), cancel=asyncio.Event(), routing_language='en')
         call.assert_not_called()

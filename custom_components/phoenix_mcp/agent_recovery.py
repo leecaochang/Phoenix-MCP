@@ -14,8 +14,12 @@ from typing import TYPE_CHECKING, Any, Callable
 
 from homeassistant.helpers.storage import Store
 from homeassistant.util.dt import utcnow
+from homeassistant.helpers import issue_registry as ir
 
+from .access_key_schema import normalize_access_key_fields
 from .const import DOMAIN, TURN_DELIVERED_EVENT
+from .tool_defs import _MESA_TOOL_ANNOTATIONS, MESA_TOOL_NAMES
+from .tool_defs import _TOOL_ANNOTATIONS, _NATIVE_TOOL_NAMES
 
 # Approval outcomes that settle a dispatch claim; mirrors approvals.TERMINAL_STATUSES,
 # named here so loading this module never pulls the approval machinery in.
@@ -40,8 +44,6 @@ class NotDispatched(RecoveryRequired):
 
 def _journal_tool_name(tool: str) -> str:
     """Persist only server catalog names, never an unbounded caller label."""
-    from .tool_defs import _TOOL_ANNOTATIONS, _NATIVE_TOOL_NAMES
-    from .mesa_tools import MESA_TOOL_NAMES
 
     return tool if tool in _TOOL_ANNOTATIONS or tool in _NATIVE_TOOL_NAMES or tool in MESA_TOOL_NAMES else "unknown_tool"
 
@@ -64,7 +66,6 @@ class AgentRecovery:
             return
         if not isinstance(saved, dict) or not isinstance(saved.get("records"), dict):
             raise RecoveryRequired("Invalid agent recovery store")
-        from .access_key_schema import normalize_access_key_fields
 
         records = {rid: normalize_access_key_fields(row) if isinstance(row, dict) else row
                    for rid, row in saved["records"].items()}
@@ -83,12 +84,32 @@ class AgentRecovery:
             for rid, r in self._records.items() if r["access_key_id"] == access_key_id
         ]
 
+    def _reported(self, record: dict) -> bool:
+        """Whether a live turn has its tool's answer for this record.
+
+        Its outcome is known until that turn fails. Holding it against another
+        turn would refuse work over a record Needs Attention rightly does not list.
+        """
+        turn = record.get("turn_id")
+        return (record.get("dispatch_result") == "received" and turn is not None
+                and (turn == _turn_id.get() or turn in self._live_turns))
+
     def blocks(self, access_key_id: str, own_request: str | None = None) -> bool:
-        turn = _turn_id.get()
+        """Whether a write must wait: an unknown outcome, or one still dispatching."""
         return any(
-            r["access_key_id"] == access_key_id and rid != own_request
-            and not (turn is not None and r.get("turn_id") == turn
-                     and r.get("dispatch_result") == "received")
+            r["access_key_id"] == access_key_id and rid != own_request and not self._reported(r)
+            for rid, r in self._records.items()
+        )
+
+    def needs_attention(self, access_key_id: str) -> bool:
+        """Whether an unresolved outcome holds this key, which is what stops a turn.
+
+        A write dispatching in a live turn is not one yet. It keeps other writes
+        out through blocks(), and a turn that only reads has nothing to wait for.
+        """
+        return any(
+            r["access_key_id"] == access_key_id and not self._reported(r)
+            and not (rid in self._active and r.get("turn_id") in self._live_turns)
             for rid, r in self._records.items()
         )
 
@@ -116,7 +137,6 @@ class AgentRecovery:
 
     async def complete_received_turn(self, hass: HomeAssistant, turn: str) -> None:
         """Finalize only this turn's received receipts after a code-owned report."""
-        from homeassistant.helpers import issue_registry as ir
 
         async with self._lock:
             removed = {rid: r for rid, r in self._records.items()
@@ -140,8 +160,10 @@ class AgentRecovery:
 
     async def begin(self, access_key_id: str, tool: str, rid: str) -> None:
         async with self._lock:
-            if self.blocks(access_key_id):
+            if self.needs_attention(access_key_id):
                 raise NotDispatched("Reconcile the previous agent operation in the Needs Attention window of the Phoenix MCP panel before retrying; nothing was dispatched.")
+            if self.blocks(access_key_id):
+                raise NotDispatched("Another action on this access key is still running; nothing was dispatched. Try again when it finishes.")
             if len(self._records) >= MAX_RECORDS:
                 raise NotDispatched("Too many agent operations await review in the Needs Attention window of the Phoenix MCP panel; nothing was dispatched.")
             tool = _journal_tool_name(tool)
@@ -154,14 +176,23 @@ class AgentRecovery:
                 raise NotDispatched("Could not persist the dispatch barrier; nothing was dispatched.") from None
             self._active.add(rid)
 
+    def hold_unknown(self, access_key_id: str, tool: str, rid: str) -> None:
+        """Take effect at once for a caller that cannot wait: retain_unknown persists it.
+
+        The later writes of this access key are blocked from here on, whatever
+        the lock is doing. Storage serializes on the event loop, so adding a
+        record between its awaits cannot disturb a save in progress.
+        """
+        if rid not in self._records:
+            self._records[rid] = {
+                "access_key_id": access_key_id, "tool": _journal_tool_name(tool),
+                "started_at": utcnow().isoformat(), "turn_id": _turn_id.get(),
+            }
+
     async def retain_unknown(self, access_key_id: str, tool: str, rid: str) -> None:
-        """Retain a write whose authority was lost after entering dispatch."""
+        """Retain a write whose outcome was lost after entering dispatch."""
         async with self._lock:
-            if rid not in self._records:
-                self._records[rid] = {
-                    "access_key_id": access_key_id, "tool": _journal_tool_name(tool),
-                    "started_at": utcnow().isoformat(), "turn_id": _turn_id.get(),
-                }
+            self.hold_unknown(access_key_id, tool, rid)
             try:
                 await self._save()
             finally:
@@ -260,7 +291,6 @@ class AgentRecovery:
                 self._records = old
                 raise
             if hass is not None:
-                from homeassistant.helpers import issue_registry as ir
                 for rid in old:
                     ir.async_delete_issue(hass, DOMAIN, f"agent_recovery_{rid}")
 
@@ -319,67 +349,9 @@ def recovery_turn(run: Callable) -> Callable:
 
 def tool_is_read_only(name: str) -> bool:
     """Use the server-owned catalog, never model-provided annotations."""
-    from .tool_defs import _TOOL_ANNOTATIONS, _NATIVE_TOOL_NAMES
-    from .mesa_tools import _MESA_TOOL_ANNOTATIONS
 
     if name in _MESA_TOOL_ANNOTATIONS:
         return _MESA_TOOL_ANNOTATIONS[name]["readOnlyHint"] is True
     canonical = _NATIVE_TOOL_NAMES.get(name, name)
     return _TOOL_ANNOTATIONS.get(canonical, {}).get("readOnlyHint") is True
 
-
-async def dispatch_agent_tool(
-    dispatch: Any, *, hass: HomeAssistant, data: Any, access_key: Any,
-    name: str, arguments: dict, tool_id: Any, request_id: str,
-    client_ip: str, base_url: str,
-) -> tuple:
-    """One dispatch, with no retry after the durable boundary.
-
-    A barrier refusal is returned as an ordinary tool refusal, because nothing
-    was dispatched; only a failure after the boundary is an unknown outcome.
-    """
-    from .tool_common import RefusedBeforeWrite, _tool_error
-
-    recovery = data.agent_recovery
-    # Unknown names are refused before a handler can run. Do not turn a model
-    # typo into a durable claim that an action might have reached HA.
-    write = (name != "home_request" and _journal_tool_name(name) != "unknown_tool"
-             and not tool_is_read_only(name))
-    try:
-        if write:
-            await recovery.reconcile(data.store, access_key.id)
-            try:
-                await recovery.begin(access_key.id, name, request_id)
-            except NotDispatched as refusal:
-                return {"jsonrpc": "2.0", "id": tool_id, "result": _tool_error(str(refusal))}, "tools/call", name, "denied"
-        response = await dispatch(
-            "tools/call", tool_id, {"name": name, "arguments": arguments},
-            access_key, hass, data, client_ip, base_url, request_id=request_id,
-        )
-        if write:
-            msg, _method, _resource, outcome = response
-            result = msg.get("result") if isinstance(msg, dict) else None
-            # A structured success is a dispatch receipt, not proof of physical
-            # completion (queued jobs keep their own lifecycle). An executor
-            # error may follow a partial action and remains unknown.
-            if isinstance(result, dict) and result.get("isError") is not True:
-                await recovery.received(request_id)
-            elif isinstance(result, dict) and outcome in ("denied", "not_found"):
-                await recovery.received(request_id)
-            elif isinstance(result, RefusedBeforeWrite):
-                # Server-owned proof that nothing was written: the model gets the
-                # error back and there is no outcome to reconcile.
-                await recovery.finish(request_id)
-            elif (isinstance(msg, dict) and isinstance(msg.get("error"), dict)
-                  and msg["error"].get("code") == -32000):
-                msg["error"]["message"] = "Authority changed during dispatch. The action outcome is unknown; reconcile Home Assistant before retrying."
-            else:
-                raise RecoveryRequired("The action outcome is unknown. Check the Needs Attention window of the Phoenix MCP panel before retrying.")
-        return response
-    except Exception:
-        if write:
-            raise RecoveryRequired("The action outcome is unknown. Check the Needs Attention window of the Phoenix MCP panel before retrying.") from None
-        raise
-    finally:
-        if write:
-            recovery.interrupted(request_id)

@@ -3,10 +3,12 @@ from unittest.mock import patch
 
 import pytest
 
-from custom_components.phoenix_mcp.agentcli import ProviderConfig
-from custom_components.phoenix_mcp.const import DECISION_SUMMARY_COMPONENTS, DECISION_TYPESAFE_BASE_URL
-from custom_components.phoenix_mcp.decision_provider import DecisionError, DecisionProvider, confident_choice
-from custom_components.phoenix_mcp.decision_summary_choices import factor_summary_choices, resolve_summary_choices
+from custom_components.phoenix_mcp.llm.accounts import ProviderConfig
+from custom_components.phoenix_mcp.routing.routing_tables import (
+    DECISION_SUMMARY_COMPONENTS, DECISION_TYPESAFE_BASE_URL,
+)
+from custom_components.phoenix_mcp.routing.decision_provider import DecisionError, DecisionProvider, confident_choice
+from custom_components.phoenix_mcp.routing.decision_targets import factor_summary_choices, resolve_summary_choices
 
 
 def catalog():

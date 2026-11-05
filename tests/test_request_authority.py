@@ -16,13 +16,15 @@ import pytest
 from homeassistant.util.dt import utcnow
 from homeassistant.helpers import entity_registry as er
 
-from custom_components.phoenix_mcp import mcp_view
+from custom_components.phoenix_mcp import mcp_transport, tool_catalog, tool_dispatch
+from custom_components.phoenix_mcp.tools import service as service_tools
+from custom_components.phoenix_mcp.tools import system as system_tools
 from custom_components.phoenix_mcp.audit import AuditLog
 from custom_components.phoenix_mcp.const import DOMAIN
 from custom_components.phoenix_mcp.data import PhoenixData
 from custom_components.phoenix_mcp.rate_limiter import RateLimiter
 from custom_components.phoenix_mcp.access_key_store import AccessKeyRecord, PermissionNode, PermissionTree, AccessKeyStore
-from tests.test_mcp_sse import _make_request as _transport_request, _view
+from tests.runtime_fixtures import make_sse_request as _transport_request, sse_view as _view
 from tests.runtime_fixtures import assist_result_parts
 
 
@@ -38,7 +40,7 @@ async def _environment(hass):
     access_key.pass_through = True
     data = PhoenixData(store=store, rate_limiter=RateLimiter(), audit=AuditLog())
     data.mcp_sessions["authority-session"] = {"access_key_id": access_key.id, "initialized": True,
-        "last_seen": mcp_view.time.monotonic(), "protocol_version": "2025-03-26"}
+        "last_seen": mcp_transport.time.monotonic(), "protocol_version": "2025-03-26"}
     hass.data[DOMAIN] = data
     return data, access_key, raw
 
@@ -69,14 +71,14 @@ async def test_authority_rechecked_after_body_wait(hass, change, status):
 async def test_revocation_between_batch_items_blocks_next_dispatch(hass):
     data, access_key, raw = await _environment(hass)
     body = [{'jsonrpc': '2.0', 'id': i, 'method': 'ping'} for i in (1, 2)]
-    original = mcp_view._dispatch_mcp_authorized
+    original = tool_dispatch._dispatch_mcp_authorized
     calls = []
     async def dispatch(*args, **kwargs):
         calls.append(args[1])
         result = await original(*args, **kwargs)
         await data.store.async_archive_access_key(access_key.id, revoked=True)
         return result
-    with patch.object(mcp_view, '_dispatch_mcp_authorized', dispatch):
+    with patch.object(tool_dispatch, '_dispatch_mcp_authorized', dispatch):
         response = await _view(hass).post(_make_request(body, 'application/json', raw))
     assert calls == [1]
     assert all('error' in row for row in json.loads(response.text))
@@ -95,7 +97,7 @@ async def test_watch_wait_does_not_disclose_after_authority_change(hass, change)
     body = {'jsonrpc': '2.0', 'id': 1, 'method': 'tools/call', 'params': {
         'name': 'watch_entity', 'arguments': {'entity_id': 'sensor.audit', 'timeout': 1},
     }}
-    with patch.object(mcp_view, 'async_track_state_change_event', subscribe):
+    with patch.object(system_tools, 'async_track_state_change_event', subscribe):
         task = asyncio.create_task(_view(hass).post(_make_request(body, 'application/json', raw)))
         await asyncio.wait_for(started.wait(), 2)
         if change == 'revoke':
@@ -122,7 +124,7 @@ async def test_nonfinite_wire_never_dispatches(hass, number):
     payload = json.dumps(body).replace('"temperature": 7', '"temperature": '+number).encode()
     req.content.read = AsyncMock(return_value=payload)
     req.content.at_eof = lambda: True
-    with patch.object(mcp_view, '_call_tool', AsyncMock()) as dispatch:
+    with patch.object(tool_dispatch, '_call_tool', AsyncMock()) as dispatch:
         response = await _view(hass).post(req)
     assert json.loads(response.text)['error']['code'] == -32700
     dispatch.assert_not_called()
@@ -130,7 +132,7 @@ async def test_nonfinite_wire_never_dispatches(hass, number):
 
 async def test_nonfinite_inprocess_never_dispatches(hass):
     data, access_key, _ = await _environment(hass)
-    result, outcome, _ = await mcp_view._call_tool('call_service', {'service_data': {'nested': [float('inf')]}}, access_key, hass, data)
+    result, outcome, _ = await tool_dispatch._call_tool('call_service', {'service_data': {'nested': [float('inf')]}}, access_key, hass, data)
     assert outcome == 'invalid_request'
     assert result['isError']
 
@@ -143,7 +145,7 @@ async def test_excessive_wire_nesting_never_reaches_handler(hass):
     req.content.read = AsyncMock(return_value=payload.encode())
     req.content.at_eof = lambda: True
     handler = AsyncMock()
-    with patch.dict(mcp_view._TOOL_HANDLERS, {'get_state': (handler, (), {})}):
+    with patch.dict(tool_catalog._TOOL_HANDLERS, {'get_state': (handler, (), {})}):
         response = await _view(hass).post(req)
     assert json.loads(response.text)['result']['isError']
     handler.assert_not_called()
@@ -152,7 +154,7 @@ async def test_excessive_wire_nesting_never_reaches_handler(hass):
 async def test_json_decoder_recursion_error_is_contained(hass):
     _, _, raw = await _environment(hass)
     req = _make_request({'jsonrpc': '2.0', 'id': 1, 'method': 'ping'}, 'application/json', raw)
-    with patch.object(mcp_view.json, 'loads', side_effect=RecursionError):
+    with patch.object(tool_dispatch.json, 'loads', side_effect=RecursionError):
         response = await _view(hass).post(req)
     assert json.loads(response.text)['error']['code'] == -32700
 
@@ -169,8 +171,8 @@ async def test_physical_target_validated_before_approval(hass, target):
         hass.states.async_set('cover.audit', 'closed')
     if target == 'denied':
         access_key.permissions = PermissionTree(domains={'cover': PermissionNode(state='RED')})
-    with patch.object(mcp_view, 'unsupported_secondary_targets', AsyncMock(return_value=[])):
-        result, outcome, _ = await mcp_view._tool_call_service(
+    with patch.object(service_tools, 'unsupported_secondary_targets', AsyncMock(return_value=[])):
+        result, outcome, _ = await service_tools._tool_call_service(
             {'service': {'domain': 'cover', 'name': 'open_cover'}, 'targets': [{'kind': 'entity', 'ids': ['cover.audit']}]},
             access_key, hass, data,
         )
@@ -206,7 +208,7 @@ async def test_service_preparation_wait_rechecks_before_side_effect(hass, change
     body = {'jsonrpc': '2.0', 'id': 1, 'method': 'tools/call', 'params': {
         'name': 'call_service', 'arguments': {'service': {'domain': 'light', 'name': 'turn_on'},
         'targets': [{'kind': 'entity', 'ids': ['light.audit']} ]}}}
-    with patch.object(mcp_view, 'unsupported_secondary_targets', prepare):
+    with patch.object(service_tools, 'unsupported_secondary_targets', prepare):
         response = await _view(hass).post(_make_request(body, 'application/json', raw))
     assert prepares == 2
     body = json.loads(response.text)
@@ -225,8 +227,8 @@ async def test_repeated_targets_reach_exact_service_union(hass):
     async def service(call):
         calls.append(dict(call.data))
     hass.services.async_register('light', 'turn_on', service)
-    with patch.object(mcp_view, 'unsupported_secondary_targets', AsyncMock(return_value=[])):
-        _, outcome, _ = await mcp_view._call_tool('call_service', {
+    with patch.object(service_tools, 'unsupported_secondary_targets', AsyncMock(return_value=[])):
+        _, outcome, _ = await tool_dispatch._call_tool('call_service', {
             'service': {'domain': 'light', 'name': 'turn_on'},
             'targets': [
                 {'kind': 'entity', 'ids': ['light.audit_a']},
@@ -243,7 +245,7 @@ async def test_repeated_targets_reach_exact_service_union(hass):
 async def test_later_batch_wait_cannot_disclose_earlier_buffered_read(hass, change):
     data, access_key, raw = await _environment(hass)
     hass.states.async_set('sensor.audit', 'buffered-secret')
-    original = mcp_view._dispatch_mcp_authorized
+    original = tool_dispatch._dispatch_mcp_authorized
     async def dispatch(*args, **kwargs):
         if args[1] == 2:
             if change == 'revoke':
@@ -257,7 +259,7 @@ async def test_later_batch_wait_cannot_disclose_earlier_buffered_read(hass, chan
             'name': 'get_state', 'arguments': {'entity_id': 'sensor.audit'}}},
         {'jsonrpc': '2.0', 'id': 2, 'method': 'ping'},
     ]
-    with patch.object(mcp_view, '_dispatch_mcp_authorized', dispatch):
+    with patch.object(tool_dispatch, '_dispatch_mcp_authorized', dispatch):
         response = await _view(hass).post(_make_request(body, 'application/json', raw))
     assert 'buffered-secret' not in response.text
     assert all('error' in row for row in json.loads(response.text))
@@ -286,7 +288,8 @@ async def test_native_service_rechecks_authority_after_mesa_wait(hass):
 
 async def _internal_ingress(kind, hass, data, access_key, name, arguments):
     from types import SimpleNamespace
-    from custom_components.phoenix_mcp import agentcli
+    from custom_components.phoenix_mcp import agent_turn
+    from custom_components.phoenix_mcp.llm import base as llm_base
     from custom_components.phoenix_mcp.assist_api import PhoenixAssistTool
 
     if kind == 'assist':
@@ -301,7 +304,7 @@ async def _internal_ingress(kind, hass, data, access_key, name, arguments):
         return result
     call = {'id': 'call', 'name': name, 'input': arguments}
     if kind == 'interactive':
-        result = await agentcli._run_tool_batch(
+        result = await agent_turn._run_tool_batch(
             [call], hass=hass, data=data, access_key_id=access_key.id, client_ip='agentcli',
             base_url='http://example.invalid', emit=AsyncMock(), cancel=asyncio.Event(),
         )
@@ -311,10 +314,10 @@ async def _internal_ingress(kind, hass, data, access_key, name, arguments):
     provider.format_tools.return_value = []
     provider.append_tool_results.side_effect = lambda messages, results: captured.extend(results)
     async def stream(*args, **kwargs):
-        yield {'type': agentcli.EV_TOOL, **call}
-        yield {'type': agentcli.EV_DONE, 'stop_reason': 'tool_use', 'assistant_msg': {'role': 'assistant', 'content': []}}
-    with patch.object(agentcli, '_stream_turn_resilient', stream):
-        await agentcli._run_headless_turn(
+        yield {'type': llm_base.EV_TOOL, **call}
+        yield {'type': llm_base.EV_DONE, 'stop_reason': 'tool_use', 'assistant_msg': {'role': 'assistant', 'content': []}}
+    with patch.object(agent_turn, '_stream_turn_resilient', stream):
+        await agent_turn._run_headless_turn(
             hass, data, access_key, provider, MagicMock(), 'http://example.invalid',
             system='', seed='', client_ip='voice_agent', max_iterations=1,
         )
@@ -353,7 +356,7 @@ async def test_internal_watch_suppresses_state_after_authority_changes(hass, ing
         callbacks.append(callback)
         subscribed.set()
         return lambda: None
-    with patch.object(mcp_view, 'async_track_state_change_event', subscribe):
+    with patch.object(system_tools, 'async_track_state_change_event', subscribe):
         task = asyncio.create_task(_internal_ingress(
             ingress, hass, data, access_key, 'watch_entity', {'entity_id': 'sensor.audit', 'timeout': 1},
         ))
@@ -390,7 +393,7 @@ async def test_internal_service_rechecks_before_side_effect(hass, ingress, chang
         if calls == 2:
             await _change_authority(data, access_key, change)
         return []
-    with patch.object(mcp_view, 'unsupported_secondary_targets', prepare):
+    with patch.object(service_tools, 'unsupported_secondary_targets', prepare):
         result = await _internal_ingress(ingress, hass, data, access_key, 'call_service', {
             'service': {'domain': 'light', 'name': 'turn_on'},
             'targets': [{'kind': 'entity', 'ids': ['light.audit']}],
@@ -404,7 +407,7 @@ async def test_internal_service_rechecks_before_side_effect(hass, ingress, chang
 
 
 async def test_internal_dispatch_preserves_zero_inline_wait_and_cleans_context(hass):
-    from custom_components.phoenix_mcp.agentcli import _current_dispatch_access_key
+    from custom_components.phoenix_mcp.agent_turn import _current_dispatch_access_key
     from custom_components.phoenix_mcp.request_authority import request_authority, policy_version
 
     data, access_key, _ = await _environment(hass)
@@ -414,8 +417,8 @@ async def test_internal_dispatch_preserves_zero_inline_wait_and_cleans_context(h
         captured.append(admitted.confirm_inline_wait_seconds)
         assert request_authority.get() is not None
         raise RuntimeError('failure before return')
-    with patch.object(mcp_view, '_dispatch_mcp_authorized', execute):
-        result = await mcp_view._dispatch_mcp('ping', 1, {}, _current_dispatch_access_key(data, access_key.id), hass, data, 'assist', '')
+    with patch.object(tool_dispatch, '_dispatch_mcp_authorized', execute):
+        result = await tool_dispatch._dispatch_mcp('ping', 1, {}, _current_dispatch_access_key(data, access_key.id), hass, data, 'assist', '')
     assert result[0]['id'] == 1 and result[0]['error']['code'] == -32603
     assert result[3] == 'invalid_request'
     assert captured == [0]
@@ -451,7 +454,10 @@ async def test_pass_through_confirm_is_a_restriction_and_mixed_edits_stay_strict
 
 @pytest.mark.parametrize("change", ["grant", "restriction"])
 async def test_chat_continues_after_capability_edit_during_tool_wait(hass, change):
-    from custom_components.phoenix_mcp import agentcli
+    from custom_components.phoenix_mcp import agent_chat, agent_turn
+    from custom_components.phoenix_mcp.llm import accounts as llm_accounts
+    from custom_components.phoenix_mcp.llm import base as llm_base
+    from custom_components.phoenix_mcp.llm import provider_openai as llm_provider_openai
 
     data, access_key, _ = await _environment(hass)
     access_key.pass_through = False
@@ -470,16 +476,16 @@ async def test_chat_continues_after_capability_edit_during_tool_wait(hass, chang
         nonlocal rounds
         rounds += 1
         if rounds == 1:
-            yield {'type': agentcli.EV_TOOL, 'id': 'read', 'name': 'watch_entity',
+            yield {'type': llm_base.EV_TOOL, 'id': 'read', 'name': 'watch_entity',
                    'input': {'entity_id': 'sensor.audit', 'timeout': 1}}
-            yield {'type': agentcli.EV_DONE, 'stop_reason': 'tool_use', 'assistant_msg': {'role': 'assistant', 'content': []}}
+            yield {'type': llm_base.EV_DONE, 'stop_reason': 'tool_use', 'assistant_msg': {'role': 'assistant', 'content': []}}
         else:
-            yield {'type': agentcli.EV_TEXT, 'text': 'Conversation continued.'}
-            yield {'type': agentcli.EV_DONE, 'stop_reason': 'end_turn', 'assistant_msg': {'role': 'assistant', 'content': 'Conversation continued.'}}
-    provider = agentcli.OpenAICompatProvider(agentcli.ProviderConfig(kind='chatgpt', model='selected-test-model', base_url='https://example.invalid'))
+            yield {'type': llm_base.EV_TEXT, 'text': 'Conversation continued.'}
+            yield {'type': llm_base.EV_DONE, 'stop_reason': 'end_turn', 'assistant_msg': {'role': 'assistant', 'content': 'Conversation continued.'}}
+    provider = llm_provider_openai.OpenAICompatProvider(llm_accounts.ProviderConfig(kind='chatgpt', model='selected-test-model', base_url='https://example.invalid'))
     emit = AsyncMock()
-    with patch.object(mcp_view, 'async_track_state_change_event', subscribe), patch.object(agentcli, '_stream_turn_resilient', stream):
-        task = asyncio.create_task(agentcli.async_run_agent_turn(
+    with patch.object(system_tools, 'async_track_state_change_event', subscribe), patch.object(agent_turn, '_stream_turn_resilient', stream):
+        task = asyncio.create_task(agent_chat.async_run_agent_turn(
             hass=hass, data=data, access_key=access_key, provider=provider, session=MagicMock(),
             messages=[{'role': 'user', 'content': 'Watch the test sensor.'}], options={},
             client_ip='agentcli', base_url='http://example.invalid', emit=emit, cancel=asyncio.Event(),
@@ -511,8 +517,8 @@ async def test_policy_change_during_reconciliation_reports_no_dispatch(hass):
         access_key.pass_through = False
 
     with patch.object(data.agent_recovery, "reconcile", side_effect=tighten), \
-            patch.object(mcp_view, "_dispatch_mcp_authorized", AsyncMock()) as dispatch:
-        response, _, _, outcome = await mcp_view._dispatch_mcp(
+            patch.object(tool_dispatch, "_dispatch_mcp_authorized", AsyncMock()) as dispatch:
+        response, _, _, outcome = await tool_dispatch._dispatch_mcp(
             "tools/call", 1, {"name": "call_service", "arguments": {}},
             access_key, hass, data, "agentcli", "",
         )

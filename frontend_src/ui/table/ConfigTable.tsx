@@ -117,8 +117,7 @@ export function ConfigTable<Row>({ id, label, columns, rows, rowKey, defaultSort
   detail?: (row: Row) => ReactNode;
   /**
    * Size each column to its header and contents (up to its maxWidth), unless the user set its width;
-   * spare width goes to an empty column at the end instead of stretching the others. On by default
-   * (user, 2026-10-27).
+   * spare width goes to an empty column at the end instead of stretching the others. On by default.
    */
   fitColumns?: boolean;
   /** Show at most this many rows, after sorting (a phone list, see rowLimit.ts); null shows all. */
@@ -287,11 +286,11 @@ export function ConfigTable<Row>({ id, label, columns, rows, rowKey, defaultSort
   };
 
   // A row chosen with the keyboard, or from outside (Previous or Next in Log Details), stays in the
-  // middle of a table that scrolls, until the list reaches its top or bottom (user, 2026-10-26).
+  // middle of a table that scrolls, until the list reaches its top or bottom.
   // A row chosen with the pointer is already where the user is looking, so it only comes into view.
   const pointerChoice = useRef(false);
   // On a phone the stack is the page: following the chosen row would pull the reader away from
-  // the window they are stepping from (Log Details), so the table stays where it is (user, 2026-11-02).
+  // the window they are stepping from (Log Details), so the table stays where it is.
   const onPhone = useContext(RowLimitContext) !== null;
   /** The row kept in the middle of the table, if any. */
   const centred = useRef<string | null>(null);
@@ -300,7 +299,7 @@ export function ConfigTable<Row>({ id, label, columns, rows, rowKey, defaultSort
   /**
    * What scrolls the rows: the table's own box, or else the window around it
    * (a floating window, or one held to a share of the screen), so the rule
-   * holds wherever the table sits (user, 2026-10-31). Never the workspace.
+   * holds wherever the table sits. Never the workspace.
    */
   const rowScroller = (): HTMLElement | null => {
     const own = wrap.current;

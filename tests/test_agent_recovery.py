@@ -7,9 +7,11 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from custom_components.phoenix_mcp.agent_dispatch import dispatch_agent_tool
 from custom_components.phoenix_mcp.agent_recovery import (
-    AgentRecovery, RecoveryRequired, dispatch_agent_tool, tool_is_read_only,
+    AgentRecovery, RecoveryRequired, recovery_turn, tool_is_read_only,
 )
+from tests.runtime_fixtures import patch_readers
 
 
 class Disk:
@@ -91,7 +93,7 @@ async def test_reconciliation_requires_attributed_approval_receipt(status, marke
 
 @pytest.mark.asyncio
 async def test_startup_settles_recorded_outcomes_and_keeps_the_unknown_one():
-    """A restart clears the claims whose outcome is on record (user, 2026-10-29).
+    """A restart clears the claims whose outcome is on record.
 
     What is left is a write that reached Home Assistant with nothing recorded
     anywhere, which still blocks the access key until it is reviewed.
@@ -205,7 +207,7 @@ async def test_unknown_tool_does_not_create_recovery_barrier(hass, access_key_st
     from homeassistant.helpers import issue_registry as ir
     from custom_components.phoenix_mcp.audit import AuditLog
     from custom_components.phoenix_mcp.data import PhoenixData
-    from custom_components.phoenix_mcp.mcp_view import _dispatch_mcp
+    from custom_components.phoenix_mcp.tool_dispatch import _dispatch_mcp
     from custom_components.phoenix_mcp.rate_limiter import RateLimiter
 
     access_key, _ = await access_key_store.async_create_access_key("unknown tool", "admin")
@@ -228,7 +230,10 @@ async def test_provider_loops_continue_after_unknown_tool(hass, access_key_store
     """The chat, voice and AI Task loops continue past an unknown tool, via the
     real MCP dispatcher.
     """
-    from custom_components.phoenix_mcp import agentcli
+    from custom_components.phoenix_mcp import agent_chat, agent_turn
+    from custom_components.phoenix_mcp.llm import accounts as llm_accounts
+    from custom_components.phoenix_mcp.llm import base as llm_base
+    from custom_components.phoenix_mcp.llm import provider_openai as llm_provider_openai
     from custom_components.phoenix_mcp.audit import AuditLog
     from custom_components.phoenix_mcp.data import PhoenixData
     from custom_components.phoenix_mcp.rate_limiter import RateLimiter
@@ -236,7 +241,7 @@ async def test_provider_loops_continue_after_unknown_tool(hass, access_key_store
     access_key, _ = await access_key_store.async_create_access_key("loop", "admin")
     data = PhoenixData(store=access_key_store, rate_limiter=RateLimiter(), audit=AuditLog(), ready=True)
     hass.data["phoenix_mcp"] = data
-    provider = agentcli.OpenAICompatProvider(agentcli.ProviderConfig(
+    provider = llm_provider_openai.OpenAICompatProvider(llm_accounts.ProviderConfig(
         kind="chatgpt", model="test", base_url="https://example.test", api_key="test",
     ))
     rounds = 0
@@ -245,10 +250,10 @@ async def test_provider_loops_continue_after_unknown_tool(hass, access_key_store
         nonlocal rounds
         rounds += 1
         if rounds == 1:
-            yield {"type": agentcli.EV_TOOL, "name": "made_up_tool", "id": "bad", "input": {}}
+            yield {"type": llm_base.EV_TOOL, "name": "made_up_tool", "id": "bad", "input": {}}
         else:
-            yield {"type": agentcli.EV_TEXT, "text": "Recovered."}
-        yield {"type": agentcli.EV_DONE, "stop_reason": "tool_use" if rounds == 1 else "end_turn",
+            yield {"type": llm_base.EV_TEXT, "text": "Recovered."}
+        yield {"type": llm_base.EV_DONE, "stop_reason": "tool_use" if rounds == 1 else "end_turn",
                "assistant_msg": {"role": "assistant", "content": "Recovered."}}
 
     events = []
@@ -256,18 +261,18 @@ async def test_provider_loops_continue_after_unknown_tool(hass, access_key_store
     async def emit(name, payload):
         events.append((name, payload))
 
-    with patch.object(agentcli, "_stream_turn_resilient", stream), \
-         patch.object(agentcli, "build_mcp_tool_list", return_value=[]), \
-         patch("custom_components.phoenix_mcp.mcp_view._build_instructions", return_value="Test"):
+    with patch.object(agent_turn, "_stream_turn_resilient", stream), \
+         patch_readers("custom_components.phoenix_mcp.tool_catalog.build_mcp_tool_list", return_value=[]), \
+         patch_readers("custom_components.phoenix_mcp.tool_dispatch._build_instructions", return_value="Test"):
         if surface == "chat":
-            await agentcli.async_run_agent_turn(
+            await agent_chat.async_run_agent_turn(
                 hass=hass, data=data, access_key=access_key, provider=provider, session=MagicMock(),
                 messages=[{"role": "user", "content": "test"}], options={}, client_ip="agentcli",
                 base_url="http://example", emit=emit, cancel=asyncio.Event(),
             )
             assert not [payload for name, payload in events if name == "error"]
         else:
-            run = agentcli.async_run_voice_turn if surface == "voice" else agentcli.async_run_ai_task
+            run = agent_chat.async_run_voice_turn if surface == "voice" else agent_chat.async_run_ai_task
             assert await run(hass, data, access_key, provider, MagicMock(), "http://example", "test") == "Recovered."
     assert rounds == 2
     assert data.agent_recovery.records(access_key.id) == []
@@ -280,7 +285,7 @@ async def test_legacy_dispatch_cannot_bypass_barrier_but_status_reads_work(hass,
     from custom_components.phoenix_mcp.audit import AuditLog
     from custom_components.phoenix_mcp.data import PhoenixData
     from custom_components.phoenix_mcp.rate_limiter import RateLimiter
-    from custom_components.phoenix_mcp.mcp_view import _dispatch_mcp
+    from custom_components.phoenix_mcp.tool_dispatch import _dispatch_mcp
 
     access_key, _ = await access_key_store.async_create_access_key("recovery", "admin", pass_through=True)
     data = PhoenixData(store=access_key_store, rate_limiter=RateLimiter(), audit=AuditLog())
@@ -402,3 +407,86 @@ async def test_begin_persists_only_bounded_catalog_tool_names(tool, expected):
     assert disk.saved["records"]["request"]["tool"] == expected
 
 
+
+
+def _turn(run):
+    return recovery_turn(run)
+
+
+@pytest.mark.asyncio
+async def test_a_finished_write_in_a_live_turn_does_not_stop_another_turn():
+    data = SimpleNamespace(agent_recovery=AgentRecovery(Disk()), store=SimpleNamespace(get_pending_approvals=list))
+    recovery = data.agent_recovery
+    answered, finish = asyncio.Event(), asyncio.Event()
+
+    @_turn
+    async def first(_hass, data):
+        await recovery.begin("access_key", "call_service", "a")
+        await recovery.received("a")
+        answered.set()
+        await finish.wait()
+        return SimpleNamespace(outcome="ok")
+
+    @_turn
+    async def second(_hass, data):
+        assert not recovery.blocks("access_key") and not recovery.needs_attention("access_key")
+        await recovery.begin("access_key", "call_service", "b")
+        await recovery.received("b")
+        return SimpleNamespace(outcome="ok")
+
+    running = asyncio.create_task(first(None, data))
+    await answered.wait()
+    await second(None, data)
+    finish.set()
+    await running
+    assert recovery.records("access_key") == []
+
+
+@pytest.mark.asyncio
+async def test_a_failed_turn_still_holds_the_key_afterwards():
+    data = SimpleNamespace(agent_recovery=AgentRecovery(Disk()))
+    recovery = data.agent_recovery
+
+    @_turn
+    async def first(_hass, data):
+        await recovery.begin("access_key", "call_service", "a")
+        await recovery.received("a")
+        return SimpleNamespace(outcome="failed")
+
+    await first(None, data)
+    assert recovery.blocks("access_key") and recovery.needs_attention("access_key")
+    assert [row["status"] for row in recovery.admin_records()] == ["outcome_unknown"]
+
+
+@pytest.mark.asyncio
+async def test_a_dispatching_write_keeps_writes_out_with_a_truthful_refusal():
+    """One write at a time still holds, and a turn that only reads may start."""
+    data = SimpleNamespace(agent_recovery=AgentRecovery(Disk()))
+    recovery = data.agent_recovery
+    dispatching, finish = asyncio.Event(), asyncio.Event()
+
+    @_turn
+    async def first(_hass, data):
+        await recovery.begin("access_key", "call_service", "a")
+        dispatching.set()
+        await finish.wait()
+        await recovery.received("a")
+        return SimpleNamespace(outcome="ok")
+
+    running = asyncio.create_task(first(None, data))
+    await dispatching.wait()
+    assert recovery.blocks("access_key") and not recovery.needs_attention("access_key")
+    with pytest.raises(RecoveryRequired, match="still running"):
+        await recovery.begin("access_key", "call_service", "b")
+    finish.set()
+    await running
+
+
+@pytest.mark.asyncio
+async def test_a_record_with_no_live_turn_still_blocks_with_needs_attention():
+    recovery = AgentRecovery(Disk())
+    await recovery.begin("access_key", "call_service", "a")
+    recovery.interrupted("a")
+    assert recovery.needs_attention("access_key")
+    with pytest.raises(RecoveryRequired, match="Needs Attention"):
+        await recovery.begin("access_key", "call_service", "b")

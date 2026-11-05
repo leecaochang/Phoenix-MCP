@@ -7,9 +7,7 @@
 # the ranges their dependents allow. It must never be installed together with
 # pytest-homeassistant-custom-component.
 #
-#   pytest-homeassistant 2026.11.0b6 pins homeassistant==2026.11.0b6.
-#   2026.11.0b6 and 2026.11.0 differ only in the version string; the final test
-#   package failed to reach PyPI. Move to 2026.11.0 once it is published.
+#   pytest-homeassistant 2026.11.0 pins homeassistant==2026.11.0.
 #   Python: 3.14.2 or newer
 #
 # This is a TEST pin only. hacs.json and const.MIN_HA_VERSION declare the
@@ -23,7 +21,7 @@
 #   # to bump: edit the pins below, using the matching HA component manifests
 #   venv/bin/python -m pytest
 
-pytest-homeassistant[bluetooth,radio-frequency]==2026.11.0b6
+pytest-homeassistant[bluetooth,radio-frequency]==2026.11.0
 
 # Dependencies of HA's `conversation` component, needed by the Phoenix MCP voice-agent
 # tests (voice_agent.py imports homeassistant.components.conversation). The test

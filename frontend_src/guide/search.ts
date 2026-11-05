@@ -1,16 +1,16 @@
 /**
- * Search across the Guide (user, 2026-11-01): every section of every topic,
+ * Search across the Guide: every section of every topic,
  * matched loosely enough to forgive a typo or a half-typed word. A section is
  * ranked by its own words: its heading counts most, then its keywords, then
  * its text, so the section that explains a term comes before the sections
- * that only share its page (user, 2026-11-01: "JEV" must lead to the JEV
+ * that only share its page ("JEV" must lead to the JEV
  * section). The page's title and keywords let a section match a word it does
  * not use, but only alongside a word of its own. Every word typed must match,
  * so adding a word narrows the results. A near miss counts only for a word
- * the Guide has nowhere, so "meta" finds Meta and not every page about MESA
- * (user, 2026-11-03). Words are compared without case or accents. Text
+ * the Guide has nowhere, so "meta" finds Meta and not every page about MESA.
+ * Words are compared without case or accents. Text
  * written without spaces (Chinese, Japanese) is split into words by the
- * browser (user, 2026-11-03), but only to find where words begin and end: the
+ * browser, but only to find where words begin and end: the
  * browser's dictionary breaks terms such as 密钥 into single characters, so
  * what the reader types is matched as written, best when it covers whole
  * words, and in the middle of a word only when it is found nowhere better.

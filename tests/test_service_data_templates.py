@@ -20,7 +20,7 @@ from tests.runtime_fixtures import mesa_off_store
 from custom_components.phoenix_mcp.access_key_store import AccessKeyRecord, PermissionNode, PermissionTree
 from custom_components.phoenix_mcp.const import DOMAIN
 from custom_components.phoenix_mcp.data import PhoenixData
-from custom_components.phoenix_mcp.mcp_view import _call_tool, async_execute_approved_tool
+from custom_components.phoenix_mcp.tool_dispatch import _call_tool, async_execute_approved_tool
 from custom_components.phoenix_mcp.service_targets import template_fields
 
 _ORACLE = "{% if is_state('lock.front_door', 'unlocked') %}/config/www/a.jpg{% else %}/nope/b.jpg{% endif %}"

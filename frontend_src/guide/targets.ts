@@ -1,5 +1,5 @@
 /**
- * Guide sections for controls drawn from a list (user, 2026-11-01): each
+ * Guide sections for controls drawn from a list: each
  * persona and each capability has its own section on its window's page, its
  * anchor the key in dashes, so selecting one in the panel opens its section.
  * The Guide's contract test checks that every persona and capability has one.

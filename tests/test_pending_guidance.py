@@ -87,7 +87,7 @@ class TestSurfacesAgree:
     def primer(self, hass):
         from unittest.mock import MagicMock
 
-        from custom_components.phoenix_mcp.mcp_view import _build_instructions
+        from custom_components.phoenix_mcp.tool_dispatch import _build_instructions
         from custom_components.phoenix_mcp.access_key_store import PermissionTree, AccessKeyRecord
         from homeassistant.util.dt import utcnow
 

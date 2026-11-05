@@ -215,6 +215,16 @@ class PhoenixSafeDumper(yaml.SafeDumper):
             return ""
         return style
 
+    def represent_mapping(self, tag: str, mapping: Any, flow_style: Any = None) -> Any:
+        # A null mapping value is written as "key:", matching HA's own dumper.
+        # Done on the node rather than on the rendered text, where the same
+        # characters can sit inside a multi-line string.
+        node = super().represent_mapping(tag, mapping, flow_style)
+        for _key, value in node.value:
+            if isinstance(value, yaml.ScalarNode) and value.tag == "tag:yaml.org,2002:null":
+                value.value = ""
+        return node
+
 
 def _make_tag_constructor(tag: str) -> Callable[[yaml.SafeLoader, yaml.nodes.Node], TaggedValue]:
     def _construct(loader: yaml.SafeLoader, node: yaml.nodes.Node) -> TaggedValue:
@@ -293,7 +303,7 @@ def dump_tagged(data: Any) -> str:
         default_flow_style=False,
         allow_unicode=True,
         sort_keys=False,
-    ).replace(": null\n", ":\n")
+    )
 
 
 def encode_tags(obj: Any) -> Any:
@@ -406,7 +416,7 @@ def resolve_domain_layout(config_dir: str, domain: str) -> DomainLayout | None:
         return None
     try:
         root = load_tagged(config_path)
-    except Exception:  # noqa: BLE001 - unparseable root file, use legacy path
+    except Exception:  # unparseable root file, use legacy path
         return None
     if not isinstance(root, dict):
         return None
@@ -1389,18 +1399,17 @@ def _create_append(path: str, shape: str, entry_id: str, config: dict) -> OpResu
             prefix += "\n"
         new_text = prefix + rendered
 
-    # Verify before writing: the result must parse and contain the new entry, so a
-    # malformed append is refused and the file is never left in a state HA cannot
-    # load.
+    # Verify before writing: the result must parse and its new entry must read back
+    # exactly as sent, so a malformed append or a rewritten value is refused and the
+    # file is never left in a state HA cannot load.
     try:
         reparsed = yaml.load(new_text, Loader=PhoenixSafeLoader)
     except yaml.YAMLError:
         reparsed = None
     if shape == "list":
-        valid = isinstance(reparsed, list) and any(
-            isinstance(x, dict) and x.get("id") == config.get("id") for x in reparsed)
+        valid = isinstance(reparsed, list) and bool(reparsed) and reparsed[-1] == config
     else:
-        valid = isinstance(reparsed, dict) and entry_id in reparsed
+        valid = isinstance(reparsed, dict) and entry_id in reparsed and reparsed[entry_id] == config
     if not valid:
         return OpResult(
             ok=False, error_kind="io_error",
@@ -1429,7 +1438,7 @@ def read_entry(config_dir: str, domain: str, entry_id: str) -> Any:
             return None
         try:
             doc = load_tagged(path)
-        except Exception:  # noqa: BLE001 - best-effort probe
+        except Exception:  # best-effort probe
             return None
         if _DOMAIN_SHAPES[domain] == "named":
             if isinstance(doc, dict) and entry_id in doc:

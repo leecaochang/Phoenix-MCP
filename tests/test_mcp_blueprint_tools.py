@@ -16,10 +16,11 @@ import pytest
 from homeassistant.core import HomeAssistant
 from homeassistant.util.dt import utcnow
 
-from custom_components.phoenix_mcp import mcp_view
+from custom_components.phoenix_mcp.tools import restore as restore_tools
 from custom_components.phoenix_mcp.tools import blueprint as blueprint_tools
 from custom_components.phoenix_mcp.data import PhoenixData
-from custom_components.phoenix_mcp.mcp_view import _EXECUTOR_REGISTRY, _call_tool
+from custom_components.phoenix_mcp.tool_catalog import _EXECUTOR_REGISTRY
+from custom_components.phoenix_mcp.tool_dispatch import _call_tool
 from custom_components.phoenix_mcp.access_key_store import PermissionTree, AccessKeyRecord
 from custom_components.phoenix_mcp.version_store import VersionStore
 from custom_components.phoenix_mcp.ws_dispatch import WsDispatchError
@@ -541,13 +542,13 @@ class TestBlueprintRestore:
     """
 
     async def test_restore_access_key_carries_explicit_allows_for_exempt_caps(self):
-        access_key = mcp_view._restore_access_key("admin-1")
+        access_key = restore_tools._restore_access_key("admin-1")
         assert access_key.cap_automation_write == "allow"
         assert access_key.cap_script_write == "allow"
         assert access_key.cap_blueprint_write == "allow"
 
     async def test_restore_edits_an_existing_blueprint(self, hass, bp_env):
-        from custom_components.phoenix_mcp.mcp_view import async_restore_version
+        from custom_components.phoenix_mcp.tools.restore import async_restore_version
         data, versions = _data()
         access_key = _access_key()
         _write_existing(bp_env)  # V1 on disk
@@ -571,7 +572,7 @@ class TestBlueprintRestore:
 
     async def test_restore_recreates_a_deleted_blueprint(self, hass, bp_env):
         import os
-        from custom_components.phoenix_mcp.mcp_view import async_restore_version
+        from custom_components.phoenix_mcp.tools.restore import async_restore_version
         data, versions = _data()
         access_key = _access_key()
         target = _write_existing(bp_env)
@@ -592,7 +593,7 @@ class TestBlueprintRestore:
         assert call[2]["allow_override"] is False  # file gone, so create path
 
     async def test_oversized_blueprint_snapshot_refuses_cleanly(self, hass, bp_env):
-        from custom_components.phoenix_mcp.mcp_view import async_restore_version
+        from custom_components.phoenix_mcp.tools.restore import async_restore_version
         data, _versions = _data()
         record = MagicMock()
         record.resource_type = "blueprint"

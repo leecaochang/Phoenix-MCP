@@ -33,7 +33,9 @@
 
 删除所有访问密钥、待处理审批和实体提示，并把所有设置重置为默认值。这还会关闭紧急停止开关。
 
-它还会删除审计日志、对话日志、变更历史、路由统计和速率限制计数。它还会移除 Phoenix 创建的语音助手，除非它是 Home Assistant 唯一的助手。
+它还会删除审计日志、对话日志、变更历史、路由统计和速率限制计数。它还会移除 Phoenix 创建的语音助手，除非它是 Home Assistant 唯一的助手。Agent Chat 对话也会被删除，但仅限此浏览器。
+
+安全副本、日历更改记录和仪表盘资源记录会保留。要移除它们，请参阅[完全移除 Phoenix](guide:topic.security#removing)。
 
 ### {{label:settings.wipeProvidersLabel}} {#wipe-providers}
 

@@ -20,6 +20,7 @@ from custom_components.phoenix_mcp.const import DOMAIN, CONFIG_RECOVERY_UNRESOLV
 from custom_components.phoenix_mcp.data import PhoenixData
 from custom_components.phoenix_mcp.access_key_store import AccessKeyStore
 from custom_components.phoenix_mcp.tools.blueprint import _blueprint_recovery_snapshot
+from tests.runtime_fixtures import patch_readers
 
 
 @pytest.fixture
@@ -220,7 +221,7 @@ async def test_file_record_is_only_acknowledged_while_a_blueprint_is_restored(ha
 
 async def test_unreadable_source_is_unknown_not_absence(hass, runtime):
     rid, _ = await interrupted(hass, runtime)
-    with patch("custom_components.phoenix_mcp.tool_common._read_text_capped", side_effect=PermissionError):
+    with patch("custom_components.phoenix_mcp.config_reconciliation._read_text_capped", side_effect=PermissionError):
         with pytest.raises(PermissionError):
             await observe_configuration(hass, runtime.config_recovery.get(rid))
         await reconcile_configurations(hass, runtime)
@@ -239,7 +240,7 @@ async def test_restart_receipt_resolves_only_after_runtime_change(hass, runtime)
     runtime.config_recovery.leave(rid)
     await reconcile_configurations(hass, runtime)
     assert runtime.config_recovery.get(rid)["phase"] == "dispatching"
-    with patch("custom_components.phoenix_mcp.config_reconciliation.runtime_identity", return_value="new-runtime"):
+    with patch_readers("custom_components.phoenix_mcp.config_recovery.runtime_identity", return_value="new-runtime"):
         await reconcile_configurations(hass, runtime)
     assert runtime.config_recovery.get(rid)["phase"] == "verified"
 
@@ -345,9 +346,9 @@ async def test_completed_same_resource_can_rotate_inside_write_lock(runtime, mon
 async def test_template_settings_expected_snapshot_matches_real_optional_clear(hass, runtime):
     from homeassistant.config_entries import SOURCE_USER
     from homeassistant.setup import async_setup_component
-    from custom_components.phoenix_mcp.mcp_view import _restore_access_key
+    from custom_components.phoenix_mcp.tools.restore import _restore_access_key
     from custom_components.phoenix_mcp.tools.helper import _execute_set_config_entry_options
-    from custom_components.phoenix_mcp.template_recovery import template_snapshot
+    from custom_components.phoenix_mcp.template_snapshots import template_snapshot
     assert await async_setup_component(hass, "homeassistant", {})
     result = await hass.config_entries.flow.async_init("template", context={"source": SOURCE_USER})
     result = await hass.config_entries.flow.async_configure(result["flow_id"], {"next_step_id": "sensor"})

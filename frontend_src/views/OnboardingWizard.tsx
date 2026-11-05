@@ -207,7 +207,7 @@ export function OnboardingWizard({ onCancel, onFinish }: Props) {
   }, [step, accessKeyId, onFinish]);
 
   // Open Agent Chat on the new access key with the chosen account/model preselected,
-  // the test prompt pre-typed and an empty conversation (user, 2026-10-28). Closing
+  // the test prompt pre-typed and an empty conversation. Closing
   // any already-open global window first forces a remount, so the freshly patched
   // durable selections are picked up.
   const launchAgentChat = useCallback((instanceId: string, model: string) => {
@@ -437,7 +437,7 @@ export function OnboardingWizard({ onCancel, onFinish }: Props) {
   }
 
   return (
-    // The wizard's buttons always show their text, whatever the toolbar's display mode (user, 2026-10-28).
+    // The wizard's buttons always show their text, whatever the toolbar's display mode.
     <DisplayModeContext.Provider value="icon-text">
       <div className={`view-root wizard-root${guide?.guideBeside ? " is-guided" : ""}`}>
         <div className="wizard-center">

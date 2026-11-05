@@ -15,7 +15,7 @@ interface Props {
   companion?: CompanionDomains | null;
 }
 
-// The state's own words, as the Permissions tree names them (user, 2026-10-28).
+// The state's own words, as the Permissions tree names them.
 const STATE_LABEL_KEYS: Record<NodeState, string> = {
   GREY: "perms.levelInherit",
   YELLOW: "perms.levelRead",
@@ -184,7 +184,7 @@ export function PermissionSummary({ permissions, entityTree, onEntityClick, mesa
     return entity ? { entity, depth: item.type } : null;
   };
   const nameOf = (item: SummaryItem) => (item.friendlyName !== item.id ? item.friendlyName : "");
-  // A configurable table like the other workspaces' lists (user, 2026-10-28). Name and ID stay narrow
+  // A configurable table like the other workspaces' lists. Name and ID stay narrow
   // enough for all four columns to fit half the workspace; their full text is in the tooltip.
   const columns: Column<SummaryItem>[] = [
     { id: "type", label: t("perms.colType"), width: 100, sortValue: (item) => TYPE_ORDER[item.type], cell: (item) => t(TYPE_LABEL_KEYS[item.type]) },

@@ -281,6 +281,7 @@ Phoenix 依此順序檢查本文大小、設定、緊急停止開關、存取金
 | 400 | `invalid_request` | `adminError.attachmentsContinue` | 影像與 `continue: true` 一起傳送。影像只能隨新訊息傳送。 |
 | 400 | `invalid_request` | `adminError.attachmentsCompanion` | 影像與 Home Companion 金鑰一起傳送，而它只接受文字。 |
 | 400 | `invalid_request` | `adminError.attachmentsVisionUnsupported` | 模型不接受影像。 |
+| 400 | `invalid_request` | `adminError.invalidHostHeader` | 請求的 `Host` 標頭無法構成 URL。 |
 | 400 | `invalid_request` | `adminError.nothingToContinue` | 傳送了 `continue: true`，但沒有可繼續的對話。 |
 | 400 | `invalid_request` | `adminError.emptyMessage` | 訊息為空，且沒有影像。 |
 

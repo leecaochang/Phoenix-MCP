@@ -132,7 +132,7 @@ describe("AuditView", () => {
     const { findByRole, getByRole, getByText } = render(
       <LogSelectionContext.Provider value={selection}><AuditView accessKeys={[]} /><LogDetailsContent /></LogSelectionContext.Provider>,
     );
-    // Every column shows by default (user, 2026-10-27), Source included.
+    // Every column shows by default, Source included.
     await findByRole("button", { name: "Time Column Options" });
     expect(getByRole("columnheader", { name: /Source/ })).toBeTruthy();
     expect(getByText("Agent Chat")).toBeTruthy();
@@ -209,6 +209,25 @@ describe("AuditView", () => {
     fireEvent.click(getByLabelText("Refresh audit log"));
     await findByText("create_automation");
     expect(queryByText("Could not load the audit log. The log tries again every 5 seconds; while updates are paused, press Refresh.")).toBeNull();
+  });
+
+  it("drops rows a live list repeats on the next page, and reads on from where the server's list was read", async () => {
+    const page = (ids: number[], total: number) => ({ entries: ids.map((n) => entry({ request_id: `r${n}`, timestamp: `2026-01-01T00:00:0${n}Z`, resource: `tool_${n}` })), total });
+    vi.mocked(api.getAudit)
+      .mockResolvedValueOnce(page([9, 8], 6))
+      // A new row pushed everything down by two, so the whole next page was shown already.
+      .mockResolvedValueOnce(page([9, 8], 8))
+      .mockResolvedValueOnce(page([7, 6], 8));
+    const view = render(<AuditView accessKeys={[]} />);
+    await view.findByText("tool_9");
+    fireEvent.click(view.getByText("Load More"));
+    await waitFor(() => expect(api.getAudit).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(view.queryByText("Load More")).toBeTruthy());
+    expect(view.getAllByText("tool_9")).toHaveLength(1);
+    fireEvent.click(view.getByText("Load More"));
+    await view.findByText("tool_7");
+    expect(vi.mocked(api.getAudit).mock.calls.map(([params]) => params?.offset)).toEqual([0, 2, 4]);
+    expect(view.getAllByText("tool_8")).toHaveLength(1);
   });
 
   it("keeps the rows already shown when a later page fails", async () => {

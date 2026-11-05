@@ -1,6 +1,6 @@
 /**
- * The Approvals windows point the Guide at the section about each control
- * (user, 2026-11-01): the Show filter and search, the list or Select
+ * The Approvals windows point the Guide at the section about each control:
+ * the Show filter and search, the list or Select
  * Multiple while ticking, Approve and Reject, and each part of Request
  * Details. The pages and sections themselves are checked by guide_contract.
  */

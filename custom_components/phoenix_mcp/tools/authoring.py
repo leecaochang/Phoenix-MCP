@@ -16,8 +16,8 @@ hand-written YAML and is refused before any approval exists.
 Scene writes add one check: a scene captures member entities' states, so
 `_unwritable_scene_members` refuses a scene naming an entity the access key cannot
 WRITE; otherwise an access key could snapshot and later restore entities outside its
-scope. mcp_view owns the transport and the registries and imports from here;
-this module does not import it.
+scope. tool_registration registers these tools and this module never imports the
+dispatcher.
 """
 
 from __future__ import annotations
@@ -36,26 +36,35 @@ from typing import Any, Literal
 import voluptuous as vol
 
 from homeassistant.components.automation.config import async_validate_config_item as _validate_automation_config
+from homeassistant.components.homeassistant.scene import PLATFORM_SCHEMA as _SCENE_PLATFORM_SCHEMA
 from homeassistant.components.script.config import async_validate_config_item as _validate_script_config
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.util.file import write_utf8_file_atomic as _write_utf8_file_atomic
 from homeassistant.util.yaml import dump as _yaml_dump, load_yaml as _load_yaml
 from homeassistant.helpers import entity_registry as er
 from homeassistant.core import HomeAssistant
+from homeassistant.core import Context, State
 
 from ..authoring_validation import async_validation_message, authoring_input_error, validation_message
 from ..const import CAP_DENY, DOMAIN, TRACE_SCOPE_MAX_DEPTH
 from ..data import PhoenixData
 from ..entity_registration import async_observe_registration
-from ..helpers import content_hash, dict_arg, diff_summary_fields as _summary, effective_cap, str_arg, str_list_arg, _strict_phoenix_log_text
+from ..helpers import (
+    content_hash, dict_arg, diff_summary_fields as _summary, effective_cap, str_arg, str_list_arg,
+    _strict_phoenix_log_text, redact_inaccessible_entity_ids_in_text,
+)
 from ..tool_common import (
     _CAP_FORBIDDEN_MESSAGE, _cas_conflict, _gate, _record_version, _tool_error, _tool_refused_before_write,
     _tool_success, _truncate, fitted_list, longest_fitting,
 )
-from ..policy_engine import Permission, filter_entities_for_access_key, resolve, resolve_read
+from ..policy_engine import (
+    Permission, filter_entities_for_access_key, resolve, resolve_read, is_sensitive_key,
+    scrub_sensitive_attributes,
+)
 from ..request_authority import AuthorityChangedError, check_request_authority
 from ..access_key_store import AccessKeyRecord
 from .. import yaml_includes
+from .discovery import _registry_relationship_preview, reference_warnings
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -121,7 +130,6 @@ async def _finish_entity_write(
         # Automation results have always named the entity at the top level.
         body["entity_id"] = body["registration"]["entity_id"]
     if domain in ("automation", "script"):
-        from .discovery import reference_warnings  # noqa: PLC0415
         if warnings := reference_warnings(hass, access_key, domain, config):
             body["warnings"] = warnings
     status = body["registration"]["status"]
@@ -753,13 +761,52 @@ async def _tool_delete_automation(
 
 
 def _remove_registry_entry(hass: HomeAssistant, domain: str, item_id: str) -> None:
-    """Drop a deleted automation's or script's registry entry, as HA's own delete does.
+    """Drop a deleted automation's, script's or scene's registry entry, as HA's own delete does.
 
     A reload alone leaves it behind as a restored, unavailable entity.
     """
     registry = er.async_get(hass)
-    if entity_id := registry.async_get_entity_id(domain, domain, item_id):
+    if entity_id := registry.async_get_entity_id(domain, "homeassistant" if domain == "scene" else domain, item_id):
         registry.async_remove(entity_id)
+
+
+async def _finish_entity_delete(
+    hass: HomeAssistant, access_key: AccessKeyRecord, *, domain: Literal["automation", "scene", "script"],
+    item_id: str, tool_name: str,
+) -> tuple[dict, str, str]:
+    """Reload after a saved, versioned delete and report the reload separately.
+
+    The entry has left its file and its version is recorded by this point, so a
+    failed reload never reads as a failed delete.
+    """
+    check_request_authority()
+    try:
+        await hass.services.async_call(domain, "reload", blocking=True)
+        check_request_authority()
+        _remove_registry_entry(hass, domain, item_id)
+    except AuthorityChangedError:
+        raise
+    except Exception as exc:
+        check_request_authority()
+        _LOGGER.error(
+            "%s reload failed after the entry was removed: %s",
+            tool_name, _strict_phoenix_log_text(format_exc(), access_key, hass),
+        )
+        result = _tool_success(json.dumps({
+            "deleted": True, f"{domain}_id": item_id, "verified": False, "reload_status": "failed",
+            "error": (
+                _strict_phoenix_log_text(str(exc), access_key, hass)[:500]
+                if isinstance(exc, HomeAssistantError)
+                else "Internal reload error. Check HA logs for details."
+            ),
+            "message": (
+                f"{domain.capitalize()} '{item_id}' was removed from its file and its version recorded, "
+                "but reload failed. Inspect HA logs before retrying reload; do not repeat the delete."
+            ),
+        }, default=str))
+        result["isError"] = True
+        return result, "invalid_request", tool_name
+    return await _deletion_receipt(hass, domain, item_id, tool_name)
 
 
 async def _execute_delete_automation(
@@ -801,9 +848,6 @@ async def _execute_delete_automation(
                 return _op_refusal(op), outcome, "delete_automation"
             else:
                 removed = op.before
-        await hass.services.async_call("automation", "reload", blocking=True)
-        check_request_authority()
-        _remove_registry_entry(hass, "automation", automation_id)
     except AuthorityChangedError:
         raise
     except Exception:
@@ -815,7 +859,9 @@ async def _execute_delete_automation(
         action="delete", before=removed, after=None,
         alias=removed.get("alias") if isinstance(removed, dict) else None,
     )
-    return await _deletion_receipt(hass, "automation", automation_id, "delete_automation")
+    return await _finish_entity_delete(
+        hass, access_key, domain="automation", item_id=automation_id, tool_name="delete_automation",
+    )
 
 
 async def _tool_list_scripts(
@@ -1126,9 +1172,6 @@ async def _execute_delete_script(
                 return _op_refusal(op), outcome, "delete_script"
             else:
                 before_cfg = op.before
-        await hass.services.async_call("script", "reload", blocking=True)
-        check_request_authority()
-        _remove_registry_entry(hass, "script", script_id)
     except AuthorityChangedError:
         raise
     except Exception:
@@ -1140,7 +1183,9 @@ async def _execute_delete_script(
         action="delete", before=before_cfg, after=None,
         alias=before_cfg.get("alias") if isinstance(before_cfg, dict) else None,
     )
-    return await _deletion_receipt(hass, "script", script_id, "delete_script")
+    return await _finish_entity_delete(
+        hass, access_key, domain="script", item_id=script_id, tool_name="delete_script",
+    )
 
 
 # HA-COUPLING POINT. From HA 2026.7 hass.data[DATA_TRACE][key] is a TraceBuckets
@@ -1196,10 +1241,7 @@ def _scope_trace(value: Any, access_key: AccessKeyRecord, hass: HomeAssistant, d
     entity IDs elsewhere are redacted in place, entries keyed by them are
     dropped, and sensitive keys keep no value.
     """
-    from homeassistant.core import Context, State  # noqa: PLC0415
 
-    from ..helpers import redact_inaccessible_entity_ids_in_text  # noqa: PLC0415
-    from ..policy_engine import is_sensitive_key, scrub_sensitive_attributes  # noqa: PLC0415
 
     def readable(entity_id: str) -> bool:
         return resolve(entity_id, access_key, hass) in (Permission.READ, Permission.WRITE)
@@ -1207,7 +1249,7 @@ def _scope_trace(value: Any, access_key: AccessKeyRecord, hass: HomeAssistant, d
     if depth > TRACE_SCOPE_MAX_DEPTH:
         return "<redacted>"
     if isinstance(value, State):
-        value = scrub_sensitive_attributes(value)
+        value = scrub_sensitive_attributes(value, access_key, hass)
     elif isinstance(value, Context):
         value = value.as_dict()
     if isinstance(value, dict):
@@ -1245,7 +1287,7 @@ def _resolve_trace_target(raw: str, hass: HomeAssistant) -> tuple[str | None, st
     return None, None
 
 
-def _empty_trace_diagnosis(hass: HomeAssistant, entity_id: str, trace_key: str) -> str:
+def _empty_trace_diagnosis(hass: HomeAssistant, entity_id: str) -> str:
     """Explain an empty trace list from facts the access key may already read."""
     state = hass.states.get(entity_id)
     if entity_id.startswith("automation.") and state is not None and state.state == "off":
@@ -1295,10 +1337,12 @@ async def _restore_saved_traces(hass: HomeAssistant) -> None:
     its own API; until then the runs before a restart look like no runs at all.
     Restoring is idempotent, the same call the trace view makes.
     """
-    from homeassistant.components.trace.const import DATA_TRACE_STORE  # noqa: PLC0415
+    # Local: optional component, imported only when this path runs.
+    from homeassistant.components.trace.const import DATA_TRACE_STORE
 
     if DATA_TRACE_STORE in hass.data:
-        from homeassistant.components.trace.util import async_restore_traces  # noqa: PLC0415
+        # Local: optional component, imported only when this path runs.
+        from homeassistant.components.trace.util import async_restore_traces
 
         await async_restore_traces(hass)
 
@@ -1312,7 +1356,8 @@ def _trace_overview(access_key: AccessKeyRecord, hass: HomeAssistant) -> tuple[d
     counted apart, since they are not runs. Runs past what one result holds are
     named in not_listed.
     """
-    from homeassistant.components.trace.const import DATA_TRACE  # noqa: PLC0415
+    # Local: optional component, imported only when this path runs.
+    from homeassistant.components.trace.const import DATA_TRACE
 
     owners = {
         (entry.domain, entry.unique_id): entry.entity_id
@@ -1379,7 +1424,8 @@ async def _tool_get_automation_traces(
     if entity_id is None or trace_key is None or resolve(entity_id, access_key, hass) not in (Permission.READ, Permission.WRITE):
         return _tool_error("Automation or script not found."), "not_found", raw
 
-    from homeassistant.components.trace.const import DATA_TRACE  # noqa: PLC0415
+    # Local: optional component, imported only when this path runs.
+    from homeassistant.components.trace.const import DATA_TRACE
     # An absent DATA_TRACE key means the trace component is not loaded, which would
     # otherwise look like an automation that never ran; it is reported as a warning.
     trace_loaded = DATA_TRACE in hass.data
@@ -1409,7 +1455,7 @@ async def _tool_get_automation_traces(
     if not trace_loaded:
         body["warnings"] = ["The trace component is not loaded; trace history is unavailable."]
     elif not items:
-        body["diagnosis"] = _empty_trace_diagnosis(hass, entity_id, trace_key)
+        body["diagnosis"] = _empty_trace_diagnosis(hass, entity_id)
     return _tool_success(json.dumps(_scope_trace(body, access_key, hass), default=str)), "allowed", entity_id
 
 
@@ -1434,6 +1480,22 @@ def _valid_scene_config(config: Any) -> bool:
         and isinstance(config.get("name"), str) and config["name"].strip() != ""
         and isinstance(config.get("entities"), dict) and len(config["entities"]) > 0
     )
+
+
+def _scene_schema_error(config: dict) -> str | None:
+    """Home Assistant's own verdict on a scene entry, or None when it would load it.
+
+    Reload drops an entry this schema refuses, so it is checked before an
+    approval exists and again before the file is written. The stored id is
+    Phoenix's to set, so a caller's value is not judged here.
+    """
+    entry = {key: value for key, value in config.items() if key != "id"}
+    try:
+        _SCENE_PLATFORM_SCHEMA({"platform": "homeassistant", "states": [entry]})
+    except vol.Invalid as exc:
+        # The first two path parts are the platform wrapper built here.
+        return validation_message("scene", exc, path_offset=2)
+    return None
 
 
 async def _tool_list_scenes(
@@ -1500,6 +1562,8 @@ async def _scene_write(
         return _tool_error("config must include a non-empty 'name' and a non-empty 'entities' map."), "invalid_request", tool_name
     if yaml_includes.contains_tag_strings(config):
         return _tool_error(yaml_includes.TAG_STRING_REFUSAL), "invalid_request", tool_name
+    if (invalid := _scene_schema_error(config)) is not None:
+        return _tool_error(invalid), "invalid_request", tool_name
     bad = _unwritable_scene_members(config, access_key, hass)
     if bad:
         return _tool_error("Scene references entities this access key cannot write: " + ", ".join(bad)), "denied", tool_name
@@ -1589,6 +1653,8 @@ def _scene_write_precheck(args: dict, tool_name: str, *, require_id: bool) -> tu
         return _tool_error("config must include a non-empty 'name' and a non-empty 'entities' map."), "invalid_request", tool_name
     if yaml_includes.contains_tag_strings(config):
         return _tool_error(yaml_includes.TAG_STRING_REFUSAL), "invalid_request", tool_name
+    if (invalid := _scene_schema_error(config)) is not None:
+        return _tool_error(invalid), "invalid_request", tool_name
     return None
 
 
@@ -1758,14 +1824,6 @@ async def _execute_delete_scene(
                     outcome = "invalid_request" if op.error_kind == "conflict" else "denied"
                     return _op_refusal(op), outcome, "delete_scene"
                 existing = op.before
-        await hass.services.async_call("scene", "reload", blocking=True)
-        # Reloading scenes.yaml does not remove the scene's entity-registry entry.
-        check_request_authority()
-        registry = er.async_get(hass)
-        for entry in list(registry.entities.values()):
-            if entry.domain == "scene" and entry.unique_id == scene_id:
-                registry.async_remove(entry.entity_id)
-                break
     except AuthorityChangedError:
         raise
     except Exception:
@@ -1776,7 +1834,9 @@ async def _execute_delete_scene(
         action="delete", before=existing, after=None,
         alias=existing.get("name") if isinstance(existing, dict) else None,
     )
-    return await _deletion_receipt(hass, "scene", scene_id, "delete_scene")
+    return await _finish_entity_delete(
+        hass, access_key, domain="scene", item_id=scene_id, tool_name="delete_scene",
+    )
 
 
 def _build_diff_create_automation(args: dict, access_key: AccessKeyRecord, hass: HomeAssistant) -> dict:
@@ -1868,7 +1928,6 @@ async def _build_diff_edit_automation(args: dict, access_key: AccessKeyRecord, h
 
 async def _authoring_consumers(hass: HomeAssistant, domain: str, item_id: str) -> dict[str, Any]:
     """What still uses the entity a delete removes, for the approval card."""
-    from .discovery import _registry_relationship_preview  # noqa: PLC0415
 
     entity_id = _authoring_entity_id(hass, domain, item_id)
     if entity_id is None:
@@ -1903,7 +1962,7 @@ def _yaml_entry(hass: HomeAssistant, domain: str, entry_id: str) -> dict | None:
     """
     try:
         return yaml_includes.read_entry(hass.config.config_dir, domain, entry_id)
-    except Exception:  # noqa: BLE001 - diagnostic only
+    except Exception:  # diagnostic only
         return None
 
 
@@ -1934,7 +1993,7 @@ async def _entry_before_json(
             return None
         payload: Any = {wrap_key: current} if wrap_key is not None else current
         return _truncate(json.dumps(payload, indent=2, default=str))
-    except Exception:  # noqa: BLE001 - diagnostic only
+    except Exception:  # diagnostic only
         return None
 
 

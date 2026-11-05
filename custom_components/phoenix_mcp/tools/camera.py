@@ -124,13 +124,14 @@ async def _tool_get_camera_image(
         return _tool_error(error), "invalid_request", entity_id
 
     try:
-        from homeassistant.components.camera import async_get_image  # noqa: PLC0415
+        # Local: optional component, imported only when this path runs.
+        from homeassistant.components.camera import async_get_image
 
         async with asyncio.timeout(_CAMERA_FETCH_TIMEOUT_SECONDS):
             image = await async_get_image(hass, entity_id, width=width, height=height)
         image_bytes = bytes(image.content)
         content_type = str(image.content_type or "").lower().split(";", 1)[0].strip()
-    except Exception:  # noqa: BLE001 - camera integrations expose varied failures
+    except Exception:  # camera integrations expose varied failures
         _LOGGER.debug("Camera image retrieval failed for %s", entity_id, exc_info=True)
         return _tool_error("Unable to retrieve the camera image."), "invalid_request", entity_id
 

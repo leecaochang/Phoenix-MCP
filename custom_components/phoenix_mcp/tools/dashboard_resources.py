@@ -40,13 +40,9 @@ from ..data import PhoenixData
 from ..helpers import content_hash, diff_summary_fields, effective_cap, redact_structure
 from ..request_authority import AuthorityChangedError, check_request_authority
 from ..tool_common import (
-    _CAP_FORBIDDEN_MESSAGE,
-    _approved_exec_ctx,
-    _gate,
-    _restore_ctx,
-    _tool_error,
-    _tool_success,
+    _CAP_FORBIDDEN_MESSAGE, _gate, _restore_ctx, _tool_error, _tool_success, _tool_uncertain,
 )
+from ..request_authority import _approved_exec_ctx
 from ..ws_dispatch import (
     WsCommandNotDispatchedError,
     WsDispatchError,
@@ -421,21 +417,21 @@ async def _recoverable_resource_write(
                     return _tool_error(f"Dashboard resource change failed: {exc}"), "invalid_request", _SET_TOOL
                 try:
                     after = await read_resource_snapshot(hass, plan.lookup, plan.key)
-                except Exception:  # noqa: BLE001 - the change may have landed
+                except Exception:  # the change may have landed
                     await recovery.mark(rid, "unknown")
-                    return _tool_success(json.dumps({
+                    return _tool_uncertain({
                         "status": "unknown", "recovery_id": rid,
                         "message": "The dashboard resource change could not be read back; inspect before retrying.",
-                    })), "allowed", resource_name
+                    }), "invalid_request", resource_name
                 await _record_ownership(data, plan.command, plan.key, after)
                 if not _matches_expected(after, plan.expected) or (
                         plan.operation == "create" and isinstance(result, dict)
                         and (after.get("resource") or {}).get("id") != result.get("id")):
                     await recovery.mark(rid, "partial", observed=after)
-                    return _tool_success(json.dumps({
+                    return _tool_uncertain({
                         "status": "partial", "recovery_id": rid,
                         "message": "The dashboard resource reads back differently; do not retry automatically.",
-                    })), "allowed", resource_name
+                    }), "invalid_request", resource_name
                 await recovery.mark(rid, "verified", observed_hash=content_hash(after))
                 await recovery.set_source(rid, after)
                 body: dict[str, Any] = {"status": "verified", "recovery_id": rid,
@@ -449,7 +445,7 @@ async def _recoverable_resource_write(
         return _tool_error(str(exc)), "invalid_request", _SET_TOOL
     except AuthorityChangedError:
         raise
-    except Exception:  # noqa: BLE001 - retain unresolved state on persistence errors
+    except Exception:  # retain unresolved state on persistence errors
         return _tool_error("The dashboard resource outcome is uncertain; inspect configuration recovery "
                            "before retrying."), "invalid_request", _SET_TOOL
 
@@ -578,10 +574,10 @@ async def execute_restore(
                 await _record_ownership(data, command, key, observed)
                 if not _matches_expected(observed, expected):
                     await recovery.mark(rid, "partial", observed=observed)
-                    return _tool_success(json.dumps({
+                    return _tool_uncertain({
                         "status": "partial", "recovery_id": rid,
                         "message": "The dashboard resource reads back differently; do not retry automatically.",
-                    })), "allowed", tool
+                    }), "invalid_request", tool
                 await recovery.mark(rid, "verified", observed_hash=content_hash(observed))
                 await recovery.set_source(rid, observed)
                 return _tool_success(json.dumps({
@@ -594,6 +590,6 @@ async def execute_restore(
         return _tool_error(str(exc)), "invalid_request", tool
     except AuthorityChangedError:
         raise
-    except Exception:  # noqa: BLE001 - keep an uncertain outcome in the recovery store
+    except Exception:  # keep an uncertain outcome in the recovery store
         return _tool_error("Dashboard resource restore outcome is uncertain; inspect configuration recovery "
                            "before retrying."), "invalid_request", tool

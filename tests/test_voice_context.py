@@ -7,12 +7,13 @@ from homeassistant.helpers import area_registry as ar, device_registry as dr, en
 from homeassistant.setup import async_setup_component
 from pytest_homeassistant.common import MockConfigEntry
 
-from custom_components.phoenix_mcp import command_routing, voice_agent
-from custom_components.phoenix_mcp.command_execution import _capture_plan, plan_is_current
+from custom_components.phoenix_mcp import voice_agent
+from custom_components.phoenix_mcp.routing import command_routing
+from custom_components.phoenix_mcp.routing.command_execution import _capture_plan, plan_is_current
 from custom_components.phoenix_mcp.const import DOMAIN
 from custom_components.phoenix_mcp.data import PhoenixData
 from custom_components.phoenix_mcp.access_key_store import PermissionNode, PermissionTree
-from custom_components.phoenix_mcp.voice_context import capture_voice_origin, voice_origin_current
+from custom_components.phoenix_mcp.routing.voice_context import capture_voice_origin, voice_origin_current
 
 
 @pytest.fixture
@@ -135,4 +136,4 @@ async def test_conversation_ingress_forwards_only_ha_origin(hass, satellite_home
         await agent.async_process(user_input)
     assert answer.call_args.kwargs['satellite_id'] == h.satellite.entity_id
     assert answer.call_args.kwargs['device_id'] == h.device.id
-    assert answer.call_args.kwargs['include_review_links'] is False
+    assert answer.call_args.kwargs['include_review_hint'] is False

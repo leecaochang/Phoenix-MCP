@@ -31,10 +31,10 @@ from homeassistant.util.dt import utcnow
 
 from custom_components.phoenix_mcp.const import REDACTION_SENTINEL
 from custom_components.phoenix_mcp.data import PhoenixData
-from custom_components.phoenix_mcp.mcp_view import _call_tool
+from custom_components.phoenix_mcp.tool_dispatch import _call_tool
 from custom_components.phoenix_mcp.access_key_store import PermissionNode, PermissionTree, AccessKeyRecord
 from custom_components.phoenix_mcp.version_store import VersionStore
-from custom_components.phoenix_mcp.ws_dispatch import ALLOWED_WS_COMMANDS, WsDispatchError
+from custom_components.phoenix_mcp.ws_dispatch import ALLOWED_WS_COMMANDS, WsDispatchError, validate_ws_payload
 
 # Patched AT the call site in tools.energy, never at ws_dispatch where it is
 # defined: the module imported the name at import time, so a mutation applied to
@@ -275,8 +275,9 @@ def test_exactly_the_four_energy_commands_are_dispatchable() -> None:
 def _writer(prefs: dict):
     """A patched async_ws_command that reads `prefs` and records what was saved.
 
-    Returns (mock, saved) where saved collects each save_prefs payload. The reader
-    hands back a DEEP COPY so a test can prove the tool built its result from its
+    Returns (mock, saved) where saved collects each save_prefs payload. A save
+    stores what Core's schema makes of it, as Core does, so a readback matches. The
+    reader hands back a DEEP COPY so a test can prove the tool built its result from its
     own mutation rather than from a shared object it happened to edit in place.
     """
     prefs = json.loads(json.dumps(prefs))
@@ -289,7 +290,7 @@ def _writer(prefs: dict):
             return {"energy_sources": [], "device_consumption": []}
         assert command == "energy/save_prefs", command
         saved.append(payload)
-        prefs.update(json.loads(json.dumps(payload)))
+        prefs.update(json.loads(json.dumps(validate_ws_payload(hass, command, payload))))
         return json.loads(json.dumps(prefs))
 
     return AsyncMock(side_effect=dispatch), saved
@@ -718,7 +719,7 @@ def _bus(prefs: dict, *, validate: dict | None = None, forecast: dict | None = N
             return {} if forecast is None else forecast
         assert command == "energy/save_prefs", command
         saved.append(payload)
-        prefs.update(json.loads(json.dumps(payload)))
+        prefs.update(json.loads(json.dumps(validate_ws_payload(hass, command, payload))))
         return json.loads(json.dumps(prefs))
 
     return AsyncMock(side_effect=dispatch), saved

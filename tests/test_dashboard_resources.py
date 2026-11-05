@@ -30,16 +30,17 @@ from custom_components.phoenix_mcp.const import DASHBOARD_RESOURCE_BINDING, REDA
 from custom_components.phoenix_mcp.dashboard_resource_ownership import DashboardResourceOwnership
 from custom_components.phoenix_mcp.data import PhoenixData
 from custom_components.phoenix_mcp.helpers import effective_cap
-from custom_components.phoenix_mcp.mcp_view import _call_tool
+from custom_components.phoenix_mcp.tool_dispatch import _call_tool
 from custom_components.phoenix_mcp.request_authority import (
     AuthorityChangedError, RequestAuthority, policy_version, request_authority,
 )
-from custom_components.phoenix_mcp.tool_common import _approved_exec_ctx
+from custom_components.phoenix_mcp.request_authority import _approved_exec_ctx
 from custom_components.phoenix_mcp.tools import dashboard_resources as resources_tool
 from custom_components.phoenix_mcp.tools.recovery import _tool_restore_configuration
 from custom_components.phoenix_mcp.ws_dispatch import (
     WsCommandNotDispatchedError, WsDispatchError, async_lovelace_resources,
 )
+from tests.runtime_fixtures import patch_readers
 
 
 def _key(**caps) -> AccessKeyRecord:
@@ -201,7 +202,7 @@ async def test_pass_through_cannot_grant_the_capability(lovelace):
 
 async def test_confirm_lists_without_an_approval(lovelace):
     data = _data()
-    with patch("custom_components.phoenix_mcp.helpers.async_evaluate_capability") as evaluate:
+    with patch("custom_components.phoenix_mcp.tool_common.async_evaluate_capability") as evaluate:
         result = await _call("list_dashboard_resources", {}, _key(cap_dashboard_resources="confirm"),
                              lovelace, data)
     assert result[1] == "allowed"
@@ -540,7 +541,7 @@ async def test_authority_lost_before_dispatch_sends_nothing(lovelace):
     authority = request_authority.set(RequestAuthority(lovelace, data, key.id, key.access_key_hash))
     epoch = policy_version.set(key.settings_version)
     try:
-        with patch.object(resources_tool, "read_resource_snapshot", side_effect=bump_policy), \
+        with patch_readers("custom_components.phoenix_mcp.tools.dashboard_resources.read_resource_snapshot", side_effect=bump_policy), \
                 patch.object(resources_tool, "async_ws_command") as dispatch, \
                 pytest.raises(AuthorityChangedError):
             await _reviewed(lovelace, data, {"operation": "create", "url": "/local/x.js", "type": "module"}, key)
@@ -587,10 +588,11 @@ async def test_a_readback_that_differs_is_partial(lovelace):
             snapshot = {**snapshot, "resource": {**snapshot["resource"], "type": "js"}}
         return snapshot
 
-    with patch.object(resources_tool, "read_resource_snapshot", side_effect=stale):
+    with patch_readers("custom_components.phoenix_mcp.tools.dashboard_resources.read_resource_snapshot", side_effect=stale):
         result = await _create(lovelace, data)
     assert _body(result)["status"] == "partial"
     assert data.config_recovery.records()[0]["phase"] == "partial"
+    assert result[0]["isError"] is True and result[1] == "invalid_request"
 
 
 async def test_an_unreadable_readback_is_unknown(lovelace):
@@ -604,10 +606,12 @@ async def test_an_unreadable_readback_is_unknown(lovelace):
             raise ConfigurationRecoveryError("unreadable")
         return await original(hass, lookup, key)
 
-    with patch.object(resources_tool, "read_resource_snapshot", side_effect=fail_second):
+    with patch_readers("custom_components.phoenix_mcp.tools.dashboard_resources.read_resource_snapshot", side_effect=fail_second):
         result = await _create(lovelace, data)
     assert _body(result)["status"] == "unknown"
     assert data.config_recovery.records()[0]["phase"] == "unknown"
+    # A dispatched write with no confirmed outcome is an error to the caller and the audit.
+    assert result[0]["isError"] is True and result[1] == "invalid_request"
 
 
 async def test_a_change_while_preparing_dispatches_nothing(lovelace):
@@ -618,7 +622,7 @@ async def test_a_change_while_preparing_dispatches_nothing(lovelace):
         snapshot = await original(hass, lookup, key)
         return {**snapshot, "exists": True}
 
-    with patch.object(resources_tool, "read_resource_snapshot", side_effect=moved), \
+    with patch_readers("custom_components.phoenix_mcp.tools.dashboard_resources.read_resource_snapshot", side_effect=moved), \
             patch.object(resources_tool, "async_ws_command") as dispatch:
         result = await _create(lovelace, data)
     assert "changed while preparing" in _text(result)

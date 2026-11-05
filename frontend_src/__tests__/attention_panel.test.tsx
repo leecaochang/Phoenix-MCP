@@ -40,7 +40,7 @@ it("keeps the confirmation, busy, until the review is saved", async () => {
   await waitFor(() => expect(view.queryByRole("group", { name: "Mark Reviewed" })).toBeNull());
 });
 
-it("names the request and offers to show it in the Audit Log (user, 2026-10-29)", async () => {
+it("names the request and offers to show it in the Audit Log", async () => {
   const onShowRequest = vi.fn();
   const view = render(<AttentionPanel onShowRequest={onShowRequest} />);
   await view.findByText(/Check a previous action|MESA could not start|Could not load/);
@@ -99,10 +99,13 @@ it("keeps a failed review visible with a clear retry path", async () => {
 });
 
 it("shows infrastructure help without offering acknowledgement", async () => {
-  vi.mocked(api.listAttention).mockResolvedValue({ items: [{ kind: "mesa", id: "mesa" }, { kind: "calendar_storage", id: "calendar_storage" }] });
+  vi.mocked(api.listAttention).mockResolvedValue({ items: [
+    { kind: "mesa", id: "mesa" }, { kind: "calendar_storage", id: "calendar_storage" }, { kind: "audit_storage", id: "audit_storage" },
+  ] });
   const view = render(<AttentionPanel />);
   await view.findByText(/Check a previous action|MESA could not start|Could not load/);
   expect(view.getByText("MESA could not start")).toBeVisible();
+  expect(view.getByText("The audit log is not reaching storage")).toBeVisible();
   expect(view.queryByRole("checkbox")).toBeNull();
   expect(view.queryByRole("group", { name: "Mark Reviewed" })).toBeNull();
   expect(view.queryByRole("button", { name: "Mark Reviewed" })).toBeNull();
@@ -114,7 +117,7 @@ it("does not mistake a failed load for a healthy state", async () => {
   await view.findByText(/Check a previous action|MESA could not start|Could not load/);
   expect(view.getByText(/Could not load/)).toBeVisible();
   expect(view.queryByText("Nothing needs attention.")).toBeNull();
-  // The list keeps itself up to date, so there is no Refresh button (user, 2026-10-29):
+  // The list keeps itself up to date, so there is no Refresh button:
   // returning to the window reads it again.
   expect(view.queryByRole("button", { name: "Refresh" })).toBeNull();
   await act(async () => { window.dispatchEvent(new Event("focus")); });

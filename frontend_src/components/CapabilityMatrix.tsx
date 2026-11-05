@@ -313,7 +313,7 @@ export function CapabilityMatrix({ accessKey, onUpdate, esphome }: Props) {
   // another row is saved after it rather than dropped.
   const [saving, setSaving] = React.useState<ReadonlySet<CapName>>(() => new Set());
   const [error, setError] = React.useState<string | null>(null);
-  // Descriptions show in icons-and-text mode; in icons-only mode they are in Help (user, 2026-10-28).
+  // Descriptions show in icons-and-text mode; in icons-only mode they are in Help.
   const iconsOnly = useContext(DisplayModeContext) === "icons";
 
   async function setMode(cap: CapName, mode: CapMode) {

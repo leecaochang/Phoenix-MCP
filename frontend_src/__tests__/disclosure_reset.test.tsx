@@ -1,7 +1,7 @@
 /**
  * Reset This Workspace puts every disclosure in a window back to how it opens
- * by default: closed, or open where it says data-default-open (user,
- * 2026-10-31). Agent Chat's conversation keeps its own.
+ * by default: closed, or open where it says data-default-open.
+ * Agent Chat's conversation keeps its own.
  */
 import { describe, expect, it } from "vitest";
 import { render } from "@testing-library/react";

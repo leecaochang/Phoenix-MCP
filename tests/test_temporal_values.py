@@ -6,8 +6,8 @@ import pytest
 from homeassistant.core import State
 from homeassistant.setup import async_setup_component
 
-from custom_components.phoenix_mcp.command_operations import service_arguments, supports_command
-from custom_components.phoenix_mcp.temporal_values import read_temporal_value, valid_temporal_value, temporal_state_matches
+from custom_components.phoenix_mcp.routing.command_operations import service_arguments, supports_command
+from custom_components.phoenix_mcp.routing.temporal_values import read_temporal_value, valid_temporal_value, temporal_state_matches
 
 
 @pytest.mark.parametrize('text,expected', [
@@ -71,7 +71,7 @@ def test_partial_helper_state_observation_does_not_compare_unrequested_field():
     ('PhoenixInputTime', '03:30:00', '2026-11-01 04:30:00', True),
 ])
 def test_partial_helper_update_checks_combined_dst_value(intent, value, state_value, valid):
-    from custom_components.phoenix_mcp.temporal_values import temporal_value_current
+    from custom_components.phoenix_mcp.routing.temporal_values import temporal_value_current
     state = State('input_datetime.test', state_value, {'has_date': True, 'has_time': True})
     proposal = {'intent': intent, 'entity_ids': [state.entity_id], 'value': value}
     assert temporal_value_current(proposal, state, ZoneInfo('America/New_York')) is valid
@@ -88,7 +88,7 @@ def test_partial_helper_update_checks_combined_dst_value(intent, value, state_va
     ('Do not start timer named Test for five minutes', None),
 ])
 async def test_native_timer_intent_supplies_only_named_immediate_duration(hass, sentence, expected):
-    from custom_components.phoenix_mcp.temporal_values import async_read_temporal_value
+    from custom_components.phoenix_mcp.routing.temporal_values import async_read_temporal_value
     assert await async_setup_component(hass, 'homeassistant', {})
     assert await async_setup_component(hass, 'conversation', {})
     hass.states.async_set('timer.test', 'idle')
@@ -98,10 +98,10 @@ async def test_native_timer_intent_supplies_only_named_immediate_duration(hass, 
 
 async def test_new_sentence_trigger_refuses_timer_evidence(hass):
     from unittest.mock import AsyncMock, patch
-    from custom_components.phoenix_mcp.intent_recognition import SentenceTriggerMatch
-    from custom_components.phoenix_mcp.temporal_values import async_read_temporal_value
+    from custom_components.phoenix_mcp.routing.intent_recognition import SentenceTriggerMatch
+    from custom_components.phoenix_mcp.routing.temporal_values import async_read_temporal_value
     hass.states.async_set('timer.test', 'idle')
-    with patch('custom_components.phoenix_mcp.intent_recognition.async_recognize', AsyncMock(side_effect=SentenceTriggerMatch)):
+    with patch('custom_components.phoenix_mcp.routing.intent_recognition.async_recognize', AsyncMock(side_effect=SentenceTriggerMatch)):
         with pytest.raises(SentenceTriggerMatch):
             await async_read_temporal_value(hass, 'Start timer named Test for five minutes', 'en')
 
@@ -109,7 +109,7 @@ async def test_new_sentence_trigger_refuses_timer_evidence(hass):
 @pytest.mark.parametrize('value,allowed', [('00:00:00', False), ('00:00:01', True),
                                           ('23:59:59', True), ('24:00:00', False)])
 def test_duration_bounds_are_distinct_from_clock_time(value, allowed):
-    from custom_components.phoenix_mcp.temporal_values import temporal_value_current
+    from custom_components.phoenix_mcp.routing.temporal_values import temporal_value_current
     proposal = {'intent': 'PhoenixTimerDuration', 'entity_ids': ['timer.test'], 'value': value}
     assert valid_temporal_value('duration', value) is allowed
     assert (service_arguments(proposal) is not None) is allowed

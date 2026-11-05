@@ -164,7 +164,7 @@ class TestDeferredDiff:
     async def test_builder_not_called_on_allow(self):
         from unittest.mock import MagicMock
 
-        from custom_components.phoenix_mcp.helpers import async_evaluate_capability
+        from custom_components.phoenix_mcp.approvals import async_evaluate_capability
 
         calls = []
 
@@ -176,13 +176,13 @@ class TestDeferredDiff:
             "cap_config_read", _access_key(cap_config_read=CAP_ALLOW), MagicMock(), MagicMock(),
             tool_name="t", args={}, request_id="r", diff=_builder,
         )
-        assert result.is_allow
+        assert result.mode == CAP_ALLOW
         assert calls == []
 
     async def test_builder_not_called_on_deny(self):
         from unittest.mock import MagicMock
 
-        from custom_components.phoenix_mcp.helpers import async_evaluate_capability
+        from custom_components.phoenix_mcp.approvals import async_evaluate_capability
 
         calls = []
 
@@ -199,7 +199,7 @@ class TestDeferredDiff:
 
     async def test_resolve_diff_accepts_sync_async_and_dict(self):
         """A deferred diff may be a dict, a sync callable or an async callable."""
-        from custom_components.phoenix_mcp.helpers import _resolve_diff
+        from custom_components.phoenix_mcp.approvals import _resolve_diff
 
         async def _async_builder():
             return {"kind": "async"}

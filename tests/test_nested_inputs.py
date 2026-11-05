@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from homeassistant.util.dt import utcnow
 
-from custom_components.phoenix_mcp import mcp_view
+from custom_components.phoenix_mcp import tool_catalog, tool_dispatch
 from custom_components.phoenix_mcp.data import PhoenixData
 from custom_components.phoenix_mcp.access_key_store import GlobalSettings, AccessKeyRecord
 from custom_components.phoenix_mcp.tool_contracts import normalize_tool_args
@@ -15,28 +15,29 @@ from custom_components.phoenix_mcp.const import (
     TOOL_INPUT_MAX_DEPTH, TOOL_INPUT_MAX_NODES,
 )
 from custom_components.phoenix_mcp.tool_input import tool_arguments_error
+from tests.runtime_fixtures import patch_readers
 
 
-@pytest.mark.parametrize("tool,arguments", [
-    ("set_entity", {"entity_id": "sensor.reviewed", "changes": {"name": "Updated", "entity_id": "sensor.other"}}),
-    ("set_device", {"device_id": "reviewed", "changes": {"name": "Updated", "device_id": "other"}}),
-    ("set_integration", {"entry_id": "reviewed", "changes": {"title": "Updated", "entry_id": "other"}}),
-    ("edit_energy_config", {"operation": "remove_device", "target": {"kind": "statistic", "id": "sensor.reviewed"}, "changes": {"op": "set_source"}}),
-    ("patch_dashboard", {"changes": [{"path": ["views", True], "kind": "remove"}]}),
-    ("get_logbook", {"target": None}),
-    ("get_logbook", {"target": {"kind": "context", "id": "context", "entity_ids": ["sensor.other"]}}),
-    ("get_state", {"entity_id": "sensor.reviewed", "projection": {"kind": "compact", "fields": ["state"]}}),
-    ("get_relationships", {"scope": {"kind": [], "id": "reviewed"}}),
-    ("get_esphome_job", {"lookup": {"kind": [], "id": "reviewed"}}),
-    ("call_service", {"service": {"domain": "light", "name": "turn_on", "data": None}}),
-    ("call_service", {"service": {"domain": "light", "name": "turn_on"}, "targets": None}),
-    ("call_service", {"service": {"domain": "light", "name": "turn_on"}, "targets": [{"kind": []}]}),
-    ("call_service", {"service": {"domain": "light", "name": "turn_on"}, "targets": [{"kind": "all", "ids": ["light.other"]}]}),
-    ("call_service", {"service": {"domain": "light", "name": "turn_on"}, "targets": [{"kind": "entity", "ids": ["light.reviewed", False]}]}),
+@pytest.mark.parametrize("tool,arguments,reason", [
+    ("set_entity", {"entity_id": "sensor.reviewed", "changes": {"name": "Updated", "entity_id": "sensor.other"}}, "changes contains unsupported fields"),
+    ("set_device", {"device_id": "reviewed", "changes": {"name": "Updated", "device_id": "other"}}, "changes contains unsupported fields"),
+    ("set_integration", {"entry_id": "reviewed", "changes": {"title": "Updated", "entry_id": "other"}}, "changes contains unsupported fields"),
+    ("edit_energy_config", {"operation": "remove_device", "target": {"kind": "statistic", "id": "sensor.reviewed"}, "changes": {"op": "set_source"}}, "changes contains unsupported fields"),
+    ("patch_dashboard", {"changes": [{"path": ["views", True], "kind": "remove"}]}, "changes[0].path[1] must be string or integer"),
+    ("get_logbook", {"target": None}, "target must be object"),
+    ("get_logbook", {"target": {"kind": "context", "id": "context", "entity_ids": ["sensor.other"]}}, "target contains fields incompatible with its kind"),
+    ("get_state", {"entity_id": "sensor.reviewed", "projection": {"kind": "compact", "fields": ["state"]}}, "projection contains fields incompatible with its kind"),
+    ("get_relationships", {"scope": {"kind": [], "id": "reviewed"}}, "scope.kind must be string"),
+    ("get_esphome_job", {"lookup": {"kind": [], "id": "reviewed"}}, "lookup.kind must be string"),
+    ("call_service", {"service": {"domain": "light", "name": "turn_on", "data": None}}, "service.data must be object"),
+    ("call_service", {"service": {"domain": "light", "name": "turn_on"}, "targets": None}, "targets must be array"),
+    ("call_service", {"service": {"domain": "light", "name": "turn_on"}, "targets": [{"kind": []}]}, "Each target needs kind all"),
+    ("call_service", {"service": {"domain": "light", "name": "turn_on"}, "targets": [{"kind": "all", "ids": ["light.other"]}]}, "targets with kind all must omit ids"),
+    ("call_service", {"service": {"domain": "light", "name": "turn_on"}, "targets": [{"kind": "entity", "ids": ["light.reviewed", False]}]}, "targets[0].ids[1] must be string"),
 ])
-def test_nested_control_refuses_invalid_input(tool, arguments):
+def test_nested_control_refuses_invalid_input(tool, arguments, reason):
     _, error = normalize_tool_args(tool, arguments)
-    assert error is not None
+    assert error is not None and reason in error
 
 
 @pytest.mark.parametrize("step", [
@@ -44,7 +45,7 @@ def test_nested_control_refuses_invalid_input(tool, arguments):
     {"step_id": "user", "data": {}, 1: "mixed"},
 ])
 def test_helper_step_envelope_is_closed(step):
-    assert helper._helper_flow_steps_error([step]) is not None
+    assert helper._helper_flow_steps_error([step]) == "flow_steps[0] must contain only step_id and data."
 
 
 def test_group_members_are_validated_as_a_whole():
@@ -69,7 +70,7 @@ def _environment(cap, mode):
 async def test_dashboard_metadata_refuses_before_gate(hass, tool, args):
     access_key, data = _environment("cap_lovelace_write", "confirm")
     with patch.object(lovelace, "_gate", AsyncMock(return_value=({}, "pending_approval", tool))) as gate:
-        result, outcome, _ = await mcp_view._call_tool(tool, args, access_key, hass, data)
+        result, outcome, _ = await tool_dispatch._call_tool(tool, args, access_key, hass, data)
     assert outcome == "invalid_request"
     assert result["isError"]
     gate.assert_not_called()
@@ -88,7 +89,7 @@ async def test_dashboard_metadata_refuses_before_gate(hass, tool, args):
 ])
 async def test_denial_precedes_nested_diagnostics(hass, cap, tool, args):
     access_key, data = _environment(cap, "deny")
-    result, outcome, _ = await mcp_view._call_tool(tool, args, access_key, hass, data)
+    result, outcome, _ = await tool_dispatch._call_tool(tool, args, access_key, hass, data)
     assert outcome == "denied"
     assert "unsupported" not in result["content"][0]["text"].lower()
 
@@ -102,7 +103,8 @@ def test_service_batch_limits(tool, field):
     else:
         targets[0]["ids"] *= SERVICE_TARGET_MAX_IDS + 1
     _, error = normalize_tool_args(tool, {"service": {"domain": "light", "name": "turn_on"}, "targets": targets})
-    assert error
+    assert error == ("targets must be a non-empty array when supplied." if field == "groups"
+                     else "A target group contains too many ids.")
 
 
 @pytest.mark.parametrize("tool,args", [
@@ -143,13 +145,13 @@ async def test_malformed_json_never_reaches_handler_or_executor(hass, value, app
     access_key.pass_through = True
     args = {"config": {"nested": value}}
     handler = AsyncMock()
-    with patch.dict(mcp_view._TOOL_HANDLERS, {"edit_dashboard": (handler, (), {})}), patch.dict(
-        mcp_view._EXECUTOR_REGISTRY, {"edit_dashboard": handler}
+    with patch.dict(tool_catalog._TOOL_HANDLERS, {"edit_dashboard": (handler, (), {})}), patch.dict(
+        tool_catalog._EXECUTOR_REGISTRY, {"edit_dashboard": handler}
     ):
         if approved:
-            result, outcome, _ = await mcp_view.async_execute_approved_tool("edit_dashboard", args, access_key, hass, data)
+            result, outcome, _ = await tool_dispatch.async_execute_approved_tool("edit_dashboard", args, access_key, hass, data)
         else:
-            result, outcome, _ = await mcp_view._call_tool("edit_dashboard", args, access_key, hass, data)
+            result, outcome, _ = await tool_dispatch._call_tool("edit_dashboard", args, access_key, hass, data)
     assert outcome == "invalid_request"
     assert result["isError"]
     handler.assert_not_called()
@@ -172,8 +174,8 @@ def test_energy_executor_refuses_invalid_numeric_values(hass, value):
 
 async def test_dashboard_executor_rechecks_metadata_shape(hass):
     access_key, data = _environment("cap_lovelace_write", "allow")
-    with patch.object(lovelace, "_dashboard_registry_snapshot", AsyncMock()) as snapshot:
-        result, outcome, _ = await mcp_view.async_execute_approved_tool(
+    with patch_readers("custom_components.phoenix_mcp.tools.lovelace._dashboard_registry_snapshot", AsyncMock()) as snapshot:
+        result, outcome, _ = await tool_dispatch.async_execute_approved_tool(
             "edit_dashboard", {"dashboard_id": "reviewed", "config": {"dashboard_id": "other"}}, access_key, hass, data,
         )
     assert outcome == "invalid_request"
@@ -222,14 +224,14 @@ class TestJsonEncodedContainers:
         key = AccessKeyRecord(id="weak", name="weak", access_key_hash="x", created_at=now(), created_by="admin",
                               permissions=PermissionTree(domains={"light": PermissionNode(state="GREEN")}))
         hass.states.async_set("light.kitchen", "on", {"brightness": 128})
-        result, outcome, _ = await mcp_view._call_tool(
+        result, outcome, _ = await tool_dispatch._call_tool(
             "get_state", {"entity_id": "light.kitchen", "projection": '{"kind": "full"}'}, key, hass, MagicMock())
         assert outcome == "allowed", result
         assert '"brightness": 128' in result["content"][0]["text"]
 
     async def test_decoded_arguments_are_bounded_again(self, hass):
         deep = "[" * (TOOL_INPUT_MAX_DEPTH + 5) + "]" * (TOOL_INPUT_MAX_DEPTH + 5)
-        result, outcome, _ = await mcp_view._call_tool(
+        result, outcome, _ = await tool_dispatch._call_tool(
             "call_service", {"service": {"domain": "light", "name": "turn_on"}, "targets": deep},
             AccessKeyRecord(id="weak", name="weak", access_key_hash="x", created_at=utcnow(), created_by="admin"),
             hass, MagicMock())
@@ -262,11 +264,25 @@ async def test_only_an_omitted_or_null_arguments_member_means_no_arguments(hass,
     if arguments is not ...:
         params["arguments"] = arguments
     try:
-        with patch.dict(mcp_view._TOOL_HANDLERS, {"restart_ha": (handler, (), {})}):
-            _msg, _method, _resource, outcome = await mcp_view._dispatch_mcp(
+        with patch.dict(tool_catalog._TOOL_HANDLERS, {"restart_ha": (handler, (), {})}):
+            _msg, _method, _resource, outcome = await tool_dispatch._dispatch_mcp(
                 "tools/call", 1, params, access_key, hass, data, "127.0.0.1", "")
     finally:
         if data.sensor_flush_cancel is not None:
             data.sensor_flush_cancel()
     assert (outcome != "invalid_request") is reaches_handler
     assert handler.called is reaches_handler
+
+
+@pytest.mark.parametrize("arguments", [
+    {"value": "x\ud800"},
+    {"x\udfff": 1},
+    {"outer": [{"inner": ["\ud800"]}]},
+])
+def test_a_lone_surrogate_is_refused_for_every_surface(arguments):
+    """Internal surfaces and approved replays have no HTTP body to refuse it at."""
+    assert tool_arguments_error(arguments) == "Tool arguments must be valid Unicode text."
+
+
+def test_a_character_outside_the_basic_plane_is_ordinary_text():
+    assert tool_arguments_error({"value": "\U0001f600 ok"}) is None

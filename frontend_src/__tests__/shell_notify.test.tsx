@@ -6,9 +6,19 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { act, fireEvent, render, screen } from "@testing-library/react";
-import { HISTORY_LIMIT, Notifications, NotificationsContext, TOAST_MS, Toasts } from "../ui/notify";
+import { HISTORY_LIMIT, Notifications, NotificationsContext, TOAST_MS, Toasts, toastMs } from "../ui/notify";
 import { NotificationsWindow } from "../shell/notifications";
 import { ToolRegistry, ToolRegistryContext, WindowPlaceContext } from "../shell/tools";
+
+it("gives a sentence the same reading time in Chinese, Japanese or Korean as its English source", () => {
+  const english = "The access key was saved and its new permissions apply to the next request.";
+  const chinese = "\u8bbf\u95ee\u5bc6\u94a5\u5df2\u4fdd\u5b58\uff0c\u65b0\u6743\u9650\u5c06\u5728\u4e0b\u4e00\u4e2a\u8bf7\u6c42\u4e2d\u751f\u6548\u3002";
+  expect(toastMs(chinese)).toBeGreaterThan(TOAST_MS);
+  expect(toastMs(chinese) / toastMs(english)).toBeGreaterThan(0.7);
+  // Kana and Hangul weigh the same as Han; Latin text is timed as before.
+  expect(toastMs("\u30ab\u30bf\u30ab\u30ca\u3072\u3089\u304c\u306a\u30ab\u30bf\u30ab\u30ca\u3072\u3089\u304c\u306a")).toBe(toastMs("\ud55c\uae00\ud55c\uae00\ud55c\uae00\ud55c\uae00\ud55c\uae00\ud55c\uae00\ud55c\uae00\ud55c\uae00"));
+  expect(toastMs("x".repeat(100))).toBe(6000);
+});
 
 describe("notification history", () => {
   it("keeps notices newest first, shows the latest as the toast, and caps the history", () => {

@@ -19,14 +19,7 @@ from custom_components.phoenix_mcp.esphome_builder import (
     BuilderResult,
     BuilderUnavailable,
 )
-from tests.test_mcp_esphome_tools import (
-    _call,
-    _device_info,
-    _esphome_entry,
-    _json,
-    _runtime,
-    _yaml_access_key,
-)
+from tests.runtime_fixtures import esphome_call as _call, esphome_device_info as _device_info, esphome_entry as _esphome_entry, esphome_json as _json, esphome_runtime as _runtime, esphome_yaml_access_key as _yaml_access_key
 
 _DASHBOARD_PATCH = "custom_components.phoenix_mcp.tools.esphome._esphome_dashboard"
 _COMMAND_PATCH = "custom_components.phoenix_mcp.tools.esphome.async_builder_command"
@@ -433,7 +426,7 @@ class TestFullStack:
         self, hass, esphome_dir, aiohttp_client, monkeypatch, socket_enabled
     ):
         from custom_components.phoenix_mcp import esphome_builder
-        from tests.test_esphome_builder import SERVER_INFO as fake_versions, FakeDeviceBuilder, stream
+        from tests.runtime_fixtures import SERVER_INFO as fake_versions, FakeDeviceBuilder, builder_stream as stream
 
         fake = FakeDeviceBuilder(replies={
             "devices/validate": stream(

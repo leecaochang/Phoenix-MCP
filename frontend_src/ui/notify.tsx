@@ -23,8 +23,13 @@ export interface Notice {
 export const TOAST_MS = 2800;
 const TOAST_MS_PER_CHAR = 60;
 const TOAST_MAX_MS = 10000;
+/** Han, kana and Hangul say in one character about what three Latin letters do. */
+const WIDE_CHAR = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/gu;
+const WIDE_CHAR_WEIGHT = 3;
 export function toastMs(text: string): number {
-  return Math.min(TOAST_MAX_MS, Math.max(TOAST_MS, text.length * TOAST_MS_PER_CHAR));
+  const wide = text.match(WIDE_CHAR)?.length ?? 0;
+  const reading = text.length + wide * (WIDE_CHAR_WEIGHT - 1);
+  return Math.min(TOAST_MAX_MS, Math.max(TOAST_MS, reading * TOAST_MS_PER_CHAR));
 }
 /** A toast left by the pointer or focus gets at least this long before it goes. */
 const TOAST_RESUME_MS = 1200;

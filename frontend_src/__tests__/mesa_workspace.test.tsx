@@ -44,7 +44,7 @@ beforeEach(() => {
   vi.mocked(api.getMesaDevice).mockResolvedValue({ stored: doc("confirm") } as never);
 });
 
-/** The Name column of each row: ID, Name, Control Mode, Type, Actions (user, 2026-10-30). */
+/** The Name column of each row: ID, Name, Control Mode, Type, Actions. */
 const nameCell = (r: HTMLElement) => r.querySelectorAll("td")[1]?.textContent ?? "";
 const names = () => rowsIn("Profiles").map(nameCell);
 const choose = (name: string) => fireEvent.click(rowsIn("Profiles").find((r) => nameCell(r) === name)!.querySelectorAll("td")[1]!);
@@ -99,12 +99,12 @@ describe("Profiles", () => {
     await waitFor(() => expect(names()).toContain("Front door"));
     choose("Front door");
     await waitFor(() => expect(editorWindow().getByLabelText(/Control mode/)).toHaveValue("prohibited"));
-    // Showing other profiles leaves nothing chosen in the list (user, 2026-10-29).
+    // Showing other profiles leaves nothing chosen in the list.
     fireEvent.change(profilesWindow().getByRole("combobox", { name: "Type" }), { target: { value: "device" } });
     expect(await editorWindow().findByText("Select a profile to edit it, or add one.")).toBeTruthy();
   });
 
-  it("opens another profile straight away, unsaved changes and all (user, 2026-10-30)", async () => {
+  it("opens another profile straight away, unsaved changes and all", async () => {
     renderMesa();
     await waitFor(() => expect(names()).toContain("Front door"));
     choose("Front door");
@@ -145,7 +145,7 @@ describe("Profiles", () => {
     ]);
     fireEvent.click(screen.getByRole("menuitem", { name: "Add Domain Profile" }));
     expect(editorWindow().getByRole("heading", { level: 3 })).toHaveTextContent("Add Domain Profile");
-    // Delete is offered but does nothing until there is a profile to delete (user, 2026-10-30).
+    // Delete is offered but does nothing until there is a profile to delete.
     expect(editorWindow().getByRole("button", { name: "Delete" })).toBeDisabled();
     fireEvent.change(editorWindow().getByRole("combobox", { name: /Domain/ }), { target: { value: "lock" } });
     fireEvent.change(editorWindow().getByLabelText(/Control mode/), { target: { value: "confirm" } });
@@ -188,7 +188,7 @@ describe("Profiles", () => {
     await waitFor(() => expect(editorWindow().getByLabelText(/Control mode/)).toHaveValue("prohibited"));
     fireEvent.click(editorWindow().getByRole("button", { name: "Delete" }));
     const confirm = editorWindow().getByRole("group", { name: "Delete this entity profile?" });
-    // What it falls back to reads in Help rather than inside the box (user, 2026-10-30).
+    // What it falls back to reads in Help rather than inside the box.
     expect(confirm.getAttribute("data-help-text")).toContain('The "Front door" entity will fall back');
     expect(api.deleteMesaProfile).not.toHaveBeenCalled();
     fireEvent.click(within(confirm).getByRole("button", { name: "Delete Entity Profile" }));

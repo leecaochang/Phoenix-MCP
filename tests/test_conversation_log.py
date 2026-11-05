@@ -4,17 +4,18 @@ import asyncio
 from copy import deepcopy
 from datetime import timedelta
 import json
+import time
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from homeassistant.util.dt import utcnow
 
 from custom_components.phoenix_mcp import conversation_log as history
 from custom_components.phoenix_mcp.audit import AuditLog
-from custom_components.phoenix_mcp.const import DOMAIN
+from custom_components.phoenix_mcp.const import CONVERSATION_LOG_SCAN_BYTES, DOMAIN
 from custom_components.phoenix_mcp.data import PhoenixData
-from custom_components.phoenix_mcp.mcp_view import _dispatch_mcp
+from custom_components.phoenix_mcp.tool_dispatch import _dispatch_mcp
 from custom_components.phoenix_mcp.rate_limiter import RateLimiter
 from custom_components.phoenix_mcp.access_key_store import GlobalSettings, AccessKeyRecord, AccessKeyStore
 
@@ -477,9 +478,9 @@ async def test_a_malformed_call_handed_back_is_not_an_uncertain_execution(conver
 
 @pytest.mark.asyncio
 async def test_uncertain_write_failure_preserves_transport_outcome(hass, conversation_data, monkeypatch):
-    from custom_components.phoenix_mcp import mcp_view
+    from custom_components.phoenix_mcp import tool_dispatch
     data, access_key = conversation_data
-    monkeypatch.setattr(mcp_view, "_dispatch_mcp_authorized", AsyncMock(side_effect=OSError("synthetic write failure")))
+    monkeypatch.setattr(tool_dispatch, "_dispatch_mcp_authorized", AsyncMock(side_effect=OSError("synthetic write failure")))
     result = await _dispatch_mcp("tools/call", 1, {"name": "call_service", "arguments": {}},
                                  access_key, hass, data, "127.0.0.1", "")
     assert result[3] == "invalid_request"
@@ -507,7 +508,7 @@ async def test_continuation_does_not_mislabel_provider_tool_envelope_as_prompt(c
 
 @pytest.mark.asyncio
 async def test_selected_identity_is_sanitized_without_copying_provider_secrets(conversation_data):
-    from custom_components.phoenix_mcp.agentcli import ProviderConfig
+    from custom_components.phoenix_mcp.llm.accounts import ProviderConfig
     data, access_key = conversation_data
     cfg = ProviderConfig(kind="openai", model="selected-model", base_url="https://secret-host.invalid",
                          api_key="canary-provider-key")
@@ -728,8 +729,8 @@ async def test_completion_saves_coalesce_but_clear_and_shutdown_flush(conversati
 
 @pytest.mark.asyncio
 async def test_unavailable_local_voice_command_records_failure(hass, conversation_data):
-    from custom_components.phoenix_mcp.command_execution import _dispatch_command
-    from custom_components.phoenix_mcp.routing_statistics import local_result
+    from custom_components.phoenix_mcp.routing.command_execution import _dispatch_command
+    from custom_components.phoenix_mcp.routing.routing_statistics import local_result
     data, access_key = conversation_data
     authority = SimpleNamespace(current=lambda _hass: None)
 
@@ -823,7 +824,10 @@ def test_rejected_argument_text_scrubs_complete_and_incomplete_secrets(raw):
     ('[]', "must be a JSON object"),
 ])
 async def test_provider_rejected_calls_reach_history_not_client_diagnostics(conversation_data, kind, arguments, reason):
-    from custom_components.phoenix_mcp import agentcli
+    from custom_components.phoenix_mcp import agent_turn
+    from custom_components.phoenix_mcp.llm import accounts as llm_accounts
+    from custom_components.phoenix_mcp.llm import provider_claude as llm_provider_claude
+    from custom_components.phoenix_mcp.llm import provider_openai as llm_provider_openai
     data, access_key = conversation_data
     if kind == "claude":
         frames = [
@@ -836,14 +840,14 @@ async def test_provider_rejected_calls_reach_history_not_client_diagnostics(conv
             {"type": "message_delta", "delta": {"stop_reason": "tool_use"}},
             {"type": "message_stop"},
         ]
-        provider = agentcli.ClaudeProvider(agentcli.ProviderConfig(kind, "model", "https://provider.invalid", "canary-key"))
+        provider = llm_provider_claude.ClaudeProvider(llm_accounts.ProviderConfig(kind, "model", "https://provider.invalid", "canary-key"))
     else:
         frames = [
             {"choices": [{"delta": {"content": "Let me check.", "reasoning_content": "canary thought"}}]},
             {"choices": [{"delta": {"tool_calls": [{"index": 0, "id": "call-one", "function": {"name": "get_state", "arguments": arguments}}]}}]},
             {"choices": [{"delta": {}, "finish_reason": "tool_calls"}]},
         ]
-        provider = agentcli.OpenAICompatProvider(agentcli.ProviderConfig(kind, "model", "https://provider.invalid", "canary-key"))
+        provider = llm_provider_openai.OpenAICompatProvider(llm_accounts.ProviderConfig(kind, "model", "https://provider.invalid", "canary-key"))
     body = "\n\n".join("data: " + json.dumps(frame) for frame in frames).encode()
 
     async def chunks(_size):
@@ -859,7 +863,7 @@ async def test_provider_rejected_calls_reach_history_not_client_diagnostics(conv
 
     @history.recorded_chat
     async def chat(**kwargs):
-        return await agentcli._consume_model_stream(provider, session, system="canary system prompt", messages=[],
+        return await agent_turn._consume_model_stream(provider, session, system="canary system prompt", messages=[],
             tools=[], options={}, cancel=asyncio.Event(), emit=kwargs["emit"],
             usage_done_input=0, usage_done_output=0, context_tokens=0)
 
@@ -1015,7 +1019,7 @@ async def test_nested_dispatch_records_parent_operation(conversation_data):
 
 @pytest.mark.asyncio
 async def test_provider_receipts_explain_each_round_without_copying_envelopes(conversation_data):
-    from custom_components.phoenix_mcp.routing_statistics import provider_events
+    from custom_components.phoenix_mcp.routing.routing_statistics import provider_events
     data, _ = conversation_data
     log = history.recorder(data)
     handle = log.begin('agentcli', prompt='read it')
@@ -1053,8 +1057,8 @@ async def test_failed_provider_receipts_name_the_failure_and_the_provider_detail
     so it carries the adapter's already scrubbed provider sentence. A malformed
     tool-call round is a failed request too, without copying its envelopes.
     """
-    from custom_components.phoenix_mcp.agentcli import EV_ERROR, EV_INVALID_TOOLS
-    from custom_components.phoenix_mcp.routing_statistics import provider_events
+    from custom_components.phoenix_mcp.llm.base import EV_ERROR, EV_INVALID_TOOLS
+    from custom_components.phoenix_mcp.routing.routing_statistics import provider_events
     data, _ = conversation_data
     log = history.recorder(data)
     handle = log.begin('agentcli', prompt='read it')
@@ -1084,7 +1088,7 @@ async def test_failed_provider_receipts_name_the_failure_and_the_provider_detail
 @pytest.mark.asyncio
 @pytest.mark.parametrize('private', [False, True])
 async def test_assist_records_actual_trimmed_input_under_privacy_controls(hass, conversation_data, monkeypatch, private):
-    from custom_components.phoenix_mcp import command_routing
+    from custom_components.phoenix_mcp.routing import command_routing
     data, access_key = conversation_data
     data.store.get_settings().log_entity_names = not private
     recognize = AsyncMock(return_value=None)
@@ -1109,8 +1113,8 @@ async def test_assist_records_actual_trimmed_input_under_privacy_controls(hass, 
 async def test_decision_input_is_sanitized_projection_of_actual_http_payload(conversation_data, socket_enabled):
     from aiohttp import ClientSession, web
     from aiohttp.test_utils import TestServer
-    from custom_components.phoenix_mcp.agentcli import ProviderConfig
-    from custom_components.phoenix_mcp.decision_provider import DecisionProvider
+    from custom_components.phoenix_mcp.llm.accounts import ProviderConfig
+    from custom_components.phoenix_mcp.routing.decision_provider import DecisionProvider
     data, _ = conversation_data
     log = history.recorder(data)
     handle = log.begin('agentcli', prompt='test')
@@ -1140,7 +1144,7 @@ async def test_decision_input_is_sanitized_projection_of_actual_http_payload(con
 
 @pytest.mark.asyncio
 async def test_context_review_records_why_no_decision_request_was_made(hass, conversation_data):
-    from custom_components.phoenix_mcp.decision_context import async_prepare_chat_context
+    from custom_components.phoenix_mcp.routing.decision_context import async_prepare_chat_context
     data, access_key = conversation_data
     log = history.recorder(data)
     handle = log.begin('agentcli', prompt='follow up')
@@ -1202,3 +1206,136 @@ async def test_access_key_name_survives_dispatch_recording_and_reload(hass, conv
     loaded = only(log)
     assert loaded["metadata"]["access_key_name"] == access_key.name
     assert access_key.name in loaded["events"][1]["payload"]["result"]["content"][0]["text"]
+
+
+def test_sanitizing_many_key_lines_stays_linear():
+    """A line that looks like a YAML key must not rescan the whole text.
+
+    The bound is generous for a slow machine: quadratic scanning takes minutes here.
+    """
+    started = time.monotonic()
+    history.sanitized("key:\n" * 200_000, max_bytes=CONVERSATION_LOG_SCAN_BYTES)
+    assert time.monotonic() - started < 5
+
+
+@pytest.mark.parametrize("marker", ["service", "alarm_control_panel"])
+def test_a_marker_anywhere_in_the_text_still_makes_a_code_block_a_secret(marker):
+    text = "code: |\n  canary-block\nother: value\n" + "key:\n" * 3 + marker
+    assert "canary-block" not in history.sanitized(text, max_bytes=100000)
+
+
+def test_a_caller_can_declare_service_context():
+    assert "canary-block" not in history.sanitized("code: |\n  canary-block\n", max_bytes=100000, service=True)
+    assert "canary-block" in history.sanitized("code: |\n  canary-block\n", max_bytes=100000)
+
+
+async def test_loading_sanitizes_off_the_event_loop_and_publishes_on_it(conversation_data):
+    import threading
+
+    data, _ = conversation_data
+    settings = data.store.get_settings()
+    log = history.ConversationLog(SimpleNamespace(async_save=AsyncMock(), async_load=AsyncMock()))
+    log.configure(settings)
+    log.begin("voice", prompt="hello")
+    await log.async_save()
+    saved = log._store.async_save.call_args.args[0]
+    log._store.async_load.return_value = deepcopy(saved)
+    threads = []
+    original = history.ConversationLog._load_rows
+
+    def tracked(self, rows):
+        threads.append(threading.current_thread())
+        assert self is not restored
+        original(self, rows)
+
+    restored = history.ConversationLog(log._store)
+    restored.configure(settings)
+    history.ConversationLog._load_rows = tracked
+    try:
+        await restored.async_load()
+    finally:
+        history.ConversationLog._load_rows = original
+    assert threads and threads[0] is not threading.current_thread()
+    assert len(restored._entries) == 1 and restored._dirty
+
+
+async def test_a_flush_copies_only_the_entries_that_changed(conversation_data, monkeypatch):
+    data, _ = conversation_data
+    log = history.ConversationLog(SimpleNamespace(async_save=AsyncMock(), async_load=AsyncMock()))
+    log.configure(data.store.get_settings())
+    quiet = log.begin("voice", prompt="quiet")
+    busy = log.begin("voice", prompt="busy")
+    await log.async_save()
+    first = log._store.async_save.call_args.args[0]["entries"]
+    log.event(busy, "tool_call", {"name": "get_state"})
+    await log.async_save()
+    second = log._store.async_save.call_args.args[0]["entries"]
+    assert second[0] is first[0] and second[0]["id"] == quiet[1]
+    assert second[1] is not first[1] and second[1]["tool_count"] == 1
+    # Everything that changes an entry reaches the saved copy.
+    assert second == [log.detail(quiet[1]), log.detail(busy[1])]
+
+
+async def test_a_removed_entry_leaves_the_saved_copies(conversation_data):
+    data, _ = conversation_data
+    log = history.ConversationLog(SimpleNamespace(async_save=AsyncMock(), async_load=AsyncMock()))
+    log.configure(data.store.get_settings())
+    gone = log.begin("voice", prompt="gone")
+    await log.async_save()
+    log._remove(gone[1])
+    await log.async_save()
+    assert log._store.async_save.call_args.args[0]["entries"] == [] and not log._saved
+
+
+def test_a_recorder_failure_names_its_cause(caplog):
+    class Log:
+        available = True
+
+        @history.best_effort
+        def record(self):
+            raise RuntimeError("private text")
+
+    Log().record()
+    assert "type=RuntimeError" in caplog.text and "conversation_log_record" in caplog.text
+    assert "private text" not in caplog.text
+
+
+def test_a_recording_fault_stands_until_the_log_is_cleared():
+    log = history.ConversationLog()
+    log._settings = SimpleNamespace(log_entity_names=True, log_client_ip=False)
+    with patch.object(history.ConversationLog, "entry", side_effect=RuntimeError):
+        log.assign(("handle",), "prompt", "x")
+    assert log.available is False
+    log._save_failed = False
+    assert log.available is False
+    asyncio.run(log.async_clear())
+    assert log.available is True
+
+
+def test_a_failed_save_lasts_until_the_next_good_one():
+    store = MagicMock()
+    store.async_save = AsyncMock(side_effect=[OSError("disk"), None])
+    log = history.ConversationLog(store)
+    log._dirty = True
+    asyncio.run(log.async_save())
+    assert log.available is False
+    log._dirty = True
+    asyncio.run(log.async_save())
+    assert log.available is True
+
+
+def test_a_long_string_is_scanned_as_a_service_call_and_marked():
+    tail = "x" * 300
+    value = history.sanitized("code: abcd " + tail, max_bytes=10_000, text_chars=200)
+    assert "abcd" not in value
+    assert value.endswith("<text shortened>")
+    assert len(value) < 260
+
+
+def test_a_private_key_cut_by_the_scan_limit_stays_hidden():
+    pem = "-----BEGIN PRIVATE KEY-----\n" + "A" * 400 + "\n-----END PRIVATE KEY-----"
+    assert "AAAA" not in history.sanitized(pem, max_bytes=10_000, text_chars=100)
+
+
+def test_a_short_string_is_left_as_it_was():
+    assert history.sanitized("hello", max_bytes=100, text_chars=10) == "hello"

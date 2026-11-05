@@ -61,6 +61,11 @@ def canonical_language(language: object) -> str:
         if region in _SIMPLIFIED_CHINESE_REGIONS or region is None:
             return "zh-Hans"
 
+    # Plain "no" is the macrolanguage, written as Bokmal by default. Nynorsk ("nn")
+    # is a language of its own and is not substituted.
+    if base == "no":
+        return "nb"
+
     base_match = next(
         (locale for locale in SHIPPED_LOCALES if locale.casefold() == base),
         None,

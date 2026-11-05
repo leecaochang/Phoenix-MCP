@@ -1282,6 +1282,7 @@ describe("AgentCliWindow streaming", () => {
     // The checkpoint control appears with the round count.
     const continueBtn = await screen.findByRole("button", { name: "Continue" });
     expect(screen.getByText(/Paused after 20 steps/)).toBeInTheDocument();
+    expect(screen.getByText(/Paused after 20 steps/).closest('[role="status"]')).toHaveClass("phx-status-region");
 
     fireEvent.click(continueBtn);
 
@@ -2252,7 +2253,7 @@ describe("AgentCliWindow header and connection", () => {
   it("names the connection on one line, opened only by the triangle beside it", async () => {
     mount();
     const toggle = await screen.findByTitle("Change Connection");
-    // Access key, then provider, then model (user, 2026-10-29).
+    // Access key, then provider, then model.
     const head = toggle.parentElement as HTMLElement;
     await waitFor(() => expect(head.textContent).toBe("alpha · Claude · claude-opus-4-8"));
     expect(screen.getByLabelText("Model")).not.toBeVisible();
@@ -2431,7 +2432,7 @@ describe("unsent message box survives a panel remount", () => {
     await waitFor(() => expect(box().value).toBe("How many lights are in my home?"));
   });
 
-  it("takes no work while Home Assistant is away, and takes it again after (user, 2026-10-29)", async () => {
+  it("takes no work while Home Assistant is away, and takes it again after", async () => {
     __resetConnectionState();
     const view = mount();
     // By label, not by placeholder: the placeholder is part of what this changes.
@@ -2457,7 +2458,7 @@ describe("unsent message box survives a panel remount", () => {
     expect(composer().value).toBe("turn the kitchen light on");
   });
 
-  it("starts a new conversation once when the wizard asks for one (user, 2026-10-28)", async () => {
+  it("starts a new conversation once when the wizard asks for one", async () => {
     setSessionTurns([{ entries: [{ kind: "user", text: "an earlier question", ts: 1 }], messages: [], lines: 1 }]);
     setSessionUsage({ input: 120, output: 40, context: 120, noData: false });
     patchDurable({ prefill: "How many lights are in my home?", freshConversation: true });
@@ -2816,5 +2817,21 @@ describe("Agent Chat docked in My Workspace", () => {
     fireEvent.click(screen.getByRole("button", { name: "Options" }));
     expect(screen.queryByRole("menuitem", { name: "Add to My Workspace" })).toBeNull();
     expect(screen.queryByRole("menuitem", { name: "Float Agent Chat" })).toBeNull();
+  });
+});
+
+describe("the access key selection", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    __resetAgentCliState();
+    getAgentCliModels.mockResolvedValue({ models: ["claude-opus-4-8"] });
+  });
+
+  it("takes the first key to arrive when none was selected, the one the select shows", async () => {
+    const view = render(<AgentCliWindow accessKeys={[]} instances={INSTANCES} scrollbackLines={500} initialAccessKeyId="" onClose={() => {}} />);
+    await act(async () => {});
+    view.rerender(<AgentCliWindow accessKeys={ACCESS_KEYS} instances={INSTANCES} scrollbackLines={500} initialAccessKeyId="" onClose={() => {}} />);
+    await act(async () => {});
+    expect(getDurable().accessKeyId).toBe(ACCESS_KEYS[0].id);
   });
 });

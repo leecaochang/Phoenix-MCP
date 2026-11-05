@@ -1,5 +1,5 @@
 /**
- * Long lists in a phone window show a few rows at a time (user, 2026-11-02):
+ * Long lists in a phone window show a few rows at a time:
  * on a phone every window is as tall as its content, so a page of 25 to 100
  * rows pushed the windows below it far down the stack. The phone stack
  * provides the step; a list asks for its limit and grows it with Load More,

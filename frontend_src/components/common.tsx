@@ -2,7 +2,7 @@
  * profile modal. Kept out of index.tsx so reusing them (e.g. ProfileEditor in
  * the injected quick-add modal) does not pull the whole panel app into a chunk.
  */
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { t, tn } from "../i18n";
 import { Icon } from "../ui/Icon";
 
@@ -15,22 +15,17 @@ export function Loading() {
   );
 }
 
+/** A live region for a notice that comes and goes: it is in the page first, so what arrives in it is spoken. */
+export function StatusRegion({ children }: { children: ReactNode }) {
+  return <div className="phx-status-region" role="status">{children}</div>;
+}
+
 export function ErrorMsg({ msg }: { msg: string }) {
   return <div className="banner banner-error" role="alert">{msg}</div>;
 }
 
 export function RefreshIcon() {
   return <Icon name="refresh" size={15} style={{ display: "block" }} />;
-}
-
-// Export = data leaves the profile store, out to a file (arrow up and out of the tray).
-export function ExportIcon() {
-  return <Icon name="export" size={15} style={{ display: "block" }} />;
-}
-
-// Import = a file's contents land in the profile store (arrow down into the tray).
-export function ImportIcon() {
-  return <Icon name="import" size={15} style={{ display: "block" }} />;
 }
 
 /**

@@ -17,7 +17,7 @@ afterEach(() => { vi.useRealTimers(); });
 const SETTINGS = { disable_all_logging: false, log_entity_names: false, conversation_log_enabled: true,
   conversation_log_max_entries: 100, conversation_log_max_days: 7, conversation_log_max_mb: 25 } as GlobalSettings;
 
-it("greys recording and every limit while all logging is off, with the reason in Help and no notice (user, 2026-10-31)", () => {
+it("greys recording and every limit while all logging is off, with the reason in Help and no notice", () => {
   const view = render(<ConversationSettings settings={{ ...SETTINGS, disable_all_logging: true }} saving={false} onChange={vi.fn()} />);
   for (const name of ["Record conversations", "Maximum entries", "Maximum age (days)", "Maximum storage (MB)"]) expect(view.getByLabelText(name)).toBeDisabled();
   // Read out with the switch for screen readers, but not shown.
@@ -26,7 +26,7 @@ it("greys recording and every limit while all logging is off, with the reason in
   expect(view.getByLabelText("Maximum entries").closest("fieldset")).toHaveAttribute("data-help", "conversations.loggingDisabled");
 });
 
-it("shows no notice when entity-name logging is off (user, 2026-10-31)", () => {
+it("shows no notice when entity-name logging is off", () => {
   const view = render(<ConversationSettings settings={SETTINGS} saving={false} onChange={vi.fn()} />);
   expect(view.queryByText(/entity-name logging is disabled/)).toBeNull();
 });

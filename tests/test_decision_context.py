@@ -5,20 +5,23 @@ import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+
+from tests.runtime_fixtures import patch_readers
 from aiohttp import ClientSession, web
 from aiohttp.test_utils import TestServer
 from homeassistant.helpers import entity_registry as er
 from homeassistant.setup import async_setup_component
 
-from custom_components.phoenix_mcp import agentcli
-from custom_components.phoenix_mcp.command_routing import async_evaluate_command
-from custom_components.phoenix_mcp.const import (
-    DOMAIN, DECISION_CONTEXT_CHECKS, DECISION_CONTEXT_REQUIRED_CHOICES,
-    DECISION_CONTEXT_MAX_BYTES, DECISION_CONTEXT_MAX_MESSAGES,
+from custom_components.phoenix_mcp.llm import accounts as llm_accounts
+from custom_components.phoenix_mcp.routing.command_routing import async_evaluate_command
+from custom_components.phoenix_mcp.const import DOMAIN
+from custom_components.phoenix_mcp.routing.routing_tables import (
+    DECISION_CONTEXT_CHECKS, DECISION_CONTEXT_REQUIRED_CHOICES, DECISION_CONTEXT_MAX_BYTES,
+    DECISION_CONTEXT_MAX_MESSAGES,
 )
 from custom_components.phoenix_mcp.data import PhoenixData
-from custom_components.phoenix_mcp.decision_context import async_preview_context, context_history
-from custom_components.phoenix_mcp.decision_provider import DecisionError, DecisionProvider
+from custom_components.phoenix_mcp.routing.decision_context import async_preview_context, context_history
+from custom_components.phoenix_mcp.routing.decision_provider import DecisionError, DecisionProvider
 from custom_components.phoenix_mcp.helpers import redact_inaccessible_entity_ids_in_text
 from custom_components.phoenix_mcp.access_key_store import PermissionTree, PermissionNode
 
@@ -51,7 +54,7 @@ async def context_home(hass, access_key_store):
     access_key.permissions = PermissionTree(domains={'light': PermissionNode(state='GREEN')})
     data = PhoenixData(store=access_key_store, rate_limiter=MagicMock(), audit=MagicMock())
     hass.data[DOMAIN] = data
-    store = agentcli.AgentCliStore(AsyncMock())
+    store = llm_accounts.AgentCliStore(AsyncMock())
     account = await store.add('typesafe', {'api_key': 'test-private-key', 'model': 'jev-latest'})
     # Context tests exercise real recognition without depending on cold-start speed.
     await access_key_store.async_patch_settings(decision_provider_id=account, command_routing_timeout_ms=5000)
@@ -62,7 +65,7 @@ async def context_home(hass, access_key_store):
         'supported_color_modes': ['brightness'], 'access_token': 'never-send-state'})
     local = await async_evaluate_command(hass, data, access_key, SENTENCE, 'en', preview=True)
     assert local['reason'] == 'supported' and local['proposal']['brightness_pct'] == 37
-    with patch.object(agentcli, '_get_secret_store', AsyncMock(return_value=store)):
+    with patch_readers("custom_components.phoenix_mcp.llm.accounts._get_secret_store", AsyncMock(return_value=store)):
         yield data, access_key, store, account, entry.entity_id, local
     data.decision_shadow.cancel()
     if data.decision_shadow.task:
@@ -104,7 +107,7 @@ async def test_review_is_inert_and_keeps_fixed_numeric_candidate(hass, context_h
     data, _, _, _, entity, _ = context_home
     before = data.decision_shadow.summary()
     with (patch.object(DecisionProvider, 'review_context', AsyncMock(return_value=answer(choice, probability))) as review,
-          patch('custom_components.phoenix_mcp.mcp_view._dispatch_mcp') as dispatch):
+          patch_readers('custom_components.phoenix_mcp.tool_dispatch._dispatch_mcp') as dispatch):
         result = await preview(hass, context_home)
     assert result['reason'] == reason and result['executed'] is False
     assert set(result) == {'reason', 'decision', 'executed', 'elapsed_ms'}
@@ -155,7 +158,7 @@ async def test_secret_store_wait_rechecks_before_sending(hass, context_home, cha
         else:
             er.async_get(hass).async_update_entity(entity, name='Changed target')
         return store
-    with (patch.object(agentcli, '_get_secret_store', side_effect=load),
+    with (patch_readers("custom_components.phoenix_mcp.llm.accounts._get_secret_store", side_effect=load),
           patch.object(DecisionProvider, 'review_context') as review):
         result = await preview(hass, context_home)
     assert result['reason'] == reason
@@ -267,7 +270,7 @@ async def test_context_wire_requires_both_named_questions_in_one_request(protoco
                dict(HISTORY[1], content=assistant_text)]
     state = {'utterance': SENTENCE, 'history': history, 'candidate': {'brightness_pct': 37}, 'language': 'en'}
     async with TestServer(app) as server, ClientSession() as session:
-        cfg = agentcli.ProviderConfig('typesafe', 'test-model', str(server.make_url('')).rstrip('/'))
+        cfg = llm_accounts.ProviderConfig('typesafe', 'test-model', str(server.make_url('')).rstrip('/'))
         response = await DecisionProvider(cfg, protocol).review_context(session, state, 1000)
     assert response == answer() and len(seen) == 1
     assert seen[0]['state'] == state and set(seen[0]['questions']) == {'request', 'constraints'}
@@ -291,7 +294,7 @@ async def test_context_rejects_malformed_or_secret_provider_answers(mutation, qu
         body['answers'][question]['probabilities'][DECISION_CONTEXT_REQUIRED_CHOICES[question]] = float('nan')
     if mutation == 'wrong_type': body['answers'][question] = []
     if mutation == 'secret': body['model'] = 'secret-api-key'
-    cfg = agentcli.ProviderConfig('typesafe', 'test-model', 'https://example.test', api_key='secret-api-key')
+    cfg = llm_accounts.ProviderConfig('typesafe', 'test-model', 'https://example.test', api_key='secret-api-key')
     provider = DecisionProvider(cfg, 'systemone')
     with patch.object(provider, '_request', AsyncMock(return_value=body)):
         with pytest.raises(DecisionError, match='^malformed$'):
@@ -318,7 +321,7 @@ async def test_each_context_check_must_pass_individually(hass, context_home, que
 
 
 async def test_administrator_preview_never_returns_a_plan_for_eligible_chat_account(hass, context_home):
-    from custom_components.phoenix_mcp.decision_context import context_execution_eligible
+    from custom_components.phoenix_mcp.routing.decision_context import context_execution_eligible
     data, _, store, *_ = context_home
     hass.data['_phoenix_agentcli_store'] = store
     await data.store.async_patch_settings(agentcli_routing_mode='auto')
@@ -332,13 +335,13 @@ async def test_administrator_preview_never_returns_a_plan_for_eligible_chat_acco
 
 
 async def test_rich_preview_is_inert_and_internal_preparation_requires_evaluated_model(hass, context_home, provider_context_history):
-    from custom_components.phoenix_mcp.decision_context import async_prepare_chat_context
+    from custom_components.phoenix_mcp.routing.decision_context import async_prepare_chat_context
     data, access_key, store, *_ = context_home
     hass.data['_phoenix_agentcli_store'] = store
     await data.store.async_patch_settings(agentcli_routing_mode='auto')
     response = answer(); response['model'] = 'jev-1.13.0'
     with (patch.object(DecisionProvider, 'review_context', AsyncMock(return_value=response)) as review,
-          patch('custom_components.phoenix_mcp.mcp_view._dispatch_mcp') as dispatch):
+          patch_readers('custom_components.phoenix_mcp.tool_dispatch._dispatch_mcp') as dispatch):
         result = await preview(hass, context_home, provider_context_history)
         assert result['reason'] == 'compatible' and result['executed'] is False and '_plan' not in result
         state = review.await_args.args[1]
@@ -370,7 +373,7 @@ async def test_nested_sensitive_history_declines_without_disclosure(hass, contex
 
 
 async def test_structured_wire_marks_tool_and_reasoning_content_as_untrusted(provider_context_history):
-    cfg = agentcli.ProviderConfig('typesafe', 'test-model', 'https://example.test')
+    cfg = llm_accounts.ProviderConfig('typesafe', 'test-model', 'https://example.test')
     provider = DecisionProvider(cfg, 'systemone')
     state = {'history': provider_context_history, 'history_format': 'provider_messages'}
     with patch.object(provider, '_request', AsyncMock(return_value=wire_answer())) as request:
@@ -424,7 +427,7 @@ async def test_preview_of_decision_candidate_reviews_full_history_without_plan(h
                    'probabilities': {key: float(key == selected[name]) for key in question['criteria']}}
             for name, question in payload['questions'].items()}}
     with (patch.object(DecisionProvider, '_request', side_effect=response) as remote,
-          patch('custom_components.phoenix_mcp.mcp_view._dispatch_mcp') as dispatch):
+          patch_readers('custom_components.phoenix_mcp.tool_dispatch._dispatch_mcp') as dispatch):
         result = await async_preview_context(hass, data, access_key, sentence, language, HISTORY,
                                             {'reason': 'no_match', 'proposal': None})
     assert remote.await_count == 2
@@ -469,7 +472,7 @@ async def test_decimal_text_is_preserved_but_numeric_entity_ids_keep_scope(hass,
 @pytest.mark.parametrize('tool_name', ['get_capability_summary', 'get_audit_summary'])
 @pytest.mark.parametrize('source', ['agentcli', 'assist', 'voice', 'ai_task', 'home_companion', '127.0.0.1'])
 async def test_access_key_introspection_preserves_context_on_every_ingress(hass, context_home, tool_name, source):
-    from custom_components.phoenix_mcp.mcp_view import _dispatch_mcp
+    from custom_components.phoenix_mcp.tool_dispatch import _dispatch_mcp
     data, access_key, *_ = context_home
     data.audit.query.return_value = []
     response, _, _, outcome = await _dispatch_mcp(

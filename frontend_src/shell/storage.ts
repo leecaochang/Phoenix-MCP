@@ -67,8 +67,8 @@ export function withHelpIn(help: HelpPrefs, workspace: WorkspaceId, open: boolea
 /** Where the Guide sits on screen, in CSS pixels from the viewport's top-left corner. */
 export interface GuideRect { x: number; y: number; w: number; h: number }
 /**
- * The Guide: one window over every workspace, as Agent Chat is (user,
- * 2026-11-01), so opening or closing it anywhere does so everywhere. It
+ * The Guide: one window over every workspace, as Agent Chat is,
+ * so opening or closing it anywhere does so everywhere. It
  * remembers where the user put it and whether it is folded.
  */
 export interface GuideState { open: boolean; rect?: GuideRect; folded?: boolean; welcome?: WelcomeState }
@@ -175,7 +175,7 @@ export function storageKey(userId: string, env: Env): string {
 
 const emptyRecord = (): ShellRecord => ({ schema: SHELL_SCHEMA, savedAt: 0, workspaces: {} });
 
-/** Before UI2 the panel remembered its tab; the logs tabs became one Logs workspace. */
+/** An older panel remembered its tab; the logs tabs became one Logs workspace. */
 function legacyWorkspace(): WorkspaceId | undefined {
   let tab: string | null = null;
   try { tab = localStorage.getItem("phx-tab"); } catch { /* storage blocked */ }

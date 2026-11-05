@@ -294,6 +294,7 @@ Every preset endpoint can also answer:
 | 400 | `invalid_request` | `adminError.presetNameInvalidCharacters` | `name` contains a refused character. |
 | 400 | `invalid_request` | `adminError.presetNameTaken` | The key already has a preset with this name. |
 | 400 | `invalid_request` | `adminError.presetLimitReached` | The key already has 8 presets. `message_params` has `max`. |
+| 400 | `invalid_request` | `adminError.presetSaveRejected` | Phoenix refused the preset as sent. |
 
 ### Rename a preset {#preset-rename}
 

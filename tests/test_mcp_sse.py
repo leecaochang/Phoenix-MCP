@@ -15,92 +15,11 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from custom_components.phoenix_mcp import mcp_view
-from custom_components.phoenix_mcp.mcp_view import (
-    PhoenixMcpView,
-    _batch_expects_response,
-    _progress_token,
-)
+from custom_components.phoenix_mcp import mcp_transport, tool_common, tool_dispatch
+from custom_components.phoenix_mcp.mcp_transport import _batch_expects_response, _progress_token
 
-from tests.test_mcp_view import _make_data, _make_hass, _make_access_key
-
-
-class _FakeStream:
-    """Captures what the view writes to a prepared StreamResponse."""
-
-    def __init__(self, fail_writes: bool = False) -> None:
-        self.frames: list[bytes] = []
-        self.prepared = False
-        self.eof = False
-        self.fail_writes = fail_writes
-        self.status = 200
-        self.headers: dict[str, str] = {}
-
-    async def prepare(self, _request):
-        self.prepared = True
-
-    async def write(self, data: bytes) -> None:
-        if self.fail_writes:
-            raise ConnectionResetError("client gone")
-        self.frames.append(data)
-
-    async def write_eof(self) -> None:
-        self.eof = True
-
-    # --- helpers the assertions use -------------------------------------
-    @property
-    def text(self) -> str:
-        return b"".join(self.frames).decode()
-
-    def messages(self) -> list[dict]:
-        out = []
-        for frame in self.text.split("\n\n"):
-            for line in frame.splitlines():
-                if line.startswith("data: "):
-                    out.append(json.loads(line[len("data: "):]))
-        return out
-
-    def keepalives(self) -> int:
-        return self.text.count(": keepalive")
-
-
-def _stream_patch(stream: _FakeStream):
-    def _factory(*_a, status=200, headers=None, **_kw):
-        stream.status = status
-        stream.headers = dict(headers or {})
-        return stream
-    return patch.object(mcp_view.web, "StreamResponse", side_effect=_factory)
-
-
-def _make_request(
-    body: dict | list,
-    accept: str,
-    raw_access_key: str,
-    extra_headers: dict[str, str] | None = None,
-) -> MagicMock:
-    payload = json.dumps(body).encode()
-    req = MagicMock()
-    req.method = "POST"
-    req.remote = "127.0.0.1"
-    headers = {"Authorization": f"Bearer {raw_access_key}", "Accept": accept}
-    headers.update(extra_headers or {})
-    req.headers = MagicMock()
-    req.headers.get = MagicMock(side_effect=lambda k, default="": headers.get(k, default))
-    req.content_length = len(payload)
-    chunks = [payload, b""]
-    req.content = MagicMock()
-    req.content.read = AsyncMock(side_effect=lambda *_a: chunks.pop(0) if chunks else b"")
-    req.content.at_eof = lambda: not chunks
-    req.url = MagicMock()
-    req.url.origin.return_value = "http://homeassistant.local"
-    req.query = {}
-    return req
-
-
-def _view(hass) -> PhoenixMcpView:
-    view = PhoenixMcpView()
-    view.hass = hass
-    return view
+from tests.runtime_fixtures import make_mcp_data as _make_data, make_mcp_hass as _make_hass, make_mcp_access_key as _make_access_key
+from tests.runtime_fixtures import FakeStream as _FakeStream, make_sse_request as _make_request, sse_view as _view, stream_patch as _stream_patch
 
 
 def _env():
@@ -240,7 +159,7 @@ class TestBatchExpectsResponse:
     async def test_agrees_with_the_dispatcher(self, items, expected):
         access_key, _raw, data, hass = _env()
         assert _batch_expects_response(items) is expected
-        actual = await mcp_view._dispatch_streamable_batch(
+        actual = await mcp_transport._dispatch_streamable_batch(
             items, access_key, hass, data, "127.0.0.1", base_url="http://h")
         assert bool(actual) is expected
 
@@ -270,10 +189,10 @@ class TestKeepaliveAndProgress:
 
     def _slow_call(self, hass, seconds: float = 0.05):
         async def _slow(*_a, **_kw):
-            mcp_view._set_progress_status("Waiting for operator approval: call_service", total=99.0)
+            tool_common._set_progress_status("Waiting for operator approval: call_service", total=99.0)
             await asyncio.sleep(seconds)
             return {"content": [{"type": "text", "text": "done"}]}, "allowed", "x"
-        return patch.object(mcp_view, "_call_tool", side_effect=_slow)
+        return patch.object(tool_dispatch, "_call_tool", side_effect=_slow)
 
     def _tool_call(self, meta: dict | None = None) -> dict:
         params: dict = {"name": "get_config", "arguments": {}}
@@ -282,7 +201,7 @@ class TestKeepaliveAndProgress:
         return {"jsonrpc": "2.0", "id": 9, "method": "tools/call", "params": params}
 
     async def test_keepalive_comments_when_no_progress_token(self, monkeypatch):
-        monkeypatch.setattr(mcp_view, "MCP_SSE_KEEPALIVE_SECONDS", 0.01)
+        monkeypatch.setattr(mcp_transport, "MCP_SSE_KEEPALIVE_SECONDS", 0.01)
         _access_key, raw, _data, hass = _env()
         stream = _FakeStream()
         with _stream_patch(stream), self._slow_call(hass):
@@ -292,7 +211,7 @@ class TestKeepaliveAndProgress:
         assert stream.messages()[-1]["id"] == 9
 
     async def test_progress_notifications_when_access_key_supplied(self, monkeypatch):
-        monkeypatch.setattr(mcp_view, "MCP_SSE_KEEPALIVE_SECONDS", 0.01)
+        monkeypatch.setattr(mcp_transport, "MCP_SSE_KEEPALIVE_SECONDS", 0.01)
         _access_key, raw, _data, hass = _env()
         stream = _FakeStream()
         with _stream_patch(stream), self._slow_call(hass):
@@ -322,9 +241,9 @@ class TestKeepaliveAndProgress:
 
     async def test_modern_dispatch_is_cancelled_after_client_disconnect(self, monkeypatch):
         """A modern-protocol dispatch is cancelled when its per-request stream drops."""
-        monkeypatch.setattr(mcp_view, "MCP_SSE_KEEPALIVE_SECONDS", 0.01)
+        monkeypatch.setattr(mcp_transport, "MCP_SSE_KEEPALIVE_SECONDS", 0.01)
         _access_key, raw, data, hass = _env()
-        data.enforce_mcp_lifecycle = True
+        data.mcp_sessions.clear()
         started = asyncio.Event()
         cancelled = asyncio.Event()
 
@@ -347,7 +266,7 @@ class TestKeepaliveAndProgress:
             "Mcp-Method": "tools/call",
             "Mcp-Name": "get_config",
         }
-        with _stream_patch(stream), patch.object(mcp_view, "_call_tool", side_effect=_slow):
+        with _stream_patch(stream), patch.object(tool_dispatch, "_call_tool", side_effect=_slow):
             await _view(hass).post(_make_request(body, "text/event-stream", raw, headers))
         assert started.is_set()
         assert cancelled.is_set()
@@ -355,9 +274,9 @@ class TestKeepaliveAndProgress:
 
     async def test_legacy_dispatch_continues_after_client_disconnect(self, monkeypatch):
         """A legacy-protocol dispatch keeps running after a client disconnect."""
-        monkeypatch.setattr(mcp_view, "MCP_SSE_KEEPALIVE_SECONDS", 0.01)
+        monkeypatch.setattr(mcp_transport, "MCP_SSE_KEEPALIVE_SECONDS", 0.01)
         _access_key, raw, data, hass = _env()
-        data.enforce_mcp_lifecycle = True
+        data.mcp_sessions.clear()
         init = {
             "jsonrpc": "2.0",
             "id": 1,
@@ -384,7 +303,7 @@ class TestKeepaliveAndProgress:
             return {"content": [{"type": "text", "text": "done"}]}, "allowed", "x"
 
         stream = _FakeStream(fail_writes=True)
-        with _stream_patch(stream), patch.object(mcp_view, "_call_tool", side_effect=_slow):
+        with _stream_patch(stream), patch.object(tool_dispatch, "_call_tool", side_effect=_slow):
             await _view(hass).post(_make_request(
                 self._tool_call(), "text/event-stream", raw, session_headers,
             ))
@@ -406,8 +325,8 @@ class TestKeepaliveAndProgress:
 
         stream = _FakeStream()
         with _stream_patch(stream):
-            outer = asyncio.create_task(mcp_view._mcp_sse_response(
-                MagicMock(), hass, "rid", {}, mcp_view._ProgressBus(), dispatch(),
+            outer = asyncio.create_task(mcp_transport._mcp_sse_response(
+                MagicMock(), hass, "rid", {}, tool_common._ProgressBus(), dispatch(),
                 cancel_on_disconnect=True,
             ))
             await started.wait()
@@ -431,8 +350,8 @@ class TestKeepaliveAndProgress:
 
         stream = _FakeStream()
         with _stream_patch(stream):
-            outer = asyncio.create_task(mcp_view._mcp_sse_response(
-                MagicMock(), hass, "rid", {}, mcp_view._ProgressBus(), dispatch(),
+            outer = asyncio.create_task(mcp_transport._mcp_sse_response(
+                MagicMock(), hass, "rid", {}, tool_common._ProgressBus(), dispatch(),
                 cancel_on_disconnect=False,
             ))
             await started.wait()

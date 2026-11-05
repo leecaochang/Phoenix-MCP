@@ -3,14 +3,16 @@ import asyncio
 from unittest.mock import patch
 
 import pytest
+
+from tests.runtime_fixtures import patch_readers
 from homeassistant.components.homeassistant.exposed_entities import async_expose_entity
 from homeassistant.helpers import area_registry as ar, entity_registry as er
 from homeassistant.setup import async_setup_component
 
 from custom_components.phoenix_mcp.audit import AuditLog
-from custom_components.phoenix_mcp.command_execution import _capture_plan, plan_is_current, async_execute_chat_command
-from custom_components.phoenix_mcp.command_routing import RoutingAuthority, async_evaluate_command
-from custom_components.phoenix_mcp.command_summary import summary_catalog, summary_proposal, summary_text
+from custom_components.phoenix_mcp.routing.command_execution import _capture_plan, plan_is_current, async_execute_chat_command
+from custom_components.phoenix_mcp.routing.command_routing import RoutingAuthority, async_evaluate_command
+from custom_components.phoenix_mcp.routing.command_summary import summary_catalog, summary_proposal, summary_text
 from custom_components.phoenix_mcp.const import DOMAIN
 from custom_components.phoenix_mcp.data import PhoenixData
 from custom_components.phoenix_mcp.rate_limiter import RateLimiter
@@ -45,7 +47,7 @@ def proposal(hass, access_key, mode='on'):
 
 @pytest.mark.parametrize('limit', ['count', 'bytes'])
 async def test_summary_catalog_overflow_refuses_without_truncation(hass, summary_home, limit):
-    from custom_components.phoenix_mcp.decision_targets import CatalogLimitError
+    from custom_components.phoenix_mcp.routing.decision_targets import CatalogLimitError
     _, access_key, _ = summary_home
     full = summary_catalog(hass, access_key)
     assert len(full.targets) > 1
@@ -55,7 +57,7 @@ async def test_summary_catalog_overflow_refuses_without_truncation(hass, summary
 
 @pytest.mark.parametrize('private', ['light.hidden_private', 'phx_' + 'a'*64])
 async def test_summary_area_metadata_cannot_disclose_hidden_ids_or_secrets(hass, summary_home, private):
-    from custom_components.phoenix_mcp.decision_provider import DecisionError
+    from custom_components.phoenix_mcp.routing.decision_provider import DecisionError
     _, access_key, ids = summary_home
     entry = er.async_get(hass).async_get(ids[0])
     ar.async_get(hass).async_update(entry.area_id, aliases={private})
@@ -64,7 +66,7 @@ async def test_summary_area_metadata_cannot_disclose_hidden_ids_or_secrets(hass,
 
 
 def test_summary_duplicate_rows_and_unbounded_breakdown_are_not_partial_answers():
-    from custom_components.phoenix_mcp.const import COMMAND_SUMMARY_MAX_STATES
+    from custom_components.phoenix_mcp.routing.routing_tables import COMMAND_SUMMARY_MAX_STATES
     ids = [f'sensor.fixture_{index}' for index in range(COMMAND_SUMMARY_MAX_STATES+1)]
     query = {'entity_ids': ids, 'summary_mode': 'breakdown'}
     rows = [{'entity_id': entity, 'state': str(index)} for index, entity in enumerate(ids)]
@@ -76,7 +78,7 @@ async def test_real_local_count_and_dispatch(hass, summary_home):
     data,access_key,ids=summary_home
     result=await async_evaluate_command(hass,data,access_key,'how many lights are on','en',preview=True)
     assert result['proposal']==proposal(hass,access_key)
-    with patch('custom_components.phoenix_mcp.agentcli.build_provider') as provider:
+    with patch_readers('custom_components.phoenix_mcp.llm.factory.build_provider') as provider:
         reply=await async_execute_chat_command(hass,data,access_key,result['proposal'],RoutingAuthority.capture(data,access_key),'http://test','test',asyncio.Event())
     assert reply.allows_local_followup
     assert '1 of 3' in reply.text and 'Unknown or unavailable: 1' in reply.text
@@ -138,12 +140,12 @@ async def test_scope_denial_does_not_disclose_count(hass,summary_home):
 @pytest.mark.parametrize('mode', ['on', 'off', 'total', 'breakdown'])
 async def test_jev_selects_query_phoenix_counts_via_real_dispatch(hass,summary_home,mode):
     from unittest.mock import AsyncMock
-    from custom_components.phoenix_mcp import agentcli
-    from custom_components.phoenix_mcp.decision_provider import DecisionProvider
-    from custom_components.phoenix_mcp.decision_shadow import async_preview_decision
-    from custom_components.phoenix_mcp.command_execution import async_execute_chat_plan
+    from custom_components.phoenix_mcp.llm import accounts as llm_accounts
+    from custom_components.phoenix_mcp.routing.decision_provider import DecisionProvider
+    from custom_components.phoenix_mcp.routing.decision_shadow import async_preview_decision
+    from custom_components.phoenix_mcp.routing.command_execution import async_execute_chat_plan
     data,access_key,_=summary_home
-    store=agentcli.AgentCliStore(AsyncMock())
+    store=llm_accounts.AgentCliStore(AsyncMock())
     account=await store.add('typesafe',{'api_key':'test-secret','model':'jev-latest'})
     hass.data['_phoenix_agentcli_store']=store
     await data.store.async_patch_settings(agentcli_routing_mode='hybrid',decision_provider_id=account)
@@ -171,7 +173,7 @@ async def test_jev_selects_query_phoenix_counts_via_real_dispatch(hass,summary_h
 
 async def test_duplicate_area_names_refuse_local_query(hass,summary_home):
     from types import SimpleNamespace
-    from custom_components.phoenix_mcp.command_summary import local_summary
+    from custom_components.phoenix_mcp.routing.command_summary import local_summary
     _,access_key,ids=summary_home
     other=ar.async_get(hass).async_create('Other room', aliases={'Office'})
     er.async_get(hass).async_update_entity(ids[0],area_id=other.id)
@@ -189,7 +191,7 @@ async def test_unknown_members_stay_in_denominator_and_state_changes_remain_fres
 
 
 async def test_context_review_contains_complete_summary_candidate(hass,summary_home):
-    from custom_components.phoenix_mcp.decision_context import _state
+    from custom_components.phoenix_mcp.routing.decision_context import _state
     _,access_key,_=summary_home
     p=proposal(hass,access_key)
     state=_state(hass,access_key,'how many lights are on','en',
@@ -216,7 +218,7 @@ async def test_device_class_scope_and_nonprimary_exclusions(hass,summary_home):
 
 
 def summary_members_for_light(hass,access_key):
-    from custom_components.phoenix_mcp.command_summary import summary_members
+    from custom_components.phoenix_mcp.routing.command_summary import summary_members
     return summary_members(hass,access_key,{'domain':'light','device_class':'','area_id':''})
 
 
@@ -230,11 +232,11 @@ async def test_installed_non_english_count_grammar(hass,summary_home,language,se
 @pytest.mark.parametrize('damage', ['single_target', 'wrong_filter', 'unrequested_filter', 'scope_changed', 'low_probability'])
 async def test_jev_summary_refusals(hass,summary_home,damage):
     from unittest.mock import AsyncMock
-    from custom_components.phoenix_mcp import agentcli
-    from custom_components.phoenix_mcp.decision_provider import DecisionProvider
-    from custom_components.phoenix_mcp.decision_batch import async_preview_batch
+    from custom_components.phoenix_mcp.llm import accounts as llm_accounts
+    from custom_components.phoenix_mcp.routing.decision_provider import DecisionProvider
+    from custom_components.phoenix_mcp.routing.decision_batch import async_preview_batch
     data,access_key,ids=summary_home
-    store=agentcli.AgentCliStore(AsyncMock())
+    store=llm_accounts.AgentCliStore(AsyncMock())
     account=await store.add('typesafe',{'api_key':'test-secret','model':'jev-latest'})
     hass.data['_phoenix_agentcli_store']=store
     await data.store.async_patch_settings(decision_provider_id=account)
@@ -260,12 +262,12 @@ async def test_jev_summary_refusals(hass,summary_home,damage):
 
 async def test_jev_summary_with_history_binds_context_and_query(hass,summary_home):
     from unittest.mock import AsyncMock
-    from custom_components.phoenix_mcp import agentcli
-    from custom_components.phoenix_mcp.decision_provider import DecisionProvider
-    from custom_components.phoenix_mcp.decision_context import async_prepare_chat_context
-    from custom_components.phoenix_mcp.const import DECISION_CONTEXT_REQUIRED_CHOICES
+    from custom_components.phoenix_mcp.llm import accounts as llm_accounts
+    from custom_components.phoenix_mcp.routing.decision_provider import DecisionProvider
+    from custom_components.phoenix_mcp.routing.decision_context import async_prepare_chat_context
+    from custom_components.phoenix_mcp.routing.routing_tables import DECISION_CONTEXT_REQUIRED_CHOICES
     data,access_key,_=summary_home
-    store=agentcli.AgentCliStore(AsyncMock())
+    store=llm_accounts.AgentCliStore(AsyncMock())
     account=await store.add('typesafe',{'api_key':'test-secret','model':'jev-latest'})
     hass.data['_phoenix_agentcli_store']=store
     await data.store.async_patch_settings(agentcli_routing_mode='hybrid',decision_provider_id=account)
@@ -293,11 +295,11 @@ async def test_jev_summary_with_history_binds_context_and_query(hass,summary_hom
 
 async def test_summary_area_metadata_cannot_disclose_configured_secret(hass,summary_home):
     from unittest.mock import AsyncMock
-    from custom_components.phoenix_mcp import agentcli
-    from custom_components.phoenix_mcp.decision_batch import async_preview_batch
-    from custom_components.phoenix_mcp.decision_provider import DecisionProvider
+    from custom_components.phoenix_mcp.llm import accounts as llm_accounts
+    from custom_components.phoenix_mcp.routing.decision_batch import async_preview_batch
+    from custom_components.phoenix_mcp.routing.decision_provider import DecisionProvider
     data,access_key,_=summary_home
-    store=agentcli.AgentCliStore(AsyncMock())
+    store=llm_accounts.AgentCliStore(AsyncMock())
     account=await store.add('typesafe',{'api_key':'private-opaque-credential','model':'jev-latest'})
     hass.data['_phoenix_agentcli_store']=store
     await data.store.async_patch_settings(decision_provider_id=account)
@@ -310,7 +312,7 @@ async def test_summary_area_metadata_cannot_disclose_configured_secret(hass,summ
 
 async def test_local_count_does_not_build_unrelated_provider_catalog(hass,summary_home):
     data,access_key,_=summary_home
-    with patch('custom_components.phoenix_mcp.command_summary.summary_catalog',side_effect=AssertionError('Unrelated catalog must not be built')):
+    with patch('custom_components.phoenix_mcp.routing.command_summary.summary_catalog',side_effect=AssertionError('Unrelated catalog must not be built')):
         result=await async_evaluate_command(hass,data,access_key,'how many lights are on','en',preview=True)
         assert result['proposal']['summary_mode']=='on'
         assert _capture_plan(hass,data,access_key,result['proposal'],ingress='chat') is not None
@@ -319,7 +321,7 @@ async def test_local_count_does_not_build_unrelated_provider_catalog(hass,summar
 @pytest.mark.parametrize('repeats', [1, 4])
 def test_large_summary_wire_preserves_every_scope_and_state_choice(repeats):
     import json
-    from custom_components.phoenix_mcp.command_summary import summary_wire
+    from custom_components.phoenix_mcp.routing.command_summary import summary_wire
     targets={f's{index}':{'summary_scope':{'domain':'light','device_class':f'class_{index % repeats}','area_id':f'room_{index // repeats}'},
                          'area':f'Room {index // repeats}','area_aliases':[f'Alias {index // repeats}'],
                          'states':['on','off','unknown','unavailable']} for index in range(150)}
@@ -339,8 +341,8 @@ def test_large_summary_wire_preserves_every_scope_and_state_choice(repeats):
 
 async def test_summary_question_instructions_are_independent_and_consistent():
     from unittest.mock import AsyncMock
-    from custom_components.phoenix_mcp.agentcli import ProviderConfig
-    from custom_components.phoenix_mcp.decision_provider import DecisionProvider
+    from custom_components.phoenix_mcp.llm.accounts import ProviderConfig
+    from custom_components.phoenix_mcp.routing.decision_provider import DecisionProvider
     provider=DecisionProvider(ProviderConfig('typesafe','jev-latest','https://example.test'),'systemone')
     scopes={'s0':{'summary_scope':{'domain':'light','device_class':'','area_id':''},
                   'area':'','area_aliases':[],'states':['on','off']}}

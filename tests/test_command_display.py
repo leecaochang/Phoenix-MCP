@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from homeassistant.helpers import entity_registry as er
 
-from custom_components.phoenix_mcp.command_display import async_display_state, display_number
+from custom_components.phoenix_mcp.routing.command_display import async_display_state, display_number
 
 
 @pytest.mark.parametrize('language,value,expected', [

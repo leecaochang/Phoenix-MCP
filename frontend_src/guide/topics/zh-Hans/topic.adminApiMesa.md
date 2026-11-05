@@ -12,6 +12,7 @@
 | 状态 | `error` | `message_key` | 条件 |
 |---|---|---|---|
 | 503 | `service_unavailable` | `adminError.mesaUnavailable` | MESA 未运行。 |
+| 503 | `service_unavailable` | `adminError.mesaSaveFailed` | Phoenix 无法保存更改，因此已撤销它。 |
 
 每次更改都会添加一条包含请求路径的审计日志条目。导出也会添加一条，尽管它不更改任何内容。
 
@@ -184,7 +185,11 @@ MESA 自己的格式会再次包装设置，因此响应会嵌套两次 `deploym
 | `triggers_automations_domains` | 字符串数组 | 域，以字符串表示。 |
 | `domain_overrides` | object | 以域为键。每个值是一个对象。 |
 
-响应与读取具有相同形状。
+响应的形状与读取相同。
+
+| 状态 | `error` | `message_key` | 条件 |
+|---|---|---|---|
+| 400 | `invalid_request` | `adminError.deploymentDefaultsInvalid` | MESA 拒绝了这些默认值。`message_params.detail` 说明原因。 |
 
 ## 问题和标签词汇表 {#issues}
 

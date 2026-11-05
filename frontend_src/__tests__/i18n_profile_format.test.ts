@@ -2,12 +2,22 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   LANGUAGES, getFormatLocale, interpolate, loadTranslations, localeClock,
   localeCompactNumber, localeDate, localeDateTime, localeDateTimeShort,
-  localeNumber, primeTranslations, resolveLanguage, setFormatLocale,
+  localeNumber, canonicalLanguage, primeTranslations, resolveLanguage, setFormatLocale,
   setLanguagePreference, syncTranslations, tn,
 } from "../i18n";
 import en from "../../custom_components/phoenix_mcp/catalogs/en.json";
 
 const ISO = "2026-03-04T22:05:06Z";
+
+describe("Norwegian tags", () => {
+  it("reads plain Norwegian as Bokmal and leaves Nynorsk out", () => {
+    expect(canonicalLanguage("no")).toBe("nb");
+    expect(canonicalLanguage("no-NO")).toBe("nb");
+    expect(canonicalLanguage("nb-NO")).toBe("nb");
+    expect(canonicalLanguage("nn")).toBe("en");
+    expect(canonicalLanguage("nn-NO")).toBe("en");
+  });
+});
 const profile = (locale: Record<string, string> = {}, zone = "UTC") => ({
   language: "en-US",
   locale: { language: "en-US", time_zone: "server", time_format: "24", date_format: "language", number_format: "language", ...locale },
@@ -75,13 +85,27 @@ describe("HA date and time preferences", () => {
     }
   });
 
+  it.each([
+    ["en", ", "],
+    ["de", ", "],
+    ["ja", " "],
+    ["zh-Hans", " "],
+  ])("joins a custom date and a time as %s does", (language, join) => {
+    setFormatLocale(profile({ date_format: "YMD", time_format: "24" }), language);
+    const date = localeDate(ISO);
+    expect(localeDateTime(ISO).startsWith(`${date}${join}`)).toBe(true);
+    expect(localeDateTime(ISO).slice(date.length + join.length)).toMatch(/^\d/);
+    expect(localeDateTimeShort(ISO)).toMatch(new RegExp(`[\\d.]${join}\\d`));
+    expect(localeDateTimeShort(ISO)).not.toContain("..");
+  });
+
   it("keeps system date formatting separate from Chinese time labels and explicit hours", () => {
     setFormatLocale(profile({ date_format: "system", time_format: "12" }), "zh-Hans");
     const expectedDate = new Intl.DateTimeFormat(undefined, {
       year: "numeric", month: "numeric", day: "numeric", timeZone: "UTC",
     }).format(new Date(ISO));
     expect(localeDate(ISO)).toBe(expectedDate);
-    expect(localeDateTime(ISO)).toBe(`${expectedDate}, 下午10:05:06`);
+    expect(localeDateTime(ISO)).toBe(`${expectedDate} 下午10:05:06`);
   });
 
   it("uses browser hour convention for system time and Phoenix's language for language time", () => {

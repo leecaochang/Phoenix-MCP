@@ -14,7 +14,8 @@ from homeassistant.util.dt import utcnow
 from custom_components.phoenix_mcp import entity_registration as observation
 from custom_components.phoenix_mcp.const import DOMAIN
 from custom_components.phoenix_mcp.data import PhoenixData
-from custom_components.phoenix_mcp.mcp_view import _call_tool, async_restore_version
+from custom_components.phoenix_mcp.tool_dispatch import _call_tool
+from custom_components.phoenix_mcp.tools.restore import async_restore_version
 from custom_components.phoenix_mcp.request_authority import (
     AuthorityChangedError, RequestAuthority, policy_version, request_authority,
 )
@@ -60,13 +61,22 @@ async def test_waits_for_registry_then_state(hass, short_budget, domain):
         entry = _entry(hass, domain)
         await asyncio.sleep(0.005)
         assert not task.done(), "Registry presence alone must not finish the wait"
-        hass.states.async_set(entry.entity_id, "unavailable")
+        hass.states.async_set(entry.entity_id, "unavailable", {"id": "stored"})
         result = await task
         assert result == {"status": "observed", "entity_id": entry.entity_id, "state_present": True}
     finally:
         if not task.done():
             task.cancel()
         await asyncio.gather(task, return_exceptions=True)
+
+
+async def test_a_scene_home_assistant_dropped_is_not_observed_from_its_restored_placeholder(hass, short_budget):
+    """Reload leaves the registry's restored state behind, which carries no scene id."""
+    access_key = _access_key()
+    entry = _entry(hass, "scene")
+    hass.states.async_set(entry.entity_id, "unavailable", {"restored": True})
+    result = await observation.async_observe_registration(hass, access_key, "scene", "stored")
+    assert result == {"status": "timed_out", "entity_id": entry.entity_id, "state_present": True}
 
 
 async def test_immediate_observation_does_not_sleep(hass):
@@ -241,7 +251,7 @@ async def test_reload_failure_preserves_saved_write_and_safe_error(hass, write_e
 
 @pytest.mark.parametrize("domain", ["scene", "script"])
 async def test_approved_executor_observes_and_records_once(hass, write_env, immediate_authoring_observation, domain):
-    from custom_components.phoenix_mcp.mcp_view import async_execute_approved_tool
+    from custom_components.phoenix_mcp.tool_dispatch import async_execute_approved_tool
 
     entry = _entry(hass, domain)
     hass.states.async_set(entry.entity_id, "off")

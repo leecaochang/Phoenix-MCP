@@ -21,8 +21,9 @@ from tests.runtime_fixtures import mesa_off_store
 
 from custom_components.phoenix_mcp.const import HELPER_TEMPLATE_MAX_CHARS
 from custom_components.phoenix_mcp.data import PhoenixData
-from custom_components.phoenix_mcp.mcp_view import _call_tool
-from custom_components.phoenix_mcp.template_recovery import restore_template, template_snapshot
+from custom_components.phoenix_mcp.tool_dispatch import _call_tool
+from custom_components.phoenix_mcp.template_recovery import restore_template
+from custom_components.phoenix_mcp.template_snapshots import template_snapshot
 from custom_components.phoenix_mcp.template_scope import HelperScopeError, template_entities
 from custom_components.phoenix_mcp.access_key_store import PermissionNode, PermissionTree, AccessKeyRecord
 from custom_components.phoenix_mcp.tools import helper

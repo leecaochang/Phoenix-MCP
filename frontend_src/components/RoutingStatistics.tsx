@@ -15,7 +15,7 @@ const OUTCOME_LABELS = {
   cancelled: "routingStats.cancelled",
 } as const;
 
-/** What a surface's routing counts cover, for Help over them (user, 2026-10-31). */
+/** What a surface's routing counts cover, for Help over them. */
 const scopeHelp = () => `${t("routingStats.scope")}${t("common.sentenceSeparator")}${t("routingStats.note")}`;
 
 /** A surface's routing counts with Refresh and Reset, loaded when first shown. */

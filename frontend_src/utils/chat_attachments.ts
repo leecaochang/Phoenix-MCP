@@ -4,7 +4,7 @@
 // the long edge shrinks to the size providers analyse anyway, the result is a
 // JPEG on a white background, and redrawing drops EXIF data such as a phone
 // photo's location. The server checks its own bounds independently
-// (`_chat_attachments` in agentcli.py); these mirror its count and size limits.
+// (`_chat_attachments` in agent_turn.py); these mirror its count and size limits.
 
 export const ATTACHMENT_MAX_COUNT = 4;
 export const ATTACHMENT_EDGE_PX = 1568;

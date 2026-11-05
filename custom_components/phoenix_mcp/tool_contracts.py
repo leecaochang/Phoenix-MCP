@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import json
+import re
 from typing import Any
+from homeassistant.core import valid_entity_id
 
+from .agent_recovery import tool_is_read_only
 from .const import (
     PATCH_DASHBOARD_MAX_CHANGES,
     SERVICE_TARGET_MAX_GROUPS,
@@ -147,6 +150,21 @@ def _adopt_retired(tool: str, args: dict[str, Any], retired: set[str]) -> dict[s
 
 
 _SERVICE_OBJECT_SYNTAX = 'service: {"domain":"...","name":"...","data":{...}}'
+_CANONICAL_SERVICE_PART = re.compile(r"[a-z0-9_]*")
+
+
+def service_name_error(domain: str, service: str) -> str | None:
+    """Refuse a spelling Home Assistant would fold into a different service.
+
+    HA lowercases both parts when it dispatches, so every gate that compares
+    these strings would otherwise decide about a name other than the one that
+    runs. Refused rather than folded, so the audit row and the approval show what
+    executes. A missing part is the caller's own required-argument error.
+    """
+    if _CANONICAL_SERVICE_PART.fullmatch(domain) and _CANONICAL_SERVICE_PART.fullmatch(service):
+        return None
+    return "Service domain and name must be lowercase letters, digits and underscores, as Home Assistant lists them."
+
 _TARGET_SELECTORS = {"entity_id": "entity", "device_id": "device", "area_id": "area"}
 _TARGET_SYNONYMS = {"entity_ids": "entity_id", "entities": "entity_id", "device_ids": "device_id", "area_ids": "area_id"}
 _EMPTY: tuple[Any, ...] = (None, "", [], {})
@@ -300,7 +318,6 @@ def adopt_near_misses(tool: str, args: dict[str, Any]) -> dict[str, Any]:
     schema = _PUBLIC_SCHEMAS.get(tool)
     if schema is None:
         return args
-    from .agent_recovery import tool_is_read_only
 
     # A preview must refuse what the call it predicts refuses.
     renames = tool_is_read_only(tool) and tool != "dry_run_service"
@@ -402,7 +419,6 @@ def _implied_kind(tool: str, args: dict[str, Any]) -> dict[str, Any]:
     elif tool == "get_esphome_job" and isinstance(value.get("id"), str):
         kind = "file" if value["id"].lower().endswith((".yaml", ".yml")) else "job"
     elif tool == "get_relationships":
-        from homeassistant.core import valid_entity_id
 
         ids = value.get("id")
         ids = [ids] if isinstance(ids, str) else ids
@@ -541,6 +557,8 @@ def normalize_tool_args(tool: str, args: dict[str, Any]) -> tuple[dict[str, Any]
             return out, "service must contain string domain and name."
         out["domain"] = service["domain"]
         out["service"] = service["name"]
+        if name_error := service_name_error(service["domain"], service["name"]):
+            return out, name_error
         if "data" in service:
             out["service_data"] = service["data"]
         if targets is not None:

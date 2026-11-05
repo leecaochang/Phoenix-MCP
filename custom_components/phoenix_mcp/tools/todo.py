@@ -23,8 +23,9 @@ from ..data import PhoenixData
 from ..household_authority import household_service_kwargs
 from ..policy_engine import Permission, resolve_read
 from ..request_authority import AuthorityChangedError, check_request_authority
-from ..tool_common import _tool_error, _tool_success, fitted_offset_page, offset_page
+from ..tool_common import _tool_error, _tool_success, _tool_uncertain, fitted_offset_page, offset_page
 from .calendar import _safe_calendar_data
+from .service import _tool_call_service
 
 STATUSES = ("needs_action", "completed")
 _NOT_FOUND = "Todo list not found."
@@ -97,7 +98,7 @@ async def _tool_get_todo_items(
             raise
         except TimeoutError:
             unreadable.append({"list": entity_id, "reason": "The list did not answer in time."})
-        except Exception as exc:  # noqa: BLE001 - one list's failure must not hide the others
+        except Exception as exc:  # one list's failure must not hide the others
             unreadable.append({"list": entity_id, "reason": str(exc)[:200] or type(exc).__name__})
     check_request_authority()
     still = [entity_id for entity_id in readable if _readable(entity_id, access_key, hass)]
@@ -163,7 +164,6 @@ async def _tool_set_todo_item(
     request_id: str = "", client_ip: str | None = None,
 ) -> tuple[dict, str, str]:
     """MCP tool: add, update or remove one item on a todo list the access key can write."""
-    from ..mcp_view import _tool_call_service  # noqa: PLC0415 - mcp_view imports this module
 
     tool = "set_todo_item"
     entity_id = str(args.get("entity_id") or "").strip()
@@ -296,13 +296,13 @@ async def _verified(
         # Home Assistant answers no items for an unavailable list, which would read as a lost change.
         body.update(applied=None, verified=False,
                     note="The list became unavailable, so whether the change took cannot be confirmed.")
-        return _tool_success(_dumps(body)), "allowed", entity_id
+        return _tool_uncertain(body), "invalid_request", entity_id
     try:
         items = await _items(hass, entity_id, list(STATUSES))
-    except Exception:  # noqa: BLE001 - the change was applied; only its confirmation failed
+    except Exception:  # the change was applied; only its confirmation failed
         body.update(applied=True, verified=False,
                     note="The change was applied, but the list could not be read back to confirm it.")
-        return _tool_success(_dumps(body)), "allowed", entity_id
+        return _tool_uncertain(body), "invalid_request", entity_id
     def named(text: Any) -> list[dict]:
         folded = str(text).strip().casefold()
         return [item for item in items if str(item.get("summary") or "").strip().casefold() == folded]

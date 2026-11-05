@@ -12,25 +12,33 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from custom_components.phoenix_mcp.agent_recovery import AgentRecovery
-from custom_components.phoenix_mcp import agentcli
-from custom_components.phoenix_mcp.const import AGENTCLI_MINIMAX_MODELS
-from custom_components.phoenix_mcp.agentcli import (
-    ClaudeProvider,
-    OpenAICompatProvider,
-    ProviderConfig,
-    _norm_stop,
-    _parse_pending,
-    async_run_agent_turn,
-)
+from custom_components.phoenix_mcp import agent_chat, agent_turn, agentcli_views, const, provider_constants, tool_catalog
+from custom_components.phoenix_mcp.llm import accounts as llm_accounts
+from custom_components.phoenix_mcp.llm import base as llm_base
+from custom_components.phoenix_mcp.llm import factory as llm_factory
+from custom_components.phoenix_mcp.llm import probes as llm_probes
+from custom_components.phoenix_mcp.llm import provider_claude as llm_provider_claude
+from custom_components.phoenix_mcp.llm import provider_openai as llm_provider_openai
+from custom_components.phoenix_mcp.llm import provider_responses as llm_provider_responses
+from custom_components.phoenix_mcp.provider_constants import AGENTCLI_MINIMAX_MODELS
+from custom_components.phoenix_mcp.llm.provider_claude import ClaudeProvider
+from custom_components.phoenix_mcp.llm.provider_openai import OpenAICompatProvider
+from custom_components.phoenix_mcp.llm.accounts import ProviderConfig
+from custom_components.phoenix_mcp.llm.base import _norm_stop
+from custom_components.phoenix_mcp.agent_turn import _parse_pending
+from custom_components.phoenix_mcp.agent_chat import async_run_agent_turn
 from custom_components.phoenix_mcp.approvals import (
     STATUS_APPROVED,
     STATUS_FAILED,
     STATUS_PENDING,
     STATUS_REJECTED,
 )
-from custom_components.phoenix_mcp.const import AGENTCLI_DEEPSEEK_MAX_TOKENS, AGENTCLI_PROVIDERS
+from custom_components.phoenix_mcp.provider_constants import (
+    AGENTCLI_DEEPSEEK_MAX_TOKENS, AGENTCLI_PROVIDERS,
+)
 from custom_components.phoenix_mcp.const import MESA_APPROVED_EXECUTOR
 from custom_components.phoenix_mcp.access_key_store import GlobalSettings
+from tests.runtime_fixtures import patch_readers
 
 
 # --------------------------------------------------------------------------- #
@@ -53,16 +61,12 @@ class _FakeResp:
         text_data: str = "", headers: dict | None = None,
     ) -> None:
         self.status = status
-        self.content = _FakeContent(body or text_data.encode())
-        self._json = json_data
+        self.content = _FakeContent(body or text_data.encode() or json.dumps(json_data).encode())
         self._text = text_data
         self.headers = headers or {}
 
     async def text(self):
         return self._text
-
-    async def json(self, content_type=None):
-        return self._json
 
     async def __aenter__(self):
         return self
@@ -76,7 +80,7 @@ class _FakeSession:
         self._resp = resp
         self.calls: list[tuple[str, dict]] = []
 
-    def post(self, url, headers=None, json=None, timeout=None, allow_redirects=None):  # noqa: A002
+    def post(self, url, headers=None, json=None, timeout=None, allow_redirects=None):
         self.calls.append(("POST", {"url": url, "json": json, "allow_redirects": allow_redirects}))
         return self._resp
 
@@ -118,11 +122,11 @@ async def test_claude_stream_parses_text_tool_and_done():
     events = await _collect(provider.stream_turn(
         session, system_prompt="s", messages=[], tools=[], options={}))
     types = [e["type"] for e in events]
-    assert agentcli.EV_TEXT in types
-    tool = next(e for e in events if e["type"] == agentcli.EV_TOOL)
+    assert llm_base.EV_TEXT in types
+    tool = next(e for e in events if e["type"] == llm_base.EV_TOOL)
     assert tool["name"] == "get_state"
     assert tool["input"] == {"entity_id": "light.x"}
-    done = next(e for e in events if e["type"] == agentcli.EV_DONE)
+    done = next(e for e in events if e["type"] == llm_base.EV_DONE)
     assert done["stop_reason"] == "tool_use"
     # Assembled assistant message carries text + tool_use blocks in order.
     blocks = done["assistant_msg"]["content"]
@@ -137,22 +141,22 @@ async def test_claude_stream_non_200_yields_error():
     session = _FakeSession(_FakeResp(401, b"", text_data="unauthorized"))
     events = await _collect(provider.stream_turn(
         session, system_prompt="s", messages=[], tools=[], options={}))
-    assert events == [] or events[0]["type"] == agentcli.EV_ERROR
+    assert events == [] or events[0]["type"] == llm_base.EV_ERROR
     err = events[0]
-    assert err["type"] == agentcli.EV_ERROR and err["code"] == "auth"
+    assert err["type"] == llm_base.EV_ERROR and err["code"] == "auth"
 
 
 def test_parse_provider_error_extracts_message_and_code():
     body = ('{"error": {"message": "You exceeded your current quota.", '
             '"type": "insufficient_quota", "param": null, "code": "insufficient_quota"}}')
-    msg, code = agentcli._parse_provider_error(body)
+    msg, code = llm_base._parse_provider_error(body)
     assert msg == "You exceeded your current quota."
     assert code == "insufficient_quota"
     # message-only nested error still yields the human sentence.
-    msg2, code2 = agentcli._parse_provider_error('{"error": {"message": "bad request"}}')
+    msg2, code2 = llm_base._parse_provider_error('{"error": {"message": "bad request"}}')
     assert msg2 == "bad request" and code2 is None
     # non-JSON falls back to the raw (trimmed) text, no code.
-    msg3, code3 = agentcli._parse_provider_error("  plain text error  ")
+    msg3, code3 = llm_base._parse_provider_error("  plain text error  ")
     assert msg3 == "plain text error" and code3 is None
 
 
@@ -162,12 +166,12 @@ async def test_openai_quota_error_is_clean_and_not_retryable():
             'your plan and billing details.", "type": "insufficient_quota", '
             '"code": "insufficient_quota"}}')
     cfg = ProviderConfig(kind="chatgpt", model="gpt-5", base_url="https://api.openai.com/v1", api_key="k")
-    provider = agentcli.OpenAICompatProvider(cfg)
+    provider = llm_provider_openai.OpenAICompatProvider(cfg)
     session = _FakeSession(_FakeResp(429, b"", text_data=body))
     events = await _collect(provider.stream_turn(
         session, system_prompt="s", messages=[], tools=[], options={}))
     err = events[0]
-    assert err["type"] == agentcli.EV_ERROR
+    assert err["type"] == llm_base.EV_ERROR
     assert err["code"] == "quota"
     assert err["retryable"] is False
     # Only the classification/status escapes; providers can echo prompts in prose.
@@ -179,7 +183,7 @@ async def test_openai_quota_error_is_clean_and_not_retryable():
 async def test_openai_plain_rate_limit_stays_retryable():
     body = '{"error": {"message": "Rate limit reached.", "type": "rate_limit_exceeded"}}'
     cfg = ProviderConfig(kind="chatgpt", model="gpt-5", base_url="https://api.openai.com/v1", api_key="k")
-    provider = agentcli.OpenAICompatProvider(cfg)
+    provider = llm_provider_openai.OpenAICompatProvider(cfg)
     session = _FakeSession(_FakeResp(429, b"", text_data=body))
     events = await _collect(provider.stream_turn(
         session, system_prompt="s", messages=[], tools=[], options={}))
@@ -323,9 +327,9 @@ async def test_openai_stream_accumulates_split_tool_args():
     session = _FakeSession(_FakeResp(200, body))
     events = await _collect(provider.stream_turn(
         session, system_prompt="s", messages=[], tools=[], options={}))
-    tool = next(e for e in events if e["type"] == agentcli.EV_TOOL)
+    tool = next(e for e in events if e["type"] == llm_base.EV_TOOL)
     assert tool["name"] == "get_state" and tool["input"] == {"entity_id": "light.x"}
-    done = next(e for e in events if e["type"] == agentcli.EV_DONE)
+    done = next(e for e in events if e["type"] == llm_base.EV_DONE)
     assert done["stop_reason"] == "tool_use"
 
 
@@ -346,11 +350,11 @@ async def test_claude_stream_reports_usage_from_message_start_and_delta():
     provider = ClaudeProvider(cfg)
     events = await _collect(provider.stream_turn(
         _FakeSession(_FakeResp(200, body)), system_prompt="s", messages=[], tools=[], options={}))
-    usage = [e for e in events if e["type"] == agentcli.EV_USAGE]
+    usage = [e for e in events if e["type"] == llm_base.EV_USAGE]
     # Cache reads and writes stay inside input_tokens and are also reported apart.
     cache = {"cache_read_tokens": 300, "cache_write_tokens": 20}
-    assert usage[0] == {"type": agentcli.EV_USAGE, "input_tokens": 420, "output_tokens": 2, **cache}
-    assert usage[-1] == {"type": agentcli.EV_USAGE, "input_tokens": 420, "output_tokens": 55, **cache}
+    assert usage[0] == {"type": llm_base.EV_USAGE, "input_tokens": 420, "output_tokens": 2, **cache}
+    assert usage[-1] == {"type": llm_base.EV_USAGE, "input_tokens": 420, "output_tokens": 55, **cache}
 
 
 @pytest.mark.asyncio
@@ -366,10 +370,10 @@ async def test_openai_usage_chunk_with_empty_choices_reports_usage():
     provider = OpenAICompatProvider(cfg)
     events = await _collect(provider.stream_turn(
         _FakeSession(_FakeResp(200, body)), system_prompt="s", messages=[], tools=[], options={}))
-    usage = next(e for e in events if e["type"] == agentcli.EV_USAGE)
+    usage = next(e for e in events if e["type"] == llm_base.EV_USAGE)
     assert usage["input_tokens"] == 812 and usage["output_tokens"] == 90
     # The reply itself still parses normally.
-    done = next(e for e in events if e["type"] == agentcli.EV_DONE)
+    done = next(e for e in events if e["type"] == llm_base.EV_DONE)
     assert done["assistant_msg"]["content"] == "Hi"
 
 
@@ -422,8 +426,8 @@ async def test_mistral_reasoning_stream_is_displayed_and_preserved_in_history():
     sent = session.calls[0][1]["json"]
     assert sent["reasoning_effort"] == "high"
     assert sent["temperature"] == 0.2
-    assert next(e for e in events if e["type"] == agentcli.EV_THINKING)["text"] == "Work it out."
-    done = next(e for e in events if e["type"] == agentcli.EV_DONE)
+    assert next(e for e in events if e["type"] == llm_base.EV_THINKING)["text"] == "Work it out."
+    done = next(e for e in events if e["type"] == llm_base.EV_DONE)
     assert done["assistant_msg"]["content"] == [
         {"type": "thinking", "thinking": [{"type": "text", "text": "Work it out."}]},
         {"type": "text", "text": "The answer is 42."},
@@ -445,8 +449,8 @@ async def test_mistral_reasoning_is_preserved_when_verbose_output_is_hidden():
         _FakeSession(_FakeResp(200, body)), system_prompt="s", messages=[], tools=[],
         options={"effort": "high", "show_thinking": False}))
 
-    assert not any(e["type"] == agentcli.EV_THINKING for e in events)
-    done = next(e for e in events if e["type"] == agentcli.EV_DONE)
+    assert not any(e["type"] == llm_base.EV_THINKING for e in events)
+    done = next(e for e in events if e["type"] == llm_base.EV_DONE)
     assert done["assistant_msg"]["content"][0]["type"] == "thinking"
 
 
@@ -489,12 +493,12 @@ async def test_opencode_accepts_mistral_content_parts_only_for_mistral_models(mo
     events = await _collect(OpenAICompatProvider(cfg).stream_turn(
         _FakeSession(_FakeResp(200, body)), system_prompt="s", messages=[], tools=[], options={}))
 
-    done = next((e for e in events if e["type"] == agentcli.EV_DONE), None)
+    done = next((e for e in events if e["type"] == llm_base.EV_DONE), None)
     if not mistral_shape:
         assert done is None
-        assert next(e for e in events if e["type"] == agentcli.EV_ERROR)["code"] == "provider_malformed"
+        assert next(e for e in events if e["type"] == llm_base.EV_ERROR)["code"] == "provider_malformed"
         return
-    assert next(e for e in events if e["type"] == agentcli.EV_TOOL)["input"] == {"entity_id": "light.desk"}
+    assert next(e for e in events if e["type"] == llm_base.EV_TOOL)["input"] == {"entity_id": "light.desk"}
     # Mistral requires the reasoning parts back on the next turn.
     assert done["assistant_msg"]["content"] == chunks
 
@@ -512,7 +516,7 @@ async def test_openai_tool_only_assistant_content_is_empty_string_not_null():
     provider = OpenAICompatProvider(cfg)
     events = await _collect(provider.stream_turn(
         _FakeSession(_FakeResp(200, body)), system_prompt="s", messages=[], tools=[], options={}))
-    done = next(e for e in events if e["type"] == agentcli.EV_DONE)
+    done = next(e for e in events if e["type"] == llm_base.EV_DONE)
     assert done["assistant_msg"]["content"] == ""
     assert done["assistant_msg"]["content"] is not None
 
@@ -530,9 +534,9 @@ async def test_openai_reasoning_content_surfaces_as_thinking():
     session = _FakeSession(_FakeResp(200, body))
     events = await _collect(provider.stream_turn(
         session, system_prompt="s", messages=[], tools=[], options={"show_thinking": True}))
-    thinking = "".join(e["text"] for e in events if e["type"] == agentcli.EV_THINKING)
+    thinking = "".join(e["text"] for e in events if e["type"] == llm_base.EV_THINKING)
     assert thinking == "Let me think. Turn it on."
-    done = next(e for e in events if e["type"] == agentcli.EV_DONE)
+    done = next(e for e in events if e["type"] == llm_base.EV_DONE)
     # Reasoning is display-only: it is not folded into the assistant message.
     assert done["assistant_msg"]["content"] == "Done."
 
@@ -549,7 +553,7 @@ async def test_openai_reasoning_hidden_when_show_thinking_off():
     session = _FakeSession(_FakeResp(200, body))
     events = await _collect(provider.stream_turn(
         session, system_prompt="s", messages=[], tools=[], options={}))  # show_thinking off
-    assert not any(e["type"] == agentcli.EV_THINKING for e in events)
+    assert not any(e["type"] == llm_base.EV_THINKING for e in events)
 
 
 @pytest.mark.asyncio
@@ -564,8 +568,8 @@ async def test_ollama_reasoning_field_surfaces_as_thinking_only():
         _FakeSession(_FakeResp(200, body)), system_prompt="s", messages=[], tools=[],
         options={"show_thinking": True},
     ))
-    assert "".join(e["text"] for e in events if e["type"] == agentcli.EV_THINKING) == "Let me think. "
-    done = next(e for e in events if e["type"] == agentcli.EV_DONE)
+    assert "".join(e["text"] for e in events if e["type"] == llm_base.EV_THINKING) == "Let me think. "
+    done = next(e for e in events if e["type"] == llm_base.EV_DONE)
     assert done["assistant_msg"]["content"] == "Done."
 
 
@@ -584,17 +588,17 @@ async def test_openai_inline_think_tags_are_split_out():
     events = await _collect(provider.stream_turn(
         _FakeSession(_FakeResp(200, body)), system_prompt="s", messages=[], tools=[],
         options={"show_thinking": True}))
-    text = "".join(e["text"] for e in events if e["type"] == agentcli.EV_TEXT)
-    thinking = "".join(e["text"] for e in events if e["type"] == agentcli.EV_THINKING)
+    text = "".join(e["text"] for e in events if e["type"] == llm_base.EV_TEXT)
+    thinking = "".join(e["text"] for e in events if e["type"] == llm_base.EV_THINKING)
     assert text == "Hello there."
     assert thinking == "secret"
-    done = next(e for e in events if e["type"] == agentcli.EV_DONE)
+    done = next(e for e in events if e["type"] == llm_base.EV_DONE)
     assert done["assistant_msg"]["content"] == "Hello there."
     # show_thinking off: thinking dropped, reply still excludes the tags
     events2 = await _collect(provider.stream_turn(
         _FakeSession(_FakeResp(200, body)), system_prompt="s", messages=[], tools=[], options={}))
-    assert "".join(e["text"] for e in events2 if e["type"] == agentcli.EV_TEXT) == "Hello there."
-    assert not any(e["type"] == agentcli.EV_THINKING for e in events2)
+    assert "".join(e["text"] for e in events2 if e["type"] == llm_base.EV_TEXT) == "Hello there."
+    assert not any(e["type"] == llm_base.EV_THINKING for e in events2)
 
 
 @pytest.mark.asyncio
@@ -786,14 +790,14 @@ async def test_meta_sends_reasoning_effort_and_never_temperature():
 
 
 def test_provider_kinds_match_the_const_allowlist():
-    from custom_components.phoenix_mcp.const import DECISION_PROVIDERS
-    assert set(agentcli._KINDS) == set(AGENTCLI_PROVIDERS | DECISION_PROVIDERS)
-    assert {key for key, value in agentcli.PROVIDER_DEFINITIONS.items() if value.purpose == "decision"} == DECISION_PROVIDERS
+    from custom_components.phoenix_mcp.routing.routing_tables import DECISION_PROVIDERS
+    assert set(llm_accounts._KINDS) == set(AGENTCLI_PROVIDERS | DECISION_PROVIDERS)
+    assert {key for key, value in llm_accounts.PROVIDER_DEFINITIONS.items() if value.purpose == "decision"} == DECISION_PROVIDERS
 
 
 
 def test_provider_registry_catalog_is_complete_and_secret_free():
-    catalog = agentcli._provider_catalog()
+    catalog = llm_accounts._provider_catalog()
     assert [row["label"] for row in catalog] == sorted(
         (row["label"] for row in catalog), key=str.lower,
     )
@@ -816,7 +820,7 @@ def test_provider_registry_catalog_is_complete_and_secret_free():
 ])
 def test_new_openai_compatible_provider_routes(kind, base_url):
     cfg = ProviderConfig(kind=kind, model="m", base_url=base_url, api_key="key")
-    provider = agentcli.build_provider(cfg)
+    provider = llm_factory.build_provider(cfg)
     assert isinstance(provider, OpenAICompatProvider)
     assert provider._chat_url() == f"{base_url}/chat/completions"
     assert provider._headers()["Authorization"] == "Bearer key"
@@ -842,13 +846,13 @@ async def test_zai_preserves_reasoning_and_enables_streamed_tools():
     assert sent["thinking"] == {"type": "enabled", "clear_thinking": False}
     assert sent["tool_stream"] is True
     assert "clear_thinking" not in sent
-    done = next(event for event in events if event["type"] == agentcli.EV_DONE)
+    done = next(event for event in events if event["type"] == llm_base.EV_DONE)
     assert done["assistant_msg"]["reasoning_content"] == "check state"
 
 
 @pytest.mark.asyncio
 async def test_probe_config_selects_zai_plan_and_qwen_url(monkeypatch):
-    coding = await agentcli._probe_config("zai", {
+    coding = await agentcli_views._probe_config("zai", {
         "api_key": "key", "endpoint_id": "coding",
     })
     assert isinstance(coding, ProviderConfig)
@@ -859,8 +863,8 @@ async def test_probe_config_selects_zai_plan_and_qwen_url(monkeypatch):
         assert allow_private is False
         return None
 
-    monkeypatch.setattr(agentcli, "_validate_base_url", public_url)
-    qwen = await agentcli._probe_config("qwen", {
+    monkeypatch.setattr(agentcli_views, "_validate_base_url", public_url)
+    qwen = await agentcli_views._probe_config("qwen", {
         "api_key": "key",
         "base_url": "https://workspace.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1/",
     })
@@ -870,14 +874,14 @@ async def test_probe_config_selects_zai_plan_and_qwen_url(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_qwen_private_url_and_unknown_zai_plan_are_rejected():
-    private = await agentcli._probe_config("qwen", {
+    private = await agentcli_views._probe_config("qwen", {
         "api_key": "key", "base_url": "https://127.0.0.1/v1",
     })
-    assert isinstance(private, agentcli.ProbeConfigError)
-    invalid_plan = await agentcli._probe_config("zai", {
+    assert isinstance(private, llm_base.ProbeConfigError)
+    invalid_plan = await agentcli_views._probe_config("zai", {
         "api_key": "key", "endpoint_id": "enterprise",
     })
-    assert isinstance(invalid_plan, agentcli.ProbeConfigError)
+    assert isinstance(invalid_plan, llm_base.ProbeConfigError)
     assert invalid_plan.key == "providerEndpointInvalid"
 
 
@@ -886,7 +890,7 @@ async def test_minimax_runs_through_claude_provider_bearer_and_adaptive():
     cfg = ProviderConfig(kind="minimax", model="MiniMax-M2",
                          base_url="https://api.minimax.io/anthropic", api_key="mkey")
     # Routed to the Anthropic-format provider, not OpenAICompat.
-    provider = agentcli.build_provider(cfg)
+    provider = llm_factory.build_provider(cfg)
     assert isinstance(provider, ClaudeProvider)
     # Auth is Bearer (not Anthropic's x-api-key), with the anthropic-version header.
     h = provider._headers()
@@ -968,7 +972,7 @@ async def test_minimax_gets_no_cache_markers():
 async def test_openrouter_bearer_url_and_tool_capable_model_filter():
     cfg = ProviderConfig(kind="openrouter", model="",
                          base_url="https://openrouter.ai/api/v1", api_key="or")
-    provider = agentcli.build_provider(cfg)
+    provider = llm_factory.build_provider(cfg)
     assert isinstance(provider, OpenAICompatProvider)
     assert provider._headers()["Authorization"] == "Bearer or"
     # Chat goes to the OpenAI-compat path under the OpenRouter base.
@@ -995,7 +999,7 @@ async def test_openrouter_bearer_url_and_tool_capable_model_filter():
 async def test_nvidia_bearer_url_and_non_chat_model_filter():
     cfg = ProviderConfig(kind="nvidia", model="",
                          base_url="https://integrate.api.nvidia.com/v1", api_key="nvapi-x")
-    provider = agentcli.build_provider(cfg)
+    provider = llm_factory.build_provider(cfg)
     assert isinstance(provider, OpenAICompatProvider)
     assert provider._headers()["Authorization"] == "Bearer nvapi-x"
     # The base already carries /v1, so the OpenAI-compat path appends cleanly.
@@ -1024,7 +1028,7 @@ async def test_nvidia_bearer_url_and_non_chat_model_filter():
 async def test_together_lists_chat_models_from_top_level_array():
     cfg = ProviderConfig(kind="together", model="",
                          base_url="https://api.together.ai/v1", api_key="together-key")
-    provider = agentcli.build_provider(cfg)
+    provider = llm_factory.build_provider(cfg)
     models_json = [
         {"id": "vendor/chat-z", "type": "chat"},
         {"id": "vendor/embed", "type": "embedding"},
@@ -1042,7 +1046,7 @@ async def test_fireworks_412_explains_account_activation():
     cfg = ProviderConfig(kind="fireworks", model="",
                          base_url="https://api.fireworks.ai/inference/v1",
                          api_key="fireworks-key")
-    provider = agentcli.build_provider(cfg)
+    provider = llm_factory.build_provider(cfg)
 
     ok, message = await provider.validate(
         _FakeSession(_FakeResp(412, b"", text_data="account suspended")))
@@ -1057,7 +1061,7 @@ async def test_qwen_404_explains_openai_compatible_endpoint_requirement():
     cfg = ProviderConfig(kind="qwen", model="",
                          base_url="https://dashscope-intl.aliyuncs.com/apps/anthropic",
                          api_key="qwen-key")
-    provider = agentcli.build_provider(cfg)
+    provider = llm_factory.build_provider(cfg)
 
     ok, message = await provider.validate(
         _FakeSession(_FakeResp(404, b"", text_data="not found")))
@@ -1071,7 +1075,7 @@ async def test_qwen_404_explains_openai_compatible_endpoint_requirement():
 async def test_ollama_cloud_uses_bearer_and_v1_path_and_tags_with_auth():
     cfg = ProviderConfig(kind="ollama_cloud", model="gpt-oss:120b",
                          base_url="https://ollama.com", api_key="ok")
-    provider = agentcli.build_provider(cfg)
+    provider = llm_factory.build_provider(cfg)
     assert isinstance(provider, OpenAICompatProvider)
     # Cloud is keyed: Bearer header (local Ollama is keyless, no header).
     assert provider._headers()["Authorization"] == "Bearer ok"
@@ -1112,7 +1116,7 @@ async def test_minimax_validate_soft_accepts_and_list_models_fallback():
 @pytest.mark.asyncio
 async def test_validate_retries_a_transient_connection_failure(monkeypatch):
     from aiohttp import ClientError
-    monkeypatch.setattr(agentcli, "_VALIDATE_RETRY_BACKOFF_SECONDS", 0)
+    monkeypatch.setattr(llm_base, "_VALIDATE_RETRY_BACKOFF_SECONDS", 0)
 
     class _FlakySession:
         """Raises a ClientError (a DNS/connect blip) on its first N get() calls."""
@@ -1139,7 +1143,7 @@ async def test_validate_retries_a_transient_connection_failure(monkeypatch):
     # A persistent failure gives up after the attempt budget with a friendly message.
     sess2 = _FlakySession(99, _FakeResp(200, b""))
     ok2, msg2 = await provider.validate(sess2)
-    assert ok2 is False and sess2.calls == agentcli._VALIDATE_ATTEMPTS
+    assert ok2 is False and sess2.calls == llm_base._VALIDATE_ATTEMPTS
     assert "could not reach" in msg2.lower()
 
     # An auth rejection (a real HTTP status, not a network error) is NOT retried.
@@ -1154,7 +1158,7 @@ def test_filter_gemini_models_strips_prefix_and_drops_non_chat():
         "models/text-embedding-004", "models/gemini-embedding-001", "models/imagen-3.0",
         "models/aqa",
     ]
-    kept = agentcli._filter_gemini_models(raw)
+    kept = llm_provider_openai._filter_gemini_models(raw)
     assert kept == ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-1.5-pro"]
 
 
@@ -1166,25 +1170,25 @@ def test_filter_chatgpt_models_keeps_only_chat_models():
         "whisper-1", "omni-moderation-latest", "gpt-3.5-turbo-instruct",
         "gpt-4o-search-preview",
     ]
-    kept = agentcli._filter_chatgpt_models(raw)
+    kept = llm_provider_openai._filter_chatgpt_models(raw)
     assert kept == ["gpt-4o", "gpt-4o-mini", "gpt-4.1", "o1", "o3-mini", "chatgpt-4o-latest"]
     # If nothing matches (e.g. a proxy with odd names), fall back to the raw list
     # rather than returning an empty dropdown.
-    assert agentcli._filter_chatgpt_models(["weird-model"]) == ["weird-model"]
+    assert llm_provider_openai._filter_chatgpt_models(["weird-model"]) == ["weird-model"]
 
 
 def test_claude_show_thinking_controls_display():
     body: dict = {}
-    agentcli._apply_claude_options(body, {"thinking": True, "show_thinking": True})
+    llm_base._apply_claude_options(body, {"thinking": True, "show_thinking": True})
     assert body["thinking"] == {"type": "adaptive", "display": "summarized"}
     body = {}
-    agentcli._apply_claude_options(body, {"thinking": True, "show_thinking": False})
+    llm_base._apply_claude_options(body, {"thinking": True, "show_thinking": False})
     assert body["thinking"] == {"type": "adaptive", "display": "omitted"}
     body = {}
-    agentcli._apply_claude_options(body, {"thinking": True})  # default: omitted
+    llm_base._apply_claude_options(body, {"thinking": True})  # default: omitted
     assert body["thinking"]["display"] == "omitted"
     body = {}
-    agentcli._apply_claude_options(body, {"thinking": False, "show_thinking": True})
+    llm_base._apply_claude_options(body, {"thinking": False, "show_thinking": True})
     assert "thinking" not in body
 
 
@@ -1202,9 +1206,9 @@ async def test_malformed_tool_args_withhold_the_batch_and_are_handed_back():
     events = await _collect(provider.stream_turn(
         session, system_prompt="s", messages=[], tools=[], options={}))
     # The entire malformed batch is withheld, including its valid call.
-    assert not any(e["type"] in (agentcli.EV_TOOL, agentcli.EV_DONE, agentcli.EV_ERROR) for e in events)
+    assert not any(e["type"] in (llm_base.EV_TOOL, llm_base.EV_DONE, llm_base.EV_ERROR) for e in events)
     invalid = events[-1]
-    assert invalid["type"] == agentcli.EV_INVALID_TOOLS and invalid["code"] == "bad_tool_call"
+    assert invalid["type"] == llm_base.EV_INVALID_TOOLS and invalid["code"] == "bad_tool_call"
     calls = invalid["assistant_msg"]["tool_calls"]
     # Replayed history never carries text a server would fail to parse; the
     # valid sibling keeps its real arguments.
@@ -1213,7 +1217,7 @@ async def test_malformed_tool_args_withhold_the_batch_and_are_handed_back():
     assert set(results) == {"c1", "c2"} and all(r["is_error"] for r in results.values())
     assert "not valid JSON" in results["c1"]["result_text"]
     assert "character 1 of 9" in results["c1"]["result_text"]
-    assert results["c2"]["result_text"] == agentcli._INVALID_BATCH_SIBLING
+    assert results["c2"]["result_text"] == llm_base._INVALID_BATCH_SIBLING
 
 
 @pytest.mark.asyncio
@@ -1231,8 +1235,8 @@ async def test_malformed_tool_args_that_cannot_be_handed_back_stay_terminal(call
     provider = OpenAICompatProvider(ProviderConfig("deepseek", "m", "https://d", "k"))
     events = await _collect(provider.stream_turn(
         _FakeSession(_FakeResp(200, body)), system_prompt="s", messages=[], tools=[], options={}))
-    assert events[-1]["type"] == agentcli.EV_ERROR and events[-1]["code"] == "bad_tool_call"
-    assert not any(e["type"] in (agentcli.EV_TOOL, agentcli.EV_INVALID_TOOLS) for e in events)
+    assert events[-1]["type"] == llm_base.EV_ERROR and events[-1]["code"] == "bad_tool_call"
+    assert not any(e["type"] in (llm_base.EV_TOOL, llm_base.EV_INVALID_TOOLS) for e in events)
 
 
 @pytest.mark.asyncio
@@ -1251,12 +1255,12 @@ async def test_truncated_tool_args_at_output_limit_reports_truncation():
     session = _FakeSession(_FakeResp(200, body))
     events = await _collect(provider.stream_turn(
         session, system_prompt="s", messages=[], tools=[], options={}))
-    err = next(e for e in events if e["type"] == agentcli.EV_ERROR)
+    err = next(e for e in events if e["type"] == llm_base.EV_ERROR)
     assert err["code"] == "tool_call_truncated"
     assert "output length limit" in err["message"]
     # Not retryable: the same request would hit the same cap again.
     assert err["retryable"] is False
-    assert not any(e["type"] == agentcli.EV_TOOL for e in events)
+    assert not any(e["type"] == llm_base.EV_TOOL for e in events)
 
 
 @pytest.mark.asyncio
@@ -1276,14 +1280,14 @@ async def test_tool_args_cut_off_mid_stream_reports_a_dropped_connection():
     session = _FakeSession(_FakeResp(200, body))
     events = await _collect(provider.stream_turn(
         session, system_prompt="s", messages=[], tools=[], options={}))
-    err = next(e for e in events if e["type"] == agentcli.EV_ERROR)
+    err = next(e for e in events if e["type"] == llm_base.EV_ERROR)
     assert err["code"] == "tool_call_cut"
     assert "connection to the model ended" in err["message"]
     # The one retryable member of the family: nothing about the request was
     # wrong, so sending it again is the fix rather than a doomed repeat.
     assert err["retryable"] is True
-    assert not any(e["type"] == agentcli.EV_TOOL for e in events)
-    assert not any(e["type"] == agentcli.EV_DONE for e in events)
+    assert not any(e["type"] == llm_base.EV_TOOL for e in events)
+    assert not any(e["type"] == llm_base.EV_DONE for e in events)
 
 
 @pytest.mark.asyncio
@@ -1302,7 +1306,7 @@ async def test_clean_stream_with_bad_json_is_not_reported_as_a_dropped_connectio
     session = _FakeSession(_FakeResp(200, body))
     events = await _collect(provider.stream_turn(
         session, system_prompt="s", messages=[], tools=[], options={}))
-    assert events[-1]["type"] == agentcli.EV_INVALID_TOOLS
+    assert events[-1]["type"] == llm_base.EV_INVALID_TOOLS
     assert events[-1]["code"] == "bad_tool_call"
 
 
@@ -1350,7 +1354,7 @@ async def test_ollama_500_before_stream_yields_backend_error():
     session = _FakeSession(_FakeResp(500, b"", text_data="unknown tool"))
     events = await _collect(provider.stream_turn(
         session, system_prompt="s", messages=[], tools=[], options={}))
-    assert events[0]["type"] == agentcli.EV_ERROR
+    assert events[0]["type"] == llm_base.EV_ERROR
     assert events[0]["code"] == "ollama_backend"
 
 
@@ -1375,8 +1379,8 @@ def test_tool_list_orders_orientation_tools_first():
     # rest keep source order (stable sort).
     access_key = SimpleNamespace(announce_all_tools=True, pass_through=True)
     data = SimpleNamespace(mesa=None)
-    names = [t["name"] for t in agentcli.build_mcp_tool_list(access_key, data)]
-    priority = list(agentcli._TOOL_PRIORITY)
+    names = [t["name"] for t in tool_catalog.build_mcp_tool_list(access_key, data)]
+    priority = list(tool_catalog._TOOL_PRIORITY)
     assert names[:len(priority)] == priority
     # No duplicates introduced by the reorder.
     assert len(names) == len(set(names))
@@ -1478,7 +1482,7 @@ def test_parse_pending_strict():
         context.update(overrides)
         return _parse_pending(result, **context)
 
-    with patch("custom_components.phoenix_mcp.agentcli.get_approval", return_value=record):
+    with patch_readers("custom_components.phoenix_mcp.approvals.get_approval", return_value=record):
         trusted = parse()
         assert trusted["approval_id"] == "a1"
         assert trusted["review_url"] == "/phoenix-mcp/approvals/a1"
@@ -1490,7 +1494,7 @@ def test_parse_pending_strict():
         assert parse()["approval_id"] == "a1"
         assert parse(dict(pend, isError=True)) is None
         assert parse({"content": [{"type": "text", "text": '{"status":"pending_approval"}'}]}) is None
-    with patch("custom_components.phoenix_mcp.agentcli.get_approval", return_value=None):
+    with patch_readers("custom_components.phoenix_mcp.approvals.get_approval", return_value=None):
         assert parse() is None
 
 
@@ -1508,7 +1512,7 @@ def test_resolved_result_reports_execution_failure_with_the_executor_error():
             "longer matches). Re-read it and reapply your change."
         )}]}, "outcome": "invalid_request"},
     )
-    out = agentcli._resolved_result(STATUS_FAILED, None, approval)
+    out = agent_turn._resolved_result(STATUS_FAILED, None, approval)
     assert out["isError"] is True
     body = json.loads(out["content"][0]["text"])
     assert body["status"] == "execution_failed"
@@ -1524,7 +1528,7 @@ def test_resolved_result_reports_interrupted_execution_as_uncertain_not_rejected
         rejected_reason="execution_interrupted",
         result=None,
     )
-    out = agentcli._resolved_result(STATUS_FAILED, None, approval)
+    out = agent_turn._resolved_result(STATUS_FAILED, None, approval)
     body = json.loads(out["content"][0]["text"])
     assert body["status"] == STATUS_FAILED
     assert "APPROVED" in body["message"]
@@ -1535,14 +1539,14 @@ def test_resolved_result_reports_interrupted_execution_as_uncertain_not_rejected
 def test_resolved_result_admin_rejection_keeps_reason_and_status():
     from types import SimpleNamespace
     approval = SimpleNamespace(rejected_reason="wrong sensor", result=None)
-    out = agentcli._resolved_result("rejected", None, approval)
+    out = agent_turn._resolved_result("rejected", None, approval)
     body = json.loads(out["content"][0]["text"])
     assert body["status"] == "rejected"
     assert "wrong sensor" in body["message"]
     # An admin typing the literal slug as their reason is NOT an execution
     # failure (no stored result): stays a plain rejection.
     slug = SimpleNamespace(rejected_reason="execution_failed", result=None)
-    body2 = json.loads(agentcli._resolved_result("rejected", None, slug)["content"][0]["text"])
+    body2 = json.loads(agent_turn._resolved_result("rejected", None, slug)["content"][0]["text"])
     assert body2["status"] == "rejected"
 
 
@@ -1552,7 +1556,7 @@ def test_resolved_result_approved_carries_operator_accepted_note():
     # on. The approved result must tell it the operator accepted this exact
     # change, appended without mutating the stored record's result.
     applied = {"content": [{"type": "text", "text": '{"saved": true}'}]}
-    out = agentcli._resolved_result(STATUS_APPROVED, applied)
+    out = agent_turn._resolved_result(STATUS_APPROVED, applied)
     assert out["content"][0] == {"type": "text", "text": '{"saved": true}'}
     assert "reviewed this exact change and approved it" in out["content"][1]["text"]
     assert "Do not revise, move, replace, or re-attempt" in out["content"][1]["text"]
@@ -1578,12 +1582,12 @@ def test_scrollback_setting_clamps():
 
 
 def test_clip_display_caps_long_tool_results():
-    from custom_components.phoenix_mcp.const import AGENTCLI_TOOL_RESULT_MAX_CHARS
+    from custom_components.phoenix_mcp.provider_constants import AGENTCLI_TOOL_RESULT_MAX_CHARS
 
     short = "small result"
-    assert agentcli._clip_display(short) == short
+    assert agent_turn._clip_display(short) == short
     big = "x" * (AGENTCLI_TOOL_RESULT_MAX_CHARS + 500)
-    clipped = agentcli._clip_display(big)
+    clipped = agent_turn._clip_display(big)
     assert len(clipped) < len(big)
     assert "truncated" in clipped
 
@@ -1596,7 +1600,7 @@ def test_clip_display_caps_long_tool_results():
 async def test_secret_store_initialization_is_shared_across_concurrent_callers(hass):
     hass.data.pop("_phoenix_agentcli_store", None)
     hass.data.pop("_phoenix_agentcli_store_lock", None)
-    store = agentcli.AgentCliStore(AsyncMock())
+    store = llm_accounts.AgentCliStore(AsyncMock())
     entered = asyncio.Event()
     release = asyncio.Event()
 
@@ -1605,10 +1609,10 @@ async def test_secret_store_initialization_is_shared_across_concurrent_callers(h
         await release.wait()
         return store
 
-    with patch.object(agentcli.AgentCliStore, "async_create", side_effect=create_once) as create:
-        first = asyncio.create_task(agentcli._get_secret_store(hass))
+    with patch.object(llm_accounts.AgentCliStore, "async_create", side_effect=create_once) as create:
+        first = asyncio.create_task(llm_accounts._get_secret_store(hass))
         await entered.wait()
-        second = asyncio.create_task(agentcli._get_secret_store(hass))
+        second = asyncio.create_task(llm_accounts._get_secret_store(hass))
         release.set()
         one, two = await asyncio.gather(first, second)
 
@@ -1629,7 +1633,7 @@ async def test_secret_store_serializes_concurrent_mutations():
                 first_save_entered.set()
                 await release_first_save.wait()
 
-    store = agentcli.AgentCliStore(SavingStore())
+    store = llm_accounts.AgentCliStore(SavingStore())
     first = asyncio.create_task(store.add("claude", {"api_key": "key-one"}))
     await first_save_entered.wait()
     second = asyncio.create_task(store.add("openrouter", {"api_key": "key-two"}))
@@ -1644,7 +1648,7 @@ async def test_secret_store_serializes_concurrent_mutations():
 
 @pytest.mark.asyncio
 async def test_secret_store_instances(hass):
-    store = agentcli.AgentCliStore(AsyncMock())
+    store = llm_accounts.AgentCliStore(AsyncMock())
     c1 = await store.add("claude", {"api_key": "sk-secretw5c4", "model": "claude-opus-4-8"})
     c2 = await store.add("claude", {"api_key": "sk-otherq9r8", "model": "claude-opus-4-8"})
     o1 = await store.add("ollama", {"base_url": "http://192.168.1.44:11434"})
@@ -1677,29 +1681,29 @@ async def test_secret_store_instances(hass):
 
 @pytest.mark.asyncio
 async def test_secret_store_rejects_duplicate_provider_identity():
-    store = agentcli.AgentCliStore(AsyncMock())
+    store = llm_accounts.AgentCliStore(AsyncMock())
     await store.add("ollama", {"base_url": "HTTP://LOCALHOST:11434/", "model": "one"})
 
-    with pytest.raises(agentcli.DuplicateProviderError):
+    with pytest.raises(llm_accounts.DuplicateProviderError):
         await store.add("ollama", {"base_url": "http://localhost:11434", "model": "two"})
 
     # Different endpoints are legitimate separate Ollama accounts.
     await store.add("ollama", {"base_url": "http://other-host:11434", "model": "one"})
 
     await store.add("openrouter", {"api_key": "same-key", "model": "one"})
-    with pytest.raises(agentcli.DuplicateProviderError):
+    with pytest.raises(llm_accounts.DuplicateProviderError):
         await store.add("openrouter", {"api_key": "same-key", "model": "two"})
     await store.add("openrouter", {"api_key": "different-key", "model": "one"})
 
     await store.add("zai", {"api_key": "zai-key", "endpoint_id": "standard"})
     await store.add("zai", {"api_key": "zai-key", "endpoint_id": "coding"})
-    with pytest.raises(agentcli.DuplicateProviderError):
+    with pytest.raises(llm_accounts.DuplicateProviderError):
         await store.add("zai", {"api_key": "zai-key", "endpoint_id": "standard"})
 
     await store.add("qwen", {
         "api_key": "qwen-key", "base_url": "https://workspace.example/v1/",
     })
-    with pytest.raises(agentcli.DuplicateProviderError):
+    with pytest.raises(llm_accounts.DuplicateProviderError):
         await store.add("qwen", {
             "api_key": "qwen-key", "base_url": "https://WORKSPACE.example/v1",
         })
@@ -1718,8 +1722,8 @@ async def test_secret_store_wipe_clears_all_accounts(hass):
         async def async_save(self, d):
             self.saved = d
 
-    with patch("custom_components.phoenix_mcp.agentcli.Store", _FakeHAStore):
-        store = await agentcli.AgentCliStore.async_create(hass)
+    with patch("custom_components.phoenix_mcp.llm.accounts.Store", _FakeHAStore):
+        store = await llm_accounts.AgentCliStore.async_create(hass)
     await store.add("claude", {"api_key": "sk-secretwipe", "model": "claude-opus-4-8"})
     await store.add("ollama", {"base_url": "http://192.168.1.44:11434"})
     decisions = [await store.add(kind, {"api_key": f"wipe-{kind}-key", "model": "decision-model"})
@@ -1737,13 +1741,13 @@ async def test_secret_store_wipe_clears_all_accounts(hass):
 
 @pytest.mark.asyncio
 async def test_wipe_agentcli_secrets_helper(hass):
-    store = agentcli.AgentCliStore(AsyncMock())
+    store = llm_accounts.AgentCliStore(AsyncMock())
     await store.add("claude", {"api_key": "sk-secretwipe2", "model": "claude-opus-4-8"})
-    with patch(
-        "custom_components.phoenix_mcp.agentcli._get_secret_store",
+    with patch_readers(
+        "custom_components.phoenix_mcp.llm.accounts._get_secret_store",
         new=AsyncMock(return_value=store),
     ):
-        await agentcli.async_wipe_agentcli_secrets(hass)
+        await llm_accounts.async_wipe_agentcli_secrets(hass)
     assert store.list_instances() == []
 
 
@@ -1781,7 +1785,7 @@ class _ScriptedProvider:
 
 
 def _done(stop_reason: str) -> dict:
-    return {"type": agentcli.EV_DONE, "stop_reason": stop_reason,
+    return {"type": llm_base.EV_DONE, "stop_reason": stop_reason,
             "assistant_msg": {"role": "assistant", "content": []}}
 
 
@@ -1813,25 +1817,25 @@ def _loop_data():
 def test_conversation_behavior_prompt_presets_preserve_invariants(
     style, phrase, detail, detail_phrase,
 ):
-    prompt = agentcli._conversation_behavior_prompt(style, detail)
+    prompt = agent_turn._conversation_behavior_prompt(style, detail)
     assert phrase in prompt
     assert detail_phrase in prompt
     assert "never change tools, tool arguments" in prompt
     assert "Explicit operator tone or detail instructions override" in prompt
     assert "Suspend humor for failures" in prompt
     assert "even when earlier assistant messages used different" in prompt
-    assert agentcli._HOME_FOCUS_INSTRUCTION not in prompt
+    assert agent_turn._HOME_FOCUS_INSTRUCTION not in prompt
 
 
 def test_direct_concise_prompt_has_concrete_prose_guardrails():
-    prompt = agentcli._conversation_behavior_prompt("direct", "concise")
+    prompt = agent_turn._conversation_behavior_prompt("direct", "concise")
     assert "Do not add praise, encouragement, conversational preambles" in prompt
     assert "three short steps or bullets" in prompt
     assert "Do not add background, a full general workflow" in prompt
 
 
 def test_agentcli_addendum_stops_on_a_contradicted_home_premise():
-    prompt = agentcli._AGENTCLI_ADDENDUM
+    prompt = agent_turn._AGENTCLI_ADDENDUM
     assert "narrowly filtered name-and-domain search" in prompt
     assert "stop the broad investigation" in prompt
     assert "ask one focused clarifying question" in prompt
@@ -1841,7 +1845,7 @@ def test_agentcli_addendum_stops_on_a_contradicted_home_premise():
 
 def test_agentcli_inventory_result_repeats_resource_mismatch_guard_for_model_only():
     original = '{"count": 80, "automations": []}'
-    guided = agentcli._agentcli_add_resource_match_guidance(
+    guided = agent_turn._agentcli_add_resource_match_guidance(
         "list_automations", {}, original,
     )
     assert guided.startswith(original)
@@ -1851,38 +1855,38 @@ def test_agentcli_inventory_result_repeats_resource_mismatch_guard_for_model_onl
 
 def test_agentcli_zero_match_search_repeats_guard_but_positive_result_does_not():
     empty = '{"count": 0, "truncated": false, "entities": []}'
-    guided = agentcli._agentcli_add_resource_match_guidance(
+    guided = agent_turn._agentcli_add_resource_match_guidance(
         "search_entities", {"query": "heating", "domain": "automation"}, empty,
     )
     assert "filtered discovery found no matching entity" in guided
     positive = '{"count": 1, "entities": [{"entity_id": "automation.heating"}]}'
-    assert agentcli._agentcli_add_resource_match_guidance(
+    assert agent_turn._agentcli_add_resource_match_guidance(
         "search_entities", {"query": "heating"}, positive,
     ) == positive
 
 
 def test_agentcli_resource_match_guard_is_not_added_to_unrelated_tool_results():
     original = '{"entries": []}'
-    assert agentcli._agentcli_add_resource_match_guidance(
+    assert agent_turn._agentcli_add_resource_match_guidance(
         "get_logbook", {}, original,
     ) == original
 
 
 def test_conversation_behavior_prompt_includes_exact_home_focus_contract():
-    prompt = agentcli._conversation_behavior_prompt(
+    prompt = agent_turn._conversation_behavior_prompt(
         "direct", "concise", home_focused=True,
     )
-    assert agentcli._HOME_FOCUS_INSTRUCTION in prompt
+    assert agent_turn._HOME_FOCUS_INSTRUCTION in prompt
     assert "must not answer, solve, summarize" in prompt
     assert "short, easy, harmless, or already known" in prompt
 
 
 def test_home_focus_marker_protocol_is_a_final_output_contract():
-    contract = agentcli._home_focus_output_contract(True)
-    assert agentcli._HOME_FOCUS_REFUSAL_MARKER in contract
+    contract = agent_turn._home_focus_output_contract(True)
+    assert agent_turn._HOME_FOCUS_REFUSAL_MARKER in contract
     assert "first characters" in contract
     assert "do not omit" in contract.lower()
-    assert agentcli._home_focus_output_contract(False) == ""
+    assert agent_turn._home_focus_output_contract(False) == ""
 
 
 @pytest.mark.parametrize("assistant_msg", [
@@ -1895,16 +1899,16 @@ def test_home_focus_marker_protocol_is_a_final_output_contract():
     ]},
 ])
 def test_focus_marker_strips_from_provider_message_shapes(assistant_msg):
-    cleaned, declined = agentcli._strip_focus_marker_message(assistant_msg)
+    cleaned, declined = agent_turn._strip_focus_marker_message(assistant_msg)
     assert declined is True
-    assert agentcli._HOME_FOCUS_REFUSAL_MARKER not in json.dumps(cleaned)
+    assert agent_turn._HOME_FOCUS_REFUSAL_MARKER not in json.dumps(cleaned)
     assert "No." in json.dumps(cleaned)
 
 
 @pytest.mark.parametrize("ending", ["", "  ", "\n"])
 def test_focus_prefix_buffer_never_exposes_a_marker_only_stream(ending):
-    focus = agentcli._FocusPrefixBuffer(enabled=True)
-    assert focus.feed(agentcli._HOME_FOCUS_REFUSAL_MARKER + ending) == ""
+    focus = agent_turn._FocusPrefixBuffer(enabled=True)
+    assert focus.feed(agent_turn._HOME_FOCUS_REFUSAL_MARKER + ending) == ""
     assert focus.finish() == ""
     assert focus.declined is True
 
@@ -1918,17 +1922,17 @@ def test_focus_prefix_buffer_never_exposes_a_marker_only_stream(ending):
     ["PHXFOCUS:", "  ", "Outside this home."],
 ])
 def test_focus_prefix_buffer_strips_a_marker_in_a_long_first_chunk(chunks):
-    focus = agentcli._FocusPrefixBuffer(enabled=True)
+    focus = agent_turn._FocusPrefixBuffer(enabled=True)
     visible = "".join(focus.feed(chunk) for chunk in chunks) + focus.finish()
     assert focus.declined is True
-    assert agentcli._HOME_FOCUS_REFUSAL_MARKER not in visible
+    assert agent_turn._HOME_FOCUS_REFUSAL_MARKER not in visible
     assert visible.strip()
 
 
 def test_focus_prefix_buffer_releases_ordinary_text_unchanged():
     long_text = "Your porch light is on and the back door is locked. " * 3
     for chunks in ([long_text], ["Your", " porch light is on."], [" " * 100, "Hello"]):
-        focus = agentcli._FocusPrefixBuffer(enabled=True)
+        focus = agent_turn._FocusPrefixBuffer(enabled=True)
         visible = "".join(focus.feed(chunk) for chunk in chunks) + focus.finish()
         assert visible == "".join(chunks)
         assert focus.declined is False
@@ -1936,13 +1940,13 @@ def test_focus_prefix_buffer_releases_ordinary_text_unchanged():
 
 @pytest.mark.asyncio
 async def test_focus_marker_split_chunks_is_hidden_signaled_and_not_persisted(hass):
-    marker = agentcli._HOME_FOCUS_REFUSAL_MARKER
+    marker = agent_turn._HOME_FOCUS_REFUSAL_MARKER
     assistant = {"role": "assistant", "content": marker + " This is Home-focused."}
     provider = _ScriptedProvider([[
-        {"type": agentcli.EV_TEXT, "text": "  " + marker[:12]},
-        {"type": agentcli.EV_TEXT, "text": marker[12:] + " This is "},
-        {"type": agentcli.EV_TEXT, "text": "Home-focused."},
-        {"type": agentcli.EV_DONE, "stop_reason": "end_turn", "assistant_msg": assistant},
+        {"type": llm_base.EV_TEXT, "text": "  " + marker[:12]},
+        {"type": llm_base.EV_TEXT, "text": marker[12:] + " This is "},
+        {"type": llm_base.EV_TEXT, "text": "Home-focused."},
+        {"type": llm_base.EV_DONE, "stop_reason": "end_turn", "assistant_msg": assistant},
     ]])
     events: list[tuple[str, dict]] = []
 
@@ -1950,8 +1954,8 @@ async def test_focus_marker_split_chunks_is_hidden_signaled_and_not_persisted(ha
         events.append((name, payload))
 
     access_key = MagicMock(id="tid")
-    with patch("custom_components.phoenix_mcp.agentcli.build_mcp_tool_list", return_value=[]), \
-         patch("custom_components.phoenix_mcp.mcp_view._build_instructions", return_value="sys"):
+    with patch_readers("custom_components.phoenix_mcp.tool_catalog.build_mcp_tool_list", return_value=[]), \
+         patch_readers("custom_components.phoenix_mcp.tool_dispatch._build_instructions", return_value="sys"):
         messages = await async_run_agent_turn(
             hass=hass, data=_loop_data(), access_key=access_key, provider=provider,
             session=MagicMock(), messages=[{"role": "user", "content": "sort this"}],
@@ -1986,9 +1990,9 @@ async def test_run_agent_turn_uses_home_assistant_timezone_silently(
     )
 
     catalog = [{"name": "GetDateTime"}, {"name": "get_logbook"}]
-    with patch("custom_components.phoenix_mcp.agentcli.build_mcp_tool_list", return_value=catalog), \
-         patch("custom_components.phoenix_mcp.mcp_view._build_instructions", return_value="sys"), \
-         patch("custom_components.phoenix_mcp.agentcli.dt_util.now", return_value=local_now):
+    with patch_readers("custom_components.phoenix_mcp.tool_catalog.build_mcp_tool_list", return_value=catalog), \
+         patch_readers("custom_components.phoenix_mcp.tool_dispatch._build_instructions", return_value="sys"), \
+         patch("custom_components.phoenix_mcp.llm.base.dt_util.now", return_value=local_now):
         stored = await async_run_agent_turn(
             hass=hass, data=data, access_key=MagicMock(), provider=provider,
             session=MagicMock(), messages=[{"role": "user", "content": "What happened?"}], options={},
@@ -2004,9 +2008,9 @@ async def test_run_agent_turn_uses_home_assistant_timezone_silently(
     assert [tool["name"] for tool in provider.tool_catalogs[0]] == ["get_logbook"]
     # The clock changes every turn, so it stays out of the cached system prompt
     # and rides on the operator's message in the request copy only.
-    assert "2026-08-13 11:26" not in prompt and agentcli._TIME_CONTEXT_LEAD not in prompt
+    assert "2026-08-13 11:26" not in prompt and agent_turn._TIME_CONTEXT_LEAD not in prompt
     sent = provider.sent_messages[0][-1]["content"]
-    assert sent.startswith("What happened?" + agentcli._TIME_CONTEXT_LEAD)
+    assert sent.startswith("What happened?" + agent_turn._TIME_CONTEXT_LEAD)
     assert zone in sent and offset_label in sent and "2026-08-13 11:26" in sent
     assert stored[0] == {"role": "user", "content": "What happened?"}
 
@@ -2020,7 +2024,7 @@ def test_agentcli_adds_local_companions_without_changing_canonical_timestamps():
         "entries": [{"when": 1786659257.0, "name": "Bedroom AC"}],
     }
 
-    augmented = json.loads(agentcli._agentcli_add_local_time_fields(
+    augmented = json.loads(agent_turn._agentcli_add_local_time_fields(
         "get_logbook", json.dumps(payload), timezone(timedelta(hours=7)),
     ))
 
@@ -2031,7 +2035,7 @@ def test_agentcli_adds_local_companions_without_changing_canonical_timestamps():
     assert augmented["entries"][0]["when"] == 1786659257.0
     assert augmented["entries"][0]["when_local"] == "2026-08-14T05:14:17+07:00"
 
-    history = json.loads(agentcli._agentcli_add_local_time_fields(
+    history = json.loads(agent_turn._agentcli_add_local_time_fields(
         "get_history",
         '{"requested_range":{"start":"2026-08-13T22:00:00+00:00"},'
         '"next_cursor":"2026-08-13T22:30:00+00:00"}',
@@ -2047,7 +2051,7 @@ def test_agentcli_adds_local_companions_without_changing_canonical_timestamps():
 def test_agentcli_leaves_non_temporal_tool_results_unchanged():
     text = '{"timestamp":"2026-08-13T22:14:17+00:00"}'
 
-    assert agentcli._agentcli_add_local_time_fields(
+    assert agent_turn._agentcli_add_local_time_fields(
         "read_config", text, timezone(timedelta(hours=7)),
     ) == text
 
@@ -2065,15 +2069,15 @@ def test_agentcli_passes_wall_times_and_rejects_shifted_ones(tool, first, second
     # passes it unchanged and refuses only an offset the model invented.
     local_tz = timezone(timedelta(hours=7))
 
-    assert agentcli._agentcli_time_arg_error(
+    assert agent_turn._agentcli_time_arg_error(
         tool, {first: "2026-08-14T05:00:00", second: "2h"}, local_tz,
     ) is None
-    error = agentcli._agentcli_time_arg_error(tool, {first: "2026-08-13T22:00:00Z"}, local_tz)
+    error = agent_turn._agentcli_time_arg_error(tool, {first: "2026-08-13T22:00:00Z"}, local_tz)
     assert "without a timezone suffix" in str(error)
 
     # A _local value sent back is already in the home zone: the exact instant.
     echoed = {first: "2026-08-14T05:14:17.250000+07:00", second: "2026-08-14T06:00:00+07:00"}
-    assert agentcli._agentcli_time_arg_error(tool, echoed, local_tz) is None
+    assert agent_turn._agentcli_time_arg_error(tool, echoed, local_tz) is None
 
 
 def test_agentcli_accepts_the_home_offset_of_each_instant_across_daylight_saving():
@@ -2082,24 +2086,24 @@ def test_agentcli_accepts_the_home_offset_of_each_instant_across_daylight_saving
     local_tz = ZoneInfo("America/Los_Angeles")
     for value, accepted in (("2026-07-01T05:00:00-07:00", True), ("2026-01-01T05:00:00-08:00", True),
                             ("2026-07-01T05:00:00-08:00", False), ("2026-01-01T05:00:00-07:00", False)):
-        error = agentcli._agentcli_time_arg_error("get_logbook", {"start_time": value}, local_tz)
+        error = agent_turn._agentcli_time_arg_error("get_logbook", {"start_time": value}, local_tz)
         assert (error is None) is accepted, value
 
 
 def test_agentcli_states_the_logbook_resume_time_locally_so_it_can_be_sent_back():
     local_tz = timezone(timedelta(hours=7))
     text = json.dumps({"entries": [], "older_end_time": "2026-08-13T22:14:17.250000+00:00"})
-    augmented = json.loads(agentcli._agentcli_add_local_time_fields("get_logbook", text, local_tz))
+    augmented = json.loads(agent_turn._agentcli_add_local_time_fields("get_logbook", text, local_tz))
     assert augmented["older_end_time"] == "2026-08-14T05:14:17.250000+07:00"
     assert "older_end_time_local" not in augmented
-    assert agentcli._agentcli_time_arg_error(
+    assert agent_turn._agentcli_time_arg_error(
         "get_logbook", {"end_time": augmented["older_end_time"]}, local_tz,
     ) is None
 
 
 def test_every_absolute_time_a_read_takes_follows_the_agent_chat_wall_time_rule():
     """A new read tool time parameter must join the table or be named here with its reason."""
-    from tests.test_mcp_tool_catalog import _all_defs
+    from tests.runtime_fixtures import all_tool_defs as _all_defs
 
     # Calendar reads already take a naive time as local and keep the offsets events carry.
     exempt = {("get_calendar_events", "start_time"), ("get_calendar_events", "end_time")}
@@ -2111,10 +2115,10 @@ def test_every_absolute_time_a_read_takes_follows_the_agent_chat_wall_time_rule(
             description = schema.get("description", "") if isinstance(schema, dict) else ""
             if "ISO" in description and "next_cursor" not in description:
                 taken.add((definition["name"], name))
-    covered = {(tool, field) for tool, fields in agentcli._AGENTCLI_LOCAL_QUERY_FIELDS.items() for field in fields}
+    covered = {(tool, field) for tool, fields in agent_turn._AGENTCLI_LOCAL_QUERY_FIELDS.items() for field in fields}
     assert taken - exempt == covered
-    prompt = agentcli._agentcli_time_guidance()
-    assert all(tool in prompt for tool in agentcli._AGENTCLI_LOCAL_QUERY_FIELDS)
+    prompt = agent_turn._agentcli_time_guidance()
+    assert all(tool in prompt for tool in agent_turn._AGENTCLI_LOCAL_QUERY_FIELDS)
 
 
 def test_agentcli_adds_local_companions_to_log_occurrences():
@@ -2122,7 +2126,7 @@ def test_agentcli_adds_local_companions_to_log_occurrences():
                        "filters": {"since": "2026-08-13T21:00:00+00:00"},
                        "entries": [{"first_occurred": "2026-08-13T22:00:00+00:00"}]})
     for tool in ("get_logs", "get_phoenix_diagnostics"):
-        augmented = json.loads(agentcli._agentcli_add_local_time_fields(tool, text, timezone(timedelta(hours=7))))
+        augmented = json.loads(agent_turn._agentcli_add_local_time_fields(tool, text, timezone(timedelta(hours=7))))
         assert augmented["source"]["latest_occurred"] == "2026-08-13T22:14:17+00:00"
         assert augmented["source"]["latest_occurred_local"] == "2026-08-14T05:14:17+07:00"
         assert augmented["source"]["read_at_local"] == "2026-08-14T06:00:00+07:00"
@@ -2133,9 +2137,9 @@ def test_agentcli_adds_local_companions_to_log_occurrences():
 @pytest.mark.asyncio
 async def test_run_agent_turn_read_tool(hass):
     provider = _ScriptedProvider([
-        [{"type": agentcli.EV_TOOL, "id": "tu1", "name": "get_state", "input": {"entity_id": "light.x"}},
+        [{"type": llm_base.EV_TOOL, "id": "tu1", "name": "get_state", "input": {"entity_id": "light.x"}},
          _done("tool_use")],
-        [{"type": agentcli.EV_TEXT, "text": "It is on."}, _done("end_turn")],
+        [{"type": llm_base.EV_TEXT, "text": "It is on."}, _done("end_turn")],
     ])
     data = _loop_data()
     tool_result = {"content": [{"type": "text", "text": "on"}]}
@@ -2145,9 +2149,9 @@ async def test_run_agent_turn_read_tool(hass):
     async def emit(name, payload):
         events.append((name, payload))
 
-    with patch("custom_components.phoenix_mcp.agentcli.build_mcp_tool_list", return_value=[]), \
-         patch("custom_components.phoenix_mcp.mcp_view._build_instructions", return_value="sys"), \
-         patch("custom_components.phoenix_mcp.mcp_view._dispatch_mcp", fake_dispatch):
+    with patch_readers("custom_components.phoenix_mcp.tool_catalog.build_mcp_tool_list", return_value=[]), \
+         patch_readers("custom_components.phoenix_mcp.tool_dispatch._build_instructions", return_value="sys"), \
+         patch_readers("custom_components.phoenix_mcp.tool_dispatch._dispatch_mcp", fake_dispatch):
         await async_run_agent_turn(
             hass=hass, data=data, access_key=MagicMock(), provider=provider,
             session=MagicMock(), messages=[], options={}, client_ip="agentcli",
@@ -2166,18 +2170,18 @@ async def test_run_agent_turn_read_tool(hass):
 async def test_the_next_turn_resends_earlier_history_unchanged(hass):
     """A prompt cache is a prefix: the time note must not alter history a later turn re-sends."""
     provider = _ScriptedProvider([
-        [{"type": agentcli.EV_TOOL, "id": "tu1", "name": "get_state", "input": {"entity_id": "light.x"}},
+        [{"type": llm_base.EV_TOOL, "id": "tu1", "name": "get_state", "input": {"entity_id": "light.x"}},
          _done("tool_use")],
-        [{"type": agentcli.EV_TEXT, "text": "It is on."}, _done("end_turn")],
-        [{"type": agentcli.EV_TEXT, "text": "Yes."}, _done("end_turn")],
+        [{"type": llm_base.EV_TEXT, "text": "It is on."}, _done("end_turn")],
+        [{"type": llm_base.EV_TEXT, "text": "Yes."}, _done("end_turn")],
     ])
     data = _loop_data()
     fake_dispatch = AsyncMock(return_value=({"result": {"content": [{"type": "text", "text": "on"}]}}, "m", "r", "allowed"))
     clock = [datetime(2026, 8, 13, 11, 26, tzinfo=timezone.utc)]
-    with patch("custom_components.phoenix_mcp.agentcli.build_mcp_tool_list", return_value=[]), \
-         patch("custom_components.phoenix_mcp.mcp_view._build_instructions", return_value="sys"), \
-         patch("custom_components.phoenix_mcp.mcp_view._dispatch_mcp", fake_dispatch), \
-         patch("custom_components.phoenix_mcp.agentcli.dt_util.now", side_effect=lambda: clock[0]):
+    with patch_readers("custom_components.phoenix_mcp.tool_catalog.build_mcp_tool_list", return_value=[]), \
+         patch_readers("custom_components.phoenix_mcp.tool_dispatch._build_instructions", return_value="sys"), \
+         patch_readers("custom_components.phoenix_mcp.tool_dispatch._dispatch_mcp", fake_dispatch), \
+         patch("custom_components.phoenix_mcp.llm.base.dt_util.now", side_effect=lambda: clock[0]):
         messages = [{"role": "user", "content": "Is the light on?"}]
         for text in (None, "Still?"):
             if text is not None:
@@ -2195,32 +2199,32 @@ async def test_the_next_turn_resends_earlier_history_unchanged(hass):
     assert "11:26" in first[0]["content"]
     # The next turn re-sends the stored history byte for byte and stamps only its own message.
     assert third[:-1] == messages[:4] and third[0] == {"role": "user", "content": "Is the light on?"}
-    assert third[-1]["content"].startswith("Still?" + agentcli._TIME_CONTEXT_LEAD) and "11:27" in third[-1]["content"]
+    assert third[-1]["content"].startswith("Still?" + agent_turn._TIME_CONTEXT_LEAD) and "11:27" in third[-1]["content"]
     assert len(set(provider.system_prompts)) == 1
-    assert all(agentcli._TIME_CONTEXT_LEAD not in json.dumps(message) for message in messages)
+    assert all(agent_turn._TIME_CONTEXT_LEAD not in json.dumps(message) for message in messages)
 
 
 def test_the_time_note_skips_tool_results_and_joins_block_content():
     tool_results = {"role": "user", "content": [{"type": "tool_result", "tool_use_id": "t1", "content": "on"}]}
     image = {"role": "user", "content": [{"type": "image", "source": {}}, {"type": "text", "text": "What is this?"}]}
     messages = [image, {"role": "assistant", "content": [{"type": "tool_use", "id": "t1"}]}, tool_results]
-    assert agentcli._operator_message_index(messages) == 0
-    assert agentcli._operator_message_index([tool_results]) is None
-    stamped = agentcli._with_time_context(messages, 0, agentcli._TIME_CONTEXT_LEAD + "UTC (UTC).]")
+    assert llm_base._operator_message_index(messages) == 0
+    assert llm_base._operator_message_index([tool_results]) is None
+    stamped = agent_turn._with_time_context(messages, 0, agent_turn._TIME_CONTEXT_LEAD + "UTC (UTC).]")
     assert stamped[0]["content"][:2] == image["content"]
-    assert stamped[0]["content"][2] == {"type": "text", "text": agentcli._TIME_CONTEXT_LEAD.lstrip("\n") + "UTC (UTC).]"}
+    assert stamped[0]["content"][2] == {"type": "text", "text": agent_turn._TIME_CONTEXT_LEAD.lstrip("\n") + "UTC (UTC).]"}
     assert stamped[1:] == messages[1:] and len(image["content"]) == 2
 
 
 @pytest.mark.asyncio
 async def test_run_agent_turn_adds_logbook_local_companions_before_model_sees_it(hass):
     provider = _ScriptedProvider([
-        [{"type": agentcli.EV_TOOL, "id": "tu1", "name": "get_logbook", "input": {
+        [{"type": llm_base.EV_TOOL, "id": "tu1", "name": "get_logbook", "input": {
             "start_time": "2026-08-14T05:00:00",
             "end_time": "2026-08-14T06:00:00",
         }},
          _done("tool_use")],
-        [{"type": agentcli.EV_TEXT, "text": "The AC turned off at 05:14."},
+        [{"type": llm_base.EV_TEXT, "text": "The AC turned off at 05:14."},
          _done("end_turn")],
     ])
     data = _loop_data()
@@ -2243,10 +2247,10 @@ async def test_run_agent_turn_adds_logbook_local_companions_before_model_sees_it
     local_now = datetime(
         2026, 8, 14, 11, 26, tzinfo=timezone(timedelta(hours=7)),
     )
-    with patch("custom_components.phoenix_mcp.agentcli.build_mcp_tool_list", return_value=[]), \
-         patch("custom_components.phoenix_mcp.mcp_view._build_instructions", return_value="sys"), \
-         patch("custom_components.phoenix_mcp.mcp_view._dispatch_mcp", fake_dispatch), \
-         patch("custom_components.phoenix_mcp.agentcli.dt_util.now", return_value=local_now):
+    with patch_readers("custom_components.phoenix_mcp.tool_catalog.build_mcp_tool_list", return_value=[]), \
+         patch_readers("custom_components.phoenix_mcp.tool_dispatch._build_instructions", return_value="sys"), \
+         patch_readers("custom_components.phoenix_mcp.tool_dispatch._dispatch_mcp", fake_dispatch), \
+         patch("custom_components.phoenix_mcp.llm.base.dt_util.now", return_value=local_now):
         messages = await async_run_agent_turn(
             hass=hass, data=data, access_key=MagicMock(), provider=provider,
             session=MagicMock(), messages=[], options={}, client_ip="agentcli",
@@ -2278,11 +2282,11 @@ async def test_run_agent_turn_repeated_rejections_stay_iteration_friendly(hass):
     # rejection's feedback must present the reason as direction, and no rejection
     # count may escalate to a stop order.
     provider = _ScriptedProvider([
-        [{"type": agentcli.EV_TOOL, "id": "tu1", "name": "add_dashboard_card", "input": {}},
+        [{"type": llm_base.EV_TOOL, "id": "tu1", "name": "add_dashboard_card", "input": {}},
          _done("tool_use")],
-        [{"type": agentcli.EV_TOOL, "id": "tu2", "name": "add_dashboard_card", "input": {}},
+        [{"type": llm_base.EV_TOOL, "id": "tu2", "name": "add_dashboard_card", "input": {}},
          _done("tool_use")],
-        [{"type": agentcli.EV_TEXT, "text": "Here is the revised card."}, _done("end_turn")],
+        [{"type": llm_base.EV_TEXT, "text": "Here is the revised card."}, _done("end_turn")],
     ])
     data = _loop_data()
     pending_result = {"content": [{"type": "text", "text": json.dumps(
@@ -2296,14 +2300,14 @@ async def test_run_agent_turn_repeated_rejections_stay_iteration_friendly(hass):
     async def emit(name, payload):
         events.append((name, payload))
 
-    with patch("custom_components.phoenix_mcp.agentcli.build_mcp_tool_list", return_value=[]), \
-        patch("custom_components.phoenix_mcp.mcp_view._build_instructions", return_value="sys"), \
-        patch("custom_components.phoenix_mcp.mcp_view._dispatch_mcp", fake_dispatch), \
-        patch("custom_components.phoenix_mcp.agentcli._parse_pending", return_value={
+    with patch_readers("custom_components.phoenix_mcp.tool_catalog.build_mcp_tool_list", return_value=[]), \
+        patch_readers("custom_components.phoenix_mcp.tool_dispatch._build_instructions", return_value="sys"), \
+        patch_readers("custom_components.phoenix_mcp.tool_dispatch._dispatch_mcp", fake_dispatch), \
+        patch("custom_components.phoenix_mcp.agent_turn._parse_pending", return_value={
             "approval_id": "ap1", "review_url": "/phoenix-mcp/approvals/ap1",
             "expires_at": None, "record": rejected_record,
         }), \
-        patch("custom_components.phoenix_mcp.agentcli.get_approval", return_value=rejected_record):
+        patch_readers("custom_components.phoenix_mcp.approvals.get_approval", return_value=rejected_record):
         task = hass.async_create_task(async_run_agent_turn(
             hass=hass, data=data, access_key=MagicMock(), provider=provider,
             session=MagicMock(), messages=[], options={}, client_ip="agentcli",
@@ -2326,7 +2330,7 @@ async def test_run_agent_turn_repeated_rejections_stay_iteration_friendly(hass):
 
 def test_resolved_result_reasonless_rejection_asks_instead_of_retrying():
     from types import SimpleNamespace
-    out = agentcli._resolved_result(
+    out = agent_turn._resolved_result(
         "rejected", None, SimpleNamespace(rejected_reason=None, result=None))
     body = json.loads(out["content"][0]["text"])
     assert body["status"] == "rejected"
@@ -2340,12 +2344,12 @@ async def test_run_agent_turn_emits_turn_cumulative_usage(hass):
     # calls and emits SSE "usage" with turn-cumulative totals plus the newest
     # call's input tokens as the context size.
     provider = _ScriptedProvider([
-        [{"type": agentcli.EV_USAGE, "input_tokens": 1000, "output_tokens": 5},
-         {"type": agentcli.EV_USAGE, "input_tokens": 1000, "output_tokens": 50},
-         {"type": agentcli.EV_TOOL, "id": "tu1", "name": "get_state", "input": {}},
+        [{"type": llm_base.EV_USAGE, "input_tokens": 1000, "output_tokens": 5},
+         {"type": llm_base.EV_USAGE, "input_tokens": 1000, "output_tokens": 50},
+         {"type": llm_base.EV_TOOL, "id": "tu1", "name": "get_state", "input": {}},
          _done("tool_use")],
-        [{"type": agentcli.EV_USAGE, "input_tokens": 1600, "output_tokens": 30},
-         {"type": agentcli.EV_TEXT, "text": "Done."}, _done("end_turn")],
+        [{"type": llm_base.EV_USAGE, "input_tokens": 1600, "output_tokens": 30},
+         {"type": llm_base.EV_TEXT, "text": "Done."}, _done("end_turn")],
     ])
     data = _loop_data()
     ok_result = {"content": [{"type": "text", "text": "on"}]}
@@ -2355,9 +2359,9 @@ async def test_run_agent_turn_emits_turn_cumulative_usage(hass):
     async def emit(name, payload):
         events.append((name, payload))
 
-    with patch("custom_components.phoenix_mcp.agentcli.build_mcp_tool_list", return_value=[]), \
-         patch("custom_components.phoenix_mcp.mcp_view._build_instructions", return_value="sys"), \
-         patch("custom_components.phoenix_mcp.mcp_view._dispatch_mcp", fake_dispatch):
+    with patch_readers("custom_components.phoenix_mcp.tool_catalog.build_mcp_tool_list", return_value=[]), \
+         patch_readers("custom_components.phoenix_mcp.tool_dispatch._build_instructions", return_value="sys"), \
+         patch_readers("custom_components.phoenix_mcp.tool_dispatch._dispatch_mcp", fake_dispatch):
         await async_run_agent_turn(
             hass=hass, data=data, access_key=MagicMock(), provider=provider,
             session=MagicMock(), messages=[], options={}, client_ip="agentcli",
@@ -2376,9 +2380,9 @@ async def test_run_agent_turn_emits_turn_cumulative_usage(hass):
 @pytest.mark.parametrize("approval_status", [STATUS_APPROVED, STATUS_FAILED])
 async def test_run_agent_turn_inline_approval_resume(hass, approval_status):
     provider = _ScriptedProvider([
-        [{"type": agentcli.EV_TOOL, "id": "tu1", "name": "call_service", "input": {}},
+        [{"type": llm_base.EV_TOOL, "id": "tu1", "name": "call_service", "input": {}},
          _done("tool_use")],
-        [{"type": agentcli.EV_TEXT, "text": "Done."}, _done("end_turn")],
+        [{"type": llm_base.EV_TEXT, "text": "Done."}, _done("end_turn")],
     ])
     data = _loop_data()
     pending_result = {"content": [{"type": "text", "text": json.dumps(
@@ -2394,14 +2398,14 @@ async def test_run_agent_turn_inline_approval_resume(hass, approval_status):
     async def emit(name, payload):
         events.append((name, payload))
 
-    with patch("custom_components.phoenix_mcp.agentcli.build_mcp_tool_list", return_value=[]), \
-        patch("custom_components.phoenix_mcp.mcp_view._build_instructions", return_value="sys"), \
-        patch("custom_components.phoenix_mcp.mcp_view._dispatch_mcp", fake_dispatch), \
-        patch("custom_components.phoenix_mcp.agentcli._parse_pending", return_value={
+    with patch_readers("custom_components.phoenix_mcp.tool_catalog.build_mcp_tool_list", return_value=[]), \
+        patch_readers("custom_components.phoenix_mcp.tool_dispatch._build_instructions", return_value="sys"), \
+        patch_readers("custom_components.phoenix_mcp.tool_dispatch._dispatch_mcp", fake_dispatch), \
+        patch("custom_components.phoenix_mcp.agent_turn._parse_pending", return_value={
             "approval_id": "ap1", "review_url": "/phoenix-mcp/approvals/ap1",
             "expires_at": None, "record": approved_record,
         }), \
-        patch("custom_components.phoenix_mcp.agentcli.get_approval", return_value=approved_record):
+        patch_readers("custom_components.phoenix_mcp.approvals.get_approval", return_value=approved_record):
         task = hass.async_create_task(async_run_agent_turn(
             hass=hass, data=data, access_key=MagicMock(), provider=provider,
             session=MagicMock(), messages=[], options={}, client_ip="agentcli",
@@ -2424,7 +2428,7 @@ async def test_run_agent_turn_inline_approval_resume(hass, approval_status):
         returned = next(p["messages"] for n, p in events if n == "messages")
         assert returned[-1]["tool_results"] == [{
             "tool_use_id": "tu1", "tool_name": "call_service",
-            "result_text": agentcli._UNKNOWN_OUTCOME_RESULT, "is_error": True,
+            "result_text": agent_turn._UNKNOWN_OUTCOME_RESULT, "is_error": True,
         }]
         return
     # The executed result flows back to the transcript as the tool_result summary,
@@ -2449,7 +2453,7 @@ class _ClaudeShapedProvider(_ScriptedProvider):
 
 def _tool_use_done(*calls: tuple[str, str]) -> dict:
     """A tool_use stop whose assistant message carries the calls as Anthropic blocks."""
-    return {"type": agentcli.EV_DONE, "stop_reason": "tool_use", "assistant_msg": {
+    return {"type": llm_base.EV_DONE, "stop_reason": "tool_use", "assistant_msg": {
         "role": "assistant",
         "content": [{"type": "tool_use", "id": call_id, "name": name, "input": {}} for call_id, name in calls],
     }}
@@ -2476,9 +2480,9 @@ async def test_unknown_outcome_answers_every_call_in_the_round(hass):
     # never starts. The turn ends there, but the conversation handed back to the
     # browser answers all three, so the next turn is not refused by the provider.
     provider = _ClaudeShapedProvider([[
-        {"type": agentcli.EV_TOOL, "id": "tu1", "name": "get_state", "input": {}},
-        {"type": agentcli.EV_TOOL, "id": "tu2", "name": "call_service", "input": {}},
-        {"type": agentcli.EV_TOOL, "id": "tu3", "name": "call_service", "input": {}},
+        {"type": llm_base.EV_TOOL, "id": "tu1", "name": "get_state", "input": {}},
+        {"type": llm_base.EV_TOOL, "id": "tu2", "name": "call_service", "input": {}},
+        {"type": llm_base.EV_TOOL, "id": "tu3", "name": "call_service", "input": {}},
         _tool_use_done(("tu1", "get_state"), ("tu2", "call_service"), ("tu3", "call_service")),
     ]])
     data = _loop_data()
@@ -2495,9 +2499,9 @@ async def test_unknown_outcome_answers_every_call_in_the_round(hass):
     async def emit(name, payload):
         events.append((name, payload))
 
-    with patch("custom_components.phoenix_mcp.agentcli.build_mcp_tool_list", return_value=[]), \
-        patch("custom_components.phoenix_mcp.mcp_view._build_instructions", return_value="sys"), \
-        patch("custom_components.phoenix_mcp.mcp_view._dispatch_mcp", fake_dispatch):
+    with patch_readers("custom_components.phoenix_mcp.tool_catalog.build_mcp_tool_list", return_value=[]), \
+        patch_readers("custom_components.phoenix_mcp.tool_dispatch._build_instructions", return_value="sys"), \
+        patch_readers("custom_components.phoenix_mcp.tool_dispatch._dispatch_mcp", fake_dispatch):
         await async_run_agent_turn(
             hass=hass, data=data, access_key=MagicMock(), provider=provider,
             session=MagicMock(), messages=[{"role": "user", "content": "go"}], options={},
@@ -2512,8 +2516,8 @@ async def test_unknown_outcome_answers_every_call_in_the_round(hass):
     assert _unanswered_tool_uses(returned) == []
     answers = {block["tool_use_id"]: block for block in returned[-1]["content"]}
     assert answers["tu1"]["content"][0]["text"] == "on" and "is_error" not in answers["tu1"]
-    assert answers["tu2"]["content"][0]["text"] == agentcli._UNKNOWN_OUTCOME_RESULT
-    assert answers["tu3"]["content"][0]["text"] == agentcli._NOT_RUN_AFTER_UNKNOWN
+    assert answers["tu2"]["content"][0]["text"] == agent_turn._UNKNOWN_OUTCOME_RESULT
+    assert answers["tu3"]["content"][0]["text"] == agent_turn._NOT_RUN_AFTER_UNKNOWN
     assert answers["tu2"]["is_error"] is answers["tu3"]["is_error"] is True
     assert events[-1] == ("done", {"stop_reason": "error"})
 
@@ -2527,9 +2531,9 @@ async def test_a_refusal_before_writing_returns_to_the_model(hass, marked):
     from custom_components.phoenix_mcp.tool_common import _tool_error, _tool_refused_before_write
 
     provider = _ClaudeShapedProvider([
-        [{"type": agentcli.EV_TOOL, "id": "tu1", "name": "edit_dashboard_card", "input": {}},
+        [{"type": llm_base.EV_TOOL, "id": "tu1", "name": "edit_dashboard_card", "input": {}},
          _tool_use_done(("tu1", "edit_dashboard_card"))],
-        [{"type": agentcli.EV_TEXT, "text": "Re-reading."}, _done("end_turn")],
+        [{"type": llm_base.EV_TEXT, "text": "Re-reading."}, _done("end_turn")],
     ])
     data = _loop_data()
     stale = "This configuration changed since you last read it (expected_hash no longer matches)."
@@ -2540,9 +2544,9 @@ async def test_a_refusal_before_writing_returns_to_the_model(hass, marked):
     async def emit(name, payload):
         events.append((name, payload))
 
-    with patch("custom_components.phoenix_mcp.agentcli.build_mcp_tool_list", return_value=[]), \
-        patch("custom_components.phoenix_mcp.mcp_view._build_instructions", return_value="sys"), \
-        patch("custom_components.phoenix_mcp.mcp_view._dispatch_mcp", fake_dispatch):
+    with patch_readers("custom_components.phoenix_mcp.tool_catalog.build_mcp_tool_list", return_value=[]), \
+        patch_readers("custom_components.phoenix_mcp.tool_dispatch._build_instructions", return_value="sys"), \
+        patch_readers("custom_components.phoenix_mcp.tool_dispatch._dispatch_mcp", fake_dispatch):
         await async_run_agent_turn(
             hass=hass, data=data, access_key=MagicMock(), provider=provider,
             session=MagicMock(), messages=[{"role": "user", "content": "go"}], options={},
@@ -2572,9 +2576,9 @@ async def test_an_approved_run_refused_before_writing_returns_to_the_model(hass,
     # read the executor's reason and continue; without it the outcome stays
     # unknown, and the synthetic result still carries that reason.
     provider = _ClaudeShapedProvider([
-        [{"type": agentcli.EV_TOOL, "id": "tu1", "name": "patch_dashboard", "input": {}},
+        [{"type": llm_base.EV_TOOL, "id": "tu1", "name": "patch_dashboard", "input": {}},
          _tool_use_done(("tu1", "patch_dashboard"))],
-        [{"type": agentcli.EV_TEXT, "text": "Re-reading."}, _done("end_turn")],
+        [{"type": llm_base.EV_TEXT, "text": "Re-reading."}, _done("end_turn")],
     ])
     data = _loop_data()
     stale = "This configuration changed since you last read it (expected_hash no longer matches)."
@@ -2591,14 +2595,14 @@ async def test_an_approved_run_refused_before_writing_returns_to_the_model(hass,
     async def emit(name, payload):
         events.append((name, payload))
 
-    with patch("custom_components.phoenix_mcp.agentcli.build_mcp_tool_list", return_value=[]), \
-        patch("custom_components.phoenix_mcp.mcp_view._build_instructions", return_value="sys"), \
-        patch("custom_components.phoenix_mcp.mcp_view._dispatch_mcp", fake_dispatch), \
-        patch("custom_components.phoenix_mcp.agentcli._parse_pending", return_value={
+    with patch_readers("custom_components.phoenix_mcp.tool_catalog.build_mcp_tool_list", return_value=[]), \
+        patch_readers("custom_components.phoenix_mcp.tool_dispatch._build_instructions", return_value="sys"), \
+        patch_readers("custom_components.phoenix_mcp.tool_dispatch._dispatch_mcp", fake_dispatch), \
+        patch("custom_components.phoenix_mcp.agent_turn._parse_pending", return_value={
             "approval_id": "ap1", "review_url": "/phoenix-mcp/approvals/ap1",
             "expires_at": None, "record": record,
         }), \
-        patch("custom_components.phoenix_mcp.agentcli.get_approval", return_value=record):
+        patch_readers("custom_components.phoenix_mcp.approvals.get_approval", return_value=record):
         task = hass.async_create_task(async_run_agent_turn(
             hass=hass, data=data, access_key=MagicMock(), provider=provider,
             session=MagicMock(), messages=[{"role": "user", "content": "go"}], options={},
@@ -2623,7 +2627,7 @@ async def test_an_approved_run_refused_before_writing_returns_to_the_model(hass,
     else:
         assert provider.i == 1 and errors == ["outcome_unknown"]
         assert data.agent_recovery.blocks("tid")
-        assert answer["content"][0]["text"] == f"{agentcli._UNKNOWN_OUTCOME_RESULT} The executor reported: {stale}"
+        assert answer["content"][0]["text"] == f"{agent_turn._UNKNOWN_OUTCOME_RESULT} The executor reported: {stale}"
 
 
 @pytest.mark.asyncio
@@ -2633,8 +2637,8 @@ async def test_cancel_mid_approval_wait_skips_remaining_batch_calls(hass):
     # dispatch (no side effect after the operator cancelled), but its
     # tool_use id still gets a synthetic result so the batch stays complete.
     provider = _ScriptedProvider([
-        [{"type": agentcli.EV_TOOL, "id": "tu1", "name": "call_service", "input": {}},
-         {"type": agentcli.EV_TOOL, "id": "tu2", "name": "call_service", "input": {}},
+        [{"type": llm_base.EV_TOOL, "id": "tu1", "name": "call_service", "input": {}},
+         {"type": llm_base.EV_TOOL, "id": "tu2", "name": "call_service", "input": {}},
          _done("tool_use")],
     ])
     data = _loop_data()
@@ -2648,14 +2652,14 @@ async def test_cancel_mid_approval_wait_skips_remaining_batch_calls(hass):
         events.append((name, payload))
 
     cancel = asyncio.Event()
-    with patch("custom_components.phoenix_mcp.agentcli.build_mcp_tool_list", return_value=[]), \
-        patch("custom_components.phoenix_mcp.mcp_view._build_instructions", return_value="sys"), \
-        patch("custom_components.phoenix_mcp.mcp_view._dispatch_mcp", fake_dispatch), \
-        patch("custom_components.phoenix_mcp.agentcli._parse_pending", return_value={
+    with patch_readers("custom_components.phoenix_mcp.tool_catalog.build_mcp_tool_list", return_value=[]), \
+        patch_readers("custom_components.phoenix_mcp.tool_dispatch._build_instructions", return_value="sys"), \
+        patch_readers("custom_components.phoenix_mcp.tool_dispatch._dispatch_mcp", fake_dispatch), \
+        patch("custom_components.phoenix_mcp.agent_turn._parse_pending", return_value={
             "approval_id": "ap1", "review_url": "/phoenix-mcp/approvals/ap1",
             "expires_at": None, "record": pending_record,
         }), \
-        patch("custom_components.phoenix_mcp.agentcli.get_approval", return_value=pending_record):
+        patch_readers("custom_components.phoenix_mcp.approvals.get_approval", return_value=pending_record):
         task = hass.async_create_task(async_run_agent_turn(
             hass=hass, data=data, access_key=MagicMock(), provider=provider,
             session=MagicMock(), messages=[], options={}, client_ip="agentcli",
@@ -2680,7 +2684,7 @@ async def test_cancel_mid_approval_wait_skips_remaining_batch_calls(hass):
 
 @pytest.mark.asyncio
 async def test_validate_base_url_blocks_ssrf_shapes():
-    from custom_components.phoenix_mcp.agentcli import _validate_base_url
+    from custom_components.phoenix_mcp.agentcli_views import _validate_base_url
     # Literal-IP and shape checks need no DNS, so patch getaddrinfo away to be safe.
     with patch("asyncio.get_running_loop") as grl:
         grl.return_value.getaddrinfo = AsyncMock(return_value=[(2, 1, 6, "", ("93.184.216.34", 0))])
@@ -2700,7 +2704,7 @@ async def test_validate_base_url_blocks_ssrf_shapes():
 async def test_validate_base_url_rejects_hostname_resolving_to_metadata():
     # A DNS name (e.g. metadata.google.internal, *.nip.io) that resolves into
     # link-local metadata space must be rejected even though it is not a literal IP.
-    from custom_components.phoenix_mcp.agentcli import _validate_base_url
+    from custom_components.phoenix_mcp.agentcli_views import _validate_base_url
     with patch("asyncio.get_running_loop") as grl:
         grl.return_value.getaddrinfo = AsyncMock(
             return_value=[(2, 1, 6, "", ("169.254.169.254", 0))])
@@ -2713,7 +2717,7 @@ async def test_validate_base_url_rejects_hostname_resolving_to_metadata():
 
 @pytest.mark.asyncio
 async def test_sse_lines_caps_a_newlineless_flood():
-    from custom_components.phoenix_mcp.agentcli import _sse_lines
+    from custom_components.phoenix_mcp.llm.base import _sse_lines
 
     class _FloodContent:
         async def iter_chunked(self, _n):
@@ -2723,7 +2727,7 @@ async def test_sse_lines_caps_a_newlineless_flood():
 
     resp = MagicMock()
     resp.content = _FloodContent()
-    with pytest.raises(agentcli.ClientError):
+    with pytest.raises(llm_base.ClientError):
         async for _line in _sse_lines(resp):
             pass
 
@@ -2732,7 +2736,7 @@ async def test_sse_lines_caps_a_newlineless_flood():
 async def test_sse_lines_caps_cumulative_newline_delimited_output(monkeypatch):
     # Many small newline-terminated frames (each under the per-frame cap) must
     # still be bounded in aggregate, or a hostile provider exhausts memory.
-    monkeypatch.setattr(agentcli, "AGENTCLI_MAX_STREAM_BYTES", 100)
+    monkeypatch.setattr(llm_base, "AGENTCLI_MAX_STREAM_BYTES", 100)
 
     class _ManyFrames:
         async def iter_chunked(self, _n):
@@ -2741,15 +2745,15 @@ async def test_sse_lines_caps_cumulative_newline_delimited_output(monkeypatch):
 
     resp = MagicMock()
     resp.content = _ManyFrames()
-    with pytest.raises(agentcli.ClientError):
-        async for _line in agentcli._sse_lines(resp):
+    with pytest.raises(llm_base.ClientError):
+        async for _line in llm_base._sse_lines(resp):
             pass
 
 
 @pytest.mark.asyncio
 async def test_error_body_read_stops_at_its_cap():
     # An error body is classified from its start, so an endless one must not be buffered.
-    from custom_components.phoenix_mcp.const import AGENTCLI_PROVIDER_ERROR_BYTES
+    from custom_components.phoenix_mcp.provider_constants import AGENTCLI_PROVIDER_ERROR_BYTES
 
     class _Endless:
         chunks = 0
@@ -2761,7 +2765,7 @@ async def test_error_body_read_stops_at_its_cap():
 
     resp = MagicMock()
     resp.content = _Endless()
-    assert len(await agentcli._error_body(resp)) == AGENTCLI_PROVIDER_ERROR_BYTES
+    assert len(await llm_base._error_body(resp)) == AGENTCLI_PROVIDER_ERROR_BYTES
     assert _Endless.chunks <= AGENTCLI_PROVIDER_ERROR_BYTES // 1024 + 1
 
 
@@ -2820,7 +2824,7 @@ def _make_chat_request(body: bytes):
 
 @pytest.mark.asyncio
 async def test_chat_view_refuses_when_kill_switch_or_shutting_down():
-    from custom_components.phoenix_mcp.agentcli import PhoenixAgentCliChatView
+    from custom_components.phoenix_mcp.agentcli_views import PhoenixAgentCliChatView
 
     view = PhoenixAgentCliChatView()
     for down, kill, expect in [(True, False, 503), (False, True, 503)]:
@@ -2828,7 +2832,7 @@ async def test_chat_view_refuses_when_kill_switch_or_shutting_down():
         data.shutting_down = down
         data.store.get_settings.return_value = MagicMock(kill_switch=kill)
         view.hass = MagicMock()
-        view.hass.data = {agentcli.DOMAIN: data}
+        view.hass.data = {const.DOMAIN: data}
         req = _make_chat_request(json.dumps({"access_key_id": "t"}).encode())
         resp = await view.post(req)
         assert resp.status == expect
@@ -2842,7 +2846,7 @@ async def test_chat_view_refuses_when_kill_switch_or_shutting_down():
 ])
 async def test_chat_view_unavailable_answers_one_key_per_cause(down, ready, kill, key):
     """Shutdown, incomplete setup and the kill switch each answer 503 with their own key, in that order."""
-    from custom_components.phoenix_mcp.agentcli import PhoenixAgentCliChatView
+    from custom_components.phoenix_mcp.agentcli_views import PhoenixAgentCliChatView
 
     data = MagicMock()
     data.shutting_down = down
@@ -2850,7 +2854,7 @@ async def test_chat_view_unavailable_answers_one_key_per_cause(down, ready, kill
     data.store.get_settings.return_value = MagicMock(kill_switch=kill)
     view = PhoenixAgentCliChatView()
     view.hass = MagicMock()
-    view.hass.data = {agentcli.DOMAIN: data}
+    view.hass.data = {const.DOMAIN: data}
     resp = await view.post(_make_chat_request(json.dumps({"access_key_id": "t"}).encode()))
     assert resp.status == 503
     assert json.loads(resp.text)["message_key"] == key
@@ -2859,7 +2863,7 @@ async def test_chat_view_unavailable_answers_one_key_per_cause(down, ready, kill
 
 @pytest.mark.asyncio
 async def test_chat_view_refuses_revoked_or_missing_access_key():
-    from custom_components.phoenix_mcp.agentcli import PhoenixAgentCliChatView
+    from custom_components.phoenix_mcp.agentcli_views import PhoenixAgentCliChatView
 
     view = PhoenixAgentCliChatView()
 
@@ -2872,7 +2876,7 @@ async def test_chat_view_refuses_revoked_or_missing_access_key():
 
     # Missing access key: 404.
     view.hass = MagicMock()
-    view.hass.data = {agentcli.DOMAIN: _data(None)}
+    view.hass.data = {const.DOMAIN: _data(None)}
     resp = await view.post(_make_chat_request(json.dumps({"access_key_id": "t"}).encode()))
     assert resp.status == 404
 
@@ -2880,7 +2884,7 @@ async def test_chat_view_refuses_revoked_or_missing_access_key():
     revoked = MagicMock()
     revoked.is_valid.return_value = False
     view.hass = MagicMock()
-    view.hass.data = {agentcli.DOMAIN: _data(revoked)}
+    view.hass.data = {const.DOMAIN: _data(revoked)}
     resp = await view.post(_make_chat_request(json.dumps({"access_key_id": "t"}).encode()))
     assert resp.status == 400
 
@@ -2890,8 +2894,8 @@ async def test_chat_view_refuses_revoked_or_missing_access_key():
 async def test_chat_view_streams_ready_and_cleans_up(hass, mode):
     # Happy path through the streaming view: it opens the SSE stream, writes the
     # `ready` frame, drives async_run_agent_turn, and closes the stream in finally.
-    import custom_components.phoenix_mcp.agentcli as ac
-    from custom_components.phoenix_mcp.agentcli import PhoenixAgentCliChatView
+    from custom_components.phoenix_mcp import agent_turn, const
+    from custom_components.phoenix_mcp.agentcli_views import PhoenixAgentCliChatView
 
     writes: list = []
 
@@ -2927,7 +2931,7 @@ async def test_chat_view_streams_ready_and_cleans_up(hass, mode):
 
     view = PhoenixAgentCliChatView()
     view.hass = hass
-    hass.data[ac.DOMAIN] = data
+    hass.data[const.DOMAIN] = data
 
     body = json.dumps({
         "access_key_id": "t1", "instance_id": "i1", "user": "hi",
@@ -2938,11 +2942,11 @@ async def test_chat_view_streams_ready_and_cleans_up(hass, mode):
         "language": "en",
         **({"home_focus_bypass": True} if mode == "bypass" else {"continue": True} if mode == "continue" else {}),
     }).encode()
-    with patch.object(ac.web, "StreamResponse", _FakeStream), \
-         patch("custom_components.phoenix_mcp.agentcli._get_secret_store", AsyncMock(return_value=store)), \
-         patch("custom_components.phoenix_mcp.agentcli.build_provider", return_value=MagicMock()), \
-         patch("custom_components.phoenix_mcp.agentcli.async_get_clientsession", return_value=MagicMock()), \
-         patch("custom_components.phoenix_mcp.agentcli.async_run_agent_turn", new=AsyncMock()) as rat:
+    with patch.object(agent_turn.web, "StreamResponse", _FakeStream), \
+         patch_readers("custom_components.phoenix_mcp.llm.accounts._get_secret_store", AsyncMock(return_value=store)), \
+         patch_readers("custom_components.phoenix_mcp.llm.factory.build_provider", return_value=MagicMock()), \
+         patch("custom_components.phoenix_mcp.agentcli_views.async_get_clientsession", return_value=MagicMock()), \
+         patch("custom_components.phoenix_mcp.agentcli_views.async_run_agent_turn", new=AsyncMock()) as rat:
         await view.post(_make_chat_request(body))
 
     joined = b"".join(w for w in writes if isinstance(w, bytes) and w != b"__EOF__")
@@ -2969,7 +2973,7 @@ async def test_await_agent_approval_cancels_orphaned_approval(hass):
     # cannot later approve and execute it after the operator abandoned the chat.
     from homeassistant.util.dt import utcnow
 
-    from custom_components.phoenix_mcp.agentcli import _await_agent_approval
+    from custom_components.phoenix_mcp.agent_turn import _await_agent_approval
     from custom_components.phoenix_mcp.approvals import (
         STATUS_CANCELLED,
         STATUS_PENDING,
@@ -3001,8 +3005,8 @@ async def test_await_agent_approval_cancels_orphaned_approval(hass):
     cancel = asyncio.Event()
     cancel.set()  # operator cancelled/closed the chat
 
-    with patch("custom_components.phoenix_mcp.agentcli.dismiss_approval_notification") as dismiss, \
-         patch("custom_components.phoenix_mcp.agentcli.fire_approval_resolved_event") as fire:
+    with patch("custom_components.phoenix_mcp.agent_turn.dismiss_approval_notification") as dismiss, \
+         patch("custom_components.phoenix_mcp.agent_turn.fire_approval_resolved_event") as fire:
         result = await _await_agent_approval(hass, data, "a1", cancel, timeout=0.01)
 
     # The persisted approval is now terminal, so the admin approve endpoint (which
@@ -3027,7 +3031,7 @@ async def test_await_agent_approval_names_why_it_stopped_waiting(hass, cancelled
     """
     from homeassistant.util.dt import utcnow
 
-    from custom_components.phoenix_mcp.agentcli import _await_agent_approval
+    from custom_components.phoenix_mcp.agent_turn import _await_agent_approval
     from custom_components.phoenix_mcp.approvals import STATUS_PENDING, PendingApproval, get_approval
 
     now = utcnow()
@@ -3055,8 +3059,8 @@ async def test_await_agent_approval_names_why_it_stopped_waiting(hass, cancelled
     if cancelled:
         cancel.set()
 
-    with patch("custom_components.phoenix_mcp.agentcli.dismiss_approval_notification"), \
-         patch("custom_components.phoenix_mcp.agentcli.fire_approval_resolved_event"):
+    with patch("custom_components.phoenix_mcp.agent_turn.dismiss_approval_notification"), \
+         patch("custom_components.phoenix_mcp.agent_turn.fire_approval_resolved_event"):
         await _await_agent_approval(hass, data, "a1", cancel, timeout=0.01)
 
     assert get_approval(store, "a1").rejected_reason == reason
@@ -3074,11 +3078,11 @@ def test_review_stop_names_what_stopped_the_turn(reason, kill_switch, code):
 
     Reporting either as an unauthorized key sends the operator to fix a key that is fine.
     """
-    from custom_components.phoenix_mcp.agentcli import _review_stop_error
+    from custom_components.phoenix_mcp.agent_turn import _review_stop_error
 
     data = MagicMock()
     data.store.get_settings.return_value = MagicMock(kill_switch=kill_switch)
-    with patch("custom_components.phoenix_mcp.agentcli._kill_switch_on", return_value=kill_switch):
+    with patch("custom_components.phoenix_mcp.agent_turn._kill_switch_on", return_value=kill_switch):
         assert _review_stop_error(reason, data)["code"] == code
 
 
@@ -3090,7 +3094,7 @@ async def test_await_agent_approval_does_not_cancel_an_in_progress_approval(hass
     # otherwise the side effect runs but the record wrongly reads cancelled.
     from homeassistant.util.dt import utcnow
 
-    from custom_components.phoenix_mcp.agentcli import _await_agent_approval
+    from custom_components.phoenix_mcp.agent_turn import _await_agent_approval
     from custom_components.phoenix_mcp.approvals import (
         STATUS_PENDING,
         PendingApproval,
@@ -3122,8 +3126,8 @@ async def test_await_agent_approval_does_not_cancel_an_in_progress_approval(hass
     cancel = asyncio.Event()
     cancel.set()
 
-    with patch("custom_components.phoenix_mcp.agentcli.dismiss_approval_notification") as dismiss, \
-         patch("custom_components.phoenix_mcp.agentcli.fire_approval_resolved_event") as fire:
+    with patch("custom_components.phoenix_mcp.agent_turn.dismiss_approval_notification") as dismiss, \
+         patch("custom_components.phoenix_mcp.agent_turn.fire_approval_resolved_event") as fire:
         await _await_agent_approval(hass, data, "a1", cancel, timeout=0.01)
 
     # Left pending for the executor to finalize; never cancelled out from under it.
@@ -3136,12 +3140,12 @@ async def test_await_agent_approval_does_not_cancel_an_in_progress_approval(hass
 async def test_run_agent_turn_stops_on_output_budget(hass, monkeypatch):
     # A provider that produces more retained output than the turn budget is cut
     # off with an output_limit error rather than accumulating unbounded memory.
-    monkeypatch.setattr(agentcli, "AGENTCLI_MAX_TURN_OUTPUT_BYTES", 100)
+    monkeypatch.setattr(agent_chat, "AGENTCLI_MAX_TURN_OUTPUT_BYTES", 100)
     big_done = {
-        "type": agentcli.EV_DONE, "stop_reason": "end_turn",
+        "type": llm_base.EV_DONE, "stop_reason": "end_turn",
         "assistant_msg": {"role": "assistant", "content": [{"type": "text", "text": "x" * 500}]},
     }
-    provider = _ScriptedProvider([[{"type": agentcli.EV_TEXT, "text": "hi"}, big_done]])
+    provider = _ScriptedProvider([[{"type": llm_base.EV_TEXT, "text": "hi"}, big_done]])
     data = _loop_data()
     events: list = []
 
@@ -3150,9 +3154,9 @@ async def test_run_agent_turn_stops_on_output_budget(hass, monkeypatch):
 
     access_key = MagicMock()
     access_key.id = "tid"
-    with patch("custom_components.phoenix_mcp.agentcli.build_mcp_tool_list", return_value=[]), \
-         patch("custom_components.phoenix_mcp.mcp_view._build_instructions", return_value="sys"), \
-         patch("custom_components.phoenix_mcp.mcp_view._dispatch_mcp", AsyncMock()):
+    with patch_readers("custom_components.phoenix_mcp.tool_catalog.build_mcp_tool_list", return_value=[]), \
+         patch_readers("custom_components.phoenix_mcp.tool_dispatch._build_instructions", return_value="sys"), \
+         patch_readers("custom_components.phoenix_mcp.tool_dispatch._dispatch_mcp", AsyncMock()):
         msgs = await async_run_agent_turn(
             hass=hass, data=data, access_key=access_key, provider=provider,
             session=MagicMock(), messages=[], options={}, client_ip="agentcli",
@@ -3167,7 +3171,7 @@ async def test_run_agent_turn_stops_on_output_budget(hass, monkeypatch):
 
 
 def test_current_dispatch_access_key_gating():
-    from custom_components.phoenix_mcp.agentcli import _current_dispatch_access_key
+    from custom_components.phoenix_mcp.agent_turn import _current_dispatch_access_key
 
     def _data(*, kill=False, down=False, access_key=None):
         d = MagicMock()
@@ -3195,8 +3199,8 @@ async def test_run_agent_turn_stops_when_access_key_revoked_midturn(hass):
     # dispatch a side effect, every tool_use id still gets a synthetic result
     # (batch stays complete), and the turn ends with an unauthorized error.
     provider = _ScriptedProvider([
-        [{"type": agentcli.EV_TOOL, "id": "tu1", "name": "call_service", "input": {}},
-         {"type": agentcli.EV_TOOL, "id": "tu2", "name": "call_service", "input": {}},
+        [{"type": llm_base.EV_TOOL, "id": "tu1", "name": "call_service", "input": {}},
+         {"type": llm_base.EV_TOOL, "id": "tu2", "name": "call_service", "input": {}},
          _done("tool_use")],
     ])
     data = _loop_data()
@@ -3208,10 +3212,10 @@ async def test_run_agent_turn_stops_when_access_key_revoked_midturn(hass):
 
     access_key = MagicMock()
     access_key.id = "tid"
-    with patch("custom_components.phoenix_mcp.agentcli.build_mcp_tool_list", return_value=[]), \
-         patch("custom_components.phoenix_mcp.mcp_view._build_instructions", return_value="sys"), \
-         patch("custom_components.phoenix_mcp.mcp_view._dispatch_mcp", fake_dispatch), \
-         patch("custom_components.phoenix_mcp.agentcli._current_dispatch_access_key", return_value=None):
+    with patch_readers("custom_components.phoenix_mcp.tool_catalog.build_mcp_tool_list", return_value=[]), \
+         patch_readers("custom_components.phoenix_mcp.tool_dispatch._build_instructions", return_value="sys"), \
+         patch_readers("custom_components.phoenix_mcp.tool_dispatch._dispatch_mcp", fake_dispatch), \
+         patch_readers("custom_components.phoenix_mcp.agent_turn._current_dispatch_access_key", return_value=None):
         msgs = await async_run_agent_turn(
             hass=hass, data=data, access_key=access_key, provider=provider,
             session=MagicMock(), messages=[], options={}, client_ip="agentcli",
@@ -3230,7 +3234,7 @@ async def test_run_agent_turn_stops_when_access_key_revoked_midturn(hass):
 async def test_run_agent_turn_names_the_kill_switch_when_it_stops_a_turn(hass):
     """The kill switch is not the key's fault, so the chat says which stopped it."""
     provider = _ScriptedProvider([
-        [{"type": agentcli.EV_TOOL, "id": "tu1", "name": "call_service", "input": {}}, _done("tool_use")],
+        [{"type": llm_base.EV_TOOL, "id": "tu1", "name": "call_service", "input": {}}, _done("tool_use")],
     ])
     data = _loop_data()
     data.store.get_settings.return_value = GlobalSettings(kill_switch=True)
@@ -3241,9 +3245,9 @@ async def test_run_agent_turn_names_the_kill_switch_when_it_stops_a_turn(hass):
 
     access_key = MagicMock()
     access_key.id = "tid"
-    with patch("custom_components.phoenix_mcp.agentcli.build_mcp_tool_list", return_value=[]), \
-         patch("custom_components.phoenix_mcp.mcp_view._build_instructions", return_value="sys"), \
-         patch("custom_components.phoenix_mcp.agentcli._current_dispatch_access_key", return_value=None):
+    with patch_readers("custom_components.phoenix_mcp.tool_catalog.build_mcp_tool_list", return_value=[]), \
+         patch_readers("custom_components.phoenix_mcp.tool_dispatch._build_instructions", return_value="sys"), \
+         patch_readers("custom_components.phoenix_mcp.agent_turn._current_dispatch_access_key", return_value=None):
         msgs = await async_run_agent_turn(
             hass=hass, data=data, access_key=access_key, provider=provider,
             session=MagicMock(), messages=[], options={}, client_ip="agentcli",
@@ -3261,9 +3265,9 @@ async def test_run_agent_turn_rejection_reason_reaches_agent(hass):
     # An admin rejects from the Approvals panel WITH a reason; the agent loop must
     # feed that reason back as the tool result so the model can report it.
     provider = _ScriptedProvider([
-        [{"type": agentcli.EV_TOOL, "id": "tu1", "name": "call_service", "input": {}},
+        [{"type": llm_base.EV_TOOL, "id": "tu1", "name": "call_service", "input": {}},
          _done("tool_use")],
-        [{"type": agentcli.EV_TEXT, "text": "Understood."}, _done("end_turn")],
+        [{"type": llm_base.EV_TEXT, "text": "Understood."}, _done("end_turn")],
     ])
     data = _loop_data()
     pending_result = {"content": [{"type": "text", "text": json.dumps(
@@ -3278,14 +3282,14 @@ async def test_run_agent_turn_rejection_reason_reaches_agent(hass):
     async def emit(name, payload):
         events.append((name, payload))
 
-    with patch("custom_components.phoenix_mcp.agentcli.build_mcp_tool_list", return_value=[]), \
-        patch("custom_components.phoenix_mcp.mcp_view._build_instructions", return_value="sys"), \
-        patch("custom_components.phoenix_mcp.mcp_view._dispatch_mcp", fake_dispatch), \
-        patch("custom_components.phoenix_mcp.agentcli._parse_pending", return_value={
+    with patch_readers("custom_components.phoenix_mcp.tool_catalog.build_mcp_tool_list", return_value=[]), \
+        patch_readers("custom_components.phoenix_mcp.tool_dispatch._build_instructions", return_value="sys"), \
+        patch_readers("custom_components.phoenix_mcp.tool_dispatch._dispatch_mcp", fake_dispatch), \
+        patch("custom_components.phoenix_mcp.agent_turn._parse_pending", return_value={
             "approval_id": "ap1", "review_url": "/phoenix-mcp/approvals/ap1",
             "expires_at": None, "record": rejected_record,
         }), \
-        patch("custom_components.phoenix_mcp.agentcli.get_approval", return_value=rejected_record):
+        patch_readers("custom_components.phoenix_mcp.approvals.get_approval", return_value=rejected_record):
         task = hass.async_create_task(async_run_agent_turn(
             hass=hass, data=data, access_key=MagicMock(), provider=provider,
             session=MagicMock(), messages=[], options={}, client_ip="agentcli",
@@ -3308,8 +3312,8 @@ async def test_run_agent_turn_retries_transient_connection_error(hass):
     # A retryable connection error before any content is retried silently, and the
     # retry's success flows through (the user never sees the transient blip).
     provider = _ScriptedProvider([
-        [{"type": agentcli.EV_ERROR, "code": "network", "message": "DNS timeout", "retryable": True}],
-        [{"type": agentcli.EV_TEXT, "text": "Recovered."}, _done("end_turn")],
+        [{"type": llm_base.EV_ERROR, "code": "network", "message": "DNS timeout", "retryable": True}],
+        [{"type": llm_base.EV_TEXT, "text": "Recovered."}, _done("end_turn")],
     ])
     data = _loop_data()
     events: list = []
@@ -3317,9 +3321,9 @@ async def test_run_agent_turn_retries_transient_connection_error(hass):
     async def emit(name, payload):
         events.append((name, payload))
 
-    with patch("custom_components.phoenix_mcp.agentcli.build_mcp_tool_list", return_value=[]), \
-         patch("custom_components.phoenix_mcp.mcp_view._build_instructions", return_value="sys"), \
-         patch("custom_components.phoenix_mcp.agentcli._CONNECT_RETRY_BACKOFF_SECONDS", 0.01):
+    with patch_readers("custom_components.phoenix_mcp.tool_catalog.build_mcp_tool_list", return_value=[]), \
+         patch_readers("custom_components.phoenix_mcp.tool_dispatch._build_instructions", return_value="sys"), \
+         patch("custom_components.phoenix_mcp.agent_turn._CONNECT_RETRY_BACKOFF_SECONDS", 0.01):
         await async_run_agent_turn(
             hass=hass, data=data, access_key=MagicMock(), provider=provider,
             session=MagicMock(), messages=[], options={}, client_ip="agentcli",
@@ -3335,14 +3339,14 @@ async def test_run_agent_turn_retries_transient_connection_error(hass):
 @pytest.mark.asyncio
 @pytest.mark.parametrize(("final_error", "expected_code", "expected_text"), [
     (
-        {"type": agentcli.EV_ERROR, "status": 429, "code": "rate_limit",
+        {"type": llm_base.EV_ERROR, "status": 429, "code": "rate_limit",
          "message": "Rate limit exceeded", "retryable": False},
         "provider_rate_limit_exhausted",
         "The provider's rate limit remained exceeded after retrying for about 0s. "
         "Provider detail: Rate limit exceeded",
     ),
     (
-        {"type": agentcli.EV_ERROR, "status": 503, "code": "upstream",
+        {"type": llm_base.EV_ERROR, "status": 503, "code": "upstream",
          "message": "Temporarily unavailable", "retryable": False},
         "provider_retry_exhausted",
         "The provider did not answer after retrying for about 0s. Temporarily unavailable",
@@ -3352,20 +3356,20 @@ async def test_retry_exhaustion_only_specializes_an_explicit_http_429(
     final_error, expected_code, expected_text,
 ):
     provider = _ScriptedProvider([
-        [{"type": agentcli.EV_ERROR, "status": 503, "code": "upstream", "message": "Provider request failed (HTTP 503).",
+        [{"type": llm_base.EV_ERROR, "status": 503, "code": "upstream", "message": "Provider request failed (HTTP 503).",
           "provider_detail": "This model is currently experiencing high demand.", "retryable": True}],
         [final_error],
     ])
 
-    with patch("custom_components.phoenix_mcp.agentcli._CONNECT_RETRY_BACKOFF_SECONDS", 0):
-        events = await _collect(agentcli._stream_turn_resilient(
+    with patch("custom_components.phoenix_mcp.agent_turn._CONNECT_RETRY_BACKOFF_SECONDS", 0):
+        events = await _collect(agent_turn._stream_turn_resilient(
             provider, MagicMock(), system_prompt="sys", messages=[], tools=[],
             options={}, cancel=asyncio.Event(),
         ))
 
     # The retry is announced with the provider's own sentence.
     # No detail_code: the detail is the provider's own sentence, shown verbatim.
-    assert events[0] == {"type": agentcli.EV_RETRYING, "attempt": 2, "status": 503,
+    assert events[0] == {"type": llm_base.EV_RETRYING, "attempt": 2, "status": 503,
                          "detail": "This model is currently experiencing high demand.", "detail_code": ""}
     # The final error gives the real time spent and keeps the failure that started the retries.
     assert events[1]["code"] == expected_code
@@ -3386,19 +3390,19 @@ async def test_a_retry_that_sends_nothing_stops_at_the_first_reply_bound():
         async def stream_turn(self, session, **kwargs):
             self.calls += 1
             if self.calls == 1:
-                yield {"type": agentcli.EV_ERROR, "status": 503, "code": "upstream", "retryable": True,
+                yield {"type": llm_base.EV_ERROR, "status": 503, "code": "upstream", "retryable": True,
                        "message": "Provider request failed (HTTP 503).", "provider_detail": "High demand."}
                 return
             await asyncio.sleep(3600)
-            yield {"type": agentcli.EV_TEXT, "text": "late"}
+            yield {"type": llm_base.EV_TEXT, "text": "late"}
 
-    with patch("custom_components.phoenix_mcp.agentcli._CONNECT_RETRY_BACKOFF_SECONDS", 0), \
-            patch("custom_components.phoenix_mcp.agentcli.AGENTCLI_RETRY_FIRST_REPLY_SECONDS", 0.05):
-        events = await asyncio.wait_for(_collect(agentcli._stream_turn_resilient(
+    with patch("custom_components.phoenix_mcp.agent_turn._CONNECT_RETRY_BACKOFF_SECONDS", 0), \
+            patch("custom_components.phoenix_mcp.agent_turn.AGENTCLI_RETRY_FIRST_REPLY_SECONDS", 0.05):
+        events = await asyncio.wait_for(_collect(agent_turn._stream_turn_resilient(
             _Silent(), MagicMock(), system_prompt="sys", messages=[], tools=[],
             options={}, cancel=asyncio.Event(),
         )), 5)
-    assert [ev["type"] for ev in events] == [agentcli.EV_RETRYING, agentcli.EV_ERROR]
+    assert [ev["type"] for ev in events] == [llm_base.EV_RETRYING, llm_base.EV_ERROR]
     assert events[1]["code"] == "provider_retry_exhausted" and events[1]["retryable"] is True
     assert events[1]["provider_detail"] == "High demand." and "no reply within" in events[1]["message"]
 
@@ -3411,7 +3415,7 @@ class _SilentFirst:
     async def stream_turn(self, session, **kwargs):
         self.calls += 1
         await asyncio.sleep(3600)
-        yield {"type": agentcli.EV_TEXT, "text": "late"}
+        yield {"type": llm_base.EV_TEXT, "text": "late"}
 
 
 @pytest.mark.asyncio
@@ -3424,13 +3428,13 @@ class _SilentFirst:
 ])
 async def test_a_bounded_first_reply_ends_the_call_without_retrying(dispatch_started, write_started, code, outcome):
     provider = _SilentFirst()
-    events = await asyncio.wait_for(_collect(agentcli._stream_turn_resilient(
+    events = await asyncio.wait_for(_collect(agent_turn._stream_turn_resilient(
         provider, MagicMock(), system_prompt="sys", messages=[], tools=[], options={},
         cancel=asyncio.Event(), dispatch_started=dispatch_started, write_started=write_started,
         first_reply_seconds=0.05,
     )), 5)
     assert provider.calls == 1
-    assert [ev["type"] for ev in events] == [agentcli.EV_ERROR]
+    assert [ev["type"] for ev in events] == [llm_base.EV_ERROR]
     assert events[0]["code"] == code and events[0]["retryable"] is False
     assert events[0].get("outcome") == outcome
 
@@ -3442,12 +3446,12 @@ async def test_without_a_first_reply_bound_a_slow_start_still_answers():
 
         async def stream_turn(self, session, **kwargs):
             await asyncio.sleep(0.1)
-            yield {"type": agentcli.EV_TEXT, "text": "answer"}
+            yield {"type": llm_base.EV_TEXT, "text": "answer"}
 
-    events = await asyncio.wait_for(_collect(agentcli._stream_turn_resilient(
+    events = await asyncio.wait_for(_collect(agent_turn._stream_turn_resilient(
         _SlowStart(), MagicMock(), system_prompt="sys", messages=[], tools=[], options={}, cancel=asyncio.Event(),
     )), 5)
-    assert events == [{"type": agentcli.EV_TEXT, "text": "answer"}]
+    assert events == [{"type": llm_base.EV_TEXT, "text": "answer"}]
 
 
 @pytest.mark.asyncio
@@ -3456,25 +3460,25 @@ async def test_a_retry_keeps_the_shorter_of_the_two_first_reply_bounds():
         async def stream_turn(self, session, **kwargs):
             self.calls += 1
             if self.calls == 1:
-                yield {"type": agentcli.EV_ERROR, "status": 503, "code": "upstream", "retryable": True,
+                yield {"type": llm_base.EV_ERROR, "status": 503, "code": "upstream", "retryable": True,
                        "message": "Provider request failed (HTTP 503)."}
                 return
             await asyncio.sleep(3600)
-            yield {"type": agentcli.EV_TEXT, "text": "late"}
+            yield {"type": llm_base.EV_TEXT, "text": "late"}
 
-    with patch("custom_components.phoenix_mcp.agentcli._CONNECT_RETRY_BACKOFF_SECONDS", 0):
-        events = await asyncio.wait_for(_collect(agentcli._stream_turn_resilient(
+    with patch("custom_components.phoenix_mcp.agent_turn._CONNECT_RETRY_BACKOFF_SECONDS", 0):
+        events = await asyncio.wait_for(_collect(agent_turn._stream_turn_resilient(
             _FailThenSilent(), MagicMock(), system_prompt="sys", messages=[], tools=[], options={},
             cancel=asyncio.Event(), first_reply_seconds=0.05,
         )), 5)
-    assert [ev["type"] for ev in events] == [agentcli.EV_RETRYING, agentcli.EV_ERROR]
+    assert [ev["type"] for ev in events] == [llm_base.EV_RETRYING, llm_base.EV_ERROR]
     assert events[1]["code"] == "provider_retry_exhausted"
 
 
 @pytest.mark.asyncio
 async def test_run_agent_turn_does_not_retry_non_retryable_error(hass):
     provider = _ScriptedProvider([
-        [{"type": agentcli.EV_ERROR, "code": "auth", "message": "API key rejected.", "retryable": False}],
+        [{"type": llm_base.EV_ERROR, "code": "auth", "message": "API key rejected.", "retryable": False}],
     ])
     data = _loop_data()
     events: list = []
@@ -3482,8 +3486,8 @@ async def test_run_agent_turn_does_not_retry_non_retryable_error(hass):
     async def emit(name, payload):
         events.append((name, payload))
 
-    with patch("custom_components.phoenix_mcp.agentcli.build_mcp_tool_list", return_value=[]), \
-         patch("custom_components.phoenix_mcp.mcp_view._build_instructions", return_value="sys"):
+    with patch_readers("custom_components.phoenix_mcp.tool_catalog.build_mcp_tool_list", return_value=[]), \
+         patch_readers("custom_components.phoenix_mcp.tool_dispatch._build_instructions", return_value="sys"):
         await async_run_agent_turn(
             hass=hass, data=data, access_key=MagicMock(), provider=provider,
             session=MagicMock(), messages=[], options={}, client_ip="agentcli",
@@ -3503,7 +3507,7 @@ async def test_run_agent_turn_preserves_provider_rate_limit_diagnostics(hass):
         "retry_after_seconds": 48,
     }
     provider = _ScriptedProvider([[
-        {"type": agentcli.EV_ERROR, "status": 429, "code": "rate_limit",
+        {"type": llm_base.EV_ERROR, "status": 429, "code": "rate_limit",
          "message": "Rate limit exceeded", "retryable": False,
          "rate_limit": rate_limit},
     ]])
@@ -3513,8 +3517,8 @@ async def test_run_agent_turn_preserves_provider_rate_limit_diagnostics(hass):
     async def emit(name, payload):
         events.append((name, payload))
 
-    with patch("custom_components.phoenix_mcp.agentcli.build_mcp_tool_list", return_value=[]), \
-         patch("custom_components.phoenix_mcp.mcp_view._build_instructions", return_value="sys"):
+    with patch_readers("custom_components.phoenix_mcp.tool_catalog.build_mcp_tool_list", return_value=[]), \
+         patch_readers("custom_components.phoenix_mcp.tool_dispatch._build_instructions", return_value="sys"):
         await async_run_agent_turn(
             hass=hass, data=data, access_key=MagicMock(), provider=provider,
             session=MagicMock(), messages=[], options={}, client_ip="agentcli",
@@ -3535,10 +3539,10 @@ async def test_human_rejection_resets_iteration_budget(hass):
     pending_result = {"content": [{"type": "text", "text": json.dumps(
         {"status": "pending_approval", "approval_id": "ap1", "review_url": "/x"})}]}
     provider = _ScriptedProvider([
-        [{"type": agentcli.EV_TOOL, "id": "t1", "name": "create_automation", "input": {}}, _done("tool_use")],
-        [{"type": agentcli.EV_TOOL, "id": "t2", "name": "create_automation", "input": {}}, _done("tool_use")],
-        [{"type": agentcli.EV_TOOL, "id": "t3", "name": "create_automation", "input": {}}, _done("tool_use")],
-        [{"type": agentcli.EV_TEXT, "text": "Okay, I'll stop."}, _done("end_turn")],
+        [{"type": llm_base.EV_TOOL, "id": "t1", "name": "create_automation", "input": {}}, _done("tool_use")],
+        [{"type": llm_base.EV_TOOL, "id": "t2", "name": "create_automation", "input": {}}, _done("tool_use")],
+        [{"type": llm_base.EV_TOOL, "id": "t3", "name": "create_automation", "input": {}}, _done("tool_use")],
+        [{"type": llm_base.EV_TEXT, "text": "Okay, I'll stop."}, _done("end_turn")],
     ])
     data = _loop_data()
     fake_dispatch = AsyncMock(return_value=({"result": pending_result}, "m", "r", "pending_approval"))
@@ -3547,15 +3551,15 @@ async def test_human_rejection_resets_iteration_budget(hass):
     async def emit(name, payload):
         events.append((name, payload))
 
-    with patch("custom_components.phoenix_mcp.agentcli.build_mcp_tool_list", return_value=[]), \
-        patch("custom_components.phoenix_mcp.mcp_view._build_instructions", return_value="sys"), \
-        patch("custom_components.phoenix_mcp.mcp_view._dispatch_mcp", fake_dispatch), \
-        patch("custom_components.phoenix_mcp.agentcli._parse_pending", return_value={
+    with patch_readers("custom_components.phoenix_mcp.tool_catalog.build_mcp_tool_list", return_value=[]), \
+        patch_readers("custom_components.phoenix_mcp.tool_dispatch._build_instructions", return_value="sys"), \
+        patch_readers("custom_components.phoenix_mcp.tool_dispatch._dispatch_mcp", fake_dispatch), \
+        patch("custom_components.phoenix_mcp.agent_turn._parse_pending", return_value={
             "approval_id": "ap1", "review_url": "/phoenix-mcp/approvals/ap1",
             "expires_at": None, "record": MagicMock(diff=None),
         }), \
-        patch("custom_components.phoenix_mcp.agentcli.get_approval", return_value=None), \
-         patch("custom_components.phoenix_mcp.agentcli._await_agent_approval", AsyncMock(return_value=rejected)):
+        patch_readers("custom_components.phoenix_mcp.approvals.get_approval", return_value=None), \
+         patch("custom_components.phoenix_mcp.agent_turn._await_agent_approval", AsyncMock(return_value=rejected)):
         await async_run_agent_turn(
             hass=hass, data=data, access_key=MagicMock(), provider=provider,
             session=MagicMock(), messages=[], options={}, client_ip="agentcli",
@@ -3578,8 +3582,8 @@ async def test_turn_emits_notice_on_output_limit_and_empty_reply(hass):
         async def emit(name, payload):
             events.append((name, payload))
 
-        with patch("custom_components.phoenix_mcp.agentcli.build_mcp_tool_list", return_value=[]), \
-             patch("custom_components.phoenix_mcp.mcp_view._build_instructions", return_value="sys"):
+        with patch_readers("custom_components.phoenix_mcp.tool_catalog.build_mcp_tool_list", return_value=[]), \
+             patch_readers("custom_components.phoenix_mcp.tool_dispatch._build_instructions", return_value="sys"):
             await async_run_agent_turn(
                 hass=hass, data=data, access_key=MagicMock(), provider=provider,
                 session=MagicMock(), messages=[], options={}, client_ip="agentcli",
@@ -3588,7 +3592,7 @@ async def test_turn_emits_notice_on_output_limit_and_empty_reply(hass):
         return events
 
     # Truncated at the output limit: a notice explains why it stopped.
-    ev = await run([{"type": agentcli.EV_TEXT, "text": "half a sen"}, _done("max_tokens")])
+    ev = await run([{"type": llm_base.EV_TEXT, "text": "half a sen"}, _done("max_tokens")])
     notice = next(p for n, p in ev if n == "notice")
     assert "output length limit" in notice["message"]
 
@@ -3597,7 +3601,7 @@ async def test_turn_emits_notice_on_output_limit_and_empty_reply(hass):
     assert any(n == "notice" for n, _ in ev)
 
     # A normal reply with text: NO notice.
-    ev = await run([{"type": agentcli.EV_TEXT, "text": "All done."}, _done("end_turn")])
+    ev = await run([{"type": llm_base.EV_TEXT, "text": "All done."}, _done("end_turn")])
     assert not any(n == "notice" for n, _ in ev)
 
 
@@ -3607,7 +3611,7 @@ async def test_safety_cap_pauses_at_continue_checkpoint_without_a_human(hass):
     # pause with a continue_required checkpoint (not a hard error), and leave the
     # conversation resumable so a continue request can carry on.
     provider = _ScriptedProvider([
-        [{"type": agentcli.EV_TOOL, "id": f"t{i}", "name": "get_state", "input": {}}, _done("tool_use")]
+        [{"type": llm_base.EV_TOOL, "id": f"t{i}", "name": "get_state", "input": {}}, _done("tool_use")]
         for i in range(6)
     ])
     data = _loop_data()
@@ -3618,9 +3622,9 @@ async def test_safety_cap_pauses_at_continue_checkpoint_without_a_human(hass):
     async def emit(name, payload):
         events.append((name, payload))
 
-    with patch("custom_components.phoenix_mcp.agentcli.build_mcp_tool_list", return_value=[]), \
-         patch("custom_components.phoenix_mcp.mcp_view._build_instructions", return_value="sys"), \
-         patch("custom_components.phoenix_mcp.mcp_view._dispatch_mcp", fake_dispatch):
+    with patch_readers("custom_components.phoenix_mcp.tool_catalog.build_mcp_tool_list", return_value=[]), \
+         patch_readers("custom_components.phoenix_mcp.tool_dispatch._build_instructions", return_value="sys"), \
+         patch_readers("custom_components.phoenix_mcp.tool_dispatch._dispatch_mcp", fake_dispatch):
         messages = await async_run_agent_turn(
             hass=hass, data=data, access_key=MagicMock(), provider=provider,
             session=MagicMock(), messages=[], options={}, client_ip="agentcli",
@@ -3638,15 +3642,15 @@ async def test_safety_cap_pauses_at_continue_checkpoint_without_a_human(hass):
 @pytest.mark.asyncio
 async def test_run_agent_turn_provider_error_stops(hass):
     provider = _ScriptedProvider([
-        [{"type": agentcli.EV_ERROR, "code": "auth", "message": "bad key", "retryable": False}],
+        [{"type": llm_base.EV_ERROR, "code": "auth", "message": "bad key", "retryable": False}],
     ])
     events: list = []
 
     async def emit(name, payload):
         events.append((name, payload))
 
-    with patch("custom_components.phoenix_mcp.agentcli.build_mcp_tool_list", return_value=[]), \
-         patch("custom_components.phoenix_mcp.mcp_view._build_instructions", return_value="sys"):
+    with patch_readers("custom_components.phoenix_mcp.tool_catalog.build_mcp_tool_list", return_value=[]), \
+         patch_readers("custom_components.phoenix_mcp.tool_dispatch._build_instructions", return_value="sys"):
         await async_run_agent_turn(
             hass=hass, data=_loop_data(), access_key=MagicMock(), provider=provider,
             session=MagicMock(), messages=[], options={}, client_ip="agentcli",
@@ -3664,7 +3668,7 @@ async def test_run_agent_turn_provider_error_stops(hass):
 async def test_delete_provider_clears_voice_agent_binding(hass):
     """Deleting the provider the voice agent points at clears its config and re-syncs."""
     import asyncio as _asyncio
-    from unittest.mock import AsyncMock, MagicMock, patch
+    from unittest.mock import AsyncMock, MagicMock
     from homeassistant.components.http.const import KEY_AUTHENTICATED, KEY_HASS_USER
     from custom_components.phoenix_mcp.const import DOMAIN
     from custom_components.phoenix_mcp.access_key_store import GlobalSettings
@@ -3698,9 +3702,9 @@ async def test_delete_provider_clears_voice_agent_binding(hass):
     req.get = MagicMock(side_effect=_get)
     req.__getitem__ = MagicMock(side_effect=lambda k: {KEY_AUTHENTICATED: True, KEY_HASS_USER: user}.get(k))
 
-    view = agentcli.PhoenixAgentCliProviderView()
+    view = agentcli_views.PhoenixAgentCliProviderView()
     view.hass = hass
-    with patch("custom_components.phoenix_mcp.agentcli._get_secret_store", AsyncMock(return_value=secret_store)):
+    with patch_readers("custom_components.phoenix_mcp.llm.accounts._get_secret_store", AsyncMock(return_value=secret_store)):
         resp = await view.delete(req, instance_id="pid")
 
     assert resp.status == 200
@@ -3713,7 +3717,7 @@ async def test_delete_provider_clears_voice_agent_binding(hass):
 async def test_delete_provider_clears_ai_task_binding(hass):
     """Deleting the provider the AI Task entity points at clears its config."""
     import asyncio as _asyncio
-    from unittest.mock import AsyncMock, MagicMock, patch
+    from unittest.mock import AsyncMock, MagicMock
     from homeassistant.components.http.const import KEY_AUTHENTICATED, KEY_HASS_USER
     from custom_components.phoenix_mcp.const import DOMAIN
     from custom_components.phoenix_mcp.access_key_store import GlobalSettings
@@ -3747,9 +3751,9 @@ async def test_delete_provider_clears_ai_task_binding(hass):
     req.get = MagicMock(side_effect=_get)
     req.__getitem__ = MagicMock(side_effect=lambda k: {KEY_AUTHENTICATED: True, KEY_HASS_USER: user}.get(k))
 
-    view = agentcli.PhoenixAgentCliProviderView()
+    view = agentcli_views.PhoenixAgentCliProviderView()
     view.hass = hass
-    with patch("custom_components.phoenix_mcp.agentcli._get_secret_store", AsyncMock(return_value=secret_store)):
+    with patch_readers("custom_components.phoenix_mcp.llm.accounts._get_secret_store", AsyncMock(return_value=secret_store)):
         resp = await view.delete(req, instance_id="pid")
 
     assert resp.status == 200
@@ -3766,7 +3770,7 @@ async def test_instances_sort_by_display_name_not_kind(hass):
     would list them out of order in both the Settings card and the Agent Chat
     provider dropdown.
     """
-    store = agentcli.AgentCliStore(AsyncMock())
+    store = llm_accounts.AgentCliStore(AsyncMock())
     await store.add("openrouter", {"api_key": "sk-or"})
     await store.add("chatgpt", {"api_key": "sk-oa"})      # displays as "OpenAI"
     await store.add("claude", {"api_key": "sk-an"})       # displays as "Anthropic"
@@ -3783,7 +3787,7 @@ async def test_instances_sort_by_display_name_not_kind(hass):
 # --------------------------------------------------------------------------- #
 
 class TestDispatchProgress:
-    """Agent Chat is the second consumer of mcp_view's progress bus.
+    """Agent Chat is the second consumer of the MCP transport's progress bus.
 
     A firmware build holds the request open for minutes; without this the panel
     shows a tool call and then nothing at all until it finishes.
@@ -3791,10 +3795,10 @@ class TestDispatchProgress:
 
     @pytest.fixture(autouse=True)
     def _fast_ticks(self, monkeypatch):
-        monkeypatch.setattr(agentcli, "AGENTCLI_PROGRESS_INTERVAL_SECONDS", 0.01)
+        monkeypatch.setattr(agent_turn, "AGENTCLI_PROGRESS_INTERVAL_SECONDS", 0.01)
 
     async def _run(self, statuses):
-        from custom_components.phoenix_mcp.mcp_view import _set_progress_status
+        from custom_components.phoenix_mcp.tool_common import _set_progress_status
 
         emitted: list[tuple[str, dict]] = []
 
@@ -3807,7 +3811,7 @@ class TestDispatchProgress:
                 await asyncio.sleep(0.03)
             return ({"result": {"ok": True}}, "m", "r", "allowed")
 
-        result = await agentcli._dispatch_with_progress(emit, "call-1", dispatch())
+        result = await agent_turn._dispatch_with_progress(emit, "call-1", dispatch())
         return result, [p["message"] for e, p in emitted if e == "tool_progress"]
 
     async def test_relays_each_new_status(self):
@@ -3835,18 +3839,18 @@ class TestDispatchProgress:
             await asyncio.sleep(0.03)
             return ({"result": {}}, "m", "r", "allowed")
 
-        await agentcli._dispatch_with_progress(emit, "call-1", dispatch())
+        await agent_turn._dispatch_with_progress(emit, "call-1", dispatch())
         assert emitted == []
 
     async def test_the_bus_does_not_leak_into_the_next_call(self):
         """Each dispatch gets its own bus; a stale status must not resurface."""
-        from custom_components.phoenix_mcp.mcp_view import _progress_ctx, _set_progress_status
+        from custom_components.phoenix_mcp.tool_common import _progress_ctx, _set_progress_status
 
         async def dispatch():
             _set_progress_status("Compiling x: 50%")
             return ({"result": {}}, "m", "r", "allowed")
 
-        await agentcli._dispatch_with_progress(AsyncMock(), "call-1", dispatch())
+        await agent_turn._dispatch_with_progress(AsyncMock(), "call-1", dispatch())
         assert _progress_ctx.get() is None
 
 
@@ -3871,7 +3875,7 @@ class TestHeadlessSurfacesShareOneLoop:
         import ast
         import pathlib
 
-        src = pathlib.Path(agentcli.__file__).read_text()
+        src = pathlib.Path(agent_chat.__file__).read_text() + pathlib.Path(agent_turn.__file__).read_text()
         for node in ast.walk(ast.parse(src)):
             if isinstance(node, ast.AsyncFunctionDef) and node.name == name:
                 return node
@@ -3952,17 +3956,17 @@ async def test_create_provider_discovers_declared_capabilities(hass):
     provider.list_model_capabilities = AsyncMock(return_value={
         "muse-glimmer:30b-mlx": {"tools": True, "thinking": True, "vision": True},
     })
-    cfg = agentcli.ProviderConfig(
+    cfg = llm_accounts.ProviderConfig(
         kind="ollama", model="muse-glimmer:30b-mlx",
         base_url="http://127.0.0.1:11434",
     )
-    view = agentcli.PhoenixAgentCliProvidersView()
+    view = agentcli_views.PhoenixAgentCliProvidersView()
     view.hass = hass
 
-    with patch("custom_components.phoenix_mcp.agentcli._probe_config", AsyncMock(return_value=cfg)), \
-         patch("custom_components.phoenix_mcp.agentcli.build_provider", return_value=provider), \
-         patch("custom_components.phoenix_mcp.agentcli._get_secret_store", AsyncMock(return_value=secret_store)), \
-         patch("custom_components.phoenix_mcp.agentcli.async_get_clientsession", return_value=MagicMock()):
+    with patch("custom_components.phoenix_mcp.agentcli_views._probe_config", AsyncMock(return_value=cfg)), \
+         patch_readers("custom_components.phoenix_mcp.llm.factory.build_provider", return_value=provider), \
+         patch_readers("custom_components.phoenix_mcp.llm.accounts._get_secret_store", AsyncMock(return_value=secret_store)), \
+         patch("custom_components.phoenix_mcp.agentcli_views.async_get_clientsession", return_value=MagicMock()):
         response = await view.post(_admin_request({
             "kind": "ollama", "base_url": "http://127.0.0.1:11434",
             "model": "muse-glimmer:30b-mlx",
@@ -3982,16 +3986,16 @@ async def test_create_provider_returns_conflict_for_duplicate(hass):
     secret_store.add = AsyncMock()
     provider = MagicMock()
     provider.validate = AsyncMock(return_value=(True, ""))
-    cfg = agentcli.ProviderConfig(
+    cfg = llm_accounts.ProviderConfig(
         kind="ollama", model="m", base_url="http://127.0.0.1:11434",
     )
-    view = agentcli.PhoenixAgentCliProvidersView()
+    view = agentcli_views.PhoenixAgentCliProvidersView()
     view.hass = hass
 
-    with patch("custom_components.phoenix_mcp.agentcli._probe_config", AsyncMock(return_value=cfg)), \
-         patch("custom_components.phoenix_mcp.agentcli.build_provider", return_value=provider), \
-         patch("custom_components.phoenix_mcp.agentcli._get_secret_store", AsyncMock(return_value=secret_store)), \
-         patch("custom_components.phoenix_mcp.agentcli.async_get_clientsession", return_value=MagicMock()):
+    with patch("custom_components.phoenix_mcp.agentcli_views._probe_config", AsyncMock(return_value=cfg)), \
+         patch_readers("custom_components.phoenix_mcp.llm.factory.build_provider", return_value=provider), \
+         patch_readers("custom_components.phoenix_mcp.llm.accounts._get_secret_store", AsyncMock(return_value=secret_store)), \
+         patch("custom_components.phoenix_mcp.agentcli_views.async_get_clientsession", return_value=MagicMock()):
         response = await view.post(_admin_request({
             "kind": "ollama", "base_url": "http://127.0.0.1:11434", "model": "m",
         }))
@@ -4008,19 +4012,19 @@ async def test_create_provider_returns_conflict_for_duplicate(hass):
 async def test_create_provider_handles_duplicate_detected_during_add(hass):
     secret_store = MagicMock()
     secret_store.has_duplicate.return_value = False
-    secret_store.add = AsyncMock(side_effect=agentcli.DuplicateProviderError())
+    secret_store.add = AsyncMock(side_effect=llm_accounts.DuplicateProviderError())
     provider = MagicMock()
     provider.validate = AsyncMock(return_value=(True, ""))
-    cfg = agentcli.ProviderConfig(
+    cfg = llm_accounts.ProviderConfig(
         kind="ollama", model="m", base_url="http://127.0.0.1:11434",
     )
-    view = agentcli.PhoenixAgentCliProvidersView()
+    view = agentcli_views.PhoenixAgentCliProvidersView()
     view.hass = hass
 
-    with patch("custom_components.phoenix_mcp.agentcli._probe_config", AsyncMock(return_value=cfg)), \
-         patch("custom_components.phoenix_mcp.agentcli.build_provider", return_value=provider), \
-         patch("custom_components.phoenix_mcp.agentcli._get_secret_store", AsyncMock(return_value=secret_store)), \
-         patch("custom_components.phoenix_mcp.agentcli.async_get_clientsession", return_value=MagicMock()):
+    with patch("custom_components.phoenix_mcp.agentcli_views._probe_config", AsyncMock(return_value=cfg)), \
+         patch_readers("custom_components.phoenix_mcp.llm.factory.build_provider", return_value=provider), \
+         patch_readers("custom_components.phoenix_mcp.llm.accounts._get_secret_store", AsyncMock(return_value=secret_store)), \
+         patch("custom_components.phoenix_mcp.agentcli_views.async_get_clientsession", return_value=MagicMock()):
         response = await view.post(_admin_request({
             "kind": "ollama", "base_url": "http://127.0.0.1:11434", "model": "m",
         }))
@@ -4037,16 +4041,16 @@ async def test_probe_provider_returns_conflict_before_listing_models(hass):
     provider = MagicMock()
     provider.validate = AsyncMock(return_value=(True, ""))
     provider.list_models = AsyncMock(return_value=["m"])
-    cfg = agentcli.ProviderConfig(
+    cfg = llm_accounts.ProviderConfig(
         kind="ollama", model="", base_url="http://127.0.0.1:11434",
     )
-    view = agentcli.PhoenixAgentCliProbeView()
+    view = agentcli_views.PhoenixAgentCliProbeView()
     view.hass = hass
 
-    with patch("custom_components.phoenix_mcp.agentcli._probe_config", AsyncMock(return_value=cfg)), \
-         patch("custom_components.phoenix_mcp.agentcli.build_provider", return_value=provider), \
-         patch("custom_components.phoenix_mcp.agentcli._get_secret_store", AsyncMock(return_value=secret_store)), \
-         patch("custom_components.phoenix_mcp.agentcli.async_get_clientsession", return_value=MagicMock()):
+    with patch("custom_components.phoenix_mcp.agentcli_views._probe_config", AsyncMock(return_value=cfg)), \
+         patch_readers("custom_components.phoenix_mcp.llm.factory.build_provider", return_value=provider), \
+         patch_readers("custom_components.phoenix_mcp.llm.accounts._get_secret_store", AsyncMock(return_value=secret_store)), \
+         patch("custom_components.phoenix_mcp.agentcli_views.async_get_clientsession", return_value=MagicMock()):
         response = await view.post(_admin_request({
             "kind": "ollama", "base_url": "http://127.0.0.1:11434",
         }))
@@ -4069,7 +4073,7 @@ class TestSetDefaultModel:
     @pytest.mark.asyncio
     async def test_store_updates_only_the_model(self, hass):
         from homeassistant.helpers.storage import Store
-        store = agentcli.AgentCliStore(Store(hass, 1, "phx_test_agentcli_model"))
+        store = llm_accounts.AgentCliStore(Store(hass, 1, "phx_test_agentcli_model"))
         iid = await store.add("deepseek", {"api_key": "k", "model": "old", "base_url": "https://d"})
 
         assert await store.set_model(iid, "deepseek-v4-flash") is True
@@ -4085,17 +4089,17 @@ class TestSetDefaultModel:
     @pytest.mark.asyncio
     async def test_store_reports_an_unknown_account(self, hass):
         from homeassistant.helpers.storage import Store
-        store = agentcli.AgentCliStore(Store(hass, 1, "phx_test_agentcli_missing"))
+        store = llm_accounts.AgentCliStore(Store(hass, 1, "phx_test_agentcli_missing"))
         assert await store.set_model("nope", "m") is False
 
     @pytest.mark.asyncio
     async def test_patch_sets_the_model(self, hass):
-        from unittest.mock import AsyncMock, patch
+        from unittest.mock import AsyncMock
         secret_store = MagicMock()
         secret_store.set_model = AsyncMock(return_value=True)
-        view = agentcli.PhoenixAgentCliProviderView()
+        view = agentcli_views.PhoenixAgentCliProviderView()
         view.hass = hass
-        with patch("custom_components.phoenix_mcp.agentcli._get_secret_store",
+        with patch_readers("custom_components.phoenix_mcp.llm.accounts._get_secret_store",
                    AsyncMock(return_value=secret_store)):
             resp = await view.patch(_admin_request({"model": "  deepseek-v4-flash  "}), instance_id="pid")
         assert resp.status == 200
@@ -4105,12 +4109,12 @@ class TestSetDefaultModel:
 
     @pytest.mark.asyncio
     async def test_patch_refuses_an_empty_model(self, hass):
-        from unittest.mock import AsyncMock, patch
+        from unittest.mock import AsyncMock
         secret_store = MagicMock()
         secret_store.set_model = AsyncMock(return_value=True)
-        view = agentcli.PhoenixAgentCliProviderView()
+        view = agentcli_views.PhoenixAgentCliProviderView()
         view.hass = hass
-        with patch("custom_components.phoenix_mcp.agentcli._get_secret_store",
+        with patch_readers("custom_components.phoenix_mcp.llm.accounts._get_secret_store",
                    AsyncMock(return_value=secret_store)):
             resp = await view.patch(_admin_request({"model": "   "}), instance_id="pid")
         assert resp.status == 400
@@ -4119,14 +4123,14 @@ class TestSetDefaultModel:
     @pytest.mark.asyncio
     async def test_patch_auto_on_a_decision_account_needs_a_model(self, hass):
         """Automatic model selection on a decision account answers decisionModelRequired and saves nothing."""
-        from unittest.mock import AsyncMock, patch
+        from unittest.mock import AsyncMock
         secret_store = MagicMock()
         secret_store.get = MagicMock(return_value={"kind": "typesafe"})
         secret_store.set_model = AsyncMock(return_value=True)
         secret_store.set_auto = AsyncMock(return_value=True)
-        view = agentcli.PhoenixAgentCliProviderView()
+        view = agentcli_views.PhoenixAgentCliProviderView()
         view.hass = hass
-        with patch("custom_components.phoenix_mcp.agentcli._get_secret_store",
+        with patch_readers("custom_components.phoenix_mcp.llm.accounts._get_secret_store",
                    AsyncMock(return_value=secret_store)):
             resp = await view.patch(_admin_request({"auto": True}), instance_id="pid")
         assert resp.status == 400
@@ -4137,12 +4141,12 @@ class TestSetDefaultModel:
 
     @pytest.mark.asyncio
     async def test_patch_reports_an_unknown_account(self, hass):
-        from unittest.mock import AsyncMock, patch
+        from unittest.mock import AsyncMock
         secret_store = MagicMock()
         secret_store.set_model = AsyncMock(return_value=False)
-        view = agentcli.PhoenixAgentCliProviderView()
+        view = agentcli_views.PhoenixAgentCliProviderView()
         view.hass = hass
-        with patch("custom_components.phoenix_mcp.agentcli._get_secret_store",
+        with patch_readers("custom_components.phoenix_mcp.llm.accounts._get_secret_store",
                    AsyncMock(return_value=secret_store)):
             resp = await view.patch(_admin_request({"model": "m"}), instance_id="gone")
         assert resp.status == 404
@@ -4166,14 +4170,14 @@ class TestDeclaredCapabilities:
             {"id": "old-model", "archived": True, "capabilities": {
                 "completion_chat": True, "function_calling": True, "vision": False}},
         ]
-        assert agentcli._filter_mistral_models(data) == ["mistral-large-latest"]
+        assert llm_provider_openai._filter_mistral_models(data) == ["mistral-large-latest"]
 
     def test_mistral_filter_falls_back_when_capability_schema_is_absent(self):
         data = [{"id": "future-model"}, {"id": "archived", "archived": True}]
-        assert agentcli._filter_mistral_models(data) == ["future-model"]
+        assert llm_provider_openai._filter_mistral_models(data) == ["future-model"]
 
     def test_mistral_declares_tool_and_vision_support(self):
-        caps = agentcli._mistral_capabilities([
+        caps = llm_provider_openai._mistral_capabilities([
             {"id": "pixtral", "capabilities": {
                 "completion_chat": True, "function_calling": True, "vision": True}},
             {"id": "plain", "capabilities": {
@@ -4192,9 +4196,9 @@ class TestDeclaredCapabilities:
             {"id": "embed", "capabilities": {
                 "completion_chat": False, "function_calling": False, "vision": False}},
         ]
-        cfg = agentcli.ProviderConfig(
+        cfg = llm_accounts.ProviderConfig(
             kind="mistral", model="", base_url="https://api.mistral.ai/v1", api_key="k")
-        provider = agentcli.OpenAICompatProvider(cfg)
+        provider = llm_provider_openai.OpenAICompatProvider(cfg)
 
         models = await provider.list_models(
             _FakeSession(_FakeResp(200, b"", json_data={"data": data})))
@@ -4209,17 +4213,17 @@ class TestDeclaredCapabilities:
         data = [{"id": "plain", "capabilities": {
             "completion_chat": True, "function_calling": False, "vision": False,
         }}]
-        cfg = agentcli.ProviderConfig(
+        cfg = llm_accounts.ProviderConfig(
             kind="mistral", model="plain",
             base_url="https://api.mistral.ai/v1", api_key="k")
 
-        models = await agentcli.OpenAICompatProvider(cfg).list_models(
+        models = await llm_provider_openai.OpenAICompatProvider(cfg).list_models(
             _FakeSession(_FakeResp(200, b"", json_data={"data": data})))
 
         assert models == []
 
     def test_openrouter_keeps_what_the_tools_filter_threw_away(self):
-        caps = agentcli._openrouter_capabilities([
+        caps = llm_base._openrouter_capabilities([
             {"id": "a/reasoner", "supported_parameters": ["tools", "reasoning", "temperature"],
              "architecture": {"input_modalities": ["text", "image"]}},
             {"id": "b/plain", "supported_parameters": ["temperature"]},
@@ -4228,7 +4232,7 @@ class TestDeclaredCapabilities:
         assert caps["b/plain"] == {"tools": False, "thinking": False, "temperature": True}
 
     def test_openrouter_can_keep_modality_metadata_without_parameters(self):
-        caps = agentcli._openrouter_capabilities([
+        caps = llm_base._openrouter_capabilities([
             {"id": "a/vision", "architecture": {"input_modalities": ["text", "image"]}},
         ])
         assert caps["a/vision"] == {"vision": True}
@@ -4237,7 +4241,7 @@ class TestDeclaredCapabilities:
         """No supported_parameters is "not declared", so the model must be absent
         rather than present with everything False, which would read as a model
         that supports nothing at all."""
-        caps = agentcli._openrouter_capabilities([
+        caps = llm_base._openrouter_capabilities([
             {"id": "a/quiet"},
             {"id": "b/loud", "supported_parameters": ["tools"]},
         ])
@@ -4252,8 +4256,7 @@ class TestDeclaredCapabilities:
 
         class _Resp:
             status = 200
-            def __init__(self, body): self._body = body
-            async def json(self, content_type=None): return self._body
+            def __init__(self, body): self.content = _FakeContent(json.dumps(body).encode())
             async def __aenter__(self): return self
             async def __aexit__(self, *a): return False
 
@@ -4264,7 +4267,7 @@ class TestDeclaredCapabilities:
         session = MagicMock()
         session.post = lambda url, **kw: _Resp(bodies[kw["json"]["model"]])
 
-        caps = await agentcli._ollama_capabilities(session, "http://h", {}, ["toolful", "toolless"])
+        caps = await llm_base._ollama_capabilities(session, "http://h", {}, ["toolful", "toolless"])
         assert caps["toolful"] == {"tools": True, "thinking": True, "vision": False}
         assert caps["toolless"] == {"tools": False, "thinking": False, "vision": False}
         assert "temperature" not in caps["toolful"]
@@ -4276,8 +4279,8 @@ class TestDeclaredCapabilities:
         from unittest.mock import MagicMock
 
         class _Resp:
-            def __init__(self, status, body=None): self.status, self._body = status, body
-            async def json(self, content_type=None): return self._body
+            def __init__(self, status, body=None):
+                self.status, self.content = status, _FakeContent(json.dumps(body).encode())
             async def __aenter__(self): return self
             async def __aexit__(self, *a): return False
 
@@ -4285,29 +4288,29 @@ class TestDeclaredCapabilities:
         session.post = lambda url, **kw: (
             _Resp(200, {"capabilities": ["tools"]}) if kw["json"]["model"] == "ok" else _Resp(500))
 
-        caps = await agentcli._ollama_capabilities(session, "http://h", {}, ["ok", "broken"])
+        caps = await llm_base._ollama_capabilities(session, "http://h", {}, ["ok", "broken"])
         assert set(caps) == {"ok"}
 
     @pytest.mark.asyncio
     async def test_a_provider_that_declares_nothing_returns_empty(self, hass):
         from unittest.mock import MagicMock
-        cfg = agentcli.ProviderConfig(kind="deepseek", model="deepseek-v4-flash",
+        cfg = llm_accounts.ProviderConfig(kind="deepseek", model="deepseek-v4-flash",
                                       base_url="https://d", api_key="k")
-        caps = await agentcli.OpenAICompatProvider(cfg).list_model_capabilities(
+        caps = await llm_provider_openai.OpenAICompatProvider(cfg).list_model_capabilities(
             MagicMock(), ["deepseek-v4-flash"])
         assert caps == {}
 
     @pytest.mark.asyncio
     async def test_claude_declares_nothing(self, hass):
         from unittest.mock import MagicMock
-        cfg = agentcli.ProviderConfig(kind="claude", model="claude-opus-4-8",
+        cfg = llm_accounts.ProviderConfig(kind="claude", model="claude-opus-4-8",
                                       base_url="https://a", api_key="k")
-        assert await agentcli.ClaudeProvider(cfg).list_model_capabilities(MagicMock(), ["x"]) == {}
+        assert await llm_provider_claude.ClaudeProvider(cfg).list_model_capabilities(MagicMock(), ["x"]) == {}
 
     @pytest.mark.asyncio
     async def test_store_records_capabilities_with_a_timestamp(self, hass):
         from homeassistant.helpers.storage import Store
-        store = agentcli.AgentCliStore(Store(hass, 1, "phx_test_agentcli_caps"))
+        store = llm_accounts.AgentCliStore(Store(hass, 1, "phx_test_agentcli_caps"))
         iid = await store.add("ollama", {"base_url": "http://h", "model": "m"})
 
         assert await store.set_capabilities(iid, {"m": {"tools": True}}, "2026-08-04T00:00:00+00:00") is True
@@ -4322,7 +4325,7 @@ class TestDeclaredCapabilities:
     @pytest.mark.asyncio
     async def test_an_account_that_never_refreshed_reports_no_timestamp(self, hass):
         from homeassistant.helpers.storage import Store
-        store = agentcli.AgentCliStore(Store(hass, 1, "phx_test_agentcli_nocaps"))
+        store = llm_accounts.AgentCliStore(Store(hass, 1, "phx_test_agentcli_nocaps"))
         await store.add("claude", {"api_key": "k", "model": "m"})
         row = store.list_instances()[0]
         assert row["capabilities"] == {}
@@ -4364,16 +4367,16 @@ class TestCapabilityProbe:
     """
 
     async def _probe(self, hass, kind, answer, model="m"):
-        from unittest.mock import MagicMock, patch
-        cfg = agentcli.ProviderConfig(kind=kind, model=model, base_url="https://x", api_key="k")
+        from unittest.mock import MagicMock
+        cfg = llm_accounts.ProviderConfig(kind=kind, model=model, base_url="https://x", api_key="k")
         prov = _ProbeProvider(answer)
-        with patch.object(agentcli, "build_provider", return_value=prov):
-            caps, calls, answered = await agentcli.async_probe_capabilities(MagicMock(), cfg)
+        with patch_readers("custom_components.phoenix_mcp.llm.factory.build_provider", return_value=prov):
+            caps, calls, answered = await llm_probes.async_probe_capabilities(MagicMock(), cfg)
         return caps, calls, prov, answered
 
     @pytest.mark.asyncio
     async def test_finds_the_levels_a_validated_field_accepts(self, hass):
-        from custom_components.phoenix_mcp.const import AGENTCLI_PROBE_SENTINEL
+        from custom_components.phoenix_mcp.provider_constants import AGENTCLI_PROBE_SENTINEL
         accepted = {"low", "high", "max"}
 
         def answer(extra):
@@ -4442,19 +4445,19 @@ class TestCapabilityProbe:
         caps, calls, prov, _a = await self._probe(hass, "ollama", answer)
         assert caps["effort_levels"] == ["low", "medium", "high", "max"]
         assert calls == 10  # control + sentinel + seven candidates + temperature
-        assert _effort_of(prov.sent[1]) == agentcli.AGENTCLI_PROBE_SENTINEL
+        assert _effort_of(prov.sent[1]) == provider_constants.AGENTCLI_PROBE_SENTINEL
 
     @pytest.mark.asyncio
     async def test_claude_uses_its_own_nested_effort_field(self, hass):
         caps, _c, prov, _a = await self._probe(
             hass, "claude", lambda extra: 400 if _effort_of(extra) == "phoenix-probe-invalid" else 200)
         assert caps["effort_levels"] == list(
-            __import__("custom_components.phoenix_mcp.const", fromlist=["x"]).AGENTCLI_EFFORT_LEVEL_ORDER)
+            __import__("custom_components.phoenix_mcp.provider_constants", fromlist=["x"]).AGENTCLI_EFFORT_LEVEL_ORDER)
         assert "output_config" in prov.sent[1]
 
     @pytest.mark.asyncio
     async def test_the_run_is_bounded(self, hass):
-        from custom_components.phoenix_mcp.const import AGENTCLI_PROBE_MAX_CALLS
+        from custom_components.phoenix_mcp.provider_constants import AGENTCLI_PROBE_MAX_CALLS
         _caps, calls, _p, _a = await self._probe(
             hass, "deepseek", lambda extra: 400 if _effort_of(extra) == "phoenix-probe-invalid" else 200)
         assert calls <= AGENTCLI_PROBE_MAX_CALLS
@@ -4469,7 +4472,7 @@ class TestLearnedRefusals:
     parameter is ground truth, costs nothing extra, and is the only signal left."""
 
     def test_names_the_option_the_provider_refused(self):
-        assert agentcli._refused_option(
+        assert llm_base._refused_option(
             400, "Unsupported parameter: 'temperature' is not supported with this model.",
             {"temperature": 0.7}) == "temperature"
 
@@ -4478,26 +4481,26 @@ class TestLearnedRefusals:
 
         It must not mark that knob unsupported.
         """
-        assert agentcli._refused_option(
+        assert llm_base._refused_option(
             400, "temperature must be provided by the caller", {"model": "m"}) is None
 
     @pytest.mark.parametrize("status", [401, 429, 500, 503])
     def test_only_a_400_teaches_anything(self, status):
         """An outage, a quota or an auth failure says nothing about the option."""
-        assert agentcli._refused_option(
+        assert llm_base._refused_option(
             status, "'temperature' is not supported", {"temperature": 1}) is None
 
     def test_a_substring_match_is_not_enough(self):
         """`max_temperature` is not `temperature`; a word boundary keeps a
         neighbouring field name from disabling the wrong control."""
-        assert agentcli._refused_option(
+        assert llm_base._refused_option(
             400, "max_temperature out of range", {"temperature": 1}) is None
 
     @pytest.mark.asyncio
     async def test_a_refusal_narrows_what_the_panel_offers(self, hass):
         from homeassistant.helpers.storage import Store
         from homeassistant.util.dt import utcnow
-        store = agentcli.AgentCliStore(Store(hass, 1, "phx_test_learned"))
+        store = llm_accounts.AgentCliStore(Store(hass, 1, "phx_test_learned"))
         iid = await store.add("chatgpt", {"api_key": "k", "model": "o9"})
 
         assert await store.record_refusal(iid, "o9", "temperature", utcnow().isoformat()) is True
@@ -4510,9 +4513,11 @@ class TestLearnedRefusals:
         from datetime import timedelta
         from homeassistant.helpers.storage import Store
         from homeassistant.util.dt import utcnow
-        from custom_components.phoenix_mcp.const import AGENTCLI_LEARNED_REFUSAL_TTL_DAYS
+        from custom_components.phoenix_mcp.provider_constants import (
+            AGENTCLI_LEARNED_REFUSAL_TTL_DAYS,
+        )
 
-        store = agentcli.AgentCliStore(Store(hass, 1, "phx_test_learned_old"))
+        store = llm_accounts.AgentCliStore(Store(hass, 1, "phx_test_learned_old"))
         iid = await store.add("chatgpt", {"api_key": "k", "model": "o9"})
         stale = (utcnow() - timedelta(days=AGENTCLI_LEARNED_REFUSAL_TTL_DAYS + 1)).isoformat()
         await store.record_refusal(iid, "o9", "temperature", stale)
@@ -4526,7 +4531,7 @@ class TestLearnedRefusals:
     @pytest.mark.asyncio
     async def test_an_unreadable_timestamp_expires_rather_than_sticking(self, hass):
         from homeassistant.helpers.storage import Store
-        store = agentcli.AgentCliStore(Store(hass, 1, "phx_test_learned_bad"))
+        store = llm_accounts.AgentCliStore(Store(hass, 1, "phx_test_learned_bad"))
         iid = await store.add("chatgpt", {"api_key": "k", "model": "o9"})
         await store.record_refusal(iid, "o9", "temperature", "not-a-date")
         # Fails toward offering the control rather than hiding it.
@@ -4540,7 +4545,7 @@ class TestLearnedRefusals:
         apart and merged only on read."""
         from homeassistant.helpers.storage import Store
         from homeassistant.util.dt import utcnow
-        store = agentcli.AgentCliStore(Store(hass, 1, "phx_test_learned_merge"))
+        store = llm_accounts.AgentCliStore(Store(hass, 1, "phx_test_learned_merge"))
         iid = await store.add("openrouter", {"api_key": "k", "model": "a/b"})
         await store.set_capabilities(iid, {"a/b": {"tools": True, "temperature": True}}, utcnow().isoformat())
         await store.record_refusal(iid, "a/b", "temperature", utcnow().isoformat())
@@ -4565,10 +4570,10 @@ class TestProbeAnswered:
     """
 
     async def _probe(self, hass, answer):
-        from unittest.mock import MagicMock, patch
-        cfg = agentcli.ProviderConfig(kind="deepseek", model="m", base_url="https://x", api_key="k")
-        with patch.object(agentcli, "build_provider", return_value=_ProbeProvider(answer)):
-            return await agentcli.async_probe_capabilities(MagicMock(), cfg)
+        from unittest.mock import MagicMock
+        cfg = llm_accounts.ProviderConfig(kind="deepseek", model="m", base_url="https://x", api_key="k")
+        with patch_readers("custom_components.phoenix_mcp.llm.factory.build_provider", return_value=_ProbeProvider(answer)):
+            return await llm_probes.async_probe_capabilities(MagicMock(), cfg)
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize("status", [401, 402, 429, 503, None])
@@ -4608,32 +4613,32 @@ class TestAggregatorEffort:
 
     @pytest.mark.parametrize("kind", ["nvidia", "opencode", "tencent"])
     def test_the_probe_asks_them_about_effort(self, kind):
-        assert agentcli._effort_probe_body(kind, "high") == {"reasoning_effort": "high"}
+        assert llm_probes._effort_probe_body(kind, "high") == {"reasoning_effort": "high"}
 
     def test_openrouter_is_asked_through_its_nested_reasoning_object(self):
         # The top-level field has no "max"; the nested object carries every level.
-        assert agentcli._effort_probe_body("openrouter", "max") == {"reasoning": {"effort": "max"}}
+        assert llm_probes._effort_probe_body("openrouter", "max") == {"reasoning": {"effort": "max"}}
 
     def test_minimax_and_zai_carry_the_switch_their_effort_needs(self):
-        assert agentcli._effort_probe_body("minimax", "low") == {
+        assert llm_probes._effort_probe_body("minimax", "low") == {
             "thinking": {"type": "adaptive"}, "output_config": {"effort": "low"}}
-        assert agentcli._effort_probe_body("zai", "low") == {"thinking": {"type": "enabled"}, "reasoning_effort": "low"}
+        assert llm_probes._effort_probe_body("zai", "low") == {"thinking": {"type": "enabled"}, "reasoning_effort": "low"}
 
     @pytest.mark.parametrize("kind", ["mimo", "qwen"])
     def test_a_backend_with_no_level_vocabulary_is_still_skipped(self, kind):
         """These take an on/off switch, not a level vocabulary."""
-        assert agentcli._effort_probe_body(kind, "high") is None
+        assert llm_probes._effort_probe_body(kind, "high") is None
 
     @pytest.mark.parametrize("kind", ["ollama", "ollama_cloud"])
     def test_ollama_probe_uses_its_openai_compatible_effort_field(self, kind):
-        assert agentcli._effort_probe_body(kind, "high") == {"reasoning_effort": "high"}
+        assert llm_probes._effort_probe_body(kind, "high") == {"reasoning_effort": "high"}
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize("kind", ["openrouter", "nvidia", "opencode", "tencent"])
     async def test_an_effort_reaches_the_request(self, hass, kind):
-        cfg = agentcli.ProviderConfig(kind=kind, model="vendor/m", base_url="https://x", api_key="k")
+        cfg = llm_accounts.ProviderConfig(kind=kind, model="vendor/m", base_url="https://x", api_key="k")
         # Capture the request the real builder produces.
-        provider = agentcli.OpenAICompatProvider(cfg)
+        provider = llm_provider_openai.OpenAICompatProvider(cfg)
         sent = {}
 
         class _Resp:
@@ -4665,9 +4670,9 @@ class TestAggregatorEffort:
     @pytest.mark.asyncio
     async def test_no_effort_means_no_field(self, hass):
         """A turn that chose nothing must not force a level on the model."""
-        cfg = agentcli.ProviderConfig(kind="openrouter", model="vendor/m",
+        cfg = llm_accounts.ProviderConfig(kind="openrouter", model="vendor/m",
                                       base_url="https://x", api_key="k")
-        provider = agentcli.OpenAICompatProvider(cfg)
+        provider = llm_provider_openai.OpenAICompatProvider(cfg)
         sent = {}
 
         class _Resp:
@@ -4686,6 +4691,7 @@ class TestAggregatorEffort:
                 break
         except Exception:
             pass
+        assert sent.get("model") == "vendor/m", "the request never reached the provider"
         assert "reasoning_effort" not in sent
 
 
@@ -4694,13 +4700,13 @@ class TestAggregatorEffort:
                                      '{"choices":[{"delta":{"tool_calls":[null]}}]}', '{broken'])
 @pytest.mark.parametrize("kind", ["claude", "deepseek"])
 async def test_malformed_provider_envelopes_are_total_and_content_free(kind, payload):
-    provider = agentcli.build_provider(ProviderConfig(kind, "model", "https://example", "secret"))
+    provider = llm_factory.build_provider(ProviderConfig(kind, "model", "https://example", "secret"))
     events = await _collect(provider.stream_turn(
         _FakeSession(_FakeResp(200, _sse(f"data: {payload}"))),
         system_prompt="private prompt", messages=[], tools=[], options={},
     ))
-    assert any(e["type"] == agentcli.EV_ERROR for e in events)
-    assert not any(e["type"] in (agentcli.EV_TOOL, agentcli.EV_DONE) for e in events)
+    assert any(e["type"] == llm_base.EV_ERROR for e in events)
+    assert not any(e["type"] in (llm_base.EV_TOOL, llm_base.EV_DONE) for e in events)
     assert "secret" not in json.dumps(events)
     assert "private prompt" not in json.dumps(events)
 
@@ -4708,9 +4714,9 @@ async def test_malformed_provider_envelopes_are_total_and_content_free(kind, pay
 @pytest.mark.asyncio
 @pytest.mark.parametrize("kind", ["claude", "deepseek"])
 async def test_http_200_prompt_block_is_never_retried(kind):
-    provider = agentcli.build_provider(ProviderConfig(kind, "model", "https://example", "secret"))
+    provider = llm_factory.build_provider(ProviderConfig(kind, "model", "https://example", "secret"))
     session = _FakeSession(_FakeResp(200, _sse('data: {"promptFeedback":{"blockReason":"SAFETY"}}')))
-    events = await _collect(agentcli._stream_turn_resilient(
+    events = await _collect(agent_turn._stream_turn_resilient(
         provider, session, system_prompt="s", messages=[], tools=[], options={}, cancel=asyncio.Event()))
     assert len(session.calls) == 1
     assert events[-1]["code"] == "provider_blocked"
@@ -4731,13 +4737,13 @@ async def test_groq_in_stream_tool_use_failure_is_an_invalid_call_not_a_block():
     session = _FakeSession(_FakeResp())
     post = session.post
     session.post = lambda *args, **kwargs: (post(*args, **kwargs), next(replies))[1]
-    events = await _collect(agentcli._stream_turn_resilient(
+    events = await _collect(agent_turn._stream_turn_resilient(
         provider, session, system_prompt="s", messages=[], tools=[], options={}, cancel=asyncio.Event()))
     assert len(session.calls) == 2
-    assert [e["text"] for e in events if e["type"] == agentcli.EV_TEXT] == ["Done."]
+    assert [e["text"] for e in events if e["type"] == llm_base.EV_TEXT] == ["Done."]
     single = await _collect(provider.stream_turn(_FakeSession(_FakeResp(200, _sse(error))),
                                                  system_prompt="s", messages=[], tools=[], options={}))
-    failure = next(e for e in single if e["type"] == agentcli.EV_ERROR)
+    failure = next(e for e in single if e["type"] == llm_base.EV_ERROR)
     assert failure["code"] == "bad_tool_call" and failure["retryable"] is True
     assert "failed_generation" not in json.dumps(single) and '"x"' not in json.dumps(single)
 
@@ -4749,7 +4755,7 @@ async def test_valid_json_tool_without_terminal_stream_never_dispatches():
     events = await _collect(provider.stream_turn(_FakeSession(_FakeResp(200, body)),
                          system_prompt="s", messages=[], tools=[], options={}))
     assert events[-1]["code"] == "provider_incomplete"
-    assert not any(e["type"] == agentcli.EV_TOOL for e in events)
+    assert not any(e["type"] == llm_base.EV_TOOL for e in events)
 
 
 @pytest.mark.asyncio
@@ -4765,9 +4771,9 @@ async def test_claude_bad_arguments_never_dispatch_their_placeholder():
     events = await _collect(provider.stream_turn(_FakeSession(_FakeResp(200, body)),
                          system_prompt="s", messages=[], tools=[], options={}))
     invalid = events[-1]
-    assert invalid["type"] == agentcli.EV_INVALID_TOOLS
+    assert invalid["type"] == llm_base.EV_INVALID_TOOLS
     # The `{}` exists only in replayed history; nothing is dispatchable.
-    assert not any(e["type"] in (agentcli.EV_TOOL, agentcli.EV_DONE) for e in events)
+    assert not any(e["type"] in (llm_base.EV_TOOL, llm_base.EV_DONE) for e in events)
     assert invalid["assistant_msg"]["content"] == [{"type": "tool_use", "id": "a", "name": "call_service", "input": {}}]
     # The hand-back names position and structure, never the model's own text.
     assert "not valid JSON" in invalid["results"][0]["result_text"]
@@ -4776,11 +4782,11 @@ async def test_claude_bad_arguments_never_dispatch_their_placeholder():
 
 @pytest.mark.asyncio
 async def test_schema_retry_count_and_dispatch_boundary():
-    error = {"type": agentcli.EV_ERROR, "code": "provider_malformed", "retryable": True}
+    error = {"type": llm_base.EV_ERROR, "code": "provider_malformed", "retryable": True}
     for dispatched, write_started, expected in [(False, False, 3), (True, False, 1), (True, True, 1)]:
         provider = _ScriptedProvider([[error]] * 5)
-        with patch.object(agentcli, "_CONNECT_RETRY_BACKOFF_SECONDS", 0):
-            events = await _collect(agentcli._stream_turn_resilient(
+        with patch("custom_components.phoenix_mcp.agent_turn._CONNECT_RETRY_BACKOFF_SECONDS", 0):
+            events = await _collect(agent_turn._stream_turn_resilient(
                 provider, None, system_prompt="s", messages=[], tools=[], options={},
                 cancel=asyncio.Event(), dispatch_started=dispatched, write_started=write_started))
         assert provider.i == expected
@@ -4791,13 +4797,13 @@ async def test_schema_retry_count_and_dispatch_boundary():
 
 @pytest.mark.asyncio
 async def test_cancel_interrupts_retry_backoff_without_another_request():
-    provider = _ScriptedProvider([[{"type": agentcli.EV_ERROR, "code": "network", "retryable": True}]] * 3)
+    provider = _ScriptedProvider([[{"type": llm_base.EV_ERROR, "code": "network", "retryable": True}]] * 3)
     cancel = asyncio.Event()
     async def stop():
         await asyncio.sleep(0.01)
         cancel.set()
     stopper = asyncio.create_task(stop())
-    await asyncio.wait_for(_collect(agentcli._stream_turn_resilient(
+    await asyncio.wait_for(_collect(agent_turn._stream_turn_resilient(
         provider, None, system_prompt="s", messages=[], tools=[], options={}, cancel=cancel)), timeout=0.5)
     await stopper
     assert provider.i == 1
@@ -4816,7 +4822,7 @@ async def test_cancel_closes_a_silent_provider_stream(task_cancel):
         finally:
             closed.set()
     cancel = asyncio.Event()
-    task = asyncio.create_task(_collect(agentcli._cancelable_provider_events(stream(), cancel)))
+    task = asyncio.create_task(_collect(agent_turn._cancelable_provider_events(stream(), cancel)))
     await entered.wait()
     if task_cancel:
         task.cancel()
@@ -4832,8 +4838,8 @@ async def test_cancel_closes_a_silent_provider_stream(task_cancel):
 @pytest.mark.parametrize('tool_name', ['get_state', 'call_service'])
 async def test_provider_failure_after_dispatch_retains_only_write_uncertainty(hass, tool_name):
     provider = _ScriptedProvider([
-        [{"type": agentcli.EV_TOOL, "id": "a", "name": tool_name, "input": {}}, _done("tool_use")],
-        [{"type": agentcli.EV_ERROR, "code": "network", "retryable": True}],
+        [{"type": llm_base.EV_TOOL, "id": "a", "name": tool_name, "input": {}}, _done("tool_use")],
+        [{"type": llm_base.EV_ERROR, "code": "network", "retryable": True}],
     ])
     data = _loop_data()
     access_key = data.store.get_access_key_by_id.return_value
@@ -4841,9 +4847,9 @@ async def test_provider_failure_after_dispatch_retains_only_write_uncertainty(ha
     events = []
     async def emit(name, payload):
         events.append((name, payload))
-    with patch.object(agentcli, "build_mcp_tool_list", return_value=[]), \
-         patch("custom_components.phoenix_mcp.mcp_view._build_instructions", return_value="sys"), \
-         patch("custom_components.phoenix_mcp.mcp_view._dispatch_mcp", dispatch):
+    with patch_readers("custom_components.phoenix_mcp.tool_catalog.build_mcp_tool_list", return_value=[]), \
+         patch_readers("custom_components.phoenix_mcp.tool_dispatch._build_instructions", return_value="sys"), \
+         patch_readers("custom_components.phoenix_mcp.tool_dispatch._dispatch_mcp", dispatch):
         await async_run_agent_turn(hass=hass, data=data, access_key=access_key, provider=provider,
             session=None, messages=[], options={}, client_ip="agentcli", base_url="http://h",
             emit=emit, cancel=asyncio.Event())
@@ -4892,8 +4898,8 @@ async def test_non_object_tool_input_never_becomes_an_empty_action(arguments):
     }}]}, "finish_reason": "tool_calls"}]}
     events = await _collect(provider.stream_turn(_FakeSession(_FakeResp(200, _sse('data: '+json.dumps(chunk)))),
         system_prompt="s", messages=[], tools=[], options={}))
-    assert any(e["type"] == agentcli.EV_ERROR for e in events)
-    assert not any(e["type"] in (agentcli.EV_TOOL, agentcli.EV_DONE) for e in events)
+    assert any(e["type"] == llm_base.EV_ERROR for e in events)
+    assert not any(e["type"] in (llm_base.EV_TOOL, llm_base.EV_DONE) for e in events)
 
 
 @pytest.mark.asyncio
@@ -4909,12 +4915,12 @@ async def test_claude_initial_tool_input_is_validated_and_preserved(initial):
         'data: {"type":"message_stop"}')
     events = await _collect(provider.stream_turn(_FakeSession(_FakeResp(200, body)),
         system_prompt="s", messages=[], tools=[], options={}))
-    calls = [e for e in events if e["type"] == agentcli.EV_TOOL]
+    calls = [e for e in events if e["type"] == llm_base.EV_TOOL]
     if isinstance(initial, dict):
         assert calls[0]["input"] == initial
     else:
         assert not calls
-        assert events[-1]["type"] == agentcli.EV_ERROR
+        assert events[-1]["type"] == llm_base.EV_ERROR
 
 
 @pytest.mark.asyncio
@@ -4923,15 +4929,15 @@ async def test_unreconciled_action_cannot_be_reported_complete_by_a_new_model_tu
     access_key = data.store.get_access_key_by_id.return_value
     await data.agent_recovery.begin(access_key.id, "call_service", "old")
     data.agent_recovery.interrupted("old")
-    provider = _ScriptedProvider([[{"type": agentcli.EV_TEXT, "text": "All done."}, _done("end_turn")]])
+    provider = _ScriptedProvider([[{"type": llm_base.EV_TEXT, "text": "All done."}, _done("end_turn")]])
     emit = AsyncMock()
     await async_run_agent_turn(hass=hass, data=data, access_key=access_key, provider=provider, session=None,
         messages=[], options={}, client_ip="agentcli", base_url="http://h", emit=emit, cancel=asyncio.Event())
     assert provider.i == 0
     assert emit.await_args_list[0].args[1]["code"] == "outcome_unknown"
-    result = await agentcli._run_headless_turn(hass, data, access_key, provider, None, "http://h",
+    result = await agent_turn._run_headless_turn(hass, data, access_key, provider, None, "http://h",
         system="s", seed="retry", client_ip="voice", max_iterations=2)
-    assert result.outcome == agentcli.TURN_OUTCOME_UNKNOWN
+    assert result.outcome == agent_turn.TURN_OUTCOME_UNKNOWN
     assert result.text == ""
     assert provider.i == 0
 
@@ -4943,18 +4949,18 @@ async def test_unreconciled_action_cannot_be_reported_complete_by_a_new_model_tu
     ("silicon_valley", "tokenhub-us.tencentcloudmaas.com"),
 ])
 async def test_tencent_site_persists_and_routes_validation_catalog_and_chat(site, host):
-    cfg = await agentcli._probe_config("tencent", {
+    cfg = await agentcli_views._probe_config("tencent", {
         "api_key": "site-key", "endpoint_id": site, "base_url": "https://ignored.invalid",
     })
     assert isinstance(cfg, ProviderConfig)
     assert cfg.base_url == f"https://{host}/v1"
-    stored = agentcli._stored_setup_config(cfg, "hy3")
+    stored = agentcli_views._stored_setup_config(cfg, "hy3")
     assert "base_url" not in stored
-    store = agentcli.AgentCliStore(AsyncMock())
+    store = llm_accounts.AgentCliStore(AsyncMock())
     instance_id = await store.add("tencent", stored)
     restored = store.resolve(instance_id)
     assert restored.base_url == cfg.base_url
-    provider = agentcli.build_provider(restored)
+    provider = llm_factory.build_provider(restored)
     session = _FakeSession(_FakeResp(json_data={"data": [{"id": "hy3", "status": "online"}]}))
     assert await provider.validate(session) == (True, "")
     assert await provider.list_models(session) == ["hy3"]
@@ -4966,13 +4972,13 @@ async def test_tencent_site_persists_and_routes_validation_catalog_and_chat(site
 
 @pytest.mark.asyncio
 async def test_tencent_site_validation_and_duplicate_identity():
-    default = await agentcli._probe_config("tencent", {"api_key": "key"})
+    default = await agentcli_views._probe_config("tencent", {"api_key": "key"})
     assert default.endpoint_id == "singapore"
-    invalid = await agentcli._probe_config("tencent", {"api_key": "key", "endpoint_id": "unknown"})
-    assert isinstance(invalid, agentcli.ProbeConfigError)
-    store = agentcli.AgentCliStore(AsyncMock())
+    invalid = await agentcli_views._probe_config("tencent", {"api_key": "key", "endpoint_id": "unknown"})
+    assert isinstance(invalid, llm_base.ProbeConfigError)
+    store = llm_accounts.AgentCliStore(AsyncMock())
     await store.add("tencent", {"api_key": "key"})
-    with pytest.raises(agentcli.DuplicateProviderError):
+    with pytest.raises(llm_accounts.DuplicateProviderError):
         await store.add("tencent", {"api_key": "key", "endpoint_id": "singapore"})
     await store.add("tencent", {"api_key": "key", "endpoint_id": "guangzhou"})
     assert {row["name"] for row in store.list_instances()} == {
@@ -4989,8 +4995,8 @@ async def test_new_provider_catalog_excludes_non_chat_and_offline_models(kind):
         {"id": "mimo-v2.5-tts", "status": "online"},
         {"id": "kinfra-text-embedding-0.6b", "status": "online"},
     ]
-    cfg = ProviderConfig(kind, "mimo-v2.5-asr", agentcli._default_base_url(kind), "key")
-    provider = agentcli.build_provider(cfg)
+    cfg = ProviderConfig(kind, "mimo-v2.5-asr", llm_accounts._default_base_url(kind), "key")
+    provider = llm_factory.build_provider(cfg)
     session = _FakeSession(_FakeResp(json_data={"data": rows}))
     assert await provider.list_models(session) == ["mimo-v2.5-pro"]
     session = _FakeSession(_FakeResp(json_data={"data": rows[1:]}))
@@ -5019,7 +5025,7 @@ async def test_deepseek_hidden_reasoning_survives_tool_and_text_rounds(thinking)
         session = _FakeSession(_FakeResp(body=_sse('data: '+json.dumps(frame), 'data: [DONE]')))
         events = await _collect(provider.stream_turn(session,system_prompt='s',messages=messages,
                                                      tools=[],options={'show_thinking':thinking}))
-        done = next(e for e in events if e['type']==agentcli.EV_DONE)
+        done = next(e for e in events if e['type']==llm_base.EV_DONE)
         provider.append_assistant(messages,done['assistant_msg'])
         assert messages[-1]['reasoning_content']=='protocol reasoning'
         if tool_round:
@@ -5027,15 +5033,15 @@ async def test_deepseek_hidden_reasoning_survives_tool_and_text_rounds(thinking)
         else:
             replayed = session.calls[-1][1]['json']['messages']
             assert replayed[1]['reasoning_content']=='protocol reasoning'
-        assert any(e['type']==agentcli.EV_THINKING for e in events) is thinking
+        assert any(e['type']==llm_base.EV_THINKING for e in events) is thinking
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("thinking", [True, False])
 async def test_mimo_thinking_and_tool_reasoning_round_trip(thinking):
-    cfg = await agentcli._probe_config("mimo", {"api_key": "key", "model": "mimo-v2.5-pro"})
+    cfg = await agentcli_views._probe_config("mimo", {"api_key": "key", "model": "mimo-v2.5-pro"})
     assert cfg.base_url == "https://api.xiaomimimo.com/v1"
-    provider = agentcli.build_provider(cfg)
+    provider = llm_factory.build_provider(cfg)
     frame = {"choices": [{"delta": {"reasoning_content": "inspect", "tool_calls": [
         {"index": 0, "id": "tool-1", "function": {"name": "get_state", "arguments": "{}"}},
     ]}, "finish_reason": "tool_calls"}]}
@@ -5049,7 +5055,7 @@ async def test_mimo_thinking_and_tool_reasoning_round_trip(thinking):
     assert ("temperature" in sent) is (not thinking)
     assert "reasoning_effort" not in sent
     assert "tool_stream" not in sent
-    done = next(event for event in events if event["type"] == agentcli.EV_DONE)
+    done = next(event for event in events if event["type"] == llm_base.EV_DONE)
     messages = []
     provider.append_assistant(messages, done["assistant_msg"])
     provider.append_tool_results(messages, [{"tool_use_id": "tool-1", "tool_name": "get_state", "content": "ok"}])
@@ -5064,8 +5070,8 @@ async def test_mimo_thinking_and_tool_reasoning_round_trip(thinking):
 
 @pytest.mark.asyncio
 async def test_tencent_replays_reasoning_without_inventing_provider_specific_flags():
-    provider = agentcli.build_provider(ProviderConfig(
-        "tencent", "hy3", agentcli._default_base_url("tencent"), "key",
+    provider = llm_factory.build_provider(ProviderConfig(
+        "tencent", "hy3", llm_accounts._default_base_url("tencent"), "key",
     ))
     frame = {"choices": [{"delta": {"reasoning_content": "reason", "content": "answer"}, "finish_reason": "stop"}]}
     session = _FakeSession(_FakeResp(body=_sse("data: " + json.dumps(frame), "data: [DONE]")))
@@ -5075,7 +5081,7 @@ async def test_tencent_replays_reasoning_without_inventing_provider_specific_fla
     sent = session.calls[-1][1]["json"]
     assert sent["reasoning_effort"] == "high"
     assert "thinking" not in sent and "tool_stream" not in sent
-    done = next(event for event in events if event["type"] == agentcli.EV_DONE)
+    done = next(event for event in events if event["type"] == llm_base.EV_DONE)
     assert done["assistant_msg"]["reasoning_content"] == "reason"
     assert done["assistant_msg"]["content"] == "answer"
 
@@ -5088,19 +5094,19 @@ async def test_decision_account_admin_catalog_isolated_and_delete_clears_binding
     from custom_components.phoenix_mcp.data import PhoenixData
     data = PhoenixData(store=access_key_store, rate_limiter=MagicMock(), audit=MagicMock())
     hass.data[DOMAIN] = data
-    store = agentcli.AgentCliStore(AsyncMock())
+    store = llm_accounts.AgentCliStore(AsyncMock())
     account = await store.add('typesafe', {'api_key':'decision-private-key','model':'jev-latest'})
     chat = await store.add('deepseek', {'api_key':'chat-private-key','model':'chat'})
     await access_key_store.async_patch_settings(decision_provider_id=account,decision_shadow_enabled=True,
                                           voice_agent_routing_mode=mode, agentcli_routing_mode=chat_mode)
-    view = agentcli.PhoenixAgentCliProvidersView(); view.hass = hass
-    with patch.object(agentcli, '_get_secret_store', AsyncMock(return_value=store)):
+    view = agentcli_views.PhoenixAgentCliProvidersView(); view.hass = hass
+    with patch_readers("custom_components.phoenix_mcp.llm.accounts._get_secret_store", AsyncMock(return_value=store)):
         for purpose, expected in [('conversation',[chat]), ('decision',[account])]:
             request = _admin_request(); request.query = {'purpose':purpose}
             result = json.loads((await view.get(request)).body)
             assert [item['id'] for item in result['instances']] == expected
             assert 'private-key' not in json.dumps(result)
-        delete = agentcli.PhoenixAgentCliProviderView(); delete.hass = hass
+        delete = agentcli_views.PhoenixAgentCliProviderView(); delete.hass = hass
         assert (await delete.delete(_admin_request(), instance_id=account)).status == 200
     assert not access_key_store.get_settings().decision_shadow_enabled
     assert access_key_store.get_settings().decision_provider_id is None
@@ -5112,17 +5118,17 @@ async def test_decision_account_admin_catalog_isolated_and_delete_clears_binding
 @pytest.mark.parametrize('kind', ['typesafe'])
 @pytest.mark.parametrize('model', ['real-model', 'abcdefg', '', None, ['real-model']])
 async def test_decision_create_requires_advertised_model(hass, kind, model):
-    from custom_components.phoenix_mcp.decision_provider import DecisionProvider
+    from custom_components.phoenix_mcp.routing.decision_provider import DecisionProvider
 
-    store = agentcli.AgentCliStore(AsyncMock())
-    view = agentcli.PhoenixAgentCliProvidersView()
+    store = llm_accounts.AgentCliStore(AsyncMock())
+    view = agentcli_views.PhoenixAgentCliProvidersView()
     view.hass = hass
     request = _admin_request({
         'kind': kind, 'api_key': 'private-key', 'base_url': 'http://localhost:8000/v1', 'model': model,
     })
     catalog = {'data': [{'id': 'real-model'}]}
-    with (patch.object(agentcli, '_get_secret_store', AsyncMock(return_value=store)),
-          patch.object(agentcli, '_validate_base_url', AsyncMock(return_value=None)),
+    with (patch_readers("custom_components.phoenix_mcp.llm.accounts._get_secret_store", AsyncMock(return_value=store)),
+          patch.object(agentcli_views, '_validate_base_url', AsyncMock(return_value=None)),
           patch.object(DecisionProvider, '_request', AsyncMock(return_value=catalog)) as transport):
         response = await view.post(request)
     assert response.status == (201 if model == 'real-model' else 400)
@@ -5134,15 +5140,15 @@ async def test_decision_create_requires_advertised_model(hass, kind, model):
 
 @pytest.mark.parametrize('kind', ['typesafe'])
 async def test_decision_discovery_requires_key_but_not_model(hass, kind):
-    from custom_components.phoenix_mcp.decision_provider import DecisionProvider
+    from custom_components.phoenix_mcp.routing.decision_provider import DecisionProvider
 
-    store = agentcli.AgentCliStore(AsyncMock())
-    view = agentcli.PhoenixAgentCliProbeView()
+    store = llm_accounts.AgentCliStore(AsyncMock())
+    view = agentcli_views.PhoenixAgentCliProbeView()
     view.hass = hass
     request = _admin_request({'kind': kind, 'api_key': 'private-key'})
     catalog = {'data': [{'id': 'jev-latest'}]}
-    with (patch.object(agentcli, '_get_secret_store', AsyncMock(return_value=store)),
-          patch.object(agentcli, '_validate_base_url', AsyncMock(return_value=None)),
+    with (patch_readers("custom_components.phoenix_mcp.llm.accounts._get_secret_store", AsyncMock(return_value=store)),
+          patch.object(agentcli_views, '_validate_base_url', AsyncMock(return_value=None)),
           patch.object(DecisionProvider, '_request', AsyncMock(return_value=catalog)) as transport):
         response = await view.post(request)
     body = json.loads(response.body)
@@ -5156,12 +5162,12 @@ async def test_decision_discovery_requires_key_but_not_model(hass, kind):
 async def test_decision_model_edits_validate_before_save_and_recheck_account(hass, access_key_store, case):
     from custom_components.phoenix_mcp.const import DOMAIN
     from custom_components.phoenix_mcp.data import PhoenixData
-    from custom_components.phoenix_mcp.decision_provider import DecisionError, DecisionProvider
+    from custom_components.phoenix_mcp.routing.decision_provider import DecisionError, DecisionProvider
 
     hass.data[DOMAIN] = PhoenixData(store=access_key_store, rate_limiter=MagicMock(), audit=MagicMock())
-    store = agentcli.AgentCliStore(AsyncMock())
+    store = llm_accounts.AgentCliStore(AsyncMock())
     account = await store.add('typesafe', {'api_key': 'private-key', 'model': 'old-model'})
-    view = agentcli.PhoenixAgentCliProviderView()
+    view = agentcli_views.PhoenixAgentCliProviderView()
     view.hass = hass
     request = _admin_request({'model': 'new-model' if case != 'unlisted' else 'abcdefg'})
     async def models(*args, **kwargs):
@@ -5169,7 +5175,7 @@ async def test_decision_model_edits_validate_before_save_and_recheck_account(has
         if case == 'deleted': await store.delete(account)
         if case == 'changed': await store.set_model(account, 'other-model')
         return {'models': [{'name': 'new-model'}]}
-    with (patch.object(agentcli, '_get_secret_store', AsyncMock(return_value=store)),
+    with (patch_readers("custom_components.phoenix_mcp.llm.accounts._get_secret_store", AsyncMock(return_value=store)),
           patch.object(DecisionProvider, '_request', AsyncMock(side_effect=models))):
         response = await view.patch(request, instance_id=account)
     assert response.status == (200 if case == 'valid' else 409 if case in ('deleted', 'changed') else 400)
@@ -5188,18 +5194,18 @@ async def test_legacy_numeric_flags_are_inert_and_model_changes_invalidate_plans
         'decision_numeric_enabled': True, 'decision_numeric_categories': ['light_brightness'],
         'decision_routing_revision': 'old-revision',
     }}}
-    with patch.object(agentcli, 'Store', return_value=backing):
-        store = await agentcli.AgentCliStore.async_create(hass)
+    with patch.object(llm_accounts, 'Store', return_value=backing):
+        store = await llm_accounts.AgentCliStore.async_create(hass)
     hass.data['_phoenix_agentcli_store'] = store
     assert not hasattr(store.resolve('legacy', purpose='decision'), 'decision_numeric_enabled')
     assert 'decision_numeric_enabled' not in store.list_instances()[0]
     assert 'private-key' not in json.dumps(store.list_instances())
-    first = agentcli.decision_account_fingerprint(hass, 'legacy')
+    first = llm_accounts.decision_account_fingerprint(hass, 'legacy')
     await store.set_model('legacy', 'model-a')
-    assert agentcli.decision_account_fingerprint(hass, 'legacy') == first
+    assert llm_accounts.decision_account_fingerprint(hass, 'legacy') == first
     await store.set_model('legacy', 'model-b')
     await store.set_model('legacy', 'model-a')
-    assert agentcli.decision_account_fingerprint(hass, 'legacy') != first
+    assert llm_accounts.decision_account_fingerprint(hass, 'legacy') != first
 
 
 @pytest.mark.parametrize('body', [
@@ -5208,9 +5214,9 @@ async def test_legacy_numeric_flags_are_inert_and_model_changes_invalidate_plans
     {'model': 'test-model', 'decision_numeric_enabled': True},
 ])
 async def test_obsolete_numeric_patch_is_rejected_without_mutation(hass, body):
-    view = agentcli.PhoenixAgentCliProviderView()
+    view = agentcli_views.PhoenixAgentCliProviderView()
     view.hass = hass
-    with patch.object(agentcli, '_get_secret_store') as store:
+    with patch_readers("custom_components.phoenix_mcp.llm.accounts._get_secret_store") as store:
         response = await view.patch(_admin_request(body), instance_id='account')
     assert response.status == 400
     assert json.loads(response.text)['message_key'] == 'adminError.unknownFields'
@@ -5218,14 +5224,14 @@ async def test_obsolete_numeric_patch_is_rejected_without_mutation(hass, body):
 
 
 @pytest.mark.parametrize("kind", [
-    kind for kind, definition in agentcli.PROVIDER_DEFINITIONS.items()
+    kind for kind, definition in llm_accounts.PROVIDER_DEFINITIONS.items()
     if any(field.id == "api_key" for field in definition.fields)
 ])
 @pytest.mark.parametrize("bad_key", ["x" * 4097, "key\rvalue", "key\nvalue", "key\x00value", "key\x7fvalue", ["key"]])
 async def test_all_provider_key_inputs_refuse_before_setup(hass, kind, bad_key):
-    view = agentcli.PhoenixAgentCliProvidersView()
+    view = agentcli_views.PhoenixAgentCliProvidersView()
     view.hass = hass
-    with patch.object(agentcli, "_get_secret_store") as store:
+    with patch_readers("custom_components.phoenix_mcp.llm.accounts._get_secret_store") as store:
         response = await view.post(_admin_request({"kind": kind, "api_key": bad_key}))
     assert response.status == 400
     assert json.loads(response.text)["error"] == "invalid_request"
@@ -5234,8 +5240,8 @@ async def test_all_provider_key_inputs_refuse_before_setup(hass, kind, bad_key):
 
 @pytest.mark.parametrize("kind", ["claude", "chatgpt", "typesafe"])
 async def test_provider_key_length_boundary_is_accepted(kind):
-    with patch.object(agentcli, "_validate_base_url", AsyncMock(return_value=None)):
-        cfg = await agentcli._probe_config(kind, {
+    with patch.object(agentcli_views, "_validate_base_url", AsyncMock(return_value=None)):
+        cfg = await agentcli_views._probe_config(kind, {
             "api_key": "k" * 4096, "base_url": "https://example.com/v1", "model": "model",
         })
     assert isinstance(cfg, ProviderConfig)
@@ -5244,7 +5250,7 @@ async def test_provider_key_length_boundary_is_accepted(kind):
 
 @pytest.mark.parametrize("kind", ["claude", "minimax", "chatgpt", "ollama"])
 async def test_provider_validation_refuses_value_error_without_secret_echo(kind):
-    provider = agentcli.build_provider(ProviderConfig(kind, "model", "https://example.com", "key"))
+    provider = llm_factory.build_provider(ProviderConfig(kind, "model", "https://example.com", "key"))
     session = MagicMock()
     session.get.side_effect = ValueError("private provider setting")
     ok, message = await provider.validate(session)
@@ -5260,18 +5266,18 @@ async def test_deleting_the_default_decision_account_passes_the_default_on_but_s
     from custom_components.phoenix_mcp.data import PhoenixData
     data = PhoenixData(store=access_key_store, rate_limiter=MagicMock(), audit=MagicMock())
     hass.data[DOMAIN] = data
-    store = agentcli.AgentCliStore(AsyncMock())
+    store = llm_accounts.AgentCliStore(AsyncMock())
     first = await store.add("typesafe", {"api_key": "k1", "model": "jev-latest"})
     second = await store.add("typesafe", {"api_key": "k2", "model": "jev-latest"})
     await access_key_store.async_patch_settings(decision_provider_id=first, decision_provider_default_id=first)
-    delete = agentcli.PhoenixAgentCliProviderView(); delete.hass = hass
-    with patch.object(agentcli, "_get_secret_store", AsyncMock(return_value=store)):
+    delete = agentcli_views.PhoenixAgentCliProviderView(); delete.hass = hass
+    with patch_readers("custom_components.phoenix_mcp.llm.accounts._get_secret_store", AsyncMock(return_value=store)):
         assert (await delete.delete(_admin_request(), instance_id=first)).status == 200
     settings = access_key_store.get_settings()
     # One account must stay selected while any exists; using it is a separate switch.
     assert settings.decision_provider_default_id == second
     assert settings.decision_provider_id is None
-    with patch.object(agentcli, "_get_secret_store", AsyncMock(return_value=store)):
+    with patch_readers("custom_components.phoenix_mcp.llm.accounts._get_secret_store", AsyncMock(return_value=store)):
         assert (await delete.delete(_admin_request(), instance_id=second)).status == 200
     assert access_key_store.get_settings().decision_provider_default_id is None
 
@@ -5291,19 +5297,19 @@ async def test_scheduled_catalog_refresh_honours_the_operator_settings(hass, acc
     from custom_components.phoenix_mcp.data import PhoenixData
     data = PhoenixData(store=access_key_store, rate_limiter=MagicMock(), audit=MagicMock())
     hass.data[DOMAIN] = data
-    store = agentcli.AgentCliStore(AsyncMock())
+    store = llm_accounts.AgentCliStore(AsyncMock())
     fresh = await store.add("claude", {"api_key": "a"})
     stale = await store.add("deepseek", {"api_key": "b"})
     new = await store.add("groq", {"api_key": "c"})
-    now = agentcli.utcnow()
+    now = llm_base.utcnow()
     await store.set_catalog(fresh, ["m"], {}, (now - timedelta(hours=2)).isoformat())
     await store.set_catalog(stale, ["m"], {}, (now - timedelta(hours=30)).isoformat())
 
     async def refreshed(**settings):
         await access_key_store.async_patch_settings(**settings)
-        with patch.object(agentcli, "_get_secret_store", AsyncMock(return_value=store)), \
-             patch.object(agentcli, "async_refresh_catalog", AsyncMock()) as refresh:
-            await agentcli.async_refresh_all_catalogs(hass)
+        with patch_readers("custom_components.phoenix_mcp.llm.accounts._get_secret_store", AsyncMock(return_value=store)), \
+             patch.object(agentcli_views, "async_refresh_catalog", AsyncMock()) as refresh:
+            await agentcli_views.async_refresh_all_catalogs(hass)
         return {call.args[1] for call in refresh.await_args_list}
 
     # Default: every 24 hours, so only the 30-hour-old catalogue and the missing one.
@@ -5321,13 +5327,17 @@ async def test_scheduled_catalog_refresh_honours_the_operator_settings(hass, acc
 # --------------------------------------------------------------------------- #
 
 def _full_catalog() -> list[dict]:
-    from custom_components.phoenix_mcp.mcp_view import _ENTITY_TOOL_DEFS, _NATIVE_TOOL_DEFS, _SYSTEM_TOOL_DEFS
+    from custom_components.phoenix_mcp.tool_defs import (
+        _ENTITY_TOOL_DEFS,
+        _NATIVE_TOOL_DEFS,
+        _SYSTEM_TOOL_DEFS,
+    )
     from custom_components.phoenix_mcp.mesa_tools import mesa_tool_defs
     return [*_ENTITY_TOOL_DEFS, *_NATIVE_TOOL_DEFS, *_SYSTEM_TOOL_DEFS, *mesa_tool_defs()]
 
 
 def _sent_schemas(kind: str, catalog: list[dict]) -> list[tuple[str, dict]]:
-    provider = agentcli.build_provider(ProviderConfig(kind, "m", "https://x", "k"))
+    provider = llm_factory.build_provider(ProviderConfig(kind, "m", "https://x", "k"))
     return [(tool.get("name") or tool["function"]["name"], tool.get("input_schema") or tool["function"]["parameters"])
             for tool in provider.format_tools(catalog)]
 
@@ -5350,7 +5360,7 @@ def _nested(schema: dict):
     yield from walk(schema, "")
 
 
-@pytest.mark.parametrize("kind", sorted(k for k, d in agentcli.PROVIDER_DEFINITIONS.items() if d.purpose == "conversation"))
+@pytest.mark.parametrize("kind", sorted(k for k, d in llm_accounts.PROVIDER_DEFINITIONS.items() if d.purpose == "conversation"))
 def test_every_provider_receives_schemas_strict_validators_accept(kind):
     """Several providers refuse the WHOLE request over one tool.
 
@@ -5437,16 +5447,16 @@ async def test_a_refused_request_carries_the_provider_sentence_for_the_administr
     ('{"error": {"message": "   "}}', ""),
 ])
 def test_provider_detail_comes_only_from_an_error_envelope(body, expected):
-    assert agentcli._provider_error_detail(body) == expected
+    assert llm_base._provider_error_detail(body) == expected
 
 
 def test_provider_detail_is_scrubbed_and_clipped():
-    echoed = agentcli._provider_error_detail(json.dumps({"error": {"message": (
+    echoed = llm_base._provider_error_detail(json.dumps({"error": {"message": (
         "Incorrect API key provided: sk-proj-abcdefghijklmnopqrstuvwx. Request from 192.168.1.20 refused.")}}))
     assert "sk-proj-abcdefghijklmnop" not in echoed and "192.168.1.20" not in echoed
     assert "<redacted>" in echoed
-    from custom_components.phoenix_mcp.const import AGENTCLI_PROVIDER_DETAIL_CHARS
-    long = agentcli._provider_error_detail(json.dumps({"error": {"message": "word " * 400}}))
+    from custom_components.phoenix_mcp.provider_constants import AGENTCLI_PROVIDER_DETAIL_CHARS
+    long = llm_base._provider_error_detail(json.dumps({"error": {"message": "word " * 400}}))
     assert len(long) <= AGENTCLI_PROVIDER_DETAIL_CHARS
 
 
@@ -5458,32 +5468,32 @@ def test_provider_detail_never_echoes_a_key(key):
     """Known prefixes are scrubbed in any text; the configured key is removed whatever its shape."""
     for message in (f"Invalid API key provided: {key}", f"The key {key} is not valid"):
         body = json.dumps({"error": {"message": message}})
-        assert key not in agentcli._provider_error_detail(body, key)
-        failure = agentcli._http_failure("groq", 401, body, code="auth", retryable=False, api_key=key)
+        assert key not in llm_base._provider_error_detail(body, key)
+        failure = llm_base._http_failure("groq", 401, body, code="auth", retryable=False, api_key=key)
         assert key not in failure.get("provider_detail", "")
     if not key.startswith("custom"):
-        assert key not in agentcli._provider_error_detail(json.dumps({"error": {"message": f"The key {key} is not valid"}}))
+        assert key not in llm_base._provider_error_detail(json.dumps({"error": {"message": f"The key {key} is not valid"}}))
 
 
 @pytest.mark.asyncio
 async def test_provider_detail_reaches_the_panel_but_never_voice_or_ai_task(hass):
-    failure = {"type": agentcli.EV_ERROR, "status": 400, "code": "provider_rejected", "retryable": False,
+    failure = {"type": llm_base.EV_ERROR, "status": 400, "code": "provider_rejected", "retryable": False,
                "message": "Provider request failed (HTTP 400).", "provider_detail": "input_schema does not support oneOf"}
     data = _loop_data()
     access_key = data.store.get_access_key_by_id.return_value
     events = []
     async def emit(name, payload):
         events.append((name, payload))
-    with patch.object(agentcli, "build_mcp_tool_list", return_value=[]), \
-         patch("custom_components.phoenix_mcp.mcp_view._build_instructions", return_value="sys"):
+    with patch_readers("custom_components.phoenix_mcp.tool_catalog.build_mcp_tool_list", return_value=[]), \
+         patch_readers("custom_components.phoenix_mcp.tool_dispatch._build_instructions", return_value="sys"):
         await async_run_agent_turn(hass=hass, data=data, access_key=access_key, provider=_ScriptedProvider([[failure]]),
             session=None, messages=[], options={}, client_ip="agentcli", base_url="http://h",
             emit=emit, cancel=asyncio.Event())
-        result = await agentcli._run_headless_turn(hass, data, access_key, _ScriptedProvider([[failure]]), None,
+        result = await agent_turn._run_headless_turn(hass, data, access_key, _ScriptedProvider([[failure]]), None,
             "http://h", system="s", seed="hi", client_ip="voice", max_iterations=2)
     errors = [body for name, body in events if name == "error"]
     assert errors[0]["provider_detail"] == "input_schema does not support oneOf"
-    assert result.outcome == agentcli.TURN_PROVIDER_ERROR
+    assert result.outcome == agent_turn.TURN_PROVIDER_ERROR
     assert result.detail == "Provider request failed (HTTP 400)."
 
 
@@ -5504,7 +5514,7 @@ async def test_provider_detail_reaches_the_panel_but_never_voice_or_ai_task(hass
 def test_json_error_hint_names_the_likely_missing_closer(raw, expected):
     with pytest.raises(json.JSONDecodeError) as caught:
         json.loads(raw)
-    hint = agentcli._json_error_hint(raw, caught.value)
+    hint = llm_base._json_error_hint(raw, caught.value)
     assert expected in hint
     assert hint.startswith("Not run:") and "Send the call again" in hint
 
@@ -5513,8 +5523,8 @@ def _invalid_round(call_id: str = "bad", name: str = "edit_automation") -> dict:
     raw = '{"config": {"triggers": [{"at": "1"}}}'
     with pytest.raises(json.JSONDecodeError) as caught:
         json.loads(raw)
-    return agentcli._invalid_tool_calls(
-        [(call_id, name, None, agentcli._json_error_hint(raw, caught.value))],
+    return llm_base._invalid_tool_calls(
+        [(call_id, name, None, llm_base._json_error_hint(raw, caught.value))],
         {"role": "assistant", "content": "", "tool_calls": [
             {"id": call_id, "type": "function", "function": {"name": name, "arguments": "{}"}}]},
     )
@@ -5529,9 +5539,9 @@ async def _chat(hass, rounds, data=None):
     events = []
     async def emit(name, payload):
         events.append((name, payload))
-    with patch.object(agentcli, "build_mcp_tool_list", return_value=[]), \
-         patch("custom_components.phoenix_mcp.mcp_view._build_instructions", return_value="sys"), \
-         patch("custom_components.phoenix_mcp.mcp_view._dispatch_mcp", dispatch):
+    with patch_readers("custom_components.phoenix_mcp.tool_catalog.build_mcp_tool_list", return_value=[]), \
+         patch_readers("custom_components.phoenix_mcp.tool_dispatch._build_instructions", return_value="sys"), \
+         patch_readers("custom_components.phoenix_mcp.tool_dispatch._dispatch_mcp", dispatch):
         messages = await async_run_agent_turn(hass=hass, data=data, access_key=access_key, provider=provider,
             session=None, messages=[], options={}, client_ip="agentcli", base_url="http://h",
             emit=emit, cancel=asyncio.Event())
@@ -5543,9 +5553,9 @@ async def test_chat_hands_malformed_tool_json_back_and_runs_the_corrected_call(h
     invalid = _invalid_round()
     provider, dispatch, events, messages, data, access_key = await _chat(hass, [
         [invalid],
-        [{"type": agentcli.EV_TOOL, "id": "good", "name": "get_state", "input": {"entity_id": "light.k"}},
+        [{"type": llm_base.EV_TOOL, "id": "good", "name": "get_state", "input": {"entity_id": "light.k"}},
          _done("tool_use")],
-        [{"type": agentcli.EV_TEXT, "text": "Done."}, _done("end_turn")],
+        [{"type": llm_base.EV_TEXT, "text": "Done."}, _done("end_turn")],
     ])
     assert provider.i == 3
     # Only the resent call ran, with the resent arguments.
@@ -5564,8 +5574,8 @@ async def test_chat_hands_malformed_tool_json_back_and_runs_the_corrected_call(h
 @pytest.mark.asyncio
 @pytest.mark.parametrize("write_first", [False, True])
 async def test_chat_stops_handing_back_malformed_json_after_the_budget(hass, write_first):
-    from custom_components.phoenix_mcp.const import AGENTCLI_MAX_TOOL_CALL_CORRECTIONS
-    rounds = [[{"type": agentcli.EV_TOOL, "id": "w", "name": "call_service", "input": {}}, _done("tool_use")]] \
+    from custom_components.phoenix_mcp.provider_constants import AGENTCLI_MAX_TOOL_CALL_CORRECTIONS
+    rounds = [[{"type": llm_base.EV_TOOL, "id": "w", "name": "call_service", "input": {}}, _done("tool_use")]] \
         if write_first else []
     rounds += [[_invalid_round(f"bad{i}")] for i in range(AGENTCLI_MAX_TOOL_CALL_CORRECTIONS + 1)]
     provider, dispatch, events, _messages, data, access_key = await _chat(hass, rounds)
@@ -5591,19 +5601,19 @@ async def test_headless_hands_malformed_tool_json_back_within_its_rounds(hass):
     invalid = _invalid_round()
     provider = _ScriptedProvider([
         [invalid],
-        [{"type": agentcli.EV_TEXT, "text": "It is on."}, _done("end_turn")],
+        [{"type": llm_base.EV_TEXT, "text": "It is on."}, _done("end_turn")],
     ])
-    with patch.object(agentcli, "build_mcp_tool_list", return_value=[]):
-        result = await agentcli._run_headless_turn(hass, data, access_key, provider, None, "http://h",
+    with patch_readers("custom_components.phoenix_mcp.tool_catalog.build_mcp_tool_list", return_value=[]):
+        result = await agent_turn._run_headless_turn(hass, data, access_key, provider, None, "http://h",
             system="s", seed="is it on", client_ip="voice", max_iterations=3)
-    assert result.outcome == agentcli.TURN_OK and result.text == "It is on."
+    assert result.outcome == agent_turn.TURN_OK and result.text == "It is on."
     assert provider.i == 2
     # With no round left for the corrected call, the turn ends as a provider error.
     provider = _ScriptedProvider([[invalid]])
-    with patch.object(agentcli, "build_mcp_tool_list", return_value=[]):
-        result = await agentcli._run_headless_turn(hass, data, access_key, provider, None, "http://h",
+    with patch_readers("custom_components.phoenix_mcp.tool_catalog.build_mcp_tool_list", return_value=[]):
+        result = await agent_turn._run_headless_turn(hass, data, access_key, provider, None, "http://h",
             system="s", seed="is it on", client_ip="voice", max_iterations=1)
-    assert result.outcome == agentcli.TURN_PROVIDER_ERROR
+    assert result.outcome == agent_turn.TURN_PROVIDER_ERROR
 
 
 # --------------------------------------------------------------------------- #
@@ -5614,8 +5624,8 @@ async def test_headless_hands_malformed_tool_json_back_within_its_rounds(hass):
                                               ("gemini", True), ("kimi", True), ("openrouter", True),
                                               ("deepseek", False), ("claude", False)])
 def test_documented_tools_array_caps(kind, capped):
-    from custom_components.phoenix_mcp.const import AGENTCLI_MAX_TOOLS_PER_REQUEST
-    assert agentcli.PROVIDER_DEFINITIONS[kind].max_tools == (AGENTCLI_MAX_TOOLS_PER_REQUEST if capped else None)
+    from custom_components.phoenix_mcp.provider_constants import AGENTCLI_MAX_TOOLS_PER_REQUEST
+    assert llm_accounts.PROVIDER_DEFINITIONS[kind].max_tools == (AGENTCLI_MAX_TOOLS_PER_REQUEST if capped else None)
 
 
 @pytest.mark.asyncio
@@ -5626,25 +5636,25 @@ async def test_a_catalog_over_the_providers_cap_is_refused_before_any_request(ha
     declared in parts, so the turn is refused up front, saying why."""
     catalog = [{"name": f"tool_{i}", "description": "d", "inputSchema": {"type": "object", "properties": {}}}
                for i in range(count)]
-    provider = _ScriptedProvider([[{"type": agentcli.EV_TEXT, "text": "Hi."}, _done("end_turn")]])
+    provider = _ScriptedProvider([[{"type": llm_base.EV_TEXT, "text": "Hi."}, _done("end_turn")]])
     provider.kind = "chatgpt"
     data = _loop_data()
     access_key = data.store.get_access_key_by_id.return_value
     events = []
     async def emit(name, payload):
         events.append((name, payload))
-    with patch.object(agentcli, "build_mcp_tool_list", return_value=catalog), \
-         patch("custom_components.phoenix_mcp.mcp_view._build_instructions", return_value="sys"):
+    with patch_readers("custom_components.phoenix_mcp.tool_catalog.build_mcp_tool_list", return_value=catalog), \
+         patch_readers("custom_components.phoenix_mcp.tool_dispatch._build_instructions", return_value="sys"):
         await async_run_agent_turn(hass=hass, data=data, access_key=access_key, provider=provider,
             session=None, messages=[], options={}, client_ip="agentcli", base_url="http://h",
             emit=emit, cancel=asyncio.Event())
-        headless_provider = _ScriptedProvider([[{"type": agentcli.EV_TEXT, "text": "Hi."}, _done("end_turn")]])
+        headless_provider = _ScriptedProvider([[{"type": llm_base.EV_TEXT, "text": "Hi."}, _done("end_turn")]])
         headless_provider.kind = "chatgpt"
-        result = await agentcli._run_headless_turn(hass, data, access_key, headless_provider, None, "http://h",
+        result = await agent_turn._run_headless_turn(hass, data, access_key, headless_provider, None, "http://h",
             system="s", seed="hi", client_ip="voice", max_iterations=2)
     errors = [body for name, body in events if name == "error"]
     if count == 128:
-        assert provider.i == 1 and not errors and result.outcome == agentcli.TURN_OK
+        assert provider.i == 1 and not errors and result.outcome == agent_turn.TURN_OK
         return
     assert provider.i == 0 and headless_provider.i == 0
     assert errors == [{
@@ -5653,7 +5663,7 @@ async def test_a_catalog_over_the_providers_cap_is_refused_before_any_request(ha
         "message": "This access key announces 129 tools, but OpenAI accepts at most 128 in one request. "
                    "Narrow the access key's capabilities or choose another provider.",
     }]
-    assert result.outcome == agentcli.TURN_PROVIDER_ERROR and "129 tools" in result.detail
+    assert result.outcome == agent_turn.TURN_PROVIDER_ERROR and "129 tools" in result.detail
 
 
 # --------------------------------------------------------------------------- #
@@ -5681,7 +5691,7 @@ def _call(arguments: str, call_id: str = "call_1", name: str = "search_entities"
 
 @pytest.mark.asyncio
 async def test_gemini_whole_arguments_sent_twice_make_one_call():
-    """Observed live: `{}` first, then the full arguments, ending with "stop".
+    """Gemini may send `{}` first, then the full arguments, ending with "stop".
 
     The OpenAI rule of concatenating fragments produced `{}{...}`, so no
     Gemini tool call could ever run.
@@ -5689,16 +5699,16 @@ async def test_gemini_whole_arguments_sent_twice_make_one_call():
     signature = {"google": {"thought_signature": "c2lnbmF0dXJl"}}
     events = await _parse_stream("gemini", _gemini_stream(
         _call("{}"), _call('{"query":"Bed Light","domain":"light"}', extra_content=signature)))
-    tools = [e for e in events if e["type"] == agentcli.EV_TOOL]
+    tools = [e for e in events if e["type"] == llm_base.EV_TOOL]
     assert [(t["id"], t["input"]) for t in tools] == [("call_1", {"query": "Bed Light", "domain": "light"})]
     done = events[-1]
-    assert done["type"] == agentcli.EV_DONE and done["stop_reason"] == "tool_use"
+    assert done["type"] == llm_base.EV_DONE and done["stop_reason"] == "tool_use"
     # The thought signature returns with its call, unchanged.
     assert done["assistant_msg"]["tool_calls"][0]["extra_content"] == signature
     # The same stream from an OpenAI-convention provider is still malformed.
     other = await _parse_stream("deepseek", _gemini_stream(
         _call("{}"), _call('{"query":"Bed Light"}'), finish="tool_calls"))
-    assert other[-1]["type"] == agentcli.EV_INVALID_TOOLS
+    assert other[-1]["type"] == llm_base.EV_INVALID_TOOLS
 
 
 @pytest.mark.asyncio
@@ -5710,7 +5720,7 @@ async def test_gemini_whole_arguments_sent_twice_make_one_call():
 ])
 async def test_gemini_argument_fragments_merge_safely(fragments, expected):
     events = await _parse_stream("gemini", _gemini_stream(*(_call(fragment) for fragment in fragments)))
-    tools = [e for e in events if e["type"] == agentcli.EV_TOOL]
+    tools = [e for e in events if e["type"] == llm_base.EV_TOOL]
     assert [t["input"] for t in tools] == [expected]
 
 
@@ -5723,7 +5733,7 @@ async def test_gemini_parallel_calls_are_kept_apart_by_id():
         {**_call('{"query":"a"}', "c1"), "extra_content": signature},
         {"tool_calls": [{"index": 0, "id": "c2", "function": {"name": "get_state", "arguments": '{"entity_id":"x"}'}}]},
     ))
-    tools = [(e["id"], e["name"], e["input"]) for e in events if e["type"] == agentcli.EV_TOOL]
+    tools = [(e["id"], e["name"], e["input"]) for e in events if e["type"] == llm_base.EV_TOOL]
     assert tools == [("c1", "search_entities", {"query": "a"}), ("c2", "get_state", {"entity_id": "x"})]
     calls = events[-1]["assistant_msg"]["tool_calls"]
     assert calls[0]["extra_content"] == signature and "extra_content" not in calls[1]
@@ -5792,7 +5802,7 @@ _PROVIDER_REFUSALS = [
 @pytest.mark.asyncio
 @pytest.mark.parametrize(("kind", "status", "body", "billing"), _PROVIDER_REFUSALS)
 async def test_billing_refusals_are_not_retried_as_rate_limits(kind, status, body, billing):
-    provider = agentcli.build_provider(ProviderConfig(kind, "m", "https://x", "k"))
+    provider = llm_factory.build_provider(ProviderConfig(kind, "m", "https://x", "k"))
     events = await _collect(provider.stream_turn(_FakeSession(_FakeResp(status, b"", text_data=json.dumps(body))),
         system_prompt="s", messages=[], tools=[], options={}))
     err = events[-1]
@@ -5805,16 +5815,16 @@ async def test_billing_refusals_are_not_retried_as_rate_limits(kind, status, bod
 
 
 def test_only_identifier_shaped_provider_codes_are_kept():
-    shaped = agentcli._http_failure("chatgpt", 429, json.dumps({"error": {"code": "rate_limit_exceeded"}}),
+    shaped = llm_base._http_failure("chatgpt", 429, json.dumps({"error": {"code": "rate_limit_exceeded"}}),
                                     code="rate_limit", retryable=True)
-    prose = agentcli._http_failure("chatgpt", 429, json.dumps({"error": {"code": "see https://x.invalid/ now"}}),
+    prose = llm_base._http_failure("chatgpt", 429, json.dumps({"error": {"code": "see https://x.invalid/ now"}}),
                                    code="rate_limit", retryable=True)
     assert shaped["provider_code"] == "rate_limit_exceeded" and "provider_code" not in prose
 
 
 def test_agentcli_states_when_each_automation_last_triggered_locally():
     text = json.dumps({"automations": [{"entity_id": "automation.a", "last_triggered": "2026-08-13T22:00:00+00:00"}]})
-    augmented = json.loads(agentcli._agentcli_add_local_time_fields("list_automations", text, timezone(timedelta(hours=7))))
+    augmented = json.loads(agent_turn._agentcli_add_local_time_fields("list_automations", text, timezone(timedelta(hours=7))))
     assert augmented["automations"][0]["last_triggered_local"] == "2026-08-14T05:00:00+07:00"
 
 
@@ -5827,8 +5837,8 @@ def test_the_history_before_the_operator_message_is_its_own_cached_prefix():
         {"role": "assistant", "content": [{"type": "text", "text": "It is on."},
                                           {"type": "thinking", "thinking": "t", "signature": "s"}]},
     ]
-    messages = [*earlier, {"role": "user", "content": "Still?" + agentcli._TIME_CONTEXT_LEAD + "UTC (UTC).]"}]
-    system, marked = agentcli._cache_marked("stable instructions", messages)
+    messages = [*earlier, {"role": "user", "content": "Still?" + agent_turn._TIME_CONTEXT_LEAD + "UTC (UTC).]"}]
+    system, marked = llm_base._cache_marked("stable instructions", messages)
     assert system == [{"type": "text", "text": "stable instructions", **marker}]
     # A thinking block cannot hold a breakpoint, so the text block before it does.
     assert marked[1]["content"][0] == {"type": "text", "text": "It is on.", **marker}
@@ -5836,11 +5846,11 @@ def test_the_history_before_the_operator_message_is_its_own_cached_prefix():
     assert marked[2]["content"][-1]["cache_control"] == marker["cache_control"]
     assert "cache_control" not in json.dumps(messages)
     # A first message, or a tool-result round, has no earlier history to mark separately.
-    _, single = agentcli._cache_marked("s", messages[2:])
+    _, single = llm_base._cache_marked("s", messages[2:])
     assert [block.get("cache_control") for block in single[0]["content"]] == [marker["cache_control"]]
     tool_round = [*messages, {"role": "assistant", "content": [{"type": "tool_use", "id": "t1"}]},
                   {"role": "user", "content": [{"type": "tool_result", "tool_use_id": "t1", "content": ""}]}]
-    _, marked = agentcli._cache_marked("s", tool_round)
+    _, marked = llm_base._cache_marked("s", tool_round)
     assert ["cache_control" in json.dumps(message) for message in marked] == [False, True, False, False, True]
 
 
@@ -5859,7 +5869,7 @@ async def test_openai_compatible_cached_prompt_tokens_are_reported(extra, cached
     cfg = ProviderConfig(kind="deepseek", model="deepseek-v4-flash", base_url="https://d", api_key="k")
     events = await _collect(OpenAICompatProvider(cfg).stream_turn(
         _FakeSession(_FakeResp(200, body)), system_prompt="s", messages=[], tools=[], options={}))
-    usage = next(e for e in events if e["type"] == agentcli.EV_USAGE)
+    usage = next(e for e in events if e["type"] == llm_base.EV_USAGE)
     assert usage["input_tokens"] == 100 and usage["cache_read_tokens"] == cached
 
 
@@ -5870,7 +5880,7 @@ class _KindScripted(_ScriptedProvider):
 async def _consume(provider, events, **status):
     async def emit(name, payload):
         events.append((name, payload))
-    return await agentcli._consume_model_stream(
+    return await agent_turn._consume_model_stream(
         provider, MagicMock(), system="sys", messages=[], tools=[], options={}, cancel=asyncio.Event(),
         emit=emit, usage_done_input=0, usage_done_output=0, context_tokens=0, status=status or None)
 
@@ -5878,8 +5888,8 @@ async def _consume(provider, events, **status):
 @pytest.mark.asyncio
 async def test_the_status_line_names_the_provider_step_and_tools_and_ends_once_the_reply_shows():
     events: list = []
-    provider = _KindScripted([[{"type": agentcli.EV_TEXT, "text": "Hi"},
-                               {"type": agentcli.EV_DONE, "stop_reason": "end_turn", "assistant_msg": {}}]])
+    provider = _KindScripted([[{"type": llm_base.EV_TEXT, "text": "Hi"},
+                               {"type": llm_base.EV_DONE, "stop_reason": "end_turn", "assistant_msg": {}}]])
     await _consume(provider, events, step=3, tools=2)
     statuses = [p for n, p in events if n == "status"]
     assert statuses == [{"provider": "Gemini", "step": 3, "tools": 2, "phase": "waiting", "seconds": 0}]
@@ -5889,14 +5899,14 @@ async def test_the_status_line_names_the_provider_step_and_tools_and_ends_once_t
 async def test_a_silent_model_call_is_reported_until_something_shows():
     class _Slow(_KindScripted):
         async def stream_turn(self, session, **kwargs):
-            yield {"type": agentcli.EV_THINKING, "text": "..."}
+            yield {"type": llm_base.EV_THINKING, "text": "..."}
             await asyncio.sleep(0.05)
-            yield {"type": agentcli.EV_TEXT, "text": "Done"}
+            yield {"type": llm_base.EV_TEXT, "text": "Done"}
             await asyncio.sleep(0.05)
-            yield {"type": agentcli.EV_DONE, "stop_reason": "end_turn", "assistant_msg": {}}
+            yield {"type": llm_base.EV_DONE, "stop_reason": "end_turn", "assistant_msg": {}}
 
     events: list = []
-    with patch("custom_components.phoenix_mcp.agentcli.AGENTCLI_STATUS_INTERVAL_SECONDS", 0.02):
+    with patch("custom_components.phoenix_mcp.agent_turn.AGENTCLI_STATUS_INTERVAL_SECONDS", 0.02):
         await _consume(_Slow([]), events, step=1, tools=0)
     phases = [p["phase"] for n, p in events if n == "status"]
     # Waiting, then thinking, refreshed while nothing visible, and quiet once the reply shows.
@@ -5909,12 +5919,12 @@ async def test_a_silent_model_call_is_reported_until_something_shows():
 async def test_a_retry_is_shown_with_the_providers_own_sentence():
     events: list = []
     provider = _KindScripted([
-        [{"type": agentcli.EV_ERROR, "status": 503, "code": "upstream", "retryable": True,
+        [{"type": llm_base.EV_ERROR, "status": 503, "code": "upstream", "retryable": True,
           "message": "Provider request failed (HTTP 503).", "provider_detail": "High demand."}],
-        [{"type": agentcli.EV_TEXT, "text": "Recovered"},
-         {"type": agentcli.EV_DONE, "stop_reason": "end_turn", "assistant_msg": {}}],
+        [{"type": llm_base.EV_TEXT, "text": "Recovered"},
+         {"type": llm_base.EV_DONE, "stop_reason": "end_turn", "assistant_msg": {}}],
     ])
-    with patch("custom_components.phoenix_mcp.agentcli._CONNECT_RETRY_BACKOFF_SECONDS", 0):
+    with patch("custom_components.phoenix_mcp.agent_turn._CONNECT_RETRY_BACKOFF_SECONDS", 0):
         await _consume(provider, events, step=1, tools=0)
     retrying = [p for n, p in events if n == "status" and p["phase"] == "retrying"]
     assert retrying == [{"provider": "Gemini", "step": 1, "tools": 0, "attempt": 2, "detail": "High demand.",
@@ -5925,10 +5935,10 @@ async def test_a_retry_is_shown_with_the_providers_own_sentence():
 @pytest.mark.asyncio
 async def test_the_turn_counts_steps_and_tools_for_the_status_line(hass):
     provider = _KindScripted([
-        [{"type": agentcli.EV_TOOL, "id": "t1", "name": "get_state", "input": {"entity_id": "light.x"}},
-         {"type": agentcli.EV_DONE, "stop_reason": "tool_use", "assistant_msg": {"role": "assistant"}}],
-        [{"type": agentcli.EV_TEXT, "text": "On."},
-         {"type": agentcli.EV_DONE, "stop_reason": "end_turn", "assistant_msg": {"role": "assistant"}}],
+        [{"type": llm_base.EV_TOOL, "id": "t1", "name": "get_state", "input": {"entity_id": "light.x"}},
+         {"type": llm_base.EV_DONE, "stop_reason": "tool_use", "assistant_msg": {"role": "assistant"}}],
+        [{"type": llm_base.EV_TEXT, "text": "On."},
+         {"type": llm_base.EV_DONE, "stop_reason": "end_turn", "assistant_msg": {"role": "assistant"}}],
     ])
     events: list = []
 
@@ -5936,9 +5946,9 @@ async def test_the_turn_counts_steps_and_tools_for_the_status_line(hass):
         events.append((name, payload))
     batch = MagicMock(results=[{"tool_use_id": "t1", "result_text": "on"}], write_started=False, human_resolved=False,
                       stop_turn=False, authority_lost=False, outcome_unknown=False)
-    with patch("custom_components.phoenix_mcp.agentcli.build_mcp_tool_list", return_value=[]), \
-         patch("custom_components.phoenix_mcp.mcp_view._build_instructions", return_value="sys"), \
-         patch("custom_components.phoenix_mcp.agentcli._run_tool_batch", AsyncMock(return_value=batch)):
+    with patch_readers("custom_components.phoenix_mcp.tool_catalog.build_mcp_tool_list", return_value=[]), \
+         patch_readers("custom_components.phoenix_mcp.tool_dispatch._build_instructions", return_value="sys"), \
+         patch("custom_components.phoenix_mcp.agent_chat._run_tool_batch", AsyncMock(return_value=batch)):
         await async_run_agent_turn(
             hass=hass, data=_loop_data(), access_key=MagicMock(), provider=provider,
             session=MagicMock(), messages=[], options={}, client_ip="agentcli",
@@ -5962,7 +5972,7 @@ class _StalledSession:
 ])
 async def test_a_stream_that_goes_silent_says_so_instead_of_connection_failed(provider):
     events = await _collect(provider.stream_turn(_StalledSession(), system_prompt="s", messages=[], tools=[], options={}))
-    assert events == [{"type": agentcli.EV_ERROR, "status": 0, "code": "provider_silent", "retryable": True,
+    assert events == [{"type": llm_base.EV_ERROR, "status": 0, "code": "provider_silent", "retryable": True,
                        "message": "The provider sent nothing for 180s, so the request was stopped.",
                        "message_params": {"seconds": 180}}]
 
@@ -5978,7 +5988,7 @@ class _SeqSession:
         self._responses = list(responses)
         self.bodies: list[dict] = []
 
-    def post(self, url, headers=None, json=None, timeout=None, allow_redirects=None):  # noqa: A002
+    def post(self, url, headers=None, json=None, timeout=None, allow_redirects=None):
         self.bodies.append(copy.deepcopy(json))
         return self._responses.pop(0)
 
@@ -5998,8 +6008,8 @@ def _claude_sse(*events: dict) -> bytes:
     ({"code": 403, "message": "moderation"}, "provider_blocked", False),
 ])
 def test_stream_errors_are_classified_by_their_http_class(error, code, retryable):
-    with pytest.raises(agentcli._ProviderResponseError) as raised:
-        agentcli._provider_object(json.dumps({"error": error}))
+    with pytest.raises(llm_base._ProviderResponseError) as raised:
+        llm_base._provider_object(json.dumps({"error": error}))
     assert raised.value.code == code and raised.value.retryable is retryable
 
 
@@ -6018,7 +6028,7 @@ async def test_documented_finish_reasons_are_not_called_malformed(finish, code, 
     events = await _collect(provider.stream_turn(_FakeSession(_FakeResp(200, body)), system_prompt="s",
                                                  messages=[], tools=[], options={}))
     error = events[-1]
-    assert error["type"] == agentcli.EV_ERROR and error["code"] == code and error["retryable"] is retryable
+    assert error["type"] == llm_base.EV_ERROR and error["code"] == code and error["retryable"] is retryable
 
 
 @pytest.mark.asyncio
@@ -6028,7 +6038,7 @@ async def test_a_repetition_cut_is_an_output_limit():
     provider = OpenAICompatProvider(ProviderConfig(kind="mimo", model="mimo-v2.6-pro", base_url="https://m", api_key="k"))
     events = await _collect(provider.stream_turn(_FakeSession(_FakeResp(200, body)), system_prompt="s",
                                                  messages=[], tools=[], options={}))
-    assert events[-1]["type"] == agentcli.EV_DONE and events[-1]["stop_reason"] == "max_tokens"
+    assert events[-1]["type"] == llm_base.EV_DONE and events[-1]["stop_reason"] == "max_tokens"
 
 
 @pytest.mark.asyncio
@@ -6097,18 +6107,18 @@ class _ErrorThenText:
         self.calls += 1
         if self.calls == 1:
             limits = {"rate_limit": {"retry_after_seconds": self.retry_after}} if self.retry_after is not None else {}
-            yield {"type": agentcli.EV_ERROR, "status": 429, "code": "rate_limit", "retryable": True,
+            yield {"type": llm_base.EV_ERROR, "status": 429, "code": "rate_limit", "retryable": True,
                    "message": "Provider request failed (HTTP 429).", **limits}
             return
-        yield {"type": agentcli.EV_TEXT, "text": "ok"}
+        yield {"type": llm_base.EV_TEXT, "text": "ok"}
 
 
 @pytest.mark.asyncio
 async def test_a_named_wait_beyond_the_retry_window_is_not_retried_early():
     provider = _ErrorThenText(retry_after=30)
-    events = await _collect(agentcli._stream_turn_resilient(
+    events = await _collect(agent_turn._stream_turn_resilient(
         provider, MagicMock(), system_prompt="s", messages=[], tools=[], options={}, cancel=asyncio.Event()))
-    assert provider.calls == 1 and [ev["type"] for ev in events] == [agentcli.EV_ERROR]
+    assert provider.calls == 1 and [ev["type"] for ev in events] == [llm_base.EV_ERROR]
 
 
 @pytest.mark.asyncio
@@ -6121,16 +6131,16 @@ async def test_a_named_wait_inside_the_window_is_waited_out():
         awaitable.close()
         raise asyncio.TimeoutError
 
-    with patch.object(agentcli.asyncio, "wait_for", fake_wait_for):
-        events = await _collect(agentcli._stream_turn_resilient(
+    with patch.object(llm_base.asyncio, "wait_for", fake_wait_for):
+        events = await _collect(agent_turn._stream_turn_resilient(
             provider, MagicMock(), system_prompt="s", messages=[], tools=[], options={}, cancel=asyncio.Event()))
     assert provider.calls == 2 and waits == [3.0]
-    assert [ev["type"] for ev in events] == [agentcli.EV_RETRYING, agentcli.EV_TEXT]
+    assert [ev["type"] for ev in events] == [llm_base.EV_RETRYING, llm_base.EV_TEXT]
 
 
 def test_validation_refusals_teach_options_on_422_too():
-    assert agentcli._refused_option(422, "temperature: Input should be less than 1", {"temperature": 1.5}) == "temperature"
-    assert agentcli._refused_option(500, "temperature broke", {"temperature": 1.5}) is None
+    assert llm_base._refused_option(422, "temperature: Input should be less than 1", {"temperature": 1.5}) == "temperature"
+    assert llm_base._refused_option(500, "temperature broke", {"temperature": 1.5}) is None
 
 
 @pytest.mark.parametrize(("body", "message"), [
@@ -6141,7 +6151,7 @@ def test_validation_refusals_teach_options_on_422_too():
     ({"detail": "plain"}, "plain"),
 ])
 def test_validation_detail_lists_become_one_sentence(body, message):
-    assert agentcli._envelope_message(body) == message
+    assert llm_base._envelope_message(body) == message
 
 
 @pytest.mark.asyncio
@@ -6154,7 +6164,7 @@ async def test_effort_probe_accepts_a_422_refusal(hass):
 
     cfg = ProviderConfig(kind="nvidia", model="openai/gpt-oss-120b", base_url="https://n", api_key="k")
     with patch.object(OpenAICompatProvider, "probe_option", probe_option):
-        caps, _calls, answered = await agentcli.async_probe_capabilities(MagicMock(), cfg)
+        caps, _calls, answered = await llm_probes.async_probe_capabilities(MagicMock(), cfg)
     assert answered is True and caps.get("effort_levels")
 
 
@@ -6177,7 +6187,7 @@ async def test_claude_tool_round_replays_thinking_with_its_signature():
     provider = ClaudeProvider(ProviderConfig(kind="claude", model="claude-haiku-4-5", base_url="https://a", api_key="k"))
     events = await _collect(provider.stream_turn(_FakeSession(_FakeResp(200, body)), system_prompt="s",
                                                  messages=[], tools=[], options={}))
-    done = next(ev for ev in events if ev["type"] == agentcli.EV_DONE)
+    done = next(ev for ev in events if ev["type"] == llm_base.EV_DONE)
     assert done["assistant_msg"]["content"] == [
         {"type": "thinking", "thinking": "check it", "signature": "sig=="},
         {"type": "redacted_thinking", "data": "opaque"},
@@ -6201,12 +6211,12 @@ async def test_claude_final_answer_keeps_no_thinking():
     provider = ClaudeProvider(ProviderConfig(kind="claude", model="claude-sonnet-5-5", base_url="https://a", api_key="k"))
     events = await _collect(provider.stream_turn(_FakeSession(_FakeResp(200, body)), system_prompt="s",
                                                  messages=[], tools=[], options={}))
-    done = next(ev for ev in events if ev["type"] == agentcli.EV_DONE)
+    done = next(ev for ev in events if ev["type"] == llm_base.EV_DONE)
     assert done["assistant_msg"]["content"] == [{"type": "text", "text": "Done."}]
 
 
 def test_finished_history_drops_thinking_blocks():
-    from custom_components.phoenix_mcp.decision_history import without_thinking
+    from custom_components.phoenix_mcp.routing.decision_history import without_thinking
     history = [
         {"role": "user", "content": "hi"},
         {"role": "assistant", "content": [{"type": "thinking", "thinking": "t", "signature": "s"},
@@ -6246,8 +6256,8 @@ async def test_claude_output_cap_falls_back_for_a_smaller_model():
     session = _SeqSession(refused, _FakeResp(200, ok))
     provider = ClaudeProvider(ProviderConfig(kind="claude", model="claude-old", base_url="https://a", api_key="k"))
     events = await _collect(provider.stream_turn(session, system_prompt="s", messages=[], tools=[], options={}))
-    assert [b["max_tokens"] for b in session.bodies] == [agentcli.AGENTCLI_DEFAULT_MAX_TOKENS, 8192]
-    assert events[-1]["type"] == agentcli.EV_DONE
+    assert [b["max_tokens"] for b in session.bodies] == [provider_constants.AGENTCLI_DEFAULT_MAX_TOKENS, 8192]
+    assert events[-1]["type"] == llm_base.EV_DONE
 
 
 @pytest.mark.asyncio
@@ -6257,13 +6267,13 @@ async def test_nvidia_gets_an_output_cap_and_drops_it_when_refused():
     session = _SeqSession(refused, _FakeResp(200, ok))
     provider = OpenAICompatProvider(ProviderConfig(kind="nvidia", model="meta/llama", base_url="https://n", api_key="k"))
     events = await _collect(provider.stream_turn(session, system_prompt="s", messages=[], tools=[], options={}))
-    assert session.bodies[0]["max_tokens"] == agentcli.AGENTCLI_NVIDIA_MAX_TOKENS
+    assert session.bodies[0]["max_tokens"] == provider_constants.AGENTCLI_NVIDIA_MAX_TOKENS
     assert "max_tokens" not in session.bodies[1]
-    assert events[-1]["type"] == agentcli.EV_DONE
+    assert events[-1]["type"] == llm_base.EV_DONE
 
 
 def test_mimo_offers_each_token_plan_region():
-    hosts = {choice.value: choice.base_url for choice in agentcli.PROVIDER_DEFINITIONS["mimo"].endpoints}
+    hosts = {choice.value: choice.base_url for choice in llm_accounts.PROVIDER_DEFINITIONS["mimo"].endpoints}
     assert hosts["token_plan"] == "https://token-plan-cn.xiaomimimo.com/v1"
     assert hosts["token_plan_sgp"] == "https://token-plan-sgp.xiaomimimo.com/v1"
     assert hosts["token_plan_ams"] == "https://token-plan-ams.xiaomimimo.com/v1"
@@ -6284,15 +6294,15 @@ _CALL_ITEM = {"type": "function_call", "id": "fc_1", "call_id": "call_1", "name"
               "arguments": '{"entity_id": "light.x"}', "status": "completed"}
 
 
-def _responses_provider(model: str = "gpt-6-astra") -> agentcli.OpenAIResponsesProvider:
-    return agentcli.OpenAIResponsesProvider(ProviderConfig(
+def _responses_provider(model: str = "gpt-6-astra") -> llm_provider_responses.OpenAIResponsesProvider:
+    return llm_provider_responses.OpenAIResponsesProvider(ProviderConfig(
         kind="chatgpt", model=model, base_url="https://api.openai.com/v1", api_key="test-secret", vision=True))
 
 
 def test_openai_accounts_use_the_responses_adapter():
-    provider = agentcli.build_provider(ProviderConfig(kind="chatgpt", model="gpt-6-luna", base_url="https://o", api_key="k"))
-    assert isinstance(provider, agentcli.OpenAIResponsesProvider)
-    other = agentcli.build_provider(ProviderConfig(kind="grok", model="grok-4", base_url="https://x", api_key="k"))
+    provider = llm_factory.build_provider(ProviderConfig(kind="chatgpt", model="gpt-6-luna", base_url="https://o", api_key="k"))
+    assert isinstance(provider, llm_provider_responses.OpenAIResponsesProvider)
+    other = llm_factory.build_provider(ProviderConfig(kind="grok", model="grok-4", base_url="https://x", api_key="k"))
     assert type(other) is OpenAICompatProvider
 
 
@@ -6357,13 +6367,13 @@ async def test_responses_tool_round_streams_and_replays_its_output_items():
     events = await _collect(provider.stream_turn(_SeqSession(_FakeResp(200, stream)), system_prompt="s",
                                                  messages=[{"role": "user", "content": "hi"}], tools=_OPENAI_TOOLS,
                                                  options={"show_thinking": True}))
-    assert {"type": agentcli.EV_THINKING, "text": "Checking."} in events
-    tool = next(ev for ev in events if ev["type"] == agentcli.EV_TOOL)
+    assert {"type": llm_base.EV_THINKING, "text": "Checking."} in events
+    tool = next(ev for ev in events if ev["type"] == llm_base.EV_TOOL)
     assert tool["id"] == "call_1" and tool["name"] == "get_state" and tool["input"] == {"entity_id": "light.x"}
-    usage = next(ev for ev in events if ev["type"] == agentcli.EV_USAGE)
+    usage = next(ev for ev in events if ev["type"] == llm_base.EV_USAGE)
     assert usage["input_tokens"] == 120 and usage["cache_read_tokens"] == 100 and usage["output_tokens"] == 30
     done = events[-1]
-    assert done["type"] == agentcli.EV_DONE and done["stop_reason"] == "tool_use"
+    assert done["type"] == llm_base.EV_DONE and done["stop_reason"] == "tool_use"
     assistant = done["assistant_msg"]
     assert assistant["response_items"] == [_REASONING_ITEM, _CALL_ITEM]
 
@@ -6379,7 +6389,7 @@ async def test_responses_tool_round_streams_and_replays_its_output_items():
     assert sent[3]["type"] == "function_call_output" and sent[3]["call_id"] == "call_1"
 
     # Once the turn is over, the encrypted items leave the history.
-    from custom_components.phoenix_mcp.decision_history import without_thinking
+    from custom_components.phoenix_mcp.routing.decision_history import without_thinking
     assert "response_items" not in without_thinking(history)[1]
 
 
@@ -6395,7 +6405,7 @@ async def test_responses_final_answer_carries_no_output_items():
     )
     events = await _collect(_responses_provider().stream_turn(_SeqSession(_FakeResp(200, stream)), system_prompt="s",
                                                               messages=[], tools=[], options={}))
-    assert "".join(ev["text"] for ev in events if ev["type"] == agentcli.EV_TEXT) == "All off."
+    assert "".join(ev["text"] for ev in events if ev["type"] == llm_base.EV_TEXT) == "All off."
     done = events[-1]
     assert done["stop_reason"] == "end_turn" and done["assistant_msg"] == {"role": "assistant", "content": "All off."}
 
@@ -6405,7 +6415,7 @@ async def test_responses_replay_uses_the_corrected_arguments_of_an_unparseable_c
     assistant = {"role": "assistant", "content": "", "tool_calls": [
         {"id": "call_1", "type": "function", "function": {"name": "get_state", "arguments": "{}"}}],
         "response_items": [_REASONING_ITEM, {**_CALL_ITEM, "arguments": '{"entity_id": '}]}
-    items = agentcli._responses_input([{"role": "user", "content": "hi"}, assistant])
+    items = llm_provider_responses._responses_input([{"role": "user", "content": "hi"}, assistant])
     assert items[2]["arguments"] == "{}" and items[1] == _REASONING_ITEM
 
 
@@ -6430,9 +6440,9 @@ async def test_responses_terminal_events(event, code, retryable, stop):
     events = await _collect(_responses_provider().stream_turn(_SeqSession(_FakeResp(200, stream)), system_prompt="s",
                                                               messages=[], tools=[], options={}))
     if stop:
-        assert events[-1]["type"] == agentcli.EV_DONE and events[-1]["stop_reason"] == stop
+        assert events[-1]["type"] == llm_base.EV_DONE and events[-1]["stop_reason"] == stop
     else:
-        assert events[-1]["type"] == agentcli.EV_ERROR
+        assert events[-1]["type"] == llm_base.EV_ERROR
         assert events[-1]["code"] == code and events[-1]["retryable"] is retryable
 
 
@@ -6482,7 +6492,7 @@ class _OllamaSession:
         rows = [] if context is None else [{"name": self.model, "model": self.model, "context_length": context}]
         return _FakeResp(200, json_data={"models": rows})
 
-    def post(self, url, headers=None, json=None, timeout=None, allow_redirects=None):  # noqa: A002
+    def post(self, url, headers=None, json=None, timeout=None, allow_redirects=None):
         self.posts.append(json)
         return self.response
 
@@ -6501,10 +6511,10 @@ def _local_ollama(kind: str = "ollama") -> OpenAICompatProvider:
 
 
 def test_prompt_estimate_and_context_problem():
-    assert agentcli._estimated_prompt_tokens({"messages": _BIG_PROMPT, "tools": []}) == pytest.approx(20_000, rel=0.01)
-    assert agentcli._ollama_context_problem(20_000, None) is None
-    assert agentcli._ollama_context_problem(20_000, 32_768) is None
-    problem = agentcli._ollama_context_problem(20_000, 8_192)
+    assert llm_provider_openai._estimated_prompt_tokens({"messages": _BIG_PROMPT, "tools": []}) == pytest.approx(20_000, rel=0.01)
+    assert llm_provider_openai._ollama_context_problem(20_000, None) is None
+    assert llm_provider_openai._ollama_context_problem(20_000, 32_768) is None
+    problem = llm_provider_openai._ollama_context_problem(20_000, 8_192)
     assert problem["code"] == "ollama_context_too_small" and problem["retryable"] is False
     assert problem["message_params"] == {"needed": 20_000, "context": 8_192, "suggested": 32_768}
 
@@ -6525,7 +6535,7 @@ async def test_a_cold_model_is_checked_before_its_tool_calls_run():
     events = await _collect(_local_ollama().stream_turn(session, system_prompt="s", messages=_BIG_PROMPT,
                                                         tools=[], options={}))
     assert len(session.posts) == 1
-    assert not any(ev["type"] in (agentcli.EV_TOOL, agentcli.EV_DONE) for ev in events)
+    assert not any(ev["type"] in (llm_base.EV_TOOL, llm_base.EV_DONE) for ev in events)
     assert events[-1]["code"] == "ollama_context_too_small"
 
 
@@ -6535,7 +6545,7 @@ async def test_a_prompt_that_fits_or_an_unknown_context_runs(contexts):
     session = _OllamaSession(contexts, _FakeResp(200, _OLLAMA_TOOL_REPLY))
     events = await _collect(_local_ollama().stream_turn(session, system_prompt="s", messages=_BIG_PROMPT,
                                                         tools=[], options={}))
-    assert any(ev["type"] == agentcli.EV_TOOL for ev in events) and events[-1]["type"] == agentcli.EV_DONE
+    assert any(ev["type"] == llm_base.EV_TOOL for ev in events) and events[-1]["type"] == llm_base.EV_DONE
     # A context found before the request is not asked for again.
     assert session.ps_calls == (1 if contexts[0] is not None else 2)
 
@@ -6545,7 +6555,7 @@ async def test_ollama_cloud_is_not_checked():
     session = _OllamaSession([4_096], _FakeResp(200, _OLLAMA_TOOL_REPLY))
     events = await _collect(_local_ollama("ollama_cloud").stream_turn(
         session, system_prompt="s", messages=_BIG_PROMPT, tools=[], options={}))
-    assert session.ps_calls == 0 and events[-1]["type"] == agentcli.EV_DONE
+    assert session.ps_calls == 0 and events[-1]["type"] == llm_base.EV_DONE
 
 
 # --------------------------------------------------------------------------- #
@@ -6553,7 +6563,7 @@ async def test_ollama_cloud_is_not_checked():
 # --------------------------------------------------------------------------- #
 
 def test_openrouter_catalog_supplies_each_models_levels():
-    caps = agentcli._openrouter_capabilities([
+    caps = llm_base._openrouter_capabilities([
         {"id": "a/optional", "supported_parameters": ["tools", "reasoning"],
          "reasoning": {"supported_efforts": ["none", "low", "high", "max", "ultra"], "mandatory": False}},
         {"id": "b/mandatory", "supported_parameters": ["tools", "reasoning"],
@@ -6568,11 +6578,11 @@ def test_openrouter_catalog_supplies_each_models_levels():
 @pytest.mark.asyncio
 async def test_ollama_show_supplies_thinking_levels():
     class _Show:
-        def post(self, url, headers=None, json=None, timeout=None, allow_redirects=None):  # noqa: A002
+        def post(self, url, headers=None, json=None, timeout=None, allow_redirects=None):
             body = {"capabilities": ["completion", "tools", "thinking"],
                     "thinking": {"values": [False, "low", "medium", "xhigh"], "default": "medium"}}
             return _FakeResp(200, json_data=body)
-    caps = await agentcli._ollama_capabilities(_Show(), "http://o", {}, ["qwen3.8:27b"])
+    caps = await llm_base._ollama_capabilities(_Show(), "http://o", {}, ["qwen3.8:27b"])
     assert caps["qwen3.8:27b"]["effort_levels"] == ["low", "medium", "xhigh"]
 
 
@@ -6611,3 +6621,42 @@ async def test_qwen_probes_stream_because_some_models_only_stream(kind, stream):
     session = _FakeSession(_FakeResp(200))
     await OpenAICompatProvider(ProviderConfig(kind=kind, model="m", base_url="https://q", api_key="k")).probe_option(session, {})
     assert session.calls[-1][1]["json"]["stream"] is stream
+
+
+@pytest.mark.parametrize("url", [
+    "https://100.100.100.200/", "https://168.63.129.16/", "https://192.0.0.192/",
+    "https://[fd00:ec2::254]/", "https://[2002:a9fe:a9fe::]/",
+])
+@pytest.mark.parametrize("allow_private", [True, False])
+async def test_validate_base_url_refuses_metadata_outside_link_local(url, allow_private):
+    from custom_components.phoenix_mcp.agentcli_views import _validate_base_url
+
+    assert await _validate_base_url(url, allow_private=allow_private) is not None
+
+
+async def test_validate_base_url_keeps_shared_address_space_for_local_servers_only():
+    from custom_components.phoenix_mcp.agentcli_views import _validate_base_url
+
+    assert await _validate_base_url("http://100.64.0.1:11434", allow_private=True) is None
+    assert await _validate_base_url("https://100.64.0.1/", allow_private=False) is not None
+
+
+@pytest.mark.parametrize("status,reason,result", [
+    ("failed", "execution_failed", {"tool_result": {"content": []}}),
+    ("failed", "execution_failed", {"tool_result": {"content": [{"type": "text", "text": "boom"}]}}),
+    ("failed", "execution_interrupted", None),
+    ("failed", None, None),
+    ("rejected", "too bright", None),
+    ("rejected", None, None),
+    ("cancelled", "kill_switch", None),
+])
+def test_both_approval_waits_report_one_outcome(status, reason, result):
+    from custom_components.phoenix_mcp.agent_turn import _resolved_result
+    from custom_components.phoenix_mcp.tool_common import _tool_inline_resolved
+
+    approval = SimpleNamespace(id="a", status=status, rejected_reason=reason, result=result)
+    inline = json.loads(_tool_inline_resolved(approval)["content"][0]["text"])
+    interactive = json.loads(_resolved_result(status, None, approval)["content"][0]["text"])
+    assert (inline["status"], inline["message"]) == (interactive["status"], interactive["message"])
+    if status == "failed":
+        assert "not applied" not in inline["message"]

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { ActionButton } from "../ui/ActionButton";
 import { api } from "../api";
+import { purgeAgentCliStorage } from "../utils/agentcli_state";
 import { Modal } from "./Modal";
 import { t } from "../i18n";
 
@@ -39,6 +40,8 @@ export function WipeConfirmModal({ scopes, onWiped, onClose }: Props) {
     setError(null);
     try {
       await api.wipe({ wipe_core: scopes.core, wipe_providers: scopes.providers, wipe_mesa: scopes.mesa });
+      // The logs a core wipe deletes include the conversations; the browser's copy goes with them.
+      if (scopes.core) purgeAgentCliStorage();
       onWiped();
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : t("settings.wipeFailed"));
@@ -47,7 +50,7 @@ export function WipeConfirmModal({ scopes, onWiped, onClose }: Props) {
   }
 
   return (
-    // Over the whole workspace, plain UI2 dialog: no coloured title or banner; only Wipe is red (user, 2026-10-28).
+    // Over the whole workspace, plain dialog: no coloured title or banner; only Wipe is red.
     <Modal titleId="wipe-title" onClose={wiping ? undefined : onClose} overWorkspace>
       <h3 className="modal-title" id="wipe-title">
         {t("settings.wipeTitle")}

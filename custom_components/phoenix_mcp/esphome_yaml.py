@@ -23,6 +23,7 @@ from typing import Any
 
 import yaml
 
+from .policy_engine import is_sensitive_key
 from .yaml_includes import PhoenixLenientLoader, YamlParseError
 
 # Known credential locations. "[]" matches any list index, so both the modern
@@ -43,8 +44,19 @@ ESPHOME_SECRET_PATHS: tuple[tuple[str, ...], ...] = (
     ("mqtt", "password"),
 )
 
-# Layer 2: key names that mark their value as a credential wherever they appear.
-_SECRET_KEY_RE = re.compile(r"(password|passwd|psk|bindkey|api_key|token|secret)", re.IGNORECASE)
+# Layer 2: key names that mark their value as a credential wherever they appear,
+# on top of the shared is_sensitive_key markers. pass and pw are whole words of a
+# key (admin_pass, wifi-pw) so that bypass or compass stay readable.
+_SECRET_KEY_RE = re.compile(
+    r"password|passwd|passphrase|passcode|psk|preshared|bindkey|api_key|api-key|apikey|token|secret"
+    r"|private_key|authorization|encryption_key|(?:^|[_\-.])(?:pass|pw|pwd)(?:$|[_\-.])",
+    re.IGNORECASE,
+)
+# A pin in a device file is a GPIO, not a credential, so that shared marker does not apply.
+_GPIO_PIN_KEY_RE = re.compile(r"(?:^|[^a-z0-9])pin$", re.IGNORECASE)
+# Every value below one of these keys is masked: request headers carry bearer
+# tokens and API keys under names no list can anticipate.
+_SECRET_SUBTREE_KEYS = frozenset({"headers", "request_headers"})
 
 # Layer 3 floor. It catches a credential inlined in one file but referenced by
 # `!secret` in another. A short secrets.yaml value (a pin number, a small integer)
@@ -202,6 +214,9 @@ def _secret_spans(text: str, secret_values: set[str]) -> list[tuple[int, int, st
         hit = (
             _path_matches_curated(_normalized_path(path))
             or bool(_SECRET_KEY_RE.search(key))
+            or (is_sensitive_key(key) and not _GPIO_PIN_KEY_RE.search(key))
+            or path[-2:] == ("encryption", "key")
+            or not _SECRET_SUBTREE_KEYS.isdisjoint(path)
             or (len(value) >= MIN_CROSS_CHECK_LENGTH and value in secret_values)
         )
         if hit:

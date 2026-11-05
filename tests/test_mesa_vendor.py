@@ -8,7 +8,10 @@ with a PyPI install). A manifest check fails any hand-edit of the tree.
 from __future__ import annotations
 
 import importlib
+import pathlib
 import sys
+
+import pytest
 
 
 def test_vendored_package_imports_with_pinned_version():
@@ -109,6 +112,15 @@ def test_vendored_tree_matches_its_manifest():
         "If this was a re-sync, re-run scripts/sync_mesa_core.py. If it was not, "
         "the vendored copy has been hand-edited; restore it from the sync."
     )
+
+
+def test_the_vendored_tree_ships_the_upstream_license_and_says_it_was_modified():
+    import pathlib
+
+    sync = _sync_module()
+    dest = pathlib.Path(sync.DEST)
+    assert "Apache License" in (dest / "LICENSE").read_text(encoding="utf-8")
+    assert sync.VENDOR_PREFIX in (dest / sync._MODIFICATIONS_NAME).read_text(encoding="utf-8")
 
 
 def test_manifest_describes_exactly_the_tracked_files():
@@ -288,4 +300,44 @@ def test_vendor_copies_revision_blobs_despite_ignored_files_and_copy_race(tmp_pa
     record = json.loads(manifest.read_text())
     assert record['source_revision'] == revision
     assert record['source_version'] == '9.9.9'
-    assert set(record['files']) == {'__init__.py'}
+    assert set(record['files']) == {'__init__.py', sync._MODIFICATIONS_NAME}
+
+
+_PREFIX = "custom_components.phoenix_mcp.mesa_core"
+
+
+@pytest.mark.parametrize("source", [
+    "import mesa_core\n",
+    "import mesa_core.enforcer\n",
+    "import mesa_core.enforcer as enforcer\n",
+    "import os, mesa_core.store\n",
+    "def later():\n    import mesa_core.lease\n",
+    "import importlib\nimportlib.import_module('mesa_core.x')\n",
+    "__import__('mesa_core')\n",
+    "name = 'mesa_core.enforcer'\n",
+    "from  mesa_core import x\n",
+    "import mesa_core\\\n    .enforcer\n",
+])
+def test_the_rewrite_refuses_every_reference_it_cannot_rewrite(source):
+    sync = _sync_module()
+    with pytest.raises(SystemExit, match="cannot handle"):
+        sync._rewrite_source(source, pathlib.Path("module.py"))
+
+
+@pytest.mark.parametrize(("source", "expected"), [
+    ("from mesa_core.store import ProfileStore\n", f"from {_PREFIX}.store import ProfileStore\n"),
+    ("from mesa_core import x\n", f"from {_PREFIX} import x\n"),
+    ("logger = logging.getLogger('mesa_core.lease')\n", "logger = logging.getLogger('mesa_core.lease')\n"),
+    ('"""Written to the ``mesa_core.audit`` logger."""\n', '"""Written to the ``mesa_core.audit`` logger."""\n'),
+    ("key = 'mesa_core_version'\n", "key = 'mesa_core_version'\n"),
+])
+def test_the_rewrite_leaves_what_it_understands(source, expected):
+    assert _sync_module()._rewrite_source(source, pathlib.Path("module.py")) == expected
+
+
+def test_the_shipped_tree_passes_its_own_rewrite():
+    """A refusal rule the current release would fail stops the next sync for nothing."""
+    sync = _sync_module()
+    root = pathlib.Path(__file__).resolve().parent.parent / "custom_components" / "phoenix_mcp" / "mesa_core"
+    for path in root.rglob("*.py"):
+        sync._rewrite_source(path.read_text(encoding="utf-8"), path.relative_to(root))

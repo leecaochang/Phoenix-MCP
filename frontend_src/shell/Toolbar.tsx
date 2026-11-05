@@ -30,7 +30,7 @@ export interface WorkspaceActions {
   restoreOriginal: (controller: WorkspaceController) => void;
   /** Reset All Workspaces: the toolbar, Quick Help, Guide and every arrangement, never My Defaults or settings. */
   restorePanelDefaults: () => void;
-  /** Items are waiting and Needs Attention was closed in this workspace: offer it back (user, 2026-10-29). */
+  /** Items are waiting and Needs Attention was closed in this workspace: offer it back. */
   attentionHidden: (controller: WorkspaceController) => boolean;
   showAttention: (controller: WorkspaceController) => void;
   /** Open a window a toolbar tool opens (Archived Access Keys, Log Settings), as its tool would. */
@@ -52,7 +52,7 @@ export function workspaceMenu(controller: WorkspaceController, actions: Workspac
     help: t("help.menuReopen", { window: windowTitle(id) }),
     onSelect: () => controller.reopen(id),
   }));
-  // A window a toolbar tool opens is offered here too while it is hidden (user, 2026-10-31).
+  // A window a toolbar tool opens is offered here too while it is hidden.
   for (const id of toolWindows) {
     if (!controller.groupOf(id) && controller.windows.includes(id)) {
       items.push({ id: `reopen-${id}`, label: t("workspace.reopen", { window: windowTitle(id) }), help: t("help.menuReopen", { window: windowTitle(id) }), onSelect: () => (actions ? actions.openToolWindow(controller, id) : controller.reopen(id)) });
@@ -63,7 +63,7 @@ export function workspaceMenu(controller: WorkspaceController, actions: Workspac
     items.push({ id: "show-attention", label: t("workspace.showAttention"), help: t("help.menuShowAttention"), onSelect: () => actions.showAttention(controller) });
   }
   // Notifications is offered back like any other closed window, in its own words; it is
-  // closed from its title bar, not from here (user, 2026-10-29).
+  // closed from its title bar, not from here.
   if (controller.windows.includes(NOTIFICATIONS) && !controller.groupOf(NOTIFICATIONS)) {
     items.push({ id: "show-notifications", label: t("notifications.showHistory"), help: t("help.menuShowNotifications"), onSelect: () => controller.reopen(NOTIFICATIONS) });
   }
@@ -112,7 +112,7 @@ function appearanceMenu(state: ToolbarState, onChange: (next: ToolbarState) => v
     { id: "icons", label: t("workspace.iconsOnly"), help: t("help.menuIconsOnly"), checked: state.mode === "icons", onSelect: () => update({ mode: "icons" }) },
     { id: "icon-text", label: t("workspace.iconsAndText"), help: t("help.menuIconsAndText"), checked: state.mode === "icon-text", onSelect: () => update({ mode: "icon-text" }) },
   ];
-  // Single Row, checked while chosen (user, 2026-11-01); an upright toolbar has columns instead. It stays
+  // Single Row, checked while chosen; an upright toolbar has columns instead. It stays
   // checked while the toolbar shows two rows because one does not fit.
   if (env === "desktop" && !toolbarVertical(state)) {
     items.push("separator", { id: "single-row", label: t("workspace.singleRow"), help: t("help.menuSingleRow"), checked: state.singleRow, toggle: true, onSelect: () => update({ singleRow: !state.singleRow }) });
@@ -193,7 +193,7 @@ export function Toolbar({ controller, shellRoot, env, state, onChange, documenta
     }
   }, [d.hass, d.narrow]);
 
-  // Phones: docked at the top, icons only, never collapsed, and no toolbar menu (user, 2026-11-02).
+  // Phones: docked at the top, icons only, never collapsed, and no toolbar menu.
   const effective: ToolbarState = env === "mobile" ? { ...state, dock: "top", mode: "icons", collapsed: false } : state;
   const update = (patch: Partial<ToolbarState>) => onChange({ ...state, ...patch });
 
@@ -275,7 +275,7 @@ export function Toolbar({ controller, shellRoot, env, state, onChange, documenta
   const vertical = env === "desktop" && toolbarVertical(effective);
   const fitOneLine = env === "desktop" && effective.mode === "icon-text" && !effective.collapsed && !vertical;
   // Phones always put the tools beside Agent Chat, Help and Workspace Options, so the toolbar is at
-  // most two rows: the workspaces, then the rest (user, 2026-11-02).
+  // most two rows: the workspaces, then the rest.
   const oneRow = (env === "mobile" || (env === "desktop" && effective.singleRow)) && !effective.collapsed && !vertical;
   const fitKey = useRef("");
   const refit = useRef<(force?: boolean) => void>(() => {});
@@ -403,7 +403,7 @@ export function Toolbar({ controller, shellRoot, env, state, onChange, documenta
                 items={() => appearanceMenu(state, onChange, env)} className="phx-toolbar-button phx-toolbar-plain phx-toolbar-options" />
             )}
           </div>
-          {/* The open windows' tools always show (user, 2026-11-01): hiding them only made them harder to find. */}
+          {/* The open windows' tools always show: hiding them only made them harder to find. */}
           {!collapsed && registry && groups.length > 0 && (
             <ToolRow registry={registry} workspace={d.workspace} order={order} groups={groups} />
           )}

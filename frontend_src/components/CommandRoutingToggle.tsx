@@ -8,7 +8,7 @@ export function CommandRoutingToggle({ surface, mode, onChange, saving, divider 
   mode: string | undefined;
   onChange: (mode: "auto" | "off") => void;
   saving: boolean;
-  /** The rule under the row; Agent Chat's settings go on without one (user, 2026-10-31). */
+  /** The rule under the row; Agent Chat's settings go on without one. */
   divider?: boolean;
 }) {
   // Its window can show in two workspaces at once; Find Setting finds it by `data-setting`.

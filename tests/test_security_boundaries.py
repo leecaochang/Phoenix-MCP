@@ -19,7 +19,10 @@ from custom_components.phoenix_mcp.audit import AuditLog
 from custom_components.phoenix_mcp.const import DOMAIN, REDACTION_SENTINEL, STORAGE_KEY, STORAGE_VERSION
 from custom_components.phoenix_mcp.data import PhoenixData
 from custom_components.phoenix_mcp.helpers import ScrubbedState, redact_secrets_in_text
-from custom_components.phoenix_mcp.mcp_view import _execute_call_service, _execute_call_service_mesa_approved
+from custom_components.phoenix_mcp.tools.service import (
+    _execute_call_service,
+    _execute_call_service_mesa_approved,
+)
 from custom_components.phoenix_mcp.policy_engine import Permission, canonical_entity_id, resolve, resolve_registry_access
 from custom_components.phoenix_mcp.rate_limiter import RateLimiter
 from custom_components.phoenix_mcp.access_key_store import PermissionNode, AccessKeyRecord, AccessKeyStore
@@ -178,7 +181,7 @@ async def test_disabled_registry_mixed_case_cannot_use_an_entity_only_grant(hass
 
 
 async def test_missing_service_selector_refuses_before_creating_approval(hass):
-    from custom_components.phoenix_mcp.mcp_view import _tool_call_service
+    from custom_components.phoenix_mcp.tools.service import _tool_call_service
 
     store = AccessKeyStore(hass, AsyncMock())
     access_key, _ = await store.async_create_access_key("target", "admin")
@@ -221,7 +224,7 @@ async def test_released_storage_does_not_cancel_an_execution_claim(hass, hass_st
 
 @pytest.mark.parametrize("selector", ["entity_id", "device_id", "area_id", "floor_id", "label_id"])
 async def test_service_data_selector_refuses_before_creating_confirm_review(hass, selector):
-    from custom_components.phoenix_mcp.mcp_view import _tool_call_service
+    from custom_components.phoenix_mcp.tools.service import _tool_call_service
 
     store = AccessKeyStore(hass, AsyncMock())
     access_key, _ = await store.async_create_access_key("target", "admin")

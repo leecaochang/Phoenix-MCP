@@ -33,7 +33,9 @@
 
 刪除所有存取金鑰、待處理核准和實體提示，並把所有設定重設為預設值。這也會關閉緊急停止開關。
 
-它還會刪除稽核日誌、對話記錄、變更歷史、路由統計和速率限制計數。它還會移除 Phoenix 建立的語音助理，除非它是 Home Assistant 唯一的助理。
+它還會刪除稽核日誌、對話記錄、變更歷史、路由統計和速率限制計數。它還會移除 Phoenix 建立的語音助理，除非它是 Home Assistant 唯一的助理。Agent Chat 對話也會被刪除，但僅限此瀏覽器。
+
+安全副本、行事曆變更記錄和儀表板資源記錄會保留。要移除它們，請參閱[完全移除 Phoenix](guide:topic.security#removing)。
 
 ### {{label:settings.wipeProvidersLabel}} {#wipe-providers}
 

@@ -5,9 +5,11 @@ Things Phoenix can't settle by itself. The window appears over the workspace whi
 
 ## Actions with an unknown outcome {#actions}
 
-An action that reached Home Assistant, but Phoenix never learned whether it worked. This happens when a conversation is cut off or Home Assistant restarts mid-action. The item names the access key, the tool and when it started.
+An action that reached Home Assistant, but Phoenix never learned whether it worked. This happens when a conversation is cut off, an external app disconnects during a change, or Home Assistant restarts mid-action. It also happens when Agent Chat makes a change Phoenix can't confirm. The item names the access key, the tool and when it started.
 
-Until you review it, that access key can't make any more changes. A calendar change with an unknown outcome is listed the same way.
+Until you review it, that access key can't make any more changes, though it can still read. A calendar change with an unknown outcome is listed the same way.
+
+An app that disconnects while it waits for your approval isn't listed: the request stays in Approvals. While one of a key's changes is still running, its other changes are refused until that one finishes, and reads carry on.
 
 ## Reviewing an action {#review}
 
@@ -17,8 +19,9 @@ Then select **{{label:attention.continue}}**, tick **{{label:attention.checked}}
 
 ## Problems that need a fix {#problems}
 
-- **{{label:attention.mesaTitle}}**: MESA failed to start, so protected changes are paused. Check the Home Assistant log, then reload Phoenix.
+- **{{label:attention.mesaTitle}}**: MESA failed to start, so protected changes are paused. Check the Home Assistant log. If it says the profile storage is corrupt, [follow its steps](guide:topic.mesaRules#storage). Then reload Phoenix.
 - **{{label:attention.calendar_storageTitle}}**: calendar changes are paused until Phoenix can read its saved calendar history again.
+- **{{label:attention.audit_storageTitle}}**: Phoenix can't write the audit log to disk, so a restart would lose recent entries. Look for a disk or storage error in the Home Assistant log. The item goes away after the next save works.
 
 These go away by themselves once the problem is fixed.
 

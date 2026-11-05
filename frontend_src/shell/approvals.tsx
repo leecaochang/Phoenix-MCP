@@ -221,7 +221,7 @@ export function ApprovalsProvider({ scope, onScopeChange, onCountChange, refresh
   }, [scope, loadPending, loadOthers]);
 
   // Every scope updates itself while the workspace is on screen, so there is no Refresh
-  // button (user, 2026-10-29); approval events make a new or decided request instant.
+  // button; approval events make a new or decided request instant.
   useEffect(() => {
     if (!active) return;
     const id = setInterval(() => {
@@ -283,7 +283,7 @@ export function ApprovalsProvider({ scope, onScopeChange, onCountChange, refresh
   /**
    * Showing different requests takes the chosen one with it: the list has
    * nothing chosen afterwards, so Review and Request Details must not still
-   * hold the request it had (user, 2026-10-29). A request opened from a link
+   * hold the request it had. A request opened from a link
    * changes the scope itself and keeps its choice.
    */
   const chooseScope = useCallback((next: ApprovalsScope) => {

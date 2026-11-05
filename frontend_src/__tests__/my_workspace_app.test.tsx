@@ -293,7 +293,7 @@ describe("Agent Chat in My Workspace", () => {
     await waitFor(() => expect(stored().myWindows).toEqual([]), { timeout: 4000 });
   });
 
-  it("keeps a closed Chat closed when My Workspace shows its slot (user, 2026-11-01)", async () => {
+  it("keeps a closed Chat closed when My Workspace shows its slot", async () => {
     seed({ lastWorkspace: "my", myWindows: ["agentChat"] });
     const el = mountPanel();
     await waitFor(() => expect(visible(el, "agentChat")?.textContent).toContain("Agent Chat is closed."));

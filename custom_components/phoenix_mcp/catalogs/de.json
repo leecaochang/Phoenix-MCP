@@ -102,7 +102,8 @@
       "profileSet": "MESA-Profil für {key} festgelegt - zum Bearbeiten klicken",
       "profileCreate": "MESA-Profil für {key} erstellen",
       "registryLoadFailed": "Entitätsregister konnte nicht geladen werden.",
-      "mesaProfile": "MESA-Profil"
+      "mesaProfile": "MESA-Profil",
+      "openFailed": "Der MESA-Profileditor konnte nicht geöffnet werden. Lade die Seite neu und versuche es noch einmal."
     },
     "agentchat": {
       "accessKey": "Zugriffsschlüssel",
@@ -135,6 +136,7 @@
       "clearHistory": "Chat-Verlauf löschen",
       "configureFirst": "Zuerst einen Anbieter konfigurieren",
       "connection": "Verbindung",
+      "connectionLost": "Die Verbindung zu Home Assistant wurde getrennt, bevor diese Antwort fertig war.",
       "continue": "Weiter",
       "decreaseTextSize": "Text verkleinern",
       "dockedClosed": "Agent Chat ist geschlossen.",
@@ -166,6 +168,7 @@
         "empty_turn": "Das Modell hat die Runde ohne Textantwort beendet.",
         "internal": "Interner Fehler.",
         "max_tokens_stop": "Das Modell wurde gestoppt, weil es sein Ausgabelängenlimit erreicht hat. Bitten Sie es, fortzufahren, oder erhöhen Sie das Ausgabe-Token-Limit des Modells (bei Ollama dessen num_predict/context-Einstellungen).",
+        "memory_trimmed": "Die Unterhaltung ist größer geworden, als eine Anfrage fassen kann, daher erinnert sich das Modell nicht mehr an die ältesten Nachrichten. Sie bleiben auf dem Bildschirm sichtbar.",
         "model_api_unsupported": "Dieses Modell ist nicht für OpenCode Chat Completions freigegeben. Wählen Sie ein unterstütztes Modell.",
         "network": "Der Anbieter ist vorübergehend nicht verfügbar.",
         "ollama_backend": "Der Anbieter ist vorübergehend nicht verfügbar.",
@@ -184,6 +187,7 @@
         "provider_transient": "Der Anbieter ist vorübergehend nicht verfügbar.",
         "quota": "Das Anbieterkonto hat kein Guthaben mehr oder sein Ausgabenlimit erreicht. Sie wird nicht erneut angefordert.",
         "rate_limit": "Der Anbieter ist vorübergehend nicht verfügbar.",
+        "request_too_large": "Diese Nachricht ist zu groß zum Senden. Kürzen Sie sie, entfernen Sie Bilder oder beginnen Sie mit /clear eine neue Unterhaltung.",
         "too_many_tools": "Dieser Zugriffsschlüssel stellt {count} Tools bereit, aber {provider} akzeptiert höchstens {limit} pro Anfrage. Schränken Sie die Fähigkeiten des Zugriffsschlüssels ein oder wählen Sie einen anderen Anbieter.",
         "tool_call_cut": "Die Verbindung zum Modell wurde mitten in einem Tool-Aufruf beendet, daher wurde die Aktion nicht ausgeführt. Es wurde nichts angewendet und die Anfrage selbst war nicht fehlerhaft; senden Sie sie erneut.",
         "tool_call_truncated": "Das Modell hat mitten in einem Tool-Aufruf sein Ausgabelängenlimit erreicht, daher wurde die Aktion nicht ausgeführt. Die angeforderte Änderung war zu groß, um sie in einem Aufruf auszugeben; versuchen Sie, eine kleinere Änderung anzufordern.",
@@ -191,7 +195,9 @@
         "review_changed": "Die Werkzeuge des Zugriffsschlüssels oder die Unterhaltung haben sich geändert, während der Werkzeugaufruf geprüft wurde, daher wurde nichts ausgeführt. Senden Sie die Anfrage erneut.",
         "kill_switch": "Der Not-Aus-Schalter ist aktiv, daher hat der Agent angehalten. Es wurde nichts weiter ausgeführt.",
         "unreachable": "Home Assistant war nicht erreichbar, daher wurde dies nicht abgeschlossen. Was auf Ihre Genehmigung wartete, wurde abgebrochen.",
-        "upstream": "Der Anbieter ist vorübergehend nicht verfügbar."
+        "upstream": "Der Anbieter ist vorübergehend nicht verfügbar.",
+        "provider_slow": "Der Anbieter hat innerhalb von {seconds} s nicht geantwortet.",
+        "result_withheld": "Ein Ergebnis mit {length} Byte passte nicht in den Kontext der Anfrage und wurde dem Modell nicht übergeben."
       },
       "options": "Optionen",
       "popIn": "Zurück in Home Assistant einblenden",
@@ -363,7 +369,7 @@
       },
       "cap_registry_write": {
         "label": "Entitätsregister verwalten",
-        "description": "Entitäten und Geräte bearbeiten, Bereiche, Etagen, Labels und Kategorien verwalten und veraltete Einträge entfernen."
+        "description": "Entitäten und Geräte bearbeiten, Bereiche, Etagen, Labels und Kategorien verwalten, veraltete Einträge entfernen und den aufgezeichneten Verlauf einer Entität löschen."
       },
       "cap_radio_write": {
         "label": "Funkverwaltung",
@@ -407,7 +413,7 @@
       "modeDescAllow": "Die Agenten dieses Schlüssels diese Fähigkeit ohne Rückfrage nutzen lassen.",
       "modeDescConfirm": "Jede Änderung wartet in Genehmigungen auf Sie, bevor sie ausgeführt wird. Lesezugriffe laufen ohne Rückfrage.",
       "updateFailed": "Fähigkeit konnte nicht aktualisiert werden.",
-      "passThroughNotice": "<strong>Durchreichen ist aktiviert.</strong> Konfiguration lesen, Template rendern, Suche & Entdeckung, Register lesen, Automatisierungs-Ablaufverfolgung, Diagnose, Durchsage und Dienst-Antwortdaten gelten als Erlauben, sofern sie nicht auf Bestätigen stehen. Alle anderen Fähigkeiten verwenden ihre Einstellung unten.",
+      "passThroughNotice": "<strong>Durchreichen ist aktiviert.</strong> Konfiguration lesen, Template rendern, Suche & Entdeckung, Register lesen, Automatisierungs-Ablaufverfolgung, Diagnose, Durchsage und Dienst-Antwortdaten gelten als Erlauben. Alle anderen Fähigkeiten verwenden ihre Einstellung unten.",
       "esphomeBadgeTitle": "Ohne das Add-on Device Builder bleiben die ESPHome-Werkzeuge, die Geräte validieren, kompilieren, flashen oder untersuchen, für diesen Zugriffsschlüssel ausgeblendet. Mit der ESPHome-Integration funktionieren Lesen und Durchsuchen von Geräte-YAML weiterhin. Die Fähigkeit kann trotzdem schon jetzt festgelegt werden.",
       "confirmUnavailable": "Diese Fähigkeit kann keine Genehmigung erfordern.",
       "cap_calendar_write": {
@@ -456,7 +462,7 @@
       },
       "read_only": {
         "label": "Nur-Lese-Beobachter",
-        "description": "Liest Zustände, Verlauf und Protokolle. Konfigurationsänderungen, Durchsagen, Schlösser, Alarmanlagen, Abdeckungen und Ventile werden verweigert."
+        "description": "Liest Zustände, Verlauf und Protokolle. Konfigurationsänderungen, Durchsagen, Schlösser, Alarmanlagen, Abdeckungen und Ventile werden verweigert. Alles, was auf W steht, kann er weiterhin steuern."
       },
       "voice_assistant": {
         "label": "Sprachassistent",
@@ -619,7 +625,7 @@
       "create": "Erstellen",
       "createFailed": "Zugriffsschlüssel konnte nicht erstellt werden.",
       "createPtUnderstand": "Ich verstehe, dass dieser Zugriffsschlüssel umfassenden Zugriff auf Home Assistant hat",
-      "createPtWarning": "<strong>Dieser Zugriffsschlüssel kann alle Entitäten von Home Assistant lesen und steuern.</strong> Die Durchreichung schaltet außerdem Konfiguration lesen, Template rendern, Suche & Entdeckung, Register lesen, Automatisierungs-Ablaufverfolgung, Diagnose, Durchsage und Dienst-Antwortdaten ein, sofern Sie diese nicht auf Bestätigen setzen. Diagnose und Dienst-Antwortdaten können sensible Details preisgeben. Alle anderen Fähigkeiten behalten ihre eigene Einstellung, und MESA-Regeln, die Phoenix MCP-Blockliste, das Entfernen sensibler Attribute, Ratenlimits, der Widerruf und der Ablauf gelten weiterhin. Verwenden Sie ihn nur mit MCP-Clients, denen Sie Ihr ganzes Zuhause anvertrauen.",
+      "createPtWarning": "<strong>Dieser Zugriffsschlüssel kann alle Entitäten von Home Assistant lesen und steuern.</strong> Die Durchreichung schaltet außerdem Konfiguration lesen, Template rendern, Suche & Entdeckung, Register lesen, Automatisierungs-Ablaufverfolgung, Diagnose, Durchsage und Dienst-Antwortdaten ein. Diagnose und Dienst-Antwortdaten können sensible Details preisgeben. Alle anderen Fähigkeiten behalten ihre eigene Einstellung, und MESA-Regeln, die Phoenix MCP-Blockliste, das Entfernen sensibler Attribute, Ratenlimits, der Widerruf und der Ablauf gelten weiterhin. Verwenden Sie ihn nur mit MCP-Clients, denen Sie Ihr ganzes Zuhause anvertrauen.",
       "createAccessKey": "Zugriffsschlüssel erstellen",
       "daysAgo": "vor {d} Tagen",
       "delete": "Löschen",
@@ -633,7 +639,7 @@
       "done": "Fertig",
       "empty": "Noch keine Zugriffsschlüssel. Erstellen Sie einen, um zu beginnen.",
       "emptyFiltered": "Keine Zugriffsschlüssel entsprechen dem Filter.",
-      "enablePtBody": "<strong>Dieser Schlüssel liest und steuert jede Entität.</strong> Acht Lese- und Diagnosefähigkeiten werden ebenfalls eingeschaltet, sofern nicht auf Bestätigen gesetzt.",
+      "enablePtBody": "<strong>Dieser Schlüssel liest und steuert jede Entität.</strong> Acht Lese- und Diagnosefähigkeiten werden ebenfalls eingeschaltet.",
       "enablePtCheck": "Ich verstehe, dass der Zugriffsschlüssel <code>{name}</code> umfassenden Zugriff auf Home Assistant haben wird",
       "enablePtFailed": "Durchreichung konnte nicht aktiviert werden.",
       "enablePtLabel": "Durchreichung aktivieren",
@@ -698,7 +704,7 @@
       "presetNewName": "Neuer Name der Voreinstellung",
       "presetNoChange": "Diese Voreinstellung entspricht den aktuellen Einstellungen, daher ändert sich keine Einstellung. Das Anwenden gilt trotzdem als Einstellungsänderung: Verbundene Agenten erfahren es bei ihrem nächsten Aufruf, und die Zählung für das Ratenlimit beginnt von vorn.",
       "presetPtUnderstand": "Ich verstehe, dass diese Voreinstellung die Durchreichung aktiviert",
-      "presetPtWarning": "<strong>Diese Voreinstellung schaltet die Durchreichung ein.</strong> Der Zugriffsschlüssel kann dann alle Entitäten lesen und steuern, und acht weitere Fähigkeiten werden eingeschaltet, darunter Diagnose und Dienst-Antwortdaten, sofern sie nicht auf Bestätigen stehen. Andere Fähigkeiten, MESA-Regeln, die Phoenix MCP-Blockliste und das Entfernen sensibler Attribute gelten weiterhin.",
+      "presetPtWarning": "<strong>Diese Voreinstellung schaltet die Durchreichung ein.</strong> Der Zugriffsschlüssel kann dann alle Entitäten lesen und steuern, und acht weitere Fähigkeiten werden eingeschaltet, darunter Diagnose und Dienst-Antwortdaten. Andere Fähigkeiten, MESA-Regeln, die Phoenix MCP-Blockliste und das Entfernen sensibler Attribute gelten weiterhin.",
       "presetRenameTitle": "Diese Voreinstellung umbenennen; wird beim Wegklicken gespeichert",
       "presetRevert": "Zurücksetzen",
       "presetRevertBody": "Dadurch werden die ungespeicherten Änderungen an <strong>{name}</strong> verworfen:",
@@ -711,7 +717,7 @@
       "presetSwitchTo": "Wechseln zu",
       "ptConvertBody": "Der Schlüssel folgt sofort seinem Berechtigungsbaum. Ohne Freigaben dort verliert er jeden Zugriff auf Entitäten.",
       "ptConvertFailed": "Zugriffsschlüssel konnte nicht konvertiert werden.",
-      "ptNoticeCaps": "Acht Lese- und Diagnosefähigkeiten sind ebenfalls an, sofern nicht auf Bestätigen gesetzt. Die übrigen behalten ihre eigene Einstellung.",
+      "ptNoticeCaps": "Acht Lese- und Diagnosefähigkeiten sind ebenfalls an. Die übrigen behalten ihre eigene Einstellung.",
       "ptNoticeIntro": "<strong>Durchreichungs-Zugriffsschlüssel.</strong> Er umgeht den Berechtigungsbaum und erreicht jede Entität, ohne sensible Attribute.",
       "ptNoticeUsage": "Durchreichung kann Details jeder Entität an das Modell senden, was mehr Tokens kostet als ein beschränkter Baum.",
       "rateBurstLabel": "Burst pro Sekunde (0 = kein Limit pro Sekunde)",
@@ -1270,7 +1276,7 @@
       "voiceAccessKeyAria": "Sprachagenten-Zugriffsschlüssel",
       "voiceAccessKeyHelp": "Steuert, auf welche Entitäten und Aktionen dieser Sprachagent zugreifen kann.",
       "wipeBusy": "Wird gelöscht...",
-      "wipeCoreHelp": "Jeden Zugriffsschlüssel, jede Einstellung, Genehmigung, Änderungsaufzeichnung und jedes Protokoll löschen. Dies lässt sich nicht rückgängig machen.",
+      "wipeCoreHelp": "Jeden Zugriffsschlüssel, jede Einstellung, Genehmigung, Änderungsaufzeichnung und jedes Protokoll löschen. Wiederherstellungskopien bleiben erhalten. Dies lässt sich nicht rückgängig machen.",
       "wipeCoreLabel": "Phoenix MCP-Kerndaten löschen",
       "wipeFailed": "Löschen fehlgeschlagen.",
       "wipeMesaHelp": "Jedes MESA-Profil löschen. Standardmäßig aus; exportieren Sie Ihre Profile vorher, um eine Kopie zu behalten.",
@@ -1565,6 +1571,7 @@
       "mesaArchiveRequired": "archive ist erforderlich.",
       "mesaProfileExists": "Ein Profil ist bereits vorhanden. Öffne es im Bearbeitungsmodus.",
       "mesaConflictModeInvalid": "on_conflict muss skip oder overwrite sein.",
+      "mesaSaveFailed": "Die MESA-Änderung konnte nicht gespeichert werden, daher gelten weiterhin die bisherigen Einstellungen.",
       "mesaUnavailable": "MESA ist nicht verfügbar.",
       "nonNegativeRequired": "{field} darf nicht negativ sein.",
       "nothingToContinue": "Es gibt keine Konversation zum Fortsetzen.",
@@ -1699,7 +1706,9 @@
       "restoreNoConfigSide": "Diese Version enthält auf dieser Seite keine Konfiguration, die wiederhergestellt werden kann.",
       "restoreYamlTags": "Diese Version enthält YAML-Tags wie !secret oder !include und kann nicht automatisch wiederhergestellt werden. Erstellen Sie sie manuell neu.",
       "restoreToolReported": "Die Wiederherstellung konnte nicht angewendet werden. Das Werkzeug meldete: {detail}",
-      "capabilityAllowUnsupported": "{capability} unterstützt den Modus Erlauben nicht."
+      "capabilityAllowUnsupported": "{capability} unterstützt den Modus Erlauben nicht.",
+      "recoverySnapshotUnsafeAt": "Es gibt keine vollständige Kopie dieses Elements ohne Geheimnisse, daher wurde nichts geändert. Phoenix hat es bei {location} abgelehnt.",
+      "invalidHostHeader": "Der Host-Header der Anfrage ist keine gültige Adresse."
     },
     "approvalSummary": {
       "action.optionalReason": "Optionaler Grund",
@@ -2001,6 +2010,7 @@
       "empty": "(leer)",
       "httpStatus": "Der Server hat mit HTTP {status} geantwortet. Laden Sie die Seite neu und versuchen Sie es erneut.",
       "invalidResponse": "Der Server hat eine ungültige Antwort zurückgegeben. Aktualisiere die Seite und versuche es erneut.",
+      "labelValue": "{label}: {value}",
       "listSeparator": ", ",
       "loadMore": "Mehr laden",
       "loading": "Wird geladen...",
@@ -2029,9 +2039,11 @@
       "killSwitchShort": "KILL-SCHALTER AN",
       "killSwitchTitle": "Phoenix MCP bedient derzeit keine Agentenanfragen. Deaktivieren Sie den Kill-Schalter unter Einstellungen, um fortzufahren.",
       "loadAccessKeysFailed": "Zugriffsschlüssel konnten nicht geladen werden.",
+      "loadSettingsFailed": "Einstellungen konnten nicht geladen werden.",
       "offlineBody": "Home Assistant antwortet nicht, meist weil es gerade neu startet. Erneuter Versuch, bitte warten...",
       "offlineTitle": "Phoenix ist nicht erreichbar",
       "renderFailed": "Diese Ansicht konnte nicht angezeigt werden. Aktualisiere sie oder wähle einen anderen Bereich.",
+      "retrySettingsHelp": "Die Einstellungen erneut aus Home Assistant lesen.",
       "sectionsAria": "Phoenix MCP-Abschnitte",
       "srTitle": "Phoenix MCP Zugriffsschlüssel-Verwaltung",
       "tabAccessKeys": "Zugriffsschlüssel",
@@ -2039,7 +2051,8 @@
       "tabAudit": "Prüfprotokoll",
       "tabChanges": "Änderungen",
       "tabSettings": "Einstellungen",
-      "killSwitchHelp": "Der Not-Aus-Schalter ist aktiv, Agenten werden abgewiesen. Auswählen, um Sicherheit zu öffnen und ihn auszuschalten."
+      "killSwitchHelp": "Der Not-Aus-Schalter ist aktiv, Agenten werden abgewiesen. Auswählen, um Sicherheit zu öffnen und ihn auszuschalten.",
+      "chatListsFailed": "Agent Chat konnte seine Zugriffsschlüssel oder KI-Anbieter nicht laden. Es versucht es erneut, wenn du es öffnest oder Home Assistant wieder verbunden ist."
     },
     "perms": {
       "addHint": "Hinweis hinzufügen",
@@ -2579,7 +2592,9 @@
       "saveFailed": "Die Prüfung konnte nicht gespeichert werden. Die Aktion muss weiterhin geprüft werden.",
       "showInAudit": "Im Audit-Protokoll anzeigen",
       "title": "Handlungsbedarf",
-      "unknown": "Die Unterhaltung endete, bevor Phoenix aufzeichnete, ob diese Aktion ausgeführt wurde. Sie kann also ausgeführt worden sein. „Im Audit-Protokoll anzeigen“ zeigt, wo angeboten, was Phoenix aufgezeichnet hat; eine Aktion, die auf Genehmigung wartete, hat ihren Status unter Genehmigungen. Prüfen Sie Home Assistant selbst, bevor Sie es erneut versuchen."
+      "unknown": "Die Unterhaltung endete, bevor Phoenix aufzeichnete, ob diese Aktion ausgeführt wurde. Sie kann also ausgeführt worden sein. „Im Audit-Protokoll anzeigen“ zeigt, wo angeboten, was Phoenix aufgezeichnet hat; eine Aktion, die auf Genehmigung wartete, hat ihren Status unter Genehmigungen. Prüfen Sie Home Assistant selbst, bevor Sie es erneut versuchen.",
+      "audit_storageTitle": "Das Audit-Protokoll erreicht den Speicher nicht",
+      "audit_storageHelp": "Neue Audit-Einträge liegen nur im Arbeitsspeicher, ein Neustart würde sie verlieren. Prüfe die Home Assistant-Protokolle. Der Hinweis verschwindet, sobald das nächste Speichern gelingt."
     },
     "workspace": {
       "addToMy": "Zu Meinem Arbeitsbereich hinzufügen",

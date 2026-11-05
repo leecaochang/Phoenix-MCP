@@ -14,7 +14,7 @@ Each active access key appears in Home Assistant as a device named "Phoenix MCP 
 - **Last Access**: the last request from an external app, to the minute. Agent Chat, Voice, AI Task and Assist don't change it.
 - **Expires In**: days until the key expires, or unknown if it never does.
 
-Each sensor's entity ID is `sensor.phoenix_mcp_access_key_`, then the key's name and the sensor's. For a key named My Access Key:
+Each sensor's entity ID is `sensor.phoenix_mcp_access_key_`, then the key's name and the sensor's. For a key named `my_access_key`, in English:
 
 ```text
 sensor.phoenix_mcp_access_key_my_access_key_status

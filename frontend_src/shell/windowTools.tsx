@@ -56,7 +56,7 @@ export function useWindowToggle(windowId: string, floating = false): { open: boo
   };
 }
 
-/** Forget what this window had chosen when the workspace is reset (user, 2026-10-30). */
+/** Forget what this window had chosen when the workspace is reset. */
 export function useWorkspaceReset(forget: () => void): void {
   const controller = useContext(ControllerContext);
   const latest = useRef(forget);

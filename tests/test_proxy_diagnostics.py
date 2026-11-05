@@ -4,8 +4,8 @@ Each case builds state through the installed Core: kitchen_sink's own RF
 transmitter entity, a habluetooth remote scanner registered through Core's
 public API (which creates the scanner's device and its via_device link), real
 advertisements, Core's slot allocation tracking, its serial consumer detection
-and real discovery flows. The assertions pin the contract in
-docs-internal/spec/proxy-diagnostics.md: scoped keys see only what is attached to
+and real discovery flows. The assertions pin the contract:
+scoped keys see only what is attached to
 what they can read, pass-through keys see what HA sees except LAN identity, and
 nothing returns advertisement payload bytes.
 """
@@ -26,7 +26,7 @@ from pytest_homeassistant.common import MockConfigEntry
 
 from custom_components.phoenix_mcp.access_key_store import AccessKeyRecord, PermissionNode, PermissionTree
 from custom_components.phoenix_mcp.data import PhoenixData
-from custom_components.phoenix_mcp.mcp_view import _call_tool
+from custom_components.phoenix_mcp.tool_dispatch import _call_tool
 from custom_components.phoenix_mcp.policy_engine import device_config_entry_ids
 from custom_components.phoenix_mcp.version_store import VersionStore
 

@@ -21,7 +21,7 @@ from pytest_homeassistant.components.recorder.common import async_wait_recording
 from custom_components.phoenix_mcp import tool_common
 from custom_components.phoenix_mcp.access_key_store import AccessKeyRecord, PermissionNode, PermissionTree
 from custom_components.phoenix_mcp.conversation_log import json_size
-from custom_components.phoenix_mcp.mcp_view import _call_tool
+from custom_components.phoenix_mcp.tool_dispatch import _call_tool
 
 
 @pytest.fixture
@@ -162,15 +162,16 @@ async def test_a_single_entity_still_reads_a_page(hass: HomeAssistant, stats_env
 
 
 async def test_an_entity_outside_scope_is_never_read_from_recorder(hass: HomeAssistant, stats_env) -> None:
-    from custom_components.phoenix_mcp import mcp_view
+    from custom_components.phoenix_mcp import recorder_queries
+    from custom_components.phoenix_mcp.tools import history as history_tools
 
     read: list[str] = []
-    real = mcp_view.read_statistic_window
+    real = recorder_queries.read_statistic_window
 
     def recording(hass_, start, end, statistic_id, types):
         read.append(statistic_id)
         return real(hass_, start, end, statistic_id, types)
 
-    with patch.object(mcp_view, "read_statistic_window", side_effect=recording):
+    with patch.object(history_tools, "read_statistic_window", side_effect=recording):
         body = json.loads((await _summary(hass, stats_env, entity_id=["sensor.hidden", "sensor.temp_a"]))[0]["content"][0]["text"])
     assert read == ["sensor.temp_a"] and body["not_found"] == ["sensor.hidden"]

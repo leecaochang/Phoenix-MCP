@@ -11,8 +11,10 @@ from homeassistant.util.dt import utcnow
 
 from custom_components.phoenix_mcp.access_key_store import AccessKeyRecord, PermissionNode, PermissionTree
 from custom_components.phoenix_mcp.data import PhoenixData
-from custom_components.phoenix_mcp.mcp_view import _call_tool, _tool_is_announced
+from custom_components.phoenix_mcp.tool_dispatch import _call_tool
+from custom_components.phoenix_mcp.tool_catalog import _tool_is_announced
 from tests.runtime_fixtures import mesa_off_store
+from tests.runtime_fixtures import patch_readers
 
 
 def _key(**fields) -> AccessKeyRecord:
@@ -37,7 +39,7 @@ def _data() -> PhoenixData:
     ("get_logbook", {"target": {"kind": "resources", "entity_ids": []}}, "cap_log_read"),
 ])
 async def test_malformed_selector_is_refused_before_any_effect(hass, tool, args, cap):
-    with patch("custom_components.phoenix_mcp.tools.lovelace.async_get_lovelace_config", AsyncMock()) as read:
+    with patch_readers("custom_components.phoenix_mcp.tools.lovelace.async_get_lovelace_config", AsyncMock()) as read:
         result, outcome, _ = await _call_tool(tool, args, _key(**{cap: "allow"}), hass, _data())
     assert outcome == "invalid_request", result
     read.assert_not_called()

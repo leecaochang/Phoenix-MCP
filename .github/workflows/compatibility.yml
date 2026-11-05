@@ -1,0 +1,73 @@
+name: Compatibility
+
+on:
+  schedule:
+    # Weekly, so a new Home Assistant release or a development advisory is seen
+    # even with no commits.
+    - cron: "37 6 * * 1"
+  workflow_dispatch:
+
+# Least privilege: these jobs only read the checkout and report a result.
+permissions:
+  contents: read
+
+jobs:
+  newest-home-assistant:
+    name: Newest published Home Assistant test stack
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.14"
+      - name: Install the compiler required by HA audio dependencies
+        run: sudo apt-get update && sudo apt-get install -y build-essential
+      - name: Install the newest test stack
+        # This isolated scheduled job intentionally follows upstream, pre-releases
+        # included, so a Core change is visible before the pinned stack moves.
+        run: python -m pip install --pre "pytest-homeassistant[bluetooth,radio-frequency]"
+      - name: Install integration and component requirements with HA constraints
+        run: python tests/ha_floor_dependencies.py
+      - name: Run pytest
+        run: python -m pytest -q tests/
+
+  mid-range-home-assistant:
+    name: Home Assistant ${{ matrix.home-assistant }} runtime compatibility
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # The releases between the floor and the pinned stack where Phoenix's
+        # compatibility branches change behaviour.
+        include:
+          - home-assistant: "2026.9.4"
+            test-package: "0.13.367"
+          - home-assistant: "2026.10.4"
+            test-package: "0.13.375"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.14"
+      - name: Install the compiler required by HA audio dependencies
+        run: sudo apt-get update && sudo apt-get install -y build-essential
+      - name: Install the matched test stack
+        run: python -m pip install "pytest-homeassistant-custom-component==${{ matrix.test-package }}"
+      - name: Install integration and component requirements with HA constraints
+        run: python tests/ha_floor_dependencies.py
+      - name: Run pytest
+        run: python -m pytest -q tests/
+
+  development-audit:
+    name: Whole-tree npm audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .nvmrc
+      - name: Audit shipped and development dependencies
+        # Report only. The shipped tree is gated in tests.yml; a development
+        # advisory should be seen, not stop anything.
+        continue-on-error: true
+        run: npm audit

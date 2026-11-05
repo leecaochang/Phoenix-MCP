@@ -16,7 +16,8 @@ tree, not Assist exposure.
 
 _yaml_scalar and its tables quote entity-supplied text so a state value cannot
 become a new YAML key or list item in the GetLiveContext block a model reads as
-instructions. mcp_view registers these tools and this module never imports it.
+instructions. tool_registration registers these tools and this module never imports
+the dispatcher.
 """
 
 from __future__ import annotations
@@ -34,21 +35,25 @@ from homeassistant.helpers import area_registry as ar
 from homeassistant.helpers import entity_registry as er
 from homeassistant.core import HomeAssistant
 
+from ..approval_targets import TARGETS_CHANGED, targets_current
 from ..audit import generate_request_id
 from ..const import (
-    ANNOUNCE_BIT, CAP_CONFIRM, CAP_DENY, DOMAIN, PHYSICAL_GATE_DOMAINS,
-    MUSIC_ASSISTANT_DOMAIN, PROXY_TIMEOUT_SECONDS, RELATIVE_VOLUME_MAX_CONCURRENCY,
-    RELATIVE_VOLUME_PLAN_VERSION, SENSITIVE_ATTRIBUTES,
-    VACUUM_CLEAN_AREA_BIT, VACUUM_RETURN_HOME_BIT, VACUUM_START_BIT,
+    ANNOUNCE_BIT, CAP_CONFIRM, CAP_DENY, DOMAIN, PHYSICAL_GATE_DOMAINS, MUSIC_ASSISTANT_DOMAIN,
+    PROXY_TIMEOUT_SECONDS, RELATIVE_VOLUME_MAX_CONCURRENCY, RELATIVE_VOLUME_PLAN_VERSION,
+    SENSITIVE_ATTRIBUTES, VACUUM_CLEAN_AREA_BIT, VACUUM_RETURN_HOME_BIT, VACUUM_START_BIT,
+    APPROVAL_TARGETS_KEY,
 )
 from ..data import PhoenixData
 from ..device_semantics import device_registry_snapshot, effective_entity_area_id
 from ..household_authority import household_service_kwargs
 from ..mesa import async_apply_mesa_to_call, fire_mesa_blocked_event
-from ..request_authority import check_request_authority
+from ..request_authority import check_request_authority, dispatch_request_id
 from ..helpers import diff_summary_fields as _summary, effective_cap, str_arg, validation_error_message as _validation_error_message
-from ..tool_common import _approved_exec_ctx, _gate, _mesa_advisory_ctx, _mesa_confirm_annotation, _pending_or_inline, _tool_error, _tool_refused_before_write, _tool_success
-from ..policy_engine import Permission, normalize_intent_selectors, resolve, resolve_intent_entities
+from ..tool_common import (
+    _gate, _mesa_confirm_annotation, _pending_or_inline, _tool_error, _tool_refused_before_write, _tool_success,
+)
+from ..request_authority import _approved_exec_ctx
+from ..policy_engine import Permission, group_member_denied, normalize_intent_selectors, resolve, resolve_intent_entities
 from ..access_key_store import AccessKeyRecord
 
 _LOGGER = logging.getLogger(__name__)
@@ -60,36 +65,36 @@ _RELATIVE_VOLUME_DISPATCHED = object()
 def _validate_integer_range(param_name: str, value: Any, min_val: int, max_val: int | None = None) -> str | None:
     """Validate an integer parameter is within range. Returns error message if invalid, None if valid."""
     if not isinstance(value, int) or isinstance(value, bool):
-        return f"Input validation error: '{value}' is not of type 'integer'"
+        return f"Input validation error: {param_name}: '{value}' is not of type 'integer'"
     if value < min_val:
-        return f"Input validation error: {value} is less than the minimum of {min_val}"
+        return f"Input validation error: {param_name}: {value} is less than the minimum of {min_val}"
     if max_val is not None and value > max_val:
-        return f"Input validation error: {value} is greater than the maximum of {max_val}"
+        return f"Input validation error: {param_name}: {value} is greater than the maximum of {max_val}"
     return None
 
 
 def _validate_number_range(param_name: str, value: Any, min_val: float | None = None, max_val: float | None = None) -> str | None:
     """Validate a number parameter (int or float) is within range. Returns error message if invalid, None if valid."""
     if not isinstance(value, (int, float)) or isinstance(value, bool):
-        return f"Input validation error: '{value}' is not of type 'number'"
+        return f"Input validation error: {param_name}: '{value}' is not of type 'number'"
     if not math.isfinite(value):
         # NaN / Infinity: rejected at JSON ingestion, but a range check must never
         # treat them as valid (every comparison with NaN is False, so the min/max
         # bounds below would silently pass).
-        return f"Input validation error: '{value}' is not a finite number"
+        return f"Input validation error: {param_name}: '{value}' is not a finite number"
     if min_val is not None and value < min_val:
-        return f"Input validation error: {value} is less than the minimum of {min_val}"
+        return f"Input validation error: {param_name}: {value} is less than the minimum of {min_val}"
     if max_val is not None and value > max_val:
-        return f"Input validation error: {value} is greater than the maximum of {max_val}"
+        return f"Input validation error: {param_name}: {value} is greater than the maximum of {max_val}"
     return None
 
 
 def _validate_string_enum(param_name: str, value: Any, allowed: list[str]) -> str | None:
     """Validate a string is one of the allowed enum values. Returns error message if invalid, None if valid."""
     if not isinstance(value, str):
-        return f"Input validation error: '{value}' is not of type 'string'"
+        return f"Input validation error: {param_name}: '{value}' is not of type 'string'"
     if value not in allowed:
-        return f"Input validation error: '{value}' is not one of {allowed}"
+        return f"Input validation error: {param_name}: '{value}' is not one of {allowed}"
     return None
 
 
@@ -235,6 +240,7 @@ async def _tool_get_date_time(
     args: dict, access_key: AccessKeyRecord, hass: HomeAssistant
 ) -> tuple[dict, str, str]:
     """MCP tool: GetDateTime - return the current local date and time."""
+    # Local: not part of the recorded Home Assistant import floor.
     from homeassistant.util.dt import now as ha_now
     local = ha_now()
     offset = local.strftime("%z")
@@ -323,7 +329,6 @@ async def _mesa_gate_native(
             (_tool_error("No accessible entities matched your request."), "denied", tool_name),
             [], [],
         )
-    from ..request_authority import dispatch_request_id
     request_id = request_id or dispatch_request_id.get() or generate_request_id()
     mesa_kwargs: dict[str, Any] = {}
     if approval_tool_name is not None:
@@ -353,8 +358,6 @@ async def _mesa_gate_native(
         return _MesaGate(
             (_tool_error("No accessible entities matched your request."), "denied", tool_name),
             [], [])
-    if outcome.warnings:
-        _mesa_advisory_ctx.set(True)
     return _MesaGate(None, outcome.entities, outcome.warnings)
 
 
@@ -374,19 +377,17 @@ async def _tool_intent_action(
     MESA runs here via _mesa_gate_native, on the already-flattened list; the
     tools that cannot route through this function call that gate directly.
     """
+    entities = [entity_id for entity_id in entities if not group_member_denied(entity_id, access_key, hass)]
     if not entities:
         return _tool_error("No accessible entities matched your request."), "denied", tool_name
 
-    from ..const import APPROVAL_TARGETS_KEY
     exact = args is not None and APPROVAL_TARGETS_KEY in args
     if exact and args is not None and not _native_targets_current(tool_name, args, access_key, hass):
-        from ..approval_targets import TARGETS_CHANGED
         return _tool_error(TARGETS_CHANGED), "denied", tool_name
     gate = await _mesa_gate_native(
         tool_name, service_domain, service_name, service_data, entities, hass, access_key,
         require_all=exact)
     if exact and args is not None and not _native_targets_current(tool_name, args, access_key, hass):
-        from ..approval_targets import TARGETS_CHANGED
         return _tool_error(TARGETS_CHANGED), "denied", tool_name
     if gate.response is not None:
         return gate.response
@@ -457,7 +458,6 @@ def _resolve_turn_entities(args: dict, access_key: AccessKeyRecord, hass: HomeAs
 
 def _native_targets_current(tool_name: str, args: dict, access_key: AccessKeyRecord, hass: HomeAssistant) -> bool:
     """Re-resolve the complete reviewed selection before every native service subgroup."""
-    from ..approval_targets import targets_current
 
     if tool_name in ("HassTurnOn", "HassTurnOff"):
         entities = _resolve_turn_entities(args, access_key, hass)
@@ -495,9 +495,6 @@ def _selector_refusal_message(selector_names: tuple[str, ...]) -> str:
         f"No usable targeting parameter was given. Provide at least one of {joined}. "
         + _selector_shapes(selector_names)
     )
-
-
-_NO_SELECTOR_MESSAGE = _selector_refusal_message(_ALL_TARGET_SELECTORS)
 
 
 def _no_selector_refusal(
@@ -659,7 +656,6 @@ async def _hass_turn_execute(
     if refusal is not None:
         return refusal
     entities = _resolve_turn_entities(args, access_key, hass)
-    from ..approval_targets import TARGETS_CHANGED, targets_current
     if not targets_current(args, entities, hass):
         return _tool_error(TARGETS_CHANGED), "denied", tool_name
     # Drop physical entities only when cap_physical_control is deny. Under allow
@@ -721,7 +717,6 @@ async def _merge_action_calls(
     access_key: AccessKeyRecord,
 ) -> tuple[dict, str, str]:
     """Run native service calls and merge their action_done responses."""
-    from ..const import APPROVAL_TARGETS_KEY
     exact = APPROVAL_TARGETS_KEY in args
     if exact:
         # Check every reviewed subgroup before the first effect. Execution still
@@ -1094,7 +1089,6 @@ async def _execute_hass_set_position(
         area=args.get("area"),
         floor=args.get("floor"),
     )
-    from ..approval_targets import TARGETS_CHANGED, targets_current
     if not targets_current(args, entities, hass):
         return _tool_error(TARGETS_CHANGED), "denied", "HassSetPosition"
     service_data: dict[str, Any] = {"position": args["position"]}
@@ -1218,7 +1212,6 @@ async def _execute_hass_set_volume_relative(
             "denied",
             "HassSetVolumeRelative",
         )
-    from ..approval_targets import TARGETS_CHANGED, targets_current
     if not targets_current(args, entities, hass):
         return _tool_error(TARGETS_CHANGED), "denied", "HassSetVolumeRelative"
     service_data_by_entity = {
@@ -1284,7 +1277,7 @@ async def _execute_hass_set_volume_relative(
                 )
             except asyncio.CancelledError:
                 raise
-            except BaseException as exc:  # noqa: BLE001 - classified below per target
+            except BaseException as exc:  # classified below per target
                 if not dispatch_stopped:
                     call_results[index] = exc
             else:
@@ -1460,10 +1453,11 @@ async def _tool_hass_set_volume_relative(
     )
 
 
-async def _tool_hass_media_pause(
-    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant
+async def _media_transport_action(
+    intent: str, from_state: str, service: str, args: dict, access_key: AccessKeyRecord, hass: HomeAssistant,
 ) -> tuple[dict, str, str]:
-    refusal = _fixed_domain_refusal(args, "HassMediaPause", "media_player")
+    """A native media intent on the selected players in the state it applies to."""
+    refusal = _fixed_domain_refusal(args, intent, "media_player")
     if refusal is not None:
         return refusal
     entities = resolve_intent_entities(
@@ -1474,44 +1468,26 @@ async def _tool_hass_media_pause(
         area=args.get("area"),
         floor=args.get("floor"),
     )
-    entities = [e for e in entities if (s := hass.states.get(e)) and s.state == "playing"]
-    return await _tool_intent_action("HassMediaPause", "media_player", "media_pause", {}, entities, hass, access_key, args=args)
+    entities = [e for e in entities if (s := hass.states.get(e)) and s.state == from_state]
+    return await _tool_intent_action(intent, "media_player", service, {}, entities, hass, access_key, args=args)
+
+
+async def _tool_hass_media_pause(
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant
+) -> tuple[dict, str, str]:
+    return await _media_transport_action("HassMediaPause", "playing", "media_pause", args, access_key, hass)
 
 
 async def _tool_hass_media_unpause(
     args: dict, access_key: AccessKeyRecord, hass: HomeAssistant
 ) -> tuple[dict, str, str]:
-    refusal = _fixed_domain_refusal(args, "HassMediaUnpause", "media_player")
-    if refusal is not None:
-        return refusal
-    entities = resolve_intent_entities(
-        hass, access_key,
-        domains=["media_player"],
-        device_classes=args.get("device_class"),
-        name=args.get("name"),
-        area=args.get("area"),
-        floor=args.get("floor"),
-    )
-    entities = [e for e in entities if (s := hass.states.get(e)) and s.state == "paused"]
-    return await _tool_intent_action("HassMediaUnpause", "media_player", "media_play", {}, entities, hass, access_key, args=args)
+    return await _media_transport_action("HassMediaUnpause", "paused", "media_play", args, access_key, hass)
 
 
 async def _tool_hass_media_next(
     args: dict, access_key: AccessKeyRecord, hass: HomeAssistant
 ) -> tuple[dict, str, str]:
-    refusal = _fixed_domain_refusal(args, "HassMediaNext", "media_player")
-    if refusal is not None:
-        return refusal
-    entities = resolve_intent_entities(
-        hass, access_key,
-        domains=["media_player"],
-        device_classes=args.get("device_class"),
-        name=args.get("name"),
-        area=args.get("area"),
-        floor=args.get("floor"),
-    )
-    entities = [e for e in entities if (s := hass.states.get(e)) and s.state == "playing"]
-    return await _tool_intent_action("HassMediaNext", "media_player", "media_next_track", {}, entities, hass, access_key, args=args)
+    return await _media_transport_action("HassMediaNext", "playing", "media_next_track", args, access_key, hass)
 
 
 async def _tool_hass_media_previous(
@@ -1586,6 +1562,7 @@ async def _tool_hass_media_search_and_play(
 
 def _can_search_media(hass: HomeAssistant, entity_id: str) -> bool:
     """Whether a player answers media_player.search_media, as Core's intent requires."""
+    # Local: optional component, imported only when this path runs.
     from homeassistant.components.media_player import MediaPlayerEntityFeature
 
     state = hass.states.get(entity_id)
@@ -1801,7 +1778,6 @@ async def _execute_hass_stop_moving(
         area=args.get("area"),
         floor=args.get("floor"),
     )
-    from ..approval_targets import TARGETS_CHANGED, targets_current
     if not targets_current(args, entities, hass):
         return _tool_error(TARGETS_CHANGED), "denied", "HassStopMoving"
     return await _tool_intent_action("HassStopMoving", "cover", "stop_cover", {}, entities, hass, access_key, args=args)
@@ -2038,7 +2014,7 @@ def _intent_diff_groups(args: dict, access_key: AccessKeyRecord, hass: HomeAssis
             if svc:
                 grouped.setdefault(eid.split(".")[0], []).append(eid)
         return [(dom, domain_services[dom], ents) for dom, ents in grouped.items()]
-    except Exception:  # noqa: BLE001 - annotation only; never block the gate diff
+    except Exception:  # annotation only; never block the gate diff
         return []
 
 

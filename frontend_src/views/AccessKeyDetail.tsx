@@ -2,7 +2,7 @@ import { BusyInput, BusySelect } from "../components/BusyButton";
 import { createContext, Fragment, memo, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 import type { AccessKeyRecord, EntityTree as EntityTreeData, PatchAccessKeyBody, PermissionTree } from "../types";
 import { api } from "../api";
-import { Loading, ErrorMsg } from "../components/common";
+import { Loading, ErrorMsg, StatusRegion } from "../components/common";
 import type { LinkScope } from "../components/MesaProfileLink";
 import { Modal } from "../components/Modal";
 import { RawAccessKeyDisplay } from "../components/AccessKeyCreate";
@@ -24,6 +24,7 @@ import type { MenuEntry } from "../ui/Menu";
 import { InlineConfirm } from "../ui/InlineConfirm";
 import { ActionButton } from "../ui/ActionButton";
 import { Icon } from "../ui/Icon";
+import { isImeKey } from "../utils/ime";
 
 // Whether an access key change alters which tools the MCP client is shown (tools/list),
 // which is the only kind of change that requires a connected agent to reconnect.
@@ -97,7 +98,7 @@ export function ToolAnnouncementToggle({ accessKey, onUpdate }: { accessKey: Acc
     }
   }
 
-  // What each setting does is in Help (user, 2026-10-28), and read out with the control.
+  // What each setting does is in Help, and read out with the control.
   return (
     <>
       {error && <div role="alert" className="banner banner-error mb-8">{error}</div>}
@@ -330,6 +331,7 @@ function EditablePresetName(
         onChange={(e) => setValue(e.target.value)}
         onBlur={commit}
         onKeyDown={(e) => {
+          if (isImeKey(e)) return;
           if (e.key === "Enter") { e.preventDefault(); (e.target as HTMLInputElement).blur(); }
           else if (e.key === "Escape") { setValue(preset.name); setErr(null); (e.target as HTMLInputElement).blur(); }
         }}
@@ -448,7 +450,7 @@ function PresetsCard({ accessKey, onUpdate }: { accessKey: AccessKeyRecord; onUp
     </InlineConfirm>
   );
 
-  // How switching and reverting work is in Help (user, 2026-10-28).
+  // How switching and reverting work is in Help.
   return (
     <div className="preset-list" data-help="accessKeys.presetHint">
       {accessKey.presets.map((p) => {
@@ -493,7 +495,7 @@ function PresetsCard({ accessKey, onUpdate }: { accessKey: AccessKeyRecord; onUp
           maxLength={40}
           busy={busy} disabled={accessKey.presets.length >= MAX_PRESETS}
           onChange={(e) => setNewName(e.target.value)}
-          onKeyDown={(e) => { if (e.key === "Enter") createPreset(); }}
+          onKeyDown={(e) => { if (e.key === "Enter" && !isImeKey(e)) createPreset(); }}
           aria-label={t("accessKeys.presetNewName")}
         />
         <ActionButton icon="add" label={t("accessKeys.presetSaveCurrent")} help="help.presetSaveCurrent" busy={busy}
@@ -519,7 +521,7 @@ export function EditableAccessKeyName({ accessKey, onRenamed, onDone, onError }:
   onDone?: () => void;
   /**
    * Where a refused name is said, when not in the field's own small line: the
-   * key list shows it under the row, where it is not cut off (user, 2026-10-31).
+   * key list shows it under the row, where it is not cut off.
    * Called with null once there is nothing to say.
    */
   onError?: (message: string | null) => void;
@@ -574,6 +576,7 @@ export function EditableAccessKeyName({ accessKey, onRenamed, onDone, onError }:
         onChange={(e) => setValue(e.target.value)}
         onBlur={commit}
         onKeyDown={(e) => {
+          if (isImeKey(e)) return;
           if (e.key === "Enter") { e.preventDefault(); void commit(); }
           else if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); setValue(accessKey.name); setErr(null); onDone?.(); }
         }}
@@ -656,7 +659,7 @@ export function AccessKeyDetailProvider({ accessKeyId, children, ...rest }: Prov
   const [value, setValue] = useState<AccessKeyDetail | null>(null);
   const current = accessKeyId && value?.accessKeyId === accessKeyId ? value : null;
   // While another key loads, its windows keep the key before on screen, inert, so nothing
-  // collapses to a loading state and grows again (user, 2026-10-28).
+  // collapses to a loading state and grows again.
   const [held, setHeld] = useState<AccessKeyDetail | null>(null);
   const loaded = current?.accessKey ? current : null;
   useLayoutEffect(() => { if (loaded) setHeld(loaded); else if (!accessKeyId) setHeld(null); }, [loaded, accessKeyId]);
@@ -951,7 +954,7 @@ function useLoadedKey(): { detail: AccessKeyDetail; accessKey: AccessKeyRecord }
 /**
  * Rotate, Revoke or Enable Pass-Through awaiting confirmation, shown above the
  * key list. What each does reads in Help, for the box and its controls, not in
- * it; Rotate confirms in the same gold as Enable Pass-Through (user, 2026-10-31).
+ * it; Rotate confirms in the same gold as Enable Pass-Through.
  */
 const KEY_ACTION_GUIDE: Record<Exclude<AccessKeyAction, "clearPerms">, string> = {
   rotate: "window.accessKeys#rotate",
@@ -962,7 +965,7 @@ const KEY_ACTION_GUIDE: Record<Exclude<AccessKeyAction, "clearPerms">, string> =
 function KeyActionConfirmation({ detail }: { detail: AccessKeyDetail }) {
   const a = detail.action;
   if (!a || a.kind === "clearPerms") return null;
-  // The acknowledgement names the key, so the box says which key it acts on (user, 2026-11-03).
+  // The acknowledgement names the key, so the box says which key it acts on.
   const name = { name: detail.accessKey?.name ?? "" };
   const ack = (key: string) => ({ check: tRich(key, { code: (c) => <code>{c}</code> }, name), checkLabel: tPlain(key, name) });
   const text = a.kind === "rotate" ? {
@@ -986,7 +989,7 @@ function KeyActionConfirmation({ detail }: { detail: AccessKeyDetail }) {
 
 /**
  * Clear All Permissions awaiting confirmation, shown above the Permissions tree.
- * The toolbar's Clear All Permissions opens and closes it (user, 2026-10-31), so
+ * The toolbar's Clear All Permissions opens and closes it, so
  * a click on that tool is not a click elsewhere.
  */
 function ClearPermissionsConfirmation({ detail }: { detail: AccessKeyDetail }) {
@@ -1012,7 +1015,7 @@ function ClearPermissionsConfirmation({ detail }: { detail: AccessKeyDetail }) {
 
 /**
  * Notices about the selected key, and its action awaiting confirmation, shown above the key list.
- * What a pass-through key may do is the Mode column's Help (user, 2026-10-28), not a banner here.
+ * What a pass-through key may do is the Mode column's Help, not a banner here.
  */
 export function AccessKeyNotices() {
   const detail = useAccessKeyDetail();
@@ -1022,8 +1025,8 @@ export function AccessKeyNotices() {
     <>
       {!detail.stale && <KeyActionConfirmation detail={detail} />}
       {!detail.stale && detail.error && <ErrorMsg msg={detail.error} />}
-      {!detail.stale && detail.reconnectNeeded && (
-        <div className="banner banner-info reconnect-banner" role="status" data-guide="window.accessKeys#reconnect">
+      <StatusRegion>{!detail.stale && detail.reconnectNeeded && (
+        <div className="banner banner-info reconnect-banner" data-guide="window.accessKeys#reconnect">
           <span className="reconnect-banner-text">
             {tRich("accessKeys.reconnectBanner", { strong: (c) => <strong>{c}</strong> })}
           </span>
@@ -1034,7 +1037,7 @@ export function AccessKeyNotices() {
             aria-label={t("accessKeys.reconnectDismiss")}
           >&times;</button>
         </div>
-      )}
+      )}</StatusRegion>
     </>
   );
 }
@@ -1077,7 +1080,7 @@ export function CapabilitiesWindow() {
 }
 
 /**
- * The key's specialized settings in three sections (user, 2026-10-28): Guidance
+ * The key's specialized settings in three sections: Guidance
  * for its agents, how its agents behave (tool announcement, the inline approval
  * wait, and Assist exposure for pass-through keys), and Rate Limiting.
  */
@@ -1122,7 +1125,7 @@ export function PermissionsWindow() {
     id: "permissions",
     label: t("accessKeys.permissionsTree"),
     tools: [
-      // Clearing is not deleting, and like the other destructive buttons it turns red only to confirm (user, 2026-10-28).
+      // Clearing is not deleting, and like the other destructive buttons it turns red only to confirm.
       { id: "clearAll", label: t("workspace.clearAllPermissions"), icon: "clearPermissions", help: "help.clearAllPermissions", disabled: detail.stale,
         pressed: detail.action?.kind === "clearPerms",
         onSelect: () => (detail.action?.kind === "clearPerms" ? detail.cancelAction() : detail.openAction("clearPerms")) },

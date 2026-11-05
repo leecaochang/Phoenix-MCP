@@ -31,7 +31,7 @@ interface SelectProps {
 type Props = PatchProps | SelectProps;
 
 // Each key's Custom capabilities from before another persona was chosen, so choosing Custom
-// again brings them back (user, 2026-10-28). Kept while the panel stays open.
+// again brings them back. Kept while the panel stays open.
 const customCaps = new Map<string, Record<string, string>>();
 
 export function PersonaPicker(props: Props) {
@@ -40,8 +40,8 @@ export function PersonaPicker(props: Props) {
   const notify = useNotify();
 
   const isSelectMode = props.onSelect !== undefined;
-  // In icons-only mode the Persona window shows each persona's name alone; its description is in Help
-  // (user, 2026-10-28). The wizard keeps the descriptions, since they are how a first persona is chosen.
+  // In icons-only mode the Persona window shows each persona's name alone; its description is in Help.
+  // The wizard keeps the descriptions, since they are how a first persona is chosen.
   const iconsOnly = useContext(DisplayModeContext) === "icons" && !isSelectMode;
   const esphome = isSelectMode ? null : props.esphome;
   const activeKey = isSelectMode ? props.selected : props.accessKey.persona;

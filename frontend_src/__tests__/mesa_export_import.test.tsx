@@ -61,7 +61,7 @@ describe("Export", () => {
     await waitFor(() => expect(profilesWindow().getAllByRole("row").length).toBeGreaterThan(1));
     chooseExport();
     const confirm = profilesWindow().getByRole("group", { name: "Export MESA Profiles" });
-    // What it downloads reads in the Help window, not inside the box (user, 2026-10-30).
+    // What it downloads reads in the Help window, not inside the box.
     expect(confirm.getAttribute("data-help-text")).toMatch(/Download 1\.234 MESA profiles/);
     expect(api.exportMesaProfiles).not.toHaveBeenCalled();
     // Rendering 1234 rows takes longer than the usual budget in jsdom, under load.
@@ -126,7 +126,7 @@ describe("Import", () => {
     const { container, getByText, findByText, getByLabelText } = render(<MesaImport onImported={() => {}} />);
     pickFile(container, JSON.stringify(archive));
     await findByText(/Archive contains/);
-    // What it leaves alone reads in the Help window (user, 2026-10-30).
+    // What it leaves alone reads in the Help window.
     expect(container.querySelector(".mesa-import")).toHaveAttribute("data-help-text", `${t("mesa.importIntro")} ${t("mesa.skipNote")}`);
 
     fireEvent.click(getByLabelText(/Replace existing profiles/i));

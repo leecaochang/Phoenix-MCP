@@ -89,7 +89,7 @@ async function beginAdd(kind = "claude") {
   fireEvent.change(picker, { target: { value: kind } });
 }
 
-/** Open the first account's options, which show under its row once it is picked (user, 2026-10-31). */
+/** Open the first account's options, which show under its row once it is picked. */
 async function openAccount() {
   fireEvent.click((await screen.findAllByRole("row", { name: /, / }))[0]);
 }
@@ -309,7 +309,7 @@ describe("AgentCliSettings", () => {
     await waitFor(() => expect(getAgentCliProviders).toHaveBeenCalled());
     fireEvent.click(await screen.findByRole("button", { name: "Remove DeepSeek" }));
     // It turns into a red Confirm Remove beside Cancel, as elsewhere in Phoenix, and what
-    // removing does reads in Help (user, 2026-10-31).
+    // removing does reads in Help.
     const confirm = await screen.findByRole("button", { name: "Confirm Remove DeepSeek" });
     expect(confirm).toHaveClass("btn-danger");
     expect(confirm).toHaveAttribute("data-help-text", tPlain("settings.agentcliRemoveBody", { name: "DeepSeek" }));
@@ -434,7 +434,7 @@ describe("AgentCliSettings", () => {
 // (a cheap authenticated GET) is fetched when the card is shown, so a retired model
 // is flagged where the operator can act on it.
 // Adding an account is shown on request from the toolbar's Add Account, which also leaves no
-// account chosen; Cancel and a click elsewhere hide it again (user, 2026-10-31).
+// account chosen; Cancel and a click elsewhere hide it again.
 describe("Add Account form", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -541,7 +541,7 @@ describe("AgentCliSettings default model", () => {
     const select = await screen.findByLabelText("Select default model:");
     const editor = select.closest(".agentcli-settings-model-edit") as HTMLElement;
     expect(editor).toHaveClass("agentcli-settings-model-edit");
-    // Refresh Models sits beside the model it refreshes, and Save is not in inverse colours (user, 2026-10-31).
+    // Refresh Models sits beside the model it refreshes, and Save is not in inverse colours.
     expect(select.closest(".agentcli-add-inline")?.textContent).toContain("Refresh Models");
     expect(editor.querySelector("input[type='checkbox']")?.closest(".toggle-switch")).toBeTruthy();
     expect(editor.querySelector(".agentcli-settings-form-actions button")?.textContent).toBe("Save");
@@ -561,7 +561,7 @@ describe("AgentCliSettings default model", () => {
     });
     renderCard();
     await openAccount();
-    // The table's Model column says so; the options no longer repeat the model (user, 2026-10-31).
+    // The table's Model column says so; the options no longer repeat the model.
     expect((await screen.findByRole("row", { name: /^DeepSeek,/ })).textContent).toContain("deepseek-v4-pro (automatic)");
     // An automatic account is never flagged as holding a retired model.
     expect(screen.queryByText(/is not in this provider's current model list/)).toBeNull();
@@ -821,7 +821,7 @@ describe("AgentCliSettings capability probe", () => {
     await openAccount();
     fireEvent.click(await screen.findByRole("button", { name: "Check Options" }));
     // Check Options turns into Check Now beside Cancel, and the cost is named in Help over
-    // both, not in the window (user, 2026-10-31): it is what separates this button from the
+    // both, not in the window: it is what separates this button from the
     // free refresh.
     const now = await screen.findByRole("button", { name: "Check Now" });
     expect(now).toHaveAttribute("data-help-text", PROBE_HELP());
@@ -984,7 +984,7 @@ describe("AgentCliSettings account actions", () => {
     expect(screen.getByRole("button", { name: "Check Options" })).toBeTruthy();
     // Naming the account matters here: "Remove" alone does not say what is about to be removed.
     expect(screen.getByRole("button", { name: "Remove DeepSeek" })).toBeTruthy();
-    // Refresh Models moved into Change Model, beside the model (user, 2026-10-31).
+    // Refresh Models moved into Change Model, beside the model.
     expect(screen.queryByRole("button", { name: "Refresh Models" })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Change Model" }));
     expect(await screen.findByRole("button", { name: "Refresh Models" })).toBeTruthy();
@@ -993,7 +993,7 @@ describe("AgentCliSettings account actions", () => {
   it("opens an account's options under its row when it is picked, and closes them again", async () => {
     renderCard();
     const row = await screen.findByRole("row", { name: /^DeepSeek,/ });
-    // Nothing is open until an account is picked (user, 2026-10-31).
+    // Nothing is open until an account is picked.
     expect(screen.queryByRole("button", { name: "Change Model" })).toBeNull();
     fireEvent.click(row);
     const change = await screen.findByRole("button", { name: "Change Model" });
@@ -1006,7 +1006,7 @@ describe("AgentCliSettings account actions", () => {
     fireEvent.click(row);
     await screen.findByRole("button", { name: "Change Model" });
     // Only the click closes them: closing on the press would move the rows below
-    // out from under the pointer before the click lands (user, 2026-10-31).
+    // out from under the pointer before the click lands.
     fireEvent.pointerDown(document.body);
     expect(screen.getByRole("button", { name: "Change Model" })).toBeTruthy();
     fireEvent.click(document.body);
@@ -1069,7 +1069,7 @@ describe("AgentCliSettings account actions", () => {
     fireEvent.click(screen.getByText("Validate"));
     const probe = await screen.findByLabelText(/Verify model options with provider/);
     expect(probe.closest(".toggle-switch")).toBeTruthy();
-    // Done sits beside the model and is not in inverse colours (user, 2026-10-31).
+    // Done sits beside the model and is not in inverse colours.
     const done = screen.getByRole("button", { name: "Done" });
     expect(done.closest(".agentcli-add-inline")?.querySelector("select")).toBeTruthy();
     expect(done).not.toHaveClass("btn-primary");

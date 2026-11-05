@@ -1,11 +1,11 @@
 /**
- * The shipped Guide against the code it describes (user, 2026-11-01): it
+ * The shipped Guide against the code it describes: it
  * compiles cleanly with every covered file present; every window of a
  * converted workspace has its page; every persona and capability has its
  * section; every Settings index entry has its section on its window's page, and selecting the entry's control in a
  * rendered window points the Guide there; every `<topic id>#<anchor>` the
  * source names exists; and only workspace overviews sit at the top of
- * Contents. The rules are in docs-internal/agents/guide.md.
+ * Contents.
  */
 
 import { describe, it, expect, beforeEach, vi } from "vitest";
@@ -104,8 +104,8 @@ describe("the shipped Guide", () => {
   });
 
   it("puts only Welcome, workspace overviews and the About page at the top of Contents", () => {
-    // Reference material that belongs to no workspace sits under one About page (user, 2026-11-01);
-    // Welcome, where a new reader starts, heads the list (user, 2026-11-02).
+    // Reference material that belongs to no workspace sits under one About page;
+    // Welcome, where a new reader starts, heads the list.
     const top = Object.entries(bundle.topics).filter(([, t]) => !t.parent).map(([id]) => id);
     expect(top.filter((id) => !id.startsWith("workspace.") && id !== "topic.about" && id !== "topic.welcome")).toEqual([]);
   });

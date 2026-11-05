@@ -24,7 +24,7 @@ from pytest_homeassistant.components.recorder.common import async_wait_recording
 from custom_components.phoenix_mcp import tool_common
 from custom_components.phoenix_mcp.access_key_store import AccessKeyRecord, PermissionNode, PermissionTree
 from custom_components.phoenix_mcp.conversation_log import json_size
-from custom_components.phoenix_mcp.mcp_view import _call_tool
+from custom_components.phoenix_mcp.tool_dispatch import _call_tool
 from custom_components.phoenix_mcp.policy_engine import Permission
 
 
@@ -62,7 +62,7 @@ async def _pages(hass, tool, args, rows_key, continuation, key=None, extra=0):
     budget = max(json_size(await _read(hass, tool, args, key)) // 3, 1500) + extra
     pages = []
     with patch.object(tool_common, "TOOL_RESULT_MAX_BYTES", budget), \
-            patch("custom_components.phoenix_mcp.mcp_view.TOOL_RESULT_MAX_BYTES", budget):
+            patch("custom_components.phoenix_mcp.tools.history.TOOL_RESULT_MAX_BYTES", budget):
         page_args = dict(args)
         while True:
             text = await _read(hass, tool, page_args, key)
@@ -119,9 +119,9 @@ async def test_logbook_keeps_the_newest_and_names_where_older_ones_continue(hass
         end = datetime.fromisoformat(payload["end_time"]).timestamp()
         return [entry for entry in entries if entry["when"] < end]
 
-    with patch("custom_components.phoenix_mcp.mcp_view.resolve_read", return_value=Permission.READ), \
-            patch("custom_components.phoenix_mcp.mcp_view.filter_service_response", side_effect=lambda value, *_: value), \
-            patch("custom_components.phoenix_mcp.mcp_view.async_ws_command", new=AsyncMock(side_effect=logbook)):
+    with patch("custom_components.phoenix_mcp.tools.logs.resolve_read", return_value=Permission.READ), \
+            patch("custom_components.phoenix_mcp.tools.logs.filter_service_response", side_effect=lambda value, *_: value), \
+            patch("custom_components.phoenix_mcp.tools.logs.async_ws_command", new=AsyncMock(side_effect=logbook)):
         args = {"start_time": "2026-10-23T00:00:00+00:00", "end_time": "2026-10-25T00:00:00+00:00", "limit": 1000,
                 "target": {"kind": "resources", "entity_ids": ["light.one"]}}
         pages, rows = await _pages(hass, "get_logbook", args, "entries",
@@ -138,9 +138,9 @@ async def test_an_instant_larger_than_one_result_is_kept_partly_and_said_so(hass
     base = datetime(2026, 10, 24, tzinfo=timezone.utc).timestamp()
     entries = [{"entity_id": "light.one", "when": base, "state": "on", "message": f"{index:02d}" + "m" * 120}
                for index in range(30)]
-    with patch("custom_components.phoenix_mcp.mcp_view.resolve_read", return_value=Permission.READ), \
-            patch("custom_components.phoenix_mcp.mcp_view.filter_service_response", side_effect=lambda value, *_: value), \
-            patch("custom_components.phoenix_mcp.mcp_view.async_ws_command", new=AsyncMock(return_value=entries)), \
+    with patch("custom_components.phoenix_mcp.tools.logs.resolve_read", return_value=Permission.READ), \
+            patch("custom_components.phoenix_mcp.tools.logs.filter_service_response", side_effect=lambda value, *_: value), \
+            patch("custom_components.phoenix_mcp.tools.logs.async_ws_command", new=AsyncMock(return_value=entries)), \
             patch.object(tool_common, "TOOL_RESULT_MAX_BYTES", 2500):
         body = json.loads(await _read(hass, "get_logbook", {
             "start_time": "2026-10-23T00:00:00+00:00", "end_time": "2026-10-25T00:00:00+00:00",

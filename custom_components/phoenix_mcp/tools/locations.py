@@ -30,9 +30,9 @@ from ..policy_engine import (
 from ..request_authority import check_request_authority
 from ..access_key_store import AccessKeyRecord
 from ..tool_common import (
-    _approved_exec_ctx, _create_registry_mesa_approval, _gate, _record_version,
-    _restore_ctx, _tool_error, _tool_success, unknown_label_message,
+    _create_registry_mesa_approval, _gate, _record_version, _restore_ctx, _tool_error, _tool_success, unknown_label_message,
 )
+from ..request_authority import _approved_exec_ctx
 
 _LOGGER = logging.getLogger(__name__)
 _TOOL = "set_area_or_floor"

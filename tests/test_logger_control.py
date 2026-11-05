@@ -7,15 +7,18 @@ import inspect
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from homeassistant.setup import async_setup_component
 
 from custom_components.phoenix_mcp.logger_control import (
+    LOGGER_CONTROL_STORAGE_KEY,
     IntegrationOverride,
     LoggerCompatibilityAdapter,
     LoggerControlUnavailable,
     LoggerOverrideManager,
+    async_get_logger_override_manager,
 )
-from custom_components.phoenix_mcp.mcp_view import _dispatch_mcp
-from tests.test_mcp_view import _make_data, _make_hass, _make_access_key
+from custom_components.phoenix_mcp.tool_dispatch import _dispatch_mcp
+from tests.runtime_fixtures import make_mcp_data as _make_data, make_mcp_hass as _make_hass, make_mcp_access_key as _make_access_key
 
 
 async def _call(args, *, tool="set_integration_log_level", access_key=None, data=None, hass=None):
@@ -56,7 +59,7 @@ async def test_invalid_shapes_fail_before_logger_access(args):
     access_key = _make_access_key(cap_log_read="allow", cap_log_control="allow")[0]
     data = _make_data(access_key)
     data.logger_control = MagicMock()
-    with patch("custom_components.phoenix_mcp.mcp_view._visible_logger_domains") as visible:
+    with patch("custom_components.phoenix_mcp.tools.logs._visible_logger_domains") as visible:
         _body, result, outcome = await _call(args, access_key=access_key, data=data)
     assert outcome == "invalid_request"
     assert result["isError"] is True
@@ -72,9 +75,9 @@ async def test_noop_skips_approval_when_setting_matches():
     manager.adapter.get_override.return_value = IntegrationOverride("WARNING", "none")
     manager.active.return_value = None
     data.logger_control = manager
-    with patch("custom_components.phoenix_mcp.mcp_view._visible_logger_domains", return_value={"mqtt"}), patch(
-        "custom_components.phoenix_mcp.mcp_view.loader.async_get_integration", new=AsyncMock()
-    ), patch("custom_components.phoenix_mcp.mcp_view._gate", new=AsyncMock()) as gate:
+    with patch("custom_components.phoenix_mcp.tools.logs._visible_logger_domains", return_value={"mqtt"}), patch(
+        "custom_components.phoenix_mcp.tools.logs.loader.async_get_integration", new=AsyncMock()
+    ), patch("custom_components.phoenix_mcp.tools.logs._gate", new=AsyncMock()) as gate:
         body, _result, outcome = await _call(
             {"integration": "mqtt", "level": "WARNING", "persistence": "none"},
             access_key=access_key, data=data,
@@ -99,8 +102,8 @@ async def test_set_uses_integration_logger_set_and_returns_verbose_warnings():
     manager.async_set = AsyncMock()
     manager.active.return_value = None
     data.logger_control = manager
-    with patch("custom_components.phoenix_mcp.mcp_view._visible_logger_domains", return_value={"demo"}), patch(
-        "custom_components.phoenix_mcp.mcp_view.loader.async_get_integration", new=AsyncMock()
+    with patch("custom_components.phoenix_mcp.tools.logs._visible_logger_domains", return_value={"demo"}), patch(
+        "custom_components.phoenix_mcp.tools.logs.loader.async_get_integration", new=AsyncMock()
     ):
         body, _result, outcome = await _call(
             {"integration": "demo", "level": "DEBUG", "persistence": "none"},
@@ -123,7 +126,7 @@ async def test_list_reports_source_and_only_scoped_domains():
     manager.adapter.effective_levels.return_value = {"homeassistant.components.demo": "WARNING"}
     manager.active.return_value = None
     data.logger_control = manager
-    with patch("custom_components.phoenix_mcp.mcp_view._visible_logger_domains", return_value={"demo"}):
+    with patch("custom_components.phoenix_mcp.tools.logs._visible_logger_domains", return_value={"demo"}):
         body, _result, outcome = await _call(
             {}, tool="list_integration_log_levels", access_key=access_key, data=data
         )
@@ -152,7 +155,7 @@ async def test_adapter_writes_only_through_integration_aware_command():
     hass.data = {"logger": MagicMock(settings=MagicMock(_stored_config={"logs": {}}))}
     adapter = LoggerCompatibilityAdapter(hass)
     with patch(
-        "custom_components.phoenix_mcp.ws_dispatch.async_ws_command",
+        "custom_components.phoenix_mcp.logger_control.async_ws_command",
         new=AsyncMock(),
     ) as command:
         await adapter.apply("mqtt", IntegrationOverride("WARNING", "none"))
@@ -306,8 +309,8 @@ async def test_approval_execution_rejects_logger_context_race():
     manager.adapter.get_override.return_value = None
     manager.async_set = AsyncMock()
     data.logger_control = manager
-    with patch("custom_components.phoenix_mcp.mcp_view._visible_logger_domains", return_value={"demo"}), patch(
-        "custom_components.phoenix_mcp.mcp_view.loader.async_get_integration", new=AsyncMock()
+    with patch("custom_components.phoenix_mcp.tools.logs._visible_logger_domains", return_value={"demo"}), patch(
+        "custom_components.phoenix_mcp.tools.logs.loader.async_get_integration", new=AsyncMock()
     ):
         body, result, outcome = await _call(
             {"integration": "demo", "level": "WARNING", "persistence": "none"},
@@ -317,3 +320,21 @@ async def test_approval_execution_rejects_logger_context_race():
     assert result["isError"] is True
     assert "changed after approval" in body
     manager.async_set.assert_not_awaited()
+
+
+async def test_a_wipe_restores_each_override_on_the_real_logger_and_forgets_it(hass, hass_storage, hass_admin_user):
+    """Nothing Phoenix owns survives a wipe, so HA's own setting must already be back."""
+    assert await async_setup_component(hass, "logger", {})
+    manager = await async_get_logger_override_manager(hass)
+    prior = manager.adapter.get_override("demo")
+    await manager.async_set(domain="demo", desired=IntegrationOverride("DEBUG", "none"), prior=prior,
+                            loggers=await manager.adapter.declared_loggers("demo"), owner_access_key_id="k",
+                            duration_minutes=30)
+    assert manager.adapter.get_override("demo") == IntegrationOverride("DEBUG", "none")
+    assert manager.active("demo") is not None
+
+    await manager.async_restore_all()
+
+    assert manager.adapter.get_override("demo") in (prior, IntegrationOverride("NOTSET", "none"))
+    assert manager.active("demo") is None
+    assert hass_storage[LOGGER_CONTROL_STORAGE_KEY]["data"] == {"overrides": {}}

@@ -6,6 +6,7 @@ import type { ConversationStyle, DetailLevel } from "../types";
 import { t } from "../i18n";
 import { SettingLabel, helpRow } from "../ui/SettingLabel";
 import { ConversationBehaviorControls } from "./ConversationBehaviorControls";
+import { isImeKey } from "../utils/ime";
 
 interface Props {
   routingMode: string | undefined;
@@ -83,7 +84,7 @@ export function AgentCliSettings({
   useEffect(() => () => window.clearTimeout(maxIterTimer.current), []);
 
   return (
-    // What Agent Chat is shows in Help over the window's empty space (user, 2026-10-31).
+    // What Agent Chat is shows in Help over the window's empty space.
     <div className="phx-settings-form" data-help-text={t("settings.agentcliIntro")}>
       <CommandRoutingToggle surface="chat" mode={routingMode} onChange={onRoutingChange} saving={saving} divider={false} />
       <div className="toggle-row" {...helpRow(t("settings.agentcliGlobalHelp"))}>
@@ -109,7 +110,7 @@ export function AgentCliSettings({
           busy={saving}
           onChange={(e) => onScrollInput(e.target.value)}
           onBlur={() => commitNow(scrollInput)}
-          onKeyDown={(e) => { if (e.key === "Enter") commitNow(scrollInput); }}
+          onKeyDown={(e) => { if (e.key === "Enter" && !isImeKey(e)) commitNow(scrollInput); }}
         />
       </div>
       <div className="toggle-row" {...helpRow(t("settings.agentcliStepsHelp"))}>
@@ -122,7 +123,7 @@ export function AgentCliSettings({
           busy={saving}
           onChange={(e) => onMaxIterInput(e.target.value)}
           onBlur={() => commitMaxIterNow(maxIterInput)}
-          onKeyDown={(e) => { if (e.key === "Enter") commitMaxIterNow(maxIterInput); }}
+          onKeyDown={(e) => { if (e.key === "Enter" && !isImeKey(e)) commitMaxIterNow(maxIterInput); }}
         />
       </div>
       <ConversationBehaviorControls

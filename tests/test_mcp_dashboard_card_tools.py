@@ -25,7 +25,7 @@ from pytest_homeassistant.common import MockConfigEntry
 
 from custom_components.phoenix_mcp.data import PhoenixData
 from custom_components.phoenix_mcp.helpers import content_hash
-from custom_components.phoenix_mcp.mcp_view import _call_tool
+from custom_components.phoenix_mcp.tool_dispatch import _call_tool
 from custom_components.phoenix_mcp.tools.lovelace import (
     _build_diff_dashboard_card,
     _execute_dashboard_card,

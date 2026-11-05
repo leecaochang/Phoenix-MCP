@@ -12,7 +12,8 @@ from homeassistant.util.dt import utcnow
 from custom_components.phoenix_mcp import yaml_includes as yi
 from custom_components.phoenix_mcp.data import PhoenixData
 from custom_components.phoenix_mcp.helpers import content_hash
-from custom_components.phoenix_mcp.mcp_view import _call_tool, async_execute_approved_tool, async_restore_version
+from custom_components.phoenix_mcp.tool_dispatch import _call_tool, async_execute_approved_tool
+from custom_components.phoenix_mcp.tools.restore import async_restore_version
 from custom_components.phoenix_mcp.access_key_store import AccessKeyRecord
 from custom_components.phoenix_mcp.tools import authoring
 from custom_components.phoenix_mcp.version_store import VersionStore
@@ -150,7 +151,7 @@ async def test_refused_identity_has_no_effect_or_approval(hass, identity_env, tm
     assert path.read_bytes() == before
 
 
-async def test_two_creates_of_same_id_have_one_winner(hass, identity_env, tmp_path):
+async def test_two_creates_of_same_id_have_one_winner(hass, identity_env, tmp_path, immediate_authoring_observation):
     access_key, data, reload = identity_env
     results = await asyncio.gather(*[
         authoring._execute_create_automation({"automation_id": "chosen", "config": config(alias)}, access_key, hass, data)
@@ -216,7 +217,7 @@ async def test_entity_id_is_not_a_create_on_lookup_failure(hass, identity_env, t
     reload.assert_not_called()
 
 
-async def test_restore_rename_then_recreate_and_restore_again(hass, identity_env, tmp_path):
+async def test_restore_rename_then_recreate_and_restore_again(hass, identity_env, tmp_path, immediate_authoring_observation):
     _, data, reload = identity_env
     path = tmp_path / "automations.yaml"
     seed(path)

@@ -25,7 +25,8 @@ from jsonschema import Draft202012Validator
 from custom_components.phoenix_mcp.access_key_store import AccessKeyRecord, PermissionNode, PermissionTree
 from custom_components.phoenix_mcp.assist_api import _convert_to_voluptuous
 from custom_components.phoenix_mcp.data import PhoenixData
-from custom_components.phoenix_mcp.mcp_view import _TOOL_DEFS_BY_NAME, _call_tool
+from custom_components.phoenix_mcp.tool_catalog import _TOOL_DEFS_BY_NAME
+from custom_components.phoenix_mcp.tool_dispatch import _call_tool
 from custom_components.phoenix_mcp.version_store import VersionStore
 from tests.runtime_fixtures import mesa_off_store
 
@@ -84,7 +85,7 @@ def _schema(tool: str) -> dict:
 def _assist_accepts(tool: str, args: dict) -> bool:
     try:
         _convert_to_voluptuous(_schema(tool))(copy.deepcopy(args))
-    except Exception:  # noqa: BLE001 - any engine refusal
+    except Exception:  # any engine refusal
         return False
     return True
 
@@ -119,7 +120,9 @@ class _Store:
         self.pending = value
 
 
-async def test_mcp_route_outcomes(hass, hass_admin_user):
+async def test_mcp_route_outcomes(hass, hass_admin_user, monkeypatch):
+    # The routes are under test, not the wait: a blocking read returns at once.
+    monkeypatch.setattr("custom_components.phoenix_mcp.tools.system._clamp_timeout", lambda _value: 0)
     assert await async_setup_component(hass, "light", {})
     er.async_get(hass).async_get_or_create("light", "t", "k", suggested_object_id="kitchen")
     hass.states.async_set(LAMP, "off", {"friendly_name": "Kitchen"})

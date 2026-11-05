@@ -66,6 +66,21 @@ def test_error_projection_unwraps_known_markers_and_hides_dynamic_markers():
     assert "secret" not in text
 
 
+def test_error_projection_names_an_undeclared_key_from_the_installed_validator():
+    with pytest.raises(vol.Invalid) as caught:
+        vol.Schema({vol.Required("name"): str})({"name": "x", "description": "token=secret"})
+    text = validation_message("scene", caught.value)
+    assert "config.description is not supported at this location." in text
+    assert "has an invalid value" not in text and "secret" not in text
+
+
+def test_error_projection_recognises_the_voluptuous_extra_key_text_exactly():
+    plain = vol.Invalid("extra keys not allowed", path=["description"])
+    assert "config.description is not supported" in validation_message("scene", plain)
+    near = vol.Invalid("extra keys not allowed here", path=["description"])
+    assert "config.description has an invalid value" in validation_message("scene", near)
+
+
 @pytest.mark.parametrize("domain", ["automation", "script"])
 @pytest.mark.parametrize("operation", ["create", "edit"])
 @pytest.mark.parametrize("cap", ["confirm", "deny"])
@@ -96,7 +111,7 @@ async def test_executor_rechecks_without_effects(hass, tool_name):
 @pytest.mark.parametrize("error", [RuntimeError("secret light.hidden"), vol.Invalid("secret light.hidden", path=["mode"])])
 async def test_diagnostics_internal_error_is_distinct_and_safe(hass, error):
     with patch.object(discovery, "_validate_script_config", AsyncMock(side_effect=error)):
-        content, outcome, _ = await discovery._tool_validate_config(
+        content, outcome, _ = await discovery._tool_validate_automation_or_script(
             {"type": "script", "config": {"sequence": []}}, _key(cap_diagnostics="allow"), hass)
     text = content["content"][0]["text"]
     assert "secret" not in text and "light.hidden" not in text
@@ -110,7 +125,7 @@ async def test_diagnostics_internal_error_is_distinct_and_safe(hass, error):
 @pytest.mark.parametrize("domain", ["automation", "script"])
 async def test_valid_input_reaches_real_ha_validator_without_mutating(hass, domain):
     config = {"triggers": [], "actions": []} if domain == "automation" else {"sequence": []}
-    result, outcome, _ = await discovery._tool_validate_config(
+    result, outcome, _ = await discovery._tool_validate_automation_or_script(
         {"type": domain, "config": config}, _key(cap_diagnostics="allow"), hass)
     assert outcome == "allowed" and json.loads(result["content"][0]["text"])["valid"] is True
 
@@ -119,7 +134,7 @@ async def test_valid_input_reaches_real_ha_validator_without_mutating(hass, doma
 async def test_schema_drift_is_internal_and_does_not_log_exception_values(hass, domain, caplog):
     target = "PLATFORM_SCHEMA" if domain == "automation" else "SCRIPT_ENTITY_SCHEMA"
     with patch("custom_components.phoenix_mcp.authoring_validation." + target, side_effect=RuntimeError("token=secret light.hidden")):
-        result, outcome, _ = await discovery._tool_validate_config(
+        result, outcome, _ = await discovery._tool_validate_automation_or_script(
             {"type": domain, "config": {}}, _key(cap_diagnostics="allow"), hass)
     assert outcome == "invalid_request" and result["isError"]
     assert "Internal error" in result["content"][0]["text"]
@@ -137,7 +152,7 @@ async def test_representative_correction_in_two_calls(hass, domain, broken, fixe
     key = _key(cap_diagnostics="allow")
     results = []
     for args in (broken, fixed):
-        result, _, _ = await discovery._tool_validate_config({"type": domain, **args}, key, hass)
+        result, _, _ = await discovery._tool_validate_automation_or_script({"type": domain, **args}, key, hass)
         results.append(result)
     first = results[0]
     assert first.get("isError") or json.loads(first["content"][0]["text"])["valid"] is False

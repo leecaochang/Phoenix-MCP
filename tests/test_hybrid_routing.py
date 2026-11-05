@@ -9,16 +9,20 @@ from homeassistant.components.homeassistant.exposed_entities import async_expose
 from homeassistant.helpers import entity_registry as er
 from homeassistant.setup import async_setup_component
 
-from custom_components.phoenix_mcp import agentcli, mcp_view, voice_agent
+from custom_components.phoenix_mcp import mesa, tool_dispatch, voice_agent
+from custom_components.phoenix_mcp.llm import accounts as llm_accounts
+from custom_components.phoenix_mcp.tools import service as service_tools
 from custom_components.phoenix_mcp.admin_view import _validated_settings_patch
 from custom_components.phoenix_mcp.audit import AuditLog
-from custom_components.phoenix_mcp.const import COMMAND_ROUTING_PLAN_KEY, DOMAIN
+from custom_components.phoenix_mcp.const import DOMAIN
+from custom_components.phoenix_mcp.routing.routing_tables import COMMAND_ROUTING_PLAN_KEY
 from custom_components.phoenix_mcp.data import PhoenixData
-from custom_components.phoenix_mcp.decision_provider import DecisionError, DecisionProvider
+from custom_components.phoenix_mcp.routing.decision_provider import DecisionError, DecisionProvider
 from custom_components.phoenix_mcp.mesa import async_setup_mesa
 from custom_components.phoenix_mcp.mesa_core import MetadataOrigin, SemanticProfile
 from custom_components.phoenix_mcp.rate_limiter import RateLimiter
 from custom_components.phoenix_mcp.access_key_store import PermissionNode, PermissionTree
+from tests.runtime_fixtures import patch_readers
 
 
 @pytest.fixture
@@ -28,7 +32,7 @@ async def hybrid_home(hass, access_key_store, immediate_command_observation):
     access_key.cap_physical_control = "allow"
     data = PhoenixData(store=access_key_store, rate_limiter=RateLimiter(), audit=AuditLog())
     hass.data[DOMAIN] = data
-    store = agentcli.AgentCliStore(AsyncMock())
+    store = llm_accounts.AgentCliStore(AsyncMock())
     hass.data["_phoenix_agentcli_store"] = store
     # Generic sequential protocol; jev_hybrid_home configures the qualified JEV variant.
     decision = await store.add("typesafe", {"api_key": "decision-secret", "model": "test-model"})
@@ -63,7 +67,7 @@ async def run_voice(hass, home, *, category="light_on", sentence="Please illumin
     async def respond(session, method, path, timeout, payload):
         return wire_answer(payload, category, percent=percent)
     with (patch.object(DecisionProvider, "_request", AsyncMock(side_effect=request or respond)) as remote,
-          patch.object(agentcli, "async_run_voice_turn", AsyncMock(return_value="Provider answer")) as provider):
+          patch("custom_components.phoenix_mcp.voice_agent.async_run_voice_turn", AsyncMock(return_value="Provider answer")) as provider):
         answer = await voice_agent.async_voice_answer(hass, data, sentence, language=language)
     return answer, remote, provider
 
@@ -76,7 +80,7 @@ async def test_two_requests_dispatch_once_and_do_not_duplicate_shadow(hass, hybr
     await hybrid_home[0].store.async_patch_settings(voice_agent_routing_mode=routing_mode)
     data, access_key, _, _, entity_id = hybrid_home
     await data.store.async_patch_settings(decision_shadow_enabled=True)
-    with (patch.object(mcp_view, "unsupported_secondary_targets", AsyncMock(return_value=[])),
+    with (patch.object(service_tools, "unsupported_secondary_targets", AsyncMock(return_value=[])),
           patch.object(type(hass.services), "async_call", new_callable=AsyncMock) as call):
         answer, remote, provider = await run_voice(hass, hybrid_home, category=category, percent=extra.get("brightness_pct", 50))
     assert answer == ("Home Assistant reports the requested state." if service == "turn_off" else
@@ -102,7 +106,7 @@ async def test_state_query_uses_existing_scoped_read(hass, hybrid_home):
 
 
 async def test_exact_local_match_spends_no_decision_request(hass, hybrid_home):
-    with (patch.object(mcp_view, "unsupported_secondary_targets", AsyncMock(return_value=[])),
+    with (patch.object(service_tools, "unsupported_secondary_targets", AsyncMock(return_value=[])),
           patch.object(type(hass.services), "async_call", new_callable=AsyncMock) as call):
         answer, remote, provider = await run_voice(hass, hybrid_home, sentence="turn on the desk lamp")
     assert answer == "Command sent. Home Assistant has not yet confirmed the requested state."
@@ -142,7 +146,7 @@ async def test_pre_dispatch_declines_keep_regular_provider(hass, hybrid_home, ca
              "proposal": None, "elapsed_ms": 1, "route": "provider"}
     if case == "no_scope": access_key.permissions = PermissionTree()
     if case == "busy": data.decision_shadow.task = asyncio.create_task(asyncio.Event().wait())
-    with (patch("custom_components.phoenix_mcp.command_routing.async_evaluate_command", AsyncMock(return_value=local)),
+    with (patch_readers("custom_components.phoenix_mcp.routing.command_routing.async_evaluate_command", AsyncMock(return_value=local)),
           patch.object(type(hass.services), "async_call", new_callable=AsyncMock) as call):
         answer, remote, provider = await run_voice(hass, hybrid_home, request=respond,
                                                  sentence="Set the desk lamp to 0 percent brightness" if case == "low_zero_category" else "Please illuminate my desk lamp",
@@ -174,7 +178,7 @@ async def test_decision_execution_preserves_mesa_and_approval(hass, hybrid_home,
     else:
         access_key.cap_physical_control = restriction
     if restriction == "pass_through": access_key.pass_through = True
-    with (patch.object(mcp_view, "unsupported_secondary_targets", AsyncMock(return_value=[])),
+    with (patch.object(service_tools, "unsupported_secondary_targets", AsyncMock(return_value=[])),
           patch.object(type(hass.services), "async_call", new_callable=AsyncMock) as call):
         answer, remote, provider = await run_voice(hass, hybrid_home)
     assert remote.await_count == 2
@@ -216,15 +220,15 @@ async def mutate(hass, home, change):
 async def test_saved_decision_approval_revalidates_account_and_full_catalog(hass, hybrid_home, change, category, service):
     data, access_key, _, _, entity_id = hybrid_home
     await set_mesa(hass, hybrid_home, "confirm")
-    with patch.object(mcp_view, "unsupported_secondary_targets", AsyncMock(return_value=[])):
+    with patch.object(service_tools, "unsupported_secondary_targets", AsyncMock(return_value=[])):
         answer, _, _ = await run_voice(hass, hybrid_home, category=category)
     assert "needs approval" in answer
     record = data.store.get_pending_approvals()[0]
     assert record["args"]["service_data"] == {}
     await mutate(hass, hybrid_home, change)
-    with (patch.object(mcp_view, "unsupported_secondary_targets", AsyncMock(return_value=[])),
+    with (patch.object(service_tools, "unsupported_secondary_targets", AsyncMock(return_value=[])),
           patch.object(type(hass.services), "async_call", new_callable=AsyncMock) as call):
-        _, outcome, _ = await mcp_view.async_execute_approved_tool(record["tool_name"], record["args"], access_key, hass, data)
+        _, outcome, _ = await tool_dispatch.async_execute_approved_tool(record["tool_name"], record["args"], access_key, hass, data)
     if change == "none":
         assert outcome == "allowed"
         call.assert_awaited_once_with("light", service, {"entity_id": [entity_id]},
@@ -236,13 +240,13 @@ async def test_saved_decision_approval_revalidates_account_and_full_catalog(hass
 
 @pytest.mark.parametrize("change", ["account", "new_candidate", "name"])
 async def test_mesa_wait_rechecks_decision_plan_without_provider_replay(hass, hybrid_home, change):
-    apply = mcp_view.async_apply_mesa_to_call
+    apply = mesa.async_apply_mesa_to_call
     async def changed(*args, **kwargs):
         result = await apply(*args, **kwargs)
         await mutate(hass, hybrid_home, change)
         return result
-    with (patch.object(mcp_view, "unsupported_secondary_targets", AsyncMock(return_value=[])),
-          patch.object(mcp_view, "async_apply_mesa_to_call", changed),
+    with (patch.object(service_tools, "unsupported_secondary_targets", AsyncMock(return_value=[])),
+          patch.object(service_tools, "async_apply_mesa_to_call", changed),
           patch.object(type(hass.services), "async_call", new_callable=AsyncMock) as call):
         answer, _, provider = await run_voice(hass, hybrid_home)
     assert "could not complete" in answer
@@ -269,7 +273,7 @@ async def test_uncertain_effect_blocks_replay_and_next_write(hass, hybrid_home):
     data, access_key, *_ = hybrid_home
     # Exercise service recovery even when HA sentence loading is cold.
     await data.store.async_patch_settings(command_routing_timeout_ms=5000)
-    with (patch.object(mcp_view, "unsupported_secondary_targets", AsyncMock(return_value=[])),
+    with (patch.object(service_tools, "unsupported_secondary_targets", AsyncMock(return_value=[])),
           patch.object(type(hass.services), "async_call", AsyncMock(side_effect=TimeoutError)) as call):
         first, _, provider = await run_voice(hass, hybrid_home)
         second, _, fallback = await run_voice(hass, hybrid_home)
@@ -289,7 +293,7 @@ async def assert_cancelled_decision_never_dispatches_or_falls_back(hass, hybrid_
         finally:
             closed.set()
     with (patch.object(DecisionProvider, "_request", request),
-          patch.object(agentcli, "async_run_voice_turn", new_callable=AsyncMock) as provider,
+          patch("custom_components.phoenix_mcp.voice_agent.async_run_voice_turn", new_callable=AsyncMock) as provider,
           patch.object(type(hass.services), "async_call", new_callable=AsyncMock) as call):
         task = asyncio.create_task(voice_agent.async_voice_answer(hass, hybrid_home[0], "Please illuminate my desk lamp", language="en"))
         await entered.wait()
@@ -313,7 +317,7 @@ async def test_owned_decision_cancellation_is_counted_without_fallback(hass, hyb
         entered.set()
         await asyncio.Event().wait()
     with (patch.object(DecisionProvider, "_request", request),
-          patch.object(agentcli, "async_run_voice_turn", new_callable=AsyncMock) as provider,
+          patch("custom_components.phoenix_mcp.voice_agent.async_run_voice_turn", new_callable=AsyncMock) as provider,
           patch.object(type(hass.services), "async_call", new_callable=AsyncMock) as call):
         task = asyncio.create_task(voice_agent.async_voice_answer(hass, data, "Please illuminate my desk lamp", language="en"))
         await entered.wait()
@@ -386,8 +390,8 @@ async def test_enabled_language_hybrid_voice_carries_language_through_dispatch(h
     await data.store.async_patch_settings(command_routing_languages=[language])
     er.async_get(hass).async_update_entity(entity_id, aliases={'台灯', 'lámpara'})
     local = {"reason": "no_match", "proposal": None, "elapsed_ms": 1, "route": "provider"}
-    with (patch("custom_components.phoenix_mcp.command_routing.async_evaluate_command", AsyncMock(return_value=local)),
-          patch.object(mcp_view, "unsupported_secondary_targets", AsyncMock(return_value=[])),
+    with (patch_readers("custom_components.phoenix_mcp.routing.command_routing.async_evaluate_command", AsyncMock(return_value=local)),
+          patch.object(service_tools, "unsupported_secondary_targets", AsyncMock(return_value=[])),
           patch.object(type(hass.services), "async_call", new_callable=AsyncMock) as call):
         answer, remote, provider = await run_voice(hass, hybrid_home, sentence=sentence, language=language,
                                                  category="light_on")
@@ -409,7 +413,7 @@ async def test_numeric_voice_automatically_falls_back_even_with_legacy_opt_in(ha
     await data.store.async_patch_settings(decision_provider_id=account, voice_agent_routing_mode=routing_mode,
                                          command_routing_languages=[language])
     local = {"reason": "no_match", "proposal": None, "elapsed_ms": 1, "route": "provider"}
-    with (patch("custom_components.phoenix_mcp.command_routing.async_evaluate_command", AsyncMock(return_value=local)),
+    with (patch_readers("custom_components.phoenix_mcp.routing.command_routing.async_evaluate_command", AsyncMock(return_value=local)),
           patch.object(type(hass.services), "async_call", new_callable=AsyncMock) as call):
         answer, remote, provider = await run_voice(hass, hybrid_home, category="light_brightness", percent=55,
             sentence="set the desk lamp to 50 percent", language=language)
@@ -424,7 +428,7 @@ async def test_numeric_voice_automatically_falls_back_even_with_legacy_opt_in(ha
 @pytest.mark.parametrize("percent", [0, 37, 50, 100])
 async def test_recognized_numeric_voice_uses_ha_value_without_either_provider(hass, hybrid_home, percent):
     entity_id = hybrid_home[-1]
-    with (patch.object(mcp_view, "unsupported_secondary_targets", AsyncMock(return_value=[])),
+    with (patch.object(service_tools, "unsupported_secondary_targets", AsyncMock(return_value=[])),
           patch.object(type(hass.services), "async_call", new_callable=AsyncMock) as call):
         answer, remote, provider = await run_voice(hass, hybrid_home,
             sentence=f"set the desk lamp brightness to {percent} percent")
@@ -441,8 +445,8 @@ async def test_recognized_numeric_voice_uses_ha_value_without_either_provider(ha
 @pytest.mark.parametrize("value_check", [None, {"status": "match", "source_value": 50}])
 async def test_preexisting_numeric_decision_approval_cannot_execute(hass, hybrid_home, ingress, percent, value_check):
     from custom_components.phoenix_mcp.approval_targets import bind_targets
-    from custom_components.phoenix_mcp.command_execution import _capture_plan, plan_is_current
-    from custom_components.phoenix_mcp.decision_targets import capture_targets
+    from custom_components.phoenix_mcp.routing.command_execution import _capture_plan, plan_is_current
+    from custom_components.phoenix_mcp.routing.decision_targets import capture_targets
     data, access_key, _, account, entity_id = hybrid_home
     await data.store.async_patch_settings(agentcli_routing_mode="hybrid")
     proposal = {"intent": "HassLightSet", "entity_ids": [entity_id], "brightness_pct": percent}
@@ -450,24 +454,24 @@ async def test_preexisting_numeric_decision_approval_cannot_execute(hass, hybrid
     assert plan_is_current(plan, hass, data, access_key)  # A recognized local value still qualifies.
     plan.update(decision_category="light_brightness",
                 decision_catalog=capture_targets(hass, access_key, "light_brightness").digest(),
-                decision_account=agentcli.decision_account_fingerprint(hass, account))
+                decision_account=llm_accounts.decision_account_fingerprint(hass, account))
     if value_check is not None:
         plan["value_check"] = {**value_check, "source_value": percent}
     args = {"domain": "light", "service": "turn_on", "entity_id": [entity_id],
             "service_data": {"brightness_pct": percent}, COMMAND_ROUTING_PLAN_KEY: plan}
     args = bind_targets(args, [entity_id], hass)
-    with (patch.object(mcp_view, "unsupported_secondary_targets", AsyncMock(return_value=[])),
+    with (patch.object(service_tools, "unsupported_secondary_targets", AsyncMock(return_value=[])),
           patch.object(type(hass.services), "async_call", new_callable=AsyncMock) as call):
-        _, outcome, _ = await mcp_view.async_execute_approved_tool("call_service", args, access_key, hass, data)
+        _, outcome, _ = await tool_dispatch.async_execute_approved_tool("call_service", args, access_key, hass, data)
     assert outcome == "denied"
     call.assert_not_called()
     # The otherwise identical recognized local plan can execute; legacy decision
     # plans lack the independently qualified joint review and cannot impersonate it.
     for key in ("decision_category", "decision_catalog", "decision_account"):
         del plan[key]
-    with (patch.object(mcp_view, "unsupported_secondary_targets", AsyncMock(return_value=[])),
+    with (patch.object(service_tools, "unsupported_secondary_targets", AsyncMock(return_value=[])),
           patch.object(type(hass.services), "async_call", new_callable=AsyncMock) as control):
-        _, outcome, _ = await mcp_view.async_execute_approved_tool("call_service", args, access_key, hass, data)
+        _, outcome, _ = await tool_dispatch.async_execute_approved_tool("call_service", args, access_key, hass, data)
     assert outcome == "allowed"
     control.assert_awaited_once()
 
@@ -518,7 +522,7 @@ async def test_qualified_numeric_voice_uses_one_decision_and_shared_execution(ha
     async def respond(session, method, path, timeout, payload):
         assert set(payload['questions']) == {'route', 'target', 'percentage', 'summary', 'summary_scope'}
         return numeric_reply(payload, home, spec, percent=percent)
-    with (patch.object(mcp_view, 'unsupported_secondary_targets', AsyncMock(return_value=[])),
+    with (patch.object(service_tools, 'unsupported_secondary_targets', AsyncMock(return_value=[])),
           patch.object(type(hass.services), 'async_call', new_callable=AsyncMock) as call):
         _, remote, provider = await run_voice(hass, home, request=respond,
             sentence=(f'Quiero {home[-1]} al {percent} por ciento ahora.' if language == 'es-MX'
@@ -556,7 +560,7 @@ async def test_numeric_approval_binds_evidence_catalog_and_current_authority(has
     data, access_key, _, _, _ = home
     await set_mesa(hass, home, 'confirm')
     async def respond(session, method, path, timeout, payload): return numeric_reply(payload, home, spec)
-    with patch.object(mcp_view, 'unsupported_secondary_targets', AsyncMock(return_value=[])):
+    with patch.object(service_tools, 'unsupported_secondary_targets', AsyncMock(return_value=[])):
         reply, remote, provider = await run_voice(hass, home, request=respond,
                                                 sentence=f'I would like {home[-1]} at thirty-seven percent now.')
     assert 'needs approval' in reply
@@ -572,9 +576,9 @@ async def test_numeric_approval_binds_evidence_catalog_and_current_authority(has
         record['args']['service_data'][spec[4]] = 5 / spec[5]
     elif change == 'missing_review': del plan['decision_batch']['percentage']
     else: await mutate(hass, home, change)
-    with (patch.object(mcp_view, 'unsupported_secondary_targets', AsyncMock(return_value=[])),
+    with (patch.object(service_tools, 'unsupported_secondary_targets', AsyncMock(return_value=[])),
           patch.object(type(hass.services), 'async_call', new_callable=AsyncMock) as call):
-        _, outcome, _ = await mcp_view.async_execute_approved_tool(record['tool_name'], record['args'], access_key, hass, data)
+        _, outcome, _ = await tool_dispatch.async_execute_approved_tool(record['tool_name'], record['args'], access_key, hass, data)
     assert outcome == ('allowed' if change == 'none' else 'denied')
     assert call.await_count == (1 if change == 'none' else 0)
 
@@ -597,7 +601,7 @@ async def test_numeric_fast_path_preserves_capability_and_mesa(hass, jev_numeric
 
 @pytest.mark.parametrize('change', ['account', 'scope', 'revoked'])
 async def test_numeric_source_worker_rechecks_before_sharing_request(hass, jev_hybrid_home, change):
-    from custom_components.phoenix_mcp.numeric_evidence import read_explicit_percentage
+    from custom_components.phoenix_mcp.routing.numeric_evidence import read_explicit_percentage
     original = hass.async_add_executor_job
     reached = False
     async def worker(function, *args):
@@ -619,7 +623,7 @@ async def test_jev_joint_routes_one_request_through_existing_executor(hass, jev_
     async def respond(session, method, path, timeout, payload):
         assert set(payload["questions"]) == {"route", "target", "summary", "summary_scope"}
         return wire_answer(payload, category, model="jev-1.13.0")
-    with (patch.object(mcp_view, "unsupported_secondary_targets", AsyncMock(return_value=[])),
+    with (patch.object(service_tools, "unsupported_secondary_targets", AsyncMock(return_value=[])),
           patch.object(type(hass.services), "async_call", new_callable=AsyncMock) as call):
         answer, remote, provider = await run_voice(hass, jev_hybrid_home, request=respond)
     remote.assert_awaited_once()
@@ -640,16 +644,16 @@ async def test_jev_latest_acts_on_whichever_revision_answers(hass, jev_hybrid_ho
     async def respond(session, method, path, timeout, payload):
         return wire_answer(payload, "light_on", model=returned)
     await set_mesa(hass, jev_hybrid_home, "confirm")
-    with patch.object(mcp_view, "unsupported_secondary_targets", AsyncMock(return_value=[])):
+    with patch.object(service_tools, "unsupported_secondary_targets", AsyncMock(return_value=[])):
         answer, remote, provider = await run_voice(hass, jev_hybrid_home, request=respond)
     remote.assert_awaited_once()
     provider.assert_not_called()
     assert "needs approval" in answer
     record = data.store.get_pending_approvals()[0]
     assert record["args"][COMMAND_ROUTING_PLAN_KEY]["decision_batch"]["model"] == returned
-    with (patch.object(mcp_view, "unsupported_secondary_targets", AsyncMock(return_value=[])),
+    with (patch.object(service_tools, "unsupported_secondary_targets", AsyncMock(return_value=[])),
           patch.object(type(hass.services), "async_call", new_callable=AsyncMock) as call):
-        _, outcome, _ = await mcp_view.async_execute_approved_tool(record["tool_name"], record["args"], jev_hybrid_home[1], hass, data)
+        _, outcome, _ = await tool_dispatch.async_execute_approved_tool(record["tool_name"], record["args"], jev_hybrid_home[1], hass, data)
     assert outcome == "allowed"
     call.assert_awaited_once_with("light", "turn_on", {"entity_id": [entity_id]}, blocking=True, return_response=False)
 
@@ -698,14 +702,14 @@ async def test_jev_joint_declines_without_sequential_retry(hass, jev_hybrid_home
 
 
 async def test_jev_large_union_keeps_all_candidates_in_one_joint_request(hass, jev_hybrid_home):
-    from custom_components.phoenix_mcp.const import DECISION_MAX_TARGETS
+    from custom_components.phoenix_mcp.routing.routing_tables import DECISION_MAX_TARGETS
     _, access_key, *_ = jev_hybrid_home
     access_key.permissions.domains["sensor"] = PermissionNode(state="YELLOW")
     for index in range(DECISION_MAX_TARGETS):
         entry = er.async_get(hass).async_get_or_create("sensor", "test", f"reading_{index}")
         hass.states.async_set(entry.entity_id, "20")
         async_expose_entity(hass, "conversation", entry.entity_id, True)
-    with (patch.object(mcp_view, "unsupported_secondary_targets", AsyncMock(return_value=[])),
+    with (patch.object(service_tools, "unsupported_secondary_targets", AsyncMock(return_value=[])),
           patch.object(type(hass.services), "async_call", new_callable=AsyncMock) as call):
         _, remote, provider = await run_voice(hass, jev_hybrid_home, request=jev_response)
     assert [set(item.args[4]["questions"]) for item in remote.await_args_list] == [{"route", "target", "summary", "summary_scope"}]
@@ -720,7 +724,7 @@ async def test_jev_joint_preserves_mesa(hass, jev_hybrid_home, restriction):
     await set_mesa(hass, jev_hybrid_home, "prohibited" if restriction == "pass_through" else restriction)
     if restriction == "pass_through":
         access_key.pass_through = True
-    with (patch.object(mcp_view, "unsupported_secondary_targets", AsyncMock(return_value=[])),
+    with (patch.object(service_tools, "unsupported_secondary_targets", AsyncMock(return_value=[])),
           patch.object(type(hass.services), "async_call", new_callable=AsyncMock) as call):
         answer, remote, provider = await run_voice(hass, jev_hybrid_home, request=jev_response)
     remote.assert_awaited_once()
@@ -743,7 +747,7 @@ async def test_jev_joint_approval_binds_full_union_and_model(hass, jev_hybrid_ho
         hass.states.async_set(entry.entity_id, "20")
         async_expose_entity(hass, "conversation", entry.entity_id, True)
     await set_mesa(hass, jev_hybrid_home, "confirm")
-    with patch.object(mcp_view, "unsupported_secondary_targets", AsyncMock(return_value=[])):
+    with patch.object(service_tools, "unsupported_secondary_targets", AsyncMock(return_value=[])):
         answer, _, _ = await run_voice(hass, jev_hybrid_home, request=jev_response)
     assert "needs approval" in answer
     record = data.store.get_pending_approvals()[0]
@@ -758,9 +762,9 @@ async def test_jev_joint_approval_binds_full_union_and_model(hass, jev_hybrid_ho
         async_expose_entity(hass, "conversation", entry.entity_id, True)
     else:
         await mutate(hass, jev_hybrid_home, change)
-    with (patch.object(mcp_view, "unsupported_secondary_targets", AsyncMock(return_value=[])),
+    with (patch.object(service_tools, "unsupported_secondary_targets", AsyncMock(return_value=[])),
           patch.object(type(hass.services), "async_call", new_callable=AsyncMock) as call):
-        _, outcome, _ = await mcp_view.async_execute_approved_tool(record["tool_name"], record["args"], access_key, hass, data)
+        _, outcome, _ = await tool_dispatch.async_execute_approved_tool(record["tool_name"], record["args"], access_key, hass, data)
     if change == "none":
         assert outcome == "allowed"
         call.assert_awaited_once_with("light", "turn_on", {"entity_id": [entity_id]}, blocking=True, return_response=False)
@@ -790,7 +794,7 @@ async def test_jev_joint_caller_cancellation_releases_owned_slot(hass, jev_hybri
 
 @pytest.mark.parametrize("sentence", ["turn on the desk lamp", "set the desk lamp to 37 percent brightness"])
 async def test_jev_local_matches_keep_zero_decision_calls(hass, jev_hybrid_home, sentence):
-    with (patch.object(mcp_view, "unsupported_secondary_targets", AsyncMock(return_value=[])),
+    with (patch.object(service_tools, "unsupported_secondary_targets", AsyncMock(return_value=[])),
           patch.object(type(hass.services), "async_call", new_callable=AsyncMock) as call):
         _, remote, provider = await run_voice(hass, jev_hybrid_home, sentence=sentence, request=jev_response)
     call.assert_awaited_once()
@@ -812,7 +816,7 @@ async def test_other_models_and_endpoints_keep_sequential_routing(
             assert path == "models"
             return {"data": [{"id": model}]}
         return await jev_response(session, method, path, timeout, payload)
-    with (patch.object(mcp_view, 'unsupported_secondary_targets', AsyncMock(return_value=[])),
+    with (patch.object(service_tools, 'unsupported_secondary_targets', AsyncMock(return_value=[])),
           patch.object(type(hass.services), 'async_call', new_callable=AsyncMock) as call):
         _, remote, provider = await run_voice(hass, hybrid_home, language=language, request=respond)
     assert [set(item.args[4]['questions']) for item in remote.await_args_list if item.args[1] == 'POST'] == [{'route'}, {'target'}]
@@ -825,7 +829,7 @@ async def test_other_models_and_endpoints_keep_sequential_routing(
 @pytest.mark.parametrize('sentence', ['decision-secret', 'password: private-value', 'turn on light.hidden'])
 async def test_jev_joint_keeps_sensitive_inputs_out_of_decision_request(hass, jev_hybrid_home, sentence):
     local = {'reason': 'no_match', 'proposal': None, 'elapsed_ms': 1, 'route': 'provider'}
-    with (patch('custom_components.phoenix_mcp.command_routing.async_evaluate_command', AsyncMock(return_value=local)),
+    with (patch_readers('custom_components.phoenix_mcp.routing.command_routing.async_evaluate_command', AsyncMock(return_value=local)),
           patch.object(type(hass.services), 'async_call', new_callable=AsyncMock) as call):
         _, remote, provider = await run_voice(hass, jev_hybrid_home, sentence=sentence, request=jev_response)
     remote.assert_not_called()
@@ -836,13 +840,13 @@ async def test_jev_joint_keeps_sensitive_inputs_out_of_decision_request(hass, je
 
 @pytest.mark.parametrize('change', ['account', 'new_candidate'])
 async def test_jev_joint_revalidates_after_mesa_wait_without_replay(hass, jev_hybrid_home, change):
-    apply = mcp_view.async_apply_mesa_to_call
+    apply = mesa.async_apply_mesa_to_call
     async def changed(*args, **kwargs):
         result = await apply(*args, **kwargs)
         await mutate(hass, jev_hybrid_home, change)
         return result
-    with (patch.object(mcp_view, 'unsupported_secondary_targets', AsyncMock(return_value=[])),
-          patch.object(mcp_view, 'async_apply_mesa_to_call', changed),
+    with (patch.object(service_tools, 'unsupported_secondary_targets', AsyncMock(return_value=[])),
+          patch.object(service_tools, 'async_apply_mesa_to_call', changed),
           patch.object(type(hass.services), 'async_call', new_callable=AsyncMock) as call):
         answer, remote, provider = await run_voice(hass, jev_hybrid_home, request=jev_response)
     assert 'could not complete' in answer
@@ -863,8 +867,8 @@ async def expanded_numeric_home(hass, jev_hybrid_home, request):
     from homeassistant.components.fan import FanEntityFeature
     from homeassistant.components.valve import ValveEntityFeature
     from homeassistant.components.water_heater import WaterHeaterEntityFeature
-    from custom_components.phoenix_mcp.command_operations import numeric_operation
-    from custom_components.phoenix_mcp.const import DECISION_TARGET_INTENTS
+    from custom_components.phoenix_mcp.routing.command_operations import numeric_operation
+    from custom_components.phoenix_mcp.routing.routing_tables import DECISION_TARGET_INTENTS
     category, value = request.param
     intent = DECISION_TARGET_INTENTS[category]
     operation = numeric_operation(intent)
@@ -903,7 +907,7 @@ async def test_expanded_native_values_use_guarded_service_once(hass, expanded_nu
     async def respond(session, method, path, timeout, payload):
         assert payload['state']['source_value'] == value
         return scalar_reply(payload, home[-1], category)
-    with (patch.object(mcp_view, 'unsupported_secondary_targets', AsyncMock(return_value=[])),
+    with (patch.object(service_tools, 'unsupported_secondary_targets', AsyncMock(return_value=[])),
           patch.object(type(hass.services), 'async_call', new_callable=AsyncMock) as call):
         _, remote, provider = await run_voice(hass, home, request=respond,
                                              sentence=f'I want Test control at {value} now')
@@ -926,7 +930,7 @@ async def test_native_numeric_approval_rechecks_bounds_units_and_value(hass, jev
     await set_mesa(hass, home, 'confirm')
     async def respond(session, method, path, timeout, payload):
         return scalar_reply(payload, entry.entity_id, 'number_value')
-    with patch.object(mcp_view, 'unsupported_secondary_targets', AsyncMock(return_value=[])):
+    with patch.object(service_tools, 'unsupported_secondary_targets', AsyncMock(return_value=[])):
         reply, _, _ = await run_voice(hass, home, request=respond, sentence='I want Level at -2.5 dB now')
     assert 'needs approval' in reply
     record = data.store.get_pending_approvals()[0]
@@ -936,15 +940,15 @@ async def test_native_numeric_approval_rechecks_bounds_units_and_value(hass, jev
     else:
         attributes.update({'range': {'min': 0}, 'unit': {'unit_of_measurement': 'W'}, 'step': {'step': 1}}[change])
         hass.states.async_set(entry.entity_id, '0', attributes)
-    with (patch.object(mcp_view, 'unsupported_secondary_targets', AsyncMock(return_value=[])),
+    with (patch.object(service_tools, 'unsupported_secondary_targets', AsyncMock(return_value=[])),
           patch.object(type(hass.services), 'async_call', new_callable=AsyncMock) as call):
-        _, outcome, _ = await mcp_view.async_execute_approved_tool(record['tool_name'], record['args'], access_key, hass, data)
+        _, outcome, _ = await tool_dispatch.async_execute_approved_tool(record['tool_name'], record['args'], access_key, hass, data)
     assert outcome == 'denied'
     call.assert_not_called()
 
 
 async def test_expanded_builtin_intents_keep_local_route(hass, expanded_numeric_home):
-    from custom_components.phoenix_mcp.command_routing import async_evaluate_command
+    from custom_components.phoenix_mcp.routing.command_routing import async_evaluate_command
     home, category, intent, operation, value = expanded_numeric_home
     sentences = {
         'fan_speed': 'set Test control speed to 37 percent',
@@ -1018,7 +1022,7 @@ async def test_temporal_helpers_dispatch_only_the_exact_requested_field(hass, te
     async def respond(*args):
         assert args[4]['state']['source'] == {'kind': field, 'value': value}
         return temporal_wire(args[4], temporal_home[-1], category)
-    with (patch.object(mcp_view, 'unsupported_secondary_targets', AsyncMock(return_value=[])),
+    with (patch.object(service_tools, 'unsupported_secondary_targets', AsyncMock(return_value=[])),
           patch.object(type(hass.services), 'async_call', new_callable=AsyncMock) as call):
         _, remote, provider = await run_voice(hass, temporal_home, request=respond,
                                               sentence=f'Set Appointment to {value}')
@@ -1040,7 +1044,7 @@ async def test_temporal_approval_revalidates_value_catalog_and_authority(hass, t
             async_expose_entity(hass, 'conversation', entry.entity_id, True)
     await set_mesa(hass, temporal_home, 'confirm')
     async def respond(*args): return temporal_wire(args[4], entity_id)
-    with patch.object(mcp_view, 'unsupported_secondary_targets', AsyncMock(return_value=[])):
+    with patch.object(service_tools, 'unsupported_secondary_targets', AsyncMock(return_value=[])):
         reply, _, provider = await run_voice(hass, temporal_home, request=respond,
                                             sentence='Set Appointment to 2026-12-25 18:30')
     assert 'needs approval' in reply
@@ -1058,9 +1062,9 @@ async def test_temporal_approval_revalidates_value_catalog_and_authority(hass, t
         hass.states.async_set(entry.entity_id, '2026-12-24', {'has_date': True, 'has_time': False})
         async_expose_entity(hass, 'conversation', entry.entity_id, True)
     elif change == 'permission': access_key.permissions.domains['input_datetime'] = PermissionNode(state='RED')
-    with (patch.object(mcp_view, 'unsupported_secondary_targets', AsyncMock(return_value=[])),
+    with (patch.object(service_tools, 'unsupported_secondary_targets', AsyncMock(return_value=[])),
           patch.object(type(hass.services), 'async_call', new_callable=AsyncMock) as call):
-        _, outcome, _ = await mcp_view.async_execute_approved_tool(record['tool_name'], record['args'], access_key, hass, data)
+        _, outcome, _ = await tool_dispatch.async_execute_approved_tool(record['tool_name'], record['args'], access_key, hass, data)
     assert outcome == ('allowed' if change == 'none' else 'denied')
     assert call.await_count == (1 if change == 'none' else 0)
 
@@ -1088,7 +1092,7 @@ async def test_temporal_model_wait_cannot_authorize_changed_or_invalid_request(h
 
 
 async def test_temporal_preview_is_inert(hass, temporal_home):
-    from custom_components.phoenix_mcp.decision_batch import async_preview_batch
+    from custom_components.phoenix_mcp.routing.decision_batch import async_preview_batch
     data, access_key, _, _, entity_id = temporal_home
     async def respond(*args): return temporal_wire(args[4], entity_id)
     with (patch.object(DecisionProvider, '_request', side_effect=respond),
@@ -1104,7 +1108,9 @@ async def test_temporal_preview_is_inert(hass, temporal_home):
 
 @pytest.fixture
 async def entity_command_home(hass, jev_hybrid_home, request):
-    from custom_components.phoenix_mcp.const import COMMAND_ROUTING_ENTITY_COMMANDS, DECISION_ENTITY_CATEGORIES
+    from custom_components.phoenix_mcp.routing.routing_tables import (
+        COMMAND_ROUTING_ENTITY_COMMANDS, DECISION_ENTITY_CATEGORIES,
+    )
     from custom_components.phoenix_mcp.entity_commands import _FEATURES
     category, value = request.param
     domain, service, field, options, feature, _ = COMMAND_ROUTING_ENTITY_COMMANDS[category]
@@ -1142,7 +1148,7 @@ async def test_entity_commands_reach_guarded_dispatch(hass, entity_command_home)
     home, category, value, intent, (domain, service, field) = entity_command_home
     async def respond(*args): return entity_command_wire(args[4], home[-1], category, value)
     sentence = f'Please perform {category} for Test helper' + (f' using "{value}"' if value else '')
-    with (patch.object(mcp_view, 'unsupported_secondary_targets', AsyncMock(return_value=[])),
+    with (patch.object(service_tools, 'unsupported_secondary_targets', AsyncMock(return_value=[])),
           patch.object(type(hass.services), 'async_call', new_callable=AsyncMock) as call):
         _, remote, provider = await run_voice(hass, home, request=respond, sentence=sentence)
     remote.assert_awaited_once()
@@ -1158,7 +1164,7 @@ async def test_entity_value_approval_preserves_current_options_and_exact_value(h
     data, access_key, _, _, entity_id = home
     await set_mesa(hass, home, 'confirm')
     async def respond(*args): return entity_command_wire(args[4], entity_id, category, value)
-    with patch.object(mcp_view, 'unsupported_secondary_targets', AsyncMock(return_value=[])):
+    with patch.object(service_tools, 'unsupported_secondary_targets', AsyncMock(return_value=[])):
         reply, _, provider = await run_voice(hass, home, request=respond, sentence='Set Test helper to Away')
     assert 'needs approval' in reply
     provider.assert_not_called()
@@ -1169,9 +1175,9 @@ async def test_entity_value_approval_preserves_current_options_and_exact_value(h
         record['args']['service_data']['option'] = 'Home'
     elif change == 'service': hass.services.async_remove('select', 'select_option')
     elif change == 'permission': access_key.permissions.domains['select'] = PermissionNode(state='RED')
-    with (patch.object(mcp_view, 'unsupported_secondary_targets', AsyncMock(return_value=[])),
+    with (patch.object(service_tools, 'unsupported_secondary_targets', AsyncMock(return_value=[])),
           patch.object(type(hass.services), 'async_call', new_callable=AsyncMock) as call):
-        _, outcome, _ = await mcp_view.async_execute_approved_tool(record['tool_name'], record['args'], access_key, hass, data)
+        _, outcome, _ = await tool_dispatch.async_execute_approved_tool(record['tool_name'], record['args'], access_key, hass, data)
     assert outcome == ('allowed' if change == 'none' else 'denied')
     assert call.await_count == (1 if change == 'none' else 0)
 
@@ -1199,7 +1205,7 @@ async def test_explicit_timer_duration_uses_existing_named_timer_only(hass, jev_
     async_expose_entity(hass, 'conversation', entry.entity_id, True)
     home = data, access_key, store, account, entry.entity_id
     async def respond(*args): return temporal_wire(args[4], entry.entity_id, 'timer_duration')
-    with (patch.object(mcp_view, 'unsupported_secondary_targets', AsyncMock(return_value=[])),
+    with (patch.object(service_tools, 'unsupported_secondary_targets', AsyncMock(return_value=[])),
           patch.object(type(hass.services), 'async_call', new_callable=AsyncMock) as call):
         _, remote, provider = await run_voice(hass, home, request=respond, sentence=f'Start timer named Test timer for {duration}')
     remote.assert_awaited_once()
@@ -1218,7 +1224,7 @@ async def test_counter_absolute_value_is_exact_and_guarded(hass, jev_hybrid_home
     async_expose_entity(hass, 'conversation', entry.entity_id, True)
     home = data, access_key, store, account, entry.entity_id
     async def respond(*args): return scalar_reply(args[4], entry.entity_id, 'counter_value')
-    with (patch.object(mcp_view, 'unsupported_secondary_targets', AsyncMock(return_value=[])),
+    with (patch.object(service_tools, 'unsupported_secondary_targets', AsyncMock(return_value=[])),
           patch.object(type(hass.services), 'async_call', new_callable=AsyncMock) as call):
         _, remote, provider = await run_voice(hass, home, request=respond, sentence='Set Test counter to 135')
     remote.assert_awaited_once()
@@ -1231,7 +1237,7 @@ async def test_counter_absolute_value_is_exact_and_guarded(hass, jev_hybrid_home
 async def test_entity_on_off_can_use_local_intent_without_decision_provider(hass, entity_command_home):
     home, _, _, _, (domain, service, _) = entity_command_home
     await home[0].store.async_patch_settings(voice_agent_routing_mode='local', decision_provider_id=None)
-    with (patch.object(mcp_view, 'unsupported_secondary_targets', AsyncMock(return_value=[])),
+    with (patch.object(service_tools, 'unsupported_secondary_targets', AsyncMock(return_value=[])),
           patch.object(type(hass.services), 'async_call', new_callable=AsyncMock) as call):
         _, remote, provider = await run_voice(hass, home, sentence='turn on Test helper')
     provider.assert_not_called()
@@ -1253,7 +1259,7 @@ async def test_numbered_options_share_one_decision_and_bind_the_complete_catalog
         if change == 'conflicting_value':
             reply['answers']['percentage'].update(choice='value', probabilities={'value': 1, 'none': 0})
         return reply
-    with patch.object(mcp_view, 'unsupported_secondary_targets', AsyncMock(return_value=[])):
+    with patch.object(service_tools, 'unsupported_secondary_targets', AsyncMock(return_value=[])):
         reply, remote, provider = await run_voice(hass, home, request=respond, sentence=f'Set Test helper to {value}')
     remote.assert_awaited_once()
     if change == 'conflicting_value':
@@ -1270,9 +1276,9 @@ async def test_numbered_options_share_one_decision_and_bind_the_complete_catalog
         async_expose_entity(hass, 'conversation', entry.entity_id, True)
     if change == 'option':
         hass.states.async_set(entity_id, 'Home', {'friendly_name': 'Test helper', 'options': ['Home']})
-    with (patch.object(mcp_view, 'unsupported_secondary_targets', AsyncMock(return_value=[])),
+    with (patch.object(service_tools, 'unsupported_secondary_targets', AsyncMock(return_value=[])),
           patch.object(type(hass.services), 'async_call', new_callable=AsyncMock) as call):
-        _, outcome, _ = await mcp_view.async_execute_approved_tool(record['tool_name'], record['args'], access_key, hass, data)
+        _, outcome, _ = await tool_dispatch.async_execute_approved_tool(record['tool_name'], record['args'], access_key, hass, data)
     assert outcome == ('allowed' if change == 'none' else 'denied')
     assert call.await_count == (1 if change == 'none' else 0)
     if change == 'none':
@@ -1291,7 +1297,7 @@ async def test_numeric_setting_remains_numeric_with_numbered_options_present(has
         reply['answers']['percentage'].update(choice='37', probabilities={
             key: float(key == '37') for key in payload['questions']['percentage']['criteria']})
         return reply
-    with (patch.object(mcp_view, 'unsupported_secondary_targets', AsyncMock(return_value=[])),
+    with (patch.object(service_tools, 'unsupported_secondary_targets', AsyncMock(return_value=[])),
           patch.object(type(hass.services), 'async_call', new_callable=AsyncMock) as call):
         _, remote, provider = await run_voice(hass, home, request=respond, sentence='I want Desk lamp at 37 percent now')
     remote.assert_awaited_once()
@@ -1301,7 +1307,7 @@ async def test_numeric_setting_remains_numeric_with_numbered_options_present(has
 
 
 async def test_timer_recognition_wait_rechecks_account_before_disclosing_to_provider(hass, jev_hybrid_home):
-    from custom_components.phoenix_mcp.temporal_values import async_read_temporal_value
+    from custom_components.phoenix_mcp.routing.temporal_values import async_read_temporal_value
     home = jev_hybrid_home
     data, _, store, account, _ = home
     hass.states.async_set('timer.test', 'idle')
@@ -1310,7 +1316,7 @@ async def test_timer_recognition_wait_rechecks_account_before_disclosing_to_prov
         assert value == {'kind': 'duration', 'value': '00:05:00'}
         await store.update(account, {'api_key': 'replacement-secret'})
         return value
-    with (patch('custom_components.phoenix_mcp.temporal_values.async_read_temporal_value', side_effect=recognize),
+    with (patch('custom_components.phoenix_mcp.routing.temporal_values.async_read_temporal_value', side_effect=recognize),
           patch.object(type(hass.services), 'async_call', new_callable=AsyncMock) as call):
         _, remote, _ = await run_voice(hass, home, sentence='Start timer named Test for five minutes')
     remote.assert_not_called()
@@ -1332,7 +1338,7 @@ async def test_timer_recognition_wait_rechecks_account_before_disclosing_to_prov
 async def test_fixed_controls_dispatch_exact_native_fields(hass, entity_command_home, expected):
     home, category, value, _, (domain, service, _) = entity_command_home
     async def respond(*args): return entity_command_wire(args[4], home[-1], category, value)
-    with (patch.object(mcp_view, 'unsupported_secondary_targets', AsyncMock(return_value=[])),
+    with (patch.object(service_tools, 'unsupported_secondary_targets', AsyncMock(return_value=[])),
           patch.object(type(hass.services), 'async_call', new_callable=AsyncMock) as call):
         _, remote, provider = await run_voice(hass, home, request=respond,
                                              sentence=f'Please perform {category} for Test helper')
@@ -1349,7 +1355,7 @@ async def test_fixed_control_approval_rechecks_features_and_arguments(hass, enti
     data, access_key, _, _, entity_id = home
     await set_mesa(hass, home, 'confirm')
     async def respond(*args): return entity_command_wire(args[4], entity_id, category, value)
-    with patch.object(mcp_view, 'unsupported_secondary_targets', AsyncMock(return_value=[])):
+    with patch.object(service_tools, 'unsupported_secondary_targets', AsyncMock(return_value=[])):
         reply, _, provider = await run_voice(hass, home, request=respond, sentence=f'Please perform {category} for Test helper')
     assert 'needs approval' in reply
     provider.assert_not_called()
@@ -1360,9 +1366,9 @@ async def test_fixed_control_approval_rechecks_features_and_arguments(hass, enti
         record['args']['service_data'] = {'is_volume_muted': False} if category == 'media_mute' else {'direction': 'forward'}
     elif change == 'permission':
         access_key.permissions.domains[entity_id.split('.')[0]] = PermissionNode(state='RED')
-    with (patch.object(mcp_view, 'unsupported_secondary_targets', AsyncMock(return_value=[])),
+    with (patch.object(service_tools, 'unsupported_secondary_targets', AsyncMock(return_value=[])),
           patch.object(type(hass.services), 'async_call', new_callable=AsyncMock) as call):
-        _, outcome, _ = await mcp_view.async_execute_approved_tool(record['tool_name'], record['args'], access_key, hass, data)
+        _, outcome, _ = await tool_dispatch.async_execute_approved_tool(record['tool_name'], record['args'], access_key, hass, data)
     assert outcome == ('allowed' if change == 'none' else 'denied')
     assert call.await_count == (1 if change == 'none' else 0)
 
@@ -1405,7 +1411,7 @@ async def test_joint_attribute_read_reaches_scoped_read_tool_and_rechecks_change
 async def test_structured_requests_keep_original_text_and_normal_provider(hass, jev_hybrid_home, sentence):
     async def respond(*args):
         return wire_answer(args[4], 'provider', 'none', model='jev-1.13.0')
-    with patch.object(mcp_view, '_dispatch_mcp', new_callable=AsyncMock) as dispatch:
+    with patch_readers("custom_components.phoenix_mcp.tool_dispatch._dispatch_mcp", new_callable=AsyncMock) as dispatch:
         answer, _, provider = await run_voice(hass, jev_hybrid_home, sentence=sentence, request=respond)
     assert answer == 'Provider answer'
     provider.assert_awaited_once()
@@ -1433,7 +1439,7 @@ async def test_generic_large_catalog_dispatch_and_approval_revalidation(hass, hy
             name: {'type': 'choice', 'choice': selected[name], 'confidence': 1.0,
                    'probabilities': {key: float(key == selected[name]) for key in spec['criteria']}}
             for name, spec in payload['questions'].items()}}
-    with (patch.object(mcp_view, 'unsupported_secondary_targets', AsyncMock(return_value=[])),
+    with (patch.object(service_tools, 'unsupported_secondary_targets', AsyncMock(return_value=[])),
           patch.object(type(hass.services), 'async_call', new_callable=AsyncMock) as call):
         answer, remote, provider = await run_voice(hass, hybrid_home, request=respond)
     provider.assert_not_called()
@@ -1446,7 +1452,7 @@ async def test_generic_large_catalog_dispatch_and_approval_revalidation(hass, hy
         call.assert_not_called()
         approval = data.store.get_pending_approvals()[0]
         plan = approval['args'][COMMAND_ROUTING_PLAN_KEY]
-        from custom_components.phoenix_mcp.command_execution import _decision_plan_current
+        from custom_components.phoenix_mcp.routing.command_execution import _decision_plan_current
         assert _decision_plan_current(plan, hass, data, access_key)
         registry.async_update_entity(other.entity_id, aliases={'Desk lamp'})
         assert not _decision_plan_current(plan, hass, data, access_key)
@@ -1460,7 +1466,7 @@ async def test_custom_sentence_keeps_precedence_through_voice(
     async def respond(*args):
         return wire_answer(args[4], model='jev-1.13.0')
     with (patch.object(home[0].decision_shadow, 'start', wraps=home[0].decision_shadow.start) as start,
-          patch.object(mcp_view, 'unsupported_secondary_targets', AsyncMock(return_value=[])),
+          patch.object(service_tools, 'unsupported_secondary_targets', AsyncMock(return_value=[])),
           patch.object(type(hass.services), 'async_call', new_callable=AsyncMock) as call):
         answer, remote, provider = await run_voice(hass, home, sentence='turn on the desk lamp', request=respond)
     assert answer == 'Provider answer'
@@ -1509,7 +1515,7 @@ async def test_timer_duration_preserves_real_ha_runtime_semantics(hass, jev_hybr
 
 
 async def test_saved_zero_duration_plan_is_rejected_at_execution(hass, jev_hybrid_home):
-    from custom_components.phoenix_mcp.command_execution import _capture_plan, plan_is_current
+    from custom_components.phoenix_mcp.routing.command_execution import _capture_plan, plan_is_current
     data, access_key, *_ = jev_hybrid_home
     access_key.permissions.domains['timer'] = PermissionNode(state='GREEN')
     entry = er.async_get(hass).async_get_or_create('timer', 'test', 'test_timer', original_name='Test timer')
@@ -1527,8 +1533,8 @@ async def test_saved_zero_duration_plan_is_rejected_at_execution(hass, jev_hybri
 @pytest.mark.parametrize('ingress', ['voice', 'chat'])
 async def test_confident_missing_name_cannot_prepare_a_color_write(hass, jev_hybrid_home, ingress):
     """A catalog-valid winner still needs identity evidence in the current request."""
-    from custom_components.phoenix_mcp.decision_shadow import async_preview_decision
-    from custom_components.phoenix_mcp.command_execution import _capture_plan
+    from custom_components.phoenix_mcp.routing.decision_shadow import async_preview_decision
+    from custom_components.phoenix_mcp.routing.command_execution import _capture_plan
     data, access_key, _, _, entity_id = jev_hybrid_home
     await data.store.async_patch_settings(agentcli_routing_mode='auto')
     hass.services.async_register('light', 'turn_on', AsyncMock())
@@ -1543,7 +1549,7 @@ async def test_confident_missing_name_cannot_prepare_a_color_write(hass, jev_hyb
             answer['probabilities']['provider' if question == 'route' else 'none'] = 1 - probability
         return body
     with (patch.object(DecisionProvider, '_request', AsyncMock(side_effect=respond)) as remote,
-          patch('custom_components.phoenix_mcp.decision_batch._capture_plan', wraps=_capture_plan) as capture):
+          patch_readers('custom_components.phoenix_mcp.routing.command_execution._capture_plan', wraps=_capture_plan) as capture):
         result = await async_preview_decision(hass, data, access_key, 'Set Audit Missing Lamp to blue.', 'en',
             {'reason': 'no_match', 'proposal': None}, targets=True, prepare=True, ingress=ingress)
     remote.assert_awaited_once()

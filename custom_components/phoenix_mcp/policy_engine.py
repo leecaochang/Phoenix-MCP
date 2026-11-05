@@ -15,18 +15,15 @@ from homeassistant.helpers import area_registry as ar
 from homeassistant.helpers import floor_registry as fr
 from homeassistant.helpers import entity_registry as er
 from homeassistant.util.dt import utcnow
+from homeassistant.config_entries import ConfigEntryState
 
 from .const import (
-    BLOCKED_DOMAINS,
-    DOMAIN,
-    ESPHOME_DOMAIN,
-    MUSIC_ASSISTANT_DOMAIN,
-    PHYSICAL_GATE_DOMAINS,
-    SCRIPT_ENTITY_SERVICES,
-    SENSITIVE_ATTRIBUTES,
-    SENSITIVE_KEY_SUBSTRINGS,
-    SENSITIVE_KEY_SUFFIXES,
+    BLOCKED_DOMAINS, DOMAIN, MUSIC_ASSISTANT_DOMAIN, PHYSICAL_GATE_DOMAINS, SCRIPT_ENTITY_SERVICES,
+    SENSITIVE_ATTRIBUTES, APPROVAL_TARGET_DEPTH, APPROVAL_TARGET_LIMIT, SENSITIVE_KEY_FINAL_WORDS,
+    SENSITIVE_KEY_SUBSTRINGS, SENSITIVE_KEY_SUFFIXES, PERSONA_HOME_COMPANION,
+    HOME_COMPANION_SENSOR_CLASSES, HOME_COMPANION_CONTROL_DOMAINS, HOME_COMPANION_READ_DOMAINS,
 )
+from .esphome_constants import ESPHOME_DOMAIN
 from .device_semantics import (
     DeviceRegistrySnapshot,
     device_authority_chain,
@@ -35,6 +32,8 @@ from .device_semantics import (
     effective_entity_area_id,
 )
 from .access_key_store import AccessKeyRecord
+from .household_authority import household_admin_access
+from .request_authority import household_authority
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -89,7 +88,6 @@ def resolve(entity_id: str, access_key: AccessKeyRecord, hass: HomeAssistant) ->
     permission = _resolve_access_key_access(entity_id, access_key, hass)
     if permission not in (Permission.READ, Permission.WRITE):
         return permission
-    from .household_authority import household_authority
 
     household = household_authority.get()
     if household is None:
@@ -152,8 +150,6 @@ def _resolve_access_key_access(entity_id: str, access_key: AccessKeyRecord, hass
     if entry is not None and entry.platform == DOMAIN:
         return Permission.NO_ACCESS
 
-    from .const import (PERSONA_HOME_COMPANION, HOME_COMPANION_SENSOR_CLASSES,
-                        HOME_COMPANION_CONTROL_DOMAINS, HOME_COMPANION_READ_DOMAINS)
     companion = access_key.persona == PERSONA_HOME_COMPANION
     if companion:
         state = hass.states.get(entity_id)
@@ -260,21 +256,27 @@ def resolve_registry_access(
     return Permission.READ
 
 
+def _single_owner(device: Any) -> list[str]:
+    """The one owning config-entry id a device reports, if any."""
+    config_entry_id = getattr(device, "config_entry_id", None)
+    return [config_entry_id] if isinstance(config_entry_id, str) else []
+
+
 def device_config_entry_ids(device: Any) -> list[str]:
     """Return a device's owning config-entry ids across supported HA versions.
 
     From HA 2026.9 a device has one owner in config_entry_id, and 2026.10 reports
     every config_entries read as deprecated. Only a restored pre-migration
     composite still holds several owners, which it reports through
-    config_entries without that warning. Releases before 2026.9 have
+    config_entries without that warning. 2026.9 has no is_composite_device, so
+    there config_entries is the only way to see them. Releases before 2026.9 have
     config_entries alone.
     """
-    if hasattr(device, "config_entry_id") and getattr(device, "is_composite_device", False) is not True:
-        config_entry_id = device.config_entry_id
-        return [config_entry_id] if isinstance(config_entry_id, str) else []
+    if hasattr(device, "config_entry_id") and getattr(device, "is_composite_device", None) is False:
+        return _single_owner(device)
     config_entries = getattr(device, "config_entries", None)
-    if config_entries is None:
-        return []
+    if not isinstance(config_entries, (set, frozenset, list, tuple)):
+        return _single_owner(device)
     return sorted(entry_id for entry_id in config_entries if isinstance(entry_id, str))
 
 
@@ -347,7 +349,6 @@ def resolve_device_registry_access(
         return Permission.NO_ACCESS
 
     entity_ids = device_registry_entity_ids(hass, device_id)
-    from .household_authority import household_admin_access
 
     if not household_admin_access() and not any(
         resolve_registry_access(entity_id, access_key, hass, force_registry_only=device.disabled_by is not None)
@@ -564,9 +565,10 @@ def resolve_config_entry_registry_write(
 def is_sensitive_key(key: Any) -> bool:
     """Whether an attribute/response key name marks its value as sensitive.
 
-    True when the key is in the fixed SENSITIVE_ATTRIBUTES list or contains any
-    SENSITIVE_KEY_SUBSTRINGS marker or ends in SENSITIVE_KEY_SUFFIXES
-    (case-insensitive), catching credentials surfaced under integration prefixes.
+    True when the key is in the fixed SENSITIVE_ATTRIBUTES list, contains any
+    SENSITIVE_KEY_SUBSTRINGS marker, ends in SENSITIVE_KEY_SUFFIXES, or has a
+    SENSITIVE_KEY_FINAL_WORDS word last (case-insensitive), catching credentials
+    surfaced under integration prefixes.
     """
     if not isinstance(key, str):
         return False
@@ -574,27 +576,44 @@ def is_sensitive_key(key: Any) -> bool:
         return True
     lowered = key.lower()
     return (any(marker in lowered for marker in SENSITIVE_KEY_SUBSTRINGS)
-            or lowered.endswith(SENSITIVE_KEY_SUFFIXES))
+            or lowered.endswith(SENSITIVE_KEY_SUFFIXES)
+            or re.split(r"[^a-z0-9]+", lowered)[-1] in SENSITIVE_KEY_FINAL_WORDS)
 
 
-def scrub_sensitive_attributes(state: State) -> dict[str, Any]:
-    """Return a state dict with sensitive attributes removed."""
+def scrub_attributes(
+    attributes: Mapping[str, Any], access_key: AccessKeyRecord, hass: HomeAssistant,
+) -> dict[str, Any]:
+    """State attributes as this access key may read them. Event loop only.
+
+    A sensitive attribute is dropped, so its name is not disclosed. Below the top
+    level the service-response filter applies: nested sensitive values and hidden
+    entity IDs are redacted and entries keyed by a hidden entity are dropped.
+    Strings that only look like an entity ID, such as a host name, stay readable.
+    """
+    return {
+        key: filter_service_response(value, access_key, hass, keep_unknown=True)
+        for key, value in attributes.items()
+        if not is_sensitive_key(key)
+        and not (isinstance(key, str) and _hidden_entity_reference(key, access_key, hass, keep_unknown=True))
+    }
+
+
+def scrub_sensitive_attributes(state: State, access_key: AccessKeyRecord, hass: HomeAssistant) -> dict[str, Any]:
+    """Return a state dict with its attributes scrubbed for this access key."""
     d = state.as_dict()
     # HA types as_dict()'s values as a union wide enough to include datetime, so
     # the attributes mapping does not narrow on its own. It is always a mapping.
     attributes: Mapping[str, Any] = d.get("attributes") or {}  # type: ignore[assignment]
-    clean_attrs = {k: v for k, v in attributes.items() if not is_sensitive_key(k)}
-    return {**d, "attributes": clean_attrs}
+    return {**d, "attributes": scrub_attributes(attributes, access_key, hass)}
 
 
-def scrub_state_dict(d: dict) -> dict:
-    """Return a copy of a raw state dict with sensitive attributes removed.
+def scrub_state_dict(d: dict, access_key: AccessKeyRecord, hass: HomeAssistant) -> dict:
+    """Return a copy of a raw state dict with its attributes scrubbed for this access key.
 
     Use this when the input is already a dict (e.g. from state history results).
     Use scrub_sensitive_attributes when working with State objects directly.
     """
-    attrs = {k: v for k, v in d.get("attributes", {}).items() if not is_sensitive_key(k)}
-    return {**d, "attributes": attrs}
+    return {**d, "attributes": scrub_attributes(d.get("attributes", {}), access_key, hass)}
 
 
 _off_loop_reported = False
@@ -613,7 +632,8 @@ def _assist_exposed(hass: HomeAssistant, entity_id: str) -> bool:
             _off_loop_reported = True
             _LOGGER.error("Assist exposure was checked off the event loop; the entity was treated as unexposed")
         return False
-    from homeassistant.components.homeassistant.exposed_entities import (  # noqa: PLC0415
+    # Local: optional component, imported only when this path runs.
+    from homeassistant.components.homeassistant.exposed_entities import (
         async_should_expose,
     )
 
@@ -661,7 +681,7 @@ def filter_entities_for_access_key(
     """
     expose = assist_expose_check(access_key, hass)
     return [
-        scrub_sensitive_attributes(e)
+        scrub_sensitive_attributes(e, access_key, hass)
         for e in entities
         if resolve(e.entity_id, access_key, hass) in (Permission.READ, Permission.WRITE)
         and (expose is None or expose(e.entity_id))
@@ -863,7 +883,7 @@ def resolve_service_targets(
         permission = resolve(eid, access_key, hass)
         if permission in (Permission.READ, Permission.WRITE):
             visible += 1
-        if permission == Permission.WRITE:
+        if permission == Permission.WRITE and not group_member_denied(eid, access_key, hass):
             permitted.append(eid)
     # A stateful entity without a registry entry (YAML, no unique ID) that the
     # key can read is counted as dropped; a ghost resolves NOT_FOUND and is not.
@@ -873,6 +893,57 @@ def resolve_service_targets(
     )
 
     return permitted, visible
+
+
+def group_member_ids(entity_id: str, hass: HomeAssistant) -> frozenset[str] | None:
+    """Every member of a group helper, nested groups included.
+
+    Empty for anything else: a group helper's membership is static and readable,
+    while scenes, scripts and automations stay governed by their primary entity,
+    so publishing an entity_id attribute does not make something a group. None
+    when a group's membership cannot be read, which callers treat as a refusal.
+    """
+    registry = er.async_get(hass)
+    members: set[str] = set()
+    pending = [(entity_id, 0)]
+    seen = {entity_id}
+    while pending:
+        current, depth = pending.pop()
+        entry = registry.async_get(current)
+        state = hass.states.get(current)
+        attributes = state.attributes if state is not None else {}
+        helper = current.startswith("group.") or (entry is not None and entry.platform == "group")
+        if not (helper or "group_entities" in attributes):
+            continue
+        listed = [attributes[key] for key in ("group_entities", "entity_id") if key in attributes]
+        if not listed or depth >= APPROVAL_TARGET_DEPTH:
+            return None
+        for value in listed:
+            if not isinstance(value, (list, tuple, set, frozenset)) or len(value) > APPROVAL_TARGET_LIMIT:
+                return None
+            for member in value:
+                if not isinstance(member, str):
+                    return None
+                members.add(member.lower())
+                if member.lower() not in seen:
+                    seen.add(member.lower())
+                    pending.append((member.lower(), depth + 1))
+        if len(members) > APPROVAL_TARGET_LIMIT:
+            return None
+    members.discard(entity_id)
+    return frozenset(members)
+
+
+def group_member_denied(entity_id: str, access_key: AccessKeyRecord, hass: HomeAssistant) -> bool:
+    """Whether a target is a group that would reach a member RED for this access key.
+
+    Only RED counts: granting a group reaches its ungranted members on purpose,
+    while RED is the operator's explicit exclusion and outranks any grant.
+    """
+    members = group_member_ids(entity_id, hass)
+    if members is None:
+        return True
+    return any(resolve(member, access_key, hass) == Permission.DENY for member in members)
 
 
 def service_target_binding_valid(
@@ -944,6 +1015,18 @@ def call_needs_physical_gate(
     return False
 
 
+def _hidden_entity_reference(
+    value: str, access_key: AccessKeyRecord, hass: HomeAssistant, *, keep_unknown: bool,
+) -> bool:
+    """Whether a string names an entity this access key may not see."""
+    if not _ENTITY_ID_RE.match(value):
+        return False
+    permission = resolve(value, access_key, hass)
+    if permission == Permission.NOT_FOUND:
+        return not keep_unknown
+    return permission in (Permission.NO_ACCESS, Permission.DENY)
+
+
 def filter_service_response(
     response_data: Any,
     access_key: AccessKeyRecord,
@@ -952,6 +1035,7 @@ def filter_service_response(
     *,
     max_depth: int = 10,
     truncated: list[list] | None = None,
+    keep_unknown: bool = False,
     _path: tuple = (),
 ) -> Any:
     """Recursively redact secrets and inaccessible entity IDs from service response data.
@@ -972,16 +1056,19 @@ def filter_service_response(
     A container below max_depth is never returned raw. Passing `truncated` makes
     it "<redacted>", which every write path refuses, and records its path there;
     otherwise it is emptied, the long-standing service-response behavior.
+
+    `keep_unknown` leaves a string that names no entity at all, for sources where
+    free values such as host names are common. Tuples and sets come back as lists.
     """
+    if isinstance(response_data, (tuple, set, frozenset)):
+        response_data = list(response_data)
     if _depth > max_depth:
         # Depth limit reached. Still redact entity ID strings, but never return
         # a container's raw contents: it could hold entity IDs at deeper levels
         # that would bypass redaction.
-        if isinstance(response_data, str) and _ENTITY_ID_RE.match(response_data):
-            perm = resolve(response_data, access_key, hass)
-            if perm in (Permission.NO_ACCESS, Permission.DENY, Permission.NOT_FOUND):
-                return "<redacted>"
-            return response_data
+        if isinstance(response_data, str):
+            hidden = _hidden_entity_reference(response_data, access_key, hass, keep_unknown=keep_unknown)
+            return "<redacted>" if hidden else response_data
         if isinstance(response_data, (dict, list)):
             if truncated is not None:
                 truncated.append(list(_path))
@@ -992,20 +1079,15 @@ def filter_service_response(
             )
             return {} if isinstance(response_data, dict) else []
         return response_data
-    nested: dict[str, Any] = {"max_depth": max_depth, "truncated": truncated}
+    nested: dict[str, Any] = {"max_depth": max_depth, "truncated": truncated, "keep_unknown": keep_unknown}
     if isinstance(response_data, str):
-        if _ENTITY_ID_RE.match(response_data):
-            perm = resolve(response_data, access_key, hass)
-            if perm in (Permission.NO_ACCESS, Permission.DENY, Permission.NOT_FOUND):
-                return "<redacted>"
-        return response_data
+        hidden = _hidden_entity_reference(response_data, access_key, hass, keep_unknown=keep_unknown)
+        return "<redacted>" if hidden else response_data
     if isinstance(response_data, dict):
         out: dict = {}
         for k, v in response_data.items():
-            if isinstance(k, str) and _ENTITY_ID_RE.match(k):
-                perm = resolve(k, access_key, hass)
-                if perm in (Permission.NO_ACCESS, Permission.DENY, Permission.NOT_FOUND):
-                    continue
+            if isinstance(k, str) and _hidden_entity_reference(k, access_key, hass, keep_unknown=keep_unknown):
+                continue
             out[k] = (
                 "<redacted>" if is_sensitive_key(k)
                 else filter_service_response(
@@ -1251,10 +1333,9 @@ def resolve_intent_entities(
     intent scoring behavior. Silently drops entities the access key cannot WRITE. Never
     acknowledges blocked or inaccessible entities. Returns an empty list when nothing matches.
     """
-    from homeassistant.helpers.intent import (  # noqa: PLC0415
-        MatchTargetsConstraints,
-        async_match_targets,
-    )
+    # Local: not part of the recorded Home Assistant import floor.
+    from homeassistant.helpers.intent import MatchTargetsConstraints
+    from homeassistant.helpers.intent import async_match_targets
 
     # A model does not always follow the tool schema (for example a list for name
     # where a string was declared). HA's async_match_targets assumes name/area/floor
@@ -1373,7 +1454,6 @@ def _esphome_entry_loaded(entry: Any) -> bool:
     keeps every caller from reading a deleted attribute or, worse, reporting the
     stale runtime a partially-failed setup left behind.
     """
-    from homeassistant.config_entries import ConfigEntryState  # noqa: PLC0415
 
     return entry.state is ConfigEntryState.LOADED
 
@@ -1427,7 +1507,6 @@ def music_assistant_readable_entries(hass: HomeAssistant, access_key: AccessKeyR
     Core's library services look the entry up by id without checking its
     domain, so the domain is checked here before the id reaches them.
     """
-    from homeassistant.config_entries import ConfigEntryState  # noqa: PLC0415
 
     registry = er.async_get(hass)
     return [

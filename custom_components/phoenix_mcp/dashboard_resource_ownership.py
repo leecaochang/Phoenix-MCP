@@ -27,7 +27,7 @@ class DashboardResourceOwnership:
             return
         try:
             raw = await self._store.async_load()
-        except Exception:  # noqa: BLE001 - an unreadable record must not block setup
+        except Exception:  # an unreadable record must not block setup
             _LOGGER.exception("Could not load the dashboard resource record; no resource counts as Phoenix's")
             return
         ids = raw.get("ids") if isinstance(raw, dict) else None

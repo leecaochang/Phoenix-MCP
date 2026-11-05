@@ -22,11 +22,11 @@ from homeassistant.setup import async_setup_component
 from homeassistant.util.dt import utcnow
 from pytest_homeassistant.common import MockConfigEntry
 
-from custom_components.phoenix_mcp import mcp_view
+from custom_components.phoenix_mcp import tool_dispatch
 from custom_components.phoenix_mcp.access_key_store import AccessKeyRecord, PermissionNode, PermissionTree
 from custom_components.phoenix_mcp.const import DOMAIN
 from custom_components.phoenix_mcp.data import PhoenixData
-from custom_components.phoenix_mcp.mcp_view import _call_tool
+from custom_components.phoenix_mcp.tool_dispatch import _call_tool
 from tests.runtime_fixtures import mesa_off_store
 
 DESK, CEILING, LOCK = "light.desk", "light.ceiling", "lock.front_door"
@@ -141,10 +141,10 @@ async def test_device_node_hint_is_inherited_by_the_device_entities(hass):
 
 async def test_context_documents_redact_hints(home):
     home.data[DOMAIN] = _data({DESK: f"Turn off with {CEILING} once {LOCK} is locked"})
-    plain = mcp_view._build_context_plain(_key(), home)
+    plain = tool_dispatch._build_context_plain(_key(), home)
     assert LOCK not in plain
     assert f'- {DESK} (READ/WRITE) - "Turn off with {CEILING} once <redacted-entity> is locked"' in plain
-    rows = {row["entity_id"]: row for row in mcp_view._build_context_json(_key(), home)["entities"]}
+    rows = {row["entity_id"]: row for row in tool_dispatch._build_context_json(_key(), home)["entities"]}
     assert rows[DESK]["hint"] == f"Turn off with {CEILING} once <redacted-entity> is locked"
     assert "hint" not in rows[CEILING]
 
@@ -154,20 +154,19 @@ async def test_context_json_gives_pass_through_keys_their_global_hints(home):
     async_expose_entity(home, "conversation", DESK, True)
     async_expose_entity(home, "conversation", CEILING, False)
     home.data[DOMAIN] = _data({DESK: f"Pairs with {CEILING}"})
-    rows = {row["entity_id"]: row for row in mcp_view._build_context_json(_pass_through_key(), home)["entities"]}
+    rows = {row["entity_id"]: row for row in tool_dispatch._build_context_json(_pass_through_key(), home)["entities"]}
     assert CEILING not in rows
     assert rows[DESK]["hint"] == "Pairs with <redacted-entity>"
 
 
 async def test_access_context_prompt_redacts_a_saved_global_hint(home, access_key_store):
-    data = PhoenixData(store=access_key_store, rate_limiter=MagicMock(), audit=MagicMock(), hass=home,
-                       enforce_mcp_lifecycle=False)
+    data = PhoenixData(store=access_key_store, rate_limiter=MagicMock(), audit=MagicMock(), hass=home)
     home.data[DOMAIN] = data
     try:
         key, _ = await access_key_store.async_create_access_key("hint-key", "admin")
         key.permissions = PermissionTree(domains={"light": PermissionNode("GREEN")})
         await access_key_store.async_set_entity_hint(DESK, f"Leave on until {LOCK} is locked")
-        response, *_ = await mcp_view._dispatch_mcp(
+        response, *_ = await tool_dispatch._dispatch_mcp(
             "prompts/get", 1, {"name": "Phoenix MCP access context"}, key, home, data, "127.0.0.1",
             base_url="http://homeassistant.local")
         text = response["result"]["messages"][0]["content"]["text"]

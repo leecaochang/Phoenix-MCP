@@ -26,6 +26,7 @@ from custom_components.phoenix_mcp.mesa_core import MetadataOrigin, SemanticProf
 from custom_components.phoenix_mcp.rate_limiter import RateLimiter
 from custom_components.phoenix_mcp.access_key_store import (
     GlobalSettings,
+    PermissionNode,
     PermissionTree,
     AccessKeyRecord,
     AccessKeyStore,
@@ -40,7 +41,7 @@ def _access_key() -> AccessKeyRecord:
         created_at=utcnow(),
         created_by="admin",
         persona="power_user",
-        permissions=PermissionTree(),
+        permissions=PermissionTree(domains={"light": PermissionNode(state="GREEN")}),
     )
 
 
@@ -101,7 +102,8 @@ async def test_off_mode_allows_all(hass: HomeAssistant):
 async def test_registry_id_cannot_bypass_entity_profile(hass, mode, profile, approved):
     from homeassistant.helpers import entity_registry as er
     from pytest_homeassistant.common import async_mock_service
-    from custom_components.phoenix_mcp.mcp_view import _execute_call_service, async_execute_approved_tool
+    from custom_components.phoenix_mcp.tools.service import _execute_call_service
+    from custom_components.phoenix_mcp.tool_dispatch import async_execute_approved_tool
 
     data = await _make_data(hass, mode)
     entry = er.async_get(hass).async_get_or_create("light", "test", "uuid-target", suggested_object_id="target")
@@ -123,7 +125,7 @@ async def test_registry_id_cannot_bypass_entity_profile(hass, mode, profile, app
 async def test_registry_id_dispatches_one_canonical_authorized_target(hass):
     from homeassistant.helpers import entity_registry as er
     from pytest_homeassistant.common import async_mock_service
-    from custom_components.phoenix_mcp.mcp_view import _execute_call_service
+    from custom_components.phoenix_mcp.tools.service import _execute_call_service
 
     data = await _make_data(hass, "enforced")
     entry = er.async_get(hass).async_get_or_create("light", "test", "uuid-allowed", suggested_object_id="allowed")
@@ -174,9 +176,9 @@ async def test_confirm_refuses_when_authority_changed_before_queuing(hass: HomeA
     """A MESA confirmation is queued only while the request still holds its authority.
 
     The capability and registry paths check request authority under the store lock
-    before they create an approval; the MESA path did not (2026-11-01 Approvals
-    audit), so a request whose key was revoked, or whose runtime went away, during
-    the wait could still leave an approval behind.
+    before they create an approval, and the MESA path does the same, so a request
+    whose key was revoked, or whose runtime went away, during the wait leaves no
+    approval behind.
     """
     from custom_components.phoenix_mcp.request_authority import (
         AuthorityChangedError, RequestAuthority, request_authority,
@@ -212,6 +214,7 @@ async def test_advisory_confirm_allows_and_surfaces_warning(hass: HomeAssistant)
     # a warning for the caller to surface (the mesa_advisory / native speech field).
     data = await _make_data(hass, "advisory")
     _set_profile(data, "light.a", "confirm")
+    hass.states.async_set("light.a", "off")
     outcome = await _apply(hass, data, ["light.a"])
     assert outcome.decision == "allow"
     assert outcome.entities == ["light.a"]
@@ -254,7 +257,8 @@ async def test_admin_approval_satisfies_mesa_confirm_in_one_step(hass: HomeAssis
     from homeassistant.helpers import entity_registry as er
     from pytest_homeassistant.common import async_mock_service
 
-    from custom_components.phoenix_mcp.mcp_view import _execute_call_service, async_execute_approved_tool
+    from custom_components.phoenix_mcp.tools.service import _execute_call_service
+    from custom_components.phoenix_mcp.tool_dispatch import async_execute_approved_tool
 
     data = await _make_data(hass, "enforced")
     _set_profile(data, "light.gate", "confirm")
@@ -301,7 +305,7 @@ async def test_gate_diff_marks_mesa_confirm_involvement(hass: HomeAssistant):
     from homeassistant.helpers import entity_registry as er
 
     from custom_components.phoenix_mcp.const import DOMAIN
-    from custom_components.phoenix_mcp.mcp_view import _build_diff_call_service
+    from custom_components.phoenix_mcp.tools.service import _build_diff_call_service
     from custom_components.phoenix_mcp.tools.native import _build_diff_hass_turn
 
     data = await _make_data(hass, "enforced")
@@ -332,7 +336,7 @@ async def test_gate_diff_unmarked_when_mesa_not_involved(hass: HomeAssistant):
     from homeassistant.helpers import entity_registry as er
 
     from custom_components.phoenix_mcp.const import DOMAIN
-    from custom_components.phoenix_mcp.mcp_view import _build_diff_call_service
+    from custom_components.phoenix_mcp.tools.service import _build_diff_call_service
 
     data = await _make_data(hass, "advisory")
     hass.data[DOMAIN] = data
@@ -355,7 +359,7 @@ async def test_approved_execution_still_rejects_prohibited(hass: HomeAssistant):
     from homeassistant.helpers import entity_registry as er
     from pytest_homeassistant.common import async_mock_service
 
-    from custom_components.phoenix_mcp.mcp_view import async_execute_approved_tool
+    from custom_components.phoenix_mcp.tool_dispatch import async_execute_approved_tool
 
     data = await _make_data(hass, "enforced")
     _set_profile(data, "light.bad", "prohibited")

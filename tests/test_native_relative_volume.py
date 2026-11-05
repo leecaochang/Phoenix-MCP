@@ -12,7 +12,7 @@ import voluptuous as vol
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.util.dt import utcnow
 
-from custom_components.phoenix_mcp.mcp_view import async_execute_approved_tool
+from custom_components.phoenix_mcp.tool_dispatch import async_execute_approved_tool
 from custom_components.phoenix_mcp.policy_engine import Permission
 from custom_components.phoenix_mcp.access_key_store import PermissionTree, AccessKeyRecord
 from custom_components.phoenix_mcp.tools.native import (

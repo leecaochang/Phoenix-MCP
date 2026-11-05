@@ -10,12 +10,14 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 importlib.import_module("custom_components.phoenix_mcp")
+# Entry setup registers the tool handlers; a test that calls dispatch directly has no setup.
+importlib.import_module("custom_components.phoenix_mcp.tool_registration")
 
 # Home Assistant's own test package loads itself and starts at 2026.11. The 2026.7
 # floor job keeps the third-party package it replaced, under the same import names.
 if importlib.util.find_spec("pytest_homeassistant") is None:
     pytest_plugins = "pytest_homeassistant_custom_component"
-    for module in ("", ".common", ".components.recorder.common"):
+    for module in ("", ".common", ".components.recorder.common", ".test_util", ".test_util.aiohttp"):
         sys.modules[f"pytest_homeassistant{module}"] = importlib.import_module(f"pytest_homeassistant_custom_component{module}")
 
 
@@ -54,7 +56,7 @@ def forget_unsettled_ws_commands():
 @pytest.fixture
 def custom_sentence_recognition(monkeypatch):
     """Mark a real HA match with the metadata used for custom sentence precedence."""
-    from custom_components.phoenix_mcp import command_routing
+    from custom_components.phoenix_mcp.routing import command_routing
 
     recognize = command_routing.async_recognize
 
@@ -81,7 +83,7 @@ def immediate_authoring_observation(monkeypatch):
 @pytest.fixture
 def immediate_command_observation(monkeypatch):
     """Observe real state without wall-clock waits in dispatch contract tests."""
-    from custom_components.phoenix_mcp import command_verification
+    from custom_components.phoenix_mcp.routing import command_verification
 
     monkeypatch.setattr(command_verification, "COMMAND_VERIFICATION_WAIT_SECONDS", 0)
 
@@ -131,10 +133,7 @@ def esphome_entries(hass):
 @pytest.fixture
 def esphome_dir(hass, tmp_path):
     """A realistic config/esphome directory, including the excluded entries."""
-    # Imported in the body, not at module scope: the sample YAML is asserted
-    # against by the module that owns it, and a conftest-level import would run
-    # at collection time for every test session.
-    from tests.test_mcp_esphome_tools import DEVICE_YAML, SECRETS_YAML
+    from tests.runtime_fixtures import DEVICE_YAML, SECRETS_YAML
 
     root = tmp_path / "esphome"
     root.mkdir()
@@ -145,6 +144,62 @@ def esphome_dir(hass, tmp_path):
     archive.mkdir()
     (archive / "old-device.yaml").write_text("esphome:\n  name: old\n")
     return root
+
+
+@pytest.fixture
+async def home(hass):
+    """A started Core with one entity exposed to Assist and one kept from it."""
+    from homeassistant.setup import async_setup_component
+
+    from tests.runtime_fixtures import EXPOSURE_HIDDEN, EXPOSURE_SHOWN, expose_to_assist
+
+    assert await async_setup_component(hass, "homeassistant", {})
+    for entity_id in (EXPOSURE_SHOWN, EXPOSURE_HIDDEN):
+        hass.states.async_set(entity_id, "on", {"brightness": 10, "friendly_name": entity_id})
+    expose_to_assist(hass, EXPOSURE_SHOWN, EXPOSURE_HIDDEN)
+    return hass
+
+
+@pytest.fixture
+def related(home):
+    """Two registered lights in one area and an exposed automation that targets both."""
+    import os
+
+    import yaml
+    from homeassistant.components.homeassistant.exposed_entities import async_expose_entity
+    from homeassistant.helpers import area_registry as ar
+    from homeassistant.helpers import entity_registry as er
+
+    from tests.runtime_fixtures import expose_to_assist
+
+    registry = er.async_get(home)
+    area = ar.async_get(home).async_create("Kitchen")
+    lights = []
+    for object_id in ("counter", "pantry"):
+        entry = registry.async_get_or_create("light", "test", object_id, suggested_object_id=object_id)
+        registry.async_update_entity(entry.entity_id, area_id=area.id)
+        home.states.async_set(entry.entity_id, "on")
+        lights.append(entry.entity_id)
+    shown, hidden = lights
+    automation = registry.async_get_or_create("automation", "test", "auto1", suggested_object_id="evening")
+    home.states.async_set(automation.entity_id, "on")
+    expose_to_assist(home, shown, hidden)
+    async_expose_entity(home, "conversation", automation.entity_id, True)
+    with open(os.path.join(home.config.config_dir, "automations.yaml"), "w", encoding="utf-8") as handle:
+        yaml.safe_dump([{
+            "id": "auto1", "alias": "Evening",
+            "trigger": [{"platform": "state", "entity_id": shown}],
+            "action": [{"service": "light.turn_on", "target": {"entity_id": [shown, hidden]}}],
+        }], handle)
+    return area, automation.entity_id, shown, hidden
+
+
+@pytest.fixture
+def decision_wire(aioclient_mock):
+    """Answer the decision provider below `_request`, so its guard and parsing are real."""
+    from tests.runtime_fixtures import DecisionWire
+
+    return DecisionWire(aioclient_mock)
 
 
 @pytest.fixture
@@ -184,7 +239,9 @@ def provider_context_history(request):
     Built through the real adapters for openai, reasoning, anthropic and text_blocks.
     """
     import json
-    from custom_components.phoenix_mcp.agentcli import ClaudeProvider, OpenAICompatProvider, ProviderConfig
+    from custom_components.phoenix_mcp.llm.provider_claude import ClaudeProvider
+    from custom_components.phoenix_mcp.llm.provider_openai import OpenAICompatProvider
+    from custom_components.phoenix_mcp.llm.accounts import ProviderConfig
 
     style = request.param
     history = [{'role': 'user', 'content': 'List the available lights; do not change anything.'}]

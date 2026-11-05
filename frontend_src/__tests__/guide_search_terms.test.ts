@@ -1,8 +1,8 @@
 /**
- * Guide Search finds what readers type (user, 2026-11-03): every AI provider
+ * Guide Search finds what readers type: every AI provider
  * Phoenix offers, named as the backend names it, leads to the AI Providers
  * page, Agent Chat and the wizard's provider step in every language the Guide
- * is written in. A provider added to agentcli.py without its name in those
+ * is written in. A provider added to llm/accounts.py without its name in those
  * pages' keywords fails here.
  */
 
@@ -18,7 +18,7 @@ const PAGES = ["window.settingsProviders", "window.agentChat", "wizard.provider"
 
 /** The provider labels the backend lists, such as "DeepSeek" or "Ollama (local)". */
 function providerLabels(): string[] {
-  const source = readFileSync(resolve(REPO, "custom_components/phoenix_mcp/agentcli.py"), "utf8");
+  const source = readFileSync(resolve(REPO, "custom_components/phoenix_mcp/llm/accounts.py"), "utf8");
   return [...source.matchAll(/_definition\(\s*"[a-z_]+",\s*"([^"]+)"/g)].map((m) => m[1]);
 }
 

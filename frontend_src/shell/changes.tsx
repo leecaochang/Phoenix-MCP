@@ -179,6 +179,9 @@ export function ChangesProvider({ hass, active = true, children }: {
   // loaded from several places with no ordering between them, so a superseded
   // response is dropped rather than allowed to put an older page back.
   const beginLoad = useLatestRequest();
+  // How far the server's feed has been read. A change recorded between reads repeats an old row
+  // on the next page; that row is dropped, and feed.length falls behind this.
+  const readTo = useRef(0);
   const loadFeed = useCallback(async (offset = 0, background = false, limit = CHANGES_PAGE) => {
     const isLatest = beginLoad();
     if (!background && offset === 0) setLoading(true);
@@ -188,7 +191,11 @@ export function ChangesProvider({ hass, active = true, children }: {
       const resp = await api.listVersions({ limit, offset });
       if (!isLatest()) return;
       setFeed((prev) => {
-        if (offset > 0) return [...prev, ...resp.versions];
+        if (offset > 0) {
+          readTo.current = offset + resp.versions.length;
+          const shown = new Set(prev.map((v) => v.id));
+          return [...prev, ...resp.versions.filter((v) => !shown.has(v.id))];
+        }
         // A background update with more pages loaded adds only the changes not shown yet, at the top, so the
         // pages below stay (they vanished every few seconds before). A foreground load starts over.
         if (background && prev.length > resp.versions.length) {
@@ -196,6 +203,7 @@ export function ChangesProvider({ hass, active = true, children }: {
           const fresh = resp.versions.filter((v) => !seen.has(v.id));
           return fresh.length ? [...fresh, ...prev] : prev;
         }
+        readTo.current = resp.versions.length;
         return resp.versions;
       });
       setTotal(resp.total);
@@ -372,8 +380,8 @@ export function ChangesProvider({ hass, active = true, children }: {
   const value: ChangesState = {
     feed, loading, loadingMore, error, hasMore, total,
     refresh: () => { void loadFeed(0); void loadNames(); void reloadHistory(); },
-    loadMore: () => { if (!loadingMore) void loadFeed(feed.length); },
-    loadRest: () => { if (!loadingMore) void loadFeed(feed.length, false, CHANGES_FILTER_READ); },
+    loadMore: () => { if (!loadingMore) void loadFeed(Math.max(feed.length, readTo.current)); },
+    loadRest: () => { if (!loadingMore) void loadFeed(Math.max(feed.length, readTo.current), false, CHANGES_FILTER_READ); },
     names,
     selectedId, select, neighbour, step, record, recordLoading, recordError, history,
     confirm, askRestore, cancelRestore: () => setConfirm(null), restore, restoring, restoreError,

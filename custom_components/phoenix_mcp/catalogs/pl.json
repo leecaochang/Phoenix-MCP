@@ -83,15 +83,17 @@
   "panel": {
     "shell": {
       "agentChat": "Agent Chat",
-      "approvalsTabAria": "Zatwierdzenia ({count} oczekujących)",
+      "approvalsTabAria": "Zatwierdzenia (oczekujące: {count})",
       "help": "Pomoc",
       "killSwitchFull": "WYŁĄCZNIK AWARYJNY JEST AKTYWNY",
       "killSwitchShort": "WYŁĄCZNIK AWARYJNY WŁĄCZONY",
       "killSwitchTitle": "Phoenix MCP nie obsługuje żadnych żądań agenta. Wyłącz wyłącznik awaryjny w Ustawieniach, aby wznowić.",
       "loadAccessKeysFailed": "Nie udało się wczytać kluczy dostępu.",
+      "loadSettingsFailed": "Nie udało się wczytać ustawień.",
       "offlineBody": "Home Assistant nie odpowiada, zwykle dlatego, że się uruchamia ponownie. Ponawianie, czekaj...",
       "offlineTitle": "Phoenix jest niedostępny",
       "renderFailed": "Nie można wyświetlić tego widoku. Odśwież, aby spróbować ponownie, lub wybierz inną sekcję.",
+      "retrySettingsHelp": "Odczytaj ustawienia z Home Assistant ponownie.",
       "sectionsAria": "Sekcje Phoenix MCP",
       "srTitle": "Zarządzanie kluczami dostępu Phoenix MCP",
       "tabAccessKeys": "Klucze dostępu",
@@ -99,7 +101,8 @@
       "tabAudit": "Dziennik audytu",
       "tabChanges": "Zmiany",
       "tabSettings": "Ustawienia",
-      "killSwitchHelp": "Wyłącznik awaryjny jest włączony, więc agenci są odrzucani. Wybierz, aby otworzyć Bezpieczeństwo i go wyłączyć."
+      "killSwitchHelp": "Wyłącznik awaryjny jest włączony, więc agenci są odrzucani. Wybierz, aby otworzyć Bezpieczeństwo i go wyłączyć.",
+      "chatListsFailed": "Agent Chat nie mógł wczytać kluczy dostępu ani dostawców AI. Spróbuje ponownie po otwarciu lub po ponownym połączeniu Home Assistant."
     },
     "common": {
       "after": "Po",
@@ -114,6 +117,7 @@
       "empty": "(puste)",
       "httpStatus": "Serwer odpowiedział kodem HTTP {status}. Odśwież stronę i spróbuj ponownie.",
       "invalidResponse": "Serwer zwrócił nieprawidłową odpowiedź. Odśwież i spróbuj ponownie.",
+      "labelValue": "{label}: {value}",
       "listSeparator": ", ",
       "loadMore": "Wczytaj więcej",
       "loading": "Wczytywanie...",
@@ -140,7 +144,8 @@
       "mesaProfile": "Profil MESA",
       "profileCreate": "Utwórz profil MESA dla {key}",
       "profileSet": "Profil MESA ustawiony dla {key} - kliknij, aby edytować",
-      "registryLoadFailed": "Nie udało się wczytać rejestru encji."
+      "registryLoadFailed": "Nie udało się wczytać rejestru encji.",
+      "openFailed": "Nie udało się otworzyć edytora profilu MESA. Odśwież stronę i spróbuj ponownie."
     },
     "personas": {
       "automation_builder": {
@@ -177,7 +182,7 @@
         "label": "Zaawansowany użytkownik"
       },
       "read_only": {
-        "description": "Odczytuje stany, historię i logi. Zmiany konfiguracji, ogłoszenia, zamki, alarmy, rolety i zawory są zabronione.",
+        "description": "Odczytuje stany, historię i logi. Zmiany konfiguracji, ogłoszenia, zamki, alarmy, rolety i zawory są zabronione. Nadal może sterować wszystkim, co ma ustawienie W.",
         "label": "Obserwator tylko do odczytu"
       },
       "voice_assistant": {
@@ -498,7 +503,7 @@
         "label": "Odczyt rejestru"
       },
       "cap_registry_write": {
-        "description": "Edytuj encje i urządzenia, zarządzaj obszarami, piętrami, etykietami i kategoriami oraz usuwaj nieaktualne wpisy.",
+        "description": "Edytuj encje i urządzenia, zarządzaj obszarami, piętrami, etykietami i kategoriami, usuwaj nieaktualne wpisy i czyść zapisaną historię encji.",
         "label": "Zarządzaj rejestrem encji"
       },
       "cap_restart": {
@@ -543,7 +548,7 @@
       "modeDescDeny": "Zablokuj tę możliwość. Jej narzędzia są ukryte przed agentami tego klucza, chyba że włączono Zawsze ogłaszaj wszystkie narzędzia.",
       "noBuilder": "Nie wykryto dodatku Device Builder",
       "noEsphome": "Nie wykryto ESPHome",
-      "passThroughNotice": "<strong>Tryb Pass-through jest włączony.</strong> Następujące możliwości są traktowane jako Zezwól, chyba że są ustawione na Potwierdź: Odczyt konfiguracji, Renderowanie szablonów, Wyszukiwanie i wykrywanie, Odczyt rejestru, Ślady automatyzacji, Diagnostyka, Ogłaszanie i Dane odpowiedzi usług. Wszystkie inne możliwości korzystają z poniższych ustawień.",
+      "passThroughNotice": "<strong>Tryb Pass-through jest włączony.</strong> Następujące możliwości są traktowane jako Zezwól: Odczyt konfiguracji, Renderowanie szablonów, Wyszukiwanie i wykrywanie, Odczyt rejestru, Ślady automatyzacji, Diagnostyka, Ogłaszanie i Dane odpowiedzi usług. Wszystkie inne możliwości korzystają z poniższych ustawień.",
       "tierConfigWrite": "Zmiany konfiguracji",
       "tierEveryday": "Codzienne akcje",
       "tierIrreversible": "Wysokie ryzyko",
@@ -742,9 +747,9 @@
     "approvals": {
       "approve": "Zatwierdź",
       "approveFailed": "Zatwierdzenie nie powiodło się.",
-      "approveSelected": "Zatwierdź {count} wybranych",
+      "approveSelected": "Zatwierdź wybrane: {count}",
       "batchApplied": "Zatwierdzono {count}.",
-      "batchRemaining": "{count} pozostało oczekujących.",
+      "batchRemaining": "Pozostało oczekujących: {count}.",
       "batchStopped": "Zatrzymano na {tool}: {reason}",
       "detailTabArgs": "Argumenty",
       "detailTabResult": "Wynik",
@@ -872,6 +877,7 @@
       "clearHistory": "Wyczyść historię czatu",
       "configureFirst": "Najpierw skonfiguruj dostawcę",
       "connection": "Połączenie",
+      "connectionLost": "Połączenie z Home Assistant zostało przerwane, zanim ta odpowiedź się zakończyła.",
       "continue": "Kontynuuj",
       "decreaseTextSize": "Zmniejsz rozmiar tekstu",
       "dockedClosed": "Agent Chat jest zamknięty.",
@@ -903,6 +909,7 @@
         "empty_turn": "Model zakończył turę bez odpowiedzi tekstowej.",
         "internal": "Błąd wewnętrzny.",
         "max_tokens_stop": "Model zatrzymał się, ponieważ osiągnął limit długości danych wyjściowych. Poproś go o kontynuację lub zwiększ limit tokenów wyjściowych modelu (dla Ollama: ustawienia num_predict/context).",
+        "memory_trimmed": "Rozmowa przekroczyła rozmiar, który mieści się w jednym żądaniu, więc model nie pamięta już najstarszych wiadomości. Pozostają one na ekranie.",
         "model_api_unsupported": "Ten model nie został zweryfikowany dla OpenCode Chat Completions. Wybierz obsługiwany model.",
         "network": "Dostawca jest tymczasowo niedostępny.",
         "ollama_backend": "Dostawca jest tymczasowo niedostępny.",
@@ -921,14 +928,17 @@
         "provider_transient": "Dostawca jest tymczasowo niedostępny.",
         "quota": "Konto dostawcy wyczerpało środki lub osiągnęło limit wydatków. Próba nie zostanie ponowiona.",
         "rate_limit": "Dostawca jest tymczasowo niedostępny.",
-        "too_many_tools": "Ten klucz dostępu udostępnia {count} narzędzi, ale {provider} przyjmuje najwyżej {limit} w jednym żądaniu. Ogranicz możliwości klucza dostępu lub wybierz innego dostawcę.",
+        "request_too_large": "Ta wiadomość jest zbyt duża, aby ją wysłać. Skróć ją, usuń obrazy lub rozpocznij nową rozmowę poleceniem /clear.",
+        "too_many_tools": "Liczba narzędzi udostępnianych przez ten klucz dostępu: {count}, a {provider} przyjmuje najwyżej {limit} w jednym żądaniu. Ogranicz możliwości klucza dostępu lub wybierz innego dostawcę.",
         "tool_call_cut": "Połączenie z modelem zakończyło się w trakcie wywołania narzędzia, więc akcja nie została wykonana. Nic nie zostało zastosowane, a samo żądanie nie było przyczyną; wyślij je ponownie.",
         "tool_call_truncated": "Model osiągnął limit długości danych wyjściowych w trakcie wywołania narzędzia, więc akcja nie została wykonana. Żądana zmiana była zbyt duża, aby wysłać ją w jednym wywołaniu; spróbuj poprosić o mniejszą zmianę.",
         "unauthorized": "Ten klucz dostępu nie jest już autoryzowany.",
         "review_changed": "Narzędzia klucza dostępu lub rozmowa zmieniły się podczas sprawdzania wywołania narzędzia, więc nic nie zostało uruchomione. Wyślij żądanie ponownie.",
         "kill_switch": "Awaryjny wyłącznik jest włączony, więc agent się zatrzymał. Nic więcej nie zostało wykonane.",
         "unreachable": "Home Assistant był nieosiągalny, więc to się nie zakończyło. Wszystko, co czekało na Twoje zatwierdzenie, zostało anulowane.",
-        "upstream": "Dostawca jest tymczasowo niedostępny."
+        "upstream": "Dostawca jest tymczasowo niedostępny.",
+        "provider_slow": "Dostawca nie odpowiedział w ciągu {seconds} s.",
+        "result_withheld": "Wynik o rozmiarze {length} B nie zmieścił się w kontekście żądania i nie został przekazany modelowi."
       },
       "options": "Opcje",
       "popIn": "Wróć do Home Assistant",
@@ -1075,6 +1085,7 @@
       "mesaArchiveRequired": "archive jest wymagane.",
       "mesaProfileExists": "Profil już istnieje. Otwórz go w trybie edycji.",
       "mesaConflictModeInvalid": "on_conflict musi mieć wartość skip lub overwrite.",
+      "mesaSaveFailed": "Nie udało się zapisać zmiany MESA, więc nadal obowiązują poprzednie ustawienia.",
       "mesaUnavailable": "MESA nie jest dostępne.",
       "nameRequired": "name jest wymagane.",
       "nodeIdInvalidChars": "ID węzła zawiera nieprawidłowe znaki.",
@@ -1218,7 +1229,9 @@
       "restoreNoConfigSide": "Ta wersja nie ma konfiguracji do przywrócenia po tej stronie.",
       "restoreYamlTags": "Ta wersja zawiera tagi YAML, takie jak !secret lub !include, i nie można jej przywrócić automatycznie. Utwórz ją ponownie ręcznie.",
       "restoreToolReported": "Nie można było zastosować przywrócenia. Narzędzie zgłosiło: {detail}",
-      "capabilityAllowUnsupported": "{capability} nie obsługuje trybu Zezwól."
+      "capabilityAllowUnsupported": "{capability} nie obsługuje trybu Zezwól.",
+      "recoverySnapshotUnsafeAt": "Brak pełnej kopii tego elementu bez sekretów, więc nic nie zostało zmienione. Phoenix odrzucił go w miejscu {location}.",
+      "invalidHostHeader": "Nagłówek Host żądania nie jest prawidłowym adresem."
     },
     "wizard": {
       "accessSub": "Wybierz trójkąt obok <code>light</code>, aby otworzyć grupę świateł. Zawiera ona Twoje urządzenia oświetleniowe; wybierz trójkąt obok urządzenia, aby zobaczyć jego encje. Możesz też wpisać nazwę światła w polu filtra. Następnie wybierz <strong>W</strong> przy świetle, które możesz sprawdzić, aby agent mógł je odczytywać i nim sterować. Więcej uprawnień możesz dodać później.",
@@ -1370,7 +1383,7 @@
       "create": "Utwórz",
       "createFailed": "Nie udało się utworzyć klucza dostępu.",
       "createPtUnderstand": "Rozumiem, że ten klucz dostępu ma szeroki dostęp do Home Assistant",
-      "createPtWarning": "<strong>Ten klucz dostępu może odczytywać wszystkie encje Home Assistant i nimi sterować.</strong> Pass-through włącza też następujące możliwości, chyba że ustawisz je na Potwierdź: Odczyt konfiguracji, Renderowanie szablonów, Wyszukiwanie i wykrywanie, Odczyt rejestru, Ślady automatyzacji, Diagnostyka, Ogłaszanie i Dane odpowiedzi usług. Diagnostyka i Dane odpowiedzi usług mogą ujawnić wrażliwe szczegóły. Wszystkie inne możliwości zachowują własne ustawienia, a reguły MESA, lista blokowanych Phoenix MCP, usuwanie wrażliwych atrybutów, limity szybkości, unieważnienie i wygaśnięcie nadal obowiązują. Używaj go tylko z klientami MCP, którym możesz powierzyć cały dom.",
+      "createPtWarning": "<strong>Ten klucz dostępu może odczytywać wszystkie encje Home Assistant i nimi sterować.</strong> Pass-through włącza też następujące możliwości: Odczyt konfiguracji, Renderowanie szablonów, Wyszukiwanie i wykrywanie, Odczyt rejestru, Ślady automatyzacji, Diagnostyka, Ogłaszanie i Dane odpowiedzi usług. Diagnostyka i Dane odpowiedzi usług mogą ujawnić wrażliwe szczegóły. Wszystkie inne możliwości zachowują własne ustawienia, a reguły MESA, lista blokowanych Phoenix MCP, usuwanie wrażliwych atrybutów, limity szybkości, unieważnienie i wygaśnięcie nadal obowiązują. Używaj go tylko z klientami MCP, którym możesz powierzyć cały dom.",
       "createAccessKey": "Utwórz klucz dostępu",
       "daysAgo": "{d} dn. temu",
       "delete": "Usuń",
@@ -1384,7 +1397,7 @@
       "done": "Gotowe",
       "empty": "Nie ma jeszcze kluczy dostępu. Utwórz jeden, aby zacząć.",
       "emptyFiltered": "Żadne klucze dostępu nie pasują do filtra.",
-      "enablePtBody": "<strong>Ten klucz będzie odczytywał każdą encję i nią sterował.</strong> Włącza się też osiem możliwości odczytu i diagnostyki, chyba że są ustawione na Potwierdź.",
+      "enablePtBody": "<strong>Ten klucz będzie odczytywał każdą encję i nią sterował.</strong> Włącza się też osiem możliwości odczytu i diagnostyki.",
       "enablePtCheck": "Rozumiem, że klucz dostępu <code>{name}</code> będzie miał szeroki dostęp do Home Assistant",
       "enablePtFailed": "Nie udało się włączyć trybu pass-through.",
       "enablePtLabel": "Włącz Pass-through",
@@ -1449,7 +1462,7 @@
       "presetNewName": "Nowa nazwa ustawienia wstępnego",
       "presetNoChange": "To ustawienie wstępne odpowiada bieżącym ustawieniom, więc żadne ustawienie się nie zmienia. Zastosowanie nadal liczy się jako zmiana ustawień: połączeni agenci dowiedzą się o tym przy następnym wywołaniu, a licznik limitu żądań zaczyna od nowa.",
       "presetPtUnderstand": "Rozumiem, że to ustawienie wstępne włącza pass-through",
-      "presetPtWarning": "<strong>To ustawienie wstępne włącza pass-through.</strong> Klucz dostępu może wtedy odczytywać wszystkie encje i nimi sterować, a osiem innych możliwości włącza się, w tym Diagnostyka i Dane odpowiedzi usług, chyba że są ustawione na Potwierdź. Inne możliwości, reguły MESA, lista blokowanych Phoenix MCP i usuwanie wrażliwych atrybutów nadal obowiązują.",
+      "presetPtWarning": "<strong>To ustawienie wstępne włącza pass-through.</strong> Klucz dostępu może wtedy odczytywać wszystkie encje i nimi sterować, a osiem innych możliwości włącza się, w tym Diagnostyka i Dane odpowiedzi usług. Inne możliwości, reguły MESA, lista blokowanych Phoenix MCP i usuwanie wrażliwych atrybutów nadal obowiązują.",
       "presetRenameTitle": "Zmień nazwę tego ustawienia; zapisze się po kliknięciu poza polem",
       "presetRevert": "Cofnij",
       "presetRevertBody": "Spowoduje to odrzucenie niezapisanych zmian w <strong>{name}</strong>:",
@@ -1462,7 +1475,7 @@
       "presetSwitchTo": "Przełącz na",
       "ptConvertBody": "Klucz od razu zaczyna stosować swoje Drzewo uprawnień. Bez uprawnień w nim traci cały dostęp do encji.",
       "ptConvertFailed": "Nie udało się przekonwertować klucza dostępu.",
-      "ptNoticeCaps": "Włączone jest też osiem możliwości odczytu i diagnostyki, chyba że są ustawione na Potwierdź. Pozostałe zachowują własne ustawienie.",
+      "ptNoticeCaps": "Włączone jest też osiem możliwości odczytu i diagnostyki. Pozostałe zachowują własne ustawienie.",
       "ptNoticeIntro": "<strong>Klucz dostępu pass-through.</strong> Pomija Drzewo uprawnień i ma dostęp do każdej encji, z usuniętymi wrażliwymi atrybutami.",
       "ptNoticeUsage": "Pass-through może wysyłać do modelu szczegóły każdej encji, co zużywa więcej tokenów niż ograniczone drzewo.",
       "rateBurstLabel": "Burst na sekundę (0 = bez limitu na sekundę)",
@@ -2041,7 +2054,7 @@
       "voiceAccessKeyAria": "Klucz dostępu agenta głosowego",
       "voiceAccessKeyHelp": "Określa, do których encji i akcji ma dostęp ten agent głosowy.",
       "wipeBusy": "Czyszczenie...",
-      "wipeCoreHelp": "Usuń wszystkie klucze dostępu, ustawienia, zatwierdzenia, rejestry zmian i dzienniki. Tego nie można cofnąć.",
+      "wipeCoreHelp": "Usuń wszystkie klucze dostępu, ustawienia, zatwierdzenia, rejestry zmian i dzienniki. Kopie odzyskiwania pozostają. Tego nie można cofnąć.",
       "wipeCoreLabel": "Usuń podstawowe dane Phoenix MCP",
       "wipeFailed": "Czyszczenie nie powiodło się.",
       "wipeMesaHelp": "Usuń wszystkie profile MESA. Domyślnie wyłączone; najpierw wyeksportuj profile, aby zachować kopię.",
@@ -2720,7 +2733,9 @@
       "saveFailed": "Nie udało się zapisać weryfikacji. Działanie nadal wymaga sprawdzenia.",
       "showInAudit": "Pokaż w dzienniku audytu",
       "title": "Wymaga uwagi",
-      "unknown": "Rozmowa zakończyła się, zanim Phoenix zapisał, czy ta akcja została wykonana, więc mogła zostać wykonana. Pokaż w dzienniku audytu, jeśli jest dostępne, pokazuje, co zapisał Phoenix; akcja, która czekała na zatwierdzenie, ma swój status w Zatwierdzeniach. Sprawdź samego Home Assistant przed ponowną próbą."
+      "unknown": "Rozmowa zakończyła się, zanim Phoenix zapisał, czy ta akcja została wykonana, więc mogła zostać wykonana. Pokaż w dzienniku audytu, jeśli jest dostępne, pokazuje, co zapisał Phoenix; akcja, która czekała na zatwierdzenie, ma swój status w Zatwierdzeniach. Sprawdź samego Home Assistant przed ponowną próbą.",
+      "audit_storageTitle": "Dziennik audytu nie trafia do magazynu",
+      "audit_storageHelp": "Najnowsze wpisy audytu są tylko w pamięci, więc restart by je usunął. Sprawdź dzienniki Home Assistant. Ten wpis zniknie po następnym udanym zapisie."
     },
     "workspace": {
       "addToMy": "Dodaj do Mojego obszaru roboczego",

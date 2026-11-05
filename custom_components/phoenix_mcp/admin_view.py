@@ -7,64 +7,107 @@ import json
 import logging
 import re
 import uuid
-from collections.abc import Callable
-from typing import Any, cast
+from collections.abc import Callable, Collection
+from datetime import datetime
+from typing import Any, TypeGuard, cast
 
 from aiohttp import web
 from homeassistant.core import HomeAssistant
+from types import SimpleNamespace
+import dataclasses
+from homeassistant.helpers import entity_registry as er
+from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers import label_registry as lr
+from homeassistant.helpers import area_registry as ar
 
-from .view_base import PhoenixView
+from .ai_task import (
+    clear_ai_task_preferred, set_ai_task_preferred, AiTaskSetupError, ai_task_preferred_status,
+    ai_task_supported,
+)
+from .approvals import (
+    REASON_CAPABILITY_DENIED, REASON_EXECUTION_INTERRUPTED, REASON_KILL_SWITCH,
+    REASON_ACCESS_KEY_INACTIVE, STATUS_APPROVED, STATUS_CANCELLED, STATUS_EXPIRED, STATUS_FAILED,
+    create_approval_notification, dismiss_approval_notification, fire_approval_claim_event,
+    fire_approval_resolved_event, get_approval, async_clear_execution_marker,
+    async_mark_execution_started, async_update_approval_status, REASON_ADMIN_CANCELLED,
+    list_approvals, REASON_WIPED, collect_pending_approvals_for_wipe, REASON_REVOKED,
+    async_cancel_approvals_for_access_key,
+)
+from .assist_api import async_register_assist_api, assist_api_supported
+from .config_reconciliation import (
+    is_recovery_approval, execute_recovery_approval, acknowledge_recovery,
+)
+from .config_recovery import (
+    recovery_error_key, recovery_error_params, runtime_identity, ConfigurationRecoveryError,
+)
+from .conversation_log import recorder
+from .esphome_yaml import redact_esphome_text
+from .household_authority import household_scope
+from .llm.accounts import (
+    async_wipe_agentcli_secrets, _get_secret_store, provider_purpose, loaded_decision_account,
+)
+from .mesa import (
+    refresh_orphans, async_refresh_trigger_issues, read_automation_configs,
+    release_access_key_leases,
+)
+from .mesa_core import vocabulary, MetadataOrigin, SemanticProfile
+from .mesa_core.exceptions import MesaValidationError, InvalidCursorError, MesaError
+from .mesa_core.migration import migrate_profile
+from .mesa_core.portability import import_profiles, export_profiles
+from .mesa_suggestions import refresh_suggestions
+from .panel import async_sync_agentchat_inject, async_sync_mesa_inject
+from .request_authority import (
+    AuthorityChangedError, check_request_authority, RequestAuthority, policy_version,
+    request_authority,
+)
+from .routing.command_routing import RoutingAuthority, async_evaluate_command, routing_language
+from .routing.decision_batch import async_preview_batch
+from .routing.decision_context import context_history, async_preview_context
+from .routing.decision_reference import async_preview_reference
+from .routing.decision_shadow import async_preview_decision
+from .routing.tool_routing import qualified_languages
+from .sensor import async_rename_access_key_sensors
+from .template_snapshots import template_snapshot
+from .tool_catalog import tool_catalog_counts
+from .tool_common import RefusedBeforeWrite, UncertainOutcome, _tool_refused_before_write
+from .tool_dispatch import ExecutorNotRegistered, async_execute_approved_tool
+from .tools.esphome import _read_esphome_secrets, esphome_availability
+from .tools.helper import _storage_items, _public_helper_config
+from .tools.restore import (
+    async_restore_version, restore_refusal, async_restore_configuration, _restore_access_key,
+)
+from .view_base import PhoenixView, _err
 from homeassistant.components.http.const import KEY_AUTHENTICATED, KEY_HASS_USER
 from homeassistant.helpers import device_registry as dr_mod, entity_registry as er_mod
 from homeassistant.util.dt import as_utc, parse_datetime, utcnow
 
 from .audit import Outcome
 from .const import (
-    COMMAND_ROUTING_MODES,
-    CHAT_COMMAND_ROUTING_MODES,
-    DECISION_TIMEOUT_MIN_MS, DECISION_TIMEOUT_MAX_MS,
-    DECISION_REQUEST_BUDGET_MAX,
-    COMMAND_ROUTING_TIMEOUT_MIN_MS,
-    COMMAND_ROUTING_TIMEOUT_MAX_MS,
-    MAX_SEARCH_QUERY_LEN,
-    AGENTCLI_MAX_ITERATIONS_MAX,
-    AGENTCLI_MAX_ITERATIONS_MIN,
-    AGENTCLI_SCROLLBACK_MAX,
-    AGENTCLI_SCROLLBACK_MIN,
-    PROVIDER_CATALOG_REFRESH_HOURS_MAX,
-    PROVIDER_CATALOG_REFRESH_HOURS_MIN,
-    PHOENIX_VERSION,
-    BLOCKED_DOMAINS,
-    CAP_ALLOW,
-    CAP_CONFIRM,
-    CAP_MODES,
-    CAPABILITY_NAMES,
-    CONFIRM_AVAILABLE_CAPS,
-    CONFIRM_ONLY_CAPS,
-    DOMAIN,
-    GITHUB_URL,
-    MAX_CONFIRM_INLINE_WAIT_SECONDS,
-    MAX_REQUEST_BODY_BYTES,
-    ACCESS_KEY_NOTES_MAX_LENGTH,
-    MIN_CONFIRM_INLINE_WAIT_SECONDS,
-    MAX_BATCH_APPROVALS,
-    MESA_CONFIRM_CAP,
-    MESA_MODES,
-    MESA_STORAGE_KEY,
-    MESA_STORAGE_VERSION,
-    MIN_HA_VERSION,
-    PERSONA_NAMES,
-    PRESET_NAME_MAX_LENGTH,
-    RUNTIME_READY_KEY,
-    ACCESS_KEY_NAME_REGEX,
-    DEFAULT_RATE_LIMIT_BURST,
-    MAX_PRESETS_PER_ACCESS_KEY,
-    DEFAULT_RATE_LIMIT_REQUESTS,
+    MAX_SEARCH_QUERY_LEN, PHOENIX_VERSION, BLOCKED_DOMAINS, CAP_ALLOW, CAP_CONFIRM, CAP_MODES,
+    CAPABILITY_NAMES, CONFIRM_AVAILABLE_CAPS, CONFIRM_ONLY_CAPS, DOMAIN, GITHUB_URL,
+    MAX_CONFIRM_INLINE_WAIT_SECONDS, MAX_REQUEST_BODY_BYTES, ACCESS_KEY_NOTES_MAX_LENGTH,
+    MIN_CONFIRM_INLINE_WAIT_SECONDS, MAX_BATCH_APPROVALS, MESA_CONFIRM_CAP, MESA_MODES,
+    MESA_STORAGE_KEY, MESA_STORAGE_VERSION, MIN_HA_VERSION, PERSONA_NAMES, PRESET_NAME_MAX_LENGTH,
+    RUNTIME_READY_KEY, ACCESS_KEY_NAME_REGEX, ACCESS_KEY_MUTABLE_FIELDS, DEFAULT_RATE_LIMIT_BURST,
+    MAX_PRESETS_PER_ACCESS_KEY, DEFAULT_RATE_LIMIT_REQUESTS, CONVERSATION_STYLES, DETAIL_LEVELS,
+    PERSONA_HOME_COMPANION, HOME_COMPANION_CONTROL_DOMAINS, HOME_COMPANION_READ_DOMAINS,
+    HOME_COMPANION_SENSOR_CLASSES,
+)
+from .provider_constants import (
+    AGENTCLI_MAX_ITERATIONS_MAX, AGENTCLI_MAX_ITERATIONS_MIN, AGENTCLI_SCROLLBACK_MAX,
+    AGENTCLI_SCROLLBACK_MIN, PROVIDER_CATALOG_REFRESH_HOURS_MAX, PROVIDER_CATALOG_REFRESH_HOURS_MIN,
+)
+from .routing.routing_tables import (
+    COMMAND_ROUTING_MODES, CHAT_COMMAND_ROUTING_MODES, DECISION_TIMEOUT_MIN_MS,
+    DECISION_TIMEOUT_MAX_MS, DECISION_REQUEST_BUDGET_MAX, COMMAND_ROUTING_TIMEOUT_MIN_MS,
+    COMMAND_ROUTING_TIMEOUT_MAX_MS, ROUTING_STATISTICS_SURFACES,
 )
 from .data import PhoenixData
 from .device_semantics import device_authority_chain, device_registry_snapshot, effective_entity_area_id
-from .helpers import LocalizedReason, cancel_expiry_timer, panel_catalog
+from .durable_storage import DurableStorageError, DurableStore, MesaSaveError
+from .helpers import LocalizedReason, cancel_expiry_timer, panel_catalog, effective_cap
 from .locales import canonical_language
+from .tool_input import _parse_finite_float, _reject_non_finite
 from .policy_engine import (
     Permission,
     config_entry_registry_context,
@@ -73,7 +116,7 @@ from .policy_engine import (
     get_effective_hint,
     resolve,
 )
-from .const import TOOL_ROUTING_MODES, TOOL_ROUTING_SETTINGS
+from .routing.routing_tables import TOOL_ROUTING_MODES, TOOL_ROUTING_SETTINGS
 from .access_key_store import (
     valid_command_routing_languages,
     KEEP_HINT,
@@ -86,6 +129,11 @@ from .access_key_store import (
     access_key_name_slug,
     normalize_notes,
 )
+from .voice_agent import (
+    async_remove_assist_pipeline, async_set_assist_pipeline_preferred, VoicePipelineError,
+    async_create_assist_pipeline, assist_pipeline_preferred, assist_pipeline_supported,
+)
+from .ws_dispatch import async_lovelace_resources, async_ws_command
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -138,45 +186,6 @@ _RESTORE_YAML_TAGS = (
 _RESTORE_HELPER_NOT_VERIFIED = (
     "Helper restoration was not verified. Inspect configuration recovery before retrying."
 )
-
-
-def _err(
-    code: str,
-    message: str,
-    status: int,
-    request_id: str = "",
-    key: str | None = None,
-    params: dict | None = None,
-    *,
-    passthrough: bool = False,
-) -> web.Response:
-    """Return a JSON error response. Uses request_id if supplied, else generates one.
-
-    Phoenix-authored operator text must carry `key` and optional `params`.
-    `passthrough=True` is reserved for diagnostic text authored by an upstream
-    provider, tool, or mesa-core. Requiring one classification at runtime keeps
-    a newly added bare English message from silently bypassing localization.
-    """
-    if bool(key) == passthrough:
-        raise ValueError("_err requires exactly one of key or passthrough=True")
-    rid = request_id or str(uuid.uuid4())
-    body: dict[str, Any] = {"error": code, "message": message}
-    if key:
-        body["message_key"] = f"adminError.{key}"
-        if params:
-            body["message_params"] = params
-    else:
-        body["message_passthrough"] = True
-    return web.Response(
-        status=status,
-        content_type="application/json",
-        text=json.dumps(body),
-        # Every admin response reflects live, frequently-mutating state (access keys,
-        # approvals, audit); without this a browser or intermediary can serve a
-        # stale GET on a plain page refresh, e.g. an approval resolved elsewhere
-        # still reading "pending" after reloading the Approvals tab.
-        headers={"X-Phoenix-Request-ID": rid, "Cache-Control": "no-store"},
-    )
 
 
 def _ok(body: Any, status: int = 200, request_id: str = "") -> web.Response:
@@ -232,7 +241,13 @@ def _admin_only(method: Callable, *, ready_required: bool) -> Callable:
         # Logs user.id (UUID) rather than user.name. UUID is stable and non-spoofable;
         # user.name can be changed by the admin. Intentional.
         _LOGGER.info("Admin %s %s rid=%s user=%s", request.method, request.path, request_id, user.id)
-        return await method(self, request, **kwargs)
+        try:
+            return await method(self, request, **kwargs)
+        except MesaSaveError:
+            # One place for every profile write: the runtime has already returned
+            # to the stored policy, so the operator is told the change did not land.
+            _LOGGER.error("Admin %s %s could not save MESA profiles rid=%s", request.method, request.path, request_id)
+            return _err("service_unavailable", "The MESA change could not be saved.", 503, request_id, key="mesaSaveFailed")
     return wrapper
 
 
@@ -277,8 +292,8 @@ async def _read_body(
         return {}
 
     try:
-        parsed = json.loads(body_bytes)
-    except json.JSONDecodeError:
+        parsed = json.loads(body_bytes, parse_constant=_reject_non_finite, parse_float=_parse_finite_float)
+    except (ValueError, RecursionError):  # Invalid JSON or text, numeric overflow, or excessive nesting.
         # Diagnostic only (never logs the body content itself). The loop above
         # reads to EOF, so a byte count short of Content-Length points at
         # something upstream of Phoenix MCP (a proxy or tunnel), not this reader.
@@ -293,6 +308,24 @@ async def _read_body(
         return _err("invalid_request", "Request body must be a JSON object.", 400, request_id, key="bodyNotObject")
 
     return parsed
+
+
+def _in_menu(value: Any, allowed: Collection[str]) -> TypeGuard[str]:
+    """Membership for a value from a request body, which may be unhashable."""
+    return isinstance(value, str) and value in allowed
+
+
+def _request_time(raw: str) -> datetime | None:
+    """A request's timestamp as aware UTC, or None when it names no real moment.
+
+    An impossible date raises from the parser, and the far ends of the calendar
+    overflow in the conversion, so neither can be left to reach the caller.
+    """
+    try:
+        parsed = parse_datetime(raw)
+        return None if parsed is None else as_utc(parsed)
+    except (ValueError, OverflowError):
+        return None
 
 
 _DOMAIN_RE = re.compile(r"^[a-z][a-z0-9_]*\Z")
@@ -371,7 +404,7 @@ def _validate_permission_tree_body(body: dict, rid: str) -> web.Response | None:
                     params={"node": key},
                 )
             state = value.get("state", "GREY")
-            if state not in VALID_NODE_STATES:
+            if not _in_menu(state, VALID_NODE_STATES):
                 message = (f"Invalid state {state!r} for {node_type[:-1]} {key!r}. "
                            f"Valid states: {sorted(VALID_NODE_STATES)}.")
                 params = {"state": state, "node": key, "states": ", ".join(sorted(VALID_NODE_STATES))}
@@ -405,9 +438,6 @@ def _build_entity_tree(hass: HomeAssistant) -> dict:
     Synchronous; never performs I/O. The result is cached in
     PhoenixData.entity_tree_cache and invalidated on registry change events.
     """
-    from homeassistant.helpers import area_registry as ar
-    from homeassistant.helpers import entity_registry as er
-    from homeassistant.helpers import label_registry as lr
 
     entity_reg = er.async_get(hass)
     device_snapshot = device_registry_snapshot(hass)
@@ -632,8 +662,6 @@ def _build_resolution_path(entity_id: str, access_key: Any, hass: HomeAssistant)
     Used by the resolve admin endpoint to explain why an entity has a particular
     effective permission.
     """
-    from homeassistant.helpers import device_registry as dr
-    from homeassistant.helpers import entity_registry as er
 
     er_reg = er.async_get(hass)
     dr_reg = dr.async_get(hass)
@@ -673,10 +701,6 @@ class PhoenixAdminInfoView(PhoenixView):
 
     @require_admin
     async def get(self, request: web.Request) -> web.Response:
-        from .mcp_view import tool_catalog_counts  # noqa: PLC0415 - avoid import cycle
-        from .const import (  # noqa: PLC0415
-            HOME_COMPANION_CONTROL_DOMAINS, HOME_COMPANION_READ_DOMAINS, HOME_COMPANION_SENSOR_CLASSES,
-        )
         return _ok({
             "version": PHOENIX_VERSION,
             "min_ha_version": MIN_HA_VERSION,
@@ -830,14 +854,13 @@ class PhoenixAdminAccessKeysView(PhoenixView):
         expires_at = None
         if "expires_at" in body:
             raw_expires = body["expires_at"]
-            expires_at = parse_datetime(raw_expires) if isinstance(raw_expires, str) else None
-            if expires_at is None:
-                return _err("invalid_request", "Invalid expires_at datetime.", 400, rid, key="badExpiresAt")
             # A timezone-less value would persist naive and later crash every
             # comparison against aware UTC (expiry checks run during setup, so
-            # one poisoned record aborts the whole integration). Normalize to
+            # one poisoned record aborts the whole integration). Normalized to
             # UTC; a naive input is treated as HA's configured local time.
-            expires_at = as_utc(expires_at)
+            expires_at = _request_time(raw_expires) if isinstance(raw_expires, str) else None
+            if expires_at is None:
+                return _err("invalid_request", "Invalid expires_at datetime.", 400, rid, key="badExpiresAt")
             # A key that is already expired would be archived on its first use.
             if expires_at <= utcnow():
                 return _err("invalid_request", "expires_at must be in the future.", 400, rid, key="expiresInPast")
@@ -906,11 +929,7 @@ class PhoenixAdminAccessKeysView(PhoenixView):
 
 # The per-access-key settings a PATCH may write. Capabilities are folded in from
 # const, so adding one needs no change here.
-_PATCHABLE_ACCESS_KEY_FIELDS = {
-    "name", "pass_through", "use_assist_exposure", "announce_all_tools",
-    "confirm_inline_wait_seconds",
-    "rate_limit_requests", "rate_limit_burst", "persona", "notes",
-} | set(CAPABILITY_NAMES)
+_PATCHABLE_ACCESS_KEY_FIELDS = ACCESS_KEY_MUTABLE_FIELDS | set(CAPABILITY_NAMES)
 
 _RATE_LIMIT_MAX = 100_000
 
@@ -1002,7 +1021,7 @@ def _validated_access_key_patch(
 
     for cap_name in set(CAPABILITY_NAMES) & patchable.keys():
         value = patchable[cap_name]
-        if value not in CAP_MODES:
+        if not _in_menu(value, CAP_MODES):
             return {}, _err(
                 "invalid_request", f"{cap_name} must be one of: deny, allow, confirm.",
                 400, rid, key="capabilityModeInvalid", params={"capability": cap_name},
@@ -1018,13 +1037,12 @@ def _validated_access_key_patch(
                 400, rid, key="capabilityAllowUnsupported", params={"capability": cap_name},
             )
 
-    if "persona" in patchable and patchable["persona"] not in PERSONA_NAMES:
+    if "persona" in patchable and not _in_menu(patchable["persona"], PERSONA_NAMES):
         return {}, _err("invalid_request", "Unknown persona.", 400, rid, key="unknownPersona")
 
     # A Home Companion key never uses pass-through or announces every tool: the
     # store turns both off. Asking for either is refused rather than answered
     # with a success that changed nothing.
-    from .const import PERSONA_HOME_COMPANION  # noqa: PLC0415
     if patchable.get("persona", access_key.persona) == PERSONA_HOME_COMPANION and (
         patchable.get("pass_through") is True or patchable.get("announce_all_tools") is True
     ):
@@ -1096,11 +1114,10 @@ async def _rename_access_key_sensors(
     rename only updates the device's display name and the record the sensors read
     from; entity_ids, and whatever refers to them, are unchanged.
     """
-    from .sensor import async_rename_access_key_sensors  # noqa: PLC0415
 
     try:
         await async_rename_access_key_sensors(hass, old_name, updated)
-    except Exception:  # noqa: BLE001
+    except Exception:
         _LOGGER.warning("Sensor rename failed for access key %s", access_key_id, exc_info=True)
 
 
@@ -1170,12 +1187,6 @@ class PhoenixAdminAccessKeyView(PhoenixView):
     @require_admin
     async def delete(self, request: web.Request, access_key_id: str) -> web.Response:
         """Revoke an access key, close its queued approvals, and fire the bus event."""
-        from .approvals import (  # noqa: PLC0415
-            REASON_REVOKED,
-            async_cancel_approvals_for_access_key,
-            dismiss_approval_notification,
-            fire_approval_resolved_event,
-        )
 
         rid = request["phoenix_mcp_rid"]
         hass = self.hass
@@ -1222,7 +1233,6 @@ class PhoenixAdminAccessKeyView(PhoenixView):
 
         # Advisory leases the access key still held. Outside the store lock: they are
         # in-memory and unrelated to stored state.
-        from .mesa import release_access_key_leases  # noqa: PLC0415
         release_access_key_leases(data, access_key_id)
 
         if data.async_sync_voice_agent is not None:
@@ -1231,7 +1241,6 @@ class PhoenixAdminAccessKeyView(PhoenixView):
         if "voice_agent_access_key_id" in _patch:
             # The voice agent lost its access key and is unregistered; remove any
             # Phoenix-created Assist pipeline so a broken assistant is not left behind.
-            from .voice_agent import async_remove_assist_pipeline  # noqa: PLC0415
             await async_remove_assist_pipeline(hass, data)
 
         if "ai_task_access_key_id" in _patch and data.async_sync_ai_task is not None:
@@ -1605,7 +1614,7 @@ class PhoenixAdminPermissionBulkSelectView(PhoenixView):
                 "invalid_request", "selector_id is required.", 400, rid,
                 key="selectorIdRequired",
             )
-        if state not in VALID_NODE_STATES:
+        if not _in_menu(state, VALID_NODE_STATES):
             return _err(
                 "invalid_request",
                 f"state must be one of: {', '.join(sorted(VALID_NODE_STATES))}.",
@@ -1723,7 +1732,7 @@ async def _patch_permission_node(
         return body
 
     state = body.get("state")
-    if state not in VALID_NODE_STATES:
+    if not _in_menu(state, VALID_NODE_STATES):
         return _err(
             "invalid_request",
             f"state must be one of: {', '.join(sorted(VALID_NODE_STATES))}.",
@@ -1876,7 +1885,6 @@ class PhoenixAdminEntityTreeView(PhoenixView):
                 data.entity_tree_cache = _build_entity_tree(hass)
                 data.entity_tree_cache_valid = True
 
-        import functools
         json_body = await hass.async_add_executor_job(
             functools.partial(json.dumps, data.entity_tree_cache, default=str)
         )
@@ -2069,13 +2077,12 @@ class PhoenixAdminConversationsView(PhoenixView):
 
     @require_admin
     async def get(self, request: web.Request) -> web.Response:
-        from .conversation_log import recorder
         rid = request["phoenix_mcp_rid"]
         paged = _parse_pagination(request, rid, default_limit=25, max_limit=100)
         if isinstance(paged, web.Response):
             return paged
         since_raw = request.query.get("since", "")
-        since = parse_datetime(since_raw) if since_raw else None
+        since = _request_time(since_raw) if since_raw else None
         if since_raw and since is None:
             return _err("invalid_request", "Invalid since timestamp.", 400, rid, key="sinceTimestampInvalid")
         log = recorder(self.hass.data[DOMAIN])
@@ -2083,11 +2090,10 @@ class PhoenixAdminConversationsView(PhoenixView):
                              search=request.query.get("search", "")[:512],
                              source=request.query.get("source", "")[:64],
                              outcome=request.query.get("outcome", "")[:64],
-                             since=as_utc(since).isoformat() if since else ""), request_id=rid)
+                             since=since.isoformat() if since else ""), request_id=rid)
 
     @require_admin
     async def delete(self, request: web.Request) -> web.Response:
-        from .conversation_log import recorder
         rid = request["phoenix_mcp_rid"]
         body = await _read_body(request, rid)
         if isinstance(body, web.Response):
@@ -2113,7 +2119,6 @@ class PhoenixAdminConversationView(PhoenixView):
 
     @require_admin
     async def get(self, request: web.Request, entry_id: str) -> web.Response:
-        from .conversation_log import recorder
         rid = request["phoenix_mcp_rid"]
         entry = recorder(self.hass.data[DOMAIN]).detail(entry_id)
         if entry is None:
@@ -2146,16 +2151,14 @@ class PhoenixAdminAuditView(PhoenixView):
         resource_filter = request.query.get("resource")
         request_id_filter = request.query.get("request_id")
         since_raw = request.query.get("since")
-        since_filter = parse_datetime(since_raw) if since_raw else None
+        # Audit timestamps are aware UTC; a timezone-less since would raise
+        # TypeError inside the filter. Naive input is treated as local time.
+        since_filter = _request_time(since_raw) if since_raw else None
         if since_raw and since_filter is None:
             return _err(
                 "invalid_request", "Invalid since timestamp.", 400, rid,
                 key="sinceTimestampInvalid",
             )
-        if since_filter is not None:
-            # Audit timestamps are aware UTC; a timezone-less since would raise
-            # TypeError inside the filter. Naive input is treated as local time.
-            since_filter = as_utc(since_filter)
 
         filter_kwargs: dict[str, Any] = {
             "access_key_id": access_key_id_filter,
@@ -2180,7 +2183,7 @@ class PhoenixAdminAuditView(PhoenixView):
         }, request_id=rid)
 
 
-def _settings_response(settings, hass=None) -> dict:
+def _settings_response(settings, hass: HomeAssistant) -> dict:
     """Settings dict plus the computed, non-persisted capability flags.
 
     assist_api_supported reflects whether the running HA exposes the llm.API +
@@ -2192,13 +2195,7 @@ def _settings_response(settings, hass=None) -> dict:
     refresh result, which the panel may show but tool announcement deliberately
     ignores (see tools.esphome.esphome_availability).
     """
-    from .ai_task import ai_task_supported  # noqa: PLC0415
-    from .assist_api import assist_api_supported  # noqa: PLC0415
-    from .tools.esphome import esphome_availability  # noqa: PLC0415
-    from .voice_agent import assist_pipeline_preferred, assist_pipeline_supported  # noqa: PLC0415
 
-    from .agentcli import loaded_decision_account
-    from .tool_routing import qualified_languages
 
     body = settings.to_dict()
     cfg = loaded_decision_account(hass, settings.decision_provider_id) if hass and settings.decision_provider_id else None
@@ -2225,11 +2222,9 @@ def _settings_response(settings, hass=None) -> dict:
 # the readable statement of what this endpoint will accept.
 # ---------------------------------------------------------------------------
 
-from .const import CONVERSATION_LOG_LIMITS
+from .const import AUDIT_FLUSH_INTERVALS, AUDIT_LOG_MAXLENS, CONVERSATION_LOG_LIMITS
 
 
-_VALID_FLUSH_INTERVALS = frozenset({0, 5, 10, 15, 30, 60})
-_VALID_LOG_MAXLENS = frozenset({100, 1000, 5000, 10000})
 
 _BOOL_SETTINGS = frozenset({
     "kill_switch", "disable_all_logging", "log_allowed", "log_denied",
@@ -2340,14 +2335,13 @@ async def _validated_settings_patch(
                 400, rid, key="booleanRequired", params={"field": key},
             )
 
-    if "mesa_mode" in patchable and patchable["mesa_mode"] not in MESA_MODES:
+    if "mesa_mode" in patchable and not _in_menu(patchable["mesa_mode"], MESA_MODES):
         return {}, _err(
             "invalid_request", f"mesa_mode must be one of: {sorted(MESA_MODES)}.",
             400, rid, key="valueAllowed",
             params={"field": "mesa_mode", "values": ", ".join(sorted(MESA_MODES))},
         )
 
-    from .const import CONVERSATION_STYLES, DETAIL_LEVELS  # noqa: PLC0415
 
     for key in _CONVERSATION_STYLE_SETTINGS & patchable.keys():
         if not isinstance(patchable[key], str) or patchable[key] not in CONVERSATION_STYLES:
@@ -2403,8 +2397,8 @@ async def _validated_settings_patch(
                             key="conversationLimitInvalid", params={"field": key, "min": lo, "max": hi})
 
     int_checks = (
-        ("audit_flush_interval", {"allowed": _VALID_FLUSH_INTERVALS}),
-        ("audit_log_maxlen", {"allowed": _VALID_LOG_MAXLENS}),
+        ("audit_flush_interval", {"allowed": AUDIT_FLUSH_INTERVALS}),
+        ("audit_log_maxlen", {"allowed": AUDIT_LOG_MAXLENS}),
         ("agentcli_scrollback_lines",
          {"bounds": (AGENTCLI_SCROLLBACK_MIN, AGENTCLI_SCROLLBACK_MAX)}),
         ("agentcli_max_iterations",
@@ -2464,9 +2458,7 @@ async def _validated_settings_patch(
                 )
         if patchable.get(pkey):
             if provider_store is None:
-                from .agentcli import _get_secret_store  # noqa: PLC0415
                 provider_store = await _get_secret_store(hass)
-            from .agentcli import provider_purpose
             record = provider_store.get(patchable[pkey])
             if not isinstance(record, dict) or provider_purpose(record.get("kind", "")) != "conversation":
                 return {}, _err(
@@ -2476,7 +2468,6 @@ async def _validated_settings_patch(
 
     for decision_key in ("decision_provider_id", "decision_provider_default_id"):
         if patchable.get(decision_key):
-            from .agentcli import _get_secret_store
             provider_store = await _get_secret_store(hass)
             if provider_store.resolve(patchable[decision_key], purpose="decision") is None:
                 return {}, _err("invalid_request", "Choose a decision provider account.", 400, rid,
@@ -2494,14 +2485,11 @@ async def _validated_settings_patch(
             or patchable.get("agentcli_routing_mode") == "hybrid"
             or any(patchable.get(key) in ("observe", "advise") for key in TOOL_ROUTING_SETTINGS.values())):
         account = patchable.get("decision_provider_id", data.store.get_settings().decision_provider_id)
-        from .agentcli import _get_secret_store
         provider_store = await _get_secret_store(hass)
         if not account or provider_store.resolve(account, purpose="decision") is None:
             return {}, _err("invalid_request", "Choose a decision provider account.", 400, rid,
                             key="decisionProviderRequired")
     if any(patchable.get(key) == "advise" for key in TOOL_ROUTING_SETTINGS.values()):
-        from .tool_routing import qualified_languages
-        from .agentcli import _get_secret_store
         provider_store = await _get_secret_store(hass)
         account = patchable.get("decision_provider_id", data.store.get_settings().decision_provider_id)
         if not qualified_languages(provider_store.resolve(account or "", purpose="decision")):
@@ -2534,7 +2522,6 @@ async def _apply_settings_side_effects(
     Assistant (its only one), so the panel does not report it removed.
     """
     voice_assistant_kept = False
-    from .conversation_log import recorder
     recorder(data)
     await data.conversations.async_save()
 
@@ -2555,7 +2542,6 @@ async def _apply_settings_side_effects(
 
     if "kill_switch" in patchable:
         # Keep the selected API available with zero tools while agent work is disabled.
-        from .assist_api import async_register_assist_api
         async_register_assist_api(hass, data)
 
     # Re-sync the Phoenix MCP voice conversation agent when its config or the kill switch
@@ -2577,7 +2563,6 @@ async def _apply_settings_side_effects(
             and now.voice_agent_provider_id and now.voice_agent_model
         )
         if not fully and now.voice_agent_pipeline_id is not None:
-            from .voice_agent import async_remove_assist_pipeline  # noqa: PLC0415
             voice_assistant_kept = await async_remove_assist_pipeline(hass, data)
 
     # Add/remove the Phoenix MCP AI Task entity to match its config (it exists only while
@@ -2590,13 +2575,11 @@ async def _apply_settings_side_effects(
     if "mesa_inject_enabled" in patchable:
         # Add/remove the in-context profile injector module. Takes effect on the
         # next full HA page load (already-open tabs are unaffected).
-        from .panel import async_sync_mesa_inject  # noqa: PLC0415
         await async_sync_mesa_inject(hass)
 
     if "agentcli_global" in patchable:
         # Add/remove the global Agent Chat window module. Takes effect on the
         # next full HA page load (already-open tabs are unaffected).
-        from .panel import async_sync_agentchat_inject  # noqa: PLC0415
         await async_sync_agentchat_inject(hass)
 
     return voice_assistant_kept
@@ -2616,12 +2599,11 @@ class PhoenixAdminRoutingStatisticsView(PhoenixView):
 
     @require_admin
     async def delete(self, request: web.Request) -> web.Response:
-        from .const import ROUTING_STATISTICS_SURFACES
         rid = request["phoenix_mcp_rid"]
         body = await _read_body(request, rid)
         if isinstance(body, web.Response):
             return body
-        if set(body) != {"surface", "confirm"} or body.get("surface") not in ROUTING_STATISTICS_SURFACES or body.get("confirm") is not True:
+        if set(body) != {"surface", "confirm"} or not _in_menu(body.get("surface"), ROUTING_STATISTICS_SURFACES) or body.get("confirm") is not True:
             return _err("invalid_request", "Choose Voice or Chat and confirm the statistics reset.", 400, rid, key="routingStatisticsResetInvalid")
         data = self.hass.data[DOMAIN]
         await data.routing_statistics.async_reset(body["surface"])
@@ -2645,8 +2627,6 @@ class PhoenixAdminCommandPreviewView(PhoenixView):
 
     @require_admin
     async def post(self, request: web.Request) -> web.Response:
-        from .command_routing import async_evaluate_command, routing_language
-        from .decision_context import context_history, async_preview_context
 
         rid = request["phoenix_mcp_rid"]
         data: PhoenixData = self.hass.data[DOMAIN]
@@ -2675,27 +2655,23 @@ class PhoenixAdminCommandPreviewView(PhoenixView):
         if access_key is None or not access_key.is_valid():
             return _err("invalid_request", "Select an active access key.", 400, rid,
                         key="activeAccessKeyRequired", params={"field": "access_key_id"})
-        from .command_routing import RoutingAuthority
         authority = RoutingAuthority.capture(data, access_key)
         language = body.get("language", "en")
         result = await async_evaluate_command(self.hass, data, access_key, sentence, language, preview=True)
         if "messages" in body:
             reviewer = async_preview_context
             if body.get("references"):
-                from .decision_reference import async_preview_reference
                 reviewer = async_preview_reference
             result["context_review"] = await reviewer(
                 self.hass, data, access_key, sentence, language, body["messages"], result)
             if result["context_review"]["reason"] in ("context_changed", "authority_changed"):
                 result.update(route="provider", reason=result["context_review"]["reason"], proposal=None)
         elif body.get("batch"):
-            from .decision_batch import async_preview_batch
             result["batch_review"] = await async_preview_batch(self.hass, data, access_key, sentence, language, result,
                                                              numeric_preview=body.get("numeric", False))
             if result["batch_review"]["reason"] in ("targets_changed", "authority_changed"):
                 result.update(route="provider", reason=result["batch_review"]["reason"], proposal=None)
         elif body.get("decision"):
-            from .decision_shadow import async_preview_decision
             result["decision_shadow"] = await async_preview_decision(
                 self.hass, data, access_key, sentence, language, result, targets=body.get("targets", False), ingress="preview")
         if authority.current(self.hass) is None:
@@ -2811,7 +2787,6 @@ class PhoenixAdminVoiceAgentPipelineView(PhoenixView):
                 key="setupMissing",
             )
 
-        from .voice_agent import async_create_assist_pipeline, VoicePipelineError  # noqa: PLC0415
         try:
             async with data.settings_update_lock:
                 result = await async_create_assist_pipeline(
@@ -2830,7 +2805,6 @@ class PhoenixAdminVoiceAgentPipelineView(PhoenixView):
     async def delete(self, request: web.Request) -> web.Response:
         rid = request["phoenix_mcp_rid"]
         data: PhoenixData = self.hass.data[DOMAIN]
-        from .voice_agent import async_remove_assist_pipeline  # noqa: PLC0415
         async with data.settings_update_lock:
             kept = await async_remove_assist_pipeline(self.hass, data)
         _audit_admin(self.hass, request, rid, "voice_agent_pipeline")
@@ -2854,7 +2828,6 @@ class PhoenixAdminVoiceAgentPreferredView(PhoenixView):
     async def _change(self, request: web.Request, preferred: bool) -> web.Response:
         rid = request["phoenix_mcp_rid"]
         data: PhoenixData = self.hass.data[DOMAIN]
-        from .voice_agent import async_set_assist_pipeline_preferred, VoicePipelineError  # noqa: PLC0415
         try:
             async with data.settings_update_lock:
                 result = await async_set_assist_pipeline_preferred(self.hass, data, preferred=preferred)
@@ -2894,7 +2867,6 @@ class PhoenixAdminAiTaskPreferredView(PhoenixView):
     @require_admin
     async def get(self, request: web.Request) -> web.Response:
         rid = request["phoenix_mcp_rid"]
-        from .ai_task import ai_task_preferred_status  # noqa: PLC0415
         entry = self._entry()
         if entry is None:
             return _err(
@@ -2906,7 +2878,6 @@ class PhoenixAdminAiTaskPreferredView(PhoenixView):
     @require_admin
     async def post(self, request: web.Request) -> web.Response:
         rid = request["phoenix_mcp_rid"]
-        from .ai_task import set_ai_task_preferred, AiTaskSetupError  # noqa: PLC0415
         entry = self._entry()
         if entry is None:
             return _err(
@@ -2927,7 +2898,6 @@ class PhoenixAdminAiTaskPreferredView(PhoenixView):
     @require_admin
     async def delete(self, request: web.Request) -> web.Response:
         rid = request["phoenix_mcp_rid"]
-        from .ai_task import clear_ai_task_preferred  # noqa: PLC0415
         entry = self._entry()
         if entry is None:
             return _err(
@@ -2982,12 +2952,6 @@ class PhoenixAdminWipeView(PhoenixView):
         wipe_mesa = _wipe_flag(body.get("wipe_mesa"), False)
 
         if wipe_core:
-            from .approvals import (  # noqa: PLC0415
-                REASON_WIPED,
-                collect_pending_approvals_for_wipe,
-                dismiss_approval_notification,
-                fire_approval_resolved_event,
-            )
 
             # Settings PATCH validates access key references under this lock and then
             # takes the store lock. Core wipe must use the same order so it cannot
@@ -3020,7 +2984,6 @@ class PhoenixAdminWipeView(PhoenixView):
 
                     # Pipeline creation uses this same lock through HA creation
                     # and id persistence. Remove it before resetting settings.
-                    from .voice_agent import async_remove_assist_pipeline  # noqa: PLC0415
                     await async_remove_assist_pipeline(hass, data)
 
                     async with data.store.async_lock:
@@ -3093,7 +3056,6 @@ class PhoenixAdminWipeView(PhoenixView):
                 await _apply_settings_side_effects(hass, data, reset, settings_after, settings_before.kill_switch)
 
         if wipe_providers:
-            from .agentcli import async_wipe_agentcli_secrets
             # Provider-only wipe is a supported scope, so it must clear the
             # dependent settings just like deleting the referenced account.
             # Serialize the provider removal and settings cleanup against PATCH
@@ -3129,7 +3091,6 @@ class PhoenixAdminWipeView(PhoenixView):
                 if voice_provider_removed:
                     if data.async_sync_voice_agent is not None:
                         data.async_sync_voice_agent()
-                    from .voice_agent import async_remove_assist_pipeline  # noqa: PLC0415
                     await async_remove_assist_pipeline(hass, data)
                 if ai_task_provider_removed and data.async_sync_ai_task is not None:
                     data.async_sync_ai_task()
@@ -3141,11 +3102,15 @@ class PhoenixAdminWipeView(PhoenixView):
             else:
                 # MESA runtime unavailable (setup failed or off): clear the
                 # on-disk store directly so "delete MESA data" still holds.
-                from homeassistant.helpers.storage import Store
-                mesa_store: Store[dict] = Store(hass, MESA_STORAGE_VERSION, MESA_STORAGE_KEY)
-                await mesa_store.async_save(
-                    {"profiles": {}, "dismissed_suggestions": []}
+                mesa_store: DurableStore[dict] = DurableStore(
+                    hass, MESA_STORAGE_VERSION, MESA_STORAGE_KEY, atomic_writes=True
                 )
+                try:
+                    await mesa_store.async_save(
+                        {"profiles": {}, "dismissed_suggestions": []}
+                    )
+                except DurableStorageError as err:
+                    raise MesaSaveError("MESA profiles could not be cleared.") from err
 
         data.audit.record(
             request_id=rid,
@@ -3215,7 +3180,6 @@ class PhoenixAdminApprovalsView(PhoenixView):
 
     @require_admin
     async def get(self, request: web.Request) -> web.Response:
-        from .approvals import list_approvals  # noqa: PLC0415
 
         rid = request["phoenix_mcp_rid"]
         hass = self.hass
@@ -3256,7 +3220,6 @@ class PhoenixAdminApprovalView(PhoenixView):
 
     @require_admin
     async def get(self, request: web.Request, approval_id: str) -> web.Response:
-        from .approvals import get_approval  # noqa: PLC0415
 
         rid = request["phoenix_mcp_rid"]
         hass = self.hass
@@ -3268,7 +3231,6 @@ class PhoenixAdminApprovalView(PhoenixView):
 
     @require_admin
     async def delete(self, request: web.Request, approval_id: str) -> web.Response:
-        from .approvals import REASON_ADMIN_CANCELLED  # noqa: PLC0415
 
         return await _resolve_approval(
             self.hass, request, approval_id,
@@ -3419,7 +3381,7 @@ class PhoenixAdminApprovalRejectView(PhoenixView):
 
 
 async def _resolve_approval(
-    hass,
+    hass: HomeAssistant,
     request: web.Request,
     approval_id: str,
     *,
@@ -3427,13 +3389,6 @@ async def _resolve_approval(
     auto_reason: str | None,
 ) -> web.Response:
     """Reject or cancel a pending approval. Idempotent on already-resolved records."""
-    from .approvals import (  # noqa: PLC0415
-        STATUS_EXPIRED,
-        dismiss_approval_notification,
-        fire_approval_resolved_event,
-        get_approval,
-        async_update_approval_status,
-    )
 
     rid = request["phoenix_mcp_rid"]
     data: PhoenixData = hass.data[DOMAIN]
@@ -3462,13 +3417,12 @@ async def _resolve_approval(
         if record.expires_at <= utcnow():
             terminal_status = STATUS_EXPIRED
             auto_reason = None
-        from .config_reconciliation import is_recovery_approval, acknowledge_recovery
         if terminal_status == "rejected" and is_recovery_approval(record, data):
-            from .config_recovery import ConfigurationRecoveryError, recovery_error_key
             try:
                 await acknowledge_recovery(record, user.id, hass, data, rejected=True)
             except ConfigurationRecoveryError as exc:
-                return _err("conflict", str(exc), 409, rid, key=recovery_error_key(str(exc)))
+                return _err("conflict", str(exc), 409, rid, key=recovery_error_key(str(exc)),
+                            params=recovery_error_params(str(exc)))
         updated = await async_update_approval_status(
             data.store,
             approval_id,
@@ -3502,32 +3456,10 @@ async def _approve_approval(hass: HomeAssistant, request: web.Request, approval_
     persisted before any dispatch, makes a stop or crash mid-execution refuse a
     retry until recovery resolves the record.
     """
-    from .approvals import (  # noqa: PLC0415
-        REASON_CAPABILITY_DENIED,
-        REASON_EXECUTION_INTERRUPTED,
-        REASON_KILL_SWITCH,
-        REASON_ACCESS_KEY_INACTIVE,
-        STATUS_APPROVED,
-        STATUS_CANCELLED,
-        STATUS_EXPIRED,
-        STATUS_FAILED,
-        create_approval_notification,
-        dismiss_approval_notification,
-        fire_approval_claim_event,
-        fire_approval_resolved_event,
-        get_approval,
-        async_clear_execution_marker,
-        async_mark_execution_started,
-        async_update_approval_status,
-    )
-    from .helpers import effective_cap  # noqa: PLC0415
-    from .mcp_view import ExecutorNotRegistered, async_execute_approved_tool  # noqa: PLC0415
 
     rid = request["phoenix_mcp_rid"]
     data: PhoenixData = hass.data[DOMAIN]
     user = request[KEY_HASS_USER]
-    from .config_reconciliation import is_recovery_approval, execute_recovery_approval
-    from .mcp_view import _restore_access_key
     closed_record = None
     closed_method: str | None = None
     closed_reason: str | None = None
@@ -3711,9 +3643,6 @@ async def _approve_approval(hass: HomeAssistant, request: web.Request, approval_
         try:
             # Approved executors must retain the admitted access key and policy epoch
             # across their own waits, just like ordinary MCP dispatch.
-            from .request_authority import (  # noqa: PLC0415
-                RequestAuthority, policy_version, request_authority,
-            )
             authority_ctx = request_authority.set(
                 None if recovery_request else RequestAuthority(hass, data, access_key.id, access_key.access_key_hash)
             )
@@ -3724,8 +3653,6 @@ async def _approve_approval(hass: HomeAssistant, request: web.Request, approval_
                         tool_result, outcome, _resource = await execute_recovery_approval(record, user, hass, data)
                     else:
                         if record.household_request:
-                            from .household_authority import household_scope
-                            from .request_authority import AuthorityChangedError, check_request_authority
 
                             async with household_scope(hass, user_id=record.ha_user_id):
                                 try:
@@ -3733,7 +3660,6 @@ async def _approve_approval(hass: HomeAssistant, request: web.Request, approval_
                                 except AuthorityChangedError:
                                     # This check precedes the executor. A removed or
                                     # inactive requester cannot have caused effects.
-                                    from .tool_common import _tool_refused_before_write
                                     tool_result = _tool_refused_before_write(
                                         "Requester authority changed. No action was dispatched.")
                                     outcome, _resource = "denied", record.tool_name
@@ -3808,7 +3734,7 @@ async def _approve_approval(hass: HomeAssistant, request: web.Request, approval_
                     outcome="denied",
                     reason=REASON_EXECUTION_INTERRUPTED,
                 )
-            except BaseException:  # noqa: BLE001 - the marker is the backstop
+            except BaseException:  # the marker is the backstop
                 _LOGGER.exception(
                     "Could not resolve approval %s after a failed execution; the "
                     "recovery will close it as interrupted", approval_id,
@@ -3833,13 +3759,14 @@ async def _approve_approval(hass: HomeAssistant, request: web.Request, approval_
 
         is_error = bool(tool_result.get("isError"))
         saved_result: dict[str, Any] = {"tool_result": tool_result, "outcome": outcome}
-        from .tool_common import RefusedBeforeWrite
         if isinstance(tool_result, RefusedBeforeWrite):
             # Persisted because the type does not survive storage. Server-owned:
             # executor text cannot set a key at this level.
             saved_result["refused_before_write"] = True
         final_status = STATUS_FAILED if is_error else STATUS_APPROVED
         auto_reason = "execution_failed" if is_error else None
+        if isinstance(tool_result, UncertainOutcome):
+            auto_reason = REASON_EXECUTION_INTERRUPTED
         audit_outcome: Outcome = "allowed" if final_status == STATUS_APPROVED else "denied"
 
         def _record_execution_audit(payload: dict | None = None) -> None:
@@ -3935,8 +3862,6 @@ def _mesa_migrated_doc(body: dict) -> dict:
     untouched so `SemanticProfile.from_dict` reports the real problem as a 400;
     raising here would turn a bad payload into a 500.
     """
-    from .mesa_core.exceptions import MesaError  # noqa: PLC0415
-    from .mesa_core.migration import migrate_profile  # noqa: PLC0415
 
     try:
         if isinstance(body.get("semantic_profile"), dict):
@@ -3950,7 +3875,7 @@ def _mesa_migrated_doc(body: dict) -> dict:
         return body
 
 
-def _audit_admin(hass, request, rid, resource) -> None:
+def _audit_admin(hass: HomeAssistant, request, rid, resource) -> None:
     data: PhoenixData = hass.data[DOMAIN]
     user = request[KEY_HASS_USER]
     data.audit.record(
@@ -3980,7 +3905,6 @@ class PhoenixAdminMesaProfilesView(PhoenixView):
         if err is not None:
             return err
 
-        from .mesa_core.exceptions import InvalidCursorError  # noqa: PLC0415
 
         q = request.query
         tag = q.get("tag")
@@ -4022,6 +3946,93 @@ class PhoenixAdminMesaProfilesView(PhoenixView):
         )
 
 
+async def _new_mesa_profile(identifier: str, request: web.Request, rid: str) -> Any:
+    """The profile in a PUT body, or the response refusing it."""
+
+    body = await _read_body(request, rid)
+    if isinstance(body, web.Response):
+        return body
+    try:
+        return SemanticProfile.from_dict(identifier, _mesa_migrated_doc(body), default_origin=MetadataOrigin.USER)
+    except MesaValidationError as exc:
+        return _err("invalid_request", str(exc), 400, rid, passthrough=True)
+
+
+async def _save_mesa_profile(
+    runtime: Any, request: web.Request, rid: str, stored: Callable[[], Any], store: Callable[[], None],
+) -> web.Response | None:
+    """Store a profile under the runtime lock, refusing to create over an existing one."""
+    async with runtime.lock:
+        if request.headers.get("If-None-Match") == "*" and stored() is not None:
+            return _err("precondition_failed", "A profile already exists. Open it in Edit mode.",
+                        412, rid, key="mesaProfileExists")
+        store()
+        await runtime.async_save()
+    return None
+
+
+class _MesaScopeProfileView(PhoenixView):
+    """GET/PUT/DELETE of the one profile a MESA scope holds, keyed by the route's id."""
+
+    requires_auth = True
+    id_field: str
+    store_suffix: str
+
+    def invalid_id(self, value: str, rid: str) -> web.Response | None:
+        raise NotImplementedError
+
+    def _store_call(self, runtime: Any, action: str) -> Callable[..., Any]:
+        return getattr(runtime.store, f"{action}_{self.store_suffix}")
+
+    @require_admin
+    async def get(self, request: web.Request, **route: str) -> web.Response:
+        rid = request["phoenix_mcp_rid"]
+        runtime, err = _mesa_runtime(self.hass, rid)
+        if err is not None:
+            return err
+        identifier = route[self.id_field]
+        stored = self._store_call(runtime, "get")(identifier)
+        return _ok(
+            {self.id_field: identifier, "stored": stored.to_dict() if stored is not None else None},
+            request_id=rid,
+        )
+
+    @require_admin
+    async def put(self, request: web.Request, **route: str) -> web.Response:
+        rid = request["phoenix_mcp_rid"]
+        runtime, err = _mesa_runtime(self.hass, rid)
+        if err is not None:
+            return err
+        identifier = route[self.id_field]
+        if (invalid := self.invalid_id(identifier, rid)) is not None:
+            return invalid
+        profile = await _new_mesa_profile(identifier, request, rid)
+        if isinstance(profile, web.Response):
+            return profile
+        refused = await _save_mesa_profile(
+            runtime, request, rid,
+            lambda: self._store_call(runtime, "get")(identifier),
+            lambda: self._store_call(runtime, "set")(identifier, profile),
+        )
+        if refused is not None:
+            return refused
+        _audit_admin(self.hass, request, rid, request.path)
+        return _ok({self.id_field: identifier, "stored": profile.to_dict()}, request_id=rid)
+
+    @require_admin
+    async def delete(self, request: web.Request, **route: str) -> web.Response:
+        rid = request["phoenix_mcp_rid"]
+        runtime, err = _mesa_runtime(self.hass, rid)
+        if err is not None:
+            return err
+        identifier = route[self.id_field]
+        async with runtime.lock:
+            self._store_call(runtime, "delete")(identifier)
+            await runtime.async_save()
+        _audit_admin(self.hass, request, rid, request.path)
+        return _ok({self.id_field: identifier, "deleted": True}, request_id=rid)
+
+
 class PhoenixAdminMesaProfileView(PhoenixView):
     """GET/PUT/DELETE /api/phoenix-mcp/admin/mesa/profiles/{entity_id} - one entity profile."""
 
@@ -4060,27 +4071,17 @@ class PhoenixAdminMesaProfileView(PhoenixView):
         if not _ENTITY_RE.match(entity_id):
             return _err("invalid_request", "Invalid entity ID format.", 400, rid, key="badEntityId")
 
-        body = await _read_body(request, rid)
-        if isinstance(body, web.Response):
-            return body
 
-        from .mesa import read_automation_configs  # noqa: PLC0415
-        from .mesa_core import MetadataOrigin, SemanticProfile  # noqa: PLC0415
-        from .mesa_core.exceptions import MesaValidationError  # noqa: PLC0415
-
-        try:
-            profile = SemanticProfile.from_dict(
-                entity_id, _mesa_migrated_doc(body), default_origin=MetadataOrigin.USER
-            )
-        except MesaValidationError as exc:
-            return _err("invalid_request", str(exc), 400, rid, passthrough=True)
-
-        async with runtime.lock:
-            if request.headers.get("If-None-Match") == "*" and runtime.store.get(entity_id) is not None:
-                return _err("precondition_failed", "A profile already exists. Open it in Edit mode.",
-                            412, rid, key="mesaProfileExists")
-            runtime.store.set(entity_id, profile)
-            await runtime.async_save()
+        profile = await _new_mesa_profile(entity_id, request, rid)
+        if isinstance(profile, web.Response):
+            return profile
+        refused = await _save_mesa_profile(
+            runtime, request, rid,
+            lambda: runtime.store.get(entity_id),
+            lambda: runtime.store.set(entity_id, profile),
+        )
+        if refused is not None:
+            return refused
 
         # Cross-check the new profile against the automation registry.
         configs = await self.hass.async_add_executor_job(read_automation_configs, self.hass)
@@ -4153,65 +4154,19 @@ class PhoenixAdminMesaAreasView(PhoenixView):
         return _ok({"areas": areas}, request_id=rid)
 
 
-class PhoenixAdminMesaDomainView(PhoenixView):
+class PhoenixAdminMesaDomainView(_MesaScopeProfileView):
     """GET/PUT/DELETE /api/phoenix-mcp/admin/mesa/domains/{domain} - one domain-level profile."""
 
     url = "/api/phoenix-mcp/admin/mesa/domains/{domain}"
     name = "api:phoenix-mcp:admin:mesa:domain"
     requires_auth = True
+    id_field = "domain"
+    store_suffix = "domain_profile"
 
-    @require_admin
-    async def get(self, request: web.Request, domain: str) -> web.Response:
-        rid = request["phoenix_mcp_rid"]
-        runtime, err = _mesa_runtime(self.hass, rid)
-        if err is not None:
-            return err
-        stored = runtime.store.get_domain_profile(domain)
-        return _ok(
-            {"domain": domain, "stored": stored.to_dict() if stored is not None else None},
-            request_id=rid,
-        )
-
-    @require_admin
-    async def put(self, request: web.Request, domain: str) -> web.Response:
-        rid = request["phoenix_mcp_rid"]
-        runtime, err = _mesa_runtime(self.hass, rid)
-        if err is not None:
-            return err
-        if not _DOMAIN_RE.match(domain):
-            return _err("invalid_request", "Invalid domain name.", 400, rid, key="badDomain")
-        body = await _read_body(request, rid)
-        if isinstance(body, web.Response):
-            return body
-
-        from .mesa_core import MetadataOrigin, SemanticProfile  # noqa: PLC0415
-        from .mesa_core.exceptions import MesaValidationError  # noqa: PLC0415
-
-        try:
-            profile = SemanticProfile.from_dict(domain, _mesa_migrated_doc(body), default_origin=MetadataOrigin.USER)
-        except MesaValidationError as exc:
-            return _err("invalid_request", str(exc), 400, rid, passthrough=True)
-
-        async with runtime.lock:
-            if request.headers.get("If-None-Match") == "*" and runtime.store.get_domain_profile(domain) is not None:
-                return _err("precondition_failed", "A profile already exists. Open it in Edit mode.",
-                            412, rid, key="mesaProfileExists")
-            runtime.store.set_domain_profile(domain, profile)
-            await runtime.async_save()
-        _audit_admin(self.hass, request, rid, request.path)
-        return _ok({"domain": domain, "stored": profile.to_dict()}, request_id=rid)
-
-    @require_admin
-    async def delete(self, request: web.Request, domain: str) -> web.Response:
-        rid = request["phoenix_mcp_rid"]
-        runtime, err = _mesa_runtime(self.hass, rid)
-        if err is not None:
-            return err
-        async with runtime.lock:
-            runtime.store.delete_domain_profile(domain)
-            await runtime.async_save()
-        _audit_admin(self.hass, request, rid, request.path)
-        return _ok({"domain": domain, "deleted": True}, request_id=rid)
+    def invalid_id(self, value: str, rid: str) -> web.Response | None:
+        if _DOMAIN_RE.match(value):
+            return None
+        return _err("invalid_request", "Invalid domain name.", 400, rid, key="badDomain")
 
 
 class PhoenixAdminMesaIntegrationsView(PhoenixView):
@@ -4240,69 +4195,20 @@ class PhoenixAdminMesaIntegrationsView(PhoenixView):
         return _ok({"integrations": integrations}, request_id=rid)
 
 
-class PhoenixAdminMesaIntegrationView(PhoenixView):
+class PhoenixAdminMesaIntegrationView(_MesaScopeProfileView):
     """GET/PUT/DELETE /api/phoenix-mcp/admin/mesa/integrations/{integration} - one profile."""
 
     url = "/api/phoenix-mcp/admin/mesa/integrations/{integration}"
     name = "api:phoenix-mcp:admin:mesa:integration"
     requires_auth = True
+    id_field = "integration"
+    store_suffix = "integration_profile"
 
-    @require_admin
-    async def get(self, request: web.Request, integration: str) -> web.Response:
-        rid = request["phoenix_mcp_rid"]
-        runtime, err = _mesa_runtime(self.hass, rid)
-        if err is not None:
-            return err
-        stored = runtime.store.get_integration_profile(integration)
-        return _ok(
-            {"integration": integration, "stored": stored.to_dict() if stored is not None else None},
-            request_id=rid,
-        )
-
-    @require_admin
-    async def put(self, request: web.Request, integration: str) -> web.Response:
-        rid = request["phoenix_mcp_rid"]
-        runtime, err = _mesa_runtime(self.hass, rid)
-        if err is not None:
-            return err
+    def invalid_id(self, value: str, rid: str) -> web.Response | None:
         # Integration/component names share HA's domain character set.
-        if not _DOMAIN_RE.match(integration):
-            return _err(
-                "invalid_request", "Invalid integration name.", 400, rid,
-                key="integrationNameInvalid",
-            )
-        body = await _read_body(request, rid)
-        if isinstance(body, web.Response):
-            return body
-
-        from .mesa_core import MetadataOrigin, SemanticProfile  # noqa: PLC0415
-        from .mesa_core.exceptions import MesaValidationError  # noqa: PLC0415
-
-        try:
-            profile = SemanticProfile.from_dict(integration, _mesa_migrated_doc(body), default_origin=MetadataOrigin.USER)
-        except MesaValidationError as exc:
-            return _err("invalid_request", str(exc), 400, rid, passthrough=True)
-
-        async with runtime.lock:
-            if request.headers.get("If-None-Match") == "*" and runtime.store.get_integration_profile(integration) is not None:
-                return _err("precondition_failed", "A profile already exists. Open it in Edit mode.",
-                            412, rid, key="mesaProfileExists")
-            runtime.store.set_integration_profile(integration, profile)
-            await runtime.async_save()
-        _audit_admin(self.hass, request, rid, request.path)
-        return _ok({"integration": integration, "stored": profile.to_dict()}, request_id=rid)
-
-    @require_admin
-    async def delete(self, request: web.Request, integration: str) -> web.Response:
-        rid = request["phoenix_mcp_rid"]
-        runtime, err = _mesa_runtime(self.hass, rid)
-        if err is not None:
-            return err
-        async with runtime.lock:
-            runtime.store.delete_integration_profile(integration)
-            await runtime.async_save()
-        _audit_admin(self.hass, request, rid, request.path)
-        return _ok({"integration": integration, "deleted": True}, request_id=rid)
+        if _DOMAIN_RE.match(value):
+            return None
+        return _err("invalid_request", "Invalid integration name.", 400, rid, key="integrationNameInvalid")
 
 
 class PhoenixAdminMesaIntegrationOptionsView(PhoenixView):
@@ -4327,77 +4233,29 @@ class PhoenixAdminMesaIntegrationOptionsView(PhoenixView):
         )
         names: dict[str, str] = {}
         try:
-            from homeassistant.loader import async_get_integrations  # noqa: PLC0415
+            # Local: inside a guard for releases that lack it.
+            from homeassistant.loader import async_get_integrations
 
             for dom, integ in (await async_get_integrations(self.hass, domains)).items():
                 if not isinstance(integ, BaseException):
                     names[dom] = getattr(integ, "name", None) or dom
-        except Exception:  # noqa: BLE001 - friendly names are best-effort
+        except Exception:  # friendly names are best-effort
             pass
         options = [{"id": dom, "name": names.get(dom, dom)} for dom in domains]
         return _ok({"integrations": options}, request_id=rid)
 
 
-class PhoenixAdminMesaAreaView(PhoenixView):
+class PhoenixAdminMesaAreaView(_MesaScopeProfileView):
     """GET/PUT/DELETE /api/phoenix-mcp/admin/mesa/areas/{area_id} - one area-level profile."""
 
     url = "/api/phoenix-mcp/admin/mesa/areas/{area_id}"
     name = "api:phoenix-mcp:admin:mesa:area"
     requires_auth = True
+    id_field = "area_id"
+    store_suffix = "area_profile"
 
-    @require_admin
-    async def get(self, request: web.Request, area_id: str) -> web.Response:
-        rid = request["phoenix_mcp_rid"]
-        runtime, err = _mesa_runtime(self.hass, rid)
-        if err is not None:
-            return err
-        stored = runtime.store.get_area_profile(area_id)
-        return _ok(
-            {"area_id": area_id, "stored": stored.to_dict() if stored is not None else None},
-            request_id=rid,
-        )
-
-    @require_admin
-    async def put(self, request: web.Request, area_id: str) -> web.Response:
-        rid = request["phoenix_mcp_rid"]
-        runtime, err = _mesa_runtime(self.hass, rid)
-        if err is not None:
-            return err
-        node_err = _validate_node_id("area", area_id, rid)
-        if node_err is not None:
-            return node_err
-        body = await _read_body(request, rid)
-        if isinstance(body, web.Response):
-            return body
-
-        from .mesa_core import MetadataOrigin, SemanticProfile  # noqa: PLC0415
-        from .mesa_core.exceptions import MesaValidationError  # noqa: PLC0415
-
-        try:
-            profile = SemanticProfile.from_dict(area_id, _mesa_migrated_doc(body), default_origin=MetadataOrigin.USER)
-        except MesaValidationError as exc:
-            return _err("invalid_request", str(exc), 400, rid, passthrough=True)
-
-        async with runtime.lock:
-            if request.headers.get("If-None-Match") == "*" and runtime.store.get_area_profile(area_id) is not None:
-                return _err("precondition_failed", "A profile already exists. Open it in Edit mode.",
-                            412, rid, key="mesaProfileExists")
-            runtime.store.set_area_profile(area_id, profile)
-            await runtime.async_save()
-        _audit_admin(self.hass, request, rid, request.path)
-        return _ok({"area_id": area_id, "stored": profile.to_dict()}, request_id=rid)
-
-    @require_admin
-    async def delete(self, request: web.Request, area_id: str) -> web.Response:
-        rid = request["phoenix_mcp_rid"]
-        runtime, err = _mesa_runtime(self.hass, rid)
-        if err is not None:
-            return err
-        async with runtime.lock:
-            runtime.store.delete_area_profile(area_id)
-            await runtime.async_save()
-        _audit_admin(self.hass, request, rid, request.path)
-        return _ok({"area_id": area_id, "deleted": True}, request_id=rid)
+    def invalid_id(self, value: str, rid: str) -> web.Response | None:
+        return _validate_node_id("area", value, rid)
 
 
 class PhoenixAdminMesaDevicesView(PhoenixView):
@@ -4446,66 +4304,17 @@ class PhoenixAdminMesaDeviceOptionsView(PhoenixView):
         return _ok({"devices": options}, request_id=rid)
 
 
-class PhoenixAdminMesaDeviceView(PhoenixView):
+class PhoenixAdminMesaDeviceView(_MesaScopeProfileView):
     """GET/PUT/DELETE /api/phoenix-mcp/admin/mesa/devices/{device_id} - one device profile."""
 
     url = "/api/phoenix-mcp/admin/mesa/devices/{device_id}"
     name = "api:phoenix-mcp:admin:mesa:device"
     requires_auth = True
+    id_field = "device_id"
+    store_suffix = "device_profile"
 
-    @require_admin
-    async def get(self, request: web.Request, device_id: str) -> web.Response:
-        rid = request["phoenix_mcp_rid"]
-        runtime, err = _mesa_runtime(self.hass, rid)
-        if err is not None:
-            return err
-        stored = runtime.store.get_device_profile(device_id)
-        return _ok(
-            {"device_id": device_id, "stored": stored.to_dict() if stored is not None else None},
-            request_id=rid,
-        )
-
-    @require_admin
-    async def put(self, request: web.Request, device_id: str) -> web.Response:
-        rid = request["phoenix_mcp_rid"]
-        runtime, err = _mesa_runtime(self.hass, rid)
-        if err is not None:
-            return err
-        node_err = _validate_node_id("device", device_id, rid)
-        if node_err is not None:
-            return node_err
-        body = await _read_body(request, rid)
-        if isinstance(body, web.Response):
-            return body
-
-        from .mesa_core import MetadataOrigin, SemanticProfile  # noqa: PLC0415
-        from .mesa_core.exceptions import MesaValidationError  # noqa: PLC0415
-
-        try:
-            profile = SemanticProfile.from_dict(device_id, _mesa_migrated_doc(body), default_origin=MetadataOrigin.USER)
-        except MesaValidationError as exc:
-            return _err("invalid_request", str(exc), 400, rid, passthrough=True)
-
-        async with runtime.lock:
-            if request.headers.get("If-None-Match") == "*" and runtime.store.get_device_profile(device_id) is not None:
-                return _err("precondition_failed", "A profile already exists. Open it in Edit mode.",
-                            412, rid, key="mesaProfileExists")
-            runtime.store.set_device_profile(device_id, profile)
-            await runtime.async_save()
-        _audit_admin(self.hass, request, rid, request.path)
-        return _ok({"device_id": device_id, "stored": profile.to_dict()}, request_id=rid)
-
-    @require_admin
-    async def delete(self, request: web.Request, device_id: str) -> web.Response:
-        rid = request["phoenix_mcp_rid"]
-        runtime, err = _mesa_runtime(self.hass, rid)
-        if err is not None:
-            return err
-        async with runtime.lock:
-            runtime.store.delete_device_profile(device_id)
-            await runtime.async_save()
-        _audit_admin(self.hass, request, rid, request.path)
-        return _ok({"device_id": device_id, "deleted": True}, request_id=rid)
+    def invalid_id(self, value: str, rid: str) -> web.Response | None:
+        return _validate_node_id("device", value, rid)
 
 
 class PhoenixAdminMesaVocabularyView(PhoenixView):
@@ -4522,7 +4331,6 @@ class PhoenixAdminMesaVocabularyView(PhoenixView):
     @require_admin
     async def get(self, request: web.Request) -> web.Response:
         rid = request["phoenix_mcp_rid"]
-        from .mesa_core import vocabulary  # noqa: PLC0415
         return _ok(
             {
                 "canonical_tags": sorted(vocabulary.CANONICAL_TAGS),
@@ -4560,7 +4368,6 @@ class PhoenixAdminMesaDefaultsView(PhoenixView):
         body = await _read_body(request, rid)
         if isinstance(body, web.Response):
             return body
-        from .mesa_core.exceptions import MesaValidationError  # noqa: PLC0415
         try:
             async with runtime.lock:
                 runtime.store.set_deployment_defaults(body)
@@ -4596,12 +4403,9 @@ class PhoenixAdminMesaIssuesView(PhoenixView):
             # Scoped: the panel's quiet background read. Rescan and the reload
             # after a profile save, delete or import ask for the full recompute
             # below, so orphans and trigger findings follow them.
-            from .mesa_suggestions import refresh_suggestions  # noqa: PLC0415
 
             refresh_suggestions(self.hass, runtime)
         elif refresh:
-            from .mesa import async_refresh_trigger_issues, refresh_orphans  # noqa: PLC0415
-            from .mesa_suggestions import refresh_suggestions  # noqa: PLC0415
 
             await async_refresh_trigger_issues(self.hass, runtime)
             refresh_orphans(self.hass, runtime)
@@ -4622,7 +4426,6 @@ class PhoenixAdminMesaIssuesView(PhoenixView):
 
 def _issue_to_dict(issue) -> dict:
     """Serialise a mesa-core ValidationIssue dataclass."""
-    import dataclasses  # noqa: PLC0415
 
     return dataclasses.asdict(issue)
 
@@ -4689,6 +4492,8 @@ class PhoenixAdminAttentionView(PhoenixView):
         items[:0] = [item for item in agent_items if item["id"] not in calendar_requests]
         if data.mesa_setup_failed:
             items.append({"id": "mesa", "kind": "mesa"})
+        if data.audit.save_failed is True:
+            items.append({"id": "audit_storage", "kind": "audit_storage"})
         return _ok({"items": items}, request_id=rid)
 
 
@@ -4740,7 +4545,6 @@ class PhoenixAdminConfigurationRecoveryView(PhoenixView):
     @require_admin
     async def get(self, request: web.Request) -> web.Response:
         data: PhoenixData = self.hass.data[DOMAIN]
-        from .config_recovery import ConfigurationRecoveryError
         try:
             records = data.config_recovery.records()
         except ConfigurationRecoveryError:
@@ -4757,10 +4561,6 @@ class PhoenixAdminConfigurationRecoveryRecordView(PhoenixView):
 
     @require_admin
     async def post(self, request: web.Request, recovery_id: str) -> web.Response:
-        from types import SimpleNamespace
-        from .config_recovery import ConfigurationRecoveryError, recovery_error_key
-        from .mcp_view import async_restore_version
-        from .template_recovery import template_snapshot
 
         rid = request["phoenix_mcp_rid"]
         data: PhoenixData = self.hass.data[DOMAIN]
@@ -4776,12 +4576,9 @@ class PhoenixAdminConfigurationRecoveryRecordView(PhoenixView):
             if action == "inspect":
                 snapshot = record.get("source") or record.get("before")
                 if isinstance(snapshot, dict) and snapshot.get("snapshot_type") == "restart_receipt":
-                    from .config_recovery import runtime_identity
                     return _ok({"runtime_replaced": runtime_identity(self.hass) != snapshot["runtime_identity"],
                                 "execution_attribution": "unproven"}, request_id=rid)
                 if isinstance(snapshot, dict) and snapshot.get("snapshot_type") == "storage_helper":
-                    from .tools.helper import _storage_items, _public_helper_config
-                    from .ws_dispatch import async_ws_command
                     helper_type = snapshot["helper_type"]
                     rows = _storage_items(helper_type, await async_ws_command(self.hass, f"{helper_type}/list", {}))
                     if rows is None:
@@ -4809,6 +4606,7 @@ class PhoenixAdminConfigurationRecoveryRecordView(PhoenixView):
                 if side not in ("before", "source") or not isinstance(record.get(side), dict):
                     return _err("invalid_request", "Select an available before or source snapshot.", 400, rid, key="recoverySideRequired")
                 snapshot = record[side]
+                resource_type = None
                 if snapshot.get("snapshot_type") == "storage_helper":
                     resource_type = "helper"
                     resource_id = f"{snapshot['helper_type']}:{snapshot['helper_id']}"
@@ -4820,22 +4618,23 @@ class PhoenixAdminConfigurationRecoveryRecordView(PhoenixView):
                     "energy_preferences", "authored_file", "yaml_file", "blueprint_source",
                     "dashboard_registry", "dashboard_layout", "dashboard_resource",
                 ):
-                    from .mcp_view import async_restore_configuration
                     restored, outcome, _ = await async_restore_configuration(
                         recovery_id, side, user.id, self.hass, data,
                     )
-                    return _ok({"result": restored, "outcome": outcome}, request_id=rid)
+                    result = {"result": restored, "outcome": outcome}
                 else:
                     return _err("invalid_request", "This recovery artifact requires manual restoration.", 400, rid, key="recoveryManualOnly")
-                restored, outcome, _ = await async_restore_version(SimpleNamespace(
-                    before=snapshot, after=None, resource_type=resource_type,
-                    resource_id=resource_id,
-                ), user.id, self.hass, data, "before")
-                result = {"result": restored, "outcome": outcome}
+                if resource_type is not None:
+                    restored, outcome, _ = await async_restore_version(SimpleNamespace(
+                        before=snapshot, after=None, resource_type=resource_type,
+                        resource_id=resource_id,
+                    ), user.id, self.hass, data, "before")
+                    result = {"result": restored, "outcome": outcome}
             else:
                 return _err("invalid_request", "Unknown recovery action.", 400, rid, key="recoveryUnknownAction")
         except ConfigurationRecoveryError as exc:
-            return _err("conflict", str(exc), 409, rid, key=recovery_error_key(str(exc)))
+            return _err("conflict", str(exc), 409, rid, key=recovery_error_key(str(exc)),
+                        params=recovery_error_params(str(exc)))
         data.audit.record(request_id=rid, access_key_id="admin", access_key_name=f"admin:{user.id}",
                           method=f"config_recovery/{action}", resource=recovery_id,
                           outcome=result.get("outcome", "allowed"),
@@ -4903,12 +4702,10 @@ async def _mask_esphome_version(hass: HomeAssistant, body: dict) -> dict:
     FAILS CLOSED: masking that raises means the credentials could not be located,
     which is exactly when the raw text must not be shown.
     """
-    from .esphome_yaml import redact_esphome_text  # noqa: PLC0415
-    from .tools.esphome import _read_esphome_secrets  # noqa: PLC0415
 
     try:
         secret_values, _ = await hass.async_add_executor_job(_read_esphome_secrets, hass)
-    except Exception:  # noqa: BLE001
+    except Exception:
         secret_values = set()
 
     def _mask(text: str) -> str:
@@ -4924,7 +4721,7 @@ async def _mask_esphome_version(hass: HomeAssistant, body: dict) -> dict:
             continue
         try:
             masked = await hass.async_add_executor_job(_mask, content)
-        except Exception:  # noqa: BLE001
+        except Exception:
             masked = _ESPHOME_VERSION_WITHHELD
         out[side] = {**payload, "content": masked}
     return out
@@ -4947,7 +4744,6 @@ class PhoenixAdminVersionView(PhoenixView):
                 "not_found", "Version not found.", 404, rid,
                 key="versionNotFound",
             )
-        from .mcp_view import restore_refusal  # noqa: PLC0415
 
         body = record.to_dict()
         if record.resource_type == "esphome_yaml":
@@ -4973,7 +4769,6 @@ class PhoenixAdminVersionRestoreView(PhoenixView):
 
     @require_admin
     async def post(self, request: web.Request, version_id: str) -> web.Response:
-        from .mcp_view import async_restore_version  # noqa: PLC0415
 
         rid = request["phoenix_mcp_rid"]
         user = request[KEY_HASS_USER]
@@ -5014,7 +4809,7 @@ class PhoenixAdminVersionRestoreView(PhoenixView):
                 )
         try:
             tool_result, _outcome, _resource = await async_restore_version(record, user.id, self.hass, data, side)
-        except Exception:  # noqa: BLE001
+        except Exception:
             _LOGGER.exception("Version restore failed for %s", version_id)
             return _err(
                 "internal_error", "Restore failed.", 500, rid,
@@ -5062,8 +4857,8 @@ class PhoenixAdminVersionRestoreView(PhoenixView):
                 return _err("invalid_request", detail, 400, rid, key="restoreYamlTags")
             refusal = _recovery_refusal(detail)
             if refusal is not None:
-                from .config_recovery import recovery_error_key  # noqa: PLC0415
-                return _err("invalid_request", refusal, 400, rid, key=recovery_error_key(refusal))
+                return _err("invalid_request", refusal, 400, rid, key=recovery_error_key(refusal),
+                            params=recovery_error_params(refusal))
             if detail:
                 return _err(
                     "invalid_request", detail, 400, rid,
@@ -5101,7 +4896,6 @@ class PhoenixAdminMesaOrphansClearView(PhoenixView):
         runtime, err = _mesa_runtime(self.hass, rid)
         if err is not None:
             return err
-        from .mesa import refresh_orphans  # noqa: PLC0415
 
         async with runtime.lock:
             # Recompute against the live registries to delete exactly what is
@@ -5156,7 +4950,6 @@ class PhoenixAdminMesaExportView(PhoenixView):
         runtime, err = _mesa_runtime(self.hass, rid)
         if err is not None:
             return err
-        from .mesa_core.portability import export_profiles  # noqa: PLC0415
 
         archive = export_profiles(runtime.store)
         _audit_admin(self.hass, request, rid, request.path)
@@ -5199,10 +4992,6 @@ class PhoenixAdminMesaImportView(PhoenixView):
                 key="mesaConflictModeInvalid",
             )
 
-        from .mesa import refresh_orphans  # noqa: PLC0415
-        from .mesa_core.exceptions import MesaValidationError  # noqa: PLC0415
-        from .mesa_core.portability import import_profiles  # noqa: PLC0415
-        from .mesa_suggestions import refresh_suggestions  # noqa: PLC0415
 
         async with runtime.lock:
             try:
@@ -5220,7 +5009,7 @@ class PhoenixAdminMesaImportView(PhoenixView):
             try:
                 refresh_orphans(self.hass, runtime)
                 refresh_suggestions(self.hass, runtime)
-            except Exception:  # noqa: BLE001 - degrade, never fail the import
+            except Exception:  # degrade, never fail the import
                 _LOGGER.warning(
                     "MESA import: post-import orphan/suggestion rescan failed rid=%s",
                     rid, exc_info=True,
@@ -5285,7 +5074,6 @@ class PhoenixAdminCardCatalogView(PhoenixView):
                 "invalid_request", "entries must be a list.", 400, rid,
                 key="entriesListRequired",
             )
-        from .ws_dispatch import async_lovelace_resources  # noqa: PLC0415
 
         resources = await async_lovelace_resources(self.hass)
         catalog = await data.card_catalog.async_replace(
@@ -5332,7 +5120,6 @@ class PhoenixAdminMesaSuggestionDismissView(PhoenixView):
                 key="suggestionKeyRequired",
             )
 
-        from .mesa_suggestions import refresh_suggestions  # noqa: PLC0415
 
         async with runtime.lock:
             refresh_suggestions(self.hass, runtime)
@@ -5375,7 +5162,6 @@ class PhoenixAdminMesaSuggestionRestoreView(PhoenixView):
                 key="suggestionRestoreTargetRequired",
             )
 
-        from .mesa_suggestions import refresh_suggestions  # noqa: PLC0415
 
         async with runtime.lock:
             if restore_all:

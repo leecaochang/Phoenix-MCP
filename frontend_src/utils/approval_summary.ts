@@ -15,6 +15,12 @@ export const ENERGY_SOURCE_LABEL_KEYS: Readonly<Record<string, string>> = {
   water: "approvals.energyWater",
 };
 
+/** The stored summary key. Requests are read back from storage, so its type is not taken on trust. */
+function summaryKeyOf(diff: ApprovalDiff | undefined): string {
+  const key: unknown = diff?.summary_key;
+  return typeof key === "string" ? key : "";
+}
+
 /**
  * A request's summary params in the reader's language: a sentinel dashboard
  * name, a blueprint's automation or script domain, and an Energy source type
@@ -24,7 +30,7 @@ export function approvalParams(diff: ApprovalDiff | undefined): Params | undefin
   const params = withDashboardLabel(diff?.summary_params, diff?.target?.type);
   if (!params) return params;
   const out: Params = { ...params };
-  const key = diff?.summary_key ?? "";
+  const key = summaryKeyOf(diff);
   if (key.startsWith("diff.blueprint.") && typeof out.domain === "string") {
     const kind = `approvalSummary.named.kind.${out.domain}`;
     if (hasMessage(kind)) out.domain = t(kind);
@@ -118,9 +124,9 @@ function namedResource(key: string, diff: ApprovalDiff, label: string | null): F
 
 /** Resolve operator copy without interpreting rendered YAML or generating text. */
 function baseApprovalSummary(diff: ApprovalDiff | undefined): FriendlyApprovalSummary {
-  const summaryKey = diff?.summary_key;
+  const summaryKey = summaryKeyOf(diff);
   const params = approvalParams(diff);
-  if (diff && summaryKey?.startsWith("diff.")) {
+  if (diff && summaryKey.startsWith("diff.")) {
     const key = summaryKey.slice("diff.".length);
     const label = targetValue(diff);
     const resource = namedResource(key, diff, label);

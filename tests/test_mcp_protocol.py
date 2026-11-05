@@ -18,17 +18,17 @@ from unittest.mock import patch
 
 import pytest
 
-from custom_components.phoenix_mcp import mcp_view
+from custom_components.phoenix_mcp import const, mcp_transport, tool_dispatch
 from custom_components.phoenix_mcp.const import (
     MCP_DISCOVER_TTL_MS,
     MCP_LEGACY_PROTOCOL_VERSION_PREFERRED,
     MCP_LEGACY_PROTOCOL_VERSIONS,
     MCP_PROTOCOL_VERSIONS,
 )
-from custom_components.phoenix_mcp.mcp_view import _MCP_METHODS, _dispatch_mcp
+from custom_components.phoenix_mcp.tool_dispatch import _MCP_METHODS, _dispatch_mcp
 
-from tests.test_mcp_sse import _FakeStream, _make_request, _stream_patch, _view
-from tests.test_mcp_view import _make_data, _make_hass, _make_access_key
+from tests.runtime_fixtures import FakeStream as _FakeStream, make_sse_request as _make_request, stream_patch as _stream_patch, sse_view as _view
+from tests.runtime_fixtures import make_mcp_data as _make_data, make_mcp_hass as _make_hass, make_mcp_access_key as _make_access_key
 
 _BASE_URL = "http://homeassistant.local"
 
@@ -42,7 +42,7 @@ def _env(**access_key_kwargs):
 
 def _strict_env(**access_key_kwargs):
     access_key, raw, data, hass = _env(**access_key_kwargs)
-    data.enforce_mcp_lifecycle = True
+    data.mcp_sessions.clear()
     return access_key, raw, data, hass
 
 
@@ -90,7 +90,7 @@ class TestServerDiscover:
 
         result = resp["result"]
         assert result["supportedVersions"] == list(MCP_PROTOCOL_VERSIONS)
-        assert result["capabilities"] == mcp_view._SERVER_CAPABILITIES
+        assert result["capabilities"] == tool_dispatch._SERVER_CAPABILITIES
         assert result["resultType"] == "complete"
         assert result["ttlMs"] == MCP_DISCOVER_TTL_MS
         server_info = result["_meta"]["io.modelcontextprotocol/serverInfo"]
@@ -129,13 +129,13 @@ class TestServerDiscover:
         # Stateless transport: nothing is held open to push a list-changed down,
         # and saying otherwise would have clients wait for a signal that never
         # arrives instead of re-listing.
-        caps = mcp_view._SERVER_CAPABILITIES
+        caps = tool_dispatch._SERVER_CAPABILITIES
         assert caps["tools"]["listChanged"] is False
         assert caps["resources"]["subscribe"] is False
 
     async def test_is_audited(self):
         access_key, _raw, data, hass = _env()
-        with patch.object(mcp_view, "_log") as logged:
+        with patch.object(tool_dispatch, "_log") as logged:
             await _dispatch_mcp(
                 "server/discover", 1, {}, access_key, hass, data, "127.0.0.1",
                 base_url=_BASE_URL)
@@ -177,16 +177,16 @@ class TestProtocolVersions:
         # The assertion above is vacuous while the list holds one entry: echoing
         # the request and always answering with the preferred version give the
         # same string. Pin the behaviour against a two-version server. Patched
-        # on mcp_view (the reader), not const; patching the definition module
+        # on mcp_transport (the reader), not const; patching the definition module
         # would not reach the already-imported name.
-        with patch.object(mcp_view, "MCP_LEGACY_PROTOCOL_VERSIONS", ("2025-11-25", "2025-03-26")), \
-             patch.object(mcp_view, "MCP_LEGACY_PROTOCOL_VERSION_PREFERRED", "2025-11-25"):
+        with patch.object(tool_dispatch, "MCP_LEGACY_PROTOCOL_VERSIONS", ("2025-11-25", "2025-03-26")), \
+             patch.object(tool_dispatch, "MCP_LEGACY_PROTOCOL_VERSION_PREFERRED", "2025-11-25"):
             resp, _m, _r, _o = await _dispatch(
                 "initialize", {"protocolVersion": "2025-03-26"})
         assert resp["result"]["protocolVersion"] == "2025-03-26"
 
     async def test_discover_reports_every_supported_version(self):
-        with patch.object(mcp_view, "MCP_PROTOCOL_VERSIONS", ("2026-01-01", "2025-03-26")):
+        with patch.object(tool_dispatch, "MCP_PROTOCOL_VERSIONS", ("2026-01-01", "2025-03-26")):
             resp, _m, _r, _o = await _dispatch("server/discover")
         assert resp["result"]["supportedVersions"] == ["2026-01-01", "2025-03-26"]
 
@@ -387,7 +387,7 @@ class TestRequestCorrelation:
         self, body, headers, status, code,
     ):
         _access_key, raw, _data, hass = _strict_env()
-        with patch.object(mcp_view, "_log") as logged:
+        with patch.object(mcp_transport, "_log") as logged:
             resp = await _view(hass).post(_make_request(
                 body, "application/json", raw, headers))
         assert resp.status == status
@@ -400,7 +400,7 @@ class TestRequestCorrelation:
 
     async def test_json_audit_row_uses_the_http_request_id(self):
         _access_key, raw, _data, hass = _env()
-        with patch.object(mcp_view, "_log") as logged:
+        with patch.object(tool_dispatch, "_log") as logged:
             resp = await _view(hass).post(_make_request(
                 {"jsonrpc": "2.0", "id": 1, "method": "ping"},
                 "application/json",
@@ -415,7 +415,7 @@ class TestRequestCorrelation:
         _access_key, raw, _data, hass = _env()
         hass.loop = asyncio.get_running_loop()
         stream = _FakeStream()
-        with _stream_patch(stream), patch.object(mcp_view, "_log") as logged:
+        with _stream_patch(stream), patch.object(tool_dispatch, "_log") as logged:
             await _view(hass).post(_make_request(
                 {"jsonrpc": "2.0", "id": 1, "method": "ping"},
                 "text/event-stream",
@@ -428,7 +428,7 @@ class TestRequestCorrelation:
 
     async def test_notification_audit_row_uses_the_http_request_id(self):
         _access_key, raw, _data, hass = _env()
-        with patch.object(mcp_view, "_log") as logged:
+        with patch.object(tool_dispatch, "_log") as logged:
             resp = await _view(hass).post(_make_request(
                 {"jsonrpc": "2.0", "method": "notifications/initialized"},
                 "application/json",
@@ -442,7 +442,7 @@ class TestRequestCorrelation:
 
     async def test_era_rejected_method_audit_row_uses_the_http_request_id(self):
         _access_key, raw, _data, hass = _strict_env()
-        with patch.object(mcp_view, "_log") as logged:
+        with patch.object(mcp_transport, "_log") as logged:
             resp = await _view(hass).post(_make_request(
                 _modern_body("initialize"),
                 "application/json",
@@ -461,7 +461,7 @@ class TestRequestCorrelation:
             {"jsonrpc": "2.0", "id": 1, "method": "ping"},
             {"jsonrpc": "2.0", "id": 2, "method": "ping"},
         ]
-        with patch.object(mcp_view, "_log") as logged:
+        with patch.object(tool_dispatch, "_log") as logged:
             resp = await _view(hass).post(_make_request(
                 body, "application/json", raw))
         request_id = resp.headers["X-Phoenix-Request-ID"]
@@ -548,7 +548,7 @@ class TestLegacyProtocolEra:
     async def test_delete_releases_session_and_reclaims_per_access_key_quota(self):
         _access_key, raw, data, hass = _strict_env()
         session_ids = []
-        for _ in range(mcp_view._MCP_LEGACY_SESSION_ACCESS_KEY_LIMIT):
+        for _ in range(mcp_transport._MCP_LEGACY_SESSION_ACCESS_KEY_LIMIT):
             init = await _view(hass).post(_make_request(
                 self._initialize_body(), "application/json", raw))
             assert init.status == 200
@@ -568,14 +568,14 @@ class TestLegacyProtocolEra:
             self._initialize_body(), "application/json", raw))
         assert retried.status == 200
         assert retried.headers["Mcp-Session-Id"] not in session_ids
-        assert len(data.mcp_sessions) == mcp_view._MCP_LEGACY_SESSION_ACCESS_KEY_LIMIT
+        assert len(data.mcp_sessions) == mcp_transport._MCP_LEGACY_SESSION_ACCESS_KEY_LIMIT
 
     async def test_delete_releases_global_legacy_session_slot(self):
         access_key, raw, data, hass = _strict_env()
         session_id = "owned-session"
-        now = mcp_view.time.monotonic()
+        now = mcp_transport.time.monotonic()
         data.mcp_sessions[session_id] = {"access_key_id": access_key.id, "last_seen": now, "in_use": 1}
-        for index in range(mcp_view._MCP_LEGACY_SESSION_LIMIT - 1):
+        for index in range(mcp_transport._MCP_LEGACY_SESSION_LIMIT - 1):
             data.mcp_sessions[f"other-{index}"] = {
                 "access_key_id": f"other-access-key-{index}",
                 "last_seen": now,
@@ -592,14 +592,14 @@ class TestLegacyProtocolEra:
         retried = await _view(hass).post(_make_request(
             self._initialize_body(), "application/json", raw))
         assert retried.status == 200
-        assert len(data.mcp_sessions) == mcp_view._MCP_LEGACY_SESSION_LIMIT
+        assert len(data.mcp_sessions) == mcp_transport._MCP_LEGACY_SESSION_LIMIT
 
     async def test_delete_requires_auth_and_preserves_another_access_keys_session(self):
         _access_key, raw, data, hass = _strict_env()
         session_id = "foreign-session"
         data.mcp_sessions[session_id] = {
             "access_key_id": "another-access-key",
-            "last_seen": mcp_view.time.monotonic(),
+            "last_seen": mcp_transport.time.monotonic(),
         }
 
         data.store.get_access_key_by_hash.return_value = None
@@ -691,7 +691,7 @@ class TestMethodRegistryMatchesDispatcher:
 
 def _dispatcher_methods() -> set[str]:
     """Every literal `_dispatch_mcp` compares its `method` argument against."""
-    tree = ast.parse(textwrap.dedent(inspect.getsource(mcp_view._dispatch_mcp_authorized)))
+    tree = ast.parse(textwrap.dedent(inspect.getsource(tool_dispatch._dispatch_mcp_authorized)))
     found: set[str] = set()
     for node in ast.walk(tree):
         if not isinstance(node, ast.Compare):
@@ -717,59 +717,59 @@ def test_dispatcher_method_extraction_actually_finds_branches():
 async def test_session_quota_cannot_evict_another_access_key():
     victim, _, data, _ = _strict_env()
     attacker, _ = _make_access_key()
-    victim_id = mcp_view._open_legacy_session(data, victim)
-    allocated = [mcp_view._open_legacy_session(data, attacker) for _ in range(300)]
+    victim_id = mcp_transport._open_legacy_session(data, victim)
+    allocated = [mcp_transport._open_legacy_session(data, attacker) for _ in range(300)]
     assert victim_id in data.mcp_sessions
     assert all(allocated)
-    assert set(allocated[-mcp_view._MCP_LEGACY_SESSION_ACCESS_KEY_LIMIT:]) == set(data.mcp_sessions) - {victim_id}
+    assert set(allocated[-mcp_transport._MCP_LEGACY_SESSION_ACCESS_KEY_LIMIT:]) == set(data.mcp_sessions) - {victim_id}
 
 
 async def test_full_global_quota_evicts_only_the_callers_own_idle_session():
     access_key, _, data, _ = _strict_env()
-    now = mcp_view.time.monotonic()
+    now = mcp_transport.time.monotonic()
     data.mcp_sessions["own-old"] = {"access_key_id": access_key.id, "last_seen": now - 10}
     data.mcp_sessions["own-busy"] = {"access_key_id": access_key.id, "last_seen": now - 20, "in_use": 1}
-    for i in range(mcp_view._MCP_LEGACY_SESSION_LIMIT - 2):
+    for i in range(mcp_transport._MCP_LEGACY_SESSION_LIMIT - 2):
         data.mcp_sessions[str(i)] = {"access_key_id": str(i), "last_seen": now - 30}
     others = {key: value for key, value in data.mcp_sessions.items() if not key.startswith("own")}
-    session = mcp_view._open_legacy_session(data, access_key)
+    session = mcp_transport._open_legacy_session(data, access_key)
     assert session is not None
     assert set(data.mcp_sessions) == {*others, "own-busy", session}
 
 
 async def test_global_session_capacity_refuses_without_eviction():
     access_key, _, data, _ = _strict_env()
-    for i in range(mcp_view._MCP_LEGACY_SESSION_LIMIT):
-        data.mcp_sessions[str(i)] = {'access_key_id': str(i), 'last_seen': mcp_view.time.monotonic()}
+    for i in range(mcp_transport._MCP_LEGACY_SESSION_LIMIT):
+        data.mcp_sessions[str(i)] = {'access_key_id': str(i), 'last_seen': mcp_transport.time.monotonic()}
     original = dict(data.mcp_sessions)
-    assert mcp_view._open_legacy_session(data, access_key) is None
+    assert mcp_transport._open_legacy_session(data, access_key) is None
     assert data.mcp_sessions == original
 
 
 async def test_session_capacity_returns_retryable_http_error():
     access_key, raw, data, hass = _strict_env()
-    for _ in range(mcp_view._MCP_LEGACY_SESSION_ACCESS_KEY_LIMIT):
-        data.mcp_sessions[mcp_view._open_legacy_session(data, access_key)]["in_use"] = 1
+    for _ in range(mcp_transport._MCP_LEGACY_SESSION_ACCESS_KEY_LIMIT):
+        data.mcp_sessions[mcp_transport._open_legacy_session(data, access_key)]["in_use"] = 1
     response = await _view(hass).post(_make_request(
         TestLegacyProtocolEra._initialize_body(), 'application/json', raw))
     assert response.status == 429
     assert 'error' in json.loads(response.text)
     assert 'Mcp-Session-Id' not in response.headers
     # Its own sessions are busy and free when their requests end: seconds, not the hour-long idle limit.
-    assert response.headers['Retry-After'] == str(mcp_view.MCP_LEGACY_SESSION_BUSY_RETRY_SECONDS)
+    assert response.headers['Retry-After'] == str(const.MCP_LEGACY_SESSION_BUSY_RETRY_SECONDS)
 
 
 async def test_a_quota_full_of_other_keys_waits_for_the_stalest_session():
     access_key, _, data, _ = _strict_env()
-    now = mcp_view.time.monotonic()
-    for i in range(mcp_view._MCP_LEGACY_SESSION_LIMIT):
+    now = mcp_transport.time.monotonic()
+    for i in range(mcp_transport._MCP_LEGACY_SESSION_LIMIT):
         data.mcp_sessions[str(i)] = {'access_key_id': str(i), 'last_seen': now - 3000}
-    assert abs(mcp_view._legacy_session_retry_after(data, access_key) - 600) <= 2
+    assert abs(mcp_transport._legacy_session_retry_after(data, access_key) - 600) <= 2
 
 
 async def test_legacy_batch_and_single_reject_same_modern_only_method():
     access_key, raw, data, hass = _strict_env()
-    session = mcp_view._open_legacy_session(data, access_key)
+    session = mcp_transport._open_legacy_session(data, access_key)
     data.mcp_sessions[session]['initialized'] = True
     headers = {'Mcp-Session-Id': session}
     discover = {'jsonrpc': '2.0', 'id': 1, 'method': 'server/discover'}

@@ -1,5 +1,5 @@
 /**
- * The Guide's framework (user, 2026-11-01): topics compile with sections,
+ * The Guide's framework: topics compile with sections,
  * parents, keywords and covered files checked, and short enough to read
  * beside a window; translations keep English's pages and sections; a page
  * renders as sections a control can point at; Contents lists every page in

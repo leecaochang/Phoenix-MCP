@@ -150,6 +150,7 @@ LITERALS: dict[str, tuple[str, ...]] = {
 # else that matches English exactly is almost certainly a copy that was never
 # translated, which nothing at runtime would ever report.
 ALLOW_IDENTICAL = frozenset({
+    "panel.common.labelValue",        # placeholders only: "{label}: {value}"
     "panel.settings.selectedOptionHelp",  # placeholders only: "{option}: {description}"
     "panel.settings.modelWithMode",   # "{model} ({mode})": placeholders and brackets only
     "panel.perms.colId",              # "ID"

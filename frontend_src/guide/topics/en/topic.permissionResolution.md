@@ -15,6 +15,8 @@ Phoenix decides every request the same way, whichever app or feature sends it.
 
 A D anywhere in that chain denies, even when the entity itself is set to W.
 
+A group with a D member is refused too, because acting on the group would reach that member. In a wider request, such as a whole area, Phoenix leaves the group out and acts on the rest. Scenes, scripts and automations don't count as groups.
+
 ## The nearest grant decides {#nearest}
 
 Otherwise the nearest R or W decides. An entity's own setting beats its device's, and a device's beats its domain's. If every level is N, the answer is NO ACCESS.
@@ -53,7 +55,7 @@ An automation, script or scene runs as Home Assistant, not as the agent. So W on
 
 R is safe for triggering: the agent can see these entities but can't run them. The tree marks these domains with "!".
 
-To guard a trigger, give the automation, script or scene a MESA profile set to Confirm. Then each run waits for your approval, whatever its actions do. [{{label:mesa.suggestTitle}}](guide:window.mesaSuggestions) finds the ones that reach risky devices.
+To guard a trigger, give the automation, script or scene a MESA profile set to Confirm. When {{label:settings.mesaModeLabel}} or that profile is {{label:settings.mesaModeEnforced}}, each run waits for your approval, whatever its actions do. Under {{label:settings.mesaModeAdvisory}}, the run goes ahead. [{{label:mesa.suggestTitle}}](guide:window.mesaSuggestions) finds the ones that reach risky devices.
 
 An approval covers the exact entities, and any group members, it was requested for. If the group changes, the agent must ask again. Phoenix doesn't check what a scene or script then does.
 

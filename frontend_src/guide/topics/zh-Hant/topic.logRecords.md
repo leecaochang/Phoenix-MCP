@@ -6,7 +6,7 @@ Phoenix 保留兩種日誌。稽核日誌是每個操作及其結果的簡短記
 ## 什麼構成稽核條目 {#audit-entries}
 
 - **智慧體操作**：來自 MCP 用戶端、Agent Chat、語音智慧體、Assist、AI 任務或 Home Companion 的每次工具呼叫。條目包含工具名稱和參數，絕不包含其結果。
-- **其他 MCP 請求**：列出工具、開始和結束工作階段，以及金鑰無權發出的請求。
+- **其他 MCP 請求**：列出工具、開始和結束工作階段，以及金鑰無權發出的請求。如果應用程式在變更期間中斷連線，名為 `request/cancelled` 的條目會記錄這一情況。
 - **MESA 阻止**：MESA 每拒絕一個實體就增加一筆條目。這些條目需要 mesa_core.audit 記錄器處於預設層級 INFO；在 Home Assistant 的記錄器設定中提高層級會隱藏它們，但阻止仍會發生。
 - **核准**：每個進入核准佇列的請求，以及它的後續結果：已核准、已執行、已拒絕、已取消或失敗。
 - **你在面板中的變更**：存取金鑰、權限、設定、MESA 策略、還原、清除等管理員操作，顯示為管理員而非存取金鑰。設定變更會說明改了什麼，即使關閉日誌記錄。
@@ -23,7 +23,7 @@ Phoenix 保留兩種日誌。稽核日誌是每個操作及其結果的簡短記
 - **{{label:audit.outcomeDenied}}**：被權限或 MESA 拒絕存取，或被拒絕、過期、取消的核准。
 - **{{label:audit.outcomePendingApproval}}**：等待你的核准。
 - **{{label:audit.outcomeRateLimited}}**：金鑰傳送過多請求。
-- **{{label:audit.outcomeInvalidRequest}}**、**{{label:audit.outcomeNotFound}}** 和 **{{label:audit.outcomeNotImplemented}}**：請求格式錯誤、指向不存在的內容，或要求 Phoenix 不做的事情。
+- **{{label:audit.outcomeInvalidRequest}}**、**{{label:audit.outcomeNotFound}}** 和 **{{label:audit.outcomeNotImplemented}}**：請求格式錯誤、指向不存在的對象，或要求 Phoenix 不支援的操作。Phoenix 無法確認的變更也記為{{label:audit.outcomeInvalidRequest}}，儘管它可能已經生效。
 
 記錄哪些結果由[稽核日誌設定](guide:window.settingsLogs#audit-log)決定。
 

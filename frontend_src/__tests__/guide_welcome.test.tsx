@@ -1,5 +1,5 @@
 /**
- * Welcome to the Guide (user, 2026-11-02/03): a demo of what the Guide does,
+ * Welcome to the Guide: a demo of what the Guide does,
  * with nothing to finish. The Guide opens on it once and then on the reader's
  * page, Back always reaches it, and it stays on screen while tips react:
  * selecting in a window invites the reader to read about it, the page's own
@@ -83,7 +83,7 @@ describe("when the Guide opens on Welcome", () => {
 });
 
 describe("Welcome in every language", () => {
-  it("ships translated, so a reader never meets an English greeting around their own labels (user, 2026-11-03)", () => {
+  it("ships translated, so a reader never meets an English greeting around their own labels", () => {
     const missing = LANGUAGES.map((l) => l.code).filter((code) => !existsSync(resolve(__dirname, `../guide/topics/${code}/topic.welcome.md`)));
     expect(missing).toEqual([]);
   });
@@ -207,7 +207,7 @@ describe("the Welcome page", () => {
     expect(welcome.markSeen).not.toHaveBeenCalled();
   });
 
-  it("gives way to the wizard's page when the wizard starts while it is showing (user, 2026-11-03)", async () => {
+  it("gives way to the wizard's page when the wizard starts while it is showing", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true, json: async () => ({ format: GUIDE_FORMAT, language: "en", topics }) })));
     const welcome = welcomeOf(undefined);
     const view = (topicId: string | null) => (

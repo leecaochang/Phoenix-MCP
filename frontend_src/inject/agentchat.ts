@@ -17,9 +17,10 @@
 
 import { JS_BUILD } from "../version";
 import { registerAgentChatShortcut } from "../utils/agentchat_shortcut";
+import { releaseAbandonedHold } from "../utils/page_suspend";
 import { claimInjectController, type InjectController } from "./ownership";
 import {
-  setAgentCliOwner, agentCliOpenPatch,
+  setAgentCliOwner, agentCliOpenPatch, purgeAgentCliStorage,
   getDurable as getAgentCliDurable,
   patchDurable as patchAgentCliDurable,
 } from "../utils/agentcli_state";
@@ -141,7 +142,13 @@ function start(): void {
     return;
   }
   setAgentCliOwner(typeof hass.user.id === "string" ? hass.user.id : null);
-  if (!hass.user.is_admin) { trackedTimeout(start, 2000); return; }
+  releaseAbandonedHold();
+  if (!hass.user.is_admin) {
+    // What an admin's chat left in this browser is not for this user to read.
+    purgeAgentCliStorage();
+    trackedTimeout(start, 2000);
+    return;
+  }
   const owner = hass.user.id;
   const watchIdentity = () => {
     const current = getHass();

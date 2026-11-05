@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import importlib
 import inspect
 import logging
 from collections.abc import Callable
+from dataclasses import dataclass
 from datetime import timedelta
 
 from homeassistant.config_entries import ConfigEntry
@@ -21,9 +23,19 @@ from .audit import AuditLog
 from .version_store import VersionStore
 from .agent_recovery import AgentRecovery, STORAGE_KEY as AGENT_RECOVERY_STORAGE_KEY
 from .card_catalog import CardCatalogStore
-from .const import APPROVAL_SWEEP_INTERVAL, AUDIT_STORAGE_KEY, AUDIT_STORAGE_VERSION, CARD_CATALOG_STORAGE_KEY, CARD_CATALOG_STORAGE_VERSION, DOMAIN, EXPIRY_CHECK_INTERVAL, FLUSH_INTERVAL, RUNTIME_READY_KEY, SENSOR_PUSH_INTERVAL, VERSION_STORAGE_KEY, VERSION_STORAGE_VERSION
-from .data import PhoenixData
-from .helpers import async_archive_expired_access_key, async_load_catalogs, cancel_expiry_timer, schedule_expiry_timer
+from .const import (
+    APPROVAL_SWEEP_INTERVAL, AUDIT_STORAGE_KEY, AUDIT_STORAGE_VERSION, CARD_CATALOG_STORAGE_KEY,
+    CARD_CATALOG_STORAGE_VERSION, CONFIG_RECOVERY_SWEEP_INTERVAL, CONVERSATION_LOG_FLUSH_SECONDS,
+    CONVERSATION_LOG_STORAGE_KEY, DASHBOARD_RESOURCE_OWNERSHIP_STORAGE_KEY, DOMAIN,
+    EXPIRY_CHECK_INTERVAL, FLUSH_INTERVAL, MIN_HA_VERSION, RUNTIME_READY_KEY, SENSOR_PUSH_INTERVAL,
+    VERSION_STORAGE_KEY, VERSION_STORAGE_VERSION,
+)
+from .provider_constants import AGENTCLI_CATALOG_TICK_INTERVAL
+from .routing.routing_tables import (
+    DECISION_BUDGET_STORAGE_KEY, ROUTING_STATISTICS_FLUSH_INTERVAL, ROUTING_STATISTICS_STORAGE_KEY,
+)
+from .data import DurableState, PhoenixData
+from .helpers import RepeatedFailureLog, async_load_catalogs, cancel_expiry_timer
 from .policy_engine import template_blocklist_vars
 from .rate_limiter import RateLimiter
 from .access_key_store import AccessKeyStore
@@ -61,6 +73,27 @@ _LOGGER = logging.getLogger(__name__)
 
 PLATFORMS = ["sensor"]
 
+# Every first-party module setup reaches. Home Assistant imports this package in
+# its import executor, but an import inside a function first runs where the
+# function does, and setup runs on the event loop: reading and compiling these
+# there stalls all of Home Assistant, and its loop guard does not see an import
+# statement. They stay out of the top of this file so that a Home Assistant too
+# old for them still reaches the refusal in async_setup_entry.
+_SETUP_MODULES = (
+    "access_key_auth", "admin_view", "agent_chat", "agentcli_views", "ai_task", "approvals",
+    "assist_api", "config_reconciliation", "config_recovery", "conversation_log",
+    "dashboard_resource_ownership", "debug_capture", "durable_storage", "llm.accounts",
+    "logger_control", "mcp_transport", "mesa", "mesa_audit", "mesa_core", "mesa_suggestions",
+    "panel", "recovery_storage", "routing.decision_budget", "routing.routing_statistics", "sensor",
+    "skill_view", "tool_registration", "tools.calendar", "voice_agent", "ws_dispatch",
+)
+
+
+def _import_setup_modules() -> None:
+    """Load what setup needs. Runs in Home Assistant's import executor."""
+    for name in _SETUP_MODULES:
+        importlib.import_module(f"{__package__}.{name}")
+
 
 @callback
 def _warn_on_computed_alias_loss(hass: HomeAssistant, event: Event) -> None:
@@ -92,13 +125,14 @@ def _warn_on_computed_alias_loss(hass: HomeAssistant, event: Event) -> None:
 
 
 def _entry_platforms() -> list[str]:
-    """All platforms this entry may have forwarded (for a symmetric unload).
+    """All platforms this entry may forward; unload follows what was actually forwarded.
 
     sensor is always forwarded; ai_task is forwarded (best-effort) when HA supports
-    it. ai_task_supported() is import-based and stable for the process lifetime, so
-    unload computes the same list; unloading a platform that never set up is a no-op.
+    it. An entry with no runtime has no record of what it forwarded, so its unload
+    falls back to this list. Unloading a platform that never set up is not safe:
+    some Home Assistant releases raise for it.
     """
-    from .ai_task import ai_task_supported  # noqa: PLC0415
+    from .ai_task import ai_task_supported
 
     platforms = list(PLATFORMS)
     if ai_task_supported():
@@ -110,7 +144,7 @@ def _audit_template_sandbox() -> None:
     """Warn about unrecognized names in Phoenix MCP's template render environment.
 
     Runs once at setup. Audits the hass-less environment actually used by
-    render_template_for_access_key() across globals, filters, AND tests (Jinja2
+    render_template_snapshot() across globals, filters, AND tests (Jinja2
     render variables cannot shadow filters or tests, so every name HA registers
     there is reachable). Any unrecognized name triggers a log warning so future
     HA versions adding new template functions don't silently bypass Phoenix MCP
@@ -153,6 +187,10 @@ def _audit_template_sandbox() -> None:
     except Exception:
         _LOGGER.debug("Phoenix MCP: could not audit template environment", exc_info=True)
 
+
+# The single DurableState of this Home Assistant process, under its own key
+# because unload pops hass.data[DOMAIN] while handlers may still be writing.
+_DURABLE_STATE_KEY = "phoenix_mcp_durable_state"
 
 # Names of the view classes already registered on HA's aiohttp router, kept in
 # hass.data under its own key so it survives unload: async_unload_entry pops
@@ -235,7 +273,9 @@ def _register_views(hass: HomeAssistant, view_classes: list) -> None:
     Skipping the ones already present is correct, not merely tidy: the views hold
     no per-setup state (they read hass.data[DOMAIN] on every request), so routes
     from the previous setup serve the new one unchanged. The kill switch works
-    the same way, refusing at request time rather than by removing routes.
+    the same way, refusing at request time rather than by removing routes. A
+    handler already running keeps the PhoenixData it started with, which is why
+    storage lives in DurableState rather than in that object.
     """
     registered: set[str] = hass.data.setdefault(_VIEWS_REGISTERED_KEY, set())
     for view_cls in view_classes:
@@ -269,23 +309,29 @@ async def _rollback_failed_setup(
         await data.decision_shadow.async_cancel()
         await _async_shutdown_mesa_workers()
         try:
-            from .assist_api import async_unregister_assist_api  # noqa: PLC0415
+            from .assist_api import async_unregister_assist_api
 
             async_unregister_assist_api(data)
-        except Exception:  # noqa: BLE001 - rollback continues through every surface
+        except Exception:  # rollback continues through every surface
             _LOGGER.exception("Phoenix MCP: failed to unregister Assist during setup rollback")
         try:
-            from .voice_agent import async_unregister_voice_agent  # noqa: PLC0415
+            from .voice_agent import async_unregister_voice_agent
 
             async_unregister_voice_agent(hass, entry)
-        except Exception:  # noqa: BLE001 - rollback continues through every surface
+        except Exception:  # rollback continues through every surface
             _LOGGER.exception("Phoenix MCP: failed to unregister voice during setup rollback")
+        try:
+            from .debug_capture import async_detach_debug_capture
+
+            async_detach_debug_capture(hass)
+        except Exception:  # rollback continues through every surface
+            _LOGGER.exception("Phoenix MCP: failed to detach debug capture during setup rollback")
 
     _remove_frontend(hass)
     try:
         if data is not None and data.forwarded_platforms:
             await hass.config_entries.async_unload_platforms(entry, sorted(data.forwarded_platforms))
-    except Exception:  # noqa: BLE001 - preserve the original setup exception
+    except Exception:  # preserve the original setup exception
         _LOGGER.exception("Phoenix MCP: failed to unload platforms during setup rollback")
     if data is not None and hass.data.get(DOMAIN) is data:
         hass.data.pop(DOMAIN, None)
@@ -296,11 +342,10 @@ def _ha_version_supported() -> tuple[bool, str]:
     from awesomeversion import AwesomeVersion
     from homeassistant.const import __version__ as ha_version
 
-    from .const import MIN_HA_VERSION
 
     try:
         return AwesomeVersion(ha_version) >= AwesomeVersion(MIN_HA_VERSION), ha_version
-    except Exception:  # noqa: BLE001 - an unreadable version must not block setup
+    except Exception:  # an unreadable version must not block setup
         return True, ha_version
 
 
@@ -310,8 +355,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # setup refuses clearly here rather than failing somewhere later.
     supported, ha_version = _ha_version_supported()
     if not supported:
-        from .const import MIN_HA_VERSION
-
         _LOGGER.error(
             "Phoenix MCP needs Home Assistant %s or newer, and this is %s. It was not set up.",
             MIN_HA_VERSION, ha_version,
@@ -319,6 +362,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         return False
     hass.data[RUNTIME_READY_KEY] = False
     try:
+        await hass.async_add_import_executor_job(_import_setup_modules)
         result = await _async_setup_entry_impl(hass, entry)
     except BaseException:
         await _rollback_failed_setup(hass, entry, hass.data.get(DOMAIN))
@@ -328,25 +372,28 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     return result
 
 
-async def _async_setup_entry_impl(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """Set up Phoenix MCP from a config entry.
+async def _async_durable_state(hass: HomeAssistant) -> DurableState:
+    """Return this process's storage owners, loading them on first use only.
 
-    Initialises storage, registers admin views and the panel unconditionally.
-    MCP views are registered at setup only when the kill switch is off.
-    Schedules a periodic flush of last_used_at timestamps and wires registry
-    change listeners to invalidate the entity tree cache.
+    A failed load publishes nothing, so a later setup attempt starts clean. A
+    reload reuses the loaded state: reading the files again would build a second
+    owner of each one while the first may still be writing.
     """
-    await async_load_catalogs(hass)
+    state: DurableState | None = hass.data.get(_DURABLE_STATE_KEY)
+    if state is not None:
+        # Reloading stays the way to retry a request ledger that could not be read.
+        await state.decision_budget.async_retry_load()
+        return state
+
     store = await AccessKeyStore.async_create(hass)
-    rate_limiter = RateLimiter()
     # Private like the Conversation Log's: tool arguments can name people and places.
-    audit_store: Store[dict] = Store(hass, AUDIT_STORAGE_VERSION, AUDIT_STORAGE_KEY, private=True)
+    from .durable_storage import DurableStore, ReportingStore
+    audit_store: ReportingStore[dict] = ReportingStore(hass, AUDIT_STORAGE_VERSION, AUDIT_STORAGE_KEY, private=True)
     audit = AuditLog(store=audit_store, maxlen=store.get_settings().audit_log_maxlen)
     await audit.async_load()
     from .conversation_log import ConversationLog
-    from .const import CONVERSATION_LOG_STORAGE_KEY, CONVERSATION_LOG_FLUSH_SECONDS
-    conversations = ConversationLog(Store(hass, 1, CONVERSATION_LOG_STORAGE_KEY,
-                                           private=True, atomic_writes=True, serialize_in_event_loop=False))
+    conversations = ConversationLog(ReportingStore(hass, 1, CONVERSATION_LOG_STORAGE_KEY,
+                                                    private=True, atomic_writes=True, serialize_in_event_loop=False))
     conversations.configure(store.get_settings())
     await conversations.async_load()
 
@@ -359,7 +406,6 @@ async def _async_setup_entry_impl(hass: HomeAssistant, entry: ConfigEntry) -> bo
     await card_catalog.async_load()
 
     from .config_recovery import ConfigurationRecovery, ConfigurationRecoveryError
-    from .durable_storage import DurableStore
     from .recovery_storage import RecoveryStorage
     config_recovery = ConfigurationRecovery(RecoveryStorage(hass), hass=hass)
     try:
@@ -370,36 +416,76 @@ async def _async_setup_entry_impl(hass: HomeAssistant, entry: ConfigEntry) -> bo
     agent_recovery = AgentRecovery(DurableStore(hass, 1, AGENT_RECOVERY_STORAGE_KEY, atomic_writes=True))
     await agent_recovery.async_load()
 
-    from .const import DASHBOARD_RESOURCE_OWNERSHIP_STORAGE_KEY
     from .dashboard_resource_ownership import DashboardResourceOwnership
     dashboard_resources = DashboardResourceOwnership(
         DurableStore(hass, 1, DASHBOARD_RESOURCE_OWNERSHIP_STORAGE_KEY, atomic_writes=True))
     await dashboard_resources.async_load()
 
-    from .routing_statistics import RoutingStatistics
-    from .const import ROUTING_STATISTICS_STORAGE_KEY, ROUTING_STATISTICS_FLUSH_INTERVAL
-    routing_statistics = RoutingStatistics(Store(hass, 1, ROUTING_STATISTICS_STORAGE_KEY))
+    from .routing.routing_statistics import RoutingStatistics
+    routing_statistics = RoutingStatistics(ReportingStore(hass, 1, ROUTING_STATISTICS_STORAGE_KEY))
     await routing_statistics.async_load()
-    from .decision_budget import DecisionRequestBudget
-    from .const import DECISION_BUDGET_STORAGE_KEY
-    decision_budget = DecisionRequestBudget(Store(hass, 1, DECISION_BUDGET_STORAGE_KEY, atomic_writes=True))
+    from .routing.decision_budget import DecisionRequestBudget
+    decision_budget = DecisionRequestBudget(DurableStore(hass, 1, DECISION_BUDGET_STORAGE_KEY, atomic_writes=True))
     await decision_budget.async_load()
 
-    data = PhoenixData(
+    from .tools.calendar import CalendarWriteJournal
+    calendar_writes = CalendarWriteJournal(hass)
+    try:
+        async with calendar_writes.lock:
+            await calendar_writes.load()
+    except Exception:
+        calendar_writes.unavailable = True
+        _LOGGER.error("Calendar recovery storage unavailable; calendar writes will retry initialization")
+
+    state = DurableState(
+        store=store,
+        audit=audit,
+        conversations=conversations,
+        versions=versions,
+        card_catalog=card_catalog,
+        config_recovery=config_recovery,
+        agent_recovery=agent_recovery,
+        dashboard_resources=dashboard_resources,
+        routing_statistics=routing_statistics,
         decision_budget=decision_budget,
+        calendar_writes=calendar_writes,
+    )
+    hass.data[_DURABLE_STATE_KEY] = state
+    return state
+
+
+async def _async_setup_entry_impl(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    """Set up Phoenix MCP from a config entry.
+
+    Initialises storage, registers admin views and the panel unconditionally.
+    MCP views are registered at setup only when the kill switch is off.
+    Schedules a periodic flush of last_used_at timestamps and wires registry
+    change listeners to invalidate the entity tree cache.
+    """
+    from .access_key_auth import async_archive_expired_access_key, schedule_expiry_timer
+
+    await async_load_catalogs(hass)
+    state = await _async_durable_state(hass)
+    store, audit, agent_recovery = state.store, state.audit, state.agent_recovery
+    rate_limiter = RateLimiter()
+    state.conversations.configure(store.get_settings())
+
+    data = PhoenixData(
+        decision_budget=state.decision_budget,
         hass=hass,
         store=store,
         rate_limiter=rate_limiter,
         audit=audit,
-        versions=versions,
+        versions=state.versions,
         agent_recovery=agent_recovery,
-        config_recovery=config_recovery,
-        dashboard_resources=dashboard_resources,
-        routing_statistics=routing_statistics,
-        conversations=conversations,
-        card_catalog=card_catalog,
+        config_recovery=state.config_recovery,
+        calendar_writes=state.calendar_writes,
+        dashboard_resources=state.dashboard_resources,
+        routing_statistics=state.routing_statistics,
+        conversations=state.conversations,
+        card_catalog=state.card_catalog,
+        approvals_in_progress=state.approvals_in_progress,
         ready=False,
-        enforce_mcp_lifecycle=True,
     )
     # hass.data is keyed by DOMAIN (not config entry ID). This is intentional: the config
     # flow enforces a single Phoenix MCP instance via async_abort("already_configured"), so there
@@ -410,15 +496,6 @@ async def _async_setup_entry_impl(hass: HomeAssistant, entry: ConfigEntry) -> bo
         if issue_domain == DOMAIN and (issue_id == "mesa_runtime_unavailable"
                                       or issue_id.startswith(("agent_recovery_", "calendar_recovery_"))):
             ir.async_delete_issue(hass, DOMAIN, issue_id)
-    from .tools.calendar import CalendarWriteJournal
-    data.calendar_writes = CalendarWriteJournal(hass)
-    try:
-        async with data.calendar_writes.lock:
-            await data.calendar_writes.load()
-    except Exception:
-        data.calendar_writes.unavailable = True
-        _LOGGER.error("Calendar recovery storage unavailable; calendar writes will retry initialization")
-
 
     from .logger_control import async_get_logger_override_manager
     data.logger_control = await async_get_logger_override_manager(hass)
@@ -436,7 +513,7 @@ async def _async_setup_entry_impl(hass: HomeAssistant, entry: ConfigEntry) -> bo
         data.mesa = await async_setup_mesa(hass, store.get_settings().mesa_mode)
         data.mesa_setup_failed = False
         ir.async_delete_issue(hass, DOMAIN, "mesa_runtime_unavailable")
-    except Exception:  # noqa: BLE001 - MESA must never block Phoenix MCP startup
+    except Exception:  # MESA must never block Phoenix MCP startup
         _LOGGER.exception(
             "Phoenix MCP: MESA runtime setup failed; protected writes will be refused"
         )
@@ -474,7 +551,7 @@ async def _async_setup_entry_impl(hass: HomeAssistant, entry: ConfigEntry) -> bo
         )
 
     from .admin_view import ALL_ADMIN_VIEWS
-    from .agentcli import ALL_AGENTCLI_ADMIN_VIEWS
+    from .agentcli_views import ALL_AGENTCLI_ADMIN_VIEWS
     _register_views(hass, ALL_ADMIN_VIEWS + ALL_AGENTCLI_ADMIN_VIEWS)
 
     from .panel import (
@@ -494,9 +571,9 @@ async def _async_setup_entry_impl(hass: HomeAssistant, entry: ConfigEntry) -> bo
 
     async def _register_routes() -> None:
         """Register agent-facing views. Skipped when kill switch is active."""
-        from .mcp_view import ALL_MCP_VIEWS
+        from .mcp_transport import ALL_MCP_VIEWS
         from .skill_view import ALL_SKILL_VIEWS
-        from .agentcli import ALL_AGENTCLI_CHAT_VIEWS
+        from .agentcli_views import ALL_AGENTCLI_CHAT_VIEWS
         _register_views(hass, ALL_MCP_VIEWS + ALL_SKILL_VIEWS + ALL_AGENTCLI_CHAT_VIEWS)
 
     data.async_register_routes = _register_routes
@@ -553,22 +630,25 @@ async def _async_setup_entry_impl(hass: HomeAssistant, entry: ConfigEntry) -> bo
 
     # The AI Task entity (ai_task.py) is optional; forward it separately and guarded
     # so a failure setting up that platform never aborts Phoenix MCP's core setup.
-    from .ai_task import ai_task_supported  # noqa: PLC0415
+    from .ai_task import ai_task_supported
     if ai_task_supported():
         try:
             await hass.config_entries.async_forward_entry_setups(entry, ["ai_task"])
             data.forwarded_platforms.add("ai_task")
-        except Exception:  # noqa: BLE001
+        except Exception:
             _LOGGER.warning("Could not set up the Phoenix MCP AI Task entity", exc_info=True)
 
     from .config_reconciliation import reconcile_configurations
-    from .const import CONFIG_RECOVERY_SWEEP_INTERVAL
+
+    reconcile_failures = RepeatedFailureLog(_LOGGER, "Configuration reconciliation failed; will retry")
 
     async def _reconcile_configuration(_now=None) -> None:
         try:
             await reconcile_configurations(hass, data)
-        except Exception:
-            _LOGGER.warning("Configuration reconciliation failed; will retry", exc_info=True)
+        except Exception as error:
+            reconcile_failures.failed(error)
+        else:
+            reconcile_failures.recovered()
 
     entry.async_on_unload(async_track_time_interval(hass, _reconcile_configuration, CONFIG_RECOVERY_SWEEP_INTERVAL))
 
@@ -579,16 +659,19 @@ async def _async_setup_entry_impl(hass: HomeAssistant, entry: ConfigEntry) -> bo
     entry.async_on_unload(async_track_time_interval(
         hass, _flush_conversations, timedelta(seconds=CONVERSATION_LOG_FLUSH_SECONDS)))
 
+    statistics_failures = RepeatedFailureLog(_LOGGER, "Routing statistics flush failed; will retry")
+
     async def _flush_statistics(_now=None) -> None:
         try:
             await data.routing_statistics.async_save()
-        except Exception:
-            _LOGGER.warning("Routing statistics flush failed; will retry", exc_info=True)
+        except Exception as error:
+            statistics_failures.failed(error)
+        else:
+            statistics_failures.recovered()
 
     entry.async_on_unload(async_track_time_interval(hass, _flush_statistics, ROUTING_STATISTICS_FLUSH_INTERVAL))
 
-    from .agentcli import async_refresh_all_catalogs
-    from .const import AGENTCLI_CATALOG_TICK_INTERVAL
+    from .agentcli_views import async_refresh_all_catalogs
 
     async def _refresh_model_catalogs(_now=None) -> None:
         try:
@@ -619,11 +702,15 @@ async def _async_setup_entry_impl(hass: HomeAssistant, entry: ConfigEntry) -> bo
     cancel_sensor_push = async_track_time_interval(hass, _push_sensor_updates, SENSOR_PUSH_INTERVAL)
     entry.async_on_unload(cancel_sensor_push)
 
+    audit_failures = RepeatedFailureLog(_LOGGER, "Audit flush failed; will retry next interval")
+
     async def _flush_audit(_now=None) -> None:
         try:
             await audit.async_save()
-        except Exception:
-            _LOGGER.warning("Audit flush failed; will retry next interval", exc_info=True)
+        except Exception as error:
+            audit_failures.failed(error)
+        else:
+            audit_failures.recovered()
 
     # Single-slot holder so the unload closure always cancels the LATEST timer,
     # not the one registered first.
@@ -677,7 +764,7 @@ async def _async_setup_entry_impl(hass: HomeAssistant, entry: ConfigEntry) -> bo
     entry.async_on_unload(_cancel_expiry_timers)
 
     async def _sweep_expired_approvals(_now=None) -> None:
-        from .approvals import (  # noqa: PLC0415
+        from .approvals import (
             dismiss_approval_notification,
             async_expire_overdue_approval_records,
             async_prune_terminal_approvals,
@@ -723,7 +810,7 @@ async def _async_setup_entry_impl(hass: HomeAssistant, entry: ConfigEntry) -> bo
         Runs at startup and during expiry sweeps, before ordinary expiry can
         report a clean timeout for an action that may already have applied.
         """
-        from .approvals import (  # noqa: PLC0415
+        from .approvals import (
             dismiss_approval_notification,
             async_reconcile_interrupted_approvals,
             fire_approval_resolved_event,
@@ -763,7 +850,7 @@ async def _async_setup_entry_impl(hass: HomeAssistant, entry: ConfigEntry) -> bo
         result. Settled dispatch claims are dropped with them, leaving Needs
         Attention for the writes whose outcome was never recorded anywhere.
         """
-        from .approvals import (  # noqa: PLC0415
+        from .approvals import (
             async_cancel_queued_approvals_at_startup,
             dismiss_approval_notification,
             fire_approval_resolved_event,
@@ -792,7 +879,7 @@ async def _async_setup_entry_impl(hass: HomeAssistant, entry: ConfigEntry) -> bo
             )
         try:
             settled = await agent_recovery.settle_known_outcomes(store)
-        except Exception:  # noqa: BLE001 - a stuck journal must not stop setup
+        except Exception:  # a stuck journal must not stop setup
             _LOGGER.exception("Phoenix MCP: could not settle recorded dispatch outcomes")
         else:
             if settled:
@@ -801,8 +888,18 @@ async def _async_setup_entry_impl(hass: HomeAssistant, entry: ConfigEntry) -> bo
                     "that never reached Home Assistant", settled,
                 )
 
-    await _reconcile_interrupted_approvals()
-    await _cancel_queued_approvals_at_startup()
+    # A reload is not a restart. Home Assistant did not stop, so a queued approval
+    # keeps its requester and every check that runs when it is approved, and an
+    # execution marker with a live claim belongs to a handler that is still running.
+    # Only the first setup of a process may treat what it finds as left over.
+    if state.startup_recovery_done:
+        await _reconcile_interrupted_approvals(
+            skip_ids=data.approvals_in_progress, at_startup=False,
+        )
+    else:
+        await _reconcile_interrupted_approvals()
+        await _cancel_queued_approvals_at_startup()
+        state.startup_recovery_done = True
     await _sweep_expired_approvals()
     cancel_approval_sweep = async_track_time_interval(
         hass,
@@ -828,11 +925,11 @@ async def _async_setup_entry_impl(hass: HomeAssistant, entry: ConfigEntry) -> bo
         # failure must also not skip the second, hence two separate guards.
         try:
             await store.async_flush_last_used()
-        except Exception:  # noqa: BLE001 - shutdown must not depend on a writable disk
+        except Exception:  # shutdown must not depend on a writable disk
             _LOGGER.exception("Phoenix MCP: could not flush access key usage at shutdown")
         try:
             await audit.async_save()
-        except Exception:  # noqa: BLE001 - shutdown must not depend on a writable disk
+        except Exception:  # shutdown must not depend on a writable disk
             _LOGGER.exception("Phoenix MCP: could not persist the audit log at shutdown")
 
     _listen_once_until_unload(hass, entry, EVENT_HOMEASSISTANT_STOP, _on_stop)
@@ -843,7 +940,12 @@ async def _async_setup_entry_impl(hass: HomeAssistant, entry: ConfigEntry) -> bo
     def _invalidate_entity_tree(_event=None) -> None:
         data.entity_tree_cache_valid = False
 
-    async def _carry_renamed_entity(old_entity_id: str, new_entity_id: str) -> None:
+    async def _carry_renamed_entity(
+        old_entity_id: str, new_entity_id: str, mesa_carried: bool
+    ) -> None:
+        if mesa_carried and data.mesa is not None:
+            from .mesa import async_persist_renamed_profile
+            await async_persist_renamed_profile(hass, data.mesa)
         async with data.store.async_lock:
             await data.store.async_rename_entity(old_entity_id, new_entity_id)
         # Its Changes history follows too, rather than splitting across two ids.
@@ -853,11 +955,18 @@ async def _async_setup_entry_impl(hass: HomeAssistant, entry: ConfigEntry) -> bo
     def _on_entity_registry_updated(event: Event) -> None:
         _invalidate_entity_tree(event)
         _warn_on_computed_alias_loss(hass, event)
-        # A renamed entity keeps its grants, hints and history.
+        # A renamed entity keeps its grants, hints, history and MESA profile. The
+        # profile moves here, before this event returns, so no call can address
+        # the new id while it is unprotected.
         old_entity_id = event.data.get("old_entity_id")
         if event.data.get("action") == "update" and isinstance(old_entity_id, str):
+            new_entity_id = event.data["entity_id"]
+            mesa_carried = False
+            if data.mesa is not None:
+                from .mesa import carry_renamed_profile
+                mesa_carried = carry_renamed_profile(data.mesa, old_entity_id, new_entity_id)
             entry.async_create_background_task(
-                hass, _carry_renamed_entity(old_entity_id, event.data["entity_id"]),
+                hass, _carry_renamed_entity(old_entity_id, new_entity_id, mesa_carried),
                 "phoenix_mcp_carry_renamed_entity",
             )
 
@@ -900,7 +1009,7 @@ async def _async_setup_entry_impl(hass: HomeAssistant, entry: ConfigEntry) -> bo
                     _LOGGER.info("Phoenix MCP MESA: imported %d developer domain profile(s)", count)
                 await async_refresh_trigger_issues(hass, mesa_runtime)
                 refresh_orphans(hass, mesa_runtime)
-            except Exception:  # noqa: BLE001 - background priming must not crash setup
+            except Exception:  # background priming must not crash setup
                 _LOGGER.warning("Phoenix MCP MESA: startup priming failed", exc_info=True)
 
         mesa_task = hass.async_create_background_task(_mesa_startup(), "phoenix_mcp_mesa_startup")
@@ -917,7 +1026,7 @@ async def _async_setup_entry_impl(hass: HomeAssistant, entry: ConfigEntry) -> bo
         def _prime_suggestions(_event: Event | None = None) -> None:
             try:
                 refresh_suggestions(hass, mesa_runtime)
-            except Exception:  # noqa: BLE001 - priming must not crash startup
+            except Exception:  # priming must not crash startup
                 _LOGGER.warning("Phoenix MCP MESA: suggestion priming failed", exc_info=True)
 
         if hass.state is CoreState.running:
@@ -975,7 +1084,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             _LOGGER.exception("Could not persist routing statistics during unload")
         try:
             await data.audit.async_save()
-        except Exception:  # noqa: BLE001 - teardown must not depend on a writable disk
+        except Exception:  # teardown must not depend on a writable disk
             _LOGGER.exception("Phoenix MCP: could not persist the audit log during unload")
     hass.data[RUNTIME_READY_KEY] = False
 
@@ -985,9 +1094,13 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # recoverable only by a later successful reload or a restart. Nothing in the
     # teardown depends on the frontend already being gone, so waiting until the
     # outcome is known costs nothing.
-    unload_ok = await hass.config_entries.async_unload_platforms(entry, _entry_platforms())
+    platforms = sorted(data.forwarded_platforms) if data is not None else _entry_platforms()
+    unload_ok = await hass.config_entries.async_unload_platforms(entry, platforms)
 
     if unload_ok:
+        if data is not None and data.mesa is not None:
+            from .mesa import async_end_leases
+            await async_end_leases(hass, data.mesa)
         await _async_shutdown_mesa_workers()
         from .debug_capture import async_detach_debug_capture
         async_detach_debug_capture(hass)
@@ -1009,9 +1122,17 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     return unload_ok
 
 
+@dataclass
+class _PipelineOwner:
+    """The part of PhoenixData pipeline removal needs, after unload discarded it."""
+
+    store: AccessKeyStore
+
+
 async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
     """Delete credentials while preserving configuration and recovery evidence."""
-    from .agentcli import async_wipe_agentcli_secrets
+    from .llm.accounts import async_wipe_agentcli_secrets
+    from .ai_task import clear_ai_task_preferred
     from .approvals import (
         REASON_INTEGRATION_REMOVED,
         async_cancel_approvals_for_access_key,
@@ -1019,7 +1140,21 @@ async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
         fire_approval_resolved_event,
     )
 
-    store = await AccessKeyStore.async_create(hass)
+    # An entry that never set up in this process has no state to share.
+    state: DurableState | None = hass.data.get(_DURABLE_STATE_KEY)
+    store = state.store if state is not None else await AccessKeyStore.async_create(hass)
+    # HA removes the registry entries after this returns and leaves its preferences
+    # alone, so this is the last point at which Phoenix's entity can be recognized.
+    try:
+        clear_ai_task_preferred(hass, entry)
+    except Exception:  # removal retires credentials regardless
+        _LOGGER.exception("Phoenix MCP: could not clear the AI Task default during removal")
+    try:
+        from .voice_agent import async_remove_assist_pipeline
+
+        await async_remove_assist_pipeline(hass, _PipelineOwner(store))
+    except Exception:  # removal retires credentials regardless
+        _LOGGER.exception("Phoenix MCP: could not remove the Assist pipeline during removal")
     changed = []
     async with store.async_lock:
         for access_key in store.list_access_keys():
@@ -1045,7 +1180,7 @@ def _remove_frontend(hass: HomeAssistant) -> None:
     silently skip the other two, leaving modules injected into every Home
     Assistant page with nothing left to service them.
     """
-    from .panel import (  # noqa: PLC0415
+    from .panel import (
         remove_agentchat_inject,
         remove_mesa_inject,
         remove_phoenix_panel,
@@ -1058,5 +1193,5 @@ def _remove_frontend(hass: HomeAssistant) -> None:
     ):
         try:
             remove(hass)
-        except Exception:  # noqa: BLE001 - one stuck removal must not skip the rest
+        except Exception:  # one stuck removal must not skip the rest
             _LOGGER.exception("Phoenix MCP: could not remove the %s during unload", name)

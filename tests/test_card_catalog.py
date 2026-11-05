@@ -51,10 +51,10 @@ async def test_replace_is_wholesale_so_removed_cards_disappear() -> None:
         resource_count=2,
         failed_imports=[],
     )
-    assert store.known_types() == {"mushroom-entity-card", "button-card"}
+    assert {e.type for e in store.catalog.entries} == {"mushroom-entity-card", "button-card"}
 
     await store.async_replace(entries=[_entry("button-card")], resource_count=1, failed_imports=[])
-    assert store.known_types() == {"button-card"}
+    assert {e.type for e in store.catalog.entries} == {"button-card"}
 
 
 async def test_get_accepts_custom_prefix() -> None:
@@ -197,7 +197,7 @@ async def test_round_trip_through_as_dict() -> None:
 
     restored = CardCatalogStore()
     restored._catalog.entries = sanitize_entries(data["entries"])
-    assert restored.known_types() == {"mushroom-light-card"}
+    assert {e.type for e in restored.catalog.entries} == {"mushroom-light-card"}
     assert data["resource_count"] == 31
     assert data["failed_imports"][0]["url"] == "/hacsfiles/gone/gone.js"
     assert data["harvested_at"] is not None

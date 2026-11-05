@@ -15,7 +15,7 @@ If you upgrade from HACS, Phoenix moves to the Marketplace by itself. Connect Gi
 
 ## Installing with HACS {#hacs}
 
-On Home Assistant 2026.10 or older, find Phoenix MCP in HACS, or add its repository as a custom repository of type Integration. Download it, then restart Home Assistant. HACS checks the Home Assistant version for you.
+On Home Assistant 2026.10 or older, add `https://github.com/leecaochang/Phoenix-MCP` to HACS as a custom repository of type Integration. Download Phoenix MCP, then restart Home Assistant. HACS checks the Home Assistant version for you.
 
 ## Installing by hand {#manual}
 
@@ -41,4 +41,4 @@ Deleting the integration revokes every access key, cancels requests waiting for 
 
 Everything else stays in Home Assistant's storage: settings such as the kill switch and MESA mode, the audit log, Conversation Log, MESA profiles, change history and recovery copies. If you add Phoenix again, it picks them up, and the revoked keys are listed in Archived Access Keys.
 
-To remove Phoenix's data too, use **{{label:settings.wipeCoreLabel}}** in [{{label:settings.wipeTitle}}](guide:window.settingsSafety#wipe-core) before deleting the integration.
+To remove Phoenix's data too, use **{{label:settings.wipeCoreLabel}}** in [{{label:settings.wipeTitle}}](guide:window.settingsSafety#wipe-core) before deleting the integration. [A few things stay](guide:topic.security#removing), including safety copies.

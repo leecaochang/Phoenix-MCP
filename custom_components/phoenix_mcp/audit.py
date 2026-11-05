@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import uuid
@@ -12,16 +13,16 @@ from typing import TYPE_CHECKING, Any, Literal
 
 from homeassistant.util.dt import parse_datetime, utcnow
 
+from .access_key_schema import normalize_access_key_fields
 from .const import (
-    AGENTCLI_CLIENT_IP,
-    AI_TASK_CLIENT_IP,
-    ASSIST_CLIENT_IP,
-    AUDIT_LOG_MAXLEN,
-    AUDIT_STORAGE_VERSION,
-    CONVERSATION_LOG_SCAN_BYTES,
-    HOME_COMPANION_CLIENT_IP,
+    AI_TASK_CLIENT_IP, ASSIST_CLIENT_IP, AUDIT_LOG_MAXLEN, AUDIT_STORAGE_VERSION,
+    CONVERSATION_LOG_MAX_DEPTH, CONVERSATION_LOG_SCAN_BYTES, HOME_COMPANION_CLIENT_IP,
     VOICE_AGENT_CLIENT_IP,
 )
+from .conversation_log import sanitized
+from .helpers import log_internal_failure
+from .request_authority import household_authority
+from .provider_constants import AGENTCLI_CLIENT_IP
 from .access_key_store import GlobalSettings
 
 if TYPE_CHECKING:
@@ -55,22 +56,55 @@ _INTERNAL_SOURCES = frozenset({
 _ENTITY_KEYS = frozenset({"entity_id", "entity_ids", "entity", "entities"})
 
 
-def _without_entity_ids(value: Any) -> Any:
-    """A payload with every entity-ID field replaced. Free text that names an entity stays."""
+def _without_entity_ids(value: Any, depth: int = 0) -> Any:
+    """A payload with nothing that identifies an entity.
+
+    Entity-ID fields are replaced, and a tool's arguments keep only their names,
+    because a query, a template, a device or area selector or a native tool's
+    name argument identifies an entity as well as an entity_id does. A name with
+    a dot has the shape of an entity ID and is left out too.
+    """
+    if depth > CONVERSATION_LOG_MAX_DEPTH:
+        return _REDACTED
     if isinstance(value, dict):
-        return {k: _REDACTED if k in _ENTITY_KEYS else _without_entity_ids(v) for k, v in value.items()}
+        return {
+            k: _argument_names(v) if k == "arguments"
+            else _REDACTED if k in _ENTITY_KEYS
+            else _without_entity_ids(v, depth + 1)
+            for k, v in value.items()
+        }
     if isinstance(value, list):
-        return [_without_entity_ids(v) for v in value]
+        return [_without_entity_ids(v, depth + 1) for v in value]
     return value
 
 
+def _argument_names(arguments: Any) -> Any:
+    """The argument names of a tool call, or the redaction marker for any other shape."""
+    if not isinstance(arguments, dict):
+        return _REDACTED
+    return sorted(name for name in arguments if isinstance(name, str) and "." not in name)
+
+
+def _storable_text(value: Any) -> Any:
+    """Escape what the JSON writer refuses, so one client string cannot fail a whole save.
+
+    Home Assistant's Store logs a write failure and keeps going, so a lone
+    surrogate in one row would silently stop the log reaching disk.
+    """
+    return value.encode("utf-8", "backslashreplace").decode("utf-8") if isinstance(value, str) else value
+
+
 def _bounded_field(value: object) -> str:
-    """Coerce an audit scalar to a length-capped string (see MAX_AUDIT_FIELD_LEN)."""
+    """Coerce an audit scalar to a length-capped, storable string (see MAX_AUDIT_FIELD_LEN)."""
     s = value if isinstance(value, str) else str(value)
-    return s if len(s) <= MAX_AUDIT_FIELD_LEN else s[:MAX_AUDIT_FIELD_LEN] + "...[truncated]"
+    return _storable_text(s if len(s) <= MAX_AUDIT_FIELD_LEN else s[:MAX_AUDIT_FIELD_LEN] + "...[truncated]")
 
 MAX_QUERY_LIMIT = 500
 MAX_AUDIT_PAYLOAD_BYTES = 2048
+# How much of a payload is sanitized. A row keeps MAX_AUDIT_PAYLOAD_BYTES, so more
+# buys nothing, and the sanitizer runs on the event loop for every audited call,
+# including refused ones, with text a client chose.
+AUDIT_PAYLOAD_SCAN_CHARS = 8 * MAX_AUDIT_PAYLOAD_BYTES
 # Hard cap for the scalar method/resource fields. Both derive from client-supplied
 # JSON-RPC data (method names, resource URIs), so they must be normalized to a
 # bounded string before storage: an unbounded or non-string value could bloat the
@@ -78,17 +112,59 @@ MAX_AUDIT_PAYLOAD_BYTES = 2048
 MAX_AUDIT_FIELD_LEN = 256
 
 
+def _clipped(value: Any, limit: int = AUDIT_PAYLOAD_SCAN_CHARS) -> tuple[Any, bool]:
+    """A JSON value cut to about `limit` characters, and whether anything was cut.
+
+    Structure before the cut stays. Every node costs at least one character, so
+    a payload of many small values is bounded like one long string.
+    """
+    remaining = limit
+    cut = False
+
+    def visit(item: Any, depth: int = 0) -> Any:
+        nonlocal remaining, cut
+        remaining -= 1
+        if remaining < 0 or depth > CONVERSATION_LOG_MAX_DEPTH:
+            cut = True
+            return _REDACTED
+        if isinstance(item, str):
+            if len(item) > remaining:
+                cut = True
+                item = item[:remaining]
+            remaining -= len(item)
+            return item
+        if isinstance(item, list):
+            kept = []
+            for entry in item:
+                if remaining <= 0:
+                    cut = True
+                    break
+                kept.append(visit(entry, depth + 1))
+            return kept
+        if isinstance(item, dict):
+            result = {}
+            for key, entry in item.items():
+                if remaining <= 0:
+                    cut = True
+                    break
+                result[visit(key, depth + 1)] = visit(entry, depth + 1)
+            return result
+        return item
+
+    return visit(value), cut
+
+
 def _logged_payload(payload: Any) -> str | None:
     """A payload as the audit log keeps it: redacted as the Conversation Log redacts, then capped.
 
     The Conversation Log's sanitizer also hides device codes (an alarm or lock
     `code`, a PIN, a Wi-Fi key), in keys and in free text, which the general
-    secret redaction keeps. A stored payload from an older version may be a
-    capped string that is no longer JSON; it is cleaned as text. A payload that
-    cannot be sanitized is left out rather than kept raw.
+    secret redaction keeps. Text past the scan limit cannot reach the kept part
+    of the row, so it is cut first; what was cut may be what marked the text as a
+    service call, so a clipped payload is sanitized as one. A stored payload from
+    an older version may be a capped string that is no longer JSON; it is cleaned
+    as text. A payload that cannot be sanitized is left out rather than kept raw.
     """
-    from .conversation_log import sanitized  # noqa: PLC0415
-    from .helpers import log_internal_failure  # noqa: PLC0415
 
     try:
         if isinstance(payload, str):
@@ -96,15 +172,18 @@ def _logged_payload(payload: Any) -> str | None:
                 value: Any = json.loads(payload)
             except ValueError:
                 value = None
-            clean = sanitized(payload, max_bytes=CONVERSATION_LOG_SCAN_BYTES) if value is None else json.dumps(
-                sanitized(value, max_bytes=CONVERSATION_LOG_SCAN_BYTES))
+            text_form = value is None
+            value, clipped = _clipped(payload if text_form else value)
         else:
             # Values that are not JSON (a datetime in a MESA event) keep their text form.
-            value = json.loads(json.dumps(payload, default=str))
-            clean = json.dumps(sanitized(value, max_bytes=CONVERSATION_LOG_SCAN_BYTES))
+            text_form = False
+            value, clipped = _clipped(json.loads(json.dumps(payload, default=str)))
+        clean = sanitized(value, max_bytes=CONVERSATION_LOG_SCAN_BYTES, service=clipped)
+        if not text_form:
+            clean = json.dumps(clean)
     except ValueError:
         return None
-    except Exception as error:  # noqa: BLE001 - never keep the raw value
+    except Exception as error:  # never keep the raw value
         log_internal_failure(_LOGGER, "audit_payload_sanitize", error)
         return None
     return clean if len(clean) <= MAX_AUDIT_PAYLOAD_BYTES else clean[:MAX_AUDIT_PAYLOAD_BYTES] + "...[truncated]"
@@ -180,6 +259,7 @@ class AuditLog:
     def __init__(self, maxlen: int = AUDIT_LOG_MAXLEN, store: Store | None = None) -> None:
         self._log: deque[AuditEntry] = deque(maxlen=maxlen)
         self._store = store
+        self.save_failed = False
 
     def record(
         self,
@@ -217,6 +297,7 @@ class AuditLog:
         # detection must be just as poison-safe as storage and querying.
         method = _bounded_field(method)
         resource = _bounded_field(resource)
+        client_ip = _bounded_field(client_ip)
 
         # Approval lifecycle rows are the authorization trail itself. They are
         # never suppressible by the ordinary allowed/denied filters, just like
@@ -242,16 +323,15 @@ class AuditLog:
             payload = _without_entity_ids(payload)
         logged_payload = None if payload is None else _logged_payload(payload)
 
-        from .household_authority import household_authority
 
         household = household_authority.get()
         if ha_user_id is None and access_key_id == "admin" and access_key_name.startswith("admin:"):
             ha_user_id = access_key_name.removeprefix("admin:")
         self._log.append(AuditEntry(
-            request_id=request_id,
+            request_id=_storable_text(request_id),
             timestamp=timestamp or utcnow(),
-            access_key_id=access_key_id,
-            access_key_name=access_key_name,
+            access_key_id=_storable_text(access_key_id),
+            access_key_name=_storable_text(access_key_name),
             method=method,
             resource=logged_resource,
             outcome=outcome,
@@ -259,10 +339,10 @@ class AuditLog:
             pass_through=pass_through,
             payload=logged_payload,
             mesa_advisory=mesa_advisory,
-            preset=preset,
+            preset=_storable_text(preset),
             stale_tools_advisory=stale_tools_advisory,
-            ha_user_id=ha_user_id if ha_user_id is not None else household.user_id if household else None,
-            originating_access_key_id=originating_access_key_id,
+            ha_user_id=_storable_text(ha_user_id if ha_user_id is not None else household.user_id if household else None),
+            originating_access_key_id=_storable_text(originating_access_key_id),
         ))
 
     _VALID_OUTCOMES = frozenset({"allowed", "denied", "not_found", "rate_limited", "not_implemented", "invalid_request", "pending_approval"})
@@ -381,10 +461,15 @@ class AuditLog:
         """
         if self._store is None:
             return
-        await self._store.async_save({
-            "version": AUDIT_STORAGE_VERSION,
-            "entries": [e.to_dict() for e in self._log],
-        })
+        try:
+            await self._store.async_save({
+                "version": AUDIT_STORAGE_VERSION,
+                "entries": [e.to_dict() for e in self._log],
+            })
+        except Exception:
+            self.save_failed = True
+            raise
+        self.save_failed = False
 
     async def async_load(self) -> None:
         """Populate the in-memory buffer from HA storage.
@@ -404,12 +489,25 @@ class AuditLog:
                 raw_version, AUDIT_STORAGE_VERSION,
             )
             return
-        from .access_key_schema import normalize_access_key_fields
+        # Scrubbing a full log takes seconds, so it runs off the event loop and
+        # the rows are published here. The cleaned log is saved at once so codes
+        # stored before device-code redaction leave the disk.
+        entries, scrubbed = await asyncio.get_running_loop().run_in_executor(
+            None, self._parse_rows, raw.get("entries", []),
+        )
+        self._log.extend(entries)
+        if scrubbed:
+            try:
+                await self.async_save()
+            except Exception as error:  # the flush timer retries, and save_failed reports it
+                _LOGGER.warning("Audit log could not be saved after loading (%s)", type(error).__name__)
 
-        # Payloads saved before device codes were redacted are cleaned once here,
-        # and the cleaned log is saved at once so the codes leave the disk.
+    def _parse_rows(self, rows: list) -> tuple[list[AuditEntry], int]:
+        """Validate saved rows and scrub their payloads. Runs in a worker."""
+
+        entries: list[AuditEntry] = []
         scrubbed = 0
-        for r in raw.get("entries", []):
+        for r in rows:
             try:
                 r = normalize_access_key_fields(r)
                 ts = parse_datetime(r["timestamp"])
@@ -423,7 +521,7 @@ class AuditLog:
                     clean = _logged_payload(payload)
                     scrubbed += clean != payload
                     payload = clean
-                self._log.append(AuditEntry(
+                entries.append(AuditEntry(
                     request_id=r["request_id"],
                     timestamp=ts,
                     access_key_id=r["access_key_id"],
@@ -442,8 +540,7 @@ class AuditLog:
                 ))
             except (KeyError, TypeError, ValueError) as exc:
                 _LOGGER.warning("Skipping corrupt audit entry: %s", exc)
-        if scrubbed:
-            await self.async_save()
+        return entries, scrubbed
 
     async def async_wipe(self) -> None:
         """Clear all entries from memory and write an empty snapshot to disk."""

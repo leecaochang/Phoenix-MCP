@@ -83,6 +83,52 @@ const block = (selector: string): Record<string, string> => {
 };
 const palettes = [...themes.matchAll(/:host\(\[data-phx-palette="(\w+)"\]\) \{/g)].map((m) => m[1]);
 
+/** A theme's tokens as the page resolves them, following var() references. */
+function themeValues(name: string | null, mode: "light" | "dark"): (token: string) => string {
+  const base = { ...(mode === "light" ? light : forcedDark), ...block(":host"), ...(mode === "dark" ? block(":host(.phx-theme-dark)") : {}) };
+  const palette = name ? (mode === "light" ? block(`:host([data-phx-palette="${name}"])`) : block(`:host([data-phx-palette="${name}"].phx-theme-dark)`)) : {};
+  const values: Record<string, string> = { ...base, ...palette };
+  const resolve = (token: string): string => {
+    const value = values[token];
+    const reference = value?.match(/^var\((--phx-[\w-]+)\)$/);
+    return reference ? resolve(reference[1]) : value;
+  };
+  return resolve;
+}
+const everyTheme = [null, ...palettes].flatMap((name) => [[name, "light"], [name, "dark"]]) as [string | null, "light" | "dark"][];
+
+it.each(everyTheme)("shows keyboard focus on the toolbar in theme %s, %s", (name, mode) => {
+  const value = themeValues(name, mode);
+  expect(contrast(rgb(value("--phx-toolbar-focus")), rgb(value("--phx-toolbar-bg")))).toBeGreaterThanOrEqual(3);
+});
+
+it("draws the toolbar's focus ring in the toolbar's own token", () => {
+  const at = themes.indexOf(".phx-toolbar-button:focus-visible");
+  expect(at).toBeGreaterThan(0);
+  expect(themes.slice(at, themes.indexOf("}", at))).toContain("outline-color: var(--phx-toolbar-focus)");
+  expect(themes.slice(0, at)).toMatch(/\.phx-toolbar:focus-visible,\s*\.phx-toolbar-handle:focus-visible,\s*$/);
+});
+
+it.each(everyTheme)("keeps the kill switch warning legible in theme %s, %s", (name, mode) => {
+  const value = themeValues(name, mode);
+  const toolbar = rgb(value("--phx-toolbar-bg"));
+  const fill = value("--phx-toolbar-danger-bg");
+  const tint = fill === "transparent" ? [0, 0, 0, 0] : rgb(fill);
+  const blended = toolbar.map((v, i) => (i < 3 ? tint[i] * tint[3] + v * (1 - tint[3]) : v));
+  expect(contrast(rgb(value("--phx-toolbar-danger")), blended)).toBeGreaterThanOrEqual(4.5);
+});
+
+it("restyles the warning button after the plain toolbar button, which would otherwise win", () => {
+  const plain = themes.indexOf(".phx-toolbar-button { background");
+  const warning = themes.indexOf(".phx-toolbar-button.phx-toolbar-warning,");
+  expect(plain).toBeGreaterThan(0);
+  expect(warning).toBeGreaterThan(plain);
+  const rule = themes.slice(warning, themes.indexOf("}", warning));
+  expect(rule).toContain("color: var(--phx-toolbar-danger)");
+  expect(rule).toContain("border-color: var(--phx-toolbar-danger)");
+  expect(rule).toContain(".phx-toolbar-warning:hover");
+});
+
 it("ships the color themes Settings offers", () => {
   expect(palettes).toEqual(["wayfinding", "framed", "mist", "office", "aubergine"]);
 });

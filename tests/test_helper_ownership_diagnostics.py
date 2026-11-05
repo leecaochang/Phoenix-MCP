@@ -21,7 +21,7 @@ from pytest_homeassistant.common import MockConfigEntry
 
 from custom_components.phoenix_mcp.access_key_store import AccessKeyRecord, PermissionNode, PermissionTree
 from custom_components.phoenix_mcp.data import PhoenixData
-from custom_components.phoenix_mcp.mcp_view import _call_tool, async_execute_approved_tool
+from custom_components.phoenix_mcp.tool_dispatch import _call_tool, async_execute_approved_tool
 from custom_components.phoenix_mcp.request_authority import AuthorityChangedError
 from custom_components.phoenix_mcp.tools import helper
 from custom_components.phoenix_mcp.version_store import VersionStore
@@ -67,7 +67,7 @@ async def test_foreign_owner_never_reaches_config_entry_removal_or_settings(hass
         args["config"] = {"state": "{{ 1 }}"}
     settings = AsyncMock()
     with patch.object(hass.config_entries, "async_remove", AsyncMock()) as remove, \
-            patch.object(helper, "_tool_set_config_entry_options", settings):
+            patch.object(helper, "_tool_set_helper_settings", settings):
         content, outcome, _ = await _call_tool(tool, args, _key(), hass, _data())
     assert outcome == "not_found", content
     remove.assert_not_awaited()
@@ -266,7 +266,7 @@ async def test_dispatched_delete_without_verified_result_is_uncertain(hass, bool
 
 async def test_authority_change_before_dispatch_propagates_as_not_applied(hass, booleans):
     data = _data()
-    with patch("custom_components.phoenix_mcp.request_authority.check_request_authority",
+    with patch("custom_components.phoenix_mcp.tools.helper.check_request_authority",
                side_effect=AuthorityChangedError("Unauthorized.")), \
             pytest.raises(AuthorityChangedError):
         await _call_tool("delete_helper", _call_args("delete_helper", booleans["id"]), _key(), hass, data)

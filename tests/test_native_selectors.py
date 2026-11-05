@@ -26,11 +26,15 @@ import pytest
 from homeassistant.util.dt import utcnow
 
 from custom_components.phoenix_mcp.const import CAP_ALLOW, CAP_DENY
-from custom_components.phoenix_mcp.mcp_view import _call_tool
+from custom_components.phoenix_mcp.tool_dispatch import _call_tool
 from custom_components.phoenix_mcp.policy_engine import Permission, normalize_intent_selectors
 from custom_components.phoenix_mcp.access_key_store import PermissionTree, AccessKeyRecord
 from custom_components.phoenix_mcp.tools.native import (
-    _NO_SELECTOR_MESSAGE,
+    _ALL_TARGET_SELECTORS,
+    _selector_refusal_message,
+    _validate_integer_range,
+    _validate_number_range,
+    _validate_string_enum,
     _with_declined_targets,
     _tool_hass_climate_set_temperature,
     _tool_hass_fan_set_speed,
@@ -126,6 +130,34 @@ def test_normalizer_never_stringifies_a_wrong_shape():
 
 
 # ---------------------------------------------------------------------------
+# A refused value names its field
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("validate,args,expected", [
+    (_validate_integer_range, ("brightness", 500, 0, 100), "brightness: 500 is greater than the maximum of 100"),
+    (_validate_integer_range, ("brightness", -1, 0, 100), "brightness: -1 is less than the minimum of 0"),
+    (_validate_integer_range, ("position", "high", 0, 100), "position: 'high' is not of type 'integer'"),
+    (_validate_number_range, ("temperature", "warm"), "temperature: 'warm' is not of type 'number'"),
+    (_validate_number_range, ("temperature", float("inf")), "temperature: 'inf' is not a finite number"),
+    (_validate_number_range, ("temperature", 9.5, 10.0), "temperature: 9.5 is less than the minimum of 10.0"),
+    (_validate_number_range, ("temperature", 31.5, None, 30.0), "temperature: 31.5 is greater than the maximum of 30.0"),
+    (_validate_string_enum, ("volume_step", 3, ["up", "down"]), "volume_step: '3' is not of type 'string'"),
+    (_validate_string_enum, ("volume_step", "left", ["up", "down"]), "volume_step: 'left' is not one of ['up', 'down']"),
+])
+def test_a_refused_value_names_its_field(validate, args, expected):
+    assert validate(*args) == f"Input validation error: {expected}"
+
+
+async def test_a_tool_refusal_names_the_field_the_caller_got_wrong():
+    response, outcome, _resource = await _tool_hass_light_set(
+        {"name": "Lamp", "brightness": 500}, _access_key(), MagicMock(),
+    )
+    assert outcome == "invalid_request"
+    assert _text(response) == "Input validation error: brightness: 500 is greater than the maximum of 100"
+
+
+# ---------------------------------------------------------------------------
 # The caller-argument case is separated
 # ---------------------------------------------------------------------------
 
@@ -143,7 +175,7 @@ async def test_no_usable_selector_is_reported_as_a_bad_argument(handler, args):
     response, outcome, _resource = await handler(args, _access_key(), MagicMock(), MagicMock())
     assert outcome == "invalid_request"
     # A malformed selector is named; an absent one gets the generic message.
-    assert _text(response) == _NO_SELECTOR_MESSAGE if "name" not in args else _text(response).startswith(
+    assert _text(response) == _selector_refusal_message(_ALL_TARGET_SELECTORS) if "name" not in args else _text(response).startswith(
         "No usable targeting parameter was given: name has an unusable shape")
     # It must name the parameters and their shapes: the commonest way to land
     # here is a shape error, and "give me a selector" does not fix that.
@@ -164,7 +196,7 @@ async def test_a_real_selector_that_matches_nothing_stays_collapsed(handler):
             {"area": "Kitchen"}, _access_key(), MagicMock(), MagicMock())
     assert outcome == "denied"
     assert _text(response) == COLLAPSED
-    assert _NO_SELECTOR_MESSAGE not in _text(response)
+    assert _selector_refusal_message(_ALL_TARGET_SELECTORS) not in _text(response)
 
 
 @pytest.mark.parametrize("handler", [_tool_hass_turn_on, _tool_hass_turn_off])
@@ -467,7 +499,7 @@ def _tools_with_top_level_combinators() -> list[str]:
 async def test_a_selector_rule_lowered_to_prose_is_still_refused_at_dispatch(tool_name):
     """Several providers refuse top-level combinators, so every provider adapter
     receives these rules as description text instead
-    (agentcli._lowered_input_schema). That is only safe while the handler itself
+    (llm.base._lowered_input_schema). That is only safe while the handler itself
     refuses what the combinator forbade. A new tool with a top-level combinator
     must keep this true."""
     from custom_components.phoenix_mcp.tool_defs import _NATIVE_TOOL_DEFS
@@ -523,6 +555,26 @@ def test_text_that_is_not_the_number_stays_refused(tool, field, text):
     from custom_components.phoenix_mcp.tool_input import scalar_arguments
     _, error = scalar_arguments(tool, {"name": "Fixture", field: text})
     assert error is not None and field in error
+
+
+@pytest.mark.parametrize(("tool", "field"), [
+    ("climate__HassClimateSetTemperature", "temperature"),
+    ("light__HassLightSet", "brightness"),
+])
+@pytest.mark.parametrize("digits", [400, 5000])
+def test_oversized_numeric_text_is_refused_by_name(tool, field, digits):
+    """It must not become infinity, or reach Python's digit limit as an internal error."""
+    from custom_components.phoenix_mcp.tool_input import scalar_arguments
+    _, error = scalar_arguments(tool, {"name": "Fixture", field: "9" * digits})
+    assert error is not None and field in error
+
+
+@pytest.mark.parametrize("read_only", [True, False])
+@pytest.mark.parametrize("digits", [400, 5000])
+def test_oversized_integer_text_on_a_phoenix_tool_is_refused_by_name(digits, read_only):
+    from custom_components.phoenix_mcp.tool_input import scalar_arguments
+    _, error = scalar_arguments("get_history", {"limit": "9" * digits}, read_only=read_only)
+    assert error is not None and "limit" in error
 
 
 def test_numeric_text_is_read_on_reads_and_natives_but_refused_on_writes():

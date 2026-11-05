@@ -7,7 +7,7 @@
  * covers exists, and that no paragraph, sentence or list item is too long to
  * read beside the window it explains or, in English, uses a phrasing the
  * Writing rules ban. A broken topic fails the build instead
- * of the panel. The rules for writing topics are in docs-internal/agents/guide.md.
+ * of the panel.
  *
  * Topic ids say what a topic explains: `workspace.<workspace id>` for a
  * workspace overview, `window.<window id>` for one window, `wizard.<step>` for
@@ -41,7 +41,7 @@ export interface GuideBundle {
   topics: Record<string, GuideTopic>;
   /**
    * English only: the English text of every label its pages use, so an English page read in
-   * another language names controls in English, as its sentences do (user, 2026-11-03).
+   * another language names controls in English, as its sentences do.
    */
   labels?: Record<string, string>;
 }
@@ -58,8 +58,8 @@ export const LABEL = /\{\{label:([^}]*)\}\}/g;
 export const LABEL_KEY = /^[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z0-9_]+)+$/;
 
 /**
- * Text short enough to read in a narrow window beside the screen it explains
- * (user, 2026-11-01): long paragraphs are split, long sentences reworded.
+ * Text short enough to read in a narrow window beside the screen it explains:
+ * long paragraphs are split, long sentences reworded.
  */
 export const LIMITS = { paragraphWords: 60, sentenceWords: 30, itemWords: 40 } as const;
 
@@ -160,8 +160,8 @@ export function lengthProblems(body: string): string[] {
 }
 
 /**
- * English phrasings the Writing rules ban that are wrong almost every time they appear
- * (user, 2026-11-01): the reader is the one acting, and steps are short sentences, not
+ * English phrasings the Writing rules ban that are wrong almost every time they appear:
+ * the reader is the one acting, and steps are short sentences, not
  * chains. Ambiguous ones ("at once", "is shown") are left to review, since they are
  * often right. Code is skipped; each pattern names the rule it enforces.
  */

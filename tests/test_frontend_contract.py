@@ -54,15 +54,16 @@ def _backend_version_resource_types() -> set[str]:
     """Every resource_type _record_version is actually called with.
 
     Read from source rather than a hand-kept list, across the whole package (call
-    sites live outside mcp_view). A call site passing a variable instead of a
+    sites live in many modules). A call site passing a variable instead of a
     literal is invisible here; the count floor below is the backstop.
     """
     import ast
     import pathlib
 
-    from custom_components.phoenix_mcp import mcp_view
 
-    package = pathlib.Path(mcp_view.__file__).parent
+    from custom_components.phoenix_mcp import const
+
+    package = pathlib.Path(const.__file__).parent
     found: set[str] = set()
     for path in package.rglob("*.py"):
         if "mesa_core" in path.parts:
@@ -88,7 +89,7 @@ def test_version_resource_types_match_the_frontend_contract():
         expected = set(json.load(f)["version_resource_types"])
     live = _backend_version_resource_types()
     assert live == expected, (
-        "The resource types recorded by mcp_view drifted from the frontend "
+        "The resource types recorded by the backend drifted from the frontend "
         "contract fixture. Update tests/contract/version_resource_types.json, "
         "the VersionResourceType union in frontend_src/types.ts, and the map in "
         "frontend_src/__tests__/contract.test.ts. If the new type's version "
@@ -133,15 +134,16 @@ def test_agentcli_provider_kinds_match_the_frontend_contract():
     Eligibility for conversation is enforced separately by the registry, account
     resolver and catalog filtering, not by this transport union.
     """
-    from custom_components.phoenix_mcp.const import AGENTCLI_PROVIDERS, DECISION_PROVIDERS
+    from custom_components.phoenix_mcp.provider_constants import AGENTCLI_PROVIDERS
+    from custom_components.phoenix_mcp.routing.routing_tables import DECISION_PROVIDERS
 
     with open(_PROVIDER_CONTRACT, encoding="utf-8") as f:
         expected = set(json.load(f)["agentcli_provider_kinds"])
     assert set(AGENTCLI_PROVIDERS | DECISION_PROVIDERS) == expected, (
-        "const.AGENTCLI_PROVIDERS drifted from the frontend contract fixture. "
+        "provider_constants.AGENTCLI_PROVIDERS drifted from the frontend contract fixture. "
         "Update tests/contract/agentcli_provider_kinds.json, the "
         "AgentCliProviderKind union and KINDS table in the frontend, and add the "
-        "kind's endpoint defaults to agentcli._KINDS."
+        "kind's endpoint defaults to llm.accounts._KINDS."
     )
 
 

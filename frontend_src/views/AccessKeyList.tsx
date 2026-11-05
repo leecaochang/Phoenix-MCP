@@ -45,7 +45,7 @@ const BY_NAME = { column: "name", dir: "asc" } as const;
 
 /**
  * The revoked and expired keys, in a window of its own that Show Archived
- * opens below the key list (user, 2026-10-28). It is closed by default and
+ * opens below the key list. It is closed by default and
  * reads the archived keys when it opens.
  */
 export function ArchivedAccessKeysWindow() {
@@ -72,7 +72,7 @@ interface Props {
   loading: boolean;
   error: string | null;
   onRefresh: () => void;
-  /** Read the list again without a loading state; there is no Refresh button (user, 2026-10-28). */
+  /** Read the list again without a loading state; there is no Refresh button. */
   onUpdate?: () => void;
   /** Whether the Archived Access Keys window is open; the workspace keeps it so a reset can close it. */
   showArchived?: boolean;
@@ -89,7 +89,7 @@ interface Props {
   renamingId?: string | null;
   onRenamed?: (updated: AccessKeyRecord) => void;
   onRenameEnd?: () => void;
-  /** Start renaming a key, as a double-click on its name does (user, 2026-10-31). */
+  /** Start renaming a key, as a double-click on its name does. */
   onStartRename?: (id: string) => void;
   /** Tools for the selected key, offered on the toolbar after the list's own. */
   selectedKeyTools?: ToolGroup | null;
@@ -124,9 +124,9 @@ export function AccessKeyListView({
       .some((value) => value.toLowerCase().includes(q));
   });
 
-  // The list as a configurable table like the other workspaces' lists (user, 2026-10-28).
+  // The list as a configurable table like the other workspaces' lists.
   const columns: Column<AccessKeyRecord>[] = [
-    // Up to 16 characters of a name show; a longer one is cut off (user, 2026-10-31).
+    // Up to 16 characters of a name show; a longer one is cut off.
     { id: "name", label: t("accessKeys.colName"), width: 160, maxWidth: 320, maxChars: 16, sortValue: (k) => k.name.toLowerCase(), title: (k) => k.name,
       cell: (k) => (k.id === renamingId && onRenamed
         ? <EditableAccessKeyName accessKey={k} onRenamed={onRenamed} onDone={() => onRenameEnd?.()} onError={setRenameError} />
@@ -152,7 +152,7 @@ export function AccessKeyListView({
       tools: [
         { id: "setUpAgent", label: t("accessKeys.setUpAgent"), icon: "setupAgent", help: "help.setUpAgent", onSelect: onLaunchWizard },
         { id: "archived", label: showArchived ? t("accessKeys.hideArchived") : t("accessKeys.showArchived"), icon: "archive", help: "help.showArchived", pressed: showArchived, onSelect: () => setShowArchived(!showArchived) },
-        // Opens and closes the form (user, 2026-10-31), except while a key is being created or its
+        // Opens and closes the form, except while a key is being created or its
         // one-time secret is shown: closing then would lose the secret.
         { id: "create", label: t("accessKeys.createAccessKey"), icon: "add", help: "help.createAccessKey", pressed: showCreate,
           onSelect: () => { if (!showCreate) onOpenCreate(); else if (!createBusy) onCloseCreate(); } },
@@ -228,7 +228,7 @@ export function AccessKeyListView({
           rowKey={(k) => k.id}
           selectedKey={selectedId}
           rowHelp="help.accessKeyRow"
-          // Choosing an active key hides the archived ones (user, 2026-10-28).
+          // Choosing an active key hides the archived ones.
           onSelect={(k) => { setShowArchived(false); onOpenDetail(k.id); }}
           rowLabel={(k) => `${k.name}, ${k.pass_through ? t("accessKeys.passThrough") : t("accessKeys.scoped")}, ${accessKeyStatusLabel(accessKeyStatus(k))}`}
           // A refused new name reads under the row being renamed, not squeezed into it.

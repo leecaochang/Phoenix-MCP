@@ -14,27 +14,29 @@ import voluptuous as vol
 from homeassistant.core import HomeAssistant, valid_entity_id
 from homeassistant.helpers.storage import Store
 from homeassistant.util import dt as dt_util
+from homeassistant.helpers import issue_registry as ir
 
 from ..approval_targets import bind_targets, target_binding, targets_current
 from ..const import (
-    DOMAIN, CAP_DENY, CALENDAR_MAX_EVENTS, CALENDAR_MAX_WINDOW_DAYS,
+    DOMAIN, CAP_DENY, CALENDAR_EVENTS_DEFAULT_LIMIT, CALENDAR_MAX_EVENTS, CALENDAR_MAX_WINDOW_DAYS,
     CALENDAR_RECEIPT_LIMIT, CALENDAR_TIMEOUT_SECONDS, CALENDAR_EVENT_MAX_BYTES,
-    CALENDAR_RESULT_MAX_BYTES,
+    CALENDAR_RESULT_MAX_BYTES, SEARCH_ENTITIES_MAX_LIMIT,
 )
 from ..data import PhoenixData
 from ..durable_storage import DurableStore
 from ..helpers import (
-    content_hash, effective_cap, diff_summary_fields, redact_inaccessible_entity_ids_in_text,
-    redact_structure,
+    content_hash, effective_cap, diff_summary_fields, parse_time_param as _parse_time_param,
+    redact_inaccessible_entity_ids_in_text, redact_structure,
 )
 from ..mesa import async_apply_mesa_to_call
 from ..policy_engine import Permission, resolve, resolve_read
 from ..request_authority import AuthorityChangedError, check_request_authority, dispatch_request_id, mark_dispatch_started
 from ..access_key_store import AccessKeyRecord
 from ..tool_common import (
-    _approved_exec_ctx, _gate, _pending_or_inline, _tool_error, _tool_success,
-    redaction_sentinel_path, _tool_pending, _approval_notifies,
+    _gate, _pending_or_inline, _tool_error, _tool_success, fitted_offset_page, offset_page, redaction_sentinel_path, _tool_pending, _approval_notifies,
 )
+from ..request_authority import _approved_exec_ctx
+from ..tool_contracts import normalize_tool_args
 
 _LOGGER = logging.getLogger(__name__)
 _FIELDS = frozenset({"summary", "start", "end", "description", "location", "rrule"})
@@ -123,7 +125,6 @@ class CalendarWriteJournal:
                 row.clear()
                 row.update(original)
                 raise
-            from homeassistant.helpers import issue_registry as ir
             ir.async_delete_issue(self.hass, DOMAIN, f"calendar_recovery_{rid}")
             return True
 
@@ -157,6 +158,7 @@ def _calendar_entity(entity_id: Any, access_key: AccessKeyRecord, hass: HomeAssi
         raise PermissionError("Calendar not found.")
     if not entity_id.startswith("calendar."):
         raise ValueError("entity_id must be a calendar entity ID.")
+    # Local: optional component, imported only when this path runs.
     from homeassistant.components.calendar import CalendarEntity, DATA_COMPONENT
 
     component = hass.data.get(DATA_COMPONENT)
@@ -218,6 +220,7 @@ def _calendar_event_payload(value: Any) -> dict:
         raise ValueError("summary, start and end are required and must be non-empty.")
     _calendar_time(value["start"])
     _calendar_time(value["end"])
+    # Local: optional component, imported only when this path runs.
     from homeassistant.components.calendar import EVENT_START, EVENT_END, WEBSOCKET_EVENT_SCHEMA
 
     try:
@@ -229,6 +232,7 @@ def _calendar_event_payload(value: Any) -> dict:
 
 
 def _calendar_serialized(event: dict) -> dict:
+    # Local: optional component, imported only when this path runs.
     from homeassistant.components.calendar import EVENT_START, EVENT_END
 
     return {"start" if key == EVENT_START else "end" if key == EVENT_END else key:
@@ -238,6 +242,7 @@ def _calendar_serialized(event: dict) -> dict:
 async def _calendar_write_plan(args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, operation: str) -> dict:
     entity_id = args.get("entity_id")
     entity = _calendar_entity(entity_id, access_key, hass, write=True)
+    # Local: optional component, imported only when this path runs.
     from homeassistant.components.calendar import CalendarEntityFeature
 
     feature = getattr(CalendarEntityFeature, f"{operation.upper()}_EVENT", 0)
@@ -559,3 +564,122 @@ async def _tool_get_calendar_write(args: dict, access_key: AccessKeyRecord, hass
         except (PermissionError, ValueError):
             return _tool_error("Calendar write not found."), "not_found", "get_calendar_write"
         return _calendar_result(receipt, access_key, hass)
+
+
+def _calendar_event_start(event: dict) -> datetime:
+    """When an event starts, comparable across calendars: an all-day date is local midnight."""
+    value = event.get("start")
+    parsed = dt_util.parse_datetime(value) if isinstance(value, str) else None
+    if parsed is None:
+        return datetime.max.replace(tzinfo=dt_util.UTC)
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=dt_util.get_default_time_zone())
+    return dt_util.as_utc(parsed)
+
+
+async def _calendar_events_many(
+    raw: list | None, args: dict, access_key: AccessKeyRecord, hass: HomeAssistant
+) -> tuple[dict, str, str]:
+    """Events from several calendars, or every readable one, merged in start order.
+
+    "What is on all my calendars this week" is then one call. Each event names
+    its calendar; its content_hash is the single-calendar one, so a write can use
+    it unchanged. A calendar that cannot be read is reported in unreadable rather
+    than failing the others, and a page that would not fit one result continues
+    at next_offset.
+    """
+    tool = "get_calendar_events"
+    if raw is not None and (not raw or len(raw) > SEARCH_ENTITIES_MAX_LIMIT
+                            or not all(isinstance(item, str) and item.strip() for item in raw)):
+        return _tool_error(
+            f"entity_id must be a calendar entity ID or a list of 1 to {SEARCH_ENTITIES_MAX_LIMIT} of them."
+        ), "invalid_request", tool
+    ids = list(dict.fromkeys(item.strip() for item in raw)) if raw is not None else sorted(
+        state.entity_id for state in hass.states.async_all("calendar"))
+    try:
+        for key in ("start_time", "end_time"):
+            if key in args:
+                if not isinstance(args[key], str):
+                    raise ValueError("Calendar times must be strings.")
+                args[key] = dt_util.as_local(_parse_time_param(args[key])).isoformat()
+        start, end = _calendar_window(args, defaults=True)
+    except ValueError as exc:
+        return _tool_error(_safe_calendar_data(str(exc), access_key, hass)), "invalid_request", tool
+
+    def entity_for(entity_id: str) -> Any:
+        try:
+            return _calendar_entity(entity_id, access_key, hass)
+        except (PermissionError, ValueError):
+            return None
+
+    entities = {entity_id: entity for entity_id in ids if (entity := entity_for(entity_id)) is not None}
+    events: list[dict] = []
+    unreadable: list[dict] = []
+    for entity_id, entity in entities.items():
+        try:
+            events += [{"calendar": entity_id, **row} for row in await _calendar_events(entity, hass, start, end)]
+        except AuthorityChangedError:
+            raise
+        except ValueError as exc:
+            unreadable.append({"calendar": entity_id, "reason": str(exc)})
+        except TimeoutError:
+            unreadable.append({"calendar": entity_id, "reason": "The calendar did not answer in time."})
+    still = {entity_id for entity_id in entities if entity_for(entity_id) is not None}
+    events = sorted((event for event in events if event["calendar"] in still), key=_calendar_event_start)
+    paged = offset_page(events, args, default_limit=CALENDAR_EVENTS_DEFAULT_LIMIT, max_limit=CALENDAR_MAX_EVENTS)
+    if isinstance(paged, str):
+        return _tool_error(paged), "invalid_request", tool
+    page, envelope = paged
+
+    def build(rows: list, envelope: dict) -> dict:
+        body: dict[str, Any] = {"calendars": sorted(still), **envelope, "events": [
+            {**event, "content_hash": content_hash({k: v for k, v in event.items() if k != "calendar"})}
+            for event in rows]}
+        if unreadable:
+            body["unreadable"] = [item for item in unreadable if item["calendar"] in still]
+        body = _safe_calendar_data(body, access_key, hass)
+        # The caller's own IDs, echoed as other summaries do: redacting them would only hide which.
+        if raw is not None:
+            body["not_found"] = [entity_id for entity_id in ids if entity_id not in still]
+        return body
+
+    return _tool_success(json.dumps(fitted_offset_page(page, envelope, build))), "allowed", tool
+
+
+async def _tool_get_calendar_events(
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant
+) -> tuple[dict, str, str]:
+    """Read full integration events including UID and occurrence identity, from one calendar or several."""
+    args, error = normalize_tool_args("get_calendar_events", args)
+    if error:
+        return _tool_error(error), "invalid_request", "get_calendar_events"
+    if args.get("entity_id") is None or isinstance(args.get("entity_id"), list):
+        return await _calendar_events_many(args.get("entity_id"), args, access_key, hass)
+    try:
+        entity = _calendar_entity(args.get("entity_id"), access_key, hass)
+        # Normalize via the shared parser so relative times ("24h") work.
+        for key in ("start_time", "end_time"):
+            if key in args:
+                if not isinstance(args[key], str):
+                    raise ValueError("Calendar times must be strings.")
+                args[key] = dt_util.as_local(_parse_time_param(args[key])).isoformat()
+        start, end = _calendar_window(args, defaults=True)
+        events = await _calendar_events(entity, hass, start, end)
+        _calendar_entity(args.get("entity_id"), access_key, hass)
+        paged = offset_page(events, args, default_limit=CALENDAR_EVENTS_DEFAULT_LIMIT, max_limit=CALENDAR_MAX_EVENTS)
+        if isinstance(paged, str):
+            raise ValueError(paged)
+        page, envelope = paged
+        body = fitted_offset_page(page, envelope, lambda rows, env: _safe_calendar_data(
+            {"calendar_id": args["entity_id"], **env, "events": [{**event, "content_hash": content_hash(event)} for event in rows]},
+            access_key, hass))
+        return _tool_success(json.dumps(body)), "allowed", args["entity_id"]
+    except AuthorityChangedError:
+        raise
+    except PermissionError:
+        return _tool_error("Calendar not found."), "denied", "get_calendar_events"
+    except ValueError as exc:
+        return _tool_error(_safe_calendar_data(str(exc), access_key, hass)), "invalid_request", "get_calendar_events"
+    except Exception:
+        _LOGGER.exception("Calendar read failed")
+        return _tool_error("Failed to read calendar events."), "invalid_request", "get_calendar_events"

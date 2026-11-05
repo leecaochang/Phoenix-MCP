@@ -8,26 +8,46 @@ import json
 import logging
 
 from homeassistant.helpers import entity_registry as er
+from homeassistant.core import HomeAssistant
 
+from .approvals import (
+    get_approval, async_update_approval_status, dismiss_approval_notification,
+    fire_approval_resolved_event, async_create_pending_approval, create_approval_notification,
+    fire_approval_requested_event, PendingApprovalCapacityError, PendingApproval,
+    REASON_RECOVERY_REVIEW_REPLACED,
+)
 from .config_recovery import ConfigurationRecoveryError, recovery_resolution, runtime_identity, safe_snapshot
 from .const import (CONFIG_RECOVERY_APPROVAL_CAP, CONFIG_RECOVERY_APPROVAL_ACCESS_KEY,
                     CONFIG_RECOVERY_UNRESOLVED, CONFIG_RECOVERY_OBSERVATION_TIMEOUT,
                     CONFIG_RECOVERY_SWEEP_BATCH, DOMAIN)
-from .helpers import content_hash
+from .helpers import content_hash, diff_summary_fields as _summary
+from .request_authority import execution_guard, check_request_authority
+from .template_snapshots import template_snapshot
+from .tool_common import _restore_ctx, _tool_success, _tool_error, _read_text_capped
+from .request_authority import _approved_exec_ctx
+from .tools.blueprint import _resolve_blueprint_path, _blueprint_recovery_snapshot
+from .tools.dashboard_resources import read_resource_snapshot
+from .tools.energy import energy_recovery_target
+from .tools.helper import _storage_items, _public_helper_config
+from .tools.lovelace import _dashboard_registry_snapshot, _dashboard_layout_snapshot
+from .tools.recovery import _execute_restore_configuration, _tool_restore_configuration
+from .tools.restore import _restore_access_key
+from .ws_dispatch import (
+    async_get_lovelace_config, WsDashboardNotFoundError, WsYamlDashboardError, async_ws_command,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
 
-async def _read_file(hass, path: str) -> str | None:
+async def _read_file(hass: HomeAssistant, path: str) -> str | None:
     """Only a missing path is absence; permission and read failures stay unknown."""
-    from .tool_common import _read_text_capped
     try:
         return await hass.async_add_executor_job(_read_text_capped, path)
     except FileNotFoundError:
         return None
 
 
-async def observe_configuration(hass, record: dict) -> dict:
+async def observe_configuration(hass: HomeAssistant, record: dict) -> dict:
     """Read current configuration through its owning adapter without any effects."""
     snapshot = record.get("expected") or record.get("source") or record.get("before")
     if not isinstance(snapshot, dict):
@@ -36,8 +56,6 @@ async def observe_configuration(hass, record: dict) -> dict:
     if kind == "restart_receipt":
         return {"snapshot_type": kind, "runtime_identity": runtime_identity(hass)}
     if kind == "storage_helper":
-        from .tools.helper import _storage_items, _public_helper_config
-        from .ws_dispatch import async_ws_command
         helper_type = snapshot["helper_type"]
         helper_id = record.get("observations", {}).get("replacement_helper_id") or snapshot["helper_id"]
         rows = _storage_items(helper_type, await async_ws_command(hass, f"{helper_type}/list", {}))
@@ -47,7 +65,6 @@ async def observe_configuration(hass, record: dict) -> dict:
         return safe_snapshot({**snapshot, "helper_id": helper_id,
                               "config": _public_helper_config(helper_type, current) if current is not None else None}) or {}
     if kind == "template_helper":
-        from .template_recovery import template_snapshot
         entry_id = record.get("observations", {}).get("replacement_entry_id") or snapshot["entry_id"]
         entry = hass.config_entries.async_get_entry(entry_id)
         if entry is not None:
@@ -60,7 +77,6 @@ async def observe_configuration(hass, record: dict) -> dict:
             raise ConfigurationRecoveryError("The helper is absent but its entity identity is still occupied.")
         return {"snapshot_type": kind, "entry_id": entry_id, "exists": False}
     if kind == "blueprint_source":
-        from .tools.blueprint import _resolve_blueprint_path, _blueprint_recovery_snapshot
         domain, rel = snapshot["domain"], snapshot["path"]
         if domain not in ("automation", "script"):
             raise ConfigurationRecoveryError("Unsupported blueprint domain.")
@@ -69,21 +85,18 @@ async def observe_configuration(hass, record: dict) -> dict:
             raise ConfigurationRecoveryError("The blueprint target is outside its current file jail.")
         return _blueprint_recovery_snapshot(domain, rel, await _read_file(hass, target[0]))
     if kind == "energy_preferences":
-        from .tools.energy import energy_recovery_target
         return await energy_recovery_target(hass)
     if kind == "dashboard_layout":
-        from .tools.lovelace import _dashboard_layout_snapshot
-        from .ws_dispatch import async_get_lovelace_config, WsDashboardNotFoundError
         try:
-            config = await async_get_lovelace_config(hass, snapshot.get("url_path"))
+            config = await async_get_lovelace_config(hass, snapshot.get("url_path"), storage_only=True)
         except WsDashboardNotFoundError:
             config = None
+        except WsYamlDashboardError:
+            raise ConfigurationRecoveryError("This dashboard is now YAML-mode, so its layout cannot be observed.") from None
         return _dashboard_layout_snapshot(snapshot.get("url_path"), config)
     if kind == "dashboard_registry":
-        from .tools.lovelace import _dashboard_registry_snapshot
         return await _dashboard_registry_snapshot(hass, snapshot["resource_id"])
     if kind == "dashboard_resource":
-        from .tools.dashboard_resources import read_resource_snapshot
         return await read_resource_snapshot(hass, snapshot["lookup"], snapshot["resource_id"])
     raise ConfigurationRecoveryError("This configuration has no observation adapter.")
 
@@ -125,10 +138,7 @@ def is_recovery_approval(approval, data) -> bool:
     return record is not None and record.get("approval_id") == approval.id
 
 
-async def _restore_receipt(hass, data, record: dict, side: str) -> tuple[dict, dict]:
-    from .mcp_view import _restore_access_key
-    from .tools.recovery import _tool_restore_configuration
-    from .tool_common import _restore_ctx
+async def _restore_receipt(hass: HomeAssistant, data, record: dict, side: str) -> tuple[dict, dict]:
     ctx = _restore_ctx.set({"user_id": "recovery_preview"})
     resolving = recovery_resolution.set(record["id"])
     try:
@@ -144,12 +154,7 @@ async def _restore_receipt(hass, data, record: dict, side: str) -> tuple[dict, d
         _restore_ctx.reset(ctx)
 
 
-async def _queue_recovery(hass, data, record: dict, observed: dict | None) -> None:
-    from .approvals import (async_create_pending_approval, create_approval_notification,
-                           fire_approval_requested_event, PendingApprovalCapacityError, PendingApproval,
-                           async_update_approval_status, dismiss_approval_notification, fire_approval_resolved_event,
-                           REASON_RECOVERY_REVIEW_REPLACED)
-    from .helpers import diff_summary_fields as _summary
+async def _queue_recovery(hass: HomeAssistant, data, record: dict, observed: dict | None) -> None:
     side = "before" if isinstance(record.get("before"), dict) else "source"
     snapshot = record.get(side)
     args: dict = {"recovery_id": record["id"], "side": side, "_resolution": "acknowledge",
@@ -164,6 +169,7 @@ async def _queue_recovery(hass, data, record: dict, observed: dict | None) -> No
             key = "configuration_recovery.restore"
         except Exception:
             # A refused restore is never advertised as an executable inverse.
+            _LOGGER.debug("No restore can be offered for %s", record["resource"], exc_info=True)
             args["_resolution"] = "acknowledge"
     diff.update(_summary("configuration_recovery.restore" if key == "configuration_recovery.restore"
                          else "configuration_recovery.acknowledge", resource=record["resource"]))
@@ -206,9 +212,7 @@ async def _queue_recovery(hass, data, record: dict, observed: dict | None) -> No
         fire_approval_requested_event(hass, approval)
 
 
-async def _close_resolved_approval(hass, data, record: dict) -> None:
-    from .approvals import (get_approval, async_update_approval_status,
-                           dismiss_approval_notification, fire_approval_resolved_event)
+async def _close_resolved_approval(hass: HomeAssistant, data, record: dict) -> None:
     async with data.store.async_lock:
         approval = get_approval(data.store, record.get("approval_id", ""))
         if approval is None or approval.is_terminal() or approval.id in data.approvals_in_progress or approval.execution_started_at:
@@ -220,7 +224,7 @@ async def _close_resolved_approval(hass, data, record: dict) -> None:
         fire_approval_resolved_event(hass, updated)
 
 
-async def reconcile_configurations(hass, data) -> None:
+async def reconcile_configurations(hass: HomeAssistant, data) -> None:
     """Lifecycle-owned readback sweep; never replay a write or infer attribution."""
     recovery = data.config_recovery
     if recovery.reconcile_lock.locked() or not data.ready or data.shutting_down:
@@ -266,7 +270,7 @@ async def reconcile_configurations(hass, data) -> None:
         await recovery.prune()
 
 
-async def acknowledge_recovery(approval, user_id: str, hass, data, *, rejected: bool = False) -> None:
+async def acknowledge_recovery(approval, user_id: str, hass: HomeAssistant, data, *, rejected: bool = False) -> None:
     """Accept the reviewed current state without modifying Home Assistant."""
     record = data.config_recovery.get(approval.args["recovery_id"])
     if record is None or record["phase"] not in CONFIG_RECOVERY_UNRESOLVED:
@@ -285,17 +289,13 @@ async def acknowledge_recovery(approval, user_id: str, hass, data, *, rejected: 
                                          decision="keep_current" if rejected else "acknowledged")
 
 
-async def execute_recovery_approval(approval, user, hass, data) -> tuple[dict, str, str]:
+async def execute_recovery_approval(approval, user, hass: HomeAssistant, data) -> tuple[dict, str, str]:
     """Apply only the system-created, reviewed restore, under current HA admin authority."""
-    from .mcp_view import _restore_access_key
-    from .request_authority import execution_guard, check_request_authority
-    from .tool_common import _restore_ctx, _approved_exec_ctx, _tool_success, _tool_error
-    from .tools.recovery import _execute_restore_configuration
     record = data.config_recovery.get(approval.args["recovery_id"])
     if record is None:
         return _tool_error("The recovery copy is no longer available."), "invalid_request", "restore_configuration"
     def guard():
-        if hass.data.get(DOMAIN) is not data or not data.ready or data.shutting_down or not user.is_admin:
+        if not data.ready or data.shutting_down or hass.data.get(DOMAIN) is not data or not user.is_admin:
             raise ConfigurationRecoveryError("Administrator restoration authority changed.")
     ctx = _restore_ctx.set({"user_id": user.id})
     resolving = recovery_resolution.set(record["id"])

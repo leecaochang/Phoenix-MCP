@@ -269,7 +269,7 @@ export class WorkspaceCanvas {
         const untargeted = flexible.filter((c) => !leafOrder(c).some((id) => id in targets));
         const offered = this.fit && untargeted.length ? untargeted : flexible;
         // A window as tall as its content never takes the space left, even when no height was
-        // just asked for: it would draw its frame short and leave a band under it (user, 2026-10-30).
+        // just asked for: it would draw its frame short and leave a band under it.
         const free = offered.filter((c) => !leafOrder(c).every((id) => this.followsContent(id)));
         const pool = free.length ? free : offered;
         // A child that cannot be sized takes the space left, or Dockview shares it out and a dragged border lags the pointer.
@@ -467,7 +467,7 @@ export function pushDownResizing(api: DockviewApi, canvas: WorkspaceCanvas, onEn
     if (line.width <= line.height) {
       // A border between columns stays Dockview's own, but nothing else lays the windows out
       // while it moves: windows following their content would re-lay the grid under every step
-      // as their text rewraps, and the drag lost the pointer (user, 2026-10-31). They settle once it ends.
+      // as their text rewraps, and the drag lost the pointer. They settle once it ends.
       host.classList.add("phx-resizing", "phx-resizing-columns");
       const done = () => {
         window.removeEventListener("pointerup", done, true);
@@ -532,7 +532,7 @@ export function pushDownResizing(api: DockviewApi, canvas: WorkspaceCanvas, onEn
       frame = requestAnimationFrame(tick);
     };
     // The windows being resized take the user's height from the first move, so their frames and
-    // content follow the border while it moves, not only once it is let go (user, 2026-10-31).
+    // content follow the border while it moves, not only once it is let go.
     let marked = false;
     const move = (ev: PointerEvent) => {
       lastY = ev.clientY;
@@ -650,7 +650,7 @@ export function bottomEdgeResizing(api: DockviewApi, canvas: WorkspaceCanvas, ed
       frame = requestAnimationFrame(tick);
     };
     // The windows being resized take the user's height from the first move, so their frames and
-    // content follow the border while it moves, not only once it is let go (user, 2026-10-31).
+    // content follow the border while it moves, not only once it is let go.
     let marked = false;
     const move = (ev: PointerEvent) => {
       lastY = ev.clientY;

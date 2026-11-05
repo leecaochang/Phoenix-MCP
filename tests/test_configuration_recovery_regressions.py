@@ -14,6 +14,7 @@ from custom_components.phoenix_mcp.tools.recovery import _tool_restore_configura
 from custom_components.phoenix_mcp.tools.lovelace import _execute_set_dashboard_config, _recoverable_dashboard_save
 from custom_components.phoenix_mcp.tools.energy import _execute_edit_energy_config
 from custom_components.phoenix_mcp.ws_dispatch import async_ws_command, WsDispatchError
+from tests.runtime_fixtures import patch_readers
 
 
 def runtime():
@@ -120,7 +121,7 @@ async def test_dashboard_restore_failure_says_whether_anything_changed(hass, has
     args.update({k: info[k] for k in ("snapshot_digest", "target_fingerprint")})
     raised = WsCommandRefusedError("invalid_format", "Url path needs to contain a hyphen (-)") if error == "refused" \
         else WsDispatchError("WebSocket command lovelace/dashboards/create failed: boom")
-    with patch("custom_components.phoenix_mcp.ws_dispatch.async_ws_command", AsyncMock(side_effect=raised)):
+    with patch("custom_components.phoenix_mcp.tools.recovery.async_ws_command", AsyncMock(side_effect=raised)):
         restored = await _tool_restore_configuration(args, t, hass, d)
     assert restored[0].get("isError") and words in restored[0]["content"][0]["text"], restored
     restore_record = next(r for r in d.config_recovery.records() if r["operation"] == "dashboard_registry_restore")
@@ -262,10 +263,10 @@ async def test_dashboard_layout_restore_records_only_verified_history(hass, stal
         await async_save_lovelace_config(host, url_path, config)
         submissions.append(config)
 
-    async def read(host, url_path):
+    async def read(host, url_path, **kwargs):
         if submissions and stale_readback:
             return after
-        return await async_get_lovelace_config(host, url_path)
+        return await async_get_lovelace_config(host, url_path, **kwargs)
 
     with patch.object(lovelace, "async_save_lovelace_config", side_effect=save), patch.object(
         lovelace, "async_get_lovelace_config", side_effect=read,
@@ -297,7 +298,7 @@ async def test_blueprint_restore_preview_compares_live_content(hass):
     assert result[1] == "allowed", result
     diff = body(result)["diff"]
     assert diff["before"] == current
-    assert diff["after"] == saved
+    assert "name: Before" in diff["after"] and "name: After" not in diff["after"]
     assert p.read_text() == current
 
 
@@ -309,7 +310,7 @@ async def test_timeout_after_dashboard_effect_keeps_barrier(hass):
         actual.clear()
         actual.update(after)
         raise WsDispatchError("WebSocket command timed out.")
-    with patch("custom_components.phoenix_mcp.tools.lovelace.async_get_lovelace_config", AsyncMock(return_value=before)), patch("custom_components.phoenix_mcp.tools.lovelace.async_save_lovelace_config", AsyncMock(side_effect=save)):
+    with patch_readers("custom_components.phoenix_mcp.tools.lovelace.async_get_lovelace_config", AsyncMock(return_value=before)), patch("custom_components.phoenix_mcp.tools.lovelace.async_save_lovelace_config", AsyncMock(side_effect=save)):
         result = await _recoverable_dashboard_save(url_path=None, before=before, after=after, access_key=t, hass=hass, data=d)
     assert actual == after
     assert result[1] == "invalid_request"
@@ -332,7 +333,7 @@ async def test_energy_partial_readback_returns_observed_state(hass):
     with patch("custom_components.phoenix_mcp.tools.energy._read_prefs_raw", AsyncMock(return_value=before)), patch("custom_components.phoenix_mcp.tools.energy.async_ws_command", AsyncMock(return_value=None)):
         result = await _execute_edit_energy_config({"op": "remove_device", "device_name": "Old"}, t, hass, d)
     assert d.config_recovery.records()[0]["phase"] == "partial"
-    assert result[1] == "allowed"
+    assert result[1] == "invalid_request" and result[0]["isError"] is True
     assert body(result)["saved"] is False
     assert body(result)["status"] == "partial"
     assert body(result)["device_consumption"][0]["name"] == "Old"
@@ -373,6 +374,10 @@ async def test_admin_restore_button_refuses_a_stored_file_record(hass, hass_admi
     assert response["result"]["content"][0]["text"].startswith(
         "This recovery record holds configuration file text, which Phoenix does not write back."
     )
+    # Every restore attempt leaves an audit row, whichever family it was.
+    row = d.audit.record.call_args.kwargs
+    d.audit.record.assert_called_once()
+    assert (row["method"], row["resource"], row["outcome"]) == ("config_recovery/restore", rid, "invalid_request")
     assert path.read_text() == "After"
     assert [record["id"] for record in d.config_recovery.records()] == [rid]
     assert d.config_recovery.get(rid)["phase"] == "verified"
@@ -398,8 +403,8 @@ async def test_real_blueprint_formatting_is_verified(hass, hass_admin_user):
 async def test_template_recreation_refuses_revoked_entity_scope(hass, scope, existing):
     from homeassistant.config_entries import SOURCE_USER
     from homeassistant.helpers import entity_registry as er
-    from custom_components.phoenix_mcp.template_recovery import template_snapshot
-    from custom_components.phoenix_mcp.mcp_view import _call_tool
+    from custom_components.phoenix_mcp.template_snapshots import template_snapshot
+    from custom_components.phoenix_mcp.tool_dispatch import _call_tool
     from custom_components.phoenix_mcp.access_key_store import PermissionNode
     assert await async_setup_component(hass, "homeassistant", {})
     flow = hass.config_entries.flow
@@ -534,7 +539,7 @@ async def test_ambiguous_ws_failure_preserves_family_barrier(hass, family):
         t = access_key(cap_lovelace_write="allow")
         resource = "dashboard_registry:test-board"
         before = {"snapshot_type": "dashboard_registry", "schema": 1, "resource_id": "test-board", "exists": False, "dashboard": None}
-        with patch("custom_components.phoenix_mcp.tools.lovelace._dashboard_registry_snapshot", AsyncMock(return_value=before)), patch("custom_components.phoenix_mcp.tools.lovelace.async_ws_command", AsyncMock(side_effect=uncertain)):
+        with patch_readers("custom_components.phoenix_mcp.tools.lovelace._dashboard_registry_snapshot", AsyncMock(return_value=before)), patch("custom_components.phoenix_mcp.tools.lovelace.async_ws_command", AsyncMock(side_effect=uncertain)):
             result = await _recoverable_dashboard_registry_write(dashboard_id="test-board", before=before, operation="create", command="lovelace/dashboards/create", payload={}, access_key=t, hass=hass, data=d)
     assert result[1] == "invalid_request"
     assert len(effects) == 1
@@ -545,7 +550,7 @@ async def test_ambiguous_ws_failure_preserves_family_barrier(hass, family):
 
 async def test_template_preview_compares_live_options(hass):
     from homeassistant.config_entries import SOURCE_USER
-    from custom_components.phoenix_mcp.template_recovery import template_snapshot
+    from custom_components.phoenix_mcp.template_snapshots import template_snapshot
     from custom_components.phoenix_mcp.access_key_store import PermissionNode
     assert await async_setup_component(hass, "homeassistant", {})
     flow = hass.config_entries.flow
@@ -628,7 +633,7 @@ async def test_pre_dispatch_refusal_does_not_leave_uncertain_barrier(hass):
     from custom_components.phoenix_mcp.ws_dispatch import WsCommandNotDispatchedError
     d, t = runtime(), access_key(cap_lovelace_write="allow")
     before = {"views": []}
-    with patch("custom_components.phoenix_mcp.tools.lovelace.async_get_lovelace_config", AsyncMock(return_value=before)), patch("custom_components.phoenix_mcp.tools.lovelace.async_save_lovelace_config", AsyncMock(side_effect=WsCommandNotDispatchedError("Invalid schema"))):
+    with patch_readers("custom_components.phoenix_mcp.tools.lovelace.async_get_lovelace_config", AsyncMock(return_value=before)), patch("custom_components.phoenix_mcp.tools.lovelace.async_save_lovelace_config", AsyncMock(side_effect=WsCommandNotDispatchedError("Invalid schema"))):
         result = await _recoverable_dashboard_save(url_path=None, before=before, after={"views": [{"title": "Changed"}]}, access_key=t, hass=hass, data=d)
     assert result[1] == "invalid_request"
     assert d.config_recovery.records()[0]["phase"] == "not_applied"

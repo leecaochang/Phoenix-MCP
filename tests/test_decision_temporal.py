@@ -3,7 +3,7 @@ from copy import deepcopy
 
 import pytest
 
-from custom_components.phoenix_mcp.decision_temporal import temporal_proposal
+from custom_components.phoenix_mcp.routing.decision_batch import temporal_proposal
 
 
 def answer(choice, other):

@@ -221,7 +221,8 @@ config is good on the strength of validation alone if you can compile it.
   again. Polling spends the turn's remaining calls and it ends with no reply at
   all, which is worse for the user than saying "it is building".
 - `install_esphome_firmware` compiles AND flashes the device over the air, and
-  usually needs an operator's approval. If you do not have this tool, this access key
+  usually needs an operator's approval. MESA judges every entity of the device, so
+  one refused entity stops the install. If you do not have this tool, this access key
   cannot flash: build it, report that it builds, and let the operator install.
 - **A finished compile does not mean the device was flashed.** An install runs
   two jobs, and `get_esphome_job` tells you the truth: report success only when
@@ -258,7 +259,10 @@ config is good on the strength of validation alone if you can compile it.
   `permit_zigbee_join` opens the Zigbee network for pairing (duration 0 closes
   it), `reconfigure_zigbee_device` re-interviews a misbehaving device, and
   `remove_zigbee_device` removes one from the network (re-pairing required to
-  rejoin).
+  rejoin). These device actions and `set_zigbee_device_options` and
+  `configure_zigbee_reporting` are judged by MESA across every entity of the
+  device, including ones you cannot write; with MESA active, a device that has no
+  entity is refused.
 
 ### 5. Verify
 - Re-read state (`get_state`, `describe_entity`) or `get_automation_traces` after
@@ -531,10 +535,12 @@ mode: single
   be unoccupied. Rename does not repair automations, scripts, scenes, groups,
   dashboards, or integration configuration that names the old ID; inspect the
   approval's relationship preview and update those consumers separately.
-- Rename and delete obey the entity's fully inherited MESA profile. A device- or
-  domain-level `read_only` rule blocks both even when the entity itself is more
-  permissive. Do not retry a MESA refusal or create a second approval: an
-  enforced `confirm` rule is already merged into the ordinary registry approval.
+- Rename, delete, enable and disable obey the entity's fully inherited MESA
+  profile, as does an area change that takes the entity out of an area with a MESA
+  profile. A device- or domain-level `read_only` rule blocks them even when the
+  entity itself is more permissive. Do not retry a MESA refusal or create a second
+  approval: an enforced `confirm` rule is already merged into the ordinary registry
+  approval.
 
 ### Integration registry lifecycle
 
@@ -598,10 +604,12 @@ mode: single
 - Device rename and enable/disable are evaluated for every attached entity under
   `device_registry.rename|enable|disable`, so entity, device, area, integration,
   and domain MESA layers all contribute. One denial blocks the whole device and
-  one enforced confirmation joins the ordinary registry approval. Area and label
-  edits have no MESA gate in this stage. With MESA active, an entity-less device
-  cannot be renamed or enabled/disabled because mesa-core has no complete entity
-  context from which to resolve it.
+  one enforced confirmation joins the ordinary registry approval. An area change
+  that takes an entity out of an area with a MESA profile is evaluated the same
+  way under `device_registry.move_area`, for those entities only. Label edits have
+  no MESA gate. With MESA active, an entity-less device cannot be renamed or
+  enabled/disabled because mesa-core has no complete entity context from which to
+  resolve it.
 - `remove_device` is destructive and uses an owning integration's Home Assistant
   removal hook; it never deletes a raw registry row. It needs
   `cap_integration_write` plus explicit device WRITE. Pass `config_entry_id` for

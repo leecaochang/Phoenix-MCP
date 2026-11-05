@@ -10,6 +10,8 @@ import os
 import re
 import stat
 from dataclasses import dataclass
+from typing import Any
+from homeassistant.core import HomeAssistant
 
 from .const import (
     CAP_DENY, FAULT_LOG_DEFAULT_LIMIT, FAULT_LOG_MAX_CURSOR_LEN, MAX_LOG_ENTRIES,
@@ -97,7 +99,7 @@ def read_fault_snapshot(config_dir: str) -> FaultSnapshot:
             os.close(directory)
 
 
-def _scrub_block(text, access_key, hass):
+def _scrub_block(text, access_key, hass: HomeAssistant):
     """Keep frame locations useful without disclosing host paths or thread IDs."""
     text = _URL.sub("<redacted-url>", text)
     lines = []
@@ -141,14 +143,14 @@ def _cursor_offset(cursor, fingerprint, access_key):
     return value["offset"]
 
 
-def fault_log_page(snapshot, access_key, hass, *, search, order, limit, cursor):
+def fault_log_page(snapshot, access_key, hass: HomeAssistant, *, search, order, limit, cursor):
     """Scrub before matching and paginate complete retained blocks only."""
     source = {
         "kind": "home_assistant_fault_log", "status": snapshot.status,
         "semantics": "faulthandler_blocks", "pagination": "bounded_snapshot",
         "coverage": "bounded_tail", "clipped": snapshot.clipped,
     }
-    body = {
+    body: dict[str, Any] = {
         "source": source, "filters": {"search": search, "order": order},
         "crash_recorded": None, "count": 0, "total": 0, "matched_blocks": 0,
         "has_more": False, "next_cursor": None, "entries": [],
@@ -220,7 +222,7 @@ def fault_log_page(snapshot, access_key, hass, *, search, order, limit, cursor):
     return body
 
 
-async def async_fault_log_query(args, access_key, hass):
+async def async_fault_log_query(args, access_key, hass: HomeAssistant):
     """Apply capability and current-authority gates around the protected read."""
     resource = "get_logs"
     if any(effective_cap(access_key, cap) == CAP_DENY for cap in ("cap_log_read", "cap_diagnostics")):

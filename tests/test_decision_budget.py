@@ -9,10 +9,10 @@ from aiohttp import ClientSession, web
 from aiohttp.test_utils import TestServer
 
 from custom_components.phoenix_mcp.admin_view import _validated_settings_patch
-from custom_components.phoenix_mcp.agentcli import ProviderConfig
-from custom_components.phoenix_mcp.decision_budget import DecisionBudgetError, DecisionRequestBudget
-from custom_components.phoenix_mcp.decision_metrics import DecisionMetrics
-from custom_components.phoenix_mcp.decision_provider import DecisionError, DecisionProvider
+from custom_components.phoenix_mcp.llm.accounts import ProviderConfig
+from custom_components.phoenix_mcp.routing.decision_budget import DecisionBudgetError, DecisionRequestBudget
+from custom_components.phoenix_mcp.routing.decision_metrics import DecisionMetrics
+from custom_components.phoenix_mcp.routing.decision_provider import DecisionError, DecisionProvider
 
 
 class MemoryStore:
@@ -37,7 +37,7 @@ async def test_core_wipe_clears_durable_allowance_and_failed_removal_stays_close
 async def test_concurrent_callers_share_exact_allowance_and_restart():
     store = MemoryStore()
     budget = DecisionRequestBudget(store)
-    with patch('custom_components.phoenix_mcp.decision_budget.time', return_value=3601):
+    with patch('custom_components.phoenix_mcp.routing.decision_budget.time', return_value=3601):
         outcomes = await asyncio.gather(*(budget.reserve(3) for _ in range(20)), return_exceptions=True)
         assert outcomes.count(None) == 3
         assert all(isinstance(item, DecisionBudgetError) for item in outcomes if item is not None)
@@ -46,9 +46,9 @@ async def test_concurrent_callers_share_exact_allowance_and_restart():
         with pytest.raises(DecisionBudgetError, match='request_budget_exhausted'): await restarted.reserve(3)
         assert restarted.summary(3)['remaining'] == 0
         await restarted.reserve(4)
-    with patch('custom_components.phoenix_mcp.decision_budget.time', return_value=10):
+    with patch('custom_components.phoenix_mcp.routing.decision_budget.time', return_value=10):
         with pytest.raises(DecisionBudgetError): await restarted.reserve(3)
-    with patch('custom_components.phoenix_mcp.decision_budget.time', return_value=7201):
+    with patch('custom_components.phoenix_mcp.routing.decision_budget.time', return_value=7201):
         await restarted.reserve(3)
         assert restarted.summary(3)['used'] == 1
 
@@ -138,3 +138,12 @@ async def test_admin_budget_validates_integer_bounds(hass, access_key_store, val
         assert error is None and changes['decision_request_budget'] == value
     else:
         assert error is not None
+
+
+async def test_an_unreadable_ledger_says_so_in_the_log(caplog):
+    from unittest.mock import AsyncMock, MagicMock
+
+    budget = DecisionRequestBudget(MagicMock(async_load=AsyncMock(return_value={"window": "x", "used": 0})))
+    await budget.async_load()
+    assert budget.summary(5)["available"] is False
+    assert "ValueError" in caplog.text

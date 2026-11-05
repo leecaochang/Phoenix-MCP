@@ -4,13 +4,15 @@ from __future__ import annotations
 
 import json
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from homeassistant.components.system_log import DedupStore
+from homeassistant.helpers import entity_registry as er
 from homeassistant.util.dt import utcnow
 
-from custom_components.phoenix_mcp import mcp_view
+from custom_components.phoenix_mcp import helpers, tool_defs, tool_dispatch
+from custom_components.phoenix_mcp.tools import system as system_tools
 from custom_components.phoenix_mcp.audit import AuditLog
 from custom_components.phoenix_mcp.const import (
     DOMAIN,
@@ -24,7 +26,7 @@ from custom_components.phoenix_mcp.data import PhoenixData
 from custom_components.phoenix_mcp.policy_engine import Permission
 from custom_components.phoenix_mcp.rate_limiter import RateLimiter
 from tests.log_fixtures import attach_log_store, make_log_entry, make_log_store
-from tests.test_mcp_view import _make_data, _make_hass, _make_access_key
+from tests.runtime_fixtures import make_mcp_data as _make_data, make_mcp_hass as _make_hass, make_mcp_access_key as _make_access_key
 
 
 async def _call(tool: str, args: dict, *, access_key=None, hass=None, data=None):
@@ -35,7 +37,7 @@ async def _call(tool: str, args: dict, *, access_key=None, hass=None, data=None)
     if hass is None:
         hass = _make_hass(data)
         attach_log_store(hass, DedupStore(maxlen=50))
-    response, _method, _resource, outcome = await mcp_view._dispatch_mcp(
+    response, _method, _resource, outcome = await tool_dispatch._dispatch_mcp(
         "tools/call",
         3,
         {"name": tool, "arguments": args},
@@ -58,6 +60,8 @@ async def _call(tool: str, args: dict, *, access_key=None, hass=None, data=None)
 def _hass_with_entries(access_key, entries, *, capacity=50):
     data = _make_data(access_key)
     hass = _make_hass(data)
+    hass.states.get.return_value = None
+    hass.data[er.DATA_REGISTRY] = MagicMock(**{"async_get.return_value": None})
     attach_log_store(hass, make_log_store(entries, capacity=capacity))
     return hass, data
 
@@ -438,7 +442,7 @@ async def test_phoenix_diagnostics_is_separate_and_strongly_redacted():
     access_key, _ = _make_access_key(cap_log_read="allow")
     access_key.cap_diagnostics = "allow"
     phoenix = make_log_entry(
-        name="custom_components.phoenix_mcp.mcp_view",
+        name="custom_components.phoenix_mcp.mcp_transport",
         message=(
             "entity sensor.allowed denied sensor.hidden at http://nas.local:8123/a "
             "/config/.storage/core 10.0.0.4 "
@@ -550,7 +554,7 @@ async def test_dual_cap_tool_announcement_and_gate_map_require_both_caps():
         access_key.cap_diagnostics = diagnostics_mode
         data = _make_data(access_key)
         hass = _make_hass(data)
-        response, _method, _resource, _outcome = await mcp_view._dispatch_mcp(
+        response, _method, _resource, _outcome = await tool_dispatch._dispatch_mcp(
             "tools/list",
             1,
             {},
@@ -561,13 +565,13 @@ async def test_dual_cap_tool_announcement_and_gate_map_require_both_caps():
             base_url="http://homeassistant.local",
         )
         names = {tool["name"] for tool in response["result"]["tools"]}
-        gate_map = mcp_view._tool_gate_map(access_key, data, hass)
+        gate_map = system_tools._tool_gate_map(access_key, data, hass)
         assert ("get_phoenix_diagnostics" in names) is expected
         bucket = "usable" if expected else "unavailable"
         assert "get_phoenix_diagnostics" in gate_map[bucket]
         published = next(
             tool
-            for tool in mcp_view._SYSTEM_TOOL_DEFS
+            for tool in tool_defs._SYSTEM_TOOL_DEFS
             if tool["name"] == "get_phoenix_diagnostics"
         )
         assert published["caps"] == ["cap_diagnostics", "cap_log_read"]
@@ -872,12 +876,12 @@ async def test_invalid_detail_arguments_fail_before_source_access(args):
 async def test_detail_authority_changes_during_collection_block_disclosure(change, hass, access_key_store):
     access_key, _ = await access_key_store.async_create_access_key("system-log-test", "admin", rate_limit_requests=0)
     access_key.cap_log_read = "allow"
-    data = PhoenixData(store=access_key_store, rate_limiter=RateLimiter(), audit=AuditLog(), enforce_mcp_lifecycle=False)
+    data = PhoenixData(store=access_key_store, rate_limiter=RateLimiter(), audit=AuditLog())
     hass.data[DOMAIN] = data
     entry = make_log_entry(message="must-not-disclose")
     attach_log_store(hass, make_log_store([entry]))
     body, _result, _outcome = await _call("get_logs", {}, access_key=access_key, hass=hass, data=data)
-    original = mcp_view._collect_log_entries
+    original = helpers.collect_log_entries
     def changed_collection(*args, **kwargs):
         page = original(*args, **kwargs)
         if change == "revoke":
@@ -893,7 +897,7 @@ async def test_detail_authority_changes_during_collection_block_disclosure(chang
         else:
             access_key.cap_log_read = "deny"
         return page
-    with patch("custom_components.phoenix_mcp.mcp_view._collect_log_entries", side_effect=changed_collection):
+    with patch("custom_components.phoenix_mcp.tools.logs._collect_log_entries", side_effect=changed_collection):
         error, result, outcome = await _call("get_log_detail", {"detail_ref": body["entries"][0]["detail_ref"]},
                                              access_key=access_key, hass=hass, data=data)
     assert outcome == "denied" and result["isError"]

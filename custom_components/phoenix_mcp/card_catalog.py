@@ -280,7 +280,7 @@ class CardCatalogStore:
             return
         try:
             data = await self._store.async_load()
-        except Exception:  # noqa: BLE001 - a bad cache must never block setup
+        except Exception:  # a bad cache must never block setup
             _LOGGER.exception("Could not load the card catalog; treating it as unharvested")
             return
         if not isinstance(data, dict):
@@ -329,10 +329,6 @@ class CardCatalogStore:
             if entry.type == wanted:
                 return entry
         return None
-
-    def known_types(self) -> frozenset[str]:
-        """Every card type the catalog knows, whether or not it is available."""
-        return frozenset(e.type for e in self._catalog.entries)
 
     def as_dict(self) -> dict:
         """Serializable form, for the Store and the admin API."""

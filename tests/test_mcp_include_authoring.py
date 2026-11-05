@@ -29,12 +29,9 @@ from pytest_homeassistant.common import MockConfigEntry
 
 from custom_components.phoenix_mcp import yaml_includes as yi
 from custom_components.phoenix_mcp.data import PhoenixData
-from custom_components.phoenix_mcp.mcp_view import (
-    _call_tool,
-    _execute_edit_automation,
-    async_execute_approved_tool,
-    async_restore_version,
-)
+from custom_components.phoenix_mcp.tool_dispatch import _call_tool, async_execute_approved_tool
+from custom_components.phoenix_mcp.tools.authoring import _execute_edit_automation
+from custom_components.phoenix_mcp.tools.restore import async_restore_version
 from custom_components.phoenix_mcp.helpers import content_hash
 from custom_components.phoenix_mcp.access_key_store import PermissionNode, PermissionTree, AccessKeyRecord
 from custom_components.phoenix_mcp.tool_common import RefusedBeforeWrite

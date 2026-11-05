@@ -1,6 +1,6 @@
 /**
  * Rows of side-by-side windows. A window dropped beside others shares their
- * row by fixed rules (user, 2026-10-27): one window before splits 50|50, two
+ * row by fixed rules: one window before splits 50|50, two
  * even ones become thirds, two uneven ones give half of the nearer one's
  * width (thirds when dropped between them), three become quarters. No
  * workspace ever holds more than MAX_ACROSS windows across. Also where a
@@ -175,7 +175,7 @@ const acrossOf = (node: GridNode, across: boolean): number => (node.type === "le
 const lastLeaf = (node: GridNode): string => { const ids = leafOrder(node); return ids[ids.length - 1] ?? ""; };
 
 /**
- * The place for the next window added to My Workspace (user, 2026-10-27):
+ * The place for the next window added to My Workspace:
  * the first fills an empty workspace (or floats when only floating windows
  * are there); the second goes beside the first, 50|50; two side by side get
  * a row under them, two stacked a column beside them; the window after that

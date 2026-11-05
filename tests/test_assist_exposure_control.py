@@ -20,13 +20,9 @@ from homeassistant.components.homeassistant.exposed_entities import DATA_EXPOSED
 
 from custom_components.phoenix_mcp import policy_engine
 from custom_components.phoenix_mcp.helpers import redact_inaccessible_entity_ids_in_text
-from custom_components.phoenix_mcp.mcp_view import _call_tool
+from custom_components.phoenix_mcp.tool_dispatch import _call_tool
 from custom_components.phoenix_mcp.policy_engine import Permission, resolve
-from tests import test_assist_exposure_reads as reads
-from tests.test_assist_exposure_reads import _body, _data, _key
-
-home = reads.home
-related = reads.related
+from tests.runtime_fixtures import exposure_body as _body, exposure_data as _data, exposure_key as _key
 
 
 def _turn_on(target: dict) -> dict:

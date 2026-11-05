@@ -16,17 +16,16 @@ from pytest_homeassistant.common import MockConfigEntry
 
 from custom_components.phoenix_mcp.const import DOMAIN
 from custom_components.phoenix_mcp.data import PhoenixData
-from custom_components.phoenix_mcp.mcp_view import (
+from custom_components.phoenix_mcp.tools.registry import (
     _REMOVE_DEVICE_CONTEXT_FINGERPRINT,
     _REMOVE_DEVICE_MESA_FINGERPRINT,
     _build_diff_remove_device,
-    _call_tool,
     _device_mesa_decision,
     _execute_remove_device,
     _resolve_device_removal_context,
-    async_execute_approved_tool,
-    async_restore_version,
 )
+from custom_components.phoenix_mcp.tool_dispatch import _call_tool, async_execute_approved_tool
+from custom_components.phoenix_mcp.tools.restore import async_restore_version
 from custom_components.phoenix_mcp.mesa import async_setup_mesa
 from custom_components.phoenix_mcp.mesa_core import MetadataOrigin, SemanticProfile
 from custom_components.phoenix_mcp.access_key_store import (
@@ -138,10 +137,10 @@ async def test_unsupported_integration_is_refused_before_approval(
     gate = AsyncMock()
     with (
         patch(
-            "custom_components.phoenix_mcp.mcp_view._async_device_removal_hook",
+            "custom_components.phoenix_mcp.tools.registry._async_device_removal_hook",
             AsyncMock(return_value=None),
         ),
-        patch("custom_components.phoenix_mcp.mcp_view._gate", gate),
+        patch("custom_components.phoenix_mcp.tools.registry._gate", gate),
     ):
         content, outcome, _ = await _call_tool(
             "remove_device",
@@ -167,7 +166,7 @@ async def test_hook_rejection_or_exception_leaves_registry_ownership(
     data = await _data(hass)
     device_id = removal_env["device"].id
     with patch(
-        "custom_components.phoenix_mcp.mcp_view._async_device_removal_hook",
+        "custom_components.phoenix_mcp.tools.registry._async_device_removal_hook",
         AsyncMock(return_value=hook),
     ):
         content, outcome, _ = await _call_tool(
@@ -190,7 +189,7 @@ async def test_integration_may_remove_device_itself(
 
     data = await _data(hass)
     with patch(
-        "custom_components.phoenix_mcp.mcp_view._async_device_removal_hook",
+        "custom_components.phoenix_mcp.tools.registry._async_device_removal_hook",
         AsyncMock(return_value=remove_in_hook),
     ):
         content, outcome, _ = await _call_tool(
@@ -216,7 +215,7 @@ async def test_child_device_removal_uses_child_ownership(
     data = await _data(hass)
 
     with patch(
-        "custom_components.phoenix_mcp.mcp_view._async_device_removal_hook",
+        "custom_components.phoenix_mcp.tools.registry._async_device_removal_hook",
         AsyncMock(return_value=hook),
     ):
         content, outcome, _ = await _call_tool(
@@ -250,7 +249,7 @@ async def test_parent_removal_covers_child_devices(hass: HomeAssistant, part_env
     data = await _data(hass)
     hook = AsyncMock(return_value=True)
     with patch(
-        "custom_components.phoenix_mcp.mcp_view._async_device_removal_hook",
+        "custom_components.phoenix_mcp.tools.registry._async_device_removal_hook",
         AsyncMock(return_value=hook),
     ):
         context = await _resolve_device_removal_context(
@@ -281,7 +280,7 @@ async def test_parent_removal_refuses_unwritable_child_device(
     key.permissions.devices[part_env["part"].id] = PermissionNode(state="RED")
     hook = AsyncMock(return_value=True)
     with patch(
-        "custom_components.phoenix_mcp.mcp_view._async_device_removal_hook",
+        "custom_components.phoenix_mcp.tools.registry._async_device_removal_hook",
         AsyncMock(return_value=hook),
     ):
         content, outcome, _ = await _call_tool(
@@ -304,7 +303,7 @@ async def test_parent_removal_honours_child_entity_mesa(hass: HomeAssistant, par
     )
     hook = AsyncMock(return_value=True)
     with patch(
-        "custom_components.phoenix_mcp.mcp_view._async_device_removal_hook",
+        "custom_components.phoenix_mcp.tools.registry._async_device_removal_hook",
         AsyncMock(return_value=hook),
     ):
         content, outcome, _ = await _call_tool(
@@ -344,11 +343,11 @@ async def test_multi_owner_requires_selection_and_removes_only_selected_owner(
 
     with (
         patch(
-            "custom_components.phoenix_mcp.mcp_view._async_device_removal_hook",
+            "custom_components.phoenix_mcp.tools.registry._async_device_removal_hook",
             hook_resolver,
         ),
         patch(
-            "custom_components.phoenix_mcp.mcp_view.device_config_entry_ids",
+            "custom_components.phoenix_mcp.tools.registry.device_config_entry_ids",
             side_effect=legacy_owners,
         ),
         patch.object(registry, "async_update_device", side_effect=legacy_update),
@@ -393,7 +392,7 @@ async def test_preview_contains_exact_affected_relationships_and_safety_context(
     data.store.list_access_keys.return_value = [_access_key(device_id)]
     hook = AsyncMock(return_value=True)
     with patch(
-        "custom_components.phoenix_mcp.mcp_view._async_device_removal_hook",
+        "custom_components.phoenix_mcp.tools.registry._async_device_removal_hook",
         AsyncMock(return_value=hook),
     ):
         context = await _resolve_device_removal_context(
@@ -413,7 +412,7 @@ async def test_preview_contains_exact_affected_relationships_and_safety_context(
     assert not isinstance(mesa, tuple)
     relationships = {"consumers": [{"kind": "automation", "id": "consumer"}]}
     with patch(
-        "custom_components.phoenix_mcp.mcp_view._registry_relationships_preview",
+        "custom_components.phoenix_mcp.tools.registry._registry_relationships_preview",
         AsyncMock(return_value=relationships),
     ):
         diff = await _build_diff_remove_device(
@@ -456,7 +455,7 @@ async def test_mesa_evaluates_exact_selected_owner_membership(
         return registry.async_get(target_id)
 
     with patch(
-        "custom_components.phoenix_mcp.mcp_view._async_device_removal_hook",
+        "custom_components.phoenix_mcp.tools.registry._async_device_removal_hook",
         AsyncMock(return_value=hook),
     ), patch.object(
         registry, "async_update_device", side_effect=remove_legacy_owner
@@ -485,7 +484,7 @@ async def test_affected_read_only_and_empty_membership_fail_closed(
     )
     hook = AsyncMock(return_value=True)
     with patch(
-        "custom_components.phoenix_mcp.mcp_view._async_device_removal_hook",
+        "custom_components.phoenix_mcp.tools.registry._async_device_removal_hook",
         AsyncMock(return_value=hook),
     ):
         content, outcome, _ = await _call_tool(
@@ -498,7 +497,7 @@ async def test_affected_read_only_and_empty_membership_fail_closed(
     data.mesa.store.delete(removal_env["entity_id"])
     er.async_get(hass).async_remove(removal_env["entity_id"])
     with patch(
-        "custom_components.phoenix_mcp.mcp_view._async_device_removal_hook",
+        "custom_components.phoenix_mcp.tools.registry._async_device_removal_hook",
         AsyncMock(return_value=hook),
     ):
         content, outcome, _ = await _call_tool(
@@ -518,10 +517,10 @@ async def test_approval_revalidates_membership_permission_capability_and_support
     gate = AsyncMock(return_value=({}, "pending_approval", "approval"))
     with (
         patch(
-            "custom_components.phoenix_mcp.mcp_view._async_device_removal_hook",
+            "custom_components.phoenix_mcp.tools.registry._async_device_removal_hook",
             AsyncMock(return_value=hook),
         ),
-        patch("custom_components.phoenix_mcp.mcp_view._gate", gate),
+        patch("custom_components.phoenix_mcp.tools.registry._gate", gate),
     ):
         _content, outcome, _ = await _call_tool(
             "remove_device",
@@ -539,7 +538,7 @@ async def test_approval_revalidates_membership_permission_capability_and_support
         hass, removal_env["owner"], device_id, "joined-while-remove-pending"
     )
     with patch(
-        "custom_components.phoenix_mcp.mcp_view._async_device_removal_hook",
+        "custom_components.phoenix_mcp.tools.registry._async_device_removal_hook",
         AsyncMock(return_value=hook),
     ):
         content, outcome, _ = await async_execute_approved_tool(
@@ -550,7 +549,7 @@ async def test_approval_revalidates_membership_permission_capability_and_support
     hook.assert_not_awaited()
 
     with patch(
-        "custom_components.phoenix_mcp.mcp_view._async_device_removal_hook",
+        "custom_components.phoenix_mcp.tools.registry._async_device_removal_hook",
         AsyncMock(return_value=None),
     ):
         _content, outcome, _ = await _execute_remove_device(
@@ -577,7 +576,7 @@ async def test_phoenix_owned_entry_is_never_removable(hass: HomeAssistant):
     )
     data = await _data(hass)
     with patch(
-        "custom_components.phoenix_mcp.mcp_view._async_device_removal_hook",
+        "custom_components.phoenix_mcp.tools.registry._async_device_removal_hook",
         AsyncMock(return_value=AsyncMock(return_value=True)),
     ):
         content, outcome, _ = await _call_tool(
@@ -614,7 +613,7 @@ async def test_removal_revalidates_after_each_wait(hass, removal_env, phase, cha
             await release.wait()
         return called_hook
 
-    with patch("custom_components.phoenix_mcp.mcp_view._async_device_removal_hook", side_effect=load):
+    with patch("custom_components.phoenix_mcp.tools.registry._async_device_removal_hook", side_effect=load):
         task = asyncio.create_task(_execute_remove_device(
             {"device_id": device_id}, access_key, hass, data
         ))
@@ -668,7 +667,7 @@ async def test_cancelled_removal_never_runs_later_cleanup(hass, removal_env, pha
             await asyncio.Event().wait()
         return called_hook
 
-    with patch("custom_components.phoenix_mcp.mcp_view._async_device_removal_hook", side_effect=load):
+    with patch("custom_components.phoenix_mcp.tools.registry._async_device_removal_hook", side_effect=load):
         task = asyncio.create_task(_execute_remove_device(
             {"device_id": device_id}, access_key, hass, data
         ))
@@ -681,7 +680,7 @@ async def test_cancelled_removal_never_runs_later_cleanup(hass, removal_env, pha
 
 
 def test_owner_summary_title_gets_the_list_integrations_scrub():
-    from custom_components.phoenix_mcp.mcp_view import _device_owner_summary
+    from custom_components.phoenix_mcp.tools.registry import _device_owner_summary
 
     owner = MockConfigEntry(domain="test_integration", entry_id="titled", title="NAS at http://10.0.0.5:5000")
     assert _device_owner_summary(owner)["title"] == "NAS at <redacted-url>"

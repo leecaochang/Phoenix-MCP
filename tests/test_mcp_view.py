@@ -12,7 +12,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from custom_components.phoenix_mcp.audit import AuditLog
 from custom_components.phoenix_mcp.const import (
     DOMAIN,
     MAX_REQUEST_BODY_BYTES,
@@ -20,102 +19,16 @@ from custom_components.phoenix_mcp.const import (
     ACCESS_KEY_PREFIX,
 )
 from custom_components.phoenix_mcp.data import PhoenixData
-from custom_components.phoenix_mcp.mcp_view import (
-    PhoenixMcpContextView,
-    PhoenixMcpView,
+from custom_components.phoenix_mcp.mcp_transport import PhoenixMcpContextView, PhoenixMcpView
+from custom_components.phoenix_mcp.tool_dispatch import (
     _build_context_json,
     _build_context_plain,
     _dispatch_mcp,
 )
 from custom_components.phoenix_mcp.rate_limiter import RateLimiter, RateLimitResult
-from custom_components.phoenix_mcp.access_key_store import PermissionNode, PermissionTree, AccessKeyRecord, AccessKeyStore
+from custom_components.phoenix_mcp.access_key_store import PermissionNode, PermissionTree, AccessKeyRecord
 from tests.log_fixtures import attach_log_store, make_log_entry, make_log_store
-
-
-def _raw_access_key() -> str:
-    return ACCESS_KEY_PREFIX + secrets.token_hex(32)
-
-
-def _make_access_key(
-    pass_through: bool = False,
-    cap_restart: str = "deny",
-    cap_config_read: str = "deny",
-    cap_template_render: str = "deny",
-    cap_automation_write: str = "deny",
-    cap_script_write: str = "deny",
-    cap_log_read: str = "deny",
-    cap_log_control: str = "deny",
-    rate_limit_requests: int = 60,
-    rate_limit_burst: int = 10,
-    revoked: bool = False,
-    permissions: PermissionTree | None = None,
-) -> tuple[AccessKeyRecord, str]:
-    from homeassistant.util.dt import utcnow
-
-    raw = _raw_access_key()
-    access_key_hash = hashlib.sha256(raw.encode()).hexdigest()
-    record = AccessKeyRecord(
-        id=str(uuid.uuid4()),
-        name="test-access-key",
-        access_key_hash=access_key_hash,
-        created_at=utcnow(),
-        created_by="user1",
-        pass_through=pass_through,
-        cap_restart=cap_restart,
-        cap_config_read=cap_config_read,
-        cap_template_render=cap_template_render,
-        cap_automation_write=cap_automation_write,
-        cap_script_write=cap_script_write,
-        cap_log_read=cap_log_read,
-        cap_log_control=cap_log_control,
-        rate_limit_requests=rate_limit_requests,
-        rate_limit_burst=rate_limit_burst,
-        revoked=revoked,
-        permissions=permissions or PermissionTree(),
-    )
-    return record, raw
-
-
-def _make_data(access_key: AccessKeyRecord | None = None) -> PhoenixData:
-    store = MagicMock(spec=AccessKeyStore)
-    if access_key is not None:
-        store.get_access_key_by_hash.return_value = access_key
-    else:
-        store.get_access_key_by_hash.return_value = None
-    store.get_settings.return_value = MagicMock(
-        kill_switch=False,
-        mesa_mode="off",
-        disable_all_logging=False,
-        log_allowed=True,
-        log_denied=True,
-        log_rate_limited=True,
-        log_entity_names=True,
-        log_client_ip=True,
-        notify_on_rate_limit=False,
-    )
-    store.update_last_used = MagicMock()
-    store.get_entity_hints.return_value = {}
-
-    rate_limiter = MagicMock(spec=RateLimiter)
-    rate_limiter.check.return_value = RateLimitResult(
-        allowed=True,
-        rate_limiting_enabled=True,
-        limit=60,
-        remaining=59,
-        reset=9999999999,
-        retry_after=0,
-    )
-
-    audit = MagicMock(spec=AuditLog)
-    audit.record = MagicMock()
-
-    return PhoenixData(
-        store=store,
-        rate_limiter=rate_limiter,
-        audit=audit,
-        rate_limit_notified={},
-        enforce_mcp_lifecycle=False,  # Isolated handler compatibility fixtures.
-    )
+from tests.runtime_fixtures import SessionMcpView, make_mcp_access_key as _make_access_key, make_mcp_data as _make_data, make_mcp_hass as _make_hass, raw_access_key as _raw_access_key
 
 
 def _make_request(
@@ -138,19 +51,8 @@ def _make_request(
     return req
 
 
-def _make_hass(data: PhoenixData) -> MagicMock:
-    hass = MagicMock()
-    hass.data = {DOMAIN: data}
-    hass.bus = MagicMock()
-    hass.bus.async_fire = MagicMock()
-    hass.components = MagicMock()
-    hass.states = MagicMock()
-    hass.states.async_all.return_value = []
-    return hass
-
-
 def _make_mcp_view(data: PhoenixData, hass: MagicMock | None = None) -> PhoenixMcpView:
-    view = PhoenixMcpView()
+    view = SessionMcpView()
     view.hass = hass if hass is not None else _make_hass(data)
     return view
 
@@ -163,7 +65,7 @@ def _make_context_view(data: PhoenixData, hass: MagicMock | None = None) -> Phoe
 
 @pytest.mark.asyncio
 async def test_streamable_batch_dispatches_sequentially_and_isolates_failures():
-    from custom_components.phoenix_mcp.mcp_view import _handle_streamable_batch
+    from custom_components.phoenix_mcp.mcp_transport import _handle_streamable_batch
 
     access_key, _ = _make_access_key()
     data = _make_data(access_key)
@@ -174,16 +76,16 @@ async def test_streamable_batch_dispatches_sequentially_and_isolates_failures():
 
     async def fake_dispatch(method, msg_id, params, *a, **k):
         call_order.append(msg_id)
-        if method == "boom":
+        if method == "tools/list":
             raise RuntimeError("explode")
         return ({"jsonrpc": "2.0", "id": msg_id, "result": {"m": method}}, None, None, None)
 
     items = [
-        {"jsonrpc": "2.0", "id": 1, "method": "a"},
-        {"jsonrpc": "2.0", "id": 2, "method": "boom"},
-        {"jsonrpc": "2.0", "id": 3, "method": "c"},
+        {"jsonrpc": "2.0", "id": 1, "method": "ping"},
+        {"jsonrpc": "2.0", "id": 2, "method": "tools/list"},
+        {"jsonrpc": "2.0", "id": 3, "method": "prompts/list"},
     ]
-    with patch("custom_components.phoenix_mcp.mcp_view._dispatch_mcp", side_effect=fake_dispatch):
+    with patch("custom_components.phoenix_mcp.mcp_transport._dispatch_mcp", side_effect=fake_dispatch):
         resp = await _handle_streamable_batch(items, access_key, rl, hass, data, "rid", "127.0.0.1", "http://h")
 
     assert resp.status == 200
@@ -193,8 +95,8 @@ async def test_streamable_batch_dispatches_sequentially_and_isolates_failures():
     assert [r["id"] for r in body] == [1, 2, 3]
     # One item's failure is isolated as a per-item internal error, not a batch failure.
     assert body[1]["error"]["code"] == -32603
-    assert body[0]["result"]["m"] == "a"
-    assert body[2]["result"]["m"] == "c"
+    assert body[0]["result"]["m"] == "ping"
+    assert body[2]["result"]["m"] == "prompts/list"
 
 
 # --- access key validation on POST /api/phoenix-mcp (Streamable HTTP) ---
@@ -343,8 +245,12 @@ async def test_mcp_post_413_body_too_large_streaming():
 async def test_mcp_post_initialize_returns_result_inline():
     access_key, raw = _make_access_key()
     data = _make_data(access_key)
+    data.mcp_sessions.clear()
     view = _make_mcp_view(data)
-    body = json.dumps({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}}).encode()
+    body = json.dumps({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {
+        "protocolVersion": "2025-03-26", "capabilities": {},
+        "clientInfo": {"name": "client", "version": "1"},
+    }}).encode()
     request = _make_request(
         method="POST",
         headers={"Authorization": f"Bearer {raw}"},
@@ -369,7 +275,7 @@ async def test_mcp_post_body_drains_partial_stream():
     data = _make_data(access_key)
     view = _make_mcp_view(data)
     body = json.dumps(
-        {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"note": "x" * 300}}
+        {"jsonrpc": "2.0", "id": 1, "method": "ping", "params": {"note": "x" * 300}}
     ).encode()
 
     class _ChunkedContent:
@@ -393,7 +299,7 @@ async def test_mcp_post_body_drains_partial_stream():
     assert result.status == 200
     payload = json.loads(result.text)
     assert payload["id"] == 1
-    assert payload["result"]["protocolVersion"] == "2025-03-26"
+    assert payload["result"] == {}
 
 
 @pytest.mark.asyncio
@@ -468,7 +374,7 @@ async def test_mcp_post_response_object_accepted_202():
 
 @pytest.mark.asyncio
 async def test_streamable_batch_bad_params_is_invalid_params_not_internal_error():
-    from custom_components.phoenix_mcp.mcp_view import _handle_streamable_batch
+    from custom_components.phoenix_mcp.mcp_transport import _handle_streamable_batch
 
     access_key, _ = _make_access_key()
     data = _make_data(access_key)
@@ -492,8 +398,12 @@ async def test_streamable_batch_bad_params_is_invalid_params_not_internal_error(
 async def test_mcp_post_rejects_untrusted_origin():
     access_key, raw = _make_access_key()
     data = _make_data(access_key)
+    data.mcp_sessions.clear()
     view = _make_mcp_view(data)
-    body = json.dumps({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}}).encode()
+    body = json.dumps({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {
+        "protocolVersion": "2025-03-26", "capabilities": {},
+        "clientInfo": {"name": "client", "version": "1"},
+    }}).encode()
     request = _make_request(
         method="POST",
         headers={"Authorization": f"Bearer {raw}", "Origin": "https://evil.example"},
@@ -509,8 +419,12 @@ async def test_mcp_post_rejects_untrusted_origin():
 async def test_mcp_post_allows_trusted_origin():
     access_key, raw = _make_access_key()
     data = _make_data(access_key)
+    data.mcp_sessions.clear()
     view = _make_mcp_view(data)
-    body = json.dumps({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}}).encode()
+    body = json.dumps({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {
+        "protocolVersion": "2025-03-26", "capabilities": {},
+        "clientInfo": {"name": "client", "version": "1"},
+    }}).encode()
     request = _make_request(
         method="POST",
         headers={"Authorization": f"Bearer {raw}", "Origin": "https://home.example"},
@@ -528,7 +442,7 @@ async def test_mcp_post_absent_origin_allowed():
     access_key, raw = _make_access_key()
     data = _make_data(access_key)
     view = _make_mcp_view(data)
-    body = json.dumps({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}}).encode()
+    body = json.dumps({"jsonrpc": "2.0", "id": 1, "method": "ping", "params": {}}).encode()
     request = _make_request(method="POST", headers={"Authorization": f"Bearer {raw}"}, body=body)
 
     result = await view.post(request)  # is_hass_url never consulted (Origin absent)
@@ -542,8 +456,12 @@ async def test_mcp_post_malformed_origin_is_403_not_500():
     # must be a uniform 403, never an unauthenticated 500.
     access_key, raw = _make_access_key()
     data = _make_data(access_key)
+    data.mcp_sessions.clear()
     view = _make_mcp_view(data)
-    body = json.dumps({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}}).encode()
+    body = json.dumps({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {
+        "protocolVersion": "2025-03-26", "capabilities": {},
+        "clientInfo": {"name": "client", "version": "1"},
+    }}).encode()
     request = _make_request(
         method="POST",
         headers={"Authorization": f"Bearer {raw}", "Origin": "http://[::1"},
@@ -593,7 +511,8 @@ async def test_mcp_notification_gets_no_response():
 @pytest.mark.asyncio
 async def test_mcp_malformed_no_id_is_invalid_request_not_notification():
     # A malformed object without `id` is NOT a valid notification; it must get an
-    # Invalid Request error with id null, not be silently swallowed with 202.
+    # Invalid Request error with id null, not be silently swallowed with 202, and
+    # MCP asks for an HTTP error status when such a message is refused.
     access_key, raw = _make_access_key()
     data = _make_data(access_key)
     view = _make_mcp_view(data)
@@ -602,7 +521,7 @@ async def test_mcp_malformed_no_id_is_invalid_request_not_notification():
             method="POST", headers={"Authorization": f"Bearer {raw}"},
             body=json.dumps(bad).encode())
         result = await view.post(request)
-        assert result.status == 200
+        assert result.status == 400
         payload = json.loads(result.text)
         assert payload["error"]["code"] == -32600
         assert payload["id"] is None
@@ -629,7 +548,7 @@ async def test_mcp_invalid_id_is_refused_and_never_dispatched(bad_id):
     request = _make_request(
         method="POST", headers={"Authorization": f"Bearer {raw}"}, body=body)
 
-    with patch("custom_components.phoenix_mcp.mcp_view._call_tool") as call_tool:
+    with patch("custom_components.phoenix_mcp.tool_dispatch._call_tool") as call_tool:
         result = await view.post(request)
 
     assert result.status == 200
@@ -729,7 +648,7 @@ async def test_mcp_batch_over_the_rate_limit_is_refused_before_any_item_runs():
         method="POST", headers={"Authorization": f"Bearer {raw}"},
         body=json.dumps(batch).encode())
 
-    with patch("custom_components.phoenix_mcp.mcp_view._call_tool") as call_tool:
+    with patch("custom_components.phoenix_mcp.tool_dispatch._call_tool") as call_tool:
         result = await view.post(request)
 
     assert result.status == 400
@@ -753,7 +672,7 @@ async def test_mcp_batch_over_the_burst_ceiling_is_refused():
         method="POST", headers={"Authorization": f"Bearer {raw}"},
         body=json.dumps(batch).encode())
 
-    with patch("custom_components.phoenix_mcp.mcp_view._call_tool") as call_tool:
+    with patch("custom_components.phoenix_mcp.tool_dispatch._call_tool") as call_tool:
         result = await view.post(request)
 
     assert result.status == 400
@@ -827,7 +746,7 @@ async def test_mcp_positional_params_notification_gets_no_response():
 
 @pytest.mark.asyncio
 async def test_streamable_batch_positional_params_notification_dropped():
-    from custom_components.phoenix_mcp.mcp_view import _handle_streamable_batch
+    from custom_components.phoenix_mcp.mcp_transport import _handle_streamable_batch
 
     access_key, _ = _make_access_key()
     data = _make_data(access_key)
@@ -846,7 +765,7 @@ async def test_streamable_batch_positional_params_notification_dropped():
 
 @pytest.mark.asyncio
 async def test_streamable_batch_malformed_no_id_still_gets_error_entry():
-    from custom_components.phoenix_mcp.mcp_view import _handle_streamable_batch
+    from custom_components.phoenix_mcp.mcp_transport import _handle_streamable_batch
 
     access_key, _ = _make_access_key()
     data = _make_data(access_key)
@@ -1143,7 +1062,7 @@ async def test_tools_call_get_state_denied_entity_not_accessible():
     data = _make_data(access_key)
     hass = _make_hass(data)
 
-    with patch("custom_components.phoenix_mcp.mcp_view.resolve_read") as mock_resolve:
+    with patch("custom_components.phoenix_mcp.tools.history.resolve_read") as mock_resolve:
         from custom_components.phoenix_mcp.policy_engine import Permission
         mock_resolve.return_value = Permission.NO_ACCESS
 
@@ -1177,11 +1096,11 @@ async def test_tools_call_get_state_success():
     hass = _make_hass(data)
     hass.states.get.return_value = state_mock
 
-    with patch("custom_components.phoenix_mcp.mcp_view.resolve_read") as mock_resolve:
+    with patch("custom_components.phoenix_mcp.tools.history.resolve_read") as mock_resolve:
         from custom_components.phoenix_mcp.policy_engine import Permission
         mock_resolve.return_value = Permission.WRITE
 
-        with patch("custom_components.phoenix_mcp.mcp_view.scrub_sensitive_attributes") as mock_scrub:
+        with patch("custom_components.phoenix_mcp.tools.history.scrub_sensitive_attributes") as mock_scrub:
             mock_scrub.return_value = {"entity_id": "light.kitchen", "state": "on", "attributes": {}}
 
             result, _m, _r, outcome = await _dispatch_mcp(
@@ -1215,7 +1134,7 @@ async def test_tools_call_unhandled_exception_returns_clean_error_not_hang():
     hass = _make_hass(data)
 
     with patch(
-        "custom_components.phoenix_mcp.mcp_view._call_tool",
+        "custom_components.phoenix_mcp.tool_dispatch._call_tool",
         side_effect=AttributeError("'list' object has no attribute 'strip'"),
     ):
         result, _m, resource, outcome = await _dispatch_mcp(
@@ -1245,7 +1164,7 @@ async def test_tools_call_get_state_not_found_entity_same_response_as_denied():
     data = _make_data(access_key)
     hass = _make_hass(data)
 
-    with patch("custom_components.phoenix_mcp.mcp_view.resolve_read") as mock_resolve:
+    with patch("custom_components.phoenix_mcp.tools.history.resolve_read") as mock_resolve:
         from custom_components.phoenix_mcp.policy_engine import Permission
         mock_resolve.return_value = Permission.NOT_FOUND
 
@@ -1260,7 +1179,7 @@ async def test_tools_call_get_state_not_found_entity_same_response_as_denied():
             base_url="http://homeassistant.local"
         )
 
-    with patch("custom_components.phoenix_mcp.mcp_view.resolve_read") as mock_resolve:
+    with patch("custom_components.phoenix_mcp.tools.history.resolve_read") as mock_resolve:
         mock_resolve.return_value = Permission.DENY
 
         result_denied, _m, _r, outcome_denied = await _dispatch_mcp(
@@ -1281,12 +1200,13 @@ async def test_tools_call_get_state_not_found_entity_same_response_as_denied():
 
 # --- get_state field projection ---
 
-from custom_components.phoenix_mcp.tool_common import (  # noqa: E402
+from custom_components.phoenix_mcp.tool_common import (
     _normalize_fields,
     _select_state_fields,
     _lean_state,
     _project_state,
 )
+from tests.runtime_fixtures import patch_readers
 
 
 def _full_light_dict():
@@ -1435,10 +1355,10 @@ async def test_tools_call_get_state_lean_default_and_detailed():
         "last_updated": "t",
         "context": {"id": "c"},
     }
-    with patch("custom_components.phoenix_mcp.mcp_view.resolve_read") as mock_resolve:
+    with patch("custom_components.phoenix_mcp.tools.history.resolve_read") as mock_resolve:
         from custom_components.phoenix_mcp.policy_engine import Permission
         mock_resolve.return_value = Permission.WRITE
-        with patch("custom_components.phoenix_mcp.mcp_view.scrub_sensitive_attributes", return_value=full):
+        with patch("custom_components.phoenix_mcp.tools.history.scrub_sensitive_attributes", return_value=full):
             res_lean, _m, _r, out_lean = await _dispatch_mcp(
                 "tools/call", 3,
                 {"name": "get_state", "arguments": {"entity_id": "light.kitchen", "projection": {"kind": "compact"}}},
@@ -1489,12 +1409,12 @@ async def test_get_logbook_scopes_to_accessible_entities():
         {"entity_id": "light.secret", "message": "turned off", "when": 2.0},
         {"name": "Some event", "message": "no entity id", "when": 3.0},
     ]
-    # _logbook_entry_visible (mcp_view.resolve_read) does the scoping under test; the
+    # _logbook_entry_visible (tools.logs.resolve_read) does the scoping under test; the
     # extra filter_service_response redaction pass is tested elsewhere, so stub it
     # to identity here (it would otherwise hit a real entity registry on the mock).
-    with patch("custom_components.phoenix_mcp.mcp_view.resolve_read", side_effect=_res), \
-         patch("custom_components.phoenix_mcp.mcp_view.filter_service_response", side_effect=lambda d, t, h: d), \
-         patch("custom_components.phoenix_mcp.mcp_view.async_ws_command", new=AsyncMock(return_value=entries)):
+    with patch("custom_components.phoenix_mcp.tools.logs.resolve_read", side_effect=_res), \
+         patch("custom_components.phoenix_mcp.tools.logs.filter_service_response", side_effect=lambda d, t, h: d), \
+         patch("custom_components.phoenix_mcp.tools.logs.async_ws_command", new=AsyncMock(return_value=entries)):
         res, _m, _r, outcome = await _dispatch_mcp(
             "tools/call", 3, {"name": "get_logbook", "arguments": {}},
             access_key, hass, data, "127.0.0.1", base_url="http://h",
@@ -1881,7 +1801,7 @@ async def test_get_logbook_errors_on_non_list_result():
     access_key, _ = _make_access_key(cap_log_read="allow")
     data = _make_data(access_key)
     hass = _make_hass(data)
-    with patch("custom_components.phoenix_mcp.mcp_view.async_ws_command",
+    with patch("custom_components.phoenix_mcp.tools.logs.async_ws_command",
                new=AsyncMock(return_value={"unexpected": "shape"})):
         res, _m, _r, outcome = await _dispatch_mcp(
             "tools/call", 3, {"name": "get_logbook", "arguments": {}},
@@ -1973,7 +1893,7 @@ async def test_authoring_validator_drift_is_not_reported_as_invalid_config():
 @pytest.mark.asyncio
 async def test_a_full_approval_queue_is_said_plainly_not_an_internal_error():
     """The 101st pending approval for a key reached the agent as an internal error."""
-    from custom_components.phoenix_mcp import mcp_view
+    from custom_components.phoenix_mcp import tool_dispatch
     from custom_components.phoenix_mcp.approvals import PendingApprovalCapacityError
 
     access_key, _ = _make_access_key(cap_automation_write="allow")
@@ -1983,7 +1903,7 @@ async def test_a_full_approval_queue_is_said_plainly_not_an_internal_error():
     async def _full(*_a, **_k):
         raise PendingApprovalCapacityError("full")
 
-    with patch.object(mcp_view, "_call_tool", _full):
+    with patch.object(tool_dispatch, "_call_tool", _full):
         result, _m, _r, outcome = await _dispatch_mcp(
             "tools/call", 7, {"name": "create_automation", "arguments": {}},
             access_key, hass, data, "127.0.0.1", base_url="http://homeassistant.local",
@@ -2409,8 +2329,8 @@ async def test_context_plain_entity_with_hint_appears():
     })
     data = _make_data(access_key)
 
-    with patch("custom_components.phoenix_mcp.mcp_view.resolve") as mock_resolve, \
-         patch("custom_components.phoenix_mcp.mcp_view.entity_hint_for_agent", return_value="The main kitchen light"):
+    with patch("custom_components.phoenix_mcp.tool_dispatch.resolve") as mock_resolve, \
+         patch("custom_components.phoenix_mcp.tool_dispatch.entity_hint_for_agent", return_value="The main kitchen light"):
         from custom_components.phoenix_mcp.policy_engine import Permission
 
         def resolve_side_effect(eid, tok, hass):
@@ -2434,8 +2354,8 @@ async def test_context_plain_entity_without_hint_renders_normally():
     })
     data = _make_data(access_key)
 
-    with patch("custom_components.phoenix_mcp.mcp_view.resolve") as mock_resolve, \
-         patch("custom_components.phoenix_mcp.mcp_view.entity_hint_for_agent", return_value=None):
+    with patch("custom_components.phoenix_mcp.tool_dispatch.resolve") as mock_resolve, \
+         patch("custom_components.phoenix_mcp.tool_dispatch.entity_hint_for_agent", return_value=None):
         from custom_components.phoenix_mcp.policy_engine import Permission
 
         def resolve_side_effect(eid, tok, hass):
@@ -2458,8 +2378,8 @@ async def test_context_plain_read_permission_shows_read_only():
     })
     data = _make_data(access_key)
 
-    with patch("custom_components.phoenix_mcp.mcp_view.resolve") as mock_resolve, \
-         patch("custom_components.phoenix_mcp.mcp_view.entity_hint_for_agent", return_value=None):
+    with patch("custom_components.phoenix_mcp.tool_dispatch.resolve") as mock_resolve, \
+         patch("custom_components.phoenix_mcp.tool_dispatch.entity_hint_for_agent", return_value=None):
         from custom_components.phoenix_mcp.policy_engine import Permission
         mock_resolve.return_value = Permission.READ
         hass = _make_hass_with_states(data, ["sensor.temp"])
@@ -2476,13 +2396,13 @@ async def test_context_json_entity_with_hint():
     })
     data = _make_data(access_key)
 
-    with patch("custom_components.phoenix_mcp.mcp_view.resolve") as mock_resolve, \
-         patch("custom_components.phoenix_mcp.mcp_view.entity_hint_for_agent", return_value="Holiday lights power switch"):
+    with patch("custom_components.phoenix_mcp.tool_dispatch.resolve") as mock_resolve, \
+         patch("custom_components.phoenix_mcp.tool_dispatch.entity_hint_for_agent", return_value="Holiday lights power switch"):
         from custom_components.phoenix_mcp.policy_engine import Permission
         mock_resolve.return_value = Permission.WRITE
 
-        with patch("custom_components.phoenix_mcp.mcp_view.er") as mock_er_mod:
-            with patch("custom_components.phoenix_mcp.mcp_view.dr") as mock_dr_mod:
+        with patch("custom_components.phoenix_mcp.tool_dispatch.er") as mock_er_mod:
+            with patch("custom_components.phoenix_mcp.tool_dispatch.dr") as mock_dr_mod:
                 mock_registry = MagicMock()
                 mock_registry.async_get.return_value = None
                 mock_er_mod.async_get.return_value = mock_registry
@@ -2505,13 +2425,13 @@ async def test_context_json_entity_without_hint_has_no_hint_key():
     })
     data = _make_data(access_key)
 
-    with patch("custom_components.phoenix_mcp.mcp_view.resolve") as mock_resolve, \
-         patch("custom_components.phoenix_mcp.mcp_view.entity_hint_for_agent", return_value=None):
+    with patch("custom_components.phoenix_mcp.tool_dispatch.resolve") as mock_resolve, \
+         patch("custom_components.phoenix_mcp.tool_dispatch.entity_hint_for_agent", return_value=None):
         from custom_components.phoenix_mcp.policy_engine import Permission
         mock_resolve.return_value = Permission.WRITE
 
-        with patch("custom_components.phoenix_mcp.mcp_view.er") as mock_er_mod:
-            with patch("custom_components.phoenix_mcp.mcp_view.dr") as mock_dr_mod:
+        with patch("custom_components.phoenix_mcp.tool_dispatch.er") as mock_er_mod:
+            with patch("custom_components.phoenix_mcp.tool_dispatch.dr") as mock_dr_mod:
                 mock_registry = MagicMock()
                 mock_registry.async_get.return_value = None
                 mock_er_mod.async_get.return_value = mock_registry
@@ -2531,12 +2451,12 @@ async def test_context_json_includes_capability_flags():
     access_key, _ = _make_access_key(cap_config_read="allow", cap_restart="allow")
     data = _make_data(access_key)
 
-    with patch("custom_components.phoenix_mcp.mcp_view.resolve") as mock_resolve:
+    with patch("custom_components.phoenix_mcp.tool_dispatch.resolve") as mock_resolve:
         from custom_components.phoenix_mcp.policy_engine import Permission
         mock_resolve.return_value = Permission.NO_ACCESS
 
-        with patch("custom_components.phoenix_mcp.mcp_view.er") as mock_er_mod:
-            with patch("custom_components.phoenix_mcp.mcp_view.dr") as mock_dr_mod:
+        with patch("custom_components.phoenix_mcp.tool_dispatch.er") as mock_er_mod:
+            with patch("custom_components.phoenix_mcp.tool_dispatch.dr") as mock_dr_mod:
                 mock_er_mod.async_get.return_value = MagicMock()
                 mock_dr_mod.async_get.return_value = MagicMock()
 
@@ -2575,8 +2495,8 @@ async def test_context_endpoint_returns_json_with_format_param():
         query={"format": "json"},
     )
 
-    with patch("custom_components.phoenix_mcp.mcp_view.er") as mock_er_mod:
-        with patch("custom_components.phoenix_mcp.mcp_view.dr") as mock_dr_mod:
+    with patch("custom_components.phoenix_mcp.tool_dispatch.er") as mock_er_mod:
+        with patch("custom_components.phoenix_mcp.tool_dispatch.dr") as mock_dr_mod:
             mock_er_mod.async_get.return_value = MagicMock()
             mock_dr_mod.async_get.return_value = MagicMock()
             result = await view.get(request)
@@ -2637,7 +2557,7 @@ async def test_call_service_cover_toggle_denied_without_physical_control(hass):
     # allowlist would miss) must hit the cap_physical_control gate for an access key that
     # has WRITE on the cover but physical control denied.
     from custom_components.phoenix_mcp.data import PhoenixData
-    from custom_components.phoenix_mcp.mcp_view import _tool_call_service
+    from custom_components.phoenix_mcp.tools.service import _tool_call_service
     from custom_components.phoenix_mcp.access_key_store import PermissionNode, PermissionTree
 
     perms = PermissionTree(entities={"cover.g": PermissionNode(state="GREEN")})
@@ -2874,7 +2794,7 @@ async def test_set_position_mixed_domains_merged():
 
 @pytest.mark.asyncio
 async def test_turn_on_off_registered_as_executors():
-    from custom_components.phoenix_mcp.mcp_view import _EXECUTOR_REGISTRY
+    from custom_components.phoenix_mcp.tool_catalog import _EXECUTOR_REGISTRY
 
     assert "HassTurnOn" in _EXECUTOR_REGISTRY
     assert "HassTurnOff" in _EXECUTOR_REGISTRY
@@ -2892,10 +2812,7 @@ async def test_turn_on_confirm_creates_real_approval_then_executor_actuates(hass
     resolution itself is stubbed.
     """
     import asyncio as _asyncio
-    from custom_components.phoenix_mcp.mcp_view import (
-        _call_tool,
-        async_execute_approved_tool,
-    )
+    from custom_components.phoenix_mcp.tool_dispatch import _call_tool, async_execute_approved_tool
     from custom_components.phoenix_mcp.data import PhoenixData
     from custom_components.phoenix_mcp.const import APPROVAL_TARGETS_KEY
     from homeassistant.helpers import entity_registry as er
@@ -3059,7 +2976,7 @@ async def test_inline_confirm_falls_back_to_pending_on_timeout(hass):
     access_key.confirm_inline_wait_seconds = 60
     approval = SimpleNamespace(id="appr-1", tool_name="create_scene", expires_at=None)
 
-    with patch("custom_components.phoenix_mcp.mcp_view.asyncio.wait_for", side_effect=TimeoutError):
+    with patch("custom_components.phoenix_mcp.tools.system.asyncio.wait_for", side_effect=TimeoutError):
         content, outcome, _ = await _await_inline_confirm(hass, data, access_key, approval)
 
     assert outcome == "pending_approval"
@@ -3140,11 +3057,11 @@ def _resolved_approval(status, *, tool_result=None):
 async def _poll_approval(record):
     """get_approval_status for one of the polling key's own approvals."""
     from types import SimpleNamespace
-    from custom_components.phoenix_mcp.mcp_view import _tool_get_approval_status
+    from custom_components.phoenix_mcp.tools.approvals import _tool_get_approval_status
 
     data = MagicMock()
     data.agent_recovery.reconcile = AsyncMock()
-    with patch("custom_components.phoenix_mcp.approvals.get_approval", return_value=record):
+    with patch_readers("custom_components.phoenix_mcp.approvals.get_approval", return_value=record):
         out, outcome, _ = await _tool_get_approval_status(
             {"approval_id": record.id}, SimpleNamespace(id="key-7"), MagicMock(), data)
     assert outcome == "allowed"
@@ -3300,7 +3217,7 @@ async def test_a_deploy_advises_that_tool_schemas_may_have_changed():
     settings_version never moves on a deploy, so nothing else would advise it,
     and the transport cannot push tools/list_changed.
     """
-    from custom_components.phoenix_mcp import mcp_view
+    from custom_components.phoenix_mcp import tool_catalog
 
     access_key, _ = _make_access_key()
     data = _make_data(access_key)
@@ -3308,7 +3225,7 @@ async def test_a_deploy_advises_that_tool_schemas_may_have_changed():
 
     await _dispatch_mcp("tools/list", 1, {}, access_key, hass, data, "127.0.0.1",
                         base_url="http://homeassistant.local")
-    assert access_key.tools_catalog_fingerprint == mcp_view._TOOL_CATALOG_FINGERPRINT
+    assert access_key.tools_catalog_fingerprint == tool_catalog._TOOL_CATALOG_FINGERPRINT
     assert not _has_catalog_advisory(await _dt_call(access_key, hass, data, 2))
 
     # A deploy: what this client fetched differs from what the build serves.
@@ -3326,7 +3243,7 @@ async def test_a_deploy_advises_that_tool_schemas_may_have_changed():
 async def test_a_access_key_that_never_recorded_a_fingerprint_is_never_catalog_stale():
     """Empty means no baseline, not staleness.
 
-    access_key_store cannot import mcp_view to learn the current fingerprint (the
+    access_key_store cannot import tool_catalog to learn the current fingerprint (the
     dependency runs the other way), so a record written before this field
     existed has nothing to compare against. Advising on empty would fire once
     for every access key on upgrade, for nothing.
@@ -3346,11 +3263,11 @@ def test_the_catalog_advisory_does_not_send_the_agent_to_the_capability_summary(
     the wrong thing and costs a call; only a reconnect replaces a schema the
     client already cached.
     """
-    from custom_components.phoenix_mcp import mcp_view
+    from custom_components.phoenix_mcp import tool_dispatch
 
-    assert "get_capability_summary" in mcp_view._STALE_TOOLS_ADVISORY
-    assert "get_capability_summary" not in mcp_view._STALE_CATALOG_ADVISORY
-    assert "reconnect" in mcp_view._STALE_CATALOG_ADVISORY
+    assert "get_capability_summary" in tool_dispatch._STALE_TOOLS_ADVISORY
+    assert "get_capability_summary" not in tool_dispatch._STALE_CATALOG_ADVISORY
+    assert "reconnect" in tool_dispatch._STALE_CATALOG_ADVISORY
 
 
 def test_the_fingerprint_tracks_arguments_and_ignores_descriptions():
@@ -3361,16 +3278,16 @@ def test_the_fingerprint_tracks_arguments_and_ignores_descriptions():
     treating prose edits as staleness would fire the notice constantly and train
     operators to ignore it.
     """
-    from custom_components.phoenix_mcp import mcp_view
+    from custom_components.phoenix_mcp import tool_catalog, tool_defs
 
-    original = mcp_view._catalog_fingerprint()
+    original = tool_catalog._catalog_fingerprint()
     target = next(
-        d for d in mcp_view._SYSTEM_TOOL_DEFS if d["name"] == "get_esphome_job")
+        d for d in tool_defs._SYSTEM_TOOL_DEFS if d["name"] == "get_esphome_job")
 
     old_desc = target["description"]
     target["description"] = old_desc + " Reworded guidance."
     try:
-        assert mcp_view._catalog_fingerprint() == original
+        assert tool_catalog._catalog_fingerprint() == original
     finally:
         target["description"] = old_desc
 
@@ -3380,18 +3297,18 @@ def test_the_fingerprint_tracks_arguments_and_ignores_descriptions():
         "properties": {**old_schema["properties"], "brand_new": {"type": "string"}},
     }
     try:
-        assert mcp_view._catalog_fingerprint() != original
+        assert tool_catalog._catalog_fingerprint() != original
     finally:
         target["inputSchema"] = old_schema
 
-    assert mcp_view._catalog_fingerprint() == original
+    assert tool_catalog._catalog_fingerprint() == original
 
 
 @pytest.mark.asyncio
 async def test_stale_advisory_suppressed_for_agentcli():
     """agentCLI rebuilds the tool list every turn, so it never gets the advisory,
     and its call does not consume the staleness epoch for a real client."""
-    from custom_components.phoenix_mcp.const import AGENTCLI_CLIENT_IP
+    from custom_components.phoenix_mcp.provider_constants import AGENTCLI_CLIENT_IP
 
     access_key, _ = _make_access_key()
     data = _make_data(access_key)
@@ -3473,7 +3390,7 @@ async def test_call_service_surfaces_validation_error_as_invalid_request(hass):
     from homeassistant.helpers import entity_registry as er
 
     from custom_components.phoenix_mcp.data import PhoenixData
-    from custom_components.phoenix_mcp.mcp_view import _execute_call_service
+    from custom_components.phoenix_mcp.tools.service import _execute_call_service
 
     reg = er.async_get(hass)
     entry = reg.async_get_or_create(
@@ -3527,7 +3444,7 @@ async def test_call_service_surfaces_schema_rejection_as_invalid_request(hass):
     from homeassistant.helpers import entity_registry as er
 
     from custom_components.phoenix_mcp.data import PhoenixData
-    from custom_components.phoenix_mcp.mcp_view import _execute_call_service
+    from custom_components.phoenix_mcp.tools.service import _execute_call_service
 
     reg = er.async_get(hass)
     entry = reg.async_get_or_create(
@@ -3539,7 +3456,7 @@ async def test_call_service_surfaces_schema_rejection_as_invalid_request(hass):
         pass  # unreachable: schema validation rejects before this runs
 
     hass.services.async_register(
-        "notify", "persistent_notification", _handler,
+        "light", "strict_effect", _handler,
         schema=vol.Schema({vol.Required("message"): str}),
     )
 
@@ -3550,8 +3467,8 @@ async def test_call_service_surfaces_schema_rejection_as_invalid_request(hass):
 
     result, outcome, _res = await _execute_call_service(
         {
-            "domain": "notify",
-            "service": "persistent_notification",
+            "domain": "light",
+            "service": "strict_effect",
             "entity_id": entry.entity_id,
             "service_data": {"message": "hi"},
         },
@@ -3608,7 +3525,7 @@ async def test_call_service_service_not_found_stays_generic_forbidden(hass):
     from homeassistant.helpers import entity_registry as er
 
     from custom_components.phoenix_mcp.data import PhoenixData
-    from custom_components.phoenix_mcp.mcp_view import _execute_call_service
+    from custom_components.phoenix_mcp.tools.service import _execute_call_service
 
     reg = er.async_get(hass)
     entry = reg.async_get_or_create(
@@ -3649,24 +3566,16 @@ async def test_call_service_service_not_found_hints_verbs_for_core_domain(hass):
     Leak-safe: post-authorization plus a hardcoded public verb list, no live
     services lookup.
     """
-    from homeassistant.exceptions import ServiceNotFound
     from homeassistant.helpers import entity_registry as er
 
     from custom_components.phoenix_mcp.data import PhoenixData
-    from custom_components.phoenix_mcp.mcp_view import _execute_call_service
+    from custom_components.phoenix_mcp.tools.service import _execute_call_service
 
     reg = er.async_get(hass)
     entry = reg.async_get_or_create(
         "valve", "demo", "irrigation", suggested_object_id="irrigation"
     )
     hass.states.async_set(entry.entity_id, "closed", {})
-
-    async def _raise(call):
-        raise ServiceNotFound("valve", "open")
-
-    # Register under the wrong verb the agent guessed, raising ServiceNotFound as
-    # HA would for a service that is not actually registered.
-    hass.services.async_register("valve", "open", _raise)
 
     access_key, _ = _make_access_key(pass_through=True)
     access_key.cap_physical_control = "allow"
@@ -3701,7 +3610,7 @@ async def test_no_target_reload_executes_bare_without_entity_flattening(hass):
     to every automation.* entity and the service schema would reject the attached
     entity_id ('extra keys not allowed @ data['entity_id']')."""
     from custom_components.phoenix_mcp.data import PhoenixData
-    from custom_components.phoenix_mcp.mcp_view import _execute_call_service
+    from custom_components.phoenix_mcp.tools.service import _execute_call_service
 
     # A live automation entity: entity flattening would attach it as a target.
     hass.states.async_set("automation.foo", "on", {})
@@ -3733,7 +3642,7 @@ async def test_no_target_reload_denied_without_cap_yaml_edit(hass):
     """automation.reload gates on cap_yaml_edit; an access key without it is denied at
     the tool gate and the service is never called."""
     from custom_components.phoenix_mcp.data import PhoenixData
-    from custom_components.phoenix_mcp.mcp_view import _tool_call_service
+    from custom_components.phoenix_mcp.tools.service import _tool_call_service
 
     called: list = []
 
@@ -3765,7 +3674,7 @@ async def test_no_target_reload_pending_under_confirm(hass):
     import asyncio as _asyncio
 
     from custom_components.phoenix_mcp.data import PhoenixData
-    from custom_components.phoenix_mcp.mcp_view import _tool_call_service
+    from custom_components.phoenix_mcp.tools.service import _tool_call_service
 
     class _ApprStore:
         def __init__(self) -> None:
@@ -3810,7 +3719,7 @@ async def test_dry_run_no_target_reload_predicts_cap_yaml_edit(hass):
     """dry_run_service predicts a no-target reload from cap_yaml_edit (not from
     entity flattening), reporting system_service with no resolved entities."""
     from custom_components.phoenix_mcp.data import PhoenixData
-    from custom_components.phoenix_mcp.mcp_view import _tool_dry_run_service
+    from custom_components.phoenix_mcp.tools.discovery import _tool_dry_run_service
 
     access_key, _ = _make_access_key()
     access_key.cap_search = "allow"
@@ -3877,7 +3786,7 @@ async def test_get_ha_assist_api_builds_a_context_the_live_ha_accepts():
 
     from homeassistant.helpers import llm as ha_llm
 
-    from custom_components.phoenix_mcp.mcp_view import _get_ha_assist_api
+    from custom_components.phoenix_mcp.tool_dispatch import _get_ha_assist_api
 
     captured = {}
 
@@ -4035,7 +3944,7 @@ async def test_another_access_keys_backlog_does_not_suppress_this_access_keys_wa
 @pytest.mark.asyncio
 async def test_wait_for_many_returns_at_once_when_all_already_resolved(hass):
     """No listener, no block: the common case after a batch approve."""
-    from custom_components.phoenix_mcp.mcp_view import _tool_wait_for_approval
+    from custom_components.phoenix_mcp.tools.approvals import _tool_wait_for_approval
 
     a = _approval_record("approved", result={"tool_result": {"content": []}})
     a["id"] = "appr-1"
@@ -4063,7 +3972,7 @@ async def test_wait_for_many_reports_which_ones_are_still_outstanding(hass):
     The caller learns exactly which landed, so it can wait again for the rest
     instead of re-waiting the whole set.
     """
-    from custom_components.phoenix_mcp.mcp_view import _tool_wait_for_approval
+    from custom_components.phoenix_mcp.tools.approvals import _tool_wait_for_approval
 
     done = _approval_record("approved", result={"tool_result": {"content": []}})
     done["id"] = "appr-1"
@@ -4084,7 +3993,7 @@ async def test_wait_for_many_reports_which_ones_are_still_outstanding(hass):
 @pytest.mark.asyncio
 async def test_wait_for_many_refuses_another_access_keys_approval(hass):
     """Byte-identical to an unknown id, so it cannot enumerate another queue."""
-    from custom_components.phoenix_mcp.mcp_view import _tool_wait_for_approval
+    from custom_components.phoenix_mcp.tools.approvals import _tool_wait_for_approval
 
     other = _approval_record("pending")
     other["id"] = "appr-1"
@@ -4106,7 +4015,7 @@ async def test_wait_for_many_refuses_another_access_keys_approval(hass):
 @pytest.mark.asyncio
 @pytest.mark.parametrize("bad", [[], "appr-1", ["appr-1", ""], ["appr-1", 7]])
 async def test_wait_for_many_rejects_a_malformed_list(hass, bad):
-    from custom_components.phoenix_mcp.mcp_view import _tool_wait_for_approval
+    from custom_components.phoenix_mcp.tools.approvals import _tool_wait_for_approval
 
     data = _inline_wait_data([])
     access_key = _make_physical_access_key("confirm")
@@ -4150,7 +4059,7 @@ async def test_wait_for_many_summarizes_results_so_a_batch_fits_in_one_reply(has
     from finding out.
     """
     from custom_components.phoenix_mcp.const import MAX_APPROVAL_RESULT_CHARS
-    from custom_components.phoenix_mcp.mcp_view import _tool_wait_for_approval
+    from custom_components.phoenix_mcp.tools.approvals import _tool_wait_for_approval
 
     records = []
     for i in range(12):
@@ -4189,7 +4098,7 @@ async def test_wait_for_many_keeps_a_failed_execution_readable(hass):
     executor's reason buried retries the same doomed call in a loop. Error text is
     short, so it survives the clip intact.
     """
-    from custom_components.phoenix_mcp.mcp_view import _tool_wait_for_approval
+    from custom_components.phoenix_mcp.tools.approvals import _tool_wait_for_approval
 
     reason = "Content hash mismatch: automations.yaml changed since you read it. Re-read and retry."
     bad = _approval_record(
@@ -4220,7 +4129,7 @@ async def test_single_id_wait_still_returns_the_full_result(hass):
     A caller that wants everything about one approval has a way to ask, which is
     what the batch note points at; narrowing both forms would leave none.
     """
-    from custom_components.phoenix_mcp.mcp_view import _tool_wait_for_approval
+    from custom_components.phoenix_mcp.tools.approvals import _tool_wait_for_approval
 
     rec = _approval_record("approved", result={"tool_result": _authoring_result()})
     rec["id"] = "appr-1"
@@ -4237,7 +4146,7 @@ async def test_single_id_wait_still_returns_the_full_result(hass):
 async def test_wait_for_many_reports_a_pending_record_with_no_result_fields(hass):
     """A record that never ran has nothing to summarize, and an empty
     result_text would read as an executor that returned nothing."""
-    from custom_components.phoenix_mcp.mcp_view import _tool_wait_for_approval
+    from custom_components.phoenix_mcp.tools.approvals import _tool_wait_for_approval
 
     still = _approval_record("pending")
     still["id"] = "appr-1"
@@ -4256,7 +4165,7 @@ async def test_wait_for_many_reports_a_pending_record_with_no_result_fields(hass
 @pytest.mark.asyncio
 async def test_wait_for_many_dedupes_repeated_ids(hass):
     """A repeated id would otherwise be reported twice and count against itself."""
-    from custom_components.phoenix_mcp.mcp_view import _tool_wait_for_approval
+    from custom_components.phoenix_mcp.tools.approvals import _tool_wait_for_approval
 
     rec = _approval_record("approved", result={"tool_result": {"content": []}})
     rec["id"] = "appr-1"
@@ -4274,7 +4183,7 @@ async def test_wait_for_many_dedupes_repeated_ids(hass):
 @pytest.mark.asyncio
 async def test_single_id_form_is_untouched(hass):
     """The plural form is additive; existing callers keep the object shape."""
-    from custom_components.phoenix_mcp.mcp_view import _tool_wait_for_approval
+    from custom_components.phoenix_mcp.tools.approvals import _tool_wait_for_approval
 
     rec = _approval_record("approved", result={"tool_result": {"content": []}})
     data = _inline_wait_data([rec])
@@ -4288,9 +4197,13 @@ async def test_single_id_form_is_untouched(hass):
 
 @pytest.mark.parametrize("domain,service", [("notify", "persistent_notification"), ("persistent_notification", "create"), ("logbook", "log")])
 async def test_untargeted_service_refusal_explains_unsupported_targetless_calls(hass, domain, service):
-    from custom_components.phoenix_mcp.mcp_view import _tool_call_service, _execute_call_service
+    from custom_components.phoenix_mcp.tools.service import (
+        _tool_call_service,
+        _execute_call_service,
+    )
 
     access_key, _ = _make_access_key(pass_through=True)
+    access_key.cap_notify = "allow"
     data = _make_data(access_key)
     hass.data[DOMAIN] = data
     for handler in (_tool_call_service, _execute_call_service):

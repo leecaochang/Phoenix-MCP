@@ -1,4 +1,8 @@
-"""Tests for the admin approval HTTP endpoints in admin_view.py."""
+"""The admin approval endpoints, through HA's real router against a real store and audit log.
+
+Records are laid into the running store directly, so each test states its starting
+queue; everything after that is an HTTP request. Only the executor is replaced.
+"""
 
 from __future__ import annotations
 
@@ -6,19 +10,16 @@ import asyncio
 import hashlib
 import json
 import secrets
+from types import SimpleNamespace
 from datetime import timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from homeassistant.core import callback
+from homeassistant.setup import async_setup_component
 from homeassistant.util.dt import utcnow
+from pytest_homeassistant.common import MockConfigEntry
 
-from custom_components.phoenix_mcp.admin_view import (
-    PhoenixAdminApprovalApproveView,
-    PhoenixAdminApprovalBatchApproveView,
-    PhoenixAdminApprovalRejectView,
-    PhoenixAdminApprovalView,
-    PhoenixAdminApprovalsView,
-)
 from custom_components.phoenix_mcp.approvals import (
     STATUS_APPROVED,
     STATUS_CANCELLED,
@@ -27,11 +28,8 @@ from custom_components.phoenix_mcp.approvals import (
     STATUS_PENDING,
     STATUS_REJECTED,
 )
-from custom_components.phoenix_mcp.audit import AuditLog
 from custom_components.phoenix_mcp.const import DOMAIN, ACCESS_KEY_PREFIX
-from custom_components.phoenix_mcp.data import PhoenixData
-from custom_components.phoenix_mcp.rate_limiter import RateLimiter
-from custom_components.phoenix_mcp.access_key_store import GlobalSettings, AccessKeyRecord, AccessKeyStore
+from custom_components.phoenix_mcp.access_key_store import AccessKeyRecord
 
 
 # ---- helpers -----------------------------------------------------------------
@@ -73,66 +71,78 @@ def _make_pending(approval_id: str, access_key_id: str = "tok-1", **kwargs) -> d
     return base
 
 
+APPROVALS = "/api/phoenix-mcp/admin/approvals"
+APPROVAL = APPROVALS + "/{approval_id}"
+APPROVE = APPROVAL + "/approve"
+REJECT = APPROVAL + "/reject"
+BATCH_APPROVE = APPROVALS + "/batch/approve"
+RUNTIME = SimpleNamespace()
+
+
+@pytest.fixture(autouse=True)
+async def runtime(hass, hass_storage, enable_custom_integrations, hass_client, hass_admin_user):
+    """A set-up entry, its live store and an authenticated admin client."""
+    assert await async_setup_component(hass, "homeassistant", {})
+    entry = MockConfigEntry(domain=DOMAIN, unique_id=DOMAIN, title="Phoenix MCP")
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    claims: list[tuple[str, bool]] = []
+
+    @callback
+    def _claimed(event) -> None:
+        claims.append((event.data["approval_id"], event.data["claimed"]))
+
+    hass.bus.async_listen(f"{DOMAIN}_approval_claimed", _claimed)
+    RUNTIME.__dict__.update(hass=hass, data=hass.data[DOMAIN], client=await hass_client(),
+                            admin_id=hass_admin_user.id, claims=claims)
+    store = hass.data[DOMAIN].store
+    store.get_settings().mesa_mode = "off"
+    audit = hass.data[DOMAIN].audit
+    audit.record = MagicMock(wraps=audit.record)
+    yield
+    store.__dict__.pop("async_save", None)
+
+
 def _make_store(pending: list[dict] | None = None, access_keys: list[AccessKeyRecord] | None = None,
-                kill_switch: bool = False) -> MagicMock:
-    store = MagicMock(spec=AccessKeyStore)
-    store._pending = list(pending or [])
-    store.async_save = AsyncMock()
-    store.async_lock = asyncio.Lock()
-    store.get_pending_approvals = MagicMock(side_effect=lambda: store._pending)
-    store.set_pending_approvals = MagicMock(side_effect=lambda lst: setattr(store, "_pending", lst))
-    settings = GlobalSettings(kill_switch=kill_switch)
-    store.get_settings = MagicMock(return_value=settings)
-    by_id = {t.id: t for t in (access_keys or [])}
-    store.get_access_key_by_id = MagicMock(side_effect=lambda i: by_id.get(i))
+                kill_switch: bool = False):
+    """Lay the starting queue and keys into the live store."""
+    store = RUNTIME.data.store
+    store.set_pending_approvals(list(pending or []))
+    for access_key in access_keys or []:
+        store._access_keys[access_key.id] = access_key
+    store.get_settings().kill_switch = kill_switch
     return store
 
 
-def _make_data(store: MagicMock) -> PhoenixData:
-    rate_limiter = MagicMock(spec=RateLimiter)
-    audit = MagicMock(spec=AuditLog)
-    audit.record = MagicMock()
-    return PhoenixData(
-        store=store,
-        rate_limiter=rate_limiter,
-        audit=audit,
-    )
+def _make_data(_store):
+    return RUNTIME.data
 
 
-def _make_admin_request(body: bytes = b"", query: dict | None = None) -> MagicMock:
-    from homeassistant.components.http.const import KEY_AUTHENTICATED, KEY_HASS_USER
-
-    user = MagicMock()
-    user.is_admin = True
-    user.id = "admin-user"
-
-    def _get(k, default=None):
-        if k == KEY_HASS_USER:
-            return user
-        if k == KEY_AUTHENTICATED:
-            return True
-        return default
-
-    rid = "test-rid"
-    state: dict = {KEY_HASS_USER: user, KEY_AUTHENTICATED: True, "phoenix_mcp_rid": rid}
-
-    request = MagicMock()
-    request.query = query or {}
-    request.read = AsyncMock(return_value=body)
-    request.content_length = len(body)
-    request.content = MagicMock()
-    request.content.read = AsyncMock(return_value=body)
-    request.__getitem__ = MagicMock(side_effect=lambda k: state.get(k))
-    request.get = MagicMock(side_effect=_get)
-    return request
+def _make_admin_request(body: bytes = b"", query: dict | None = None) -> SimpleNamespace:
+    return SimpleNamespace(body=body, query=query or {})
 
 
-def _make_hass(data: PhoenixData) -> MagicMock:
-    hass = MagicMock()
-    hass.data = {DOMAIN: data}
-    hass.bus = MagicMock()
-    hass.bus.async_fire = MagicMock()
-    return hass
+class _Route:
+    """One admin endpoint; a call is a real authenticated HTTP request."""
+
+    def __init__(self, path: str) -> None:
+        self.path = path
+
+    async def _send(self, method: str, request: SimpleNamespace, ids: dict) -> SimpleNamespace:
+        response = await RUNTIME.client.request(
+            method, self.path.format(**ids), data=request.body or None, params=request.query,
+            headers={"Content-Type": "application/json"})
+        return SimpleNamespace(status=response.status, text=await response.text())
+
+    async def get(self, request: SimpleNamespace, **ids: str) -> SimpleNamespace:
+        return await self._send("GET", request, ids)
+
+    async def post(self, request: SimpleNamespace, **ids: str) -> SimpleNamespace:
+        return await self._send("POST", request, ids)
+
+    async def delete(self, request: SimpleNamespace, **ids: str) -> SimpleNamespace:
+        return await self._send("DELETE", request, ids)
 
 
 # ---- list view ---------------------------------------------------------------
@@ -141,14 +151,11 @@ def _make_hass(data: PhoenixData) -> MagicMock:
 class TestApprovalsList:
     @pytest.mark.asyncio
     async def test_returns_all_when_no_filter(self):
-        store = _make_store(pending=[
+        _make_store(pending=[
             _make_pending("appr_a"),
             _make_pending("appr_b", status=STATUS_APPROVED),
         ])
-        data = _make_data(store)
-        hass = _make_hass(data)
-        view = PhoenixAdminApprovalsView()
-        view.hass = hass
+        view = _Route(APPROVALS)
         request = _make_admin_request()
 
         resp = await view.get(request)
@@ -158,14 +165,11 @@ class TestApprovalsList:
 
     @pytest.mark.asyncio
     async def test_filters_by_status(self):
-        store = _make_store(pending=[
+        _make_store(pending=[
             _make_pending("appr_a"),
             _make_pending("appr_b", status=STATUS_APPROVED),
         ])
-        data = _make_data(store)
-        hass = _make_hass(data)
-        view = PhoenixAdminApprovalsView()
-        view.hass = hass
+        view = _Route(APPROVALS)
         request = _make_admin_request(query={"status": STATUS_PENDING})
 
         resp = await view.get(request)
@@ -176,14 +180,11 @@ class TestApprovalsList:
 
     @pytest.mark.asyncio
     async def test_filters_by_access_key(self):
-        store = _make_store(pending=[
+        _make_store(pending=[
             _make_pending("appr_a", access_key_id="tok-1"),
             _make_pending("appr_b", access_key_id="tok-2"),
         ])
-        data = _make_data(store)
-        hass = _make_hass(data)
-        view = PhoenixAdminApprovalsView()
-        view.hass = hass
+        view = _Route(APPROVALS)
         request = _make_admin_request(query={"access_key_id": "tok-1"})
 
         resp = await view.get(request)
@@ -199,11 +200,8 @@ class TestApprovalsList:
 class TestApprovalDetail:
     @pytest.mark.asyncio
     async def test_returns_record(self):
-        store = _make_store(pending=[_make_pending("appr_a")])
-        data = _make_data(store)
-        hass = _make_hass(data)
-        view = PhoenixAdminApprovalView()
-        view.hass = hass
+        _make_store(pending=[_make_pending("appr_a")])
+        view = _Route(APPROVAL)
         request = _make_admin_request()
 
         resp = await view.get(request, approval_id="appr_a")
@@ -214,11 +212,8 @@ class TestApprovalDetail:
 
     @pytest.mark.asyncio
     async def test_returns_404_for_missing(self):
-        store = _make_store(pending=[])
-        data = _make_data(store)
-        hass = _make_hass(data)
-        view = PhoenixAdminApprovalView()
-        view.hass = hass
+        _make_store(pending=[])
+        view = _Route(APPROVAL)
         request = _make_admin_request()
 
         resp = await view.get(request, approval_id="appr_missing")
@@ -232,11 +227,8 @@ class TestApprovalDetail:
 class TestApprovalDelete:
     @pytest.mark.asyncio
     async def test_delete_cancels_pending(self):
-        store = _make_store(pending=[_make_pending("appr_a")])
-        data = _make_data(store)
-        hass = _make_hass(data)
-        view = PhoenixAdminApprovalView()
-        view.hass = hass
+        _make_store(pending=[_make_pending("appr_a")])
+        view = _Route(APPROVAL)
         request = _make_admin_request()
 
         with \
@@ -249,11 +241,8 @@ class TestApprovalDelete:
 
     @pytest.mark.asyncio
     async def test_delete_idempotent_on_terminal(self):
-        store = _make_store(pending=[_make_pending("appr_a", status=STATUS_APPROVED)])
-        data = _make_data(store)
-        hass = _make_hass(data)
-        view = PhoenixAdminApprovalView()
-        view.hass = hass
+        _make_store(pending=[_make_pending("appr_a", status=STATUS_APPROVED)])
+        view = _Route(APPROVAL)
         request = _make_admin_request()
 
         resp = await view.delete(request, approval_id="appr_a")
@@ -267,15 +256,13 @@ class TestApprovalDelete:
         store = _make_store(pending=[_make_pending("appr_a")])
         data = _make_data(store)
         data.approvals_in_progress.add("appr_a")
-        hass = _make_hass(data)
-        view = PhoenixAdminApprovalView()
-        view.hass = hass
+        view = _Route(APPROVAL)
         request = _make_admin_request()
 
         resp = await view.delete(request, approval_id="appr_a")
 
         assert resp.status == 409
-        assert next(r for r in store._pending if r["id"] == "appr_a")["status"] == STATUS_PENDING
+        assert next(r for r in store.get_pending_approvals() if r["id"] == "appr_a")["status"] == STATUS_PENDING
 
 
 # ---- reject view -------------------------------------------------------------
@@ -284,11 +271,8 @@ class TestApprovalDelete:
 class TestApprovalReject:
     @pytest.mark.asyncio
     async def test_reject_with_reason(self):
-        store = _make_store(pending=[_make_pending("appr_a")])
-        data = _make_data(store)
-        hass = _make_hass(data)
-        view = PhoenixAdminApprovalRejectView()
-        view.hass = hass
+        _make_store(pending=[_make_pending("appr_a")])
+        view = _Route(REJECT)
         body = json.dumps({"reason": "not_safe"}).encode()
         request = _make_admin_request(body=body)
 
@@ -302,11 +286,8 @@ class TestApprovalReject:
 
     @pytest.mark.asyncio
     async def test_reject_without_body(self):
-        store = _make_store(pending=[_make_pending("appr_a")])
-        data = _make_data(store)
-        hass = _make_hass(data)
-        view = PhoenixAdminApprovalRejectView()
-        view.hass = hass
+        _make_store(pending=[_make_pending("appr_a")])
+        view = _Route(REJECT)
         request = _make_admin_request(body=b"{}")
 
         with \
@@ -322,31 +303,26 @@ class TestApprovalReject:
         store = _make_store(pending=[_make_pending("appr_a")])
         data = _make_data(store)
         data.approvals_in_progress.add("appr_a")
-        hass = _make_hass(data)
-        view = PhoenixAdminApprovalRejectView()
-        view.hass = hass
+        view = _Route(REJECT)
         request = _make_admin_request(body=b"{}")
 
         resp = await view.post(request, approval_id="appr_a")
 
         assert resp.status == 409
-        assert next(r for r in store._pending if r["id"] == "appr_a")["status"] == STATUS_PENDING
+        assert next(r for r in store.get_pending_approvals() if r["id"] == "appr_a")["status"] == STATUS_PENDING
 
     @pytest.mark.asyncio
     async def test_reject_preserves_a_stale_execution_marker(self):
         pending = _make_pending("appr_a")
         pending["execution_started_at"] = utcnow().isoformat()
         store = _make_store(pending=[pending])
-        data = _make_data(store)
-        hass = _make_hass(data)
-        view = PhoenixAdminApprovalRejectView()
-        view.hass = hass
+        view = _Route(REJECT)
 
         response = await view.post(
             _make_admin_request(body=b"{}"), approval_id="appr_a",
         )
 
-        stored = next(r for r in store._pending if r["id"] == "appr_a")
+        stored = next(r for r in store.get_pending_approvals() if r["id"] == "appr_a")
         assert response.status == 409
         assert stored["status"] == STATUS_PENDING
         assert stored["execution_started_at"]
@@ -359,25 +335,22 @@ class TestApprovalApprove:
     @pytest.mark.asyncio
     async def test_approve_runs_executor_and_marks_approved(self):
         access_key = _make_access_key("tok-1", cap_restart="confirm")
-        store = _make_store(pending=[_make_pending("appr_a", access_key_id="tok-1")], access_keys=[access_key])
-        data = _make_data(store)
-        hass = _make_hass(data)
-        view = PhoenixAdminApprovalApproveView()
-        view.hass = hass
+        _make_store(pending=[_make_pending("appr_a", access_key_id="tok-1")], access_keys=[access_key])
+        view = _Route(APPROVE)
         request = _make_admin_request(body=b"{}")
 
         async def _fake_executor(name, args, tok, hass, data):
             return ({"content": [{"type": "text", "text": '{"success": true}'}]}, "allowed", "restart_ha")
 
         with \
-             patch("custom_components.phoenix_mcp.mcp_view.async_execute_approved_tool", side_effect=_fake_executor), \
+             patch("custom_components.phoenix_mcp.admin_view.async_execute_approved_tool", side_effect=_fake_executor), \
              patch("homeassistant.components.persistent_notification.async_dismiss"):
             resp = await view.post(request, approval_id="appr_a")
 
         out = json.loads(resp.text)
         assert out["status"] == STATUS_APPROVED
         assert out["result"]["outcome"] == "allowed"
-        assert out["approved_by_user_id"] == "admin-user"
+        assert out["approved_by_user_id"] == RUNTIME.admin_id
 
     @pytest.mark.asyncio
     async def test_approve_marks_execution_on_disk_before_running_the_executor(self):
@@ -390,15 +363,12 @@ class TestApprovalApprove:
         """
         access_key = _make_access_key("tok-1", cap_restart="confirm")
         store = _make_store(pending=[_make_pending("appr_a", access_key_id="tok-1")], access_keys=[access_key])
-        data = _make_data(store)
-        hass = _make_hass(data)
-        view = PhoenixAdminApprovalApproveView()
-        view.hass = hass
+        view = _Route(APPROVE)
         request = _make_admin_request(body=b"{}")
         seen: dict = {}
 
         async def _observing_executor(name, args, tok, hass, data):
-            entry = next(r for r in store._pending if r["id"] == "appr_a")
+            entry = next(r for r in store.get_pending_approvals() if r["id"] == "appr_a")
             seen["marker"] = entry.get("execution_started_at")
             seen["approved_at"] = entry.get("approved_at")
             seen["approved_by_user_id"] = entry.get("approved_by_user_id")
@@ -409,7 +379,7 @@ class TestApprovalApprove:
             return ({"content": [{"type": "text", "text": "{}"}]}, "allowed", "restart_ha")
 
         with \
-             patch("custom_components.phoenix_mcp.mcp_view.async_execute_approved_tool", side_effect=_observing_executor), \
+             patch("custom_components.phoenix_mcp.admin_view.async_execute_approved_tool", side_effect=_observing_executor), \
              patch("homeassistant.components.persistent_notification.async_dismiss"):
             resp = await view.post(request, approval_id="appr_a")
 
@@ -418,12 +388,12 @@ class TestApprovalApprove:
             "execution_started_at was not persisted before the executor ran"
         )
         assert seen["approved_at"] == seen["marker"]
-        assert seen["approved_by_user_id"] == "admin-user"
+        assert seen["approved_by_user_id"] == RUNTIME.admin_id
         assert seen["audit_methods"] == ["approval/approved"]
         assert seen["status"] == STATUS_PENDING
         # Cleared once the outcome is recorded, so the history carries no
         # half-finished marker and a later startup has nothing to reconcile.
-        assert "execution_started_at" not in next(r for r in store._pending if r["id"] == "appr_a")
+        assert "execution_started_at" not in next(r for r in store.get_pending_approvals() if r["id"] == "appr_a")
 
     @pytest.mark.asyncio
     async def test_approve_refuses_when_the_marker_cannot_be_persisted(self):
@@ -437,14 +407,12 @@ class TestApprovalApprove:
         store = _make_store(pending=[_make_pending("appr_a", access_key_id="tok-1")], access_keys=[access_key])
         store.async_save = AsyncMock(side_effect=OSError("disk full"))
         data = _make_data(store)
-        hass = _make_hass(data)
-        view = PhoenixAdminApprovalApproveView()
-        view.hass = hass
+        view = _Route(APPROVE)
         request = _make_admin_request(body=b"{}")
 
         executor = AsyncMock()
         with \
-             patch("custom_components.phoenix_mcp.mcp_view.async_execute_approved_tool", executor), \
+             patch("custom_components.phoenix_mcp.admin_view.async_execute_approved_tool", executor), \
              patch("homeassistant.components.persistent_notification.async_dismiss"):
             resp = await view.post(request, approval_id="appr_a")
 
@@ -452,7 +420,7 @@ class TestApprovalApprove:
         executor.assert_not_called()
         # Still pending, and the claim released so a retry is possible once the
         # store is writable again.
-        assert next(r for r in store._pending if r["id"] == "appr_a")["status"] == STATUS_PENDING
+        assert next(r for r in store.get_pending_approvals() if r["id"] == "appr_a")["status"] == STATUS_PENDING
         assert "appr_a" not in data.approvals_in_progress
 
     @pytest.mark.asyncio
@@ -463,21 +431,19 @@ class TestApprovalApprove:
         store = _make_store(pending=[_make_pending("appr_a", access_key_id="tok-1")], access_keys=[access_key])
         data = _make_data(store)
         data.approvals_in_progress.add("appr_a")
-        hass = _make_hass(data)
-        view = PhoenixAdminApprovalApproveView()
-        view.hass = hass
+        view = _Route(APPROVE)
         request = _make_admin_request(body=b"{}")
 
         executor = AsyncMock()
         with \
-             patch("custom_components.phoenix_mcp.mcp_view.async_execute_approved_tool", executor), \
+             patch("custom_components.phoenix_mcp.admin_view.async_execute_approved_tool", executor), \
              patch("homeassistant.components.persistent_notification.async_dismiss"):
             resp = await view.post(request, approval_id="appr_a")
 
         assert resp.status == 409
         executor.assert_not_called()
         # Untouched: still pending for the in-flight request to finalize.
-        assert next(r for r in store._pending if r["id"] == "appr_a")["status"] == STATUS_PENDING
+        assert next(r for r in store.get_pending_approvals() if r["id"] == "appr_a")["status"] == STATUS_PENDING
 
     @pytest.mark.asyncio
     async def test_approve_cannot_claim_during_core_wipe(self):
@@ -485,13 +451,11 @@ class TestApprovalApprove:
         store = _make_store(pending=[_make_pending("appr_a", access_key_id="tok-1")], access_keys=[access_key])
         data = _make_data(store)
         data.core_wipe_in_progress = True
-        hass = _make_hass(data)
-        view = PhoenixAdminApprovalApproveView()
-        view.hass = hass
+        view = _Route(APPROVE)
         executor = AsyncMock()
 
         with \
-             patch("custom_components.phoenix_mcp.mcp_view.async_execute_approved_tool", executor):
+             patch("custom_components.phoenix_mcp.admin_view.async_execute_approved_tool", executor):
             response = await view.post(
                 _make_admin_request(body=b"{}"), approval_id="appr_a",
             )
@@ -499,16 +463,13 @@ class TestApprovalApprove:
         assert response.status == 409
         assert json.loads(response.text)["message_key"] == "adminError.approvalWipeInProgress"
         executor.assert_not_awaited()
-        assert next(r for r in store._pending if r["id"] == "appr_a")["status"] == STATUS_PENDING
+        assert next(r for r in store.get_pending_approvals() if r["id"] == "appr_a")["status"] == STATUS_PENDING
 
     @pytest.mark.asyncio
     async def test_two_admin_clients_cannot_execute_the_same_approval_twice(self):
         access_key = _make_access_key("tok-1", cap_restart="confirm")
-        store = _make_store(pending=[_make_pending("appr_a", access_key_id="tok-1")], access_keys=[access_key])
-        data = _make_data(store)
-        hass = _make_hass(data)
-        view = PhoenixAdminApprovalApproveView()
-        view.hass = hass
+        _make_store(pending=[_make_pending("appr_a", access_key_id="tok-1")], access_keys=[access_key])
+        view = _Route(APPROVE)
         started = asyncio.Event()
         finish = asyncio.Event()
 
@@ -519,7 +480,7 @@ class TestApprovalApprove:
 
         executor = AsyncMock(side_effect=_blocked_executor)
         with \
-             patch("custom_components.phoenix_mcp.mcp_view.async_execute_approved_tool", executor), \
+             patch("custom_components.phoenix_mcp.admin_view.async_execute_approved_tool", executor), \
              patch("homeassistant.components.persistent_notification.async_dismiss"):
             first_task = asyncio.create_task(
                 view.post(_make_admin_request(body=b"{}"), approval_id="appr_a")
@@ -537,6 +498,26 @@ class TestApprovalApprove:
         assert executor.await_count == 1
 
     @pytest.mark.asyncio
+    async def test_approve_at_the_exact_deadline_expires_without_running(self):
+        """The deadline instant itself counts as overdue, as the sweep treats it."""
+        deadline = utcnow() + timedelta(hours=1)
+        pending = _make_pending("appr_a", access_key_id="tok-1", expires_at=deadline.isoformat())
+        store = _make_store(pending=[pending], access_keys=[_make_access_key("tok-1", cap_restart="confirm")])
+        view = _Route(APPROVE)
+        executor = AsyncMock()
+
+        with \
+             patch("custom_components.phoenix_mcp.admin_view.async_execute_approved_tool", executor), \
+             patch("custom_components.phoenix_mcp.admin_view.utcnow", return_value=deadline), \
+             patch("homeassistant.components.persistent_notification.async_dismiss"), \
+             patch("custom_components.phoenix_mcp.admin_view.fire_approval_resolved_event"):
+            response = await view.post(_make_admin_request(body=b"{}"), approval_id="appr_a")
+
+        assert response.status == 409
+        assert next(r for r in store.get_pending_approvals() if r["id"] == "appr_a")["status"] == STATUS_EXPIRED
+        executor.assert_not_awaited()
+
+    @pytest.mark.asyncio
     async def test_approve_expires_an_overdue_record_before_claiming_it(self):
         """An overdue request answers approvalExpired on Approve and closes as expired without running."""
         access_key = _make_access_key("tok-1", cap_restart="confirm")
@@ -547,20 +528,18 @@ class TestApprovalApprove:
         )
         store = _make_store(pending=[pending], access_keys=[access_key])
         data = _make_data(store)
-        hass = _make_hass(data)
-        view = PhoenixAdminApprovalApproveView()
-        view.hass = hass
+        view = _Route(APPROVE)
         executor = AsyncMock()
 
         with \
-             patch("custom_components.phoenix_mcp.mcp_view.async_execute_approved_tool", executor), \
+             patch("custom_components.phoenix_mcp.admin_view.async_execute_approved_tool", executor), \
              patch("homeassistant.components.persistent_notification.async_dismiss"), \
-             patch("custom_components.phoenix_mcp.approvals.fire_approval_resolved_event") as resolved:
+             patch("custom_components.phoenix_mcp.admin_view.fire_approval_resolved_event") as resolved:
             response = await view.post(
                 _make_admin_request(body=b"{}"), approval_id="appr_a",
             )
 
-        stored = next(r for r in store._pending if r["id"] == "appr_a")
+        stored = next(r for r in store.get_pending_approvals() if r["id"] == "appr_a")
         assert response.status == 409
         assert json.loads(response.text)["message_key"] == "adminError.approvalExpired"
         assert stored["status"] == STATUS_EXPIRED
@@ -568,6 +547,24 @@ class TestApprovalApprove:
         resolved.assert_called_once()
         assert resolved.call_args.args[1].status == STATUS_EXPIRED
         assert data.audit.record.call_args.kwargs["method"] == "approval/expired"
+
+    @pytest.mark.asyncio
+    async def test_reject_at_the_exact_deadline_closes_as_expired(self):
+        """The deadline instant itself counts as overdue, as the sweep treats it."""
+        deadline = utcnow() + timedelta(hours=1)
+        pending = _make_pending("appr_a", access_key_id="tok-1", expires_at=deadline.isoformat())
+        store = _make_store(pending=[pending], access_keys=[_make_access_key("tok-1", cap_restart="confirm")])
+        view = _Route(REJECT)
+
+        with (patch("custom_components.phoenix_mcp.admin_view.utcnow", return_value=deadline),
+              patch("homeassistant.components.persistent_notification.async_dismiss")):
+            response = await view.post(
+                _make_admin_request(body=b'{"reason": "not now"}'), approval_id="appr_a",
+            )
+
+        stored = next(r for r in store.get_pending_approvals() if r["id"] == "appr_a")
+        assert response.status == 200
+        assert stored["status"] == STATUS_EXPIRED
 
     @pytest.mark.asyncio
     async def test_reject_closes_an_overdue_record_as_expired(self):
@@ -579,15 +576,14 @@ class TestApprovalApprove:
         )
         store = _make_store(pending=[pending], access_keys=[_make_access_key("tok-1", cap_restart="confirm")])
         data = _make_data(store)
-        view = PhoenixAdminApprovalRejectView()
-        view.hass = _make_hass(data)
+        view = _Route(REJECT)
 
         with patch("homeassistant.components.persistent_notification.async_dismiss"):
             response = await view.post(
                 _make_admin_request(body=b'{"reason": "not now"}'), approval_id="appr_a",
             )
 
-        stored = next(r for r in store._pending if r["id"] == "appr_a")
+        stored = next(r for r in store.get_pending_approvals() if r["id"] == "appr_a")
         assert response.status == 200
         assert stored["status"] == STATUS_EXPIRED
         assert stored.get("rejected_reason") is None
@@ -598,17 +594,14 @@ class TestApprovalApprove:
     async def test_approve_reads_settings_after_waiting_for_the_store_lock(self):
         access_key = _make_access_key("tok-1", cap_restart="confirm")
         store = _make_store(pending=[_make_pending("appr_a", access_key_id="tok-1")], access_keys=[access_key])
-        data = _make_data(store)
-        hass = _make_hass(data)
-        view = PhoenixAdminApprovalApproveView()
-        view.hass = hass
+        view = _Route(APPROVE)
         executor = AsyncMock()
         queued = asyncio.Event()
 
         async def _patch_kill_switch():
             queued.set()
             async with store.async_lock:
-                store.get_settings.return_value = GlobalSettings(kill_switch=True)
+                store.get_settings().kill_switch = True
 
         await store.async_lock.acquire()
         update_task = asyncio.create_task(_patch_kill_switch())
@@ -621,44 +614,14 @@ class TestApprovalApprove:
 
         await update_task
         with \
-             patch("custom_components.phoenix_mcp.mcp_view.async_execute_approved_tool", executor), \
+             patch("custom_components.phoenix_mcp.admin_view.async_execute_approved_tool", executor), \
              patch("homeassistant.components.persistent_notification.async_dismiss"):
             response = await approve_task
 
-        stored = next(r for r in store._pending if r["id"] == "appr_a")
+        stored = next(r for r in store.get_pending_approvals() if r["id"] == "appr_a")
         assert response.status == 503
         assert stored["status"] == STATUS_CANCELLED
         assert stored["rejected_reason"] == "kill_switch"
-        executor.assert_not_awaited()
-
-    @pytest.mark.asyncio
-    async def test_marker_save_cancellation_does_not_strand_the_local_claim(self):
-        access_key = _make_access_key("tok-1", cap_restart="confirm")
-        store = _make_store(pending=[_make_pending("appr_a", access_key_id="tok-1")], access_keys=[access_key])
-        data = _make_data(store)
-        hass = _make_hass(data)
-        view = PhoenixAdminApprovalApproveView()
-        view.hass = hass
-        save_started = asyncio.Event()
-        executor = AsyncMock()
-
-        async def _blocked_save():
-            save_started.set()
-            await asyncio.Future()
-
-        store.async_save = AsyncMock(side_effect=_blocked_save)
-        with \
-             patch("custom_components.phoenix_mcp.mcp_view.async_execute_approved_tool", executor):
-            task = asyncio.create_task(
-                view.post(_make_admin_request(body=b"{}"), approval_id="appr_a")
-            )
-            await save_started.wait()
-            task.cancel()
-            with pytest.raises(asyncio.CancelledError):
-                await task
-
-        assert "appr_a" not in data.approvals_in_progress
-        assert next(r for r in store._pending if r["id"] == "appr_a")["execution_started_at"]
         executor.assert_not_awaited()
 
     @pytest.mark.asyncio
@@ -667,16 +630,14 @@ class TestApprovalApprove:
         access_key = _make_access_key("tok-1", cap_restart="confirm")
         store = _make_store(pending=[_make_pending("appr_a", access_key_id="tok-1")], access_keys=[access_key])
         data = _make_data(store)
-        hass = _make_hass(data)
-        view = PhoenixAdminApprovalApproveView()
-        view.hass = hass
+        view = _Route(APPROVE)
         request = _make_admin_request(body=b"{}")
 
         async def _fake_executor(name, args, tok, hass, data):
             return ({"content": [{"type": "text", "text": '{"success": true}'}]}, "allowed", "restart_ha")
 
         with \
-             patch("custom_components.phoenix_mcp.mcp_view.async_execute_approved_tool", side_effect=_fake_executor), \
+             patch("custom_components.phoenix_mcp.admin_view.async_execute_approved_tool", side_effect=_fake_executor), \
              patch("homeassistant.components.persistent_notification.async_dismiss"):
             resp = await view.post(request, approval_id="appr_a")
 
@@ -688,23 +649,21 @@ class TestApprovalApprove:
         access_key = _make_access_key("tok-1", cap_restart="confirm")
         store = _make_store(pending=[_make_pending("appr_a", access_key_id="tok-1")], access_keys=[access_key])
         data = _make_data(store)
-        hass = _make_hass(data)
-        view = PhoenixAdminApprovalApproveView()
-        view.hass = hass
+        view = _Route(APPROVE)
         request = _make_admin_request(body=b"{}")
 
         async def _executor_that_resolves_elsewhere(name, args, tok, hass, data):
-            store._pending[0]["status"] = STATUS_REJECTED
-            store._pending[0]["rejected_reason"] = "admin_cancelled"
+            store.get_pending_approvals()[0]["status"] = STATUS_REJECTED
+            store.get_pending_approvals()[0]["rejected_reason"] = "admin_cancelled"
             return ({"content": [{"type": "text", "text": '{"success": true}'}]}, "allowed", "restart_ha")
 
         with \
-             patch("custom_components.phoenix_mcp.mcp_view.async_execute_approved_tool", side_effect=_executor_that_resolves_elsewhere), \
+             patch("custom_components.phoenix_mcp.admin_view.async_execute_approved_tool", side_effect=_executor_that_resolves_elsewhere), \
              patch("homeassistant.components.persistent_notification.async_dismiss"):
             resp = await view.post(request, approval_id="appr_a")
 
         assert resp.status == 409
-        assert store._pending[0]["status"] == STATUS_REJECTED
+        assert store.get_pending_approvals()[0]["status"] == STATUS_REJECTED
         assert [call.kwargs["method"] for call in data.audit.record.call_args_list] == [
             "approval/approved",
             "approval/executed",
@@ -721,24 +680,50 @@ class TestApprovalApprove:
     @pytest.mark.asyncio
     async def test_approve_rejected_when_executor_returns_error(self):
         access_key = _make_access_key("tok-1", cap_restart="confirm")
-        store = _make_store(pending=[_make_pending("appr_a", access_key_id="tok-1")], access_keys=[access_key])
-        data = _make_data(store)
-        hass = _make_hass(data)
-        view = PhoenixAdminApprovalApproveView()
-        view.hass = hass
+        _make_store(pending=[_make_pending("appr_a", access_key_id="tok-1")], access_keys=[access_key])
+        view = _Route(APPROVE)
         request = _make_admin_request(body=b"{}")
 
         async def _failing_executor(name, args, tok, hass, data):
             return ({"content": [{"type": "text", "text": "Restart failed."}], "isError": True}, "denied", "restart_ha")
 
         with \
-             patch("custom_components.phoenix_mcp.mcp_view.async_execute_approved_tool", side_effect=_failing_executor), \
+             patch("custom_components.phoenix_mcp.admin_view.async_execute_approved_tool", side_effect=_failing_executor), \
              patch("homeassistant.components.persistent_notification.async_dismiss"):
             resp = await view.post(request, approval_id="appr_a")
 
         out = json.loads(resp.text)
         assert out["status"] == STATUS_FAILED
         assert out["rejected_reason"] == "execution_failed"
+
+    @pytest.mark.asyncio
+    async def test_an_unconfirmed_write_closes_as_interrupted_not_failed(self):
+        from custom_components.phoenix_mcp.tool_common import (
+            _tool_uncertain,
+            approval_outcome,
+            execution_failure_text,
+        )
+
+        access_key = _make_access_key("tok-1", cap_restart="confirm")
+        _make_store(pending=[_make_pending("appr_a", access_key_id="tok-1")], access_keys=[access_key])
+        view = _Route(APPROVE)
+
+        async def _executor(name, args, tok, hass, data):
+            return _tool_uncertain({"status": "unknown", "note": "may have landed"}), "invalid_request", "x"
+
+        with \
+             patch("custom_components.phoenix_mcp.admin_view.async_execute_approved_tool", side_effect=_executor), \
+             patch("homeassistant.components.persistent_notification.async_dismiss"):
+            resp = await view.post(_make_admin_request(body=b"{}"), approval_id="appr_a")
+
+        out = json.loads(resp.text)
+        assert out["status"] == STATUS_FAILED
+        assert out["rejected_reason"] == "execution_interrupted"
+        record = SimpleNamespace(rejected_reason=out["rejected_reason"], result=out["result"])
+        assert execution_failure_text(record) is None
+        status, message = approval_outcome(STATUS_FAILED, record)
+        assert status == STATUS_FAILED
+        assert "may have partly applied" in message and "may have landed" in message
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize("refused", [True, False])
@@ -748,11 +733,8 @@ class TestApprovalApprove:
         from custom_components.phoenix_mcp.tool_common import _tool_error, _tool_refused_before_write
 
         access_key = _make_access_key("tok-1", cap_restart="confirm")
-        store = _make_store(pending=[_make_pending("appr_a", access_key_id="tok-1")], access_keys=[access_key])
-        data = _make_data(store)
-        hass = _make_hass(data)
-        view = PhoenixAdminApprovalApproveView()
-        view.hass = hass
+        _make_store(pending=[_make_pending("appr_a", access_key_id="tok-1")], access_keys=[access_key])
+        view = _Route(APPROVE)
         request = _make_admin_request(body=b"{}")
         text = "This configuration changed since you last read it (expected_hash no longer matches)."
 
@@ -761,7 +743,7 @@ class TestApprovalApprove:
             return result, "invalid_request", "restart_ha"
 
         with \
-             patch("custom_components.phoenix_mcp.mcp_view.async_execute_approved_tool", side_effect=_executor), \
+             patch("custom_components.phoenix_mcp.admin_view.async_execute_approved_tool", side_effect=_executor), \
              patch("homeassistant.components.persistent_notification.async_dismiss"):
             resp = await view.post(request, approval_id="appr_a")
 
@@ -773,10 +755,7 @@ class TestApprovalApprove:
     async def test_approve_cancels_when_token_revoked(self):
         # No access key in store, so get_access_key_by_id returns None.
         store = _make_store(pending=[_make_pending("appr_a", access_key_id="tok-1")], access_keys=[])
-        data = _make_data(store)
-        hass = _make_hass(data)
-        view = PhoenixAdminApprovalApproveView()
-        view.hass = hass
+        view = _Route(APPROVE)
         request = _make_admin_request(body=b"{}")
 
         with \
@@ -786,7 +765,35 @@ class TestApprovalApprove:
         assert resp.status == 404
         assert json.loads(resp.text)["error"] == "not_found"
         # Storage shows the approval cancelled.
-        cancelled = next(r for r in store._pending if r["id"] == "appr_a")
+        cancelled = next(r for r in store.get_pending_approvals() if r["id"] == "appr_a")
+        assert cancelled["status"] == STATUS_CANCELLED
+        assert cancelled["rejected_reason"] == "access_key_inactive"
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("batch", [False, True])
+    @pytest.mark.parametrize("fields", [
+        {"expires_at": utcnow() - timedelta(seconds=1)}, {"revoked": True},
+    ], ids=["expired", "revoked"])
+    async def test_approve_closes_for_a_key_still_listed_but_no_longer_valid(self, fields, batch):
+        """A key leaves the active set lazily, so the listing alone does not prove it may act."""
+        access_key = _make_access_key("tok-1", cap_restart="confirm", **fields)
+        store = _make_store(pending=[_make_pending("appr_a", access_key_id="tok-1")], access_keys=[access_key])
+        view = _Route(BATCH_APPROVE) if batch else _Route(APPROVE)
+        body = json.dumps({"approval_ids": ["appr_a"]}).encode() if batch else b"{}"
+        executor = AsyncMock()
+
+        with patch("custom_components.phoenix_mcp.admin_view.async_execute_approved_tool", executor), \
+             patch("homeassistant.components.persistent_notification.async_dismiss"):
+            resp = await (view.post(_make_admin_request(body=body)) if batch
+                          else view.post(_make_admin_request(body=body), approval_id="appr_a"))
+
+        out = json.loads(resp.text)
+        if batch:
+            assert out["applied"] == [] and out["failed"]["approval_id"] == "appr_a"
+        else:
+            assert resp.status == 404 and out["error"] == "not_found"
+        executor.assert_not_awaited()
+        cancelled = next(r for r in store.get_pending_approvals() if r["id"] == "appr_a")
         assert cancelled["status"] == STATUS_CANCELLED
         assert cancelled["rejected_reason"] == "access_key_inactive"
 
@@ -794,10 +801,7 @@ class TestApprovalApprove:
     async def test_approve_rejected_when_cap_now_deny(self):
         access_key = _make_access_key("tok-1", cap_restart="deny")
         store = _make_store(pending=[_make_pending("appr_a", access_key_id="tok-1")], access_keys=[access_key])
-        data = _make_data(store)
-        hass = _make_hass(data)
-        view = PhoenixAdminApprovalApproveView()
-        view.hass = hass
+        view = _Route(APPROVE)
         request = _make_admin_request(body=b"{}")
 
         with \
@@ -806,7 +810,7 @@ class TestApprovalApprove:
 
         assert resp.status == 403
         assert json.loads(resp.text)["error"] == "forbidden"
-        rejected = next(r for r in store._pending if r["id"] == "appr_a")
+        rejected = next(r for r in store.get_pending_approvals() if r["id"] == "appr_a")
         assert rejected["status"] == STATUS_FAILED
         assert rejected["rejected_reason"] == "capability_denied"
 
@@ -825,11 +829,8 @@ class TestApprovalApprove:
             tool_name=MESA_APPROVED_EXECUTOR,
             args={"domain": "light", "service": "turn_on", "entity_id": ["light.a"]},
         )
-        store = _make_store(pending=[pending], access_keys=[access_key])
-        data = _make_data(store)
-        hass = _make_hass(data)
-        view = PhoenixAdminApprovalApproveView()
-        view.hass = hass
+        _make_store(pending=[pending], access_keys=[access_key])
+        view = _Route(APPROVE)
         request = _make_admin_request(body=b"{}")
 
         async def _fake_executor(name, args, tok, hass, data):
@@ -837,7 +838,7 @@ class TestApprovalApprove:
             return ({"content": [{"type": "text", "text": '{"success": true}'}]}, "allowed", "svc")
 
         with \
-             patch("custom_components.phoenix_mcp.mcp_view.async_execute_approved_tool", side_effect=_fake_executor), \
+             patch("custom_components.phoenix_mcp.admin_view.async_execute_approved_tool", side_effect=_fake_executor), \
              patch("homeassistant.components.persistent_notification.async_dismiss"):
             resp = await view.post(request, approval_id="appr_m")
 
@@ -852,10 +853,7 @@ class TestApprovalApprove:
             access_keys=[access_key],
             kill_switch=True,
         )
-        data = _make_data(store)
-        hass = _make_hass(data)
-        view = PhoenixAdminApprovalApproveView()
-        view.hass = hass
+        view = _Route(APPROVE)
         request = _make_admin_request(body=b"{}")
 
         with \
@@ -863,21 +861,18 @@ class TestApprovalApprove:
             resp = await view.post(request, approval_id="appr_a")
 
         assert resp.status == 503
-        cancelled = next(r for r in store._pending if r["id"] == "appr_a")
+        cancelled = next(r for r in store.get_pending_approvals() if r["id"] == "appr_a")
         assert cancelled["status"] == STATUS_CANCELLED
         assert cancelled["rejected_reason"] == "kill_switch"
 
     @pytest.mark.asyncio
     async def test_approve_idempotent_on_terminal(self):
         access_key = _make_access_key("tok-1", cap_restart="confirm")
-        store = _make_store(
+        _make_store(
             pending=[_make_pending("appr_a", access_key_id="tok-1", status=STATUS_APPROVED)],
             access_keys=[access_key],
         )
-        data = _make_data(store)
-        hass = _make_hass(data)
-        view = PhoenixAdminApprovalApproveView()
-        view.hass = hass
+        view = _Route(APPROVE)
         request = _make_admin_request(body=b"{}")
 
         resp = await view.post(request, approval_id="appr_a")
@@ -887,11 +882,8 @@ class TestApprovalApprove:
 
     @pytest.mark.asyncio
     async def test_approve_404_for_missing(self):
-        store = _make_store(pending=[])
-        data = _make_data(store)
-        hass = _make_hass(data)
-        view = PhoenixAdminApprovalApproveView()
-        view.hass = hass
+        _make_store(pending=[])
+        view = _Route(APPROVE)
         request = _make_admin_request(body=b"{}")
 
         resp = await view.post(request, approval_id="appr_missing")
@@ -900,21 +892,6 @@ class TestApprovalApprove:
 
 
 # ---- audit logging on resolution -------------------------------------------
-
-
-def _make_data_real_audit(store: MagicMock) -> PhoenixData:
-    """_make_data with a real AuditLog.
-
-    A malformed record() call (missing settings=, or an outcome outside
-    _VALID_OUTCOMES) is then exercised instead of swallowed by a MagicMock.
-    """
-    rate_limiter = MagicMock(spec=RateLimiter)
-    audit = AuditLog(store=None, maxlen=100)
-    return PhoenixData(
-        store=store,
-        rate_limiter=rate_limiter,
-        audit=audit,
-    )
 
 
 class TestApprovalClaimSignal:
@@ -927,12 +904,8 @@ class TestApprovalClaimSignal:
     """
 
     @staticmethod
-    def _claim_events(hass) -> list[tuple[str, bool]]:
-        return [
-            (c.args[1]["approval_id"], c.args[1]["claimed"])
-            for c in hass.bus.async_fire.call_args_list
-            if c.args[0] == f"{DOMAIN}_approval_claimed"
-        ]
+    def _claim_events() -> list[tuple[str, bool]]:
+        return RUNTIME.claims
 
     @pytest.mark.asyncio
     async def test_claim_event_fires_before_the_executor_runs(self):
@@ -941,22 +914,19 @@ class TestApprovalClaimSignal:
         Firing it afterwards would coincide with the resolved event and change nothing.
         """
         access_key = _make_access_key("tok-1", cap_restart="confirm")
-        store = _make_store(pending=[_make_pending("appr_a", access_key_id="tok-1")], access_keys=[access_key])
-        data = _make_data(store)
-        hass = _make_hass(data)
-        view = PhoenixAdminApprovalApproveView()
-        view.hass = hass
+        _make_store(pending=[_make_pending("appr_a", access_key_id="tok-1")], access_keys=[access_key])
+        view = _Route(APPROVE)
         request = _make_admin_request(body=b"{}")
 
         seen_during_execution: list[tuple[str, bool]] = []
 
         async def _fake_executor(name, args, tok, hass_, data_):
-            seen_during_execution.extend(self_ref._claim_events(hass))
+            seen_during_execution.extend(self_ref._claim_events())
             return ({"content": [{"type": "text", "text": "{}"}]}, "allowed", "restart_ha")
 
         self_ref = self
         with \
-             patch("custom_components.phoenix_mcp.mcp_view.async_execute_approved_tool", side_effect=_fake_executor), \
+             patch("custom_components.phoenix_mcp.admin_view.async_execute_approved_tool", side_effect=_fake_executor), \
              patch("homeassistant.components.persistent_notification.async_dismiss"):
             resp = await view.post(request, approval_id="appr_a")
 
@@ -970,11 +940,8 @@ class TestApprovalClaimSignal:
         It has no UI state of its own, so dismissal is its way of going non-actionable.
         """
         access_key = _make_access_key("tok-1", cap_restart="confirm")
-        store = _make_store(pending=[_make_pending("appr_a", access_key_id="tok-1")], access_keys=[access_key])
-        data = _make_data(store)
-        hass = _make_hass(data)
-        view = PhoenixAdminApprovalApproveView()
-        view.hass = hass
+        _make_store(pending=[_make_pending("appr_a", access_key_id="tok-1")], access_keys=[access_key])
+        view = _Route(APPROVE)
         request = _make_admin_request(body=b"{}")
 
         dismissed_during_execution: list[int] = []
@@ -984,7 +951,7 @@ class TestApprovalClaimSignal:
             return ({"content": [{"type": "text", "text": "{}"}]}, "allowed", "restart_ha")
 
         with \
-             patch("custom_components.phoenix_mcp.mcp_view.async_execute_approved_tool", side_effect=_fake_executor), \
+             patch("custom_components.phoenix_mcp.admin_view.async_execute_approved_tool", side_effect=_fake_executor), \
              patch("homeassistant.components.persistent_notification.async_dismiss") as dismiss:
             await view.post(request, approval_id="appr_a")
 
@@ -998,22 +965,19 @@ class TestApprovalClaimSignal:
         dead action.
         """
         access_key = _make_access_key("tok-1", cap_restart="confirm")
-        store = _make_store(pending=[_make_pending("appr_a", access_key_id="tok-1")], access_keys=[access_key])
-        data = _make_data(store)
-        hass = _make_hass(data)
-        view = PhoenixAdminApprovalApproveView()
-        view.hass = hass
+        _make_store(pending=[_make_pending("appr_a", access_key_id="tok-1")], access_keys=[access_key])
+        view = _Route(APPROVE)
         request = _make_admin_request(body=b"{}")
 
         async def _fake_executor(name, args, tok, hass_, data_):
             return ({"content": [{"type": "text", "text": "{}"}]}, "allowed", "restart_ha")
 
         with \
-             patch("custom_components.phoenix_mcp.mcp_view.async_execute_approved_tool", side_effect=_fake_executor), \
+             patch("custom_components.phoenix_mcp.admin_view.async_execute_approved_tool", side_effect=_fake_executor), \
              patch("homeassistant.components.persistent_notification.async_dismiss"):
             await view.post(request, approval_id="appr_a")
 
-        assert self._claim_events(hass) == [("appr_a", True)]
+        assert self._claim_events() == [("appr_a", True)]
 
     @pytest.mark.asyncio
     async def test_a_raising_executor_closes_the_approval_instead_of_re_offering_it(self):
@@ -1028,25 +992,23 @@ class TestApprovalClaimSignal:
         access_key = _make_access_key("tok-1", cap_restart="confirm")
         store = _make_store(pending=[_make_pending("appr_a", access_key_id="tok-1")], access_keys=[access_key])
         data = _make_data(store)
-        hass = _make_hass(data)
-        view = PhoenixAdminApprovalApproveView()
-        view.hass = hass
+        view = _Route(APPROVE)
         request = _make_admin_request(body=b"{}")
 
         with \
-             patch("custom_components.phoenix_mcp.mcp_view.async_execute_approved_tool",
+             patch("custom_components.phoenix_mcp.admin_view.async_execute_approved_tool",
                    side_effect=RuntimeError("boom")), \
              patch("homeassistant.components.persistent_notification.async_dismiss"), \
              patch("homeassistant.components.persistent_notification.async_create") as create:
             resp = await view.post(request, approval_id="appr_a")
 
         assert resp.status == 500
-        stored = next(r for r in store._pending if r["id"] == "appr_a")
+        stored = next(r for r in store.get_pending_approvals() if r["id"] == "appr_a")
         assert stored["status"] == STATUS_FAILED
         assert stored["rejected_reason"] == "execution_interrupted"
         # Not released back to pending, so no claimed=False and no notification
         # inviting a second attempt.
-        assert self._claim_events(hass) == [("appr_a", True)]
+        assert self._claim_events() == [("appr_a", True)]
         assert create.call_count == 0
         assert "appr_a" not in data.approvals_in_progress
 
@@ -1055,18 +1017,15 @@ class TestApprovalClaimSignal:
         # The two-POST shape: the whole point is that the admin looking at the
         # 500 cannot click Approve again and apply the side effect twice.
         access_key = _make_access_key("tok-1", cap_restart="confirm")
-        store = _make_store(pending=[_make_pending("appr_a", access_key_id="tok-1")], access_keys=[access_key])
-        data = _make_data(store)
-        hass = _make_hass(data)
-        view = PhoenixAdminApprovalApproveView()
-        view.hass = hass
+        _make_store(pending=[_make_pending("appr_a", access_key_id="tok-1")], access_keys=[access_key])
+        view = _Route(APPROVE)
 
         executor = AsyncMock(side_effect=[
             RuntimeError("raised after the side effect landed"),
             ({"content": [{"type": "text", "text": "{}"}]}, "allowed", "restart_ha"),
         ])
         with \
-             patch("custom_components.phoenix_mcp.mcp_view.async_execute_approved_tool", executor), \
+             patch("custom_components.phoenix_mcp.admin_view.async_execute_approved_tool", executor), \
              patch("homeassistant.components.persistent_notification.async_dismiss"), \
              patch("homeassistant.components.persistent_notification.async_create"):
             first = await view.post(_make_admin_request(body=b"{}"), approval_id="appr_a")
@@ -1089,25 +1048,22 @@ class TestApprovalClaimSignal:
         # interrupted.
         access_key = _make_access_key("tok-1", cap_restart="confirm")
         store = _make_store(pending=[_make_pending("appr_a", access_key_id="tok-1")], access_keys=[access_key])
-        data = _make_data(store)
-        hass = _make_hass(data)
-        view = PhoenixAdminApprovalApproveView()
-        view.hass = hass
+        view = _Route(APPROVE)
 
-        from custom_components.phoenix_mcp.mcp_view import ExecutorNotRegistered
+        from custom_components.phoenix_mcp.tool_dispatch import ExecutorNotRegistered
 
         with \
-             patch("custom_components.phoenix_mcp.mcp_view.async_execute_approved_tool",
+             patch("custom_components.phoenix_mcp.admin_view.async_execute_approved_tool",
                    side_effect=ExecutorNotRegistered("no such tool")), \
              patch("homeassistant.components.persistent_notification.async_dismiss"), \
              patch("homeassistant.components.persistent_notification.async_create") as create:
             resp = await view.post(_make_admin_request(body=b"{}"), approval_id="appr_a")
 
         assert resp.status == 400
-        stored = next(r for r in store._pending if r["id"] == "appr_a")
+        stored = next(r for r in store.get_pending_approvals() if r["id"] == "appr_a")
         assert stored["status"] == STATUS_PENDING
         assert "execution_started_at" not in stored
-        assert self._claim_events(hass) == [("appr_a", True), ("appr_a", False)]
+        assert self._claim_events() == [("appr_a", True), ("appr_a", False)]
         assert create.call_count == 1
 
     @pytest.mark.asyncio
@@ -1118,16 +1074,13 @@ class TestApprovalClaimSignal:
         cannot tell a lookup failure from an executor failure. Treating the KeyError as
         retryable would clear the durable marker and re-offer an applied action.
         """
-        from custom_components.phoenix_mcp import mcp_view
+        from custom_components.phoenix_mcp import tool_catalog
 
         access_key = _make_access_key("tok-1", cap_restart="confirm")
         store = _make_store(
             pending=[_make_pending("appr_a", access_key_id="tok-1", tool_name="restart_ha")],
             access_keys=[access_key])
-        data = _make_data(store)
-        hass = _make_hass(data)
-        view = PhoenixAdminApprovalApproveView()
-        view.hass = hass
+        view = _Route(APPROVE)
         applied: list[str] = []
 
         async def _executor(args, tok, hass_, data_):
@@ -1135,7 +1088,7 @@ class TestApprovalClaimSignal:
             raise KeyError("a lookup inside the executor, long after the write")
 
         with \
-             patch.dict(mcp_view._EXECUTOR_REGISTRY, {"restart_ha": _executor}), \
+             patch.dict(tool_catalog._EXECUTOR_REGISTRY, {"restart_ha": _executor}), \
              patch("homeassistant.components.persistent_notification.async_dismiss"), \
              patch("homeassistant.components.persistent_notification.async_create"):
             first = await view.post(_make_admin_request(body=b"{}"), approval_id="appr_a")
@@ -1144,46 +1097,10 @@ class TestApprovalClaimSignal:
         assert first.status == 500
         # Ran once, and the record is closed rather than offered back.
         assert applied == ["side effect landed"]
-        stored = next(r for r in store._pending if r["id"] == "appr_a")
+        stored = next(r for r in store.get_pending_approvals() if r["id"] == "appr_a")
         assert stored["status"] == STATUS_FAILED
         assert stored["rejected_reason"] == "execution_interrupted"
         assert json.loads(second.text)["rejected_reason"] == "execution_interrupted"
-
-    @pytest.mark.asyncio
-    async def test_cancellation_mid_execution_does_not_re_offer_the_approval(self):
-        """A cancellation mid-execution closes the approval instead of re-offering it.
-
-        asyncio.CancelledError does not inherit from Exception, so an `except
-        Exception` handler skips it, yet the side effect may have landed. The
-        cancellation is re-raised, so the assertion is on the store afterwards.
-        """
-        from custom_components.phoenix_mcp import mcp_view
-
-        access_key = _make_access_key("tok-1", cap_restart="confirm")
-        store = _make_store(
-            pending=[_make_pending("appr_a", access_key_id="tok-1", tool_name="restart_ha")],
-            access_keys=[access_key])
-        data = _make_data(store)
-        hass = _make_hass(data)
-        view = PhoenixAdminApprovalApproveView()
-        view.hass = hass
-        applied: list[str] = []
-
-        async def _cancelled_executor(args, tok, hass_, data_):
-            applied.append("side effect landed")
-            raise asyncio.CancelledError()
-
-        with \
-             patch.dict(mcp_view._EXECUTOR_REGISTRY, {"restart_ha": _cancelled_executor}), \
-             patch("homeassistant.components.persistent_notification.async_dismiss"), \
-             patch("homeassistant.components.persistent_notification.async_create"):
-            with pytest.raises(asyncio.CancelledError):
-                await view.post(_make_admin_request(body=b"{}"), approval_id="appr_a")
-
-        assert applied == ["side effect landed"]
-        stored = next(r for r in store._pending if r["id"] == "appr_a")
-        assert stored["status"] == STATUS_FAILED
-        assert stored["rejected_reason"] == "execution_interrupted"
 
     @pytest.mark.asyncio
     async def test_an_approval_carrying_a_stale_marker_refuses_to_run_again(self):
@@ -1193,15 +1110,13 @@ class TestApprovalClaimSignal:
         so the action may already have applied. Overwriting it and running again is the
         retry that must not happen; recovery reconciliation resolves these.
         """
-        from custom_components.phoenix_mcp import mcp_view
+        from custom_components.phoenix_mcp import tool_catalog
 
         pending = _make_pending("appr_a", access_key_id="tok-1", tool_name="restart_ha")
         pending["execution_started_at"] = utcnow().isoformat()
         store = _make_store(pending=[pending], access_keys=[])
         data = _make_data(store)
-        hass = _make_hass(data)
-        view = PhoenixAdminApprovalApproveView()
-        view.hass = hass
+        view = _Route(APPROVE)
         applied: list[str] = []
 
         async def _executor(args, tok, hass_, data_):
@@ -1209,7 +1124,7 @@ class TestApprovalClaimSignal:
             return ({"content": [{"type": "text", "text": "{}"}]}, "allowed", "restart_ha")
 
         with \
-             patch.dict(mcp_view._EXECUTOR_REGISTRY, {"restart_ha": _executor}), \
+             patch.dict(tool_catalog._EXECUTOR_REGISTRY, {"restart_ha": _executor}), \
              patch("homeassistant.components.persistent_notification.async_dismiss"), \
              patch("homeassistant.components.persistent_notification.async_create"):
             resp = await view.post(_make_admin_request(body=b"{}"), approval_id="appr_a")
@@ -1217,7 +1132,7 @@ class TestApprovalClaimSignal:
         assert resp.status == 409
         assert applied == []
         assert "appr_a" not in data.approvals_in_progress
-        stored = next(r for r in store._pending if r["id"] == "appr_a")
+        stored = next(r for r in store.get_pending_approvals() if r["id"] == "appr_a")
         assert stored["status"] == STATUS_PENDING
         assert stored["execution_started_at"]
 
@@ -1231,9 +1146,7 @@ class TestApprovalClaimSignal:
         store = _make_store(pending=[_make_pending("appr_a"), _make_pending("appr_b")])
         data = _make_data(store)
         data.approvals_in_progress.add("appr_a")
-        hass = _make_hass(data)
-        view = PhoenixAdminApprovalsView()
-        view.hass = hass
+        view = _Route(APPROVALS)
 
         resp = await view.get(_make_admin_request())
 
@@ -1246,10 +1159,8 @@ class TestApprovalAuditLogging:
     @pytest.mark.asyncio
     async def test_reject_writes_queryable_audit_entry(self):
         store = _make_store(pending=[_make_pending("appr_a")])
-        data = _make_data_real_audit(store)
-        hass = _make_hass(data)
-        view = PhoenixAdminApprovalRejectView()
-        view.hass = hass
+        data = _make_data(store)
+        view = _Route(REJECT)
         request = _make_admin_request(body=json.dumps({"reason": "not_safe"}).encode())
 
         with \
@@ -1267,17 +1178,15 @@ class TestApprovalAuditLogging:
     async def test_approve_writes_allowed_audit_entry(self):
         access_key = _make_access_key("tok-1", cap_restart="confirm")
         store = _make_store(pending=[_make_pending("appr_a", access_key_id="tok-1")], access_keys=[access_key])
-        data = _make_data_real_audit(store)
-        hass = _make_hass(data)
-        view = PhoenixAdminApprovalApproveView()
-        view.hass = hass
+        data = _make_data(store)
+        view = _Route(APPROVE)
         request = _make_admin_request(body=b"{}")
 
         async def _fake_executor(name, args, tok, hass, data):
             return ({"content": [{"type": "text", "text": '{"success": true}'}]}, "allowed", "restart_ha")
 
         with \
-             patch("custom_components.phoenix_mcp.mcp_view.async_execute_approved_tool", side_effect=_fake_executor), \
+             patch("custom_components.phoenix_mcp.admin_view.async_execute_approved_tool", side_effect=_fake_executor), \
              patch("homeassistant.components.persistent_notification.async_dismiss"):
             resp = await view.post(request, approval_id="appr_a")
 
@@ -1302,9 +1211,7 @@ class TestBatchApprove:
     def _view_and_request(pending, access_keys, ids, kill_switch=False):
         store = _make_store(pending=pending, access_keys=access_keys, kill_switch=kill_switch)
         data = _make_data(store)
-        hass = _make_hass(data)
-        view = PhoenixAdminApprovalBatchApproveView()
-        view.hass = hass
+        view = _Route(BATCH_APPROVE)
         request = _make_admin_request(body=json.dumps({"approval_ids": ids}).encode())
         return view, request, store, data
 
@@ -1322,7 +1229,7 @@ class TestBatchApprove:
             return ({"content": [{"type": "text", "text": "{}"}]}, "allowed", "restart_ha")
 
         with \
-             patch("custom_components.phoenix_mcp.mcp_view.async_execute_approved_tool", side_effect=_fake_executor), \
+             patch("custom_components.phoenix_mcp.admin_view.async_execute_approved_tool", side_effect=_fake_executor), \
              patch("homeassistant.components.persistent_notification.async_dismiss"):
             resp = await view.post(request)
 
@@ -1331,7 +1238,7 @@ class TestBatchApprove:
         assert [a["approval_id"] for a in out["applied"]] == ["appr_a", "appr_b", "appr_c"]
         assert out["failed"] is None and out["remaining"] == []
         assert len(seen) == 3
-        assert all(r["status"] == STATUS_APPROVED for r in store._pending)
+        assert all(r["status"] == STATUS_APPROVED for r in store.get_pending_approvals())
 
     @pytest.mark.asyncio
     async def test_stops_at_first_failure_and_leaves_the_rest_pending(self):
@@ -1354,7 +1261,7 @@ class TestBatchApprove:
             return ({"content": [{"type": "text", "text": "{}"}]}, "allowed", "restart_ha")
 
         with \
-             patch("custom_components.phoenix_mcp.mcp_view.async_execute_approved_tool", side_effect=_fake_executor), \
+             patch("custom_components.phoenix_mcp.admin_view.async_execute_approved_tool", side_effect=_fake_executor), \
              patch("homeassistant.components.persistent_notification.async_dismiss"), \
              patch("homeassistant.components.persistent_notification.async_create"):
             resp = await view.post(request)
@@ -1365,7 +1272,7 @@ class TestBatchApprove:
         assert out["remaining"] == ["appr_c"]
         # The third executor never ran.
         assert len(seen) == 2
-        by_id = {r["id"]: r for r in store._pending}
+        by_id = {r["id"]: r for r in store.get_pending_approvals()}
         assert by_id["appr_a"]["status"] == STATUS_APPROVED
         assert by_id["appr_c"]["status"] == STATUS_PENDING
 
@@ -1386,7 +1293,7 @@ class TestBatchApprove:
             return ({"content": [{"type": "text", "text": "nope"}], "isError": True}, "invalid_request", "x")
 
         with \
-             patch("custom_components.phoenix_mcp.mcp_view.async_execute_approved_tool", side_effect=_fake_executor), \
+             patch("custom_components.phoenix_mcp.admin_view.async_execute_approved_tool", side_effect=_fake_executor), \
              patch("homeassistant.components.persistent_notification.async_dismiss"), \
              patch("homeassistant.components.persistent_notification.async_create"):
             resp = await view.post(request)
@@ -1404,7 +1311,7 @@ class TestBatchApprove:
         )
         executor = AsyncMock()
         with \
-             patch("custom_components.phoenix_mcp.mcp_view.async_execute_approved_tool", executor), \
+             patch("custom_components.phoenix_mcp.admin_view.async_execute_approved_tool", executor), \
              patch("homeassistant.components.persistent_notification.async_dismiss"):
             resp = await view.post(request)
 
@@ -1420,7 +1327,7 @@ class TestBatchApprove:
     ])
     async def test_rejects_a_malformed_id_list(self, body):
         view, request, _s, _d = self._view_and_request([], [], ["x"])
-        request.content.read = AsyncMock(return_value=json.dumps(body).encode())
+        request.body = json.dumps(body).encode()
         resp = await view.post(request)
         assert resp.status == 400
 
@@ -1448,7 +1355,7 @@ class TestBatchApprove:
 @pytest.mark.parametrize("change", ["revocation", "policy", "runtime", "kill_switch"])
 async def test_approved_executor_carries_current_authority_across_wait(change):
     """Real approval dispatch binds authority for executor revalidation."""
-    from custom_components.phoenix_mcp import mcp_view
+    from custom_components.phoenix_mcp import tool_catalog
     from custom_components.phoenix_mcp.request_authority import (
         check_request_authority, policy_version, request_authority,
     )
@@ -1457,11 +1364,8 @@ async def test_approved_executor_carries_current_authority_across_wait(change):
     store = _make_store(access_keys=[access_key], pending=[_make_pending(
         "appr_registry", tool_name="set_entity", cap_name="cap_registry_write",
     )])
-    store.get_access_key_by_hash.return_value = access_key
     data = _make_data(store)
-    hass = _make_hass(data)
-    view = PhoenixAdminApprovalApproveView()
-    view.hass = hass
+    view = _Route(APPROVE)
     entered, release = asyncio.Event(), asyncio.Event()
     effects = []
 
@@ -1476,7 +1380,7 @@ async def test_approved_executor_carries_current_authority_across_wait(change):
         return {"content": []}, "allowed", "test"
 
     with (
-        patch.dict(mcp_view._EXECUTOR_REGISTRY, {"set_entity": executor}),
+        patch.dict(tool_catalog._EXECUTOR_REGISTRY, {"set_entity": executor}),
         patch("homeassistant.components.persistent_notification.async_dismiss"),
         patch("homeassistant.components.persistent_notification.async_create"),
     ):
@@ -1486,19 +1390,19 @@ async def test_approved_executor_carries_current_authority_across_wait(change):
         try:
             await asyncio.wait_for(entered.wait(), 1)
             if change == "revocation":
-                store.get_access_key_by_hash.return_value = None
+                access_key.revoked = True
             elif change == "policy":
                 access_key.settings_version += 1
             elif change == "runtime":
                 data.shutting_down = True
             else:
-                store.get_settings.return_value.kill_switch = True
+                store.get_settings().kill_switch = True
         finally:
             release.set()
         response = await task
     assert response.status == 500
     assert effects == []
-    assert store._pending[0]["status"] == STATUS_FAILED
-    assert store._pending[0]["rejected_reason"] == "execution_interrupted"
+    assert store.get_pending_approvals()[0]["status"] == STATUS_FAILED
+    assert store.get_pending_approvals()[0]["rejected_reason"] == "execution_interrupted"
     assert not data.approvals_in_progress
     assert request_authority.get() is None

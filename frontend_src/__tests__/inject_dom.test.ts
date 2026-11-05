@@ -4,6 +4,7 @@ import {
   areaIdFromPath,
   BTN_CLASS,
   deepQueryAll,
+  pageRoot,
   deviceIdFromPath,
   extractEntityId,
   integrationDomainFromPath,
@@ -293,6 +294,23 @@ describe("isSelfMutation", () => {
         rec({ target: cell, added: [document.createElement("span")] }), // foreign
       ])
     ).toBe(false);
+  });
+});
+
+describe("pageRoot", () => {
+  it("finds the page area through Home Assistant's shadow roots", () => {
+    const app = document.createElement("home-assistant");
+    const main = document.createElement("home-assistant-main");
+    const resolver = document.createElement("partial-panel-resolver");
+    app.attachShadow({ mode: "open" }).appendChild(main);
+    main.attachShadow({ mode: "open" }).appendChild(resolver);
+    document.body.appendChild(app);
+    expect(pageRoot()).toBe(resolver);
+    app.remove();
+  });
+
+  it("falls back to the document when the path is missing", () => {
+    expect(pageRoot()).toBe(document);
   });
 });
 

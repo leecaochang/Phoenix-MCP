@@ -1,7 +1,7 @@
 /** A profile without a control mode is saved without one.
  *
- * An absent control_mode means the profile makes no control decision (MESA
- * Spec 5.7 Rule E), so the inherited or built-in mode applies. Writing a
+ * An absent control_mode means the profile makes no control decision,
+ * so the inherited or built-in mode applies. Writing a
  * default in its place would replace that baseline: a domain profile saved
  * with Autonomous makes every lock in scope autonomous. The editor therefore
  * offers "(unset)" and starts there whenever nothing was declared.

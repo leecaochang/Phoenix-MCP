@@ -17,6 +17,7 @@ _SCHEMAS = {definition["name"]: definition["inputSchema"]
 _PUBLIC_SCHEMAS = {**_SCHEMAS, **{definition["name"]: definition["inputSchema"]
                                   for definition in _NATIVE_TOOL_DEFS}}
 _CONTAINER_TYPES = ("object", "array")
+_INVALID_TEXT = "Tool arguments must be valid Unicode text."
 _NATIVE_TOOLS = frozenset(definition["name"] for definition in _NATIVE_TOOL_DEFS)
 _INTEGER_TEXT = re.compile(r"-?\d+")
 _NUMBER_TEXT = re.compile(r"-?\d+(\.\d+)?")
@@ -58,6 +59,25 @@ def with_argument_notes(result: tuple[dict, _Outcome, str], notes: list[str]) ->
     else:
         items.append({"type": "text", "text": "Arguments adjusted: " + " ".join(notes)})
     return {**content, "content": items}, outcome, resource
+
+
+def _reject_non_finite(_value: str) -> None:
+    """json.loads parse_constant hook: reject NaN / Infinity / -Infinity.
+
+    Python's json.loads accepts these by default, and they defeat range checks
+    (every comparison with NaN is False, so NaN passes a minimum and a maximum)
+    and can flow through to HA services and device integrations. Raising here
+    rejects them at ingestion; the caller's ValueError handler answers it.
+    """
+    raise ValueError("Non-finite JSON numbers are not allowed.")
+
+
+def _parse_finite_float(value: str) -> float:
+    """Reject exponent overflow as well as literal non-finite constants."""
+    result = float(value)
+    if not math.isfinite(result):
+        raise ValueError("Non-finite JSON numbers are not allowed.")
+    return result
 
 
 def decode_container_strings(tool: str, arguments: dict) -> dict:
@@ -127,11 +147,20 @@ def _list_text(name: str, schema: dict, value: str) -> list[str] | None:
     return None
 
 
-def tool_arguments_error(arguments: object) -> str | None:
-    """Bound every ingress, including internal calls and persisted executors.
+def _serialized_size(text: str) -> int:
+    """A string's size as JSON in UTF-8. Raises UnicodeEncodeError on a lone surrogate."""
+    return len(json.dumps(text, ensure_ascii=False).encode("utf-8"))
 
-    Depth bounds also terminate cycles. Shared references remain valid when
-    their expanded JSON representation fits the same traversal budget.
+
+def tool_arguments_error(arguments: object) -> str | None:
+    """Bound tool arguments, on every route, before internal calls and persisted executors.
+
+    Holds size, depth, JSON shape, finite numbers and valid Unicode. A lone
+    surrogate is refused because a value holding one cannot be serialized later:
+    in a state it fails Home Assistant's state API, in a registry it stops every
+    later save of that registry. Depth bounds also terminate cycles. Shared
+    references remain valid when their expanded JSON representation fits the same
+    traversal budget.
     """
     if not isinstance(arguments, dict):
         return "Tool arguments must be an object."
@@ -153,7 +182,10 @@ def tool_arguments_error(arguments: object) -> str | None:
                 for key in item:
                     if len(key) > MAX_REQUEST_BODY_BYTES:
                         return "Tool arguments exceed the size limit."
-                    payload_bytes += len(json.dumps(key, ensure_ascii=False).encode("utf-8", errors="surrogatepass"))
+                    try:
+                        payload_bytes += _serialized_size(key)
+                    except UnicodeEncodeError:
+                        return _INVALID_TEXT
                     if payload_bytes > MAX_REQUEST_BODY_BYTES:
                         return "Tool arguments exceed the size limit."
                 pending.extend((value, depth + 1) for value in item.values())
@@ -162,7 +194,10 @@ def tool_arguments_error(arguments: object) -> str | None:
         elif isinstance(item, str):
             if len(item) > MAX_REQUEST_BODY_BYTES:
                 return "Tool arguments exceed the size limit."
-            payload_bytes += len(json.dumps(item, ensure_ascii=False).encode("utf-8", errors="surrogatepass"))
+            try:
+                payload_bytes += _serialized_size(item)
+            except UnicodeEncodeError:
+                return _INVALID_TEXT
         elif isinstance(item, (int, float)) and not isinstance(item, bool):
             try:
                 if not math.isfinite(item):
@@ -231,11 +266,27 @@ def _native_shape(value: Any, schema: dict) -> Any:
     items = schema.get("items")
     if "array" in kinds and text and isinstance(items, dict) and _kinds(items) == ["string"]:
         return [value]
-    if "integer" in kinds and _INTEGER_TEXT.fullmatch(text):
-        return int(text)
-    if "number" in kinds and _NUMBER_TEXT.fullmatch(text):
-        return float(text)
-    return value
+    read = _number_from_text(text, kinds)
+    return value if read is None else read
+
+
+def _number_from_text(text: str, kinds: list[str]) -> int | float | None:
+    """The number `text` spells for a field of these kinds, or None.
+
+    Python refuses an integer past its digit limit and reads an over-long decimal
+    as infinity. JSON admission refuses both magnitudes, so the text stays for
+    the type check, which names the field, rather than reaching a handler.
+    """
+    try:
+        if "integer" in kinds and _INTEGER_TEXT.fullmatch(text):
+            read: int | float = int(text)
+        elif "number" in kinds and _NUMBER_TEXT.fullmatch(text):
+            read = float(text)
+        else:
+            return None
+        return read if math.isfinite(read) else None
+    except (ValueError, OverflowError):
+        return None
 
 
 def _scalar_error(name: str, value: Any, schema: dict, kinds: list[str]) -> str | None:
@@ -274,13 +325,9 @@ def _scalar_text(name: str, value: Any, schema: dict) -> Any:
     if not isinstance(value, str) or "string" in kinds:
         return value
     text = value.strip()
-    read: Any = value
-    if "integer" in kinds and _INTEGER_TEXT.fullmatch(text):
-        read = int(text)
-    elif "number" in kinds and _NUMBER_TEXT.fullmatch(text):
-        read = float(text)
-    elif "boolean" in kinds and text.lower() in ("true", "false"):
-        read = text.lower() == "true"
+    read: Any = _number_from_text(text, kinds)
+    if read is None:
+        read = text.lower() == "true" if "boolean" in kinds and text.lower() in ("true", "false") else value
     if read is not value:
         note_argument_adjustment(f"Read {name} text {json.dumps(value[:40])} as {json.dumps(read)}.")
     return read

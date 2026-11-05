@@ -12,7 +12,7 @@ from unittest.mock import AsyncMock
 import pytest
 import pytest_asyncio
 
-from custom_components.phoenix_mcp import fault_log, mcp_view
+from custom_components.phoenix_mcp import fault_log, tool_dispatch
 from custom_components.phoenix_mcp.audit import AuditLog
 from custom_components.phoenix_mcp.const import (
     DOMAIN, FAULT_LOG_FILENAME, FAULT_LOG_MAX_BLOCK_BYTES, FAULT_LOG_MAX_BYTES,
@@ -47,7 +47,7 @@ async def context(hass, tmp_path):
 
 async def _call(context, **arguments):
     hass, access_key, data, _ = context
-    response, _, _, outcome = await mcp_view._dispatch_mcp(
+    response, _, _, outcome = await tool_dispatch._dispatch_mcp(
         "tools/call", 1, {"name": "get_logs", "arguments": {"source": "fault_log", **arguments}},
         access_key, hass, data, "127.0.0.1", "http://localhost",
     )

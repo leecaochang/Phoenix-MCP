@@ -4,9 +4,9 @@
 scope, so per-access-key permissions, MESA, approvals and audit apply with no separate LLM
 integration. Sibling of voice_agent.py and the llm.API bridge (assist_api.py).
 
-The model side is reused from agentcli.py: provider accounts and keys, provider
+The model side is reused from llm/ and agent_chat.py: provider accounts and keys, provider
 construction, and the gated tool loop (async_run_ai_task dispatches every tool through
-mcp_view._dispatch_mcp with the sentinel client_ip "ai_task"). A confirm-gated action
+tool_dispatch._dispatch_mcp with the sentinel client_ip "ai_task"). A confirm-gated action
 degrades to "queued, approve in the Phoenix MCP panel"; the task never blocks. A task
 `structure` is honored by converting its schema to JSON, instructing the model to emit
 matching JSON, and parsing the result.
@@ -25,12 +25,19 @@ from typing import Any
 
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import HomeAssistantError
-from homeassistant.helpers import entity_registry as er
+from homeassistant.helpers import chat_session, entity_registry as er
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.util.json import json_loads
 
+from .agent_chat import AiTaskError, async_run_ai_task
+from .agent_turn import _current_dispatch_access_key
 from .const import DOMAIN
-from .helpers import LocalizedReason
+from .helpers import LocalizedReason, _scrub_log_text
+from .helpers import instance_base_url as _base_url
+from .household_authority import household_scope
+from .llm.accounts import _get_secret_store
+from .llm.factory import build_provider
+from .request_authority import AuthorityChangedError
 from .schema_compat import schema_engine
 
 _LOGGER = logging.getLogger(__name__)
@@ -67,6 +74,7 @@ def _loaded_ai_task_entity_id(hass: HomeAssistant, entry_id: str) -> str | None:
     """Return an entity eligible for selection, excluding registry-only leftovers."""
     if not _AI_TASK_AVAILABLE:
         return None
+    # Local: optional component, imported only when this path runs.
     from homeassistant.components.ai_task.const import DATA_COMPONENT
 
     entity_id = _ai_task_entity_id(hass, entry_id)
@@ -79,7 +87,8 @@ def _loaded_ai_task_entity_id(hass: HomeAssistant, entry_id: str) -> str | None:
 def _ai_task_preferences(hass: HomeAssistant) -> Any:
     """HA's AITaskPreferences object (holds gen_data_entity_id), or None."""
     try:
-        from homeassistant.components.ai_task.const import DATA_PREFERENCES  # noqa: PLC0415
+        # Local: optional component, imported only when this path runs.
+        from homeassistant.components.ai_task.const import DATA_PREFERENCES
     except ImportError:  # pragma: no cover - camera requirement not installed
         return None
     return hass.data.get(DATA_PREFERENCES)
@@ -317,9 +326,10 @@ def _structure_to_json(structure: Any) -> dict | None:
         engine = schema_engine(structure)
         if engine.__name__ == "probatio":
             return engine.to_openapi(structure)
+        # Local: ships with an optional component, not with this integration.
         from voluptuous_openapi import convert
         return convert(structure)
-    except Exception as err:  # noqa: BLE001 - unavailable/unconvertible schema
+    except Exception as err:  # unavailable/unconvertible schema
         raise HomeAssistantError(
             "This AI Task's structured output is not supported by the Phoenix MCP AI Task entity."
         ) from err
@@ -344,7 +354,7 @@ def _parse_structured(text: str, structure: Any) -> Any:
         # HA's parser, unlike json.loads, refuses NaN and Infinity.
         parsed = json_loads(body.strip())
     except ValueError as err:
-        _LOGGER.error("Phoenix MCP AI Task: could not parse structured output: %s", err)
+        _LOGGER.error("Phoenix MCP AI Task: could not parse structured output: %s", _scrub_log_text(str(err)))
         raise HomeAssistantError(
             "The Phoenix MCP AI Task did not return valid JSON for the requested structure."
         ) from err
@@ -353,26 +363,37 @@ def _parse_structured(text: str, structure: Any) -> Any:
     try:
         structure(parsed)
     except schema_engine(structure).Invalid as err:
-        _LOGGER.error("Phoenix MCP AI Task: structured output does not match the structure: %s", err)
+        _LOGGER.error("Phoenix MCP AI Task: structured output does not match the structure: %s",
+                      _scrub_log_text(str(err)))
         raise HomeAssistantError(
             f"The Phoenix MCP AI Task's output did not match the requested structure: {err}"
         ) from err
     return parsed
 
 
-from .conversation_log import recorded_turn
+from .conversation_log import recorded_turn, record_identity
+
+
+def _task_user_id() -> str | None:
+    """The user this task runs for, or None when HA names none.
+
+    Read from the chat session HA opens for the call, which is local to that call.
+    The entity's own context is one slot that overlapping tasks share. Releases
+    whose session carries no owner, and automations, name no user.
+    """
+    user_id = getattr(chat_session.current_session.get(), "user_id", None)
+    return user_id if isinstance(user_id, str) else None
 
 
 @recorded_turn("ai_task", "instructions")
 async def async_generate_ai_task_data(
     hass: HomeAssistant, data: Any, instructions: str, structure: Any,
+    *, user_id: str | None = None,
 ) -> Any:
-    """Apply household-only authority when HA exposes no per-task identity hook."""
-    from .household_authority import household_scope
-    from .request_authority import AuthorityChangedError
+    """Intersect the bound key with the requesting user; a task with none keeps household scope."""
 
     try:
-        async with household_scope(hass):
+        async with household_scope(hass, user_id=user_id):
             return await _async_generate_ai_task_data(hass, data, instructions, structure)
     except AuthorityChangedError as err:
         raise HomeAssistantError("The AI Task's authority changed; check any earlier actions.") from err
@@ -387,13 +408,6 @@ async def _async_generate_ai_task_data(
     HomeAssistantError for any not-ready or generation failure, so the service call
     surfaces a clean error rather than a Phoenix MCP internal.
     """
-    from .agentcli import (  # noqa: PLC0415
-        AiTaskError,
-        _current_dispatch_access_key,
-        _get_secret_store,
-        build_provider,
-        async_run_ai_task,
-    )
 
     settings = data.store.get_settings()
     if not data.ready or data.shutting_down or settings.kill_switch:
@@ -410,7 +424,6 @@ async def _async_generate_ai_task_data(
     if cfg is None or not cfg.model:
         raise HomeAssistantError("The Phoenix MCP AI Task entity is not fully configured.")
 
-    from .conversation_log import record_identity
     record_identity(access_key=access_key, config=cfg)
 
     structure_json = _structure_to_json(structure)
@@ -428,16 +441,6 @@ async def _async_generate_ai_task_data(
     if structure_json is None:
         return text
     return _parse_structured(text, structure)
-
-
-def _base_url(hass: HomeAssistant) -> str:
-    """Best-effort external URL for the skill link in the primer; "" if none."""
-    try:
-        from homeassistant.helpers.network import get_url  # noqa: PLC0415
-
-        return get_url(hass)
-    except Exception:  # noqa: BLE001 - NoURLAvailableError and anything else
-        return ""
 
 
 if _AI_TASK_AVAILABLE:
@@ -472,7 +475,7 @@ if _AI_TASK_AVAILABLE:
             if data is None:
                 raise HomeAssistantError("Phoenix MCP is not set up.")
             result = await async_generate_ai_task_data(
-                self.hass, data, task.instructions, task.structure
+                self.hass, data, task.instructions, task.structure, user_id=_task_user_id(),
             )
             return _ai_task.GenDataTaskResult(
                 conversation_id=chat_log.conversation_id,
@@ -552,7 +555,7 @@ def async_sync_ai_task(hass: HomeAssistant, entry, data, async_add_entities) -> 
         if entity_id is not None:
             # If Phoenix MCP was HA's default "Data generation tasks" entity, clear that
             # first so no dangling default is left (disable, revoke, provider delete and
-            # wipe all route through here).
+            # wipe all route through here; integration removal clears it itself).
             prefs = _ai_task_preferences(hass)
             if prefs is not None and prefs.gen_data_entity_id == entity_id:
                 prefs.async_set_preferences(gen_data_entity_id=None)

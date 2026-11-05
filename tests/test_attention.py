@@ -109,6 +109,15 @@ async def test_unreadable_calendar_history_is_not_an_empty_list(attention_env, h
     assert result == {"items": [{"id": "calendar_storage", "kind": "calendar_storage"}]}
 
 
+async def test_a_failed_audit_save_is_listed_until_a_save_works(attention_env):
+    client, data, _ = attention_env
+    data.audit.save_failed = True
+    result = await (await client.get("/api/phoenix-mcp/admin/attention")).json()
+    assert result == {"items": [{"id": "audit_storage", "kind": "audit_storage"}]}
+    data.audit.save_failed = False
+    assert await (await client.get("/api/phoenix-mcp/admin/attention")).json() == {"items": []}
+
+
 async def test_unreadable_calendar_history_says_why_once_in_the_log(attention_env, hass, caplog):
     """The attention text points at the HA log, so the log must name the failing field."""
     client, data, _ = attention_env

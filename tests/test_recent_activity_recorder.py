@@ -20,7 +20,7 @@ from homeassistant.util import dt as dt_util
 from pytest_homeassistant.components.recorder.common import async_wait_recording_done
 
 from custom_components.phoenix_mcp.access_key_store import AccessKeyRecord, PermissionNode, PermissionTree
-from custom_components.phoenix_mcp.mcp_view import _call_tool
+from custom_components.phoenix_mcp.tool_dispatch import _call_tool
 
 
 @pytest.fixture

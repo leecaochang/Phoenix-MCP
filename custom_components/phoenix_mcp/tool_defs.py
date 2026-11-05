@@ -2,20 +2,18 @@
 
 Declarative data only, no behaviour: three def lists (entity, native HA and
 system tools) and the `_TOOL_ANNOTATIONS` map holding every tool's four MCP
-hints. mcp_view, which owns the transport and the dispatch and executor
-registries, re-exports these names and stamps the annotations onto the defs at
-import, so a tool added without an entry raises KeyError there rather than
+hints. tool_catalog stamps the annotations onto the defs at import, so a tool added without an entry raises KeyError there rather than
 shipping the spec's unsafe defaults. The conventions for each hint are in the
 comment above the map.
 
-Nothing here imports the transport. Adding a tool means adding a def here AND
-registering a handler in mcp_view; guard tests pin the two against each other,
+Nothing here imports the dispatcher. Adding a tool means adding a def here AND
+registering a handler in tool_registration; guard tests pin the two against each other,
 and against the annotations and executor registries, in both directions.
 """
 
 from __future__ import annotations
 
-from .const import BACKUP_COMPLETION_WAIT_SECONDS, GET_STATE_MAX_IDS, ORIENTATION_GUIDANCE, PATCH_DASHBOARD_MAX_CHANGES, SEARCH_ENTITIES_MAX_LIMIT, SEARCH_POWER_TYPES, SEARCH_RADIO_TYPES, SERVICE_TARGET_MAX_GROUPS, SERVICE_TARGET_MAX_IDS
+from .const import BACKUP_COMPLETION_WAIT_SECONDS, GET_STATE_MAX_IDS, LIST_FILES_DEFAULT_LIMIT, LIST_FILES_MAX_LIMIT, ORIENTATION_GUIDANCE, PATCH_DASHBOARD_MAX_CHANGES, SEARCH_ENTITIES_MAX_LIMIT, SEARCH_POWER_TYPES, SEARCH_RADIO_TYPES, SERVICE_TARGET_MAX_GROUPS, SERVICE_TARGET_MAX_IDS
 
 _SYSTEM_LOG_DETAIL_PROPERTIES = {
     "detail_ref": {
@@ -68,9 +66,9 @@ _NATIVE_TOOL_PUBLIC_TO_INTERNAL: dict[str, str] = {
 }
 
 # One wording on every dashboard tool that needs a card's location or confirms a
-# write, so a model is steered the same way wherever it starts. Live runs showed
-# models reading the whole layout because these tools said to, firing a full
-# read alongside a search, and re-reading to confirm a write that had succeeded.
+# write, so a model is steered the same way wherever it starts: never
+# a whole-layout read because a tool said to, a full read alongside a search, or a
+# re-read to confirm a write that succeeded.
 _DASHBOARD_SEARCH_FIRST = (
     "Find cards with a get_dashboard_config search, not a full read that resends every card: "
     "its matches carry the paths and content_hash this tool needs. "
@@ -217,7 +215,7 @@ _ENTITY_TOOL_DEFS: list[dict] = [
                 },
                 "attribute": {
                     "type": "string", "maxLength": 255,
-                    "description": "summary only: total this attribute's values (e.g. hvac_action) instead of the state.",
+                    "description": "summary only: total this attribute's values (e.g. hvac_action) instead of the state, over at most 7 days.",
                 },
                 "limit": {
                     "type": "integer",
@@ -534,7 +532,9 @@ _ENTITY_TOOL_DEFS: list[dict] = [
         "description": (
             "Call a Home Assistant service. Target groups (kind entity, device, area or all) are resolved "
             "and flattened to the entities this access key can write; out-of-scope targets are dropped "
-            "silently. A service without a target is refused, except the core reloads (cap_yaml_edit), "
+            "silently. A service only takes the targets it declares: every target must be of the service's own domain or "
+            "listed in its description, and homeassistant.turn_on, turn_off, toggle and update_entity take any entity. "
+            "A service without a target is refused, except the core reloads (cap_yaml_edit), "
             "homeassistant.restart and stop (cap_restart), ESPHome device actions (write on the device) and the Music Assistant library reads music_assistant.search and get_library (cap_service_response and read on a Music Assistant entity; for a genre, mood or year search playlists first; with none, search for artists that fit and pass the found uris as the music_assistant.play_media media_id list). The call passes the capability gate and "
             "per-entity MESA policy, so it may return pending_approval or be refused. Preview a risky "
             "call first with dry_run_service (and whatif to see which automations it would trigger). "
@@ -694,7 +694,8 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
             "'rename_device' changes the label on an existing entry. 'remove_source' drops the source named by "
             "source_type, and refuses when there is more than one of that type rather than guessing which. "
             "'set_source' updates the grid, solar, battery, gas or water source named by source_type, "
-            "creating it if there is none, and sets only the fields you pass: stat_energy_from and "
+            "creating it if there is none. It cannot add a second source of a type, and refuses when "
+            "there is already more than one rather than guessing which. It sets only the fields you pass: stat_energy_from and "
             "stat_energy_to (grid import/export, battery discharge/charge), number_energy_price and "
             "number_energy_price_export. Call get_energy_config first to see what is there. "
             "A verified write returns a recovery_id for restore_configuration, and issues: Home Assistant's own "
@@ -2892,7 +2893,7 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
             "before repointing automations, scripts or dashboard cards from one entity to another: "
             "a narrowed min_temp/max_temp, a target_temp_step that only one side declares, or an "
             "option renamed between two integrations all break references that look correct. "
-            "This is a snapshot of current attributes, not a history comparison (see compare_state "
+            "This is a snapshot of current attributes, not a history comparison (see compare_states "
             "for one entity over time, and get_history to compare values that vary)."
         ),
         "cap": "cap_search",
@@ -3102,7 +3103,7 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
     },
     {
         "name": "edit_helper",
-        "description": "Update an existing helper's config by its helper_type and helper_id. Send only the fields to change: every other stored field keeps its current value, and null clears an optional field. For Template helpers, list_helpers reports the entity domain as helper_type; config contains settings-flow values and is checked against the entry's live options schema. Omitted options are preserved by Home Assistant's options flow. The verified result includes a recovery_id. Inherited MESA is resolved before approval and fingerprint-rechecked at execution. Zone, tag, and person edits require write access to that storage entity and reject unknown fields. Person edits accept only name/device_trackers, require write access to every current and proposed tracker, and preserve private user/picture bindings. Tags expose only name and description; scan history is read-only. A zone's icon can be replaced but not removed.",
+        "description": "Update an existing helper's config by its helper_type and helper_id. Send only the fields to change: every other stored field keeps its current value, and null clears an optional field. For Template helpers, list_helpers reports the entity domain as helper_type; config contains settings-flow values and is checked against the entry's live options schema. Omitted options are preserved by Home Assistant's options flow. A verified Template helper edit includes a recovery_id. Inherited MESA is resolved before approval and fingerprint-rechecked at execution. Zone, tag, and person edits require write access to that storage entity and reject unknown fields. Person edits accept only name/device_trackers, require write access to every current and proposed tracker, and preserve private user/picture bindings. Tags expose only name and description; scan history is read-only. A zone's icon can be replaced but not removed.",
         "cap": "cap_helper_write",
         "inputSchema": {
             "type": "object",
@@ -3130,7 +3131,7 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
     {
         "name": "restore_configuration",
         "description": (
-            "Restore a secret-safe Template helper, blueprint, Energy, or dashboard registry/layout/resource snapshot created by this access key. First send recovery_id and side to get a snapshot digest and current-target fingerprint; resend both values to request normal family-capability approval. The executor rechecks current authority and the target, then uses that family's Home Assistant API and verifies readback. Unsupported families and non-invertible effects are refused."
+            "Restore a secret-safe Template helper, blueprint, Energy, or dashboard registry/layout/resource snapshot created by this access key. First send recovery_id and side to get a snapshot digest and current-target fingerprint; resend both values to request normal family-capability approval. The executor rechecks current authority and the target, then uses that family's Home Assistant API and verifies readback. A blueprint comes back as Home Assistant re-renders it, without its comments or formatting; the receipt says so when that changes the text. Unsupported families and non-invertible effects are refused."
         ),
         "caps_any": [
             "cap_helper_write",
@@ -3171,14 +3172,17 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
     {
         "name": "list_files",
         "description": (
-            "List files in an allowed config directory (www/, themes/, custom_templates/). "
-            "With no path, returns the allowed directories."
+            "List files in an allowed config directory (www/, themes/, custom_templates/), a page at a time. "
+            "With no path, returns the allowed directories. has_more means pass next_offset as offset for the rest."
         ),
         "cap": "cap_filesystem",
         "inputSchema": {
             "type": "object",
             "properties": {
                 "path": {"type": "string", "description": "A path under www/, themes/, or custom_templates/."},
+                "limit": {"type": "integer", "minimum": 1, "maximum": LIST_FILES_MAX_LIMIT, "default": LIST_FILES_DEFAULT_LIMIT,
+                          "description": "Maximum entries in this page. A result too large for one reply holds fewer."},
+                "offset": {"type": "integer", "minimum": 0, "default": 0, "description": "Entries to skip, from next_offset."},
             },
         },
     },
@@ -3209,8 +3213,8 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
             "secret is visible; keep secrets in secrets.yaml and reference them with !secret. "
             "secrets.yaml, hidden directories, and the esphome directory cannot be read. Use "
             "get_esphome_yaml for ESPHome device files so credentials are masked and entity scope "
-            "is enforced. content_hash is always the hash of the WHOLE file, even when key is "
-            "given. This tool only reads: YAML configuration is edited by the operator, and "
+            "is enforced. content_hash covers the WHOLE file, even when key is given, and is "
+            "only comparable between reads. This tool only reads: YAML configuration is edited by the operator, and "
             "automations, scripts and scenes are changed with their own tools."
         ),
         "cap": "cap_yaml_edit",
@@ -3589,7 +3593,8 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
             "changing, or removing a single card, prefer add_dashboard_card / "
             "edit_dashboard_card / delete_dashboard_card, which do not resend the whole "
             "layout. Omit url_path for the default dashboard. Storage-mode dashboards "
-            "only (YAML-mode is rejected). "
+            "only (YAML-mode is rejected). Every layout write first takes a safety copy, so a layout that holds a "
+            "credential or nests over 100 levels is refused, naming the location. "
             "A layout whose views, sections, badges or cards are not lists would not display, so it is "
             "refused. May require admin approval. Pass expected_hash (the content_hash from a "
             "prior get_dashboard_config) to make the write conditional: if the layout changed "
@@ -4317,3 +4322,29 @@ _TOOL_ANNOTATIONS: dict[str, dict] = {
 # refused, as HA's Assist engine already refuses it.
 for _definition in (*_ENTITY_TOOL_DEFS, *_SYSTEM_TOOL_DEFS, *_NATIVE_TOOL_DEFS):
     _definition["inputSchema"].setdefault("additionalProperties", False)
+
+
+MESA_TOOL_NAMES = frozenset({
+    "mesa_query_profiles",
+    "mesa_get_profile",
+    "mesa_explain_profile",
+    "mesa_get_caller_context",
+    "mesa_request_lease",
+    "mesa_release_lease",
+})
+
+
+# MCP tool annotations for the six mesa_* tools, in the same shape as
+# tool_defs._TOOL_ANNOTATIONS (see it for the conventions). The four retrieval
+# tools are pure reads; the lease tools mutate in-memory lease state, so they are
+# not read-only, but a lease is advisory metadata, never a device action, so
+# neither is destructive.
+_MESA_TOOL_ANNOTATIONS: dict[str, dict[str, bool]] = {
+    "mesa_query_profiles": {"readOnlyHint": True, "destructiveHint": False, "idempotentHint": True, "openWorldHint": False},
+    "mesa_get_profile": {"readOnlyHint": True, "destructiveHint": False, "idempotentHint": True, "openWorldHint": False},
+    "mesa_explain_profile": {"readOnlyHint": True, "destructiveHint": False, "idempotentHint": True, "openWorldHint": False},
+    "mesa_get_caller_context": {"readOnlyHint": True, "destructiveHint": False, "idempotentHint": True, "openWorldHint": False},
+    # Each request mints a new lease with its own expiry, so repeating is not a no-op.
+    "mesa_request_lease": {"readOnlyHint": False, "destructiveHint": False, "idempotentHint": False, "openWorldHint": False},
+    "mesa_release_lease": {"readOnlyHint": False, "destructiveHint": False, "idempotentHint": True, "openWorldHint": False},
+}

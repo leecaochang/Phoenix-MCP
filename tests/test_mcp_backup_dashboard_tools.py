@@ -16,12 +16,15 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from homeassistant.setup import async_setup_component
 from homeassistant.util.dt import utcnow
 
-from custom_components.phoenix_mcp import mcp_view
+from custom_components.phoenix_mcp import tool_defs
+from custom_components.phoenix_mcp.tools import backup as backup_tools
 from custom_components.phoenix_mcp.tools import lovelace as lovelace_tools
-from custom_components.phoenix_mcp.mcp_view import _EXECUTOR_REGISTRY, _call_tool
+from custom_components.phoenix_mcp.tool_catalog import _EXECUTOR_REGISTRY
+from custom_components.phoenix_mcp.tool_dispatch import _call_tool
 from custom_components.phoenix_mcp.access_key_store import PermissionTree, AccessKeyRecord
 from custom_components.phoenix_mcp.config_recovery import ConfigurationRecovery
 from custom_components.phoenix_mcp.ws_dispatch import WsDispatchError, async_ws_command
+from tests.runtime_fixtures import patch_readers
 
 
 def _access_key(**caps) -> AccessKeyRecord:
@@ -44,20 +47,20 @@ async def _call(name, args, access_key, hass):
 
 
 def _patch_ws(return_value):
-    return patch.object(mcp_view, "async_ws_command", new=AsyncMock(return_value=return_value))
+    return patch.object(backup_tools, "async_ws_command", new=AsyncMock(return_value=return_value))
 
 
 def _patch_ws_map(mapping, default=None):
     """Patch async_ws_command to return per-command values."""
     async def _fn(_hass, command, payload=None, **_kw):
         return mapping.get(command, default)
-    return patch.object(mcp_view, "async_ws_command", new=AsyncMock(side_effect=_fn))
+    return patch.object(backup_tools, "async_ws_command", new=AsyncMock(side_effect=_fn))
 
 
 def _patch_lovelace_ws(return_value):
     """Patch the dashboard tools' own async_ws_command.
 
-    The dashboard handlers live in tools/lovelace.py, so patching mcp_view's
+    The dashboard handlers live in tools/lovelace.py, so patching another module's
     binding would hit a name they never read and the mock would silently go unused.
     """
     rows = [] if isinstance(return_value, dict) and "url_path" in return_value else [
@@ -87,7 +90,7 @@ def _patch_lovelace_ws(return_value):
 
 class TestRestoreRemoved:
     def test_no_restore_backup_tool(self):
-        names = {d["name"] for d in mcp_view._SYSTEM_TOOL_DEFS}
+        names = {d["name"] for d in tool_defs._SYSTEM_TOOL_DEFS}
         assert "restore_backup" not in names
         assert "restore_backup" not in _EXECUTOR_REGISTRY
 
@@ -152,7 +155,7 @@ class TestBackupAgentReadFailure:
             if command == "backup/info":
                 return {"backups": []}
             return {"backup_job_id": "x"}
-        return patch.object(mcp_view, "async_ws_command", new=AsyncMock(side_effect=_fn))
+        return patch.object(backup_tools, "async_ws_command", new=AsyncMock(side_effect=_fn))
 
     async def test_list_backups_warns_and_still_succeeds(self, hass):
         with self._patch_agents_fail():
@@ -231,7 +234,7 @@ class TestDashboard:
 
     async def test_delete(self, hass):
         # An auto-generated dashboard has no stored layout to retain.
-        with _patch_lovelace_ws(None) as m, patch(
+        with _patch_lovelace_ws(None) as m, patch_readers(
             "custom_components.phoenix_mcp.tools.lovelace.async_get_lovelace_config", AsyncMock(return_value=None),
         ):
             content, outcome, _ = await _call("delete_dashboard", {"dashboard_id": "d1"}, _access_key(), hass)

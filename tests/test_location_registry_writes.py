@@ -15,7 +15,8 @@ from homeassistant.helpers import label_registry as lr
 from homeassistant.util.dt import utcnow
 from pytest_homeassistant.common import MockConfigEntry
 
-from custom_components.phoenix_mcp import mcp_view as view
+from custom_components.phoenix_mcp import tool_dispatch
+from custom_components.phoenix_mcp.tools import restore as restore_tools
 from custom_components.phoenix_mcp.const import DOMAIN, LOCATION_REGISTRY_BINDING
 from custom_components.phoenix_mcp.data import PhoenixData
 from custom_components.phoenix_mcp.mesa import async_setup_mesa
@@ -72,7 +73,7 @@ async def _call(hass, env, *, kind="area", operation="update", changes=None, loc
         args["location_id"] = location_id or (area_id if kind == "area" else floor_id)
     if changes is not None:
         args["changes"] = changes
-    return await view._call_tool("set_area_or_floor", args, access_key, hass, data)
+    return await tool_dispatch._call_tool("set_area_or_floor", args, access_key, hass, data)
 
 
 def _body(result):
@@ -93,7 +94,7 @@ async def test_area_labels_patch_replace_clear_and_restore(hass, location_env):
     assert ar.async_get(hass).async_get_area(area_id).labels == {labels[1]}
     _body(await _call(hass, location_env, changes={"labels": []}))
     assert not ar.async_get(hass).async_get_area(area_id).labels
-    _body(await view.async_restore_version(original, "admin", hass, data, side="after"))
+    _body(await restore_tools.async_restore_version(original, "admin", hass, data, side="after"))
     assert ar.async_get(hass).async_get_area(area_id).labels == {labels[0]}
     assert data.versions.list_for("area", area_id)[0].action == "rollback"
     # Replacement is distinct from additive assignment.
@@ -147,13 +148,13 @@ async def test_create_empty_discovery_duplicate_delete_and_no_recreation(hass, l
     access_key.pass_through = True
     created = _body(await _call(hass, location_env, kind=kind, operation="create", changes={"name": "New"}))
     location_id = created["location_id"]
-    listed = _body(await view._call_tool(f"list_{kind}s", {}, access_key, hass, data))
+    listed = _body(await tool_dispatch._call_tool(f"list_{kind}s", {}, access_key, hass, data))
     assert any(row[f"{kind}_id"] == location_id for row in listed[f"{kind}s"])
     assert (await _call(hass, location_env, kind=kind, operation="create", changes={"name": " new "}))[1] == "invalid_request"
     _body(await _call(hass, location_env, kind=kind, operation="delete", location_id=location_id))
     record = data.versions.list_for(kind, location_id)[0]
     assert record.before["restorable"] is False
-    assert (await view.async_restore_version(record, "admin", hass, data, side="before"))[1] == "invalid_request"
+    assert (await restore_tools.async_restore_version(record, "admin", hass, data, side="before"))[1] == "invalid_request"
 
 
 @pytest.mark.parametrize("kind", ["area", "floor"])
@@ -193,9 +194,9 @@ async def test_whole_membership_authority(hass, location_env, kind, obstruction)
 async def test_capability_denial_before_validation_and_private_binding_rejected(hass, location_env):
     access_key, data, *_ = location_env
     access_key.cap_registry_write = "deny"
-    assert (await view._call_tool("set_area_or_floor", {"kind": []}, access_key, hass, data))[1] == "denied"
+    assert (await tool_dispatch._call_tool("set_area_or_floor", {"kind": []}, access_key, hass, data))[1] == "denied"
     access_key.cap_registry_write = "allow"
-    result = await view._call_tool("set_area_or_floor", {
+    result = await tool_dispatch._call_tool("set_area_or_floor", {
         "kind": "area", "operation": "update", "location_id": location_env[3],
         "changes": {"icon": "mdi:home"}, LOCATION_REGISTRY_BINDING: "forged",
     }, access_key, hass, data)
@@ -223,7 +224,7 @@ async def test_confirm_binds_identity_membership_metadata_and_references(hass, l
         assert new.id == area_id
     elif drift == "label_removed":
         lr.async_get(hass).async_delete(labels[0])
-    result = await view.async_execute_approved_tool("set_area_or_floor", saved, access_key, hass, data)
+    result = await tool_dispatch.async_execute_approved_tool("set_area_or_floor", saved, access_key, hass, data)
     assert result[1] == ("allowed" if drift is None else ("invalid_request" if drift == "label_removed" else "denied")), result
     if drift:
         assert not data.versions.list_for("area", area_id)
@@ -326,7 +327,7 @@ async def test_inherited_area_mesa_identity_actions(hass, location_env, mode):
     assert result[1] == ("pending_approval" if mode == "confirm" else "denied"), result
     if mode == "confirm":
         saved = data.store.get_pending_approvals()[0]["args"]
-        _body(await view.async_execute_approved_tool("set_area_or_floor", saved, access_key, hass, data))
+        _body(await tool_dispatch.async_execute_approved_tool("set_area_or_floor", saved, access_key, hass, data))
     assert ar.async_get(hass).async_get_area(area_id).name == ("Renamed area" if mode == "confirm" else "Location area")
 
 

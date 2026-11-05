@@ -1,18 +1,18 @@
 /**
  * Cancel on a click elsewhere: calls `onAway` when a pointer goes down outside
  * an element, so an in-place confirmation never holds the workspace until its
- * own Cancel is pressed (user, 2026-10-28). The press still does what it was
+ * own Cancel is pressed. The press still does what it was
  * for. A press on a scrollbar does not count, so a long window can be scrolled,
  * nor does one on `opener`, the control that toggles the element itself.
  *
  * `on: "click"` waits for the click rather than the press: closing something
  * that sits above other controls moves them up, and a click whose press already
- * moved the control away from the pointer lands on something else (user,
- * 2026-10-31, a provider row below an open account could not be chosen).
+ * moved the control away from the pointer lands on something else (a
+ * provider row below an open account could not be chosen).
  *
  * A touch always waits for the click: a finger that goes down to scroll the
  * page also starts with a press, and the box it was scrolling towards closed
- * under it (user, 2026-11-02, Clear History on an iPhone). A scroll ends
+ * under it. A scroll ends
  * without a click, so it no longer counts as a click elsewhere.
  */
 

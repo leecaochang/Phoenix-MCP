@@ -21,7 +21,7 @@ from homeassistant.util.dt import utcnow
 from custom_components.phoenix_mcp.access_key_store import AccessKeyRecord, PermissionNode, PermissionTree
 from custom_components.phoenix_mcp.const import DASHBOARD_SCRUB_MAX_DEPTH, DASHBOARD_SEARCH_MAX_MATCHES
 from custom_components.phoenix_mcp.data import PhoenixData
-from custom_components.phoenix_mcp.mcp_view import _call_tool
+from custom_components.phoenix_mcp.tool_dispatch import _call_tool
 from custom_components.phoenix_mcp.tool_common import resolve_json_path
 from custom_components.phoenix_mcp.tools.dashboard_search import Criteria, parse_criteria, search_layout
 from custom_components.phoenix_mcp.version_store import VersionStore
@@ -386,7 +386,7 @@ class TestDepth:
 
 
 def test_dashboard_tools_steer_to_search_and_trust_a_saved_write():
-    """Live runs read whole layouts because these words said to; pin the steering."""
+    """These words steer a model away from whole-layout reads; pin the steering."""
     from custom_components.phoenix_mcp.skill_view import PHOENIX_SKILL_MARKDOWN
     from custom_components.phoenix_mcp.tool_defs import _SYSTEM_TOOL_DEFS
     descriptions = {d["name"]: d["description"] for d in _SYSTEM_TOOL_DEFS}

@@ -24,14 +24,15 @@ from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
 from pytest_homeassistant.components.recorder.common import async_wait_recording_done
 
-from custom_components.phoenix_mcp import mcp_view
+from custom_components.phoenix_mcp import history_summary
+from custom_components.phoenix_mcp.tools import history as history_tools
 from custom_components.phoenix_mcp.access_key_store import AccessKeyRecord, PermissionNode, PermissionTree
 from custom_components.phoenix_mcp.history_summary import (
     SummaryUnavailableError, cursor_cut, group_cut, scan_state_changes,
 )
 from custom_components.phoenix_mcp.const import CONVERSATION_LOG_PAYLOAD_BYTES, TOOL_RESULT_MAX_BYTES
 from custom_components.phoenix_mcp.conversation_log import json_size
-from custom_components.phoenix_mcp.mcp_view import _call_tool
+from custom_components.phoenix_mcp.tool_dispatch import _call_tool
 from custom_components.phoenix_mcp.policy_engine import Permission
 
 
@@ -233,11 +234,38 @@ async def test_attribute_totals_are_the_same_across_internal_pages(recorder_mock
         _set(hass, "climate.hall", "heat", 3400 + index * 10, {"hvac_action": "heating" if index % 2 else "idle"})
     await async_wait_recording_done(hass)
     whole = await _summary(hass, "climate.hall", 0, 3600, attribute="hvac_action")
-    with (patch.object(mcp_view, "HISTORY_SUMMARY_PAGE_ROWS", 3),
-          patch.object(mcp_view, "read_attribute_change_page", wraps=mcp_view.read_attribute_change_page) as page):
+    with (patch.object(history_tools, "HISTORY_SUMMARY_PAGE_ROWS", 3),
+          patch.object(history_tools, "attribute_page", wraps=history_summary.attribute_page) as page,
+          patch.object(history_tools, "read_attribute_changes", wraps=history_summary.read_attribute_changes) as read):
         paged = await _summary(hass, "climate.hall", 0, 3600, attribute="hvac_action")
-    assert page.call_count >= 5
+    # Core's attribute query takes no limit, so a scan must not repeat it per page.
+    assert page.call_count >= 2 and read.call_count == 1
     assert paged == whole and whole["complete"] is True
+
+
+@pytest.mark.parametrize("entity_id", ["climate.hall", ["climate.hall", "climate.den"]])
+async def test_attribute_summary_range_is_capped(recorder_mock, hass: HomeAssistant, entity_id) -> None:
+    """Core cannot limit the attribute query, so the range bounds what it reads."""
+    _anchor(hass)
+    _hvac(hass)
+    await async_wait_recording_done(hass)
+    args = {"entity_id": entity_id, "mode": "summary", "attribute": "hvac_action",
+            "start_time": _at(-8 * 86400).isoformat(), "end_time": _at(0).isoformat()}
+    with patch.object(history_tools, "read_attribute_changes") as read:
+        result = await _call_tool("get_history", args, _key(), hass, MagicMock(), "r", None)
+    assert result[1] == "invalid_request"
+    assert "at most 7 days" in result[0]["content"][0]["text"]
+    read.assert_not_called()
+
+
+def test_attribute_page_matches_the_state_change_page_shape() -> None:
+    from custom_components.phoenix_mcp.history_summary import attribute_page
+
+    rows = [(10, "a"), (20, "b"), (30, "c"), (40, "d")]
+    # The start row comes on top of the limit, and later pages are strictly after the bound.
+    assert attribute_page(rows, 10, 2, True) == [(10, "a"), (20, "b"), (30, "c")]
+    assert attribute_page(rows, 20, 2, False) == [(30, "c"), (40, "d")]
+    assert attribute_page(rows, 5, 2, True) == [(10, "a"), (20, "b")]
 
 
 async def test_attribute_totals_for_several_entities_and_only_in_summary(recorder_mock, hass: HomeAssistant) -> None:
@@ -307,7 +335,7 @@ async def test_in_state_sees_a_state_a_row_combines(recorder_mock, hass: HomeAss
     _set(hass, "sensor.busy", "unavailable", 2500)
     _set(hass, "sensor.busy", "20", 2501)
     await async_wait_recording_done(hass)
-    with patch.object(mcp_view, "HISTORY_SUMMARY_MANY_MAX_STATES", 3):
+    with patch.object(history_tools, "HISTORY_SUMMARY_MANY_MAX_STATES", 3):
         body = await _many(hass, 0, 3600, entity_id=["sensor.busy"], in_state="unavailable")
     row = body["entities"][0]
     assert "unavailable" not in {item["state"] for item in row["states"]} and row["other_states"]["count"] > 0
@@ -334,7 +362,7 @@ async def test_an_empty_select_scans_every_entity_only_with_in_state(recorder_mo
     key.cap_search = "allow"
     key.permissions.domains.pop("light")
     # The cap on a caller's own list does not bound a selection.
-    with patch.object(mcp_view, "SEARCH_ENTITIES_MAX_LIMIT", 2):
+    with patch.object(history_tools, "SEARCH_ENTITIES_MAX_LIMIT", 2):
         body = await _many(hass, 0, 3600, key=key, select={}, in_state="unavailable")
     assert [row["entity_id"] for row in body["entities"]] == ["sensor.already", "sensor.dropped"]
     assert body["select"] == {} and body["diagnostic_excluded"] == 1
@@ -359,8 +387,8 @@ async def test_state_carries_across_internal_pages(recorder_mock, hass: HomeAssi
     _alternate(hass, "light.desk", 25)
     await async_wait_recording_done(hass)
     whole = await _summary(hass, "light.desk", 0, 400)
-    with (patch.object(mcp_view, "HISTORY_SUMMARY_PAGE_ROWS", 3),
-          patch.object(mcp_view, "read_state_change_page", wraps=mcp_view.read_state_change_page) as page):
+    with (patch.object(history_tools, "HISTORY_SUMMARY_PAGE_ROWS", 3),
+          patch.object(history_tools, "read_state_change_page", wraps=history_summary.read_state_change_page) as page):
         paged = await _summary(hass, "light.desk", 0, 400)
     assert page.call_count >= 9
     assert paged == whole and whole["transitions"] == 25 and whole["complete"] is True
@@ -375,7 +403,7 @@ async def test_sub_microsecond_timestamps_are_read_once_across_pages(recorder_mo
         hass.states.async_set("light.desk", "on" if index % 2 == 0 else "off", timestamp=stamp)
     await async_wait_recording_done(hass)
     whole = await _summary(hass, "light.desk", 0, 400)
-    with patch.object(mcp_view, "HISTORY_SUMMARY_PAGE_ROWS", 3):
+    with patch.object(history_tools, "HISTORY_SUMMARY_PAGE_ROWS", 3):
         paged = await _summary(hass, "light.desk", 0, 400)
     assert whole["rows_scanned"] == paged["rows_scanned"] == 30
     assert paged == whole and whole["transitions"] == 30
@@ -391,7 +419,7 @@ async def test_a_spent_budget_returns_a_cursor_whose_continuations_add_up(record
     whole = await _summary(hass, "light.desk", 0, 400)
     totals: dict[str, list[float]] = {}
     transitions, pages, cursor = 0, [], None
-    with (patch.object(mcp_view, "HISTORY_SUMMARY_PAGE_ROWS", 3), patch.object(mcp_view, "HISTORY_SUMMARY_MAX_ROWS", 6)):
+    with (patch.object(history_tools, "HISTORY_SUMMARY_PAGE_ROWS", 3), patch.object(history_tools, "HISTORY_SUMMARY_MAX_ROWS", 6)):
         while True:
             body = await _summary(hass, "light.desk", 0, 400, **({"cursor": cursor} if cursor else {}))
             pages.append(body)
@@ -422,7 +450,7 @@ async def test_the_time_budget_stops_after_one_page(recorder_mock, hass: HomeAss
     _anchor(hass)
     _alternate(hass, "light.desk", 10)
     await async_wait_recording_done(hass)
-    with patch.object(mcp_view, "HISTORY_SUMMARY_PAGE_ROWS", 3), patch.object(mcp_view, "HISTORY_SUMMARY_MAX_SECONDS", 0):
+    with patch.object(history_tools, "HISTORY_SUMMARY_PAGE_ROWS", 3), patch.object(history_tools, "HISTORY_SUMMARY_MAX_SECONDS", 0):
         body = await _summary(hass, "light.desk", 0, 400)
     assert body["has_more"] is True and body["rows_scanned"] < 10
     assert any("stopped at its budget" in warning for warning in body["warnings"])
@@ -433,7 +461,7 @@ async def test_many_distinct_states_list_the_longest_and_combine_the_rest(record
     for index, seconds in enumerate((0.5, 10, 70, 130, 400, 1000)):
         _set(hass, "sensor.mode", f"mode_{index}", seconds)
     await async_wait_recording_done(hass)
-    with patch.object(mcp_view, "HISTORY_SUMMARY_MAX_STATES", 3):
+    with patch.object(history_tools, "HISTORY_SUMMARY_MAX_STATES", 3):
         body = await _summary(hass, "sensor.mode", 0, 1200)
     assert [row["state"] for row in body["states"]] == ["mode_4", "mode_3", "mode_5"]
     assert body["other_states"] == {"count": 3, "duration_seconds": 129.5, "duration": "2m 10s",
@@ -485,7 +513,7 @@ async def test_access_is_rechecked_after_the_scan(recorder_mock, hass: HomeAssis
     _anchor(hass)
     _set(hass, "light.desk", "on", -60)
     await async_wait_recording_done(hass)
-    with patch.object(mcp_view, "resolve_read", side_effect=[Permission.READ, Permission.NO_ACCESS]) as resolve:
+    with patch.object(history_tools, "resolve_read", side_effect=[Permission.READ, Permission.NO_ACCESS]) as resolve:
         result = await _call(hass, "light.desk", 0, 600)
     assert resolve.call_count == 2
     assert result[1] == "denied" and result[0]["content"][0]["text"] == "Entity not found."
@@ -506,7 +534,7 @@ async def test_row_paging_arguments_are_ignored_and_named(recorder_mock, hass: H
 
 async def test_hidden_entities_are_not_found_before_any_scan(recorder_mock, hass: HomeAssistant) -> None:
     _set(hass, "switch.hidden", "on", -60)
-    with patch.object(mcp_view, "read_state_change_page") as page:
+    with patch.object(history_tools, "read_state_change_page") as page:
         result = await _call(hass, "switch.hidden", 0, 600)
     assert result[1] == "denied" and result[0]["content"][0]["text"] == "Entity not found."
     page.assert_not_called()
@@ -675,7 +703,7 @@ async def test_entity_pages_past_one_result_are_named_not_dropped(recorder_mock,
     for entity_id in ids:
         _alternate(hass, entity_id, 20)
     await async_wait_recording_done(hass)
-    with patch.object(mcp_view, "TOOL_RESULT_MAX_BYTES", 6000):
+    with patch.object(history_tools, "TOOL_RESULT_MAX_BYTES", 6000):
         body = await _rows(hass, ids, 0, 4000)
     listed = [row["entity_id"] for row in body["entities"]]
     assert listed and listed + body["not_listed"] == ids
@@ -741,14 +769,14 @@ async def test_rows_fill_the_result_budget_and_name_the_rest(recorder_mock, hass
         _alternate(hass, entity_id, 3)
     await async_wait_recording_done(hass)
     scanned: list[str] = []
-    real = mcp_view._scan_summary
+    real = history_tools._scan_summary
 
     async def recording(instance, hass_, entity_id, *rest):
         scanned.append(entity_id)
         return await real(instance, hass_, entity_id, *rest)
 
-    with patch.object(mcp_view, "TOOL_RESULT_MAX_BYTES", budget), \
-            patch.object(mcp_view, "_scan_summary", side_effect=recording):
+    with patch.object(history_tools, "TOOL_RESULT_MAX_BYTES", budget), \
+            patch.object(history_tools, "_scan_summary", side_effect=recording):
         body = await _summary(hass, ids, 0, 400)
     rows = [row["entity_id"] for row in body["entities"]]
     assert rows and rows + body["not_summarized"] == ids
@@ -767,12 +795,12 @@ async def test_the_built_result_is_measured_and_trimmed_when_the_estimate_misses
     for entity_id in ids:
         _alternate(hass, entity_id, 3)
     await async_wait_recording_done(hass)
-    real = mcp_view._stored_bytes
+    real = history_tools._stored_bytes
 
     def blind(value):
         return real(value) if isinstance(value, dict) and "mode" in value else 0
 
-    with patch.object(mcp_view, "TOOL_RESULT_MAX_BYTES", 3000), patch.object(mcp_view, "_stored_bytes", side_effect=blind):
+    with patch.object(history_tools, "TOOL_RESULT_MAX_BYTES", 3000), patch.object(history_tools, "_stored_bytes", side_effect=blind):
         body = await _summary(hass, ids, 0, 400)
     rows = [row["entity_id"] for row in body["entities"]]
     assert rows and body["not_summarized"] and rows + body["not_summarized"] == ids
@@ -801,7 +829,7 @@ async def test_entities_past_the_call_budget_are_listed_not_dropped(recorder_moc
     _alternate(hass, "light.desk", 4)
     _alternate(hass, "light.porch", 4)
     await async_wait_recording_done(hass)
-    with patch.object(mcp_view, "HISTORY_SUMMARY_BATCH_SECONDS", 0):
+    with patch.object(history_tools, "HISTORY_SUMMARY_BATCH_SECONDS", 0):
         body = await _summary(hass, ["light.desk", "light.porch"], 0, 400)
     assert body["entities"] == [] and body["unscanned"] == ["light.desk", "light.porch"]
     assert any("summarize them in another call" in warning for warning in body["warnings"])
@@ -813,13 +841,13 @@ async def test_an_entity_outside_scope_is_never_read_from_recorder(recorder_mock
     _set(hass, "light.desk", "on", 20)
     await async_wait_recording_done(hass)
     scanned: list[str] = []
-    real = mcp_view._scan_summary
+    real = history_tools._scan_summary
 
     async def recording(instance, hass_, entity_id, *rest):
         scanned.append(entity_id)
         return await real(instance, hass_, entity_id, *rest)
 
-    with patch.object(mcp_view, "_scan_summary", side_effect=recording):
+    with patch.object(history_tools, "_scan_summary", side_effect=recording):
         body = await _summary(hass, ["switch.hidden", "light.desk"], 0, 400)
     assert scanned == ["light.desk"] and body["not_found"] == ["switch.hidden"]
 
@@ -908,7 +936,7 @@ async def test_select_past_one_result_names_the_rest(recorder_mock, hass: HomeAs
     for index in range(53):
         _set(hass, f"sensor.probe_{index:02d}", "1", -60)
     await async_wait_recording_done(hass)
-    with patch.object(mcp_view, "TOOL_RESULT_MAX_BYTES", 3000):
+    with patch.object(history_tools, "TOOL_RESULT_MAX_BYTES", 3000):
         body = json.loads((await _select(hass, {"query": "probe"}))[0]["content"][0]["text"])
     rows = [row["entity_id"] for row in body["entities"]]
     assert body["matched"] == 53 and 0 < len(rows) < 53

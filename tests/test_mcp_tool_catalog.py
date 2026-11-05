@@ -15,7 +15,12 @@ from types import SimpleNamespace
 import pytest
 from homeassistant.util.dt import utcnow
 
-from custom_components.phoenix_mcp import agentcli, const, mcp_view, mesa_tools
+from custom_components.phoenix_mcp import const, provider_constants, tool_catalog, tool_defs, tool_dispatch
+from custom_components.phoenix_mcp.llm import accounts as llm_accounts
+from custom_components.phoenix_mcp.llm import provider_claude as llm_provider_claude
+from custom_components.phoenix_mcp.llm import provider_openai as llm_provider_openai
+from custom_components.phoenix_mcp.tools import history as history_tools
+from custom_components.phoenix_mcp.tools import system as system_tools
 from custom_components.phoenix_mcp.tool_defs import (
     _NATIVE_TOOL_NAMES,
     _NATIVE_TOOL_PUBLIC_TO_INTERNAL,
@@ -25,6 +30,7 @@ from custom_components.phoenix_mcp.access_key_store import (
     PermissionTree,
     AccessKeyRecord,
 )
+from tests.runtime_fixtures import all_tool_defs as _all_defs, static_tool_defs as _static_defs
 
 _HINT_KEYS = {"readOnlyHint", "destructiveHint", "idempotentHint", "openWorldHint"}
 # restart_ha is not named delete_*/remove_* but is the most destructive tool here.
@@ -32,31 +38,26 @@ _DESTRUCTIVE_BY_NAME_EXTRA = {"restart_ha"}
 _OPEN_WORLD_EXPECTED = {"list_blueprints", "get_blueprint"}
 
 
+# Words the tool-name scan matches that descriptions use for something else: Home
+# Assistant services, script keys, policy values and result fields.
+_DESCRIBED_NON_TOOLS = frozenset({
+    "get_library", "mesa_advisory", "read_only", "reload_status", "wait_for_trigger", "wait_template",
+})
+
+
 def _catalog_payload_metrics(access_key, data) -> dict[str, int]:
     """Deterministic byte metrics for the access key's announced catalog, per wire format."""
     import json
 
-    tools = agentcli.build_mcp_tool_list(access_key, data)
+    tools = tool_catalog.build_mcp_tool_list(access_key, data)
 
     def size(value) -> int:
         return len(json.dumps(value, sort_keys=True, separators=(",", ":")).encode())
 
-    claude = agentcli.ClaudeProvider(agentcli.ProviderConfig("claude", "metrics", "")).format_tools(tools)
-    openai = agentcli.OpenAICompatProvider(agentcli.ProviderConfig("chatgpt", "metrics", "")).format_tools(tools)
+    claude = llm_provider_claude.ClaudeProvider(llm_accounts.ProviderConfig("claude", "metrics", "")).format_tools(tools)
+    openai = llm_provider_openai.OpenAICompatProvider(llm_accounts.ProviderConfig("chatgpt", "metrics", "")).format_tools(tools)
     return {"tool_count": len(tools), "canonical_bytes": size(tools), "claude_bytes": size(claude), "openai_bytes": size(openai)}
 
-
-
-def _static_defs() -> list[dict]:
-    return [
-        *mcp_view._ENTITY_TOOL_DEFS,
-        *mcp_view._NATIVE_TOOL_DEFS,
-        *mcp_view._SYSTEM_TOOL_DEFS,
-    ]
-
-
-def _all_defs() -> list[dict]:
-    return [*_static_defs(), *mesa_tools.mesa_tool_defs()]
 
 
 def _by_name() -> dict[str, dict]:
@@ -84,7 +85,7 @@ def test_every_tool_carries_exactly_the_four_hints():
 
 
 def test_annotation_map_matches_the_def_lists_both_ways():
-    mapped = set(mcp_view._TOOL_ANNOTATIONS)
+    mapped = set(tool_defs._TOOL_ANNOTATIONS)
     defined = {d["name"] for d in _static_defs()}
     assert defined - mapped == set(), (
         f"tools with no entry in _TOOL_ANNOTATIONS: {sorted(defined - mapped)}"
@@ -100,7 +101,7 @@ def test_executor_registry_tools_are_not_read_only():
     # construction: it is the function an admin's Approve re-runs.
     defs = _by_name()
     offenders = [
-        name for name in mcp_view._EXECUTOR_REGISTRY
+        name for name in tool_catalog._EXECUTOR_REGISTRY
         if _public_name(name) in defs
         and defs[_public_name(name)]["annotations"]["readOnlyHint"]
     ]
@@ -110,7 +111,7 @@ def test_executor_registry_tools_are_not_read_only():
 def test_write_gated_tools_are_not_read_only():
     defs = _by_name()
     offenders = [
-        name for name in mcp_view._WRITE_GATED_TOOLS
+        name for name in tool_catalog._WRITE_GATED_TOOLS
         if defs[_public_name(name)]["annotations"]["readOnlyHint"]
     ]
     assert not offenders, f"write-gated tools marked readOnlyHint true: {sorted(offenders)}"
@@ -121,8 +122,8 @@ def test_read_only_tools_are_in_neither_write_set():
     # write anywhere, or the annotation is lying to the client.
     read_only = {d["name"] for d in _all_defs() if d["annotations"]["readOnlyHint"]}
     read_only_internal = {_internal_name(name) for name in read_only}
-    assert not (read_only_internal & set(mcp_view._EXECUTOR_REGISTRY))
-    assert not (read_only_internal & mcp_view._WRITE_GATED_TOOLS)
+    assert not (read_only_internal & set(tool_catalog._EXECUTOR_REGISTRY))
+    assert not (read_only_internal & tool_catalog._WRITE_GATED_TOOLS)
 
 
 def test_destroying_tools_are_marked_destructive():
@@ -152,12 +153,12 @@ def test_open_world_is_exactly_the_blueprint_tools():
 
 @pytest.mark.asyncio
 async def test_tools_list_exposes_annotations_and_still_strips_cap():
-    from tests.test_mcp_view import _make_data, _make_hass, _make_access_key
+    from tests.runtime_fixtures import make_mcp_data as _make_data, make_mcp_hass as _make_hass, make_mcp_access_key as _make_access_key
 
     access_key, _ = _make_access_key()
     access_key.announce_all_tools = True
     data = _make_data(access_key)
-    res, _m, _r, _o = await mcp_view._dispatch_mcp(
+    res, _m, _r, _o = await tool_dispatch._dispatch_mcp(
         "tools/list", 1, {}, access_key, _make_hass(data), data, "127.0.0.1",
         base_url="http://homeassistant.local",
     )
@@ -173,7 +174,7 @@ async def test_tools_list_exposes_annotations_and_still_strips_cap():
 
 def test_catalog_payload_metrics_cover_representative_profiles_and_provider_wires():
     """Pin deterministic payload bytes for read, write, and announce-all access keys."""
-    from tests.test_mcp_view import _make_data, _make_access_key
+    from tests.runtime_fixtures import make_mcp_data as _make_data, make_mcp_access_key as _make_access_key
 
     read_only, _ = _make_access_key(cap_config_read="allow", cap_log_read="allow")
     read_only.cap_search = "allow"
@@ -207,25 +208,77 @@ def test_catalog_payload_metrics_cover_representative_profiles_and_provider_wire
     assert metrics == {
         "read_only": {
             "tool_count": 54,
-            "canonical_bytes": 64271,
-            "claude_bytes": 58698,
-            "openai_bytes": 60264,
+            "canonical_bytes": 64293,
+            "claude_bytes": 58720,
+            "openai_bytes": 60286,
         },
         "write_capable": {
             "tool_count": 100,
-            "canonical_bytes": 126661,
-            "claude_bytes": 115735,
-            "openai_bytes": 118635,
+            "canonical_bytes": 127179,
+            "claude_bytes": 116253,
+            "openai_bytes": 119153,
         },
         "announce_all": {
             "tool_count": 168,
-            "canonical_bytes": 200327,
-            "claude_bytes": 182411,
-            "openai_bytes": 187283,
+            "canonical_bytes": 201321,
+            "claude_bytes": 183405,
+            "openai_bytes": 188277,
         },
     }
     assert metrics["announce_all"]["tool_count"] == len(_static_defs()) == 168
-    assert mcp_view.tool_catalog_counts()["total"] == 174
+    assert tool_catalog.tool_catalog_counts()["total"] == 174
+
+
+def test_descriptions_name_only_tools_that_exist():
+    """A tool-shaped word in a description is a call a model will try."""
+    import re
+
+    from custom_components.phoenix_mcp import const, skill_view
+
+    defs = _all_defs()
+    tools = {definition["name"] for definition in defs} | {definition["name"].split("__")[-1] for definition in defs}
+    tools |= {"home_request", "load_tools"}
+    # Prefixes the catalog's tool names use. Argument values and field names share
+    # them, so those are named here rather than matched loosely.
+    shaped = re.compile(
+        r"\b((?:get|list|set|create|edit|delete|remove|search|find|describe|wait|watch|call|dry_run|compare"
+        r"|recent|render|restore|validate|check|install|compile|clean|cancel|decode|analyze|scan|permit"
+        r"|reconfigure|configure|reload|restart|send|patch|add|read|mesa)_[a-z_]+)\b"
+    )
+    fields: set[str] = set()
+
+    def schema_words(node) -> list[str]:
+        """Descriptions to scan; property names and enum values are arguments, not tools."""
+        found = []
+        if isinstance(node, dict):
+            fields.update(key for key in (node.get("properties") or {}))
+            fields.update(value for value in node.get("enum") or () if isinstance(value, str))
+            if isinstance(node.get("const"), str):
+                fields.add(node["const"])
+            if isinstance(node.get("description"), str):
+                found.append(node["description"])
+            for value in node.values():
+                found.extend(schema_words(value))
+        elif isinstance(node, list):
+            for value in node:
+                found.extend(schema_words(value))
+        return found
+
+    sources = {definition["name"]: "\n".join(schema_words(definition)) for definition in defs}
+    sources["skill"] = skill_view.PHOENIX_SKILL_MARKDOWN
+    sources["orientation"] = const.ORIENTATION_GUIDANCE
+    unknown: dict[str, set[str]] = {}
+    for source, text in sources.items():
+        for word in set(shaped.findall(text)) - tools - fields - _DESCRIBED_NON_TOOLS:
+            unknown.setdefault(word, set()).add(source)
+    assert not unknown, unknown
+
+
+def test_edit_helper_promises_a_recovery_id_only_for_template_helpers():
+    """A storage-helper edit returns no recovery_id, and restore_configuration has no such family."""
+    definition = next(d for d in _all_defs() if d["name"] == "edit_helper")
+    assert "A verified Template helper edit includes a recovery_id." in definition["description"]
+    assert "The verified result includes a recovery_id" not in definition["description"]
 
 
 def test_every_public_parameter_has_a_description():
@@ -242,7 +295,7 @@ def test_every_tool_capability_name_is_known():
     used = {
         cap
         for definition in _all_defs()
-        for cap in mcp_view._tool_caps(definition)
+        for cap in tool_catalog._tool_caps(definition)
     }
     assert used <= set(const.CAPABILITY_NAMES)
 
@@ -267,8 +320,8 @@ async def test_announcement_mirrors_agree_across_esphome_availability(integratio
     """
     from unittest.mock import patch
 
-    from custom_components.phoenix_mcp import agentcli
-    from tests.test_mcp_view import _make_data, _make_hass, _make_access_key
+    from custom_components.phoenix_mcp import tool_catalog
+    from tests.runtime_fixtures import make_mcp_data as _make_data, make_mcp_hass as _make_hass, make_mcp_access_key as _make_access_key
 
     access_key, _ = _make_access_key()
     # Grant every cap the ESPHome tools gate on, so this test varies only the
@@ -284,13 +337,13 @@ async def test_announcement_mirrors_agree_across_esphome_availability(integratio
 
     with patch("custom_components.phoenix_mcp.tools.esphome._esphome_dashboard", return_value=dashboard), \
             patch.object(hass.config_entries, "async_entries", return_value=[]):
-        res, _m, _r, _o = await mcp_view._dispatch_mcp(
+        res, _m, _r, _o = await tool_dispatch._dispatch_mcp(
             "tools/list", 1, {}, access_key, hass, data, "127.0.0.1",
             base_url="http://homeassistant.local",
         )
         announced = {t["name"] for t in res["result"]["tools"]}
-        agent_names = {t["name"] for t in agentcli.build_mcp_tool_list(access_key, data)}
-        gate_map = mcp_view._tool_gate_map(access_key, data, hass)
+        agent_names = {t["name"] for t in tool_catalog.build_mcp_tool_list(access_key, data)}
+        gate_map = system_tools._tool_gate_map(access_key, data, hass)
 
     assert announced == agent_names, "tools/list and the Agent Chat list diverged"
 
@@ -328,7 +381,7 @@ def test_esphome_persona_fits_the_provider_tool_cap():
     from unittest.mock import patch
 
     from custom_components.phoenix_mcp.personas import get_persona_caps
-    from tests.test_mcp_view import _make_data, _make_hass, _make_access_key
+    from tests.runtime_fixtures import make_mcp_data as _make_data, make_mcp_hass as _make_hass, make_mcp_access_key as _make_access_key
 
     access_key, _ = _make_access_key()
     for cap, mode in (get_persona_caps(const.PERSONA_ESPHOME) or {}).items():
@@ -340,9 +393,9 @@ def test_esphome_persona_fits_the_provider_tool_cap():
     data.hass = hass
     with patch("custom_components.phoenix_mcp.tools.esphome._esphome_dashboard", return_value=object()), \
             patch.object(hass.config_entries, "async_entries", return_value=[]):
-        names = {t["name"] for t in agentcli.build_mcp_tool_list(access_key, data)}
+        names = {t["name"] for t in tool_catalog.build_mcp_tool_list(access_key, data)}
     assert {"get_esphome_history", "analyze_esphome_memory", "check_esphome_connectivity"} <= names
-    assert len(names) <= const.AGENTCLI_MAX_TOOLS_PER_REQUEST
+    assert len(names) <= provider_constants.AGENTCLI_MAX_TOOLS_PER_REQUEST
 
 
 @pytest.mark.parametrize("surface", ["chat", "voice"])
@@ -357,7 +410,7 @@ def test_the_largest_catalog_loads_within_every_capped_provider(surface):
     from unittest.mock import patch
 
     from custom_components.phoenix_mcp.tool_loading import ToolLoader
-    from tests.test_mcp_view import _make_data, _make_hass, _make_access_key
+    from tests.runtime_fixtures import make_mcp_data as _make_data, make_mcp_hass as _make_hass, make_mcp_access_key as _make_access_key
 
     access_key, _ = _make_access_key()
     for cap in const.CAPABILITY_NAMES:
@@ -366,14 +419,14 @@ def test_the_largest_catalog_loads_within_every_capped_provider(surface):
     data = _make_data(access_key)
     data.hass = _make_hass(data)
     data.mesa = object()
-    with patch.object(mcp_view, "_requires_satisfied", return_value=True):
-        catalog = agentcli.build_agent_tool_list(access_key, data, surface)
-    limit = min(d.max_tools for d in agentcli.PROVIDER_DEFINITIONS.values() if d.max_tools)
+    with patch.object(tool_catalog, "_requires_satisfied", return_value=True):
+        catalog = tool_catalog.build_agent_tool_list(access_key, data, surface)
+    limit = min(d.max_tools for d in llm_accounts.PROVIDER_DEFINITIONS.values() if d.max_tools)
     loader = ToolLoader(catalog, limit)
 
     assert len(catalog) > limit, "the worst case no longer needs loading; this bound is then vacuous"
-    assert {tool["name"] for tool in catalog}.isdisjoint({const.AGENTCLI_LOAD_TOOLS_NAME})
-    assert set(loader.groups) == set(const.AGENTCLI_DEFERRED_TOOL_GROUPS)
+    assert {tool["name"] for tool in catalog}.isdisjoint({provider_constants.AGENTCLI_LOAD_TOOLS_NAME})
+    assert set(loader.groups) == set(provider_constants.AGENTCLI_DEFERRED_TOOL_GROUPS)
     assert max(len(names) for names in loader.groups.values()) <= loader.capacity
 
 
@@ -387,16 +440,16 @@ def test_the_largest_catalog_loads_within_every_capped_provider(surface):
 
 def test_dispatch_registry_matches_the_def_lists_both_ways():
     published = {_internal_name(name) for name in _by_name()}
-    registered = set(mcp_view._TOOL_HANDLERS)
+    registered = set(tool_catalog._TOOL_HANDLERS)
     assert published - registered == set(), "published but not dispatchable"
     assert registered - published == set(), "dispatchable but not published"
 
 
 def test_dispatch_registry_covers_the_reported_tool_count():
     # tool_catalog_counts is the single source of truth for the tool count
-    # (docs, the admin info endpoint, scripts/count_tools.py all read it).
-    counts = mcp_view.tool_catalog_counts()
-    assert len(mcp_view._TOOL_HANDLERS) == counts["total"]
+    # (docs and the admin info endpoint both read it).
+    counts = tool_catalog.tool_catalog_counts()
+    assert len(tool_catalog._TOOL_HANDLERS) == counts["total"]
 
 
 def test_every_registered_handler_is_a_coroutine_function():
@@ -405,7 +458,7 @@ def test_every_registered_handler_is_a_coroutine_function():
     # evaluate annotations eagerly on Python 3.14.
     co_coroutine = 0x80
     bad = [
-        name for name, (handler, _w, _b) in mcp_view._TOOL_HANDLERS.items()
+        name for name, (handler, _w, _b) in tool_catalog._TOOL_HANDLERS.items()
         if not handler.__code__.co_flags & co_coroutine
     ]
     assert bad == []
@@ -418,7 +471,7 @@ def test_registered_context_params_are_real_handler_parameters():
     binding whose kwarg the handler cannot take, fails at call time on a tool
     nobody may exercise until production.
     """
-    for name, (handler, wanted, bound) in mcp_view._TOOL_HANDLERS.items():
+    for name, (handler, wanted, bound) in tool_catalog._TOOL_HANDLERS.items():
         code = handler.__code__
         accepted = set(code.co_varnames[: code.co_argcount + code.co_kwonlyargcount])
         assert set(wanted) <= accepted, name
@@ -429,7 +482,7 @@ def test_registered_context_params_are_real_handler_parameters():
 
 def test_duplicate_registration_is_refused():
     with pytest.raises(ValueError, match="duplicate tool registration"):
-        mcp_view._register_tool("get_state", mcp_view._tool_get_state)
+        tool_catalog._register_tool("get_state", history_tools._tool_get_state)
 
 
 # The five targeting parameters the native Hass* tools share. They are the only
@@ -481,13 +534,13 @@ def _required_any_of_sets(schema: dict) -> list[set[str]]:
 
 
 def test_every_targeted_native_action_schema_requires_a_caller_target():
-    by_name = {tool["name"]: tool for tool in mcp_view._NATIVE_TOOL_DEFS}
+    by_name = {tool["name"]: tool for tool in tool_defs._NATIVE_TOOL_DEFS}
     for tool_name, selectors in _NATIVE_TARGET_REQUIREMENTS.items():
         assert selectors in _required_any_of_sets(by_name[tool_name]["inputSchema"])
 
 
 def test_native_action_schemas_require_their_operation_values():
-    by_name = {tool["name"]: tool for tool in mcp_view._NATIVE_TOOL_DEFS}
+    by_name = {tool["name"]: tool for tool in tool_defs._NATIVE_TOOL_DEFS}
     required = {
         _NATIVE_TOOL_NAMES["HassFanSetSpeed"]: "percentage",
         _NATIVE_TOOL_NAMES["HassClimateSetTemperature"]: "temperature",
@@ -511,7 +564,7 @@ def test_native_targeting_params_are_documented():
     """
     undocumented = [
         (tool_def["name"], param)
-        for tool_def in mcp_view._NATIVE_TOOL_DEFS
+        for tool_def in tool_defs._NATIVE_TOOL_DEFS
         for param, schema in tool_def["inputSchema"].get("properties", {}).items()
         if param in _NATIVE_TARGET_PARAMS and not schema.get("description", "").strip()
     ]
@@ -528,7 +581,7 @@ def test_native_targeting_descriptions_have_one_definition_each():
     for param in ("name", "area", "floor", "device_class"):
         wordings = {
             tool_def["inputSchema"]["properties"][param]["description"]
-            for tool_def in mcp_view._NATIVE_TOOL_DEFS
+            for tool_def in tool_defs._NATIVE_TOOL_DEFS
             if param in tool_def["inputSchema"].get("properties", {})
             and (tool_def["name"], param) not in _NOT_A_TARGETING_SELECTOR
         }
@@ -541,7 +594,7 @@ def test_the_not_a_targeting_selector_exemptions_are_all_live():
     A stale entry silently re-opens the drift it was written to allow: the shared
     wording could diverge on a tool nobody is exempting any more.
     """
-    by_name = {t["name"]: t for t in mcp_view._NATIVE_TOOL_DEFS}
+    by_name = {t["name"]: t for t in tool_defs._NATIVE_TOOL_DEFS}
     for tool_name, param in _NOT_A_TARGETING_SELECTOR:
         assert tool_name in by_name, f"exemption names a tool that no longer exists: {tool_name}"
         props = by_name[tool_name]["inputSchema"].get("properties", {})
@@ -608,11 +661,11 @@ def test_executor_registry_is_an_exact_proxy_for_gating():
     capped = {
         _internal_name(d["name"])
         for d in _all_defs()
-        if mcp_view._tool_caps(d)
+        if tool_catalog._tool_caps(d)
     }
-    executors = set(mcp_view._EXECUTOR_REGISTRY)
+    executors = set(tool_catalog._EXECUTOR_REGISTRY)
     gating = {
-        name for name, (fn, _pos, _kw) in mcp_view._TOOL_HANDLERS.items()
+        name for name, (fn, _pos, _kw) in tool_catalog._TOOL_HANDLERS.items()
         if _handler_calls_gate(fn)
     }
     assert sorted(capped & executors) == sorted(capped & gating)
@@ -629,7 +682,7 @@ def test_cap_tied_reads_are_not_reported_as_needing_approval():
         permissions=PermissionTree(domains={"light": PermissionNode(state="GREEN")}),
         **{cap: "confirm" for cap in const.CAPABILITY_NAMES},
     )
-    gate_map = mcp_view._tool_gate_map(access_key, SimpleNamespace(mesa=None), None)
+    gate_map = system_tools._tool_gate_map(access_key, SimpleNamespace(mesa=None), None)
     for read_tool in ("get_automation", "get_script", "get_dashboard_config", "get_yaml_config"):
         assert read_tool not in gate_map["needs_approval"], read_tool
         assert read_tool in gate_map["usable"], read_tool
@@ -647,9 +700,9 @@ def test_list_integrations_is_visible_with_either_integration_capability():
     definition = next(d for d in _all_defs() if d["name"] == "list_integrations")
     for granted in ("cap_integration_write", "cap_integration_reconfigure"):
         access_key = AccessKeyRecord(**base, **{granted: "allow"})
-        assert mcp_view._tool_is_announced(definition, access_key, False, None)
+        assert tool_catalog._tool_is_announced(definition, access_key, False, None)
     denied = AccessKeyRecord(**base)
-    assert not mcp_view._tool_is_announced(definition, denied, False, None)
+    assert not tool_catalog._tool_is_announced(definition, denied, False, None)
 
 
 def test_recognize_intent_is_visible_with_search_or_config_read():
@@ -661,10 +714,10 @@ def test_recognize_intent_is_visible_with_search_or_config_read():
     definition = next(d for d in _all_defs() if d["name"] == "recognize_intent")
     for granted in ("cap_search", "cap_config_read"):
         access_key = AccessKeyRecord(**base, **{granted: "allow"})
-        assert mcp_view._tool_is_announced(definition, access_key, False, None)
+        assert tool_catalog._tool_is_announced(definition, access_key, False, None)
     denied = AccessKeyRecord(**base)
-    assert not mcp_view._tool_is_announced(definition, denied, False, None)
-    assert "recognize_intent" not in mcp_view._EXECUTOR_REGISTRY
+    assert not tool_catalog._tool_is_announced(definition, denied, False, None)
+    assert "recognize_intent" not in tool_catalog._EXECUTOR_REGISTRY
     assert definition["annotations"]["readOnlyHint"] is True
     assert "agent_id" not in definition["inputSchema"]["properties"]
 
@@ -696,14 +749,14 @@ def _announced(name: str, access_key: AccessKeyRecord) -> bool:
     """tools/list's decision for one tool, with write scope computed as tools/list computes it."""
     from custom_components.phoenix_mcp.helpers import access_key_has_write_scope
 
-    return mcp_view._tool_is_announced(_by_name()[name], access_key, access_key_has_write_scope(access_key), None)
+    return tool_catalog._tool_is_announced(_by_name()[name], access_key, access_key_has_write_scope(access_key), None)
 
 
 async def _summary_tools(access_key: AccessKeyRecord) -> dict:
     """The tools section get_capability_summary returns for this access key."""
     import json
 
-    content, outcome, _ = await mcp_view._tool_get_capability_summary({}, access_key, None, SimpleNamespace(mesa=None))
+    content, outcome, _ = await system_tools._tool_get_capability_summary({}, access_key, None, SimpleNamespace(mesa=None))
     assert outcome == "allowed"
     return json.loads(content["content"][0]["text"])["tools"]
 

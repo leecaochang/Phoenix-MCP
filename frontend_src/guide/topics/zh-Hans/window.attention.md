@@ -5,9 +5,11 @@ Phoenix 自己无法解决的事情。有内容需要检查时，窗口会出现
 
 ## 结果未知的操作 {#actions}
 
-操作已到达 Home Assistant，但 Phoenix 始终不知道它是否生效。这会在对话被切断或 Home Assistant 在操作中途重启时发生。项目会注明访问密钥、工具以及开始时间。
+操作已到达 Home Assistant，但 Phoenix 始终不知道它是否生效。这会在对话被切断、外部应用在更改期间断开连接，或 Home Assistant 在操作中途重启时发生。Agent Chat 做出 Phoenix 无法确认的更改时也会如此。项目会注明访问密钥、工具以及开始时间。
 
-在你审核它之前，该访问密钥无法再进行任何更改。结果未知的日历更改也会以同样方式列出。
+在你审核之前，该访问密钥无法再做任何更改，但仍可读取。结果未知的日历更改也会以相同方式列出。
+
+应用在等待你审批时断开连接不会列在这里：请求会保留在审批中。当密钥的某项更改仍在运行时，它的其他更改会被拒绝，直到该项完成，读取则继续进行。
 
 ## 审核操作 {#review}
 
@@ -17,8 +19,9 @@ Phoenix 自己无法解决的事情。有内容需要检查时，窗口会出现
 
 ## 需要修复的问题 {#problems}
 
-- **{{label:attention.mesaTitle}}**：MESA 启动失败，因此受保护的更改被暂停。请检查 Home Assistant 日志，然后重新加载 Phoenix。
+- **{{label:attention.mesaTitle}}**：MESA 启动失败，因此受保护的更改被暂停。请检查 Home Assistant 日志。如果日志提示策略存储已损坏，请[按其中的步骤操作](guide:topic.mesaRules#storage)。然后重新加载 Phoenix。
 - **{{label:attention.calendar_storageTitle}}**：日历更改会暂停，直到 Phoenix 能再次读取其保存的日历历史。
+- **{{label:attention.audit_storageTitle}}**：Phoenix 无法将审计日志写入磁盘，重启后最近的条目会丢失。请在 Home Assistant 日志中查找磁盘或存储错误。下一次保存成功后，此项会消失。
 
 问题修复后，这些会自行消失。
 

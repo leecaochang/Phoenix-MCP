@@ -14,15 +14,8 @@ from unittest.mock import patch
 import pytest
 
 from custom_components.phoenix_mcp.esphome_builder import BuilderCommandError
-from tests.test_mcp_esphome_firmware_tools import FakeBuilder
-from tests.test_mcp_esphome_tools import (
-    _call,
-    _device_info,
-    _esphome_entry,
-    _json,
-    _runtime,
-    _yaml_access_key,
-)
+from tests.runtime_fixtures import FakeBuilder
+from tests.runtime_fixtures import esphome_call as _call, esphome_device_info as _device_info, esphome_entry as _esphome_entry, esphome_json as _json, esphome_runtime as _runtime, esphome_yaml_access_key as _yaml_access_key
 
 _DASHBOARD_PATCH = "custom_components.phoenix_mcp.tools.esphome._esphome_dashboard"
 _COMMAND_PATCH = "custom_components.phoenix_mcp.tools.esphome.async_builder_command"

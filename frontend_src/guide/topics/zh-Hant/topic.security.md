@@ -10,7 +10,7 @@ Phoenix 讓 AI 智慧體在你家中工作，因此它的設計目標是只給�
 每個應用程式用自己的存取金鑰連線。Phoenix 只儲存它的指紋，因此金鑰本身只在你建立或輪換它時顯示一次。
 
 - 應用程式必須在 Authorization 標頭中傳送金鑰。放在網址中的金鑰會被拒絕。
-- 來自 Home Assistant 之外頁面的瀏覽器請求會被拒絕，因此惡意網站無法透過你的瀏覽器存取 Phoenix。
+- MCP 連線會拒絕來自 Home Assistant 之外頁面的瀏覽器請求，因此惡意網站無法透過你的瀏覽器存取它。
 - 已撤銷或已過期的金鑰會立即失效。已在執行的請求會在下一次檢查時停止。
 
 相關：[保護金鑰安全](guide:topic.connecting#credentials)、[{{label:accessKeys.rotate}}](guide:window.accessKeys#rotate)、[{{label:accessKeys.revoke}}](guide:window.accessKeys#revoke)
@@ -21,15 +21,15 @@ Phoenix 讓 AI 智慧體在你家中工作，因此它的設計目標是只給�
 
 - Phoenix 自己的實體，以及它為每個金鑰建立的感測器。
 - 攝影機串流和圖片位址，以及存取權杖。
-- 任何名稱暗示機密的屬性，例如包含 password、token、secret、key 或 session 的屬性。
+- 任何名稱暗示機密的屬性：名稱包含 password、token、secret、session、passphrase、api_key、wifi_key、encryption_key 或 license_key，或以 pin 或 psk 結尾。
 
-金鑰範圍之外的實體看起來就像不存在。在操作結果和儀表板中，它們會顯示為 `<redacted>`。
+金鑰範圍之外的實體看起來就像不存在。在操作結果、屬性、日誌和儀表板中，它們會顯示為 `<redacted>`。
 
 ## Phoenix 無法攔截什麼 {#gaps}
 
-移除機密是依名稱進行的，因此使用普通名稱的機密會被放過。請把密碼和金鑰放在 secrets.yaml 中，任何智慧體都無法讀取它。
+移除機密是依名稱進行的，因此使用普通名稱的機密會被放過，即使它就叫 `key`。請把密碼和金鑰放在 secrets.yaml 中，任何智慧體都無法讀取它。
 
-- YAML 設定會原樣傳回你的檔案。直接寫在其中的密碼對智慧體可見。
+- YAML 設定會隱藏名稱暗示機密的值。使用普通名稱的密碼對智慧體可見。
 - 日誌是自由文字。Phoenix 會移除網址中的存取金鑰、權杖和密碼，但日誌行中的其他機密仍可能漏過。
 
 只把這些能力授予需要它們的智慧體。
@@ -56,7 +56,7 @@ Phoenix 讓 AI 智慧體在你家中工作，因此它的設計目標是只給�
 
 面板及其設定需要 Home Assistant 管理員。存取金鑰無法開啟它們。任何管理員憑據都有效，包括管理員的長期存取權杖，而且它可以建立具有任何能力的金鑰。
 
-請保持管理員數量精簡，並保護他們的權杖。Home Assistant 的 MCP Server 使用管理員登入存取 Phoenix，且不受 Phoenix 的速率限制。請為它綁定範圍較窄的金鑰。
+請保持管理員數量精簡，並保護他們的權杖。Home Assistant 的 MCP Server 存取 Phoenix 時不受 Phoenix 的速率限制。它是否需要管理員，取決於 Home Assistant 的版本和該整合的選項。其他能夠通過的人只擁有家庭工具和他們自己的 Home Assistant 權限。請為它綁定範圍較窄的金鑰。
 
 相關：[透過 Home Assistant 的 MCP Server](guide:topic.connecting#ha-mcp-server)
 
@@ -67,6 +67,20 @@ Phoenix 會把資料儲存在 Home Assistant 的儲存資料夾中。存取金�
 Home Assistant 備份會包含該資料夾。請把備份和設定資料夾視為機密。
 
 相關：[日誌記錄的內容](guide:topic.logRecords)
+
+## 哪些資料會離開你的家 {#leaves-home}
+
+Phoenix 在 Home Assistant 內執行，但你的 AI 模型不一定如此。Phoenix 傳送給雲端提供者的內容都會離開你的家，並受該提供者的條款約束。
+
+- Agent Chat 每次傳送訊息時都會傳送對話，包括你附加的圖片。
+- 工具結果也會傳送：狀態、名稱、歷史記錄、日誌、YAML 檔案和攝影機影像，也就是存取金鑰允許智慧體讀取的任何內容。
+- 語音智慧體、AI 任務和 Home Companion 會把同類資料傳送給各自的帳戶。
+- 決策提供者會收到使用者所說的話。某些檢查還會讓它收到最近的訊息，以及可供選擇的裝置或工具清單。
+- 外部應用程式會把讀取到的內容傳送給自己的模型。傳送到哪裡由該應用程式的設定決定。
+
+若要讓一切都留在家中，請使用 Ollama 上的本機模型，並且不使用決策提供者。使用雲端提供者時，只給金鑰你願意分享的攝影機、日誌和 YAML 存取權限。
+
+相關：[{{label:workspace.aiProviders}}](guide:window.settingsProviders)
 
 ## 保持安全 {#checklist}
 
@@ -87,5 +101,7 @@ Home Assistant 備份會包含該資料夾。請把備份和設定資料夾視�
 ## 完全移除 Phoenix {#removing}
 
 刪除整合會撤銷金鑰，但保留設定、日誌和已歸檔的金鑰。要同時移除 Phoenix 的資料，請先使用 **{{label:settings.wipeCoreLabel}}**。
+
+這樣仍會留下安全副本、行事曆變更記錄、儀表板資源記錄，以及 MESA 策略（除非你選擇了[{{label:settings.wipeMesaLabel}}](guide:window.settingsSafety#wipe-mesa)）。刪除整合後，請刪除 `.storage` 資料夾中所有以 `phoenix_mcp` 開頭的剩餘檔案。
 
 相關：[移除 Phoenix MCP](guide:topic.install#removing)、[{{label:settings.wipeCoreLabel}}](guide:window.settingsSafety#wipe-core)

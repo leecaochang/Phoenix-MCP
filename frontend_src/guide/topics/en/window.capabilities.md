@@ -59,7 +59,7 @@ Reads files in the www, themes and custom_templates folders. Pass-through doesn'
 
 ### {{label:caps.cap_broadcast.label}} {#broadcast}
 
-Broadcasts a message through Assist satellites and plays announcements on speakers, on top of Write on the speaker. Ordinary playback needs only Write. Pass-through allows it.
+Broadcasts a message through Assist satellites, starts conversations on them and plays announcements on speakers, on top of Write on the speaker. Ordinary playback needs only Write. Pass-through allows it.
 
 ### {{label:caps.cap_service_response.label}} {#service-response}
 
@@ -129,7 +129,7 @@ Reads and changes dashboards. Without it, the agent can't read dashboards either
 
 ### {{label:caps.cap_registry_write.label}} {#registry-write}
 
-Renames entities, changes their area, device, labels and categories, and deletes them. An entity's ID can change within its domain.
+Renames entities, changes their area, device, labels and categories, and deletes them. An entity's ID can change within its domain. Purging an entity's recorded history with `recorder.purge_entities` needs this capability too.
 
 ### {{label:caps.cap_radio_write.label}} {#radio-write}
 

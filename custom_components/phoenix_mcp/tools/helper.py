@@ -12,9 +12,8 @@ config a mapping). A helper write validates by way of the WS command that IS the
 write, so there is no side-effect-free validator to run before the gate; the
 rest happens at execution time.
 
-mcp_view registers these tools; this module imports it lazily, inside
-_tool_delete_helper only, to reach the integration removal tool. Shared
-primitives come from ..tool_common.
+tool_registration registers these tools and this module never imports the
+dispatcher. Shared primitives come from ..tool_common.
 """
 
 from __future__ import annotations
@@ -31,7 +30,7 @@ import voluptuous as vol
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers import entity_registry as er
 from homeassistant.core import HomeAssistant
-from homeassistant.config_entries import SOURCE_RECONFIGURE, SOURCE_USER
+from homeassistant.config_entries import SOURCE_RECONFIGURE, SOURCE_USER, ConfigEntry
 from homeassistant.data_entry_flow import FlowResultType
 from homeassistant.loader import IntegrationNotFound, async_get_integration
 from homeassistant.util import slugify
@@ -54,28 +53,18 @@ from ..mesa import (
     evaluate_registry_action,
     fire_mesa_blocked_event,
 )
-from ..request_authority import AuthorityChangedError
+from ..request_authority import AuthorityChangedError, check_request_authority
+from ..template_snapshots import template_snapshot, protect_template
 from ..ws_dispatch import WsCommandNotDispatchedError, WsDispatchError, async_ws_command, ws_commands_unsettled
+from ..mesa_audit import note_mesa_advisory
 from ..helpers import (
     content_hash, dict_arg, diff_summary_fields as _summary, effective_cap,
     redact_inaccessible_entity_ids_in_text, version_summary_fields as _version_summary,
 )
 from ..tool_common import (
-    _CAP_FORBIDDEN_MESSAGE,
-    _approved_exec_ctx,
-    _cas_conflict,
-    _gate,
-    _mesa_advisory_ctx,
-    _pending_or_inline,
-    _record_version,
-    _restore_ctx,
-    fitted_list,
-    redaction_sentinel_path,
-    _tool_error,
-    _tool_success,
-    _truncate,
-    serialize_ha_schema,
+    _CAP_FORBIDDEN_MESSAGE, _cas_conflict, _gate, _pending_or_inline, _record_version, _restore_ctx, fitted_list, redaction_sentinel_path, _tool_error, _tool_success, _truncate, serialize_ha_schema,
 )
+from ..request_authority import _approved_exec_ctx
 from ..policy_engine import (
     _ENTITY_ID_RE,
     Permission,
@@ -182,7 +171,7 @@ def _helper_mesa_context(
                     session_id=session_id,
                 ),
             ))
-    except Exception:  # noqa: BLE001 - a safety resolver failure must block
+    except Exception:  # a safety resolver failure must block
         _LOGGER.exception("MESA helper %s evaluation failed for %s", action, entities)
         return (
             _tool_error("MESA safety evaluation failed; no helper change was made."),
@@ -389,8 +378,7 @@ def _enforce_helper_mesa_context(
     ):
         _fire_helper_mesa_blocks(hass, access_key, context)
         return _helper_mesa_error(context)
-    if context.warnings:
-        _mesa_advisory_ctx.set(True)
+    note_mesa_advisory(context.warnings)
     return context
 
 
@@ -434,7 +422,6 @@ def _helper_create_mesa_entity(
     helper_type: str, args: dict, hass: HomeAssistant
 ) -> str:
     if helper_type == "template":
-        from ..const import TEMPLATE_RECOVERY_TYPES
         steps = args.get("flow_steps")
         for step in steps if isinstance(steps, list) else []:
             if not isinstance(step, dict):
@@ -583,7 +570,6 @@ def _helper_flow_steps_error(steps: Any) -> str | None:
 def _flow_step_body(helper_type: str, result: Any) -> dict[str, Any] | None:
     """Project a form or the qualified Template type-selection menu."""
     if result.get("type") == FlowResultType.MENU:
-        from ..const import TEMPLATE_RECOVERY_TYPES
         if helper_type != "template" or result.get("step_id") != "user":
             return None
         offered = result.get("menu_options")
@@ -657,12 +643,13 @@ async def _with_field_help(
     translation helper, so no scope or privacy boundary moves; a missing
     translation leaves the field as it was.
     """
+    # Local: not part of the recorded Home Assistant import floor.
+    from homeassistant.helpers.translation import async_get_translations
     if not isinstance(step_id, str):
         return None
-    from homeassistant.helpers.translation import async_get_translations  # noqa: PLC0415
     try:
         strings = await async_get_translations(hass, "en", category, [domain])
-    except Exception:  # noqa: BLE001 - help text is optional
+    except Exception:  # help text is optional
         _LOGGER.debug("No %s translations for %s", category, domain, exc_info=True)
         return None
     step = f"component.{domain}.{category}.step.{step_id}."
@@ -701,7 +688,7 @@ async def _abort_create_flow(hass: HomeAssistant, flow_id: str | None) -> None:
         return
     try:
         hass.config_entries.flow.async_abort(flow_id)
-    except Exception:  # noqa: BLE001 - already-finished and already-gone are fine
+    except Exception:  # already-finished and already-gone are fine
         _LOGGER.debug("Could not abort helper creation flow %s", flow_id, exc_info=True)
 
 
@@ -799,7 +786,7 @@ async def _prepare_config_flow_helper(
         return "form", await _described(body)
     except HelperScopeError as exc:
         return "scope_error", str(exc)
-    except Exception:  # noqa: BLE001 - integration flow failures become clean tool errors
+    except Exception:  # integration flow failures become clean tool errors
         _LOGGER.exception("Could not preflight helper creation flow for %s", helper_type)
         return "error", "Could not open or validate this helper's creation flow."
     finally:
@@ -879,7 +866,6 @@ async def _tool_list_helpers(
             row["id"]: row for row in storage_items
             if isinstance(row.get("id"), str)
         }
-    from ..const import TEMPLATE_RECOVERY_TYPES
     helpers: list[dict] = []
     for e in filter_entities_for_access_key(hass.states.async_all(), access_key, hass):
         domain = e["entity_id"].split(".")[0]
@@ -1704,8 +1690,7 @@ async def _execute_create_helper(
                 )
         return post_error
     assert isinstance(post_mesa, _HelperMesaContext)
-    if post_mesa.warnings:
-        _mesa_advisory_ctx.set(True)
+    note_mesa_advisory(post_mesa.warnings)
     # Read the stored row back: it must hold what Home Assistant reported creating,
     # which already carries HA's own normalization of the request. Unreadable
     # storage leaves the create unconfirmed rather than failed.
@@ -1771,7 +1756,6 @@ async def _execute_config_flow_helper(
                     ),
                     "denied", "create_helper",
                 )
-            from ..request_authority import check_request_authority
             check_request_authority()
             fresh_mesa = _helper_mesa_context(data, access_key,
                 [_helper_create_mesa_entity(helper_type, {"flow_steps": steps}, hass)],
@@ -1825,7 +1809,7 @@ async def _execute_config_flow_helper(
             _tool_error(f"The helper form was rejected: {err}. Nothing was created."),
             "invalid_request", "create_helper",
         )
-    except Exception:  # noqa: BLE001 - integration failures become clean tool errors
+    except Exception:  # integration failures become clean tool errors
         _LOGGER.exception("Helper creation flow failed for %s", helper_type)
         return (
             _tool_error("Could not create this helper."),
@@ -1842,7 +1826,6 @@ async def _execute_config_flow_helper(
         if registry_entry.config_entry_id == entry.entry_id
     )
     if helper_type == "template":
-        from ..const import TEMPLATE_RECOVERY_TYPES
         selected_type = next((
             step.get("data", {}).get("next_step_id")
             for step in steps
@@ -1856,7 +1839,7 @@ async def _execute_config_flow_helper(
                 or created_entries[0].entity_id not in entity_ids):
             try:
                 await hass.config_entries.async_remove(entry.entry_id)
-            except Exception:  # noqa: BLE001 - unsafe materialization must be surfaced
+            except Exception:  # unsafe materialization must be surfaced
                 _LOGGER.exception("Could not clean up malformed Template helper %s", entry.entry_id)
                 return (
                     _tool_error("Template creation produced an unexpected entity mapping and cleanup failed. Inspect Home Assistant before retrying."),
@@ -1893,7 +1876,7 @@ async def _execute_config_flow_helper(
     if post_error is not None:
         try:
             await hass.config_entries.async_remove(entry.entry_id)
-        except Exception:  # noqa: BLE001 - report an unsafe partial create loudly
+        except Exception:  # report an unsafe partial create loudly
             _LOGGER.exception(
                 "MESA blocked new helper entry %s but cleanup failed", entry.entry_id
             )
@@ -1907,8 +1890,7 @@ async def _execute_config_flow_helper(
             )
         return post_error
     assert isinstance(post_mesa, _HelperMesaContext)
-    if post_mesa.warnings:
-        _mesa_advisory_ctx.set(True)
+    note_mesa_advisory(post_mesa.warnings)
     await _record_version(
         data,
         access_key,
@@ -1955,7 +1937,7 @@ async def _tool_edit_helper(
         settings = args.get("config")
         if not isinstance(settings, dict) or not settings:
             return _tool_error("config must be a non-empty object of Template settings."), "invalid_request", "edit_helper"
-        return await _tool_set_config_entry_options(
+        return await _tool_set_helper_settings(
             {"entry_id": entry.entry_id, "settings": settings},
             access_key, hass, data, request_id=request_id, client_ip=client_ip,
         )
@@ -2029,7 +2011,25 @@ def _uncertain_helper_result(exc: _UncertainHelperWrite, tool_name: str) -> tupl
     })), "invalid_request", tool_name
 
 
-async def _protected_storage_helper_write(args, access_key, hass, data, before, payload, *, deleting=False):
+def _helper_edit_landed(payload: dict, target_field: str, observed: Any, result: Any) -> bool:
+    """Whether the stored row carries every field of an edit.
+
+    Home Assistant normalizes what it accepts (a timer duration of 00:10:00 is
+    stored as 0:10:00, a numeric string as a number), so a field also matches
+    when the row holds the value the update itself returned for that field. A
+    row holding neither the sent nor the returned value means the edit did not
+    land as Home Assistant reported.
+    """
+    if not isinstance(observed, dict):
+        return False
+    returned = result if isinstance(result, dict) else {}
+    return all(
+        observed.get(k) == v or (k in returned and observed.get(k) == returned[k])
+        for k, v in payload.items() if k != target_field
+    )
+
+
+async def _protected_storage_helper_write(args, access_key, hass: HomeAssistant, data, before, payload, *, deleting=False):
     """Retain a durable safety copy and verify storage readback after one dispatch.
 
     Raises ConfigurationRecoveryError when nothing changed: a refusal before
@@ -2037,7 +2037,6 @@ async def _protected_storage_helper_write(args, access_key, hass, data, before, 
     the safety copy. Raises _UncertainHelperWrite once a dispatch may have taken
     effect. An authority change propagates after its recovery phase is saved.
     """
-    from ..request_authority import check_request_authority
 
     helper_type = args["helper_type"]
     helper_id = str(args["helper_id"]).strip()
@@ -2131,9 +2130,7 @@ async def _protected_storage_helper_write(args, access_key, hass, data, before, 
             except AuthorityChangedError:
                 await recovery.mark(rid, "unknown")
                 raise
-            verified = observed is None if deleting else isinstance(observed, dict) and all(
-                observed.get(k) == v for k, v in payload.items() if k != f"{helper_type}_id"
-            )
+            verified = observed is None if deleting else _helper_edit_landed(payload, target_field, observed, result)
             await recovery.mark(rid, "verified" if verified else "partial")
             if not verified:
                 raise _UncertainHelperWrite(rid, "partial")
@@ -2248,71 +2245,6 @@ async def _execute_edit_helper(
     # The stored row is compared before this point; a mismatch returns status partial instead.
     return _tool_success(json.dumps({"helper_type": helper_type, "helper": public_item, "verified": True},
                                     default=str)), "allowed", f"helper:{helper_type}:{helper_id}"
-
-
-async def _tool_delete_helper(
-    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData,
-    request_id: str = "", client_ip: str | None = None,
-) -> tuple[dict, str, str]:
-    """MCP tool: delete a helper (Confirm-gated)."""
-    if effective_cap(access_key, "cap_helper_write") == CAP_DENY:
-        return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "delete_helper"
-    if args.get("helper_type") in TEMPLATE_RECOVERY_TYPES:
-        helper_id = str(args.get("helper_id") or "").strip()
-        helper_type = str(args.get("helper_type"))
-        entry = _template_helper_entry(hass, helper_type, helper_id)
-        if entry is None:
-            return _tool_error("Helper not found."), "not_found", f"helper:{helper_type}:{helper_id}"
-        from ..mcp_view import _tool_remove_integration
-        return await _tool_remove_integration(
-            {"entry_id": entry.entry_id}, access_key, hass, data,
-            request_id=request_id, client_ip=client_ip,
-        )
-    pre = _helper_write_precheck(
-        {**args, "config": {}}, "delete_helper", require_id=True
-    )
-    if pre is not None:
-        return pre
-    approval_args, context_error = await _bind_scoped_helper_context(
-        args, access_key, hass, "delete_helper"
-    )
-    if context_error is not None:
-        return context_error
-    helper_type = str(args.get("helper_type"))
-    helper_id = str(args.get("helper_id") or "").strip()
-    entity_id = _resolve_helper_entity_id(hass, helper_type, helper_id)
-    if entity_id is None:
-        return _tool_error("Helper not found."), "not_found", f"helper:{helper_type}:{helper_id}"
-    mesa_context = _helper_mesa_context(
-        data,
-        access_key,
-        [entity_id],
-        action="delete",
-        service_data={"helper_type": helper_type},
-        session_id=request_id or "delete_helper",
-    )
-    if isinstance(mesa_context, tuple):
-        return mesa_context
-    # The executor needs this item as its safety copy, so refuse now rather
-    # than after an approval that could only fail. Scoped types read it above.
-    if helper_type not in _SCOPED_STORAGE_HELPER_TYPES:
-        _, missing = await _stored_helper_item(hass, access_key, helper_type, helper_id, entity_id, "delete_helper")
-        if missing is not None:
-            return missing
-    approval_args, blocked = await _helper_mesa_approval_gate(
-        approval_args,
-        access_key,
-        hass,
-        data,
-        context=mesa_context,
-        tool_name="delete_helper",
-        request_id=request_id,
-        client_ip=client_ip,
-        diff_builder=lambda: _build_diff_delete_helper(approval_args, access_key, hass),
-    )
-    if blocked is not None:
-        return blocked
-    return await _execute_delete_helper(approval_args, access_key, hass, data)
 
 
 async def _execute_delete_helper(
@@ -2430,30 +2362,6 @@ def _build_diff_edit_helper(
     }
 
 
-async def _build_diff_delete_helper(args: dict, access_key: AccessKeyRecord, hass: HomeAssistant) -> dict:
-    from .discovery import _registry_relationship_preview  # noqa: PLC0415
-
-    helper_type = args.get("helper_type")
-    helper_id = str(args.get("helper_id") or "").strip()
-    entity_id = _resolve_helper_entity_id(hass, str(helper_type), helper_id)
-    state = hass.states.get(entity_id) if entity_id is not None else None
-    label = (
-        state.attributes.get("friendly_name")
-        if state is not None else None
-    ) or helper_id
-    return {
-        "kind": "system_action",
-        **_summary("delete_helper", helper_type=helper_type, helper_id=helper_id),
-        "target": {"type": "helper", "id": helper_id, "label": label},
-        "before": None,
-        "preview": {
-            "helper_type": helper_type, "warning": "This helper will be removed permanently.",
-            "relationships": (await _registry_relationship_preview(hass, entity_id) if entity_id is not None
-                              else {"consumers": [], "consumer_count": 0, "searched": []}),
-        },
-    }
-
-
 # ---------------------------------------------------------------------------
 # Config-entry helper reconfigure (cap_helper_write)
 # ---------------------------------------------------------------------------
@@ -2508,7 +2416,7 @@ def _config_entry_helper_mesa_entities(
                 "denied",
                 "set_helper_settings",
             )
-    except Exception:  # noqa: BLE001 - unreadable safety mode fails closed
+    except Exception:  # unreadable safety mode fails closed
         return (
             _tool_error("MESA safety state could not be read; nothing changed."),
             "denied",
@@ -2720,7 +2628,7 @@ def _options_schema_json(result: Any) -> list | None:
         return []
     try:
         converted = serialize_ha_schema(schema, cv.custom_serializer)
-    except Exception:  # noqa: BLE001 - a schema shape this cannot describe
+    except Exception:  # a schema shape this cannot describe
         # Returning [] here would be a lie the caller acts on: an empty field
         # list reads as "this helper accepts nothing", and the caller would then
         # send nothing and clear every optional setting. None means "could not be
@@ -2746,11 +2654,11 @@ async def _abort_flow(hass: HomeAssistant, mechanism: str | None, flow_id: str |
     manager = hass.config_entries.flow if mechanism == _RECONFIGURE else hass.config_entries.options
     try:
         manager.async_abort(flow_id)
-    except Exception:  # noqa: BLE001 - best effort; an already-gone flow is fine
+    except Exception:  # best effort; an already-gone flow is fine
         _LOGGER.debug("Could not abort options flow %s", flow_id, exc_info=True)
 
 
-async def _tool_get_config_entry_options(
+async def _tool_get_helper_settings(
     args: dict, access_key: AccessKeyRecord, hass: HomeAssistant
 ) -> tuple[dict, str, str]:
     """MCP tool: read one helper config entry's options and the schema for them.
@@ -2827,7 +2735,7 @@ async def _tool_get_config_entry_options(
             "form's current suggested values. To clear an optional field with no default, "
             "explicitly send null; other fields follow the form's validation."
         )
-    except Exception:  # noqa: BLE001 - a flow that will not start is not a Phoenix bug
+    except Exception:  # a flow that will not start is not a Phoenix bug
         _LOGGER.exception("Could not open the settings flow for %s", entry.entry_id)
         return _tool_error("Could not read this helper's settings."), "invalid_request", tool
     finally:
@@ -2963,9 +2871,8 @@ async def _build_diff_set_config_entry_options(
     }
 
 
-async def _preflight_template_settings(hass, entry, settings, access_key, *, intended=None):
+async def _preflight_template_settings(hass: HomeAssistant, entry: ConfigEntry, settings, access_key, *, intended=None):
     """Validate an options form without submitting or creating a recovery barrier."""
-    from ..template_recovery import template_snapshot
 
     before = template_snapshot(hass, entry)
     flow_id = None
@@ -2995,7 +2902,7 @@ async def _preflight_template_settings(hass, entry, settings, access_key, *, int
     return None
 
 
-async def _tool_set_config_entry_options(
+async def _tool_set_helper_settings(
     args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData,
     request_id: str = "", client_ip: str | None = None,
 ) -> tuple[dict, str, str]:
@@ -3063,8 +2970,6 @@ async def _execute_set_config_entry_options(
     args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData
 ) -> tuple[dict, str, str]:
     """Run a helper settings write, wrapping Template entries in configuration recovery."""
-    from ..config_recovery import ConfigurationRecoveryError
-    from ..template_recovery import protect_template, template_snapshot
 
     if effective_cap(access_key, "cap_helper_write") == CAP_DENY:
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "set_helper_settings"
@@ -3129,7 +3034,6 @@ async def _apply_config_entry_options(
     if pre is not None:
         return pre
     before = _settings_store(entry, mechanism)
-    from ..template_recovery import template_snapshot
     version_before = template_snapshot(hass, entry) if entry.domain == "template" else before
     conflict = _cas_conflict(args.get("expected_hash"), before, tool)
     if conflict is not None:
@@ -3157,8 +3061,6 @@ async def _apply_config_entry_options(
         result = await _init_settings_flow(hass, entry, mechanism)
         flow_id = result.get("flow_id")
         if entry.domain == "template":
-            from ..request_authority import check_request_authority
-            from ..config_recovery import ConfigurationRecoveryError
             check_request_authority()
             current_entry = hass.config_entries.async_get_entry(entry.entry_id)
             if (current_entry is None or id(current_entry) != id(entry)
@@ -3194,7 +3096,7 @@ async def _apply_config_entry_options(
     except vol.Invalid as err:
         await _abort_flow(hass, mechanism, flow_id)
         return _tool_error(f"The settings were rejected: {err}"), "invalid_request", tool
-    except Exception:  # noqa: BLE001 - a flow failure is not a Phoenix bug, but must not leak
+    except Exception:  # a flow failure is not a Phoenix bug, but must not leak
         _LOGGER.exception("Settings flow failed for %s", entry.entry_id)
         await _abort_flow(hass, mechanism, flow_id)
         return _tool_error("Could not apply these settings."), "invalid_request", tool

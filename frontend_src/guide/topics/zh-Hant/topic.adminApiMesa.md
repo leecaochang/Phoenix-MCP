@@ -12,6 +12,7 @@
 | 狀態 | `error` | `message_key` | 條件 |
 |---|---|---|---|
 | 503 | `service_unavailable` | `adminError.mesaUnavailable` | MESA 未執行。 |
+| 503 | `service_unavailable` | `adminError.mesaSaveFailed` | Phoenix 無法儲存變更，因此已復原它。 |
 
 每次變更都會新增一筆包含請求路徑的稽核日誌條目。匯出也會新增一筆，儘管它不變更任何內容。
 
@@ -184,7 +185,11 @@ MESA 自己的格式會再次包裝設定，因此回應會巢狀兩次 `deploym
 | `triggers_automations_domains` | 字串陣列 | 域，以字串表示。 |
 | `domain_overrides` | object | 以域為鍵。每個值是一個物件。 |
 
-回應與讀取具有相同形狀。
+回應的形狀與讀取相同。
+
+| 狀態 | `error` | `message_key` | 條件 |
+|---|---|---|---|
+| 400 | `invalid_request` | `adminError.deploymentDefaultsInvalid` | MESA 拒絕了這些預設值。`message_params.detail` 說明原因。 |
 
 ## 問題和標籤詞彙表 {#issues}
 

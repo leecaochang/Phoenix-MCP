@@ -7,7 +7,10 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from homeassistant.core import ServiceCall, ServiceRegistry
 
-from custom_components.phoenix_mcp import agentcli, home_companion as home, mcp_view
+from custom_components.phoenix_mcp import agent_chat, home_companion, home_companion_turn, tool_catalog, tool_defs, tool_dispatch
+from custom_components.phoenix_mcp.llm import accounts as llm_accounts
+from custom_components.phoenix_mcp.llm import base as llm_base
+from custom_components.phoenix_mcp.llm import provider_claude as llm_provider_claude
 from custom_components.phoenix_mcp.const import DOMAIN, HOME_COMPANION_MAX_CONTEXT_BYTES, HOME_COMPANION_TOOLS
 from custom_components.phoenix_mcp.data import PhoenixData
 from custom_components.phoenix_mcp.personas import get_persona_caps, detect_persona
@@ -35,7 +38,7 @@ async def companion(hass, access_key_store):
     data = PhoenixData(store=access_key_store,rate_limiter=MagicMock(),audit=MagicMock(),hass=hass)
     hass.data[DOMAIN] = data
     await access_key_store.async_patch_settings(mesa_mode='off')
-    store = agentcli.AgentCliStore(AsyncMock())
+    store = llm_accounts.AgentCliStore(AsyncMock())
     account = await store.add('chatgpt',{'api_key':'synthetic-key','model':'test-model'})
     hass.data['_phoenix_agentcli_store'] = store
     await access_key_store.async_patch_settings(voice_agent_provider_id=account,voice_agent_model='test-model')
@@ -46,7 +49,7 @@ async def companion(hass, access_key_store):
 
 async def rpc(hass, companion, name='home_request', args=None, method='tools/call'):
     data, access_key, _, _ = companion
-    return await mcp_view._dispatch_mcp(method,'id',{'name':name,'arguments':args or {'request':'Read the temperature.'}},access_key,hass,data,'test','http://test')
+    return await tool_dispatch._dispatch_mcp(method,'id',{'name':name,'arguments':args or {'request':'Read the temperature.'}},access_key,hass,data,'test','http://test')
 
 
 def payload(response):
@@ -54,7 +57,7 @@ def payload(response):
 
 
 def scripted(monkeypatch, rounds, *, before=None, transcripts=None, prompts=None):
-    provider = agentcli.ClaudeProvider(agentcli.ProviderConfig('claude','test','http://test','key'))
+    provider = llm_provider_claude.ClaudeProvider(llm_accounts.ProviderConfig('claude','test','http://test','key'))
     catalogs = []
     async def stream(session, *, system_prompt, messages, tools, options):
         catalogs.append(tools)
@@ -66,17 +69,17 @@ def scripted(monkeypatch, rounds, *, before=None, transcripts=None, prompts=None
             await before(len(catalogs))
         current = rounds.pop(0)
         if isinstance(current,str):
-            yield {'type':agentcli.EV_TEXT,'text':current}
-            yield {'type':agentcli.EV_DONE,'stop_reason':'end_turn','assistant_msg':{'role':'assistant','content':[{'type':'text','text':current}]}}
+            yield {'type':llm_base.EV_TEXT,'text':current}
+            yield {'type':llm_base.EV_DONE,'stop_reason':'end_turn','assistant_msg':{'role':'assistant','content':[{'type':'text','text':current}]}}
         elif isinstance(current,dict):
             yield current
         else:
             calls = [{'type':'tool_use','id':f't{len(catalogs)}_{i}','name':name,'input':args} for i,(name,args) in enumerate(current)]
             for call in calls:
-                yield {'type':agentcli.EV_TOOL,'id':call['id'],'name':call['name'],'input':call['input']}
-            yield {'type':agentcli.EV_DONE,'stop_reason':'tool_use','assistant_msg':{'role':'assistant','content':calls}}
+                yield {'type':llm_base.EV_TOOL,'id':call['id'],'name':call['name'],'input':call['input']}
+            yield {'type':llm_base.EV_DONE,'stop_reason':'tool_use','assistant_msg':{'role':'assistant','content':calls}}
     monkeypatch.setattr(provider,'stream_turn',stream)
-    monkeypatch.setattr(agentcli,'build_provider',lambda cfg:provider)
+    monkeypatch.setattr(home_companion_turn, 'build_provider', lambda cfg:provider)
     return catalogs
 
 
@@ -92,7 +95,7 @@ async def test_persona_is_persisted_and_never_inferred(companion):
 async def test_single_external_catalog_and_no_resource_backdoor(hass,companion):
     result = await rpc(hass,companion,method='tools/list')
     assert [t['name'] for t in result[0]['result']['tools']] == ['home_request']
-    assert [t['name'] for t in agentcli.build_agent_tool_list(companion[1],companion[0],'chat')] == ['home_request']
+    assert [t['name'] for t in tool_catalog.build_agent_tool_list(companion[1],companion[0],'chat')] == ['home_request']
     for method in ['resources/list','prompts/list','resources/templates/list']:
         assert list((await rpc(hass,companion,method=method))[0]['result'].values()) == [[]]
     for method in ['resources/read','prompts/get']:
@@ -103,8 +106,8 @@ async def test_single_external_catalog_and_no_resource_backdoor(hass,companion):
 async def test_guessed_external_calls_never_dispatch(hass,companion,name):
     with patch.object(ServiceRegistry,'async_call',AsyncMock()) as service:
         result = await rpc(hass,companion,name,{'entity_id':'light.selected'})
-    internal = mcp_view._NATIVE_TOOL_PUBLIC_TO_INTERNAL.get(name, name)
-    if internal not in mcp_view._TOOL_HANDLERS:
+    internal = tool_defs._NATIVE_TOOL_PUBLIC_TO_INTERNAL.get(name, name)
+    if internal not in tool_catalog._TOOL_HANDLERS:
         assert result[3] == 'invalid_request'
         assert result[0]['error']['code'] == -32602
     else:
@@ -162,7 +165,7 @@ async def test_shared_loop_reads_with_complete_catalog(hass,companion,monkeypatc
     assert result['status']=='completed'
     assert result['tool_outcomes']==[{'tool':'get_state','outcome':'allowed'}]
     assert {t['name'] for t in catalogs[0]}==HOME_COMPANION_TOOLS
-    assert not companion[0].home_companion_active and home._turn.get() is None
+    assert not companion[0].home_companion_active and home_companion._turn.get() is None
 
 
 @pytest.mark.parametrize('user_request', [
@@ -471,7 +474,7 @@ async def test_provider_error_after_reads_preserves_only_real_write_uncertainty(
         calls.append(call.data)
     hass.services.async_register('light','turn_on',turn_on)
     rounds = [[('get_state', {'entity_id':'sensor.temperature','projection':{'kind':'compact'}})],
-              {'type':agentcli.EV_ERROR,'code':'network','retryable':True}]
+              {'type':llm_base.EV_ERROR,'code':'network','retryable':True}]
     if write_first:
         rounds.insert(0, [('light__HassLightSet', {'name':'light.selected','brightness':40})])
     catalogs = scripted(monkeypatch, rounds)
@@ -497,19 +500,19 @@ async def test_notes_reach_the_inner_turn_the_same_way_from_every_ingress(hass,c
         [('get_state',{'entity_id':'sensor.temperature','projection':{'kind':'compact'}})],
         json.dumps({'status':'completed','message':'23 degrees.'}),
     ],prompts=prompts)
-    provider=agentcli.build_provider(None)
+    provider=home_companion_turn.build_provider(None)
     request='Read the temperature.'
     if surface=='external':
         await rpc(hass,companion,args={'request':request})
     elif surface=='voice':
-        await agentcli.async_run_voice_turn(hass,data,access_key,provider,None,'http://test',request)
+        await agent_chat.async_run_voice_turn(hass,data,access_key,provider,None,'http://test',request)
     elif surface=='chat':
         async def emit(name,value):pass
-        await agentcli.async_run_agent_turn(hass=hass,data=data,access_key=access_key,provider=provider,
+        await agent_chat.async_run_agent_turn(hass=hass,data=data,access_key=access_key,provider=provider,
             session=None,messages=[{'role':'user','content':request}],options={},client_ip='test',base_url='',
             emit=emit,cancel=asyncio.Event())
     else:
-        await agentcli.async_run_ai_task(hass,data,access_key,provider,None,'',request)
+        await agent_chat.async_run_ai_task(hass,data,access_key,provider,None,'',request)
     assert len(prompts) == 2
     for prompt in prompts:
         assert '<administrator_notes>\nCall the fan the breeze. Never mention <redacted-entity>.\n</administrator_notes>' in prompt
@@ -524,20 +527,20 @@ async def test_owned_ingresses_delegate_original_request_once_without_report_rei
         [('get_state',{'entity_id':'sensor.temperature','projection':{'kind':'full'}})],
         json.dumps({'status':'completed','message':'Invented success: lights changed.'}),
     ] + ([json.dumps({'temperature':23})] if surface=='ai_structured' else []))
-    provider=agentcli.build_provider(None)
+    provider=home_companion_turn.build_provider(None)
     request="Read the temperature in Alex's office. Do not change devices."
     if surface=='voice':
-        answer=await agentcli.async_run_voice_turn(hass,data,access_key,provider,None,'http://test',request)
+        answer=await agent_chat.async_run_voice_turn(hass,data,access_key,provider,None,'http://test',request)
     elif surface=='chat':
         events=[]
         async def emit(name,value):events.append((name,value))
-        messages=await agentcli.async_run_agent_turn(hass=hass,data=data,access_key=access_key,provider=provider,
+        messages=await agent_chat.async_run_agent_turn(hass=hass,data=data,access_key=access_key,provider=provider,
             session=None,messages=[{'role':'user','content':request}],options={},client_ip='test',base_url='',
             emit=emit,cancel=asyncio.Event())
         answer=messages[-1]['content']
         assert sum(name=='assistant_delta' for name,_ in events)==1
     else:
-        answer=await agentcli.async_run_ai_task(hass,data,access_key,provider,None,'',request,
+        answer=await agent_chat.async_run_ai_task(hass,data,access_key,provider,None,'',request,
             structure_json={'type':'object','properties':{'temperature':{'type':'number'}}} if surface=='ai_structured' else None)
     if surface=='ai_structured':
         assert json.loads(answer)=={'temperature':23}
@@ -569,8 +572,8 @@ async def test_chat_cancellation_stops_inner_planner(hass,companion,monkeypatch)
     catalogs=scripted(monkeypatch,[],before=wait)
     events=[]
     async def emit(name,value):events.append((name,value))
-    task=asyncio.create_task(agentcli.async_run_agent_turn(hass=hass,data=data,access_key=access_key,
-        provider=agentcli.build_provider(None),session=None,messages=[{'role':'user','content':'Read temperature'}],
+    task=asyncio.create_task(agent_chat.async_run_agent_turn(hass=hass,data=data,access_key=access_key,
+        provider=home_companion_turn.build_provider(None),session=None,messages=[{'role':'user','content':'Read temperature'}],
         options={},client_ip='test',base_url='',emit=emit,cancel=cancel))
     await entered.wait()
     cancel.set()
@@ -585,9 +588,9 @@ async def test_companion_uses_wrapper_under_auto_routing_without_announcing_gues
     data,access_key,_,_=companion
     await data.store.async_patch_settings(voice_agent_enabled=True,voice_agent_access_key_id=access_key.id,
         voice_agent_routing_mode='auto',agentcli_routing_mode='auto')
-    monkeypatch.setattr('custom_components.phoenix_mcp.command_routing.async_evaluate_command',
+    monkeypatch.setattr('custom_components.phoenix_mcp.routing.command_routing.async_evaluate_command',
                         AsyncMock(side_effect=AssertionError('Wrapper persona must not use direct dispatch')))
-    monkeypatch.setattr('custom_components.phoenix_mcp.chat_routing.async_evaluate_command',
+    monkeypatch.setattr('custom_components.phoenix_mcp.routing.chat_routing.async_evaluate_command',
                         AsyncMock(side_effect=AssertionError('Wrapper persona must not use direct dispatch')))
     catalogs=scripted(monkeypatch,[[('get_state',{'entity_id':'sensor.temperature','projection':{'kind':'compact'}})],
         json.dumps({'status':'completed','message':'23 degrees.'})])
@@ -597,7 +600,7 @@ async def test_companion_uses_wrapper_under_auto_routing_without_announcing_gues
     else:
         events=[]
         async def emit(name,value):events.append((name,value))
-        messages=await agentcli.async_run_agent_turn(hass=hass,data=data,access_key=access_key,provider=agentcli.build_provider(None),
+        messages=await agent_chat.async_run_agent_turn(hass=hass,data=data,access_key=access_key,provider=home_companion_turn.build_provider(None),
             session=None,messages=[{'role':'user','content':'Read temperature.'}],options={},client_ip='test',base_url='',
             emit=emit,cancel=asyncio.Event(),routing_language='en')
         assert '23' in messages[-1]['content']
@@ -662,20 +665,20 @@ def test_internal_companion_does_not_receive_external_catalog_reconnect_advice(h
     data, access_key, _, _ = companion
     assert access_key.settings_version > access_key.tools_list_version
     response = {'content':[{'type':'text','text':'Area not found.'}]}
-    assert not mcp_view._maybe_append_stale_advisory(response,access_key,data,'home_companion',hass)
+    assert not tool_dispatch._maybe_append_stale_advisory(response,access_key,data,'home_companion',hass)
     assert response['content']==[{'type':'text','text':'Area not found.'}]
-    assert mcp_view._maybe_append_stale_advisory(response,access_key,data,'external-client',hass)
+    assert tool_dispatch._maybe_append_stale_advisory(response,access_key,data,'external-client',hass)
     assert any('reconnect' in row['text'] for row in response['content'])
 
 
 async def test_chat_lookup_failure_is_displayed_once_and_does_not_create_repairs(hass, companion, monkeypatch):
     data, access_key, _, _ = companion
-    scripted(monkeypatch, [{'type': agentcli.EV_ERROR, 'code': 'network', 'retryable': True}])
+    scripted(monkeypatch, [{'type': llm_base.EV_ERROR, 'code': 'network', 'retryable': True}])
     events = []
     async def emit(name, value):
         events.append((name, value))
-    await agentcli.async_run_agent_turn(
-        hass=hass, data=data, access_key=access_key, provider=agentcli.build_provider(None), session=None,
+    await agent_chat.async_run_agent_turn(
+        hass=hass, data=data, access_key=access_key, provider=home_companion_turn.build_provider(None), session=None,
         messages=[{'role': 'user', 'content': 'turn on steve lights in the the office doorway'}],
         options={}, client_ip='test', base_url='', emit=emit, cancel=asyncio.Event())
     errors = [value for name, value in events if name == 'error']
@@ -704,7 +707,7 @@ async def test_actual_dispatch_failure_retains_repairs_without_replaying(hass, c
 @pytest.mark.parametrize('code', ['provider_malformed', 'bad_tool_call', 'provider_retry_exhausted'])
 async def test_malformed_planner_correction_preserves_reads_without_replaying(hass, companion, monkeypatch, after_read, code):
     rounds = [[('get_state', {'entity_id': 'sensor.temperature', 'projection': {'kind': 'full'}})]] if after_read else []
-    rounds += [{'type': agentcli.EV_ERROR, 'code': code, 'retryable': False, 'diagnostic': {'category': 'bad_tool_call'}}]
+    rounds += [{'type': llm_base.EV_ERROR, 'code': code, 'retryable': False, 'diagnostic': {'category': 'bad_tool_call'}}]
     if not after_read:
         rounds += [[('get_state', {'entity_id': 'sensor.temperature', 'projection': {'kind': 'full'}})]]
     rounds += [json.dumps({'status': 'completed', 'message': '23 degrees.'})]
@@ -721,7 +724,7 @@ async def test_malformed_planner_correction_preserves_reads_without_replaying(ha
 
 
 async def test_repeated_malformed_planner_does_not_loop(hass, companion, monkeypatch):
-    failure = {'type': agentcli.EV_ERROR, 'code': 'provider_malformed', 'retryable': False}
+    failure = {'type': llm_base.EV_ERROR, 'code': 'provider_malformed', 'retryable': False}
     catalogs = scripted(monkeypatch, [failure, failure])
     report = payload(await rpc(hass, companion))
     assert report['status'] == 'provider_error' and len(catalogs) == 2
@@ -835,11 +838,11 @@ async def test_plural_household_targets_do_not_invent_context_or_a_single_select
         eid = 'cover.office_' + part
         hass.states.async_set(eid, 'closed', {'friendly_name': 'Office cover ' + part})
         access_key.permissions.entities[eid] = PermissionNode('GREEN')
-    context = home._turn.set(home.CompanionTurn(access_key.id, request=utterance))
+    context = home_companion._turn.set(home_companion.CompanionTurn(access_key.id, request=utterance))
     try:
-        assert home.ambiguous_control(access_key, hass, 'intent__HassSetPosition') is expected
+        assert home_companion.ambiguous_control(access_key, hass, 'intent__HassSetPosition') is expected
     finally:
-        home._turn.reset(context)
+        home_companion._turn.reset(context)
 
 
 @pytest.mark.parametrize('utterance,alias', [('Turn this Selected lamp on.', None), ('Turn those Sunbeam lights on.', 'Sunbeam')])
@@ -867,7 +870,7 @@ async def test_malformed_planning_after_control_never_requests_correction(hass, 
     hass.services.async_register('light', 'turn_on', turn_on)
     catalogs = scripted(monkeypatch, [
         [('light__HassLightSet', {'name': 'light.selected', 'brightness': 40})],
-        {'type': agentcli.EV_ERROR, 'code': code, 'retryable': False},
+        {'type': llm_base.EV_ERROR, 'code': code, 'retryable': False},
     ])
     report = payload(await rpc(hass, companion))
     assert len(catalogs) == 2 and len(calls) == 1
@@ -992,7 +995,7 @@ async def test_count_report_correction_cannot_dispatch_or_repeat(hass, companion
 @pytest.mark.parametrize('mode', ['off', 'observe', 'advise'])
 @pytest.mark.parametrize('discovery', ['search_entities', 'get_capability_summary'])
 async def test_companion_never_creates_or_calls_decision_review(hass, companion, monkeypatch, discovery, mode):
-    from custom_components.phoenix_mcp.decision_provider import DecisionProvider
+    from custom_components.phoenix_mcp.routing.decision_provider import DecisionProvider
 
     data, access_key, store, _ = companion
     account = await store.add('typesafe', {'api_key': 'decision-test-key', 'model': 'jev-latest'})
@@ -1010,8 +1013,8 @@ async def test_companion_never_creates_or_calls_decision_review(hass, companion,
         json.dumps({'status': 'completed', 'message': 'Done.'})])
     choose = AsyncMock(return_value={'tool': 'get_history', 'model': 'synthetic-review-model'})
     with patch.object(DecisionProvider, 'select_tool', choose), \
-            patch('custom_components.phoenix_mcp.tool_routing.create_review_state', side_effect=AssertionError('Companion must skip review state')), \
-            patch('custom_components.phoenix_mcp.tool_routing.async_review_tools', side_effect=AssertionError('Companion must skip review')):
+            patch('custom_components.phoenix_mcp.agent_turn.create_review_state', side_effect=AssertionError('Companion must skip review state')), \
+            patch('custom_components.phoenix_mcp.agent_turn.async_review_tools', side_effect=AssertionError('Companion must skip review')):
         result = payload(await rpc(hass, companion, args={'request': 'Set selected lights to 40%.'}))
 
     assert result['status'] == 'completed'
@@ -1039,17 +1042,17 @@ async def test_household_domains_follow_read_write_and_red_scope(hass, companion
 @pytest.mark.parametrize('cap', ['cap_registry_read', 'cap_search'])
 def test_household_catalog_is_capability_filtered_but_cannot_add_authoring(companion, cap):
     data, access_key, _, _ = companion
-    context = home._turn.set(home.CompanionTurn(access_key.id))
+    context = home_companion._turn.set(home_companion.CompanionTurn(access_key.id))
     try:
-        enabled = {tool['name'] for tool in agentcli.build_agent_tool_list(access_key, data, 'voice')}
+        enabled = {tool['name'] for tool in tool_catalog.build_agent_tool_list(access_key, data, 'voice')}
         setattr(access_key, cap, 'deny')
-        narrowed = {tool['name'] for tool in agentcli.build_agent_tool_list(access_key, data, 'voice')}
+        narrowed = {tool['name'] for tool in tool_catalog.build_agent_tool_list(access_key, data, 'voice')}
         assert narrowed < enabled
         assert enabled == HOME_COMPANION_TOOLS
         access_key.cap_filesystem = access_key.cap_automation_write = access_key.cap_restart = 'allow'
-        assert {tool['name'] for tool in agentcli.build_agent_tool_list(access_key, data, 'voice')} == narrowed
+        assert {tool['name'] for tool in tool_catalog.build_agent_tool_list(access_key, data, 'voice')} == narrowed
     finally:
-        home._turn.reset(context)
+        home_companion._turn.reset(context)
 
 
 HOUSEHOLD_ACTIONS = [
@@ -1077,7 +1080,7 @@ async def test_household_receipts_readback_and_provider_failure_do_not_replay(ha
         hass.states.async_set(eid, final_state, {'friendly_name': 'Household device', **attrs})
 
     hass.services.async_register(service_domain, service_name, operate)
-    ending = {'type': agentcli.EV_ERROR, 'code': 'provider_error', 'message': 'Failed.'} if narration_fails else json.dumps({'status': 'completed', 'message': 'Everything physically worked.'})
+    ending = {'type': llm_base.EV_ERROR, 'code': 'provider_error', 'message': 'Failed.'} if narration_fails else json.dumps({'status': 'completed', 'message': 'Everything physically worked.'})
     scripted(monkeypatch, [[(tool, args)], ending])
     report = payload(await rpc(hass, companion, args={'request': 'Operate ' + eid + ' with the requested settings.'}))
     assert len(applied) == 1 and applied[0]['entity_id'] == [eid]
@@ -1137,11 +1140,11 @@ async def test_single_typo_corroborates_only_unique_explicit_target(hass, compan
         eid = 'light.steve_office_' + part
         hass.states.async_set(eid, 'off', {'friendly_name': 'Steve Office Lights ' + part.title()})
         access_key.permissions.entities[eid] = PermissionNode('GREEN')
-    context = home._turn.set(home.CompanionTurn(access_key.id, request=utterance))
+    context = home_companion._turn.set(home_companion.CompanionTurn(access_key.id, request=utterance))
     try:
-        assert home.ambiguous_control(access_key, hass, 'intent__HassTurnOn', {'name': 'light.steve_office_' + proposed}) is expected
+        assert home_companion.ambiguous_control(access_key, hass, 'intent__HassTurnOn', {'name': 'light.steve_office_' + proposed}) is expected
     finally:
-        home._turn.reset(context)
+        home_companion._turn.reset(context)
 
 
 async def test_ambiguity_guard_records_withheld_proposal_and_selected_provider(hass, companion, monkeypatch):
@@ -1175,7 +1178,7 @@ def test_every_permitted_call_may_return_a_full_size_result():
 async def test_a_read_too_large_for_the_request_is_withheld_so_the_model_can_narrow_it(hass, companion, monkeypatch):
     # The call and result limits keep ordinary reads within the context; this exercises
     # the safety net with a smaller budget, as when the model's own output is oversized.
-    monkeypatch.setattr(home, 'HOME_COMPANION_MAX_CONTEXT_BYTES', 65536)
+    monkeypatch.setattr(home_companion, 'HOME_COMPANION_MAX_CONTEXT_BYTES', 65536)
     _, access_key, _, _ = companion
     access_key.permissions.domains['binary_sensor'] = PermissionNode('YELLOW')
     for i in range(400):
@@ -1220,22 +1223,22 @@ async def test_agent_chat_shows_the_companion_turns_token_usage(hass, companion,
         [('get_state', {'entity_id': 'sensor.temperature', 'projection': {'kind': 'compact'}})],
         json.dumps({'status': 'completed', 'message': '23 degrees.'}),
     ])
-    provider = agentcli.build_provider(None)
+    provider = home_companion_turn.build_provider(None)
     inner, calls = provider.stream_turn, []
     async def stream(session, **kwargs):
         calls.append(1)
         async for ev in inner(session, **kwargs):
-            if reported and ev['type'] == agentcli.EV_DONE:
+            if reported and ev['type'] == llm_base.EV_DONE:
                 # A provider's report is cumulative within one call: only the last one counts.
                 for output in (5, 50):
-                    yield {'type': agentcli.EV_USAGE, 'input_tokens': 1000 * len(calls),
+                    yield {'type': llm_base.EV_USAGE, 'input_tokens': 1000 * len(calls),
                            'output_tokens': output, 'cache_read_tokens': 400}
             yield ev
     monkeypatch.setattr(provider, 'stream_turn', stream)
     events = []
     async def emit(name, value):
         events.append((name, value))
-    await agentcli.async_run_agent_turn(hass=hass, data=data, access_key=access_key, provider=provider, session=None,
+    await agent_chat.async_run_agent_turn(hass=hass, data=data, access_key=access_key, provider=provider, session=None,
         messages=[{'role': 'user', 'content': 'Read the temperature.'}], options={}, client_ip='test', base_url='',
         emit=emit, cancel=asyncio.Event())
     usage = [value for name, value in events if name == 'usage']
@@ -1258,12 +1261,12 @@ async def test_agent_chat_runs_companion_on_the_chats_own_account_and_model(hass
         [('get_state', {'entity_id': 'sensor.temperature', 'projection': {'kind': 'compact'}})],
         json.dumps({'status': 'completed', 'message': '23 degrees.'}),
     ])
-    provider, used = agentcli.build_provider(None), []
-    monkeypatch.setattr(agentcli, 'build_provider', lambda cfg: used.append((cfg.kind, cfg.model)) or provider)
+    provider, used = home_companion_turn.build_provider(None), []
+    monkeypatch.setattr(home_companion_turn, 'build_provider', lambda cfg: used.append((cfg.kind, cfg.model)) or provider)
     events = []
     async def emit(name, value):
         events.append((name, value))
-    await agentcli.async_run_agent_turn(hass=hass, data=data, access_key=access_key, provider=provider, session=None,
+    await agent_chat.async_run_agent_turn(hass=hass, data=data, access_key=access_key, provider=provider, session=None,
         messages=[{'role': 'user', 'content': 'Read the temperature.'}], options={}, client_ip='test', base_url='',
         emit=emit, cancel=asyncio.Event(), account=(chat_account, 'chat-picked-model'))
     assert used == [('claude', 'chat-picked-model')]
@@ -1272,7 +1275,7 @@ async def test_agent_chat_runs_companion_on_the_chats_own_account_and_model(hass
     if voice_configured:
         used.clear()
         scripted(monkeypatch, [json.dumps({'status': 'clarification_needed', 'message': 'Which sensor?'})])
-        monkeypatch.setattr(agentcli, 'build_provider', lambda cfg: used.append((cfg.kind, cfg.model)) or provider)
+        monkeypatch.setattr(home_companion_turn, 'build_provider', lambda cfg: used.append((cfg.kind, cfg.model)) or provider)
         await rpc(hass, companion)
         assert used == [('chatgpt', 'test-model')]
 

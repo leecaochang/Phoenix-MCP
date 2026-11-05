@@ -1,11 +1,11 @@
 ---
-{ "id": "topic.mesaRules", "title": "How MESA Decides", "parent": "workspace.mesa", "order": 10, "keywords": ["MESA", "policy", "safety", "inheritance", "precedence"], "sectionKeywords": { "levels": ["inherit", "main device", "parent device", "scope"], "combining": ["most restrictive", "conflict", "loosen", "override"], "baseline": ["default", "unprofiled", "built-in", "deployment defaults"], "modes": ["advisory", "enforced", "off", "warn", "block"], "privacy": ["restricted", "sensitive", "deny"], "coverage": ["reads", "camera", "automations", "pass-through"], "not-in-editor": ["declared limits", "temporal constraints", "time window", "access roles", "import only"] }, "covers": ["custom_components/phoenix_mcp/mesa.py", "custom_components/phoenix_mcp/mesa_core/conflict.py", "custom_components/phoenix_mcp/mesa_core/inheritance.py", "custom_components/phoenix_mcp/mesa_core/profile.py", "custom_components/phoenix_mcp/mesa_core/enforcer.py"] }
+{ "id": "topic.mesaRules", "title": "How MESA Decides", "parent": "workspace.mesa", "order": 10, "keywords": ["MESA", "policy", "safety", "inheritance", "precedence"], "sectionKeywords": { "levels": ["inherit", "main device", "parent device", "scope"], "combining": ["most restrictive", "conflict", "loosen", "override"], "baseline": ["default", "unprofiled", "built-in", "deployment defaults"], "modes": ["advisory", "enforced", "off", "warn", "block"], "privacy": ["restricted", "sensitive", "deny"], "coverage": ["reads", "camera", "automations", "pass-through"], "not-in-editor": ["declared limits", "temporal constraints", "time window", "access roles", "import only", "calendar"], "renames": ["rename", "entity ID", "orphan", "move", "area"], "storage": ["corrupt", "damaged", "restore", "503"] }, "covers": ["custom_components/phoenix_mcp/mesa.py", "custom_components/phoenix_mcp/mesa_core/conflict.py", "custom_components/phoenix_mcp/mesa_core/inheritance.py", "custom_components/phoenix_mcp/mesa_core/profile.py", "custom_components/phoenix_mcp/mesa_core/enforcer.py"] }
 ---
 MESA checks every action an agent takes on a device, after the access key has allowed it. A profile describes how careful to be with what it covers. This page explains how profiles at different levels add up, and what happens when an action breaks one.
 
 ## Levels {#levels}
 
-A profile covers one of five things. When an agent acts on an entity, MESA gathers every profile that covers it, most specific first:
+A profile covers one of these levels. When an agent acts on an entity, MESA gathers every profile that covers it, most specific first:
 
 - **{{label:mesa.scopeLabelEntity}}**: the entity itself.
 - **{{label:mesa.scopeLabelDevice}}**: the device the entity belongs to, including entities the device gains later.
@@ -54,6 +54,8 @@ A profile set to **{{label:mesa.modeEnforced}}** is enforced while the setting i
 
 When an action targets several entities, MESA drops the blocked ones and the action runs on the rest. A warning or a block reaches the agent with the reason.
 
+A group is different. If MESA blocks one member, it blocks the whole group, and if a member needs confirmation, the whole group waits for your approval.
+
 ## Privacy {#privacy}
 
 A **{{label:mesa.privRestricted}}** privacy level makes an Autonomous entity need confirmation. People are always at least **{{label:mesa.privSensitive}}**.
@@ -62,15 +64,49 @@ An imported profile can also deny access to certain personas. That denial blocks
 
 ## What MESA covers {#coverage}
 
-MESA covers every way an agent changes something: MCP clients, Agent Chat, the voice agent, Assist and AI Task. It applies to pass-through access keys too.
+MESA applies the same way to every source: MCP clients, Agent Chat, the voice agent, Assist and AI Task. It applies to pass-through access keys too.
 
-It checks device actions, renaming and removing entities and devices, integration and helper changes, areas and floors, calendar writes and notifications.
+It checks:
+
+- Device actions, whichever command the agent uses.
+- Renaming, enabling, disabling and removing entities and devices, and moving them out of a profiled area.
+- Integration and helper changes, areas and floors.
+- Calendar and to-do changes, and notifications.
+- Zigbee device changes and ESPHome firmware installs.
+
+It doesn't check:
+
+- Changes to automations, scripts, blueprints, scenes, dashboards, dashboard resources or the Energy setup.
+- Backups, restarts, YAML reloads and log levels.
+- ESPHome device actions and builds, and opening a Zigbee network to new devices.
 
 Reading a state isn't checked, except camera images. Automations and scripts run inside Home Assistant, so their actions aren't checked again. To control when an agent starts one, give the automation or script its own profile.
+
+## Renaming and moving {#renames}
+
+When you rename an entity in Home Assistant, its profile follows it straight away. If the new ID already has a profile, Phoenix keeps both. The stricter one applies, and the other shows as an orphan for you to review. An agent's rename works the same way, after MESA has checked the rename itself.
+
+Moving something out of an area with a profile counts as a change, because it could lift a rule. Moving into one doesn't, because a new area only makes rules stricter.
+
+## If MESA can't read its profiles {#storage}
+
+If the saved profiles are damaged, MESA doesn't start with an empty list. It stays off, protected changes pause, and [{{label:attention.title}}](guide:window.attention#problems) tells you.
+
+The Home Assistant log says what to do: put the named copy back, or delete it to start with no profiles. Then reload Phoenix.
+
+If Phoenix can't save a profile change, it undoes the change and shows an error, so the rules in force are always the saved ones.
 
 ## What Profile Editor can't set {#not-in-editor}
 
 A profile can also hold declared limits (such as a maximum temperature), time windows when stricter rules apply, privacy denials for certain personas, and the entity override. These arrive only in an imported archive.
+
+A limit also covers the same request sent another way. `homeassistant.turn_on` counts as the entity's own turn on, and every way of setting a light's brightness counts against a brightness limit.
+
+`fan.turn_on`, `fan.set_percentage` and a speed step count as one fan percentage. A thermostat's `temperature`, `target_temp_high` and `target_temp_low` count against each other's limits. A light turned on with no brightness counts at its default light profile's brightness. Without such a profile, a limit can't see the level the light restores.
+
+A limit doesn't reach a different action with a similar effect, such as `fan.turn_on` with a percentage against a limit on `fan.set_percentage`. A command that sends no value, such as a plain turn on, passes.
+
+A time window can follow a calendar. It applies while the calendar is on, and also when Phoenix can't tell.
 
 Saving a profile in Profile Editor replaces the whole profile with what the form shows, so it removes these fields.
 

@@ -60,12 +60,12 @@ function ControlMode({ row }: { row: ProfileRow }) {
 
 /** How a profile's control reads in one string, for sorting and for a row's name. */
 const controlText = (row: ProfileRow): string =>
-  `${controlLabel(rawControlMode(row.document))}${isEnforced(row.document) ? ` ${t("mesa.modeEnforced")}` : ""}`;
+  [controlLabel(rawControlMode(row.document)), isEnforced(row.document) && t("mesa.modeEnforced")].filter(Boolean).join(t("common.listSeparator"));
 
 /**
  * A row's own action, asking in place before it acts: the button turns red and
  * is answered beside it, on the same line, and a click anywhere else cancels,
- * as Delete Permanently does in Archived Access Keys (user, 2026-10-30).
+ * as Delete Permanently does in Archived Access Keys.
  */
 function RowAction({ id, label, confirmLabel, icon, busy, confirming, boxRef, guide, help, onAsk, onConfirm }: {
   id: string;
@@ -122,7 +122,7 @@ export function MesaProfilesWindow() {
   const [control, setControl] = useState("");
   const [enforcement, setEnforcement] = useState("");
   const [filtersOpen, setFiltersOpen] = useState(false);
-  // Importing and exporting both open in place at the top of the list (user, 2026-10-30).
+  // Importing and exporting both open in place at the top of the list.
   const [importing, setImporting] = useState(false);
   const [deleting, setDeleting] = useState<string | null>(null);
   const [confirmId, setConfirmId] = useState<string | null>(null);
@@ -130,7 +130,7 @@ export function MesaProfilesWindow() {
   // One click-away for the whole list: at most one row is ever asking.
   const confirmBox = useRef<HTMLSpanElement | null>(null);
   useClickAway(confirmBox, () => setConfirmId(null), !!confirmId && !deleting);
-  // Hidden filters stop applying and come back as they were (user, 2026-10-27); the search is not one of them.
+  // Hidden filters stop applying and come back as they were; the search is not one of them.
   const filtersApply = !useOnToolbar() || filtersOpen;
   const activeFilters = filtersApply ? (scope ? 1 : 0) + (control ? 1 : 0) + (enforcement ? 1 : 0) : 0;
   // Resetting the workspace clears what it had chosen, as it clears the arrangement.
@@ -147,7 +147,7 @@ export function MesaProfilesWindow() {
     "separator",
     { id: "rescan", label: t("mesa.rescan"), help: t("mesa.rescanHelp"), onSelect: () => { void m?.rescan(); } },
     { id: "restore", label: t("mesa.restoreDismissed"), help: t("mesa.restoreDismissedHelp"), disabled: !m?.issues.dismissed_suggestions.length, onSelect: () => { void m?.restoreSuggestions(); } },
-    // Findings dismissed in Advisory come back from here, as dismissed suggestions do (user, 2026-10-30).
+    // Findings dismissed in Advisory come back from here, as dismissed suggestions do.
     { id: "restore-notices", label: t("mesa.restoreNotices"), help: t("mesa.restoreNoticesHelp"), disabled: !m?.anyDismissed, onSelect: () => m?.restoreNotices() },
   ];
   const groups: ToolGroup[] = m ? [{
@@ -169,7 +169,7 @@ export function MesaProfilesWindow() {
   const showFilters = !onToolbar || filtersOpen;
   /**
    * Showing other profiles leaves nothing chosen in the list, so Profile Editor
-   * does not keep the one it had (user, 2026-10-29).
+   * does not keep the one it had.
    */
   const forget = () => { if (m.editing) m.open(null); };
   const clearFilters = () => { forget(); setScope(""); setControl(""); setEnforcement(""); };
@@ -195,7 +195,7 @@ export function MesaProfilesWindow() {
     && (!control || rawControlMode(r.document) === control)
     && (!enforcement || (enforcement === "enforced") === isEnforced(r.document))))
     && matchesListSearch(`${r.name} ${r.key} ${scopeLabel(r.scope)} ${tagsOf(r.document).join(" ")}`, search));
-  // ID, Name, Control Mode, Type, Actions, sorted by ID (user, 2026-10-30). Each column is as
+  // ID, Name, Control Mode, Type, Actions, sorted by ID. Each column is as
   // wide as what it holds, up to a ceiling, and Actions always fits Confirm beside Cancel: a
   // narrow window scrolls the list sideways rather than cutting Name and Type short.
   const columns: Column<ProfileRow>[] = [
@@ -220,7 +220,7 @@ export function MesaProfilesWindow() {
       {m.exporting && (
         <div data-guide="window.mesaProfiles#export">
         <InlineConfirm label={t("mesa.exportTitle")} confirmLabel={t("mesa.export")} confirmIcon="export" cancelLabel={t("common.cancel")}
-          confirmClassName="btn btn-outline btn-sm" help={`${tn("mesa.exportBody", m.rows.length)} ${t("mesa.exportNote")}`}
+          confirmClassName="btn btn-outline btn-sm" help={`${tn("mesa.exportBody", m.rows.length)}${t("common.sentenceSeparator")}${t("mesa.exportNote")}`}
           busy={m.exporting.busy} error={m.exporting.error} onConfirm={() => { void m.doExport(); }} onCancel={m.cancelExport} />
         </div>
       )}
@@ -315,7 +315,7 @@ export function SuggestedProfilesWindow() {
   useClickAway(confirmBox, () => setConfirmId(null), !!confirmId);
   if (!m) return null;
   const list = m.issues.suggestions;
-  // Choosing a suggestion opens it in the editor, already filled in (user, 2026-10-30).
+  // Choosing a suggestion opens it in the editor, already filled in.
   const review = (s: MesaSuggestion) => {
     m.open({
       scope: s.scope === "domain" ? "domain" : "entity",
@@ -356,7 +356,7 @@ export function SuggestedProfilesWindow() {
         rowKey={(s) => s.key}
         selectedKey={m.selectedSuggestion}
         onSelect={(s) => { m.selectSuggestion(s.key); review(s); }}
-        // Why it was suggested reads in Help while the row is under the pointer (user, 2026-10-30).
+        // Why it was suggested reads in Help while the row is under the pointer.
         rowLabel={(s) => `${s.subject_id}, ${mode(s)}. ${suggestionReason(s)}`}
         empty={m.findingsLoaded ? <NothingHere window="mesaSuggestions" text={t("mesa.noSuggestionsNow")} /> : <FindingsPending error={m.error} />}
       />
@@ -398,9 +398,9 @@ function OrphanGroups({ m, onOpen }: { m: MesaState; onOpen?: (scope: MesaProfil
 }
 
 /**
- * A finding, in a plain bordered box like every other UI2 item. Dismissing one
- * is a named button under it rather than a cross in its corner (user,
- * 2026-10-30), and it is permanent, per account, and changes nothing in MESA.
+ * A finding, in a plain bordered box like every other item. Dismissing one
+ * is a named button under it rather than a cross in its corner,
+ * and it is permanent, per account, and changes nothing in MESA.
  */
 function Notice({ tone, label, guide, onDismiss, children }: { tone: "info" | "warn"; label: string; guide: string; onDismiss?: () => void; children: ReactNode }) {
   return (
@@ -409,8 +409,8 @@ function Notice({ tone, label, guide, onDismiss, children }: { tone: "info" | "w
       <div className="mesa-notice-content">
         {children}
         {onDismiss && (
-          // Named in words whatever the toolbar's display mode: a cross alone was what
-          // the user asked to be rid of here (user, 2026-10-30).
+          // Named in words whatever the toolbar's display mode: a cross alone says
+          // too little here.
           <DisplayModeContext.Provider value="icon-text">
             <div className="mesa-notice-actions" data-guide="window.mesaAdvisory#dismiss">
               <ActionButton icon="close" label={t("mesa.dismiss")} name={label} help="mesa.dismissNoticeHelp" className="btn btn-outline btn-sm" onClick={onDismiss} />
@@ -461,8 +461,7 @@ function ValidationNotice({ m, label, onDismiss }: { m: MesaState; label: string
  * it could only partly inspect, trigger declarations that do not match, and
  * profiles whose target is gone. Each finding is dismissed from here, and the
  * MESA Actions menu shows dismissed ones again; nothing here changes MESA
- * itself (user, 2026-10-30, one window instead of Advisory, Orphaned Profiles
- * and Diagnostics).
+ * itself.
  */
 export function AdvisoryWindow() {
   const m = useMesa();

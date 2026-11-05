@@ -13,6 +13,7 @@
       "empty": "(empty)",
       "httpStatus": "The server answered with HTTP {status}. Refresh and try again.",
       "invalidResponse": "The server returned an invalid response. Refresh and try again.",
+      "labelValue": "{label}: {value}",
       "listSeparator": ", ",
       "loadMore": "Load More",
       "loading": "Loading...",
@@ -222,7 +223,7 @@
       },
       "cap_registry_write": {
         "label": "Manage entity registry",
-        "description": "Edit entities and devices, manage areas, floors, labels and categories, and remove stale entries."
+        "description": "Edit entities and devices, manage areas, floors, labels and categories, remove stale entries, and purge an entity's recorded history."
       },
       "cap_radio_write": {
         "label": "Radio management",
@@ -270,7 +271,7 @@
       "modeDescAllow": "Let this key's agents use this capability without asking you.",
       "modeDescConfirm": "Each change waits for you in Approvals before it runs. Reads run without asking.",
       "updateFailed": "Failed to update capability.",
-      "passThroughNotice": "<strong>Pass-through is on.</strong> Configuration read, Template render, Search & discovery, Registry read, Automation traces, Diagnostics, Broadcast and Service response data count as Allow unless set to Confirm. Every other capability uses its setting below.",
+      "passThroughNotice": "<strong>Pass-through is on.</strong> Configuration read, Template render, Search & discovery, Registry read, Automation traces, Diagnostics, Broadcast and Service response data count as Allow. Every other capability uses its setting below.",
       "esphomeBadgeTitle": "Without the Device Builder add-on, the ESPHome tools that validate, compile, flash, or inspect devices stay hidden from this access key. With the ESPHome integration, reading and searching device YAML still works. The capability can still be set now.",
       "confirmUnavailable": "This capability cannot require approval.",
       "allowUnavailable": "This capability always needs approval.",
@@ -315,7 +316,7 @@
       },
       "read_only": {
         "label": "Read-Only Observer",
-        "description": "Reads states, history and logs. Configuration changes, announcements, locks, alarms, covers and valves are denied."
+        "description": "Reads states, history and logs; denies configuration, announcements, locks, alarms, covers and valves. Still controls anything set to W."
       },
       "voice_assistant": {
         "label": "Voice Assistant",
@@ -366,7 +367,7 @@
       "create": "Create",
       "createFailed": "Failed to create access key.",
       "createPtUnderstand": "I understand this access key has broad Home Assistant access",
-      "createPtWarning": "<strong>This access key can read and control every Home Assistant entity.</strong> Pass-through also turns on Configuration read, Template render, Search & discovery, Registry read, Automation traces, Diagnostics, Broadcast and Service response data, unless you set them to Confirm. Diagnostics and Service response data can reveal sensitive details. Every other capability keeps its own setting, and MESA rules, the Phoenix MCP blocklist, sensitive attribute removal, rate limits, revocation and expiry still apply. Use it only with MCP clients you trust with your whole home.",
+      "createPtWarning": "<strong>This access key can read and control every Home Assistant entity.</strong> Pass-through also turns on Configuration read, Template render, Search & discovery, Registry read, Automation traces, Diagnostics, Broadcast and Service response data. Diagnostics and Service response data can reveal sensitive details. Every other capability keeps its own setting, and MESA rules, the Phoenix MCP blocklist, sensitive attribute removal, rate limits, revocation and expiry still apply. Use it only with MCP clients you trust with your whole home.",
       "createAccessKey": "Create Access Key",
       "daysAgo": "{d}d ago",
       "delete": "Delete",
@@ -384,7 +385,7 @@
       "done": "Done",
       "empty": "No access keys yet. Create one to get started.",
       "emptyFiltered": "No access keys match the filter.",
-      "enablePtBody": "<strong>This key will read and control every entity.</strong> Eight read and diagnostic capabilities turn on too, unless set to Confirm.",
+      "enablePtBody": "<strong>This key will read and control every entity.</strong> Eight read and diagnostic capabilities turn on too.",
       "enablePtCheck": "I understand access key <code>{name}</code> will have broad Home Assistant access",
       "enablePtFailed": "Failed to enable pass-through.",
       "enablePtLabel": "Enable Pass-Through",
@@ -457,7 +458,7 @@
       "presetNewName": "New preset name",
       "presetNoChange": "This preset matches the current settings, so no setting changes. Applying it still counts as a settings change: connected agents are told so on their next call, and the rate limit count starts over.",
       "presetPtUnderstand": "I understand this preset enables pass-through",
-      "presetPtWarning": "<strong>This preset turns on pass-through.</strong> The access key can then read and control every entity, and eight more capabilities turn on, including Diagnostics and Service response data, unless they are set to Confirm. Other capabilities, MESA rules, the Phoenix MCP blocklist and sensitive attribute removal still apply.",
+      "presetPtWarning": "<strong>This preset turns on pass-through.</strong> The access key can then read and control every entity, and eight more capabilities turn on, including Diagnostics and Service response data. Other capabilities, MESA rules, the Phoenix MCP blocklist and sensitive attribute removal still apply.",
       "presetRenameTitle": "Rename this preset; saves when you click away",
       "presetRevert": "Revert",
       "presetRevertBody": "This discards the unsaved changes on <strong>{name}</strong>:",
@@ -470,7 +471,7 @@
       "presetSwitchTo": "Switch To",
       "ptConvertBody": "The key follows its Permissions Tree straight away. With no grants there, it loses all entity access.",
       "ptConvertFailed": "Failed to convert access key.",
-      "ptNoticeCaps": "Eight read and diagnostic capabilities are on too, unless set to Confirm. The rest keep their own setting.",
+      "ptNoticeCaps": "Eight read and diagnostic capabilities are on too. The rest keep their own setting.",
       "ptNoticeIntro": "<strong>Pass-through access key.</strong> It skips the Permissions Tree and reaches every entity, with sensitive attributes removed.",
       "ptNoticeUsage": "Pass-through can send details of every entity to the model, which costs more tokens than a scoped tree.",
       "rateBurstLabel": "Burst per second (0 = no per-second limit)",
@@ -519,9 +520,11 @@
       "killSwitchShort": "KILL SWITCH ON",
       "killSwitchTitle": "Phoenix MCP is not serving any agent requests. Disable the kill switch in Settings to resume.",
       "loadAccessKeysFailed": "Failed to load access keys.",
+      "loadSettingsFailed": "Failed to load settings.",
       "offlineBody": "Home Assistant is not answering, usually because it is restarting. Retrying, please wait...",
       "offlineTitle": "Phoenix is unavailable",
       "renderFailed": "This view could not be displayed. Refresh to try again, or choose another section.",
+      "retrySettingsHelp": "Read the settings from Home Assistant again.",
       "sectionsAria": "Phoenix MCP sections",
       "srTitle": "Phoenix MCP Access Key Management",
       "tabAccessKeys": "Access Keys",
@@ -530,7 +533,8 @@
       "tabChanges": "Changes",
       "tabMesa": "MESA",
       "tabSettings": "Settings",
-      "killSwitchHelp": "The kill switch is on, so agents are refused. Select to open Safety and turn it off."
+      "killSwitchHelp": "The kill switch is on, so agents are refused. Select to open Safety and turn it off.",
+      "chatListsFailed": "Agent Chat could not load its access keys or AI providers. It tries again when you open it or when Home Assistant reconnects."
     },
     "workspace": {
       "addToMy": "Add to My Workspace",
@@ -1215,7 +1219,8 @@
       "profileSet": "MESA profile set for {key} - click to edit",
       "profileCreate": "Create a MESA profile for {key}",
       "registryLoadFailed": "Failed to load the entity registry.",
-      "mesaProfile": "MESA Profile"
+      "mesaProfile": "MESA Profile",
+      "openFailed": "The MESA profile editor could not open. Reload the page and try again."
     },
     "mesa": {
       "addAreaProfile": "Add Area Profile",
@@ -1750,7 +1755,7 @@
       "voiceAccessKeyAria": "Voice agent access key",
       "voiceAccessKeyHelp": "Controls which entities and actions this voice agent can access.",
       "wipeBusy": "Wiping...",
-      "wipeCoreHelp": "Delete every access key, setting, approval, change record and log. This can't be undone.",
+      "wipeCoreHelp": "Delete every access key, setting, approval, change record and log, but not safety copies. This can't be undone.",
       "wipeCoreLabel": "Delete core Phoenix MCP data",
       "wipeFailed": "Wipe failed.",
       "wipeMesaHelp": "Delete every MESA profile. Off by default; export your profiles first to keep a copy.",
@@ -1883,6 +1888,7 @@
       "clearHistory": "Clear Chat History",
       "configureFirst": "Configure a provider first",
       "connection": "Connection",
+      "connectionLost": "The connection to Home Assistant dropped before this reply finished.",
       "continue": "Continue",
       "decreaseTextSize": "Decrease Text Size",
       "dockedClosed": "Agent Chat is closed.",
@@ -1914,6 +1920,7 @@
         "empty_turn": "The model ended the turn without a text reply.",
         "internal": "Internal error.",
         "max_tokens_stop": "The model stopped because it reached its output length limit. Ask it to continue, or raise the model's output token limit (for Ollama, its num_predict/context settings).",
+        "memory_trimmed": "The conversation grew past what one request can carry, so the model no longer remembers the oldest messages. They stay on screen.",
         "model_api_unsupported": "This model is not qualified for OpenCode Chat Completions. Choose a supported model.",
         "network": "The provider is temporarily unavailable.",
         "ollama_backend": "The provider is temporarily unavailable.",
@@ -1932,6 +1939,7 @@
         "provider_transient": "The provider is temporarily unavailable.",
         "quota": "The provider account has run out of credit or reached its spending limit. It will not be retried.",
         "rate_limit": "The provider is temporarily unavailable.",
+        "request_too_large": "This message is too large to send. Shorten it, remove images, or start a new conversation with /clear.",
         "too_many_tools": "This access key announces {count} tools, but {provider} accepts at most {limit} in one request. Narrow the access key's capabilities or choose another provider.",
         "tool_call_cut": "The connection to the model ended in the middle of a tool call, so the action was not run. Nothing was applied and the request itself was not at fault; send it again.",
         "tool_call_truncated": "The model hit its output length limit in the middle of a tool call, so the action was not run. The requested change was too large to emit in one call; try asking for a smaller change.",
@@ -1939,7 +1947,9 @@
         "review_changed": "The access key's tools or the conversation changed while the tool call was reviewed, so nothing was run. Send the request again.",
         "kill_switch": "The kill switch is on, so the agent stopped. Nothing more was run.",
         "unreachable": "Home Assistant was not reachable, so this did not finish. Anything waiting for your approval was cancelled.",
-        "upstream": "The provider is temporarily unavailable."
+        "upstream": "The provider is temporarily unavailable.",
+        "provider_slow": "The provider sent no reply within {seconds}s.",
+        "result_withheld": "A {length}-byte result did not fit the request's context and was withheld from the model."
       },
       "options": "Options",
       "pausedAfter": {
@@ -2244,6 +2254,7 @@
       "mesaArchiveRequired": "archive is required.",
       "mesaProfileExists": "A profile already exists. Open it in Edit mode.",
       "mesaConflictModeInvalid": "on_conflict must be skip or overwrite.",
+      "mesaSaveFailed": "The MESA change could not be saved, so the previous settings still apply.",
       "mesaUnavailable": "MESA is not available.",
       "nonNegativeRequired": "{field} must be non-negative.",
       "nothingToContinue": "There is no conversation to continue.",
@@ -2374,7 +2385,9 @@
       "decisionProviderCheckFailed": "Decision provider check failed ({detail}).",
       "restoreNoConfigSide": "This version has no configuration to restore on that side.",
       "restoreYamlTags": "This version contains YAML tags such as !secret or !include and cannot be restored automatically. Re-create it manually.",
-      "restoreToolReported": "The restore could not be applied. The tool reported: {detail}"
+      "restoreToolReported": "The restore could not be applied. The tool reported: {detail}",
+      "recoverySnapshotUnsafeAt": "No complete copy of this item without secrets is available, so nothing was changed. Phoenix refused it at {location}.",
+      "invalidHostHeader": "The request's Host header is not a valid address."
     },
     "mesaSuggestion": {
       "baseline_note": " Prohibited matches the built-in baseline for this domain, so the profile makes that intent explicit. To allow agent control behind admin approval instead, choose Confirm in Profile Editor before saving; approval applies while MESA is enforced.",
@@ -2944,7 +2957,9 @@
       "saveFailed": "The review could not be saved. The action still needs review.",
       "showInAudit": "Show in Audit Log",
       "title": "Needs Attention",
-      "unknown": "The conversation ended before Phoenix recorded whether this action ran, so it may have run. Show in Audit Log, where offered, shows what Phoenix recorded; an action that waited for approval has its status in Approvals. Check Home Assistant itself before trying it again."
+      "unknown": "The conversation ended before Phoenix recorded whether this action ran, so it may have run. Show in Audit Log, where offered, shows what Phoenix recorded; an action that waited for approval has its status in Approvals. Check Home Assistant itself before trying it again.",
+      "audit_storageTitle": "The audit log is not reaching storage",
+      "audit_storageHelp": "Recent audit entries are held in memory only, so a restart would lose them. Check Home Assistant logs. This clears after the next save succeeds."
     }
   },
   "notification": {

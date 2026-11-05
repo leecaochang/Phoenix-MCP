@@ -240,7 +240,7 @@ class TestUpdateStatus:
 
 
 class TestCancelQueuedAtStartup:
-    """A restart drops the requests nobody is waiting for any more (user, 2026-10-29)."""
+    """A restart drops the requests nobody is waiting for any more."""
 
     @pytest.mark.asyncio
     async def test_cancels_every_queued_request_and_leaves_decided_ones(self, store):
@@ -416,6 +416,22 @@ class TestExpire:
         assert get_approval(store, record.id).status == STATUS_EXPIRED
 
     @pytest.mark.asyncio
+    async def test_expires_at_exactly_the_deadline_and_not_before(self, store, freezer):
+        record = await async_create_pending_approval(
+            store, access_key_id="t1", access_key_name="a", tool_name="x",
+            cap_name="cap_restart", args={}, diff={}, request_id="r",
+            ttl_seconds=60,
+        )
+        raw = store.get_pending_approvals()
+        raw[0]["expires_at"] = (utcnow() + timedelta(microseconds=1)).isoformat()
+        store.set_pending_approvals(raw)
+        assert await async_expire_overdue_approval_records(store) == []
+        assert get_approval(store, record.id).status == STATUS_PENDING
+        freezer.tick(timedelta(microseconds=1))
+        assert [e.id for e in await async_expire_overdue_approval_records(store)] == [record.id]
+        assert get_approval(store, record.id).status == STATUS_EXPIRED
+
+    @pytest.mark.asyncio
     async def test_does_not_expire_in_window(self, store):
         record = await async_create_pending_approval(
             store, access_key_id="t1", access_key_name="a", tool_name="x",
@@ -483,7 +499,7 @@ class TestExpiredAccessKeyCancelsApprovals:
     @pytest.mark.asyncio
     async def test_archive_expired_access_key_rechecks_current_expiry_under_lock(self, store):
         """A concurrent expiry extension wins over an older timer snapshot."""
-        from custom_components.phoenix_mcp.helpers import async_archive_expired_access_key
+        from custom_components.phoenix_mcp.access_key_auth import async_archive_expired_access_key
 
         stale = MagicMock(id="tok-exp", name="alice")
         stale.expires_at = utcnow() - timedelta(seconds=1)
@@ -511,7 +527,7 @@ class TestExpiredAccessKeyCancelsApprovals:
         dismissed, and phoenix_mcp_approval_resolved fires for each."""
         from unittest.mock import MagicMock, patch
 
-        from custom_components.phoenix_mcp.helpers import async_archive_expired_access_key
+        from custom_components.phoenix_mcp.access_key_auth import async_archive_expired_access_key
 
         record = await async_create_pending_approval(
             store, access_key_id="tok-exp", access_key_name="a", tool_name="restart_ha",
@@ -533,7 +549,7 @@ class TestExpiredAccessKeyCancelsApprovals:
         store.get_access_key_by_id = MagicMock(return_value=access_key)
 
         with patch(
-            "custom_components.phoenix_mcp.approvals.dismiss_approval_notification"
+            "custom_components.phoenix_mcp.access_key_auth.dismiss_approval_notification"
         ) as dismiss:
             await async_archive_expired_access_key(hass, data, access_key)
 
@@ -551,7 +567,7 @@ class TestExpiredAccessKeyCancelsApprovals:
         the expiring access key, and re-syncs the voice agent."""
         from unittest.mock import MagicMock, patch
 
-        from custom_components.phoenix_mcp.helpers import async_archive_expired_access_key
+        from custom_components.phoenix_mcp.access_key_auth import async_archive_expired_access_key
 
         await store.async_patch_settings(assist_bound_access_key_id="tok-exp", voice_agent_access_key_id="tok-exp")
         store.async_archive_access_key = AsyncMock(return_value=MagicMock())
@@ -1018,7 +1034,7 @@ async def test_interrupted_approvals_stay_but_drop_their_payload_after_the_histo
 
 
 async def test_device_codes_are_hidden_from_review_but_kept_for_the_executor(store):
-    """A disarm code is a credential: the admin view and the stored diff hide it (2026-11-01).
+    """A disarm code is a credential: the admin view and the stored diff hide it.
 
     The executor re-runs the saved args, so they keep the code; only what an
     administrator sees, and the review diff on disk, lose it.

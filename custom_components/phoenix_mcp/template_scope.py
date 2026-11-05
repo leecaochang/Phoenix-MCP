@@ -224,8 +224,11 @@ def validate_template_selectors(options: Any, template_type: str) -> None:
 
     Raises HelperScopeError. Their future authority cannot be established.
     """
+    # Local: not part of the recorded Home Assistant import floor.
+    from homeassistant.helpers.selector import ActionSelector
+    from homeassistant.helpers.selector import DeviceSelector
+    # Local: optional component, imported only when this path runs.
     from homeassistant.components.template.config_flow import config_schema
-    from homeassistant.helpers.selector import ActionSelector, DeviceSelector
 
     def walk(schema: Any, values: Any) -> None:
         if not isinstance(values, dict):

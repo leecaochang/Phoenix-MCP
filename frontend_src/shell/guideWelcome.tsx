@@ -1,5 +1,5 @@
 /**
- * Welcome to the Guide (user, 2026-11-02/03): a bright demo of what the Guide
+ * Welcome to the Guide: a bright demo of what the Guide
  * does, with nothing to finish. Each tip reacts when the reader tries it, while
  * the page stays on screen: resting the pointer on a button shows that Quick
  * Help explained it; selecting something in a window invites the reader to read
@@ -13,7 +13,7 @@
  * so it does not open on Welcome afterwards. Welcome is always the first page
  * of the Guide's history, so Back reaches it, and Contents lists it. Its words
  * are the Guide topic `topic.welcome`; this module draws them, with the only
- * controls and pictures the Guide carries (user, 2026-11-02).
+ * controls and pictures the Guide carries.
  */
 
 import { createContext, useContext, useEffect, useMemo, useState, useSyncExternalStore } from "react";
@@ -26,6 +26,7 @@ import { PALETTES, readPalette, setPalette, subscribeTheme } from "../ui/theme";
 import { renderTopic, topicTitle, useSearchSections, type FoundTopic, type Guide } from "./guide";
 import type { Theme } from "./settings";
 import { WELCOME_STEPS, type WelcomeState, type WelcomeStep } from "./storage";
+import { isImeKey } from "../utils/ime";
 
 export const WELCOME_TOPIC = "topic.welcome";
 /** The section holding the look controls. */
@@ -132,7 +133,7 @@ function SearchTry({ guide, onType }: { guide: Guide; onType: () => void }) {
         <input type="search" className="input" value={query} placeholder={t("guide.welcomeSearchHint", { word: SEARCH_SUGGESTION })}
           aria-label={t("guide.searchPlaceholder")} data-help="help.guideSearchInput"
           onChange={(e) => { setQuery(e.target.value); if (e.target.value.trim()) onType(); }}
-          onKeyDown={(e) => { if (e.key === "Enter" && hits[0]) { e.preventDefault(); guide.open(hits[0].section.topic, hits[0].section.anchor); } }} />
+          onKeyDown={(e) => { if (e.key === "Enter" && hits[0] && !isImeKey(e)) { e.preventDefault(); guide.open(hits[0].section.topic, hits[0].section.anchor); } }} />
       </label>
       <ResultCount count={hits.length} query={query} />
       {query.trim() && !hits.length && <p className="phx-guide-note">{t("guide.noResults")}</p>}
@@ -243,7 +244,7 @@ export function WelcomeCard({ guide, topic, onDismiss }: { guide: Guide; topic: 
           <MakeItYours welcome={welcome} />
         </section>
       )}
-      {/* Dismiss again at the end, so it is plain the reader can leave at any time (user, 2026-11-03). */}
+      {/* Dismiss again at the end, so it is plain the reader can leave at any time. */}
       <div className="phx-welcome-actions">
         <button type="button" className="btn btn-ghost btn-sm" data-help="help.guideDismissWelcome" onClick={onDismiss}>
           <Icon name="close" size={14} />

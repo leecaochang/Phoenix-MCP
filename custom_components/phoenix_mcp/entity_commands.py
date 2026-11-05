@@ -21,7 +21,14 @@ from homeassistant.components.vacuum import VacuumEntityFeature
 from homeassistant.components.valve import ValveEntityFeature
 from homeassistant.components.water_heater import WaterHeaterEntityFeature
 
-from .const import COMMAND_ROUTING_ENTITY_INTENTS, COMMAND_ROUTING_ENTITY_VALUE_LIMIT, COMMAND_ROUTING_FIXED_INTENT_DATA, COMMAND_ROUTING_READ_INTENTS, COMMAND_ROUTING_READ_ATTRIBUTES, COMMAND_ROUTING_READ_PERCENT_SCALES, DECISION_ENTITY_VALUE_QUESTIONS, COMMAND_ROUTING_REQUIRED_STATES
+from .routing.command_operations import finite_number
+from .routing.decision_provider import confident_choice, DecisionError
+from .routing.routing_tables import (
+    COMMAND_ROUTING_ENTITY_INTENTS, COMMAND_ROUTING_ENTITY_VALUE_LIMIT,
+    COMMAND_ROUTING_FIXED_INTENT_DATA, COMMAND_ROUTING_READ_INTENTS,
+    COMMAND_ROUTING_READ_ATTRIBUTES, COMMAND_ROUTING_READ_PERCENT_SCALES,
+    DECISION_ENTITY_VALUE_QUESTIONS, COMMAND_ROUTING_REQUIRED_STATES, COMMAND_ROUTING_PROOF_FIELDS,
+)
 
 _FEATURES = {'alarm_control_panel': AlarmControlPanelEntityFeature, 'light': LightEntityFeature, 'climate': ClimateEntityFeature, 'cover': CoverEntityFeature, 'fan': FanEntityFeature,
              'humidifier': HumidifierEntityFeature, 'lawn_mower': LawnMowerEntityFeature, 'lock': LockEntityFeature,
@@ -54,6 +61,7 @@ def supports_entity_command(state: Any, intent: str) -> bool:
         feature_type = _FEATURES.get(state.domain)
         if state.domain == 'camera':
             # Camera has optional dependencies; importing it must not be a Phoenix setup requirement.
+            # Local: optional component, imported only when this path runs.
             from homeassistant.components.camera import CameraEntityFeature
             feature_type = CameraEntityFeature
         feature = getattr(feature_type, spec[4], None)
@@ -104,7 +112,6 @@ def valid_entity_value(state: Any, intent: str, value: Any) -> bool:
 
 
 def entity_arguments(proposal: dict) -> dict | None:
-    from .const import COMMAND_ROUTING_PROOF_FIELDS
     spec = COMMAND_ROUTING_ENTITY_INTENTS.get(proposal.get('intent', ''))
     if spec is None or proposal.get("intent") in COMMAND_ROUTING_READ_INTENTS:
         return None
@@ -128,7 +135,6 @@ def literal_text(sentence: str) -> str | None:
 
 def value_choices(sentence: str, targets: dict, question: str = "value") -> dict[str, str]:
     """Opaque choices contain only known options or one independently copied text literal."""
-    from .decision_provider import DecisionError
     values = set()
     for descriptor in targets.values():
         for metadata in descriptor.get('entity_operations', {}).values():
@@ -150,7 +156,6 @@ def value_choices(sentence: str, targets: dict, question: str = "value") -> dict
 
 def chosen_entity_value(answer: dict, sentence: str, targets: dict, descriptor: dict, category: str) -> str | None:
     """Bind a choice to this operation and target, not another entity's option list."""
-    from .decision_provider import confident_choice
     metadata = descriptor.get('entity_operations', {}).get(category, {})
     question = metadata.get('kind') if metadata.get('kind') in ('attribute', 'color') else 'value'
     if any(answer.get(other, {}).get('choice', 'none') != 'none' for other in DECISION_ENTITY_VALUE_QUESTIONS if other != question):
@@ -182,7 +187,6 @@ def entity_metadata(state: Any, intent: str) -> dict:
 
 def attribute_display(field: str, value: Any, temperature_unit: str | None, domain: str) -> str | None:
     """Format only the already-authorized, scrubbed tool value, never read raw state."""
-    from .command_operations import finite_number
     conversion = COMMAND_ROUTING_READ_PERCENT_SCALES.get(field)
     if conversion is not None and domain in conversion[0]:
         scale = conversion[1]

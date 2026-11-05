@@ -15,6 +15,8 @@
 
 該鏈中任何位置的 D 都會拒絕存取，即使實體本身設為 W。
 
+含有 D 成員的群組也會被拒絕，因為對群組的操作會觸及該成員。在範圍更大的請求中（例如整個分區），Phoenix 會略過該群組，只對其餘實體執行操作。場景、腳本和自動化不算作群組。
+
 ## 最近的授權決定結果 {#nearest}
 
 否則由最近的 R 或 W 決定。實體自身的設定優先於其裝置，裝置的設定優先於其域。如果每一層都是 N，結果為無存取權限。
@@ -53,7 +55,7 @@
 
 R 用於觸發是安全的：智慧體可以看到這些實體，但無法執行它們。權限樹會用「!」標記這些域。
 
-若要保護觸發器，請為自動化、腳本或場景設定一個設為確認的 MESA 策略。之後每次執行都會等待你的核准，無論其操作做什麼。[{{label:mesa.suggestTitle}}](guide:window.mesaSuggestions)會找出會觸及風險裝置的那些。
+若要保護觸發器，請為自動化、腳本或場景設定一個設為確認的 MESA 策略。當{{label:settings.mesaModeLabel}}或該策略為{{label:settings.mesaModeEnforced}}時，每次執行都會等待你的核准，無論其操作做什麼。在{{label:settings.mesaModeAdvisory}}下，執行會直接進行。[{{label:mesa.suggestTitle}}](guide:window.mesaSuggestions)會找出會觸及風險裝置的那些。
 
 核准只涵蓋請求時指定的確切實體及其任何群組成員。如果群組變更，智慧體必須重新詢問。Phoenix 不會檢查場景或腳本隨後做了什麼。
 

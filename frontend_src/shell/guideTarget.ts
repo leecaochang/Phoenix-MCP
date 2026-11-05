@@ -1,5 +1,5 @@
 /**
- * What the Guide shows follows what the reader works with (user, 2026-11-01):
+ * What the Guide shows follows what the reader works with:
  * selecting or focusing a control opens its window's page and the section
  * about that control. Hovering does not move the Guide, so it stays put while
  * the pointer crosses the screen.
@@ -78,7 +78,7 @@ export class GuideTargetTracker {
       // A click on a window's empty space keeps the section the reader had chosen there.
       if (!next || (next.anchor === null && next.topic === null && this.target?.windowId === next.windowId)) return;
       const same = this.target && this.target.windowId === next.windowId && this.target.topic === next.topic && this.target.anchor === next.anchor;
-      // Selecting the same control again counts, so the Guide returns to it from another page (user, 2026-11-03);
+      // Selecting the same control again counts, so the Guide returns to it from another page;
       // focus coming back to it does not.
       if (same && e.type !== "pointerdown") return;
       if (!same) this.target = next;

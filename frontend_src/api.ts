@@ -47,7 +47,7 @@ import type {
 import { validApiResponse } from "./api_response";
 
 import { hasMessage, resolveLanguage, t } from "./i18n";
-import { noteConnection } from "./utils/connection";
+import { ConnectionLostError, noteConnection } from "./utils/connection";
 
 import { setAgentCliOwner } from "./utils/agentcli_state";
 
@@ -553,7 +553,17 @@ export async function agentCliChat(
     onEvent(name, payload);
   };
   for (;;) {
-    const { done, value } = await reader.read();
+    let chunk: ReadableStreamReadResult<Uint8Array>;
+    try {
+      chunk = await reader.read();
+    } catch (e: unknown) {
+      if (signal?.aborted) throw e;
+      // The headers already arrived, so this is the server or the page going away
+      // mid-reply. The away probe clears the state if the server still answers.
+      noteConnection(false);
+      throw new ConnectionLostError();
+    }
+    const { done, value } = chunk;
     if (done) break;
     buffer += decoder.decode(value, { stream: true });
     let idx: number;

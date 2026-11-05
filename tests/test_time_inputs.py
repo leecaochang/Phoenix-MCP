@@ -19,7 +19,8 @@ from homeassistant.util.dt import utcnow
 
 from custom_components.phoenix_mcp.access_key_store import AccessKeyRecord, PermissionTree
 from custom_components.phoenix_mcp.helpers import parse_time_param
-from custom_components.phoenix_mcp.mcp_view import _call_tool, _logbook_time
+from custom_components.phoenix_mcp.tool_dispatch import _call_tool
+from custom_components.phoenix_mcp.tools.logs import _logbook_time
 from custom_components.phoenix_mcp.recorder_queries import parse_recorder_window
 
 UTC = timezone.utc

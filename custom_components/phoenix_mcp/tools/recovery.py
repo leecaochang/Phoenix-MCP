@@ -6,17 +6,42 @@ import json
 from typing import Any
 
 from homeassistant.helpers import entity_registry as er
+from homeassistant.core import HomeAssistant
 
 from ..config_recovery import ConfigurationRecoveryError, recovery_resolution
 from ..helpers import content_hash, diff_summary_fields as _summary, effective_cap
+from ..policy_engine import filter_service_response
 from ..request_authority import check_request_authority
-from ..tool_common import _CAP_FORBIDDEN_MESSAGE, _gate, _restore_ctx, _tool_error, _tool_success
+from ..template_recovery import restore_template, validate_restore_scope
+from ..template_snapshots import validate_snapshot, TEMPLATE_RECOVERY_ADAPTERS, template_snapshot
+from ..tool_common import (
+    _CAP_FORBIDDEN_MESSAGE, _gate, _restore_ctx, _tool_error, _tool_success, _tool_uncertain,
+    _record_version, _version_content_payload,
+)
+from .blueprint import (
+    _blueprint_denied, _blueprint_recovery_snapshot, _canonical_blueprint_source,
+    _read_blueprint_source, _resolve_blueprint_path, _blueprint_gate_cap,
+)
+from .dashboard_resources import (
+    execute_restore, _valid_snapshot, restore_receipt_diff, restore_refusal, restore_target,
+)
+from .energy import (
+    energy_recovery_target, restore_energy_configuration, validate_energy_recovery_scope,
+    validate_energy_recovery_snapshot, energy_recovery_diff,
+)
 from .helper import (
     _HELPER_MESA_FINGERPRINT,
     _enforce_helper_mesa_context,
     _helper_mesa_approval_gate,
     _helper_mesa_context,
     _unwritable_option_entities,
+)
+from ..ws_dispatch import (
+    WsDashboardNotFoundError, async_get_lovelace_config, WsDispatchError, async_ws_command,
+)
+from .lovelace import (
+    _dashboard_layout_snapshot, _recoverable_dashboard_save, dashboard_registry_refused,
+    _dashboard_registry_snapshot,
 )
 
 
@@ -30,8 +55,7 @@ def _may_restore_record(record: dict | None, access_key) -> bool:
     )
 
 
-def _template_record_target(record: dict[str, Any], side: str, hass) -> dict[str, Any]:
-    from ..template_recovery import template_snapshot
+def _template_record_target(record: dict[str, Any], side: str, hass: HomeAssistant) -> dict[str, Any]:
 
     source = record.get(side)
     if not isinstance(source, dict) or source.get("snapshot_type") != "template_helper":
@@ -108,7 +132,7 @@ _FILE_RECORD_REFUSED = (
 async def _tool_restore_configuration(
     args: dict,
     access_key,
-    hass,
+    hass: HomeAssistant,
     data,
     request_id: str = "",
     client_ip: str | None = None,
@@ -170,7 +194,6 @@ async def _tool_restore_configuration(
     if effective_cap(access_key, "cap_helper_write") == "deny":
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", tool
     try:
-        from ..template_recovery import validate_restore_scope, validate_snapshot
 
         selected = _selected_template_snapshot(record, side)
         validate_snapshot(selected)
@@ -182,9 +205,8 @@ async def _tool_restore_configuration(
         return _tool_error("Forbidden."), "denied", tool
     except ConfigurationRecoveryError as exc:
         return _tool_error(str(exc)), "invalid_request", tool
-    except Exception:  # noqa: BLE001 - malformed persisted values must not disclose internals
+    except Exception:  # malformed persisted values must not disclose internals
         return _tool_error("Configuration recovery record is not usable."), "invalid_request", tool
-    from ..template_recovery import TEMPLATE_RECOVERY_ADAPTERS
     options = selected["options"]
     entity_id = selected["entities"][0]["entity_id"]
     current_entry = hass.config_entries.async_get_entry(selected["entry_id"])
@@ -231,13 +253,33 @@ async def _tool_restore_configuration(
     return await _execute_restore_configuration(approval_args, access_key, hass, data)
 
 
+_BLUEPRINT_RERENDERED_NOTE = (
+    "Home Assistant re-renders a blueprint when it saves one, so this restores its content without the "
+    "snapshot's comments or formatting. The original text stays in this recovery record."
+)
+
+
+def _blueprint_restored_text(domain: str, snapshot: dict) -> str | None:
+    """The text a restore leaves on disk, so a review shows that and not the snapshot.
+
+    Source Home Assistant would refuse is shown as it stands; the executor refuses it.
+    """
+
+    content = snapshot.get("content")
+    if not isinstance(content, str):
+        return None
+    try:
+        return _canonical_blueprint_source(domain, content)
+    except Exception:  # preview only; the executor applies the real refusal
+        return content
+
+
 def _blueprint_target_snapshot(domain: str, path: str, content: str | None) -> dict:
-    from .blueprint import _blueprint_recovery_snapshot
     return _blueprint_recovery_snapshot(domain, path, content)
 
 
 async def _tool_restore_blueprint_configuration(
-    args: dict, record: dict[str, Any], side: str, access_key, hass, data,
+    args: dict, record: dict[str, Any], side: str, access_key, hass: HomeAssistant, data,
     request_id: str, client_ip: str | None,
 ) -> tuple[dict, str, str]:
     """Preflight one blueprint source restore under its dual gate.
@@ -245,7 +287,6 @@ async def _tool_restore_blueprint_configuration(
     The gate is cap_blueprint_write plus the blueprint domain's own write cap;
     Confirm on either one requires approval.
     """
-    from .blueprint import _blueprint_denied, _blueprint_gate_cap, _read_blueprint_source, _resolve_blueprint_path
 
     tool = "restore_configuration"
     snapshot = record.get(side)
@@ -272,15 +313,17 @@ async def _tool_restore_blueprint_configuration(
         digest, fingerprint = content_hash(snapshot), content_hash(target_snapshot)
     except ConfigurationRecoveryError as exc:
         return _tool_error(str(exc)), "invalid_request", tool
+    restored = await hass.async_add_executor_job(_blueprint_restored_text, domain, snapshot)
     if args.get("snapshot_digest") is None and args.get("target_fingerprint") is None:
         diff = {
             "kind": "yaml_diff", **_summary("restore.blueprint", label=path),
             "target": {"type": "blueprint", "id": f"{domain}/{path}", "label": path},
-            "before": current, "after": snapshot.get("content"),
+            "before": current, "after": restored,
         }
         return _tool_success(json.dumps({
             "status": "needs_confirmation", "recovery_id": record["id"], "side": side,
             "snapshot_digest": digest, "target_fingerprint": fingerprint, "diff": diff,
+            **({"note": _BLUEPRINT_RERENDERED_NOTE} if restored != snapshot.get("content") else {}),
         })), "allowed", tool
     if args.get("snapshot_digest") != digest or args.get("target_fingerprint") != fingerprint:
         return _tool_error("The selected blueprint snapshot or target changed; request a fresh restore receipt."), "invalid_request", tool
@@ -291,7 +334,7 @@ async def _tool_restore_blueprint_configuration(
         request_id=request_id, client_ip=client_ip,
         diff=lambda: {"kind": "yaml_diff", **_summary("restore.blueprint", label=path),
                       "target": {"type": "blueprint", "id": f"{domain}/{path}", "label": path},
-                      "before": current, "after": snapshot.get("content")},
+                      "before": current, "after": restored},
     )
     if blocked is not None:
         return blocked
@@ -299,13 +342,10 @@ async def _tool_restore_blueprint_configuration(
 
 
 async def _tool_restore_dashboard_layout(
-    args: dict, record: dict[str, Any], side: str, access_key, hass, data,
+    args: dict, record: dict[str, Any], side: str, access_key, hass: HomeAssistant, data,
     request_id: str, client_ip: str | None,
 ) -> tuple[dict, str, str]:
     """Preflight a dashboard layout restore under cap_lovelace_write."""
-    from .lovelace import _dashboard_layout_snapshot
-    from ..ws_dispatch import WsDashboardNotFoundError, async_get_lovelace_config
-    from ..policy_engine import filter_service_response
 
     tool = "restore_configuration"
     snapshot = record.get(side)
@@ -318,10 +358,10 @@ async def _tool_restore_dashboard_layout(
     if url_path is not None and not isinstance(url_path, str):
         return _tool_error("The dashboard layout target is invalid."), "invalid_request", tool
     try:
-        current = await async_get_lovelace_config(hass, url_path)
+        current = await async_get_lovelace_config(hass, url_path, storage_only=True)
     except WsDashboardNotFoundError:
         current = None
-    except Exception:  # noqa: BLE001 - unreadable target is not absence
+    except Exception:  # unreadable target is not absence
         return _tool_error("Could not read the current dashboard layout."), "invalid_request", tool
     try:
         target = _dashboard_layout_snapshot(url_path, current)
@@ -357,11 +397,10 @@ async def _tool_restore_dashboard_layout(
 
 
 async def _tool_restore_dashboard_registry(
-    args: dict, record: dict[str, Any], side: str, access_key, hass, data,
+    args: dict, record: dict[str, Any], side: str, access_key, hass: HomeAssistant, data,
     request_id: str, client_ip: str | None,
 ) -> tuple[dict, str, str]:
     """Preflight dashboard registry metadata restoration under cap_lovelace_write."""
-    from .lovelace import _dashboard_registry_snapshot
 
     tool = "restore_configuration"
     snapshot = record.get(side)
@@ -375,7 +414,7 @@ async def _tool_restore_dashboard_registry(
         lookup_key = _dashboard_registry_lookup_key(record, side, snapshot)
         target = await _dashboard_registry_snapshot(hass, lookup_key)
         digest, fingerprint = content_hash(snapshot), content_hash(target)
-    except Exception:  # noqa: BLE001 - incomplete registry read is not absence
+    except Exception:  # incomplete registry read is not absence
         return _tool_error("Could not read the current dashboard registry."), "invalid_request", tool
     if args.get("snapshot_digest") is None and args.get("target_fingerprint") is None:
         return _tool_success(json.dumps({
@@ -405,9 +444,8 @@ async def _tool_restore_dashboard_registry(
     return await _execute_restore_configuration(bound, access_key, hass, data)
 
 
-async def _execute_restore_dashboard_registry(args, record, side, snapshot, access_key, hass, data):
+async def _execute_restore_dashboard_registry(args, record, side, snapshot, access_key, hass: HomeAssistant, data):
     """Revalidate and restore one dashboard registry row, recording the inverse."""
-    from .lovelace import _dashboard_registry_snapshot
 
     tool = "restore_configuration"
     if effective_cap(access_key, "cap_lovelace_write") == "deny":
@@ -436,8 +474,6 @@ async def _execute_restore_dashboard_registry(args, record, side, snapshot, acce
                     await recovery.mark(rid, "not_applied")
                     return _tool_error("The dashboard registry changed before restore dispatch."), "invalid_request", tool
                 check_request_authority()
-                from ..ws_dispatch import WsDispatchError, async_ws_command
-                from .lovelace import dashboard_registry_refused
                 if snapshot["exists"]:
                     dashboard = snapshot.get("dashboard")
                     if not isinstance(dashboard, dict):
@@ -450,6 +486,7 @@ async def _execute_restore_dashboard_registry(args, record, side, snapshot, acce
                         # single-word path such as "map" needs this flag to be created again.
                         command, payload = "lovelace/dashboards/create", {**metadata, "allow_single_word": True}
                     else:
+                        # Local: optional component, imported only when this path runs.
                         from homeassistant.components.lovelace.const import STORAGE_DASHBOARD_UPDATE_FIELDS
                         fields = {getattr(field, "schema", field) for field in STORAGE_DASHBOARD_UPDATE_FIELDS}
                         command = "lovelace/dashboards/update"
@@ -480,10 +517,10 @@ async def _execute_restore_dashboard_registry(args, record, side, snapshot, acce
                         )))
                 if not same:
                     await recovery.mark(rid, "partial", observed=observed)
-                    return _tool_success(json.dumps({
+                    return _tool_uncertain({
                         "status": "partial", "recovery_id": rid,
                         "message": "Dashboard registry readback differs; do not retry automatically.",
-                    }, default=str)), "allowed", tool
+                    }), "invalid_request", tool
                 await recovery.mark(rid, "verified", observed_hash=content_hash(observed))
                 await recovery.set_source(rid, observed)
                 return _tool_success(json.dumps({
@@ -493,16 +530,15 @@ async def _execute_restore_dashboard_registry(args, record, side, snapshot, acce
                 recovery.leave(rid)
     except ConfigurationRecoveryError as exc:
         return _tool_error(str(exc)), "invalid_request", tool
-    except Exception:  # noqa: BLE001 - keep uncertain outcome in the recovery store
+    except Exception:  # keep uncertain outcome in the recovery store
         return _tool_error("Dashboard registry restore outcome is uncertain; inspect configuration recovery before retrying."), "invalid_request", tool
 
 
 async def _tool_restore_dashboard_resource(
-    args: dict, record: dict[str, Any], side: str, access_key, hass, data,
+    args: dict, record: dict[str, Any], side: str, access_key, hass: HomeAssistant, data,
     request_id: str, client_ip: str | None,
 ) -> tuple[dict, str, str]:
     """Preflight a dashboard resource restore under cap_dashboard_resources."""
-    from .dashboard_resources import _valid_snapshot, restore_receipt_diff, restore_refusal, restore_target
 
     tool = "restore_configuration"
     if effective_cap(access_key, "cap_dashboard_resources") == "deny":
@@ -516,7 +552,7 @@ async def _tool_restore_dashboard_resource(
         digest, fingerprint = content_hash(snapshot), content_hash(target)
     except ConfigurationRecoveryError as exc:
         return _tool_error(str(exc)), "invalid_request", tool
-    except Exception:  # noqa: BLE001 - an incomplete resource read is not absence
+    except Exception:  # an incomplete resource read is not absence
         return _tool_error("Could not read the current dashboard resources."), "invalid_request", tool
     if (refusal := restore_refusal(data, target, snapshot)) is not None:
         return _tool_error(refusal), "denied", tool
@@ -540,14 +576,10 @@ async def _tool_restore_dashboard_resource(
 
 
 async def _tool_restore_energy_configuration(
-    args: dict, record: dict[str, Any], side: str, access_key, hass, data,
+    args: dict, record: dict[str, Any], side: str, access_key, hass: HomeAssistant, data,
     request_id: str, client_ip: str | None,
 ) -> tuple[dict, str, str]:
     """Preflight an Energy restore and bind its live target into Phoenix approval."""
-    from .energy import (
-        energy_recovery_diff, energy_recovery_target,
-        validate_energy_recovery_scope, validate_energy_recovery_snapshot,
-    )
 
     tool = "restore_configuration"
     if effective_cap(access_key, "cap_energy_write") == "deny":
@@ -563,7 +595,7 @@ async def _tool_restore_energy_configuration(
         fingerprint = content_hash(target)
     except ConfigurationRecoveryError as exc:
         return _tool_error(str(exc)), "invalid_request", tool
-    except Exception:  # noqa: BLE001 - malformed persisted snapshots fail closed
+    except Exception:  # malformed persisted snapshots fail closed
         return _tool_error("Energy recovery target is not usable."), "invalid_request", tool
     if args.get("snapshot_digest") is None and args.get("target_fingerprint") is None:
         return _tool_success(json.dumps({
@@ -592,7 +624,7 @@ async def _tool_restore_energy_configuration(
 
 
 async def _execute_restore_configuration(
-    args: dict, access_key, hass, data
+    args: dict, access_key, hass: HomeAssistant, data
 ) -> tuple[dict, str, str]:
     """Revalidate owner, snapshot digest and target fingerprint after approval.
 
@@ -611,10 +643,6 @@ async def _execute_restore_configuration(
         return _tool_error("side must be 'before' or 'source'."), "invalid_request", tool
     selected = record.get(side)
     if isinstance(selected, dict) and selected.get("snapshot_type") == "energy_preferences":
-        from .energy import (
-            energy_recovery_target, restore_energy_configuration,
-            validate_energy_recovery_scope, validate_energy_recovery_snapshot,
-        )
 
         if effective_cap(access_key, "cap_energy_write") == "deny":
             return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", tool
@@ -629,7 +657,7 @@ async def _execute_restore_configuration(
             return await restore_energy_configuration(selected, access_key, hass, data)
         except ConfigurationRecoveryError as exc:
             return _tool_error(str(exc)), "invalid_request", tool
-        except Exception:  # noqa: BLE001 - family adapter owns the recovery outcome
+        except Exception:  # family adapter owns the recovery outcome
             return _tool_error("Energy restoration failed; inspect Home Assistant and configuration recovery before retrying."), "invalid_request", tool
     if isinstance(selected, dict) and selected.get("snapshot_type") in ("authored_file", "yaml_file"):
         return _tool_error(_FILE_RECORD_REFUSED), "invalid_request", tool
@@ -640,7 +668,6 @@ async def _execute_restore_configuration(
     if isinstance(selected, dict) and selected.get("snapshot_type") == "dashboard_registry":
         return await _execute_restore_dashboard_registry(args, record, side, selected, access_key, hass, data)
     if isinstance(selected, dict) and selected.get("snapshot_type") == "dashboard_resource":
-        from .dashboard_resources import execute_restore
         return await execute_restore(
             record, side, selected, snapshot_digest=args.get("snapshot_digest"),
             target_fingerprint=args.get("target_fingerprint"), access_key=access_key, hass=hass, data=data,
@@ -648,7 +675,6 @@ async def _execute_restore_configuration(
     if effective_cap(access_key, "cap_helper_write") == "deny":
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", tool
     try:
-        from ..template_recovery import restore_template, validate_restore_scope, validate_snapshot
 
         selected = _selected_template_snapshot(record, side)
         validate_snapshot(selected)
@@ -675,19 +701,12 @@ async def _execute_restore_configuration(
         return _tool_error("Forbidden."), "denied", tool
     except ConfigurationRecoveryError as exc:
         return _tool_error(str(exc)), "invalid_request", tool
-    except Exception:  # noqa: BLE001 - restoration adapter owns the detailed recovery receipt
+    except Exception:  # restoration adapter owns the detailed recovery receipt
         return _tool_error("Template restoration failed; inspect Home Assistant and configuration recovery before retrying."), "invalid_request", tool
 
 
-async def _execute_restore_blueprint_configuration(args, record, side, snapshot, access_key, hass, data):
+async def _execute_restore_blueprint_configuration(args, record, side, snapshot, access_key, hass: HomeAssistant, data):
     """Restore blueprint source only through HA's validated blueprint commands."""
-    from .blueprint import (
-        _blueprint_denied, _blueprint_recovery_snapshot, _canonical_blueprint_source, _read_blueprint_source,
-        _resolve_blueprint_path,
-    )
-    from ..tool_common import _record_version, _version_content_payload
-    from ..request_authority import check_request_authority
-    from ..ws_dispatch import WsDispatchError, async_ws_command
 
     tool = "restore_configuration"
     domain, path = snapshot.get("domain"), snapshot.get("path")
@@ -727,10 +746,10 @@ async def _execute_restore_blueprint_configuration(args, record, side, snapshot,
                 observed = await _read_blueprint_source(hass, target_path)
                 if observed != expected_source:
                     await recovery.mark(rid, "partial", observed_hash=content_hash(observed or ""))
-                    return _tool_success(json.dumps({
+                    return _tool_uncertain({
                         "status": "partial", "recovery_id": rid,
                         "message": "Blueprint restore was submitted but readback differs; do not retry automatically.",
-                    })), "allowed", tool
+                    }), "invalid_request", tool
                 await recovery.mark(rid, "verified", observed_hash=content_hash(observed or ""))
                 await recovery.set_source(rid, _blueprint_recovery_snapshot(domain, path, observed))
                 await _record_version(
@@ -740,26 +759,26 @@ async def _execute_restore_blueprint_configuration(args, record, side, snapshot,
                     after=_version_content_payload(observed) if observed is not None else None,
                     alias=path,
                 )
-                return _tool_success(json.dumps({"status": "verified", "recovery_id": rid})), "allowed", tool
+                return _tool_success(json.dumps({
+                    "status": "verified", "recovery_id": rid,
+                    **({"note": _BLUEPRINT_RERENDERED_NOTE} if expected_source != snapshot.get("content") else {}),
+                })), "allowed", tool
             except WsDispatchError:
                 await recovery.mark(rid, "unknown", outcome="blueprint_ws_failed")
-                return _tool_success(json.dumps({
+                return _tool_uncertain({
                     "status": "unknown", "recovery_id": rid,
                     "message": "Blueprint restore outcome is unknown; inspect before any retry.",
-                })), "allowed", tool
+                }), "invalid_request", tool
             finally:
                 recovery.leave(rid)
     except ConfigurationRecoveryError as exc:
         return _tool_error(str(exc)), "invalid_request", tool
-    except Exception:  # noqa: BLE001 - records remain unresolved if verification fails
+    except Exception:  # records remain unresolved if verification fails
         return _tool_error("Blueprint restoration failed; inspect configuration recovery before retrying."), "invalid_request", tool
 
 
-async def _execute_restore_dashboard_layout(args, record, side, snapshot, access_key, hass, data):
+async def _execute_restore_dashboard_layout(args, record, side, snapshot, access_key, hass: HomeAssistant, data):
     """Recheck the live dashboard and delegate to its locked layout adapter."""
-    from .lovelace import _dashboard_layout_snapshot, _recoverable_dashboard_save
-    from ..ws_dispatch import WsDashboardNotFoundError, async_get_lovelace_config
-    from ..tool_common import _record_version
 
     tool = "restore_configuration"
     if effective_cap(access_key, "cap_lovelace_write") == "deny":
@@ -774,7 +793,7 @@ async def _execute_restore_dashboard_layout(args, record, side, snapshot, access
         if content_hash(snapshot) != args.get("snapshot_digest"):
             return _tool_error("The selected dashboard snapshot changed after approval."), "invalid_request", tool
         try:
-            before = await async_get_lovelace_config(hass, url_path)
+            before = await async_get_lovelace_config(hass, url_path, storage_only=True)
         except WsDashboardNotFoundError:
             before = None
         target = _dashboard_layout_snapshot(url_path, before)
@@ -797,5 +816,5 @@ async def _execute_restore_dashboard_layout(args, record, side, snapshot, access
         return result
     except ConfigurationRecoveryError as exc:
         return _tool_error(str(exc)), "invalid_request", tool
-    except Exception:  # noqa: BLE001 - owning adapter keeps uncertain status in recovery
+    except Exception:  # owning adapter keeps uncertain status in recovery
         return _tool_error("Dashboard layout restore failed; inspect configuration recovery before retrying."), "invalid_request", tool

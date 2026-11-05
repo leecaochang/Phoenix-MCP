@@ -6,17 +6,21 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+
+from tests.runtime_fixtures import patch_readers
 from homeassistant.components.media_player import MediaPlayerEntityFeature
 from homeassistant.components.vacuum import VacuumEntityFeature
 from homeassistant.helpers import entity_registry as er
 from homeassistant.setup import async_setup_component
 
-from custom_components.phoenix_mcp import agentcli, mcp_view, voice_agent
+from custom_components.phoenix_mcp import agent_chat, tool_dispatch, voice_agent
+from custom_components.phoenix_mcp.llm import base as llm_base
+from custom_components.phoenix_mcp.tools import service as service_tools
 from custom_components.phoenix_mcp.audit import AuditLog
 from custom_components.phoenix_mcp.rate_limiter import RateLimiter
-from custom_components.phoenix_mcp.command_routing import async_evaluate_command
-from custom_components.phoenix_mcp.command_execution import _capture_plan, plan_is_current
-from custom_components.phoenix_mcp.command_operations import service_arguments
+from custom_components.phoenix_mcp.routing.command_routing import async_evaluate_command
+from custom_components.phoenix_mcp.routing.command_execution import _capture_plan, plan_is_current
+from custom_components.phoenix_mcp.routing.command_operations import service_arguments
 from custom_components.phoenix_mcp.const import DOMAIN
 from custom_components.phoenix_mcp.data import PhoenixData
 from custom_components.phoenix_mcp.access_key_store import PermissionNode, PermissionTree
@@ -98,7 +102,7 @@ async def test_native_action_refusals_preserve_competitors_and_precedence(hass, 
     elif change == 'duplicate':
         other = er.async_get(hass).async_get_or_create('media_player', 'test', 'duplicate', original_name='TV')
         hass.states.async_set(other.entity_id, 'paused', dict(state.attributes))
-    from custom_components.phoenix_mcp import command_routing
+    from custom_components.phoenix_mcp.routing import command_routing
     original = command_routing.async_recognize
     async def recognize(*args, **kwargs):
         result = await original(*args, **kwargs)
@@ -125,7 +129,7 @@ async def test_native_media_plan_rechecks_playing_before_effects(hass, native_ho
 
 
 async def test_native_duplicate_target_choice_retains_fixed_service_projection(hass, native_home):
-    from custom_components.phoenix_mcp.command_clarification import async_clarification_reply
+    from custom_components.phoenix_mcp.routing.command_clarification import async_clarification_reply
     home = native_home
     state = hass.states.get(home.entities['media_player'])
     other = er.async_get(hass).async_get_or_create('media_player', 'test', 'other-tv', original_name='TV')
@@ -141,20 +145,20 @@ async def test_native_duplicate_target_choice_retains_fixed_service_projection(h
 async def run_native(hass, home, sentence, ingress):
     """Leave routing, authorization, approval and recovery paths intact."""
     async def stream(*args, **kwargs):
-        yield {'type': agentcli.EV_TEXT, 'text': 'Provider fallback'}
-        yield {'type': agentcli.EV_DONE, 'stop_reason': 'end_turn',
+        yield {'type': llm_base.EV_TEXT, 'text': 'Provider fallback'}
+        yield {'type': llm_base.EV_DONE, 'stop_reason': 'end_turn',
                'assistant_msg': {'role': 'assistant', 'content': 'Provider fallback'}}
     provider = MagicMock()
     provider.stream_turn.side_effect = stream
     store = MagicMock()
     store.resolve.return_value = SimpleNamespace(model='model')
-    with (patch.object(agentcli, '_get_secret_store', AsyncMock(return_value=store)),
-          patch.object(agentcli, 'build_provider', return_value=provider),
-          patch.object(agentcli, 'async_run_voice_turn', AsyncMock(return_value='Provider fallback')) as voice):
+    with (patch_readers("custom_components.phoenix_mcp.llm.accounts._get_secret_store", AsyncMock(return_value=store)),
+          patch_readers("custom_components.phoenix_mcp.llm.factory.build_provider", return_value=provider),
+          patch("custom_components.phoenix_mcp.voice_agent.async_run_voice_turn", AsyncMock(return_value='Provider fallback')) as voice):
         if ingress == 'voice':
             result = await voice_agent.async_voice_answer(hass, home.data, sentence, language='en')
         else:
-            result = await agentcli.async_run_agent_turn(hass=hass, data=home.data, access_key=home.access_key,
+            result = await agent_chat.async_run_agent_turn(hass=hass, data=home.data, access_key=home.access_key,
                 provider=provider, session=None, messages=[{'role': 'user', 'content': sentence}], options={},
                 client_ip='agentcli', base_url='http://test', emit=AsyncMock(), cancel=asyncio.Event(), routing_language='en')
     voice.assert_not_called()
@@ -166,7 +170,7 @@ async def run_native(hass, home, sentence, ingress):
 @pytest.mark.parametrize('ingress', ['voice', 'chat'])
 async def test_native_actions_execute_once_through_existing_ingress(hass, native_home, case, ingress):
     home = native_home
-    with (patch.object(mcp_view, 'unsupported_secondary_targets', AsyncMock(return_value=[])),
+    with (patch.object(service_tools, 'unsupported_secondary_targets', AsyncMock(return_value=[])),
           patch.object(type(hass.services), 'async_call', new_callable=AsyncMock) as call):
         await run_native(hass, home, case['sentence'], ingress)
     service, values = EXPECTED[case['intent']]
@@ -185,7 +189,7 @@ async def test_native_approval_keeps_exact_action_and_current_guards(hass, nativ
     entity_id = home.entities['media_player']
     home.data.mesa.store.set(entity_id, SemanticProfile.from_dict(entity_id,
         {'semantic_profile': {'operational_boundaries': {'control_mode': 'confirm'}}}, default_origin=MetadataOrigin.USER))
-    with (patch.object(mcp_view, 'unsupported_secondary_targets', AsyncMock(return_value=[])),
+    with (patch.object(service_tools, 'unsupported_secondary_targets', AsyncMock(return_value=[])),
           patch.object(type(hass.services), 'async_call', new_callable=AsyncMock) as call):
         answer = await run_native(hass, home, 'pause TV', 'voice')
         assert 'needs approval' in answer
@@ -197,7 +201,7 @@ async def test_native_approval_keeps_exact_action_and_current_guards(hass, nativ
                                   {**state.attributes, **({'supported_features': 0} if change == 'feature' else {})})
         elif change == 'scope':
             home.access_key.permissions = PermissionTree()
-        _, outcome, _ = await mcp_view.async_execute_approved_tool(record['tool_name'], record['args'], home.access_key, hass, home.data)
+        _, outcome, _ = await tool_dispatch.async_execute_approved_tool(record['tool_name'], record['args'], home.access_key, hass, home.data)
         if change == 'unchanged':
             assert outcome == 'allowed'
             call.assert_awaited_once_with('media_player', 'media_pause', {'entity_id': [state.entity_id]}, blocking=True, return_response=False)

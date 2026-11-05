@@ -10,6 +10,7 @@ import { act, fireEvent, render, screen, waitFor, within } from "@testing-librar
 import { api, setHass } from "../api";
 import { ProfileEditor } from "../views/MesaView";
 import type { MesaProfileDetail } from "../types";
+import { MesaProvider, useMesa } from "../shell/mesa";
 import { EMPTY_ISSUES, advisoryWindow, editorWindow, mockEmptyMesa, profilesWindow, renderMesa, rowsIn } from "./mesa_harness";
 
 vi.mock("../phoenix-mcp-panel.css?inline", () => ({ default: "" }));
@@ -25,6 +26,12 @@ vi.mock("../api", async (importOriginal) => {
 });
 
 const doc = (mode: string) => ({ semantic_profile: { operational_boundaries: { control_mode: mode } } });
+
+let mesaState: ReturnType<typeof useMesa> = null;
+function MesaProbe() {
+  mesaState = useMesa();
+  return null;
+}
 
 beforeEach(() => {
   vi.resetAllMocks();
@@ -123,5 +130,36 @@ describe("Effective Resolution after Save", () => {
     await waitFor(() => expect(api.getMesaProfile).toHaveBeenCalledTimes(2));
     expect(effective()).toBe("prohibited");
     expect(screen.queryByText("offline")).toBeNull();
+  });
+});
+
+describe("a scope read that fails", () => {
+  const stored = { domains: [{ domain: "light", document: doc("confirm") }, { domain: "lock", document: doc("confirm") }] } as never;
+  const shownDomains = () => mesaState?.keysIn("domain").size;
+
+  it("keeps the rows shown when the read is the quiet one", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      vi.mocked(api.listMesaDomains).mockResolvedValue(stored);
+      render(<MesaProvider active><MesaProbe /></MesaProvider>);
+      await waitFor(() => expect(shownDomains()).toBe(2));
+      vi.mocked(api.listMesaDomains).mockRejectedValueOnce(new Error("Bad gateway"));
+      await act(async () => { await vi.advanceTimersByTimeAsync(30_000); });
+      expect(api.listMesaDomains).toHaveBeenCalledTimes(2);
+      expect(shownDomains()).toBe(2);
+      expect(mesaState?.error).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("says so on a read the operator asked for, and keeps the rows there too", async () => {
+    vi.mocked(api.listMesaDomains).mockResolvedValue(stored);
+    render(<MesaProvider active><MesaProbe /></MesaProvider>);
+    await waitFor(() => expect(shownDomains()).toBe(2));
+    vi.mocked(api.listMesaDomains).mockRejectedValueOnce(new Error("Bad gateway"));
+    await act(async () => { mesaState?.refresh(); });
+    await waitFor(() => expect(mesaState?.error).toBe("Failed to load MESA profiles."));
+    expect(shownDomains()).toBe(2);
   });
 });

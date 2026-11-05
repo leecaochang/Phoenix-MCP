@@ -2,6 +2,16 @@ import { describe, expect, it } from "vitest";
 import { friendlyApprovalSummary } from "../utils/approval_summary";
 
 describe("friendly approval summary", () => {
+  it("survives a malformed stored record, which is searched on every render of the panel", () => {
+    for (const field of ["kind", "summary", "summary_key", "summary_params", "target", "before", "after", "preview"]) {
+      for (const value of [null, 5, "x", [], {}, { a: 1 }, true]) {
+        for (const kind of [undefined, "yaml_diff", "config_diff", "service_preview", "system_action"]) {
+          expect(() => friendlyApprovalSummary({ kind, [field]: value } as never), `${field} ${JSON.stringify(value)}`).not.toThrow();
+        }
+      }
+    }
+  });
+
   it.each([
     ["exact", "This approval covers the entities listed below. Changed targets require a new request."],
     ["future_native_execution", "Home Assistant resolves future targets when this configuration runs. Membership may change, and later execution is outside Phoenix permission and MESA checks."],

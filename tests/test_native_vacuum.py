@@ -11,7 +11,7 @@ required_features, so a vacuum that cannot perform the operation is never target
 without the mirror the service would be called anyway and the tool would report
 success for a vacuum that ignored it.
 
-Patches target tools.native directly, never mcp_view's re-exported names: a
+Patches target tools.native directly, never another module's copy: a
 monkeypatch on a re-export fails silently and leaves these assertions passing.
 """
 

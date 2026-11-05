@@ -14,7 +14,7 @@ Phoenix 會向 Home Assistant 新增一些內容，幫助你觀察它並圍繞�
 - **Last Access**：來自外部應用程式的最後一個請求，精確到分鐘。Agent Chat、語音、AI 任務和 Assist 不會改變它。
 - **Expires In**：金鑰過期前的天數，永遠不過期時為未知。
 
-每個感測器的實體 ID 是 `sensor.phoenix_mcp_access_key_`，然後是金鑰名稱和感測器名稱。對於名為 My Access Key 的金鑰：
+每個感測器的實體 ID 是 `sensor.phoenix_mcp_access_key_`，然後是金鑰名稱和感測器名稱。對於名為 `my_access_key` 的金鑰，在英語環境下：
 
 ```text
 sensor.phoenix_mcp_access_key_my_access_key_status

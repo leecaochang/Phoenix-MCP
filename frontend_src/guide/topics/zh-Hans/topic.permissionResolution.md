@@ -15,6 +15,8 @@
 
 该链中任何位置的 D 都会拒绝访问，即使实体本身设为 W。
 
+含有 D 成员的组也会被拒绝，因为对组的操作会触及该成员。在范围更大的请求中（例如整个区域），Phoenix 会跳过该组，只对其余实体执行操作。场景、脚本和自动化不算作组。
+
 ## 最近的授权决定结果 {#nearest}
 
 否则由最近的 R 或 W 决定。实体自身的设置优先于其设备，设备的设置优先于其域。如果每一层都是 N，结果为无访问权限。
@@ -53,7 +55,7 @@
 
 R 用于触发是安全的：智能体可以看到这些实体，但无法运行它们。权限树会用“!”标记这些域。
 
-要保护触发器，请为自动化、脚本或场景设置一个设为确认的 MESA 策略。之后每次运行都会等待你的审批，无论其操作做什么。[{{label:mesa.suggestTitle}}](guide:window.mesaSuggestions)会找出会触及风险设备的那些。
+要保护触发器，请为自动化、脚本或场景设置一个设为确认的 MESA 策略。当{{label:settings.mesaModeLabel}}或该策略为{{label:settings.mesaModeEnforced}}时，每次运行都会等待你的审批，无论其操作做什么。在{{label:settings.mesaModeAdvisory}}下，运行会直接进行。[{{label:mesa.suggestTitle}}](guide:window.mesaSuggestions)会找出会触及风险设备的那些。
 
 审批只覆盖请求时指定的确切实体及其任何组成员。如果组发生变化，智能体必须重新询问。Phoenix 不会检查场景或脚本随后做了什么。
 

@@ -16,6 +16,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.event import async_call_later
 from homeassistant.helpers.storage import Store
 from homeassistant.util.dt import utcnow
+from .ws_dispatch import async_ws_command
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -74,6 +75,7 @@ class LoggerCompatibilityAdapter:
 
     def _settings_and_logs(self) -> tuple[Any, dict[str, Any]]:
         try:
+            # Local: optional component, imported only when this path runs.
             from homeassistant.components.logger.helpers import DATA_LOGGER
         except (ImportError, AttributeError) as exc:
             raise LoggerControlUnavailable("logger helper API is unavailable") from exc
@@ -132,10 +134,11 @@ class LoggerCompatibilityAdapter:
 
     async def declared_loggers(self, domain: str) -> set[str]:
         try:
+            # Local: optional component, imported only when this path runs.
             from homeassistant.components.logger.helpers import get_integration_loggers
 
             loggers = await get_integration_loggers(self.hass, domain)
-        except Exception as exc:  # noqa: BLE001 - compatibility boundary must fail closed
+        except Exception as exc:  # compatibility boundary must fail closed
             raise LoggerControlUnavailable("integration logger discovery is unavailable") from exc
         if not isinstance(loggers, set) or not all(isinstance(item, str) for item in loggers):
             raise LoggerControlUnavailable("integration logger discovery changed shape")
@@ -144,7 +147,6 @@ class LoggerCompatibilityAdapter:
     async def apply(self, domain: str, override: IntegrationOverride | None) -> None:
         self._settings_and_logs()
         try:
-            from .ws_dispatch import async_ws_command
 
             desired = override or IntegrationOverride("NOTSET", "none")
             await async_ws_command(
@@ -158,7 +160,7 @@ class LoggerCompatibilityAdapter:
             )
         except LoggerControlUnavailable:
             raise
-        except Exception as exc:  # noqa: BLE001 - compatibility boundary must fail closed
+        except Exception as exc:  # compatibility boundary must fail closed
             raise LoggerControlUnavailable("integration logger update is unavailable") from exc
 
     @staticmethod
@@ -193,7 +195,7 @@ class LoggerOverrideManager:
                 )
             if stale:
                 await self._store.async_save({"overrides": {}})
-        except Exception:  # noqa: BLE001 - optional control must not block Phoenix setup
+        except Exception:  # optional control must not block Phoenix setup
             self.storage_available = False
             _LOGGER.exception("Phoenix timed logger restoration storage is unavailable")
 
@@ -243,7 +245,7 @@ class LoggerOverrideManager:
             # best-effort exact rollback before surfacing the error.
             try:
                 await self.adapter.apply(domain, prior)
-            except Exception:  # noqa: BLE001 - preserve the original failure
+            except Exception:  # preserve the original failure
                 _LOGGER.exception("Could not roll back partial logger update for %s", domain)
             raise
         if duration_minutes is None:

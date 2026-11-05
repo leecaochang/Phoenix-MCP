@@ -17,12 +17,12 @@ import json
 import re
 from typing import Any
 
-from .const import AGENTCLI_DEFERRED_TOOL_GROUPS, AGENTCLI_LOAD_TOOLS_NAME
+from .provider_constants import AGENTCLI_DEFERRED_TOOL_GROUPS, AGENTCLI_LOAD_TOOLS_NAME
+from .tool_catalog import _TOOL_DEFS_BY_NAME, _tool_caps
 
 
 def tool_group(name: str) -> str | None:
     """The deferred group a published tool belongs to, or None for the starting set."""
-    from .mcp_view import _TOOL_DEFS_BY_NAME, _tool_caps  # noqa: PLC0415 - mcp_view imports agentcli
 
     definition = _TOOL_DEFS_BY_NAME.get(name)
     caps = _tool_caps(definition) if definition is not None else ()

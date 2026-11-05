@@ -4,7 +4,7 @@
  * closes, as its menu offers; the shell saves the result as the workspace's
  * phone arrangement (see PhoneLayout). Help and Notification History are not
  * offered on phones, and the Guide sits at the bottom of the stack while it is
- * open (user, 2026-11-02).
+ * open.
  */
 
 import { useContext, useEffect, useId, useMemo, useRef, type MouseEvent, type ReactNode } from "react";
@@ -34,7 +34,7 @@ const SETTLE_MS = 300;
 const HOLD_MAX_MS = 4000;
 
 /**
- * Keep a window's height while it loads (user, 2026-11-02). A loading
+ * Keep a window's height while it loads. A loading
  * placeholder is short, and on a phone the page is the scroller, so the
  * browser pulled the page up as the window shrank (Safari keeps no scroll
  * anchor) and the reader lost their place: stepping with Previous or Next,
@@ -106,7 +106,7 @@ export function phoneDefaults(workspace: WorkspaceId): { folded: string[]; close
 export function phoneWindows(workspace: WorkspaceId, myWindows: readonly string[]): WindowId[] {
   const ids: WindowId[] = workspace === "my" ? [...myWindows.filter(canAddToMy) as WindowId[], ATTENTION_WINDOW as WindowId] : WORKSPACES[workspace].windows;
   // Help explains what is being touched, which a phone cannot show while the finger is down,
-  // so neither it nor Notification History is offered on phones (user, 2026-11-02).
+  // so neither it nor Notification History is offered on phones.
   return ids.filter((id) => !SHARED_WINDOWS.includes(id) && !INLINE_ON_PHONES.includes(id));
 }
 
@@ -186,7 +186,7 @@ export function PhoneStack({ workspace, layout, onLayout, maximized = null, onMa
   onCloseArchived?: () => void;
   /** The windows added to My Workspace on phones. */
   myWindows?: readonly string[];
-  /** Add a window to My Workspace from its window menu (user, 2026-11-02), and take one out by closing it there. */
+  /** Add a window to My Workspace from its window menu, and take one out by closing it there. */
   onAddToMy?: (id: string) => void;
   onRemoveFromMy?: (id: string) => void;
   /** The Guide, at the bottom of the stack while it is open. */
@@ -235,7 +235,7 @@ export function PhoneStack({ workspace, layout, onLayout, maximized = null, onMa
         "separator",
       );
     }
-    // Add to My Workspace sits in the window menu on phones too (user, 2026-11-02), as on a desktop.
+    // Add to My Workspace sits in the window menu on phones too, as on a desktop.
     if (workspace !== "my" && onAddToMy && canAddToMy(id)) {
       entries.push({ id: "add-my", label: t("workspace.addToMy"), help: t("help.menuAddToMy"), disabled: myWindows.includes(id), onSelect: () => onAddToMy(id) });
     }

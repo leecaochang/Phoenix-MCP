@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { agentCliChat, api } from "../api";
-import { homeAssistantReachable, onConnectionChange, useHomeAssistantAway } from "../utils/connection";
+import { ConnectionLostError, homeAssistantReachable, onConnectionChange, useHomeAssistantAway } from "../utils/connection";
 import { renderMarkdown, flagsUnsafeContent } from "../utils/markdown";
 import {
   ATTACHMENT_MAX_COUNT, AttachmentError, imageFiles, prepareAttachment, withoutSentImages,
@@ -10,7 +10,7 @@ import {
 import {
   getAgentCliOwner, flushSessionDraft, getDurable, patchDurable, getSessionTurns, setSessionTurns, getLogConversationId,
   getSessionDraft, setSessionDraft,
-  getSessionUsage, setSessionUsage, type SessionUsage,
+  getSessionUsage, setSessionUsage, onSavedConversationChange, type SessionUsage,
   AGENTCLI_TEXT_SIZE_MIN_PT, AGENTCLI_TEXT_SIZE_MAX_PT, AGENTCLI_TEXT_SIZE_STEP_PT,
   normalizeAgentCliTextSize,
 } from "../utils/agentcli_state";
@@ -20,6 +20,7 @@ import { localizedApprovalReason } from "../utils/approval_reason";
 import { chatNoticeText, failureDetailText } from "../utils/chat_notice";
 import { localizedExecutorError } from "../utils/approval_text";
 import { subscribeApprovalEvents } from "../utils/approval_events";
+import { keepPageAwakeWhileHidden } from "../utils/page_suspend";
 import {
   AGENTCHAT_REVIEW_CLOSED_EVENT,
   AGENTCHAT_REVIEW_DECIDED_EVENT,
@@ -40,6 +41,8 @@ import { openPopupWindow } from "../ui/popup";
 import { Icon } from "../ui/Icon";
 import { MenuButton, MenuRootContext, type MenuEntry } from "../ui/Menu";
 import { applyThemeClass, resolveThemeClass } from "../ui/theme";
+import { isImeKey } from "../utils/ime";
+import { StatusRegion } from "./common";
 
 // One rendered item in the transcript. ts (epoch ms, stamped at creation) is
 // optional: restored session entries may lack it, and the timestamp display
@@ -57,6 +60,12 @@ type ChatEntry =
       rateLimit?: ProviderRateLimit; providerDetail?: string };
 
 const COMPOSER_MAX_ROWS = 6;
+
+// How often a streaming reply is drawn: each draw parses all of its text so far.
+const LIVE_FRAME_MS = 50;
+
+// How far above the end of the transcript still counts as being at its end.
+const FOLLOW_SLOP_PX = 8;
 
 /** Keep the composer at two visible rows, then grow with its content until six
  *  rows. Past that point it scrolls internally instead of consuming the chat. */
@@ -204,17 +213,53 @@ export function trimTurns(turns: Turn[], scrollback: number): Turn[] {
   return kept;
 }
 
+// The server refuses a request body over 1 MiB, images aside. Its count differs
+// from requestBytes by the spaces Python's JSON puts after separators, which
+// this margin covers.
+const MEMORY_MAX_BYTES = 960_000;
+
+/** What a value adds to the server's body count: JSON in ASCII, each non-ASCII
+ *  UTF-16 unit taking a six-byte escape. Image bytes have a budget of their own. */
+function requestBytes(value: unknown): number {
+  const json = JSON.stringify(value, (_key, item: unknown) => {
+    const type = item && typeof item === "object" ? (item as { type?: unknown }).type : undefined;
+    return type === "image" || type === "image_url" ? null : item;
+  }) ?? "";
+  return json.length + 5 * (json.length - json.replace(/[\u0080-\uffff]/g, "").length);
+}
+
+/** The oldest turn the next request can carry within the budget. When older
+ *  turns must go, memory starts at a turn the user opened: a turn resumed from
+ *  the round-cap checkpoint carries on from the tool calls of the one before it. */
+export function memoryStart(turns: Turn[], budget = MEMORY_MAX_BYTES): number {
+  let total = 0;
+  let start = turns.length;
+  while (start > 0) {
+    total += requestBytes(turns[start - 1].messages);
+    if (total > budget) break;
+    start -= 1;
+  }
+  if (start === 0) return 0;
+  while (start < turns.length && (turns[start].entries[0]?.kind !== "user" || !turns[start].messages.length)) start += 1;
+  return start;
+}
+
 /** Model memory for the next request. Only the newest attached images are
  *  resent, so follow-up questions can still look at them; earlier ones, and
- *  those too once a new message attaches images, become a short note. */
-export function memoryMessages(turns: Turn[], scrollback: number, replacingImages = false): unknown[] {
+ *  those too once a new message attaches images, become a short note. The
+ *  oldest turns are left out once the rest would fill the request. */
+export function memoryMessages(
+  turns: Turn[], scrollback: number, replacingImages = false, budget = MEMORY_MAX_BYTES,
+): unknown[] {
   if (scrollback <= 0) return [];
   const carriedImages = (turn: Turn) => turn.entries.some(
     (entry) => entry.kind === "user" && Array.isArray(entry.images) && entry.images.length > 0);
   let newest = -1;
   turns.forEach((turn, index) => { if (carriedImages(turn)) newest = index; });
-  return turns.flatMap((turn, index) => (carriedImages(turn) && (index !== newest || replacingImages)
-    ? withoutSentImages(turn.messages) : turn.messages));
+  const start = memoryStart(turns, budget);
+  return turns.flatMap((turn, index) => (index < start ? []
+    : carriedImages(turn) && (index !== newest || replacingImages)
+      ? withoutSentImages(turn.messages) : turn.messages));
 }
 
 // Wall-clock label for a transcript entry, in the viewer's locale convention.
@@ -325,7 +370,7 @@ function grokAtLeast(m: string, major: number, minor: number): boolean {
 
 /** OpenAI's documented reasoning levels and default for one model id, or null.
  *
- *  From OpenAI's per-model pages (2026-10-30). "none" turns reasoning off and is
+ *  From OpenAI's per-model pages. "none" turns reasoning off and is
  *  absent where a model cannot stop reasoning (GPT-6 Astra, GPT-6.1 Sol, GPT-5
  *  and the o-series); GPT-6 has no "minimal". The default is the model's own, so
  *  an untouched control keeps OpenAI's behaviour.
@@ -703,6 +748,9 @@ export function clampPosToViewport(
   };
 }
 
+/** The code of the notice that older messages were left out of what is sent. */
+const MEMORY_TRIMMED = "memory_trimmed";
+
 /** Statuses a card never asks about again. */
 const TERMINAL_APPROVAL_STATUSES: ReadonlySet<string> = new Set(["approved", "rejected", "cancelled", "expired", "failed", "resolved"]);
 
@@ -721,6 +769,8 @@ export function AgentCliWindow({
   const [models, setModels] = useState<string[]>([]);
   const [model, setModel] = useState<string>(saved.model);
   const restoredApprovals = useRef(new Set<string>());
+  // Turns taken from another tab's save: already in storage, so not written back.
+  const adoptedTurns = useRef<Turn[] | null>(null);
   const [turns, setTurns] = useState<Turn[]>(() => (saved.freshConversation ? [] : restorableTurns(getSessionTurns())).map((turn) => ({
     ...turn,
     entries: turn.entries.map((entry) => {
@@ -781,7 +831,7 @@ export function AgentCliWindow({
   const [narrowViewport, setNarrowViewport] = useState(isNarrowViewport);
   const agentChatTitle = t("agentchat.title");
   // Home Assistant away: the chat floats over every page and pops out into a window of its
-  // own, where the panel's notice cannot reach it, so it says so and takes no work (user, 2026-10-29).
+  // own, where the panel's notice cannot reach it, so it says so and takes no work.
   const away = useHomeAssistantAway(() => api.getSettings());
   const currentHass = useCallback(() => getLiveHass?.() ?? hass, [getLiveHass, hass]);
   const agentChatLanguage = resolveLanguage(currentHass());
@@ -815,6 +865,19 @@ export function AgentCliWindow({
   const updateLive = useCallback((next: ChatEntry[] | ((prev: ChatEntry[]) => ChatEntry[])) => {
     liveRef.current = typeof next === "function" ? next(liveRef.current) : next;
     setLive(liveRef.current);
+  }, []);
+  // Tokens can arrive far faster than they can be read. The ref stays current on
+  // each one; the transcript is drawn at most once a frame, on a timer because a
+  // hidden main page stops animation frames while its pop-out window is on screen.
+  const liveFrame = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const streamLive = useCallback((next: (prev: ChatEntry[]) => ChatEntry[]) => {
+    liveRef.current = next(liveRef.current);
+    if (liveFrame.current !== null) return;
+    setLive(liveRef.current);
+    liveFrame.current = setTimeout(() => {
+      liveFrame.current = null;
+      setLive(liveRef.current);
+    }, LIVE_FRAME_MS);
   }, []);
   const usageRef = useRef(usage);
   usageRef.current = usage;
@@ -942,7 +1005,9 @@ export function AgentCliWindow({
   }, [persistenceOwner, saved.freshConversation]);
   // The transcript is kept in this browser's storage for the Home Assistant user
   // (utils/agentcli_state), so it survives a remount and a reload.
-  useEffect(() => { setSessionTurns(turns, persistenceOwner); }, [persistenceOwner, turns]);
+  useEffect(() => {
+    if (turns !== adoptedTurns.current) setSessionTurns(turns, persistenceOwner);
+  }, [persistenceOwner, turns]);
   // Mirror the unsent message box into the same session tier. Done as an effect
   // rather than at each setInput call site so every path stays in sync: typing,
   // send and /clear (which set it to ""), and the cancel path that restores the
@@ -1057,22 +1122,47 @@ export function AgentCliWindow({
   // Same as above for the access key: a revoke elsewhere (Access key detail fires
   // phx-access-keys-changed, which both window hosts turn into a fresh accessKeys prop)
   // must not leave a dead access key selected. Falls back to another available
-  // access key, or "" if none remain; the conversation-reset effect above already
-  // clears history whenever accessKeyId changes, including this reselect.
+  // access key, or "" if none remain, and takes the first key to arrive when none
+  // was selected, the one its select then shows. The conversation-reset effect
+  // above already clears history whenever accessKeyId changes, including this
+  // reselect.
   useEffect(() => {
-    if (accessKeyId && !accessKeys.some((tok) => tok.id === accessKeyId)) {
+    if (!accessKeys.some((tok) => tok.id === accessKeyId)) {
       setAccessKeyId(accessKeys[0]?.id ?? "");
     }
   }, [accessKeys, accessKeyId]);
 
+  // The transcript's size after the last update, to tell whether the view was at
+  // its end before the next one, and whether the next update goes there regardless.
+  const transcriptSize = useRef<{ content: number; view: number } | null>(null);
+  const followNextUpdate = useRef(false);
+  const noteTranscriptSize = useCallback((el: HTMLElement) => {
+    transcriptSize.current = { content: el.scrollHeight, view: el.clientHeight };
+  }, []);
   const scrollToLatest = useCallback(() => {
     const el = bodyRef.current;
-    if (el) el.scrollTop = el.scrollHeight;
-  }, []);
+    if (!el) return;
+    el.scrollTop = el.scrollHeight;
+    noteTranscriptSize(el);
+  }, [noteTranscriptSize]);
 
-  // Keep the newest message visible after both content changes and geometry
-  // changes. The second write runs after layout because browsers can reset a
-  // scroller while resizing it or moving it between the panel and popup DOMs.
+  // New content moves the view to the newest message only if the view was at the
+  // end before it arrived, so a reader who scrolled up stays put. The size of the
+  // view can change between updates, as when the composer grows, and the larger
+  // of its two sizes is the one that does not mistake that for scrolling up.
+  useEffect(() => {
+    const el = bodyRef.current;
+    if (!el) return;
+    const before = transcriptSize.current;
+    const reading = !followNextUpdate.current && before !== null
+      && el.scrollTop < before.content - Math.max(before.view, el.clientHeight) - FOLLOW_SLOP_PX;
+    followNextUpdate.current = false;
+    if (reading) noteTranscriptSize(el); else scrollToLatest();
+  }, [turns, live, noteTranscriptSize, scrollToLatest]);
+
+  // Geometry changes always go to the newest message. The second write runs after
+  // layout because browsers can reset a scroller while resizing it or moving it
+  // between the panel and popup DOMs.
   useEffect(() => {
     const el = bodyRef.current;
     if (!el) return;
@@ -1080,7 +1170,7 @@ export function AgentCliWindow({
     const ownerWindow = el.ownerDocument.defaultView ?? window;
     const frame = ownerWindow.requestAnimationFrame(scrollToLatest);
     return () => ownerWindow.cancelAnimationFrame(frame);
-  }, [turns, live, mode, size, popupMount, scrollToLatest]);
+  }, [mode, size, popupMount, scrollToLatest]);
 
   // Native viewport and popup resizes do not necessarily change React state,
   // so keep a listener on both browser windows as well.
@@ -1184,6 +1274,7 @@ export function AgentCliWindow({
 
   useEffect(() => () => {
     if (abortRef.current) endTurnRef.current(true);
+    if (liveFrame.current !== null) clearTimeout(liveFrame.current);
     flushSessionDraft(persistenceOwner);
     turnGenerationRef.current += 1;
     cancelledRef.current = true;
@@ -1249,6 +1340,10 @@ export function AgentCliWindow({
     };
   }, [sending]);
 
+  // Home Assistant drops a page hidden for some minutes, and with it the request
+  // the running turn depends on.
+  useEffect(() => (sending ? keepPageAwakeWhileHidden() : undefined), [sending]);
+
   // One turn: either a new user message (mode "user") or a resume of a turn
   // that paused at the round-cap checkpoint (mode "continue", no new user
   // message; the model continues from the existing conversation).
@@ -1260,6 +1355,7 @@ export function AgentCliWindow({
   ) => {
     if (sending) return;
     const generation = ++turnGenerationRef.current;
+    followNextUpdate.current = true;
     setConnectionOpen(false);
     setPendingContinue(null);
     cancelledRef.current = false;
@@ -1282,8 +1378,14 @@ export function AgentCliWindow({
     }]);
     setSending(true);
 
-    const sentMessages = stateless ? [] : memoryOverride ?? memoryMessages(turns, scrollbackLines, images.length > 0);
+    const memoryBudget = MEMORY_MAX_BYTES - requestBytes(text);
+    const sentMessages = stateless ? [] : memoryOverride ?? memoryMessages(turns, scrollbackLines, images.length > 0, memoryBudget);
     const sentLen = sentMessages.length;
+    // Said once: the cut moves forward with every later message while the transcript keeps them all.
+    if (!stateless && scrollbackLines > 0 && memoryStart(turns, memoryBudget) > 0
+        && !turns.some((turn) => turn.entries.some((e) => e.kind === "notice" && e.code === MEMORY_TRIMMED))) {
+      updateLive((prev) => [...prev, { kind: "notice", code: MEMORY_TRIMMED, message: t(`agentchat.notice.${MEMORY_TRIMMED}`) }]);
+    }
     let newMessages: unknown[] = [];
     const ac = new AbortController();
     abortRef.current = ac;
@@ -1310,19 +1412,17 @@ export function AgentCliWindow({
     };
     const clearActivity = () => updateLive((prev) => stripActivity(prev));
     const appendAssistant = (delta: string, thinking: boolean) => {
-      updateLive((prev) => {
-        const last = prev[prev.length - 1];
-        if (last && last.kind === "assistant") {
-          const upd = { ...last } as Extract<ChatEntry, { kind: "assistant" }>;
+      const latest = liveRef.current[liveRef.current.length - 1];
+      if (latest?.kind === "assistant") {
+        streamLive((prev) => {
+          const upd = { ...prev[prev.length - 1] } as Extract<ChatEntry, { kind: "assistant" }>;
           if (thinking) upd.thinking += delta; else upd.text += delta;
           return [...prev.slice(0, -1), upd];
-        }
-        const fresh: ChatEntry = {
-          kind: "assistant", text: thinking ? "" : delta, thinking: thinking ? delta : "",
-          ts: Date.now(),
-        };
-        return [...prev, fresh];
-      });
+        });
+        return;
+      }
+      // A new message shows at once; only the tokens that extend one wait for a frame.
+      push({ kind: "assistant", text: thinking ? "" : delta, thinking: thinking ? delta : "", ts: Date.now() });
     };
 
     try {
@@ -1468,19 +1568,34 @@ export function AgentCliWindow({
     } catch (err) {
       // An intentional cancel aborts the fetch; don't surface that as an error.
       if (!cancelledRef.current && turnGenerationRef.current === generation) {
+        const restorePrompt = () => {
+          if (lastQueryRef.current) setInput((current) => current || lastQueryRef.current);
+          const sentImages = lastAttachmentsRef.current;
+          lastAttachmentsRef.current = [];
+          if (sentImages.length) setAttachments((current) => (current.length ? current : sentImages));
+        };
         // Home Assistant going away is not the model provider failing, and the window
         // already says so above the composer: no red line is added, and what was typed
-        // comes back so it can be sent again (user, 2026-10-29).
+        // comes back so it can be sent again.
         // A server answer carries its HTTP status; a network failure does not.
-        if (err instanceof Error && typeof (err as { status?: unknown }).status === "number") {
+        if (err instanceof ConnectionLostError) {
+          // Once anything came back the model may have acted on the message, so sending
+          // it again is the reader's call and it stays out of the composer.
+          const answered = liveRef.current.some((e) => e.kind !== "user" && e.kind !== "notice" && !isActivity(e));
+          push({ kind: "notice", message: t("agentchat.connectionLost") });
+          if (!answered) restorePrompt();
+        } else if (err instanceof Error && typeof (err as { status?: unknown }).status === "number") {
           // Phoenix answered and refused before any reply streamed (the kill switch, a key or
           // account no longer usable, an attachment over its limit): its own message says why,
-          // so it is shown as is, never replaced by the provider-unavailable text.
-          push({ kind: "error", code: "", message: err.message });
+          // so it is shown as is, never replaced by the provider-unavailable text. Nothing
+          // reached the model, so what was typed comes back.
+          const tooLarge = (err as { status?: unknown }).status === 413;
+          push({ kind: "error", code: tooLarge ? "request_too_large" : "", message: err.message });
+          restorePrompt();
         } else if (homeAssistantReachable()) {
           push({ kind: "error", code: "network", message: err instanceof Error ? err.message : t("agentchat.requestFailed") });
-        } else if (lastQueryRef.current) {
-          setInput((current) => current || lastQueryRef.current);
+        } else {
+          restorePrompt();
         }
       }
     } finally {
@@ -1509,7 +1624,7 @@ export function AgentCliWindow({
         if (finalText) announceReply(finalText);
       }
     }
-  }, [sending, accessKeys, turns, scrollbackLines, accessKeyId, persistenceOwner, resetUsage, instanceId, model, kind, options, caps, updateLive, announceReply]);
+  }, [sending, accessKeys, turns, scrollbackLines, accessKeyId, persistenceOwner, resetUsage, instanceId, model, kind, options, caps, updateLive, streamLive, announceReply]);
 
   // Why images cannot go with the next message, when they cannot. Unknown model
   // support is allowed: the composer says so, and a provider refusal is learned.
@@ -1667,7 +1782,7 @@ export function AgentCliWindow({
 
   // Home Assistant restarting cancels the approvals it was still holding, so a
   // card left offering Approve and Reject is stale. When it answers again, every
-  // unresolved card is verified the same way a restored one is (user, 2026-10-29).
+  // unresolved card is verified the same way a restored one is.
   const turnsRef = useRef(turns);
   turnsRef.current = turns;
   const [verifyNonce, setVerifyNonce] = useState(0);
@@ -1681,6 +1796,22 @@ export function AgentCliWindow({
     }
     if (found) setVerifyNonce((n) => n + 1);
   }), []);
+
+  // Agent Chat open in two tabs shows one conversation: a save in the other tab
+  // replaces this one's, so neither brings an older copy back. A running turn keeps
+  // its own, and its save at the end is the one that stands.
+  useEffect(() => onSavedConversationChange(() => {
+    if (abortRef.current || getAgentCliOwner() !== persistenceOwner) return;
+    const adopted = restorableTurns(getSessionTurns());
+    adoptedTurns.current = adopted;
+    setTurns(adopted);
+    setUsage(getSessionUsage());
+    setPendingContinue(null);
+    // The other tab may close before it finishes checking a card it restored.
+    const unchecked = adopted.flatMap((turn) => turn.entries).filter((e) => e.kind === "approval" && e.checking);
+    for (const entry of unchecked) if (entry.kind === "approval") restoredApprovals.current.add(entry.approvalId);
+    if (unchecked.length) setVerifyNonce((n) => n + 1);
+  }), [persistenceOwner]);
 
   // Resolution events sent while this document was absent cannot reach its
   // subscription. Verify restored cards before offering actions, and poll until
@@ -1888,6 +2019,11 @@ export function AgentCliWindow({
     }
   }, [minimize, mode, poppedOut, docked]);
 
+  // Stable for the transcript's memoized items: what it closes over changes on every drag.
+  const openReviewRef = useRef(openReview);
+  openReviewRef.current = openReview;
+  const reviewFromItem = useCallback((approvalId: string) => openReviewRef.current(approvalId), []);
+
   const maximize = useCallback(() => setMode("max"), []);
 
   // Rotating a phone (any viewport resize) can strand the remembered window or
@@ -1897,7 +2033,7 @@ export function AgentCliWindow({
   // The change-guards make in-bounds calls no-ops, so drags and resizes (which
   // already clamp to the viewport) are never fought. It runs before the window is
   // painted, so a window saved on a larger screen never shows past the edge of a
-  // smaller one, such as an iPad (user, 2026-11-02).
+  // smaller one, such as an iPad.
   useLayoutEffect(() => {
     if (poppedOut) return;
     const refit = () => {
@@ -2095,7 +2231,7 @@ export function AgentCliWindow({
           {/* One line naming the key, provider and model; the triangle beside it opens the fields that change them. */}
           <div className="agentcli-connection" data-guide="window.agentChat#connection">
             <div className="agentcli-connection-head">
-              {/* Only the triangle opens the fields: the line itself is text, not a control (user, 2026-10-29). */}
+              {/* Only the triangle opens the fields: the line itself is text, not a control. */}
               <button type="button" className="agentcli-connection-toggle" aria-expanded={connectionOpen}
                       aria-controls={connectionId} aria-label={t("agentchat.changeConnection")}
                       title={t("agentchat.changeConnection")} onClick={() => setConnectionOpen((open) => !open)}>
@@ -2170,7 +2306,7 @@ export function AgentCliWindow({
             )}
             {displayed.map((e, i) => (
               <ChatItem key={i} entry={e} verbose={options.verbose} showTs={showTimestamps} away={away}
-                        onResolve={resolveApproval} onReview={openReview}
+                        onResolve={resolveApproval} onReview={reviewFromItem}
                       />
             ))}
             {sending && (
@@ -2181,15 +2317,15 @@ export function AgentCliWindow({
             )}
           </div>
 
-          {pendingContinue !== null && !sending && (
-            <div className="agentcli-continue" role="status" data-guide="window.agentChat#check-in">
+          <StatusRegion>{pendingContinue !== null && !sending && (
+            <div className="agentcli-continue" data-guide="window.agentChat#check-in">
               <span className="agentcli-continue-text">
                 {tn("agentchat.pausedAfter", pendingContinue)}
               </span>
               <button className="btn btn-primary btn-sm" onClick={continueTurn}>{t("agentchat.continue")}</button>
               <button className="btn btn-sm" onClick={() => setPendingContinue(null)}>{t("agentchat.stop")}</button>
             </div>
-          )}
+          )}</StatusRegion>
 
           {(attachments.length > 0 || attachError) && (
             <div className="agentcli-attachments" data-guide="window.agentChat#images">
@@ -2263,7 +2399,7 @@ export function AgentCliWindow({
               // Enter that ends an input method's composition (Chinese, Japanese, Korean) picks the
               // characters; it does not send. Safari reports that as key code 229.
               onKeyDown={(e) => {
-                if (e.key !== "Enter" || e.shiftKey || e.nativeEvent.isComposing || e.keyCode === 229) return;
+                if (e.key !== "Enter" || e.shiftKey || isImeKey(e)) return;
                 e.preventDefault();
                 void send();
               }}
@@ -2454,7 +2590,14 @@ function CopyResponseButton({ text }: { text: string }) {
   );
 }
 
-function ChatItem({
+/** Parsed once per text: a transcript item redraws for reasons that leave its text alone. */
+const MarkdownText = React.memo(function MarkdownText({ text, className }: { text: string; className: string }) {
+  return <div className={className} dangerouslySetInnerHTML={{ __html: renderMarkdown(text) }} />;
+});
+
+// Memoized, with every prop stable for an entry that has not changed: the window
+// redraws on each keystroke and each drawn token, and a long transcript must not.
+const ChatItem = React.memo(function ChatItem({
   entry, verbose, showTs, away = false, onResolve, onReview,
 }: {
   entry: ChatEntry;
@@ -2517,18 +2660,13 @@ function ChatItem({
               {/* Same sanitizing renderer as the reply body: models emit
                   markdown in their reasoning too, which a raw <pre> would
                   show as literal ** and # markup. */}
-              <div
-                className="agentcli-md agentcli-thinking-body"
-                dangerouslySetInnerHTML={{ __html: renderMarkdown(entry.thinking) }}
-              />
+              <MarkdownText className="agentcli-md agentcli-thinking-body" text={entry.thinking} />
             </details>
           )}
           {hasReply && flagsUnsafeContent(entry.text) && (
             <div className="agentcli-unsafe">{t("agentchat.unsafeContent")}</div>
           )}
-          {hasReply && (
-            <div className="agentcli-md" dangerouslySetInnerHTML={{ __html: renderMarkdown(entry.text) }} />
-          )}
+          {hasReply && <MarkdownText className="agentcli-md" text={entry.text} />}
           {ts}
         </div>
       );
@@ -2609,4 +2747,4 @@ function ChatItem({
     default:
       return null;
   }
-}
+});

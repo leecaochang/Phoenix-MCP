@@ -1,5 +1,5 @@
 ---
-{ "id": "topic.configurationHistory", "title": "What Changes Records", "parent": "workspace.changes", "order": 10, "keywords": ["history", "versions", "retention", "undo", "recovery"], "sectionKeywords": { "restore": ["undo", "revert", "recreate"], "not-recorded": ["missing", "dashboard resources", "calendar"], "recovery": ["safety copy", "restore_configuration"] }, "covers": ["custom_components/phoenix_mcp/version_store.py", "custom_components/phoenix_mcp/tool_common.py", "custom_components/phoenix_mcp/mcp_view.py", "custom_components/phoenix_mcp/config_recovery.py", "custom_components/phoenix_mcp/const.py", "custom_components/phoenix_mcp/config_reconciliation.py", "custom_components/phoenix_mcp/recovery_storage.py", "custom_components/phoenix_mcp/template_recovery.py", "custom_components/phoenix_mcp/repairs.py"] }
+{ "id": "topic.configurationHistory", "title": "What Changes Records", "parent": "workspace.changes", "order": 10, "keywords": ["history", "versions", "retention", "undo", "recovery"], "sectionKeywords": { "restore": ["undo", "revert", "recreate"], "not-recorded": ["missing", "dashboard resources", "calendar"], "recovery": ["safety copy", "restore_configuration"] }, "covers": ["custom_components/phoenix_mcp/version_store.py", "custom_components/phoenix_mcp/tool_common.py", "custom_components/phoenix_mcp/tools/restore.py", "custom_components/phoenix_mcp/config_recovery.py", "custom_components/phoenix_mcp/const.py", "custom_components/phoenix_mcp/config_reconciliation.py", "custom_components/phoenix_mcp/recovery_storage.py", "custom_components/phoenix_mcp/template_recovery.py", "custom_components/phoenix_mcp/template_snapshots.py"] }
 ---
 Phoenix records a change after an agent's write has succeeded, with the item before and after it. Changes approved in Approvals are recorded the same way; requests you reject record nothing.
 
@@ -38,5 +38,7 @@ Restoring a helper usually replaces it whole, so fields added since are removed.
 ## Safety copies {#recovery}
 
 Before some risky writes, Phoenix also keeps a safety copy, separate from Changes. If a write may not have finished, Phoenix asks in Approvals whether to put the copy back. Safety copies survive deleting core data.
+
+Phoenix won't keep a copy that holds a secret, so it refuses the change instead. For a dashboard, the agent's message names the place in the layout. Ordinary card settings such as `max_tokens` or a `session` label are fine, and the layout can nest up to 100 levels.
 
 Phoenix checks unfinished writes every 30 seconds and at startup. It keeps up to 256 safety copies, each up to 1 MiB. Resolved copies are kept for 30 days, and at most 20 per item.

@@ -10,7 +10,7 @@ import pytest
 from homeassistant.components.calendar import CalendarEntity, CalendarEntityFeature, CalendarEvent, DATA_COMPONENT, EVENT_START, EVENT_END
 from homeassistant.helpers import entity_registry as er
 
-from custom_components.phoenix_mcp import mcp_view
+from custom_components.phoenix_mcp import tool_dispatch
 from custom_components.phoenix_mcp.audit import AuditLog
 from custom_components.phoenix_mcp.const import DOMAIN
 from custom_components.phoenix_mcp.data import PhoenixData
@@ -74,7 +74,7 @@ def payload(result):
 
 async def call(env, name, args):
     hass, data, access_key, _ = env
-    return await mcp_view._call_tool(name, args, access_key, hass, data)
+    return await tool_dispatch._call_tool(name, args, access_key, hass, data)
 
 
 CREATE = {'entity_id': 'calendar.test', 'event': {'summary': 'Appointment', 'start': '2026-10-02', 'end': '2026-10-03', 'description': 'Original', 'location': 'Office'}}
@@ -173,11 +173,11 @@ async def test_stale_approval_and_identity_refuse(calendar_env):
     assert (await call(calendar_env, 'update_calendar_event', args))[1] == 'pending_approval'
     approval = calendar_env[1].store.get_pending_approvals()[0]
     calendar_env[3].events[0].summary = 'External edit'
-    result = await mcp_view.async_execute_approved_tool('update_calendar_event', approval["args"], calendar_env[2], calendar_env[0], calendar_env[1])
+    result = await tool_dispatch.async_execute_approved_tool('update_calendar_event', approval["args"], calendar_env[2], calendar_env[0], calendar_env[1])
     assert result[1] == 'invalid_request'
     assert len(calendar_env[3].calls) == 1
     er.async_get(calendar_env[0]).async_update_entity('calendar.test', new_unique_id='replacement')
-    result = await mcp_view.async_execute_approved_tool('update_calendar_event', approval["args"], calendar_env[2], calendar_env[0], calendar_env[1])
+    result = await tool_dispatch.async_execute_approved_tool('update_calendar_event', approval["args"], calendar_env[2], calendar_env[0], calendar_env[1])
     assert result[1] == 'denied'
 
 
@@ -186,7 +186,7 @@ async def test_confirm_executes_once_with_frozen_payload(calendar_env):
     assert (await call(calendar_env, 'create_calendar_event', CREATE))[1] == 'pending_approval'
     approval = calendar_env[1].store.get_pending_approvals()[0]
     assert not calendar_env[3].calls
-    result = await mcp_view.async_execute_approved_tool('create_calendar_event', approval["args"], calendar_env[2], calendar_env[0], calendar_env[1])
+    result = await tool_dispatch.async_execute_approved_tool('create_calendar_event', approval["args"], calendar_env[2], calendar_env[0], calendar_env[1])
     assert result[1] == 'allowed'
     assert len(calendar_env[3].calls) == 1
 
@@ -231,7 +231,7 @@ async def test_receipt_is_access_key_and_identity_scoped(calendar_env):
     body = payload(await call(calendar_env, 'create_calendar_event', CREATE))
     access_key, _ = await calendar_env[1].store.async_create_access_key('other-calendar', 'admin', rate_limit_requests=0)
     access_key.pass_through = True
-    result = await mcp_view._call_tool('get_calendar_write', {'entity_id': 'calendar.test', 'receipt_id': body['receipt_id']}, access_key, calendar_env[0], calendar_env[1])
+    result = await tool_dispatch._call_tool('get_calendar_write', {'entity_id': 'calendar.test', 'receipt_id': body['receipt_id']}, access_key, calendar_env[0], calendar_env[1])
     assert result[1] == 'not_found'
     er.async_get(calendar_env[0]).async_update_entity('calendar.test', new_unique_id='replaced')
     assert (await call(calendar_env, 'get_calendar_write', {'entity_id': 'calendar.test', 'receipt_id': body['receipt_id']}))[1] == 'not_found'

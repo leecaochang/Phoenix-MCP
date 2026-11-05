@@ -20,7 +20,7 @@ from homeassistant.util.dt import utcnow
 from custom_components.phoenix_mcp.const import MAX_FILE_BYTES
 from custom_components.phoenix_mcp.helpers import content_hash
 from custom_components.phoenix_mcp.config_recovery import ConfigurationRecovery
-from custom_components.phoenix_mcp.mcp_view import _call_tool
+from custom_components.phoenix_mcp.tool_dispatch import _call_tool
 from custom_components.phoenix_mcp.access_key_store import PermissionTree, AccessKeyRecord
 
 
@@ -119,6 +119,31 @@ class TestListFiles:
         assert outcome == "allowed"
         names = [e["name"] for e in _json(content)["entries"]]
         assert "hello.txt" in names
+
+    async def test_a_large_directory_is_paged_within_one_result(self, hass, fs_env):
+        """Every entry stays reachable, and no reply outgrows what the Conversation Log keeps whole."""
+        from custom_components.phoenix_mcp.tool_common import stored_result_bytes
+        from custom_components.phoenix_mcp.const import TOOL_RESULT_MAX_BYTES
+
+        for index in range(3000):
+            open(hass.config.path(f"www/{'snapshot' * 25}{index:05d}.jpg"), "w").close()
+        seen, offset = [], 0
+        while True:
+            content, outcome, _ = await _call("list_files", {"path": "www", "offset": offset, "limit": 1000}, _access_key(), hass)
+            assert outcome == "allowed"
+            body = _json(content)
+            assert stored_result_bytes(body) <= TOOL_RESULT_MAX_BYTES
+            seen += [entry["name"] for entry in body["entries"]]
+            if not body["has_more"]:
+                break
+            offset = body["next_offset"]
+        assert len(seen) == len(set(seen)) == body["total"] == 3001
+
+    async def test_list_page_arguments_are_checked(self, hass, fs_env):
+        content, outcome, _ = await _call("list_files", {"path": "www", "limit": 2, "offset": 1}, _access_key(), hass)
+        assert outcome == "allowed" and _json(content)["offset"] == 1
+        content, outcome, _ = await _call("list_files", {"path": "www", "limit": 0}, _access_key(), hass)
+        assert outcome == "invalid_request"
 
     @pytest.mark.parametrize("path", ["www/missing", "www/..", "../", "www/hello.txt"])
     async def test_outside_or_absent_directory_is_not_found(self, hass, fs_env, path):

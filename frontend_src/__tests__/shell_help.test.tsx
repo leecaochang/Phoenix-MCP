@@ -81,7 +81,26 @@ describe("what Help says", () => {
     stop();
   });
 
-  it("shows the focused control's help in the language the panel changes to (user, 2026-10-31)", () => {
+  it("keeps the last control's text when focus moves into Help, where it can be read", () => {
+    const tracker = new HelpTracker();
+    render(
+      <HelpContext.Provider value={tracker}>
+        <div data-testid="root">
+          <button type="button" aria-label="First" />
+          <div data-phx-window={HELP_WINDOW} data-testid="help-body" tabIndex={-1}><HelpWindow /></div>
+        </div>
+      </HelpContext.Provider>,
+    );
+    const stop = tracker.attach(screen.getByTestId("root"));
+    const help = () => document.querySelector(".phx-help-text")!.textContent;
+    act(() => { fireEvent.focusIn(screen.getByLabelText("First")); });
+    act(() => { fireEvent.focusOut(screen.getByLabelText("First"), { relatedTarget: screen.getByTestId("help-body") }); });
+    act(() => { fireEvent.focusIn(screen.getByTestId("help-body")); });
+    expect(help()).toBe("First");
+    stop();
+  });
+
+  it("shows the focused control's help in the language the panel changes to", () => {
     const tracker = new HelpTracker();
     render(
       <HelpContext.Provider value={tracker}>

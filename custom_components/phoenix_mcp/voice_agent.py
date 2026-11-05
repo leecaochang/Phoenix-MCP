@@ -6,9 +6,9 @@ the self-contained counterpart to the llm.API bridge (assist_api.py), which hand
 Phoenix MCP's tools to a model from another integration. The module is NOT named
 conversation.py so HA does not treat it as a conversation ENTITY platform.
 
-Model-side work is reused from agentcli.py: provider accounts and keys, provider
-construction, and the gated tool loop (async_run_voice_turn), which dispatches
-every tool through mcp_view._dispatch_mcp so per-access-key scope, MESA, approvals and
+Model-side work is reused from llm/ and agent_chat.py: provider accounts and keys,
+provider construction, and the gated tool loop (async_run_voice_turn), which dispatches
+every tool through tool_dispatch._dispatch_mcp so per-access-key scope, MESA, approvals and
 audit apply identically. A confirm-gated action degrades to "queued, approve in the
 Phoenix MCP panel" (voice has no inline Approve button), so a turn never blocks.
 The bound access key, provider and model are GlobalSettings.voice_agent_*, set in the
@@ -28,8 +28,28 @@ from homeassistant.const import MATCH_ALL
 from homeassistant.core import Context, HomeAssistant
 from homeassistant.helpers import intent
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from uuid import uuid4
 
+from .agent_chat import async_run_voice_turn
+from .agent_turn import _current_dispatch_access_key
 from .helpers import LocalizedReason, voice_text
+from .helpers import instance_base_url as _base_url
+from .home_companion import is_companion
+from .household_authority import household_scope
+from .llm.accounts import _get_secret_store
+from .llm.factory import build_provider
+from .request_authority import AuthorityChangedError
+from .routing.command_clarification import (
+    async_clarification_reply, clarification_binding, clarification_prompt, is_clarification_cancel,
+)
+from .routing.command_execution import (
+    async_execute_command_plan, async_execute_local_command, LocalCommandReply,
+)
+from .routing.command_routing import (
+    RoutingAuthority, async_evaluate_command, effective_routing_mode,
+)
+from .routing.decision_shadow import async_preview_decision
+from .routing.voice_context import capture_voice_origin
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -69,9 +89,9 @@ def _spoken_text(text: str) -> str:
     spoken = re.sub(r"\n{3,}", "\n\n", spoken)
     return spoken.strip()
 
-# conversation is a core integration, but the import is guarded so setup never
-# hard-crashes and the module imports in a minimal env (same feature-detect as
-# assist_api).
+# conversation is a declared after-dependency, and routing_tables needs the intents
+# package it brings. This guard only keeps the agent class undefined when the
+# component itself fails to import (same feature-detect as assist_api).
 try:
     from homeassistant.components import conversation as _conversation
 
@@ -81,26 +101,16 @@ except ImportError:  # pragma: no cover - conversation absent only in broken env
     _CONVERSATION_AVAILABLE = False
 
 
-def _base_url(hass: HomeAssistant) -> str:
-    """Return HA's best available URL for approval/skill links, or "" if none."""
-    try:
-        from homeassistant.helpers.network import get_url  # noqa: PLC0415
-
-        return get_url(hass)
-    except Exception:  # noqa: BLE001 - NoURLAvailableError and anything else
-        return ""
+from .routing.routing_statistics import tracked_turn, local_result
 
 
-from .routing_statistics import tracked_turn
-
-
-from .conversation_log import recorded_turn
+from .conversation_log import recorded_turn, record_identity
 
 
 @recorded_turn("voice", "user_text", transform=lambda text: _spoken_text(text))
 async def async_voice_answer(
     hass: HomeAssistant, data: Any, user_text: str, *,
-    include_review_links: bool = False, language: object = None,
+    include_review_hint: bool = False, language: object = None,
     satellite_id: object = None, device_id: object = None,
     conversation_id: object = None, context: Context | None = None,
 ) -> str:
@@ -108,13 +118,11 @@ async def async_voice_answer(
 
     A change to that user mid-turn ends the turn with the "access key unavailable" sentence.
     """
-    from .household_authority import household_scope
-    from .request_authority import AuthorityChangedError
 
     try:
         async with household_scope(hass, context):
             return await _async_voice_answer(
-                hass, data, user_text, include_review_links=include_review_links,
+                hass, data, user_text, include_review_hint=include_review_hint,
                 language=language, satellite_id=satellite_id, device_id=device_id,
                 conversation_id=conversation_id,
             )
@@ -128,7 +136,7 @@ async def _async_voice_answer(
     data: Any,
     user_text: str,
     *,
-    include_review_links: bool = False,
+    include_review_hint: bool = False,
     language: object = None,
     satellite_id: object = None,
     device_id: object = None,
@@ -137,17 +145,12 @@ async def _async_voice_answer(
     """Resolve config, access key and provider, then route or run the gated voice loop.
 
     Independent of the conversation base class. A provider or loop failure degrades
-    to a spoken sentence instead of raising. include_review_links is passed through
-    to the executors (True only when no satellite_id is set; see async_process).
+    to a spoken sentence instead of raising. include_review_hint is passed through
+    to the model loop (True only when no satellite_id is set; see async_process). A
+    local command needs no hint, since its own sentence names the panel.
     Decline sentences are rendered in the CONVERSATION's language
     (helpers.voice_text), not the server's; language=None falls back to English.
     """
-    from .agentcli import (  # noqa: PLC0415
-        _current_dispatch_access_key,
-        _get_secret_store,
-        build_provider,
-        async_run_voice_turn,
-    )
 
     settings = data.store.get_settings()
     if (
@@ -167,7 +170,6 @@ async def _async_voice_answer(
     if access_key is None:
         return voice_text(language, "access_key_unavailable")
 
-    from .command_routing import RoutingAuthority, async_evaluate_command, effective_routing_mode
 
     routing_mode = effective_routing_mode(settings)
     authority = RoutingAuthority.capture(data, access_key) if routing_mode in ("local_shadow", "local", "hybrid") else None
@@ -176,15 +178,11 @@ async def _async_voice_answer(
     if cfg is None or not cfg.model:
         return voice_text(language, "not_configured")
 
-    from .conversation_log import record_identity
     record_identity(access_key=access_key, config=cfg)
 
-    from .home_companion import is_companion
     if authority is not None and not is_companion(access_key):
         if authority.current(hass) is None:
             return voice_text(language, "access_key_unavailable")
-        from .voice_context import capture_voice_origin
-        from .command_clarification import (async_clarification_reply, clarification_binding, clarification_prompt, is_clarification_cancel)
         origin = capture_voice_origin(hass, satellite_id, device_id)
         context: dict[str, Any] = {'voice_origin': origin} if origin is not None else {}
         can_clarify = routing_mode in ('local', 'hybrid') and isinstance(conversation_id, str) and 0 < len(conversation_id) <= 128
@@ -199,14 +197,11 @@ async def _async_voice_answer(
                 return voice_text(language, 'access_key_unavailable')
             if reply is not None:
                 if not pending.get('_expired') and is_clarification_cancel(user_text):
-                    from .command_execution import LocalCommandReply
-                    from .routing_statistics import local_result
                     local_result(LocalCommandReply(reply, 'cancelled'), 'local')
                 return reply
             if selected is not None:
-                from .command_execution import async_execute_local_command
                 answer = await async_execute_local_command(hass, data, access_key, selected, authority,
-                    _base_url(hass), include_review_links, language=language)
+                    _base_url(hass), language=language)
                 return answer if answer is not None else voice_text(language, 'local_clarification_expired')
         if can_clarify:
             context['clarify'] = True
@@ -229,18 +224,15 @@ async def _async_voice_answer(
             # the provider turn.
             data.decision_shadow.start(hass, data, access_key, user_text, language or "en", observe=True)
         if routing_mode in ("local", "hybrid") and observation["proposal"]:
-            from .command_execution import async_execute_local_command
 
             answer = await async_execute_local_command(
-                hass, data, access_key, observation["proposal"], authority, _base_url(hass), include_review_links, language=language,
+                hass, data, access_key, observation["proposal"], authority, _base_url(hass), language=language,
             )
             if answer is not None:
                 return answer
             if authority.current(hass) is None:
                 return voice_text(language, "access_key_unavailable")
         if routing_mode == "hybrid" and not observation["proposal"]:
-            from .decision_shadow import async_preview_decision
-            from .command_execution import async_execute_command_plan
 
             decision = await async_preview_decision(hass, data, access_key, user_text, language or "en",
                                                     observation, targets=True, prepare=True)
@@ -250,7 +242,7 @@ async def _async_voice_answer(
                 return voice_text(language, "access_key_unavailable")
             if decision.get("_plan") is not None:
                 return await async_execute_command_plan(
-                    hass, data, access_key, decision["_plan"], authority, _base_url(hass), include_review_links, language=language,
+                    hass, data, access_key, decision["_plan"], authority, _base_url(hass), language=language,
                 )
 
     provider = build_provider(cfg)
@@ -258,11 +250,11 @@ async def _async_voice_answer(
     try:
         return await async_run_voice_turn(
             hass, data, access_key, provider, session, _base_url(hass), user_text,
-            include_review_links=include_review_links,
+            include_review_hint=include_review_hint,
             max_iterations=data.store.get_settings().agentcli_max_iterations,
             language=language,
         )
-    except Exception:  # noqa: BLE001 - a provider/loop failure must not raise
+    except Exception:  # a provider/loop failure must not raise
         _LOGGER.exception("Phoenix MCP voice agent turn failed")
         return voice_text(language, "error")
 
@@ -285,17 +277,16 @@ if _CONVERSATION_AVAILABLE:
             self, user_input: "_conversation.ConversationInput"
         ) -> "_conversation.ConversationResult":
             """Answer one utterance, spoken as the final assistant text."""
-            # A hardware satellite sets satellite_id, so approval links are suppressed
+            # A hardware satellite sets satellite_id, so the approval hint is suppressed
             # there. Companion-app STT does not set it, and HA discards the pipeline's
             # start_stage before calling the agent, so app voice and typed turns are
             # indistinguishable. Every response is sanitized because HA uses this one
             # plain-speech value for both its visible Assist reply and TTS input.
             satellite_id = getattr(user_input, "satellite_id", None)
-            from uuid import uuid4
             conversation_id = user_input.conversation_id or uuid4().hex
             text = await async_voice_answer(
                 self.hass, self._data, user_input.text,
-                include_review_links=satellite_id is None,
+                include_review_hint=satellite_id is None,
                 language=user_input.language,
                 satellite_id=satellite_id,
                 device_id=getattr(user_input, 'device_id', None),
@@ -323,7 +314,7 @@ def async_register_voice_agent(hass: HomeAssistant, entry: Any, data: Any) -> No
         return
     try:
         _conversation.async_set_agent(hass, entry, PhoenixConversationAgent(hass, data))
-    except Exception:  # noqa: BLE001
+    except Exception:
         _LOGGER.warning("Could not register the Phoenix MCP voice agent", exc_info=True)
 
 
@@ -333,7 +324,7 @@ def async_unregister_voice_agent(hass: HomeAssistant, entry: Any) -> None:
         return
     try:
         _conversation.async_unset_agent(hass, entry)
-    except Exception:  # noqa: BLE001
+    except Exception:
         _LOGGER.debug("Voice agent unregister failed", exc_info=True)
 
 
@@ -376,7 +367,7 @@ def async_sync_voice_agent(hass: HomeAssistant, entry: Any, data: Any) -> None:
 # text-only fallback, so a resolver rename only loses STT/TTS auto-population.
 
 try:  # assist_pipeline is a default HA integration but guard like the rest.
-    from homeassistant.components.assist_pipeline.pipeline import (  # noqa: PLC0415
+    from homeassistant.components.assist_pipeline.pipeline import (
         KEY_ASSIST_PIPELINE as _KEY_ASSIST_PIPELINE,
     )
 
@@ -407,14 +398,15 @@ def _pipeline_store(hass: HomeAssistant) -> Any:
 def _resolve_pipeline_settings(hass: HomeAssistant, entry_id: str) -> dict:
     """Build pipeline settings for Phoenix MCP's agent (best-effort STT/TTS defaults)."""
     try:
-        from homeassistant.components.assist_pipeline.pipeline import (  # noqa: PLC0415
+        # Local: optional component, imported only when this path runs.
+        from homeassistant.components.assist_pipeline.pipeline import (
             _async_resolve_default_pipeline_settings,
         )
 
         settings = _async_resolve_default_pipeline_settings(
             hass, conversation_engine_id=entry_id, pipeline_name="Phoenix MCP"
         )
-    except Exception:  # noqa: BLE001 - private helper drift: fall back to text-only
+    except Exception:  # private helper drift: fall back to text-only
         # WARNING, not debug: the fallback yields a pipeline with no STT or TTS, and
         # the operator would otherwise get no signal that anything degraded. The
         # catch is broad because the resolver is private and may raise for reasons
@@ -482,7 +474,7 @@ async def async_create_assist_pipeline(
     settings = _resolve_pipeline_settings(hass, entry.entry_id)
     try:
         pipeline = await store.async_create_item(settings)
-    except Exception as err:  # noqa: BLE001
+    except Exception as err:
         raise VoicePipelineError(LocalizedReason("Could not create the Phoenix MCP Assist pipeline.", "assistPipelineFailed")) from err
 
     if preferred:
@@ -521,7 +513,7 @@ async def async_remove_assist_pipeline(hass: HomeAssistant, data: Any) -> bool:
                     _set_preferred(store, other)
             if not _is_preferred(store, pipeline_id):
                 await store.async_delete_item(pipeline_id)
-        except Exception:  # noqa: BLE001 - never let cleanup raise
+        except Exception:  # never let cleanup raise
             _LOGGER.warning("Could not remove the Phoenix MCP Assist pipeline", exc_info=True)
 
     async with data.store.async_lock:
@@ -566,7 +558,7 @@ async def async_set_assist_pipeline_preferred(hass: HomeAssistant, data: Any, *,
             store.async_set_preferred_item(other)
     except VoicePipelineError:
         raise
-    except Exception as err:  # noqa: BLE001 - HA store errors become one clear failure
+    except Exception as err:  # HA store errors become one clear failure
         raise VoicePipelineError(LocalizedReason("Could not change the preferred assistant.", "assistantPreferredFailed")) from err
     return {"pipeline_id": pipeline_id, "preferred": _is_preferred(store, pipeline_id)}
 
@@ -574,12 +566,12 @@ async def async_set_assist_pipeline_preferred(hass: HomeAssistant, data: Any, *,
 def _is_preferred(store: Any, pipeline_id: str) -> bool:
     try:
         return store.async_get_preferred_item() == pipeline_id
-    except Exception:  # noqa: BLE001
+    except Exception:
         return False
 
 
 def _set_preferred(store: Any, pipeline_id: str) -> None:
     try:
         store.async_set_preferred_item(pipeline_id)
-    except Exception:  # noqa: BLE001
+    except Exception:
         _LOGGER.debug("Could not set preferred Assist pipeline", exc_info=True)

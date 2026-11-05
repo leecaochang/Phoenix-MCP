@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Callable
 from .const import DOMAIN
 
 if TYPE_CHECKING:
+    from .household_authority import HouseholdAuthority
     from homeassistant.core import HomeAssistant
     from .data import PhoenixData
     from .audit import Outcome
@@ -68,6 +69,7 @@ policy_version: ContextVar[int | None] = ContextVar("phoenix_request_policy_vers
 
 
 dispatch_request_id: ContextVar[str] = ContextVar("phoenix_dispatch_request_id", default="")
+dispatch_client_ip: ContextVar[str | None] = ContextVar("phoenix_dispatch_client_ip", default=None)
 
 execution_guard: ContextVar[Callable[[], None] | None] = ContextVar("phoenix_execution_guard", default=None)
 
@@ -78,7 +80,6 @@ def check_request_authority() -> None:
     Checks the household authority, the execution guard, the access key and runtime
     state, then the permission policy version captured at admission.
     """
-    from .household_authority import household_authority
 
     household = household_authority.get()
     if household is not None:
@@ -93,3 +94,19 @@ def check_request_authority() -> None:
     version = policy_version.get()
     if version is not None and not access_key.accepts_policy_version(version):
         raise PolicyChangedError("Permissions changed. Retry with current permissions.")
+
+
+household_authority: ContextVar[HouseholdAuthority | None] = ContextVar(
+    "phoenix_household_authority", default=None,
+)
+
+
+# Set while async_execute_approved_tool runs an admin-approved action, so the MESA
+# gate treats that approval as the human confirmation it asks for (confirm-approved
+# semantics: confirm-mode entities proceed, prohibited/read_only entities are
+# still rejected). Without it, an action gated by BOTH a confirm-mode capability
+# and a MESA confirm-mode entity would need two sequential approvals: approving
+# the capability gate re-runs the call, which would then queue a second, separate
+# MESA approval for the action the admin just reviewed.
+# asyncio-safe: scoped to the approving request's task.
+_approved_exec_ctx: ContextVar[bool] = ContextVar("phoenix_mcp_approved_exec", default=False)

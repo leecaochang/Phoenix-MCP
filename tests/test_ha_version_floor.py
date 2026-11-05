@@ -63,7 +63,6 @@ KNOWN_IMPORTS: dict[str, dict[str, str]] = {
     "homeassistant.components.valve": {"ValveEntityFeature": "0.0.0"},
     "homeassistant.components.water_heater": {"WaterHeaterEntityFeature": "0.0.0"},
     # Verified exported in 2024.5.0, the earliest claimed floor.
-    "homeassistant.components.repairs": {"RepairsFlow": "0.0.0"},
     "homeassistant": {
         # Integration loading is older than any claimed floor and is the same
         # public module HA's own device-removal endpoint uses.
@@ -169,10 +168,14 @@ KNOWN_IMPORTS: dict[str, dict[str, str]] = {
         "ServiceValidationError": "0.0.0",
         "Unauthorized": "0.0.0",
     },
+    "homeassistant.components.homeassistant.scene": {"PLATFORM_SCHEMA": "0.0.0"},
     "homeassistant.helpers": {
         "area_registry": "0.0.0",
         # Verified absent in 2024.3.3, present in 2024.4.0.
         "category_registry": "2024.4.0",
+        # Verified present in the 2026.7.0 reference stack.
+        "chat_session": "2026.7.0",
+        "service": "0.0.0",
         "config_validation": "0.0.0",
         "device_registry": "0.0.0",
         "entity_registry": "0.0.0",
@@ -222,6 +225,8 @@ KNOWN_IMPORTS: dict[str, dict[str, str]] = {
         "IntegrationNotFound": "0.0.0",
         "async_get_integration": "0.0.0",
     },
+    "homeassistant.components.light.const": {"DATA_PROFILES": "2024.8.0"},
+    "homeassistant.util.percentage": {"percentage_to_ranged_value": "0.0.0", "ranged_value_to_percentage": "0.0.0"},
     "homeassistant.util": {
         "dt": "0.0.0",
         # Public utility that core's helper and entity ID generation has long
@@ -299,7 +304,7 @@ def test_mandatory_feature_imports_are_not_newer_than_the_floor(symbol: str) -> 
 
 def test_injector_floor_matches_the_supported_base() -> None:
     """The optional DOM injector cannot advertise an unsupported HA release."""
-    from custom_components.phoenix_mcp import const  # noqa: PLC0415
+    from custom_components.phoenix_mcp import const
 
     assert const.MESA_INJECT_MIN_HA == MIN_HA_VERSION
 

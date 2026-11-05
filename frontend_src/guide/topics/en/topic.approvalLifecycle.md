@@ -1,5 +1,5 @@
 ---
-{ "id": "topic.approvalLifecycle", "title": "How an Approval Works", "parent": "workspace.approvals", "order": 10, "keywords": ["confirm", "lifecycle", "expire", "pending_approval", "wait_for_approval"], "sectionKeywords": { "agent": ["inline wait", "wait_for_approval", "voice", "assist"], "expiry": ["expire", "expired", "timeout", "one hour"], "history": ["retention", "kept"] }, "covers": ["custom_components/phoenix_mcp/approvals.py", "custom_components/phoenix_mcp/tool_common.py", "custom_components/phoenix_mcp/admin_view.py", "custom_components/phoenix_mcp/const.py", "custom_components/phoenix_mcp/approval_targets.py"] }
+{ "id": "topic.approvalLifecycle", "title": "How an Approval Works", "parent": "workspace.approvals", "order": 10, "keywords": ["confirm", "lifecycle", "expire", "pending_approval", "wait_for_approval"], "sectionKeywords": { "agent": ["inline wait", "wait_for_approval", "voice", "assist"], "expiry": ["expire", "expired", "timeout", "one hour"], "history": ["retention", "kept"] }, "covers": ["custom_components/phoenix_mcp/approvals.py", "custom_components/phoenix_mcp/tool_common.py", "custom_components/phoenix_mcp/admin_view.py", "custom_components/phoenix_mcp/const.py", "custom_components/phoenix_mcp/approval_targets.py", "custom_components/phoenix_mcp/catalog_templates.py"] }
 ---
 What happens to a request from the moment an agent asks until it's decided, and what the agent is told along the way.
 
@@ -28,7 +28,7 @@ Phoenix checks the request again before running it:
 - An expired request closes as expired.
 - If the access key was revoked or has expired, the request is cancelled.
 - If its capability is now Deny, the request fails without running.
-- If the kill switch is on, the request is cancelled.
+- If the kill switch is on, the request is cancelled, unless it's a configuration recovery review.
 
 Once those pass, Phoenix records your decision before it runs anything. Each action also checks its own targets, permissions and MESA rules again. If the devices it targets have changed since the request, it's refused, and the agent must ask again.
 
@@ -46,7 +46,7 @@ The agent receives your reason, or is told to ask you if you gave none. A reject
 
 ## What ends a request early {#cancelled}
 
-Restarting Home Assistant cancels every pending request. So do revoking its access key, the key expiring, and deleting core data. Approving while the kill switch is on cancels the request instead.
+Restarting Home Assistant cancels every pending request. Reloading Phoenix doesn't, and an approved action that's already running carries on. Revoking the access key, the key expiring and deleting core data cancel its requests too. Approving while the kill switch is on cancels the request instead, except for a configuration recovery review.
 
 ## Notifications {#notify}
 

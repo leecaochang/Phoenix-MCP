@@ -8,9 +8,9 @@ from homeassistant.core import State
 from homeassistant.helpers import entity_registry as er
 from homeassistant.setup import async_setup_component
 
-from custom_components.phoenix_mcp import command_verification as verification
+from custom_components.phoenix_mcp.routing import command_verification as verification
 from custom_components.phoenix_mcp.audit import AuditLog
-from custom_components.phoenix_mcp.command_execution import _capture_plan
+from custom_components.phoenix_mcp.routing.command_execution import _capture_plan
 from custom_components.phoenix_mcp.const import DOMAIN
 from custom_components.phoenix_mcp.data import PhoenixData
 from custom_components.phoenix_mcp.rate_limiter import RateLimiter
@@ -164,7 +164,7 @@ async def test_all_targets_must_match_in_the_same_observation(hass, observation_
     ('PhoenixNumberValue', 'number', -2.5, None, '-2.5', True),
 ])
 def test_native_numeric_verification_checks_requested_property_and_power(intent, domain, value, attribute, state, matched):
-    from custom_components.phoenix_mcp.command_operations import numeric_operation
+    from custom_components.phoenix_mcp.routing.command_operations import numeric_operation
     operation = numeric_operation(intent)
     proposal = {'intent': intent, 'entity_ids': [domain + '.test'], operation.proposal_field: value}
     assert verification.state_matches(proposal, State(domain + '.test', state, {attribute: value} if attribute else {})) is matched

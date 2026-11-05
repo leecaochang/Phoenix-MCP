@@ -13,6 +13,10 @@ class DurableStorageError(OSError):
     """A critical record was not confirmed written; no new effect may be dispatched."""
 
 
+class MesaSaveError(DurableStorageError):
+    """A MESA profile change was not written, and was withdrawn from memory."""
+
+
 class DurableStore[T: Mapping[str, Any] | Sequence[Any]](Store[T]):
     """Use HA's writer while preventing its log-only error handling for barriers.
 
@@ -32,3 +36,17 @@ class DurableStore[T: Mapping[str, Any] | Sequence[Any]](Store[T]):
         except (WriteError, SerializationError):
             # Store's outer handler must not turn a failed barrier into success.
             raise DurableStorageError("Critical storage could not be written.") from None
+
+
+class ReportingStore[T: Mapping[str, Any] | Sequence[Any]](DurableStore[T]):
+    """Tell the caller about a failed write of data that can be saved again.
+
+    Such data is not a barrier, so a save during shutdown keeps HA's deferral to
+    the final write instead of being refused.
+    """
+
+    async def async_save(self, data: T) -> None:
+        if self.hass.state is CoreState.stopping:
+            await Store.async_save(self, data)
+            return
+        await super().async_save(data)

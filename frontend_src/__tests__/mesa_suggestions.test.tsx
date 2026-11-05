@@ -2,7 +2,7 @@
  * Suggested Profiles: one row per suggestion with its own Dismiss, the reason
  * in the row's own name so Help reads it, and choosing a row opening the
  * suggestion in Profile Editor filled in. Nothing is applied by a scan, and
- * nothing is saved until the editor saves it (user, 2026-10-30).
+ * nothing is saved until the editor saves it.
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";

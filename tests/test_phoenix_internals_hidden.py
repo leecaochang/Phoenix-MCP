@@ -148,7 +148,7 @@ class TestPassThroughFastPaths:
 
     async def test_mcp_context_json_excludes_the_phoenix_sensor(
             self, hass, registry_with_a_phoenix_sensor):
-        from custom_components.phoenix_mcp.mcp_view import _build_context_json
+        from custom_components.phoenix_mcp.tool_dispatch import _build_context_json
 
         data = MagicMock()
         data.store.get_entity_hints.return_value = {}
@@ -166,7 +166,7 @@ class TestPassThroughFastPaths:
         Checked as a set comparison rather than one entity, so an exclusion
         added to resolve and forgotten here fails too.
         """
-        from custom_components.phoenix_mcp.mcp_view import _build_context_json
+        from custom_components.phoenix_mcp.tool_dispatch import _build_context_json
 
         data = MagicMock()
         data.store.get_entity_hints.return_value = {}

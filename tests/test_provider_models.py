@@ -11,11 +11,12 @@ from unittest.mock import AsyncMock
 import pytest
 from homeassistant.util.dt import utcnow
 
-from custom_components.phoenix_mcp import agentcli
-from custom_components.phoenix_mcp.agentcli import (
-    ClaudeProvider,
+from custom_components.phoenix_mcp import agentcli_views, provider_constants
+from custom_components.phoenix_mcp.llm import accounts as llm_accounts
+from custom_components.phoenix_mcp.llm import base as llm_base
+from custom_components.phoenix_mcp.llm.provider_claude import ClaudeProvider
+from custom_components.phoenix_mcp.llm.provider_openai import (
     OpenAICompatProvider,
-    ProviderConfig,
     _filter_chatgpt_models,
     _filter_gemini_models,
     _filter_meta_models,
@@ -24,6 +25,7 @@ from custom_components.phoenix_mcp.agentcli import (
     _filter_opencode_models,
     _filter_openrouter_models,
 )
+from custom_components.phoenix_mcp.llm.accounts import ProviderConfig
 
 
 class _Content:
@@ -36,14 +38,12 @@ class _Content:
 
 class _Resp:
     def __init__(self, status=200, body=b"", json_data=None, text=""):
-        self.status, self.content, self._json, self._text = status, _Content(body or text.encode()), json_data, text
+        self.status, self._text = status, text
+        self.content = _Content(body or text.encode() or json.dumps(json_data).encode())
         self.headers: dict = {}
 
     async def text(self):
         return self._text
-
-    async def json(self, content_type=None):
-        return self._json
 
     async def __aenter__(self):
         return self
@@ -66,7 +66,7 @@ class _Session:
     def get(self, url, headers=None, timeout=None, allow_redirects=None, params=None):
         return self._next(method="GET", url=url, params=params, headers=headers, allow_redirects=allow_redirects)
 
-    def post(self, url, headers=None, json=None, timeout=None, allow_redirects=None):  # noqa: A002
+    def post(self, url, headers=None, json=None, timeout=None, allow_redirects=None):
         # A copy: the provider edits its body in place when it retries.
         return self._next(method="POST", url=url, json=copy.deepcopy(json), headers=headers,
                           allow_redirects=allow_redirects)
@@ -84,7 +84,7 @@ async def _collect(agen):
 
 @pytest.mark.asyncio
 async def test_new_account_is_automatic_and_follows_the_catalogue():
-    store = agentcli.AgentCliStore(AsyncMock())
+    store = llm_accounts.AgentCliStore(AsyncMock())
     iid = await store.add("claude", {"api_key": "k"})
     assert store.resolve(iid).model == ""
     listed = store.list_instances()[0]
@@ -101,7 +101,7 @@ async def test_new_account_is_automatic_and_follows_the_catalogue():
 
 @pytest.mark.asyncio
 async def test_a_retired_explicit_model_is_replaced_but_a_custom_one_is_not():
-    store = agentcli.AgentCliStore(AsyncMock())
+    store = llm_accounts.AgentCliStore(AsyncMock())
     retired = await store.add("deepseek", {"api_key": "a", "model": "deepseek-v4-flash"})
     custom = await store.add("deepseek", {"api_key": "b", "model": "my-finetune"})
     for iid in (retired, custom):
@@ -121,7 +121,7 @@ async def test_a_retired_explicit_model_is_replaced_but_a_custom_one_is_not():
 
 @pytest.mark.asyncio
 async def test_an_empty_listing_never_replaces_the_catalogue():
-    store = agentcli.AgentCliStore(AsyncMock())
+    store = llm_accounts.AgentCliStore(AsyncMock())
     iid = await store.add("claude", {"api_key": "k"})
     await store.set_catalog(iid, ["claude-opus-4-8"], {}, "t1")
     assert await store.set_catalog(iid, [], {}, "t2") is False
@@ -130,7 +130,7 @@ async def test_an_empty_listing_never_replaces_the_catalogue():
 
 @pytest.mark.asyncio
 async def test_automatic_mode_skips_a_model_that_cannot_call_tools():
-    store = agentcli.AgentCliStore(AsyncMock())
+    store = llm_accounts.AgentCliStore(AsyncMock())
     iid = await store.add("chatgpt", {"api_key": "k"})
     await store.set_catalog(iid, ["gpt-6-sol", "gpt-5-sol"], {}, "t1")
     assert store.resolve(iid).model == "gpt-6-sol"
@@ -144,7 +144,7 @@ async def test_automatic_mode_skips_a_model_that_cannot_call_tools():
 
 @pytest.mark.asyncio
 async def test_decision_accounts_never_follow_the_catalogue():
-    store = agentcli.AgentCliStore(AsyncMock())
+    store = llm_accounts.AgentCliStore(AsyncMock())
     iid = await store.add("typesafe", {"api_key": "k", "model": "jev-1.13.0"})
     await store.set_catalog(iid, ["jev-1.13.0", "jev-2.0.0"], {}, "t1")
     assert store.resolve(iid, purpose="decision").model == "jev-1.13.0"
@@ -183,7 +183,7 @@ async def test_claude_list_models_without_a_configured_model_has_no_fallback():
 
 @pytest.mark.asyncio
 async def test_claude_adaptive_thinking_rejection_retries_with_an_enabled_budget():
-    agentcli._CLAUDE_NO_ADAPTIVE.discard("claude-haiku-x")
+    llm_base._CLAUDE_NO_ADAPTIVE.clear()
     err = _Resp(status=400, text=json.dumps({"error": {"type": "invalid_request_error",
                 "message": "adaptive thinking is not supported on this model"}}))
     ok = _Resp(body=_sse(
@@ -202,8 +202,8 @@ async def test_claude_adaptive_thinking_rejection_retries_with_an_enabled_budget
     assert first["thinking"]["type"] == "adaptive" and "output_config" in first
     assert second["thinking"] == {"type": "enabled", "budget_tokens": 4000}
     assert "output_config" not in second
-    assert "claude-haiku-x" in agentcli._CLAUDE_NO_ADAPTIVE
-    agentcli._CLAUDE_NO_ADAPTIVE.discard("claude-haiku-x")
+    assert any(model == "claude-haiku-x" for _base, model in llm_base._CLAUDE_NO_ADAPTIVE)
+    llm_base._CLAUDE_NO_ADAPTIVE.clear()
 
 
 @pytest.mark.asyncio
@@ -327,31 +327,31 @@ def test_opencode_console_requires_per_model_endpoint_evidence():
 
 @pytest.mark.asyncio
 async def test_opencode_setup_routes_are_explicit_and_credentials_keep_their_identity(hass):
-    from custom_components.phoenix_mcp.const import (
+    from custom_components.phoenix_mcp.provider_constants import (
         AGENTCLI_OPENCODE_BASE_URL, AGENTCLI_OPENCODE_CONSOLE_BASE_URL,
     )
 
-    legacy = await agentcli._probe_config("opencode", {"api_key": "secret"})
-    console = await agentcli._probe_config("opencode", {
+    legacy = await agentcli_views._probe_config("opencode", {"api_key": "secret"})
+    console = await agentcli_views._probe_config("opencode", {
         "api_key": "secret", "endpoint_id": "console", "base_url": "https://untrusted.example",
     })
     assert isinstance(legacy, ProviderConfig) and isinstance(console, ProviderConfig)
     assert legacy.base_url == AGENTCLI_OPENCODE_BASE_URL
     assert console.base_url == AGENTCLI_OPENCODE_CONSOLE_BASE_URL
-    assert "base_url" not in agentcli._stored_setup_config(console)
-    assert agentcli._stored_setup_config(console)["endpoint_id"] == "console"
-    assert isinstance(await agentcli._probe_config("opencode", {
+    assert "base_url" not in agentcli_views._stored_setup_config(console)
+    assert agentcli_views._stored_setup_config(console)["endpoint_id"] == "console"
+    assert isinstance(await agentcli_views._probe_config("opencode", {
         "api_key": "secret", "endpoint_id": "https://untrusted.example",
-    }), agentcli.ProbeConfigError)
+    }), llm_base.ProbeConfigError)
     old = {"api_key": "secret", "model": "kimi-k3"}
-    store = agentcli.AgentCliStore(AsyncMock())
+    store = llm_accounts.AgentCliStore(AsyncMock())
     iid = await store.add("opencode", old)
     snapshot = copy.deepcopy(store.get(iid))
     assert store.resolve(iid).base_url == AGENTCLI_OPENCODE_BASE_URL
     assert store.resolve(iid).model == "kimi-k3"
-    assert store.has_duplicate("opencode", agentcli._stored_setup_config(console))
+    assert store.has_duplicate("opencode", agentcli_views._stored_setup_config(console))
     assert store.get(iid) == snapshot
-    public = next(p for p in agentcli._provider_catalog() if p["kind"] == "opencode")
+    public = next(p for p in llm_accounts._provider_catalog() if p["kind"] == "opencode")
     assert "Bearer secret" not in json.dumps(public)
     assert "https://" not in json.dumps(public)
     assert [c["value"] for c in public["fields"][0]["choices"]] == ["zen", "console"]
@@ -361,7 +361,7 @@ async def test_opencode_setup_routes_are_explicit_and_credentials_keep_their_ide
 @pytest.mark.parametrize("route", ["zen", "console"])
 @pytest.mark.parametrize("model", ["qwen3.8-max", "qwen3.5-plus"])
 async def test_opencode_catalog_and_all_inference_probes_use_their_own_urls(route, model):
-    cfg = await agentcli._probe_config("opencode", {
+    cfg = await agentcli_views._probe_config("opencode", {
         "api_key": "secret", "endpoint_id": route, "model": model,
     })
     provider = OpenAICompatProvider(cfg)
@@ -389,7 +389,7 @@ def test_opencode_does_not_redirect_credentials_from_a_saved_custom_url():
 @pytest.mark.parametrize("data", [None, {}, [None, "bad", {"id": 12}, {"id": ""}, {"id": "qwen3.8-flash"}]])
 async def test_opencode_console_catalog_refuses_bad_rows_without_restoring_the_saved_model(data):
     provider = OpenAICompatProvider(ProviderConfig(
-        kind="opencode", model="qwen3.8-max", base_url=agentcli.AGENTCLI_OPENCODE_CONSOLE_BASE_URL,
+        kind="opencode", model="qwen3.8-max", base_url=provider_constants.AGENTCLI_OPENCODE_CONSOLE_BASE_URL,
     ))
     assert await provider.list_models(_Session(_Resp(json_data={"data": data}))) == []
 
@@ -397,7 +397,7 @@ async def test_opencode_console_catalog_refuses_bad_rows_without_restoring_the_s
 @pytest.mark.asyncio
 async def test_opencode_console_refuses_other_api_families_before_any_network_call():
     provider = OpenAICompatProvider(ProviderConfig(
-        kind="opencode", model="qwen3.8-flash", base_url=agentcli.AGENTCLI_OPENCODE_CONSOLE_BASE_URL,
+        kind="opencode", model="qwen3.8-flash", base_url=provider_constants.AGENTCLI_OPENCODE_CONSOLE_BASE_URL,
     ))
     session = _Session()
     events = await _collect(provider.stream_turn(session, system_prompt="", messages=[], tools=[], options={}))
@@ -411,7 +411,7 @@ async def test_opencode_console_refuses_other_api_families_before_any_network_ca
 @pytest.mark.asyncio
 async def test_opencode_replays_reasoning_and_complete_tool_calls_without_usage_flags():
     provider = OpenAICompatProvider(ProviderConfig(
-        kind="opencode", model="qwen3.8-max", base_url=agentcli.AGENTCLI_OPENCODE_CONSOLE_BASE_URL,
+        kind="opencode", model="qwen3.8-max", base_url=provider_constants.AGENTCLI_OPENCODE_CONSOLE_BASE_URL,
     ))
     frame = {"choices": [{"delta": {"reasoning_content": "retained reasoning", "tool_calls": [{
         "index": 0, "id": "call_1", "function": {"name": "read", "arguments": '{"x":1}'},
@@ -446,7 +446,7 @@ async def test_opencode_replays_reasoning_and_complete_tool_calls_without_usage_
 ])
 async def test_opencode_console_keeps_billing_and_rate_limit_classifications(status, error, code, retryable):
     provider = OpenAICompatProvider(ProviderConfig(
-        kind="opencode", model="qwen3.8-max", base_url=agentcli.AGENTCLI_OPENCODE_CONSOLE_BASE_URL,
+        kind="opencode", model="qwen3.8-max", base_url=provider_constants.AGENTCLI_OPENCODE_CONSOLE_BASE_URL,
     ))
     session = _Session(_Resp(status=status, text=json.dumps({"error": error})))
     events = await _collect(provider.stream_turn(session, system_prompt="", messages=[], tools=[], options={}))
@@ -473,7 +473,7 @@ async def test_opencode_stream_cancellation_closes_the_response_without_retrying
     response.content = WaitingContent()
     session = _Session(response)
     provider = OpenAICompatProvider(ProviderConfig(
-        kind="opencode", model="kimi-k3", base_url=agentcli.AGENTCLI_OPENCODE_CONSOLE_BASE_URL,
+        kind="opencode", model="kimi-k3", base_url=provider_constants.AGENTCLI_OPENCODE_CONSOLE_BASE_URL,
     ))
     task = asyncio.create_task(_collect(provider.stream_turn(
         session, system_prompt="", messages=[], tools=[], options={},
@@ -520,3 +520,52 @@ async def test_models_past_their_shutdown_date_are_not_listed():
     models = await provider.list_models(_Session(_Resp(json_data=body)))
     assert sorted(models) == ["gpt-keep", "gpt-new"]
     assert provider.model_created["gpt-keep"] == 3
+
+
+def _ollama(session_body: bytes) -> tuple:
+    provider = OpenAICompatProvider(ProviderConfig(
+        kind="ollama", model="fallback", base_url="http://ollama:11434", api_key=""))
+    return provider, _Session(_Resp(body=session_body))
+
+
+@pytest.mark.parametrize("body", [b"[1, 2]", b'{"models": [1, 2]}', b'{"models": "x"}', b"null", b"{"])
+async def test_a_malformed_catalogue_is_no_listing_rather_than_an_error(body):
+    provider, session = _ollama(body)
+    assert await provider.list_models(session) == ["fallback"]
+
+
+async def test_an_oversized_catalogue_is_refused_before_it_is_buffered(monkeypatch):
+    monkeypatch.setattr(llm_base, "AGENTCLI_MAX_JSON_BYTES", 64)
+    provider, session = _ollama(json.dumps({"models": [{"name": "x" * 100}]}).encode())
+    assert await provider.list_models(session) == ["fallback"]
+
+
+async def test_a_catalogue_is_capped_and_unusable_ids_are_dropped(monkeypatch):
+    monkeypatch.setattr(llm_base, "AGENTCLI_MAX_CATALOG_MODELS", 3)
+    rows = [{"name": name} for name in ("a", "a", "x" * 201, "b", "c", "d")]
+    provider, session = _ollama(json.dumps({"models": rows}).encode())
+    assert await provider.list_models(session) == ["a", "b", "c"]
+
+
+async def test_a_deeply_nested_reply_is_a_value_error():
+    resp = _Resp(body=b"[" * 200000)
+    with pytest.raises(ValueError):
+        await llm_base._read_json(resp)
+
+
+async def test_an_empty_reply_reads_as_no_body():
+    assert await llm_base._read_json(_Resp()) is None
+
+
+async def test_declared_capabilities_survive_a_malformed_body():
+    provider = OpenAICompatProvider(ProviderConfig(
+        kind="openrouter", model="m", base_url="https://openrouter.test/api/v1", api_key="k"))
+    assert await provider.list_model_capabilities(_Session(_Resp(body=b"[1]")), ["m"]) == {}
+
+
+async def test_one_hosts_adaptive_refusal_does_not_reshape_another_hosts_requests():
+    llm_base._CLAUDE_NO_ADAPTIVE.clear()
+    llm_base._CLAUDE_NO_ADAPTIVE.add(("https://other-host", "claude-haiku-x"))
+    provider = ClaudeProvider(ProviderConfig(kind="claude", model="claude-haiku-x", base_url="https://a", api_key="k"))
+    assert (provider.cfg.base_url, provider.cfg.model) not in llm_base._CLAUDE_NO_ADAPTIVE
+    llm_base._CLAUDE_NO_ADAPTIVE.clear()

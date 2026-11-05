@@ -12,66 +12,28 @@ from __future__ import annotations
 
 import asyncio
 import json
-import os
-import uuid
 from datetime import timedelta
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
-import yaml
 from homeassistant.components.calendar import CalendarEntity, CalendarEvent, DATA_COMPONENT
 from homeassistant.components.homeassistant.exposed_entities import (
     DATA_EXPOSED_ENTITIES,
     async_expose_entity,
 )
 from homeassistant.core import State
-from homeassistant.helpers import area_registry as ar
 from homeassistant.helpers import entity_registry as er
-from homeassistant.setup import async_setup_component
 from homeassistant.util import dt as dt_util
 from homeassistant.util.dt import utcnow
 
-from custom_components.phoenix_mcp import mcp_view
-from custom_components.phoenix_mcp.access_key_store import AccessKeyRecord, PermissionTree
-from custom_components.phoenix_mcp.const import MESA_MODE_OFF
-from custom_components.phoenix_mcp.data import PhoenixData
-from custom_components.phoenix_mcp.mcp_view import _call_tool
+from custom_components.phoenix_mcp.tools import logs as logs_tools
+from custom_components.phoenix_mcp.tools import system as system_tools
+from custom_components.phoenix_mcp.tool_dispatch import _call_tool
 from custom_components.phoenix_mcp.policy_engine import Permission, resolve_read
+from tests.runtime_fixtures import EXPOSURE_HIDDEN as HIDDEN, EXPOSURE_SHOWN as SHOWN, expose_to_assist as _expose, exposure_body as _body, exposure_data as _data, exposure_key as _key
 
-SHOWN, HIDDEN, GHOST = "light.kitchen", "light.porch", "light.ghost"
-
-
-def _key(*, filtered: bool = True) -> AccessKeyRecord:
-    return AccessKeyRecord(
-        id=str(uuid.uuid4()), name="t", access_key_hash="x", created_at=utcnow(), created_by="u",
-        permissions=PermissionTree(), pass_through=True, use_assist_exposure=filtered,
-        cap_search="allow", cap_config_read="allow", cap_log_read="allow", cap_camera_read="allow", cap_diagnostics="allow",
-    )
-
-
-def _data(mesa: object | None = None) -> PhoenixData:
-    store = MagicMock()
-    store.get_settings.return_value = SimpleNamespace(mesa_mode=MESA_MODE_OFF)
-    return PhoenixData(store=store, rate_limiter=MagicMock(), audit=MagicMock(), mesa=mesa)
-
-
-def _expose(hass, shown: str, hidden: str) -> None:
-    async_expose_entity(hass, "conversation", shown, True)
-    async_expose_entity(hass, "conversation", hidden, False)
-
-
-def _body(result: tuple) -> dict:
-    return json.loads(result[0]["content"][0]["text"])
-
-
-@pytest.fixture
-async def home(hass):
-    assert await async_setup_component(hass, "homeassistant", {})
-    for entity_id in (SHOWN, HIDDEN):
-        hass.states.async_set(entity_id, "on", {"brightness": 10, "friendly_name": entity_id})
-    _expose(hass, SHOWN, HIDDEN)
-    return hass
+GHOST = "light.ghost"
 
 
 async def _assert_gated(hass, tool, args_for, data, *, shown=SHOWN, hidden=HIDDEN, ghost=GHOST) -> None:
@@ -233,8 +195,8 @@ async def test_watch_entity(home):
 
 async def test_watch_entity_refuses_before_subscribing(home):
     """A ghost refuses at once, so waiting out the timeout on a hidden entity would time an oracle."""
-    real_track = mcp_view.async_track_state_change_event
-    with patch.object(mcp_view, "async_track_state_change_event", wraps=real_track) as track:
+    real_track = system_tools.async_track_state_change_event
+    with patch.object(system_tools, "async_track_state_change_event", wraps=real_track) as track:
         result, outcome, _ = await asyncio.wait_for(_call_tool(
             "watch_entity", {"entity_id": HIDDEN, "until_state": "off", "timeout": 5}, _key(), home, _data()), timeout=2)
     assert outcome == "not_found"
@@ -244,14 +206,14 @@ async def test_watch_entity_refuses_before_subscribing(home):
 
 async def test_watch_entity_rechecks_exposure_after_the_wait(home):
     ready = asyncio.Event()
-    real_track = mcp_view.async_track_state_change_event
+    real_track = system_tools.async_track_state_change_event
 
     def tracked(hass, entity_ids, action):
         unsub = real_track(hass, entity_ids, action)
         ready.set()
         return unsub
 
-    with patch.object(mcp_view, "async_track_state_change_event", side_effect=tracked):
+    with patch.object(system_tools, "async_track_state_change_event", side_effect=tracked):
         task = asyncio.create_task(_call_tool(
             "watch_entity", {"entity_id": SHOWN, "until_state": "off", "timeout": 5}, _key(), home, _data()))
         await asyncio.wait_for(ready.wait(), timeout=2)
@@ -260,31 +222,6 @@ async def test_watch_entity_rechecks_exposure_after_the_wait(home):
         result, outcome, _ = await task
     assert outcome == "not_found"
     assert result["content"][0]["text"] == "Entity not found."
-
-
-@pytest.fixture
-def related(home):
-    """Two registered lights in one area and an exposed automation that targets both."""
-    registry = er.async_get(home)
-    area = ar.async_get(home).async_create("Kitchen")
-    lights = []
-    for object_id in ("counter", "pantry"):
-        entry = registry.async_get_or_create("light", "test", object_id, suggested_object_id=object_id)
-        registry.async_update_entity(entry.entity_id, area_id=area.id)
-        home.states.async_set(entry.entity_id, "on")
-        lights.append(entry.entity_id)
-    shown, hidden = lights
-    automation = registry.async_get_or_create("automation", "test", "auto1", suggested_object_id="evening")
-    home.states.async_set(automation.entity_id, "on")
-    _expose(home, shown, hidden)
-    async_expose_entity(home, "conversation", automation.entity_id, True)
-    with open(os.path.join(home.config.config_dir, "automations.yaml"), "w", encoding="utf-8") as handle:
-        yaml.safe_dump([{
-            "id": "auto1", "alias": "Evening",
-            "trigger": [{"platform": "state", "entity_id": shown}],
-            "action": [{"service": "light.turn_on", "target": {"entity_id": [shown, hidden]}}],
-        }], handle)
-    return area, automation.entity_id, shown, hidden
 
 
 async def test_get_relationships_entity_selector(home, related):
@@ -306,7 +243,7 @@ async def test_get_relationships_area_scope_and_forward_references(home, related
 async def test_get_logbook_requested_entity_and_home_wide_rows(home):
     rows = [{"entity_id": eid, "when": float(i), "state": "on", "message": "turned on"}
             for i, eid in enumerate((SHOWN, HIDDEN))]
-    with patch.object(mcp_view, "async_ws_command", new=AsyncMock(return_value=rows)):
+    with patch.object(logs_tools, "async_ws_command", new=AsyncMock(return_value=rows)):
         await _assert_gated(
             home, "get_logbook", lambda eid: {"target": {"kind": "resources", "entity_ids": [eid]}}, _data())
         filtered = await _call_tool("get_logbook", {}, _key(), home, _data())

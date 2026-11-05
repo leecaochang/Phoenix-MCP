@@ -59,7 +59,7 @@
 
 ### {{label:caps.cap_broadcast.label}} {#broadcast}
 
-透過 Assist 衛星裝置廣播訊息，並在喇叭上播放公告，這需要在喇叭的 W 之外另行授予。一般播放只需要 W。直通模式允許它。
+透過 Assist 衛星裝置廣播訊息、在其上發起對話，並在喇叭上播放公告，這需要在喇叭的 W 之外另行授予。一般播放只需要 W。直通模式允許它。
 
 ### {{label:caps.cap_service_response.label}} {#service-response}
 
@@ -129,7 +129,7 @@
 
 ### {{label:caps.cap_registry_write.label}} {#registry-write}
 
-重新命名實體，變更其分區、裝置、分類和類別，並刪除它們。實體的 ID 可以在其域內變更。
+重新命名實體，變更其分區、裝置、分類和類別，並刪除它們。實體的 ID 可以在其域內變更。使用 `recorder.purge_entities` 清除實體的歷史記錄也需要此能力。
 
 ### {{label:caps.cap_radio_write.label}} {#radio-write}
 

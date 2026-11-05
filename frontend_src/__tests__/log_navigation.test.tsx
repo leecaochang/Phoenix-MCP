@@ -4,7 +4,7 @@
  * with the pointer only comes into view, so the list does not jump under the
  * pointer. Previous and Next report the step so Log Details can be resized.
  * In a phone window the table neither centres nor scrolls to the chosen row,
- * and shows its rows ten at a time (user, 2026-11-02).
+ * and shows its rows ten at a time.
  */
 import { describe, expect, it, vi } from "vitest";
 import { fireEvent, render } from "@testing-library/react";
@@ -53,7 +53,7 @@ describe("moving through a log", () => {
     expect(row(container, "r11").scrollIntoView).not.toHaveBeenCalled();
   });
 
-  it("keeps the row in the middle of the window when the window scrolls rather than the table (user, 2026-10-31)", () => {
+  it("keeps the row in the middle of the window when the window scrolls rather than the table", () => {
     const { container } = render(<div className="phx-window-body" style={{ overflowY: "auto" }}><Table /></div>);
     const body = container.querySelector<HTMLElement>(".phx-window-body")!;
     const wrap = container.querySelector<HTMLElement>(".phx-table-wrap")!;
@@ -75,7 +75,7 @@ describe("moving through a log", () => {
     expect(body.scrollTop).toBe(225);
   });
 
-  it("leaves a phone window's scroll alone when a row is chosen (user, 2026-11-02)", () => {
+  it("leaves a phone window's scroll alone when a row is chosen", () => {
     const { container } = render(<RowLimitContext.Provider value={PHONE_ROWS}><Table /></RowLimitContext.Provider>);
     const wrap = layout(container);
     fireEvent.keyDown(row(container, "r5"), { key: "ArrowDown" });

@@ -95,6 +95,26 @@ def device_authority_chain(
     return (device_id, parent_id)
 
 
+def device_effective_area_id(hass: HomeAssistant, device_id: str | None) -> str | None:
+    """Return one device's direct-or-parent area without a registry-wide snapshot.
+
+    The single-device form of DeviceRegistrySnapshot.effective_area_id, for a
+    lookup that runs once per entity.
+    """
+    if not isinstance(device_id, str) or not device_id:
+        return None
+    registry = dr.async_get(hass)
+    device = registry.async_get(device_id)
+    if device is None:
+        return None
+    document = _entry_document(device)
+    parent_id = _valid_id(document.get("parent_device_id"))
+    documents: dict[str, Mapping[str, Any]] = {}
+    if parent_id is not None and (parent := registry.async_get(parent_id)) is not None:
+        documents[parent_id] = _entry_document(parent)
+    return _effective_area(document, documents)[0]
+
+
 def _collection_entries(collection: object) -> Collection[Any]:
     """Normalize legacy mappings and HA 2026.9 collection views."""
     if isinstance(collection, Mapping):

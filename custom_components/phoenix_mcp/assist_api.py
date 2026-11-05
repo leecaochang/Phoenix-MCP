@@ -31,11 +31,22 @@ from typing import Any, cast
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import llm as _llm
 
+from .agent_turn import (
+    _current_dispatch_access_key, _parse_pending, dispatch_tool_result, _flatten_text,
+)
 from .assist_gemini import gemini_schema, unwrap_json_fields
+from .assist_schema import legacy_schema
+from .audit import generate_request_id
 from .const import ASSIST_CLIENT_IP, DOMAIN
+from .helpers import instance_base_url as _base_url, access_key_notes_block
+from .home_companion import is_companion
 from .household_authority import household_scope
 from .request_authority import AuthorityChangedError
 from .schema_compat import schema_engine
+from .tool_catalog import build_mcp_tool_list
+from .tool_dispatch import (
+    _build_instructions, _dispatch_mcp, _NOTES_CHANGED_NOTICE, _NOTES_REMOVED_NOTICE,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -49,7 +60,6 @@ def _schema_converter() -> Callable[[Any], Any]:
     engine = schema_engine()
     if engine.__name__ == "probatio":
         return cast(Callable[[Any], Any], engine.from_openapi)
-    from .assist_schema import legacy_schema
 
     return legacy_schema
 
@@ -127,16 +137,6 @@ _ASSIST_ADDENDUM = (
 )
 
 
-def _base_url(hass: HomeAssistant) -> str:
-    """Best-effort external URL for the skill link in the primer; "" if none."""
-    try:
-        from homeassistant.helpers.network import get_url  # noqa: PLC0415
-
-        return get_url(hass)
-    except Exception:  # noqa: BLE001 - NoURLAvailableError and anything else
-        return ""
-
-
 _MCP_HINTS = (
     ("read_only", "readOnlyHint"),
     ("destructive", "destructiveHint"),
@@ -174,7 +174,6 @@ def _unwrap_result(result: dict) -> dict:
     Most tools put a JSON object in that text; errors put a plain sentence. A dict
     passes through verbatim; anything else is wrapped so the return is always a dict.
     """
-    from .agentcli import _flatten_text  # noqa: PLC0415
 
     text = _flatten_text(result.get("content", []))
     try:
@@ -204,9 +203,6 @@ class _InstanceBuild:
 
     def notice(self, access_key: Any, hass: HomeAssistant) -> str | None:
         """What changed since the last notice, or None; each change is told once."""
-        from .helpers import access_key_notes_block  # noqa: PLC0415
-        from .home_companion import is_companion  # noqa: PLC0415
-        from .mcp_view import _NOTES_CHANGED_NOTICE, _NOTES_REMOVED_NOTICE  # noqa: PLC0415
 
         parts: list[str] = []
         if access_key.notes_version > self.notes_version and not is_companion(access_key):
@@ -237,11 +233,8 @@ class PhoenixAssistTool(_llm.Tool):
         self._json_paths = json_paths
         self._build = build
 
-    async def async_call(self, hass, tool_input, llm_context) -> Any:
+    async def async_call(self, hass: HomeAssistant, tool_input, llm_context) -> Any:
         """Run one tool call end-to-end through Phoenix MCP's scoped dispatch path."""
-        from .agentcli import _current_dispatch_access_key, _parse_pending, dispatch_tool_result  # noqa: PLC0415
-        from .audit import generate_request_id  # noqa: PLC0415
-        from .mcp_view import _dispatch_mcp  # noqa: PLC0415
 
         async with household_scope(hass, getattr(llm_context, "context", None)):
             data = hass.data[DOMAIN]
@@ -340,8 +333,6 @@ class PhoenixAssistAPI(_llm.API):
             except AuthorityChangedError:
                 return _llm.APIInstance(api=self, api_prompt=_USER_UNAVAILABLE_PROMPT,
                                         llm_context=llm_context, tools=[])
-            from .agentcli import build_mcp_tool_list  # noqa: PLC0415
-            from .mcp_view import _build_instructions  # noqa: PLC0415
 
             tools: list[Any] = []
             public_schemas: dict[int, tuple[Any, dict[str, Any]]] = {}
@@ -365,7 +356,7 @@ class PhoenixAssistAPI(_llm.API):
                     while isinstance(node, engine.Schema):
                         node = node.schema
                     public_schemas[id(node)] = (node, advertised)
-                except Exception as err:  # noqa: BLE001 - one bad schema must not
+                except Exception as err:  # one bad schema must not
                     # take down the whole voice assistant; skip just that tool.
                     _LOGGER.warning(
                         "Assist bridge: skipping tool %s (schema conversion failed: %s)",
@@ -409,7 +400,7 @@ def async_register_assist_api(hass: HomeAssistant, data: Any) -> None:
         return
     try:
         data.assist_api_unregister = _llm.async_register_api(hass, PhoenixAssistAPI(hass, data))
-    except Exception:  # noqa: BLE001 - HomeAssistantError on dup id, or anything
+    except Exception:  # HomeAssistantError on dup id, or anything
         _LOGGER.warning("Could not register the Phoenix MCP Assist API", exc_info=True)
 
 
@@ -421,5 +412,5 @@ def async_unregister_assist_api(data: Any) -> None:
     data.assist_api_unregister = None
     try:
         unregister()
-    except Exception:  # noqa: BLE001
+    except Exception:
         _LOGGER.debug("Assist API unregister failed", exc_info=True)

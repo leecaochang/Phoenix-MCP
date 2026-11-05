@@ -9,7 +9,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../api";
 import type { AccessKeyRecord, ConversationSummary } from "../types";
 import { BusyButton } from "../components/BusyButton";
-import { RefreshIcon, ResultCount } from "../components/common";
+import { RefreshIcon, ResultCount, StatusRegion } from "../components/common";
 import { SignalIcon, label, outcomeIcon, outcomeSignal, rowStatus } from "../components/ConversationRecord";
 import { localeDateTime, localeDateTimeShort, localeNumber, t } from "../i18n";
 import { useWindowVisible } from "../shell/visibility";
@@ -51,7 +51,7 @@ export function ConversationsView({ accessKeys = NO_KEYS }: { accessKeys?: Acces
   const [confirmClear, setConfirmClear] = useState(false);
   const [clearing, setClearing] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
-  // Hidden filters, the text search included, stop applying and come back as they were (user, 2026-10-27).
+  // Hidden filters, the text search included, stop applying and come back as they were.
   const filtersApply = !useOnToolbar() || filtersOpen;
   const generation = useRef(0);
   const clearingRef = useRef(false);
@@ -118,7 +118,7 @@ export function ConversationsView({ accessKeys = NO_KEYS }: { accessKeys?: Acces
       ...(paused ? [{ id: "refresh", label: t("workspace.refreshWindow", { window: t("conversations.title") }), short: t("common.refresh"), icon: "refresh" as const, help: "help.refreshPaused",
         shared: { id: "refresh", label: t("common.refresh") }, onSelect: () => { void load(); } }] : []),
       ...logSettings,
-      // Neutral until it asks to confirm, like the other destructive buttons (user, 2026-10-28).
+      // Neutral until it asks to confirm, like the other destructive buttons.
       // An empty filtered list says nothing about the rest of the history, which Clear removes too.
       { id: "clear", label: t("conversations.clear"), short: t("conversations.clearShort"), icon: "delete", help: "help.clearConversations", disabled: clearing || (!entries.length && !activeFilters), onSelect: () => setConfirmClear(true) },
     ],
@@ -142,7 +142,7 @@ export function ConversationsView({ accessKeys = NO_KEYS }: { accessKeys?: Acces
   }
 
   const columns = useMemo((): Column<ConversationSummary>[] => [
-    // Time leads, as in the Audit Log (user, 2026-10-27); the id stays "latest" so saved sorts still apply.
+    // Time leads, as in the Audit Log; the id stays "latest" so saved sorts still apply.
     { id: "latest", label: t("audit.rowTime"), width: 150, sortValue: (e) => e.latest_at ?? e.started_at, cell: (e) => localeDateTimeShort(e.latest_at ?? e.started_at), title: (e) => localeDateTime(e.latest_at ?? e.started_at) },
     { id: "prompt", label: t("conversations.prompt"), width: 300, maxWidth: 360, sortValue: conversationTitle, cell: (e) => conversationTitle(e), title: conversationTitle, className: "conversation-summary-title" },
     { id: "outcome", label: t("audit.rowOutcome"), width: 170, sortValue: (e) => label("outcome", rowStatus(e)),
@@ -157,7 +157,7 @@ export function ConversationsView({ accessKeys = NO_KEYS }: { accessKeys?: Acces
 
   return <div className="view-root conversations-view phx-log-view">
     {!enabled && <p className="banner" data-guide="window.conversationLog#recording">{t("conversations.disabledHelp")}</p>}
-    {!available && <p className="banner banner-warning" role="status">{t("conversations.storageUnavailable")}</p>}
+    <StatusRegion>{!available && <p className="banner banner-warning">{t("conversations.storageUnavailable")}</p>}</StatusRegion>
     {error && <p className="banner banner-error" role="alert">{error}</p>}
     {confirmBanner && <div className="log-group" data-guide="window.conversationLog#clear">{confirmBanner}</div>}
     <div className="phx-filters" hidden={!showFilters} data-guide="window.conversationLog#filters">

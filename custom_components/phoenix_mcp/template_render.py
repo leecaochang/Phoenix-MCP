@@ -11,7 +11,9 @@ import signal
 import sys
 from typing import TYPE_CHECKING
 
-from .const import TEMPLATE_WORKER_DIAGNOSTIC_EXIT, TEMPLATE_WORKER_INPUT_BYTES, TEMPLATE_WORKER_TIMEOUT_SECONDS
+from .template_limits import (
+    TEMPLATE_WORKER_DIAGNOSTIC_EXIT, TEMPLATE_WORKER_INPUT_BYTES, TEMPLATE_WORKER_TIMEOUT_SECONDS,
+)
 from .helpers import build_permitted_states
 from .request_authority import check_request_authority
 from .template_diagnostics import format_template_failure

@@ -9,6 +9,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import area_registry as ar
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 from homeassistant.util.dt import utcnow
@@ -16,12 +17,11 @@ from pytest_homeassistant.common import MockConfigEntry
 
 from custom_components.phoenix_mcp.const import DOMAIN
 from custom_components.phoenix_mcp.data import PhoenixData
-from custom_components.phoenix_mcp.mcp_view import (
+from custom_components.phoenix_mcp.tools.registry import (
     _REGISTRY_MESA_FINGERPRINT,
-    _call_tool,
     _entity_identity_references,
-    async_execute_approved_tool,
 )
+from custom_components.phoenix_mcp.tool_dispatch import _call_tool, async_execute_approved_tool
 from custom_components.phoenix_mcp.mesa import (
     async_setup_mesa,
     evaluate_registry_action,
@@ -125,7 +125,7 @@ async def test_inherited_read_only_blocks_rename_and_delete_before_approval(
         )
 
     gate = AsyncMock()
-    with patch("custom_components.phoenix_mcp.mcp_view._gate", gate):
+    with patch("custom_components.phoenix_mcp.tools.registry._gate", gate):
         for tool_name, args in (
             (
                 "set_entity",
@@ -223,13 +223,13 @@ async def test_enforced_confirm_uses_one_normal_registry_approval(
         return_value={"consumers": [], "consumer_count": 0, "searched": []}
     )
     with (
-        patch("custom_components.phoenix_mcp.mcp_view._gate", gate),
+        patch("custom_components.phoenix_mcp.tools.registry._gate", gate),
         patch(
-            "custom_components.phoenix_mcp.mcp_view._create_registry_mesa_approval",
+            "custom_components.phoenix_mcp.tools.registry._create_registry_mesa_approval",
             create,
         ),
         patch(
-            "custom_components.phoenix_mcp.mcp_view._registry_relationship_preview",
+            "custom_components.phoenix_mcp.tools.registry._registry_relationship_preview",
             relationship_preview,
         ),
     ):
@@ -258,9 +258,9 @@ async def test_capability_confirmation_already_satisfies_mesa_confirmation(
     gate = AsyncMock(return_value=({}, "pending_approval", "approval-capability"))
     create = AsyncMock()
     with (
-        patch("custom_components.phoenix_mcp.mcp_view._gate", gate),
+        patch("custom_components.phoenix_mcp.tools.registry._gate", gate),
         patch(
-            "custom_components.phoenix_mcp.mcp_view._create_registry_mesa_approval",
+            "custom_components.phoenix_mcp.tools.registry._create_registry_mesa_approval",
             create,
         ),
     ):
@@ -344,6 +344,22 @@ async def test_permission_and_mesa_are_rechecked_for_approved_execution(
     assert er.async_get(hass).async_get(entity_id) is not None
 
 
+async def test_a_stored_profile_sends_a_rename_to_the_mesa_gate_instead_of_blocking_it(
+    hass: HomeAssistant, registry_entity
+):
+    entity_id, _ = registry_entity
+    data = await _data(hass, "enforced")
+    data.mesa.store.set(entity_id, _profile(entity_id, "prohibited"))
+    content, outcome, _ = await _call_tool(
+        "set_entity",
+        {"entity_id": entity_id, "changes": {"new_entity_id": "light.renamed"}},
+        _access_key(cap="allow"), hass, data,
+    )
+    assert outcome == "denied", content
+    assert "blockers" not in content["content"][0]["text"]
+    assert er.async_get(hass).async_get(entity_id) is not None
+
+
 async def test_rename_blockers_cover_identity_keyed_phoenix_configuration(
     hass: HomeAssistant, registry_entity
 ):
@@ -362,8 +378,8 @@ async def test_rename_blockers_cover_identity_keyed_phoenix_configuration(
             "args": {"entity_id": entity_id},
         }
     ]
+    # A profile moves with the entity, and an inherited one governs the operation.
     data.mesa.store.set(entity_id, _profile(entity_id, "confirm"))
-    # Inherited profiles govern the operation but are not identity blockers.
     data.mesa.store.set_domain_profile("light", _profile("light", "confirm"))
     data.mesa.store.set_device_profile(device_id, _profile(device_id, "confirm"))
 
@@ -372,12 +388,11 @@ async def test_rename_blockers_cover_identity_keyed_phoenix_configuration(
         "access_key_permission",
         "preset_permission",
         "global_hint",
-        "mesa_entity_profile",
         "pending_approval",
     }
 
     gate = AsyncMock()
-    with patch("custom_components.phoenix_mcp.mcp_view._gate", gate):
+    with patch("custom_components.phoenix_mcp.tools.registry._gate", gate):
         content, outcome, _ = await _call_tool(
             "set_entity",
             {"entity_id": entity_id, "changes": {"new_entity_id": "light.blocked_by_config"}},
@@ -409,7 +424,7 @@ async def test_invalid_or_occupied_rename_is_rejected_before_approval(
     )
     data = await _data(hass, "off")
     gate = AsyncMock()
-    with patch("custom_components.phoenix_mcp.mcp_view._gate", gate):
+    with patch("custom_components.phoenix_mcp.tools.registry._gate", gate):
         content, outcome, _ = await _call_tool(
             "set_entity",
             {"entity_id": entity_id, "changes": {"new_entity_id": new_entity_id}},
@@ -420,3 +435,224 @@ async def test_invalid_or_occupied_rename_is_rejected_before_approval(
     assert outcome == "invalid_request"
     assert message in content["content"][0]["text"]
     gate.assert_not_awaited()
+
+
+# --- moves out of a profiled area, and entity enable/disable --------------------
+
+
+def _device_key(device_id: str, **caps) -> AccessKeyRecord:
+    key = _access_key(**caps)
+    key.permissions = PermissionTree(
+        devices={device_id: PermissionNode(state="GREEN")}, domains={"light": PermissionNode(state="GREEN")},
+    )
+    return key
+
+
+def _place(hass: HomeAssistant, entity_id: str, area_id: str) -> None:
+    """Give an entity its own area, which Home Assistant allows only with its own name."""
+    er.async_get(hass).async_update_entity(entity_id, name="Registry light", area_id=area_id)
+
+
+@pytest.fixture
+def areas(hass: HomeAssistant) -> tuple[str, str]:
+    registry = ar.async_get(hass)
+    return registry.async_create("Vault").id, registry.async_create("Hall").id
+
+
+async def test_an_entity_cannot_be_moved_out_of_a_prohibited_area(hass: HomeAssistant, registry_entity, areas):
+    entity_id, _device_id = registry_entity
+    vault, hall = areas
+    _place(hass, entity_id, vault)
+    data = await _data(hass, "enforced")
+    data.mesa.store.set_area_profile(vault, _profile(vault, "prohibited"))
+
+    content, outcome, _ = await _call_tool(
+        "set_entity", {"entity_id": entity_id, "changes": {"area_id": hall}}, _access_key(), hass, data,
+    )
+
+    assert outcome == "denied"
+    assert "move_area" in _body(content)["error"]
+    assert er.async_get(hass).async_get(entity_id).area_id == vault
+
+
+async def test_clearing_an_entity_area_is_a_move_out_of_it(hass: HomeAssistant, registry_entity, areas):
+    entity_id, _device_id = registry_entity
+    vault, _hall = areas
+    _place(hass, entity_id, vault)
+    data = await _data(hass, "enforced")
+    data.mesa.store.set_area_profile(vault, _profile(vault, "prohibited"))
+
+    _content, outcome, _ = await _call_tool(
+        "set_entity", {"entity_id": entity_id, "changes": {"area_id": None}}, _access_key(), hass, data,
+    )
+
+    assert outcome == "denied"
+    assert er.async_get(hass).async_get(entity_id).area_id == vault
+
+
+async def test_moving_into_a_profiled_area_only_tightens(hass: HomeAssistant, registry_entity, areas):
+    entity_id, _device_id = registry_entity
+    vault, hall = areas
+    _place(hass, entity_id, hall)
+    data = await _data(hass, "enforced")
+    data.mesa.store.set_domain_profile("light", _profile("light", "autonomous"))
+    data.mesa.store.set_area_profile(vault, _profile(vault, "prohibited"))
+
+    _content, outcome, _ = await _call_tool(
+        "set_entity", {"entity_id": entity_id, "changes": {"area_id": vault}}, _access_key(), hass, data,
+    )
+
+    assert outcome == "allowed"
+    assert er.async_get(hass).async_get(entity_id).area_id == vault
+
+
+async def test_a_room_change_without_area_profiles_ignores_mesa(hass: HomeAssistant, registry_entity, areas):
+    """A restrictive domain default says nothing about which room an entity is in."""
+    entity_id, _device_id = registry_entity
+    vault, hall = areas
+    _place(hass, entity_id, vault)
+    data = await _data(hass, "enforced")
+    data.mesa.store.set_domain_profile("light", _profile("light", "prohibited"))
+
+    _content, outcome, _ = await _call_tool(
+        "set_entity", {"entity_id": entity_id, "changes": {"area_id": hall}}, _access_key(), hass, data,
+    )
+
+    assert outcome == "allowed"
+
+
+async def test_a_confirm_area_routes_the_move_to_an_approval_that_binds_it(hass: HomeAssistant, registry_entity, areas):
+    entity_id, _device_id = registry_entity
+    vault, hall = areas
+    _place(hass, entity_id, vault)
+    data = await _data(hass, "enforced")
+    data.mesa.store.set_domain_profile("light", _profile("light", "autonomous"))
+    data.mesa.store.set_area_profile(vault, _profile(vault, "confirm"))
+    create = AsyncMock(return_value=({}, "pending_approval", "approval"))
+    key = _access_key()
+
+    with (patch("custom_components.phoenix_mcp.tools.registry._create_registry_mesa_approval", create)):
+        await _call_tool("set_entity", {"entity_id": entity_id, "changes": {"area_id": hall}}, key, hass, data)
+
+    saved = create.await_args.kwargs["args"]
+    assert saved[_REGISTRY_MESA_FINGERPRINT]
+    assert er.async_get(hass).async_get(entity_id).area_id == vault
+    _content, outcome, _ = await async_execute_approved_tool("set_entity", saved, key, hass, data)
+    assert outcome == "allowed"
+    assert er.async_get(hass).async_get(entity_id).area_id == hall
+
+
+@pytest.mark.parametrize(("enabled", "initially_disabled"), [(False, False), (True, True)])
+async def test_entity_enable_and_disable_are_gated(hass: HomeAssistant, registry_entity, enabled, initially_disabled):
+    entity_id, _device_id = registry_entity
+    registry = er.async_get(hass)
+    if initially_disabled:
+        registry.async_update_entity(entity_id, disabled_by=er.RegistryEntryDisabler.USER)
+    data = await _data(hass, "enforced")
+    data.mesa.store.set(entity_id, _profile(entity_id, "prohibited"))
+
+    _content, outcome, _ = await _call_tool(
+        "set_entity", {"entity_id": entity_id, "changes": {"enabled": enabled}}, _access_key(), hass, data,
+    )
+
+    assert outcome == "denied"
+    assert (registry.async_get(entity_id).disabled_by is not None) is initially_disabled
+
+
+async def test_an_enable_that_changes_nothing_has_no_action_to_gate(hass: HomeAssistant, registry_entity):
+    entity_id, _device_id = registry_entity
+    data = await _data(hass, "enforced")
+    data.mesa.store.set(entity_id, _profile(entity_id, "prohibited"))
+
+    _content, outcome, _ = await _call_tool(
+        "set_entity", {"entity_id": entity_id, "changes": {"enabled": True}}, _access_key(), hass, data,
+    )
+
+    assert outcome == "allowed"
+
+
+async def test_the_strictest_action_in_one_edit_decides(hass: HomeAssistant, registry_entity, areas):
+    entity_id, _device_id = registry_entity
+    vault, hall = areas
+    _place(hass, entity_id, vault)
+    data = await _data(hass, "advisory")
+    data.mesa.store.set_area_profile(vault, _profile(vault, "read_only"))
+
+    content, outcome, _ = await _call_tool(
+        "set_entity", {"entity_id": entity_id, "changes": {"area_id": hall, "enabled": False}}, _access_key(), hass, data,
+    )
+
+    assert outcome == "denied"
+    assert "disable" in _body(content)["error"] and "move_area" in _body(content)["error"]
+
+
+async def test_a_device_cannot_be_moved_out_of_a_prohibited_area(hass: HomeAssistant, registry_entity, areas):
+    entity_id, device_id = registry_entity
+    vault, hall = areas
+    devices = dr.async_get(hass)
+    devices.async_update_device(device_id, area_id=vault)
+    data = await _data(hass, "enforced")
+    data.mesa.store.set_area_profile(vault, _profile(vault, "prohibited"))
+
+    content, outcome, _ = await _call_tool(
+        "set_device", {"device_id": device_id, "area_id": hall}, _device_key(device_id), hass, data,
+    )
+
+    assert outcome == "denied", content
+    assert devices.async_get(device_id).area_id == vault
+
+
+async def test_a_confirm_area_routes_a_device_move_to_an_approval(hass: HomeAssistant, registry_entity, areas):
+    _entity_id, device_id = registry_entity
+    vault, hall = areas
+    devices = dr.async_get(hass)
+    devices.async_update_device(device_id, area_id=vault)
+    data = await _data(hass, "enforced")
+    data.mesa.store.set_domain_profile("light", _profile("light", "autonomous"))
+    data.mesa.store.set_area_profile(vault, _profile(vault, "confirm"))
+    create = AsyncMock(return_value=({}, "pending_approval", "approval"))
+    key = _device_key(device_id)
+
+    with patch("custom_components.phoenix_mcp.tools.registry._create_registry_mesa_approval", create):
+        _content, outcome, _ = await _call_tool("set_device", {"device_id": device_id, "area_id": hall}, key, hass, data)
+
+    assert outcome == "pending_approval"
+    assert devices.async_get(device_id).area_id == vault
+    _content, outcome, _ = await async_execute_approved_tool(
+        "set_device", create.await_args.kwargs["args"], key, hass, data,
+    )
+    assert outcome == "allowed"
+    assert devices.async_get(device_id).area_id == hall
+
+
+async def test_a_device_move_gates_only_the_entities_that_leave(hass: HomeAssistant, registry_entity, areas):
+    """An entity with an area of its own stays put, so its mode does not refuse the move."""
+    entity_id, device_id = registry_entity
+    vault, hall = areas
+    devices = dr.async_get(hass)
+    devices.async_update_device(device_id, area_id=vault)
+    _place(hass, entity_id, hall)
+    data = await _data(hass, "enforced")
+    data.mesa.store.set_area_profile(vault, _profile(vault, "prohibited"))
+    data.mesa.store.set_domain_profile("light", _profile("light", "autonomous"))
+
+    _content, outcome, _ = await _call_tool(
+        "set_device", {"device_id": device_id, "area_id": hall}, _device_key(device_id), hass, data,
+    )
+
+    assert outcome == "allowed"
+    assert devices.async_get(device_id).area_id == hall
+
+
+async def test_the_registry_gate_fails_closed_without_a_runtime(hass: HomeAssistant, registry_entity, areas):
+    entity_id, _device_id = registry_entity
+    _vault, hall = areas
+    data = await _data(hass, "advisory")
+    data.mesa = None
+    data.mesa_setup_failed = True
+
+    _content, outcome, _ = await _call_tool(
+        "set_entity", {"entity_id": entity_id, "changes": {"area_id": hall}}, _access_key(), hass, data,
+    )
+
+    assert outcome == "denied"

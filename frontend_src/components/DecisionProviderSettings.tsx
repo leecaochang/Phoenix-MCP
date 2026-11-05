@@ -24,7 +24,7 @@ export function DecisionProviderSettings({ settings, onChange, saving }: {
   const [refreshing, setRefreshing] = useState<string | null>(null);
   const [refreshed, setRefreshed] = useState<Record<string, { models: number; declared: boolean }>>({});
   const [confirmRemove, setConfirmRemove] = useState<string | null>(null);
-  // The account whose options show under it; none until one is clicked (user, 2026-10-31).
+  // The account whose options show under it; none until one is clicked.
   const [open, setOpen] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -57,7 +57,7 @@ export function DecisionProviderSettings({ settings, onChange, saving }: {
     return () => { mounted.current = false; pendingGeneration.current++; };
   }, []);
 
-  // One radio group (user, 2026-10-31): No Decision Provider clears only the account in
+  // One radio group: No Decision Provider clears only the account in
   // use and the default stays; choosing an account puts it in use, and the server makes it
   // the default with it.
   function use(id: string) {
@@ -168,7 +168,7 @@ export function DecisionProviderSettings({ settings, onChange, saving }: {
           { models: refreshed[account.id].models })}</p>}
       </div>
       {editing === account.id ? <div ref={editBox} className="agentcli-settings-model-edit">
-        {/* Refresh Models sits beside the model it refreshes (user, 2026-10-31). */}
+        {/* Refresh Models sits beside the model it refreshes. */}
         <div className="agentcli-add-inline">
           <BusySelect className="input input-auto" value={modelDraft} autoFocus
             aria-label={t("routing.accountModel", { name: account.name })}
@@ -179,7 +179,7 @@ export function DecisionProviderSettings({ settings, onChange, saving }: {
             </option>}
             {models[account.id]?.map(model => <option value={model} key={model}>{model}</option>)}
           </BusySelect>
-          {/* A decision model has no options to check (user, 2026-10-31); what Refresh Models does and does not test reads in Help. */}
+          {/* A decision model has no options to check; what Refresh Models does and does not test reads in Help. */}
           <ActionButton icon="refresh" className="btn btn-outline btn-sm" helpText={t("routing.providerOptions")}
             label={refreshing === account.id ? t("settings.agentcliRefreshing") : t("settings.accountRefreshModels")}
             busy={saving || busy} onClick={() => void refresh(account.id)} />
@@ -195,7 +195,7 @@ export function DecisionProviderSettings({ settings, onChange, saving }: {
       </div> : <div className="phx-window-actions agentcli-account-actions">
         <ActionButton icon="edit" label={t("settings.accountChangeModel")} className="btn btn-outline btn-sm" busy={saving || busy} help="routing.changeModelHelp"
           onClick={() => { setConfirmRemove(null); void editModel(account); }} />
-        {/* Remove asks in place, as elsewhere in Phoenix; what it does reads in Help (user, 2026-10-31). */}
+        {/* Remove asks in place, as elsewhere in Phoenix; what it does reads in Help. */}
         {confirmRemove === account.id ? <span className="row-actions" ref={askBox}>
           <ActionButton icon="delete" label={t("settings.agentcliConfirmRemove", { name: account.name })} className="btn btn-danger btn-sm"
             helpText={t("routing.removeAccountHelp", { name: account.name })} busy={saving || busy} onClick={() => void remove(account.id)} />
@@ -210,7 +210,7 @@ export function DecisionProviderSettings({ settings, onChange, saving }: {
   };
 
   const hint = t("routing.providerHint", { voice: t("settings.voiceCard"), chat: t("settings.agentcliCard") });
-  // What the Decision Provider is shows in Help over the section's empty space (user, 2026-10-31).
+  // What the Decision Provider is shows in Help over the section's empty space.
   return <div className="routing-provider-section" data-help-text={hint}>
     <span className="sr-only" id={`${uid}provider-hint`}>{hint}</span>
     <div className="routing-choices" role="radiogroup" aria-label={t("routing.decisionAccount")}

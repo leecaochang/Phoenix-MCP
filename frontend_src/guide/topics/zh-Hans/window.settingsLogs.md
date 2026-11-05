@@ -55,7 +55,7 @@ Phoenix 的传感器会继续计数，通知仍会到达。
 
 ### {{label:conversations.limit.mb}} {#conversation-size}
 
-日志可以占用多少空间：1 到 250 MB（默认 25）。当前使用的空间显示在限制下方。
+日志可以占用多少空间：1 到 250 MB（默认 25）。当前使用的空间显示在限制下方。日志较大时，Home Assistant 启动时加载它所需的时间更长，内存占用也可能达到此大小的约两倍。
 
 ## {{label:settings.privacySection}} {#privacy}
 
@@ -65,7 +65,7 @@ Phoenix 的传感器会继续计数，通知仍会到达。
 
 关闭时，审计日志的 {{label:audit.rowResource}} 列显示 [redacted]，对话日志会省略说了什么和做了什么。默认开启。
 
-审计日志的负载也会隐藏实体 ID，但工具调用参数中的自由文本仍可能提到一个。已记录的对话内容会在 Phoenix 下次启动时移除。
+此时审计日志的负载只保留工具调用参数的名称，不保留它们的值。负载中的其他文本（例如审批原因）仍可能提到实体。已记录的对话内容会在 Phoenix 下次启动时移除。
 
 ### {{label:settings.logClientIpLabel}} {#log-client-ip}
 

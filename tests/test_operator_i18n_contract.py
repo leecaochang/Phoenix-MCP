@@ -8,15 +8,23 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).parents[1]
-BACKEND_FILES = (
-    ROOT / "custom_components/phoenix_mcp/admin_view.py",
-    ROOT / "custom_components/phoenix_mcp/agentcli.py",
+AGENT_FILES = (
+    ROOT / "custom_components/phoenix_mcp/agent_chat.py",
+    ROOT / "custom_components/phoenix_mcp/agent_turn.py",
+    ROOT / "custom_components/phoenix_mcp/agentcli_views.py",
+    *sorted((ROOT / "custom_components/phoenix_mcp/llm").glob("*.py")),
 )
+BACKEND_FILES = (ROOT / "custom_components/phoenix_mcp/admin_view.py", *AGENT_FILES)
 CATALOG_FILES = tuple(sorted((ROOT / "custom_components/phoenix_mcp/catalogs").glob("*.json")))
 
 
 def _panel_catalog(path: Path) -> dict:
     return json.loads(path.read_text(encoding="utf-8"))["panel"]
+
+
+def _agent_module() -> ast.Module:
+    """Every Agent Chat, provider and account module as one tree."""
+    return ast.Module([node for path in AGENT_FILES for node in ast.parse(path.read_text(encoding="utf-8")).body], [])
 
 
 def _literal_string(node: ast.AST | None) -> str | None:
@@ -116,7 +124,8 @@ def test_localized_reasons_have_catalog_keys() -> None:
     """Every LocalizedReason names an adminError key present in every catalog."""
     catalogs = [_panel_catalog(path)["adminError"] for path in CATALOG_FILES]
     found = 0
-    for path in sorted((ROOT / "custom_components/phoenix_mcp").glob("*.py")):
+    package = ROOT / "custom_components/phoenix_mcp"
+    for path in sorted([*package.glob("*.py"), *package.glob("routing/*.py")]):
         for call in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
             if not (isinstance(call, ast.Call) and isinstance(call.func, ast.Name)
                     and call.func.id == "LocalizedReason"):
@@ -131,15 +140,14 @@ def test_localized_reasons_have_catalog_keys() -> None:
                 assert key in catalog, f"{path.name}:{call.lineno} adminError.{key} missing from {catalog_path.name}"
     # Not vacuous: provider checks and decision provider reasons use it.
     assert found >= 10
-    from custom_components.phoenix_mcp.decision_provider import _DECISION_ERROR_REASONS
+    from custom_components.phoenix_mcp.routing.decision_provider import _DECISION_ERROR_REASONS
     for _text, key in _DECISION_ERROR_REASONS.values():
         for catalog_path, catalog in zip(CATALOG_FILES, catalogs):
             assert key in catalog, f"decision reason adminError.{key} missing from {catalog_path.name}"
 
 
 def test_probe_config_errors_have_catalog_keys() -> None:
-    path = ROOT / "custom_components/phoenix_mcp/agentcli.py"
-    tree = ast.parse(path.read_text(encoding="utf-8"))
+    tree = _agent_module()
     catalogs = [_panel_catalog(catalog_path)["adminError"] for catalog_path in CATALOG_FILES]
     keys: list[tuple[int, str]] = []
     for call in ast.walk(tree):
@@ -153,19 +161,18 @@ def test_probe_config_errors_have_catalog_keys() -> None:
         if _is_checked_dynamic_key(key_node):
             continue
         key = _literal_string(key_node)
-        assert key is not None, f"agentcli.py:{call.lineno} ProbeConfigError key must be literal"
+        assert key is not None, f"line {call.lineno}: ProbeConfigError key must be literal"
         keys.append((call.lineno, key))
 
     assert keys, "ProbeConfigError constructors were not found"
     for line, key in keys:
         for catalog_path, catalog in zip(CATALOG_FILES, catalogs):
-            assert key in catalog, f"agentcli.py:{line} adminError.{key} missing from {catalog_path.name}"
+            assert key in catalog, f"line {line}: adminError.{key} missing from {catalog_path.name}"
 
 
 def test_successful_error_payloads_declare_key_or_passthrough() -> None:
     """HTTP 200 probe failures bypass _err, so guard their payloads too."""
-    path = ROOT / "custom_components/phoenix_mcp/agentcli.py"
-    tree = ast.parse(path.read_text(encoding="utf-8"))
+    tree = _agent_module()
     findings: list[int] = []
     for node in ast.walk(tree):
         if not isinstance(node, ast.Dict):
@@ -183,8 +190,7 @@ def test_agent_chat_authored_sse_codes_and_progress_have_catalog_keys() -> None:
     catalogs = [_panel_catalog(path) for path in CATALOG_FILES]
     findings: list[str] = []
 
-    agent_path = ROOT / "custom_components/phoenix_mcp/agentcli.py"
-    agent_tree = ast.parse(agent_path.read_text(encoding="utf-8"))
+    agent_tree = _agent_module()
     for call in ast.walk(agent_tree):
         if not (
             isinstance(call, ast.Call)
@@ -200,11 +206,21 @@ def test_agent_chat_authored_sse_codes_and_progress_have_catalog_keys() -> None:
             continue
         for catalog_path, catalog in zip(CATALOG_FILES, catalogs):
             if code not in catalog["agentchat"]["notice"]:
-                findings.append(f"agentcli.py:{call.lineno} agentchat.notice.{code} missing from {catalog_path.name}")
+                findings.append(f"line {call.lineno}: agentchat.notice.{code} missing from {catalog_path.name}")
 
     for relative in (
         "custom_components/phoenix_mcp/tool_common.py",
-        "custom_components/phoenix_mcp/mcp_view.py",
+        "custom_components/phoenix_mcp/mcp_transport.py",
+        "custom_components/phoenix_mcp/tool_dispatch.py",
+        "custom_components/phoenix_mcp/tools/approvals.py",
+        "custom_components/phoenix_mcp/tools/backup.py",
+        "custom_components/phoenix_mcp/tools/history.py",
+        "custom_components/phoenix_mcp/tools/integrations.py",
+        "custom_components/phoenix_mcp/tools/logs.py",
+        "custom_components/phoenix_mcp/tools/registry.py",
+        "custom_components/phoenix_mcp/tools/restore.py",
+        "custom_components/phoenix_mcp/tools/service.py",
+        "custom_components/phoenix_mcp/tools/system.py",
         "custom_components/phoenix_mcp/tools/esphome.py",
     ):
         path = ROOT / relative
@@ -236,8 +252,7 @@ def test_agent_chat_authored_sse_codes_and_progress_have_catalog_keys() -> None:
 
 
 def test_tool_image_sse_contains_data_not_backend_authored_alt_text() -> None:
-    source = (ROOT / "custom_components/phoenix_mcp/agentcli.py").read_text(encoding="utf-8")
-    tree = ast.parse(source)
+    tree = _agent_module()
     payloads: list[ast.Dict] = []
     for call in ast.walk(tree):
         if (
@@ -252,3 +267,23 @@ def test_tool_image_sse_contains_data_not_backend_authored_alt_text() -> None:
     assert payloads
     for payload in payloads:
         assert "alt" not in _dict_items(payload)
+
+
+def test_every_recorded_chat_event_code_has_a_notice_entry():
+    """A code without an entry shows its stored English in every language."""
+    import json
+    import re
+    from pathlib import Path
+
+    package = Path(__file__).parent.parent / "custom_components" / "phoenix_mcp"
+    english = json.loads((package / "catalogs" / "en.json").read_text(encoding="utf-8"))
+    notices = english["panel"]["agentchat"]["notice"]
+    for code in ("result_withheld", "provider_slow"):
+        assert code in notices
+    source = "".join((package / name).read_text(encoding="utf-8") for name in (
+        "home_companion.py", "home_companion_turn.py", "agent_turn.py", "agent_chat.py"))
+    # Each code's params are recorded with it, or the entry shows raw placeholders.
+    for code, placeholder in (("result_withheld", "length"), ("provider_slow", "seconds")):
+        assert "{" + placeholder + "}" in notices[code]
+        block = source[source.index(f'"{code}"'):][:400]
+        assert re.search(rf'"message_params": \{{"{placeholder}"', block), code

@@ -15,7 +15,7 @@ Home Assistant 2026.7.0 或更高版本。Phoenix 不需要安装其他东西：
 
 ## 使用 HACS 安装 {#hacs}
 
-在 Home Assistant 2026.10 或更早版本上，在 HACS 中找到 Phoenix MCP，或把它的仓库添加为集成类型的自定义仓库。下载后重启 Home Assistant。HACS 会替你检查 Home Assistant 版本。
+在 Home Assistant 2026.10 或更早版本上，把 `https://github.com/leecaochang/Phoenix-MCP` 添加到 HACS，作为集成类型的自定义仓库。下载 Phoenix MCP，然后重启 Home Assistant。HACS 会替你检查 Home Assistant 版本。
 
 ## 手动安装 {#manual}
 
@@ -41,4 +41,4 @@ Home Assistant 2026.7.0 或更高版本。Phoenix 不需要安装其他东西：
 
 其他所有内容都保留在 Home Assistant 的存储中。包括紧急停止开关和 MESA 模式等设置，以及审计日志、对话日志、MESA 策略、变更历史和安全副本。如果你再次添加 Phoenix，它会读取这些内容，已吊销的密钥会列在已归档的访问密钥中。
 
-要同时移除 Phoenix 的数据，请在删除集成前使用[{{label:settings.wipeTitle}}](guide:window.settingsSafety#wipe-core)中的 **{{label:settings.wipeCoreLabel}}**。
+要同时移除 Phoenix 的数据，请在删除集成前使用[{{label:settings.wipeTitle}}](guide:window.settingsSafety#wipe-core)中的 **{{label:settings.wipeCoreLabel}}**。[有少量内容会保留](guide:topic.security#removing)，包括安全副本。

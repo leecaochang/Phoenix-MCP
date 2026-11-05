@@ -7,7 +7,7 @@ pairs, opens a port, starts or continues a flow, or subscribes. Scoped
 projections answer only for resources the caller can already read; the
 pass-through projections add Bluetooth addresses and USB serial identifiers but
 withhold LAN identity (IP addresses, hostnames, network MACs and URL hosts), as
-every other Phoenix surface does. The contract is spec/proxy-diagnostics.md.
+every other Phoenix surface does.
 Every function runs on the event loop.
 """
 
@@ -31,6 +31,7 @@ from .const import (
     PROXY_TEXT_MAX_CHARS,
 )
 from .helpers import redact_diagnostics
+from .household_authority import household_admin_access
 from .policy_engine import Permission, assist_expose_check, device_config_entry_ids, resolve_device_registry_access
 
 _LOGGER = logging.getLogger(__name__)
@@ -44,7 +45,6 @@ _LAN_PLACEHOLDER_KEYS = frozenset({"host", "hostname", "ip", "ip_address", "addr
 
 def full_pass_through(access_key: AccessKeyRecord, hass: HomeAssistant) -> bool:
     """Whether a key sees what HA sees: pass-through, no Assist-exposure filter, no non-admin household caller."""
-    from .household_authority import household_admin_access
 
     return bool(access_key.pass_through) and household_admin_access() and assist_expose_check(access_key, hass) is None
 
@@ -64,6 +64,7 @@ def _text(value: Any) -> str | None:
 def rf_capabilities(hass: HomeAssistant, entity_id: str) -> dict[str, Any] | None:
     """Frequency ranges (hertz) and modulations of one loaded RF transmitter, else None."""
     try:
+        # Local: optional component, imported only when this path runs.
         from homeassistant.components.radio_frequency import DATA_COMPONENT
         from rf_protocols import ModulationType
     except ImportError:
@@ -77,7 +78,7 @@ def rf_capabilities(hass: HomeAssistant, entity_id: str) -> dict[str, Any] | Non
             "supported_frequency_ranges": [[int(low), int(high)] for low, high in entity.supported_frequency_ranges],
             "supported_modulations": [m.value for m in ModulationType if entity.supports_modulation(m)],
         }
-    except Exception:  # noqa: BLE001 - an integration's property must not fail the read
+    except Exception:  # an integration's property must not fail the read
         _LOGGER.debug("RF capabilities unavailable for %s", entity_id, exc_info=True)
         return None
 
@@ -91,6 +92,7 @@ def _bluetooth_scanners(hass: HomeAssistant) -> list[Any] | None:
     """Every registered scanner, or None when Bluetooth is not loaded."""
     if _BLUETOOTH not in hass.config.components:
         return None
+    # Local: optional component, imported only when this path runs.
     from homeassistant.components import bluetooth
 
     return list(bluetooth.async_current_scanners(hass))
@@ -99,10 +101,11 @@ def _bluetooth_scanners(hass: HomeAssistant) -> list[Any] | None:
 def _allocations(source: str) -> Any:
     """The manager's slot allocations for one scanner source, or None."""
     try:
+        # Local: ships with an optional component, not with this integration.
         from habluetooth import get_manager
 
         rows = get_manager().async_current_allocations(source)
-    except Exception:  # noqa: BLE001 - slots are optional detail
+    except Exception:  # slots are optional detail
         return None
     return rows[0] if rows else None
 
@@ -192,6 +195,7 @@ def bluetooth_network(hass: HomeAssistant) -> dict[str, Any] | None:
     scanners = _bluetooth_scanners(hass)
     if scanners is None:
         return None
+    # Local: optional component, imported only when this path runs.
     from homeassistant.components import bluetooth
 
     scanner_rows = []
@@ -246,10 +250,12 @@ async def _serial_state(hass: HomeAssistant) -> tuple[list[Any], dict[str, list[
     """Scanned ports and Core's consumers by port (None before HA 2026.9), or None without usb."""
     if "usb" not in hass.config.components:
         return None
+    # Local: optional component, imported only when this path runs.
     from homeassistant.components import usb
 
     ports = list(await usb.async_scan_serial_ports(hass))
     try:
+        # Local: optional component, imported only when this path runs.
         from homeassistant.components.usb.consumers import async_get_serial_port_consumers
     except ImportError:
         return ports, None
@@ -258,6 +264,7 @@ async def _serial_state(hass: HomeAssistant) -> tuple[list[Any], dict[str, list[
 
 def _unscannable_schemes() -> tuple[str, ...]:
     try:
+        # Local: optional component, imported only when this path runs.
         from homeassistant.components.usb.consumers import UNSCANNABLE_PORT_SCHEMES
     except ImportError:
         return ()
@@ -280,7 +287,7 @@ async def integration_serial_ports(hass: HomeAssistant) -> dict[str, list[dict[s
     """Scoped port usage per consuming config entry, or None when Core cannot report usage."""
     try:
         state = await _serial_state(hass)
-    except Exception:  # noqa: BLE001 - port usage is optional detail on a listing
+    except Exception:  # port usage is optional detail on a listing
         _LOGGER.debug("Serial port usage unavailable", exc_info=True)
         return None
     if state is None or state[1] is None:
@@ -306,13 +313,15 @@ async def integration_serial_ports(hass: HomeAssistant) -> dict[str, list[dict[s
 
 async def serial_inventory(hass: HomeAssistant) -> dict[str, Any] | None:
     """Pass-through serial inventory: scanned ports plus configured ports missing from the scan."""
+    # Local: not part of the recorded Home Assistant import floor.
+    from homeassistant.helpers.service_info.usb import UsbServiceInfo
     state = await _serial_state(hass)
     if state is None:
         return None
     ports, consumers = state
+    # Local: optional component, imported only when this path runs.
     from homeassistant.components import usb
     from homeassistant.components.usb.models import USBDevice
-    from homeassistant.helpers.service_info.usb import UsbServiceInfo
 
     unscannable = _unscannable_schemes()
     scanned = {port.device: port for port in ports}
@@ -366,6 +375,7 @@ def _discovery_identities(hass: HomeAssistant) -> dict[str, dict[str, Any]]:
     the order it returns them; with uninitialized flows included the two line up.
     Each backend is imported only when loaded, since its libraries may be absent.
     """
+    # Local: not part of the recorded Home Assistant import floor.
     from homeassistant.helpers.service_info.usb import UsbServiceInfo
 
     def bluetooth_identity(info: Any) -> dict[str, Any]:
@@ -378,6 +388,7 @@ def _discovery_identities(hass: HomeAssistant) -> dict[str, dict[str, Any]]:
 
     kinds: list[tuple[type, Any]] = [(UsbServiceInfo, usb_identity)]
     if _BLUETOOTH in hass.config.components:
+        # Local: optional component, imported only when this path runs.
         from homeassistant.components.bluetooth import BluetoothServiceInfoBleak
 
         kinds.append((BluetoothServiceInfoBleak, bluetooth_identity))
@@ -399,6 +410,7 @@ def _discovery_identities(hass: HomeAssistant) -> dict[str, dict[str, Any]]:
 
 def discovered_flows(hass: HomeAssistant) -> tuple[list[dict[str, Any]], int]:
     """Pass-through discovered-but-not-added devices: (rows, omitted count)."""
+    # Local: not part of the recorded Home Assistant import floor.
     from homeassistant.config_entries import DISCOVERY_SOURCES
 
     flows = [

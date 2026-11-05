@@ -62,8 +62,8 @@ def _track_unsettled(future: asyncio.Future) -> None:
 # refuses anything outside this set, so a future caller cannot turn user input
 # into an arbitrary privileged command run as admin. Adding a command here is a
 # deliberate act. Keep in sync with the command strings the in-tree callers pass
-# (helper, lovelace, blueprint, energy and discovery tools, mcp_view, logger_control,
-# radio.py). restore_backup is deliberately absent (too destructive). The helper
+# (helper, lovelace, blueprint, energy, discovery, logs, restore and backup tools,
+# logger_control, radio.py). restore_backup is deliberately absent (too destructive). The helper
 # "list" read captures the pre-change config for version history.
 # Most ZHA write-side commands (zha/devices/permit, zha/devices/reconfigure,
 # zha/topology/update) are deliberately absent: their handlers enable
@@ -350,7 +350,7 @@ async def async_ws_command(
         return future.result()
     except WsDispatchError:
         raise
-    except Exception as err:  # noqa: BLE001 - degrade any HA-internal breakage to a clean error
+    except Exception as err:  # degrade any HA-internal breakage to a clean error
         raise WsDispatchError(f"WebSocket command {command} failed: {err}") from err
 
 
@@ -453,7 +453,7 @@ def check_ws_dispatch_compat(hass: HomeAssistant) -> str | None:
             if handler_err is not None:
                 return handler_err
         return None
-    except Exception as err:  # noqa: BLE001 - advisory probe must never abort setup
+    except Exception as err:  # advisory probe must never abort setup
         return f"compatibility probe could not run: {err}"
 
 
@@ -480,11 +480,12 @@ def _lovelace_dashboard(hass: HomeAssistant, url_path: str | None) -> Any:
     dashboard as "nothing to preserve".
     """
     try:
-        from homeassistant.components.lovelace.const import (  # noqa: PLC0415
+        # Local: optional component, imported only when this path runs.
+        from homeassistant.components.lovelace.const import (
             DOMAIN as _LL_DOMAIN,
             LOVELACE_DATA,
         )
-    except Exception as exc:  # noqa: BLE001 - lovelace not loaded
+    except Exception as exc:  # lovelace not loaded
         raise WsDispatchError(f"lovelace is not loaded: {exc}") from exc
     data = hass.data.get(LOVELACE_DATA)
     if data is None:
@@ -518,7 +519,8 @@ async def async_lovelace_resources(hass: HomeAssistant) -> LovelaceResources | N
     rather than look like an instance with no resources.
     """
     try:
-        from homeassistant.components.lovelace.const import LOVELACE_DATA  # noqa: PLC0415
+        # Local: optional component, imported only when this path runs.
+        from homeassistant.components.lovelace.const import LOVELACE_DATA
 
         data = hass.data.get(LOVELACE_DATA)
         if data is None or hass.config.safe_mode:
@@ -527,7 +529,7 @@ async def async_lovelace_resources(hass: HomeAssistant) -> LovelaceResources | N
         await resources.async_get_info()
         items = resources.async_items() or []
         mode = data.resource_mode
-    except Exception:  # noqa: BLE001 - callers report an unreadable list, never a failed tool
+    except Exception:  # callers report an unreadable list, never a failed tool
         _LOGGER.debug("Could not read the dashboard resource list", exc_info=True)
         return None
     if mode not in ("storage", "yaml"):
@@ -560,14 +562,15 @@ async def async_get_lovelace_config(
             filename = None if relative.startswith("..") or os.path.isabs(relative) else relative
         raise WsYamlDashboardError(f"dashboard {url_path!r} is YAML-mode", filename)
     try:
-        from homeassistant.components.lovelace.const import ConfigNotFound  # noqa: PLC0415
-    except Exception as exc:  # noqa: BLE001
+        # Local: optional component, imported only when this path runs.
+        from homeassistant.components.lovelace.const import ConfigNotFound
+    except Exception as exc:
         raise WsDispatchError(f"lovelace unavailable: {exc}") from exc
     try:
         return await config.async_load(False)
     except ConfigNotFound:
         return None
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         raise WsDispatchError(f"failed to read dashboard config: {exc}") from exc
 
 
@@ -592,7 +595,7 @@ async def async_save_lovelace_config(
     check_request_authority()
     try:
         await config.async_save(config_data)
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         raise WsDispatchError(f"failed to save dashboard config: {exc}") from exc
 
 
@@ -620,31 +623,33 @@ async def async_zha_reconfigure_device(hass: HomeAssistant, ieee: str) -> None:
     per-call error.
     """
     try:
-        from homeassistant.components.zha.helpers import get_zha_gateway  # noqa: PLC0415
-    except Exception as exc:  # noqa: BLE001 - zha missing or restructured
+        # Local: optional component, imported only when this path runs.
+        from homeassistant.components.zha.helpers import get_zha_gateway
+    except Exception as exc:  # zha missing or restructured
         raise WsDispatchError(f"ZHA is not available: {exc}") from exc
     try:
         gateway = get_zha_gateway(hass)
         device = gateway.get_device(_zha_eui64(ieee))
     except WsDispatchError:
         raise
-    except Exception as exc:  # noqa: BLE001 - gateway not running / API drift
+    except Exception as exc:  # gateway not running / API drift
         raise WsDispatchError(f"ZHA gateway is not available: {exc}") from exc
     if device is None:
         raise WsDispatchError("not_found: ZHA device not found")
     try:
         hass.async_create_task(gateway.async_reinterview_device(device.ieee))
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         raise WsDispatchError(f"failed to start reconfigure: {exc}") from exc
 
 
 def _zha_eui64(ieee: str) -> Any:
     """Convert an ieee string to zigpy's EUI64 type (what the gateway keys on)."""
     try:
-        from zigpy.types import EUI64  # noqa: PLC0415
-    except Exception as exc:  # noqa: BLE001
+        # Local: ships with an optional component, not with this integration.
+        from zigpy.types import EUI64
+    except Exception as exc:
         raise WsDispatchError(f"ZHA is not available: {exc}") from exc
     try:
         return EUI64.convert(ieee)
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         raise WsDispatchError(f"invalid ieee address: {ieee}") from exc

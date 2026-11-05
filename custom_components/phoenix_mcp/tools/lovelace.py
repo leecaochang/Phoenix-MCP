@@ -13,8 +13,8 @@ arguments, which blows weaker providers' output limits. All guard with an
 optimistic-lock content_hash, checked pre-gate and again at apply time so a
 change made during the approval window is caught.
 
-mcp_view registers these tools and this module never imports it. Shared
-primitives come from ..tool_common.
+tool_registration registers these tools and this module never imports the
+dispatcher. Shared primitives come from ..tool_common.
 """
 
 from __future__ import annotations
@@ -65,6 +65,7 @@ from ..tool_common import (
     _tool_error,
     _tool_refused_before_write,
     _tool_success,
+    _tool_uncertain,
     _truncate,
     redaction_sentinel_path,
     resolve_json_path,
@@ -95,6 +96,18 @@ def _dashboard_layout_snapshot(url_path: str | None, config: dict | None) -> dic
     }) or {}
 
 
+def _addressed_by_row_id(before: dict, dashboard_id: str) -> tuple[str, dict]:
+    """Core addresses a dashboard by its row id alone, though readers also know its url_path.
+
+    Returns that id and the snapshot keyed by it, so one dashboard has one
+    recovery resource whichever name the caller used.
+    """
+    row_id = (before.get("dashboard") or {}).get("id")
+    if not isinstance(row_id, str) or not row_id:
+        return dashboard_id, before
+    return row_id, {**before, "resource_id": row_id}
+
+
 async def _dashboard_registry_snapshot(hass: HomeAssistant, dashboard_id: str) -> dict:
     """Read one dashboard registry row as a complete, secret-safe snapshot."""
     dashboards = await async_ws_command(hass, "lovelace/dashboards/list", {})
@@ -115,11 +128,12 @@ def dashboard_registry_refused(exc: WsDispatchError) -> bool:
     """Whether a dashboard registry command failed without changing anything.
 
     Core's dashboard collection answers invalid_format only from the checks it
-    runs before storing (a url_path without a hyphen, a schema error), so that
-    refusal is proof nothing changed; any other failure may have landed.
+    runs before storing (a url_path without a hyphen, a schema error) and
+    not_found only from its item lookup, so either refusal is proof nothing
+    changed; any other failure may have landed.
     """
     return isinstance(exc, WsCommandNotDispatchedError) or (
-        isinstance(exc, WsCommandRefusedError) and exc.code == "invalid_format")
+        isinstance(exc, WsCommandRefusedError) and exc.code in ("invalid_format", "not_found"))
 
 
 async def _recoverable_dashboard_registry_write(
@@ -153,12 +167,12 @@ async def _recoverable_dashboard_registry_write(
                     return _tool_error(f"Dashboard registry operation failed: {exc}"), "invalid_request", operation
                 try:
                     after = await _dashboard_registry_snapshot(hass, dashboard_id)
-                except Exception:  # noqa: BLE001 - dispatch may have landed
+                except Exception:  # dispatch may have landed
                     await recovery.mark(rid, "unknown")
-                    return _tool_success(json.dumps({
+                    return _tool_uncertain({
                         "status": "unknown", "recovery_id": rid,
                         "message": "Dashboard registry operation outcome is unknown; inspect before retrying.",
-                    })), "allowed", f"dashboard:{dashboard_id}"
+                    }), "invalid_request", f"dashboard:{dashboard_id}"
                 expected_exists = expected_row is not None
                 observed_row = after.get("dashboard")
                 if after.get("exists") is not expected_exists or (
@@ -169,11 +183,11 @@ async def _recoverable_dashboard_registry_write(
                     )
                 ):
                     await recovery.mark(rid, "partial", observed=after)
-                    return _tool_success(json.dumps({
+                    return _tool_uncertain({
                         "status": "partial", "recovery_id": rid,
                         "dashboard": result,
                         "message": "Dashboard registry readback differs; do not retry automatically.",
-                    }, default=str)), "allowed", f"dashboard:{dashboard_id}"
+                    }), "invalid_request", f"dashboard:{dashboard_id}"
                 await recovery.mark(rid, "verified", observed_hash=content_hash(after))
                 await recovery.set_source(rid, after)
                 return _tool_success(json.dumps({
@@ -183,7 +197,7 @@ async def _recoverable_dashboard_registry_write(
                 recovery.leave(rid)
     except ConfigurationRecoveryError as exc:
         return _tool_error(str(exc)), "invalid_request", operation
-    except Exception:  # noqa: BLE001 - retain unresolved state on persistence or authority errors
+    except Exception:  # retain unresolved state on persistence or authority errors
         return _tool_error("Dashboard registry outcome is uncertain; inspect configuration recovery before retrying."), "invalid_request", operation
 
 
@@ -207,9 +221,12 @@ async def _recoverable_dashboard_save(
             try:
                 await recovery.mark(rid, "dispatching")
                 try:
-                    current = await async_get_lovelace_config(hass, url_path)
+                    current = await async_get_lovelace_config(hass, url_path, storage_only=True)
                 except WsDashboardNotFoundError:
                     current = None
+                except WsYamlDashboardError as exc:
+                    await recovery.mark(rid, "not_applied")
+                    return _tool_error(_yaml_dashboard_message(url_path, exc.filename)), "invalid_request", "dashboard"
                 if current != before:
                     await recovery.mark(rid, "not_applied")
                     return _tool_error("The dashboard layout changed while preparing its recovery snapshot; nothing was dispatched."), "invalid_request", "dashboard"
@@ -221,15 +238,15 @@ async def _recoverable_dashboard_save(
                     await recovery.mark(rid, "not_applied" if isinstance(exc, WsCommandNotDispatchedError) else "unknown", error="save_rejected")
                     return _tool_error(f"Failed to save dashboard config: {exc}"), "invalid_request", "dashboard"
                 try:
-                    observed = await async_get_lovelace_config(hass, url_path)
+                    observed = await async_get_lovelace_config(hass, url_path, storage_only=True)
                 except WsDashboardNotFoundError:
                     observed = None
                 if observed != after:
                     await recovery.mark(rid, "partial", observed_hash=content_hash(observed or {}))
-                    return _tool_success(json.dumps({
+                    return _tool_uncertain({
                         "status": "partial", "recovery_id": rid,
                         "message": "Dashboard layout write landed but readback differs; do not retry automatically.",
-                    })), "allowed", f"dashboard:{resource_id}"
+                    }), "invalid_request", f"dashboard:{resource_id}"
                 await recovery.mark(rid, "verified", observed_hash=content_hash(observed))
                 await recovery.set_source(rid, _dashboard_layout_snapshot(url_path, observed))
                 if return_result:
@@ -241,7 +258,7 @@ async def _recoverable_dashboard_save(
                 recovery.leave(rid)
     except ConfigurationRecoveryError as exc:
         return _tool_error(str(exc)), "invalid_request", "dashboard"
-    except Exception:  # noqa: BLE001 - keep uncertain writes in the recovery store
+    except Exception:  # keep uncertain writes in the recovery store
         if not dispatched:
             return _tool_error("The recovery snapshot could not be saved, so the dashboard was not changed."), "invalid_request", "dashboard"
         return _tool_error("Dashboard layout outcome is uncertain; inspect configuration recovery before retrying."), "invalid_request", "dashboard"
@@ -605,6 +622,7 @@ async def _execute_edit_dashboard(
             return _tool_error("No dashboard found with that dashboard_id."), "invalid_request", "edit_dashboard"
     except (WsDispatchError, ConfigurationRecoveryError) as exc:
         return _tool_error(f"Could not capture dashboard registry snapshot: {exc}"), "invalid_request", "edit_dashboard"
+    dashboard_id, before = _addressed_by_row_id(before, dashboard_id)
     return await _recoverable_dashboard_registry_write(
         dashboard_id=dashboard_id, before=before, operation="dashboard_registry_edit",
         command="lovelace/dashboards/update", payload={"dashboard_id": dashboard_id, **config},
@@ -644,12 +662,13 @@ async def _execute_delete_dashboard(
             return _tool_error("No dashboard found with that dashboard_id."), "invalid_request", "delete_dashboard"
     except (WsDispatchError, ConfigurationRecoveryError) as exc:
         return _tool_error(f"Could not capture dashboard registry snapshot: {exc}"), "invalid_request", "delete_dashboard"
+    dashboard_id, before = _addressed_by_row_id(before, dashboard_id)
     # Home Assistant deletes the dashboard's stored layout with its registry row,
     # so the views and cards need their own durable pre-image before anything is
     # dispatched; an auto-generated dashboard has none to lose.
     url_path = (before.get("dashboard") or {}).get("url_path")
     try:
-        layout = await async_get_lovelace_config(hass, url_path) if isinstance(url_path, str) else None
+        layout = await async_get_lovelace_config(hass, url_path, storage_only=True) if isinstance(url_path, str) else None
     except WsDashboardNotFoundError:
         layout = None
     except WsDispatchError as exc:
@@ -675,7 +694,7 @@ async def _execute_delete_dashboard(
                     access_key=access_key, hass=hass, data=data,
                 )
                 try:
-                    remaining = await async_get_lovelace_config(hass, url_path)
+                    remaining = await async_get_lovelace_config(hass, url_path, storage_only=True)
                 except WsDashboardNotFoundError:
                     remaining = None
                 if remaining is None:
@@ -890,13 +909,13 @@ async def _build_diff_set_dashboard_config(args: dict, access_key: AccessKeyReco
     views = config.get("views")
     before = None
     try:
-        current = await async_get_lovelace_config(hass, url_path)
+        current = await async_get_lovelace_config(hass, url_path, storage_only=True)
         if current is not None:
             # Redact out-of-scope entity ids the same way get_dashboard_config does.
             before = _truncate(json.dumps(filter_service_response(current, access_key, hass), indent=2, default=str))
     except WsDashboardNotFoundError:
         pass  # a new dashboard has no before
-    except Exception:  # noqa: BLE001 - diagnostic only; the tool refused an unreadable one before gating
+    except Exception:  # diagnostic only; the tool refused an unreadable one before gating
         _LOGGER.warning("Could not read dashboard %s for its approval preview", label, exc_info=True)
     return {
         "kind": "yaml_diff",
@@ -963,9 +982,11 @@ async def _tool_set_dashboard_config(
         return pre
     url_path = str(args.get("url_path") or "").strip() or None
     try:
-        current = await async_get_lovelace_config(hass, url_path)
+        current = await async_get_lovelace_config(hass, url_path, storage_only=True)
     except WsDashboardNotFoundError:
         current = None  # genuinely absent: any expected_hash conflicts
+    except WsYamlDashboardError as exc:
+        return _tool_error(_yaml_dashboard_message(url_path, exc.filename)), "invalid_request", "set_dashboard_config"
     except WsDispatchError as exc:
         # An unreadable lovelace must not be mistaken for an absent dashboard:
         # the CAS guard would pass against a phantom None, and the approval
@@ -997,9 +1018,11 @@ async def _execute_set_dashboard_config(
     url_path = str(args.get("url_path") or "").strip() or None
     resource_id = url_path or "lovelace"
     try:
-        before = await async_get_lovelace_config(hass, url_path)
+        before = await async_get_lovelace_config(hass, url_path, storage_only=True)
     except WsDashboardNotFoundError:
         before = None  # creating a dashboard config that does not exist yet
+    except WsYamlDashboardError as exc:
+        return _tool_error(_yaml_dashboard_message(url_path, exc.filename)), "invalid_request", "set_dashboard_config"
     except WsDispatchError as exc:
         # Not absence: writing now would record a phantom "create" and lose the
         # real prior layout from version history.
@@ -1218,7 +1241,9 @@ async def _dashboard_card_current(
         return refusal
     url_path = str(args.get("url_path") or "").strip() or None
     try:
-        current = await async_get_lovelace_config(hass, url_path)
+        current = await async_get_lovelace_config(hass, url_path, storage_only=True)
+    except WsYamlDashboardError as exc:
+        return _tool_error(_yaml_dashboard_message(url_path, exc.filename)), "invalid_request", tool_name
     except WsDispatchError as exc:
         return _tool_error(f"Could not read dashboard: {exc}"), "invalid_request", tool_name
     if not isinstance(current, dict):
@@ -1250,10 +1275,10 @@ async def _build_diff_dashboard_card(
     before = None
     prior = None
     try:
-        current = await async_get_lovelace_config(hass, url_path)
+        current = await async_get_lovelace_config(hass, url_path, storage_only=True)
         if isinstance(current, dict):
             _, prior, _ = _apply_dashboard_card_op(current, op, args)
-    except Exception:  # noqa: BLE001 - diagnostic only; the precheck already validated
+    except Exception:  # diagnostic only; the precheck already validated
         pass
     if prior is not None:
         # Redact out-of-scope entity ids the same way get_dashboard_config does.
@@ -1346,7 +1371,8 @@ async def _execute_dashboard_card(
     raw_card = args.get("card")
     # None, not {}: a delete op has no card, and the diff must show no `after`.
     card = raw_card if isinstance(raw_card, dict) else None
-    card_type = (card or prior or {}).get("type")
+    # A delete can remove a junk entry that is not an object.
+    card_type = (card or (prior if isinstance(prior, dict) else None) or {}).get("type")
     subject = card_type or "card"
     # The English `where` and `subject` are the stored record. The indices and
     # card type travel as their own params so the panel can rebuild the location
@@ -1509,10 +1535,10 @@ async def _build_diff_patch_dashboard(args: dict, access_key: AccessKeyRecord, h
     changes = [change for change in args.get("changes") or [] if isinstance(change, dict)]
     priors: list[Any] = []
     try:
-        current = await async_get_lovelace_config(hass, url_path)
+        current = await async_get_lovelace_config(hass, url_path, storage_only=True)
         if isinstance(current, dict):
             _, priors, _ = _apply_dashboard_patch(current, args)
-    except Exception:  # noqa: BLE001 - diagnostic only; the precheck already validated
+    except Exception:  # diagnostic only; the precheck already validated
         pass
 
     def render(value: Any) -> str:

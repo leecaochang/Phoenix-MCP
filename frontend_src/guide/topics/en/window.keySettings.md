@@ -21,7 +21,7 @@ Offers the agent every Phoenix tool, even ones this key can't use. Calls to thos
 
 How long a request that needs approval waits for your decision before the app gets a "pending" answer: Off (default), or 30 to 180 seconds. With Off, the app hears straight away that the request is waiting in Approvals.
 
-This applies to external apps only. Agent Chat, the Voice Agent, Assist and AI Task always queue straight away. If the key already has a request waiting, a new one doesn't wait.
+This applies to external apps only. Agent Chat waits up to 15 minutes for your decision. The Voice Agent, Assist and AI Task report that the change is waiting and carry on. If the key already has a request waiting, a new one doesn't wait.
 
 ### {{label:accessKeys.assistExposureLabel}} {#assist-exposure}
 

@@ -75,3 +75,8 @@ export function clearReasonDraft(approvalId: string): void {
   delete drafts[approvalId];
   writeAll(drafts);
 }
+
+/** Drop every draft in this browser, whoever wrote it. */
+export function clearAllReasonDrafts(): void {
+  try { localStorage.removeItem(LS_KEY); } catch { /* storage blocked */ }
+}

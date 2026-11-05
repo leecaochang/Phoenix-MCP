@@ -23,6 +23,10 @@
 
 本项目目前不提供漏洞赏金。提交报告不会产生报酬或其他奖励承诺。
 
+## 安全审查
+
+Phoenix MCP 的安全审查是由维护者借助 AI 工具进行的内部代码审查。目前尚未发布独立的第三方审计。
+
 ## 支持版本
 
 我们通常优先修复默认分支上的问题，以及最新的公开版本。无法继续支持的旧版本可能只会获得修复建议，而不会获得回溯修复。
@@ -57,6 +61,10 @@ We will acknowledge a report within 5 business days and provide progress updates
 This policy covers the Phoenix MCP source code, frontend assets, build configuration, and release content in this repository. Issues in Home Assistant core, other integrations, upstream dependencies, or the hosting environment should also be reported to the appropriate upstream project.
 
 This project does not currently offer a bug bounty. A report does not create an entitlement to payment or another reward.
+
+## Security Reviews
+
+Phoenix MCP's security reviews are internal code reviews carried out by the maintainer with AI assistance. No independent third-party audit has been published.
 
 ## Supported Versions
 

@@ -10,7 +10,7 @@ The kill switch cuts off every way an AI can reach your home through Phoenix. It
 - The Voice Agent only replies that it's unavailable.
 - The AI Task entity becomes unavailable.
 - Assist Tool Provider offers no tools.
-- Approving a waiting request cancels it instead.
+- Approving a waiting request cancels it instead. A configuration recovery review is the exception: it still runs.
 
 ## What keeps working {#keeps}
 

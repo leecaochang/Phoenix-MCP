@@ -14,7 +14,7 @@ from unittest.mock import patch
 import pytest
 from homeassistant.util.dt import utcnow
 
-from custom_components.phoenix_mcp.mcp_view import _call_tool
+from custom_components.phoenix_mcp.tool_dispatch import _call_tool
 from custom_components.phoenix_mcp.access_key_store import PermissionNode, PermissionTree, AccessKeyRecord
 
 
@@ -49,7 +49,7 @@ class TestWatchEntity:
     @pytest.mark.parametrize(("new_state", "attributes", "state_changed"), [
         ("off", {}, True), ("on", {"brightness": 80}, False)])
     async def test_returns_change(self, hass, new_state, attributes, state_changed):
-        import custom_components.phoenix_mcp.mcp_view as mcp_view
+        from custom_components.phoenix_mcp.tools import system as system_tools
 
         hass.states.async_set("light.kitchen", "on", {})
         before = hass.states.get("light.kitchen")
@@ -60,14 +60,14 @@ class TestWatchEntity:
         # has registered its listener (registration is synchronous, so the
         # listener is live the moment the wrapper sets the event).
         ready = asyncio.Event()
-        real_track = mcp_view.async_track_state_change_event
+        real_track = system_tools.async_track_state_change_event
 
         def _tracked(h, eids, cb):
             unsub = real_track(h, eids, cb)
             ready.set()
             return unsub
 
-        with patch.object(mcp_view, "async_track_state_change_event", side_effect=_tracked):
+        with patch.object(system_tools, "async_track_state_change_event", side_effect=_tracked):
             task = asyncio.create_task(
                 _call("watch_entity", {"entity_id": "light.kitchen", "timeout": 5}, access_key, hass))
             await asyncio.wait_for(ready.wait(), timeout=2)
@@ -103,17 +103,17 @@ class TestWatchUntilState:
         assert loop.time() - started < 1
 
     async def test_other_changes_do_not_end_the_wait(self, hass):
-        from custom_components.phoenix_mcp import mcp_view
+        from custom_components.phoenix_mcp.tools import system as system_tools
         hass.states.async_set("light.kitchen", "on", {})
         ready = asyncio.Event()
-        real_track = mcp_view.async_track_state_change_event
+        real_track = system_tools.async_track_state_change_event
 
         def _tracked(h, eids, cb):
             unsub = real_track(h, eids, cb)
             ready.set()
             return unsub
 
-        with patch.object(mcp_view, "async_track_state_change_event", side_effect=_tracked):
+        with patch.object(system_tools, "async_track_state_change_event", side_effect=_tracked):
             task = asyncio.create_task(_call(
                 "watch_entity", {"entity_id": "light.kitchen", "until_state": "off", "timeout": 5}, _access_key(), hass))
             await asyncio.wait_for(ready.wait(), timeout=2)
@@ -133,11 +133,11 @@ class TestWatchUntilState:
         assert body["reached"] is False and body["state"] == "on"
 
     async def test_scope_lost_during_the_wait_is_not_disclosed(self, hass):
-        from custom_components.phoenix_mcp import mcp_view
+        from custom_components.phoenix_mcp.tools import system as system_tools
         from custom_components.phoenix_mcp.policy_engine import Permission
         hass.states.async_set("light.kitchen", "on", {})
         calls = iter([Permission.READ, Permission.NO_ACCESS])
-        with patch.object(mcp_view, "resolve_read", side_effect=lambda *a: next(calls)):
+        with patch.object(system_tools, "resolve_read", side_effect=lambda *a: next(calls)):
             content, outcome, _ = await _call(
                 "watch_entity", {"entity_id": "light.kitchen", "timeout": 1}, _access_key(), hass)
         assert outcome == "not_found"

@@ -21,9 +21,10 @@
 
 import { api, setHass } from "../api";
 import { JS_BUILD } from "../version";
+import { purgeAgentCliStorage } from "../utils/agentcli_state";
 import { syncCardCatalog } from "../utils/card_harvest";
 import { loadTranslations, resolveLanguage, syncTranslations, t } from "../i18n";
-import { applyProfileButton, BTN_CLASS, deepQueryAll, extractEntityId, isSelfMutation, nameInsertionPoint, onEntityPage, personEntityId, SUBPAGE_SURFACES, WIDEN_STYLE_ID } from "./dom";
+import { applyProfileButton, BTN_CLASS, deepQueryAll, extractEntityId, isSelfMutation, nameInsertionPoint, onEntityPage, pageRoot, personEntityId, SUBPAGE_SURFACES, WIDEN_STYLE_ID } from "./dom";
 import { claimInjectController, type InjectController } from "./ownership";
 import { blockInjectSession, injectSessionBlocked, startInjectSession } from "./compatibility";
 import type { QuickAddScope } from "./QuickAdd";
@@ -45,6 +46,9 @@ const profiled: Record<Scope, Set<string>> = {
   area: new Set(),
   integration: new Set(),
 };
+/** How far each scope's list has come; a scope not here has not been asked for. */
+const scopeReads = new Map<Scope, "reading" | "done">();
+let opening = false;
 let observedRoots = new WeakSet<ShadowRoot>();
 const observers = new Set<MutationObserver>();
 const timeouts = new Set<number>();
@@ -142,10 +146,18 @@ function buildButton(scope: Scope, key: string, placement: Placement = "cell"): 
   btn.addEventListener("click", (e) => {
     e.preventDefault();
     e.stopPropagation();
-    openModal(scope, key).catch((err) => log("modal open failed", err));
+    openModal(scope, key).catch((err) => {
+      log("modal open failed", err);
+      tellOperator(t("inject.openFailed"));
+    });
   });
   applyButtonState(btn, scope, key);
   return btn;
+}
+
+/** Show a message in Home Assistant's own toast: this page has no Phoenix surface to show it in. */
+function tellOperator(message: string): void {
+  document.querySelector("home-assistant")?.dispatchEvent(new CustomEvent("hass-notification", { detail: { message } }));
 }
 
 /** What to call this target in the button's tooltip.
@@ -224,6 +236,22 @@ function ensureColumnWidth(sr: ShadowRoot): void {
 // an else-branch, so a new surface can never silently claim the wrong scope by
 // falling through to another scope's scanner.
 function scan(): void {
+  // Each scope's list is read once, by the first page that can show its buttons: most pages cannot.
+  // Nothing paints until it arrives, so a profiled target does not start with the Create glyph.
+  const scope = pageScope();
+  if (!scope) return;
+  if (scopeReads.get(scope) !== "done") {
+    if (!scopeReads.has(scope)) {
+      const generation = identityGeneration;
+      scopeReads.set(scope, "reading");
+      void refreshScope(scope).then(() => {
+        if (generation !== identityGeneration) return;
+        scopeReads.set(scope, "done");
+        safe(scan);
+      });
+    }
+    return;
+  }
   if (onEntityPage()) {
     scanDataTables();
     if (disposed) return;
@@ -248,7 +276,7 @@ function restorePeopleMeta(row: Element): void {
 
 /** HA's People page renders list items rather than entity data-table rows. */
 function scanPeople(): void {
-  for (const page of deepQueryAll("ha-config-person")) {
+  for (const page of deepQueryAll("ha-config-person", pageRoot())) {
     const sr = page.shadowRoot;
     if (!sr) continue;
     observeRoot(sr);
@@ -278,7 +306,7 @@ function scanPeople(): void {
 }
 
 function scanDataTables(): void {
-  for (const table of deepQueryAll("ha-data-table")) {
+  for (const table of deepQueryAll("ha-data-table", pageRoot())) {
     const sr = (table as HTMLElement).shadowRoot;
     if (!sr) continue;
     observeRoot(sr);
@@ -312,7 +340,7 @@ function scanDataTables(): void {
  *  placements, so a page that gains or loses its action row between scans
  *  cannot strand a copy in the other one. */
 function scanSubpage(scope: Exclude<Scope, "entity">, key: string): void {
-  for (const sp of deepQueryAll("hass-subpage")) {
+  for (const sp of deepQueryAll("hass-subpage", pageRoot())) {
     const host = sp as HTMLElement;
     const sr = host.shadowRoot;
     if (!sr) continue;
@@ -451,13 +479,29 @@ async function refreshScoped(scope: Exclude<Scope, "entity">): Promise<void> {
   }
 }
 
+/** The scope this page's buttons belong to, if it can show any. */
+function pageScope(): Scope | null {
+  if (onEntityPage()) return "entity";
+  return SUBPAGE_SURFACES.find(({ keyFromPath }) => keyFromPath())?.scope ?? null;
+}
+
 /** Read one scope's profiled keys again. */
 function refreshScope(scope: Scope): Promise<void> {
   return scope === "entity" ? refreshProfiled() : refreshScoped(scope);
 }
 
 async function openModal(scope: Scope, key: string): Promise<void> {
-  if (disposed) return;
+  // The first click on a slow link waits for the editor's chunk; a second click must not stack another editor.
+  if (disposed || opening) return;
+  opening = true;
+  try {
+    await openEditor(scope, key);
+  } finally {
+    opening = false;
+  }
+}
+
+async function openEditor(scope: Scope, key: string): Promise<void> {
   const generation = identityGeneration;
   // The sets are read once per page load, so a profile made since then in the
   // panel or another tab would open here in create mode, and its Save would
@@ -529,6 +573,8 @@ function start(): void {
     return;
   }
   if (!hass.user.is_admin) {
+    // What an admin's chat left in this browser is not for this user to read.
+    purgeAgentCliStorage();
     // Identity may change in a live HA session; remain dormant until admin login.
     trackedTimeout(() => safe(start), POLL_MS);
     return;
@@ -539,14 +585,9 @@ function start(): void {
   // the catalog fresher than the panel alone can. Rate-limited internally and
   // fire-and-forget: it must never delay or fail the profile injection.
   void syncCardCatalog();
-  // Strings ride along with the profile reads this already waits on, so the
-  // first scan paints its buttons with labels rather than raw keys.
+  // The first scan waits for the strings, so it paints its buttons with labels rather than raw keys.
   const generation = identityGeneration;
-  Promise.all([
-    refreshProfiled(),
-    ...SUBPAGE_SURFACES.map(({ scope }) => refreshScoped(scope)),
-    loadTranslations(hass, resolveLanguage(hass)),
-  ]).then(() => { if (generation === identityGeneration) safe(scan); });
+  void loadTranslations(hass, resolveLanguage(hass)).then(() => { if (generation === identityGeneration) safe(scan); });
   // These buttons are painted once per scan, so without this their labels stay
   // in the old language until the next full page load.
   const languageHandler = () => {
@@ -564,6 +605,7 @@ function start(): void {
       controller.dispose();
       identityGeneration += 1;
       for (const entries of Object.values(profiled)) entries.clear();
+      scopeReads.clear();
       disposed = false;
       startAttempts = 0;
       controllerHost[ACTIVE_FLAG] = controller;

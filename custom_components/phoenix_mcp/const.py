@@ -1,10 +1,18 @@
-"""Constants for the Phoenix MCP integration."""
+"""Cross-cutting limits, modes, capability names and security memberships.
 
+Imports only the standard library, and every shared table is read-only. Tables
+with a single owning area live beside this module: routing_tables for command,
+Decision Provider and tool routing, provider_constants for model providers,
+catalog_templates for generated operator text, esphome_constants for ESPHome,
+and template_limits for the disposable template worker.
+"""
+
+from collections.abc import Mapping
 import datetime
 import pathlib
 import re
+from types import MappingProxyType
 
-from home_assistant_intents import get_languages as _assist_languages
 
 # Phoenix's OWN operator-facing string catalogs (panel, notification, voice),
 # deliberately NOT under translations/. hassfest validates translations/en.json
@@ -112,6 +120,9 @@ LOG_DETAIL_STALE_MESSAGE = "Invalid or stale log detail reference. Restart the q
 SERVICE_RESULT_STATES_MAX = 20
 # Authoring results name at most this many unresolvable references.
 REFERENCE_WARNING_MAX = 20
+# list_files: entries per page.
+LIST_FILES_DEFAULT_LIMIT = 500
+LIST_FILES_MAX_LIMIT = 1000
 # Nested stack cards checked for list shape before a dashboard write.
 LAYOUT_SHAPE_MAX_DEPTH = 10
 # One patch_dashboard call applies at most this many changes under one approval.
@@ -119,6 +130,11 @@ PATCH_DASHBOARD_MAX_CHANGES = 20
 # A dashboard layout read is scrubbed this many levels deep; anything deeper is
 # returned as the redaction placeholder and reported, never silently emptied.
 DASHBOARD_SCRUB_MAX_DEPTH = 100
+# A layout's recovery snapshot holds anything that read can show, one level down
+# inside the snapshot's own envelope.
+CONFIG_RECOVERY_LAYOUT_MAX_DEPTH = DASHBOARD_SCRUB_MAX_DEPTH + 1
+# Every other recovery snapshot, matching helpers.redact_structure.
+CONFIG_RECOVERY_MAX_DEPTH = 25
 # Typed objects under these keys are nested cards for get_dashboard_config search.
 DASHBOARD_CARD_CONTAINER_KEYS = frozenset({"card", "cards", "custom_fields", "states"})
 DASHBOARD_SEARCH_CRITERION_MAX = 200
@@ -126,17 +142,7 @@ DASHBOARD_SEARCH_MAX_MATCHES = 50
 DASHBOARD_SEARCH_MATCHED_VALUES = 5
 DASHBOARD_SEARCH_VALUE_CHARS = 200
 DASHBOARD_SEARCH_MAX_WARNINGS = 20
-TEMPLATE_WORKER_TIMEOUT_SECONDS = 5
-TEMPLATE_WORKER_CPU_SECONDS = 2
-TEMPLATE_WORKER_MEMORY_BYTES = 512 * 1024 * 1024
-TEMPLATE_WORKER_INPUT_BYTES = 1_048_576
-TEMPLATE_WORKER_CONCURRENCY = 2
-TEMPLATE_WORKER_DIAGNOSTIC_EXIT = 65
-TEMPLATE_DIAGNOSTIC_BYTES = 4096
-TEMPLATE_DIAGNOSTIC_MESSAGE_CHARS = 320
-TEMPLATE_DIAGNOSTIC_SOURCE_CHARS = 240
-TEMPLATE_DIAGNOSTIC_TRACEBACK_FRAMES = 64
-TEMPLATE_FAILURE_MESSAGES = {
+TEMPLATE_FAILURE_MESSAGES = MappingProxyType({
     "syntax": "Template syntax error",
     "undefined": "Template runtime error: undefined variable or attribute. Check the name and use a default for missing values.",
     "division": "Template runtime error: division by zero. Check the divisor before dividing.",
@@ -148,7 +154,7 @@ TEMPLATE_FAILURE_MESSAGES = {
     "memory": "Template rendering exhausted its memory budget. Reduce the template workload.",
     "recursion": "Template rendering exceeded its recursion limit. Reduce nested or recursive calls.",
     "worker": "Template worker failed. Check Phoenix diagnostics.",
-}
+})
 
 ACCESS_KEY_PREFIX = "phx_"
 ACCESS_KEY_HEX_LENGTH = 64
@@ -156,6 +162,11 @@ ACCESS_KEY_LENGTH = len(ACCESS_KEY_PREFIX) + ACCESS_KEY_HEX_LENGTH
 
 ACCESS_KEY_NAME_REGEX = re.compile(r"^[A-Za-z0-9_\-]{3,32}$")
 
+# The access key fields an update may change, capabilities aside.
+ACCESS_KEY_MUTABLE_FIELDS = frozenset({
+    "name", "pass_through", "use_assist_exposure", "announce_all_tools", "confirm_inline_wait_seconds",
+    "rate_limit_requests", "rate_limit_burst", "persona", "notes",
+})
 DEFAULT_RATE_LIMIT_REQUESTS = 60
 DEFAULT_RATE_LIMIT_BURST = 10
 
@@ -179,6 +190,10 @@ SENSOR_PUSH_INTERVAL = datetime.timedelta(hours=1)
 SENSOR_WRITE_DEBOUNCE_SECONDS = 5
 
 AUDIT_LOG_MAXLEN = 10000
+# The menus behind two settings: the admin API refuses anything else and a stored
+# value outside them is reset on load, so one list has to serve both.
+AUDIT_LOG_MAXLENS = frozenset({100, 1000, 5000, 10000})
+AUDIT_FLUSH_INTERVALS = frozenset({0, 5, 10, 15, 30, 60})
 AUDIT_STORAGE_KEY = "phoenix_mcp_audit"
 AUDIT_STORAGE_VERSION = 1
 # audit_flush_interval is stored and exposed in minutes (not seconds).
@@ -197,14 +212,6 @@ CONFIG_RECOVERY_MAX_BYTES = 1_048_576
 CONFIG_RECOVERY_RETENTION_DAYS = 30
 CONFIG_RECOVERY_PER_RESOURCE = 20
 CONFIG_RECOVERY_SWEEP_INTERVAL = datetime.timedelta(seconds=30)
-# How often the provider model catalogues are CONSIDERED for a re-read. Whether an
-# account is actually re-read depends on the operator's settings below, so a
-# change of period takes effect without re-registering the timer.
-AGENTCLI_CATALOG_TICK_INTERVAL = datetime.timedelta(hours=1)
-# Operator setting: how many hours between automatic provider model checks.
-PROVIDER_CATALOG_REFRESH_HOURS_MIN = 6
-PROVIDER_CATALOG_REFRESH_HOURS_MAX = 720
-PROVIDER_CATALOG_REFRESH_HOURS_DEFAULT = 24
 CONFIG_RECOVERY_SWEEP_BATCH = 4
 CONFIG_RECOVERY_OBSERVATION_TIMEOUT = 5
 CONFIG_RECOVERY_APPROVAL_CAP = "__configuration_recovery__"
@@ -322,289 +329,10 @@ BUILTIN_CARD_TYPES = frozenset({
     "energy-solar-consumed-gauge", "energy-solar-graph", "energy-sources-table",
     "energy-usage-graph", "energy-water-graph", "water-flow-sankey", "water-sankey",
 })
-
-# agentCLI: the in-panel LLM chat that runs an agentic loop server-side on
-# behalf of a chosen access key. Provider API keys / base URLs persist in a dedicated
-# Store, separate from access keys, so the recoverable secret never rides the general
-# settings serialization (which the settings GET and audit snapshots echo).
-AGENTCLI_SECRETS_STORAGE_KEY = "phoenix_mcp_agentcli_secrets"
-AGENTCLI_SECRETS_STORAGE_VERSION = 1
-PROVIDER_API_KEY_MAX_LENGTH = 4096
-AGENTCLI_PROVIDERS = frozenset({
-    "claude", "deepseek", "chatgpt", "gemini", "grok", "kimi", "meta",
-    "minimax", "mistral", "openrouter", "nvidia", "ollama", "ollama_cloud",
-    "zai", "groq", "together", "cerebras", "fireworks", "qwen", "opencode", "mimo", "tencent"})
-# Default endpoints/models; the panel may override the model per conversation.
-AGENTCLI_CLAUDE_BASE_URL = "https://api.anthropic.com"
-AGENTCLI_ANTHROPIC_VERSION = "2023-06-01"
-AGENTCLI_DEEPSEEK_BASE_URL = "https://api.deepseek.com"
-# No provider ships a default model id. An account without a chosen model is in
-# AUTOMATIC mode and follows the newest model of the provider's own catalogue
-# (see model_selection.py), so a retired or replaced model never needs a Phoenix
-# release. The retired `deepseek-chat` and `deepseek-reasoner` ids were routing
-# labels for thinking modes, which is why the mode is the `thinking` field.
-# ChatGPT (OpenAI) is OpenAI-compatible; base already includes /v1.
-AGENTCLI_OPENAI_BASE_URL = "https://api.openai.com/v1"
-# Gemini via Google's OpenAI-compatible endpoint (Authorization: Bearer <key>);
-# base already includes the OpenAI path, so chat/models append cleanly.
-AGENTCLI_GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai"
-# Grok (xAI) is OpenAI-compatible; base includes /v1 so chat/models append cleanly.
-AGENTCLI_GROK_BASE_URL = "https://api.x.ai/v1"
-# MiniMax via its Anthropic-compatible API (Authorization: Bearer <key>); base has
-# no /v1, so /v1/messages and /v1/models append cleanly. It speaks the Anthropic
-# Messages wire format, so it runs through ClaudeProvider, not OpenAICompatProvider.
-AGENTCLI_MINIMAX_BASE_URL = "https://api.minimax.io/anthropic"
-# MiniMax's /v1/models is documented but not guaranteed on every key; this curated
-# set is ONLY the fallback when the live listing returns nothing. Ids are mixed
-# case. Automatic mode ranks it like any catalogue, so a new MiniMax model reaches
-# an account through the live listing without touching this tuple.
-AGENTCLI_MINIMAX_MODELS = (
-    "MiniMax-M3.1-Flash", "MiniMax-M3", "MiniMax-M2.7", "MiniMax-M2.7-highspeed", "MiniMax-M2.5",
-    "MiniMax-M2.5-highspeed", "MiniMax-M2.1", "MiniMax-M2.1-highspeed", "MiniMax-M2",
-)
-# Mistral's hosted API is OpenAI-compatible for chat and publishes live model
-# capabilities. Base includes /v1 so chat/models append cleanly. There is no
-# shipped default because the account-scoped list is authoritative.
-AGENTCLI_MISTRAL_BASE_URL = "https://api.mistral.ai/v1"
-# Kimi (Moonshot) via its OpenAI-compatible API (Authorization: Bearer); base
-# includes /v1 so chat/models append cleanly. It also fronts an
-# Anthropic-compatible path at /anthropic, but the OpenAI path is the documented
-# primary, is the one whose tool-calling is documented, and is the only one with a
-# models-list endpoint, so Phoenix MCP runs Kimi through OpenAICompatProvider.
-AGENTCLI_KIMI_BASE_URL = "https://api.moonshot.ai/v1"
-# No default model, the ChatGPT/Grok convention: Kimi's /v1/models is scoped to
-# what the ACCOUNT is entitled to, not the published catalog (K3 is plan-gated,
-# and k2.5 + the moonshot-v1 series are withheld from newly registered users), so
-# only the live list knows which models a given key can actually call. Naming a
-# flagship default here would offer a model that answers 404 on the lower plans.
-# Meta's Model API (dev.meta.ai) is OpenAI-compatible; base includes /v1 so
-# chat/models append cleanly. Its predecessor api.llama.com is being retired.
-AGENTCLI_META_BASE_URL = "https://api.meta.ai/v1"
-# OpenRouter aggregates many providers behind one OpenAI-compatible key (a common
-# region-friendly way to reach Meta's Llama and hundreds of other models). Base
-# includes /api/v1; no default model (the live tool-capable list drives the dropdown).
-AGENTCLI_OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
-# NVIDIA (build.nvidia.com) hosts many vendors' models behind one OpenAI-compatible
-# key (Authorization: Bearer nvapi-...); base includes /v1 so chat/models append
-# cleanly. No default model: the live list drives the dropdown. Model ids are
-# vendor-namespaced (e.g. "meta/llama-3.3-70b-instruct"), and tool-calling support
-# varies by model, which the catalog does not advertise.
-AGENTCLI_NVIDIA_BASE_URL = "https://integrate.api.nvidia.com/v1"
-# Local Ollama has no default: the operator supplies a local base URL and picks a
-# model from the installed list. Ollama Cloud is the same wire format but hosted
-# at a fixed URL and authenticated with an API key (Authorization: Bearer).
-AGENTCLI_OLLAMA_CLOUD_BASE_URL = "https://ollama.com"
-# Additional OpenAI-compatible providers. Z.ai has two fixed plans selected by
-# endpoint id; Qwen uses the workspace-specific URL supplied by the operator.
-AGENTCLI_ZAI_BASE_URL = "https://api.z.ai/api/paas/v4"
-AGENTCLI_ZAI_CODING_BASE_URL = "https://api.z.ai/api/coding/paas/v4"
-AGENTCLI_GROQ_BASE_URL = "https://api.groq.com/openai/v1"
-AGENTCLI_TOGETHER_BASE_URL = "https://api.together.ai/v1"
-AGENTCLI_CEREBRAS_BASE_URL = "https://api.cerebras.ai/v1"
-AGENTCLI_FIREWORKS_BASE_URL = "https://api.fireworks.ai/inference/v1"
-AGENTCLI_MIMO_BASE_URL = "https://api.xiaomimimo.com/v1"
-AGENTCLI_TENCENT_SINGAPORE_BASE_URL = "https://tokenhub-intl.tencentcloudmaas.com/v1"
-AGENTCLI_TENCENT_GUANGZHOU_BASE_URL = "https://tokenhub.tencentcloudmaas.com/v1"
-AGENTCLI_TENCENT_US_BASE_URL = "https://tokenhub-us.tencentcloudmaas.com/v1"
-AGENTCLI_OPENCODE_BASE_URL = "https://opencode.ai/zen/v1"
-# Keep Zen as the default for accounts saved before Console routing existed.
-AGENTCLI_OPENCODE_CONSOLE_BASE_URL = "https://opencode.ai/inference/openai/v1"
-AGENTCLI_OPENCODE_CONSOLE_MODELS_URL = "https://opencode.ai/inference/v1/models"
-# Console eligibility needs a documented Chat Completions endpoint or a qualified
-# live tool round. The catalog now also lists each model's API family; this set
-# remains the documented source until that metadata is qualified. Free models are
-# left out: OpenCode serves them only to its own app.
-# Source: https://opencode.ai/v2/docs/console/models/ (2026-10-18, rechecked 2026-10-30).
-AGENTCLI_OPENCODE_CHAT_MODELS = frozenset({
-    "qwen3.8-max", "deepseek-v4.1-flash", "deepseek-v4-pro",
-    "minimax-m3", "minimax-m2.7", "minimax-m2.5", "glm-5.3-flash",
-    "glm-5.3", "glm-5.2", "glm-5.1", "glm-5", "kimi-k2.5", "kimi-k2.6",
-    "kimi-k2.7-code", "kimi-k3", "mistral-large-4",
-    # The table lists Messages, but live Chat Completions tool rounds also pass.
-    "qwen3.5-plus",
-})
-# Exact exceptions to the legacy family filter, qualified on the Zen route.
-AGENTCLI_OPENCODE_LEGACY_CHAT_EXCEPTIONS = frozenset({"qwen3.8-max", "qwen3.5-plus"})
-# Regional and plan-specific endpoints a provider documents next to its default.
-# An API key is bound to the region or plan it was issued for, so each is a
-# separate choice rather than a rewrite of the default URL.
-AGENTCLI_KIMI_CHINA_BASE_URL = "https://api.moonshot.cn/v1"
-AGENTCLI_ZAI_CHINA_BASE_URL = "https://open.bigmodel.cn/api/paas/v4"
-AGENTCLI_MIMO_TOKEN_PLAN_BASE_URL = "https://token-plan-cn.xiaomimimo.com/v1"
-AGENTCLI_MIMO_TOKEN_PLAN_SGP_BASE_URL = "https://token-plan-sgp.xiaomimimo.com/v1"
-AGENTCLI_MIMO_TOKEN_PLAN_AMS_BASE_URL = "https://token-plan-ams.xiaomimimo.com/v1"
-AGENTCLI_MISTRAL_EU_BASE_URL = "https://api.eu.mistral.ai/v1"
-AGENTCLI_MISTRAL_US_BASE_URL = "https://api.us.mistral.ai/v1"
-AGENTCLI_OPENAI_US_BASE_URL = "https://us.api.openai.com/v1"
-AGENTCLI_OPENAI_EU_BASE_URL = "https://eu.api.openai.com/v1"
-# OpenAI's other data-residency prefixes. A residency project must use its own
-# prefixed host; US, EU and UAE also process in-region, the others store only.
-AGENTCLI_OPENAI_REGION_PREFIXES = ("ae", "au", "ca", "jp", "in", "sg", "kr", "gb")
-AGENTCLI_MINIMAX_CHINA_BASE_URL = "https://api.minimaxi.com/anthropic"
-AGENTCLI_GROK_US_BASE_URL = "https://us.api.x.ai/v1"
-# Output cap for Anthropic-format requests. Thinking counts toward it, and a
-# large tool call (a whole-dashboard write) cut off mid-JSON cannot run, so it
-# sits well above a normal answer. Every current Claude model accepts it; a model
-# that refuses it is retried once at the provider's default.
-AGENTCLI_DEFAULT_MAX_TOKENS = 32000
-# Explicit output cap sent to DeepSeek only while thinking is OFF, where its
-# default (8K) can truncate a large tool call mid-JSON. With thinking on, its
-# defaults (64K, 128K at maximum effort) are larger, so nothing is sent. Other
-# OpenAI-compatible kinds are deliberately not sent max_tokens (OpenAI reasoning
-# models reject the field outright), except NVIDIA below.
-AGENTCLI_DEEPSEEK_MAX_TOKENS = 32768
-# NVIDIA's hosted models default as low as 1024 output tokens (Llama 3.3 70B);
-# 4096 is within each documented model range checked. A model that refuses it is
-# retried once without the field.
-AGENTCLI_NVIDIA_MAX_TOKENS = 4096
-# Characters per token for estimating a request's size before a local Ollama
-# server sees it: a whole Phoenix request measured 4.6 (its tool definitions
-# alone 4.7), so 5 estimates about 8% low and an estimate over the loaded
-# context is a real overflow.
-AGENTCLI_PROMPT_CHARS_PER_TOKEN = 5.0
-# How many Ollama /api/show lookups run at once during a capability refresh.
-# Ollama is the only backend whose capabilities cost one request PER MODEL, and a
-# large local library would otherwise arrive as one burst against a machine that
-# is also running Home Assistant.
-AGENTCLI_CAPABILITY_CONCURRENCY = 6
-
-AGENTCLI_DEFAULT_EFFORT = "high"
-AGENTCLI_EFFORT_LEVELS = frozenset({"low", "medium", "high", "xhigh", "max"})
-# The same levels in a fixed order, which the capability probe walks. A frozenset
-# iterates arbitrarily, and a probe that reports its findings in a different order
-# each run reads as a changing answer when nothing changed.
-# "none" comes first: a provider that accepts it has a real way to turn
-# reasoning off, which the panel then offers as Off.
-AGENTCLI_EFFORT_LEVEL_ORDER = ("none", "minimal", "low", "medium", "high", "xhigh", "max")
-
-# The value the probe sends when it is asking "is this field read at all". It has
-# to be something no provider could ever accept as a real level, and recognisable
-# in a provider's own logs as a deliberate probe rather than a malformed client.
-AGENTCLI_PROBE_SENTINEL = "phoenix-probe-invalid"
-
-# Hard cap on completion requests one probe run may make. The matrix is bounded by
-# construction (one control request, one validation check, seven levels and
-# temperature), so this is a backstop that keeps a new knob from turning a button
-# into unbounded spend.
-AGENTCLI_PROBE_MAX_CALLS = 10
-# Output room for the image check's short answer, with headroom for models
-# that reason before replying.
-AGENTCLI_PROBE_IMAGE_MAX_TOKENS = 2048
-
-# How long a refusal LEARNED from a real turn is honoured before Phoenix tries
-# the option again. It expires because the fact came from one moment in one
-# provider's history: a model that rejects a parameter today may accept it after
-# an upgrade, and a permanent "no" learned from a transient refusal would be the
-# same silently-stale answer this whole area exists to remove.
-AGENTCLI_LEARNED_REFUSAL_TTL_DAYS = 30
-
-# Request keys a refusal can be learned for, mapped to the capability it settles.
-# Deliberately short: a key is here only when refusing it has ONE unambiguous
-# consequence for what the panel should offer.
-AGENTCLI_LEARNABLE_OPTIONS = {
-    "temperature": "temperature",
-    "reasoning_effort": "thinking",
-    "thinking": "thinking",
-    "think": "thinking",
-    "enable_thinking": "thinking",
-    "tools": "tools",
-    # Not a request key: _refused_option reports it when an attached image was
-    # refused as unsupported input, which teaches Phoenix the model lacks vision.
-    "images": "vision",
-}
-# Per-turn cap on provider and tool round trips before the loop pauses. In the
-# interactive chat this is a "continue?" checkpoint (the operator can grant
-# another N rounds), not a hard stop; the headless voice/AI-task loops stop
-# here since there is no one to ask. Admin-configurable via the
-# agentcli_max_iterations setting; this is the default and the clamp bounds.
-AGENTCLI_MAX_ITERATIONS = 20
-AGENTCLI_MAX_ITERATIONS_MIN = 3
-AGENTCLI_MAX_ITERATIONS_MAX = 100
-# Per-turn cap on rounds that hand a malformed tool call back to the model as a
-# tool error so it can resend the call. Each correction also spends one round of
-# the iteration cap above; past this cap the turn ends with bad_tool_call.
-AGENTCLI_MAX_TOOL_CALL_CORRECTIONS = 2
-# The tools-array cap OpenAI, Groq, Mistral and Z.ai document or enforce. A
-# provider definition opts in through max_tools; a larger catalog is declared in
-# parts (tool_loading.py), and one whose starting set still exceeds it is refused.
-AGENTCLI_MAX_TOOLS_PER_REQUEST = 128
-# Phoenix's own client-local function that declares deferred tools; never an MCP tool.
-AGENTCLI_LOAD_TOOLS_NAME = "load_tools"
-# Groups of tools deferred under a provider's tools-array cap: id -> (capabilities,
-# name fragments, directory summary). A tool joins the first group whose
-# capabilities hold its first capability or one of whose fragments is in its
-# name; every other tool is in the starting set.
-AGENTCLI_DEFERRED_TOOL_GROUPS: dict[str, tuple[tuple[str, ...], tuple[str, ...], str]] = {
-    "esphome": (("cap_esphome_yaml", "cap_esphome_flash"), ("esphome",),
-                "ESPHome Device Builder: device YAML, validation, builds, flashing, jobs, device logs and diagnostics."),
-    "dashboards": (("cap_lovelace_write", "cap_dashboard_resources"), ("dashboard",),
-                   "Lovelace dashboards, their views and cards, and dashboard resources."),
-    "zigbee": (("cap_radio_write",), ("zigbee", "radio"),
-               "Zigbee and radio networks: network and device diagnostics, pairing, options, bindings, reporting and groups."),
-    "integrations": (("cap_integration_write", "cap_integration_reconfigure"), (),
-                     "Adding, removing, reloading and reconfiguring integrations."),
-    "registry_writes": (("cap_registry_write",), (), "Renaming, moving, enabling, disabling and removing registry entries."),
-    "files_and_backups": (("cap_backup", "cap_filesystem", "cap_yaml_edit"), (), "Configuration files, YAML edits and backups."),
-    "helpers": (("cap_helper_write",), (), "Creating, editing and deleting helpers."),
-    "mesa": ((), ("mesa_",), "MESA device-safety profiles, their explanations and control leases."),
-}
-# Longest provider error-envelope message shown to an administrator.
-AGENTCLI_PROVIDER_DETAIL_CHARS = 300
-# Bytes of a provider's error body read for classification; the rest is never read.
-AGENTCLI_PROVIDER_ERROR_BYTES = 4000
-# Images an administrator attaches to one Agent Chat message. The browser
-# re-encodes each to a JPEG with a long edge of at most
-# AGENTCLI_ATTACHMENT_BROWSER_EDGE_PX; the server bounds stay independent of it.
-# The edge bound is the largest image any supported provider documents accepting.
-AGENTCLI_ATTACHMENT_MAX_COUNT = 4
-AGENTCLI_ATTACHMENT_MAX_BYTES = 2 * 1024 * 1024
-AGENTCLI_ATTACHMENT_MAX_TOTAL_BYTES = 4 * 1024 * 1024
-AGENTCLI_ATTACHMENT_MAX_EDGE_PX = 8000
-AGENTCLI_ATTACHMENT_BROWSER_EDGE_PX = 1568
-# The chat request carries its history plus base64 attachments, so it gets the
-# ordinary body cap plus room for the encoded attachment total.
-AGENTCLI_REQUEST_BODY_BYTES = MAX_REQUEST_BODY_BYTES + -(-AGENTCLI_ATTACHMENT_MAX_TOTAL_BYTES * 4 // 3) + 65_536
-# Cap on the between-newline SSE buffer from a provider stream. A real frame is a
-# few KB; this bounds a faulty/hostile provider that never sends a newline.
-AGENTCLI_MAX_SSE_BUFFER_BYTES = 8 * 1024 * 1024
-# Cap on the CUMULATIVE bytes of a single provider response (all frames summed),
-# so a flood of small newline-delimited frames cannot exhaust memory even though
-# each frame stays under the per-frame cap. A real response is far smaller.
-AGENTCLI_MAX_STREAM_BYTES = 32 * 1024 * 1024
-# Cap on the TOTAL provider-generated output retained across a whole turn (all
-# iterations), measured on the assistant messages held in the conversation. The
-# per-response cap above bounds one stream; this bounds the sum so many iterations
-# cannot accumulate a large multiple. A real multi-step turn stays far below it.
-AGENTCLI_MAX_TURN_OUTPUT_BYTES = 48 * 1024 * 1024
-# Max idle gap between stream chunks before the provider request is aborted. The
-# total time is deliberately unbounded (a long agentic turn streams for minutes),
-# but a provider that stops sending data must not hang the turn forever.
-AGENTCLI_STREAM_READ_TIMEOUT_SECONDS = 180
-# A retry after a temporary provider failure waits this long for the first reply
-# rather than the full silent-stream bound: a provider that has just said it is
-# overloaded and then sends nothing is stuck, not thinking.
-AGENTCLI_RETRY_FIRST_REPLY_SECONDS = 60
 # A Voice model call that has sent nothing after this long is abandoned and the
 # speaker hears that the provider is too slow, instead of waiting out the
 # silent-stream bound. A healthy provider starts its stream within seconds.
 VOICE_FIRST_REPLY_SECONDS = 30
-# How often Agent Chat's status line reports a model call that has shown nothing yet.
-AGENTCLI_STATUS_INTERVAL_SECONDS = 30
-# Interactive inline-approval wait, tied to the live SSE connection (far longer
-# than the per-access-key confirm_inline_wait cap, which is for unattended agents).
-AGENTCLI_APPROVAL_WAIT_SECONDS = 900
-# How often Agent Chat relays a held tool's progress line to the panel. Faster
-# than the MCP keepalive because this is a local connection with no proxy in
-# the way, and the panel is where a human is actually watching.
-AGENTCLI_PROGRESS_INTERVAL_SECONDS = 2.0
-# Sentinel client_ip so agentCLI-driven tool calls are attributable in the audit
-# log without a core change to _dispatch_mcp.
-AGENTCLI_CLIENT_IP = "agentcli"
-# Transcript scrollback bound (also the conversation-memory bound): lines dropped
-# from the window are dropped from what the LLM is sent.
-AGENTCLI_SCROLLBACK_DEFAULT = 100
-AGENTCLI_SCROLLBACK_MIN = 0
-AGENTCLI_SCROLLBACK_MAX = 5000
 
 # Server-owned conversation behavior values. These are persisted settings rather
 # than provider options: every provider receives the same prompt contract, and
@@ -629,10 +357,6 @@ DETAIL_LEVELS = frozenset({
     DETAIL_LEVEL_BALANCED,
     DETAIL_LEVEL_DETAILED,
 })
-# Display-only cap on the tool-result text streamed to the verbose panel view
-# (the model always receives the full result via the message history). Large
-# enough that ordinary results are shown whole; only pathological dumps clip.
-AGENTCLI_TOOL_RESULT_MAX_CHARS = 20000
 
 # Assist bridge (assist_api.py): a registered llm.API exposes the bound access key's
 # scoped tool surface to HA's native Assist/voice conversation agents.
@@ -685,7 +409,7 @@ MESA_MODES = frozenset({MESA_MODE_OFF, MESA_MODE_ADVISORY, MESA_MODE_ENFORCED})
 # cases it so effective_cap() (which would auto-deny an unknown cap) is skipped.
 MESA_CONFIRM_CAP = "mesa_control_mode"
 # Executor key for re-running a MESA-gated service call after admin approval.
-# Registered in mcp_view._EXECUTOR_REGISTRY but never dispatchable from the
+# Registered in tool_catalog._EXECUTOR_REGISTRY but never dispatchable from the
 # tool router, so an access key cannot invoke the approved-bypass path directly.
 MESA_APPROVED_EXECUTOR = "call_service_mesa_approved"
 
@@ -697,54 +421,13 @@ MESA_INJECT_MIN_HA = MIN_HA_VERSION
 # computed admin-side and NEVER auto-applied.
 MESA_SUGGEST_SIGNAL_BLAST_RADIUS = "blast_radius"
 MESA_SUGGEST_SIGNAL_NAKED_RISKY = "naked_risky"
-# The suggestion reason an operator reads, and which is written verbatim into a
-# profile's control_reason when they Apply. English stays the stored form (like
-# a diff summary, it is the record); the panel renders the key in its own
-# language. Keys are mirrored into translations/en.json by
-# scripts/gen_diff_catalog.py, so never hand-edit that section.
-MESA_SUGGESTION_TEMPLATES: dict[str, str] = {
-    "blast_radius.risky.one": (
-        "This {noun} touches {count} risky entity ({shown}) and has no MESA profile of "
-        "its own; an agent allowed to trigger it controls those entities indirectly, "
-        "bypassing their own profiles."
-    ),
-    "blast_radius.risky.other": (
-        "This {noun} touches {count} risky entities ({shown}) and has no MESA profile of "
-        "its own; an agent allowed to trigger it controls those entities indirectly, "
-        "bypassing their own profiles."
-    ),
-    "blast_radius.fanout": (
-        "This {noun} has no MESA profile of its own and references many entities ({count}); "
-        "one trigger has a wide blast radius."
-    ),
-    "naked_risky.domain": (
-        "{domain} entities with no MESA profile at any level: {count}. This domain "
-        "{concern}. A domain-level profile covers them all.{baseline_note}"
-    ),
-    "naked_risky.entity": (
-        "No MESA profile covers this entity at any level, and it {concern}.{baseline_note}"
-    ),
-}
-
-# The domain nouns and the trailing baseline note the templates interpolate.
-MESA_SUGGESTION_PHRASES: dict[str, str] = {
-    "noun.automation": "automation",
-    "noun.script": "script",
-    "noun.scene": "scene",
-    "shown.more": "{shown} + {extra} more",
-    "baseline_note": (
-        " Prohibited matches the built-in baseline for this domain, so the profile makes "
-        "that intent explicit. To allow agent control behind admin approval instead, "
-        "choose Confirm in Profile Editor before saving; approval applies while MESA is enforced."
-    ),
-}
 
 # Curated risky domains for the naked-risky signal: each domain maps to its
 # (suggested control_mode, concern text surfaced verbatim in the suggestion reason).
 # lock/alarm suggest "prohibited" to MATCH mesa-core's zero-profile baseline,
 # so applying a suggestion is never a relaxation under enforced mode; the
 # rest suggest "confirm".
-MESA_SUGGEST_RISKY_DOMAINS: dict[str, tuple[str, str]] = {
+MESA_SUGGEST_RISKY_DOMAINS: Mapping[str, tuple[str, str]] = MappingProxyType({
     "lock": ("prohibited", "controls a physical security boundary; a mistaken unlock cannot be undone remotely"),
     "alarm_control_panel": ("prohibited", "arms and disarms the home security system; a silent disarm defeats it"),
     "cover": ("confirm", "opens a physical entry point"),
@@ -755,15 +438,6 @@ MESA_SUGGEST_RISKY_DOMAINS: dict[str, tuple[str, str]] = {
         "confirm",
         "receives firmware updates that are effectively irreversible and can brick the device",
     ),
-}
-
-# Each domain's concern clause is interpolated INTO a reason template, so it
-# needs its own catalog entry: translating the sentence but not the clause spliced
-# into it produces a half-translated line. Derived from the table above so the two
-# cannot drift.
-MESA_SUGGESTION_PHRASES.update({
-    f"concern.{domain}": concern
-    for domain, (_mode, concern) in MESA_SUGGEST_RISKY_DOMAINS.items()
 })
 # cover is risky only for these device classes (blinds and shades are noise).
 MESA_SUGGEST_COVER_DEVICE_CLASSES = frozenset({"garage", "door", "gate"})
@@ -795,7 +469,14 @@ SENSITIVE_KEY_SUBSTRINGS = frozenset({
     "auth_token", "authorization", "credential", "private_key",
     "token", "session", "community",
     "access_key_value", "access_key_hash", "accesskeyvalue", "accesskeyhash",
+    "passphrase", "passcode", "passkey", "pincode", "pin_code",
+    "wifi_key", "wifikey", "wpa_key", "wpakey", "encryption_key", "encryptionkey",
+    "network_key", "networkkey", "pre_shared_key", "preshared_key", "presharedkey",
+    "shared_key", "signing_key", "ssh_key", "license_key", "licensekey",
 })
+# Too short to match as substrings ("ping", "shipping", "upskill"), so these mark
+# a secret only as the final word of a key name, as in wpa_psk or door-pin.
+SENSITIVE_KEY_FINAL_WORDS = frozenset({"pin", "psk"})
 # Credential suffixes also catch integration-prefixed secrets without treating
 # access_key_name and access_key_id metadata as credential values.
 SENSITIVE_KEY_SUFFIXES = ("access_key", "accesskey", "access-key", "access key")
@@ -836,7 +517,7 @@ REDACTION_SENTINEL = "<redacted>"
 # (e.g. counter uses minimum/maximum, not min/max like number).
 LEAN_ALWAYS_ATTRS = ("friendly_name",)
 
-DOMAIN_IMPORTANT_ATTRIBUTES: dict[str, tuple[str, ...]] = {
+DOMAIN_IMPORTANT_ATTRIBUTES: Mapping[str, tuple[str, ...]] = MappingProxyType({
     "light": ("brightness", "color_mode", "color_temp_kelvin", "rgb_color", "effect",
               "supported_color_modes"),
     "climate": ("current_temperature", "temperature", "target_temp_high", "target_temp_low",
@@ -870,7 +551,7 @@ DOMAIN_IMPORTANT_ATTRIBUTES: dict[str, tuple[str, ...]] = {
     "counter": ("minimum", "maximum", "step"),
     "calendar": ("message", "start_time", "end_time", "all_day", "location"),
     "remote": ("current_activity",),
-}
+})
 
 BLOCKED_DOMAINS = frozenset({"phoenix_mcp"})
 
@@ -901,14 +582,25 @@ MUSIC_ASSISTANT_LIBRARY_SERVICES = frozenset({
 # not enough; they also need cap_broadcast, as HassBroadcast does.
 ANNOUNCEMENT_SERVICES = frozenset({
     "assist_satellite/announce",
+    "assist_satellite/ask_question",
+    "assist_satellite/start_conversation",
     "music_assistant/play_announcement",
+})
+# Home Assistant's generic services act on an entity of any domain. Listed so they
+# stay available when service descriptions cannot be read; every other service is
+# bound to its targets by what its own description declares.
+CROSS_DOMAIN_SERVICES = frozenset({
+    "homeassistant/turn_on",
+    "homeassistant/turn_off",
+    "homeassistant/toggle",
+    "homeassistant/update_entity",
 })
 # call_service reaches these no-target services by capability alone, so it is
 # announced to an access key holding one of them even without entity write scope.
 CALL_SERVICE_NO_TARGET_CAPS = ("cap_restart", "cap_yaml_edit")
 
 SCRIPT_ENTITY_SERVICES = frozenset({"turn_on", "turn_off", "toggle"})
-RUNTIME_SERVICE_GUIDANCE = {
+RUNTIME_SERVICE_GUIDANCE = MappingProxyType({
     "automation/trigger": "Run actions now; skip_condition defaults to true. Does not enable future triggers.",
     "automation/turn_on": "Enable future triggers without running actions now.",
     "automation/turn_off": "Disable future triggers; stop_actions defaults to true and also stops running actions.",
@@ -917,29 +609,6 @@ RUNTIME_SERVICE_GUIDANCE = {
     "script/turn_off": "Stop all running executions. The script remains available to run again.",
     "script/toggle": "Start an idle script or stop its running executions.",
     "scene/turn_on": "Activate the scene; later member effects run under Home Assistant.",
-}
-
-# Services that require cap_physical_control even when pass_through is True.
-# These represent irreversible or safety-relevant physical actions.
-PHYSICAL_GATE_SERVICES = frozenset({
-    "lock/lock",
-    "lock/unlock",
-    "lock/open",
-    "alarm_control_panel/alarm_disarm",
-    "alarm_control_panel/alarm_arm_away",
-    "alarm_control_panel/alarm_arm_home",
-    "alarm_control_panel/alarm_arm_night",
-    "alarm_control_panel/alarm_arm_vacation",
-    "alarm_control_panel/alarm_trigger",
-    "cover/open_cover",
-    "cover/close_cover",
-    "cover/stop_cover",
-    "cover/set_cover_position",
-    "cover/set_cover_tilt_position",
-    "valve/open_valve",
-    "valve/close_valve",
-    "valve/stop_valve",
-    "valve/set_valve_position",
 })
 
 # Core HA services that take NO entity/device/area target: they re-read YAML
@@ -952,7 +621,8 @@ PHYSICAL_GATE_SERVICES = frozenset({
 # capability that reads that configuration. HA-version-sensitive: this is a curated list of stable core reload
 # services, deliberately conservative (integration-specific reloads like
 # mqtt/rest/command_line are omitted); re-verify and extend on HA upgrades.
-# homeassistant/reload_config_entry is excluded on purpose: it takes a target.
+# homeassistant/reload_config_entry is excluded on purpose: it needs the config
+# entry's own scope, so only reload_integration runs it.
 NO_TARGET_SERVICES = frozenset({
     "homeassistant/reload_all",
     "homeassistant/reload_core_config",
@@ -1021,7 +691,7 @@ CAPABILITY_NAMES = (
 
 # Tiers drive UI grouping and which capabilities offer Confirm.
 # Read and Everyday tiers are deny/allow only; the others support Confirm.
-CAPABILITY_TIERS: dict[str, str] = {
+CAPABILITY_TIERS: Mapping[str, str] = MappingProxyType({
     "cap_config_read": "read",
     "cap_camera_read": "read",
     "cap_template_render": "read",
@@ -1071,7 +741,7 @@ CAPABILITY_TIERS: dict[str, str] = {
     # leave a device unreachable until someone reaches it with a cable. It sits
     # with cap_radio_write, its nearest sibling in consequence.
     "cap_esphome_flash": "system",
-}
+})
 
 # Capabilities for which Confirm is a meaningful third state.
 # UI hides the Confirm option for caps not in this set.
@@ -1172,103 +842,6 @@ PROXY_TEXT_MAX_CHARS = 120
 # the correlated response a short window, then verify the retained config.
 Z2M_DEVICE_OPTIONS_RESPONSE_TIMEOUT_SECONDS = 5.0
 
-# ESPHome Device Builder commands. Phoenix MCP speaks the add-on's multiplexed
-# WebSocket API at <dashboard url>/ws for validation, for the
-# board/component/automation reference data an authoring agent needs, and for
-# the firmware job model (compile, install, poll, cancel).
-# Version-sensitive surface: the frame shapes and command names are the add-on's,
-# with no stability promise, so re-verify them on add-on upgrades.
-# Source-qualified protocol targets. The compiler and Device Builder use
-# independent version families; ESPHome 2026.10.0 and 2026.10.1 both bundle Device
-# Builder 1.25.0. Used only to add context to failures, never as an upgrade
-# warning on success.
-ESPHOME_BUILDER_VERIFIED_VERSION = "1.25.0"
-ESPHOME_COMPILER_VERIFIED_VERSION = "2026.10.1"
-ESPHOME_BUILDER_REQUEST_TIMEOUT_SECONDS = 10.0
-# Validation runs the config through ESPHome itself (no compile), which is
-# seconds on a small file but can pull external_components on a large one.
-ESPHOME_BUILDER_VALIDATE_TIMEOUT_SECONDS = 60.0
-ESPHOME_BUILDER_OUTPUT_MAX_CHARS = 65_536
-ESPHOME_BUILDER_PAGE_LIMIT = 20
-ESPHOME_BUILDER_PAGE_LIMIT_MAX = 50
-ESPHOME_BUILDER_MAX_COMPONENT_IDS = 10
-ESPHOME_YAML_SEARCH_MAX_QUERY_CHARS = 200
-ESPHOME_YAML_SEARCH_MAX_BYTES = 2_097_152
-ESPHOME_YAML_SEARCH_CONTEXT_LINES_MAX = 3
-ESPHOME_YAML_SEARCH_SNIPPET_MAX_CHARS = 1_000
-ESPHOME_YAML_SEARCH_MAX_MATCHES = 1_000
-ESPHOME_YAML_INVENTORY_MAX_ENTRIES = 1_000
-ESPHOME_BUILDER_METADATA_MAX_CHARS = 512
-ESPHOME_BUILDER_DEVICE_STATES = frozenset({"online", "offline", "unknown"})
-
-# Firmware jobs. Compile and install ENQUEUE and return a job record, so those
-# calls use the normal request timeout above; only the log replay of a finished
-# job needs a longer one.
-ESPHOME_BUILDER_JOB_LOG_TIMEOUT_SECONDS = 60.0
-# A real build log runs 3-10k lines. The add-on already keeps only the last
-# 2000, and the full 64KB budget above would still swamp an agent's context, so
-# job output gets its own tighter bound.
-ESPHOME_BUILDER_JOB_OUTPUT_MAX_CHARS = 16_384
-# A poll of a RUNNING build gets a much tighter, tail-only slice. The full log is
-# near-identical between polls, so an agent checking a real build every 30 seconds
-# would pull the same banner into its context a dozen times over. Progress is a
-# question about the last few lines; the whole log is only worth returning once
-# the build has actually finished.
-ESPHOME_BUILDER_JOB_PROGRESS_MAX_CHARS = 4_096
-# wait_for_esphome_job holds the request open so a build has something in flight
-# to report progress on. This is the longest hold in the whole surface (the next
-# is the 180s inline confirm), chosen to fit a real build in one call; the SSE
-# keepalive is what keeps an intermediary from dropping it.
-ESPHOME_BUILDER_JOB_WAIT_SECONDS = 300
-# The same hold on a headless conversational surface (Assist's tool bridge, the
-# voice agent, AI Task) is a hang: none of them can render a held request, their
-# own pipeline timeouts are far shorter than the value above, and the build runs
-# on regardless of whether anyone is waiting. Long enough for a cached build to
-# land inside the turn, short enough that the reply is "still building, ask me
-# again" rather than a timeout.
-ESPHOME_BUILDER_JOB_WAIT_HEADLESS_SECONDS = 10
-# Faster than the 15s keepalive so the reported percentage is fresh when a frame
-# goes out, and so a build that finishes returns promptly rather than on the tick.
-ESPHOME_BUILDER_JOB_POLL_SECONDS = 5.0
-# A cancel is confirmed by re-reading the job until it reports a finished status.
-ESPHOME_BUILDER_CANCEL_SETTLE_SECONDS = 5.0
-ESPHOME_BUILDER_CANCEL_POLL_SECONDS = 0.5
-# The add-on caps a decode at 200 lines of 500 chars and times out server-side
-# at 60s; the client waits a little longer so its own timeout is never the first
-# to fire and mask the add-on's own answer.
-ESPHOME_BUILDER_DECODE_TIMEOUT_SECONDS = 90.0
-ESPHOME_BUILDER_MAX_BACKTRACE_LINES = 200
-# devices/logs runs until it is killed, so a capture window bounds the request.
-# The maximum is deliberately small: this hold is dead air on the wire for however
-# long it runs.
-ESPHOME_BUILDER_LOG_CAPTURE_SECONDS = 15
-ESPHOME_BUILDER_LOG_CAPTURE_MAX_SECONDS = 60
-# Automation building-block docs. The add-on pages a large request through
-# `remaining`; the page cap bounds a reply that never makes progress.
-ESPHOME_BUILDER_MAX_AUTOMATION_REFS = 20
-ESPHOME_BUILDER_AUTOMATION_DOCS_MAX_PAGES = 5
-# The add-on's AUTOMATION_TYPES (controllers/automations/catalog.py).
-ESPHOME_AUTOMATION_REF_TYPES = frozenset({
-    "triggers", "actions", "conditions", "light_effects", "filters",
-})
-# One existing automation's masked YAML, and all of them together.
-ESPHOME_AUTOMATION_YAML_MAX_CHARS = 4_000
-ESPHOME_AUTOMATION_LIST_MAX_CHARS = 32_768
-# Masked unified diffs (migration preview, version history).
-ESPHOME_DIFF_MAX_CHARS = 16_384
-# The git author the Device Builder commits as. Rows report only whether a
-# version came from the Builder; an adopted repository can carry real names.
-ESPHOME_BUILDER_HISTORY_AUTHOR = "ESPHome Device Builder"
-ESPHOME_BUILDER_LOADED_COMPONENTS_MAX = 500
-# devices/troubleshoot carries no budget of its own (its legs self-bound) and
-# the add-on's own dialog waits 35 s. A headless surface cannot hold that long.
-ESPHOME_BUILDER_TROUBLESHOOT_TIMEOUT_SECONDS = 40.0
-ESPHOME_BUILDER_TROUBLESHOOT_HEADLESS_SECONDS = 8.0
-# Memory analysis is followed in the call that starts it: the add-on drops the
-# job once it ends, so there is nothing to poll afterwards.
-ESPHOME_BUILDER_ANALYZE_TIMEOUT_SECONDS = ESPHOME_BUILDER_JOB_WAIT_SECONDS
-ESPHOME_BUILDER_ANALYZE_OUTPUT_MAX_CHARS = 24_576
-
 # Pending-approval queue limits.
 MAX_PENDING_APPROVALS_PER_ACCESS_KEY = 100
 APPROVAL_DEFAULT_TTL_SECONDS = 3600
@@ -1322,9 +895,10 @@ PERSONA_NAMES = frozenset({
     PERSONA_CUSTOM,
 })
 
-# Domains whose services require cap_physical_control.
-# Derived from the domain portion of PHYSICAL_GATE_SERVICES. Used by the native
-# Hass* action tools (HassTurnOn/Off, HassSetPosition) to physical-gate targets
+# Domains whose services require cap_physical_control even when pass_through is
+# True: irreversible or safety-relevant physical actions. The gate covers the whole
+# domain rather than a list of service names, so a service added later is gated too.
+# Used by call_service and by the native Hass* action tools (HassTurnOn/Off, HassSetPosition) to physical-gate targets
 # the same way call_service gates the underlying domain services, so a valve is
 # gated whether it is actuated via valve/open_valve or via HassTurnOn.
 PHYSICAL_GATE_DOMAINS = frozenset({"lock", "alarm_control_panel", "cover", "valve"})
@@ -1345,11 +919,12 @@ PHYSICAL_GATE_DOMAINS = frozenset({"lock", "alarm_control_panel", "cover", "valv
 #  - "target", which is a target block only at HA's own WS/REST boundary (which
 #    merges it into data before the call). Reaching hass.services.async_call it
 #    selects nothing, and it is a REAL data field for the notify domain, whose
-#    target names a notification recipient.
+#    target names a notification recipient. unsupported_secondary_targets refuses
+#    the mapping form with its own message, and MESA is not shown the data field.
 #  - "config_entry_id", which TargetSelection does not read and which is a
-#    legitimate argument to the config-entry services.
-# Both are refused by MESA's own enforcement, which is a stricter rule applied to
-# what MESA is shown rather than to what Home Assistant is asked to do.
+#    legitimate argument to the config-entry services. On an entity call MESA's
+#    own enforcement refuses it, a stricter rule applied to what MESA is shown
+#    rather than to what Home Assistant is asked to do.
 #
 # "exclude" (HA 2026.11) only narrows a selection, but HA applies it after Phoenix
 # resolved the targets, so the call would reach fewer entities than were reviewed,
@@ -1385,8 +960,10 @@ SECONDARY_TARGET_SELECTOR_KEYS = frozenset({
     "container_device_id",
     "device_ids",
     "doorbells",
+    "domains",
     "entities",
     "entity",
+    "entity_globs",
     "entry",
     "entry_id",
     "group_members",
@@ -1404,14 +981,6 @@ SECONDARY_TARGET_SELECTOR_KEYS = frozenset({
     "transfer_id",
     "vehicle",
 })
-
-# The ESPHome integration's domain. Its services are ALL dynamically registered
-# per device (services.yaml is deliberately empty upstream): a device's firmware
-# declares actions, and HA registers each as
-# esphome.<device_name_with_underscores>_<action_name>. They take no entity
-# target, so they need their own no-target dispatch path and are authorized by
-# the owning device's write scope rather than a capability.
-ESPHOME_DOMAIN = "esphome"
 
 # Actionable service-name hints for core actuator domains whose real service
 # verbs differ from the naive guess (e.g. valve.open_valve, not valve.open;
@@ -1434,7 +1003,7 @@ ESPHOME_DOMAIN = "esphome"
 # other HA-coupling points). Extend the map when a new verb-mismatch domain
 # surfaces; only physical/actuator domains where the naive verb differs are
 # included (light/switch/siren use the obvious turn_on/turn_off and are omitted).
-DOMAIN_SERVICE_HINTS: dict[str, tuple[str, ...]] = {
+DOMAIN_SERVICE_HINTS: Mapping[str, tuple[str, ...]] = MappingProxyType({
     "valve": ("open_valve", "close_valve", "stop_valve", "set_valve_position"),
     "cover": (
         "open_cover", "close_cover", "stop_cover", "set_cover_position",
@@ -1468,7 +1037,7 @@ DOMAIN_SERVICE_HINTS: dict[str, tuple[str, ...]] = {
         "alarm_arm_vacation", "alarm_disarm", "alarm_trigger",
     ),
     "lawn_mower": ("start_mowing", "pause", "dock"),
-}
+})
 
 # assist_satellite feature bit for ANNOUNCE support.
 ANNOUNCE_BIT = 2
@@ -1678,1050 +1247,8 @@ MAX_FILE_BYTES = 1_048_576
 YAML_MAX_DEPTH = 64
 YAML_MAX_EXPANDED_NODES = 100_000
 
-# Approval diff summaries, as format templates keyed by a stable slug.
-#
-# The summary an admin reads before approving is the confirm gate's whole safety
-# property, so it has to be translatable. It is also PERSISTED on the approval
-# record (it doubles as the audit trail), which means translating it server-side
-# would freeze the language at creation time and make History mixed after a
-# language switch. So the record carries the English `summary` plus
-# `summary_key` and `summary_params` for the panel to render in the operator's
-# own language, falling back to the stored English for any record without a key.
-#
-# The template lives HERE and nowhere else. Python formats it to produce the
-# stored English, and scripts/gen_diff_catalog.py generates the panel's
-# translations/en.json `diff.*` entries FROM this dict, so the two cannot drift.
-# A contract test pins that generation and checks every builder's emitted key
-# and params against it.
-#
-# Placeholders are `{name}` only: that is what both str.format and the panel's
-# interpolation understand, and what HA's own translation loader validates a
-# translated string against. A variant suffix (.mesa, .section, .device) is a
-# SEPARATE key rather than a runtime concatenation, because a translator has to
-# be able to move the clause.
-DIFF_SUMMARY_TEMPLATES: dict[str, str] = {
-    "create_calendar_event": "Create calendar event",
-    "update_calendar_event": "Update calendar event",
-    "delete_calendar_event": "Delete calendar event",
-    "configuration_recovery.restore": "Restore saved configuration for {resource}",
-    "configuration_recovery.acknowledge": "Check configuration after an interrupted change to {resource}",
-    "restore.template_helper": "Restore Template helper configuration",
-    "restore.blueprint": "Restore blueprint source '{label}'",
-    "restore.dashboard_layout": "Restore the layout of dashboard '{label}'",
-    "restore.dashboard_registry": "Restore the registry entry of dashboard '{label}'",
-    "restore.dashboard_resource": "Restore dashboard resource {url}",
-    "restore.energy": "Restore Energy dashboard preferences",
-    "edit_energy_config.fallback": "Change the Energy dashboard configuration",
-    # Blueprints. Create never reports consumers (a new blueprint has none).
-    "blueprint.create": "Create {domain} blueprint '{rel}'",
-    "blueprint.edit": "Replace {domain} blueprint '{rel}'",
-    "blueprint.delete": "Delete {domain} blueprint '{rel}'",
-    "blueprint.edit.consumers": "Replace {domain} blueprint '{rel}' (to be reloaded: {count})",
-    "blueprint.delete.consumers": "Delete {domain} blueprint '{rel}' (still in use: {count})",
-    # Entity registry.
-    "set_entity": "Update registry metadata ({fields}) for {entity_id}",
-    "delete_entity": "Delete the registry entry for {entity_id}",
-    # Location registry.
-    "location.create": "Create location {name}",
-    "location.update": "Update location {name}",
-    "location.delete": "Delete location {name}",
-    "label.create": "Create label {name}",
-    "label.update": "Update label {name}",
-    "label.delete": "Delete label {name}",
-    "category.create": "Create category {name}",
-    "category.update": "Update category {name}",
-    "category.delete": "Delete category {name}",
-    # Device registry.
-    "set_device": "Update device registry metadata ({fields}) for {device_id}",
-    "remove_device": "Remove {device_id} from config entry {config_entry_id}",
-    # Zigbee. The bare forms are the error paths, where no device resolved.
-    "zigbee_permit": "Open the Zigbee network for joining",
-    "zigbee_permit.close": "Close the Zigbee join window",
-    "zigbee_permit.open": "Open the Zigbee network for joining for {duration} seconds",
-    "zigbee_reconfigure": "Reconfigure a Zigbee device",
-    "zigbee_reconfigure.device": "Reconfigure (re-interview) Zigbee device {label}",
-    "zigbee_remove": "Remove a Zigbee device",
-    "zigbee_remove.device": "Remove Zigbee device {label} from the network",
-    "zigbee_options": "Change Zigbee2MQTT device options",
-    "zigbee_options.device": "Change Zigbee2MQTT options ({keys}) for {label}",
-    "zigbee_property": "Change a Zigbee2MQTT exposed property",
-    "zigbee_property.device": "Change Zigbee2MQTT property {property} for {label}",
-    "zigbee_binding": "Change a Zigbee device binding",
-    "zigbee_binding.devices.bind": "Bind Zigbee device {source} to {target}",
-    "zigbee_binding.devices.unbind": "Unbind Zigbee device {source} from {target}",
-    "zigbee_reporting": "Configure Zigbee attribute reporting",
-    "zigbee_reporting.device": "Configure {cluster}.{attribute} reporting for {label}",
-    "zigbee_group": "Change a Zigbee group",
-    "zigbee_group.named.create": "Create Zigbee group {name}",
-    "zigbee_group.named.add_members": "Add devices to Zigbee group {name}",
-    "zigbee_group.named.remove_members": "Remove devices from Zigbee group {name}",
-    "zigbee_group.named.delete": "Remove Zigbee group {name}",
-    "zigbee_topology": "Scan Zigbee topology",
-    "zigbee_topology.backend": "Scan {backend} neighbor tables for the scoped Zigbee map",
-    # System.
-    "restart_ha": "Restart Home Assistant",
-    "send_notification": "Send a notification to {target}",
-    "config_entry.options": "Change {keys} on helper '{label}'",
-    "integration.enable": "Enable integration {label}",
-    "integration.disable": "Disable integration {label}",
-    "integration.update": "Update integration {label}",
-    "integration.reconfigure": "Reconfigure integration {label}",
-    "integration.log_level": "Change integration log level for {label}",
-    "integration.reload": "Reload integration {label}",
-    "integration.remove": "Remove integration {label}",
-    "create_backup": "Create backup",
-    "create_backup.named": 'Create backup "{name}"',
-    # ESPHome.
-    "install_esphome_firmware": "Flash ESPHome firmware to {label}",
-    "install_esphome_firmware.jump": "Flash ESPHome firmware to {label} (ESPHome version change: {jump})",
-    # Dashboards. The card ops spell out the location rather than passing a
-    # pre-joined "view N, section M" fragment, so word order stays translatable.
-    "set_dashboard_config": "Set dashboard layout '{label}'",
-    "dashboard.create": "Create dashboard '{label}'",
-    "dashboard.edit": "Edit dashboard '{label}'",
-    "dashboard.delete": "Delete dashboard '{label}'",
-    "dashboard_resource.create": "Add dashboard resource {url}",
-    "dashboard_resource.update": "Change dashboard resource {url}",
-    "dashboard_resource.delete": "Remove dashboard resource {url}",
-    "dashboard_card.add": "Add '{card_type}' to dashboard '{label}' (view {view_index})",
-    "dashboard_card.add.section": "Add '{card_type}' to dashboard '{label}' (view {view_index}, section {section_index})",
-    "dashboard_card.edit": "Replace card {card_index} on dashboard '{label}' (view {view_index})",
-    "dashboard_card.edit.section": "Replace card {card_index} on dashboard '{label}' (view {view_index}, section {section_index})",
-    "dashboard_card.delete": "Delete card {card_index} from dashboard '{label}' (view {view_index})",
-    "dashboard_card.delete.section": "Delete card {card_index} from dashboard '{label}' (view {view_index}, section {section_index})",
-    # Energy dashboard. Each names the human-visible thing, never the JSON path:
-    # an operator reviewing these knows their appliances, not HA's prefs schema.
-    "edit_energy_config.replace_statistic": "Energy: point '{label}' at {new_statistic} (was {old_statistic})",
-    "edit_energy_config.add_device": "Energy: track '{label}' ({new_statistic}) as an individual device",
-    "edit_energy_config.remove_device": "Energy: stop tracking '{label}' ({old_statistic})",
-    "edit_energy_config.rename_device": "Energy: rename '{old_label}' to '{label}'",
-    "edit_energy_config.remove_source": "Energy: remove the {source_type} source ({old_statistic})",
-    "edit_energy_config.set_source.update": "Energy: update the {source_type} source ({fields})",
-    "edit_energy_config.set_source.create": "Energy: add a {source_type} source ({fields})",
-    "patch_dashboard.set": "Set {path} on dashboard '{label}'",
-    "patch_dashboard.append": "Append to {path} on dashboard '{label}'",
-    "patch_dashboard.remove": "Remove {path} from dashboard '{label}'",
-    "patch_dashboard.multi": "Apply {count} changes to dashboard '{label}'",
-    # Service calls and the native physical-gate tools.
-    "call_service": "Call {domain}/{service}",
-    "call_service.mesa": "Call {domain}/{service} (includes MESA confirmation)",
-    "hass_turn.on": "Physical device control: turn on {names}",
-    "hass_turn.off": "Physical device control: turn off {names}",
-    "hass_turn.on.mesa": "Physical device control: turn on {names} (includes MESA confirmation)",
-    "hass_turn.off.mesa": "Physical device control: turn off {names} (includes MESA confirmation)",
-    "hass_set_position": "Set cover/valve position",
-    "hass_set_position.mesa": "Set cover/valve position (includes MESA confirmation)",
-    "hass_stop_moving": "Stop moving cover",
-    "hass_stop_moving.mesa": "Stop moving cover (includes MESA confirmation)",
-    "mesa_service": "MESA confirmation for {domain}.{service}",
-    # Authoring.
-    "create_automation": "Create automation '{alias}'",
-    "edit_automation": "Edit automation '{automation_id}'",
-    "delete_automation": "Delete automation '{automation_id}'",
-    "create_script": "Create script '{script_id}'",
-    "edit_script": "Edit script '{script_id}'",
-    "delete_script": "Delete script '{script_id}'",
-    "create_scene": "Create scene '{name}'",
-    "edit_scene": "Edit scene '{scene_id}'",
-    "delete_scene": "Delete scene '{scene_id}'",
-    "create_helper": "Create {helper_type} helper '{name}'",
-    "edit_helper": "Edit {helper_type} helper '{helper_id}'",
-    "delete_helper": "Delete {helper_type} helper '{helper_id}'",
-}
-
-
-# Friendly approval-modal copy. Unlike diff summaries, these sentences are
-# presentation only: the persisted English diff remains the audit record. Every
-# known diff key gets a title and consequence so Summary never has to expose a
-# technical path or rendered YAML. The generated catalog is the frontend API.
-_APPROVAL_SUMMARY_TITLE_OVERRIDES = {
-    "dashboard_card.add": "Add a card to dashboard '{label}'",
-    "dashboard_card.add.section": "Add a card to dashboard '{label}'",
-    "dashboard_card.edit": "Update a card on dashboard '{label}'",
-    "dashboard_card.edit.section": "Update a card on dashboard '{label}'",
-    "dashboard_card.delete": "Remove a card from dashboard '{label}'",
-    "dashboard_card.delete.section": "Remove a card from dashboard '{label}'",
-    "patch_dashboard.set": "Update dashboard '{label}'",
-    "patch_dashboard.append": "Update dashboard '{label}'",
-    "patch_dashboard.remove": "Update dashboard '{label}'",
-    "patch_dashboard.multi": "Update dashboard '{label}'",
-}
-
-_APPROVAL_SUMMARY_BODIES = {
-    "configuration_recovery.restore": "A previous change could not be verified. Approve restores the saved configuration shown below. Reject keeps the current configuration. The original command will not be repeated.",
-    "configuration_recovery.acknowledge": "A previous change could not be verified and cannot be safely restored here. Check this resource in Home Assistant, then Approve to accept its current state and unblock changes. Reject leaves changes blocked. The original command will not be repeated.",
-    "restart_ha": "Home Assistant will be briefly unavailable while it restarts.",
-    "restore.template_helper": "This will put back the Template helper configuration from the selected change. Compare it with the current configuration below.",
-    "restore.blueprint": "This will put back the blueprint source from the selected change. Compare it with the current source below.",
-    "restore.dashboard_layout": "This will put back the dashboard layout from the selected change. Compare it with the current layout below.",
-    "restore.dashboard_registry": "This will put back the dashboard's registry settings from the selected change. Compare them with the current settings below.",
-    "restore.dashboard_resource": "This will put back the dashboard resource from the selected change. Every browser loads it when it opens a dashboard.",
-    "restore.energy": "This will put back the Energy dashboard preferences from the selected change. Compare them with the current preferences below.",
-    "send_notification": "This will send the message shown below to {target}.",
-    "zigbee_reconfigure": "This will interview the Zigbee device again. It may be briefly unresponsive. Battery devices must be awake.",
-    "zigbee_reconfigure.device": "This will interview {label} again. It may be briefly unresponsive. Battery devices must be awake.",
-    "zigbee_remove": "This will remove the Zigbee device from the network. The change cannot be undone from this approval.",
-    "zigbee_remove.device": "This will remove {label} from the Zigbee network. The change cannot be undone from this approval.",
-    "zigbee_options": "This will change Zigbee2MQTT device options. Review the proposed values below.",
-    "zigbee_options.device": "This will change Zigbee2MQTT device options for {label}. Review the proposed values below.",
-    "zigbee_property": "This will directly change a Zigbee2MQTT device property. Review the proposed value below.",
-    "zigbee_property.device": "This will directly change property {property} for {label}. Review the proposed value below.",
-    "zigbee_binding": "This will change direct control between two Zigbee devices. Review both devices and the selected clusters below.",
-    "zigbee_binding.devices.bind": "This will let {source} control {target} directly over Zigbee. Review the exact relationship below.",
-    "zigbee_binding.devices.unbind": "This will stop {source} controlling {target} directly over Zigbee. Review the exact relationship below.",
-    "zigbee_reporting": "This will change how frequently a Zigbee device reports an attribute. Review the intervals below.",
-    "zigbee_reporting.device": "This will change {cluster}.{attribute} reporting for {label}. Review the intervals below.",
-    "zigbee_group": "This will change which devices are controlled together as a Zigbee group. Review the membership below.",
-    "zigbee_group.named.create": "This will create Zigbee group {name}. Review its members below.",
-    "zigbee_group.named.add_members": "This will add devices to Zigbee group {name}. Review the exact membership change below.",
-    "zigbee_group.named.remove_members": "This will remove devices from Zigbee group {name}. Review the exact membership change below.",
-    "zigbee_group.named.delete": "This will remove Zigbee group {name}. Its devices stay paired but are no longer controlled together.",
-    "zigbee_topology": "This actively queries Zigbee routers. The mesh may be less responsive while the scan runs.",
-    "zigbee_topology.backend": "This actively queries Zigbee routers on {backend}. The mesh may be less responsive while the scan runs.",
-    "integration.reload": "This will temporarily unload the {label} integration and set it up again.",
-    "integration.reconfigure": (
-        "Phoenix will submit agent-provided values to {label}'s Home Assistant reconfigure flow. "
-        "The integration has not validated them yet. Browser or OAuth and asynchronous progress "
-        "steps are unsupported, and Phoenix cannot automatically roll this change back."
-    ),
-    "integration.remove": "This will remove the {label} integration and its configuration from Home Assistant.",
-    "delete_entity": "This will delete the registry entry for {entity_id}. The entity may be recreated later by its integration.",
-    "remove_device": "This will remove {device_id} from its integration. The device may need to be added again.",
-    "install_esphome_firmware": "This will compile and flash firmware to {label}. Do not disconnect the device during the update.",
-    "install_esphome_firmware.jump": "This will change the ESPHome version, compile, and flash firmware to {label}. Do not disconnect the device during the update.",
-    "blueprint.delete": "This will permanently delete the {domain} blueprint {rel}.",
-    "blueprint.delete.consumers": "This will permanently delete {rel}. Automations and scripts that still use it: {count}.",
-    "dashboard.delete": "This will permanently delete the dashboard {label}.",
-    "dashboard_resource.create": "Every browser that opens a dashboard will load {url}. A JavaScript file runs with that person's Home Assistant access, so approve only a file you trust.",
-    "dashboard_resource.update": "This changes a file every browser loads when it opens a dashboard. Compare the current and proposed file below.",
-    "dashboard_resource.delete": "Dashboards will stop loading {url}. Cards that come from it will show an error until it is added back.",
-    "dashboard_card.delete": "This will permanently delete the selected card from {label}.",
-    "dashboard_card.delete.section": "This will permanently delete the selected card from {label}.",
-    "delete_automation": "This will permanently delete automation {automation_id}.",
-    "delete_script": "This will permanently delete script {script_id}.",
-    "delete_scene": "This will permanently delete scene {scene_id}.",
-    "delete_helper": "This will permanently delete helper {helper_id}.",
-}
-
-
-def _approval_summary_body(key: str) -> str:
-    """Return concise consequence copy for one stable diff-summary key."""
-    if key in _APPROVAL_SUMMARY_BODIES:
-        return _APPROVAL_SUMMARY_BODIES[key]
-    if key.startswith("integration."):
-        return "This will change the {label} integration in Home Assistant."
-    if key.startswith(("dashboard", "patch_dashboard", "edit_energy_config")):
-        return "This will update the Home Assistant dashboard configuration."
-    if key in ("location.delete", "label.delete", "category.delete"):
-        return "This will remove the selected item. The change may not be reversible."
-    if key.startswith(("create_", "edit_", "set_", "patch_", "blueprint.", "location.", "label.", "category.")):
-        return "This will apply the proposed configuration change."
-    if key.startswith(("call_service", "mesa_service")):
-        return "This will run the proposed Home Assistant service action."
-    if key.startswith(("hass_turn", "hass_set_position", "hass_stop_moving")):
-        return "This will control the selected physical device or devices."
-    if key.startswith("zigbee_permit"):
-        return "This will change whether new devices can join the Zigbee network."
-    if key.startswith(("delete_", "remove_")):
-        return "This will remove the selected item. The change may not be reversible."
-    return "This will apply the proposed action."
-
-
-APPROVAL_SUMMARY_TEMPLATES: dict[str, str] = {
-    part_key: template
-    for key, diff_title in DIFF_SUMMARY_TEMPLATES.items()
-    for part_key, template in (
-        (f"{key}.title", _APPROVAL_SUMMARY_TITLE_OVERRIDES.get(key, diff_title)),
-        (f"{key}.body", _approval_summary_body(key)),
-    )
-}
-
-APPROVAL_SUMMARY_UI: dict[str, str] = {
-    "action.optionalReason": "Optional reason",
-    "action.reasonPlaceholder": "Explain why this request was rejected",
-    "fallback.file.title": "Update {file}",
-    "fallback.integration.title": "Update integration {label}",
-    "fallback.item.title": "Update {label}",
-    "fallback.service.title": "Run {label}",
-    "fallback.unknown.title": "Review proposed action",
-    "targets.exact": "This approval covers the entities listed below. Changed targets require a new request.",
-    "targets.futureNative": "Home Assistant resolves future targets when this configuration runs. Membership may change, and later execution is outside Phoenix permission and MESA checks.",
-    "targets.dynamicAccessible": "Accessible devices are resolved again at execution and may have changed.",
-    "named.editAutomation.title": "Edit automation '{label}'",
-    "named.removeDevice.title": "Remove {device} from {integration}",
-    "named.removeDevice.body": "This will ask the {integration} integration to remove {device}. You may need to add the device again, and this action cannot be undone from Phoenix MCP.",
-    "named.removeDevice.unnamedTitle": "Remove device from {integration}",
-    "named.removeDevice.unnamedBody": "This will ask the {integration} integration to remove the selected device. You may need to add the device again, and this action cannot be undone from Phoenix MCP.",
-    "named.removeDevice.integrationFallback": "its current integration",
-    "named.kind.automation": "automation",
-    "named.kind.script": "script",
-    "named.kind.scene": "scene",
-    "named.kind.helper": "helper",
-    "named.kind.input_boolean": "input boolean helper",
-    "named.kind.input_number": "number helper",
-    "named.kind.input_text": "text helper",
-    "named.kind.input_select": "dropdown helper",
-    "named.kind.input_datetime": "date and time helper",
-    "named.kind.input_button": "button helper",
-    "named.kind.counter": "counter helper",
-    "named.kind.timer": "timer helper",
-    "named.kind.schedule": "schedule helper",
-    "named.kind.zone": "zone helper",
-    "named.kind.tag": "tag helper",
-    "named.kind.person": "person helper",
-    "named.resource.createTitle": "Create {kind} '{label}'",
-    "named.resource.editTitle": "Edit {kind} '{label}'",
-    "named.resource.deleteTitle": "Delete {kind} '{label}'",
-    "named.resource.deleteUnnamedTitle": "Delete {kind}",
-    "named.resource.createBody": "This will add {kind} '{label}' to Home Assistant. Review its configuration below.",
-    "named.resource.editBody": "This will update {kind} '{label}'.",
-    "named.resource.deleteBody": "This will permanently delete {kind} '{label}'. This action cannot be undone.",
-    "named.resource.deleteUnnamedBody": "This will permanently delete the selected {kind}. This action cannot be undone.",
-    "history.approved.body": "The request completed successfully.",
-    "history.rejected.body": "The request was rejected and was not run.",
-    "history.rejectedReason.body": "The request was rejected and was not run. Reason: {reason}",
-    "history.expired.body": "The request expired and was not run.",
-    "history.cancelled.body": "The request was cancelled and was not run.",
-    "history.cancelledReason.body": "The request was cancelled and was not run. Reason: {reason}",
-    "history.error.generic": "The action could not be completed. Request Details shows the full error under Result.",
-    "history.error.integrationChanged": "The integration changed after approval. Review the current request details and try again.",
-    "history.error.integrationDisabled": "The integration is disabled and cannot be reloaded.",
-    "history.error.integrationLoggerChanged": "The integration's logging configuration changed after approval. Review the current request details and try again.",
-    "history.error.integrationNotFound": "The integration no longer exists.",
-    "history.error.integrationReloadFailed": "Home Assistant could not reload the integration.",
-    "history.error.integrationReloadUnsupported": "This integration does not currently support reloading.",
-    "history.error.integrationStateNotReloadable": "The integration is currently in state {state} and cannot be reloaded.",
-    "history.failed.body": "The request was approved but did not complete. Error: {error}",
-    "history.interrupted.body": "Execution was interrupted and the change may have been applied. Verify the current state before requesting it again.",
-    "history.resolvedAt": "Resolved {time}",
-}
-
-
-# Version-record summaries, the Changes tab's one-line "what changed" text.
-#
-# Same contract as DIFF_SUMMARY_TEMPLATES above and generated into the same
-# catalog by the same script, but a separate surface: an approval diff describes
-# a change being PROPOSED, a version record describes one already APPLIED, and
-# only some resource types get one at all (an automation's alias already tells
-# the story, so those stay None).
-#
-# The card-op location is assembled from the three loc* parts joined with the
-# panel's list separator, rather than one key per combination of view/section/
-# card: it is a coordinate list, not prose, so the order is fixed and only the
-# nouns need translating.
-VERSION_SUMMARY_TEMPLATES: dict[str, str] = {
-    "cards": "cards: {count}",
-    "cards.was": "cards: {count} (was {before})",
-    "size": "{size}",
-    "size.was": "{size} (was {before})",
-    "entity.removed": "registry entry removed",
-    "entity.changed": "changed: {fields}",
-    "device.removed": "device registry entry removed",
-    "device.changed": "changed: {fields}",
-    "device.zigbee_options": "changed Zigbee2MQTT options: {keys}",
-    "device.zigbee_property": "changed Zigbee2MQTT property: {property}",
-    "device.zigbee_binding.bind": "bound Zigbee control to {target}",
-    "device.zigbee_binding.unbind": "removed the Zigbee binding to {target}",
-    "device.zigbee_reporting": "configured Zigbee reporting: {cluster}.{attribute}",
-    "device.zigbee_group.create": "created Zigbee group: {name}",
-    "device.zigbee_group.add_members": "added to Zigbee group: {name}",
-    "device.zigbee_group.remove_members": "removed from Zigbee group: {name}",
-    "device.zigbee_group.delete": "removed Zigbee group: {name}",
-    "config_entry.removed": "integration removed",
-    "card.added": "added {subject} ({where})",
-    "card.edited": "edited {subject} ({where})",
-    "card.deleted": "deleted {subject} ({where})",
-    "loc.view": "view {index}",
-    "loc.section": "section {index}",
-    "loc.card": "card {index}",
-    "energy.sources": "sources: {count}, devices: {devices}",
-    "config_entry.options": "reconfigured {subject}",
-    "config_entry.reconfigure": "reconfigured {subject}",
-    "patch.set": "set {subject}",
-    "patch.append": "appended to {subject}",
-    "patch.remove": "removed {subject}",
-    "patch.multi": "changes: {count}",
-}
-
-
-# Persistent-notification text, the only Phoenix strings HA itself renders
-# outside the panel.
-#
-# Server-rendered and broadcast to every admin, so there is no per-viewer
-# language to key off: these resolve against hass.config.language, the
-# instance's own setting. Same {name} placeholder rule as the summary templates,
-# and generated into the catalog by the same script.
-NOTIFICATION_TEMPLATES: dict[str, str] = {
-    "approval.title": "Phoenix MCP",
-    # The link label is inside the markdown, so it has to be part of the string;
-    # the URL is substituted and must not be translated.
-    "approval.message": "Access key '{access_key}' requested approval.\n\n[Review in Phoenix MCP]({url})",
-    "approval.recovery_message": "Configuration recovery needs review: a previous change could not be verified.\n\n[Review in Phoenix MCP]({url})",
-    "rate_limit.title": "Phoenix MCP Alert",
-    "rate_limit.message": "Phoenix MCP: access key '{access_key}' has hit its rate limit.",
-}
-
-# The sentences the voice agent speaks when it declines a turn. Unlike a
-# notification (one stored string shown to every admin, so it follows the
-# SERVER language), these are spoken back to whoever is talking, so they
-# resolve against the CONVERSATION's own language.
-#
-# `unavailable` deliberately does not say WHY. It covers the kill switch, an
-# admin-disabled agent, and shutdown with one sentence, and the kill switch is
-# a security control: naming it would announce the gateway's state to anyone
-# within earshot of the satellite.
-VOICE_TEMPLATES: dict[str, str] = {
-    "local_cancelled": "Cancelled.",
-    "local_clarification": "Which target do you mean? {choices}. Reply with its number or exact entity ID, or say cancel. This choice expires in two minutes.",
-    "local_clarification_expired": "That choice is no longer current. Please repeat the full command.",
-    "local_unauthorized": "This access key is no longer authorized.",
-    "local_state_matched": "Home Assistant reports the requested state.",
-    "local_state_unconfirmed": "Command sent. Home Assistant has not yet confirmed the requested state.",
-    "local_pending": "This command needs approval in the Phoenix MCP panel.",
-    "local_review": "Review command",
-    # Link label after a typed Assist reply that queued approvals (not spoken).
-    "approval_link": "Approve in the Phoenix MCP panel",
-    "local_failed": "Phoenix MCP could not complete this command.",
-    "local_state": "The state is {state}.",
-    "local_state_unknown": "Unknown",
-    "local_state_unavailable": "Unavailable",
-    'local_summary_count': 'Entities exposed to Assist that I can access, with state {state}: {matched} of {total}. Unknown or unavailable: {unknown}.',
-    'local_summary_total': 'Entities exposed to Assist that I can access: {total}. Unknown or unavailable: {unknown}.',
-    'local_summary_breakdown': 'Entities exposed to Assist that I can access: {total}. {summary}.',
-
-    "local_read_failed": "Phoenix MCP could not read the state.",
-    "local_attribute_unavailable": "Home Assistant is not reporting a value for the requested property right now.",
-    "unavailable": "The Phoenix MCP voice agent is currently unavailable.",
-    "not_configured": "The Phoenix MCP voice agent is not fully configured.",
-    "access_key_unavailable": "The Phoenix MCP voice agent's access key is no longer available.",
-    "error": "Sorry, the Phoenix MCP voice agent hit an error.",
-    # How a turn that did not finish cleanly is SPOKEN. The loop reports an
-    # outcome code and each surface renders it from here, so a Chinese pipeline
-    # does not hear the declines above translated and then an English sentence
-    # the moment anything went wrong. {reason} is the provider's own error text
-    # and stays in whatever language the provider produced: it is third-party
-    # output and is not translated.
-    "could_not_complete": "Sorry, I could not complete that.",
-    "provider_unavailable": "Sorry, the language model could not answer right now.",
-    "provider_slow": "Sorry, the language model is taking too long to answer. Try again in a moment.",
-    "model_api_unsupported": "This model is not qualified for OpenCode Chat Completions. Choose a supported model.",
-    "outcome_unknown": "This action may have run. Check Home Assistant and its approval history before trying it again. Open Needs Attention in Phoenix MCP.",
-    "prior_action_unresolved": "This request was not executed because a previous action needs checking. Open Needs Attention in Phoenix MCP.",
-    'companion_accepted_direct': 'Home Assistant accepted the command for {names}.',
-    'companion_accepted_warm': 'Your command for {names} has been accepted by Home Assistant.',
-    'companion_accepted_calm_guide': 'Home Assistant confirms it accepted the command for {names}.',
-    'companion_accepted_lively': 'Command accepted for {names}.',
-    'companion_accepted_technical': 'Command receipt: accepted. Targets: {names}.',
-    'companion_verified_short': 'It reports the requested settings.',
-    'companion_receipt_limit': 'A command receipt confirms acceptance; the state check shows what Home Assistant reports, not physical proof.',
-    'companion_group_targets': '{kind} in {area} ({count})',
-    'companion_action_lights': 'lights',
-    'companion_action_fans': 'fans',
-    'companion_action_devices': 'devices',
-    'companion_verification_progress': 'Targets Home Assistant reports with the requested settings: {count} of {total}.',
-    'companion_unavailable_targets': 'Unavailable ({count}): {names}. Check in Home Assistant; do not resend commands.',
-    'companion_unverified_targets': 'Not verified ({count}): {names}. Check in Home Assistant; do not resend commands.',
-    'companion_count_direct': 'Matching {kind} in your permitted scope: {count}.',
-    'companion_count_warm': "Matching {kind} I can see within Phoenix's permitted scope: {count}.",
-    'companion_count_calm_guide': 'Matching {kind} Phoenix can access: {count}. This count covers your permitted scope.',
-    'companion_count_lively': 'Matching {kind} visible to Phoenix: {count}.',
-    'companion_count_technical': "Matching {kind} within Phoenix's permitted scope, count: {count}.",
-    'companion_kind_light': 'light entities',
-    'companion_kind_fan': 'fan entities',
-    'companion_kind_sensor': 'sensor entities',
-    'companion_kind_other': 'entities',
-    'companion_count_groups': 'This counts Home Assistant entities, which may include groups.',
-    'companion_count_scope': 'Only matching entities this assistant can access are counted; this does not establish the number of physical devices.',
-    'companion_power_on': 'Turned on {names}.',
-    'companion_power_off': 'Turned off {names}.',
-    "companion_readings": "Home Assistant reports: {readings}.",
-    "companion_clarify": "Please try again with the complete request: what to do, which device or room, and any restrictions. Do not reply with only a device name.",
-    "companion_candidates": "Matches include: {names}.",
-    "companion_accepted": "Home Assistant accepted the device commands.",
-    "companion_partial": "Some device commands were accepted, but other commands were refused or could not be confirmed.",
-    "companion_targets": "Devices: {names}.",
-    "companion_verified": "Home Assistant reports the accepted devices at their commanded settings.",
-    "companion_unverified": "The final device states were not verified. Check them in Home Assistant; do not resend commands just because confirmation is missing.",
-    "companion_refused": "The requested operation was refused or could not be confirmed. Check the device state and this assistant's permissions before deciding what to do next.",
-    "companion_read_failed": "The lookup did not finish. No device command was attempted. Please try again with the complete request.",
-    "companion_limit": "Phoenix reached an information limit before finishing. No device command was attempted. Keep the same requested scope when trying again; if this repeats, ask the administrator to review the request limits.",
-    "companion_steps": "Phoenix reached its step limit before finishing. No device command was attempted. Please try again with the same complete request.",
-    "companion_busy": "Another request is still running. This request did not start; wait for the earlier result before sending a complete new request.",
-    "companion_no_match": "No accessible device matched the lookup. This does not establish whether the name, filters or permissions caused it. Check those details and try again with the complete request. No device command was attempted.",
-    "output_limit": "Sorry, the model produced too much output, so I stopped.",
-    "out_of_steps": "Sorry, I ran out of steps before finishing that.",
-    "focus_declined": (
-        "This conversation is in Home-focused mode, so I can only help with requests "
-        "about your home and Home Assistant."
-    ),
-    # Appended after a real answer, so it is a follow-on sentence, not a reply.
-    "answer_truncated": "I had to stop before finishing.",
-}
-
-# Auto routing follows the ingress language; legacy diagnostic modes retain their allowlist.
-COMMAND_ROUTING_MODES = frozenset({"off", "auto", "local_shadow", "local", "hybrid"})
-CHAT_COMMAND_ROUTING_MODES = frozenset({"off", "auto", "local", "hybrid"})
-CHAT_ROUTING_HISTORY_LIMIT = 128
-COMMAND_CLARIFICATION_LIMIT = 64
-COMMAND_CLARIFICATION_TTL_SECONDS = 120
-COMMAND_CLARIFICATION_MAX_CHOICES = 5
-COMMAND_ROUTING_PROOF_FIELDS = frozenset({'voice_origin', 'clarification'})
-DECISION_REQUEST_BUDGET_MAX = 100000
-DECISION_BUDGET_WINDOW_SECONDS = 3600
-DECISION_BUDGET_STORAGE_KEY = 'phoenix_mcp_decision_budget'
-COMMAND_CLARIFICATION_CANCEL = frozenset({'cancel', 'never mind', 'nevermind', '取消', '取消吧',
-    'abbrechen', 'cancelar', 'annuler', 'annulla', 'キャンセル', '취소', 'annuleren', 'anuluj', 'отмена'})
-CHAT_ROUTING_HISTORY_TTL_SECONDS = 1800
-CHAT_ROUTING_HISTORY_MAX_MESSAGES = 128
-CHAT_ROUTING_HISTORY_MAX_BYTES = 65536
-# Canonical routing tags map to the HA sentence variant; previews use the same set.
-COMMAND_ROUTING_LANGUAGES = {language: language for language in _assist_languages()}
-COMMAND_ROUTING_LANGUAGES.update({"zh-Hans": "zh-CN", "zh-Hant": "zh-TW"})
-COMMAND_ROUTING_DEFAULT_LANGUAGES = ("en",)
-COMMAND_ROUTING_LANGUAGE_ALIASES = {
-    "zh-hans": "zh-Hans", "zh-cn": "zh-Hans", "zh-sg": "zh-Hans", "zh-my": "zh-Hans",
-    "zh-hant": "zh-Hant", "zh-tw": "zh-Hant", "zh-mo": "zh-Hant", "zh": "zh-Hans",
-}
-COMMAND_ROUTING_PLAN_KEY = "_phoenix_command_route"
-COMMAND_ROUTING_NUMERIC_TARGET_LIMIT = 16
-COMMAND_ROUTING_NUMERIC_MATCH_LIMIT = 64
-COMMAND_ROUTING_TIMEOUT_DEFAULT_MS = 500
-COMMAND_ROUTING_TIMEOUT_MIN_MS = 50
-COMMAND_ROUTING_TIMEOUT_MAX_MS = 5000
-# A short observation window, not a device completion deadline or retry budget.
-COMMAND_VERIFICATION_WAIT_SECONDS = 1.0
-COMMAND_VERIFICATION_POLL_SECONDS = 0.1
-COMMAND_VERIFICATION_TOLERANCES = {"HassLightSet": 1, "HassSetVolume": 0.005, "HassSetPosition": 0.5}
-# Domain, HA slot, proposal field, service, service field, divisor, whole percent, HA matching domains.
-COMMAND_ROUTING_NUMERIC_OPERATIONS = {
-    "HassLightSet": ("light", "brightness", "brightness_pct", "turn_on", "brightness_pct", 1, False, ("light",)),
-    "HassSetVolume": ("media_player", "volume_level", "volume_pct", "volume_set", "volume_level", 100, True, ("media_player",)),
-    "HassSetPosition": ("cover", "position", "position_pct", "set_cover_position", "position", 1, True, ("cover", "valve")),
-}
-# Additional absolute numeric controls. Synthetic intent names are internal only.
-COMMAND_ROUTING_NUMERIC_OPERATIONS.update({
-    "HassFanSetSpeed": ("fan", "percentage", "percentage", "set_percentage", "percentage", 1, True, ("fan",)),
-    "PhoenixValvePosition": ("valve", "position", "position_pct", "set_valve_position", "position", 1, True, ("cover", "valve")),
-    "PhoenixCoverTilt": ("cover", "tilt", "tilt_pct", "set_cover_tilt_position", "tilt_position", 1, True, ("cover",)),
-    "HassClimateSetTemperature": ("climate", "temperature", "temperature", "set_temperature", "temperature", 1, False, ("climate",)),
-    "HassHumidifierSetpoint": ("humidifier", "humidity", "humidity", "set_humidity", "humidity", 1, True, ("humidifier",)),
-    "PhoenixClimateHumidity": ("climate", "humidity", "humidity", "set_humidity", "humidity", 1, True, ("climate",)),
-    "PhoenixWaterTemperature": ("water_heater", "temperature", "temperature", "set_temperature", "temperature", 1, False, ("water_heater",)),
-    "PhoenixCounterValue": ("counter", "value", "value", "set_value", "value", 1, True, ("counter",)),
-    "PhoenixNumberValue": ("number", "value", "value", "set_value", "value", 1, False, ("number", "input_number")),
-    "PhoenixInputNumberValue": ("input_number", "value", "value", "set_value", "value", 1, False, ("number", "input_number")),
-    "PhoenixLightTemperature": ("light", "temperature", "temperature", "turn_on", "color_temp_kelvin", 1, True, ("light",)),
-})
-# Native bounds and precision must be present; missing metadata never invents a range.
-COMMAND_ROUTING_NUMERIC_BOUNDS = {
-    "HassClimateSetTemperature": ("min_temp", "max_temp", "target_temp_step"),
-    "PhoenixWaterTemperature": ("min_temp", "max_temp", None),
-    "HassHumidifierSetpoint": ("min_humidity", "max_humidity", None),
-    "PhoenixClimateHumidity": ("min_humidity", "max_humidity", None),
-    "PhoenixNumberValue": ("min", "max", "step"),
-    "PhoenixInputNumberValue": ("min", "max", "step"),
-    "PhoenixLightTemperature": ("min_color_temp_kelvin", "max_color_temp_kelvin", None),
-}
-COMMAND_ROUTING_NATIVE_VALUES = frozenset({
-    "HassClimateSetTemperature", "PhoenixWaterTemperature", "PhoenixNumberValue",
-    "PhoenixInputNumberValue", "PhoenixLightTemperature",
-})
-COMMAND_ROUTING_NUMERIC_STATE = {
-    "HassFanSetSpeed": "percentage", "PhoenixValvePosition": "current_position",
-    "PhoenixCoverTilt": "current_tilt_position", "HassClimateSetTemperature": "temperature",
-    "PhoenixWaterTemperature": "temperature", "HassHumidifierSetpoint": "humidity",
-    "PhoenixClimateHumidity": "humidity", "PhoenixNumberValue": None, "PhoenixInputNumberValue": None,
-    "PhoenixLightTemperature": "color_temp_kelvin",
-}
-COMMAND_ROUTING_NATIVE_VALUES |= {"PhoenixCounterValue"}
-COMMAND_ROUTING_NUMERIC_STATE["PhoenixCounterValue"] = None
-COMMAND_ROUTING_SWITCH_SERVICES = {"HassTurnOn": "turn_on", "HassTurnOff": "turn_off"}
-COMMAND_ROUTING_INTENTS = frozenset({*COMMAND_ROUTING_SWITCH_SERVICES, *COMMAND_ROUTING_NUMERIC_OPERATIONS, "HassGetState"})
-COMMAND_ROUTING_TARGET_SLOTS = frozenset({"name", "area", "domain", "device_class"})
-
-# Fixed entity actions and bounded option/text values. No provider-written service names.
-# Domain, service, value field, options attribute, required feature, observed state.
-COMMAND_ROUTING_ENTITY_COMMANDS = {
-    "switch_on": ('switch', 'turn_on', '', '', '', 'on'),
-    "switch_off": ('switch', 'turn_off', '', '', '', 'off'),
-    "input_boolean_on": ('input_boolean', 'turn_on', '', '', '', 'on'),
-    "input_boolean_off": ('input_boolean', 'turn_off', '', '', '', 'off'),
-    "fan_on": ('fan', 'turn_on', '', '', 'TURN_ON', 'on'),
-    "fan_off": ('fan', 'turn_off', '', '', 'TURN_OFF', 'off'),
-    "humidifier_on": ('humidifier', 'turn_on', '', '', '', 'on'),
-    "humidifier_off": ('humidifier', 'turn_off', '', '', '', 'off'),
-    "climate_on": ('climate', 'turn_on', '', '', 'TURN_ON', ''),
-    "climate_off": ('climate', 'turn_off', '', '', 'TURN_OFF', 'off'),
-    "water_heater_on": ('water_heater', 'turn_on', '', '', 'ON_OFF', ''),
-    "water_heater_off": ('water_heater', 'turn_off', '', '', 'ON_OFF', 'off'),
-    "media_player_on": ('media_player', 'turn_on', '', '', 'TURN_ON', ''),
-    "media_player_off": ('media_player', 'turn_off', '', '', 'TURN_OFF', 'off'),
-    "remote_on": ('remote', 'turn_on', '', '', '', 'on'),
-    "remote_off": ('remote', 'turn_off', '', '', '', 'off'),
-    "siren_on": ('siren', 'turn_on', '', '', 'TURN_ON', 'on'),
-    "siren_off": ('siren', 'turn_off', '', '', 'TURN_OFF', 'off'),
-    "switch_toggle": ('switch', 'toggle', '', '', '', ''),
-    "input_boolean_toggle": ('input_boolean', 'toggle', '', '', '', ''),
-    "counter_increment": ('counter', 'increment', '', '', '', ''),
-    "counter_decrement": ('counter', 'decrement', '', '', '', ''),
-    "counter_reset": ('counter', 'reset', '', '', '', ''),
-    "timer_start": ('timer', 'start', '', '', '', ''),
-    "timer_pause": ('timer', 'pause', '', '', '', 'paused'),
-    "timer_cancel": ('timer', 'cancel', '', '', '', 'idle'),
-    "timer_finish": ('timer', 'finish', '', '', '', ''),
-    "button_press": ('button', 'press', '', '', '', ''),
-    "input_button_press": ('input_button', 'press', '', '', '', ''),
-    "cover_open": ('cover', 'open_cover', '', '', 'OPEN', 'open'),
-    "cover_close": ('cover', 'close_cover', '', '', 'CLOSE', 'closed'),
-    "cover_stop": ('cover', 'stop_cover', '', '', 'STOP', ''),
-    "valve_open": ('valve', 'open_valve', '', '', 'OPEN', 'open'),
-    "valve_close": ('valve', 'close_valve', '', '', 'CLOSE', 'closed'),
-    "valve_stop": ('valve', 'stop_valve', '', '', 'STOP', ''),
-    "media_play": ('media_player', 'media_play', '', '', 'PLAY', 'playing'),
-    "media_pause": ('media_player', 'media_pause', '', '', 'PAUSE', 'paused'),
-    "media_stop": ('media_player', 'media_stop', '', '', 'STOP', 'idle'),
-    "media_next_track": ('media_player', 'media_next_track', '', '', 'NEXT_TRACK', ''),
-    "media_previous_track": ('media_player', 'media_previous_track', '', '', 'PREVIOUS_TRACK', ''),
-    "vacuum_start": ('vacuum', 'start', '', '', 'START', 'cleaning'),
-    "vacuum_pause": ('vacuum', 'pause', '', '', 'PAUSE', 'paused'),
-    "vacuum_stop": ('vacuum', 'stop', '', '', 'STOP', ''),
-    "vacuum_return_to_base": ('vacuum', 'return_to_base', '', '', 'RETURN_HOME', 'returning'),
-    "vacuum_locate": ('vacuum', 'locate', '', '', 'LOCATE', ''),
-    "lawn_mower_start_mowing": ('lawn_mower', 'start_mowing', '', '', 'START_MOWING', 'mowing'),
-    "lawn_mower_dock": ('lawn_mower', 'dock', '', '', 'DOCK', 'returning'),
-    "lawn_mower_pause": ('lawn_mower', 'pause', '', '', 'PAUSE', 'paused'),
-    "lock_lock": ('lock', 'lock', '', '', '', 'locked'),
-    "lock_unlock": ('lock', 'unlock', '', '', '', 'unlocked'),
-    "lock_open": ('lock', 'open', '', '', 'OPEN', ''),
-    "scene_activate": ('scene', 'turn_on', '', '', '', ''),
-    "script_on": ('script', 'turn_on', '', '', '', ''),
-    "script_off": ('script', 'turn_off', '', '', '', 'off'),
-    "select_option": ('select', 'select_option', 'option', 'options', '', ''),
-    "input_select_option": ('input_select', 'select_option', 'option', 'options', '', ''),
-    "text_value": ('text', 'set_value', 'value', '', '', ''),
-    "input_text_value": ('input_text', 'set_value', 'value', '', '', ''),
-    "climate_hvac": ('climate', 'set_hvac_mode', 'hvac_mode', 'hvac_modes', '', ''),
-    "climate_preset": ('climate', 'set_preset_mode', 'preset_mode', 'preset_modes', 'PRESET_MODE', ''),
-    "climate_fan": ('climate', 'set_fan_mode', 'fan_mode', 'fan_modes', 'FAN_MODE', ''),
-    "climate_swing": ('climate', 'set_swing_mode', 'swing_mode', 'swing_modes', 'SWING_MODE', ''),
-    "fan_preset": ('fan', 'set_preset_mode', 'preset_mode', 'preset_modes', 'PRESET_MODE', ''),
-    "humidifier_mode": ('humidifier', 'set_mode', 'mode', 'available_modes', 'MODES', ''),
-    "water_operation": ('water_heater', 'set_operation_mode', 'operation_mode', 'operation_list', 'OPERATION_MODE', ''),
-    "media_source": ('media_player', 'select_source', 'source', 'source_list', 'SELECT_SOURCE', ''),
-    "media_sound": ('media_player', 'select_sound_mode', 'sound_mode', 'sound_mode_list', 'SELECT_SOUND_MODE', ''),
-    "vacuum_speed": ('vacuum', 'set_fan_speed', 'fan_speed', 'fan_speed_list', 'FAN_SPEED', ''),
-}
-COMMAND_ROUTING_ENTITY_COMMANDS.update({
-    "automation_on": ('automation', 'turn_on', '', '', '', 'on'),
-    "automation_off": ('automation', 'turn_off', '', '', '', 'off'),
-    "media_mute": ('media_player', 'volume_mute', '', '', 'VOLUME_MUTE', ''),
-    "media_unmute": ('media_player', 'volume_mute', '', '', 'VOLUME_MUTE', ''),
-    "media_shuffle_on": ('media_player', 'shuffle_set', '', '', 'SHUFFLE_SET', ''),
-    "media_shuffle_off": ('media_player', 'shuffle_set', '', '', 'SHUFFLE_SET', ''),
-    "media_repeat_all": ('media_player', 'repeat_set', '', '', 'REPEAT_SET', ''),
-    "media_repeat_one": ('media_player', 'repeat_set', '', '', 'REPEAT_SET', ''),
-    "media_repeat_off": ('media_player', 'repeat_set', '', '', 'REPEAT_SET', ''),
-    "media_clear_playlist": ('media_player', 'clear_playlist', '', '', 'CLEAR_PLAYLIST', ''),
-    "fan_oscillate_on": ('fan', 'oscillate', '', '', 'OSCILLATE', ''),
-    "fan_oscillate_off": ('fan', 'oscillate', '', '', 'OSCILLATE', ''),
-    "fan_direction_forward": ('fan', 'set_direction', '', '', 'DIRECTION', ''),
-    "fan_direction_reverse": ('fan', 'set_direction', '', '', 'DIRECTION', ''),
-    "cover_open_tilt": ('cover', 'open_cover_tilt', '', '', 'OPEN_TILT', ''),
-    "cover_close_tilt": ('cover', 'close_cover_tilt', '', '', 'CLOSE_TILT', ''),
-    "cover_stop_tilt": ('cover', 'stop_cover_tilt', '', '', 'STOP_TILT', ''),
-    "climate_swing_horizontal": ('climate', 'set_swing_horizontal_mode', 'swing_horizontal_mode', 'swing_horizontal_modes', 'SWING_HORIZONTAL_MODE', ''),
-})
-# Native no-payload actions retain the shared permission and approval executor.
-COMMAND_ROUTING_ENTITY_COMMANDS.update({
-    "input_number_increment": ('input_number', 'increment', '', '', '', ''),
-    "input_number_decrement": ('input_number', 'decrement', '', '', '', ''),
-    "water_away_on": ('water_heater', 'set_away_mode', '', '', 'AWAY_MODE', ''),
-    "water_away_off": ('water_heater', 'set_away_mode', '', '', 'AWAY_MODE', ''),
-    "vacuum_clean_spot": ('vacuum', 'clean_spot', '', '', 'CLEAN_SPOT', ''),
-    "media_volume_up": ('media_player', 'volume_up', '', '', 'VOLUME_STEP', ''),
-    "media_volume_down": ('media_player', 'volume_down', '', '', 'VOLUME_STEP', ''),
-    "media_play_pause": ('media_player', 'media_play_pause', '', '', 'PAUSE', ''),
-    "media_unjoin": ('media_player', 'unjoin', '', '', 'GROUPING', ''),
-    "camera_on": ('camera', 'turn_on', '', '', 'ON_OFF', 'idle'),
-    "camera_off": ('camera', 'turn_off', '', '', 'ON_OFF', 'off'),
-    "camera_motion_on": ('camera', 'enable_motion_detection', '', '', '', ''),
-    "camera_motion_off": ('camera', 'disable_motion_detection', '', '', '', ''),
-    "light_effect": ('light', 'turn_on', 'effect', 'effect_list', 'EFFECT', ''),
-    "light_color": ('light', 'turn_on', 'color_name', '__color_names__', '', ''),
-})
-for _domain in ('select', 'input_select'):
-    for _position in ('first', 'last', 'next', 'previous'):
-        COMMAND_ROUTING_ENTITY_COMMANDS[f"{_domain}_{_position}"] = (_domain, f"select_{_position}", '', '', '', '')
-for _domain in ('light', 'fan', 'humidifier', 'climate', 'media_player', 'remote', 'siren', 'automation', 'script'):
-    COMMAND_ROUTING_ENTITY_COMMANDS[f"{_domain}_toggle"] = (_domain, 'toggle', '', '', '', '')
-COMMAND_ROUTING_ENTITY_COMMANDS.update({
-    "cover_toggle": ('cover', 'toggle', '', '', 'OPEN', ''),
-    "cover_tilt_toggle": ('cover', 'toggle_cover_tilt', '', '', 'OPEN_TILT', ''),
-    "valve_toggle": ('valve', 'toggle', '', '', 'OPEN', ''),
-})
-COMMAND_ROUTING_ENTITY_COMMANDS.update({
-    "fan_increase": ('fan', 'increase_speed', '', '', 'SET_SPEED', ''),
-    "fan_decrease": ('fan', 'decrease_speed', '', '', 'SET_SPEED', ''),
-    "light_flash_short": ('light', 'turn_on', '', '', 'FLASH', ''),
-    "light_flash_long": ('light', 'turn_on', '', '', 'FLASH', ''),
-    "alarm_disarm": ('alarm_control_panel', 'alarm_disarm', '', '', '', 'disarmed'),
-    "alarm_home": ('alarm_control_panel', 'alarm_arm_home', '', '', 'ARM_HOME', 'armed_home'),
-    "alarm_away": ('alarm_control_panel', 'alarm_arm_away', '', '', 'ARM_AWAY', 'armed_away'),
-    "alarm_night": ('alarm_control_panel', 'alarm_arm_night', '', '', 'ARM_NIGHT', 'armed_night'),
-    "alarm_vacation": ('alarm_control_panel', 'alarm_arm_vacation', '', '', 'ARM_VACATION', 'armed_vacation'),
-    "alarm_custom_bypass": ('alarm_control_panel', 'alarm_arm_custom_bypass', '', '', 'ARM_CUSTOM_BYPASS', 'armed_custom_bypass'),
-    "alarm_trigger": ('alarm_control_panel', 'alarm_trigger', '', '', 'TRIGGER', 'triggered'),
-    "update_skip": ('update', 'skip', '', '', '', ''),
-    "update_clear_skipped": ('update', 'clear_skipped', '', '', '', ''),
-})
-# Read selection reuses known public state projections, never writable service fields.
-COMMAND_ROUTING_ENTITY_COMMANDS["attribute_read"] = ('', '', 'attribute', '__read_attributes__', '', '')
-COMMAND_ROUTING_READ_INTENTS = frozenset({"HassGetState", "PhoenixEntityAttributeRead", "PhoenixStateSummary"})
-COMMAND_ROUTING_READ_PERCENT_SCALES = {
-    "brightness": (("light",), 255), "volume_level": (("media_player",), 1),
-    "current_position": (("cover", "valve"), 100), "current_tilt_position": (("cover",), 100),
-    "percentage": (("fan",), 100), "humidity": (("climate", "humidifier", "weather"), 100),
-    "current_humidity": (("climate", "humidifier"), 100),
-}
-COMMAND_ROUTING_READ_ATTRIBUTES = frozenset({
-    *(key for fields in DOMAIN_IMPORTANT_ATTRIBUTES.values() for key in fields),
-    "unit_of_measurement", "options", "remaining", "finishes_at", "min", "max", "step", "minimum", "maximum",
-    "current_tilt_position", "swing_horizontal_mode", "oscillating", "direction", "away_mode", "effect",
-}) - {"friendly_name", "supported_features", "supported_color_modes", "device_class", "state_class", "unit_of_measurement"}
-# Exact service data is owned by Phoenix; a model selects only the category.
-COMMAND_ROUTING_ENTITY_FIXED_DATA: dict[str, dict[str, bool | str]] = {
-    "automation_off": {"stop_actions": True},
-    "light_flash_short": {"flash": "short"}, "light_flash_long": {"flash": "long"},
-    "water_away_on": {"away_mode": True}, "water_away_off": {"away_mode": False},
-    "media_mute": {"is_volume_muted": True}, "media_unmute": {"is_volume_muted": False},
-    "media_shuffle_on": {"shuffle": True}, "media_shuffle_off": {"shuffle": False},
-    "media_repeat_all": {"repeat": "all"}, "media_repeat_one": {"repeat": "one"}, "media_repeat_off": {"repeat": "off"},
-    "fan_oscillate_on": {"oscillating": True}, "fan_oscillate_off": {"oscillating": False},
-    "fan_direction_forward": {"direction": "forward"}, "fan_direction_reverse": {"direction": "reverse"},
-}
-COMMAND_ROUTING_ENTITY_INTENTS = {"PhoenixEntity" + "".join(part.title() for part in category.split("_")): spec
-                                  for category, spec in COMMAND_ROUTING_ENTITY_COMMANDS.items()}
-DECISION_ENTITY_CATEGORIES = {category: "PhoenixEntity" + "".join(part.title() for part in category.split("_"))
-                              for category in COMMAND_ROUTING_ENTITY_COMMANDS}
-COMMAND_ROUTING_FIXED_INTENT_DATA = {DECISION_ENTITY_CATEGORIES[category]: values
-                                     for category, values in COMMAND_ROUTING_ENTITY_FIXED_DATA.items()}
-COMMAND_ROUTING_FIXED_OBSERVATIONS = {intent: values for intent, values in COMMAND_ROUTING_FIXED_INTENT_DATA.items()
-                                     if intent not in {DECISION_ENTITY_CATEGORIES[key] for key in ("automation_off", "light_flash_short", "light_flash_long")}}
-COMMAND_ROUTING_FIXED_OBSERVATIONS[DECISION_ENTITY_CATEGORIES["water_away_on"]] = {"away_mode": "on"}
-COMMAND_ROUTING_FIXED_OBSERVATIONS[DECISION_ENTITY_CATEGORIES["water_away_off"]] = {"away_mode": "off"}
-COMMAND_ROUTING_VALUE_INTENTS = frozenset(intent for intent, spec in COMMAND_ROUTING_ENTITY_INTENTS.items() if spec[2])
-# Native named actions share projections and approval checks with typed decisions.
-COMMAND_ROUTING_NATIVE_ACTIONS = {
-    "HassMediaPause": "media_pause", "HassMediaUnpause": "media_play",
-    "HassMediaNext": "media_next_track", "HassMediaPrevious": "media_previous_track",
-    "HassMediaPlayerMute": "media_mute", "HassMediaPlayerUnmute": "media_unmute",
-    "HassVacuumStart": "vacuum_start", "HassVacuumReturnToBase": "vacuum_return_to_base",
-}
-COMMAND_ROUTING_REQUIRED_STATES = {
-    "HassMediaPause": frozenset({"playing"}), "HassMediaNext": frozenset({"playing"}),
-    "HassMediaPrevious": frozenset({"playing"}),
-}
-for _intent, _category in COMMAND_ROUTING_NATIVE_ACTIONS.items():
-    COMMAND_ROUTING_ENTITY_INTENTS[_intent] = COMMAND_ROUTING_ENTITY_COMMANDS[_category]
-    if _category in COMMAND_ROUTING_ENTITY_FIXED_DATA:
-        COMMAND_ROUTING_FIXED_INTENT_DATA[_intent] = COMMAND_ROUTING_ENTITY_FIXED_DATA[_category]
-        COMMAND_ROUTING_FIXED_OBSERVATIONS[_intent] = COMMAND_ROUTING_ENTITY_FIXED_DATA[_category]
-COMMAND_ROUTING_INTENTS |= COMMAND_ROUTING_ENTITY_INTENTS.keys()
-COMMAND_ROUTING_ENTITY_VALUE_LIMIT = 254
-DECISION_ENTITY_VALUE_QUESTIONS = ("value", "attribute", "color")
-COMMAND_ROUTING_TIMER_OBSERVATION_TOLERANCE_SECONDS = 2
-COMMAND_ROUTING_UNKNOWN_ACTION_DOMAINS = frozenset({"button", "input_button", "scene"})
-COMMAND_ROUTING_NUMERIC_READ_DOMAINS = frozenset({"sensor", "number", "input_number", "counter"})
-COMMAND_ROUTING_TRANSLATION_TIMEOUT_SECONDS = 2
-
-# Typed helper updates are immediate value writes, never scheduling requests.
-COMMAND_ROUTING_TEMPORAL_OPERATIONS = {
-    "PhoenixTimerDuration": ("timer", "start", "duration", "duration"),
-    "PhoenixDateValue": ("date", "set_value", "date", "date"),
-    "PhoenixTimeValue": ("time", "set_value", "time", "time"),
-    "PhoenixDateTimeValue": ("datetime", "set_value", "datetime", "datetime"),
-    "PhoenixInputDate": ("input_datetime", "set_datetime", "date", "date"),
-    "PhoenixInputTime": ("input_datetime", "set_datetime", "time", "time"),
-    "PhoenixInputDateTime": ("input_datetime", "set_datetime", "datetime", "datetime"),
-}
-DECISION_TEMPORAL_CATEGORIES = {
-    "timer_duration": "PhoenixTimerDuration",
-    "date_value": "PhoenixDateValue", "time_value": "PhoenixTimeValue", "datetime_value": "PhoenixDateTimeValue",
-    "helper_date": "PhoenixInputDate", "helper_time": "PhoenixInputTime", "helper_datetime": "PhoenixInputDateTime",
-}
-
-# Decision-only shadow routing: configurable network time, independent of HA recognition.
-DECISION_TYPESAFE_BASE_URL = "https://api.typesafe.ai/v1"
-DECISION_TYPESAFE_MODEL = "jev-latest"
-DECISION_TIMEOUT_DEFAULT_MS = 5000
-DECISION_TIMEOUT_MIN_MS = 250
-DECISION_TIMEOUT_MAX_MS = 30000
-DECISION_MAX_RESPONSE_BYTES = 65536
-DECISION_MAX_ERROR_BYTES = 4096
-DECISION_TYPESAFE_HTTP_ERRORS = {"max_tokens_exceeded": "provider_context_limit"}
-# TypeSafe moves this alias to each new JEV revision. An account configured with
-# it accepts whichever revision answers, by operator decision, wherever the
-# registries below admit the alias; a pinned revision must answer as itself.
-DECISION_FOLLOWED_ALIASES = frozenset({("typesafe", DECISION_TYPESAFE_BASE_URL, "jev-latest")})
-DECISION_FOLLOWED_REVISION = r"jev-\d+\.\d+\.\d+"
-DECISION_METRIC_SAMPLES = 256
-DECISION_METRIC_SCOPES = frozenset({"preview", "voice", "chat", "voice_shadow", "chat_shadow", "tool_chat", "tool_voice", "tool_ai_task"})
-DECISION_METRIC_OPERATIONS = frozenset({"classify", "target", "context", "batch", "reference", "tool"})
-DECISION_DIAGNOSTIC_QUESTIONS = frozenset({
-    "route", "target", "value", "attribute", "color", "percentage", "summary_scope", "summary",
-})
-DECISION_CONTEXT_MAX_MESSAGES = 32
-DECISION_CONTEXT_MAX_BYTES = 16384
-DECISION_CONTEXT_MAX_DEPTH = 16
-DECISION_CONTEXT_CHECKS = {
-    "request": {
-        "immediate": "In this conversation, the latest user message is a real request to carry out the fixed candidate now or read its current state. Its meaning does not depend on unresolved references.",
-        "contextual": "The latest message is quoted, hypothetical, a demonstration, text to translate or explain, deferred, conditional, context-dependent or otherwise uncertain.",
-    },
-    "constraints": {
-        "clear": "No earlier user restriction still prevents this fixed candidate now. Either no applicable restriction was given, or a later user message explicitly revoked it.",
-        "restricted": "An earlier user restriction still applies, a required condition is unresolved, or it is uncertain whether the fixed candidate is permitted by the user's earlier instructions.",
-    },
-}
-DECISION_CONTEXT_REQUIRED_CHOICES = {"request": "immediate", "constraints": "clear"}
-# Singular references have separate qualification from self-contained commands.
-DECISION_REFERENCE_LANGUAGES = frozenset(COMMAND_ROUTING_LANGUAGES.values())
-DECISION_REFERENCE_INTENTS = frozenset({"HassTurnOn", "HassTurnOff", "HassGetState"})
-DECISION_REFERENCE_EXECUTION_MODELS = {
-    ("typesafe", DECISION_TYPESAFE_BASE_URL, "jev-latest"): frozenset({"jev-1.13.0"}),
-    ("typesafe", DECISION_TYPESAFE_BASE_URL, "jev-1.13.0"): frozenset({"jev-1.13.0"}),
-}
-DECISION_REFERENCE_CHECKS = {
-    "route": {
-        "light_on": "The latest message requests turning the one referenced light on now.",
-        "light_off": "The latest message requests turning the one referenced light off now.",
-        "state_query": "The latest message requests only the current on/off state of the one referenced light.",
-        "provider": "Anything else, including explanation, translation, negation, delay, conditions, numeric or relative adjustments, multiple requests or uncertainty.",
-    },
-    "reference": {
-        "bound": "The latest singular reference refers to the anchored light, which remains the clear conversational subject. This identifies the device, not whether an earlier action succeeded.",
-        "unresolved": "The latest message names a target explicitly, has no singular reference, refers elsewhere, has competing referents, or its reference is uncertain.",
-    },
-    "constraints": {
-        "clear": "No earlier user restriction prevents the operation requested in the latest message. A read-only restriction permits a state query, even when earlier commands requested changes.",
-        "restricted": "An earlier user restriction prevents the latest requested operation, an applicable condition remains unresolved, or permission under earlier user instructions is uncertain.",
-    },
-}
-# Initial evaluated revisions only; every adapter remains eligible for inert previews.
-DECISION_CONTEXT_EXECUTION_MODELS = {
-    ("typesafe", DECISION_TYPESAFE_BASE_URL, "jev-latest"): frozenset({"jev-1.13.0"}),
-    ("typesafe", DECISION_TYPESAFE_BASE_URL, "jev-1.13.0"): frozenset({"jev-1.13.0"}),
-}
-DECISION_CONTEXT_EXECUTION_LANGUAGES = frozenset(COMMAND_ROUTING_LANGUAGES.values())
-# Combining decision-derived candidates with context review is qualified separately.
-DECISION_FOLLOWUP_EXECUTION_MODELS = {
-    ("typesafe", DECISION_TYPESAFE_BASE_URL, "jev-latest"): frozenset({"jev-1.13.0"}),
-    ("typesafe", DECISION_TYPESAFE_BASE_URL, "jev-1.13.0"): frozenset({"jev-1.13.0"}),
-}
-# Joint routing has its own qualification, independent of context and numeric decisions.
-DECISION_BATCH_EXECUTION_MODELS = {
-    ("typesafe", DECISION_TYPESAFE_BASE_URL, "jev-latest"): frozenset({"jev-1.13.0"}),
-    ("typesafe", DECISION_TYPESAFE_BASE_URL, "jev-1.13.0"): frozenset({"jev-1.13.0"}),
-}
-DECISION_BATCH_EXECUTION_LANGUAGES = frozenset(COMMAND_ROUTING_LANGUAGES.values())
-# Numeric execution is qualified independently from categorical routing.
-DECISION_PERCENTAGE_EXECUTION_MODELS = {
-    ("typesafe", DECISION_TYPESAFE_BASE_URL, "jev-latest"): frozenset({"jev-1.13.0"}),
-    ("typesafe", DECISION_TYPESAFE_BASE_URL, "jev-1.13.0"): frozenset({"jev-1.13.0"}),
-}
-DECISION_ROUTE_CHOICES = {
-    "light_on": "One immediate, explicit request to turn on one light, without a brightness setting or adjustment.",
-    "light_off": "One immediate, explicit request to turn off one light, without a brightness setting or adjustment.",
-    "light_brightness": "One immediate, explicit request to set one light to an absolute whole brightness percentage from 0 through 100, inclusive. Not a relative adjustment.",
-    "state_query": "A question about the current primary state of one named entity.",
-    "provider": "Anything else, including ambiguity, negation, quoted commands, deferred or conditional actions, multiple actions, comparisons, counts and general conversation. Use the regular agent for history/statistics, forecast/event/list contents, and structured payloads such as calendar/todo authoring, media playback/grouping, remote commands, camera files, temperature ranges, or settings not represented by an exact eligible operation.",
-}
-DECISION_PERCENTAGE_PREVIEW_CHOICES = {
-    "media_volume": "One immediate, explicit request to set one media player's volume to an absolute whole percentage from 0 through 100. Not a relative adjustment.",
-    "cover_position": "One immediate, explicit request to set one cover to an absolute whole percentage open from 0 through 100. Zero is fully closed and 100 fully open. Not a relative adjustment.",
-}
-# TypeSafe Choice supports 255 options; exact percentages need 101 plus a refusal.
-DECISION_EXACT_PERCENTAGE_ENDPOINTS = frozenset({("typesafe", DECISION_TYPESAFE_BASE_URL, "systemone")})
-# TypeSafe's direct API rounds probabilities to two decimal places.
-DECISION_PROBABILITY_ROUNDING = {("typesafe", DECISION_TYPESAFE_BASE_URL, "systemone"): 0.005}
-DECISION_PROBABILITY_SUM_TOLERANCE = 0.001
-DECISION_PROBABILITY_ROUNDING_EPSILON = 1e-9
-DECISION_PERCENTAGE_CHOICES = {
-    **{str(value): f"The explicitly requested absolute setting is exactly {value} percent." for value in range(101)},
-    "none": "No single explicit absolute whole percentage from 0 through 100 is requested for this operation.",
-}
-
-DECISION_PROVIDERS = frozenset({"typesafe"})
-DECISION_TARGET_INTENTS = {
-    "light_on": "HassTurnOn", "light_off": "HassTurnOff",
-    "light_brightness": "HassLightSet", "state_query": "HassGetState",
-    "media_volume": "HassSetVolume", "cover_position": "HassSetPosition",
-}
-DECISION_ADDITIONAL_NUMERIC = {
-    "fan_speed": ("HassFanSetSpeed", "fan speed percentage"),
-    "valve_position": ("PhoenixValvePosition", "valve percentage open, never percentage closed"),
-    "cover_tilt": ("PhoenixCoverTilt", "cover tilt percentage, distinct from cover position"),
-    "climate_temperature": ("HassClimateSetTemperature", "thermostat target temperature in its native unit"),
-    "humidifier_humidity": ("HassHumidifierSetpoint", "humidifier target humidity percentage"),
-    "climate_humidity": ("PhoenixClimateHumidity", "climate target humidity percentage"),
-    "water_temperature": ("PhoenixWaterTemperature", "water heater target temperature in its native unit"),
-    "counter_value": ("PhoenixCounterValue", "counter value as an absolute integer"),
-    "number_value": ("PhoenixNumberValue", "numeric entity value in its native unit"),
-    "input_number_value": ("PhoenixInputNumberValue", "numeric helper value in its native unit"),
-    "light_temperature": ("PhoenixLightTemperature", "light colour temperature in kelvin, not room temperature"),
-}
-DECISION_TARGET_INTENTS.update(DECISION_ENTITY_CATEGORIES)
-DECISION_ENTITY_CHOICES = {category: f"One immediate request for {spec[1]} on one named {spec[0]} entity"
-                             + (f" using its {spec[2]} value." if spec[2] else ". No additional setting or duration.")
-                             for category, spec in COMMAND_ROUTING_ENTITY_COMMANDS.items()}
-for _category, _values in COMMAND_ROUTING_ENTITY_FIXED_DATA.items():
-    DECISION_ENTITY_CHOICES[_category] += f" Use exactly these fixed service fields: {_values}."
-DECISION_ENTITY_CHOICES["attribute_read"] = "Read one current attribute of one named entity. Select its attribute name from the available options. Brightness, volume, position, speed percentage and humidity are reported as percentages; temperatures use Home Assistant units. No other unit conversions. Not a primary-state query, historical query, comparison or aggregate."
-DECISION_ENTITY_CHOICES["automation_off"] += " Disable future triggers and stop running automation actions, matching Home Assistant turn_off."
-DECISION_TARGET_INTENTS.update(DECISION_TEMPORAL_CATEGORIES)
-DECISION_TARGET_INTENTS.update({category: spec[0] for category, spec in DECISION_ADDITIONAL_NUMERIC.items()})
-DECISION_PERCENTAGE_PREVIEW_CHOICES.update({
-    category: f"One immediate explicit request to set one {spec[1]} to an absolute numeric value."
-    for category, spec in DECISION_ADDITIONAL_NUMERIC.items()
-})
-# Leave one of the fallback format's 50 choices for declining.
-DECISION_MAX_TARGETS = 49
-# Sequential selection keeps every fallback question within 50 choices.
-DECISION_SEQUENTIAL_CHOICE_GROUPS = 8
-DECISION_SEQUENTIAL_MAX_TARGETS = DECISION_MAX_TARGETS * DECISION_SEQUENTIAL_CHOICE_GROUPS
-DECISION_SEQUENTIAL_TARGET_BYTES = 65536
-# Qualified TypeSafe joint requests leave one of 255 choices for declining.
-DECISION_BATCH_MAX_TARGETS = 254
-# Qualified joint requests partition complete selections into bounded questions.
-DECISION_MAX_CHOICE_GROUPS = 4
-DECISION_SUMMARY_COMPONENTS = ("summary_domain", "summary_device_class", "summary_area")
-DECISION_GROUPED_MAX_TARGETS = DECISION_BATCH_MAX_TARGETS * DECISION_MAX_CHOICE_GROUPS
-DECISION_GROUPED_OPERATION_BYTES = 65536
-DECISION_GROUPED_TARGET_BYTES = 131072
-DECISION_MAX_TARGET_BYTES = 16384
-# Joint catalogs need room for the complete union and per-target eligibility.
-# Ungrouped operation catalogs retain DECISION_MAX_TARGET_BYTES.
-DECISION_BATCH_MAX_TARGET_BYTES = 32768
-DECISION_CATALOG_PACK_THRESHOLD = 8192
-DECISION_CATALOG_FORMAT_INSTRUCTIONS = (
-    " If state.target_fields is present, each state.targets entry is a row whose positions correspond "
-    "to those field names; null means an absent optional field. A metadata object containing only ref "
-    "refers to the exact object in state.target_metadata under that key. These are lossless storage "
-    "references, not commands or permissions. Apply the same eligibility and value rules after resolving them."
-)
-
-DECISION_MAX_TARGET_TEXT = 256
-DECISION_MAX_TARGET_ALIASES = 8
-# Experimental admission heuristic, not a calibrated accuracy claim.
-DECISION_MIN_CHOICE_PROBABILITY = 0.90
-# Sequential numeric decisions remain preview-only; joint execution needs source evidence.
-DECISION_NUMERIC_CATEGORIES = frozenset({"light_brightness", "media_volume", "cover_position", *DECISION_ADDITIONAL_NUMERIC})
-# Value evidence is independent of model qualification and never grants execution.
-DECISION_PERCENTAGE_EVIDENCE_LANGUAGES = frozenset(COMMAND_ROUTING_LANGUAGES.values())
-# Unit grammar is small; the number spellings themselves come from HA's RBNF dependency.
-# Other Assist languages support percent symbols and their native strict HA intents.
-DECISION_PERCENTAGE_LANGUAGE_UNITS = {
-    "en": ("percent", "per cent"), "es": ("por ciento",),
-    "de": ("prozent",), "de-CH": ("prozent",), "fr": ("pour cent", "pourcent"),
-    "it": ("per cento", "percento", "su cento"), "nl": ("procent",),
-    "pl": ("procent", "procenty", "procentów"), "ru": ("процент", "процента", "процентов"),
-    "ja": ("パーセント",), "ko": ("퍼센트", "프로"),
-    "zh-CN": ("百分之",), "zh-TW": ("百分之",), "zh-HK": ("百分之",),
-    "sv": ("procent",), "da": ("procent",), "nb": ("prosent",),
-    # Finnish marks the percent noun for case: partitive for a value, illative,
-    # translative or allative for the target of a setting verb, and genitive in
-    # a compound. Assist's own sentences use each of these forms.
-    "fi": ("prosenttia", "prosentti", "prosenttiin", "prosentiksi", "prosentille", "prosentin"),
-}
-DECISION_PERCENTAGE_HYPHEN_LANGUAGES = frozenset({"en", "fr"})
-# The RBNF locale a routing language's number spellings are read from. Only the
-# exceptions are listed: unicode-rbnf ships no separate Bokmal ruleset, so `nb`
-# borrows Norwegian `no`, whose cardinals are identical to written Bokmal. `nn`
-# (Nynorsk) has the same spellings but no Home Assistant Assist intent data, so
-# it is not a routable Phoenix language. Swedish, Danish and Finnish have their
-# own rulesets and need no alias.
-DECISION_NUMBER_LANGUAGE_ALIASES = {"zh-CN": "zh", "zh-TW": "zh_Hant", "zh-HK": "zh_Hant", "de-CH": "de", "nb": "no", "pt-BR": "pt", "sr-Latn": "sr_Latn"}
-
-DECISION_PERCENTAGE_EVIDENCE_MODIFIERS = {
-    "en": frozenset({"negative", "minus", "plus", "point", "dot", "half", "halves", "quarter", "quarters",
-                     "hundred", "thousand", "million", "billion", "trillion", "dozen", "dozens"}),
-    "es": frozenset({"negativo", "negativa", "menos", "más", "coma", "punto", "medio", "media", "mitad",
-                     "cuarto", "cuartos", "ciento", "cientos", "mil", "millón", "millones"}),
-    "zh-CN": frozenset("负負正点點半几幾多余餘成折分之万萬亿億兆"),
-}
-DECISION_PERCENTAGE_EVIDENCE_MODIFIERS.update({
-    "de": frozenset({"minus", "plus", "komma", "halb", "halbe", "hälfte", "viertel", "hundert", "tausend", "million", "millionen"}),
-    "fr": frozenset({"moins", "plus", "virgule", "demi", "demie", "moitié", "quart"}),
-    "it": frozenset({"meno", "più", "virgola", "mezzo", "mezza", "metà", "quarto"}),
-    "nl": frozenset({"min", "minus", "plus", "komma", "half", "halve", "kwart"}),
-    "pl": frozenset({"minus", "plus", "przecinek", "pół", "połowa", "ćwierć"}),
-    "ru": frozenset({"минус", "плюс", "запятая", "половина", "половиной", "четверть"}),
-    "ja": frozenset({"マイナス", "プラス", "点", "半", "約"}),
-    "ko": frozenset({"마이너스", "플러스", "점", "반"}),
-    "sv": frozenset({"minus", "plus", "komma", "halv", "halvt", "halva", "hälft", "hälften", "kvart"}),
-    "da": frozenset({"minus", "plus", "komma", "halv", "halvt", "halvdel", "kvart"}),
-    "nb": frozenset({"minus", "pluss", "komma", "halv", "halvt", "halvdel", "kvart"}),
-    "fi": frozenset({"miinus", "plus", "pilkku", "puoli", "puolikas", "puolikkaan", "neljännes", "neljännestä"}),
-})
-for _language, _source in (("zh-TW", "zh-CN"), ("zh-HK", "zh-CN"), ("de-CH", "de")):
-    DECISION_PERCENTAGE_EVIDENCE_MODIFIERS[_language] = DECISION_PERCENTAGE_EVIDENCE_MODIFIERS[_source]
-DECISION_PERCENTAGE_EVIDENCE_CONNECTORS = {
-    "en": frozenset({"and"}), "es": frozenset({"y"}), "zh-CN": frozenset(),
-    "sv": frozenset({"och"}), "da": frozenset({"og"}),
-    "nb": frozenset({"og"}), "fi": frozenset({"ja"}),
-}
-DECISION_PERCENTAGE_UNITS = (("%",), ("％",), ("percent",), ("per", "cent"), ("por", "ciento"), ("百", "分", "之"))
-# Adding a preview category must not automatically authorize an execution path.
-DECISION_EXECUTION_CATEGORIES = frozenset({"light_on", "light_off", "state_query", *DECISION_ENTITY_CATEGORIES})
-# Bound independent identity checks without assuming whitespace in every language.
-DECISION_TARGET_MENTION_LIMIT = 256
-DECISION_UNSEGMENTED_TARGET_LANGUAGES = frozenset({'zh', 'ja', 'ko', 'th', 'lo', 'km', 'my'})
-DECISION_HYBRID_REASONS = frozenset({
-    "plan_ready", "provider_fallback", "category_low_probability", "target_low_probability",
-    "target_declined", "target_unverified", "ambiguous_target", "brightness_declined", "no_target", "targets_changed",
-    "unsupported_category", "too_many_targets", "target_metadata_too_large", "unsupported_language",
-    "invalid_input", "authority_changed", "not_enabled", "not_configured", "local_match", "numeric_unverified",
-    "local_unavailable", "busy", "cancelled", "authentication", "rate_limited", "http_error",
-    "response_too_large", "provider_context_limit", "malformed", "timeout", "unavailable",
-    "request_budget_exhausted", "budget_unavailable",
-    "context_unverified", "context_unavailable", "context_changed", "low_probability", "invalid_context",
-    "model_unverified", "category_mismatch",
-})
-DECISION_BRIGHTNESS_CHOICES = {
-    # Enumerate whole values so classification does not require digit arithmetic.
-    "brightness_tens": {**{str(value): "The requested brightness is exactly one of: " + ", ".join(
-        f"{percent}%" for percent in range(value * 10, min(value * 10 + 10, 101))) + "."
-        for value in range(11)}, "none": "No single explicit whole brightness percentage from 0% to 100%."},
-    "brightness_units": {**{str(value): "The requested brightness is exactly one of: " + ", ".join(
-        f"{percent}%" for percent in range(value, 101, 10)) + "."
-        for value in range(10)}, "none": "No single explicit whole brightness percentage from 0% to 100%."},
-}
-
-# Summary filters are native primary states, never inferred attributes or thresholds.
-COMMAND_SUMMARY_STATES = {
-    **{domain: ('on', 'off') for domain in ('light', 'switch', 'input_boolean', 'binary_sensor', 'fan', 'humidifier', 'automation')},
-    **{domain: ('open', 'closed', 'opening', 'closing') for domain in ('cover', 'valve')},
-    'lock': ('locked', 'unlocked', 'locking', 'unlocking', 'jammed'),
-    'media_player': ('on', 'off', 'playing', 'paused', 'idle', 'standby'),
-    'timer': ('active', 'paused', 'idle'),
-    'person': ('home', 'not_home'),
-    'device_tracker': ('home', 'not_home'),
-    'vacuum': ('cleaning', 'docked', 'idle', 'paused', 'returning', 'error'),
-}
-COMMAND_SUMMARY_UNKNOWN_STATES = ('unknown', 'unavailable')
-COMMAND_SUMMARY_MODES = ('total', 'breakdown', *COMMAND_SUMMARY_UNKNOWN_STATES, *sorted({state for states in COMMAND_SUMMARY_STATES.values() for state in states}))
-COMMAND_SUMMARY_MAX_STATES = 20
-COMMAND_ROUTING_INTENTS |= {'PhoenixStateSummary'}
-DECISION_TARGET_INTENTS['state_summary'] = 'PhoenixStateSummary'
-
-# Aggregate routing telemetry has fixed dimensions and contains no transcripts.
-ROUTING_STATISTICS_STORAGE_KEY = "phoenix_mcp_routing_statistics"
-ROUTING_STATISTICS_SURFACES = ("voice", "chat")
-ROUTING_STATISTICS_OUTCOMES = ("local", "decision", "provider", "pending", "failed", "cancelled")
-ROUTING_STATISTICS_FLUSH_INTERVAL = datetime.timedelta(seconds=30)
-
 # Targeted public-input diagnostics; unrelated extra arguments stay tolerated.
-UNKNOWN_ARGUMENT_PROTECTED_FIELDS = {
+UNKNOWN_ARGUMENT_PROTECTED_FIELDS = MappingProxyType({
     "get_dashboard_config": ("url_path", "query", "entity_id", "card_type", "heading", "all_dashboards"),
     "set_dashboard_config": ("url_path", "expected_hash"),
     "add_dashboard_card": ("url_path", "view_index", "section_index", "position", "expected_hash"),
@@ -2740,8 +1267,8 @@ UNKNOWN_ARGUMENT_PROTECTED_FIELDS = {
     "set_integration": ("entry_id",),
     "call_service": ("service", "targets"),
     "dry_run_service": ("service", "targets"),
-}
-UNKNOWN_ARGUMENT_ALIASES = {
+})
+UNKNOWN_ARGUMENT_ALIASES = MappingProxyType({
     "url_path": ("dashboard_url", "dashboard_url_path", "dashboard_path", "dashboard", "dashboard_id", "url"),
     "dashboard_id": ("dashboard", "dashboard_url", "url_path"),
     "file": ("filename", "file_name", "file_path", "path"),
@@ -2755,7 +1282,7 @@ UNKNOWN_ARGUMENT_ALIASES = {
     "statistic_types": ("types", "statistic_type", "stat_types"),
     "device_class": ("device_classes",),
     "query": ("name",),
-}
+})
 UNKNOWN_ARGUMENT_MAX_NAME = 80
 UNKNOWN_ARGUMENT_MAX_ERRORS = 8
 
@@ -2768,28 +1295,6 @@ TRACE_SCOPE_MAX_DEPTH = 32
 HELPER_FIELD_HELP_MAX = 300
 # Longest HA step description attached to a helper flow form.
 HELPER_STEP_HELP_MAX = 600
-
-# Tool advice has separate qualification from direct-command execution.
-TOOL_ROUTING_MODES = frozenset({"off", "observe", "advise"})
-TOOL_ROUTING_SETTINGS = {
-    "chat": "agentcli_tool_routing_mode", "voice": "voice_agent_tool_routing_mode",
-    "ai_task": "ai_task_tool_routing_mode",
-}
-TOOL_ROUTING_MAX_REVIEWS = 2
-TOOL_ROUTING_MAX_REPLANS = 1
-TOOL_ROUTING_MAX_BYTES = 262144
-TOOL_ROUTING_MAX_GROUPS = 8
-# (provider, endpoint, configured model, language): admitted returned models.
-# Populate only from independent tool-selection and paired task qualification.
-TOOL_ROUTING_QUALIFIED_MODELS: dict[tuple[str, str, str, str], tuple[str, ...]] = {}
-TOOL_ROUTING_REASONS = frozenset({
-    "agreement", "alternative", "replan", "declined", "low_probability", "unqualified",
-    "off", "limit", "last_round", "no_account", "unsupported_language", "context_unavailable",
-    "catalog_unavailable", "catalog_changed", "context_changed", "authority_changed", "cancelled",
-    "busy", "timeout", "unavailable", "malformed", "request_budget_exhausted", "budget_unavailable",
-    "provider_context_limit", "authentication", "rate_limited", "http_error", "response_too_large",
-    "model_unverified", "too_many_targets", "category_mismatch",
-})
 
 # The delegated persona has a bounded household catalog, narrowed by capabilities.
 HOME_COMPANION_TOOLS = frozenset({
@@ -2816,14 +1321,14 @@ HOME_COMPANION_CONTROL_DOMAINS = frozenset({
 # Reads whose states can answer on their own; any other read leaves the answer to the model.
 HOME_COMPANION_STATE_READ_TOOLS = frozenset({"search_entities", "get_state", "get_capability_summary"})
 HOME_COMPANION_READ_DOMAINS = frozenset({"sensor", "binary_sensor", "weather", "calendar", "sun"})
-HOME_COMPANION_TOOL_DOMAINS = {
+HOME_COMPANION_TOOL_DOMAINS = MappingProxyType({
     "light__HassLightSet": ("light",), "fan__HassFanSetSpeed": ("fan",),
     "climate__HassClimateSetTemperature": ("climate",),
     "intent__HassSetPosition": ("cover", "valve"), "intent__HassStopMoving": ("cover",),
     "intent__HassCancelAllTimers": ("timer",),
     **{name: ("media_player",) for name in HOME_COMPANION_CONTROL_TOOLS if name.startswith("media_player__")},
     **{name: ("vacuum",) for name in HOME_COMPANION_CONTROL_TOOLS if name.startswith("vacuum__")},
-}
+})
 HOME_COMPANION_MAX_FORMAT_CORRECTIONS = 1
 HOME_COMPANION_FORMAT_ERROR_CODES = frozenset({'provider_malformed', 'bad_tool_call'})
 HOME_COMPANION_GROUP_WORDS = frozenset({
@@ -2839,7 +1344,7 @@ HOME_COMPANION_GROUP_WORDS = frozenset({
     "kaikki", "kaikkia", "molemmat", "valot", "valoja", "lamput", "tuulettimet",
 })
 HOME_COMPANION_GROUP_PHRASES = ("所有", "全部", "すべて", "全て", "모든", "전부")
-HOME_COMPANION_CONTEXT_PATTERNS = {
+HOME_COMPANION_CONTEXT_PATTERNS = MappingProxyType({
     'en': r'\b(those|these|them|it|that|this|same|previous)\b',
     'de': r'\b(diese|diesen|jene|jenen|das|es|vorherigen)\b',
     'es': r'\b(esas|esos|estas|estos|aquellas|aquellos|eso|esto|anteriores)\b',
@@ -2855,7 +1360,7 @@ HOME_COMPANION_CONTEXT_PATTERNS = {
     'zh': r'那些|这些|它们|那个|这个|之前',
     'ja': r'それら|あれら|それ|あれ|これ|前の',
     'ko': r'그것|이것|저것|이전',
-}
+})
 HOME_COMPANION_TYPO_MIN_LENGTH = 5
 HOME_COMPANION_GENERIC_TARGET_WORDS = HOME_COMPANION_GROUP_WORDS | frozenset({
     "climate", "thermostat", "cover", "blind", "shade", "valve", "media", "player", "speaker", "vacuum",
@@ -2881,26 +1386,26 @@ HOME_COMPANION_SENSOR_CLASSES = frozenset({
     "temperature", "humidity", "illuminance", "power", "energy", "battery",
 })
 HOME_COMPANION_REPORT_STATUSES = frozenset({"completed", "partial", "clarification_needed", "pending_approval", "refused"})
-HOME_COMPANION_ACCEPTED_TEMPLATES = {
+HOME_COMPANION_ACCEPTED_TEMPLATES = MappingProxyType({
     "direct": "companion_accepted_direct", "warm": "companion_accepted_warm",
     "calm_guide": "companion_accepted_calm_guide", "lively": "companion_accepted_lively",
     "technical": "companion_accepted_technical",
-}
-HOME_COMPANION_POWER_TEMPLATES = {"on": "companion_power_on", "off": "companion_power_off"}
-HOME_COMPANION_ACTION_KIND_TEMPLATES = {'light': 'companion_action_lights', 'fan': 'companion_action_fans', 'other': 'companion_action_devices'}
-HOME_COMPANION_EXCEPTION_TEMPLATES = {'unavailable': 'companion_unavailable_targets', 'unverified': 'companion_unverified_targets'}
-HOME_COMPANION_COUNT_TEMPLATES = {
+})
+HOME_COMPANION_POWER_TEMPLATES = MappingProxyType({"on": "companion_power_on", "off": "companion_power_off"})
+HOME_COMPANION_ACTION_KIND_TEMPLATES = MappingProxyType({'light': 'companion_action_lights', 'fan': 'companion_action_fans', 'other': 'companion_action_devices'})
+HOME_COMPANION_EXCEPTION_TEMPLATES = MappingProxyType({'unavailable': 'companion_unavailable_targets', 'unverified': 'companion_unverified_targets'})
+HOME_COMPANION_COUNT_TEMPLATES = MappingProxyType({
     "direct": "companion_count_direct", "warm": "companion_count_warm",
     "calm_guide": "companion_count_calm_guide", "lively": "companion_count_lively",
     "technical": "companion_count_technical",
-}
-HOME_COMPANION_COUNT_KIND_TEMPLATES = {
+})
+HOME_COMPANION_COUNT_KIND_TEMPLATES = MappingProxyType({
     "light": "companion_kind_light", "fan": "companion_kind_fan",
     "sensor": "companion_kind_sensor", "other": "companion_kind_other",
-}
-HOME_COMPANION_VERIFIED_TEMPLATES = {
+})
+HOME_COMPANION_VERIFIED_TEMPLATES = MappingProxyType({
     "concise": "companion_verified_short", "balanced": "companion_verified", "detailed": "companion_verified",
-}
+})
 HOME_COMPANION_CLIENT_IP = "home_companion"
 HOME_COMPANION_MAX_ROUNDS = 4
 HOME_COMPANION_MAX_CALLS = 8
@@ -2909,7 +1414,6 @@ HOME_COMPANION_MAX_CATALOG_BYTES = 65536
 HOME_COMPANION_MAX_REPORT_ENTITIES = 128
 HOME_COMPANION_MAX_REPORT_NAMES = 8
 HOME_COMPANION_TIMEOUT_SECONDS = 120
-
 
 # Location registry admission and private approval bindings.
 LOCATION_REGISTRY_COLLECTION_LIMIT = 100
@@ -2945,16 +1449,16 @@ CONVERSATION_LOG_STORAGE_KEY = "phoenix_mcp_conversations"
 # cancels the handler) does not make its effects uncertain. A failed or
 # cancelled delivery of this event still does.
 TURN_DELIVERED_EVENT = "done"
-CONVERSATION_LOG_DEFAULTS = {
+CONVERSATION_LOG_DEFAULTS = MappingProxyType({
     "conversation_log_max_entries": 100,
     "conversation_log_max_days": 7,
     "conversation_log_max_mb": 25,
-}
-CONVERSATION_LOG_LIMITS = {
+})
+CONVERSATION_LOG_LIMITS = MappingProxyType({
     "conversation_log_max_entries": (1, 2000),
     "conversation_log_max_days": (1, 365),
     "conversation_log_max_mb": (1, 250),
-}
+})
 CONVERSATION_LOG_RESERVE_BYTES = 16384
 CONVERSATION_LOG_MAX_NODES = 100000
 CONVERSATION_LOG_MAX_DEPTH = 25
@@ -2973,6 +1477,9 @@ TOOL_RESULT_MAX_BYTES = CONVERSATION_LOG_PAYLOAD_BYTES - 512
 HOME_COMPANION_PROMPT_BYTES = 32768
 HOME_COMPANION_MAX_CONTEXT_BYTES = HOME_COMPANION_MAX_CALLS * TOOL_RESULT_MAX_BYTES + HOME_COMPANION_PROMPT_BYTES
 CONVERSATION_LOG_SCAN_BYTES = 8_000_000
+# A payload keeps CONVERSATION_LOG_PAYLOAD_BYTES at most, so a string is scanned
+# only this far on the event loop.
+CONVERSATION_LOG_TEXT_SCAN_CHARS = 128_000
 CONVERSATION_LOG_MAX_EVENTS = 256
 CONVERSATION_LOG_MAX_OPERATIONS = 256
 CONVERSATION_LOG_MAX_APPROVALS = 128
@@ -2992,3 +1499,4 @@ CONVERSATION_LOG_METADATA = frozenset({
 # Seconds a refused legacy MCP initialize waits when the access key's own sessions
 # are all busy: one frees as soon as its request ends.
 MCP_LEGACY_SESSION_BUSY_RETRY_SECONDS = 5
+

@@ -91,7 +91,7 @@
       },
       "cap_registry_write": {
         "label": "Gestionar el registro de entidades",
-        "description": "Edita entidades y dispositivos, gestiona áreas, plantas, etiquetas y categorías, y elimina entradas obsoletas."
+        "description": "Edita entidades y dispositivos, gestiona áreas, plantas, etiquetas y categorías, elimina entradas obsoletas y borra el historial registrado de una entidad."
       },
       "cap_radio_write": {
         "label": "Gestión de radio",
@@ -135,7 +135,7 @@
       "modeDescAllow": "Permite que los agentes de esta clave usen esta capacidad sin preguntarle.",
       "modeDescConfirm": "Cada cambio le espera en Aprobaciones antes de ejecutarse. Las lecturas se ejecutan sin preguntar.",
       "updateFailed": "No se pudo actualizar la capacidad.",
-      "passThroughNotice": "<strong>El paso directo está habilitado.</strong> Lectura de configuración, Representación de plantillas, Búsqueda y descubrimiento, Lectura del registro, Trazas de automatizaciones, Diagnóstico, Difusión y Datos de respuesta de servicios se tratan como Permitir, salvo que estén en Confirmar. Las demás capacidades usan su configuración de abajo.",
+      "passThroughNotice": "<strong>El paso directo está habilitado.</strong> Lectura de configuración, Representación de plantillas, Búsqueda y descubrimiento, Lectura del registro, Trazas de automatizaciones, Diagnóstico, Difusión y Datos de respuesta de servicios se tratan como Permitir. Las demás capacidades usan su configuración de abajo.",
       "esphomeBadgeTitle": "Sin el complemento Device Builder, las herramientas de ESPHome que validan, compilan, flashean o inspeccionan dispositivos permanecen ocultas para esta clave de acceso. Con la integración ESPHome, leer y buscar en el YAML de los dispositivos sigue funcionando. La capacidad puede configurarse ahora.",
       "confirmUnavailable": "Esta capacidad no puede requerir aprobación.",
       "cap_calendar_write": {
@@ -152,7 +152,8 @@
       "profileSet": "Perfil MESA establecido para {key} - clic para editar",
       "profileCreate": "Crear un perfil MESA para {key}",
       "registryLoadFailed": "No se pudo cargar el registro de entidades.",
-      "mesaProfile": "Perfil MESA"
+      "mesaProfile": "Perfil MESA",
+      "openFailed": "No se pudo abrir el editor de perfiles MESA. Recarga la página e inténtalo de nuevo."
     },
     "version": {
       "card.added": "añadido {subject} ({where})",
@@ -673,6 +674,7 @@
       "clearHistory": "Borrar historial de chat",
       "configureFirst": "Configurar primero un proveedor",
       "connection": "Conexión",
+      "connectionLost": "La conexión con Home Assistant se interrumpió antes de que terminara esta respuesta.",
       "continue": "Continuar",
       "decreaseTextSize": "Reducir el tamaño del texto",
       "dockedClosed": "Agent Chat está cerrado.",
@@ -704,6 +706,7 @@
         "empty_turn": "El modelo finalizó el turno sin una respuesta de texto.",
         "internal": "Error interno.",
         "max_tokens_stop": "El modelo se detuvo porque alcanzó su límite de longitud de salida. Pídale que continúe o aumente el límite de tokens de salida del modelo (en Ollama, sus ajustes num_predict/context).",
+        "memory_trimmed": "La conversación ha superado lo que cabe en una solicitud, así que el modelo ya no recuerda los mensajes más antiguos. Siguen en pantalla.",
         "model_api_unsupported": "Este modelo no está validado para OpenCode Chat Completions. Elige un modelo compatible.",
         "network": "El proveedor no está disponible temporalmente.",
         "ollama_backend": "El proveedor no está disponible temporalmente.",
@@ -722,6 +725,7 @@
         "provider_transient": "El proveedor no está disponible temporalmente.",
         "quota": "La cuenta del proveedor se ha quedado sin crédito o ha alcanzado su límite de gasto. No se volverá a intentar.",
         "rate_limit": "El proveedor no está disponible temporalmente.",
+        "request_too_large": "Este mensaje es demasiado grande para enviarlo. Acórtalo, quita imágenes o empieza una conversación nueva con /clear.",
         "too_many_tools": "Esta clave de acceso anuncia {count} herramientas, pero {provider} acepta como máximo {limit} por solicitud. Reduzca las capacidades de la clave de acceso o elija otro proveedor.",
         "tool_call_cut": "La conexión con el modelo se interrumpió en mitad de una llamada de herramienta, por lo que la acción no se ejecutó. No se aplicó nada y la solicitud no tuvo la culpa; vuelva a enviarla.",
         "tool_call_truncated": "El modelo alcanzó su límite de longitud de salida en mitad de una llamada de herramienta, por lo que la acción no se ejecutó. El cambio solicitado era demasiado grande para emitirlo en una sola llamada; pruebe a solicitar un cambio más pequeño.",
@@ -729,7 +733,9 @@
         "review_changed": "Las herramientas de la clave de acceso o la conversación cambiaron mientras se revisaba la llamada a la herramienta, así que no se ejecutó nada. Envía la solicitud de nuevo.",
         "kill_switch": "El interruptor de emergencia está activado, así que el agente se detuvo. No se ejecutó nada más.",
         "unreachable": "No se pudo contactar con Home Assistant, así que esto no terminó. Todo lo que esperaba tu aprobación se canceló.",
-        "upstream": "El proveedor no está disponible temporalmente."
+        "upstream": "El proveedor no está disponible temporalmente.",
+        "provider_slow": "El proveedor no respondió en {seconds} s.",
+        "result_withheld": "Un resultado de {length} bytes no cabía en el contexto de la solicitud y no se entregó al modelo."
       },
       "options": "Opciones",
       "popIn": "Volver a incrustar en Home Assistant",
@@ -997,6 +1003,7 @@
       "mesaArchiveRequired": "archive es obligatorio.",
       "mesaProfileExists": "Ya existe un perfil. Ábrelo en el modo de edición.",
       "mesaConflictModeInvalid": "on_conflict debe ser skip o overwrite.",
+      "mesaSaveFailed": "No se pudo guardar el cambio de MESA, por lo que siguen vigentes los ajustes anteriores.",
       "mesaUnavailable": "MESA no está disponible.",
       "nonNegativeRequired": "{field} debe ser no negativo.",
       "nothingToContinue": "No hay ninguna conversación que continuar.",
@@ -1131,7 +1138,9 @@
       "restoreNoConfigSide": "Esta versión no tiene ninguna configuración que restaurar en ese lado.",
       "restoreYamlTags": "Esta versión contiene etiquetas YAML como !secret o !include y no se puede restaurar automáticamente. Vuelva a crearla manualmente.",
       "restoreToolReported": "No se pudo aplicar la restauración. La herramienta informó: {detail}",
-      "capabilityAllowUnsupported": "{capability} no admite el modo Permitir."
+      "capabilityAllowUnsupported": "{capability} no admite el modo Permitir.",
+      "recoverySnapshotUnsafeAt": "No hay una copia completa de este elemento sin secretos, así que no se cambió nada. Phoenix lo rechazó en {location}.",
+      "invalidHostHeader": "El encabezado Host de la solicitud no es una dirección válida."
     },
     "accessKeys": {
       "announceAllHelp": "Ofrezca a los agentes de esta clave todas las herramientas, incluso las que no puede usar. Solo para solucionar problemas; consume más tokens.",
@@ -1169,7 +1178,7 @@
       "create": "Crear",
       "createFailed": "No se pudo crear la clave de acceso.",
       "createPtUnderstand": "Entiendo que esta clave de acceso tiene un acceso amplio a Home Assistant",
-      "createPtWarning": "<strong>Esta clave de acceso puede leer y controlar todas las entidades de Home Assistant.</strong> El paso directo también activa Lectura de configuración, Representación de plantillas, Búsqueda y descubrimiento, Lectura del registro, Trazas de automatizaciones, Diagnóstico, Difusión y Datos de respuesta de servicios, salvo que las establezca en Confirmar. Diagnóstico y Datos de respuesta de servicios pueden revelar detalles sensibles. Las demás capacidades conservan su propia configuración, y las reglas de MESA, la lista de bloqueo de Phoenix MCP, la eliminación de atributos sensibles, los límites de velocidad, la revocación y la expiración siguen aplicándose. Úsela solo con clientes MCP a los que confiaría toda su casa.",
+      "createPtWarning": "<strong>Esta clave de acceso puede leer y controlar todas las entidades de Home Assistant.</strong> El paso directo también activa Lectura de configuración, Representación de plantillas, Búsqueda y descubrimiento, Lectura del registro, Trazas de automatizaciones, Diagnóstico, Difusión y Datos de respuesta de servicios. Diagnóstico y Datos de respuesta de servicios pueden revelar detalles sensibles. Las demás capacidades conservan su propia configuración, y las reglas de MESA, la lista de bloqueo de Phoenix MCP, la eliminación de atributos sensibles, los límites de velocidad, la revocación y la expiración siguen aplicándose. Úsela solo con clientes MCP a los que confiaría toda su casa.",
       "createAccessKey": "Crear clave de acceso",
       "daysAgo": "hace {d} d",
       "delete": "Eliminar",
@@ -1183,7 +1192,7 @@
       "done": "Hecho",
       "empty": "Aún no hay claves de acceso. Cree una para empezar.",
       "emptyFiltered": "Ninguna clave de acceso coincide con el filtro.",
-      "enablePtBody": "<strong>Esta clave leerá y controlará todas las entidades.</strong> También se activan ocho capacidades de lectura y diagnóstico, salvo que estén en Confirmar.",
+      "enablePtBody": "<strong>Esta clave leerá y controlará todas las entidades.</strong> También se activan ocho capacidades de lectura y diagnóstico.",
       "enablePtCheck": "Entiendo que la clave de acceso <code>{name}</code> tendrá un acceso amplio a Home Assistant",
       "enablePtFailed": "No se pudo habilitar el paso directo.",
       "enablePtLabel": "Habilitar paso directo",
@@ -1248,7 +1257,7 @@
       "presetNewName": "Nuevo nombre del preajuste",
       "presetNoChange": "Este preajuste coincide con los ajustes actuales, así que ningún ajuste cambia. Aplicarlo cuenta igualmente como un cambio de ajustes: los agentes conectados lo sabrán en su siguiente llamada y el recuento del límite de frecuencia vuelve a empezar.",
       "presetPtUnderstand": "Entiendo que este preajuste activa el paso directo",
-      "presetPtWarning": "<strong>Este preajuste activa el paso directo.</strong> La clave de acceso podrá leer y controlar todas las entidades, y se activan ocho capacidades más, entre ellas Diagnóstico y Datos de respuesta de servicios, salvo que estén en Confirmar. Las demás capacidades, las reglas de MESA, la lista de bloqueo de Phoenix MCP y la eliminación de atributos sensibles siguen aplicándose.",
+      "presetPtWarning": "<strong>Este preajuste activa el paso directo.</strong> La clave de acceso podrá leer y controlar todas las entidades, y se activan ocho capacidades más, entre ellas Diagnóstico y Datos de respuesta de servicios. Las demás capacidades, las reglas de MESA, la lista de bloqueo de Phoenix MCP y la eliminación de atributos sensibles siguen aplicándose.",
       "presetRenameTitle": "Renombre este preajuste; se guarda al hacer clic fuera",
       "presetRevert": "Revertir",
       "presetRevertBody": "Esto descarta los cambios sin guardar de <strong>{name}</strong>:",
@@ -1261,7 +1270,7 @@
       "presetSwitchTo": "Cambiar a",
       "ptConvertBody": "La clave sigue su árbol de permisos de inmediato. Si allí no hay concesiones, pierde todo acceso a entidades.",
       "ptConvertFailed": "No se pudo convertir la clave de acceso.",
-      "ptNoticeCaps": "También están activadas ocho capacidades de lectura y diagnóstico, salvo que estén en Confirmar. Las demás conservan su propio ajuste.",
+      "ptNoticeCaps": "También están activadas ocho capacidades de lectura y diagnóstico. Las demás conservan su propio ajuste.",
       "ptNoticeIntro": "<strong>Clave de acceso de paso directo.</strong> Omite el árbol de permisos y llega a todas las entidades, sin los atributos sensibles.",
       "ptNoticeUsage": "El paso directo puede enviar al modelo detalles de todas las entidades, lo que cuesta más tokens que un árbol con ámbito.",
       "rateBurstLabel": "Ráfaga por segundo (0 = sin límite por segundo)",
@@ -1810,7 +1819,7 @@
       "voiceAccessKeyAria": "Clave de acceso del agente de voz",
       "voiceAccessKeyHelp": "Controla a qué entidades y acciones puede acceder este agente de voz.",
       "wipeBusy": "Borrando...",
-      "wipeCoreHelp": "Elimine todas las claves de acceso, ajustes, aprobaciones, registros de cambios y registros. No se puede deshacer.",
+      "wipeCoreHelp": "Elimine todas las claves de acceso, ajustes, aprobaciones, registros de cambios y registros. Las copias de recuperación se conservan. No se puede deshacer.",
       "wipeCoreLabel": "Eliminar los datos principales de Phoenix MCP",
       "wipeFailed": "No se pudo borrar.",
       "wipeMesaHelp": "Elimine todos los perfiles de MESA. Desactivado por defecto; exporte antes sus perfiles para conservar una copia.",
@@ -2228,6 +2237,7 @@
       "empty": "(vacío)",
       "httpStatus": "El servidor respondió con HTTP {status}. Actualice e inténtelo de nuevo.",
       "invalidResponse": "El servidor devolvió una respuesta no válida. Actualiza e inténtalo de nuevo.",
+      "labelValue": "{label}: {value}",
       "listSeparator": ", ",
       "loadMore": "Cargar más",
       "loading": "Cargando...",
@@ -2284,7 +2294,7 @@
       },
       "read_only": {
         "label": "Observador de solo lectura",
-        "description": "Lee estados, historial y registros. Se deniegan los cambios de configuración, anuncios, cerraduras, alarmas, persianas y válvulas."
+        "description": "Lee estados, historial y registros. Se deniegan los cambios de configuración, anuncios, cerraduras, alarmas, persianas y válvulas. Aun así puede controlar todo lo que esté en W."
       },
       "voice_assistant": {
         "label": "Asistente de voz",
@@ -2305,9 +2315,11 @@
       "killSwitchShort": "INTERRUPTOR DE EMERGENCIA ACTIVADO",
       "killSwitchTitle": "Phoenix MCP no está atendiendo ninguna solicitud de agente. Desactive el interruptor de emergencia en Configuración para reanudar.",
       "loadAccessKeysFailed": "No se pudieron cargar las claves de acceso.",
+      "loadSettingsFailed": "No se pudo cargar la configuración.",
       "offlineBody": "Home Assistant no responde, normalmente porque se está reiniciando. Reintentando, espera...",
       "offlineTitle": "Phoenix no está disponible",
       "renderFailed": "No se pudo mostrar esta vista. Actualiza para volver a intentarlo o elige otra sección.",
+      "retrySettingsHelp": "Leer de nuevo la configuración de Home Assistant.",
       "sectionsAria": "Secciones de Phoenix MCP",
       "srTitle": "Gestión de claves de acceso de Phoenix MCP",
       "tabAccessKeys": "Claves de acceso",
@@ -2315,7 +2327,8 @@
       "tabAudit": "Registro de auditoría",
       "tabChanges": "Cambios",
       "tabSettings": "Configuración",
-      "killSwitchHelp": "El interruptor de emergencia está activado, así que los agentes se rechazan. Seleccione para abrir Seguridad y desactivarlo."
+      "killSwitchHelp": "El interruptor de emergencia está activado, así que los agentes se rechazan. Seleccione para abrir Seguridad y desactivarlo.",
+      "chatListsFailed": "Agent Chat no pudo cargar sus claves de acceso ni sus proveedores de IA. Lo intenta de nuevo cuando lo abres o cuando Home Assistant se reconecta."
     },
     "routing": {
       "providerOptions": "Vuelva a cargar la lista de modelos de esta cuenta. No ejecuta ningún comando ni prueba lo bien que enruta un modelo.",
@@ -2579,7 +2592,9 @@
       "saveFailed": "No se pudo guardar la revisión. La acción sigue pendiente de revisión.",
       "showInAudit": "Ver en el registro de auditoría",
       "title": "Requiere atención",
-      "unknown": "La conversación terminó antes de que Phoenix registrara si esta acción se ejecutó, así que puede haberse ejecutado. Ver en el registro de auditoría, donde se ofrece, muestra lo que registró Phoenix; una acción que esperaba aprobación tiene su estado en Aprobaciones. Comprueba Home Assistant antes de volver a intentarlo."
+      "unknown": "La conversación terminó antes de que Phoenix registrara si esta acción se ejecutó, así que puede haberse ejecutado. Ver en el registro de auditoría, donde se ofrece, muestra lo que registró Phoenix; una acción que esperaba aprobación tiene su estado en Aprobaciones. Comprueba Home Assistant antes de volver a intentarlo.",
+      "audit_storageTitle": "El registro de auditoría no llega al almacenamiento",
+      "audit_storageHelp": "Las entradas de auditoría recientes solo están en memoria, así que un reinicio las perdería. Revisa los registros de Home Assistant. Esto desaparece cuando el siguiente guardado funcione."
     },
     "workspace": {
       "addToMy": "Añadir a Mi espacio de trabajo",

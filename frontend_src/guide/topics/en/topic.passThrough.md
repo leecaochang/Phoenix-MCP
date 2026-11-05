@@ -5,7 +5,7 @@ A pass-through key skips the Permissions Tree: it can read and control every ent
 
 ## What it turns on {#allows}
 
-Pass-through also allows these capabilities, unless you set them to Confirm:
+Pass-through also turns on these capabilities. They stay on while it's on, and none of them can be Confirm or Deny:
 
 - {{label:caps.cap_config_read.label}}, {{label:caps.cap_template_render.label}}, {{label:caps.cap_search.label}} and {{label:caps.cap_registry_read.label}}.
 - {{label:caps.cap_traces.label}}, {{label:caps.cap_diagnostics.label}}, {{label:caps.cap_broadcast.label}} and {{label:caps.cap_service_response.label}}.

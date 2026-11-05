@@ -1,5 +1,5 @@
 /**
- * English Guide pages read in another language (user, 2026-11-03): controls
+ * English Guide pages read in another language: controls
  * are named in English like the sentences around them, so titles, links and
  * Contents read in English too, while the reader's own name for each control
  * still finds its section in Search. The English bundle carries the English

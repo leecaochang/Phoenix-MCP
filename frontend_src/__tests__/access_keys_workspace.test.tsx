@@ -160,7 +160,7 @@ describe("Access Keys workspace", () => {
     render(<Workspace registry={registry} />);
     expect(screen.queryByRole("button", { name: "Create Access Key" })).toBeNull();
     const labels = registry.groupsFor("accessKeys", ["accessKeys"])[0].tools.map((t) => t.label);
-    // No Refresh: the list keeps itself up to date while shown (user, 2026-10-28).
+    // No Refresh: the list keeps itself up to date while shown.
     expect(labels).toEqual(["Set Up an Agent", "Show Archived", "Create Access Key"]);
   });
 
@@ -183,7 +183,7 @@ describe("Access Keys workspace", () => {
     const again = await screen.findByRole("textbox", { name: "Access key name (editable)" });
     fireEvent.change(again, { target: { value: "no spaces allowed" } });
     fireEvent.keyDown(again, { key: "Enter" });
-    // The refusal reads in a row of its own under the key's, not cut off inside it (user, 2026-10-31).
+    // The refusal reads in a row of its own under the key's, not cut off inside it.
     const alert = await screen.findByRole("alert");
     expect(alert.closest("tr")).toHaveClass("phx-table-detail");
     expect(alert.closest("tr")!.previousElementSibling).toBe(keyRow("kitchen_agent"));
@@ -212,7 +212,7 @@ describe("Access Keys workspace", () => {
     const inline = await screen.findByRole("group", { name: "Revoke Access Key" });
     const confirm = within(inline).getByRole("button", { name: "Revoke Access Key" });
     expect(confirm).toBeDisabled();
-    // What revoking does reads in Help, for the box and its controls, not in it (user, 2026-10-31).
+    // What revoking does reads in Help, for the box and its controls, not in it.
     // Not drawn in the box (Help shows it), but read with it by a screen reader.
     expect(within(inline).getByText(t("accessKeys.revokeBody"))).toHaveClass("sr-only");
     expect(inline).toHaveAttribute("data-help-text", t("accessKeys.revokeBody"));
@@ -235,7 +235,7 @@ describe("Access Keys workspace", () => {
       const entries = tool(registry, "selectedKey", "keyActions")!.menu!().filter((e) => e !== "separator") as Array<{ id: string; disabled?: boolean }>;
       expect(entries.find((e) => e.id === "passThrough")?.disabled).toBe(true);
       expect(screen.getByText("Pass-through access keys don't use the permissions tree, so there are no rules to summarize.")).toBeInTheDocument();
-      // What pass-through means is the Mode column's Help, not a banner above the list (user, 2026-10-28).
+      // What pass-through means is the Mode column's Help, not a banner above the list.
       expect(screen.queryByText(/This is a pass-through access key/)).toBeNull();
       expect(document.querySelector(".access-keys-list .pass-through-header-banner")).toBeNull();
       expect(document.querySelector('tr[data-row="k3"] [data-help="accessKeys.passThroughModeHelp"]')).not.toBeNull();
@@ -261,7 +261,7 @@ describe("Access Keys workspace", () => {
     const inline = await screen.findByRole("group", { name: "Rotate Access Key" });
     const confirm = within(inline).getByRole("button", { name: "Rotate Access Key" });
     expect(confirm).toBeDisabled();
-    // In Help, not in the box, and confirmed in the same gold as Enable Pass-Through (user, 2026-10-31).
+    // In Help, not in the box, and confirmed in the same gold as Enable Pass-Through.
     // Not drawn in the box (Help shows it), but read with it by a screen reader.
     expect(within(inline).getByText(t("accessKeys.rotateBody"))).toHaveClass("sr-only");
     expect(inline).toHaveAttribute("data-help-text", t("accessKeys.rotateBody"));
@@ -314,7 +314,7 @@ describe("Access Keys workspace", () => {
     // Select By narrows the tree beside its filter; it is not a toolbar tool any more.
     expect(tool(registry, "permissions", "selectBy")).toBeUndefined();
 
-    // The tool opens and closes the confirmation, showing pressed while it is open (user, 2026-10-31).
+    // The tool opens and closes the confirmation, showing pressed while it is open.
     const permissions = within(screen.getByRole("region", { name: "Permissions window" }));
     act(() => tool(registry, "permissions", "clearAll")!.onSelect!());
     await permissions.findByRole("group", { name: "Clear All Permissions" });

@@ -2,7 +2,7 @@
 
 Each module here owns one domain's tools end to end: the _tool_X gate, the
 _execute_X side effect, its diff builders and its prechecks. They depend on
-tool_common for the shared primitives and are imported by mcp_view, which owns
-the transport and the dispatch registry. The dependency runs one way, so a
-domain module does not import the transport that dispatches it at module level.
+tool_common for the shared primitives and are registered by tool_registration.
+The dependency runs one way: a domain module never imports tool_dispatch,
+tool_registration or the MCP transport.
 """

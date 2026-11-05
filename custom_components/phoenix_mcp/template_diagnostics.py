@@ -7,12 +7,10 @@ import json
 from jinja2 import TemplateError, TemplateSyntaxError, UndefinedError
 from jinja2.sandbox import SecurityError
 
-from .const import (
-    TEMPLATE_DIAGNOSTIC_BYTES,
-    TEMPLATE_DIAGNOSTIC_MESSAGE_CHARS,
-    TEMPLATE_DIAGNOSTIC_SOURCE_CHARS,
+from .const import TEMPLATE_FAILURE_MESSAGES
+from .template_limits import (
+    TEMPLATE_DIAGNOSTIC_BYTES, TEMPLATE_DIAGNOSTIC_MESSAGE_CHARS, TEMPLATE_DIAGNOSTIC_SOURCE_CHARS,
     TEMPLATE_DIAGNOSTIC_TRACEBACK_FRAMES,
-    TEMPLATE_FAILURE_MESSAGES,
 )
 
 

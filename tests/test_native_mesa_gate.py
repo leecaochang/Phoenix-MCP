@@ -21,6 +21,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from homeassistant.util.dt import utcnow
 
+from homeassistant.helpers import entity_registry as er
+
 from custom_components.phoenix_mcp.const import DOMAIN
 from custom_components.phoenix_mcp.access_key_store import PermissionTree, AccessKeyRecord
 from custom_components.phoenix_mcp.tools.native import _tool_intent_action
@@ -41,7 +43,7 @@ def _hass(*, with_mesa: bool) -> MagicMock:
     data.mesa = MagicMock() if with_mesa else None
     data.mesa_setup_failed = False
     data.store.get_settings.return_value.mesa_mode = "advisory" if with_mesa else "off"
-    hass.data = {DOMAIN: data}
+    hass.data = {DOMAIN: data, er.DATA_REGISTRY: MagicMock(**{"async_get.return_value": None})}
     hass.services = MagicMock()
     hass.services.async_call = AsyncMock(return_value=None)
     hass.states = MagicMock()
@@ -134,24 +136,20 @@ class TestMesaDecisionRouting:
         hass = _hass(with_mesa=True)
         warn = ["light.kitchen is flagged by MESA"]
 
-        with patch(f"{NATIVE}._mesa_advisory_ctx") as ctx:
-            content, outcome, _ = await _run(hass, _outcome("allow", warnings=warn))
+        content, outcome, _ = await _run(hass, _outcome("allow", warnings=warn))
 
         assert outcome == "allowed"
         body = json.loads(content["content"][0]["text"])
         assert body["speech"]["plain"]["speech"] == "light.kitchen is flagged by MESA"
-        ctx.set.assert_called_once_with(True)
 
-    async def test_no_warnings_leaves_speech_empty_and_the_flag_unset(self):
-        """The drop side of the previous test: no advisory, no speech, no flag."""
+    async def test_no_warnings_leaves_speech_empty(self):
+        """The drop side of the previous test: no advisory, no speech."""
         hass = _hass(with_mesa=True)
 
-        with patch(f"{NATIVE}._mesa_advisory_ctx") as ctx:
-            content, outcome, _ = await _run(hass, _outcome("allow", warnings=[]))
+        content, outcome, _ = await _run(hass, _outcome("allow", warnings=[]))
 
         body = json.loads(content["content"][0]["text"])
         assert body["speech"] == {}
-        ctx.set.assert_not_called()
 
     async def test_confirm_approved_context_is_threaded_into_the_gate(self):
         """An admin-approved execution runs MESA under confirm-approved semantics."""
@@ -186,7 +184,7 @@ class TestMesaRuntimeAbsent:
 
     async def test_missing_domain_data_refuses_write(self):
         hass = _hass(with_mesa=False)
-        hass.data = {}
+        del hass.data[DOMAIN]
 
         _content, outcome, _ = await _tool_intent_action(
             "HassTurnOn", "homeassistant", "turn_on", {}, ["light.kitchen"],

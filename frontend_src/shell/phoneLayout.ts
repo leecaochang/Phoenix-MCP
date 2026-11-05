@@ -38,11 +38,6 @@ export function readPhoneLayout(raw: unknown): PhoneLayout {
   return out;
 }
 
-/** The arrangement a workspace starts from on a phone. */
-export function defaultPhoneLayout(folded: readonly string[] = [], closed: readonly string[] = []): Required<Pick<PhoneLayout, "folded" | "closed">> {
-  return { folded: [...folded], closed: [...closed] };
-}
-
 /**
  * `present` in the user's order: the windows the saved order lists come in
  * that order, and any other window follows the window it comes after by

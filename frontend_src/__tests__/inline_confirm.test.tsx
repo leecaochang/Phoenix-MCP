@@ -1,10 +1,10 @@
 /**
- * Behaviour: every inline confirmation is a plain UI2 box (user, 2026-10-28):
+ * Behaviour: every inline confirmation is a plain box:
  * a heading with no icon or coloured accent, the label unless a title is
  * given, and the explanation below it. A click anywhere else cancels it,
  * as Cancel does, unless the action is running. A finger that goes down to
  * scroll is not a click elsewhere, and the box scrolls itself into view, so a
- * box opened below an iPhone screen can be reached (user, 2026-11-02).
+ * box opened below an iPhone screen can be reached.
  */
 import { describe, it, expect, vi } from "vitest";
 import { useState } from "react";

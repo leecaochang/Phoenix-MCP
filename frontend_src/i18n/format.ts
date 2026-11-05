@@ -148,6 +148,21 @@ function formatDate(date: Date, short = false): string {
   return fields.filter(field => !short || field !== "year").map(value).join(separator) + suffix;
 }
 
+/**
+ * What the language's own date and time pattern puts between the two, for a date
+ * built by hand. That text can open with the punctuation closing the date
+ * (German "4.3., 22:05"), which `shown` already ends with.
+ */
+function dateTimeJoin(date: Date, kind: FormatterKind, shown: string): string {
+  const parts = dateFormatter(kind).formatToParts(date);
+  const before = parts[parts.findIndex((part) => part.type === "hour" || part.type === "dayPeriod") - 1];
+  if (before?.type !== "literal") return " ";
+  for (let overlap = before.value.length; overlap > 0; overlap--) {
+    if (shown.endsWith(before.value.slice(0, overlap))) return before.value.slice(overlap);
+  }
+  return before.value;
+}
+
 /** Date only, in the selected zone and calendar order. */
 export function localeDate(iso: string | number | Date): string {
   const date = new Date(iso);
@@ -159,7 +174,8 @@ export function localeDateTime(iso: string | number | Date): string {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return String(iso);
   if (dateFormat === "language") return dateFormatter("dateTime").format(date);
-  return `${formatDate(date)}, ${dateFormatter("time").format(date)}`;
+  const shown = formatDate(date);
+  return `${shown}${dateTimeJoin(date, "dateTime", shown)}${dateFormatter("time").format(date)}`;
 }
 
 /** Month, day and time for the narrow audit table. */
@@ -167,7 +183,8 @@ export function localeDateTimeShort(iso: string | number | Date): string {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return String(iso);
   if (dateFormat === "language") return dateFormatter("shortDateTime").format(date);
-  return `${formatDate(date, true)}, ${dateFormatter("clock").format(date)}`;
+  const shown = formatDate(date, true);
+  return `${shown}${dateTimeJoin(date, "shortDateTime", shown)}${dateFormatter("clock").format(date)}`;
 }
 
 /** Wall clock, hours and minutes only. */

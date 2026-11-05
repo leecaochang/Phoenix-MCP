@@ -136,10 +136,11 @@ def _inject_version_ok() -> bool:
     known-incompatible old HA; it is not a safety boundary.
     """
     try:
+        # Local: ships with an optional component, not with this integration.
         from awesomeversion import AwesomeVersion
 
         return AwesomeVersion(HA_VERSION) >= AwesomeVersion(MESA_INJECT_MIN_HA)
-    except Exception:  # noqa: BLE001 - version parsing must never disable the feature outright
+    except Exception:  # version parsing must never disable the feature outright
         return True
 
 
@@ -186,7 +187,7 @@ def remove_mesa_inject(hass: HomeAssistant) -> None:
 def _safe_remove_inject_url(hass: HomeAssistant, url: str) -> None:
     try:
         remove_extra_js_url(hass, url)
-    except Exception:  # noqa: BLE001 - removal is best-effort; never block teardown
+    except Exception:  # removal is best-effort; never block teardown
         _LOGGER.debug("Phoenix MCP: failed to remove inject module URL %s", url, exc_info=True)
 
 
@@ -200,6 +201,7 @@ def _remove_all_inject_urls(hass: HomeAssistant) -> None:
     be read, callers still remove their tracked URL.
     """
     try:
+        # Local: optional component, imported only when this path runs.
         from homeassistant.components.frontend import DATA_EXTRA_MODULE_URL
 
         registered = hass.data.get(DATA_EXTRA_MODULE_URL)
@@ -211,7 +213,7 @@ def _remove_all_inject_urls(hass: HomeAssistant) -> None:
         ]
         for u in stale:
             _safe_remove_inject_url(hass, u)
-    except Exception:  # noqa: BLE001 - introspection is best-effort
+    except Exception:  # introspection is best-effort
         _LOGGER.debug("Phoenix MCP: inject module URL sweep failed", exc_info=True)
 
 
@@ -223,6 +225,7 @@ def _agentchat_url_with_cache_bust() -> str:
 def _remove_all_agentchat_urls(hass: HomeAssistant) -> None:
     """Remove every registered Agent Chat module URL, whatever its cache-bust value."""
     try:
+        # Local: optional component, imported only when this path runs.
         from homeassistant.components.frontend import DATA_EXTRA_MODULE_URL
 
         registered = hass.data.get(DATA_EXTRA_MODULE_URL)
@@ -234,7 +237,7 @@ def _remove_all_agentchat_urls(hass: HomeAssistant) -> None:
         ]
         for u in stale:
             _safe_remove_inject_url(hass, u)
-    except Exception:  # noqa: BLE001 - introspection is best-effort
+    except Exception:  # introspection is best-effort
         _LOGGER.debug("Phoenix MCP: Agent Chat module URL sweep failed", exc_info=True)
 
 

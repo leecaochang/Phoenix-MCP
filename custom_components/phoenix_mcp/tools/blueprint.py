@@ -13,9 +13,8 @@ re-validate and refuse a delete while the blueprint is in use. Phoenix validates
 first, with the same generic BLUEPRINT_SCHEMA HA's save handler uses, so a doomed
 write is refused before an approval is created.
 
-mcp_view owns the transport and the dispatch and executor registries and imports
-from here; this module does not import it. Shared primitives come from
-..tool_common.
+tool_registration registers these tools and this module never imports the
+dispatcher. Shared primitives come from ..tool_common.
 """
 
 from __future__ import annotations
@@ -27,6 +26,7 @@ import re
 from typing import Any
 
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import HomeAssistantError
 
 from ..const import (
     CAP_CONFIRM,
@@ -48,11 +48,13 @@ from ..tool_common import (
     _record_version,
     _tool_error,
     _tool_success,
+    _tool_uncertain,
     _truncate,
     _usable_path_arg,
     _version_content_payload,
 )
 from ..ws_dispatch import WsCommandNotDispatchedError, WsDispatchError, async_ws_command
+from ..yaml_includes import load_tagged_lenient, YamlParseError
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -65,9 +67,11 @@ async def _domain_blueprints(hass: HomeAssistant, domain: str) -> dict:
     cannot be read at all.
     """
     if domain == "automation":
-        from homeassistant.components.automation import async_get_blueprints as _get_bp  # noqa: PLC0415
+        # Local: optional component, imported only when this path runs.
+        from homeassistant.components.automation import async_get_blueprints as _get_bp
     else:
-        from homeassistant.components.script import async_get_blueprints as _get_bp  # noqa: PLC0415
+        # Local: optional component, imported only when this path runs.
+        from homeassistant.components.script import async_get_blueprints as _get_bp
     return await _get_bp(hass).async_get_blueprints()
 
 
@@ -87,7 +91,7 @@ async def _tool_list_blueprints(
     for dom in domains:
         try:
             blueprints = await _domain_blueprints(hass, dom)
-        except Exception:  # noqa: BLE001 - a missing/again-failing domain yields no blueprints
+        except Exception:  # a missing/again-failing domain yields no blueprints
             _LOGGER.debug("list_blueprints failed for domain %s", dom, exc_info=True)
             warnings.append(f"Failed to read {dom} blueprints; none are listed for that domain.")
             continue
@@ -160,15 +164,17 @@ def _blueprint_consumers(hass: HomeAssistant, domain: str, path: str) -> list[st
     """
     try:
         if domain == "automation":
-            from homeassistant.components.automation import (  # noqa: PLC0415
+            # Local: optional component, imported only when this path runs.
+            from homeassistant.components.automation import (
                 automations_with_blueprint as _with_bp,
             )
         else:
-            from homeassistant.components.script import (  # noqa: PLC0415
+            # Local: optional component, imported only when this path runs.
+            from homeassistant.components.script import (
                 scripts_with_blueprint as _with_bp,
             )
         return list(_with_bp(hass, path))
-    except Exception:  # noqa: BLE001 - annotation only; never block the gate
+    except Exception:  # annotation only; never block the gate
         _LOGGER.debug("blueprint consumer lookup failed for %s/%s", domain, path, exc_info=True)
         return []
 
@@ -181,13 +187,13 @@ def _validate_blueprint_source(domain: str, content: str) -> str | None:
     Blueprint constructor checks the schema, that the declared domain matches the
     target, and that every !input the body uses has an input definition.
     """
-    from homeassistant.components.blueprint.models import Blueprint  # noqa: PLC0415
-    from homeassistant.components.blueprint.schemas import (  # noqa: PLC0415
+    # Local: not part of the recorded Home Assistant import floor.
+    from homeassistant.util import yaml as yaml_util
+    # Local: optional component, imported only when this path runs.
+    from homeassistant.components.blueprint.models import Blueprint
+    from homeassistant.components.blueprint.schemas import (
         BLUEPRINT_SCHEMA,
     )
-    from homeassistant.exceptions import HomeAssistantError  # noqa: PLC0415
-    from homeassistant.util import yaml as yaml_util  # noqa: PLC0415
-    from ..yaml_includes import load_tagged_lenient, YamlParseError
 
     try:
         load_tagged_lenient(content, allow_aliases=False)
@@ -200,7 +206,7 @@ def _validate_blueprint_source(domain: str, content: str) -> str | None:
         Blueprint(data, expected_domain=domain, schema=BLUEPRINT_SCHEMA)
     except HomeAssistantError as err:  # InvalidBlueprint and friends
         return f"not a valid {domain} blueprint: {err}"
-    except Exception as err:  # noqa: BLE001 - never leak an unexpected type
+    except Exception as err:  # never leak an unexpected type
         _LOGGER.debug("blueprint validation error", exc_info=True)
         return f"blueprint validation failed: {err}"
     return None
@@ -233,7 +239,7 @@ async def _tool_get_blueprint(
         return _tool_error("Missing required argument: path"), "invalid_request", "get_blueprint"
     try:
         blueprints = await _domain_blueprints(hass, domain)
-    except Exception:  # noqa: BLE001 - the domain could not be read at all
+    except Exception:  # the domain could not be read at all
         _LOGGER.debug("get_blueprint failed to list domain %s", domain, exc_info=True)
         return _tool_error("Failed to read blueprints."), "invalid_request", "get_blueprint"
     bp = blueprints.get(path)
@@ -337,10 +343,11 @@ async def _read_blueprint_source(hass: HomeAssistant, target: str) -> str | None
 
 def _canonical_blueprint_source(domain: str, content: str) -> str:
     """Return the source HA's blueprint/save command will persist."""
+    # Local: not part of the recorded Home Assistant import floor.
+    from homeassistant.util import yaml as yaml_util
+    # Local: optional component, imported only when this path runs.
     from homeassistant.components.blueprint.models import Blueprint
     from homeassistant.components.blueprint.schemas import BLUEPRINT_SCHEMA
-    from homeassistant.util import yaml as yaml_util
-    from ..yaml_includes import load_tagged_lenient, YamlParseError
 
     try:
         load_tagged_lenient(content, allow_aliases=False)
@@ -542,17 +549,17 @@ async def _save_blueprint(
                 observed = await _read_blueprint_source(hass, target)
                 if observed != expected_source:
                     await recovery.mark(rid, "partial", observed_hash=content_hash(observed or ""))
-                    return _tool_success(json.dumps({
+                    return _tool_uncertain({
                         "status": "partial", "recovery_id": rid,
                         "message": "Blueprint save landed but readback differs; do not retry automatically.",
-                    })), "allowed", resource
+                    }), "invalid_request", resource
                 await recovery.mark(rid, "verified", observed_hash=content_hash(observed or ""))
                 await recovery.set_source(rid, _blueprint_recovery_snapshot(domain, rel, observed))
             finally:
                 recovery.leave(rid)
     except ConfigurationRecoveryError as exc:
         return _tool_error(str(exc)), "invalid_request", tool_name
-    except Exception:  # noqa: BLE001 - retain the dispatch record when readback is incomplete
+    except Exception:  # retain the dispatch record when readback is incomplete
         _LOGGER.exception("blueprint recovery transaction failed for %s", resource)
         return _tool_error("Blueprint save outcome is uncertain; inspect configuration recovery before retrying."), "invalid_request", tool_name
     await _record_version(
@@ -628,17 +635,17 @@ async def _execute_delete_blueprint(
                     return _tool_error(f"Failed to delete blueprint: {exc}"), "invalid_request", "delete_blueprint"
                 if await _read_blueprint_source(hass, target) is not None:
                     await recovery.mark(rid, "partial", observed="blueprint_still_exists")
-                    return _tool_success(json.dumps({
+                    return _tool_uncertain({
                         "status": "partial", "recovery_id": rid,
                         "message": "Blueprint delete was submitted but the file remains; do not retry automatically.",
-                    })), "allowed", resource
+                    }), "invalid_request", resource
                 await recovery.mark(rid, "verified", observed="blueprint_absent")
                 await recovery.set_source(rid, _blueprint_recovery_snapshot(domain, rel, None))
             finally:
                 recovery.leave(rid)
     except ConfigurationRecoveryError as exc:
         return _tool_error(str(exc)), "invalid_request", "delete_blueprint"
-    except Exception:  # noqa: BLE001 - keep incomplete outcomes recoverable
+    except Exception:  # keep incomplete outcomes recoverable
         _LOGGER.exception("blueprint deletion recovery failed for %s", resource)
         return _tool_error("Blueprint delete outcome is uncertain; inspect configuration recovery before retrying."), "invalid_request", "delete_blueprint"
     await _record_version(

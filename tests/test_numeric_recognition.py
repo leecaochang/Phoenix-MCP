@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 import pytest
 
-from custom_components.phoenix_mcp.numeric_recognition import NumericIdMatch, _literal_span, recognize_numeric_ids
+from custom_components.phoenix_mcp.routing.numeric_recognition import NumericIdMatch, _literal_span, recognize_numeric_ids
 
 
 @pytest.mark.parametrize('entity,pattern,intent', [
@@ -75,7 +75,9 @@ def test_parser_anomalies_never_become_numeric_evidence(change):
             other.entities['brightness'].value = 55
             yield other
         if change == 'too_many':
-            from custom_components.phoenix_mcp.const import COMMAND_ROUTING_NUMERIC_MATCH_LIMIT
+            from custom_components.phoenix_mcp.routing.routing_tables import (
+                COMMAND_ROUTING_NUMERIC_MATCH_LIMIT,
+            )
             for _ in range(COMMAND_ROUTING_NUMERIC_MATCH_LIMIT):
                 yield result
     with patch.object(hassil, 'recognize_all', changed):

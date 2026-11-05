@@ -12,7 +12,7 @@ from homeassistant.util.dt import utcnow
 
 from custom_components.phoenix_mcp import template_render
 from custom_components.phoenix_mcp.audit import AuditLog
-from custom_components.phoenix_mcp.const import TEMPLATE_WORKER_CONCURRENCY
+from custom_components.phoenix_mcp.template_limits import TEMPLATE_WORKER_CONCURRENCY
 from custom_components.phoenix_mcp.data import PhoenixData
 from custom_components.phoenix_mcp.rate_limiter import RateLimiter
 from custom_components.phoenix_mcp.access_key_store import AccessKeyRecord
@@ -231,7 +231,7 @@ async def test_diagnostics_recheck_real_authority_after_worker_wait(hass, change
     policy_reset = policy_version.set(access_key.settings_version)
     try:
         with patch.object(template_render.asyncio, 'create_subprocess_exec', AsyncMock(return_value=process)):
-            from custom_components.phoenix_mcp.mcp_view import _tool_render_template
+            from custom_components.phoenix_mcp.tools.system import _tool_render_template
             with pytest.raises(AuthorityChangedError):
                 await _tool_render_template({'template': 'private-input'}, access_key, hass, data)
     finally:
@@ -273,7 +273,7 @@ async def test_error_response_uses_only_scoped_snapshot(hass, monkeypatch):
     from io import BytesIO, StringIO
     from types import SimpleNamespace
     from custom_components.phoenix_mcp import template_worker
-    from custom_components.phoenix_mcp.mcp_view import _tool_render_template
+    from custom_components.phoenix_mcp.tools.system import _tool_render_template
     from custom_components.phoenix_mcp.access_key_store import PermissionNode, PermissionTree
 
     access_key, data = _env()
@@ -319,7 +319,7 @@ async def test_error_response_uses_only_scoped_snapshot(hass, monkeypatch):
 
 
 async def test_capability_denial_precedes_diagnostics(hass):
-    from custom_components.phoenix_mcp.mcp_view import _tool_render_template
+    from custom_components.phoenix_mcp.tools.system import _tool_render_template
     access_key, data = _env()
     access_key.pass_through = False
     access_key.cap_template_render = 'deny'
@@ -413,7 +413,7 @@ def test_coverage_records_disposable_worker_without_importing_it_in_parent(tmp_p
     # These lines run only in the disposable child, never in the parent probe.
     child_only = {
         _line_of('phase = "resource_limits"'),
-        _line_of('limits = runpy.run_path(str(Path(__file__).with_name("const.py")))'),
+        _line_of('limits = runpy.run_path(str(Path(__file__).with_name("template_limits.py")))'),
         _line_of('resource.setrlimit(resource.RLIMIT_CPU, (cpu_seconds, cpu_seconds))'),
         _line_of('main()'),
     }

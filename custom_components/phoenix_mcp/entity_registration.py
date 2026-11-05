@@ -21,7 +21,9 @@ async def async_observe_registration(
 
     Registry entries survive reloads. Only a present State completes the live
     observation; disabled entries complete separately. Missing and inaccessible
-    entries have the same result. No guessed entity ID is ever returned.
+    entries have the same result. No guessed entity ID is ever returned. A scene
+    Home Assistant dropped on reload leaves a restored placeholder State, so a
+    scene's State counts only when it carries the scene's own id.
     Cancellation propagates and there are no listeners or background tasks.
     """
     deadline = asyncio.get_running_loop().time() + AUTHORING_REGISTRATION_TIMEOUT_SECONDS
@@ -40,12 +42,13 @@ async def async_observe_registration(
             and (expose is None or expose(entity_id))
         ):
             entry = registry.async_get(entity_id)
-            state_present = hass.states.get(entity_id) is not None
+            state = hass.states.get(entity_id)
+            state_present = state is not None
             observed.update(entity_id=entity_id, state_present=state_present)
             if entry is not None and entry.disabled_by is not None:
                 observed["status"] = "disabled"
                 return observed
-            if state_present:
+            if state is not None and (domain != "scene" or state.attributes.get("id") == storage_id):
                 observed["status"] = "observed"
                 return observed
         remaining = deadline - asyncio.get_running_loop().time()

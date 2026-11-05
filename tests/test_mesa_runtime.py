@@ -9,10 +9,16 @@ from __future__ import annotations
 
 import json
 import os
+from unittest.mock import patch
 
 import pytest
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import area_registry as ar
+from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers import entity_registry as er
+from pytest_homeassistant.common import MockConfigEntry
 
+from custom_components.phoenix_mcp.device_semantics import device_registry_snapshot, effective_entity_area_id
 from custom_components.phoenix_mcp.mesa import (
     _build_get_entity_area,
     async_import_sidecar_profiles,
@@ -20,6 +26,7 @@ from custom_components.phoenix_mcp.mesa import (
     async_setup_mesa,
     build_caller_context,
     build_expand_target,
+    evaluate_service_entities,
 )
 from custom_components.phoenix_mcp.mesa_core import MetadataOrigin, SemanticProfile
 from custom_components.phoenix_mcp.access_key_store import PermissionTree, AccessKeyRecord
@@ -659,3 +666,93 @@ async def test_the_enforcer_resolves_over_the_unfiltered_store(hass: HomeAssista
     assert runtime.enforcer.resolver.store is runtime.store
     assert not isinstance(runtime.enforcer.store, ScopedProfileStore)
     assert not isinstance(runtime.enforcer.resolver.store, ScopedProfileStore)
+
+
+# --- calendar time windows -------------------------------------------------------
+
+
+def _calendar_window(runtime, entity_id="light.c", calendar="calendar.holiday", *, negate=False):
+    condition = {"type": "calendar_entity", "calendar_entity": calendar}
+    if negate:
+        condition["negate"] = True
+    runtime.store.set(entity_id, SemanticProfile.from_dict(entity_id, {"semantic_profile": {"operational_boundaries": {
+        "control_mode": "autonomous",
+        "temporal_constraints": [{"id": "hol", "condition": condition, "effect": {"control_mode": "read_only"},
+                                  "human_reason": "only on holidays"}],
+    }}}, default_origin=MetadataOrigin.USER))
+
+
+def _calendar_verdict(runtime):
+    key = AccessKeyRecord(id="k", name="k", access_key_hash="x", created_at=utcnow(), created_by="t",
+                          permissions=PermissionTree())
+    return evaluate_service_entities(
+        runtime, "advisory", key, ["light.c"], domain="light", service="turn_on", service_data={}, session_id="s",
+    )
+
+
+@pytest.mark.parametrize(("state", "active"), [
+    ("on", True), ("off", False), ("unavailable", True), ("unknown", True), (None, True),
+])
+async def test_a_calendar_window_follows_the_calendar_and_fails_closed(hass, state, active):
+    runtime = await async_setup_mesa(hass, "advisory")
+    _calendar_window(runtime)
+    if state is not None:
+        hass.states.async_set("calendar.holiday", state)
+    verdict = _calendar_verdict(runtime)
+    assert bool(verdict.blocked) is active, verdict
+
+
+async def test_a_negated_calendar_window_inverts_only_a_known_state(hass):
+    runtime = await async_setup_mesa(hass, "advisory")
+    _calendar_window(runtime, negate=True)
+    hass.states.async_set("calendar.holiday", "off")
+    assert _calendar_verdict(runtime).blocked
+    hass.states.async_set("calendar.holiday", "on")
+    assert not _calendar_verdict(runtime).blocked
+    hass.states.async_set("calendar.holiday", "unavailable")
+    assert _calendar_verdict(runtime).blocked
+
+
+# --- area lookup -----------------------------------------------------------------
+
+
+async def test_an_area_lookup_takes_no_registry_snapshot(hass):
+    """The lookup runs once per resolved entity, so it must not walk every device."""
+    entry = MockConfigEntry(domain="test", entry_id="area-lookup")
+    entry.add_to_hass(hass)
+    device = dr.async_get(hass).async_get_or_create(config_entry_id=entry.entry_id, identifiers={("test", "a")})
+    area = ar.async_get(hass).async_create("Kitchen")
+    dr.async_get(hass).async_update_device(device.id, area_id=area.id)
+    entity = er.async_get(hass).async_get_or_create("light", "test", "a", config_entry=entry, device_id=device.id)
+    with patch("custom_components.phoenix_mcp.device_semantics.device_registry_snapshot_from_registry",
+               side_effect=AssertionError("walked the device registry")):
+        assert _build_get_entity_area(hass)(entity.entity_id) == area.id
+
+
+async def test_area_lookup_matches_the_snapshot_for_every_shape(hass):
+    entry = MockConfigEntry(domain="test", entry_id="area-parity")
+    entry.add_to_hass(hass)
+    devices = dr.async_get(hass)
+    rooms = ar.async_get(hass)
+    kitchen, hall = rooms.async_create("Kitchen").id, rooms.async_create("Hall").id
+    main = devices.async_get_or_create(config_entry_id=entry.entry_id, identifiers={("test", "main")})
+    devices.async_update_device(main.id, area_id=kitchen)
+    bare = devices.async_get_or_create(config_entry_id=entry.entry_id, identifiers={("test", "bare")})
+    registry = er.async_get(hass)
+    entities = [
+        registry.async_get_or_create("light", "test", "own", config_entry=entry, device_id=main.id),
+        registry.async_get_or_create("light", "test", "via", config_entry=entry, device_id=main.id),
+        registry.async_get_or_create("light", "test", "none", config_entry=entry, device_id=bare.id),
+        registry.async_get_or_create("light", "test", "free", config_entry=entry),
+    ]
+    registry.async_update_entity(entities[0].entity_id, name="Own", area_id=hall)
+    if hasattr(devices, "async_get_or_create_child"):
+        part = devices.async_get_or_create_child(
+            config_entry_id=entry.entry_id, identifiers={("test", "part")}, parent_device_id=main.id)
+        entities.append(registry.async_get_or_create("light", "test", "part", config_entry=entry, device_id=part.id))
+    lookup = _build_get_entity_area(hass)
+    snapshot = device_registry_snapshot(hass)
+    for entity in entities:
+        expected = effective_entity_area_id(registry.async_get(entity.entity_id), snapshot)
+        assert lookup(entity.entity_id) == expected
+    assert lookup("light.ghost") is None

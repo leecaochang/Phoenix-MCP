@@ -58,7 +58,7 @@ describe("Review and Request Details", () => {
     const view = renderApprovals();
     await view.findByText("Restart Home Assistant");
     const search = view.getByRole("searchbox");
-    // A word has to appear as it was typed; its letters in order are not enough (user, 2026-10-29).
+    // A word has to appear as it was typed; its letters in order are not enough.
     fireEvent.change(search, { target: { value: "rst hm" } });
     expect(view.queryByText("Restart Home Assistant")).toBeNull();
     fireEvent.change(search, { target: { value: "home restart" } });
@@ -66,7 +66,7 @@ describe("Review and Request Details", () => {
     fireEvent.change(search, { target: { value: "unmatched-value" } });
     expect(view.queryByText("Restart Home Assistant")).toBeNull();
     expect(view.getByText("No approvals match your search.")).toBeVisible();
-    // The list updates itself, so there is no Refresh button (user, 2026-10-29).
+    // The list updates itself, so there is no Refresh button.
     expect(view.queryByRole("button", { name: "Refresh Approvals" })).toBeNull();
     expect(view.getByRole("searchbox")).toBe(search);
   });
@@ -75,14 +75,14 @@ describe("Review and Request Details", () => {
     const view = await open();
     expect(reviewWindow().querySelector(".phx-review")).toBeTruthy();
     expect(details().queryByText("Select a request to see its details.")).toBeNull();
-    // Showing another set of requests leaves nothing chosen in the list (user, 2026-10-29).
+    // Showing another set of requests leaves nothing chosen in the list.
     vi.mocked(api.listApprovals).mockResolvedValue({ approvals: [], total: 0, limit: 50, offset: 0 });
     fireEvent.change(view.getByLabelText("Show"), { target: { value: "history" } });
     await waitFor(() => expect(reviewWindow().querySelector(".phx-review")).toBeNull());
     expect(details().getByText("Select a request to see its details.")).toBeVisible();
   });
 
-  it("updates itself while it is shown, in every scope (user, 2026-10-29)", async () => {
+  it("updates itself while it is shown, in every scope", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     try {
       vi.mocked(api.listApprovals).mockResolvedValue({ approvals: [record()], total: 1, limit: 50, offset: 0 });

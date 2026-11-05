@@ -361,7 +361,7 @@ async def test_compat_probe_reports_handler_arity_change(hass, monkeypatch):
 
     assert await async_setup_component(hass, "input_boolean", {"input_boolean": {}})
 
-    def _four_args(hass_, connection, msg, surprise):  # noqa: ANN001
+    def _four_args(hass_, connection, msg, surprise):
         ...
 
     registry = dict(hass.data[ws_const.DOMAIN])

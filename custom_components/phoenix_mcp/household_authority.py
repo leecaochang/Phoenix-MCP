@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from contextvars import ContextVar
 from dataclasses import dataclass
 from functools import partial
 from inspect import unwrap
@@ -14,8 +13,10 @@ from homeassistant.auth import EVENT_USER_REMOVED, EVENT_USER_UPDATED
 from homeassistant.auth.permissions.const import POLICY_CONTROL, POLICY_READ
 from homeassistant.core import Context, callback
 from homeassistant.exceptions import Unauthorized
+from homeassistant.helpers import service as ha_service
 
-from .request_authority import AuthorityChangedError
+from .const import HOUSEHOLD_ADMIN_TOOLS
+from .request_authority import AuthorityChangedError, household_authority
 
 if TYPE_CHECKING:
     from homeassistant.auth.models import User
@@ -50,11 +51,6 @@ class HouseholdAuthority:
                 permissions.check_entity(entity_id, POLICY_CONTROL))
 
 
-household_authority: ContextVar[HouseholdAuthority | None] = ContextVar(
-    "phoenix_household_authority", default=None,
-)
-
-
 def household_admin_access() -> bool:
     """Access key administration requires a known administrator on household ingress."""
     authority = household_authority.get()
@@ -63,7 +59,6 @@ def household_admin_access() -> bool:
 
 def household_tool_access(tool_name: str) -> bool:
     """Shared-access-key history belongs to administrators, even without a capability."""
-    from .const import HOUSEHOLD_ADMIN_TOOLS
 
     return tool_name not in HOUSEHOLD_ADMIN_TOOLS or household_admin_access()
 
@@ -86,13 +81,13 @@ def household_service_kwargs(hass: HomeAssistant, domain: str, service: str) -> 
         return {}
     authority.check()
     if not authority.is_admin():
-        from homeassistant.helpers import service as ha_service
 
         admin_handler = getattr(ha_service, "_async_admin_handler", None)
         if admin_handler is None:
             # Fail closed if HA changes the admin-service registration adapter.
             raise Unauthorized()
-        registered = hass.services.async_services().get(domain, {}).get(service)
+        # HA folds case when it dispatches, so the probe must see the same service.
+        registered = hass.services.async_services().get(domain.lower(), {}).get(service.lower())
         if registered is not None:
             try:
                 target = unwrap(registered.job.target)

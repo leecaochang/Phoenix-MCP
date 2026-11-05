@@ -7,7 +7,9 @@ to ``custom_components.phoenix_mcp.mesa_core`` so the copy is hermetic and never
 collides with an installed mesa-core or another integration's copy.
 
 The copy comes from the tracked files at the clean source checkout's HEAD;
-mesa-core itself is never modified. Commit the regenerated tree with its manifest.
+mesa-core itself is never modified. The project's license travels with the copy,
+beside a note of what the import rewrite changed. Commit the regenerated tree with
+its manifest.
 
 Usage:
     python scripts/sync_mesa_core.py [SOURCE_DIR]   re-vendor from source
@@ -21,6 +23,7 @@ checkout can tell a re-sync from a hand-edit, which nothing else would notice.
 
 from __future__ import annotations
 
+import ast
 import datetime
 import hashlib
 import json
@@ -38,6 +41,17 @@ DEST = REPO_ROOT / "custom_components" / "phoenix_mcp" / "mesa_core"
 MANIFEST = REPO_ROOT / "tests" / "contract" / "mesa_core_vendor.json"
 
 VENDOR_PREFIX = "custom_components.phoenix_mcp.mesa_core"
+
+# The upstream project keeps these at its repository root, outside the package.
+_LICENSE_NAMES = ("LICENSE", "NOTICE")
+# Modified files must say so under the upstream license; this file does it for the
+# whole tree, and it is tracked where _VENDORED.txt is not.
+_MODIFICATIONS_NAME = "MODIFICATIONS.txt"
+_MODIFICATIONS_TEXT = (
+    "This directory is a modified copy of the mesa-core package.\n"
+    f"Absolute mesa_core imports are rewritten to {VENDOR_PREFIX}.\n"
+    "Nothing else differs from the upstream release.\n"
+)
 
 # Never copied into the vendored tree and never hashed. These belong to the OS,
 # editor and tooling, not the library: they exist only in a developer's working
@@ -58,20 +72,47 @@ def _is_excluded(path: Path, root: Path) -> bool:
     return path.name in _EXCLUDED_NAMES or path.name.endswith((".pyc", ".pyo", ".swp"))
 
 # All internal imports in mesa-core take the form ``from mesa_core[.x] import``.
-# A bare ``import mesa_core`` would bind the wrong name after rewriting, so it is
-# refused rather than silently rewritten into broken code.
+# Any other reference to the package by name would still mean the top-level
+# package after the rewrite: ``import mesa_core.x`` and a dynamic import either
+# bind a foreign module or fail only on that code path at runtime. Those are
+# refused rather than shipped. Logger names are the one kept reference, because
+# they label records and import nothing.
 _FROM_RE = re.compile(r"\bfrom mesa_core\b")
-_BARE_IMPORT_RE = re.compile(r"\bimport mesa_core\b(?!\s*\.)")
+_PACKAGE_NAME_RE = re.compile(r"mesa_core(?:\.\w*)*")
+
+
+def _unrewritten_reference(tree: ast.AST) -> str | None:
+    """Describe the first reference to the package the rewrite did not reach."""
+    logger_names = {
+        id(argument)
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+        and (node.func.attr if isinstance(node.func, ast.Attribute) else getattr(node.func, "id", None)) == "getLogger"
+        for argument in node.args
+    }
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                if _PACKAGE_NAME_RE.fullmatch(alias.name):
+                    return f"'import {alias.name}'"
+        elif isinstance(node, ast.ImportFrom):
+            if node.level == 0 and node.module and _PACKAGE_NAME_RE.fullmatch(node.module):
+                return f"'from {node.module} import'"
+        elif (isinstance(node, ast.Constant) and isinstance(node.value, str)
+                and id(node) not in logger_names and _PACKAGE_NAME_RE.fullmatch(node.value)):
+            return f"the string {node.value!r}"
+    return None
 
 
 def _rewrite_source(text: str, rel: Path) -> str:
-    if _BARE_IMPORT_RE.search(text):
+    rewritten = _FROM_RE.sub(f"from {VENDOR_PREFIX}", text)
+    reference = _unrewritten_reference(ast.parse(rewritten, filename=str(rel)))
+    if reference is not None:
         raise SystemExit(
-            f"ERROR: {rel} contains a bare 'import mesa_core' statement, which "
-            "the vendoring rewrite cannot handle. Report this to the user; do "
-            "not edit mesa-core."
+            f"ERROR: {rel} contains {reference}, which the vendoring rewrite "
+            "cannot handle. Report this to the user; do not edit mesa-core."
         )
-    return _FROM_RE.sub(f"from {VENDOR_PREFIX}", text)
+    return rewritten
 
 
 def _read_source_version(source_root: Path) -> str:
@@ -160,6 +201,25 @@ def _read_revision_files(source_root: Path, revision: str) -> dict[Path, bytes]:
     return files
 
 
+def _read_license_files(source_root: Path, revision: str) -> dict[Path, bytes]:
+    """Read the license files at the root of the recorded revision."""
+    repository = subprocess.run(
+        ["git", "-C", str(source_root), "rev-parse", "--show-toplevel"],
+        check=True, capture_output=True, text=True,
+    ).stdout.strip()
+    names = subprocess.run(
+        ["git", "-C", repository, "ls-tree", "--name-only", revision],
+        check=True, capture_output=True, text=True,
+    ).stdout.split()
+    return {
+        Path(name): subprocess.run(
+            ["git", "-C", repository, "cat-file", "blob", f"{revision}:{name}"],
+            check=True, capture_output=True,
+        ).stdout
+        for name in _LICENSE_NAMES if name in names
+    }
+
+
 def main() -> int:
     source = Path(sys.argv[1]).resolve() if len(sys.argv) > 1 else DEFAULT_SOURCE.resolve()
     if not source.is_dir():
@@ -179,6 +239,8 @@ def main() -> int:
         if rel.suffix == ".py" else blob
         for rel, blob in source_files.items()
     }
+    prepared.update(_read_license_files(source, provenance["source_revision"]))
+    prepared[Path(_MODIFICATIONS_NAME)] = _MODIFICATIONS_TEXT.encode("utf-8")
     if DEST.exists():
         shutil.rmtree(DEST)
     DEST.mkdir(parents=True)

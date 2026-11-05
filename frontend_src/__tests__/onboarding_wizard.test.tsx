@@ -134,7 +134,7 @@ describe("the setup wizard", () => {
     expect(heading()).toBe("Grant Access to One Light");
   });
 
-  it("shows every button's icon and text, even with the toolbar showing icons only (user, 2026-10-28)", async () => {
+  it("shows every button's icon and text, even with the toolbar showing icons only", async () => {
     mocks.getAgentCliProviders.mockResolvedValue({ instances: [{ id: "inst1", name: "My Claude", model: "claude" }], provider_types: [] });
     render(<DisplayModeContext.Provider value="icons"><OnboardingWizard onCancel={vi.fn()} onFinish={vi.fn()} /></DisplayModeContext.Provider>);
     const allLabelled = () => {
@@ -152,7 +152,7 @@ describe("the setup wizard", () => {
     allLabelled();
   });
 
-  it("opens Agent Chat for the test with an empty conversation (user, 2026-10-28)", async () => {
+  it("opens Agent Chat for the test with an empty conversation", async () => {
     __resetAgentCliState();
     setSessionTurns([{ entries: [{ kind: "user", text: "old", ts: 1 }], messages: [], lines: 1 }]);
     mocks.getAgentCliProviders.mockResolvedValue({ instances: [{ id: "inst1", name: "My Claude", model: "claude" }], provider_types: [] });

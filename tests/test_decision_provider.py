@@ -5,15 +5,21 @@ import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+
+from tests.runtime_fixtures import patch_readers
 from aiohttp import ClientSession, web
 from aiohttp.test_utils import TestServer
 
-from custom_components.phoenix_mcp import agentcli
+from custom_components.phoenix_mcp import agentcli_views
+from custom_components.phoenix_mcp.llm import accounts as llm_accounts
+from custom_components.phoenix_mcp.llm import base as llm_base
+from custom_components.phoenix_mcp.llm import factory as llm_factory
 from custom_components.phoenix_mcp.admin_view import _validated_settings_patch
-from custom_components.phoenix_mcp.const import DECISION_ROUTE_CHOICES, DOMAIN
+from custom_components.phoenix_mcp.const import DOMAIN
+from custom_components.phoenix_mcp.routing.routing_tables import DECISION_ROUTE_CHOICES
 from custom_components.phoenix_mcp.data import PhoenixData
-from custom_components.phoenix_mcp.decision_provider import DecisionError, DecisionProvider, parse_choice
-from custom_components.phoenix_mcp.decision_shadow import DecisionShadow, async_preview_decision
+from custom_components.phoenix_mcp.routing.decision_provider import DecisionError, DecisionProvider, parse_choice
+from custom_components.phoenix_mcp.routing.decision_shadow import DecisionShadow, async_preview_decision
 
 
 @pytest.mark.parametrize("chat", [False, True])
@@ -45,10 +51,10 @@ async def decision_home(hass, access_key_store):
     access_key, _ = await access_key_store.async_create_access_key('decision_test','test')
     data = PhoenixData(store=access_key_store, rate_limiter=MagicMock(), audit=MagicMock())
     hass.data[DOMAIN] = data
-    store = agentcli.AgentCliStore(AsyncMock())
+    store = llm_accounts.AgentCliStore(AsyncMock())
     account = await store.add('typesafe', {'api_key':'test-secret','model':'jev-latest'})
     await access_key_store.async_patch_settings(decision_provider_id=account)
-    with patch.object(agentcli, '_get_secret_store', AsyncMock(return_value=store)):
+    with patch_readers("custom_components.phoenix_mcp.llm.accounts._get_secret_store", AsyncMock(return_value=store)):
         yield data, access_key, store, account
     data.decision_shadow.cancel()
     if data.decision_shadow.task:
@@ -67,7 +73,7 @@ async def test_real_http_contract(protocol, socket_enabled):
         return web.json_response({'models':[{'name':'jev-latest'}]})
     app.router.add_get('/v1/models', models)
     async with TestServer(app) as server, ClientSession() as session:
-        cfg=agentcli.ProviderConfig('typesafe','jev-latest',str(server.make_url('/v1')),'test-secret')
+        cfg=llm_accounts.ProviderConfig('typesafe','jev-latest',str(server.make_url('/v1')),'test-secret')
         provider=DecisionProvider(cfg,protocol)
         assert await provider.validate(session)==(True,'')
         assert await provider.list_models(session)==['jev-latest']
@@ -91,7 +97,7 @@ async def test_http_failures_never_follow_redirects_retry_or_echo_bodies(status,
         return web.Response(status=status,text='private prompt and test-secret',headers={'Location':'/must-not-follow'})
     app=web.Application(); app.router.add_post('/systemone',handler)
     async with TestServer(app) as server, ClientSession() as session:
-        cfg=agentcli.ProviderConfig('typesafe','m',str(server.make_url('')).rstrip('/'))
+        cfg=llm_accounts.ProviderConfig('typesafe','m',str(server.make_url('')).rstrip('/'))
         with pytest.raises(DecisionError,match='^'+reason+'$'):
             await DecisionProvider(cfg,'systemone').classify(session,'command',1000)
     assert count==1
@@ -106,7 +112,7 @@ async def test_body_bounds_and_duplicate_keys(body,reason,socket_enabled):
         return web.Response(text=body)
     app=web.Application(); app.router.add_post('/systemone',handler)
     async with TestServer(app) as server, ClientSession() as session:
-        cfg=agentcli.ProviderConfig('typesafe','m',str(server.make_url('')).rstrip('/'))
+        cfg=llm_accounts.ProviderConfig('typesafe','m',str(server.make_url('')).rstrip('/'))
         with pytest.raises(DecisionError,match='^'+reason+'$'):
             await DecisionProvider(cfg,'systemone').classify(session,'command',1000)
 
@@ -126,8 +132,8 @@ def test_malformed_answers_have_no_decision(change, typesafe):
     if change=='confidence':a['confidence']=2
     if change=='extra':body['answers']['extra']=copy.deepcopy(a)
     if change=='model':body['model']='private output\n'
-    from custom_components.phoenix_mcp.const import DECISION_TYPESAFE_BASE_URL
-    provider = DecisionProvider(agentcli.ProviderConfig('typesafe', 'jev-latest', DECISION_TYPESAFE_BASE_URL),
+    from custom_components.phoenix_mcp.routing.routing_tables import DECISION_TYPESAFE_BASE_URL
+    provider = DecisionProvider(llm_accounts.ProviderConfig('typesafe', 'jev-latest', DECISION_TYPESAFE_BASE_URL),
                                 'systemone')
     parser = provider._parse_choice if typesafe else parse_choice
     with pytest.raises(DecisionError):
@@ -139,10 +145,10 @@ async def test_decision_accounts_are_secret_free_and_cannot_resolve_for_conversa
     assert store.resolve(account) is None
     cfg=store.resolve(account,purpose='decision')
     assert cfg.kind=='typesafe'
-    with pytest.raises(ValueError):agentcli.build_provider(cfg)
+    with pytest.raises(ValueError):llm_factory.build_provider(cfg)
     assert 'test-secret' not in json.dumps(store.list_instances())
-    assert not any(i['kind']=='typesafe' for i in agentcli._provider_catalog())
-    assert {i['kind'] for i in agentcli._provider_catalog('decision')}=={'typesafe'}
+    assert not any(i['kind']=='typesafe' for i in llm_accounts._provider_catalog())
+    assert {i['kind'] for i in llm_accounts._provider_catalog('decision')}=={'typesafe'}
 
 
 @pytest.mark.parametrize('field',['voice_agent_provider_id','ai_task_provider_id'])
@@ -167,13 +173,14 @@ async def test_only_decision_accounts_can_be_selected(hass,decision_home):
 async def test_decision_budget_is_separate_and_strict(hass,decision_home,budget):
     data,*_=decision_home
     _,error=await _validated_settings_patch({'decision_timeout_ms':budget},data,hass,'rid')
-    assert error is not None
+    assert error is not None and error.status==400
+    assert b'decision_timeout_ms' in error.body
 
 
 async def test_manual_observation_cannot_execute_or_create_approval(hass,decision_home):
     data,access_key,*_=decision_home
     with (patch.object(DecisionProvider,'classify',AsyncMock(return_value=parse_choice(response(),DECISION_ROUTE_CHOICES))) as classify,
-          patch('custom_components.phoenix_mcp.mcp_view._dispatch_mcp') as dispatch):
+          patch_readers('custom_components.phoenix_mcp.tool_dispatch._dispatch_mcp') as dispatch):
         result=await async_preview_decision(hass,data,access_key,'Switch the lamp on','en',{'reason':'no_match','proposal':None})
     assert result['reason']=='observed' and result['executed'] is False
     classify.assert_awaited_once();dispatch.assert_not_called()
@@ -246,7 +253,7 @@ async def test_real_http_timeout_is_bounded_and_not_retried(socket_enabled):
         return web.json_response(response())
     app=web.Application();app.router.add_post('/systemone',handler)
     async with TestServer(app) as server, ClientSession() as session:
-        cfg=agentcli.ProviderConfig('typesafe','m',str(server.make_url('')).rstrip('/'))
+        cfg=llm_accounts.ProviderConfig('typesafe','m',str(server.make_url('')).rstrip('/'))
         try:
             with pytest.raises((TimeoutError,DecisionError)):
                 await DecisionProvider(cfg,'systemone').classify(session,'command',20)
@@ -269,10 +276,10 @@ async def test_voice_shadow_never_waits_for_decision_or_replaces_provider(hass,d
            'route':'local_candidate' if local_reason=='supported' else 'provider','elapsed_ms':1,'executed':False}
     ordinary=AsyncMock(return_value='ordinary answer')
     with (patch.object(DecisionProvider,'classify',classify),
-          patch('custom_components.phoenix_mcp.command_routing.async_evaluate_command',AsyncMock(return_value=local)),
-          patch.object(agentcli,'build_provider',return_value=MagicMock()),
-          patch.object(agentcli,'async_run_voice_turn',ordinary),
-          patch('custom_components.phoenix_mcp.mcp_view._dispatch_mcp') as dispatch):
+          patch_readers('custom_components.phoenix_mcp.routing.command_routing.async_evaluate_command',AsyncMock(return_value=local)),
+          patch_readers("custom_components.phoenix_mcp.llm.factory.build_provider",return_value=MagicMock()),
+          patch("custom_components.phoenix_mcp.voice_agent.async_run_voice_turn",ordinary),
+          patch_readers('custom_components.phoenix_mcp.tool_dispatch._dispatch_mcp') as dispatch):
         async with asyncio.timeout(1):
             reply=await voice_agent.async_voice_answer(hass,data,'private utterance',language='en')
         assert reply=='ordinary answer' and not release.is_set()
@@ -291,7 +298,7 @@ async def test_voice_shadow_never_waits_for_decision_or_replaces_provider(hass,d
 async def test_multilingual_decision_preview_sends_language_without_execution(hass, decision_home, language, expected):
     data, access_key, *_ = decision_home
     with (patch.object(DecisionProvider, '_request', AsyncMock(return_value=response())) as request,
-          patch('custom_components.phoenix_mcp.mcp_view._dispatch_mcp') as dispatch):
+          patch_readers('custom_components.phoenix_mcp.tool_dispatch._dispatch_mcp') as dispatch):
         result = await async_preview_decision(hass, data, access_key, '打开台灯', language,
                                               {'reason': 'no_match', 'proposal': None}, ingress='preview')
     assert result['reason'] == 'observed' and result['executed'] is False
@@ -321,7 +328,7 @@ async def test_preview_ingress_cannot_prepare_plan_even_with_hybrid_enabled(hass
     ('model', 'model_identifier'),
 ])
 def test_validation_diagnostics_preserve_strict_checks_without_response_data(change, check):
-    from custom_components.phoenix_mcp.decision_provider import DecisionValidationError
+    from custom_components.phoenix_mcp.routing.decision_provider import DecisionValidationError
     body = response()
     answer = body['answers']['route']
     if change == 'selected': answer['choice'] = 'private-provider-text'
@@ -338,7 +345,7 @@ def test_validation_diagnostics_preserve_strict_checks_without_response_data(cha
 
 
 @pytest.mark.parametrize('view_class,method', [
-    (agentcli.PhoenixAgentCliModelsView, 'get'), (agentcli.PhoenixAgentCliRefreshView, 'post'),
+    (agentcli_views.PhoenixAgentCliModelsView, 'get'), (agentcli_views.PhoenixAgentCliRefreshView, 'post'),
 ])
 @pytest.mark.parametrize('reason', ['unavailable', 'timeout', 'authentication'])
 async def test_offline_decision_catalog_is_a_handled_error_without_account_changes(hass, decision_home, view_class, method, reason):
@@ -356,7 +363,7 @@ async def test_offline_decision_catalog_is_a_handled_error_without_account_chang
 
 @pytest.mark.parametrize('question', ['route', 'target', 'percentage', 'summary_scope', 'private-question'])
 def test_probability_total_diagnostic_contains_only_allowlisted_aggregates(question):
-    from custom_components.phoenix_mcp.decision_provider import DecisionValidationError
+    from custom_components.phoenix_mcp.routing.decision_provider import DecisionValidationError
     body = {'model': 'jev-1.13.0', 'answers': {question: {
         'type': 'choice', 'choice': 'private-choice', 'confidence': 0.95,
         'probabilities': {'private-choice': 0.95, 'none': 0.1},
@@ -373,7 +380,7 @@ def test_probability_total_diagnostic_contains_only_allowlisted_aggregates(quest
 
 @pytest.mark.parametrize('bad', [float('nan'), float('inf'), -1, 2, 'private-value'])
 def test_invalid_probability_values_never_expose_aggregate_diagnostics(bad):
-    from custom_components.phoenix_mcp.decision_provider import DecisionValidationError
+    from custom_components.phoenix_mcp.routing.decision_provider import DecisionValidationError
     body = response()
     body['answers']['route']['probabilities']['light_on'] = bad
     with pytest.raises(DecisionValidationError) as error:
@@ -387,7 +394,7 @@ def test_invalid_probability_values_never_expose_aggregate_diagnostics(bad):
     ('typesafe', 'https://other.example/v1', 'systemone', False),
 ])
 async def test_rounding_is_applied_only_to_known_typesafe_endpoint(kind, base_url, protocol, allowed):
-    provider = DecisionProvider(agentcli.ProviderConfig(kind, 'jev-latest', base_url), protocol)
+    provider = DecisionProvider(llm_accounts.ProviderConfig(kind, 'jev-latest', base_url), protocol)
     body = response()
     probabilities = {key: 0.95 if key == 'light_on' else 0.01 for key in DECISION_ROUTE_CHOICES}
     body['answers']['route']['probabilities'] = probabilities
@@ -412,9 +419,9 @@ async def test_rounding_is_applied_only_to_known_typesafe_endpoint(kind, base_ur
     ([0.95] + [0.01] * 26, False, False),
 ])
 def test_typesafe_rounding_bounds_preserve_raw_probabilities_and_threshold(values, valid, confident):
-    from custom_components.phoenix_mcp.const import DECISION_TYPESAFE_BASE_URL
-    from custom_components.phoenix_mcp.decision_provider import confident_choice
-    provider = DecisionProvider(agentcli.ProviderConfig('typesafe', 'jev-latest', DECISION_TYPESAFE_BASE_URL),
+    from custom_components.phoenix_mcp.routing.routing_tables import DECISION_TYPESAFE_BASE_URL
+    from custom_components.phoenix_mcp.routing.decision_provider import confident_choice
+    provider = DecisionProvider(llm_accounts.ProviderConfig('typesafe', 'jev-latest', DECISION_TYPESAFE_BASE_URL),
                                 'systemone')
     probabilities = {str(index): value for index, value in enumerate(values)}
     choices = {key: key for key in probabilities}
@@ -433,8 +440,8 @@ def test_typesafe_rounding_bounds_preserve_raw_probabilities_and_threshold(value
 @pytest.mark.parametrize('selection', ['target', 'summary_scope'])
 @pytest.mark.parametrize('case', ['last_group', 'none', 'conflict', 'uncertain_decline', 'missing', 'unknown'])
 async def test_grouped_choices_require_complete_unambiguous_global_selection(selection, case):
-    from custom_components.phoenix_mcp.const import DECISION_TYPESAFE_BASE_URL
-    provider = DecisionProvider(agentcli.ProviderConfig('typesafe', 'jev-latest', DECISION_TYPESAFE_BASE_URL),
+    from custom_components.phoenix_mcp.routing.routing_tables import DECISION_TYPESAFE_BASE_URL
+    provider = DecisionProvider(llm_accounts.ProviderConfig('typesafe', 'jev-latest', DECISION_TYPESAFE_BASE_URL),
                                 'systemone')
     targets = {f't{i}': {'entity_id': f'light.test_{i}', 'name': 'Duplicate lamp' if i in (0, 254) else f'Lamp {i}',
                         'eligible_categories': ['light_on']} for i in range(255)} if selection == 'target' else {}
@@ -484,8 +491,10 @@ async def test_grouped_choices_require_complete_unambiguous_global_selection(sel
 
 
 async def test_grouped_choice_limit_refuses_before_provider_request():
-    from custom_components.phoenix_mcp.const import DECISION_TYPESAFE_BASE_URL, DECISION_GROUPED_MAX_TARGETS
-    provider = DecisionProvider(agentcli.ProviderConfig('typesafe', 'jev-latest', DECISION_TYPESAFE_BASE_URL),
+    from custom_components.phoenix_mcp.routing.routing_tables import (
+        DECISION_TYPESAFE_BASE_URL, DECISION_GROUPED_MAX_TARGETS,
+    )
+    provider = DecisionProvider(llm_accounts.ProviderConfig('typesafe', 'jev-latest', DECISION_TYPESAFE_BASE_URL),
                                 'systemone')
     targets = {f't{i}': {'entity_id': f'light.test_{i}', 'eligible_categories': ['light_on']}
                for i in range(DECISION_GROUPED_MAX_TARGETS + 1)}
@@ -498,8 +507,8 @@ async def test_grouped_choice_limit_refuses_before_provider_request():
 @pytest.mark.parametrize('kind', ['entity', 'collection'])
 @pytest.mark.parametrize('failure', [None, 'authority', 'uncertain', 'declined', 'model_changed'])
 async def test_oversized_catalog_kind_selection_keeps_complete_relevant_catalog(kind, failure):
-    from custom_components.phoenix_mcp.const import DECISION_TYPESAFE_BASE_URL
-    provider = DecisionProvider(agentcli.ProviderConfig('typesafe', 'jev-latest', DECISION_TYPESAFE_BASE_URL),
+    from custom_components.phoenix_mcp.routing.routing_tables import DECISION_TYPESAFE_BASE_URL
+    provider = DecisionProvider(llm_accounts.ProviderConfig('typesafe', 'jev-latest', DECISION_TYPESAFE_BASE_URL),
                                 'systemone')
     targets = {f't{i}': {'entity_id': f'light.lamp_{i}', 'eligible_categories': ['light_on']} for i in range(2)}
     scopes = {f's{i}': {'summary_scope': {'domain': 'light', 'device_class': '', 'area_id': str(i)},
@@ -525,7 +534,7 @@ async def test_oversized_catalog_kind_selection_keeps_complete_relevant_catalog(
                                                    'collection' if kind == 'entity' else 'entity': 0}
         return {'model': 'different-model' if not first and failure == 'model_changed' else 'jev-1.13.0',
                 'answers': answers}
-    with (patch('custom_components.phoenix_mcp.decision_provider.DECISION_BATCH_MAX_TARGET_BYTES', 1),
+    with (patch('custom_components.phoenix_mcp.routing.decision_provider.DECISION_BATCH_MAX_TARGET_BYTES', 1),
           patch.object(provider, '_request', side_effect=reply) as request):
         if failure:
             with pytest.raises(DecisionError):
@@ -555,7 +564,7 @@ async def test_oversized_catalog_kind_selection_keeps_complete_relevant_catalog(
 ], ids=['capacity', 'private_extras', 'unknown_code', 'object_code', 'array_detail', 'array_body',
         'duplicate', 'oversized', 'deep_json', 'non_json', 'invalid_utf8'])
 async def test_typesafe_capacity_error_is_bounded_and_secret_free(body, expected, socket_enabled, caplog):
-    from custom_components.phoenix_mcp.decision_metrics import DecisionMetrics
+    from custom_components.phoenix_mcp.routing.decision_metrics import DecisionMetrics
 
     calls = 0
     async def handler(request):
@@ -568,7 +577,7 @@ async def test_typesafe_capacity_error_is_bounded_and_secret_free(body, expected
     app.router.add_post('/systemone', handler)
     metrics = DecisionMetrics()
     async with TestServer(app) as server, ClientSession() as session:
-        cfg = agentcli.ProviderConfig('typesafe', 'jev-latest', str(server.make_url('')).rstrip('/'), 'test-secret')
+        cfg = llm_accounts.ProviderConfig('typesafe', 'jev-latest', str(server.make_url('')).rstrip('/'), 'test-secret')
         provider = DecisionProvider(cfg, 'systemone', metrics=metrics)
         with pytest.raises(DecisionError, match='^' + expected + '$'):
             await provider.classify(session, 'private prompt', 1000)
@@ -599,7 +608,7 @@ async def test_capacity_code_does_not_override_status_or_other_adapters(kind, pr
     app = web.Application()
     app.router.add_post('/' + protocol, handler)
     async with TestServer(app) as server, ClientSession() as session:
-        cfg = agentcli.ProviderConfig(kind, 'model', str(server.make_url('')).rstrip('/'))
+        cfg = llm_accounts.ProviderConfig(kind, 'model', str(server.make_url('')).rstrip('/'))
         with pytest.raises(DecisionError, match='^' + expected + '$'):
             await DecisionProvider(cfg, protocol).classify(session, 'command', 1000)
     assert calls == 1
@@ -615,9 +624,9 @@ async def test_capacity_refusal_reaches_preview_and_fixed_hybrid_counters(hass, 
     app = web.Application()
     app.router.add_post('/systemone', handler)
     async with TestServer(app) as server:
-        cfg = agentcli.ProviderConfig('typesafe', 'jev-latest', str(server.make_url('')).rstrip('/'), 'test-secret')
+        cfg = llm_accounts.ProviderConfig('typesafe', 'jev-latest', str(server.make_url('')).rstrip('/'), 'test-secret')
         with (patch.object(store, 'resolve', return_value=cfg),
-              patch('custom_components.phoenix_mcp.mcp_view._dispatch_mcp') as dispatch):
+              patch_readers('custom_components.phoenix_mcp.tool_dispatch._dispatch_mcp') as dispatch):
             result = await async_preview_decision(hass, data, access_key, 'command', 'en', {'reason': 'no_match', 'proposal': None})
     assert calls == 1
     assert result['reason'] == 'provider_context_limit'
@@ -646,7 +655,7 @@ async def test_capacity_error_body_obeys_deadline_and_cancellation(cancel, socke
     app = web.Application()
     app.router.add_post('/systemone', handler)
     async with TestServer(app) as server, ClientSession() as session:
-        cfg = agentcli.ProviderConfig('typesafe', 'jev-latest', str(server.make_url('')).rstrip('/'))
+        cfg = llm_accounts.ProviderConfig('typesafe', 'jev-latest', str(server.make_url('')).rstrip('/'))
         provider = DecisionProvider(cfg, 'systemone')
         original = provider._http_error_reason
         async def observe(reply):
@@ -676,19 +685,19 @@ async def test_capacity_error_body_obeys_deadline_and_cancellation(cancel, socke
 async def test_unsupported_accounts_cannot_enter_any_provider_surface(hass, decision_home, kind):
     data, _, store, _ = decision_home
     legacy = await store.add(kind, {'api_key': 'private-key', 'base_url': 'http://retired.test/v1', 'model': 'retired-model'})
-    assert agentcli.provider_purpose(kind) == 'unsupported'
+    assert llm_accounts.provider_purpose(kind) == 'unsupported'
     assert legacy not in {row['id'] for row in store.list_instances()}
     assert store.resolve(legacy) is None
     assert store.resolve(legacy, purpose='decision') is None
     assert store.resolve(legacy, purpose='unsupported') is None
     hass.data['_phoenix_agentcli_store'] = store
-    assert agentcli.decision_account_fingerprint(hass, legacy) is None
+    assert llm_accounts.decision_account_fingerprint(hass, legacy) is None
     _, error = await _validated_settings_patch({'decision_provider_id': legacy}, data, hass, 'rid')
     assert error is not None and error.status == 400
-    config = await agentcli._probe_config(kind, {'api_key': 'private-key', 'base_url': 'http://retired.test/v1'})
-    assert isinstance(config, agentcli.ProbeConfigError) and config.key == 'providerUnknown'
+    config = await agentcli_views._probe_config(kind, {'api_key': 'private-key', 'base_url': 'http://retired.test/v1'})
+    assert isinstance(config, llm_base.ProbeConfigError) and config.key == 'providerUnknown'
     with pytest.raises(ValueError):
-        DecisionProvider(agentcli.ProviderConfig(kind, 'retired-model', 'http://retired.test/v1'), 'systemone')
+        DecisionProvider(llm_accounts.ProviderConfig(kind, 'retired-model', 'http://retired.test/v1'), 'systemone')
     # Stored credentials remain recoverable only through the existing admin delete/wipe owner.
     await store.delete(legacy)
     assert store.get(legacy) is None
@@ -708,7 +717,7 @@ async def test_decision_request_records_identity_and_outcome_without_request_env
     app.router.add_post('/systemone', handler)
     try:
         async with TestServer(app) as server, ClientSession() as session:
-            cfg = agentcli.ProviderConfig('typesafe', 'jev-latest', str(server.make_url('')).rstrip('/'), 'canary-api-secret')
+            cfg = llm_accounts.ProviderConfig('typesafe', 'jev-latest', str(server.make_url('')).rstrip('/'), 'canary-api-secret')
             provider = DecisionProvider(cfg, 'systemone', metric_scope='chat_shadow')
             if status == 200:
                 await provider.classify(session, 'private request envelope', 1000)
@@ -745,12 +754,13 @@ async def test_decision_request_records_identity_and_outcome_without_request_env
     ('jev-preview', 'official', 'jev-1.14.0', False),
 ])
 def test_revision_admission_follows_only_the_official_alias(model, base_url, returned, admitted):
-    from custom_components.phoenix_mcp.const import (
-        DECISION_BATCH_EXECUTION_MODELS, DECISION_CONTEXT_EXECUTION_MODELS, DECISION_FOLLOWUP_EXECUTION_MODELS,
-        DECISION_PERCENTAGE_EXECUTION_MODELS, DECISION_REFERENCE_EXECUTION_MODELS, DECISION_TYPESAFE_BASE_URL,
+    from custom_components.phoenix_mcp.routing.routing_tables import (
+        DECISION_BATCH_EXECUTION_MODELS, DECISION_CONTEXT_EXECUTION_MODELS,
+        DECISION_FOLLOWUP_EXECUTION_MODELS, DECISION_PERCENTAGE_EXECUTION_MODELS,
+        DECISION_REFERENCE_EXECUTION_MODELS, DECISION_TYPESAFE_BASE_URL,
     )
-    from custom_components.phoenix_mcp.decision_provider import revision_admitted
-    cfg = agentcli.ProviderConfig('typesafe', model, DECISION_TYPESAFE_BASE_URL if base_url == 'official' else base_url, 'key')
+    from custom_components.phoenix_mcp.routing.decision_provider import revision_admitted
+    cfg = llm_accounts.ProviderConfig('typesafe', model, DECISION_TYPESAFE_BASE_URL if base_url == 'official' else base_url, 'key')
     for registry in (DECISION_BATCH_EXECUTION_MODELS, DECISION_CONTEXT_EXECUTION_MODELS, DECISION_FOLLOWUP_EXECUTION_MODELS,
                      DECISION_PERCENTAGE_EXECUTION_MODELS, DECISION_REFERENCE_EXECUTION_MODELS):
         assert revision_admitted(registry, cfg, returned) is admitted

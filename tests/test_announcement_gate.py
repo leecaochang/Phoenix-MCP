@@ -4,14 +4,16 @@ from __future__ import annotations
 
 import json
 import uuid
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from homeassistant.helpers import entity_registry as er
 from homeassistant.util.dt import utcnow
 
+from custom_components.phoenix_mcp import service_targets
 from custom_components.phoenix_mcp.access_key_store import AccessKeyRecord, PermissionNode, PermissionTree
-from custom_components.phoenix_mcp.mcp_view import _call_tool, _execute_call_service
+from custom_components.phoenix_mcp.tool_dispatch import _call_tool
+from custom_components.phoenix_mcp.tools.service import _execute_call_service
 
 SPEAKER = "media_player.kitchen_speaker"
 SATELLITE = "assist_satellite.hall"
@@ -37,17 +39,25 @@ async def _call(name: str, domain: str, service: str, data: dict, entity_id: str
 
 
 @pytest.fixture
-def calls(hass):
+def calls(hass, monkeypatch):
     """Real states and registered stand-ins for the announcement services."""
     recorded: list = []
+    # Reading every description imports each integration's feature constants, and
+    # the test stack lacks an optional dependency behind assist_satellite.
+    monkeypatch.setattr(service_targets, "async_get_all_descriptions", AsyncMock(return_value={
+        "music_assistant": {"play_announcement": {"target": {
+            "entity": [{"domain": ["media_player"], "integration": "music_assistant"}]}}},
+        "media_player": {"play_media": {"target": {"entity": [{"domain": ["media_player"]}]}}},
+        "assist_satellite": {"announce": {"target": {"entity": [{"domain": ["assist_satellite"]}]}}},
+    }))
 
     async def _handler(call):
         recorded.append(call)
 
     registry = er.async_get(hass)
-    for entity_id in (SPEAKER, SATELLITE):
+    for entity_id, platform in ((SPEAKER, "music_assistant"), (SATELLITE, "test")):
         domain, object_id = entity_id.split(".", 1)
-        registry.async_get_or_create(domain, "test", object_id, suggested_object_id=object_id)
+        registry.async_get_or_create(domain, platform, object_id, suggested_object_id=object_id)
         hass.states.async_set(entity_id, "idle")
     for domain, service in {(domain, service) for domain, service, _, _ in ANNOUNCEMENTS}:
         hass.services.async_register(domain, service, _handler)

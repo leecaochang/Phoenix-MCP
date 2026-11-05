@@ -19,11 +19,9 @@ import re
 
 import pytest
 
-from custom_components.phoenix_mcp.const import (
-    AGENTCLI_PROVIDERS,
-    CAPABILITY_NAMES,
-)
-from custom_components.phoenix_mcp.mcp_view import (
+from custom_components.phoenix_mcp.const import CAPABILITY_NAMES
+from custom_components.phoenix_mcp.provider_constants import AGENTCLI_PROVIDERS
+from custom_components.phoenix_mcp.tool_defs import (
     _ENTITY_TOOL_DEFS,
     _NATIVE_TOOL_DEFS,
     _SYSTEM_TOOL_DEFS,
@@ -74,7 +72,8 @@ def test_admin_api_documents_every_provider_kind() -> None:
 
 
 def test_admin_api_documents_every_emitted_error_code() -> None:
-    src = "\n".join((PKG / name).read_text(encoding="utf-8") for name in ("admin_view.py", "agentcli.py"))
+    src = "\n".join((PKG / name).read_text(encoding="utf-8") for name in (
+        "admin_view.py", "agent_turn.py", "agent_chat.py", "agentcli_views.py"))
     codes = set(re.findall(r'_err\(\s*"([a-z_]+)"', src))
     assert len(codes) >= 6, f"error-code extraction broke: {sorted(codes)}"
     pages = _admin_api_pages()
@@ -83,7 +82,8 @@ def test_admin_api_documents_every_emitted_error_code() -> None:
 
 
 def test_admin_api_documents_every_sse_frame() -> None:
-    src = (PKG / "agentcli.py").read_text(encoding="utf-8")
+    src = "\n".join((PKG / name).read_text(encoding="utf-8") for name in (
+        "agent_turn.py", "agent_chat.py", "agentcli_views.py"))
     frames = set(re.findall(r'emit\(\s*"([a-z_]+)"', src))
     assert len(frames) >= 10, f"SSE frame extraction broke: {sorted(frames)}"
     page = _page("topic.adminApiChat")
@@ -92,8 +92,8 @@ def test_admin_api_documents_every_sse_frame() -> None:
 
 
 @pytest.mark.parametrize("pages,module_names", [
-    (("topic.agentEndpoints",), ("mcp_view", "skill_view")),
-    ((), ("admin_view", "agentcli")),
+    (("topic.agentEndpoints",), ("mcp_transport", "skill_view")),
+    ((), ("admin_view", "agentcli_views")),
 ])
 def test_route_reference_matches_methods_and_paths(pages, module_names) -> None:
     """A documented URL alone cannot pin an omitted DELETE or wrong verb."""
@@ -110,7 +110,7 @@ def test_route_reference_matches_methods_and_paths(pages, module_names) -> None:
             if not isinstance(url, str):
                 continue
             for method in ("get", "post", "put", "patch", "delete"):
-                if method in cls.__dict__:
+                if callable(getattr(cls, method, None)):
                     expected.add((method.upper(), re.sub(r"\{[^}]+\}", "{}", url)))
     assert len(expected) >= (4 if pages else 60)
     source = _page(*pages) if pages else _admin_api_pages()
@@ -189,10 +189,13 @@ def _source_files() -> list[str]:
     """Every tracked file whose change can alter what the panel or an agent sees."""
     import subprocess
 
-    tracked = subprocess.run(
-        ["git", "ls-files", "frontend_src", "custom_components/phoenix_mcp"],
-        cwd=ROOT, capture_output=True, text=True, check=True,
-    ).stdout.split()
+    try:
+        tracked = subprocess.run(
+            ["git", "ls-files", "frontend_src", "custom_components/phoenix_mcp"],
+            cwd=ROOT, capture_output=True, text=True, check=True,
+        ).stdout.split()
+    except (OSError, subprocess.CalledProcessError):
+        pytest.skip("git is not available to enumerate tracked files")
     return sorted(
         path for path in tracked
         if (path.startswith("frontend_src/") and path.endswith((".ts", ".tsx"))

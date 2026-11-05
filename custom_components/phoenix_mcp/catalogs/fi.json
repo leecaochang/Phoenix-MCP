@@ -47,7 +47,7 @@
       "createAccessKey": "Luo käyttöavain",
       "createFailed": "Käyttöavaimen luonti epäonnistui.",
       "createPtUnderstand": "Ymmärrän, että tällä käyttöavaimella on laajat oikeudet Home Assistant -järjestelmään",
-      "createPtWarning": "<strong>Tämä käyttöavain voi lukea ja ohjata kaikkia Home Assistant -entiteettejä.</strong> Läpivienti ottaa käyttöön myös seuraavat: Kokoonpanon luku, Mallin renderöinti, Haku ja löytäminen, Rekisterin luku, Automaatioiden jäljitykset, Diagnostiikka, Kuulutus ja Palvelun vastaustiedot, ellet aseta niitä tilaan Vahvista. Diagnostiikka ja Palvelun vastaustiedot voivat paljastaa arkaluontoisia tietoja. Kaikki muut ominaisuudet säilyttävät oman asetuksensa, ja MESA-säännöt, Phoenix MCP -estolista, arkaluontoisten attribuuttien poisto, pyyntörajat, mitätöinti ja vanheneminen ovat edelleen voimassa. Käytä sitä vain MCP-asiakkaiden kanssa, joihin luotat koko kotisi osalta.",
+      "createPtWarning": "<strong>Tämä käyttöavain voi lukea ja ohjata kaikkia Home Assistant -entiteettejä.</strong> Läpivienti ottaa käyttöön myös seuraavat: Kokoonpanon luku, Mallin renderöinti, Haku ja löytäminen, Rekisterin luku, Automaatioiden jäljitykset, Diagnostiikka, Kuulutus ja Palvelun vastaustiedot. Diagnostiikka ja Palvelun vastaustiedot voivat paljastaa arkaluontoisia tietoja. Kaikki muut ominaisuudet säilyttävät oman asetuksensa, ja MESA-säännöt, Phoenix MCP -estolista, arkaluontoisten attribuuttien poisto, pyyntörajat, mitätöinti ja vanheneminen ovat edelleen voimassa. Käytä sitä vain MCP-asiakkaiden kanssa, joihin luotat koko kotisi osalta.",
       "daysAgo": "{d} pv sitten",
       "delete": "Poista",
       "deletePermanently": "Poista pysyvästi",
@@ -60,7 +60,7 @@
       "done": "Valmis",
       "empty": "Ei vielä käyttöavaimia. Aloita luomalla yksi.",
       "emptyFiltered": "Mikään käyttöavain ei vastaa suodatinta.",
-      "enablePtBody": "<strong>Tämä avain lukee ja ohjaa kaikkia entiteettejä.</strong> Myös kahdeksan luku- ja diagnostiikkaominaisuutta otetaan käyttöön, elleivät ne ole Vahvista-tilassa.",
+      "enablePtBody": "<strong>Tämä avain lukee ja ohjaa kaikkia entiteettejä.</strong> Myös kahdeksan luku- ja diagnostiikkaominaisuutta otetaan käyttöön.",
       "enablePtCheck": "Ymmärrän, että käyttöavaimella <code>{name}</code> on laajat oikeudet Home Assistant -järjestelmään",
       "enablePtFailed": "Läpiviennin käyttöönotto epäonnistui.",
       "enablePtLabel": "Ota läpivienti käyttöön",
@@ -125,7 +125,7 @@
       "presetNewName": "Uuden esiasetuksen nimi",
       "presetNoChange": "Tämä esiasetus vastaa nykyisiä asetuksia, joten mikään asetus ei muutu. Käyttöönotto lasketaan silti asetusten muutokseksi: yhdistetyt agentit saavat siitä tiedon seuraavassa kutsussaan, ja nopeusrajoituksen laskenta alkaa alusta.",
       "presetPtUnderstand": "Ymmärrän, että tämä esiasetus ottaa läpiviennin käyttöön",
-      "presetPtWarning": "<strong>Tämä esiasetus ottaa läpiviennin käyttöön.</strong> Käyttöavain voi silloin lukea ja ohjata kaikkia entiteettejä, ja kahdeksan muuta ominaisuutta otetaan käyttöön, muun muassa Diagnostiikka ja Palvelun vastaustiedot, elleivät ne ole tilassa Vahvista. Muut ominaisuudet, MESA-säännöt, Phoenix MCP -estolista ja arkaluontoisten attribuuttien poisto ovat edelleen voimassa.",
+      "presetPtWarning": "<strong>Tämä esiasetus ottaa läpiviennin käyttöön.</strong> Käyttöavain voi silloin lukea ja ohjata kaikkia entiteettejä, ja kahdeksan muuta ominaisuutta otetaan käyttöön, muun muassa Diagnostiikka ja Palvelun vastaustiedot. Muut ominaisuudet, MESA-säännöt, Phoenix MCP -estolista ja arkaluontoisten attribuuttien poisto ovat edelleen voimassa.",
       "presetRenameTitle": "Nimeä tämä esiasetus uudelleen; tallennetaan, kun napsautat muualle",
       "presetRevert": "Palauta",
       "presetRevertBody": "Tämä kumoaa esiasetuksen <strong>{name}</strong> tallentamattomat muutokset:",
@@ -138,7 +138,7 @@
       "presetSwitchTo": "Vaihda tähän",
       "ptConvertBody": "Avain noudattaa käyttöoikeuspuutaan heti. Jos siinä ei ole myöntöjä, avain menettää pääsyn kaikkiin entiteetteihin.",
       "ptConvertFailed": "Käyttöavaimen muuntaminen epäonnistui.",
-      "ptNoticeCaps": "Myös kahdeksan luku- ja diagnostiikkaominaisuutta on käytössä, elleivät ne ole Vahvista-tilassa. Muut säilyttävät oman asetuksensa.",
+      "ptNoticeCaps": "Myös kahdeksan luku- ja diagnostiikkaominaisuutta on käytössä. Muut säilyttävät oman asetuksensa.",
       "ptNoticeIntro": "<strong>Läpivientikäyttöavain.</strong> Se ohittaa käyttöoikeuspuun ja ulottuu kaikkiin entiteetteihin, arkaluontoiset attribuutit poistettuina.",
       "ptNoticeUsage": "Läpivienti voi lähettää mallille tietoja jokaisesta entiteetistä, mikä kuluttaa enemmän tokeneita kuin rajattu puu.",
       "rateBurstLabel": "Purskeita sekunnissa (0 = ei sekuntikohtaista rajaa)",
@@ -263,6 +263,7 @@
       "mesaArchiveRequired": "archive on pakollinen.",
       "mesaConflictModeInvalid": "on_conflict on oltava skip tai overwrite.",
       "mesaProfileExists": "Profiili on jo olemassa. Avaa se muokkaustilassa.",
+      "mesaSaveFailed": "MESA-muutosta ei voitu tallentaa, joten aiemmat asetukset ovat yhä voimassa.",
       "mesaUnavailable": "MESA ei ole käytettävissä.",
       "nameRequired": "name on pakollinen.",
       "nodeIdInvalidChars": "Solmun tunnus sisältää virheellisiä merkkejä.",
@@ -394,7 +395,9 @@
       "restoreNoConfigSide": "Tässä versiossa ei ole kyseisellä puolella kokoonpanoa, jonka voisi palauttaa.",
       "restoreYamlTags": "Tämä versio sisältää YAML-tageja, kuten !secret tai !include, eikä sitä voi palauttaa automaattisesti. Luo se uudelleen käsin.",
       "restoreToolReported": "Palautusta ei voitu toteuttaa. Työkalu ilmoitti: {detail}",
-      "capabilityAllowUnsupported": "{capability} ei tue Salli-tilaa."
+      "capabilityAllowUnsupported": "{capability} ei tue Salli-tilaa.",
+      "recoverySnapshotUnsafeAt": "Tästä kohteesta ei ole täydellistä kopiota ilman salaisuuksia, joten mitään ei muutettu. Phoenix hylkäsi sen kohdassa {location}.",
+      "invalidHostHeader": "Pyynnön Host-otsake ei ole kelvollinen osoite."
     },
     "agentchat": {
       "accessKey": "Käyttöavain",
@@ -427,6 +430,7 @@
       "clearHistory": "Tyhjennä keskusteluhistoria",
       "configureFirst": "Määritä ensin palveluntarjoaja",
       "connection": "Yhteys",
+      "connectionLost": "Yhteys Home Assistantiin katkesi ennen kuin tämä vastaus valmistui.",
       "continue": "Jatka",
       "decreaseTextSize": "Pienennä tekstin kokoa",
       "dockedClosed": "Agent Chat on suljettu.",
@@ -458,6 +462,7 @@
         "empty_turn": "Malli päätti vuoron ilman tekstivastausta.",
         "internal": "Sisäinen virhe.",
         "max_tokens_stop": "Malli pysähtyi, koska se saavutti tulosteen pituusrajan. Pyydä sitä jatkamaan tai suurenna mallin tulosteen token-rajaa (Ollamassa sen num_predict/context-asetuksia).",
+        "memory_trimmed": "Keskustelu on kasvanut suuremmaksi kuin yhteen pyyntöön mahtuu, joten malli ei enää muista vanhimpia viestejä. Ne pysyvät näytöllä.",
         "model_api_unsupported": "Tätä mallia ei ole varmennettu OpenCode Chat Completions -rajapinnalle. Valitse tuettu malli.",
         "network": "Palveluntarjoaja ei ole tilapäisesti käytettävissä.",
         "ollama_backend": "Palveluntarjoaja ei ole tilapäisesti käytettävissä.",
@@ -476,6 +481,7 @@
         "provider_transient": "Palveluntarjoaja ei ole tilapäisesti käytettävissä.",
         "quota": "Palveluntarjoajan tililtä on loppunut saldo tai sen kulutusraja on täynnä. Sitä ei yritetä uudelleen.",
         "rate_limit": "Palveluntarjoaja ei ole tilapäisesti käytettävissä.",
+        "request_too_large": "Tämä viesti on liian suuri lähetettäväksi. Lyhennä sitä, poista kuvia tai aloita uusi keskustelu komennolla /clear.",
         "too_many_tools": "Tämä käyttöavain tarjoaa {count} työkalua, mutta {provider} hyväksyy enintään {limit} yhdessä pyynnössä. Rajaa käyttöavaimen ominaisuuksia tai valitse toinen palveluntarjoaja.",
         "tool_call_cut": "Yhteys malliin katkesi kesken työkalukutsun, joten toimintoa ei suoritettu. Mitään ei muutettu, eikä vika ollut pyynnössä itsessään; lähetä se uudelleen.",
         "tool_call_truncated": "Malli saavutti tulosteen pituusrajan kesken työkalukutsun, joten toimintoa ei suoritettu. Pyydetty muutos oli liian suuri tuotettavaksi yhdellä kutsulla; pyydä pienempää muutosta.",
@@ -483,7 +489,9 @@
         "review_changed": "Käyttöavaimen työkalut tai keskustelu muuttuivat työkalukutsun tarkistuksen aikana, joten mitään ei suoritettu. Lähetä pyyntö uudelleen.",
         "kill_switch": "Hätäkatkaisu on päällä, joten agentti pysähtyi. Mitään muuta ei suoritettu.",
         "unreachable": "Home Assistantiin ei saatu yhteyttä, joten tämä ei valmistunut. Kaikki hyväksyntääsi odottanut peruutettiin.",
-        "upstream": "Palveluntarjoaja ei ole tilapäisesti käytettävissä."
+        "upstream": "Palveluntarjoaja ei ole tilapäisesti käytettävissä.",
+        "provider_slow": "Palveluntarjoaja ei vastannut {seconds} sekunnin kuluessa.",
+        "result_withheld": "{length} tavun tulos ei mahtunut pyynnön kontekstiin, eikä sitä annettu mallille."
       },
       "options": "Asetukset",
       "popIn": "Palauta takaisin Home Assistantiin",
@@ -967,7 +975,9 @@
       "saveFailed": "Tarkistusta ei voitu tallentaa. Toiminto odottaa edelleen tarkistusta.",
       "showInAudit": "Näytä valvontalokissa",
       "title": "Tarvitsee huomiotasi",
-      "unknown": "Keskustelu päättyi ennen kuin Phoenix kirjasi, suoritettiinko toiminto, joten se on voinut suorittua. Näytä valvontalokissa näyttää, missä se on tarjolla, mitä Phoenix kirjasi; hyväksyntää odottaneen toiminnon tila näkyy kohdassa Hyväksynnät. Tarkista Home Assistant ennen uutta yritystä."
+      "unknown": "Keskustelu päättyi ennen kuin Phoenix kirjasi, suoritettiinko toiminto, joten se on voinut suorittua. Näytä valvontalokissa näyttää, missä se on tarjolla, mitä Phoenix kirjasi; hyväksyntää odottaneen toiminnon tila näkyy kohdassa Hyväksynnät. Tarkista Home Assistant ennen uutta yritystä.",
+      "audit_storageTitle": "Tarkastusloki ei päädy tallennustilaan",
+      "audit_storageHelp": "Uusimmat tarkastuslokin merkinnät ovat vain muistissa, joten uudelleenkäynnistys hävittäisi ne. Tarkista Home Assistant -lokit. Tämä poistuu, kun seuraava tallennus onnistuu."
     },
     "audit": {
       "accessPassThrough": "Läpivienti",
@@ -1105,7 +1115,7 @@
         "label": "Rekisterin luku"
       },
       "cap_registry_write": {
-        "description": "Muokkaa entiteettejä ja laitteita, hallitse huoneita, kerroksia, tunnisteita ja luokkia ja poista vanhentuneita merkintöjä.",
+        "description": "Muokkaa entiteettejä ja laitteita, hallitse huoneita, kerroksia, tunnisteita ja luokkia, poista vanhentuneita merkintöjä ja tyhjennä entiteetin tallennettu historia.",
         "label": "Hallitse entiteettirekisteriä"
       },
       "cap_restart": {
@@ -1150,7 +1160,7 @@
       "modeDescDeny": "Estä tämä ominaisuus. Sen työkalut ovat piilossa tämän avaimen agenteilta, ellei Ilmoita aina kaikki työkalut ole käytössä.",
       "noBuilder": "Device Builder -lisäosaa ei havaittu",
       "noEsphome": "ESPHomea ei havaittu",
-      "passThroughNotice": "<strong>Läpivienti on käytössä.</strong> Seuraavia kohdellaan kuin tilaa Salli, elleivät ne ole tilassa Vahvista: Kokoonpanon luku, Mallin renderöinti, Haku ja löytäminen, Rekisterin luku, Automaatioiden jäljitykset, Diagnostiikka, Kuulutus ja Palvelun vastaustiedot. Kaikki muut ominaisuudet käyttävät alla olevaa asetustaan.",
+      "passThroughNotice": "<strong>Läpivienti on käytössä.</strong> Seuraavia kohdellaan kuin tilaa Salli: Kokoonpanon luku, Mallin renderöinti, Haku ja löytäminen, Rekisterin luku, Automaatioiden jäljitykset, Diagnostiikka, Kuulutus ja Palvelun vastaustiedot. Kaikki muut ominaisuudet käyttävät alla olevaa asetustaan.",
       "tierConfigWrite": "Kokoonpanomuutokset",
       "tierEveryday": "Arjen toiminnot",
       "tierIrreversible": "Korkea riski",
@@ -1269,6 +1279,7 @@
       "empty": "(tyhjä)",
       "httpStatus": "Palvelin vastasi HTTP-tilakoodilla {status}. Päivitä ja yritä uudelleen.",
       "invalidResponse": "Palvelin palautti virheellisen vastauksen. Päivitä ja yritä uudelleen.",
+      "labelValue": "{label}: {value}",
       "listSeparator": ", ",
       "loadMore": "Lataa lisää",
       "loading": "Ladataan...",
@@ -1599,7 +1610,8 @@
       "mesaProfile": "MESA-profiili",
       "profileCreate": "Luo MESA-profiili kohteelle {key}",
       "profileSet": "MESA-profiili asetettu kohteelle {key} - napsauta muokataksesi",
-      "registryLoadFailed": "Entiteettirekisterin lataus epäonnistui."
+      "registryLoadFailed": "Entiteettirekisterin lataus epäonnistui.",
+      "openFailed": "MESA-profiilieditoria ei voitu avata. Lataa sivu uudelleen ja yritä uudelleen."
     },
     "mesa": {
       "addAreaProfile": "Lisää huoneprofiili",
@@ -2020,7 +2032,7 @@
         "label": "Tehokäyttäjä"
       },
       "read_only": {
-        "description": "Lukee tiloja, historiaa ja lokeja. Kokoonpanomuutokset, kuulutukset, lukot, hälytykset, suojukset ja venttiilit on estetty.",
+        "description": "Lukee tiloja, historiaa ja lokeja. Kokoonpanomuutokset, kuulutukset, lukot, hälytykset, suojukset ja venttiilit on estetty. Se voi silti ohjata kaikkea, minkä asetus on W.",
         "label": "Vain luku -tarkkailija"
       },
       "voice_assistant": {
@@ -2327,7 +2339,7 @@
       "voiceRemoveFailed": "Phoenix MCP -avustajan poistaminen ei onnistunut.",
       "voiceSetUpFailed": "Phoenix MCP -avustajan määrittäminen ei onnistunut.",
       "wipeBusy": "Tyhjennetään...",
-      "wipeCoreHelp": "Poista kaikki käyttöavaimet, asetukset, hyväksynnät, muutoskirjaukset ja lokit. Tätä ei voi kumota.",
+      "wipeCoreHelp": "Poista kaikki käyttöavaimet, asetukset, hyväksynnät, muutoskirjaukset ja lokit. Palautuskopiot säilyvät. Tätä ei voi kumota.",
       "wipeCoreLabel": "Poista Phoenix MCP:n ydintiedot",
       "wipeFailed": "Tyhjennys epäonnistui.",
       "wipeMesaHelp": "Poista kaikki MESA-profiilit. Oletuksena pois päältä; vie profiilisi ensin, jos haluat säilyttää kopion.",
@@ -2429,9 +2441,11 @@
       "killSwitchShort": "HÄTÄKATKAISU PÄÄLLÄ",
       "killSwitchTitle": "Phoenix MCP ei palvele yhtään agenttipyyntöä. Poista hätäkatkaisu käytöstä Asetuksissa jatkaaksesi.",
       "loadAccessKeysFailed": "Käyttöavainten lataaminen epäonnistui.",
+      "loadSettingsFailed": "Asetusten lataaminen epäonnistui.",
       "offlineBody": "Home Assistant ei vastaa, yleensä koska se käynnistyy uudelleen. Yritetään uudelleen, odota...",
       "offlineTitle": "Phoenix ei ole käytettävissä",
       "renderFailed": "Tätä näkymää ei voitu näyttää. Päivitä yrittääksesi uudelleen tai valitse toinen osio.",
+      "retrySettingsHelp": "Lue asetukset uudelleen Home Assistantista.",
       "sectionsAria": "Phoenix MCP -osiot",
       "srTitle": "Phoenix MCP -käyttöavainten hallinta",
       "tabAccessKeys": "Käyttöavaimet",
@@ -2439,7 +2453,8 @@
       "tabAudit": "Tarkastusloki",
       "tabChanges": "Muutokset",
       "tabSettings": "Asetukset",
-      "killSwitchHelp": "Hätäkatkaisu on päällä, joten agentit torjutaan. Valitse avataksesi Turvallisuus ja poistaaksesi sen käytöstä."
+      "killSwitchHelp": "Hätäkatkaisu on päällä, joten agentit torjutaan. Valitse avataksesi Turvallisuus ja poistaaksesi sen käytöstä.",
+      "chatListsFailed": "Agent Chat ei voinut ladata käyttöavaimiaan tai tekoälypalveluitaan. Se yrittää uudelleen, kun avaat sen tai kun Home Assistant yhdistää uudelleen."
     },
     "version": {
       "card.added": "lisäsi kohteen {subject} ({where})",

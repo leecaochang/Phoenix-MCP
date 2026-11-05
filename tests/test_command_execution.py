@@ -5,15 +5,19 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+
+from tests.runtime_fixtures import patch_readers
 from homeassistant.helpers import entity_registry as er
 from homeassistant.setup import async_setup_component
 
-from custom_components.phoenix_mcp import agentcli, mcp_view, voice_agent
+from custom_components.phoenix_mcp import mesa, tool_dispatch, voice_agent
+from custom_components.phoenix_mcp.tools import service as service_tools
 from custom_components.phoenix_mcp.access_key_schema import normalize_access_key_root
 from custom_components.phoenix_mcp.audit import AuditLog
-from custom_components.phoenix_mcp.command_execution import async_execute_local_command
-from custom_components.phoenix_mcp.command_routing import RoutingAuthority, async_evaluate_command
-from custom_components.phoenix_mcp.const import DOMAIN, COMMAND_ROUTING_PLAN_KEY
+from custom_components.phoenix_mcp.routing.command_execution import async_execute_local_command
+from custom_components.phoenix_mcp.routing.command_routing import RoutingAuthority, async_evaluate_command
+from custom_components.phoenix_mcp.const import DOMAIN
+from custom_components.phoenix_mcp.routing.routing_tables import COMMAND_ROUTING_PLAN_KEY
 from custom_components.phoenix_mcp.data import PhoenixData
 from custom_components.phoenix_mcp.mesa import async_setup_mesa
 from custom_components.phoenix_mcp.mesa_core import MetadataOrigin, SemanticProfile
@@ -43,9 +47,9 @@ async def local_home(hass, access_key_store, immediate_command_observation):
 async def run_voice(hass, data, sentence, **kwargs):
     store = MagicMock()
     store.resolve.return_value = SimpleNamespace(model="model")
-    with (patch.object(agentcli, "_get_secret_store", AsyncMock(return_value=store)),
-          patch.object(agentcli, "build_provider", return_value=MagicMock()) as build,
-          patch.object(agentcli, "async_run_voice_turn", AsyncMock(return_value="Provider answer")) as provider):
+    with (patch_readers("custom_components.phoenix_mcp.llm.accounts._get_secret_store", AsyncMock(return_value=store)),
+          patch_readers("custom_components.phoenix_mcp.llm.factory.build_provider", return_value=MagicMock()) as build,
+          patch("custom_components.phoenix_mcp.voice_agent.async_run_voice_turn", AsyncMock(return_value="Provider answer")) as provider):
         answer = await voice_agent.async_voice_answer(hass, data, sentence, **kwargs)
     return answer, build, provider
 
@@ -59,7 +63,7 @@ async def run_voice(hass, data, sentence, **kwargs):
 async def test_local_voice_dispatches_exactly_once_without_model(hass, local_home, sentence, service, extra, routing_mode):
     await local_home[0].store.async_patch_settings(voice_agent_routing_mode=routing_mode)
     data, access_key, entity_id = local_home
-    with (patch.object(mcp_view, "unsupported_secondary_targets", AsyncMock(return_value=[])),
+    with (patch.object(service_tools, "unsupported_secondary_targets", AsyncMock(return_value=[])),
           patch.object(type(hass.services), "async_call", new_callable=AsyncMock) as call):
         answer, build, provider = await run_voice(hass, data, sentence, language="en")
     assert answer == ("Home Assistant reports the requested state." if service == "turn_off" else
@@ -83,7 +87,7 @@ async def test_local_state_read_and_provider_fallback(hass, local_home):
 @pytest.mark.parametrize("language", ["fr", "zh", "es"])
 async def test_non_english_keeps_provider_path(hass, local_home, language):
     data, _, _ = local_home
-    with patch("custom_components.phoenix_mcp.command_routing.async_recognize") as recognize:
+    with patch("custom_components.phoenix_mcp.routing.command_routing.async_recognize") as recognize:
         answer, _, provider = await run_voice(hass, data, "turn on the desk lamp", language=language)
     assert answer == "Provider answer"
     recognize.assert_not_called()
@@ -101,7 +105,7 @@ async def enable_mesa(hass, data, entity_id, mode):
 async def test_mesa_checks_apply_to_local_commands(hass, local_home, mode):
     data, access_key, entity_id = local_home
     await enable_mesa(hass, data, entity_id, mode)
-    with (patch.object(mcp_view, "unsupported_secondary_targets", AsyncMock(return_value=[])),
+    with (patch.object(service_tools, "unsupported_secondary_targets", AsyncMock(return_value=[])),
           patch.object(type(hass.services), "async_call", new_callable=AsyncMock) as call):
         answer, build, _ = await run_voice(hass, data, "turn on the desk lamp", language="en")
     call.assert_not_called()
@@ -118,7 +122,7 @@ async def test_mesa_checks_apply_to_local_commands(hass, local_home, mode):
 async def test_saved_approval_rejects_changed_targets(hass, local_home, change, legacy_proof):
     data, access_key, entity_id = local_home
     await enable_mesa(hass, data, entity_id, "confirm")
-    with patch.object(mcp_view, "unsupported_secondary_targets", AsyncMock(return_value=[])):
+    with patch.object(service_tools, "unsupported_secondary_targets", AsyncMock(return_value=[])):
         answer, _, _ = await run_voice(hass, data, "set the desk lamp brightness to 50 percent", language="en")
     assert "needs approval" in answer
     record = data.store.get_pending_approvals()[0]
@@ -146,9 +150,9 @@ async def test_saved_approval_rejects_changed_targets(hass, local_home, change, 
         record = normalize_access_key_root({"pending_approvals": [record]})[0]["pending_approvals"][0]
     else:
         access_key.permissions = PermissionTree()
-    with (patch.object(mcp_view, "unsupported_secondary_targets", AsyncMock(return_value=[])),
+    with (patch.object(service_tools, "unsupported_secondary_targets", AsyncMock(return_value=[])),
           patch.object(type(hass.services), "async_call", new_callable=AsyncMock) as call):
-        result, outcome, _ = await mcp_view.async_execute_approved_tool(record["tool_name"], record["args"], access_key, hass, data)
+        result, outcome, _ = await tool_dispatch.async_execute_approved_tool(record["tool_name"], record["args"], access_key, hass, data)
     assert outcome == "denied"
     assert result["isError"] is True
     call.assert_not_called()
@@ -158,7 +162,7 @@ async def test_saved_approval_rejects_changed_targets(hass, local_home, change, 
 async def test_unchanged_approval_uses_existing_executor(hass, local_home, legacy_proof):
     data, access_key, entity_id = local_home
     await enable_mesa(hass, data, entity_id, "confirm")
-    with patch.object(mcp_view, "unsupported_secondary_targets", AsyncMock(return_value=[])):
+    with patch.object(service_tools, "unsupported_secondary_targets", AsyncMock(return_value=[])):
         await run_voice(hass, data, "turn on the desk lamp", language="en")
     record = data.store.get_pending_approvals()[0]
     plan = record["args"][COMMAND_ROUTING_PLAN_KEY]
@@ -166,9 +170,9 @@ async def test_unchanged_approval_uses_existing_executor(hass, local_home, legac
     if legacy_proof:
         plan["token_version"] = plan.pop("access_key_version")
         record = normalize_access_key_root({"pending_approvals": [record]})[0]["pending_approvals"][0]
-    with (patch.object(mcp_view, "unsupported_secondary_targets", AsyncMock(return_value=[])),
+    with (patch.object(service_tools, "unsupported_secondary_targets", AsyncMock(return_value=[])),
           patch.object(type(hass.services), "async_call", new_callable=AsyncMock) as call):
-        _, outcome, _ = await mcp_view.async_execute_approved_tool(record["tool_name"], record["args"], access_key, hass, data)
+        _, outcome, _ = await tool_dispatch.async_execute_approved_tool(record["tool_name"], record["args"], access_key, hass, data)
     assert outcome == "allowed"
     assert call.await_args.args[2] == {"entity_id": [entity_id]}
 
@@ -185,7 +189,7 @@ async def test_changes_during_service_preparation_refuse_effects(hass, local_hom
         else:
             er.async_get(hass).async_update_entity(entity_id, name="Replacement")
         return []
-    with (patch.object(mcp_view, "unsupported_secondary_targets", preparation),
+    with (patch.object(service_tools, "unsupported_secondary_targets", preparation),
           patch.object(type(hass.services), "async_call", new_callable=AsyncMock) as call):
         _, build, provider = await run_voice(hass, data, "turn on the desk lamp", language="en")
     call.assert_not_called()
@@ -197,7 +201,7 @@ async def test_changes_during_service_preparation_refuse_effects(hass, local_hom
 async def test_interrupted_local_write_keeps_recovery_barrier(hass, local_home, failure):
     data, access_key, _ = local_home
     error = asyncio.TimeoutError() if failure == "timeout" else asyncio.CancelledError()
-    with (patch.object(mcp_view, "unsupported_secondary_targets", AsyncMock(return_value=[])),
+    with (patch.object(service_tools, "unsupported_secondary_targets", AsyncMock(return_value=[])),
           patch.object(type(hass.services), "async_call", AsyncMock(side_effect=error)) as call):
         if failure == "cancel":
             with pytest.raises(asyncio.CancelledError):
@@ -230,9 +234,9 @@ async def test_external_tool_cannot_supply_private_local_plan(hass, local_home):
     data, access_key, entity_id = local_home
     args = {"service": {"domain": "light", "name": "turn_on"},
             "targets": [{"kind": "entity", "ids": [entity_id]}], COMMAND_ROUTING_PLAN_KEY: {}}
-    with (patch.object(mcp_view, "unsupported_secondary_targets", AsyncMock(return_value=[])),
+    with (patch.object(service_tools, "unsupported_secondary_targets", AsyncMock(return_value=[])),
           patch.object(type(hass.services), "async_call", new_callable=AsyncMock) as call):
-        _, outcome, _ = await mcp_view._tool_call_service(args, access_key, hass, data)
+        _, outcome, _ = await service_tools._tool_call_service(args, access_key, hass, data)
     # Refused as an unknown argument before the dedicated private-plan guard.
     assert outcome == "invalid_request"
     call.assert_not_called()
@@ -248,13 +252,13 @@ async def test_unregistered_target_returns_to_provider_before_dispatch(hass, loc
 
 async def test_mesa_wait_cannot_change_targets_before_effect(hass, local_home):
     data, _, entity_id = local_home
-    apply = mcp_view.async_apply_mesa_to_call
+    apply = mesa.async_apply_mesa_to_call
     async def changed(*args, **kwargs):
         result = await apply(*args, **kwargs)
         er.async_get(hass).async_update_entity(entity_id, name="Different target")
         return result
-    with (patch.object(mcp_view, "unsupported_secondary_targets", AsyncMock(return_value=[])),
-          patch.object(mcp_view, "async_apply_mesa_to_call", changed),
+    with (patch.object(service_tools, "unsupported_secondary_targets", AsyncMock(return_value=[])),
+          patch.object(service_tools, "async_apply_mesa_to_call", changed),
           patch.object(type(hass.services), "async_call", new_callable=AsyncMock) as call):
         answer, build, _ = await run_voice(hass, data, "turn on the desk lamp", language="en")
     assert "could not complete" in answer
@@ -273,7 +277,7 @@ async def test_pass_through_does_not_bypass_mesa_or_allow_partial_area_actions(h
     registry.async_update_entity(other.entity_id, area_id=area.id)
     hass.states.async_set(other.entity_id, "off", {"supported_color_modes": ["brightness"]})
     await enable_mesa(hass, data, other.entity_id, "prohibited")
-    with (patch.object(mcp_view, "unsupported_secondary_targets", AsyncMock(return_value=[])),
+    with (patch.object(service_tools, "unsupported_secondary_targets", AsyncMock(return_value=[])),
           patch.object(type(hass.services), "async_call", new_callable=AsyncMock) as call):
         answer, build, _ = await run_voice(hass, data, "turn on the kitchen lights", language="en")
     assert "could not complete" in answer
@@ -283,7 +287,7 @@ async def test_pass_through_does_not_bypass_mesa_or_allow_partial_area_actions(h
 
 async def test_failed_write_blocks_second_local_attempt_without_provider_replay(hass, local_home):
     data, access_key, _ = local_home
-    with (patch.object(mcp_view, "unsupported_secondary_targets", AsyncMock(return_value=[])),
+    with (patch.object(service_tools, "unsupported_secondary_targets", AsyncMock(return_value=[])),
           patch.object(type(hass.services), "async_call", AsyncMock(side_effect=RuntimeError("uncertain"))) as call):
         first, _, _ = await run_voice(hass, data, "turn on the desk lamp", language="en")
         second, build, provider = await run_voice(hass, data, "turn on the desk lamp", language="en")
@@ -297,14 +301,14 @@ async def test_failed_write_blocks_second_local_attempt_without_provider_replay(
 async def test_approval_rechecks_current_mesa_restrictions(hass, local_home):
     data, access_key, entity_id = local_home
     await enable_mesa(hass, data, entity_id, "confirm")
-    with patch.object(mcp_view, "unsupported_secondary_targets", AsyncMock(return_value=[])):
+    with patch.object(service_tools, "unsupported_secondary_targets", AsyncMock(return_value=[])):
         await run_voice(hass, data, "turn on the desk lamp", language="en")
     record = data.store.get_pending_approvals()[0]
     data.mesa.store.set(entity_id, SemanticProfile.from_dict(entity_id,
         {"semantic_profile": {"operational_boundaries": {"control_mode": "prohibited"}}}, default_origin=MetadataOrigin.USER))
-    with (patch.object(mcp_view, "unsupported_secondary_targets", AsyncMock(return_value=[])),
+    with (patch.object(service_tools, "unsupported_secondary_targets", AsyncMock(return_value=[])),
           patch.object(type(hass.services), "async_call", new_callable=AsyncMock) as call):
-        _, outcome, _ = await mcp_view.async_execute_approved_tool(record["tool_name"], record["args"], access_key, hass, data)
+        _, outcome, _ = await tool_dispatch.async_execute_approved_tool(record["tool_name"], record["args"], access_key, hass, data)
     assert outcome == "denied"
     call.assert_not_called()
 
@@ -318,7 +322,7 @@ async def test_enabled_language_runs_real_local_voice_once(hass, local_home, lan
     data, _, entity_id = local_home
     await data.store.async_patch_settings(command_routing_languages=[selection])
     er.async_get(hass).async_update_entity(entity_id, aliases={alias})
-    with (patch.object(mcp_view, "unsupported_secondary_targets", AsyncMock(return_value=[])),
+    with (patch.object(service_tools, "unsupported_secondary_targets", AsyncMock(return_value=[])),
           patch.object(type(hass.services), "async_call", new_callable=AsyncMock) as call):
         answer, build, provider = await run_voice(hass, data, sentence, language=language)
     assert answer == reply
@@ -337,7 +341,7 @@ async def test_multilingual_voice_approval_rechecks_language_selection(hass, loc
     await data.store.async_patch_settings(command_routing_languages=[language])
     er.async_get(hass).async_update_entity(entity_id, aliases={alias})
     await enable_mesa(hass, data, entity_id, "confirm")
-    with (patch.object(mcp_view, "unsupported_secondary_targets", AsyncMock(return_value=[])),
+    with (patch.object(service_tools, "unsupported_secondary_targets", AsyncMock(return_value=[])),
           patch.object(type(hass.services), "async_call", new_callable=AsyncMock) as call):
         answer, _, provider = await run_voice(hass, data, sentence, language=language)
         assert answer == reply
@@ -346,7 +350,7 @@ async def test_multilingual_voice_approval_rechecks_language_selection(hass, loc
         record = data.store.get_pending_approvals()[0]
         if remove_language:
             await data.store.async_patch_settings(command_routing_languages=[])
-        _, outcome, _ = await mcp_view.async_execute_approved_tool(record["tool_name"], record["args"], access_key, hass, data)
+        _, outcome, _ = await tool_dispatch.async_execute_approved_tool(record["tool_name"], record["args"], access_key, hass, data)
     assert outcome == ("denied" if remove_language else "allowed")
     assert call.await_count == (0 if remove_language else 1)
 
@@ -380,7 +384,7 @@ async def test_multilingual_local_command_keeps_mesa_denial(hass, local_home, la
 
 @pytest.mark.parametrize('delayed', [False, True])
 async def test_success_reply_observes_actual_report_without_resending(hass, local_home, delayed, monkeypatch):
-    from custom_components.phoenix_mcp import command_verification
+    from custom_components.phoenix_mcp.routing import command_verification
     data, access_key, eid = local_home
     monkeypatch.setattr(command_verification, 'COMMAND_VERIFICATION_WAIT_SECONDS', .06)
     monkeypatch.setattr(command_verification, 'COMMAND_VERIFICATION_POLL_SECONDS', .005)
@@ -393,7 +397,7 @@ async def test_success_reply_observes_actual_report_without_resending(hass, loca
         else:
             reported()
     try:
-        with (patch.object(mcp_view, 'unsupported_secondary_targets', AsyncMock(return_value=[])),
+        with (patch.object(service_tools, 'unsupported_secondary_targets', AsyncMock(return_value=[])),
               patch.object(type(hass.services), 'async_call', AsyncMock(side_effect=dispatched)) as call):
             answer, _, provider = await run_voice(hass, data, 'set the desk lamp brightness to 37 percent', language='en')
         assert answer == 'Home Assistant reports the requested state.'
@@ -410,16 +414,16 @@ async def test_approved_routed_action_has_the_same_state_observation(hass, local
     import json
     data, access_key, eid = local_home
     await enable_mesa(hass, data, eid, 'confirm')
-    with patch.object(mcp_view, 'unsupported_secondary_targets', AsyncMock(return_value=[])):
+    with patch.object(service_tools, 'unsupported_secondary_targets', AsyncMock(return_value=[])):
         answer, _, _ = await run_voice(hass, data, 'turn on the desk lamp', language='en')
     assert 'needs approval' in answer
     record = data.store.get_pending_approvals()[0]
     async def dispatched(*args, **kwargs):
         if report_matches:
             hass.states.async_set(eid, 'on', dict(hass.states.get(eid).attributes))
-    with (patch.object(mcp_view, 'unsupported_secondary_targets', AsyncMock(return_value=[])),
+    with (patch.object(service_tools, 'unsupported_secondary_targets', AsyncMock(return_value=[])),
           patch.object(type(hass.services), 'async_call', AsyncMock(side_effect=dispatched)) as call):
-        result, outcome, _ = await mcp_view.async_execute_approved_tool(record['tool_name'], record['args'], access_key, hass, data)
+        result, outcome, _ = await tool_dispatch.async_execute_approved_tool(record['tool_name'], record['args'], access_key, hass, data)
     payload = json.loads(result['content'][0]['text'])
     assert outcome == 'allowed' and payload['success'] is True
     assert payload['state_verification'] == ('matched' if report_matches else 'unconfirmed')
@@ -427,16 +431,16 @@ async def test_approved_routed_action_has_the_same_state_observation(hass, local
 
 
 async def test_cancel_after_dispatch_during_observation_keeps_recovery_barrier(hass, local_home, monkeypatch):
-    from custom_components.phoenix_mcp import command_verification
+    from custom_components.phoenix_mcp.routing import command_verification
     data, access_key, _ = local_home
     monkeypatch.setattr(command_verification, 'COMMAND_VERIFICATION_WAIT_SECONDS', 10)
     entered = asyncio.Event()
-    original = command_verification.async_verify_command_state
+    original = service_tools.async_verify_command_state
     async def observing(*args):
         entered.set()
         return await original(*args)
-    with (patch.object(command_verification, 'async_verify_command_state', observing),
-          patch.object(mcp_view, 'unsupported_secondary_targets', AsyncMock(return_value=[])),
+    with (patch.object(service_tools, 'async_verify_command_state', observing),
+          patch.object(service_tools, 'unsupported_secondary_targets', AsyncMock(return_value=[])),
           patch.object(type(hass.services), 'async_call', new_callable=AsyncMock) as call):
         task = asyncio.create_task(run_voice(hass, data, 'turn on the desk lamp', language='en'))
         await asyncio.wait_for(entered.wait(), 2)
@@ -448,7 +452,7 @@ async def test_cancel_after_dispatch_during_observation_keeps_recovery_barrier(h
 
 
 async def test_attribute_read_uses_existing_scrubbed_read_dispatch_and_no_write_authority(hass, local_home):
-    from custom_components.phoenix_mcp.const import DECISION_ENTITY_CATEGORIES
+    from custom_components.phoenix_mcp.routing.routing_tables import DECISION_ENTITY_CATEGORIES
     data, access_key, entity_id = local_home
     access_key.permissions.domains['light'].state = 'YELLOW'
     access_key.cap_physical_control = 'deny'
@@ -465,8 +469,8 @@ async def test_attribute_read_uses_existing_scrubbed_read_dispatch_and_no_write_
 
 
 async def test_attribute_read_plan_rejects_removed_attribute_before_dispatch(hass, local_home):
-    from custom_components.phoenix_mcp.command_execution import _capture_plan, plan_is_current
-    from custom_components.phoenix_mcp.const import DECISION_ENTITY_CATEGORIES
+    from custom_components.phoenix_mcp.routing.command_execution import _capture_plan, plan_is_current
+    from custom_components.phoenix_mcp.routing.routing_tables import DECISION_ENTITY_CATEGORIES
     data, access_key, entity_id = local_home
     hass.states.async_set(entity_id, 'on', {'brightness': 94})
     proposal = {'intent': DECISION_ENTITY_CATEGORIES['attribute_read'], 'entity_ids': [entity_id], 'value': 'brightness'}
@@ -482,8 +486,8 @@ async def test_attribute_read_plan_rejects_removed_attribute_before_dispatch(has
     ('invalid', 'Phoenix MCP could not read the state.'),
 ])
 async def test_attribute_read_distinguishes_absent_value_from_zero_and_invalid(hass, local_home, value, expected):
-    from custom_components.phoenix_mcp.command_execution import _capture_plan, _run_local_command
-    from custom_components.phoenix_mcp.const import DECISION_ENTITY_CATEGORIES
+    from custom_components.phoenix_mcp.routing.command_execution import _capture_plan, _run_local_command
+    from custom_components.phoenix_mcp.routing.routing_tables import DECISION_ENTITY_CATEGORIES
     data, access_key, entity_id = local_home
     access_key.cap_physical_control = 'deny'
     hass.states.async_set(entity_id, 'off', {'brightness': value})
@@ -512,7 +516,7 @@ async def test_localized_read_rechecks_authority_after_translation_wait(hass, lo
         else:
             er.async_get(hass).async_update_entity(entity_id, name='Changed identity')
         return 'private translated state'
-    with patch('custom_components.phoenix_mcp.command_display.async_display_state', side_effect=display):
+    with patch('custom_components.phoenix_mcp.routing.command_display.async_display_state', side_effect=display):
         answer, build, provider = await run_voice(hass, data, 'what is the state of the desk lamp', language='en')
     assert 'private translated state' not in answer
     build.assert_not_called()

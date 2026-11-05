@@ -19,14 +19,13 @@ from pytest_homeassistant.common import MockConfigEntry
 
 from custom_components.phoenix_mcp.const import DOMAIN
 from custom_components.phoenix_mcp.data import PhoenixData
-from custom_components.phoenix_mcp.mcp_view import (
+from custom_components.phoenix_mcp.tools.registry import (
     _DEVICE_MESA_FINGERPRINT,
     _build_diff_set_device,
-    _call_tool,
     _execute_set_device,
-    async_execute_approved_tool,
-    async_restore_version,
 )
+from custom_components.phoenix_mcp.tool_dispatch import _call_tool, async_execute_approved_tool
+from custom_components.phoenix_mcp.tools.restore import async_restore_version
 from custom_components.phoenix_mcp.mesa import async_setup_mesa
 from custom_components.phoenix_mcp.mesa_core import MetadataOrigin, SemanticProfile
 from custom_components.phoenix_mcp.access_key_store import (
@@ -301,7 +300,7 @@ async def test_unknown_label_is_rejected_before_approval(
 ):
     data = await _data(hass)
     gate = AsyncMock()
-    with patch("custom_components.phoenix_mcp.mcp_view._gate", gate):
+    with patch("custom_components.phoenix_mcp.tools.registry._gate", gate):
         content, outcome, _ = await _call_tool(
             "set_device",
             {"device_id": device_env["device_id"], "changes": {"add_labels": ["missing"]}},
@@ -413,7 +412,7 @@ async def test_disable_preview_includes_membership_and_relationships(
     expected = {"consumers": [{"kind": "automation", "id": "uses-device"}]}
     relationship_preview = AsyncMock(return_value=expected)
     with patch(
-        "custom_components.phoenix_mcp.mcp_view._registry_relationships_preview",
+        "custom_components.phoenix_mcp.tools.registry._registry_relationships_preview",
         relationship_preview,
     ):
         diff = await _build_diff_set_device(
@@ -523,9 +522,9 @@ async def test_enforced_confirm_joins_normal_approval_and_covers_membership(
     gate = AsyncMock(return_value=({}, "pending_approval", "cap-approval"))
     create = AsyncMock()
     with (
-        patch("custom_components.phoenix_mcp.mcp_view._gate", gate),
+        patch("custom_components.phoenix_mcp.tools.registry._gate", gate),
         patch(
-            "custom_components.phoenix_mcp.mcp_view._create_registry_mesa_approval",
+            "custom_components.phoenix_mcp.tools.registry._create_registry_mesa_approval",
             create,
         ),
     ):
@@ -548,7 +547,7 @@ async def test_capability_approval_pins_membership_even_when_mesa_is_off(
     device_id = device_env["device_id"]
     data = await _data(hass, "off")
     gate = AsyncMock(return_value=({}, "pending_approval", "cap-approval"))
-    with patch("custom_components.phoenix_mcp.mcp_view._gate", gate):
+    with patch("custom_components.phoenix_mcp.tools.registry._gate", gate):
         _content, outcome, _ = await _call_tool(
             "set_device",
             {"device_id": device_id, "changes": {"name": "Pinned membership"}},
@@ -587,7 +586,7 @@ async def test_membership_and_mesa_changes_are_rechecked_for_approved_execution(
     )
     create = AsyncMock(return_value=({}, "pending_approval", "mesa-approval"))
     with patch(
-        "custom_components.phoenix_mcp.mcp_view._create_registry_mesa_approval",
+        "custom_components.phoenix_mcp.tools.registry._create_registry_mesa_approval",
         create,
     ):
         _content, outcome, _ = await _call_tool(

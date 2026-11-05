@@ -15,15 +15,14 @@ from pytest_homeassistant.common import MockConfigEntry
 
 from custom_components.phoenix_mcp.const import DOMAIN
 from custom_components.phoenix_mcp.data import PhoenixData
-from custom_components.phoenix_mcp.mcp_view import (
+from custom_components.phoenix_mcp.tools.integrations import (
     _CONFIG_ENTRY_CONTEXT_FINGERPRINT,
     _CONFIG_ENTRY_DELETE_SNAPSHOT,
     _build_diff_remove_integration,
-    _call_tool,
     _config_entry_action_decision,
-    async_execute_approved_tool,
-    async_restore_version,
 )
+from custom_components.phoenix_mcp.tool_dispatch import _call_tool, async_execute_approved_tool
+from custom_components.phoenix_mcp.tools.restore import async_restore_version
 from custom_components.phoenix_mcp.mesa import async_setup_mesa
 from custom_components.phoenix_mcp.mesa_core import MetadataOrigin, SemanticProfile
 from custom_components.phoenix_mcp.access_key_store import (
@@ -178,11 +177,11 @@ async def test_preview_reports_exact_consumers_shared_owners_and_phoenix_refs(
     relationships = {"consumers": [{"kind": "automation", "id": "consumer"}]}
     with (
         patch(
-            "custom_components.phoenix_mcp.mcp_view._registry_relationships_preview",
+            "custom_components.phoenix_mcp.tools.integrations._registry_relationships_preview",
             AsyncMock(return_value=relationships),
         ),
         patch(
-            "custom_components.phoenix_mcp.mcp_view.device_config_entry_ids",
+            "custom_components.phoenix_mcp.tools.integrations.device_config_entry_ids",
             return_value=[env["entry_id"], second.entry_id],
         ),
     ):
@@ -269,7 +268,7 @@ async def test_shared_device_survives_with_remaining_owner(hass: HomeAssistant):
     with (
         patch.object(hass.config_entries, "async_remove", new=legacy_shared_remove),
         patch(
-            "custom_components.phoenix_mcp.mcp_view.device_config_entry_ids",
+            "custom_components.phoenix_mcp.tools.integrations.device_config_entry_ids",
             side_effect=legacy_owners,
         ),
     ):
@@ -342,7 +341,7 @@ async def test_pending_removal_revalidates_membership_and_permission(
     env = _environment(hass)
     data = await _data(hass)
     gate = AsyncMock(return_value=({}, "pending_approval", "approval"))
-    with patch("custom_components.phoenix_mcp.mcp_view._gate", gate):
+    with patch("custom_components.phoenix_mcp.tools.integrations._gate", gate):
         _content, outcome, _ = await _call_tool(
             "remove_integration",
             {"entry_id": env["entry_id"]},
@@ -386,7 +385,7 @@ async def test_new_read_only_profile_invalidates_pending_removal(
     env = _environment(hass)
     data = await _data(hass, "enforced")
     gate = AsyncMock(return_value=({}, "pending_approval", "approval"))
-    with patch("custom_components.phoenix_mcp.mcp_view._gate", gate):
+    with patch("custom_components.phoenix_mcp.tools.integrations._gate", gate):
         _content, outcome, _ = await _call_tool(
             "remove_integration",
             {"entry_id": env["entry_id"]},

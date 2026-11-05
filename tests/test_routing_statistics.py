@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from custom_components.phoenix_mcp.routing_statistics import (
+from custom_components.phoenix_mcp.routing.routing_statistics import (
     RoutingStatistics, TurnStatistics, decision_usage, local_result, provider_events, tracked_turn, voice_result,
 )
 
@@ -135,7 +135,7 @@ async def test_reset_failure_preserves_counters_and_other_surface_finishing_duri
 
 
 async def test_late_decision_after_timeout_stays_missing_not_zero_and_nested_ai_task_excluded():
-    from custom_components.phoenix_mcp.routing_statistics import begin_decision, end_decision, untracked_turn
+    from custom_components.phoenix_mcp.routing.routing_statistics import begin_decision, end_decision, untracked_turn
     d=data(); handle=None
     @untracked_turn
     async def ai_task():

@@ -16,7 +16,7 @@ applies it, checks the result differs only as intended (`_verify_structure`), an
 sends only the top-level keys that changed. The redacted view is never a write
 input, so a placeholder is never written back as configuration; a literal one in
 the caller's arguments is refused. A version restore is the one wholesale write:
-reproducing the snapshot IS the operation. mcp_view registers these tools.
+reproducing the snapshot IS the operation. tool_registration registers these tools.
 """
 
 from __future__ import annotations
@@ -50,6 +50,7 @@ from ..tool_common import (
     _record_version,
     _tool_error,
     _tool_success,
+    _tool_uncertain,
     _truncate,
     redaction_sentinel_path,
 )
@@ -194,6 +195,7 @@ async def _energy_usage(
     plus discharged minus exported and charged, given only when every meter it
     needs was read in one unit.
     """
+    # Local: optional component, imported only when this path runs.
     from homeassistant.components.recorder import get_instance
 
     instance = get_instance(hass)
@@ -464,26 +466,33 @@ def _find_device(prefs: dict, statistic: str, device_name: str) -> tuple[str, in
 def _replace_everywhere(prefs: dict, old: str, new: str) -> int:
     """Point every occurrence of one statistic id at another. Returns the count.
 
-    Walks sources AND both device lists, because a statistic can legitimately
-    appear in several places (a battery's charge meter, a device entry for the
-    same appliance) and a migration that fixed only one would leave the rest
-    pointing at an integration that is about to be removed.
+    Walks the whole structure, as _referenced_entities does, because a statistic
+    can legitimately appear in several places (a battery's charge meter, its
+    state of charge, a nested power_config, a device entry for the same
+    appliance), the keys differ per source type and HA adds to them, and a
+    migration that fixed only some would leave the rest pointing at an integration
+    that is about to be removed. Labels are never statistics.
     """
     changed = 0
-    for source in prefs.get("energy_sources") or []:
-        if not isinstance(source, dict):
-            continue
-        for field in _STATISTIC_FIELDS | {"stat_cost", "stat_compensation", "entity_energy_price", "stat_rate"}:
-            if source.get(field) == old:
-                source[field] = new
+
+    def walk(node: Any, depth: int) -> None:
+        nonlocal changed
+        if depth > 10:
+            return
+        if isinstance(node, dict):
+            items: list[tuple[Any, Any]] = [(k, v) for k, v in node.items() if k not in ("name", "type")]
+        elif isinstance(node, list):
+            items = list(enumerate(node))
+        else:
+            return
+        for key, value in items:
+            if value == old:
+                node[key] = new
                 changed += 1
-    for key in _DEVICE_KEYS:
-        for entry in prefs.get(key) or []:
-            if isinstance(entry, dict):
-                for field in ("stat_consumption", "stat_rate", "included_in_stat"):
-                    if entry.get(field) == old:
-                        entry[field] = new
-                        changed += 1
+            else:
+                walk(value, depth + 1)
+
+    walk(prefs, 0)
     return changed
 
 
@@ -661,9 +670,15 @@ def _apply_op(prefs: dict, args: dict, access_key: AccessKeyRecord, hass: HomeAs
         raise _OpError(f"source_type must be one of: {', '.join(_SOURCE_TYPES)}.")
     fields = _source_fields_arg(args, source_type, access_key, hass)
     sources = new.setdefault("energy_sources", [])
-    existing = next(
-        (s for s in sources if isinstance(s, dict) and s.get("type") == source_type), None
-    )
+    same_type = [s for s in sources if isinstance(s, dict) and s.get("type") == source_type]
+    if len(same_type) > 1:
+        # Same reasoning as remove_source: updating "the first one" would silently
+        # stop counting whichever of the operator's meters it happened to be.
+        raise _OpError(
+            f"There are {len(same_type)} {source_type} sources. Updating one by type would be "
+            "ambiguous; change it in the Energy dashboard UI."
+        )
+    existing = same_type[0] if same_type else None
     if existing is None:
         source = _new_source(source_type)
         source.update(fields)
@@ -844,7 +859,7 @@ async def _build_diff_edit_energy_config(args: dict, access_key: AccessKeyRecord
             **{k: v for k, v in summary.items() if k != "op"},
             "energy": {"before": _preview_rows(before, access_key, hass), "after": _preview_rows(after, access_key, hass)},
         }
-    except Exception:  # noqa: BLE001 - diagnostic only
+    except Exception:  # diagnostic only
         for field, value in _summary("edit_energy_config.fallback").items():
             diff.setdefault(field, value)
     return diff
@@ -947,19 +962,19 @@ async def _execute_edit_energy_config(
                             await recovery.set_source(rid, source_snapshot)
                     else:
                         await recovery.mark(rid, "partial", observed_hash=content_hash(observed))
-                        return _tool_success(json.dumps({
+                        return _tool_uncertain({
                             "status": "partial", "saved": False, "recovery_id": rid,
                             "message": "Energy preferences were submitted but readback differs; inspect configuration recovery before retrying.",
                             **_scoped_body(observed, True, access_key, hass),
-                        }, default=str)), "allowed", "energy:preferences"
-                except Exception:  # noqa: BLE001 - a committed write with failed readback is uncertain
+                        }), "invalid_request", "energy:preferences"
+                except Exception:  # a committed write with failed readback is uncertain
                     await recovery.mark(rid, "unknown", readback="unavailable")
                     return _tool_error("Energy preferences were submitted, but readback is incomplete; inspect configuration recovery before retrying."), "invalid_request", tool
             finally:
                 recovery.leave(rid)
     except ConfigurationRecoveryError as err:
         return _tool_error(str(err)), "invalid_request", tool
-    except Exception:  # noqa: BLE001 - never claim a saved Energy write without its record
+    except Exception:  # never claim a saved Energy write without its record
         _LOGGER.exception("edit_energy_config recovery persistence failed")
         return _tool_error("Could not verify the Energy configuration change; inspect configuration recovery before retrying."), "invalid_request", tool
 
@@ -1015,9 +1030,16 @@ def validate_energy_recovery_snapshot(snapshot: dict[str, Any]) -> dict[str, Any
 def validate_energy_recovery_scope(
     snapshot: dict[str, Any], access_key: AccessKeyRecord, hass: HomeAssistant,
 ) -> None:
-    """Refuse restores whose entity references exceed the access key's current scope."""
+    """Refuse restores whose entity references exceed the access key's current scope.
+
+    A dead statistic exists for no key, so it is outside nobody's scope, and
+    undoing a repair is exactly when a snapshot names one. Only an entity that
+    exists can be out of scope.
+    """
     prefs = validate_energy_recovery_snapshot(snapshot)
     for entity_id in _referenced_entities(prefs):
+        if resolve(entity_id, access_key, hass) == Permission.NOT_FOUND:
+            continue
         try:
             _check_writable_statistic(entity_id, "recovery", access_key, hass)
         except _OpError:
@@ -1080,10 +1102,10 @@ async def restore_energy_configuration(snapshot: dict[str, Any], access_key: Acc
                 observed = await _read_prefs_raw(hass)
                 if observed != expected:
                     await recovery.mark(rid, "partial", observed_hash=content_hash(observed))
-                    return _tool_success(json.dumps({
+                    return _tool_uncertain({
                         "status": "partial", "recovery_id": rid,
                         "message": "Energy restore was submitted but readback differs; do not retry automatically.",
-                    })), "allowed", tool
+                    }), "invalid_request", tool
                 await recovery.mark(rid, "verified", observed_hash=content_hash(observed))
                 await recovery.set_source(rid, _energy_recovery_snapshot(observed))
                 await _record_version(
@@ -1100,10 +1122,10 @@ async def restore_energy_configuration(snapshot: dict[str, Any], access_key: Acc
                 }, default=str)), "allowed", tool
             except WsDispatchError as err:
                 await recovery.mark(rid, "unknown", error="save_or_readback_failed")
-                return _tool_success(json.dumps({
+                return _tool_uncertain({
                     "status": "unknown", "recovery_id": rid,
                     "message": f"Energy restore outcome is unknown ({err}); inspect before any retry.",
-                })), "allowed", tool
+                }), "invalid_request", tool
             except BaseException:
                 # Cancellation after dispatch deliberately leaves dispatching as
                 # the durable uncertain state. Never infer that it did not apply.
@@ -1150,12 +1172,12 @@ async def async_restore_energy_prefs(
                 if observed != expected:
                     await recovery.mark(rid, "partial", observed_hash=content_hash(observed))
                     # Not a restore, so no version: report it as the edit path does.
-                    return _tool_success(json.dumps({
+                    return _tool_uncertain({
                         "status": "partial", "saved": False, "recovery_id": rid,
                         "message": "Energy preferences were submitted, but the readback differs from the chosen "
                                    "version; inspect configuration recovery before retrying.",
                         **_scoped_body(observed, True, access_key, hass),
-                    }, default=str)), "allowed", "energy:preferences"
+                    }), "invalid_request", "energy:preferences"
                 await recovery.mark(rid, "verified", observed_hash=content_hash(observed))
                 await recovery.set_source(rid, _energy_recovery_snapshot(observed))
             except WsDispatchError:

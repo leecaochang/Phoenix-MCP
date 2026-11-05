@@ -14,6 +14,7 @@ import DOCKVIEW_CSS from "dockview-react/dist/styles/dockview.css?inline";
 import PANEL_CSS from "./phoenix-mcp-panel.css?inline";
 import DOCK_CSS from "./shell/dock/dock.css?inline";
 import THEMES_CSS from "./themes.css?inline";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 import { PanelDataProvider, type Theme } from "./shell/PanelData";
 import { Shell } from "./shell/Shell";
 import { readRecord } from "./shell/storage";
@@ -29,17 +30,19 @@ function PhoenixApp({ hass, narrow, theme, onThemeChange, language, onLanguageCh
     return readRecord(userId, window.innerWidth < 700 ? "mobile" : "desktop")?.lastWorkspace ?? "accessKeys";
   });
   return (
-    <PanelDataProvider
-      hass={hass}
-      narrow={narrow}
-      theme={theme}
-      onThemeChange={onThemeChange}
-      language={language}
-      onLanguageChange={onLanguageChange}
-      initialWorkspace={initialWorkspace}
-    >
-      <Shell />
-    </PanelDataProvider>
+    <ErrorBoundary>
+      <PanelDataProvider
+        hass={hass}
+        narrow={narrow}
+        theme={theme}
+        onThemeChange={onThemeChange}
+        language={language}
+        onLanguageChange={onLanguageChange}
+        initialWorkspace={initialWorkspace}
+      >
+        <Shell />
+      </PanelDataProvider>
+    </ErrorBoundary>
   );
 }
 

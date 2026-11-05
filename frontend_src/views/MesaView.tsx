@@ -18,12 +18,13 @@ import type {
 import { api, ApiError } from "../api";
 import { Modal } from "../components/Modal";
 import { TagInput } from "../components/TagInput";
-import { Loading, ErrorMsg } from "../components/common";
+import { Loading, ErrorMsg, StatusRegion } from "../components/common";
 import { compareStrings, t, tn } from "../i18n";
 import { ActionButton } from "../ui/ActionButton";
 import { useNotify } from "../ui/notify";
 import { InlineConfirm } from "../ui/InlineConfirm";
 import { helpRow } from "../ui/SettingLabel";
+import { isImeKey } from "../utils/ime";
 // A cycle (shell/mesa reads exportMesaArchive), safe because neither module uses the other at load.
 import { useMesa } from "../shell/mesa";
 
@@ -66,7 +67,7 @@ type Opt = { value: string; label: string };
 type LabeledOpt = { value: string; labelKey: string };
 
 // "" leaves control_mode undeclared, so the profile makes no control decision
-// and the inherited or built-in mode applies (Spec 5.7 Rule E).
+// and the inherited or built-in mode applies.
 const CONTROL_MODES: LabeledOpt[] = [
   { value: "", labelKey: "mesa.unset" },
   { value: "autonomous", labelKey: "mesa.modeAutonomous" },
@@ -364,7 +365,7 @@ export function deleteProfile(scope: ProfileScope, key: string): Promise<void> {
 /**
  * A field's name. Its explanation is no longer a "?" badge beside it: it reads
  * in the Help window while the label or the field has the pointer or the
- * keyboard (user, 2026-10-30).
+ * keyboard.
  */
 function FieldLabel({ id, text, help }: { id?: string; text: string; help: string }) {
   return (
@@ -392,7 +393,7 @@ function SelectField({
 
 // Fuzzy combobox over a fixed option set. Selecting an option sets `value` to
 // the option's slug; free typing is allowed but the parent validates exactness.
-function Combo({
+export function Combo({
   id, value, options, placeholder, invalid, describedBy, help, onChange,
 }: {
   id: string;
@@ -440,6 +441,7 @@ function Combo({
   }
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (isImeKey(e)) return;
     if (e.key === "ArrowDown") {
       e.preventDefault();
       setOpen(true);
@@ -458,6 +460,8 @@ function Combo({
       e.preventDefault();
       pick(matches[Math.min(active, matches.length - 1)].value);
     } else if (e.key === "Escape") {
+      // An open list takes the key for itself; a dialog around the field stays.
+      if (open && matches.length > 0) e.stopPropagation();
       setOpen(false);
     }
   }
@@ -530,12 +534,11 @@ function effectiveModes(detail: MesaProfileDetail): { control_mode: string; enfo
  */
 /**
  * Whether the user left Effective Resolution open. It starts folded on every
- * profile, and stays open for the rest of the session once it is opened
- * (user, 2026-10-30).
+ * profile, and stays open for the rest of the session once it is opened.
  */
 let explainLeftOpen = false;
 
-/** Forget the explanation's open state, as Reset This Workspace does (user, 2026-10-31). */
+/** Forget the explanation's open state, as Reset This Workspace does. */
 export function resetProfileEditorDisclosures(): void {
   explainLeftOpen = false;
 }
@@ -704,7 +707,7 @@ export function ProfileEditor({
     return out.sort((a, b) => compareStrings(a.label, b.label));
   }, [entityTree, scope, integrationOptions, deviceOptions]);
   // A new profile cannot be given a target that already has one, so the picker
-  // does not offer it (user, 2026-10-30).
+  // does not offer it.
   const isTaken = useCallback((key: string) => isNew && !lockedKey && !!taken?.has(key), [isNew, lockedKey, taken]);
   const keyOptions = useMemo(() => allKeyOptions.filter((o) => !isTaken(o.value)), [allKeyOptions, isTaken]);
   // A boolean, so another picker list arriving does not re-run (and cancel)
@@ -903,7 +906,7 @@ export function ProfileEditor({
             )}
             {(lockedKey || !isNew) && (
               // What the profile covers, by its familiar name, on every profile that has
-              // one already: only a new one is chosen here (user, 2026-10-30).
+              // one already: only a new one is chosen here.
               <div className="field" data-guide="window.mesaEditor#target" {...helpRow(t(SCOPE_HELP[scope]))}>
                 <FieldLabel id={fid("mesa-key")} text={t(SCOPE_LABEL[scope])} help={t(SCOPE_HELP[scope])} />
                 <input id={fid("mesa-key")} className="input" value={keyLabel || state.key || String(profileKey ?? "")} readOnly disabled />
@@ -912,7 +915,7 @@ export function ProfileEditor({
 
             <div className="field" data-guide="window.mesaEditor#tags" {...helpRow(t(HELP.tags))}>
               <FieldLabel id={fid("mesa-tags")} text={t("mesa.semanticTags")} help={t(HELP.tags)} />
-              {/* The suggested tags open from the end of the input itself, closed every time (user, 2026-10-30). */}
+              {/* The suggested tags open from the end of the input itself, closed every time. */}
               <div className="mesa-tag-row">
                 <TagInput
                   id={fid("mesa-tags")}
@@ -1011,7 +1014,7 @@ export function ProfileEditor({
               : <><strong className="mesa-editor-scope">{t(SCOPE_ID_LABEL[scope])}</strong><code>{id || name}</code></>}
           </h3>
           <div className="phx-window-actions mesa-editor-actions" data-guide="window.mesaEditor#save">
-            {/* A new profile is itself the change; an existing one waits for an edit (user, 2026-10-30). */}
+            {/* A new profile is itself the change; an existing one waits for an edit. */}
             <ActionButton icon="save" label={t("mesa.save")} help="mesa.saveHelp" busy={saving} inactive={!canSave || (!isNew && !dirty)} onClick={() => { void save(); }} className="btn btn-outline btn-sm" />
             <ActionButton icon="undo" label={t("mesa.discardChanges")} help="mesa.discardHelp" busy={saving} inactive={!isNew && !dirty} onClick={discard} className="btn btn-outline btn-sm" />
             {/* Always offered, so the row does not change shape; there is nothing to delete until a profile is open. */}
@@ -1027,7 +1030,7 @@ export function ProfileEditor({
 
   return (
     <>
-    {/* Over the whole workspace, with UI2 buttons; Delete turns red only in its confirmation (user, 2026-10-28). */}
+    {/* Over the whole workspace, with plain buttons; Delete turns red only in its confirmation. */}
     <Modal titleId="mesa-editor-title" onClose={attemptClose} overWorkspace>
       <h3 className="modal-title" id="mesa-editor-title">{titleVerb}</h3>
       {body}
@@ -1181,8 +1184,8 @@ export function MesaImport({ onImported, onCancel }: { onImported: () => void; o
   const invalidEntries = result ? Object.entries(result.invalid) : [];
 
   return (
-    // What importing does, and what it leaves alone, reads in the Help window (user, 2026-10-30).
-    <div className="phx-window-pad mesa-import" data-help-text={`${t("mesa.importIntro")} ${t("mesa.skipNote")}`} data-help-controls="">
+    // What importing does, and what it leaves alone, reads in the Help window.
+    <div className="phx-window-pad mesa-import" data-help-text={`${t("mesa.importIntro")}${t("common.sentenceSeparator")}${t("mesa.skipNote")}`} data-help-controls="">
       {error && <ErrorMsg msg={error} />}
       <div className="field mesa-import-file">
         <input ref={fileInput} type="file" accept="application/json,.json" className="sr-only" aria-label={t("mesa.archiveFileAria")} onChange={onFile} />
@@ -1200,7 +1203,7 @@ export function MesaImport({ onImported, onCancel }: { onImported: () => void; o
         )}
       </div>
       {replaceExisting && <div className="banner banner-warn">{t("mesa.replaceWarn")}</div>}
-      {/* Replacing, importing and leaving all sit on one line (user, 2026-10-30). */}
+      {/* Replacing, importing and leaving all sit on one line. */}
       <div className="phx-window-actions mesa-import-actions">
         <div className="toggle-row mesa-import-replace">
           <div className="toggle-label"><span>{t("mesa.replaceExisting")}</span></div>
@@ -1214,8 +1217,8 @@ export function MesaImport({ onImported, onCancel }: { onImported: () => void; o
           onClick={() => { void doImport(); }} className={`btn btn-sm ${replaceExisting ? "btn-danger" : "btn-outline"}`} />
         {onCancel && <ActionButton icon="undo" label={t("mesa.cancel")} help="help.cancelAction" busy={busy} onClick={onCancel} className="btn btn-outline btn-sm" />}
       </div>
-      {result && (
-        <div className="mesa-import-result" role="status">
+      <StatusRegion>{result && (
+        <div className="mesa-import-result">
           <h4 className="phx-section-title">{t("mesa.importComplete")}</h4>
           <p className="modal-body-text">
             {tn("mesa.importResult", result.imported, { overwritten: result.overwritten, skipped: result.skipped_existing.length })}
@@ -1229,7 +1232,7 @@ export function MesaImport({ onImported, onCancel }: { onImported: () => void; o
             </div>
           )}
         </div>
-      )}
+      )}</StatusRegion>
     </div>
   );
 }

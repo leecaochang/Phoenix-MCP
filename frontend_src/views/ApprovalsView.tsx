@@ -9,7 +9,7 @@
 import { Fragment, useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 import type { ApprovalRecord, ApprovalStatus, BatchApproveResult } from "../types";
 import { ApprovalChange } from "../components/ApprovalChange";
-import { ErrorMsg, Loading, ResultCount } from "../components/common";
+import { ErrorMsg, Loading, ResultCount, StatusRegion } from "../components/common";
 import { YamlView, toYaml } from "../components/YamlView";
 import { hasMessage, localeNumber, t, tn, type Params } from "../i18n";
 import { APPROVALS_PAGE, APPROVALS_SCOPES, MAX_BATCH_APPROVALS, isOverdue, useApprovals, type ApprovalsScope, type ApprovalsState } from "../shell/approvals";
@@ -24,6 +24,7 @@ import { approvalStatusLabel, formatDateTime, friendlyToolName } from "../utils"
 import { approvalListTitle, approvalOutcome, diffSummary, friendlyReason } from "../utils/approval_text";
 import { localizedApprovalReason } from "../utils/approval_reason";
 import { friendlyApprovalSummary } from "../utils/approval_summary";
+import { isImeKey } from "../utils/ime";
 
 const SCOPE_LABEL_KEYS: Record<ApprovalsScope, string> = {
   pending: "approvals.tabPending",
@@ -104,7 +105,7 @@ function ExpiresIn({ record }: { record: ApprovalRecord }) {
 function BatchResultMsg({ result, onDismiss }: { result: BatchApproveResult; onDismiss: () => void }) {
   const failed = result.failed;
   return (
-    <div className={`approvals-batch-result ${failed ? "is-error" : "is-ok"}`} role="status" data-guide="window.approvals#select-multiple">
+    <div className={`approvals-batch-result ${failed ? "is-error" : "is-ok"}`} data-guide="window.approvals#select-multiple">
       <div className="approvals-batch-result-text">
         <span>{t("approvals.batchApplied", { count: result.applied.length })}</span>
         {failed && (
@@ -201,14 +202,14 @@ export function ApprovalsListWindow() {
       {/* How many requests are ticked, said as each is ticked. */}
       <span className="sr-only" role="status">{a.batchMode ? tn("approvals.pickedCount", a.pickedCount) : ""}</span>
       {a.error && <ErrorMsg msg={a.error} />}
-      {a.batchResult && <BatchResultMsg result={a.batchResult} onDismiss={a.dismissBatchResult} />}
+      <StatusRegion>{a.batchResult && <BatchResultMsg result={a.batchResult} onDismiss={a.dismissBatchResult} />}</StatusRegion>
       {(a.loading || reading) && !a.shown.length && <Loading />}
       {/* Ticking requests for a batch reads about Select Multiple; choosing one, about the list. */}
       <div className="approvals-table" data-guide={a.batchMode ? "window.approvals#select-multiple" : "window.approvals#list"}>
       <ConfigTable
         id="approvals"
         label={t("shell.tabApprovals")}
-        // Newest request first, as every table with a time sorts by default (user, 2026-10-27).
+        // Newest request first, as every table with a time sorts by default.
         defaultSort={{ column: "requested", dir: "desc" }}
         columns={listColumns(a)}
         rows={a.shown}
@@ -216,7 +217,7 @@ export function ApprovalsListWindow() {
         rowKey={(r) => r.id}
         selectedKey={a.current?.id ?? null}
         onSelect={(r, ordered) => a.select(r, ordered.map((o) => o.id))}
-        rowLabel={(r) => `${approvalListTitle(r.diff)}, ${a.isClaimed(r) ? t("approvals.processing") : approvalStatusLabel(r.status)}${a.batchMode && a.picked.has(r.id) ? `, ${t("approvals.rowPicked")}` : ""}`}
+        rowLabel={(r) => [approvalListTitle(r.diff), a.isClaimed(r) ? t("approvals.processing") : approvalStatusLabel(r.status), a.batchMode && a.picked.has(r.id) && t("approvals.rowPicked")].filter(Boolean).join(t("common.listSeparator"))}
         rowHelp="help.approvalsRow"
         empty={a.loading || reading ? null : empty}
         selection={a.batchMode ? {
@@ -245,7 +246,7 @@ export function ApprovalsListWindow() {
 function ReasonRow({ a, locked, decisions }: { a: ApprovalsState; locked: boolean; decisions: RefObject<HTMLDivElement | null> }) {
   const input = useRef<HTMLInputElement | null>(null);
   useEffect(() => { input.current?.focus(); }, []);
-  // A click anywhere else cancels, as Cancel does; the reason typed so far stays as the draft (user, 2026-10-28).
+  // A click anywhere else cancels, as Cancel does; the reason typed so far stays as the draft.
   // Approve and Reject are not "elsewhere": Reject closes the row itself, and Approve stays unavailable while it is open.
   const row = useRef<HTMLDivElement | null>(null);
   useClickAway(row, () => a.setRejecting(false), !locked && a.deciding === null, decisions);
@@ -256,6 +257,7 @@ function ReasonRow({ a, locked, decisions }: { a: ApprovalsState; locked: boolea
         placeholder={t("approvalSummary.action.reasonPlaceholder")} readOnly={locked} aria-disabled={locked || undefined}
         onChange={(e) => a.setReason(e.target.value)}
         onKeyDown={(e) => {
+          if (isImeKey(e)) return;
           if (e.key === "Enter") { e.preventDefault(); if (!locked) void a.reject(); }
           if (e.key === "Escape") { e.preventDefault(); a.setRejecting(false); }
         }} />
@@ -293,7 +295,7 @@ export function ReviewWindow() {
     // Not keyed by the request: stepping updates the head in place, so Previous and Next keep focus.
     <div className="phx-review">
       {/* Request Details is closed and reopened from Workspace Options, like any other
-          window; Review has no tools of its own (user, 2026-10-29). */}
+          window; Review has no tools of its own. */}
       <div className="phx-review-head">
         {/* Previous and Next step through the list the request was chosen from, as in Log Details. */}
         <div className="phx-log-details-bar">
@@ -337,7 +339,7 @@ export function ReviewWindow() {
 /**
  * Which Request Details sections the user left open. The window is built again
  * for each request, and folding a section is a standing choice about what to
- * read, so it holds for the requests after it (user, 2026-10-29).
+ * read, so it holds for the requests after it.
  */
 const sectionOpen: Record<string, boolean> = {};
 
@@ -345,7 +347,7 @@ const sectionOpen: Record<string, boolean> = {};
 function Section({ id, label, defaultOpen, guide, help, children }: { id: string; label: string; defaultOpen: boolean; guide: string; help?: string; children: () => ReactNode }) {
   const [open, setOpen] = useState(sectionOpen[id] ?? defaultOpen);
   const toggle = (next: boolean) => { sectionOpen[id] = next; setOpen(next); };
-  // Reset This Workspace forgets every section's choice, including those of sections not shown now (user, 2026-10-31).
+  // Reset This Workspace forgets every section's choice, including those of sections not shown now.
   useWorkspaceReset(() => { for (const key of Object.keys(sectionOpen)) delete sectionOpen[key]; });
   return (
     <details className="phx-request-section" open={open} data-default-open={defaultOpen ? "" : undefined} data-guide={guide} onToggle={(e) => toggle(e.currentTarget.open)}>

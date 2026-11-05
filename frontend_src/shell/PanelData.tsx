@@ -16,6 +16,8 @@ import {
 import { api } from "../api";
 import { syncCardCatalog } from "../utils/card_harvest";
 import { registerAgentChatShortcut } from "../utils/agentchat_shortcut";
+import { onConnectionChange } from "../utils/connection";
+import { releaseAbandonedHold } from "../utils/page_suspend";
 import { t } from "../i18n";
 import type { WorkspaceId } from "./storage";
 import { APPROVALS_SCOPES, type ApprovalsScope } from "./approvals";
@@ -106,6 +108,9 @@ export interface PanelData {
 
   settings: GlobalSettings | null;
   setSettings: (settings: GlobalSettings) => void;
+  /** Why the settings could not be read, while there are none to show. */
+  settingsError: string | null;
+  retrySettings: () => void;
 
   pendingCount: number;
   refreshPendingCount: () => Promise<void>;
@@ -132,6 +137,14 @@ export interface PanelData {
   /** Raised each time the user opens Agent Chat, so its message box takes focus. */
   agentCliFocus: number;
   agentCliInstances: AgentCliInstance[];
+  /**
+   * Both lists Agent Chat chooses from have been read. An unread list is empty,
+   * and to the window an empty list means every saved choice is gone, so it must
+   * not mount before this.
+   */
+  agentCliListsLoaded: boolean;
+  /** A read Chat waits for failed, so the window cannot open yet. */
+  agentCliListFailed: boolean;
   globalChatReady: boolean;
 }
 
@@ -162,6 +175,8 @@ export function PanelDataProvider({ hass, narrow, theme, onThemeChange, language
   const [accessKeyView, setView] = useState<AccessKeyView>(readStoredView);
   const [accessKeys, setAccessKeys] = useState<AccessKeyRecord[]>([]);
   const [settings, setSettings] = useState<GlobalSettings | null>(null);
+  const [settingsError, setSettingsError] = useState<string | null>(null);
+  const [accessKeysLoaded, setAccessKeysLoaded] = useState(false);
   const [loadingAccessKeys, setLoadingAccessKeys] = useState(true);
   const [accessKeysError, setAccessKeysError] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
@@ -194,12 +209,15 @@ export function PanelDataProvider({ hass, narrow, theme, onThemeChange, language
   const [agentCliSummon, setAgentCliSummon] = useState<number>(0);
   const [agentCliFocus, setAgentCliFocus] = useState<number>(0);
   const [agentCliInstances, setAgentCliInstances] = useState<AgentCliInstance[]>([]);
+  const [agentCliInstancesLoaded, setAgentCliInstancesLoaded] = useState(false);
+  const [agentCliListFailed, setAgentCliListFailed] = useState(false);
   // Baseline pendingCount "seen" while actually viewing Pending; null until the
   // first count is known, so a reload with History persisted and count > 0
   // never looks like a rise. Used to detect a genuinely NEW approval arriving
   // while History is open, distinct from "some approval happens to be pending".
   const lastSeenPendingCountRef = useRef<number | null>(null);
   const openAgentCliRef = useRef<(accessKeyId?: string) => void>(() => {});
+  const readMissingRef = useRef<() => void>(() => {});
   const attention = useAttention();
 
   // Deep-link from a notification: /phoenix-mcp/approvals/{id} opens the
@@ -295,8 +313,10 @@ export function PanelDataProvider({ hass, narrow, theme, onThemeChange, language
     try {
       const data = await api.listAccessKeys();
       setAccessKeys(data);
+      setAccessKeysLoaded(true);
       setAccessKeysError(null);
     } catch (e: unknown) {
+      setAgentCliListFailed(true);
       if (!quiet) setAccessKeysError(e instanceof Error ? e.message : t("shell.loadAccessKeysFailed"));
     } finally {
       if (!quiet) setLoadingAccessKeys(false);
@@ -305,12 +325,43 @@ export function PanelDataProvider({ hass, narrow, theme, onThemeChange, language
   const refreshAccessKeys = useCallback(() => loadAccessKeys(false), [loadAccessKeys]);
   const updateAccessKeys = useCallback(() => loadAccessKeys(true), [loadAccessKeys]);
 
+  const loadSettings = useCallback(async () => {
+    setSettingsError(null);
+    try {
+      const loaded = await api.getSettings();
+      // A save answered while this read ran is newer than it.
+      setSettings((current) => current ?? loaded);
+    } catch (e: unknown) {
+      setSettingsError(e instanceof Error ? e.message : t("shell.loadSettingsFailed"));
+    }
+  }, []);
+
+  const loadAgentCliInstances = useCallback(() => api.getAgentCliProviders()
+    .then((r) => {
+      setAgentCliInstances(r.instances);
+      setAgentCliInstancesLoaded(true);
+    })
+    .catch(() => {
+      // Read again when Home Assistant answers or Chat is opened.
+      setAgentCliListFailed(true);
+    }), []);
+
+  // Anything read once at mount and lost to a failure is read again, or the
+  // windows that wait for it would wait until a manual page reload.
+  readMissingRef.current = () => {
+    setAgentCliListFailed(false);
+    if (!settings) void loadSettings();
+    if (!accessKeysLoaded) void refreshAccessKeys();
+    if (!agentCliInstancesLoaded) void loadAgentCliInstances();
+  };
+  useEffect(() => onConnectionChange((up) => { if (up) readMissingRef.current(); }), []);
+  useEffect(releaseAbandonedHold, []);
+
   // Load configured agentCLI providers, open the floating chat window when a
   // "connect" surface requests it, and refresh the provider list whenever it
   // changes in Settings (so the window updates without a page reload).
   useEffect(() => {
-    const refresh = () => api.getAgentCliProviders()
-      .then((r) => setAgentCliInstances(r.instances)).catch(() => { /* not configured yet */ });
+    const refresh = () => { void loadAgentCliInstances(); };
     refresh();
     // Opening from an access key's connect flow binds the window to that access key;
     // opening from the toolbar restores the last-used access key.
@@ -334,7 +385,7 @@ export function PanelDataProvider({ hass, narrow, theme, onThemeChange, language
       window.removeEventListener("phx-agentcli-providers-changed", refresh);
       window.removeEventListener("phx-access-keys-changed", onAccessKeysChanged);
     };
-  }, [refreshAccessKeys]);
+  }, [loadAgentCliInstances, refreshAccessKeys]);
 
   // Open (or re-summon) the chat window: re-center it and clear any minimized
   // state, so a window that was dragged off screen or minimized always comes
@@ -345,6 +396,7 @@ export function PanelDataProvider({ hass, narrow, theme, onThemeChange, language
   // remount that re-reads the centered geometry.
   const openAgentCli = useCallback((accessKeyId?: string, preservePosition = false) => {
     if (settings?.kill_switch) return;
+    readMissingRef.current();
     // The panel-local fallback can also be popped out. Keep its live React tree
     // intact and use this direct button gesture to request popup focus.
     if (accessKeyId === undefined && focusAgentCliPopup()) return;
@@ -454,8 +506,8 @@ export function PanelDataProvider({ hass, narrow, theme, onThemeChange, language
 
   useEffect(() => {
     void refreshAccessKeys();
-    api.getSettings().then(setSettings).catch(() => null);
-  }, [refreshAccessKeys]);
+    void loadSettings();
+  }, [loadSettings, refreshAccessKeys]);
 
   const refreshPendingCount = useCallback(async () => {
     try {
@@ -548,7 +600,7 @@ export function PanelDataProvider({ hass, narrow, theme, onThemeChange, language
       setApprovalsTab("pending");
     }
     setWorkspace(next);
-    // Coming back to Access Keys keeps the chosen key (user, 2026-10-28); the list is read again.
+    // Coming back to Access Keys keeps the chosen key; the list is read again.
     if (next === "accessKeys") void refreshAccessKeys();
   }, [refreshAccessKeys, approvalsTab, pendingCount]);
 
@@ -563,11 +615,12 @@ export function PanelDataProvider({ hass, narrow, theme, onThemeChange, language
     workspace, navigate,
     accessKeys, loadingAccessKeys, accessKeysError, refreshAccessKeys, updateAccessKeys,
     accessKeyView, openDetail, openWizard, goBack, deselectKey, goToSettings, showCreate, setShowCreate, showArchived, setShowArchived,
-    settings, setSettings,
+    settings, setSettings, settingsError, retrySettings: loadSettings,
     pendingCount, refreshPendingCount, approvalSignal, claimedApprovals, deepApprovalId, consumeDeepApprovalLink,
     approvalsTab, setApprovalsTab,
     attention, attentionRequested, dismissAttentionRequest,
-    openAgentCli, keepAgentCliOpen, closeAgentCli, agentCliOpen, agentCliKey, agentCliSummon, agentCliFocus, agentCliInstances, globalChatReady,
+    openAgentCli, keepAgentCliOpen, closeAgentCli, agentCliOpen, agentCliKey, agentCliSummon, agentCliFocus, agentCliInstances,
+    agentCliListsLoaded: accessKeysLoaded && agentCliInstancesLoaded, agentCliListFailed, globalChatReady,
   };
   return <PanelDataContext.Provider value={value}>{children}</PanelDataContext.Provider>;
 }

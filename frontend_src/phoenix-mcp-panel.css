@@ -193,6 +193,9 @@
 
 .raw-diff .sr-only { user-select: none; }
 
+/* Empty, a status region takes no room and adds no gap in a flex parent. */
+.phx-status-region:empty { position: absolute; }
+
 .sr-only {
   position: absolute;
   width: 1px;
@@ -349,8 +352,6 @@
 }
 /* Agent Chat: a 2 px outline drawn inside the border, so the button keeps its size. */
 .phx-toolbar-chat { border-color: var(--phx-text); box-shadow: inset 0 0 0 1px var(--phx-text); }
-.phx-toolbar-warning { border-color: var(--phx-error); background: var(--phx-error-bg); color: var(--phx-error); }
-.phx-toolbar-warning:hover { background: var(--phx-error-bg); }
 
 /* Icons only: labels stay available to assistive technology and as tooltips. */
 .phx-toolbar[data-mode="icons"] .phx-toolbar-button { width: 36px; padding: 0; }
@@ -403,7 +404,7 @@
   white-space: nowrap;
 }
 
-/* One row (user, 2026-11-01): the tools follow the workspaces after a separator, and Agent Chat, Documentation,
+/* One row: the tools follow the workspaces after a separator, and Agent Chat, Documentation,
    Workspace Options and the toolbar's own buttons keep the end of the row. The main row lends its items to the
    one row; the toolbar sets data-rows only while everything fits (shell/toolbarFit.ts). */
 .phx-toolbar[data-rows="1"] .phx-toolbar-body { flex-direction: row; flex-wrap: wrap; align-items: center; gap: 4px; }
@@ -591,11 +592,11 @@
   .phx-cell-label { display: block; color: var(--phx-text-2); }
 }
 .phx-guide-missing { color: var(--phx-error); }
-/* Breadcrumbs: the pages above this one in Contents (user, 2026-11-01). */
+/* Breadcrumbs: the pages above this one in Contents. */
 .phx-guide-crumbs { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 4px; margin: 0 0 4px; font-size: 12px; color: var(--phx-text-2); }
 .phx-guide-crumb { display: inline-flex; align-items: center; gap: 4px; }
 .phx-guide-crumb-sep { color: var(--phx-text-2); flex: none; }
-/* Sections: the one the reader selected is marked until something else is (user, 2026-11-01). */
+/* Sections: the one the reader selected is marked until something else is. */
 .phx-guide-topic h4 { margin: 18px 0 6px; font-size: 14px; font-weight: 600; }
 .phx-guide-topic h5 { margin: 14px 0 4px; font-size: 13px; font-weight: 600; }
 .phx-guide-section { margin: 0 -8px; padding: 0 8px; border-left: 2px solid transparent; border-radius: var(--phx-radius-xs); transition: background 0.2s; }
@@ -618,6 +619,9 @@
 .phx-guide-note { margin: 0; color: var(--phx-text-2); }
 /* The title takes the room, so a window's controls sit at the right of its title bar. */
 .phx-phone-title .phx-window-title-text { flex: 1; }
+@media (pointer: coarse) {
+  .phx-phone-title .phx-window-control, .phx-window-control.phx-guide-phone-close { width: 44px; height: 44px; }
+}
 .phx-guide-phone .phx-phone-body { padding: 0 12px 12px; }
 
 /* The Notifications window: this session's notices, newest first. */
@@ -740,7 +744,7 @@
 
 /* Approvals: the list with its Show menu and search, Review, and Request Details. */
 .phx-window-actions { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 8px; }
-/* An action closing a run of settings: on the right, clear of the setting above it (user, 2026-10-31). */
+/* An action closing a run of settings: on the right, clear of the setting above it. */
 .phx-window-actions-end { justify-content: flex-end; margin-top: 12px; }
 .phx-table th.phx-table-pick,
 .phx-table td.phx-table-pick { width: 36px; padding: 0; text-align: center; }
@@ -769,7 +773,7 @@
 .change-item > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* Inline confirmations: what the action does, an optional acknowledgement, then
    Confirm and Cancel. They wrap inside narrow windows. */
-/* A plain UI2 box (user, 2026-10-28): the window's surface and a hairline, no coloured accents; only a danger button is red. */
+/* A plain box: the window's surface and a hairline, no coloured accents; only a danger button is red. */
 .phx-inline-confirm { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-bottom: 12px; padding: 10px 12px; border: 1px solid var(--phx-border); border-radius: var(--phx-radius-sm); background: var(--phx-surface); }
 .phx-inline-confirm-body { flex: 1 1 260px; min-width: 0; font-size: 13px; line-height: 1.5; color: var(--phx-text-2); }
 .phx-inline-confirm-body strong { color: var(--phx-text); font-weight: 600; }
@@ -782,7 +786,7 @@
 
 /* Settings windows: native field rows, folded sections, local tabs, Find Setting. */
 .phx-settings > * + * { margin-top: 12px; }
-/* One rhythm for every Settings row (user, 2026-10-31): a row of any kind (switch, dropdown or number
+/* One rhythm for every Settings row: a row of any kind (switch, dropdown or number
    field) is 12px above and below with no margin, so neighbours are always 24px apart, and a group's rule
    or a folded section's sits between rows with no margin of its own. */
 .phx-settings :is(.toggle-row, .phx-setting-checks > .toggle-row) { padding: 12px 0; margin: 0; }
@@ -800,7 +804,7 @@
 .phx-disclosure-body { padding: 0 0 12px; }
 /* An account's options: what the last action found, hidden while there is none, then the actions.
    AI Providers opens them in a row under the account's own, joined to it by the row's grey
-   (user, 2026-10-31); a decision account opens them under its choice. */
+  ; a decision account opens them under its choice. */
 .phx-provider-account {
   display: flex; flex-direction: column; gap: 8px;
   padding: 10px 12px; border: 1px solid var(--phx-border); border-radius: var(--phx-radius-sm); background: var(--phx-surface);
@@ -822,7 +826,7 @@
 .phx-setting-checks { border-bottom: 1px solid var(--phx-divider); }
 .phx-setting-checks > .toggle-row { padding: 8px 0; border-bottom: none; }
 /* A group ending its section, or followed by a folded section (which draws its own rule) or by
-   the action it chooses for, ends without a rule (user, 2026-10-31). */
+   the action it chooses for, ends without a rule. */
 .phx-setting-checks:is(:last-child, :has(+ .phx-disclosure, + .phx-window-actions, + .settings-divider)) { border-bottom: none; }
 /* Audit and Conversation recording side by side once the window has 620 px inside, stacked below that. */
 .phx-settings { container-type: inline-size; }
@@ -909,7 +913,7 @@
 }
 .phx-table tbody tr[tabindex] { cursor: pointer; }
 .phx-table tbody tr[tabindex]:hover > td { background: var(--phx-hover); }
-/* The chosen row is marked by its grey alone (user, 2026-10-26): no border, and while the user
+/* The chosen row is marked by its grey alone: no border, and while the user
    moves with the keys a row under a still pointer is not highlighted as well. */
 .phx-table tbody tr.is-selected > td { background: var(--phx-selected); }
 /* The chosen row needs no ring, its grey shows where the keys are; a row the keys reach before
@@ -1223,13 +1227,13 @@ select.input {
   cursor: pointer;
 }
 .input-auto { flex: 0 0 auto; width: auto; }
-/* Every dropdown is one width and every number field another (user, 2026-10-31): a dropdown
+/* Every dropdown is one width and every number field another: a dropdown
    takes a third of the row it sits in, which is the window's width less its padding, but
    never so little that a short choice is cut nor more than a long one needs; a number field
    fits six digits and its arrows. Agent Chat's own compact controls keep their sizes. */
 select.input:not(.agentcli-select) { flex: 0 0 auto; width: clamp(10rem, 33%, 18rem); max-width: 100%; min-width: 0; }
 input.input[type="number"]:not(.agentcli-number) { flex: 0 0 auto; width: 7rem; max-width: 100%; }
-/* A number field sits on its name's line, at the right, as every setting's control does (user, 2026-10-31). */
+/* A number field sits on its name's line, at the right, as every setting's control does. */
 :is(.field, .agentcli-settings-field, .conversation-limit):has(> input[type="number"]) {
   display: flex; flex-direction: row; align-items: center; justify-content: space-between; gap: 12px;
 }
@@ -1286,7 +1290,7 @@ input.input[type="number"]:not(.agentcli-number) { flex: 0 0 auto; width: 7rem; 
   border-bottom: 1px solid var(--phx-divider);
 }
 .toggle-row:last-child { border-bottom: none; }
-/* In Settings a group's rows run on without rules; rules mark groups and folded sections (user, 2026-10-31). */
+/* In Settings a group's rows run on without rules; rules mark groups and folded sections. */
 .phx-settings .toggle-row { border-bottom: none; }
 /* A folded section or a divider draws its own rule above it, so the row before it does not add a second. */
 .toggle-row:has(+ .phx-disclosure, + .settings-divider) { border-bottom: none; }
@@ -1370,7 +1374,7 @@ input.input[type="number"]:not(.agentcli-number) { flex: 0 0 auto; width: 7rem; 
 }
 /* Wider dialog for side-by-side diffs (approval review). */
 .modal-wide { max-width: 920px; }
-/* The UI2 dialog heading (user, 2026-10-28): weights stay within 400 to 600, no colour. */
+/* The dialog heading: weights stay within 400 to 600, no colour. */
 .modal-title { font-size: 16px; font-weight: 600; margin: 0 0 12px 0; color: var(--phx-text); }
 .modal-body-text { margin: 0 0 16px; color: var(--phx-text-2); line-height: 1.5; }
 .modal-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; margin-top: 20px; flex-wrap: wrap; }
@@ -1480,8 +1484,7 @@ input.input[type="number"]:not(.agentcli-number) { flex: 0 0 auto; width: 7rem; 
 
 @media (max-width: 600px) {
   /* Backstop, not the fix: overflow-x is unset above (only overflow-y is),
-     so anything that still manages to force a wider box (a bug I've missed,
-     a future one) drags the whole tab content into horizontal scroll
+     so anything that still manages to force a wider box drags the whole tab content into horizontal scroll
      instead of just clipping locally. */
   .phx-content { padding: 0 10px 16px; overflow-x: hidden; }
   .card { padding: 14px; overflow-x: hidden; }
@@ -1489,9 +1492,7 @@ input.input[type="number"]:not(.agentcli-number) { flex: 0 0 auto; width: 7rem; 
 
   .card-header-stack { flex-direction: column; align-items: stretch; gap: 8px; }
 
-  .cap-row { flex-direction: column; align-items: stretch; }
   .cap-row-label { width: 100%; }
-  .cap-row-modes { width: 100%; justify-content: flex-end; gap: 6px; }
 
   .phx-killswitch-text-full { display: none; }
   .phx-killswitch-text-short { display: inline; }
@@ -1503,9 +1504,6 @@ input.input[type="number"]:not(.agentcli-number) { flex: 0 0 auto; width: 7rem; 
   .filter-row-refresh { order: 2; flex-shrink: 0; }
   .filter-row-right { order: 3; flex-basis: 100%; flex-wrap: wrap; }
 
-  .tree-badge, .tree-effective, .tree-hint-btn { display: none; }
-  .tree-children { margin-left: 9px; padding-left: 6px; }
-  .tree-node { gap: 6px; }
 
 
   
@@ -1520,12 +1518,9 @@ input.input[type="number"]:not(.agentcli-number) { flex: 0 0 auto; width: 7rem; 
 
   
 
-  .access-key-detail-sticky { margin: 0 -10px; padding: 12px 10px 10px; }
   .access-key-card-body { flex-direction: column; }
-  .access-key-card-actions { min-width: auto; width: 100%; flex-direction: row; flex-wrap: wrap; }
   .access-key-action-btn { flex: 1; min-width: 120px; }
-  .btn, .perm-btn, .tree-expand, .theme-toggle-btn { min-height: 44px; }
-  .perm-btn { min-width: 36px; }
+  .btn, .perm-btn, .tree-expand, .tree-hint-btn, .theme-toggle-btn { min-height: 44px; }
 }
 
 /* ============================================================
@@ -1570,7 +1565,7 @@ input.input[type="number"]:not(.agentcli-number) { flex: 0 0 auto; width: 7rem; 
 .perm-btn.active-GREEN  { background: var(--phx-success-bg);   color: var(--phx-success); }
 .perm-btn.active-RED    { background: var(--phx-error-bg);     color: var(--phx-error); }
 /* The chosen state is drawn as a ring and a heavier letter as well as its tint, so it does not rest on colour.
-   The ring is 1px: at 2px it boxed the letter in (user, 2026-11-03). */
+   The ring is 1px: at 2px it boxed the letter in. */
 .perm-btn[aria-pressed="true"] { font-weight: 800; box-shadow: inset 0 0 0 1px currentColor; }
 .perm-btn:focus-visible { outline-offset: -4px; }
 
@@ -1591,7 +1586,7 @@ input.input[type="number"]:not(.agentcli-number) { flex: 0 0 auto; width: 7rem; 
   100% { background: var(--phx-accent-lt);  box-shadow: 0 0 0 1.5px var(--phx-accent); }
 }
 .tree-expand {
-  width: 20px; height: 20px; border: none; background: none; cursor: pointer;
+  width: 24px; height: 24px; border: none; background: none; cursor: pointer;
   color: var(--phx-text-2); font-size: 10px; flex-shrink: 0;
   display: flex; align-items: center; justify-content: center;
   border-radius: 4px; padding: 0;
@@ -1649,6 +1644,15 @@ input.input[type="number"]:not(.agentcli-number) { flex: 0 0 auto; width: 7rem; 
 .tree-hint-editor-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .tree-hint-error { color: var(--phx-error); font-size: 12px; margin: 0; }
 .tree-perm-error { font-size: 11px; font-weight: 600; color: var(--phx-error); white-space: nowrap; flex-shrink: 0; cursor: help; }
+/* After the base rules, which it overrides. A narrow row keeps everything it says:
+   what does not fit beside the name wraps below it, the selector at the end. */
+@media (max-width: 600px) {
+  .tree-children { margin-left: 9px; padding-left: 6px; }
+  .tree-node { flex-wrap: wrap; gap: 2px 6px; }
+  .tree-name { flex: 1 1 140px; }
+  .tree-node > .perm-selector { margin-inline-start: auto; }
+  .perm-btn { min-width: 44px; }
+}
 .hint-scope { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; font-size: 13px; color: var(--phx-text-2); }
 .hint-scope-active { color: var(--phx-text); font-weight: 600; }
 .hint-scope-side { cursor: pointer; }
@@ -1670,7 +1674,7 @@ input.input[type="number"]:not(.agentcli-number) { flex: 0 0 auto; width: 7rem; 
 /* Wrap on narrow screens; a nowrap+hidden combo clipped the trailing
    controls entirely once the inputs hit their min-width. */
 /* Every window's filters sit in .phx-filters with one or more .filter-row children, so the
-   gap under the title bar and between rows is the same everywhere (user, 2026-10-29). */
+   gap under the title bar and between rows is the same everywhere. */
 .filter-row { display: flex; gap: 8px; margin-bottom: 14px; flex-wrap: wrap; align-items: center; }
 .filter-row input[type="search"] { flex: 1 1 180px; min-width: 0; }
 .filter-row .input:not(.input-auto):not(select):not([type="number"]) { flex: 1 1 0; min-width: 80px; width: auto; }
@@ -1682,7 +1686,7 @@ input.input[type="number"]:not(.agentcli-number) { flex: 0 0 auto; width: 7rem; 
 
 /* Placed after the base rule above (not in the earlier shared 600px block)
    so this equal-specificity flex-basis override actually wins the cascade
-   tie on source order, the same bug already hit once this session. */
+   tie on source order. */
 
 /* ============================================================
    Section header
@@ -1774,7 +1778,7 @@ input.input[type="number"]:not(.agentcli-number) { flex: 0 0 auto; width: 7rem; 
 /* Only as wide as its buttons: a click beside them, even in the same cell, cancels a confirmation. */
 .row-actions { display: inline-flex; gap: 4px; vertical-align: middle; }
 /* A row's actions keep their names, and Confirm sits beside Cancel on the row's own line:
-   their column is sized for the pair in icons-and-text mode (user, 2026-10-30). */
+   their column is sized for the pair in icons-and-text mode. */
 .phx-table td.phx-td-actions { overflow: visible; }
 /* Import lines up with its heading, and Import, Cancel and the switch share one height. */
 .phx-inline-panel .mesa-import { padding: 10px 12px 12px; }
@@ -1820,7 +1824,7 @@ input.input[type="number"]:not(.agentcli-number) { flex: 0 0 auto; width: 7rem; 
    Access key create modal
    ============================================================ */
 /* Create Access Key, in place at the top of the Access Keys window. */
-/* Part of the window, like its other sections: no box of its own, a divider below (user, 2026-10-28). */
+/* Part of the window, like its other sections: no box of its own, a divider below. */
 .phx-inline-form { margin-bottom: 12px; padding: 0 0 12px; border-bottom: 1px solid var(--phx-divider); }
 .phx-inline-form-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
 .access-key-create-fields { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 10px 16px; }
@@ -2005,7 +2009,7 @@ input.input[type="number"]:not(.agentcli-number) { flex: 0 0 auto; width: 7rem; 
 /* ============================================================
    Rate limit config
    ============================================================ */
-/* The two limits are rows like the settings above them (user, 2026-10-31). */
+/* The two limits are rows like the settings above them. */
 .rate-limit-row { display: flex; flex-direction: column; }
 .rate-limit-row .field { margin: 0; padding: 12px 0; }
 
@@ -2024,7 +2028,7 @@ input.input[type="number"]:not(.agentcli-number) { flex: 0 0 auto; width: 7rem; 
 /* ============================================================
    Entity tree extras
    ============================================================ */
-.tree-spacer { width: 20px; flex-shrink: 0; }
+.tree-spacer { width: 24px; flex-shrink: 0; }
 .tree-cursor-pointer { cursor: pointer; }
 .tree-domain-group { margin-bottom: 4px; }
 .tree-domain-label { font-weight: 600; }
@@ -2066,7 +2070,7 @@ input.input[type="number"]:not(.agentcli-number) { flex: 0 0 auto; width: 7rem; 
 }
 .persona-card:not(.persona-card-active):hover:not(:disabled):not([aria-disabled="true"]) { background: var(--phx-surface-2); }
 .persona-card:disabled, .persona-card[aria-disabled="true"] { cursor: default; opacity: 0.7; }
-/* The chosen persona is framed in ink on the selection fill, which no other card has (user, 2026-11-03):
+/* The chosen persona is framed in ink on the selection fill, which no other card has:
    in the accent it read as one more colored card beside Custom's blue. */
 .persona-card-active {
   border-color: var(--phx-text); background: var(--phx-selected);
@@ -2141,6 +2145,11 @@ input.input[type="number"]:not(.agentcli-number) { flex: 0 0 auto; width: 7rem; 
 
 @media (max-width: 600px) {
   .modal-wide { padding: 20px; }
+  /* After their base rules, which win at equal specificity. */
+  .cap-row { flex-direction: column; align-items: stretch; }
+  .cap-row-modes { width: 100%; justify-content: flex-end; gap: 6px; }
+  .access-key-detail-sticky { margin: 0 -10px; padding: 12px 10px 10px; }
+  .access-key-card-actions { min-width: auto; width: 100%; flex-direction: row; flex-wrap: wrap; }
 }
 
 .approval-history-more { display: flex; justify-content: center; margin-top: 10px; }
@@ -2168,7 +2177,7 @@ input.input[type="number"]:not(.agentcli-number) { flex: 0 0 auto; width: 7rem; 
 .change-detail-body { min-width: 0; }
 
 .change-diff-wrap { min-width: 0; }
-/* The view controls sit together on the left, with no hint beside them (user, 2026-10-27); Comparison puts
+/* The view controls sit together on the left, with no hint beside them; Comparison puts
    Restore at the right end. */
 .change-diff-toolbar { display: flex; align-items: center; justify-content: flex-start; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
 .change-diff-toolbar-end { margin-left: auto; display: inline-flex; }
@@ -2340,7 +2349,7 @@ hui-card, .dash-preview-card-slot { display: block; min-width: 0; }
 }
 
 /* Home Assistant is away: one notice over the panel while it comes back. */
-/* Over the panel only, not Home Assistant's sidebar, which stays usable during the wait (user, 2026-11-01). */
+/* Over the panel only, not Home Assistant's sidebar, which stays usable during the wait. */
 .phx-offline:focus-visible { outline: none; }
 .phx-offline {
   position: absolute; inset: 0; z-index: var(--phx-z-modal);
@@ -2445,7 +2454,7 @@ hui-card, .dash-preview-card-slot { display: block; min-width: 0; }
 .command-block-title { font-size: 12px; font-weight: 600; color: var(--phx-text); margin-bottom: 2px; }
 .command-block .wizard-hint { display: block; margin-bottom: 6px; }
 /* Every value (URL, access key, command, JSON, header field) renders as a full-width
-   box with its Copy button beside the value, never over it (user, 2026-10-28). */
+   box with its Copy button beside the value, never over it. */
 .command-field { margin: 8px 0; }
 .command-field-label { font-size: 12px; font-weight: 600; color: var(--phx-text-2); margin-bottom: 3px; }
 .command-block-codewrap { display: flex; align-items: flex-start; gap: 8px; padding-right: 6px; border: 1px solid var(--phx-border); border-radius: var(--phx-radius-sm); overflow: hidden; background: var(--phx-surface-2, var(--phx-surface)); }
@@ -2505,9 +2514,12 @@ hui-card, .dash-preview-card-slot { display: block; min-width: 0; }
 .tag-chip-ns { color: var(--phx-text-2); font-size: 11px; }
 .tag-chip-ns::after { content: "\203a"; margin-left: 4px; opacity: 0.6; }
 .tag-chip-qual { color: var(--phx-text); font-weight: 600; overflow: hidden; text-overflow: ellipsis; }
+/* A 24 px target; the negative margin keeps it from making the chip taller. */
 .tag-chip-x {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 24px; min-height: 24px; margin-block: -3px;
   border: none; background: none; cursor: pointer; color: var(--phx-text-2);
-  font-size: 15px; line-height: 1; padding: 0 2px; border-radius: 50%;
+  font-size: 15px; line-height: 1; padding: 0; border-radius: 50%;
 }
 .tag-chip-x:hover { color: var(--phx-error); }
 .tag-input-field {
@@ -2788,7 +2800,7 @@ hui-card, .dash-preview-card-slot { display: block; min-width: 0; }
 .agentcli-connection-rest { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: pre; }
 /* Access Key and Provider, then Model, Thinking and Temperature: one line while both rows fit,
    otherwise the second row drops below the first. Neither row ever wraps inside itself: the
-   fields narrow instead, so the fields are never more than two rows (user, 2026-10-29). */
+   fields narrow instead, so the fields are never more than two rows. */
 .agentcli-controls { display: flex; flex-wrap: wrap; gap: 6px 8px; padding: 8px 12px 10px; }
 .agentcli-controls[hidden] { display: none; }
 .agentcli-control-row { display: flex; gap: 8px; flex: 1 1 auto; min-width: min(100%, 230px); }
@@ -2799,7 +2811,7 @@ hui-card, .dash-preview-card-slot { display: block; min-width: 0; }
 /* A number field has no arrow of its own to leave room for: its spinner sits at the edge. */
 .agentcli-control .agentcli-number { padding-inline-end: 4px; }
 .agentcli-connection-note { flex: 1 1 100%; font-size: 12px; color: var(--phx-text-2); }
-/* Compact fields everywhere, phones included (user, 2026-11-02); Home Assistant's page turns off zooming,
+/* Compact fields everywhere, phones included; Home Assistant's page turns off zooming,
    so a small field does not zoom the page when tapped. */
 .agentcli-controls .agentcli-select { height: 28px; min-height: 28px; padding-top: 0; padding-bottom: 0; font-size: 12px; }
 
@@ -2851,7 +2863,7 @@ hui-card, .dash-preview-card-slot { display: block; min-width: 0; }
 @media (hover: none) { .agentcli-msg-meta .agentcli-copy-btn { opacity: 0.85; } }
 .agentcli-copy-btn {
   display: inline-flex; align-items: center; justify-content: center;
-  width: 22px; height: 22px; margin: -2px 0; padding: 3px;
+  width: 24px; height: 24px; margin: -3px 0; padding: 4px;
   border: 0; border-radius: var(--phx-radius-xs);
   background: transparent; color: currentColor; cursor: pointer;
   opacity: 0.85; transition: background 0.15s, opacity 0.15s, color 0.15s;
@@ -3161,7 +3173,7 @@ hui-card, .dash-preview-card-slot { display: block; min-width: 0; }
   display: flex; align-items: center; gap: 12px; width: 100%; flex-wrap: wrap;
 }
 .agentcli-settings-model-actions > .agentcli-settings-probe-opt { flex: 1 1 280px; }
-/* In Settings a row's buttons sit beside it, along the bottom of its field (user, 2026-10-31). */
+/* In Settings a row's buttons sit beside it, along the bottom of its field. */
 .agentcli-add-inline { display: flex; align-items: flex-end; gap: 8px; flex-wrap: wrap; width: 100%; }
 .agentcli-add-inline > :is(.agentcli-settings-field, .agentcli-settings-model-row) { flex: 1 1 220px; min-width: 0; }
 .agentcli-settings-model-row {
@@ -3169,7 +3181,7 @@ hui-card, .dash-preview-card-slot { display: block; min-width: 0; }
   font-size: 13px;
 }
 .agentcli-settings-model-row > span { color: var(--phx-text-2); font-weight: 600; }
-/* Post-create "how will you use this access key" choices: plain rows with an icon, in the UI2 style (user, 2026-10-28). */
+/* Post-create "how will you use this access key" choices: plain rows with an icon. */
 .post-create-choices { display: flex; flex-direction: column; margin: 0; border: 1px solid var(--phx-border); border-radius: var(--phx-radius-sm); overflow: hidden; }
 .post-create-choice {
   display: flex; align-items: flex-start; gap: 12px; text-align: left; width: 100%;
@@ -3338,7 +3350,7 @@ section.phx-guide:focus-visible,
 
 /* Korean is written with spaces between words and wraps between them; by default a line could break
    inside a word (메|뉴). A word too long for its box still breaks rather than overflowing. Set where the
-   panel declares its language (registerLanguageRoot), and inherited by everything inside (2026-11-03). */
+   panel declares its language (registerLanguageRoot), and inherited by everything inside. */
 [lang|="ko"] { word-break: keep-all; overflow-wrap: break-word; }
 
 /* Windows High Contrast replaces backgrounds and drops shadows, so a state drawn that way

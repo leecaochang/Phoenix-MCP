@@ -7,10 +7,16 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 from aiohttp.test_utils import TestClient, TestServer
 import pytest
+
+from tests.runtime_fixtures import patch_readers
 from homeassistant.setup import async_setup_component
 from homeassistant.helpers import entity_registry as er
 
-from custom_components.phoenix_mcp import agentcli, mcp_view
+from custom_components.phoenix_mcp import agent_turn, agentcli_views, mcp_transport, service_targets, tool_catalog, tool_dispatch
+from custom_components.phoenix_mcp.llm import accounts as llm_accounts
+from custom_components.phoenix_mcp.llm import base as llm_base
+from custom_components.phoenix_mcp.llm import provider_claude as llm_provider_claude
+from custom_components.phoenix_mcp.tools import service as service_tools
 from custom_components.phoenix_mcp.admin_view import PhoenixAdminApprovalApproveView
 from custom_components.phoenix_mcp.approvals import async_create_pending_approval, get_approval
 from custom_components.phoenix_mcp.audit import AuditLog
@@ -43,7 +49,7 @@ async def test_actual_task_cancellation_resolves_only_unclaimed_review(hass, cla
         pending = data.store.get_pending_approvals()
         pending[0]["execution_started_at"] = record.created_at.isoformat()
         data.store.set_pending_approvals(pending)
-    task = asyncio.create_task(agentcli._await_agent_approval(hass, data, record.id, asyncio.Event(), 60))
+    task = asyncio.create_task(agent_turn._await_agent_approval(hass, data, record.id, asyncio.Event(), 60))
     await asyncio.sleep(0)
     task.cancel()
     with pytest.raises(asyncio.CancelledError):
@@ -55,24 +61,24 @@ async def test_actual_task_cancellation_resolves_only_unclaimed_review(hass, cla
 async def test_real_chat_disconnect_cancels_approval(hass, hass_access_token, socket_enabled, handler_cancellation):
     assert await async_setup_component(hass, "http", {})
     data, access_key, _ = await _environment(hass)
-    view = agentcli.PhoenixAgentCliChatView()
+    view = agentcli_views.PhoenixAgentCliChatView()
     view.hass = hass
     hass.http.register_view(view)
-    cfg = agentcli.ProviderConfig("claude", "fixture-model", "http://example.invalid", "fixture-key")
+    cfg = llm_accounts.ProviderConfig("claude", "fixture-model", "http://example.invalid", "fixture-key")
     store = MagicMock()
     store.resolve.return_value = cfg
-    provider = agentcli.ClaudeProvider(cfg)
+    provider = llm_provider_claude.ClaudeProvider(cfg)
     async def stream(*args, **kwargs):
-        yield {"type": agentcli.EV_TOOL, "id": "call", "name": "restart_ha", "input": {}}
-        yield {"type": agentcli.EV_DONE, "stop_reason": "tool_use", "assistant_msg": {
+        yield {"type": llm_base.EV_TOOL, "id": "call", "name": "restart_ha", "input": {}}
+        yield {"type": llm_base.EV_DONE, "stop_reason": "tool_use", "assistant_msg": {
             "role": "assistant", "content": [{"type": "tool_use", "id": "call", "name": "restart_ha", "input": {}}]}}
     provider.stream_turn = stream
     server = TestServer(hass.http.app, handler_cancellation=handler_cancellation)
     client = TestClient(server, headers={"Authorization": f"Bearer {hass_access_token}"})
     await client.start_server()
-    with patch.object(agentcli, "_get_secret_store", AsyncMock(return_value=store)), \
-         patch.object(agentcli, "build_provider", return_value=provider), \
-         patch.object(agentcli, "AGENTCLI_HEARTBEAT_SECONDS", 0.02):
+    with patch_readers("custom_components.phoenix_mcp.llm.accounts._get_secret_store", AsyncMock(return_value=store)), \
+         patch_readers("custom_components.phoenix_mcp.llm.factory.build_provider", return_value=provider), \
+         patch("custom_components.phoenix_mcp.agentcli_views.AGENTCLI_HEARTBEAT_SECONDS", 0.02):
         try:
             response = await client.post(view.url, json={"access_key_id": access_key.id, "instance_id": "fixture", "user": "restart"})
             assert response.status == 200
@@ -102,19 +108,19 @@ async def test_interrupted_delivery_through_the_view_keeps_the_barrier(
 
     assert await async_setup_component(hass, "http", {})
     data, access_key, _ = await _environment(hass)
-    view = agentcli.PhoenixAgentCliChatView()
+    view = agentcli_views.PhoenixAgentCliChatView()
     view.hass = hass
     hass.http.register_view(view)
-    cfg = agentcli.ProviderConfig("claude", "fixture-model", "http://example.invalid", "fixture-key")
+    cfg = llm_accounts.ProviderConfig("claude", "fixture-model", "http://example.invalid", "fixture-key")
     store = MagicMock()
     store.resolve.return_value = cfg
-    provider = agentcli.ClaudeProvider(cfg)
+    provider = llm_provider_claude.ClaudeProvider(cfg)
     rounds = iter([
-        [{"type": agentcli.EV_TOOL, "id": "call", "name": "call_service", "input": {}},
-         {"type": agentcli.EV_DONE, "stop_reason": "tool_use", "assistant_msg": {
+        [{"type": llm_base.EV_TOOL, "id": "call", "name": "call_service", "input": {}},
+         {"type": llm_base.EV_DONE, "stop_reason": "tool_use", "assistant_msg": {
              "role": "assistant", "content": [{"type": "tool_use", "id": "call", "name": "call_service", "input": {}}]}}],
-        [{"type": agentcli.EV_TEXT, "text": "Done."},
-         {"type": agentcli.EV_DONE, "stop_reason": "end_turn", "assistant_msg": {"role": "assistant", "content": "Done."}}],
+        [{"type": llm_base.EV_TEXT, "text": "Done."},
+         {"type": llm_base.EV_DONE, "stop_reason": "end_turn", "assistant_msg": {"role": "assistant", "content": "Done."}}],
     ])
 
     async def stream(*args, **kwargs):
@@ -131,10 +137,10 @@ async def test_interrupted_delivery_through_the_view_keeps_the_barrier(
     server = TestServer(hass.http.app)
     client = TestClient(server, headers={"Authorization": f"Bearer {hass_access_token}"})
     await client.start_server()
-    with patch.object(agentcli, "_get_secret_store", AsyncMock(return_value=store)), \
-         patch.object(agentcli, "build_provider", return_value=provider), \
-         patch.object(agentcli, "build_mcp_tool_list", return_value=[]), \
-         patch("custom_components.phoenix_mcp.mcp_view._dispatch_mcp", dispatch), \
+    with patch_readers("custom_components.phoenix_mcp.llm.accounts._get_secret_store", AsyncMock(return_value=store)), \
+         patch_readers("custom_components.phoenix_mcp.llm.factory.build_provider", return_value=provider), \
+         patch_readers("custom_components.phoenix_mcp.tool_catalog.build_mcp_tool_list", return_value=[]), \
+         patch_readers("custom_components.phoenix_mcp.tool_dispatch._dispatch_mcp", dispatch), \
          patch.object(web.StreamResponse, "write", leaving_client):
         try:
             response = await client.post(view.url, json={"access_key_id": access_key.id, "instance_id": "fixture", "user": "go"})
@@ -156,19 +162,19 @@ async def test_client_leaving_right_after_done_keeps_the_turn_finished(
     data, access_key, _ = await _environment(hass)
     data.store.get_settings().conversation_log_enabled = True
     data.conversations.configure(data.store.get_settings())
-    view = agentcli.PhoenixAgentCliChatView()
+    view = agentcli_views.PhoenixAgentCliChatView()
     view.hass = hass
     hass.http.register_view(view)
-    cfg = agentcli.ProviderConfig("claude", "fixture-model", "http://example.invalid", "fixture-key")
+    cfg = llm_accounts.ProviderConfig("claude", "fixture-model", "http://example.invalid", "fixture-key")
     store = MagicMock()
     store.resolve.return_value = cfg
-    provider = agentcli.ClaudeProvider(cfg)
+    provider = llm_provider_claude.ClaudeProvider(cfg)
     rounds = iter([
-        [{"type": agentcli.EV_TOOL, "id": "call", "name": "call_service", "input": {}},
-         {"type": agentcli.EV_DONE, "stop_reason": "tool_use", "assistant_msg": {
+        [{"type": llm_base.EV_TOOL, "id": "call", "name": "call_service", "input": {}},
+         {"type": llm_base.EV_DONE, "stop_reason": "tool_use", "assistant_msg": {
              "role": "assistant", "content": [{"type": "tool_use", "id": "call", "name": "call_service", "input": {}}]}}],
-        [{"type": agentcli.EV_TEXT, "text": "Done."},
-         {"type": agentcli.EV_DONE, "stop_reason": "end_turn", "assistant_msg": {"role": "assistant", "content": "Done."}}],
+        [{"type": llm_base.EV_TEXT, "text": "Done."},
+         {"type": llm_base.EV_DONE, "stop_reason": "end_turn", "assistant_msg": {"role": "assistant", "content": "Done."}}],
     ])
 
     async def stream(*args, **kwargs):
@@ -185,10 +191,10 @@ async def test_client_leaving_right_after_done_keeps_the_turn_finished(
     server = TestServer(hass.http.app, handler_cancellation=handler_cancellation)
     client = TestClient(server, headers={"Authorization": f"Bearer {hass_access_token}"})
     await client.start_server()
-    with patch.object(agentcli, "_get_secret_store", AsyncMock(return_value=store)), \
-         patch.object(agentcli, "build_provider", return_value=provider), \
-         patch.object(agentcli, "build_mcp_tool_list", return_value=[]), \
-         patch("custom_components.phoenix_mcp.mcp_view._dispatch_mcp", dispatch), \
+    with patch_readers("custom_components.phoenix_mcp.llm.accounts._get_secret_store", AsyncMock(return_value=store)), \
+         patch_readers("custom_components.phoenix_mcp.llm.factory.build_provider", return_value=provider), \
+         patch_readers("custom_components.phoenix_mcp.tool_catalog.build_mcp_tool_list", return_value=[]), \
+         patch_readers("custom_components.phoenix_mcp.tool_dispatch._dispatch_mcp", dispatch), \
          patch.object(data.agent_recovery, "complete_turn", slow_release):
         try:
             response = await client.post(view.url, json={"access_key_id": access_key.id, "instance_id": "fixture", "user": "go"})
@@ -215,7 +221,7 @@ async def lifecycle_http(hass, hass_client_no_auth):
     data, access_key, raw = await _environment(hass)
     er.async_get(hass).async_get_or_create("light", "test", "lifecycle", suggested_object_id="lifecycle")
     hass.states.async_set("light.lifecycle", "off")
-    for cls in (*mcp_view.ALL_MCP_VIEWS, PhoenixAdminApprovalApproveView):
+    for cls in (*mcp_transport.ALL_MCP_VIEWS, PhoenixAdminApprovalApproveView):
         view = cls()
         view.hass = hass
         hass.http.register_view(view)
@@ -239,8 +245,7 @@ async def test_real_json_disconnect_preserves_only_legacy_dispatch(hass, socket_
     """Closing the real HTTP connection detaches legacy work but cancels modern work."""
     assert await async_setup_component(hass, "http", {})
     data, _, raw = await _environment(hass)
-    assert data.enforce_mcp_lifecycle
-    view = mcp_view.PhoenixMcpView()
+    view = mcp_transport.PhoenixMcpView()
     view.hass = hass
     hass.http.register_view(view)
     client = TestClient(TestServer(hass.http.app, handler_cancellation=True))
@@ -254,7 +259,7 @@ async def test_real_json_disconnect_preserves_only_legacy_dispatch(hass, socket_
         try:
             await release.wait()
             effects.append(method)
-            return mcp_view._jsonrpc_result(msg_id, {}), method, "fixture", "allowed"
+            return tool_dispatch._jsonrpc_result(msg_id, {}), method, "fixture", "allowed"
         finally:
             finished.set()
 
@@ -280,7 +285,7 @@ async def test_real_json_disconnect_preserves_only_legacy_dispatch(hass, socket_
                 "io.modelcontextprotocol/protocolVersion": "2026-07-28",
                 "io.modelcontextprotocol/clientCapabilities": {},
             }}
-        with patch.object(mcp_view, "_dispatch_mcp_authorized", side_effect=dispatch):
+        with patch.object(tool_dispatch, "_dispatch_mcp_authorized", side_effect=dispatch):
             pending = asyncio.create_task(client.post(view.url, headers=headers, json=[body] if batch else body))
             async with asyncio.timeout(3):
                 await entered.wait()
@@ -338,7 +343,7 @@ async def test_unknown_write_retains_barrier_and_refuses_repeat(lifecycle_http, 
         effects.append("effect")
         access_key.settings_version += 1
         check_request_authority()
-    with patch.dict(mcp_view._TOOL_HANDLERS, {"call_service": (handler, (), {})}):
+    with patch.dict(tool_catalog._TOOL_HANDLERS, {"call_service": (handler, (), {})}):
         first = await client.post("/api/phoenix-mcp", headers={"Authorization": f"Bearer {raw}"}, json=_write())
         body = await first.json()
         assert "may already" in json.dumps(body)
@@ -384,7 +389,7 @@ async def test_buffered_batch_write_keeps_receipt_when_later_read_loses_authorit
         access_key.settings_version += 1
         return {"content": [{"type": "text", "text": "private-stale-result"}]}, "allowed", "sensor.lifecycle"
     batch = [_write(), {"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {"name": "get_state", "arguments": {"entity_id": "light.lifecycle", "projection": {"kind": "compact"}}}}]
-    with patch.dict(mcp_view._TOOL_HANDLERS, {"get_state": (delayed_read, (), {})}):
+    with patch.dict(tool_catalog._TOOL_HANDLERS, {"get_state": (delayed_read, (), {})}):
         response = await client.post("/api/phoenix-mcp", headers={"Authorization": f"Bearer {raw}"}, json=batch)
     result = await response.json()
     calls.assert_awaited_once()
@@ -430,8 +435,8 @@ async def test_cancel_before_approval_emission_cleans_saved_review(hass):
             tool_name="restart_ha", cap_name="cap_restart", args={}, diff={}, request_id=request_id)
         pending_created.set()
         await asyncio.Event().wait()
-    with patch.object(mcp_view, "_dispatch_mcp", side_effect=dispatch):
-        task = asyncio.create_task(agentcli._run_tool_batch(
+    with patch_readers("custom_components.phoenix_mcp.tool_dispatch._dispatch_mcp", side_effect=dispatch):
+        task = asyncio.create_task(agent_turn._run_tool_batch(
             [{"id": "call", "name": "restart_ha", "input": {}}], hass=hass, data=data,
             access_key_id=access_key.id, client_ip="agentcli", base_url="", emit=AsyncMock(), cancel=asyncio.Event()))
         await asyncio.wait_for(pending_created.wait(), 2)
@@ -452,11 +457,11 @@ async def test_unknown_receipt_never_persists_caller_tool_text(hass):
 
 @pytest.mark.parametrize("surface", ["http", "agent"])
 async def test_service_authority_loss_before_dispatch_has_no_unknown_barrier(lifecycle_http, hass, monkeypatch, surface):
-    from custom_components.phoenix_mcp.agent_recovery import dispatch_agent_tool
+    from custom_components.phoenix_mcp.agent_dispatch import dispatch_agent_tool
     client, data, access_key, raw = lifecycle_http
     calls = AsyncMock()
     hass.services.async_register("light", "toggle", calls)
-    original = mcp_view.unsupported_secondary_targets
+    original = service_targets.unsupported_secondary_targets
     checks = 0
 
     async def change(*args, **kwargs):
@@ -466,13 +471,13 @@ async def test_service_authority_loss_before_dispatch_has_no_unknown_barrier(lif
             access_key.settings_version += 1
         return await original(*args, **kwargs)
 
-    monkeypatch.setattr(mcp_view, "unsupported_secondary_targets", change)
+    monkeypatch.setattr(service_tools, "unsupported_secondary_targets", change)
     if surface == "http":
         response = await client.post("/api/phoenix-mcp", headers={"Authorization": f"Bearer {raw}"}, json=_write())
         assert response.status == 200
         body = await response.json()
     else:
-        body, _, _, _ = await dispatch_agent_tool(mcp_view._dispatch_mcp, hass=hass, data=data, access_key=access_key,
+        body, _, _, _ = await dispatch_agent_tool(tool_dispatch._dispatch_mcp, hass=hass, data=data, access_key=access_key,
             name="call_service", arguments=_write()["params"]["arguments"], tool_id=1, request_id="prepare",
             client_ip="agentcli", base_url="")
     assert checks == 2
@@ -518,7 +523,7 @@ async def test_authority_recovery_double_fault_keeps_json_response_and_barrier(l
         check_request_authority()
     data.agent_recovery._store = AsyncMock()
     data.agent_recovery._store.async_save.side_effect = OSError("private-path-disk-full")
-    with patch.dict(mcp_view._TOOL_HANDLERS, {"call_service": (handler, (), {})}):
+    with patch.dict(tool_catalog._TOOL_HANDLERS, {"call_service": (handler, (), {})}):
         response = await client.post("/api/phoenix-mcp", headers={"Authorization": f"Bearer {raw}"}, json=_write(72))
     assert response.status == 200
     body = await response.json()
@@ -536,7 +541,7 @@ async def test_emit_failure_after_pending_review_still_closes_it(hass):
             raise ConnectionResetError("client gone")
 
     with pytest.raises(ConnectionResetError):
-        await agentcli._run_tool_batch(
+        await agent_turn._run_tool_batch(
             [{"id": "call", "name": "restart_ha", "input": {}}], hass=hass, data=data,
             access_key_id=access_key.id, client_ip="agentcli", base_url="", emit=emit, cancel=asyncio.Event())
     pending = data.store.get_pending_approvals()
@@ -550,7 +555,7 @@ async def test_agent_refusal_before_writing_leaves_no_barrier(hass, refusal):
     # tool's own first check, and one refused by the dispatcher before any
     # handler runs. None could write, so the agent loop gets the error back with
     # no outcome to reconcile.
-    from custom_components.phoenix_mcp.agent_recovery import dispatch_agent_tool
+    from custom_components.phoenix_mcp.agent_dispatch import dispatch_agent_tool
     from custom_components.phoenix_mcp.helpers import content_hash
     from custom_components.phoenix_mcp.ws_dispatch import async_get_lovelace_config, async_save_lovelace_config
 
@@ -568,7 +573,7 @@ async def test_agent_refusal_before_writing_leaves_no_barrier(hass, refusal):
     if refusal == "dispatcher_argument":
         name, arguments = "restart_ha", {"colour": "red"}
     body, _, _, outcome = await dispatch_agent_tool(
-        mcp_view._dispatch_mcp, hass=hass, data=data, access_key=access_key, name=name,
+        tool_dispatch._dispatch_mcp, hass=hass, data=data, access_key=access_key, name=name,
         arguments=arguments, tool_id=1, request_id="refused", client_ip="agentcli", base_url="")
     assert outcome == "invalid_request"
     assert body["result"]["isError"] is True
@@ -584,7 +589,8 @@ async def test_agent_refusal_before_writing_leaves_no_barrier(hass, refusal):
 async def test_agent_write_error_without_the_marker_keeps_the_barrier(hass, result):
     # A handler error after the handler ran may follow a partial write, and a
     # copy that drops the marker's type proves nothing either: both fail closed.
-    from custom_components.phoenix_mcp.agent_recovery import RecoveryRequired, dispatch_agent_tool
+    from custom_components.phoenix_mcp.agent_dispatch import dispatch_agent_tool
+    from custom_components.phoenix_mcp.agent_recovery import RecoveryRequired
     from custom_components.phoenix_mcp.tool_common import _tool_error, _tool_refused_before_write
 
     data, access_key, _ = await _environment(hass)
@@ -594,10 +600,10 @@ async def test_agent_write_error_without_the_marker_keeps_the_barrier(hass, resu
     async def handler(*args, **kwargs):
         return error, "invalid_request", "call_service"
 
-    with patch.dict(mcp_view._TOOL_HANDLERS, {"call_service": (handler, (), {})}), \
+    with patch.dict(tool_catalog._TOOL_HANDLERS, {"call_service": (handler, (), {})}), \
             pytest.raises(RecoveryRequired):
         await dispatch_agent_tool(
-            mcp_view._dispatch_mcp, hass=hass, data=data, access_key=access_key, name="call_service",
+            tool_dispatch._dispatch_mcp, hass=hass, data=data, access_key=access_key, name="call_service",
             arguments=_write()["params"]["arguments"], tool_id=1, request_id="uncertain",
             client_ip="agentcli", base_url="")
     assert data.agent_recovery.blocks(access_key.id)

@@ -3,7 +3,11 @@
 //   - Durable (localStorage): open flag, geometry, and the access key/provider/model/
 //     options selections. Restored after a full page reload too.
 //   - Conversation (localStorage plus a module cache): transcript, draft, and
-//     usage. Survives panel remounts and full page reloads until Clear is used.
+//     usage. Survives panel remounts and full page reloads until Clear is used,
+//     it goes unused for MAX_CONV_AGE_MS, or purgeAgentCliStorage removes it.
+//     Each browser holds one conversation per user, shared by its tabs.
+
+import { clearAllReasonDrafts } from "./approval_reason_draft";
 
 export interface AgentCliOptions {
   thinking: boolean;
@@ -46,6 +50,8 @@ export interface AgentCliDurable {
 const LS_KEY = "phx-agentcli";
 let ownerId: string | null = null;
 let draftTimer: ReturnType<typeof setTimeout> | null = null;
+/** Set once the stored data was purged: nothing may write it back in this page. */
+let storageClosed = false;
 
 /** Browser persistence belongs to one authenticated HA user. */
 export function getAgentCliOwner(): string | null { return ownerId; }
@@ -54,6 +60,7 @@ export function setAgentCliOwner(userId: string | null): void {
   if (userId === ownerId) return;
   flushSessionDraft(ownerId);
   ownerId = userId;
+  storageClosed = false;
   conversation = defaultConversation();
   loaded = false;
   try {
@@ -61,13 +68,16 @@ export function setAgentCliOwner(userId: string | null): void {
     localStorage.removeItem(LS_KEY);
     localStorage.removeItem(CONV_KEY);
   } catch { /* storage unavailable */ }
+  if (userId) expireConversations();
 }
 
 function storageKey(base: string): string | null {
-  return ownerId ? `${base}:${encodeURIComponent(ownerId)}` : null;
+  return ownerId && !storageClosed ? `${base}:${encodeURIComponent(ownerId)}` : null;
 }
 
-function ownsSession(owner: string | null): boolean { return owner !== null && owner === ownerId; }
+function ownsSession(owner: string | null): boolean {
+  return owner !== null && owner === ownerId && !storageClosed;
+}
 
 
 export const AGENTCLI_TEXT_SIZE_DEFAULT_PT = 9.75;
@@ -186,10 +196,14 @@ export function patchDurable(patch: Partial<AgentCliDurable>, owner = ownerId): 
 //
 // Conversation content, including tool results, is therefore written to browser
 // localStorage on an admin-only page. It is bounded by the scrollback-lines
-// setting and by MAX_CONV_BYTES below.
+// setting, by MAX_CONV_BYTES and by MAX_CONV_AGE_MS below. Home Assistant has no
+// logout hook, so what an admin saved stays until the next identity shows up: a
+// non-admin session and a wipe purge it, and another admin, who can read the same
+// data through the Conversation Log, leaves it in place.
 // ---------------------------------------------------------------------------
 
 const CONV_KEY = "phx-agentcli-conversation";
+const PURGE_EVENT = "phx-agentcli-purged";
 
 // localStorage is ~5MB per origin and shared with the window state and every
 // other Phoenix MCP key. Cap the conversation well under that: on overflow the
@@ -197,11 +211,16 @@ const CONV_KEY = "phx-agentcli-conversation";
 // limit already does to the visible transcript.
 const MAX_CONV_BYTES = 2_000_000;
 
+// A conversation left unused this long is deleted the next time a user signs in here.
+const MAX_CONV_AGE_MS = 30 * 24 * 60 * 60 * 1000;
+
 interface Conversation {
   logConversationId: string;
   turns: unknown[];
   draft: string;
   usage: SessionUsage;
+  /** Changes with every write of the turns, so a tab can tell them from a draft or usage write. */
+  turnsRevision: number;
 }
 
 function sanitizeForPersistence(value: unknown): unknown {
@@ -245,11 +264,77 @@ function sanitizeForPersistence(value: unknown): unknown {
 }
 
 function defaultConversation(): Conversation {
-  return { logConversationId: "", turns: [], draft: "", usage: { input: 0, output: 0, context: 0, noData: false } };
+  return { logConversationId: "", turns: [], draft: "", usage: { input: 0, output: 0, context: 0, noData: false }, turnsRevision: 0 };
 }
 
 let conversation: Conversation = defaultConversation();
 let loaded = false;
+/** The revision of the turns this tab last read or wrote. */
+let seenRevision = 0;
+const conversationListeners = new Set<() => void>();
+
+/** Called when another tab replaced the saved turns of this conversation. */
+export function onSavedConversationChange(listener: () => void): () => void {
+  conversationListeners.add(listener);
+  return () => { conversationListeners.delete(listener); };
+}
+
+// The module cache is per tab and a save writes the whole conversation, so a
+// tab must drop its cache when another one saves, or its next save would bring
+// the older conversation back.
+function adoptOtherTab(event: StorageEvent): void {
+  const key = storageKey(CONV_KEY);
+  if (!key || (event.key !== null && event.key !== key)) return;
+  const seen = seenRevision;
+  conversation = defaultConversation();
+  loaded = false;
+  if (!conversationListeners.size || load().turnsRevision === seen) return;
+  for (const listener of [...conversationListeners]) listener();
+}
+
+/** Delete conversations past their age, and date any saved before they carried one. */
+function expireConversations(): void {
+  try {
+    const now = Date.now();
+    for (const key of Object.keys(localStorage)) {
+      if (!key.startsWith(`${CONV_KEY}:`)) continue;
+      let saved: Record<string, unknown> | null = null;
+      try { saved = JSON.parse(localStorage.getItem(key) ?? "null") as Record<string, unknown> | null; } catch { /* load() starts clean */ }
+      if (typeof saved?.savedAt !== "number") {
+        if (saved) localStorage.setItem(key, JSON.stringify({ ...saved, savedAt: now }));
+      } else if (now - saved.savedAt > MAX_CONV_AGE_MS) {
+        localStorage.removeItem(key);
+      }
+    }
+  } catch { /* storage unavailable */ }
+}
+
+function closeStorage(): void {
+  storageClosed = true;
+  if (draftTimer !== null) clearTimeout(draftTimer);
+  draftTimer = null;
+  conversation = defaultConversation();
+  loaded = false;
+}
+
+/**
+ * Remove every Agent Chat conversation and window state in this browser, for
+ * every user, along with unsent rejection reasons, and keep this page from
+ * writing them back. For a wipe and for a session that may not read them. The
+ * page's other bundles have their own module state, so they are told too.
+ */
+export function purgeAgentCliStorage(): void {
+  closeStorage();
+  try {
+    for (const key of Object.keys(localStorage)) {
+      if (key === LS_KEY || key === CONV_KEY || key.startsWith(`${LS_KEY}:`) || key.startsWith(`${CONV_KEY}:`)) {
+        localStorage.removeItem(key);
+      }
+    }
+  } catch { /* storage unavailable */ }
+  clearAllReasonDrafts();
+  window.dispatchEvent(new Event(PURGE_EVENT));
+}
 
 function load(): Conversation {
   if (loaded) return conversation;
@@ -265,12 +350,14 @@ function load(): Conversation {
         turns: Array.isArray(p.turns) ? p.turns : d.turns,
         draft: typeof p.draft === "string" ? p.draft : d.draft,
         usage: { ...d.usage, ...(p.usage || {}) },
+        turnsRevision: typeof p.turnsRevision === "number" ? p.turnsRevision : d.turnsRevision,
       };
     }
   } catch {
     // Corrupt or unreadable: start clean rather than breaking the window.
     conversation = defaultConversation();
   }
+  seenRevision = conversation.turnsRevision;
   return conversation;
 }
 
@@ -282,9 +369,10 @@ function save(): void {
     // its own (a tool result with many entities), so give up rather than loop
     // forever if even one turn will not fit.
     let turns = conversation.turns;
+    const stamped = { ...conversation, savedAt: Date.now() };
     for (;;) {
       const payload = JSON.stringify({
-        ...conversation,
+        ...stamped,
         turns: sanitizeForPersistence(turns),
       });
       if (payload.length <= MAX_CONV_BYTES) {
@@ -293,7 +381,7 @@ function save(): void {
       }
       if (turns.length === 0) {
         // Keep the draft and usage even when no transcript fits.
-        localStorage.setItem(key, JSON.stringify({ ...conversation, turns: [] }));
+        localStorage.setItem(key, JSON.stringify({ ...stamped, turns: [] }));
         return;
       }
       turns = turns.slice(1);
@@ -327,7 +415,9 @@ export function getSessionTurns(): unknown[] {
 }
 export function setSessionTurns(turns: unknown[], owner = ownerId): void {
   if (!ownsSession(owner)) return;
-  load().turns = turns;
+  const state = load();
+  state.turns = turns;
+  state.turnsRevision = seenRevision = Math.random();
   save();
 }
 
@@ -351,7 +441,11 @@ export function flushSessionDraft(owner = ownerId): void {
   if (pending && ownsSession(owner) && loaded) save();
 }
 
-if (typeof window !== "undefined") window.addEventListener("pagehide", () => flushSessionDraft());
+if (typeof window !== "undefined") {
+  window.addEventListener("pagehide", () => flushSessionDraft());
+  window.addEventListener("storage", adoptOtherTab);
+  window.addEventListener(PURGE_EVENT, closeStorage);
+}
 
 
 // Token usage, provider-reported. Same lifecycle as the transcript it belongs
@@ -386,6 +480,8 @@ export function __reloadFromStorage(): void {
 export function __resetAgentCliState(): void {
   if (draftTimer !== null) clearTimeout(draftTimer);
   draftTimer = null;
+  storageClosed = false;
+  seenRevision = 0;
   conversation = defaultConversation();
   loaded = true;
   try {

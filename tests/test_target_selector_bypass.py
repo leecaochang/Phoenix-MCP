@@ -24,6 +24,7 @@ from custom_components.phoenix_mcp.data import PhoenixData
 from custom_components.phoenix_mcp.helpers import sanitize_service_data
 from custom_components.phoenix_mcp.rate_limiter import RateLimiter, RateLimitResult
 from custom_components.phoenix_mcp.service_targets import (
+    secondary_target_error,
     secondary_target_fields,
     unsupported_secondary_targets,
 )
@@ -240,7 +241,7 @@ def test_sanitizer_strips_an_exclude_block_on_its_own():
 @pytest.mark.asyncio
 async def test_mcp_call_service_refuses_misplaced_selectors(hass, access_key_store):
     """A target selector inside service_data is refused, not forwarded to HA."""
-    from custom_components.phoenix_mcp.mcp_view import _execute_call_service
+    from custom_components.phoenix_mcp.tools.service import _execute_call_service
 
     access_key, _ = _make_access_key()
     data = _make_data(access_key)
@@ -253,7 +254,7 @@ async def test_mcp_call_service_refuses_misplaced_selectors(hass, access_key_sto
         "service_data": {**_ALL_SELECTORS, "brightness_pct": 40},
     }
     with patch(
-        "custom_components.phoenix_mcp.mcp_view.resolve_service_targets",
+        "custom_components.phoenix_mcp.tools.service.resolve_service_targets",
         return_value=(["light.kitchen"], 1),
     ):
         result, outcome, _ = await _execute_call_service(args, access_key, hass, data, request_id="r1")
@@ -266,7 +267,7 @@ async def test_mcp_call_service_refuses_misplaced_selectors(hass, access_key_sto
 @pytest.mark.asyncio
 async def test_mcp_call_service_refuses_tts_secondary_target(hass, access_key_store):
     """A permitted TTS entity cannot be used to speak on a denied media player."""
-    from custom_components.phoenix_mcp.mcp_view import _execute_call_service
+    from custom_components.phoenix_mcp.tools.service import _execute_call_service
 
     access_key, _ = _make_access_key()
     data = _make_data(access_key)
@@ -282,7 +283,7 @@ async def test_mcp_call_service_refuses_tts_secondary_target(hass, access_key_st
     }
 
     with patch(
-        "custom_components.phoenix_mcp.mcp_view.resolve_service_targets"
+        "custom_components.phoenix_mcp.tools.service.resolve_service_targets"
     ) as resolve:
         content, outcome, resource = await _execute_call_service(
             args, access_key, hass, data, request_id="r1"
@@ -327,7 +328,7 @@ async def test_approved_reexecution_refuses_misplaced_selectors(hass, access_key
     too; checking only at the request boundary would leave approval as a second
     entrance.
     """
-    from custom_components.phoenix_mcp.mcp_view import async_execute_approved_tool
+    from custom_components.phoenix_mcp.tool_dispatch import async_execute_approved_tool
 
     access_key, _ = _make_access_key()
     data = _make_data(access_key)
@@ -383,7 +384,7 @@ async def test_dry_run_refuses_misplaced_selectors(hass, access_key_store):
     }
     with (
         patch.object(discovery, "resolve_service_targets", return_value=(["light.kitchen"], 1)),
-        patch.object(discovery, "evaluate_service_entities", side_effect=_capture),
+        patch.object(discovery, "evaluate_service_call", side_effect=_capture),
     ):
         result, outcome, _ = await discovery._tool_dry_run_service(args, access_key, hass, data)
 
@@ -408,7 +409,7 @@ async def test_mesa_evaluates_exactly_the_parameters_that_execute(hass, access_k
     the latter would replace the code that builds these parameters, so the
     assertion would hold whatever that code did.
     """
-    from custom_components.phoenix_mcp.mcp_view import _execute_call_service
+    from custom_components.phoenix_mcp.tools.service import _execute_call_service
 
     access_key, _ = _make_access_key()
     data = _make_data(access_key)
@@ -419,7 +420,10 @@ async def test_mesa_evaluates_exactly_the_parameters_that_execute(hass, access_k
 
     def _capture(*, entity_id, service, service_params, **_kw):
         evaluated.append(dict(service_params))
-        return MagicMock(allowed=True, warnings=[], rule_applied=None, reason=None)
+        result = MagicMock(allowed=True, warnings=[], rule_applied=None, reason=None)
+        result.effective_profile.operational_boundaries.declared_limits = []
+        result.effective_profile.operational_boundaries.temporal_constraints = []
+        return result
 
     data.mesa = MagicMock()
     data.mesa.enforcer.evaluate = MagicMock(side_effect=_capture)
@@ -431,9 +435,9 @@ async def test_mesa_evaluates_exactly_the_parameters_that_execute(hass, access_k
         "service_data": {"brightness_pct": 40},
     }
     with patch(
-        "custom_components.phoenix_mcp.mcp_view.resolve_service_targets",
+        "custom_components.phoenix_mcp.tools.service.resolve_service_targets",
         return_value=(["light.kitchen", "light.hall"], 2),
-    ):
+    ), patch("custom_components.phoenix_mcp.tools.service.unbound_service_targets", AsyncMock(return_value=())):
         await _execute_call_service(args, access_key, hass, data, request_id="r1")
 
     executed = _call_data(hass)
@@ -501,7 +505,7 @@ async def test_remote_text_device_reaches_scoped_boundary(
     """A vendor command-group string survives all three service boundaries."""
     import json
 
-    from custom_components.phoenix_mcp import mcp_view
+    from custom_components.phoenix_mcp.tools import service as service_tools
     from custom_components.phoenix_mcp.tools import discovery
 
     access_key, _ = _make_access_key(cap_search='allow', cap_physical_control='allow')
@@ -515,7 +519,7 @@ async def test_remote_text_device_reaches_scoped_boundary(
     with (
         patch('custom_components.phoenix_mcp.service_targets.async_get_all_descriptions',
               AsyncMock(return_value=remote_service_descriptions)),
-        patch.object(mcp_view, 'resolve_service_targets', return_value=(['remote.test'], 1)),
+        patch.object(service_tools, 'resolve_service_targets', return_value=(['remote.test'], 1)),
         patch.object(discovery, 'resolve_service_targets', return_value=(['remote.test'], 1)),
     ):
         if surface == 'preview':
@@ -527,9 +531,9 @@ async def test_remote_text_device_reaches_scoped_boundary(
             hass.services.async_call.assert_not_called()
         else:
             if surface == 'request':
-                content, outcome, _ = await mcp_view._tool_call_service(public_args, access_key, hass, data)
+                content, outcome, _ = await service_tools._tool_call_service(public_args, access_key, hass, data)
             else:
-                content, outcome, _ = await mcp_view._execute_call_service(
+                content, outcome, _ = await service_tools._execute_call_service(
                     {'domain': 'remote', 'service': service, 'entity_id': 'remote.test',
                      'service_data': service_data}, access_key, hass, data
                 )
@@ -584,7 +588,7 @@ async def test_missing_requested_description_keeps_dynamic_fallback(hass, remote
 @pytest.mark.asyncio
 async def test_description_change_is_rechecked_by_executor(remote_service_descriptions):
     """Approval cannot preserve a text exception after metadata becomes a target."""
-    from custom_components.phoenix_mcp import mcp_view
+    from custom_components.phoenix_mcp.tools import service as service_tools
 
     access_key, _ = _make_access_key(cap_physical_control='allow')
     data = _make_data(access_key)
@@ -592,7 +596,7 @@ async def test_description_change_is_rechecked_by_executor(remote_service_descri
     remote_service_descriptions['remote']['send_command']['fields']['device']['selector'] = {'device': {}}
     with patch('custom_components.phoenix_mcp.service_targets.async_get_all_descriptions',
                AsyncMock(return_value=remote_service_descriptions)):
-        content, outcome, _ = await mcp_view._execute_call_service(
+        content, outcome, _ = await service_tools._execute_call_service(
             {'domain': 'remote', 'service': 'send_command', 'entity_id': 'remote.test',
              'service_data': {'device': 'group', 'command': 'not_sent'}}, access_key, hass, data,
             mesa_approved=True,
@@ -600,3 +604,59 @@ async def test_description_change_is_rechecked_by_executor(remote_service_descri
     assert outcome == 'invalid_request'
     assert content['isError'] is True
     hass.services.async_call.assert_not_called()
+
+
+# --- a target block against a target data field ----------------------------------
+
+
+@pytest.mark.parametrize("target", [{"entity_id": "lock.front"}, {"area_id": "vault"}, {}])
+async def test_a_target_block_in_service_data_is_refused_by_name(hass, target):
+    fields = await unsupported_secondary_targets(hass, {"target": target}, domain="light", service="turn_on")
+    assert fields == ("target",)
+    assert "target" in secondary_target_error(fields)
+
+
+@pytest.mark.parametrize("target", ["all_phones", ["one", "two"]])
+async def test_a_target_data_field_passes_the_guard(hass, target):
+    assert await unsupported_secondary_targets(hass, {"target": target}, domain="notify", service="send") == ()
+
+
+async def test_a_target_block_joins_the_primary_selectors(hass):
+    fields = await unsupported_secondary_targets(
+        hass, {"target": {}, "area_id": "vault"}, domain="light", service="turn_on"
+    )
+    assert fields == ("area_id", "target")
+
+
+async def test_a_target_field_reaches_home_assistant_under_mesa_without_an_error_log(hass, caplog):
+    from homeassistant.helpers import entity_registry as er
+    from pytest_homeassistant.common import MockConfigEntry, async_mock_service
+
+    from custom_components.phoenix_mcp.access_key_store import GlobalSettings, PermissionNode, PermissionTree
+    from custom_components.phoenix_mcp.tool_dispatch import _call_tool
+    from custom_components.phoenix_mcp.mesa import async_setup_mesa
+
+    entry = MockConfigEntry(domain="test", entry_id="target-field")
+    entry.add_to_hass(hass)
+    entity = er.async_get(hass).async_get_or_create(
+        "light", "test", "field", config_entry=entry, suggested_object_id="field"
+    ).entity_id
+    hass.states.async_set(entity, "off")
+    calls = async_mock_service(hass, "light", "turn_on")
+    access_key, _ = _make_access_key()
+    access_key.permissions = PermissionTree(domains={"light": PermissionNode(state="GREEN")})
+    data = _make_data(access_key)
+    data.store.get_settings.return_value = GlobalSettings(mesa_mode="advisory")
+    data.mesa = await async_setup_mesa(hass, "advisory")
+    hass.data[DOMAIN] = data
+
+    result = await _call_tool(
+        "call_service",
+        {"domain": "light", "service": "turn_on", "entity_id": entity, "service_data": {"target": "x"}},
+        access_key, hass, data,
+    )
+    await hass.async_block_till_done()
+
+    assert result[1] == "allowed", result
+    assert calls and calls[0].data["target"] == "x"
+    assert not [record for record in caplog.records if record.levelname == "ERROR"]

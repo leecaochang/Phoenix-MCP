@@ -106,7 +106,8 @@ export class HelpTracker {
     const inHelp = (target: EventTarget | null) => target instanceof Element && !!target.closest(`[data-phx-window="${HELP_WINDOW}"]`);
     const over = (e: PointerEvent) => { if (!inHelp(e.target)) this.set("hovered", e.target); };
     const leave = () => this.set("hovered", null);
-    const focusIn = (e: FocusEvent) => this.set("focused", e.target);
+    // Focus moved into Help keeps the text too: that is how a keyboard or screen reader user reads it.
+    const focusIn = (e: FocusEvent) => { if (!inHelp(e.target)) this.set("focused", e.target); };
     const focusOut = (e: FocusEvent) => { if (!(e.relatedTarget instanceof Node && root.contains(e.relatedTarget))) this.set("focused", null); };
     root.addEventListener("pointerover", over);
     root.addEventListener("pointerleave", leave);

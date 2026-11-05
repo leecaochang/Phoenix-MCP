@@ -32,7 +32,8 @@ import custom_components.phoenix_mcp.tools.radio as radio_tools
 from tests.runtime_fixtures import mesa_off_store
 
 from custom_components.phoenix_mcp.data import PhoenixData
-from custom_components.phoenix_mcp.mcp_view import _call_tool, _tool_gate_map, async_execute_approved_tool
+from custom_components.phoenix_mcp.tool_dispatch import _call_tool, async_execute_approved_tool
+from custom_components.phoenix_mcp.tools.system import _tool_gate_map
 from custom_components.phoenix_mcp.access_key_store import PermissionNode, PermissionTree, AccessKeyRecord
 
 Z2M_BULB_IEEE = "0x00158d0001112222"
@@ -3162,3 +3163,49 @@ def test_the_radio_preview_reads_a_child_device_without_core_reports(hass):
     report.assert_not_called()
     assert (preview["manufacturer"], preview["model"]) == (None, None)
     assert (main["manufacturer"], main["model"]) == ("Acme", "Plug")
+
+
+class TestConfirmedZigbeeWrites:
+    """Confirm builds each diff and nothing is published until the approved executor runs."""
+
+    async def _confirm(self, hass, broker, access_key, tool: str, args: dict) -> dict:
+        data, store = _appr_data()
+        published = len(broker.published)
+        result = await _call_tool(tool, args, access_key, hass, data, "rid-1", "1.2.3.4")
+        assert result[1] == "pending_approval", result
+        assert len(broker.published) == published
+        approval = store._p[0]
+        assert approval["tool_name"] == tool and approval["cap_name"] == "cap_radio_write"
+        assert approval["diff"]["summary"]
+        output = await async_execute_approved_tool(tool, approval["args"], access_key, hass, data)
+        assert output[1] == "allowed", output
+        return approval
+
+    async def test_reconfigure(self, hass, radio_env, broker):
+        hass.config.components.add("mqtt")
+        access_key = _light_access_key(cap_radio_write="confirm")
+        await self._confirm(hass, broker, access_key, "reconfigure_zigbee_device", {"device_id": radio_env["z2m_bulb"]})
+        assert broker.published[-1][0].endswith("device/configure")
+
+    async def test_reporting(self, hass, radio_env, broker):
+        hass.config.components.add("mqtt")
+        access_key = _light_access_key(cap_radio_write="confirm", cap_diagnostics="allow")
+        args = await TestConfigureZigbeeReporting()._args(hass, radio_env, access_key)
+        await self._confirm(hass, broker, access_key, "configure_zigbee_reporting", args)
+        assert broker.published[-1][0].endswith("device/reporting/configure")
+
+    async def test_create_group(self, hass, radio_env, broker):
+        hass.config.components.add("mqtt")
+        access_key = _z2m_pair_access_key(cap_radio_write="confirm", cap_physical_control="allow")
+        await self._confirm(hass, broker, access_key, "create_zigbee_group", {
+            "name": "New Safe Group", "members": [{"device_id": radio_env["z2m_lock"], "endpoint": 1}]})
+        assert broker.published[-1][0].endswith("group/members/add")
+
+    async def test_remove_group(self, hass, radio_env, broker):
+        hass.config.components.add("mqtt")
+        access_key = _z2m_pair_access_key(cap_radio_write="confirm", cap_physical_control="allow", cap_diagnostics="allow")
+        groups = _body(await _call_tool("get_zigbee_groups", {}, access_key, hass, _data()))["groups"]
+        group = next(row for row in groups if row["name"] == Z2M_GROUP_NAME)
+        await self._confirm(hass, broker, access_key, "remove_zigbee_group", {
+            "group_entity_id": radio_env["z2m_group_eid"], "expected_hash": group["content_hash"]})
+        assert broker.published[-1][0].endswith("group/remove")

@@ -83,6 +83,7 @@ The response is `200` with the updated record:
 
 - `status: "approved"` when the action ran.
 - `status: "failed"` with `rejected_reason: "execution_failed"` when the tool returned an error. This is still a `200`.
+- `status: "failed"` with `rejected_reason: "execution_interrupted"` when the tool sent the change but couldn't confirm it landed. Check the result before you retry. This is still a `200`.
 - `result` is `{ tool_result, outcome }`. It adds `refused_before_write: true` when the tool refused before writing anything.
 - An approval that already ended comes back unchanged.
 
@@ -288,6 +289,7 @@ The response is `{ items }`. Each item is one of these:
 - An agent action whose outcome is unknown: `{ id, "kind": "agent", tool, access_key_name, started_at, dispatch_result }`.
 - A calendar write whose outcome is unknown: `{ id, "kind": "calendar", tool, access_key_name, started_at, entity_id, "dispatch_result": "unknown" }`. Its `tool` is `<operation>_calendar_event`.
 - `{ "id": "calendar_storage", "kind": "calendar_storage" }` when Phoenix can't read its calendar records.
+- `{ "id": "audit_storage", "kind": "audit_storage" }` when Phoenix's last audit log save failed.
 - `{ "id": "mesa", "kind": "mesa" }` when MESA failed to start.
 
 When a request wrote to a calendar, its calendar item replaces the agent item for the same request.
@@ -360,7 +362,7 @@ Inspects, reviews, deletes or restores one record, chosen by `action`.
 | 400 | `invalid_request` | `adminError.recoveryManualOnly` | Phoenix can't restore this kind of copy. Restore it by hand. |
 | 409 | `conflict` | a recovery key | The record refuses the action. The key names why. |
 
-The recovery keys are `adminError.recoveryStorageUnavailable`, `adminError.recoveryOperationActive`, `adminError.recoveryCommandRunning`, `adminError.recoveryResolveInApprovals`, `adminError.recoveryFull`, `adminError.recoveryReviewBeforeRemoving`, `adminError.recoveryReviewBeforeRestoring`, `adminError.recoveryChangedAfterReview`, `adminError.recoveryAuthorityChanged`, `adminError.recoveryHelperUnreadable` and `adminError.recoverySnapshotUnsafe`. Any other refusal uses `adminError.recoveryBlocked`.
+The recovery keys are `adminError.recoveryStorageUnavailable`, `adminError.recoveryOperationActive`, `adminError.recoveryCommandRunning`, `adminError.recoveryResolveInApprovals`, `adminError.recoveryFull`, `adminError.recoveryReviewBeforeRemoving`, `adminError.recoveryReviewBeforeRestoring`, `adminError.recoveryChangedAfterReview`, `adminError.recoveryAuthorityChanged`, `adminError.recoveryHelperUnreadable`, `adminError.recoverySnapshotUnsafe` and `adminError.recoverySnapshotUnsafeAt`. Any other refusal uses `adminError.recoveryBlocked`. `adminError.recoverySnapshotUnsafeAt` names the refused place in `message_params.location`.
 
 ### Inspect {#recovery-inspect}
 

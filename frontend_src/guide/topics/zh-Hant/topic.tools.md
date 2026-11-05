@@ -25,6 +25,7 @@
 - 歷史和統計每頁最多 1000 列。
 - 一次行事曆讀取最多涵蓋 31 天和 500 個事件。
 - 攝影機影像每邊最多 2048 像素。
+- 屬性值摘要最多涵蓋 7 天。
 
 允許它的能力：[{{label:caps.cap_camera_read.label}}](guide:window.capabilities#camera-read)、[{{label:caps.cap_search.label}}](guide:window.capabilities#search)
 
@@ -34,7 +35,7 @@
 
 門鎖、警報、捲簾和閥門還需要物理控制。設為確認時，包含其中一項的命令會等待你的核准。設為拒絕存取時，智慧體無法控制它們。
 
-透過 Assist 衛星裝置廣播訊息需要廣播。MESA 會在能力和權限樹之後最後檢查每個命令。
+透過 Assist 衛星裝置廣播訊息或在其上發起對話需要廣播。MESA 會在能力和權限樹之後最後檢查每個命令。
 
 允許它的能力：[{{label:caps.cap_physical_control.label}}](guide:window.capabilities#physical-control)、[{{label:caps.cap_broadcast.label}}](guide:window.capabilities#broadcast)
 
@@ -42,17 +43,21 @@
 
 ## 執行任意操作 {#actions}
 
-智慧體還可以在它們可以寫入的目標上執行任意 Home Assistant 操作，並先預覽結果。少數操作需要更多條件：
+智慧體還可以在它們可以寫入的目標上執行 Home Assistant 操作，並先預覽結果。目標必須是該操作適用的對象，因此對開關執行 `light.turn_on` 會被拒絕。`homeassistant.turn_on`、`turn_off`、`toggle` 和 `update_entity` 適用於任何對象。少數操作需要更多條件：
 
 - 重新啟動或停止 Home Assistant 需要重新啟動能力。
 - 重新載入自動化、腳本、場景、輔助項目或核心設定需要 YAML 設定。
 - 操作傳回的資料需要服務回應資料。沒有它，操作仍會執行。
 - 傳送訊息的通知操作需要通知能力。
-- 公告播放需要廣播能力：`assist_satellite.announce`、`music_assistant.play_announcement`，以及帶 `announce` 的 `media_player.play_media`。一般播放只需要 W。
+- 公告播放需要廣播能力：`assist_satellite.announce`、`start_conversation` 和 `ask_question`，`music_assistant.play_announcement`，以及帶 `announce` 的 `media_player.play_media`。一般播放只需要 W。
 - ESPHome 裝置操作只需要裝置上的 W。MESA 不檢查它們，也不檢查重新載入或重新啟動。
 - 搜尋或列出 Music Assistant 音樂庫需要服務回應資料，以及某個 Music Assistant 實體（例如喇叭）上的 R。這些操作不會播放任何內容，所以 MESA 也不檢查它們。
 
-沒有目標的其他操作會被拒絕。行事曆變更也會被拒絕，它們有自己的工具。執行超過 30 秒的操作會被回報為可能未完成。
+未宣告目標的操作（例如 `shell_command`、`rest_command` 或 `python_script`）對每個金鑰都會被拒絕，包括直通金鑰。智慧體指定什麼目標都一樣，即使是該操作所屬網域的實體。沒有目標的其他操作也會被拒絕。
+
+自訂操作由 Home Assistant 在其實體上執行，或其註冊的結構描述列出 `entity_id` 時，算作已宣告目標。
+
+行事曆變更和 `homeassistant.reload_config_entry` 同樣會被拒絕，因為它們有自己的工具。執行超過 30 秒的操作會被回報為可能未完成。
 
 允許它的能力：[{{label:caps.cap_restart.label}}](guide:window.capabilities#restart)、[{{label:caps.cap_yaml_edit.label}}](guide:window.capabilities#yaml-edit)、[{{label:caps.cap_service_response.label}}](guide:window.capabilities#service-response)、[{{label:caps.cap_notify.label}}](guide:window.capabilities#notify)、[{{label:caps.cap_search.label}}](guide:window.capabilities#search)（用於預覽）
 
@@ -116,7 +121,7 @@
 智慧體可以列出、建立、編輯和刪除儀表板，讀取和搜尋其佈局，變更卡片並列出已安裝的自訂卡片。所有這些都需要管理儀表板，包括讀取。
 
 - 權限樹和 MESA 不限制儀表板變更。金鑰無法讀取的實體會顯示為 `<redacted>`，仍包含此類實體的變更會被拒絕。
-- 無法顯示的佈局會被拒絕。
+- 無法顯示的佈局會被拒絕，對 YAML 模式儀表板的變更也會被拒絕。
 - 刪除儀表板前會先儲存其佈局，以便還原。
 - 自訂卡片清單來自開啟過面板的瀏覽器，最多每 10 分鐘重新整理一次。
 
@@ -143,7 +148,7 @@
 ## 設定、模板和日誌 {#configuration}
 
 - 讀取設定涵蓋 Home Assistant 的基本設定、能源設定、太陽能預測和藍圖。
-- 管理能源儀表板會變更能源設定的一部分。
+- 管理能源儀表板會變更能源設定的一部分。它不能為某一類型新增第二個來源，也會拒絕變更已有多個來源的類型。
 - 模板渲染會在個別受限程序中渲染模板。它作用於金鑰可讀取狀態的副本，最長 5 秒。
 - 讀取系統日誌涵蓋警告和錯誤、日誌簿和通知。故障日誌和擷取的偵錯記錄還需要診斷。
 - 整合日誌級別會變更整合的日誌量，例如開啟偵錯日誌。變更可以在 5 到 120 分鐘後結束、持續到下次重新啟動，或一直保留到清除。
@@ -167,17 +172,17 @@
 
 ## 檔案和 YAML {#files}
 
-讀取檔案讓智慧體讀取 www、themes 和 custom_templates 資料夾中的文字檔案，每個最大 1 MiB。它不能寫入這些檔案。
+讀取檔案讓智慧體讀取 www、themes 和 custom_templates 資料夾中的文字檔案，每個最大 1 MiB。資料夾清單分頁傳回，預設每頁 500 項，最多 1000 項。它不能寫入這些檔案。
 
-YAML 設定讓智慧體讀取你的 YAML 檔案，secrets.yaml、esphome 資料夾和隱藏檔案除外。檔案會原樣傳回，因此直接寫在其中的密碼可見。沒有工具會寫入 YAML 設定。
+YAML 設定讓智慧體讀取你的 YAML 檔案，名稱中含有 secret 的檔案、esphome 資料夾和隱藏檔案除外。名稱暗示機密的值會顯示為 `<redacted>`，但使用普通名稱的密碼可見。沒有工具會寫入 YAML 設定。
 
 允許它的能力：[{{label:caps.cap_filesystem.label}}](guide:window.capabilities#filesystem)、[{{label:caps.cap_yaml_edit.label}}](guide:window.capabilities#yaml-edit)
 
 ## ESPHome {#esphome}
 
-智慧體可以讀取和搜尋 ESPHome 裝置設定，密碼和金鑰會被遮蔽。使用 ESPHome Device Builder 附加元件時，它們還可以校驗、編譯、讀取裝置日誌、分析記憶體並檢查連線。沒有該附加元件時，只能讀取和搜尋。
+智慧體可以讀取和搜尋 ESPHome 裝置設定，密碼、金鑰和所有請求標頭的值都會被遮蔽。使用 ESPHome Device Builder 附加元件時，它們還可以校驗、編譯、讀取裝置日誌、分析記憶體並檢查連線。沒有該附加元件時，只能讀取和搜尋。
 
-編譯、清理和記憶體分析需要裝置上的 W。安裝韌體需要 ESPHome 韌體刷寫、ESPHome 裝置 YAML 和裝置上的 W。
+編譯、清理和記憶體分析需要裝置上的 W。安裝韌體需要 ESPHome 韌體刷寫、ESPHome 裝置 YAML 和裝置上的 W，並且 MESA 會檢查它。
 
 允許它的能力：[{{label:caps.cap_esphome_yaml.label}}](guide:window.capabilities#esphome-yaml)、[{{label:caps.cap_esphome_flash.label}}](guide:window.capabilities#esphome-flash)
 
@@ -185,8 +190,9 @@ YAML 設定讓智慧體讀取你的 YAML 檔案，secrets.yaml、esphome 資料�
 
 - 整合管理會新增、啟用、停用、重新載入和移除整合，並移除裝置。
 - 重新設定整合會變更整合的設定。
-- 管理實體登錄檔會重新命名實體和裝置，並變更實體 ID、分區、樓層、分類和類別。
-- 無線電裝置管理會變更 Zigbee 網路。群組、綁定和裝置屬性還需要物理控制。
+- 管理實體登錄檔會重新命名實體和裝置，並變更實體 ID、分區、樓層、分類和類別。`recorder.purge_entities` 也需要它，因為該操作會刪除歷史記錄。
+- 無線電裝置管理會變更 Zigbee 網路。群組、綁定和裝置屬性還需要物理控制。MESA 會檢查對 Zigbee 裝置的變更。
+- 沒有實體的 Zigbee 裝置無從檢查，因此建議模式會發出警告並繼續。MESA 處於強制模式、啟動失敗，或你為該裝置儲存了策略時，則會拒絕。
 - 備份會建立和列出備份，但無法還原備份。
 - 重新啟動或停止 Home Assistant 會重新啟動它。智慧體會被告知不要自行重試。
 - 通知會傳送通知，無論是透過自己的工具還是執行通知操作。

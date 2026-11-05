@@ -43,7 +43,7 @@ it.each(["entity", "domain"] as const)("does not replace a %s profile created af
   renderMesa();
   await waitFor(() => expect(rowsIn("Suggested Profiles")).toHaveLength(1));
   // The suggestion opens in the editor, which saves it create-only, so a profile
-  // written since the scan is reported rather than replaced (user, 2026-10-30).
+  // written since the scan is reported rather than replaced.
   fireEvent.click(rowsIn("Suggested Profiles")[0]);
   const editor = editorWindow();
   await waitFor(() => expect(editor.getByLabelText(/Control mode/)).toHaveValue("prohibited"));
@@ -63,7 +63,7 @@ it("combines template inspection notices and leaves automation details collapsed
   const advisory = advisoryWindow();
   const summary = await advisory.findByText("23 automations could only be partially inspected because they contain templates or use blueprints.");
   expect(summary.closest(".mesa-notice")).toHaveClass("mesa-notice-info");
-  // The inspection notice and the orphaned profiles each say so, in the one window (user, 2026-10-30).
+  // The inspection notice and the orphaned profiles each say so, in the one window.
   expect(advisory.getAllByText(ADVISORY)).toHaveLength(2);
   expect(advisory.queryByText(recommendation)).toBeNull();
   expect(advisory.queryByText("Warning:")).toBeNull();
@@ -147,7 +147,7 @@ it("shows Advisory only while it holds an undismissed finding of any kind, and b
   await waitFor(() => expect(findings[findings.length - 1]).toEqual({ advisory: true }));
   fireEvent.click(advisoryWindow().getByRole("button", { name: "Dismiss inspection notice in this browser" }));
   await waitFor(() => expect(findings[findings.length - 1]).toEqual({ advisory: false }));
-  // Dismissed notices come back from the MESA Actions menu (user, 2026-10-30).
+  // Dismissed notices come back from the MESA Actions menu.
   fireEvent.click(profilesWindow().getByRole("button", { name: "MESA Actions" }));
   fireEvent.click(screen.getByRole("menuitem", { name: "Restore Dismissed Notices" }));
   await waitFor(() => expect(findings[findings.length - 1]).toEqual({ advisory: true }));

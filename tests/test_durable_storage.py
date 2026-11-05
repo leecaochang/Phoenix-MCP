@@ -1,7 +1,7 @@
 """Real HA writer faults cannot acknowledge an unwritten execution barrier."""
 
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from homeassistant.core import CoreState
@@ -11,7 +11,9 @@ from homeassistant.util.json import SerializationError
 
 from custom_components.phoenix_mcp.agent_recovery import AgentRecovery, RecoveryRequired
 from custom_components.phoenix_mcp.config_recovery import ConfigurationRecovery
-from custom_components.phoenix_mcp.durable_storage import DurableStorageError, DurableStore
+from custom_components.phoenix_mcp.audit import AuditLog
+from custom_components.phoenix_mcp.routing.decision_budget import DecisionBudgetError, DecisionRequestBudget
+from custom_components.phoenix_mcp.durable_storage import DurableStorageError, DurableStore, ReportingStore
 from custom_components.phoenix_mcp.access_key_store import AccessKeyStore
 from custom_components.phoenix_mcp.tools.calendar import CalendarWriteJournal
 from tests.ha_storage import WRITE, WRITER, real_storage as real_ha_storage, real_writer
@@ -199,3 +201,78 @@ async def test_an_older_write_cannot_land_after_a_newer_one(hass):
     assert key.permissions.entities == {}
     reloaded = await AccessKeyStore.async_create(hass)
     assert reloaded.get_access_key_by_id(key.id).permissions.entities == {}
+
+
+async def test_reporting_store_tells_the_caller_about_a_failed_write(hass):
+    """HA logs this fault and returns, so a retry written above it would never run."""
+    from custom_components.phoenix_mcp.conversation_log import ConversationLog
+    from custom_components.phoenix_mcp.durable_storage import ReportingStore
+    from custom_components.phoenix_mcp.access_key_store import GlobalSettings
+
+    log = ConversationLog(ReportingStore(hass, 1, "log-test", atomic_writes=True))
+    log.configure(GlobalSettings(conversation_log_enabled=True))
+    log.begin("voice", prompt="hello")
+    with patch.object(WRITER, WRITE, side_effect=WriteError("disk unavailable")):
+        await log.async_save()
+    assert log.available is False and log._dirty is True
+    await log.async_save()
+    assert log.available is True and log._dirty is False
+    assert Path(log._store.path).exists()
+
+
+async def test_routing_statistics_retry_a_failed_flush(hass):
+    from custom_components.phoenix_mcp.durable_storage import ReportingStore
+    from custom_components.phoenix_mcp.routing.routing_statistics import RoutingStatistics
+
+    statistics = RoutingStatistics(ReportingStore(hass, 1, "statistics-test"))
+    statistics.revision = 1
+    with patch.object(WRITER, WRITE, side_effect=WriteError("disk unavailable")):
+        with pytest.raises(DurableStorageError):
+            await statistics.async_save()
+    assert statistics.saved_revision == 0
+    await statistics.async_save()
+    assert statistics.saved_revision == 1
+
+
+async def test_reporting_store_defers_to_the_final_write_during_shutdown(hass):
+    from homeassistant.const import EVENT_HOMEASSISTANT_FINAL_WRITE
+
+    from custom_components.phoenix_mcp.durable_storage import ReportingStore
+
+    store = ReportingStore(hass, 1, "final-write-test")
+    hass.set_state(CoreState.stopping)
+    await store.async_save({"kept": True})
+    assert not Path(store.path).exists()
+    hass.set_state(CoreState.final_write)
+    hass.bus.async_fire(EVENT_HOMEASSISTANT_FINAL_WRITE)
+    await hass.async_block_till_done()
+    hass.set_state(CoreState.running)
+    assert await store.async_load() == {"kept": True}
+
+
+async def test_a_failed_audit_save_is_reported_and_clears_on_the_next_good_one():
+    store = MagicMock()
+    store.async_save = AsyncMock(side_effect=[DurableStorageError("disk"), None])
+    audit = AuditLog(store=store)
+    with pytest.raises(DurableStorageError):
+        await audit.async_save()
+    assert audit.save_failed is True
+    await audit.async_save()
+    assert audit.save_failed is False
+
+
+async def test_a_real_audit_store_reports_a_refused_write(hass, hass_storage):
+    audit = AuditLog(store=ReportingStore(hass, 1, "phoenix_audit_report"))
+    audit._log.append(MagicMock(to_dict=lambda: {"method": "\ud800"}))
+    with pytest.raises(DurableStorageError):
+        await audit.async_save()
+    assert audit.save_failed is True
+
+
+async def test_a_real_budget_store_refuses_a_reservation_it_could_not_save(hass, hass_storage):
+    budget = DecisionRequestBudget(DurableStore(hass, 1, "phoenix_budget_report"))
+    with patch.object(DurableStore, "_async_write_data", AsyncMock(side_effect=DurableStorageError("disk"))):
+        with pytest.raises(DecisionBudgetError):
+            await budget.reserve(5)
+    with pytest.raises(DecisionBudgetError):
+        await budget.reserve(5)

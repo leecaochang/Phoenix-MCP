@@ -10,8 +10,10 @@ import { ActionButton, DisplayModeContext } from "../ui/ActionButton";
 import { Icon } from "../ui/Icon";
 import { MenuButton, type MenuEntry } from "../ui/Menu";
 import { useWindowVisible } from "../shell/visibility";
+import { scrollMotion } from "../ui/motion";
 import { useClickAway } from "../ui/useClickAway";
 import { companionCap, companionDomainCap, companionLabel, type CompanionDomains } from "../utils/companion_reach";
+import { isImeKey } from "../utils/ime";
 
 const INDIRECT_CONTROL_DOMAINS = new Set([
   "automation", "script", "scene",
@@ -93,7 +95,7 @@ function domainInScope(scope: TreeScope | null, domainData: DomainTree): boolean
  *
  * A layout effect, so the tree never draws the in-between state: the filter gone
  * but every branch still open. Firefox and Safari measured that frame (50,000
- * pixels of tree) and the workspace sized itself to it (user, 2026-10-31).
+ * pixels of tree) and the workspace sized itself to it.
  */
 function useTemporarySearchExpansion(
   isSearching: boolean,
@@ -242,7 +244,7 @@ interface HintEditorProps {
 
 /**
  * The hint editor, opened under its entity's row without covering the rest of
- * the panel. Cancel, Escape or a click anywhere else closes it unsaved (user, 2026-10-28).
+ * the panel. Cancel, Escape or a click anywhere else closes it unsaved.
  */
 function HintEditor({ accessKeyId, entityId, currentHint, globalHint, currentState, onSaved, onGlobalHintsChange, onClose, onDismiss, opener }: HintEditorProps) {
   const [allAccessKeys, setAllAccessKeys] = useState(true);
@@ -289,7 +291,7 @@ function HintEditor({ accessKeyId, entityId, currentHint, globalHint, currentSta
   return (
     <div ref={root} className="tree-hint-editor" role="group" aria-labelledby={titleId} data-guide="window.permissions#hints"
       onKeyDown={(e) => {
-        if (e.key !== "Escape" || saving) return;
+        if (e.key !== "Escape" || saving || isImeKey(e)) return;
         e.preventDefault();
         e.stopPropagation();
         onClose();
@@ -307,10 +309,10 @@ function HintEditor({ accessKeyId, entityId, currentHint, globalHint, currentSta
         onChange={(e) => setValue(e.target.value)}
         placeholder={t("perms.hintPlaceholder")}
         maxLength={200}
-        onKeyDown={(e) => { if (e.key === "Enter" && !saving) void save(value.trim() || null); }}
+        onKeyDown={(e) => { if (e.key === "Enter" && !saving && !isImeKey(e)) void save(value.trim() || null); }}
         autoFocus
       />
-      {/* Who receives a hint, and what each scope means, is in Help (user, 2026-10-28). */}
+      {/* Who receives a hint, and what each scope means, is in Help. */}
       <div className="hint-scope" data-help={scopeHelp}>
         {/* Each side's name chooses that side, as the switch between them does. */}
         <span className={allAccessKeys ? "hint-scope-side" : "hint-scope-side hint-scope-active"}
@@ -384,12 +386,12 @@ function EntityRow({
 
   // Scroll to this row only on an explicit reveal request (revealNonce bump),
   // never merely because it became the selected entity: a permission edit in
-  // this same tree selects the row (for the emulator) without requesting a
+  // this same tree selects the row without requesting a
   // reveal, and isRevealed in the dependency array would fire on that
   // transition and scroll during the click.
   useEffect(() => {
     if (isRevealed && rowRef.current) {
-      rowRef.current.scrollIntoView({ block: "center", behavior: "smooth" });
+      rowRef.current.scrollIntoView({ block: "center", behavior: scrollMotion() });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [revealNonce]);
@@ -407,7 +409,7 @@ function EntityRow({
         hint: entityNode?.hint ?? null,
       });
       onPermChange(tree);
-      // Sync the emulator to the entity just edited, but do not scroll: the
+      // Select the entity just edited, but do not scroll: the
       // row is already on screen, and re-centering it would make clicks land
       // on the wrong row mid-scroll.
       onEntityClick?.(entityId, "entity", { reveal: false });
@@ -582,7 +584,7 @@ function DeviceGroup({
   // EntityRow for why isRevealed must not drive this directly.
   useEffect(() => {
     if (isRevealed && headerRef.current) {
-      headerRef.current.scrollIntoView({ block: "center", behavior: "smooth" });
+      headerRef.current.scrollIntoView({ block: "center", behavior: scrollMotion() });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [revealNonce]);
@@ -841,7 +843,7 @@ function DomainGroup({
   // EntityRow for why isRevealed must not drive this directly.
   useEffect(() => {
     if (isRevealed && headerRef.current) {
-      headerRef.current.scrollIntoView({ block: "center", behavior: "smooth" });
+      headerRef.current.scrollIntoView({ block: "center", behavior: scrollMotion() });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [revealNonce]);
@@ -1201,7 +1203,7 @@ export function EntityTree({ accessKeyId, permissions, onPermissionsChange, onEn
   }, []);
 
   useEffect(() => { loadTree(false, !!lastTree); }, [loadTree]);
-  // No Reload button (user, 2026-10-28): the tree follows the registries, and is built afresh each
+  // No Reload button: the tree follows the registries, and is built afresh each
   // time it comes back into view, which also picks up entities that have no registry entry.
   useEffect(() => followRegistries(() => void loadTree(false, true)), [loadTree]);
   const visible = useWindowVisible();

@@ -5,7 +5,7 @@
  * records the window as closed and Workspace Options offers it back; Maximize
  * shows one window and keeps the others mounted; folding and the per-window
  * labels choice are saved; Add to My Workspace is in the window menu, not the
- * title bar (user, 2026-11-02); the record keeps phone stacks through reading
+ * title bar; the record keeps phone stacks through reading
  * and section merges; Help and Notification History are not stacked on a
  * phone and the open Guide comes last; and a phone is told from a tablet by its touch-only
  * screen's shorter side, so a phone keeps the stack in landscape.

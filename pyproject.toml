@@ -3,10 +3,11 @@ testpaths = ["tests"]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 # Home Assistant installs its httpx alias before respx is imported.
-addopts = "-p no:respx"
+addopts = "-p no:respx --strict-markers --strict-config"
 
 [tool.coverage.run]
 source = ["custom_components/phoenix_mcp"]
+branch = true
 # Instrument disposable workers without changing their runtime or OS limits.
 patch = ["subprocess"]
 # mesa_core is a vendored copy of a separate, read-only project. Its coverage
@@ -15,19 +16,32 @@ patch = ["subprocess"]
 omit = ["custom_components/phoenix_mcp/mesa_core/*"]
 
 [tool.coverage.report]
-# Minimum first-party coverage gate. This is a floor, not a claim that every
-# covered branch is qualified. Killed workers cannot flush coverage data.
-# Ratchet below the measured 88.75 percent first-party statement baseline.
-# Never lower it to pass; subprocess instrumentation also runs in Linux CI.
+# Minimum first-party coverage gate over statements and branches together. This
+# is a floor, not a claim that every covered branch is qualified. Killed workers
+# cannot flush coverage data. Keep it just below the measured figure and never
+# lower it to pass; subprocess instrumentation also runs in Linux CI.
 fail_under = 88
 
+[tool.phoenix-coverage-floors]
+# Per-module floors over statements and branches, checked in CI by
+# scripts/check_coverage_floors.py from coverage.py's JSON report. These modules
+# hold the authority, approval and restore decisions, so a drop in one must not
+# be averaged away. Keep each just below its measured figure and never lower one
+# to pass.
+"access_key_store.py" = 94
+"approvals.py" = 96
+"helpers.py" = 89
+"mesa.py" = 93
+"policy_engine.py" = 94
+"request_authority.py" = 99
+"tools/recovery.py" = 70
+
 [tool.mypy]
-# Phoenix MCP's coupling to HA internals is its top maintenance risk, and until
-# now `hass: Any` on 313 signatures meant every hass.states / hass.services /
-# hass.data access in the package was checked against nothing at all. This runs
-# NON-STRICT on purpose: the goal is to catch real drift (a renamed HA attribute,
-# a wrong argument) rather than to chase full annotation coverage on a codebase
-# that was never type-checked.
+# Phoenix MCP's coupling to HA internals is its top maintenance risk. A function
+# whose `hass` parameter is annotated HomeAssistant is checked against HA's own
+# types; one still annotated Any is not. This runs NON-STRICT on purpose: the goal
+# is to catch real drift (a renamed HA attribute, a wrong argument) rather than to
+# chase full annotation coverage.
 # Keep this aligned with the HA test interpreter: mypy applies python_version
 # when parsing dependencies too, and Home Assistant itself uses syntax far newer
 # than that floor (unparenthesized except groups in hundreds of files, plus type
@@ -44,21 +58,13 @@ ignore_missing_imports = true
 exclude = "custom_components/phoenix_mcp/mesa_core/"
 explicit_package_bases = true
 mypy_path = "."
-# Deliberately off: the package predates type checking, so demanding annotated
-# defs everywhere would produce thousands of findings and bury the useful ones.
+# Deliberately off: demanding annotated defs everywhere would bury the useful
+# findings. The bodies of unannotated defs are still checked.
 disallow_untyped_defs = false
-check_untyped_defs = false
+check_untyped_defs = true
 warn_unused_ignores = true
 
-# NO RATCHET. Every first-party module type-checks clean. It started at 296
-# findings across 18 modules; do not reintroduce a per-module ignore_errors to
-# make a red build pass, fix the finding.
-#
-# For the record, because the number looked much worse than it was: the single
-# largest cause was not a Phoenix defect. HomeAssistantView does not declare
-# `hass` while Phoenix assigns it at registration, so every `self.hass` in all
-# 69 views read as attr-defined. The typed PhoenixView base in view_base.py
-# cleared 141 of those in one change.
+# Do not add a per-module ignore_errors; fix the finding.
 
 # Vendored read-only copy of a separate project (the coverage omit and the
 # exclude above say the same thing); it is reachable by import even when

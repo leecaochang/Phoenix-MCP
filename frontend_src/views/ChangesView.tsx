@@ -105,7 +105,7 @@ function versionSummary(v: { summary?: string | null; summary_key?: string | nul
   return v.summary ?? "";
 }
 
-/** Every table with a time column starts sorted by it, newest first (user, 2026-10-27). */
+/** Every table with a time column starts sorted by it, newest first. */
 const NEWEST_FIRST = { column: "time", dir: "desc" } as const;
 
 export function ChangesListWindow() {
@@ -119,7 +119,7 @@ export function ChangesListWindow() {
   const [type, setType] = useState("");
   const [action, setAction] = useState("");
   const [filtersOpen, setFiltersOpen] = useState(false);
-  // Hidden filters, the search included, stop applying and come back as they were (user, 2026-10-27).
+  // Hidden filters, the search included, stop applying and come back as they were.
   const filtersApply = !useOnToolbar() || filtersOpen;
   const activeFilters = filtersApply ? (type ? 1 : 0) + (action ? 1 : 0) + (search.trim() ? 1 : 0) : 0;
   // Filters match text only the panel knows, translated labels and current key names, so they run here.
@@ -145,7 +145,7 @@ export function ChangesListWindow() {
   const showFilters = !onToolbar || filtersOpen;
   /**
    * Showing other changes leaves nothing chosen in the list, so Comparison and
-   * Item History do not keep the change they had (user, 2026-10-29).
+   * Item History do not keep the change they had.
    */
   const forget = () => c?.select(null);
   const clearFilters = () => { forget(); setType(""); setAction(""); setSearch(""); };
@@ -153,7 +153,7 @@ export function ChangesListWindow() {
   const shown = !filtersApply ? c.feed : c.feed.filter((v) => (!type || v.resource_type === type)
     && (!action || v.action === action)
     && matchesListSearch(`${changeLabel(v)} ${v.resource_id} ${v.resource_type} ${resourceTypeLabel(v.resource_type)} ${v.action} ${actionLabel(v.action)} ${whoNow(v, c.names)} ${versionSummary(v)}`, search));
-  // Time first and every column shown (user, 2026-10-27); the Item cell is the item's name alone.
+  // Time first and every column shown; the Item cell is the item's name alone.
   const columns: Column<VersionSummary>[] = [
     { id: "time", label: t("audit.rowTime"), width: 160, sortValue: (v) => v.timestamp, cell: (v) => formatDateTime(v.timestamp) },
     { id: "item", label: t("changes.colName"), width: 220, maxWidth: 360, sortValue: (v) => changeLabel(v), title: (v) => changeLabel(v), cell: (v) => changeLabel(v) },
@@ -307,7 +307,7 @@ function VersionComparison({ c, restore }: { c: ChangesState; restore: ReactNode
 
   return (
     <div className="change-diff-wrap">
-      {/* The view controls, then Restore at the end of the same row (user, 2026-10-27). */}
+      {/* The view controls, then Restore at the end of the same row. */}
       <div className="change-diff-toolbar" data-guide="window.comparison#views">
         {canPreview && (
           <SegmentedToggle value={mode} onChange={setMode} help="help.diffPreview" ariaLabel={t("approvals.diffModeAria")}
@@ -346,7 +346,7 @@ function VersionComparison({ c, restore }: { c: ChangesState; restore: ReactNode
 
 export function ComparisonWindow() {
   const c = useChanges();
-  // Item History opens by itself once a chosen change's item has other changes (user, 2026-10-27); once the user
+  // Item History opens by itself once a chosen change's item has other changes; once the user
   // closes it, it stays closed until reopened from Workspace Options or the workspace is reset.
   const history = useWindowToggle("itemHistory");
   const hasHistory = !!c?.record && c.record.id === c.selectedId && c.history.length > 1;

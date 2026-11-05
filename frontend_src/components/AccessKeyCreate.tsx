@@ -17,6 +17,7 @@ import { ActionButton } from "../ui/ActionButton";
 import { Icon, type IconName } from "../ui/Icon";
 import { useClickAway } from "../ui/useClickAway";
 import { helpRow } from "../ui/SettingLabel";
+import { isImeKey } from "../utils/ime";
 
 const NAME_REGEX = /^[A-Za-z0-9_\-]{3,32}$/;
 
@@ -89,8 +90,7 @@ interface PostCreateProps {
 // After an access key is created, offer three ways forward instead of dumping the raw
 // access key immediately: connect an external agent, set up in-panel Agent Chat, or
 // just reveal the access key to copy. It is drawn over the whole workspace, not inside
-// the Access Keys window, and in the UI2 style: plain rows with icons, no coloured
-// accents (user, 2026-10-28).
+// the Access Keys window, with plain rows and icons, no coloured accents.
 function PostCreateModal({ rawAccessKey, accessKeyName, onOpenSettings, onDone }: PostCreateProps) {
   const [view, setView] = useState<"choice" | "connect" | "access-key">("choice");
 
@@ -169,7 +169,7 @@ export function AccessKeyCreateForm({ existingNames, onCreated, onClose, onOpenS
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [createdAccessKey, setCreatedAccessKey] = useState<{ record: AccessKeyRecord; raw: string } | null>(null);
-  // A click anywhere else dismisses the form, as other forms in Phoenix do (user, 2026-10-31); never
+  // A click anywhere else dismisses the form, as other forms in Phoenix do; never
   // while the key is being created. It waits for the click, so the row below the form still gets it,
   // and the toolbar's Create Access Key, which opened it, leaves it open.
   const form = useRef<HTMLElement | null>(null);
@@ -265,14 +265,14 @@ export function AccessKeyCreateForm({ existingNames, onCreated, onClose, onOpenS
   return (
     <section ref={form} className="phx-inline-form" aria-labelledby={`${uid}title`} data-guide="window.accessKeys#create-key"
       onKeyDown={(e) => {
-        if (e.key !== "Escape" || saving) return;
+        if (e.key !== "Escape" || saving || isImeKey(e)) return;
         e.preventDefault();
         e.stopPropagation();
         onClose();
       }}>
       <h3 className="phx-section-title" id={`${uid}title`}>{t("accessKeys.createAccessKey")}</h3>
 
-      {/* One row of fields that wraps on narrow windows (user, 2026-10-28). */}
+      {/* One row of fields that wraps on narrow windows. */}
       <div className="access-key-create-fields">
         <div className="field access-key-create-name" data-guide="window.accessKeys#key-name">
           <label htmlFor={`${uid}name`}>{t("accessKeys.nameLabel")}</label>
@@ -354,7 +354,7 @@ export function AccessKeyCreateForm({ existingNames, onCreated, onClose, onOpenS
         )}
       </div>
 
-      {/* What pass-through does is in Help (user, 2026-10-28). */}
+      {/* What pass-through does is in Help. */}
       <div className="toggle-row access-key-create-pt" data-help="accessKeys.passThroughModeHelp" data-help-controls="" data-guide="window.accessKeys#key-pass-through">
         <label className="toggle-switch">
           <input

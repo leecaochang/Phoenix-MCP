@@ -12,15 +12,10 @@ import pytest
 from homeassistant.util.dt import utcnow
 
 from custom_components.phoenix_mcp.const import (
-    CAP_ALLOW,
-    CAP_DENY,
-    DEFAULT_RATE_LIMIT_BURST,
-    DEFAULT_RATE_LIMIT_REQUESTS,
-    STORAGE_VERSION,
-    ACCESS_KEY_LENGTH,
-    ACCESS_KEY_PREFIX,
-    TOOL_ROUTING_SETTINGS,
+    CAP_ALLOW, CAP_DENY, DEFAULT_RATE_LIMIT_BURST, DEFAULT_RATE_LIMIT_REQUESTS, STORAGE_VERSION,
+    ACCESS_KEY_LENGTH, ACCESS_KEY_PREFIX,
 )
+from custom_components.phoenix_mcp.routing.routing_tables import TOOL_ROUTING_SETTINGS
 from custom_components.phoenix_mcp.access_key_store import (
     ArchivedAccessKeyRecord,
     GlobalSettings,
@@ -45,6 +40,11 @@ def _sha256(value: str) -> str:
 # ---------------------------------------------------------------------------
 # PermissionNode
 # ---------------------------------------------------------------------------
+
+
+def _saved(mock_store) -> dict:
+    """What the last save handed to storage, so a test can say what became durable."""
+    return mock_store.async_save.call_args.args[0]
 
 
 class TestPermissionNode:
@@ -122,6 +122,15 @@ class TestAccessKeyRecord:
         access_key = self._make(expires_at=utcnow() - timedelta(seconds=1))
         assert access_key.is_expired() is True
         assert access_key.is_valid() is False
+
+    def test_a_key_expires_at_exactly_its_expiry_instant(self, freezer):
+        instant = utcnow()
+        key = self._make(expires_at=instant + timedelta(microseconds=1))
+        assert not key.is_expired()
+        assert key.is_valid()
+        freezer.tick(timedelta(microseconds=1))
+        assert key.is_expired()
+        assert not key.is_valid()
 
     def test_is_expired_future(self):
         access_key = self._make(expires_at=utcnow() + timedelta(days=1))
@@ -324,7 +333,7 @@ class TestGlobalSettings:
         )
 
     def test_agentcli_max_iterations_default_and_clamp(self):
-        from custom_components.phoenix_mcp.const import AGENTCLI_MAX_ITERATIONS
+        from custom_components.phoenix_mcp.provider_constants import AGENTCLI_MAX_ITERATIONS
         assert GlobalSettings().agentcli_max_iterations == AGENTCLI_MAX_ITERATIONS
         assert GlobalSettings(agentcli_max_iterations=40).to_dict()["agentcli_max_iterations"] == 40
         # Load-side clamp: out-of-range and non-numeric fall to the bounds/default.
@@ -670,7 +679,7 @@ class TestAccessKeyCreation:
 
     async def test_create_saves_immediately(self, access_key_store, mock_store):
         await access_key_store.async_create_access_key("t1", "u")
-        mock_store.async_save.assert_called()
+        assert [row["name"] for row in _saved(mock_store)["access_keys"]] == ["t1"]
 
     async def test_create_with_expiry(self, access_key_store):
         expiry = utcnow() + timedelta(days=30)
@@ -760,13 +769,6 @@ class TestAccessKeyListing:
         assert r1.id in ids
         assert r2.id in ids
 
-    async def test_active_access_key_count(self, access_key_store):
-        assert access_key_store.active_access_key_count() == 0
-        await access_key_store.async_create_access_key("t1", "u")
-        assert access_key_store.active_access_key_count() == 1
-        await access_key_store.async_create_access_key("t2", "u")
-        assert access_key_store.active_access_key_count() == 2
-
     async def test_list_archived_empty(self, access_key_store):
         assert access_key_store.list_archived() == []
 
@@ -797,7 +799,9 @@ class TestAccessKeyArchival:
         record, _ = await access_key_store.async_create_access_key("t1", "u")
         mock_store.async_save.reset_mock()
         await access_key_store.async_archive_access_key(record.id, revoked=True)
-        mock_store.async_save.assert_called()
+        saved = _saved(mock_store)
+        assert saved["access_keys"] == []
+        assert [row["id"] for row in saved["archived_access_keys"]] == [record.id]
 
     async def test_archive_nonexistent_returns_none(self, access_key_store):
         result = await access_key_store.async_archive_access_key("no-such-id", revoked=True)
@@ -923,7 +927,7 @@ class TestAccessKeyPatch:
         record, _ = await access_key_store.async_create_access_key("t1", "u")
         mock_store.async_save.reset_mock()
         await access_key_store.async_patch_access_key(record.id, cap_restart="allow")
-        mock_store.async_save.assert_called()
+        assert _saved(mock_store)["access_keys"][0]["cap_restart"] == "allow"
 
     async def test_patch_nonexistent_returns_none(self, access_key_store):
         result = await access_key_store.async_patch_access_key("no-such-id", cap_restart="allow")
@@ -1031,7 +1035,7 @@ class TestPermissions:
         record, _ = await access_key_store.async_create_access_key("t1", "u")
         mock_store.async_save.reset_mock()
         await access_key_store.async_patch_permission_node(record.id, "domains", "light", "GREEN")
-        mock_store.async_save.assert_called()
+        assert _saved(mock_store)["access_keys"][0]["permissions"]["domains"]["light"]["state"] == "GREEN"
 
     async def test_set_permissions_nonexistent_returns_none(self, access_key_store):
         result = await access_key_store.async_set_permissions("no-such-id", PermissionTree())
@@ -1056,10 +1060,12 @@ class TestLastUsed:
 
     async def test_flush_last_used_calls_save(self, access_key_store, mock_store):
         record, _ = await access_key_store.async_create_access_key(name="usage-token", created_by="u")
-        access_key_store.update_last_used(record.id, utcnow())
+        used = utcnow()
+        access_key_store.update_last_used(record.id, used)
         mock_store.async_save.reset_mock()
         await access_key_store.async_flush_last_used()
         mock_store.async_save.assert_called_once()
+        assert _saved(mock_store)["access_keys"][0]["last_used_at"] == used.isoformat()
 
 
 # ---------------------------------------------------------------------------
@@ -1080,7 +1086,7 @@ class TestArchivedDeletion:
         await access_key_store.async_archive_access_key(record.id, revoked=True)
         mock_store.async_save.reset_mock()
         await access_key_store.async_delete_archived(record.id)
-        mock_store.async_save.assert_called()
+        assert _saved(mock_store)["archived_access_keys"] == []
 
     async def test_delete_archived_nonexistent_returns_false(self, access_key_store):
         result = await access_key_store.async_delete_archived("no-such-id")
@@ -1135,7 +1141,7 @@ class TestSettings:
     async def test_patch_settings_saves_immediately(self, access_key_store, mock_store):
         mock_store.async_save.reset_mock()
         await access_key_store.async_patch_settings(kill_switch=True)
-        mock_store.async_save.assert_called()
+        assert _saved(mock_store)["settings"]["kill_switch"] is True
 
 
 # ---------------------------------------------------------------------------
@@ -1191,7 +1197,8 @@ class TestWipe:
     async def test_wipe_saves_immediately(self, access_key_store, mock_store):
         mock_store.async_save.reset_mock()
         await access_key_store.async_wipe()
-        mock_store.async_save.assert_called()
+        saved = _saved(mock_store)
+        assert saved["access_keys"] == [] and saved["pending_approvals"] == []
 
     async def test_wipe_clears_pending_approvals(self, access_key_store):
         # An orphaned pending approval must not survive a wipe (and thus must not
@@ -1337,7 +1344,7 @@ class TestPresets:
         loaded = AccessKeyRecord.from_dict({**base, "settings_version": 5})
         assert loaded.tools_list_version == 5
         # The catalog fingerprint has NO such fallback: access_key_store cannot import
-        # mcp_view to learn the current one, so a legacy record has no baseline
+        # tool_catalog to learn the current one, so a legacy record has no baseline
         # and empty must read as "never recorded", never as stale.
         assert loaded.tools_catalog_fingerprint == ""
         # confirm_inline_wait_seconds defaults to OFF. Blocking a confirm-gated

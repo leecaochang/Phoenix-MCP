@@ -5,21 +5,25 @@ import re
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+
+from tests.runtime_fixtures import patch_readers
 from aiohttp import ClientSession, web
 from aiohttp.test_utils import TestServer
 from homeassistant.components.homeassistant.exposed_entities import async_expose_entity
 from homeassistant.helpers import area_registry as ar, entity_registry as er
 from homeassistant.setup import async_setup_component
 
-from custom_components.phoenix_mcp import agentcli, device_semantics
-from custom_components.phoenix_mcp.command_execution import _target_fingerprint
-from custom_components.phoenix_mcp.const import (
-    DOMAIN, DECISION_BRIGHTNESS_CHOICES, DECISION_MAX_TARGETS, DECISION_ROUTE_CHOICES,
+from custom_components.phoenix_mcp import device_semantics
+from custom_components.phoenix_mcp.llm import accounts as llm_accounts
+from custom_components.phoenix_mcp.routing.command_execution import _target_fingerprint
+from custom_components.phoenix_mcp.const import DOMAIN
+from custom_components.phoenix_mcp.routing.routing_tables import (
+    DECISION_BRIGHTNESS_CHOICES, DECISION_MAX_TARGETS, DECISION_ROUTE_CHOICES,
 )
 from custom_components.phoenix_mcp.data import PhoenixData
-from custom_components.phoenix_mcp.decision_provider import DecisionError, DecisionProvider
-from custom_components.phoenix_mcp.decision_shadow import async_preview_decision
-from custom_components.phoenix_mcp.decision_targets import capture_targets, CatalogLimitError
+from custom_components.phoenix_mcp.routing.decision_provider import DecisionError, DecisionProvider
+from custom_components.phoenix_mcp.routing.decision_shadow import async_preview_decision
+from custom_components.phoenix_mcp.routing.decision_targets import capture_targets, CatalogLimitError
 from custom_components.phoenix_mcp.access_key_store import PermissionTree, PermissionNode
 
 
@@ -34,7 +38,7 @@ async def target_home(hass, access_key_store):
     access_key.permissions = PermissionTree(domains={"light": PermissionNode(state="GREEN")})
     data = PhoenixData(store=access_key_store, rate_limiter=MagicMock(), audit=MagicMock())
     hass.data[DOMAIN] = data
-    store = agentcli.AgentCliStore(AsyncMock())
+    store = llm_accounts.AgentCliStore(AsyncMock())
     account = await store.add("typesafe", {"api_key": "secret", "model": "jev-latest"})
     await access_key_store.async_patch_settings(decision_provider_id=account)
     assert await async_setup_component(hass, "homeassistant", {})
@@ -45,7 +49,7 @@ async def target_home(hass, access_key_store):
     registry.async_update_entity(entry.entity_id, aliases=[er.COMPUTED_NAME, "Task light"], area_id=area.id)
     hass.states.async_set(entry.entity_id, "off", {"friendly_name": "Desk lamp",
                           "supported_color_modes": ["brightness"], "access_token": "private-state-secret"})
-    with patch.object(agentcli, "_get_secret_store", AsyncMock(return_value=store)):
+    with patch_readers("custom_components.phoenix_mcp.llm.accounts._get_secret_store", AsyncMock(return_value=store)):
         yield data, access_key, store, account, entry.entity_id
     data.decision_shadow.cancel()
     if data.decision_shadow.task:
@@ -69,7 +73,7 @@ async def test_scoped_metadata_only_and_inert_preview(hass, target_home):
     assert snapshot.targets == {"t0": {"entity_id": entity_id, "name": "Desk lamp",
                                       "aliases": ["Desk lamp", "Task light"], "area": "Office"}}
     first, second = mocks()
-    with (first, second as select, patch("custom_components.phoenix_mcp.mcp_view._dispatch_mcp") as dispatch):
+    with (first, second as select, patch_readers("custom_components.phoenix_mcp.tool_dispatch._dispatch_mcp") as dispatch):
         result = await preview(hass, target_home)
     assert result["executed"] is False
     assert result["target_selection"]["entity_id"] == entity_id
@@ -253,7 +257,7 @@ async def test_target_http_contract_and_generated_id_rejection(protocol, invalid
         return web.json_response({"data": [{"id": "test-model"}]})
     app.router.add_get("/models", models)
     async with TestServer(app) as server, ClientSession() as session:
-        cfg = agentcli.ProviderConfig("typesafe", "test-model", str(server.make_url("")).rstrip("/"))
+        cfg = llm_accounts.ProviderConfig("typesafe", "test-model", str(server.make_url("")).rstrip("/"))
         provider = DecisionProvider(cfg, protocol)
         targets = {"t0": {"name": "Desk lamp"}}
         if invalid:
@@ -271,7 +275,7 @@ async def test_target_http_contract_and_generated_id_rejection(protocol, invalid
 async def test_plain_observation_never_enumerates_or_sends_targets(hass, target_home):
     data, access_key, *_ = target_home
     first, second = mocks()
-    with first, second as select, patch("custom_components.phoenix_mcp.decision_targets.capture_targets") as capture:
+    with first, second as select, patch("custom_components.phoenix_mcp.routing.decision_targets.capture_targets") as capture:
         result = await data.decision_shadow.start(hass, data, access_key, "lamp on", "en", observe=True)
     # HA can start this task eagerly; its completion callback runs on the next tick.
     await asyncio.sleep(0)
@@ -364,7 +368,7 @@ async def test_brightness_multi_question_http_contract(protocol, percent, socket
         return web.json_response({"data": [{"id": "test-model"}]})
     app.router.add_get("/models", models)
     async with TestServer(app) as server, ClientSession() as session:
-        cfg = agentcli.ProviderConfig("typesafe", "test-model", str(server.make_url("")).rstrip("/"))
+        cfg = llm_accounts.ProviderConfig("typesafe", "test-model", str(server.make_url("")).rstrip("/"))
         answer = await DecisionProvider(cfg, protocol).select_target(
             session, f"set the desk lamp to {percent} percent", "light_brightness", {"t0": {"name": "Desk lamp"}}, 1000)
     assert answer["brightness_pct"] == percent
@@ -379,7 +383,7 @@ async def test_brightness_multi_question_http_contract(protocol, percent, socket
 
 @pytest.mark.parametrize("change", ["missing", "extra", "fractional", "out_of_range", "none", "low_probability", "bool"])
 async def test_brightness_answers_are_closed_and_bounded(change):
-    cfg = agentcli.ProviderConfig("typesafe", "test-model", "http://example.invalid")
+    cfg = llm_accounts.ProviderConfig("typesafe", "test-model", "http://example.invalid")
     async def request(session, method, path, timeout, payload=None):
         if method == "GET":
             return {"data": [{"id": "test-model"}]}
@@ -408,7 +412,7 @@ async def test_manual_brightness_preview_exposes_proposal_but_never_execution_pl
     first, _ = mocks("light_brightness")
     answer = {**choice("t0", ["t0", "none"]), "brightness_pct": 0}
     with (first, patch.object(DecisionProvider, "select_target", AsyncMock(return_value=answer)),
-          patch("custom_components.phoenix_mcp.mcp_view._dispatch_mcp") as dispatch):
+          patch_readers("custom_components.phoenix_mcp.tool_dispatch._dispatch_mcp") as dispatch):
         result = await preview(hass, target_home)
     assert result["target_selection"]["proposal"] == {
         "intent": "HassLightSet", "entity_ids": [target_home[-1]], "brightness_pct": 0}
@@ -428,7 +432,7 @@ async def test_sequential_value_evidence_is_diagnostic_only(hass, target_home, s
     first, _ = mocks('light_brightness')
     answer = {**choice('t0', ['t0', 'none']), 'brightness_pct': model_value}
     with (first, patch.object(DecisionProvider, 'select_target', AsyncMock(return_value=answer)),
-          patch('custom_components.phoenix_mcp.command_execution._capture_plan') as prepare):
+          patch_readers('custom_components.phoenix_mcp.routing.command_execution._capture_plan') as prepare):
         result = await async_preview_decision(hass, data, access_key, sentence, 'en',
                                               {'reason': 'no_match', 'proposal': None}, targets=True)
     assert result['target_selection']['value_check'] == evidence
@@ -437,11 +441,11 @@ async def test_sequential_value_evidence_is_diagnostic_only(hass, target_home, s
 
 
 async def test_target_selector_cannot_prepare_numeric_plan_even_with_matching_value(hass, target_home):
-    from custom_components.phoenix_mcp.command_routing import RoutingAuthority
+    from custom_components.phoenix_mcp.routing.command_routing import RoutingAuthority
     data, access_key, store, account, _ = target_home
     provider = DecisionProvider(store.resolve(account, purpose='decision'), 'systemone')
     with (patch.object(provider, 'select_target') as select,
-          patch('custom_components.phoenix_mcp.command_execution._capture_plan') as prepare):
+          patch_readers('custom_components.phoenix_mcp.routing.command_execution._capture_plan') as prepare):
         result = await data.decision_shadow._select_target(
             hass, RoutingAuthority.capture(data, access_key), provider, None, 'Set the lamp to 37 percent',
             choice('light_brightness', DECISION_ROUTE_CHOICES), 1000, prepare=True,
@@ -466,7 +470,7 @@ async def test_multilingual_target_and_brightness_preview_keeps_language_and_no_
             question: {"type": "choice", **choice(selected[question], spec["criteria"])}
             for question, spec in payload["questions"].items()}}
     with (patch.object(DecisionProvider, "_request", AsyncMock(side_effect=request)),
-          patch("custom_components.phoenix_mcp.mcp_view._dispatch_mcp") as dispatch):
+          patch_readers("custom_components.phoenix_mcp.tool_dispatch._dispatch_mcp") as dispatch):
         result = await async_preview_decision(hass, data, access_key, sentence, language,
                                               {"reason": "no_match", "proposal": None}, targets=True, ingress="preview")
     assert result["target_selection"]["proposal"] == {
@@ -509,7 +513,7 @@ async def test_jev_exact_percentage_preview_is_scoped_and_inert(hass, target_hom
             question: {'type': 'choice', **choice(selected[question], spec['criteria'])}
             for question, spec in payload['questions'].items()}}
     with (patch.object(DecisionProvider, '_request', AsyncMock(side_effect=response)) as request,
-          patch('custom_components.phoenix_mcp.mcp_view._dispatch_mcp') as dispatch):
+          patch_readers('custom_components.phoenix_mcp.tool_dispatch._dispatch_mcp') as dispatch):
         result = await async_preview_decision(hass, data, access_key, f'Set {entity_id} to {percent} percent', 'en',
                                               {'reason': 'no_match', 'proposal': None}, targets=True, ingress='preview')
     assert result['target_selection']['proposal'] == {'intent': intent, 'entity_ids': [entity_id], field: percent}
@@ -521,8 +525,8 @@ async def test_jev_exact_percentage_preview_is_scoped_and_inert(hass, target_hom
 
 @pytest.mark.parametrize('damage', ['missing', 'extra', 'fractional', 'outside', 'bool', 'low', 'none'])
 async def test_jev_exact_percentage_rejects_unsound_values(damage):
-    from custom_components.phoenix_mcp.const import DECISION_TYPESAFE_BASE_URL
-    provider = DecisionProvider(agentcli.ProviderConfig('typesafe', 'jev-latest', DECISION_TYPESAFE_BASE_URL), 'systemone')
+    from custom_components.phoenix_mcp.routing.routing_tables import DECISION_TYPESAFE_BASE_URL
+    provider = DecisionProvider(llm_accounts.ProviderConfig('typesafe', 'jev-latest', DECISION_TYPESAFE_BASE_URL), 'systemone')
     async def response(session, method, path, timeout, payload):
         selected = {'target': 't0', 'percentage': '37'}
         selected['percentage'] = {'fractional': '37.5', 'outside': '101', 'bool': True, 'none': 'none'}.get(damage, '37')
@@ -598,7 +602,7 @@ def unpack_catalog(state):
 
 def test_large_catalog_packing_preserves_all_entities_aliases_options_and_native_bounds():
     from copy import deepcopy
-    from custom_components.phoenix_mcp.decision_targets import catalog_state
+    from custom_components.phoenix_mcp.routing.decision_targets import catalog_state
     targets = {f't{i}': {'entity_id': f'light.room_{i}', 'name': f'Room light {i}',
         'aliases': [f'Lampe {i}', f'ランプ {i}'], 'area': 'Shared room',
         'eligible_categories': ['light_brightness', 'light_color', 'attribute_read'],
@@ -615,7 +619,7 @@ def test_large_catalog_packing_preserves_all_entities_aliases_options_and_native
 
 
 def test_catalog_packing_retains_supplied_null_and_does_not_mutate_source():
-    from custom_components.phoenix_mcp.decision_targets import catalog_state
+    from custom_components.phoenix_mcp.routing.decision_targets import catalog_state
     targets = {f't{i}': {'entity_id': f'sensor.test_{i}', 'name': 'x' * 100, 'optional': None} for i in range(100)}
     packed = catalog_state(targets)
     assert 'target_fields' not in packed
@@ -653,7 +657,7 @@ async def test_generic_grouped_targets_http_contract(protocol, case, socket_enab
         return web.json_response({"data": [{"id": "test-model"}]})
     app.router.add_get("/models", models)
     async with TestServer(app) as server, ClientSession() as session:
-        cfg = agentcli.ProviderConfig("typesafe", "test-model", str(server.make_url("")).rstrip("/"))
+        cfg = llm_accounts.ProviderConfig("typesafe", "test-model", str(server.make_url("")).rstrip("/"))
         provider = DecisionProvider(cfg, protocol)
         call = provider.select_target(session, "switch Lamp 98 off", "light_off", targets, 1000)
         if case in ("selected", "declined"):
@@ -674,8 +678,8 @@ async def test_generic_grouped_targets_http_contract(protocol, case, socket_enab
 
 
 async def test_generic_grouped_catalog_bound_and_stale_competitor(hass, target_home):
-    from custom_components.phoenix_mcp.const import DECISION_SEQUENTIAL_MAX_TARGETS
-    from custom_components.phoenix_mcp.decision_targets import capture_sequential_targets
+    from custom_components.phoenix_mcp.routing.routing_tables import DECISION_SEQUENTIAL_MAX_TARGETS
+    from custom_components.phoenix_mcp.routing.decision_targets import capture_sequential_targets
     data, access_key, _, _, _ = target_home
     registry = er.async_get(hass)
     for i in range(DECISION_SEQUENTIAL_MAX_TARGETS - 1):
@@ -707,7 +711,7 @@ async def test_generic_choice_capacity_is_model_scoped_and_bounded(advertised, e
     app = web.Application()
     app.router.add_get('/models', models)
     async with TestServer(app) as server, ClientSession() as session:
-        provider = DecisionProvider(agentcli.ProviderConfig("typesafe", "test-model", str(server.make_url('')).rstrip('/')), 'systemone')
+        provider = DecisionProvider(llm_accounts.ProviderConfig("typesafe", "test-model", str(server.make_url('')).rstrip('/')), 'systemone')
         if expected is None:
             with pytest.raises(DecisionError, match='malformed'):
                 await provider.target_choice_limit(session, 1000)
@@ -733,7 +737,7 @@ async def test_advertised_extended_choices_avoid_unnecessary_groups(socket_enabl
     app.router.add_get('/models', models)
     app.router.add_post('/systemone', classify)
     async with TestServer(app) as server, ClientSession() as session:
-        provider = DecisionProvider(agentcli.ProviderConfig('typesafe', 'test-model', str(server.make_url('')).rstrip('/')), 'systemone')
+        provider = DecisionProvider(llm_accounts.ProviderConfig('typesafe', 'test-model', str(server.make_url('')).rstrip('/')), 'systemone')
         result = await provider.select_target(session, 'turn off Lamp 94', 'light_off',
                                              targets, 1000)
     assert result['choice'] == 't94'
@@ -773,7 +777,7 @@ async def test_small_target_catalog_obeys_model_capacity(protocol, limit, count,
     app.router.add_get('/models', models)
     app.router.add_post('/' + protocol, classify)
     async with TestServer(app) as server, ClientSession() as session:
-        provider = DecisionProvider(agentcli.ProviderConfig("typesafe", 'test-model', str(server.make_url('')).rstrip('/')), protocol)
+        provider = DecisionProvider(llm_accounts.ProviderConfig("typesafe", 'test-model', str(server.make_url('')).rstrip('/')), protocol)
         result = await provider.select_target(session, f'turn off Lamp {count - 1}', 'light_off', targets, 1000)
     assert result['choice'] == f't{count - 1}'
     assert requests == ['GET', 'POST']
@@ -786,7 +790,7 @@ async def test_small_target_catalog_obeys_model_capacity(protocol, limit, count,
 ])
 def test_operation_metadata_pooling_is_lossless_and_keeps_distinct_values(field, metadata):
     from copy import deepcopy
-    from custom_components.phoenix_mcp.decision_targets import catalog_state
+    from custom_components.phoenix_mcp.routing.decision_targets import catalog_state
     targets = {f't{i}': {'entity_id': f'sensor.item_{i}', 'name': f'Item {i}', field: deepcopy(metadata)}
                for i in range(100)}
     targets['t99'][field] = {**metadata, 'unique': 'Preserve this competitor'}

@@ -67,7 +67,7 @@ describe("BeforeAfter code view", () => {
   it("defaults to the line diff, not the code view", () => {
     const { container } = render(<BeforeAfter {...props} />);
     expect(container.querySelectorAll(".diff-line").length).toBeGreaterThan(0);
-    // No explanatory hint beside the controls (user, 2026-10-27).
+    // No explanatory hint beside the controls.
     expect(container.querySelector(".change-diff-hint")).toBeNull();
   });
 

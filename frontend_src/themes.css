@@ -19,7 +19,7 @@
   --phx-chat-frame: var(--phx-text);
   --phx-toolbar-bg: var(--phx-raised);
   --phx-toolbar-border: var(--phx-border);
-  /* Bars between the toolbar's sections (user, 2026-11-03), in the toolbar's own ink: in the border grey they all but vanished. */
+  /* Bars between the toolbar's sections, in the toolbar's own ink: in the border grey they all but vanished. */
   --phx-toolbar-divider: color-mix(in srgb, var(--phx-toolbar-btn-fg) 40%, transparent);
   --phx-toolbar-btn-bg: var(--phx-surface);
   --phx-toolbar-btn-border: var(--phx-border);
@@ -30,6 +30,9 @@
   --phx-toolbar-current-bg: var(--phx-accent);
   --phx-toolbar-current-fg: var(--phx-accent-fg);
   --phx-toolbar-danger: var(--phx-error);
+  /* The warning button's fill, and the ring that marks focus on the toolbar: themes that paint the toolbar set their own. */
+  --phx-toolbar-danger-bg: var(--phx-error-bg);
+  --phx-toolbar-focus: var(--phx-focus);
   --phx-window-frame: var(--phx-border);
   --phx-window-frame-active: var(--phx-line-strong);
   --phx-window-titlebar: var(--phx-surface);
@@ -46,7 +49,7 @@
   --phx-ws-my: currentColor;
   --phx-ws-fg: var(--phx-toolbar-current-fg);
   --phx-tools-bg: var(--phx-toolbar-btn-bg);
-  /* Welcome to the Guide: one hue per step, green for done (user, 2026-11-02: make it really welcoming). */
+  /* Welcome to the Guide: one hue per step, green for done. */
   --phx-welcome-point: #5452d6;
   --phx-welcome-point-bg: rgba(84,82,214,0.11);
   --phx-welcome-select: #0d8577;
@@ -300,6 +303,8 @@
   --phx-toolbar-current-bg: #ffffff;
   --phx-toolbar-current-fg: #2b579a;
   --phx-toolbar-danger: #ffc9cc;
+  --phx-toolbar-danger-bg: transparent;
+  --phx-toolbar-focus: #ffffff;
   --phx-guide-surface: #f3f8fd;
   --phx-guide-titlebar: #e8f1fb;
   --phx-guide-border: #8db2e3;
@@ -341,6 +346,8 @@
     --phx-toolbar-current-bg: #ffffff;
     --phx-toolbar-current-fg: #1f3d6b;
     --phx-toolbar-danger: #ffc9cc;
+    --phx-toolbar-danger-bg: transparent;
+    --phx-toolbar-focus: #ffffff;
     --phx-guide-surface: #1f2329;
     --phx-guide-titlebar: #232a33;
     --phx-guide-border: #3d5f8f;
@@ -382,6 +389,8 @@
   --phx-toolbar-current-bg: #ffffff;
   --phx-toolbar-current-fg: #1f3d6b;
   --phx-toolbar-danger: #ffc9cc;
+  --phx-toolbar-danger-bg: transparent;
+  --phx-toolbar-focus: #ffffff;
   --phx-guide-surface: #1f2329;
   --phx-guide-titlebar: #232a33;
   --phx-guide-border: #3d5f8f;
@@ -421,6 +430,8 @@
   --phx-toolbar-current-bg: #1164a3;
   --phx-toolbar-current-fg: #ffffff;
   --phx-toolbar-danger: #ffc9cc;
+  --phx-toolbar-danger-bg: transparent;
+  --phx-toolbar-focus: #ffffff;
   --phx-guide-surface: #f5f9fc;
   --phx-guide-titlebar: #ebf3f9;
   --phx-guide-border: #8fb3cf;
@@ -459,6 +470,8 @@
     --phx-toolbar-current-bg: #1164a3;
     --phx-toolbar-current-fg: #ffffff;
     --phx-toolbar-danger: #ffb3b8;
+    --phx-toolbar-danger-bg: transparent;
+    --phx-toolbar-focus: #ffffff;
     --phx-guide-surface: #1d232a;
     --phx-guide-titlebar: #212a33;
     --phx-guide-border: #3b6283;
@@ -497,6 +510,8 @@
   --phx-toolbar-current-bg: #1164a3;
   --phx-toolbar-current-fg: #ffffff;
   --phx-toolbar-danger: #ffb3b8;
+  --phx-toolbar-danger-bg: transparent;
+  --phx-toolbar-focus: #ffffff;
   --phx-guide-surface: #1d232a;
   --phx-guide-titlebar: #212a33;
   --phx-guide-border: #3b6283;
@@ -519,6 +534,17 @@
 .phx-toolbar-button.is-danger { color: var(--phx-toolbar-danger); }
 .phx-toolbar-handle,
 .phx-toolbar-plain { color: var(--phx-toolbar-muted); }
+.phx-toolbar:focus-visible,
+.phx-toolbar-handle:focus-visible,
+.phx-toolbar-button:focus-visible { outline-color: var(--phx-toolbar-focus); }
+/* The kill switch is on: the button that stands in for Agent Chat is the toolbar's one warning. */
+.phx-toolbar-button.phx-toolbar-warning,
+.phx-toolbar-button.phx-toolbar-warning:hover {
+  border-color: var(--phx-toolbar-danger);
+  background: var(--phx-toolbar-danger-bg);
+  box-shadow: inset 0 0 0 1px var(--phx-toolbar-danger);
+  color: var(--phx-toolbar-danger);
+}
 .phx-toolbar-chat { border-color: var(--phx-toolbar-btn-fg); box-shadow: inset 0 0 0 1px var(--phx-toolbar-btn-fg); }
 .phx-toolbar-tools .phx-toolbar-button:not(.is-current) { background: var(--phx-tools-bg); }
 
@@ -574,14 +600,14 @@
 .phx-window-body :is(.btn, button.phx-action):not(:disabled):not([aria-disabled="true"]):not([aria-pressed="true"]):not(.btn-primary):not(.btn-danger):not(.btn-warning):not(.btn-text-danger):not(.btn-text-warning) > svg:not(.phx-icon-delete) { color: var(--phx-action-icon); }
 
 /* Personas with a character of their own, in every theme but Spartan: Home Companion gold, New User green, Custom blue,
-   in a half-transparent border only, so the chosen card's frame and fill stand out (user, 2026-11-03). */
+   in a half-transparent border only, so the chosen card's frame and fill stand out. */
 :host([data-phx-palette]) .persona-card[data-persona="home_companion"] { border-color: color-mix(in srgb, var(--phx-persona-companion) 50%, transparent); }
 :host([data-phx-palette]) .persona-card[data-persona="home_companion"] .persona-card-marker { color: var(--phx-persona-companion); }
 :host([data-phx-palette]) .persona-card[data-persona="new_user"] { border-color: color-mix(in srgb, var(--phx-persona-new) 50%, transparent); }
 :host([data-phx-palette]) .persona-card[data-persona="custom"] { border-color: color-mix(in srgb, var(--phx-persona-custom) 50%, transparent); }
 :host([data-phx-palette]) .persona-card-active[data-persona] { border-color: var(--phx-text); }
 
-/* Welcome to the Guide (user, 2026-11-02/03): a bright demo that fits the Guide's default size without
+/* Welcome to the Guide: a bright demo that fits the Guide's default size without
    scrolling. The header stays pinned so its Dismiss is always in reach. One hue per tip, on its own tile;
    a green check shows a tip worked. Hues are the tokens above. */
 .phx-welcome-point { --phx-step: var(--phx-welcome-point); --phx-step-bg: var(--phx-welcome-point-bg); }

@@ -3,7 +3,9 @@
 ---
 新增 Phoenix 使用的 AI 帳戶。每個帳戶需要 API 金鑰，或者對於本機模型，需要伺服器位址。
 
-Agent Chat、語音智慧體和 AI 任務各使用其中一個帳戶，並搭配你選擇的模型。
+Agent Chat、語音智慧體和 AI 任務各使用其中一個帳戶，並搭配你選擇的模型。它們會把對話和工具結果傳送給該提供者。
+
+相關：[哪些資料會離開你的家](guide:topic.security#leaves-home)
 
 ## 帳戶 {#provider-accounts}
 

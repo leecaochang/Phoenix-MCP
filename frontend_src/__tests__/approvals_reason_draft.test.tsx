@@ -85,7 +85,7 @@ describe("rejection reason draft sharing", () => {
     await waitFor(() => expect(getReasonDraft("appr_1")).toBe(""));
   });
 
-  it("a click elsewhere cancels the rejection and keeps the reason; Approve and Reject do not count as elsewhere (user, 2026-10-28)", async () => {
+  it("a click elsewhere cancels the rejection and keeps the reason; Approve and Reject do not count as elsewhere", async () => {
     const view = await openDetail();
     const input = await view.findByLabelText("Optional reason");
     fireEvent.change(input, { target: { value: "wrong entity" } });

@@ -3,7 +3,9 @@
 ---
 添加 Phoenix 使用的 AI 账户。每个账户需要 API 密钥，或者对于本地模型，需要服务器地址。
 
-Agent Chat、语音智能体和 AI 任务各使用其中一个账户，并搭配你选择的模型。
+Agent Chat、语音智能体和 AI 任务各使用其中一个账户，并搭配你选择的模型。它们会把对话和工具结果发送给该提供商。
+
+相关：[哪些数据会离开你的家](guide:topic.security#leaves-home)
 
 ## 账户 {#provider-accounts}
 

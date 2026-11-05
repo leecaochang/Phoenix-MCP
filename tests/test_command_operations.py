@@ -6,18 +6,23 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+
+from tests.runtime_fixtures import patch_readers
 from homeassistant.components.cover import CoverEntityFeature
 from homeassistant.components.media_player import MediaPlayerEntityFeature
 from homeassistant.helpers import area_registry as ar, entity_registry as er
 from homeassistant.setup import async_setup_component
 
-from custom_components.phoenix_mcp import agentcli, mcp_view, voice_agent
+from custom_components.phoenix_mcp import agent_chat, tool_dispatch, voice_agent
+from custom_components.phoenix_mcp.llm import base as llm_base
+from custom_components.phoenix_mcp.tools import service as service_tools
 from custom_components.phoenix_mcp.audit import AuditLog
-from custom_components.phoenix_mcp.command_operations import numeric_operation, service_arguments
-from custom_components.phoenix_mcp.command_routing import async_evaluate_command
-from custom_components.phoenix_mcp.const import DOMAIN, COMMAND_ROUTING_PLAN_KEY
+from custom_components.phoenix_mcp.routing.command_operations import numeric_operation, service_arguments
+from custom_components.phoenix_mcp.routing.command_routing import async_evaluate_command
+from custom_components.phoenix_mcp.const import DOMAIN
+from custom_components.phoenix_mcp.routing.routing_tables import COMMAND_ROUTING_PLAN_KEY
 from custom_components.phoenix_mcp.data import PhoenixData
-from custom_components.phoenix_mcp.decision_provider import DecisionProvider
+from custom_components.phoenix_mcp.routing.decision_provider import DecisionProvider
 from custom_components.phoenix_mcp.mesa import async_setup_mesa
 from custom_components.phoenix_mcp.mesa_core import MetadataOrigin, SemanticProfile
 from custom_components.phoenix_mcp.rate_limiter import RateLimiter
@@ -58,8 +63,8 @@ async def numeric_home(hass, access_key_store, request, immediate_command_observ
 async def run_numeric(hass, home, sentence, ingress="voice", history=()):
     """Leave recognition, planning, authorization and dispatch real."""
     async def stream(*args, **kwargs):
-        yield {"type": agentcli.EV_TEXT, "text": "Normal provider reply"}
-        yield {"type": agentcli.EV_DONE, "stop_reason": "end_turn",
+        yield {"type": llm_base.EV_TEXT, "text": "Normal provider reply"}
+        yield {"type": llm_base.EV_DONE, "stop_reason": "end_turn",
                "assistant_msg": {"role": "assistant", "content": "Normal provider reply"}}
     provider = MagicMock()
     provider.stream_turn.side_effect = stream
@@ -68,14 +73,14 @@ async def run_numeric(hass, home, sentence, ingress="voice", history=()):
     events = []
     async def emit(name, payload):
         events.append((name, payload))
-    with (patch.object(agentcli, "_get_secret_store", AsyncMock(return_value=store)),
-          patch.object(agentcli, "build_provider", return_value=provider),
-          patch.object(agentcli, "async_run_voice_turn", AsyncMock(return_value="Normal provider reply")) as voice,
+    with (patch_readers("custom_components.phoenix_mcp.llm.accounts._get_secret_store", AsyncMock(return_value=store)),
+          patch_readers("custom_components.phoenix_mcp.llm.factory.build_provider", return_value=provider),
+          patch("custom_components.phoenix_mcp.voice_agent.async_run_voice_turn", AsyncMock(return_value="Normal provider reply")) as voice,
           patch.object(DecisionProvider, "classify", new_callable=AsyncMock) as decision):
         if ingress == "voice":
             result = await voice_agent.async_voice_answer(hass, home.data, sentence, language="en")
         else:
-            result = await agentcli.async_run_agent_turn(
+            result = await agent_chat.async_run_agent_turn(
                 hass=hass, data=home.data, access_key=home.access_key, provider=provider, session=None,
                 messages=[*history, {"role": "user", "content": sentence}], options={}, client_ip="agentcli",
                 base_url="http://test", emit=emit, cancel=asyncio.Event(), routing_language="en")
@@ -87,7 +92,7 @@ async def run_numeric(hass, home, sentence, ingress="voice", history=()):
 @pytest.mark.parametrize("ingress", ["voice", "chat"])
 async def test_exact_values_reach_existing_service_without_either_model(hass, numeric_home, value, ingress):
     home = numeric_home
-    with (patch.object(mcp_view, "unsupported_secondary_targets", AsyncMock(return_value=[])),
+    with (patch.object(service_tools, "unsupported_secondary_targets", AsyncMock(return_value=[])),
           patch.object(type(hass.services), "async_call", new_callable=AsyncMock) as call):
         result, voice, provider, _ = await run_numeric(hass, home, home.sentence.format(value=value), ingress)
     expected_value = value / 100 if home.domain == "media_player" else value
@@ -120,7 +125,7 @@ async def test_numeric_chat_sequence_preserves_values_history_and_fresh_capabili
             attrs['current_position'] = value
             state = 'open' if value else 'closed'
         hass.states.async_set(home.entity_id, state, attrs)
-    with (patch.object(mcp_view, "unsupported_secondary_targets", AsyncMock(return_value=[])),
+    with (patch.object(service_tools, "unsupported_secondary_targets", AsyncMock(return_value=[])),
           patch.object(type(hass.services), "async_call", AsyncMock(side_effect=report_state)) as call):
         for value in (37, 0, 100):
             previous = copy.deepcopy(history)
@@ -228,7 +233,7 @@ async def test_numeric_commands_keep_mesa_enforcement(hass, numeric_home, mode):
     home.data.mesa = await async_setup_mesa(hass, "enforced")
     home.data.mesa.store.set(home.entity_id, SemanticProfile.from_dict(home.entity_id,
         {"semantic_profile": {"operational_boundaries": {"control_mode": mode}}}, default_origin=MetadataOrigin.USER))
-    with (patch.object(mcp_view, "unsupported_secondary_targets", AsyncMock(return_value=[])),
+    with (patch.object(service_tools, "unsupported_secondary_targets", AsyncMock(return_value=[])),
           patch.object(type(hass.services), "async_call", new_callable=AsyncMock) as call):
         result, voice, provider, _ = await run_numeric(hass, home, home.sentence.format(value=37))
     call.assert_not_called()
@@ -245,7 +250,7 @@ async def test_approval_rechecks_exact_numeric_operation(hass, numeric_home, cha
     home.data.mesa = await async_setup_mesa(hass, "enforced")
     home.data.mesa.store.set(home.entity_id, SemanticProfile.from_dict(home.entity_id,
         {"semantic_profile": {"operational_boundaries": {"control_mode": "confirm"}}}, default_origin=MetadataOrigin.USER))
-    with patch.object(mcp_view, "unsupported_secondary_targets", AsyncMock(return_value=[])):
+    with patch.object(service_tools, "unsupported_secondary_targets", AsyncMock(return_value=[])):
         result, _, _, _ = await run_numeric(hass, home, home.sentence.format(value=37).replace(home.name.lower(), home.entity_id) if literal_id else home.sentence.format(value=37))
     assert "needs approval" in result
     record = copy.deepcopy(home.data.store.get_pending_approvals()[0])
@@ -266,9 +271,9 @@ async def test_approval_rechecks_exact_numeric_operation(hass, numeric_home, cha
     elif change == "exposure":
         from homeassistant.components.homeassistant.exposed_entities import async_expose_entity
         async_expose_entity(hass, "conversation", home.entity_id, False)
-    with (patch.object(mcp_view, "unsupported_secondary_targets", AsyncMock(return_value=[])),
+    with (patch.object(service_tools, "unsupported_secondary_targets", AsyncMock(return_value=[])),
           patch.object(type(hass.services), "async_call", new_callable=AsyncMock) as call):
-        _, outcome, _ = await mcp_view.async_execute_approved_tool(record["tool_name"], args, home.access_key, hass, home.data)
+        _, outcome, _ = await tool_dispatch.async_execute_approved_tool(record["tool_name"], args, home.access_key, hass, home.data)
     if change == "none":
         assert outcome == "allowed"
         call.assert_awaited_once_with(home.domain, home.service, {"entity_id": [home.entity_id],
@@ -300,7 +305,7 @@ async def test_literal_entity_id_numeric_command_uses_existing_guarded_dispatch(
     sentence = (f'set {home.entity_id} to thirty seven percent brightness' if home.domain == 'light' else
                 f'set {home.entity_id} volume to 37 percent' if home.domain == 'media_player' else
                 f'set {home.entity_id} to 37 percent')
-    with (patch.object(mcp_view, 'unsupported_secondary_targets', AsyncMock(return_value=[])),
+    with (patch.object(service_tools, 'unsupported_secondary_targets', AsyncMock(return_value=[])),
           patch.object(type(hass.services), 'async_call', new_callable=AsyncMock) as call):
         _, voice, provider, _ = await run_numeric(hass, home, sentence, ingress)
     voice.assert_not_called()
@@ -312,8 +317,8 @@ async def test_literal_entity_id_numeric_command_uses_existing_guarded_dispatch(
 
 @pytest.mark.parametrize('barrier', ['hidden', 'unexposed', 'scope', 'unavailable', 'features', 'trigger'])
 async def test_literal_id_does_not_bypass_local_target_or_sentence_guards(hass, numeric_home, barrier):
-    from custom_components.phoenix_mcp import command_routing
-    from custom_components.phoenix_mcp.intent_recognition import SentenceTriggerMatch
+    from custom_components.phoenix_mcp.routing import command_routing
+    from custom_components.phoenix_mcp.routing.intent_recognition import SentenceTriggerMatch
     home = numeric_home
     sentence = (f'set {home.entity_id} to 37 percent brightness' if home.domain == 'light' else
                 f'set {home.entity_id} volume to 37 percent' if home.domain == 'media_player' else
@@ -328,7 +333,7 @@ async def test_literal_id_does_not_bypass_local_target_or_sentence_guards(hass, 
     recognize = command_routing.async_recognize
     if barrier == 'trigger': recognize = AsyncMock(side_effect=SentenceTriggerMatch)
     with (patch.object(command_routing, 'async_recognize', recognize),
-          patch.object(mcp_view, '_dispatch_mcp') as dispatch):
+          patch_readers("custom_components.phoenix_mcp.tool_dispatch._dispatch_mcp") as dispatch):
         result = await async_evaluate_command(hass, home.data, home.access_key, sentence, 'en')
     assert result['proposal'] is None
     dispatch.assert_not_called()
@@ -336,8 +341,8 @@ async def test_literal_id_does_not_bypass_local_target_or_sentence_guards(hass, 
 
 @pytest.mark.parametrize('change', ['access_key', 'exposure', 'trigger', 'custom'])
 async def test_literal_numeric_rechecks_after_worker_wait(hass, numeric_home, change):
-    from custom_components.phoenix_mcp import command_routing
-    from custom_components.phoenix_mcp.intent_recognition import SentenceTriggerMatch
+    from custom_components.phoenix_mcp.routing import command_routing
+    from custom_components.phoenix_mcp.routing.intent_recognition import SentenceTriggerMatch
     home = numeric_home
     sentence = home.sentence.format(value=37).replace(home.name.lower(), home.entity_id)
     recognize = command_routing.async_recognize
@@ -361,7 +366,7 @@ async def test_literal_numeric_rechecks_after_worker_wait(hass, numeric_home, ch
 
 async def test_numeric_worker_timeout_keeps_shared_capacity_until_thread_finishes(hass, numeric_home):
     import threading
-    from custom_components.phoenix_mcp import command_routing
+    from custom_components.phoenix_mcp.routing import command_routing
     home = numeric_home
     sentence = home.sentence.format(value=37).replace(home.name.lower(), home.entity_id)
     await command_routing.async_recognize(hass, sentence, 'en', strict=True)
@@ -399,7 +404,7 @@ async def test_numeric_worker_timeout_keeps_shared_capacity_until_thread_finishe
 ])
 def test_native_operation_bounds_and_steps(intent, domain, attributes, valid, invalid):
     from homeassistant.core import State
-    from custom_components.phoenix_mcp.command_operations import valid_target_value
+    from custom_components.phoenix_mcp.routing.command_operations import valid_target_value
     state = State(domain + '.test', 'on', attributes)
     assert valid_target_value(state, intent, valid)
     assert not valid_target_value(state, intent, invalid)

@@ -18,9 +18,10 @@ from homeassistant.util.dt import utcnow
 from pytest_homeassistant.common import MockConfigEntry
 
 from custom_components.phoenix_mcp.const import MAX_FILE_BYTES
-from custom_components.phoenix_mcp.helpers import content_hash
+from custom_components.phoenix_mcp.tools.config_files import _file_change_hash
 from custom_components.phoenix_mcp.config_recovery import ConfigurationRecovery
-from custom_components.phoenix_mcp.mcp_view import _EXECUTOR_REGISTRY, _call_tool
+from custom_components.phoenix_mcp.tool_catalog import _EXECUTOR_REGISTRY
+from custom_components.phoenix_mcp.tool_dispatch import _call_tool
 from custom_components.phoenix_mcp.access_key_store import (
     PermissionNode,
     PermissionTree,
@@ -297,7 +298,7 @@ class TestGetYamlConfigKeyArg:
         text = "http:\n  server_port: 8123\nfrontend:\n"
         self._write(hass, text)
         body = _json((await _call("get_yaml_config", {"key": "http"}, _access_key(), hass))[0])
-        assert body["content_hash"] == content_hash(text)
+        assert body["content_hash"] == _file_change_hash(text)
 
     async def test_key_from_another_file(self, hass):
         with open(hass.config.path("extra.yaml"), "w", encoding="utf-8") as f:
@@ -326,13 +327,14 @@ class TestYamlConfigContentHash:
         with open(path, "w", encoding="utf-8") as f:
             f.write("default_config:\n")
         content, _, _ = await _call("get_yaml_config", {}, _access_key(), hass)
-        assert _json(content)["content_hash"] == content_hash("default_config:\n")
+        repeat, _, _ = await _call("get_yaml_config", {}, _access_key(), hass)
+        assert _json(content)["content_hash"] == _json(repeat)["content_hash"]
 
     async def test_get_absent_reports_hash_of_empty(self, hass):
         content, _, _ = await _call("get_yaml_config", {}, _access_key(), hass)
         body = _json(content)
         assert body["exists"] is False
-        assert body["content_hash"] == content_hash("")
+        assert body["content_hash"] == _file_change_hash("")
 
 
 

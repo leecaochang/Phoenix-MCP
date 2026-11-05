@@ -15,8 +15,8 @@ defaults it to INFO): an operator raising it can suppress rows, so an empty trai
 does not prove no denial occurred, and the operator Guide says so.
 
 Rows are attributed to the request that provoked them through a ContextVar set by
-the actuation gate, MESA-tool adapter and camera privacy check; with no context
-set (a preview) an event is dropped.
+the actuation gate, registry gate, MESA-tool adapter and camera privacy check; with
+no context set (a preview) an event is dropped.
 """
 
 from __future__ import annotations
@@ -25,10 +25,21 @@ import contextlib
 import logging
 from contextvars import ContextVar
 from dataclasses import dataclass
+from collections.abc import Sequence
 from typing import TYPE_CHECKING, Any, Iterator
 
 from .mesa_core.audit import audit_logger
 from .mesa_core import CallerContext, EnforcementResult, MesaAuditEvent, emit_audit_event
+
+# Whether MESA let this request through with warnings. Per task, so it survives the
+# awaits between the gate and the single audit point that reads it.
+mesa_advisory_ctx: ContextVar[bool] = ContextVar("phoenix_mcp_mesa_advisory", default=False)
+
+
+def note_mesa_advisory(warnings: Sequence[str]) -> None:
+    """Flag the current request's audit row when MESA acted on warnings alone."""
+    if warnings:
+        mesa_advisory_ctx.set(True)
 
 if TYPE_CHECKING:
     from .data import PhoenixData
@@ -123,6 +134,29 @@ def record_read_only_denial(
     ))
 
 
+def record_policy_failure(
+    entity_id: str, service: str, caller: CallerContext, result: EnforcementResult
+) -> None:
+    """Record a profile that could not be evaluated, for actual requests only.
+
+    mesa-core returns this refusal without an audit event, and it is the case an
+    operator most needs explained: the entity is blocked by a damaged profile.
+    """
+    if _context.get() is None:
+        return
+    emit_audit_event(MesaAuditEvent(
+        event_type="enforcement_decision",
+        action=service,
+        decision="blocked",
+        entity_id=entity_id,
+        caller_id=caller.caller_id,
+        roles=caller.effective_roles(),
+        profile_version=result.effective_profile.metadata.profile_version,
+        rule_applied="policy_unavailable",
+        details={"enforcement_source": "phoenix_policy_failure"},
+    ))
+
+
 class MesaAuditBridge(logging.Handler):
     """Records mesa-core denials, including privacy and lease refusals, in Phoenix's audit log.
 
@@ -165,7 +199,7 @@ class MesaAuditBridge(logging.Handler):
                 payload=event,
                 preset=ctx.preset,
             )
-        except Exception:  # noqa: BLE001 - see the class docstring
+        except Exception:  # see the class docstring
             self.handleError(record)
 
 

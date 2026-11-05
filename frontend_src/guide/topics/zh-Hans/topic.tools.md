@@ -25,6 +25,7 @@
 - 历史和统计每页最多 1000 行。
 - 一次日历读取最多覆盖 31 天和 500 个事件。
 - 摄像头图像每边最多 2048 像素。
+- 属性值摘要最多覆盖 7 天。
 
 允许它的能力：[{{label:caps.cap_camera_read.label}}](guide:window.capabilities#camera-read)、[{{label:caps.cap_search.label}}](guide:window.capabilities#search)
 
@@ -34,7 +35,7 @@
 
 锁、警报、卷帘和阀门还需要物理控制。设为确认时，包含其中一项的命令会等待你的审批。设为拒绝访问时，智能体无法控制它们。
 
-通过 Assist 卫星设备播报消息需要广播。MESA 在能力和权限树之后最后检查每个命令。
+通过 Assist 卫星设备播报消息或在其上发起对话需要广播。MESA 在能力和权限树之后最后检查每个命令。
 
 允许它的能力：[{{label:caps.cap_physical_control.label}}](guide:window.capabilities#physical-control)、[{{label:caps.cap_broadcast.label}}](guide:window.capabilities#broadcast)
 
@@ -42,17 +43,21 @@
 
 ## 运行任意操作 {#actions}
 
-智能体还可以在它们可以写入的目标上运行任意 Home Assistant 操作，并先预览结果。少数操作需要更多条件：
+智能体还可以在它们可以写入的目标上运行 Home Assistant 操作，并先预览结果。目标必须是该操作适用的对象，因此对开关运行 `light.turn_on` 会被拒绝。`homeassistant.turn_on`、`turn_off`、`toggle` 和 `update_entity` 适用于任何对象。少数操作需要更多条件：
 
 - 重启或停止 Home Assistant 需要重启能力。
 - 重新加载自动化、脚本、场景、辅助元素或核心配置需要 YAML 配置。
 - 操作返回的数据需要服务响应数据。没有它，操作仍会运行。
 - 发送消息的通知操作需要通知能力。
-- 通知播放需要广播能力：`assist_satellite.announce`、`music_assistant.play_announcement`，以及带 `announce` 的 `media_player.play_media`。普通播放只需要 W。
+- 通知播放需要广播能力：`assist_satellite.announce`、`start_conversation` 和 `ask_question`，`music_assistant.play_announcement`，以及带 `announce` 的 `media_player.play_media`。普通播放只需要 W。
 - ESPHome 设备操作只需要设备上的 W。MESA 不检查它们，也不检查重新加载或重启。
 - 搜索或列出 Music Assistant 音乐库需要服务响应数据，以及某个 Music Assistant 实体（例如音箱）上的 R。这些操作不会播放任何内容，所以 MESA 也不检查它们。
 
-没有目标的其他操作会被拒绝。日历更改也会被拒绝，它们有自己的工具。运行超过 30 秒的操作会被报告为可能未完成。
+未声明目标的操作（例如 `shell_command`、`rest_command` 或 `python_script`）对每个密钥都会被拒绝，包括直通密钥。智能体指定什么目标都一样，即使是该操作所属域的实体。没有目标的其他操作也会被拒绝。
+
+自定义操作由 Home Assistant 在其实体上运行，或其注册的架构列出 `entity_id` 时，算作已声明目标。
+
+日历更改和 `homeassistant.reload_config_entry` 同样会被拒绝，因为它们有自己的工具。运行超过 30 秒的操作会被报告为可能未完成。
 
 允许它的能力：[{{label:caps.cap_restart.label}}](guide:window.capabilities#restart)、[{{label:caps.cap_yaml_edit.label}}](guide:window.capabilities#yaml-edit)、[{{label:caps.cap_service_response.label}}](guide:window.capabilities#service-response)、[{{label:caps.cap_notify.label}}](guide:window.capabilities#notify)、[{{label:caps.cap_search.label}}](guide:window.capabilities#search)（用于预览）
 
@@ -116,7 +121,7 @@
 智能体可以列出、创建、编辑和删除仪表盘，读取和搜索其布局，更改卡片并列出已安装的自定义卡片。所有这些都需要管理仪表盘，包括读取。
 
 - 权限树和 MESA 不限制仪表盘更改。密钥无法读取的实体显示为 `<redacted>`，仍包含此类实体的更改会被拒绝。
-- 无法显示的布局会被拒绝。
+- 无法显示的布局会被拒绝，对 YAML 模式仪表盘的更改也会被拒绝。
 - 删除仪表盘前会先保存其布局，以便还原。
 - 自定义卡片列表来自打开过面板的浏览器，最多每 10 分钟刷新一次。
 
@@ -143,7 +148,7 @@
 ## 配置、模板和日志 {#configuration}
 
 - 读取配置涵盖 Home Assistant 的基本设置、能源设置、太阳能预测和蓝图。
-- 管理能源仪表盘会更改能源设置的一部分。
+- 管理能源仪表盘会更改能源设置的一部分。它不能为某一类型添加第二个来源，也会拒绝更改已有多个来源的类型。
 - 模板渲染会在单独的受限进程中渲染模板。它作用于密钥可读取状态的副本，最长 5 秒。
 - 读取系统日志涵盖警告和错误、日志簿和通知。故障日志和捕获的调试记录还需要诊断。
 - 集成日志级别会更改集成的日志量，例如开启调试日志。更改可以在 5 到 120 分钟后结束、持续到下次重启，或一直保留到清除。
@@ -167,17 +172,17 @@
 
 ## 文件和 YAML {#files}
 
-读取文件让智能体读取 www、themes 和 custom_templates 文件夹中的文本文件，每个最大 1 MiB。它不能写入这些文件。
+读取文件让智能体读取 www、themes 和 custom_templates 文件夹中的文本文件，每个最大 1 MiB。文件夹列表分页返回，默认每页 500 项，最多 1000 项。它不能写入这些文件。
 
-YAML 配置让智能体读取你的 YAML 文件，secrets.yaml、esphome 文件夹和隐藏文件除外。文件会原样返回，因此直接写在其中的密码可见。没有工具会写入 YAML 配置。
+YAML 配置让智能体读取你的 YAML 文件，名称中含有 secret 的文件、esphome 文件夹和隐藏文件除外。名称暗示机密的值显示为 `<redacted>`，但使用普通名称的密码可见。没有工具会写入 YAML 配置。
 
 允许它的能力：[{{label:caps.cap_filesystem.label}}](guide:window.capabilities#filesystem)、[{{label:caps.cap_yaml_edit.label}}](guide:window.capabilities#yaml-edit)
 
 ## ESPHome {#esphome}
 
-智能体可以读取和搜索 ESPHome 设备配置，密码和密钥会被遮蔽。使用 ESPHome Device Builder 加载项时，它们还可以校验、编译、读取设备日志、分析内存并检查连接。没有该加载项时，只能读取和搜索。
+智能体可以读取和搜索 ESPHome 设备配置，密码、密钥和所有请求头的值都会被遮蔽。使用 ESPHome Device Builder 加载项时，它们还可以校验、编译、读取设备日志、分析内存并检查连接。没有该加载项时，只能读取和搜索。
 
-编译、清理和内存分析需要设备上的 W。安装固件需要 ESPHome 固件刷写、ESPHome 设备 YAML 和设备上的 W。
+编译、清理和内存分析需要设备上的 W。安装固件需要 ESPHome 固件刷写、ESPHome 设备 YAML 和设备上的 W，并且 MESA 会检查它。
 
 允许它的能力：[{{label:caps.cap_esphome_yaml.label}}](guide:window.capabilities#esphome-yaml)、[{{label:caps.cap_esphome_flash.label}}](guide:window.capabilities#esphome-flash)
 
@@ -185,8 +190,9 @@ YAML 配置让智能体读取你的 YAML 文件，secrets.yaml、esphome 文件�
 
 - 集成管理会添加、启用、禁用、重新加载和移除集成，并移除设备。
 - 集成重新配置会更改集成的设置。
-- 管理实体注册表会重命名实体和设备，并更改实体 ID、区域、楼层、标签和类别。
-- 无线电管理会更改 Zigbee 网络。群组、绑定和设备属性还需要物理控制。
+- 管理实体注册表会重命名实体和设备，并更改实体 ID、区域、楼层、标签和类别。`recorder.purge_entities` 也需要它，因为该操作会删除历史记录。
+- 无线电管理会更改 Zigbee 网络。群组、绑定和设备属性还需要物理控制。MESA 会检查对 Zigbee 设备的更改。
+- 没有实体的 Zigbee 设备无从检查，因此建议模式会发出警告并继续。MESA 处于强制模式、启动失败，或你为该设备保存了策略时，则会拒绝。
 - 备份会创建和列出备份，但无法还原备份。
 - 重启或停止 Home Assistant 会重启它。智能体会被告知不要自行重试。
 - 通知会发送通知，无论是通过自己的工具还是运行通知操作。

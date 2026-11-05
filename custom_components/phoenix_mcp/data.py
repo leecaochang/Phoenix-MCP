@@ -11,11 +11,11 @@ from .config_recovery import ConfigurationRecovery
 from .dashboard_resource_ownership import DashboardResourceOwnership
 from .audit import AuditLog
 from .conversation_log import ConversationLog
-from .command_routing import CommandRouting
-from .decision_shadow import DecisionShadow
-from .decision_budget import DecisionRequestBudget
-from .routing_statistics import RoutingStatistics
-from .const import TEMPLATE_WORKER_CONCURRENCY
+from .routing.command_routing import CommandRouting
+from .routing.decision_shadow import DecisionShadow
+from .routing.decision_budget import DecisionRequestBudget
+from .routing.routing_statistics import RoutingStatistics
+from .template_limits import TEMPLATE_WORKER_CONCURRENCY
 from .card_catalog import CardCatalogStore
 from .rate_limiter import RateLimiter
 from .access_key_store import AccessKeyStore
@@ -27,6 +27,36 @@ if TYPE_CHECKING:
     from .mesa import MesaRuntime
     from .logger_control import LoggerOverrideManager
     from .tools.calendar import CalendarWriteJournal
+
+
+@dataclass
+class DurableState:
+    """The one owner of every Phoenix storage file for this process.
+
+    Each object below rewrites its whole file from memory, so two instances of
+    one store undo each other's saves. A config-entry reload therefore keeps this
+    state and rebuilds only the registrations around it: a handler still running
+    against the previous PhoenixData writes to these same objects, under the same
+    locks, and cannot put a revoked access key back on disk.
+    """
+
+    store: AccessKeyStore
+    audit: AuditLog
+    conversations: ConversationLog
+    versions: VersionStore
+    card_catalog: CardCatalogStore
+    config_recovery: ConfigurationRecovery
+    agent_recovery: AgentRecovery
+    dashboard_resources: DashboardResourceOwnership
+    routing_statistics: RoutingStatistics
+    decision_budget: DecisionRequestBudget
+    calendar_writes: CalendarWriteJournal
+    # Claims stay valid across a reload because the handlers that hold them keep
+    # running: an execution marker with a claim here has not been interrupted.
+    approvals_in_progress: set[str] = field(default_factory=set)
+    # Set once the recovery that belongs to a new process has run. Only that run
+    # may treat what it finds as left over from a previous process.
+    startup_recovery_done: bool = False
 
 
 @dataclass
@@ -147,7 +177,5 @@ class PhoenixData:
     # completed. Permanent aiohttp routes refuse while this is false.
     ready: bool = True
     # Legacy Streamable HTTP sessions, keyed by the cryptographically random
-    # Mcp-Session-Id returned from initialize. Direct constructions keep
-    # lifecycle enforcement on, matching production setup.
+    # Mcp-Session-Id returned from initialize.
     mcp_sessions: dict[str, dict] = field(default_factory=dict)
-    enforce_mcp_lifecycle: bool = True

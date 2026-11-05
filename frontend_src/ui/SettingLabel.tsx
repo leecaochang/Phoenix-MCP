@@ -1,6 +1,6 @@
 /**
  * A settings row's name, with its explanation moved out of the window and into
- * Help (user, 2026-10-31). The row spreads `helpRow(text)`, so pointing at or
+ * Help. The row spreads `helpRow(text)`, so pointing at or
  * focusing anything in it, its switch or field included, shows the explanation
  * in the Help window; screen readers still read it beside the name.
  */

@@ -59,7 +59,7 @@
 
 ### {{label:caps.cap_broadcast.label}} {#broadcast}
 
-通过 Assist 卫星设备播报消息，并在音箱上播放通知，这需要在音箱的 W 之外另行授予。普通播放只需要 W。直通模式允许它。
+通过 Assist 卫星设备播报消息、在其上发起对话，并在音箱上播放通知，这需要在音箱的 W 之外另行授予。普通播放只需要 W。直通模式允许它。
 
 ### {{label:caps.cap_service_response.label}} {#service-response}
 
@@ -129,7 +129,7 @@
 
 ### {{label:caps.cap_registry_write.label}} {#registry-write}
 
-重命名实体，更改其区域、设备、标签和类别，并删除它们。实体的 ID 可以在其域内更改。
+重命名实体，更改其区域、设备、标签和类别，并删除它们。实体的 ID 可以在其域内更改。使用 `recorder.purge_entities` 清除实体的历史记录也需要此能力。
 
 ### {{label:caps.cap_radio_write.label}} {#radio-write}
 

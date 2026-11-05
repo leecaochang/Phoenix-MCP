@@ -29,6 +29,7 @@ import { ApprovalsProvider } from "./approvals";
 import { ChangesProvider } from "./changes";
 import { HELP_WINDOW, HelpContext, HelpTracker, helpFor } from "./help";
 import { attachToggleNames } from "../ui/toggleNames";
+import { scrollMotion } from "../ui/motion";
 import { GuideTargetTracker } from "./guideTarget";
 import { GuideTargetContext, GuideWindow, PhoneGuide, WizardGuideContext, useWizardGuide } from "./guide";
 import { Reconnecting } from "./Reconnecting";
@@ -75,7 +76,7 @@ const PHONE_SHORT_SIDE = 600;
 
 /**
  * A phone keeps the phone stack in both orientations, so turning it never swaps
- * the phone arrangement for the desktop one (user, 2026-11-02). A phone is a
+ * the phone arrangement for the desktop one. A phone is a
  * touch-only screen with a phone-sized shorter side; a tablet is not, and a
  * narrowed tablet window gets the stack by width like any narrow window.
  */
@@ -206,7 +207,7 @@ export function Shell() {
       controller.want(HELP_WINDOW, helpOpen(helpRef.current, id));
       // Closing or reopening Quick Help in one workspace overrides the Help menu's choice there only.
       // Closing Agent Chat's window in My Workspace closes Chat. Closing an added window there takes it out of
-      // My Workspace (user, 2026-10-27): it comes back only by adding it again from its own workspace.
+      // My Workspace: it comes back only by adding it again from its own workspace.
       controller.onUserSized = (windowId) => {
         const kind = detailsKind.current.get(id);
         // Only a height under or over a log is a choice; beside the logs Log Details just fills its column.
@@ -225,7 +226,7 @@ export function Shell() {
     return controller;
   }, [controllers, setShowArchived]);
 
-  // While no key is chosen Access Keys shows only its list, maximized (user, 2026-10-31); the key's windows
+  // While no key is chosen Access Keys shows only its list, maximized; the key's windows
   // keep their places for the next one, and choosing a key returns the list to its own size.
   const keyChosen = d.accessKeyView.name === "detail";
   useEffect(() => {
@@ -249,7 +250,7 @@ export function Shell() {
     return here;
   }, [env, controllerFor]);
   // Selecting a log record shows it in Log Details, opening or unfolding that window first,
-  // sized to the record (user, 2026-10-26): an audit entry gets the few rows it needs, a
+  // sized to the record: an audit entry gets the few rows it needs, a
   // conversation at most CONVERSATION_SHARE of the height. A window the user resized or moved
   // only ever gets smaller. Conversations load their detail after opening, so the size
   // follows the content for a moment.
@@ -490,6 +491,12 @@ export function Shell() {
 
   // Toasts and this session's notification history, shared by every workspace.
   const notifications = useMemo(() => new Notifications(), []);
+  // Chat stays closed until its lists arrive, so a failed read has to say so here.
+  const chatWaitsOnFailedRead = d.agentCliOpen && d.agentCliListFailed && !d.agentCliListsLoaded
+    && !(d.settings?.agentcli_global && d.globalChatReady);
+  useEffect(() => {
+    if (chatWaitsOnFailedRead) notifications.notify(t("shell.chatListsFailed"), "error");
+  }, [chatWaitsOnFailedRead, notifications]);
   // Help follows the pointer and focus anywhere in the shell.
   const helpTracker = useMemo(() => new HelpTracker(), []);
   useEffect(() => (rootEl ? helpTracker.attach(rootEl) : undefined), [rootEl, helpTracker]);
@@ -510,7 +517,7 @@ export function Shell() {
     setTheme: d.onThemeChange,
   }), [guide.welcome, env, welcomeTried, markWelcome, markWelcomeSeen, d.theme, d.onThemeChange]);
   // Point is done when, with Welcome on screen, the reader moves the pointer onto a button and rests
-  // it there while Quick Help explains it (user, 2026-11-02): a pointer already resting where the Help
+  // it there while Quick Help explains it: a pointer already resting where the Help
   // menu closed, passing over, keyboard focus or Welcome's own controls do not count.
   const pointDone = welcomeTried.includes("point");
   useEffect(() => {
@@ -598,16 +605,16 @@ export function Shell() {
   }, [env, addToMy, removeFromMy]);
 
   // The Guide opened at the bottom of the phone stack is brought into view, so opening it
-  // visibly does something (user, 2026-11-02); one already open when the panel opens is not.
+  // visibly does something; one already open when the panel opens is not.
   const [revealGuide, setRevealGuide] = useState(false);
   useEffect(() => {
     if (!revealGuide) return;
     setRevealGuide(false);
-    root.current?.querySelector(".phx-guide-phone")?.scrollIntoView?.({ block: "start", behavior: "smooth" });
+    root.current?.querySelector(".phx-guide-phone")?.scrollIntoView?.({ block: "start", behavior: scrollMotion() });
   }, [revealGuide]);
 
-  // The Help menu: Quick Help (every workspace; not on phones, user 2026-11-02) and the Guide (every workspace).
-  // The Guide is the manual, so the website is no longer offered (user, 2026-11-01).
+  // The Help menu: Quick Help (every workspace; not on phones) and the Guide (every workspace).
+  // The Guide is the manual, so the menu offers no website.
   const documentationMenu = useCallback((): MenuEntry[] => {
     const items: MenuEntry[] = [];
     if (env === "desktop") {
@@ -626,7 +633,7 @@ export function Shell() {
     return items;
   }, [env, updateGuide]);
 
-  // Reset All Workspaces applies at once (user, 2026-10-26): it changes presentation only, and says so in a toast.
+  // Reset All Workspaces applies at once: it changes presentation only, and says so in a toast.
   const restorePanelDefaults = useCallback(() => {
     const rec = recordRef.current;
     setToolbar(DEFAULT_TOOLBAR);
@@ -687,16 +694,16 @@ export function Shell() {
       notify(t("workspace.myDefaultRestored"));
     },
     restoreOriginal: (controller) => {
-      // My Workspace goes back to its original, empty state (user, 2026-10-27).
+      // My Workspace goes back to its original, empty state.
       const mine = controller.id === "my";
       if (mine) clearMy();
-      // The key list's Show Archived is part of how the workspace looks (user, 2026-10-28), and a
-      // reset leaves no key chosen, so the list is maximized again (user, 2026-10-31).
+      // The key list's Show Archived is part of how the workspace looks, and a
+      // reset leaves no key chosen, so the list is maximized again.
       if (controller.id === "accessKeys") {
         setShowArchived(false);
         deselectKey();
       }
-      // A reset brings Needs Attention back while items are still waiting (user, 2026-10-29).
+      // A reset brings Needs Attention back while items are still waiting.
       attentionRef.current.showAttentionIn(controller.id as WorkspaceId);
       controller.restoreOriginal();
       markChanged([`ws:${controller.id as WorkspaceId}`, ...(mine ? ["myWindows" as const] : [])], true);
@@ -778,7 +785,7 @@ export function Shell() {
 
   // Needs Attention appears in the visible workspace while items need checking (or a
   // notification asked for it). Closing it hides it in THAT workspace only, until an
-  // item it did not show arrives, and Workspace Options offers it back there (user, 2026-10-29).
+  // item it did not show arrives, and Workspace Options offers it back there.
   // Items, not a count: a review and a new item together keep the count.
   const attentionKeys = d.attention.items.map((item) => `${item.kind}:${item.id}`);
   const attentionCount = attentionKeys.length;
@@ -809,7 +816,7 @@ export function Shell() {
       if (env === "desktop" && id === d.workspace && attentionShownIn(id)) controller.showTransient(ATTENTION_WINDOW);
       else controller.hideTransient(ATTENTION_WINDOW);
     }
-    // Show Archived opens and closes the archived keys' own window (user, 2026-10-28). Asked for only
+    // Show Archived opens and closes the archived keys' own window. Asked for only
     // when the two disagree: `want` lays the workspace out again, which every render must not do.
     const keys = controllers.get("accessKeys");
     if (keys && !!keys.hostOf(ARCHIVED_WINDOW) !== showArchived) keys.want(ARCHIVED_WINDOW, showArchived);
@@ -839,7 +846,7 @@ export function Shell() {
   const closeAgentCli = d.closeAgentCli;
   closeChatRef.current = () => { if (globalChat) chatBridge()?.close?.(); else closeAgentCli(); };
   // A slot never opens Chat by itself: Chat docks from its own menu, so it is open then, and a
-  // Chat closed elsewhere stays closed when My Workspace shows again (user, 2026-11-01). The
+  // Chat closed elsewhere stays closed when My Workspace shows again. The
   // docked window offers Agent Chat to open it.
   const { agentCliOpen, keepAgentCliOpen, openAgentCli } = d;
   // The global Chat follows the slot through its bridge; without the panel it floats.
@@ -867,7 +874,7 @@ export function Shell() {
   const dock = env === "mobile" ? "top" : toolbar.dock;
   // The wizard's Guide: shown in Access Keys while the wizard runs, and on a desktop the wizard makes room for it.
   const wizardGuideShown = active === "accessKeys" && !!wizardStep;
-  // The Guide met the reader beside the setup wizard, so it does not open on Welcome afterwards (user, 2026-11-03).
+  // The Guide met the reader beside the setup wizard, so it does not open on Welcome afterwards.
   useEffect(() => { if (wizardGuideShown) markWelcomeSeen(); }, [wizardGuideShown, markWelcomeSeen]);
   const guideShown = wizardGuideShown || guide.open;
   const guideBeside = env === "desktop" && wizardGuideShown;
@@ -944,10 +951,10 @@ export function Shell() {
         </WorkspaceArea>
 
         {/* Panel-only Agent Chat window. Not rendered in global-visibility mode (the
-            inject module owns the window then), nor while the kill switch is on.
-            When global injection is unsupported, __phxAgentChat is absent, so this
-            renders as the fallback. */}
-        {s && !s.kill_switch && d.agentCliOpen && !globalChat && (
+            inject module owns the window then), nor while the kill switch is on,
+            nor before its lists are read. When global injection is unsupported,
+            __phxAgentChat is absent, so this renders as the fallback. */}
+        {s && !s.kill_switch && d.agentCliOpen && d.agentCliListsLoaded && !globalChat && (
           <ErrorBoundary key={d.agentCliKey}>
             <AgentCliWindow
               key={d.agentCliKey}

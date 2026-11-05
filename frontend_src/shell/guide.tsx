@@ -11,7 +11,7 @@
  * link to each other inside the Guide; links to the web open in a new tab. On
  * phones it heads the stack.
  *
- * While the setup wizard runs, the Guide is always shown (user, 2026-10-28):
+ * While the setup wizard runs, the Guide is always shown:
  * pinned beside the part of the step it explains, with the step's topic, and
  * it cannot be moved, resized or closed until the wizard ends.
  */
@@ -22,7 +22,7 @@ import { clampPosToViewport, snapResizeRect } from "../components/AgentCliWindow
 import { ANCHOR, GUIDE_FORMAT, HEADING, LABEL, type GuideBundle, type GuideTopic } from "../guide/compile";
 import { fold, searchGuide, topicSections, type SearchSection } from "../guide/search";
 import type { GuideTarget, GuideTargetTracker } from "./guideTarget";
-import { hasMessage, t } from "../i18n";
+import { displayedLanguage, hasMessage, t } from "../i18n";
 import { compareStrings } from "../i18n/format";
 import { ResultCount } from "../components/common";
 import { Icon } from "../ui/Icon";
@@ -36,6 +36,7 @@ import { JS_BUILD } from "../version";
 import type { WorkspaceController } from "./dock/controller";
 import type { GuideRect } from "./storage";
 import { WELCOME_TOPIC, WelcomeCard, useWelcome, welcomeFirst } from "./guideWelcome";
+import { isImeKey } from "../utils/ime";
 
 declare const __GUIDE_LANGUAGES__: string[];
 /** Languages with Guide topics, read from the topic folders at build time; readers of any other language get English. */
@@ -81,7 +82,7 @@ function validBundle(raw: unknown): GuideBundle | null {
 }
 
 /**
- * English pages as a reader of another language gets them (user, 2026-11-03): each control is named in
+ * English pages as a reader of another language gets them: each control is named in
  * English like the sentence around it, never "縮小文字 and 放大文字 change the size", so titles, links,
  * Contents and Search read in English too. The reader's own name for each control joins that section's
  * search words, so typing what the screen says still finds it. Translated pages keep the reader's labels.
@@ -332,7 +333,7 @@ function useGuideTopic(workspace: string, windowId: string | null, language: str
   const [lead, setLead] = useState<"selection" | "window">("window");
   useEffect(() => { setLead("window"); }, [workspace, windowId]);
   useEffect(() => { if (selectionVersion) setLead("selection"); }, [selectionVersion]);
-  // Welcome stays on screen while the reader tries things (user, 2026-11-02): selecting something in a
+  // Welcome stays on screen while the reader tries things: selecting something in a
   // window ticks its Select step and offers that window's page as a link, instead of turning to it.
   const welcome = useWelcome();
   const markRef = useRef(welcome?.mark);
@@ -345,7 +346,7 @@ function useGuideTopic(workspace: string, windowId: string | null, language: str
     markRef.current?.("select");
     setPicked(true);
   }, [selectionVersion]);
-  // Welcome is always the first page of the history, so Back reaches it (user, 2026-11-02). The Guide opens
+  // Welcome is always the first page of the history, so Back reaches it. The Guide opens
   // on it while it has steps left and was not dismissed. Beside the wizard it plays no part.
   const welcomeBase = useRef(!topicId && !!welcome);
   const startOnWelcome = useRef(welcomeBase.current && welcomeFirst(welcome!.state));
@@ -362,7 +363,7 @@ function useGuideTopic(workspace: string, windowId: string | null, language: str
       ?? findTopic(bundles, workspace, windowId);
     if (found) auto = { kind: "topic", id: found.id, anchor: !topicId && selected && (!selected.topic || found.id === selected.topic) ? selected.anchor : null };
   }
-  // One history, as in a browser (user, 2026-11-01): every page shown, whether the reader followed a
+  // One history, as in a browser: every page shown, whether the reader followed a
   // link, used Contents or Search, or selected a control, so Back always returns to the page seen before.
   const [history, setHistory] = useState<History>({ steps: [], at: -1 });
   const autoRef = useRef(auto);
@@ -388,7 +389,7 @@ function useGuideTopic(workspace: string, windowId: string | null, language: str
       return;
     }
     // Welcome holds the page; the reader opens the new one from its link. A wizard step's page is not
-    // the reader's selection, so it always turns to it (user, 2026-11-03).
+    // the reader's selection, so it always turns to it.
     if (onWelcomeRef.current && !topicId) return;
     setHistory((h) => pushStep(h, autoRef.current!));
   }, [autoKey, selectionVersion]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -448,7 +449,7 @@ function followLink(guide: Guide, e: ReactMouseEvent<HTMLElement>): void {
   guide.open(link.dataset.guideTopic ?? null, link.dataset.guideAnchor ?? null);
 }
 
-/** Contents and Search, two links at the top of every page (user, 2026-11-03: no fold to open first). */
+/** Contents and Search, two links at the top of every page, with no fold to open first. */
 function GuideTools({ guide }: { guide: Guide }) {
   return (
     <div className="phx-guide-tools">
@@ -512,7 +513,7 @@ export function rememberSearch(query: string): void {
 }
 
 /**
- * Search, with the reader's recent searches under an empty field (user, 2026-11-03). A search is kept once
+ * Search, with the reader's recent searches under an empty field. A search is kept once
  * it found something and the reader moved on: opened a result, left Search, or typed a different search.
  */
 function SearchView({ guide }: { guide: Guide }) {
@@ -538,7 +539,7 @@ function SearchView({ guide }: { guide: Guide }) {
       <h3>{t("guide.search")}</h3>
       <input ref={input} type="search" className="input phx-guide-search" data-help="help.guideSearchInput" autoFocus value={query} placeholder={t("guide.searchPlaceholder")}
         aria-label={t("guide.searchPlaceholder")} onChange={(e) => change(e.target.value)}
-        onKeyDown={(e) => { if (e.key === "Enter" && hits[0]) { e.preventDefault(); guide.open(hits[0].section.topic, hits[0].section.anchor); } }} />
+        onKeyDown={(e) => { if (e.key === "Enter" && hits[0] && !isImeKey(e)) { e.preventDefault(); guide.open(hits[0].section.topic, hits[0].section.anchor); } }} />
       {!query.trim() && history.length > 0 && (
         <>
           <h4 className="phx-guide-history-title" id={historyId}>{t("guide.searchHistory")}</h4>
@@ -643,7 +644,7 @@ function HistoryButtons({ guide, iconSize = WINDOW_ICON }: { guide: Guide; iconS
   );
 }
 
-/** Where the page sits in Contents, each page above it a link; none on a top-level page (user, 2026-11-01). */
+/** Where the page sits in Contents, each page above it a link; none on a top-level page. */
 function Breadcrumbs({ guide, id }: { guide: Guide; id: string }) {
   const topics = useMemo(() => mergedTopics(guide.bundles ?? []), [guide.bundles]);
   const chain = topicAncestors(topics, id);
@@ -663,7 +664,7 @@ function Breadcrumbs({ guide, id }: { guide: Guide; id: string }) {
 const NO_WINDOWS: ReadonlySet<string> = new Set();
 const POPUP_NAME = "phoenix-mcp-guide";
 // Inside the panel the Guide's controls match the workspace windows'; popped out, they match
-// Agent Chat's popped-out window, the other window of its own (user, 2026-11-01).
+// Agent Chat's popped-out window, the other window of its own.
 const WINDOW_ICON = 14;
 const POPUP_ICON = 16;
 const POPUP_MOUNT_ID = "phx-guide-popout-root";
@@ -675,8 +676,8 @@ const MIN_H = 280;
 
 /**
  * The Guide's place on this screen: a size saved on a larger screen shrinks to
- * fit a smaller one, such as an iPad, and the whole window stays on screen
- * (user, 2026-11-02). The fit is not saved, so the larger screen keeps its size.
+ * fit a smaller one, such as an iPad, and the whole window stays on screen.
+ * The fit is not saved, so the larger screen keeps its size.
  */
 export function fitGuideRect(r: GuideRect, vw: number, vh: number): GuideRect {
   const w = Math.min(r.w, Math.max(MIN_W, vw - 2 * MARGIN));
@@ -686,7 +687,7 @@ export function fitGuideRect(r: GuideRect, vw: number, vh: number): GuideRect {
 
 /**
  * The floating Guide on a desktop: one window over every workspace. It has
- * the window controls every window has (user, 2026-11-01): Fold, the window
+ * the window controls every window has: Fold, the window
  * menu with keyboard Move and Resize, Maximize and Close, but no Dock, since
  * a Guide docked in one workspace would not fit the others.
  */
@@ -704,7 +705,7 @@ export function GuideWindow({ workspace, controller, language, rect, onRect, onC
   topicId?: string | null;
   /**
    * The wizard step to sit beside: the Guide is placed there for each step and cannot be closed.
-   * The reader can still drag or resize it (user, 2026-11-03); from then on it stays where they put it.
+   * The reader can still drag or resize it; from then on it stays where they put it.
    */
   follow?: WizardGuideStep | null;
   /**
@@ -736,7 +737,7 @@ export function GuideWindow({ workspace, controller, language, rect, onRect, onC
   const isFolded = folded && !following;
   // Moving or resizing with the arrow keys, from the window menu.
   const [keys, setKeys] = useState<"move" | "resize" | null>(null);
-  // Popped out into a browser window of its own, like Agent Chat (user, 2026-11-01). The same
+  // Popped out into a browser window of its own, like Agent Chat. The same
   // component renders there, so it keeps following selections in the panel, with its history.
   const [popup, setPopup] = useState<OpenPopup | null>(null);
   const [popupBlocked, setPopupBlocked] = useState(false);
@@ -891,7 +892,7 @@ export function GuideWindow({ workspace, controller, language, rect, onRect, onC
     themeHost.current = root instanceof ShadowRoot ? root.host : null;
     const opened = openPopupWindow({
       name: POPUP_NAME, mountId: POPUP_MOUNT_ID, width: liveRef.current.w, height: liveRef.current.h,
-      title: t("guide.title"), language: document.documentElement.lang, background: "var(--phx-surface)", extraCss: DOCK_CSS,
+      title: t("guide.title"), language: displayedLanguage(), background: "var(--phx-surface)", extraCss: DOCK_CSS,
     });
     setPopupBlocked(!opened);
     if (!opened) return;
@@ -911,6 +912,8 @@ export function GuideWindow({ workspace, controller, language, rect, onRect, onC
   }, []);
   // Beside the wizard the Guide stays in the panel.
   useEffect(() => { if (following) popIn(); }, [following, popIn]);
+  // The popup's document names the language on display, also after the panel's language changes.
+  useEffect(() => { if (popup) popup.window.document.documentElement.lang = displayedLanguage(); });
   // The popup follows the panel's theme, and its own close button closes the Guide, as Agent Chat's does.
   useEffect(() => {
     if (!popup) return undefined;
@@ -955,7 +958,7 @@ export function GuideWindow({ workspace, controller, language, rect, onRect, onC
   ];
   const showMenu = useContextMenu();
 
-  // Welcome fits without scrolling (user, 2026-11-03), also in languages longer than English: shown in a
+  // Welcome fits without scrolling, also in languages longer than English: shown in a
   // Guide too short for it, the Guide grows by what is missing, as far as the screen allows. The growth is
   // not saved and goes when Welcome does; a size the reader sets meanwhile wins.
   const onWelcome = guide.view === "topic" && guide.topic?.id === WELCOME_TOPIC;
@@ -1011,7 +1014,7 @@ export function GuideWindow({ workspace, controller, language, rect, onRect, onC
           </button>
         )}
         {/* Moving or sizing by keyboard, the title bar holds the hint in the title's place, beside the
-            menu button that takes the keys and Close; the rest returns when it ends (user, 2026-11-03). */}
+            menu button that takes the keys and Close; the rest returns when it ends. */}
         {keys
           ? <span className="phx-window-resize-hint phx-guide-keys-hint" role="status">{t(keys === "move" ? "workspace.moveHint" : "workspace.resizeHint")}</span>
           : <><HistoryButtons guide={guide} /><h2 className="phx-guide-title">{t("guide.title")}</h2></>}

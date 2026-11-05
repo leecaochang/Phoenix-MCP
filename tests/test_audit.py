@@ -5,10 +5,13 @@ from __future__ import annotations
 import json
 import uuid
 from datetime import datetime, timezone
+from unittest.mock import patch
 
-from homeassistant.util.dt import utcnow
+from homeassistant.util.dt import parse_datetime, utcnow
 
 from custom_components.phoenix_mcp.audit import (
+    AUDIT_PAYLOAD_SCAN_CHARS,
+    MAX_AUDIT_FIELD_LEN,
     MAX_QUERY_LIMIT,
     AuditEntry,
     AuditLog,
@@ -69,8 +72,8 @@ def _record(
 
 
 class TestGenerateRequestId:
-    def test_returns_string(self):
-        assert isinstance(generate_request_id(), str)
+    def test_each_id_is_distinct(self):
+        assert generate_request_id() != generate_request_id()
 
     def test_is_valid_uuid(self):
         rid = generate_request_id()
@@ -118,7 +121,7 @@ class TestAuditEntry:
 
     def test_to_dict_timestamp_is_string(self):
         entry = self._entry()
-        assert isinstance(entry.to_dict()["timestamp"], str)
+        assert parse_datetime(entry.to_dict()["timestamp"]) == entry.timestamp
 
     def test_to_dict_values_match(self):
         ts = utcnow()
@@ -435,16 +438,20 @@ class TestRedactionSettings:
         assert [e.client_ip for e in log._log] == ["agentcli", "voice", "assist", "ai_task", "home_companion"]
 
     def test_log_entity_names_false_hides_entity_ids_in_the_payload(self):
-        """Tool arguments and MESA rows carry entity IDs too."""
+        """Tool arguments keep only their names, and MESA rows carry entity IDs too."""
         log = AuditLog()
-        payload = {"arguments": {"entity_id": "lock.front_door", "target": {"entity_id": ["light.a"]}},
+        payload = {"arguments": {"entity_id": "lock.front_door", "target": {"entity_id": ["light.a"]},
+                                 "query": "person.alice", "template": "{{ states('sensor.door') }}",
+                                 "area_id": "bedroom", "name": "Front door", "lock.back": 1},
                    "entities": [{"id": "x"}], "service": "light.turn_on"}
         log.record(request_id="r", access_key_id="k", access_key_name="n", method="tools/call",
                    resource="lock.front_door", outcome="allowed", client_ip="", settings=_settings(log_entity_names=False),
                    payload=payload)
         stored = json.loads(list(log._log)[0].payload)
-        assert "lock.front_door" not in json.dumps(stored) and "light.a" not in json.dumps(stored)
-        assert stored["arguments"]["entity_id"] == "[redacted]"
+        for private in ("lock.front_door", "light.a", "person.alice", "sensor.door", "bedroom", "Front door", "lock.back"):
+            assert private not in json.dumps(stored)
+        assert stored["arguments"] == ["area_id", "entity_id", "name", "query", "target", "template"]
+        assert stored["entities"] == "[redacted]"
         # A service name looks like an entity ID but is not one, and stays.
         assert stored["service"] == "light.turn_on"
         log.record(request_id="r", access_key_id="k", access_key_name="n", method="tools/call",
@@ -745,7 +752,7 @@ class TestPayloadRedaction:
 
 
 class TestDeviceCodeRedaction:
-    """Audit payloads hide device codes as the Conversation Log does (2026-11-01).
+    """Audit payloads hide device codes as the Conversation Log does.
 
     The general secret redaction kept a disarm `code` and a PIN, so they were
     saved in the audit log and returned by the admin audit route.
@@ -840,7 +847,7 @@ async def test_restore_origin_survives_persistence_without_relaxing_payload_scru
 
 
 class TestRequestIdFilter:
-    """Needs Attention links to one request, so the filter is exact (user, 2026-10-29)."""
+    """Needs Attention links to one request, so the filter is exact."""
 
     def test_returns_only_that_request_and_counts_it(self):
         log = AuditLog()
@@ -853,3 +860,88 @@ class TestRequestIdFilter:
         assert log.count(request_id="req-a") == 2
         assert log.query(request_id="req-") == []
         assert log.count(request_id="nope") == 0
+
+
+class TestPayloadScanLimit:
+    """The sanitizer runs on the event loop for every audited call, so its input is bounded."""
+
+    def _stored(self, payload) -> str:
+        log = AuditLog()
+        log.record(request_id="r", access_key_id="k", access_key_name="n", method="m", resource="x",
+                   outcome="allowed", client_ip="", settings=_settings(), payload=payload)
+        return list(log._log)[0].payload
+
+    def test_only_a_bounded_part_of_a_payload_is_sanitized(self):
+        seen = []
+        import custom_components.phoenix_mcp.conversation_log as conversation_log
+        real = conversation_log.sanitized
+
+        def measure(value, **kwargs):
+            seen.append(len(json.dumps(value)))
+            return real(value, **kwargs)
+
+        with patch("custom_components.phoenix_mcp.audit.sanitized", measure):
+            self._stored({"arguments": {"a": "x" * 500_000, "b": ["y"] * 50_000}})
+        assert seen and max(seen) < 2 * AUDIT_PAYLOAD_SCAN_CHARS
+
+    def test_a_short_payload_is_not_clipped_and_keeps_every_field(self):
+        payload = {"name": "t", "arguments": {"a": 1, "b": [True, None, 1.5], "c": {"d": "e"}}}
+        assert json.loads(self._stored(payload)) == payload
+
+    def test_a_secret_stays_hidden_in_what_the_row_keeps(self):
+        stored = self._stored({"arguments": {"text": "password: hunter2\n" + "x" * 500_000}})
+        assert "hunter2" not in stored and "truncated" in stored
+
+    def test_a_code_stays_hidden_when_what_marked_it_as_a_service_call_is_cut(self):
+        """The keys and words that make `code` a credential can sit past the limit."""
+        stored = self._stored({"code": "ab12", "pad": "x" * 500_000, "service": "lock.unlock"})
+        assert "ab12" not in stored
+        stored = self._stored({"text": "code: ab12\n" + "x" * 500_000 + " alarm_control_panel"})
+        assert "ab12" not in stored
+
+    def test_a_payload_nested_past_the_sanitizer_limit_is_not_kept_raw(self):
+        value: object = "person.alice"
+        for _ in range(5_000):
+            value = [value]
+        log = AuditLog()
+        for private in (True, False):
+            log.record(request_id="r", access_key_id="k", access_key_name="n", method="m", resource="x",
+                       outcome="allowed", client_ip="", settings=_settings(log_entity_names=private),
+                       payload={"arguments": {"deep": value}, "other": value})
+        assert all("person.alice" not in (row.payload or "") for row in log._log)
+
+    def test_every_client_derived_field_is_storable_and_bounded(self):
+        log = AuditLog()
+        log.record(request_id="\ud800", access_key_id="\ud800", access_key_name="\ud800", method="\ud800" * 1000,
+                   resource="\udfff", outcome="denied", client_ip="\ud800" * 1000, settings=_settings(),
+                   preset="\ud800", ha_user_id="\ud800", originating_access_key_id="\ud800",
+                   payload={"\ud800": "\ud800"})
+        serialized = json.dumps([row.to_dict() for row in log._log], ensure_ascii=False)
+        serialized.encode("utf-8")
+        row = list(log._log)[0]
+        assert row.method.startswith("\\ud800") and len(row.client_ip) < 2 * MAX_AUDIT_FIELD_LEN * len("\\ud800")
+
+
+async def test_loading_scrubs_payloads_off_the_event_loop():
+    import threading
+    from unittest.mock import AsyncMock, MagicMock
+
+    from custom_components.phoenix_mcp.audit import AuditLog
+    from custom_components.phoenix_mcp.const import AUDIT_STORAGE_VERSION
+
+    store = MagicMock(async_load=AsyncMock(return_value={"version": AUDIT_STORAGE_VERSION, "entries": [{
+        "request_id": "r", "timestamp": "2026-01-01T00:00:00+00:00", "access_key_id": "k",
+        "access_key_name": "n", "method": "m", "resource": "x", "outcome": "allowed", "client_ip": "",
+    }]}), async_save=AsyncMock())
+    log = AuditLog(store=store, maxlen=10)
+    threads = []
+    original = log._parse_rows
+
+    def tracked(rows):
+        threads.append(threading.current_thread())
+        return original(rows)
+
+    log._parse_rows = tracked
+    await log.async_load()
+    assert threads and threads[0] is not threading.current_thread()
+    assert len(log) == 1

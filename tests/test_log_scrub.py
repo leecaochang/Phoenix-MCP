@@ -273,3 +273,44 @@ async def test_off_the_event_loop_no_identifiers_are_added(instance):
     # Assistant context, so only the pattern-based scrub applies there.
     out = await instance.async_add_executor_job(redact_diagnostics, "myhome.duckdns.org via nas.home.lan")
     assert out == "myhome.duckdns.org via <redacted-host>"
+
+
+def test_a_repeated_failure_warns_once_until_it_recovers(caplog):
+    import logging
+
+    from custom_components.phoenix_mcp.helpers import RepeatedFailureLog
+
+    logger = logging.getLogger("custom_components.phoenix_mcp.test_repeat")
+    caplog.set_level(logging.DEBUG, logger=logger.name)
+    failures = RepeatedFailureLog(logger, "Flush failed")
+
+    def warnings():
+        return [r for r in caplog.records if r.levelno == logging.WARNING]
+
+    error = OSError("http://user:secret@host/")
+    failures.failed(error)
+    failures.failed(error)
+    assert len(warnings()) == 1 and "OSError" in caplog.text
+    assert "secret" not in warnings()[0].getMessage()
+    failures.recovered()
+    failures.failed(error)
+    assert len(warnings()) == 2
+
+
+@pytest.mark.parametrize("module", [
+    "mcp_transport.py", "tool_dispatch.py", "tools/approvals.py", "tools/backup.py", "tools/history.py",
+    "tools/integrations.py", "tools/logs.py", "tools/registry.py", "tools/restore.py", "tools/service.py",
+    "tools/system.py", "ai_task.py", "tools/radio.py",
+])
+def test_no_error_line_logs_an_exception_unscrubbed(module):
+    """Third-party errors can carry hosts or credentials, and this log gets pasted into issues."""
+    import ast
+    from pathlib import Path
+
+    source = (Path(helpers.__file__).parent / module).read_text(encoding="utf-8")
+    for node in ast.walk(ast.parse(source)):
+        if (isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
+                and node.func.attr == "error" and getattr(node.func.value, "id", "") == "_LOGGER"):
+            bare = [arg.id for arg in node.args if isinstance(arg, ast.Name) and arg.id in ("exc", "err", "error")]
+            assert not bare, f"line {node.lineno}"
+            assert not any(keyword.arg == "exc_info" for keyword in node.keywords), f"line {node.lineno}"

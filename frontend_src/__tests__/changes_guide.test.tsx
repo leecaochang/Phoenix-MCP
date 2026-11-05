@@ -1,6 +1,6 @@
 /**
- * The Changes windows point the Guide at the section about each control
- * (user, 2026-11-01): the filters, the list, the view toggles, Restore and
+ * The Changes windows point the Guide at the section about each control:
+ * the filters, the list, the view toggles, Restore and
  * its confirmation, and stepping through changes. The pages and sections
  * themselves are checked by guide_contract.
  */

@@ -1,4 +1,4 @@
-"""Tests for the Phoenix MCP AI Task entity (ai_task.py + agentcli.async_run_ai_task).
+"""Tests for the Phoenix MCP AI Task entity (ai_task.py + agent_chat.async_run_ai_task).
 
 The installed HA provides the real AITaskEntity base. The missing-platform case
 blocks its import in an isolated Phoenix module, so the feature-detection guard
@@ -13,12 +13,16 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+
+from tests.runtime_fixtures import patch_readers
 import voluptuous as vol
 
 from custom_components.phoenix_mcp.agent_recovery import AgentRecovery
-from custom_components.phoenix_mcp import ai_task, agentcli
-from custom_components.phoenix_mcp.agentcli import AiTaskError, async_run_ai_task
-from custom_components.phoenix_mcp.const import AGENTCLI_MAX_TURN_OUTPUT_BYTES, AI_TASK_CLIENT_IP, DOMAIN
+from custom_components.phoenix_mcp import agent_turn, ai_task
+from custom_components.phoenix_mcp.llm import base as llm_base
+from custom_components.phoenix_mcp.agent_chat import AiTaskError, async_run_ai_task
+from custom_components.phoenix_mcp.const import AI_TASK_CLIENT_IP, DOMAIN
+from custom_components.phoenix_mcp.provider_constants import AGENTCLI_MAX_TURN_OUTPUT_BYTES
 from custom_components.phoenix_mcp.access_key_store import GlobalSettings
 from homeassistant.exceptions import HomeAssistantError
 
@@ -54,11 +58,11 @@ def _staged_stream(*batches, capture=None):
 
 
 def _tool_ev(name, tid, args=None):
-    return {"type": agentcli.EV_TOOL, "name": name, "id": tid, "input": args or {}}
+    return {"type": llm_base.EV_TOOL, "name": name, "id": tid, "input": args or {}}
 
 
 def _done(stop_reason):
-    return {"type": agentcli.EV_DONE, "stop_reason": stop_reason,
+    return {"type": llm_base.EV_DONE, "stop_reason": stop_reason,
             "assistant_msg": {"role": "assistant", "content": []}}
 
 
@@ -439,10 +443,10 @@ async def test_generate_structured_refuses_output_the_structure_rejects(reply):
     data = _make_data(**_FULL)
     store = MagicMock()
     store.resolve.return_value = SimpleNamespace(model="m")
-    with patch.object(agentcli, "_current_dispatch_access_key", return_value=_make_access_key()), \
-         patch.object(agentcli, "_get_secret_store", AsyncMock(return_value=store)), \
-         patch.object(agentcli, "build_provider", return_value=_MockProvider()), \
-         patch.object(agentcli, "async_run_ai_task", AsyncMock(return_value=reply)):
+    with patch_readers("custom_components.phoenix_mcp.agent_turn._current_dispatch_access_key", return_value=_make_access_key()), \
+         patch_readers("custom_components.phoenix_mcp.llm.accounts._get_secret_store", AsyncMock(return_value=store)), \
+         patch_readers("custom_components.phoenix_mcp.llm.factory.build_provider", return_value=_MockProvider()), \
+         patch("custom_components.phoenix_mcp.ai_task.async_run_ai_task", AsyncMock(return_value=reply)):
         with pytest.raises(HomeAssistantError):
             await ai_task.async_generate_ai_task_data(MagicMock(), data, "do it", _ha_structure())
 
@@ -452,10 +456,10 @@ async def test_generate_structured_returns_the_model_value_uncoerced():
     data = _make_data(**_FULL)
     store = MagicMock()
     store.resolve.return_value = SimpleNamespace(model="m")
-    with patch.object(agentcli, "_current_dispatch_access_key", return_value=_make_access_key()), \
-         patch.object(agentcli, "_get_secret_store", AsyncMock(return_value=store)), \
-         patch.object(agentcli, "build_provider", return_value=_MockProvider()), \
-         patch.object(agentcli, "async_run_ai_task", AsyncMock(return_value='{"summary": "ok", "priority": 3}')):
+    with patch_readers("custom_components.phoenix_mcp.agent_turn._current_dispatch_access_key", return_value=_make_access_key()), \
+         patch_readers("custom_components.phoenix_mcp.llm.accounts._get_secret_store", AsyncMock(return_value=store)), \
+         patch_readers("custom_components.phoenix_mcp.llm.factory.build_provider", return_value=_MockProvider()), \
+         patch("custom_components.phoenix_mcp.ai_task.async_run_ai_task", AsyncMock(return_value='{"summary": "ok", "priority": 3}')):
         result = await ai_task.async_generate_ai_task_data(MagicMock(), data, "do it", _ha_structure())
     # HA's number selector would coerce 3 to 3.0; an automation templating the
     # value must see what the model wrote, as with HA's own AI Task providers.
@@ -480,11 +484,11 @@ async def test_ai_task_raises_when_the_provider_blows_the_output_budget():
     data = _make_data()
     provider = _MockProvider()
     huge = {"role": "assistant", "content": "x" * (AGENTCLI_MAX_TURN_OUTPUT_BYTES + 1)}
-    stream = _staged_stream([{"type": agentcli.EV_DONE, "stop_reason": "tool_use",
+    stream = _staged_stream([{"type": llm_base.EV_DONE, "stop_reason": "tool_use",
                               "assistant_msg": huge}])
-    with patch.object(agentcli, "_stream_turn_resilient", stream), \
-         patch.object(agentcli, "build_mcp_tool_list", return_value=[]), \
-         patch("custom_components.phoenix_mcp.mcp_view._build_instructions", return_value="SYS"), \
+    with patch.object(agent_turn, "_stream_turn_resilient", stream), \
+         patch_readers("custom_components.phoenix_mcp.tool_catalog.build_mcp_tool_list", return_value=[]), \
+         patch_readers("custom_components.phoenix_mcp.tool_dispatch._build_instructions", return_value="SYS"), \
          pytest.raises(AiTaskError, match="too much output"):
         await async_run_ai_task(
             MagicMock(), data, access_key, provider, MagicMock(), "http://h", "summarize")
@@ -507,11 +511,11 @@ async def test_ai_task_raises_when_it_runs_out_of_steps():
     data = _make_data()
     provider = _MockProvider()
     stream = _staged_stream([_tool_ev("get_state", "t1"), _done("tool_use")])
-    with patch.object(agentcli, "_stream_turn_resilient", stream), \
-         patch.object(agentcli, "build_mcp_tool_list", return_value=[]), \
-         patch.object(agentcli, "_current_dispatch_access_key", return_value=access_key), \
-         patch("custom_components.phoenix_mcp.mcp_view._dispatch_mcp", side_effect=_dispatch_ok("on")), \
-         patch("custom_components.phoenix_mcp.mcp_view._build_instructions", return_value="SYS"), \
+    with patch.object(agent_turn, "_stream_turn_resilient", stream), \
+         patch_readers("custom_components.phoenix_mcp.tool_catalog.build_mcp_tool_list", return_value=[]), \
+         patch_readers("custom_components.phoenix_mcp.agent_turn._current_dispatch_access_key", return_value=access_key), \
+         patch_readers("custom_components.phoenix_mcp.tool_dispatch._dispatch_mcp", side_effect=_dispatch_ok("on")), \
+         patch_readers("custom_components.phoenix_mcp.tool_dispatch._build_instructions", return_value="SYS"), \
          pytest.raises(AiTaskError, match="ran out of steps"):
         await async_run_ai_task(
             MagicMock(), data, access_key, provider, MagicMock(), "http://h", "summarize",
@@ -530,13 +534,13 @@ async def test_ai_task_raises_on_a_truncated_result():
     data = _make_data()
     provider = _MockProvider()
     stream = _staged_stream([
-        {"type": agentcli.EV_TEXT, "text": '{"summary": "the kitchen'},
-        {"type": agentcli.EV_DONE, "stop_reason": "max_tokens",
+        {"type": llm_base.EV_TEXT, "text": '{"summary": "the kitchen'},
+        {"type": llm_base.EV_DONE, "stop_reason": "max_tokens",
          "assistant_msg": {"role": "assistant", "content": []}},
     ])
-    with patch.object(agentcli, "_stream_turn_resilient", stream), \
-         patch.object(agentcli, "build_mcp_tool_list", return_value=[]), \
-         patch("custom_components.phoenix_mcp.mcp_view._build_instructions", return_value="SYS"), \
+    with patch.object(agent_turn, "_stream_turn_resilient", stream), \
+         patch_readers("custom_components.phoenix_mcp.tool_catalog.build_mcp_tool_list", return_value=[]), \
+         patch_readers("custom_components.phoenix_mcp.tool_dispatch._build_instructions", return_value="SYS"), \
          pytest.raises(AiTaskError, match="output length limit"):
         await async_run_ai_task(
             MagicMock(), data, access_key, provider, MagicMock(), "http://h", "summarize")
@@ -550,11 +554,11 @@ async def test_ai_task_stops_after_one_round_when_authority_is_lost():
     provider = _MockProvider()
     dispatch = _dispatch_ok("should not run")
     stream = _staged_stream([_tool_ev("call_service", "t1"), _done("tool_use")])
-    with patch.object(agentcli, "_stream_turn_resilient", stream), \
-         patch.object(agentcli, "build_mcp_tool_list", return_value=[]), \
-         patch.object(agentcli, "_current_dispatch_access_key", return_value=None), \
-         patch("custom_components.phoenix_mcp.mcp_view._dispatch_mcp", side_effect=dispatch), \
-         patch("custom_components.phoenix_mcp.mcp_view._build_instructions", return_value="SYS"):
+    with patch.object(agent_turn, "_stream_turn_resilient", stream), \
+         patch_readers("custom_components.phoenix_mcp.tool_catalog.build_mcp_tool_list", return_value=[]), \
+         patch_readers("custom_components.phoenix_mcp.agent_turn._current_dispatch_access_key", return_value=None), \
+         patch_readers("custom_components.phoenix_mcp.tool_dispatch._dispatch_mcp", side_effect=dispatch), \
+         patch_readers("custom_components.phoenix_mcp.tool_dispatch._build_instructions", return_value="SYS"):
         with pytest.raises(AiTaskError):
             await async_run_ai_task(
                 MagicMock(), data, access_key, provider, MagicMock(), "http://h", "x",
@@ -569,10 +573,10 @@ async def test_generate_free_text_happy_path():
     data = _make_data(**_FULL)
     store = MagicMock()
     store.resolve.return_value = SimpleNamespace(model="m")
-    with patch.object(agentcli, "_current_dispatch_access_key", return_value=_make_access_key()), \
-         patch.object(agentcli, "_get_secret_store", AsyncMock(return_value=store)), \
-         patch.object(agentcli, "build_provider", return_value=_MockProvider()), \
-         patch.object(agentcli, "async_run_ai_task", AsyncMock(return_value="A plain summary.")):
+    with patch_readers("custom_components.phoenix_mcp.agent_turn._current_dispatch_access_key", return_value=_make_access_key()), \
+         patch_readers("custom_components.phoenix_mcp.llm.accounts._get_secret_store", AsyncMock(return_value=store)), \
+         patch_readers("custom_components.phoenix_mcp.llm.factory.build_provider", return_value=_MockProvider()), \
+         patch("custom_components.phoenix_mcp.ai_task.async_run_ai_task", AsyncMock(return_value="A plain summary.")):
         result = await ai_task.async_generate_ai_task_data(MagicMock(), data, "summarize", None)
     assert result == "A plain summary."
 
@@ -583,10 +587,10 @@ async def test_generate_structured_parses_json():
     store = MagicMock()
     store.resolve.return_value = SimpleNamespace(model="m")
     schema = vol.Schema({vol.Required("summary"): str})
-    with patch.object(agentcli, "_current_dispatch_access_key", return_value=_make_access_key()), \
-         patch.object(agentcli, "_get_secret_store", AsyncMock(return_value=store)), \
-         patch.object(agentcli, "build_provider", return_value=_MockProvider()), \
-         patch.object(agentcli, "async_run_ai_task", AsyncMock(return_value='{"summary": "ok"}')) as rt:
+    with patch_readers("custom_components.phoenix_mcp.agent_turn._current_dispatch_access_key", return_value=_make_access_key()), \
+         patch_readers("custom_components.phoenix_mcp.llm.accounts._get_secret_store", AsyncMock(return_value=store)), \
+         patch_readers("custom_components.phoenix_mcp.llm.factory.build_provider", return_value=_MockProvider()), \
+         patch("custom_components.phoenix_mcp.ai_task.async_run_ai_task", AsyncMock(return_value='{"summary": "ok"}')) as rt:
         result = await ai_task.async_generate_ai_task_data(MagicMock(), data, "do it", schema)
     assert result == {"summary": "ok"}
     # structure_json was passed to the loop (so the model was told to emit JSON).
@@ -610,7 +614,7 @@ async def test_generate_kill_switch_raises_unavailable():
 @pytest.mark.asyncio
 async def test_generate_access_key_gone_raises():
     data = _make_data(**_FULL)
-    with patch.object(agentcli, "_current_dispatch_access_key", return_value=None):
+    with patch_readers("custom_components.phoenix_mcp.agent_turn._current_dispatch_access_key", return_value=None):
         with pytest.raises(HomeAssistantError, match="access key"):
             await ai_task.async_generate_ai_task_data(MagicMock(), data, "x", None)
 
@@ -620,10 +624,10 @@ async def test_generate_wraps_loop_error():
     data = _make_data(**_FULL)
     store = MagicMock()
     store.resolve.return_value = SimpleNamespace(model="m")
-    with patch.object(agentcli, "_current_dispatch_access_key", return_value=_make_access_key()), \
-         patch.object(agentcli, "_get_secret_store", AsyncMock(return_value=store)), \
-         patch.object(agentcli, "build_provider", return_value=_MockProvider()), \
-         patch.object(agentcli, "async_run_ai_task", AsyncMock(side_effect=AiTaskError("model down"))):
+    with patch_readers("custom_components.phoenix_mcp.agent_turn._current_dispatch_access_key", return_value=_make_access_key()), \
+         patch_readers("custom_components.phoenix_mcp.llm.accounts._get_secret_store", AsyncMock(return_value=store)), \
+         patch_readers("custom_components.phoenix_mcp.llm.factory.build_provider", return_value=_MockProvider()), \
+         patch("custom_components.phoenix_mcp.ai_task.async_run_ai_task", AsyncMock(side_effect=AiTaskError("model down"))):
         with pytest.raises(HomeAssistantError, match="model down"):
             await ai_task.async_generate_ai_task_data(MagicMock(), data, "x", None)
 
@@ -648,13 +652,13 @@ async def test_run_ai_task_tool_then_answer_uses_ai_task_sentinel():
     dispatch = _dispatch_ok('{"state": "on"}')
     stream = _staged_stream(
         [_tool_ev("get_state", "t1", {"entity_id": "light.x"}), _done("tool_use")],
-        [{"type": agentcli.EV_TEXT, "text": "final answer"}, _done("end_turn")],
+        [{"type": llm_base.EV_TEXT, "text": "final answer"}, _done("end_turn")],
     )
-    with patch.object(agentcli, "_stream_turn_resilient", stream), \
-         patch.object(agentcli, "build_mcp_tool_list", return_value=[]), \
-         patch.object(agentcli, "_current_dispatch_access_key", return_value=access_key), \
-         patch("custom_components.phoenix_mcp.mcp_view._dispatch_mcp", side_effect=dispatch), \
-         patch("custom_components.phoenix_mcp.mcp_view._build_instructions", return_value="SYS"):
+    with patch.object(agent_turn, "_stream_turn_resilient", stream), \
+         patch_readers("custom_components.phoenix_mcp.tool_catalog.build_mcp_tool_list", return_value=[]), \
+         patch_readers("custom_components.phoenix_mcp.agent_turn._current_dispatch_access_key", return_value=access_key), \
+         patch_readers("custom_components.phoenix_mcp.tool_dispatch._dispatch_mcp", side_effect=dispatch), \
+         patch_readers("custom_components.phoenix_mcp.tool_dispatch._build_instructions", return_value="SYS"):
         text = await async_run_ai_task(MagicMock(), data, access_key, provider, MagicMock(), "http://h", "instr")
     assert text == "final answer"
     assert dispatch.calls == [{"client_ip": AI_TASK_CLIENT_IP, "name": "get_state"}]
@@ -666,12 +670,12 @@ async def test_run_ai_task_includes_structure_directive_in_system_prompt():
     data = _make_data()
     capture: dict = {}
     stream = _staged_stream(
-        [{"type": agentcli.EV_TEXT, "text": '{"a": 1}'}, _done("end_turn")],
+        [{"type": llm_base.EV_TEXT, "text": '{"a": 1}'}, _done("end_turn")],
         capture=capture,
     )
-    with patch.object(agentcli, "_stream_turn_resilient", stream), \
-         patch.object(agentcli, "build_mcp_tool_list", return_value=[]), \
-         patch("custom_components.phoenix_mcp.mcp_view._build_instructions", return_value="SYS"):
+    with patch.object(agent_turn, "_stream_turn_resilient", stream), \
+         patch_readers("custom_components.phoenix_mcp.tool_catalog.build_mcp_tool_list", return_value=[]), \
+         patch_readers("custom_components.phoenix_mcp.tool_dispatch._build_instructions", return_value="SYS"):
         text = await async_run_ai_task(
             MagicMock(), data, access_key, _MockProvider(), MagicMock(), "http://h", "instr",
             structure_json={"type": "object", "properties": {"a": {"type": "integer"}}},
@@ -691,12 +695,12 @@ async def test_run_ai_task_free_text_uses_selected_style_and_detail():
     )
     capture: dict = {}
     stream = _staged_stream(
-        [{"type": agentcli.EV_TEXT, "text": "result"}, _done("end_turn")],
+        [{"type": llm_base.EV_TEXT, "text": "result"}, _done("end_turn")],
         capture=capture,
     )
-    with patch.object(agentcli, "_stream_turn_resilient", stream), \
-         patch.object(agentcli, "build_mcp_tool_list", return_value=[]), \
-         patch("custom_components.phoenix_mcp.mcp_view._build_instructions", return_value="SYS"):
+    with patch.object(agent_turn, "_stream_turn_resilient", stream), \
+         patch_readers("custom_components.phoenix_mcp.tool_catalog.build_mcp_tool_list", return_value=[]), \
+         patch_readers("custom_components.phoenix_mcp.tool_dispatch._build_instructions", return_value="SYS"):
         text = await async_run_ai_task(
             MagicMock(), data, access_key, _MockProvider(), MagicMock(), "http://h", "instr",
         )
@@ -705,7 +709,7 @@ async def test_run_ai_task_free_text_uses_selected_style_and_detail():
     assert "thorough reasoning" in capture["system_prompt"]
     assert "AI Task free-text output contract" in capture["system_prompt"]
     assert "Do not mention tools, available entities" in capture["system_prompt"]
-    assert agentcli._HOME_FOCUS_INSTRUCTION not in capture["system_prompt"]
+    assert agent_turn._HOME_FOCUS_INSTRUCTION not in capture["system_prompt"]
 
 
 @pytest.mark.asyncio
@@ -724,14 +728,14 @@ async def test_run_ai_task_pending_becomes_queued_without_blocking():
 
     stream = _staged_stream(
         [_tool_ev("call_service", "t1"), _done("tool_use")],
-        [{"type": agentcli.EV_TEXT, "text": "queued"}, _done("end_turn")],
+        [{"type": llm_base.EV_TEXT, "text": "queued"}, _done("end_turn")],
     )
-    with patch.object(agentcli, "_stream_turn_resilient", stream), \
-         patch.object(agentcli, "build_mcp_tool_list", return_value=[]), \
-         patch.object(agentcli, "_current_dispatch_access_key", return_value=access_key), \
-         patch.object(agentcli, "get_approval", return_value=record), \
-         patch("custom_components.phoenix_mcp.mcp_view._dispatch_mcp", side_effect=dispatch_pending), \
-         patch("custom_components.phoenix_mcp.mcp_view._build_instructions", return_value="SYS"):
+    with patch.object(agent_turn, "_stream_turn_resilient", stream), \
+         patch_readers("custom_components.phoenix_mcp.tool_catalog.build_mcp_tool_list", return_value=[]), \
+         patch_readers("custom_components.phoenix_mcp.agent_turn._current_dispatch_access_key", return_value=access_key), \
+         patch_readers("custom_components.phoenix_mcp.approvals.get_approval", return_value=record), \
+         patch_readers("custom_components.phoenix_mcp.tool_dispatch._dispatch_mcp", side_effect=dispatch_pending), \
+         patch_readers("custom_components.phoenix_mcp.tool_dispatch._build_instructions", return_value="SYS"):
         text = await async_run_ai_task(MagicMock(), data, access_key, provider, MagicMock(), "http://h", "unlock")
     assert text == "queued"
     fed_back = provider.tool_result_batches[0][0]["result_text"]
@@ -742,10 +746,10 @@ async def test_run_ai_task_pending_becomes_queued_without_blocking():
 async def test_run_ai_task_error_raises_aitaskerror():
     access_key = _make_access_key()
     data = _make_data()
-    stream = _staged_stream([{"type": agentcli.EV_ERROR, "message": "boom"}])
-    with patch.object(agentcli, "_stream_turn_resilient", stream), \
-         patch.object(agentcli, "build_mcp_tool_list", return_value=[]), \
-         patch("custom_components.phoenix_mcp.mcp_view._build_instructions", return_value="SYS"):
+    stream = _staged_stream([{"type": llm_base.EV_ERROR, "message": "boom"}])
+    with patch.object(agent_turn, "_stream_turn_resilient", stream), \
+         patch_readers("custom_components.phoenix_mcp.tool_catalog.build_mcp_tool_list", return_value=[]), \
+         patch_readers("custom_components.phoenix_mcp.tool_dispatch._build_instructions", return_value="SYS"):
         with pytest.raises(AiTaskError, match="boom"):
             await async_run_ai_task(MagicMock(), data, access_key, _MockProvider(), MagicMock(), "http://h", "hi")
 

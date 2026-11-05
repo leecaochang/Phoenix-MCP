@@ -145,7 +145,7 @@ export function BeforeAfter({ before, after, toolbarExtra }: {
   );
   return (
     <div className="change-diff-wrap">
-      {/* No explanatory hint (user, 2026-10-27): the pressed Code Editor button says the tinting is off. */}
+      {/* No explanatory hint: the pressed Code Editor button says the tinting is off. */}
       <div className="change-diff-toolbar">
         {toolbarExtra}
         <CodeToggle code={code} onToggle={toggleCode} />

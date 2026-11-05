@@ -20,7 +20,7 @@ from homeassistant.util.dt import utcnow
 from custom_components.phoenix_mcp.access_key_store import AccessKeyRecord, PermissionNode, PermissionTree
 from custom_components.phoenix_mcp.const import MESA_MODE_OFF
 from custom_components.phoenix_mcp.data import PhoenixData
-from custom_components.phoenix_mcp.mcp_view import _call_tool
+from custom_components.phoenix_mcp.tool_dispatch import _call_tool
 
 
 def _key(**caps) -> AccessKeyRecord:
@@ -200,7 +200,7 @@ async def test_a_mesa_deny_says_mesa_not_capability(home):
     from custom_components.phoenix_mcp.mesa import MesaGateOutcome
     from custom_components.phoenix_mcp.tool_common import MESA_DENIED_MESSAGE
 
-    with patch("custom_components.phoenix_mcp.mcp_view.async_apply_mesa_to_call",
+    with patch("custom_components.phoenix_mcp.tools.service.async_apply_mesa_to_call",
                AsyncMock(return_value=MesaGateOutcome(decision="deny"))):
         result = await _call_tool("call_service", {"service": {"domain": "light", "name": "turn_on"},
                                                    "targets": [{"kind": "entity", "ids": ["light.allowed"]}]},

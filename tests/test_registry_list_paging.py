@@ -15,7 +15,7 @@ from homeassistant.util.dt import utcnow
 from pytest_homeassistant.common import MockConfigEntry
 
 from custom_components.phoenix_mcp.access_key_store import AccessKeyRecord, PermissionNode, PermissionTree
-from custom_components.phoenix_mcp.mcp_view import _call_tool
+from custom_components.phoenix_mcp.tool_dispatch import _call_tool
 from custom_components.phoenix_mcp.tool_common import offset_page
 
 
@@ -51,7 +51,7 @@ def _home(hass):
 
 async def test_list_devices_filters_by_area_floor_integration_and_query(hass):
     floor, study, hall = _home(hass)
-    names = lambda body: sorted(row["name"] for row in body["devices"])  # noqa: E731
+    names = lambda body: sorted(row["name"] for row in body["devices"])
     assert names(await _list(hass, "list_devices", {"area": "Upstairs"})) == ["Lamp 0"]
     assert names(await _list(hass, "list_devices", {"area": hall.id})) == ["Lamp 1", "Lamp 2"]
     assert names(await _list(hass, "list_devices", {"integration": "hue"})) == ["Lamp 0", "Lamp 2"]
@@ -77,6 +77,7 @@ async def test_list_integrations_filters_and_pages(hass):
     assert page["total"] == 2 and page["has_more"] is True
 
 
-@pytest.mark.parametrize("args", [{"limit": 0}, {"limit": True}, {"offset": -1}, {"offset": "2"}])
-def test_offset_page_refuses_bad_paging(args):
-    assert isinstance(offset_page([1, 2, 3], args, default_limit=2, max_limit=10), str)
+@pytest.mark.parametrize("args,field", [
+    ({"limit": 0}, "limit"), ({"limit": True}, "limit"), ({"offset": -1}, "offset"), ({"offset": "2"}, "offset")])
+def test_offset_page_refuses_bad_paging(args, field):
+    assert offset_page([1, 2, 3], args, default_limit=2, max_limit=10).startswith(f"{field} must be")

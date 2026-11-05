@@ -78,10 +78,10 @@ export const windowTitle = (id: string): string =>
 /** Shown by the shell when items need checking; never saved in a layout. */
 export const ATTENTION_WINDOW = "attention";
 
-/** The selected access key's windows, hidden in place while no key is chosen (user, 2026-10-28). */
+/** The selected access key's windows, hidden in place while no key is chosen. */
 export const KEY_WINDOWS: readonly WindowId[] = ["persona", "capabilities", "keySettings", "presets", "permissions", "permissionSummary"];
 
-/** The revoked and expired keys: closed until Show Archived opens it (user, 2026-10-28). */
+/** The revoked and expired keys: closed until Show Archived opens it. */
 export const ARCHIVED_WINDOW = "archivedAccessKeys";
 
 type Add = (id: string, position?: AddPanelOptions["position"]) => void;
@@ -154,7 +154,7 @@ const OWN_WINDOWS: Record<WorkspaceId, WorkspaceDef> = {
     helpKey: "help.wsAccessKeys",
     icon: "accessKeys",
     windows: ["accessKeys", "archivedAccessKeys", "persona", "capabilities", "keySettings", "presets", "permissions", "permissionSummary", "attention"],
-    // Two equal columns (user, 2026-10-31): the key list over the selected key's
+    // Two equal columns: the key list over the selected key's
     // Persona, Presets, Capabilities and Key Settings on the left, its Permissions
     // Tree over the Permissions Summary on the right. Every window is as tall as its
     // content and none starts folded: the workspace scrolls.
@@ -186,7 +186,7 @@ const OWN_WINDOWS: Record<WorkspaceId, WorkspaceDef> = {
     helpKey: "help.wsApprovals",
     icon: "approvals",
     windows: ["approvals", "review", "requestDetails", "attention"],
-    // The list beside Review, with Request Details under it from the start (user, 2026-10-29);
+    // The list beside Review, with Request Details under it from the start;
     // Workspace Options reopens it there once closed.
     arrange: (api, add) => {
       add("approvals");
@@ -197,11 +197,11 @@ const OWN_WINDOWS: Record<WorkspaceId, WorkspaceDef> = {
     // Until a request is chosen there is nothing to measure, so the two windows start
     // at these heights and Request Details takes the rest of the column.
     heights: { review: 420, requestDetails: 320 },
-    // The windows always fit the screen (user, 2026-10-29): Approvals never scrolls, so the
+    // The windows always fit the screen: Approvals never scrolls, so the
     // list scrolls inside its own window and keeps the chosen request in view.
     fit: true,
     // Review is as tall as the request it shows and Request Details takes the rest of
-    // the column, rather than the two splitting it evenly (user, 2026-10-29). Only Review
+    // the column, rather than the two splitting it evenly. Only Review
     // asks for a height, so when the column is too short Request Details gives way first.
     contentWindows: ["review"],
     // 3: Request Details opens with the workspace, under a Review sized to its request.
@@ -212,7 +212,7 @@ const OWN_WINDOWS: Record<WorkspaceId, WorkspaceDef> = {
     helpKey: "help.wsChanges",
     icon: "changes",
     windows: ["changes", "comparison", "itemHistory", "attention"],
-    // The list and Comparison in two equal columns (user, 2026-10-27). Item History starts closed and opens
+    // The list and Comparison in two equal columns. Item History starts closed and opens
     // below the list by itself when a chosen change's item has other changes, unless the user closed it.
     // The windows always fit the screen: Changes never scrolls.
     arrange: (_, add) => {
@@ -231,7 +231,7 @@ const OWN_WINDOWS: Record<WorkspaceId, WorkspaceDef> = {
     icon: "mesa",
     windows: ["mesaProfiles", "mesaEditor", "mesaSuggestions", "mesaAdvisory", "attention"],
     // Two columns of equal width, each the full height: Profiles with Suggested
-    // Profiles under it, and Profile Editor beside them (user, 2026-10-30).
+    // Profiles under it, and Profile Editor beside them.
     // Importing is part of Profiles, and the findings windows float over the
     // workspace rather than taking space from either column.
     arrange: (api, add) => {
@@ -245,8 +245,8 @@ const OWN_WINDOWS: Record<WorkspaceId, WorkspaceDef> = {
     },
     heights: { mesaProfiles: 560, mesaEditor: 560, mesaSuggestions: 260 },
     // The windows always fit the screen; Suggested Profiles takes a third of its column
-    // and Profiles the rest (user, 2026-11-05). Advisory floats at the height of its
-    // findings, up to the workspace's own (user, 2026-10-30).
+    // and Profiles the rest. Advisory floats at the height of its
+    // findings, up to the workspace's own.
     fit: true,
     contentWindows: ["mesaSuggestions", "mesaAdvisory"],
     contentMax: { mesaSuggestions: 1 / 3, mesaAdvisory: 1 },
@@ -261,9 +261,9 @@ const OWN_WINDOWS: Record<WorkspaceId, WorkspaceDef> = {
     icon: "logs",
     // Log Settings opens the Logs and Notifications settings floating over the logs.
     windows: ["auditLog", "conversationLog", "logDetails", "settingsLogs", "attention"],
-    // Two equal columns (user, 2026-10-27): the Audit Log over the Conversation Log on the left, Log Details on
+    // Two equal columns: the Audit Log over the Conversation Log on the left, Log Details on
     // the right; Help pinned below them across the full width, and Notifications beside it splitting at the
-    // same border. They always fit the screen (user, 2026-10-26): Logs never scrolls. Beside the logs Log Details
+    // same border. They always fit the screen: Logs never scrolls. Beside the logs Log Details
     // keeps its column's height; arranged under a log instead, it sizes itself to the record chosen.
     arrange: (_, add) => {
       add("auditLog");
@@ -273,7 +273,7 @@ const OWN_WINDOWS: Record<WorkspaceId, WorkspaceDef> = {
     heights: { auditLog: 500, conversationLog: 500 },
     closedAt: { settingsLogs: { neighbor: "", side: "bottom", host: "float" } },
     toolWindows: ["settingsLogs"],
-    // Notifications opens to the right of Help, at its height (user, 2026-10-26).
+    // Notifications opens to the right of Help, at its height.
     fit: true,
   },
   my: {
@@ -290,9 +290,9 @@ const OWN_WINDOWS: Record<WorkspaceId, WorkspaceDef> = {
     helpKey: "help.wsSettings",
     icon: "settings",
     windows: ["settingsProviders", "settingsChat", "settingsHome", "settingsSafety", "settingsLogs", "settingsGeneral", "chatRoutingStatistics", "voiceRoutingStatistics", "attention"],
-    // Three equal columns (user, 2026-10-31): AI Providers alone on the left; Home Assistant over
+    // Three equal columns: AI Providers alone on the left; Home Assistant over
     // Logs and Notifications in the middle; Agent Chat over Safety over General on the right.
-    // Every window is as tall as its content and the workspace scrolls (user, 2026-10-31).
+    // Every window is as tall as its content and the workspace scrolls.
     arrange: (api, add) => {
       add("settingsProviders");
       add("settingsHome", { referencePanel: "settingsProviders", direction: "right" });
@@ -307,7 +307,7 @@ const OWN_WINDOWS: Record<WorkspaceId, WorkspaceDef> = {
     heights: { settingsProviders: 600, settingsChat: 600, settingsHome: 680, settingsSafety: 680, settingsLogs: 640, settingsGeneral: 520, chatRoutingStatistics: 360, voiceRoutingStatistics: 360 },
     contentHeights: true,
     // Show Routing Statistics, in Agent Chat and on the Voice Agent tab, floats that surface's
-    // counts over the workspace at their own height, and closes them again (user, 2026-10-31).
+    // counts over the workspace at their own height, and closes them again.
     closedAt: {
       chatRoutingStatistics: { neighbor: "settingsChat", side: "bottom", host: "float" },
       voiceRoutingStatistics: { neighbor: "settingsHome", side: "bottom", host: "float" },
@@ -400,7 +400,7 @@ const px = (value: string): number => {
  * was stretched to fill its window, or that scrolls, reports back the height
  * it was given rather than the height it wants, so its children are measured
  * instead: a window sized from that number would chase itself up and down for
- * ever (user, 2026-10-30, a list that never settled).
+ * ever.
  */
 function neededHeight(el: HTMLElement): number {
   const style = getComputedStyle(el);
@@ -417,7 +417,7 @@ function neededHeight(el: HTMLElement): number {
     inner += neededHeight(child) + px(box.marginTop) + px(box.marginBottom);
     placed++;
   }
-  // A flex column's gaps take room too: Review asked for 24 pixels too few (user, 2026-10-31).
+  // A flex column's gaps take room too: Review asked for 24 pixels too few.
   const gaps = column && placed > 1 ? px(style.rowGap) * (placed - 1) : 0;
   return px(style.paddingTop) + px(style.paddingBottom) + px(style.borderTopWidth) + px(style.borderBottomWidth) + inner + gaps;
 }
@@ -456,7 +456,7 @@ export function WindowBody({ id, children }: { id: string; children: ReactNode }
   const body = useRef<HTMLDivElement | null>(null);
   const followsContent = !!controller && controller.followsContent(id);
   // Reset This Workspace puts every disclosure in the window back to how it opens by default:
-  // closed, or open where it says `data-default-open` (user, 2026-10-31). A disclosure that
+  // closed, or open where it says `data-default-open`. A disclosure that
   // keeps its own state hears the change through its toggle event. Agent Chat's conversation is not
   // part of the arrangement, so its messages keep theirs.
   useEffect(() => controller?.onReset(() => {
@@ -506,11 +506,11 @@ function AccessKeysContent() {
   const controller = useContext(ControllerContext);
   const wizard = view.name === "wizard";
   // An edit to the selected key (Enable Pass-Through, rename, rotate) shows in the list at once,
-  // not at its next quiet update (user, 2026-10-28).
+  // not at its next quiet update.
   const edited = detail && !detail.stale ? detail.accessKey?.updated_at : undefined;
   const updateList = d.updateAccessKeys;
   useEffect(() => { if (edited) void updateList(); }, [edited, updateList]);
-  // A double-click on a name chooses the key and renames it once its record is here (user, 2026-10-31).
+  // A double-click on a name chooses the key and renames it once its record is here.
   const [renameNext, setRenameNext] = useState<string | null>(null);
   useEffect(() => {
     if (renameNext && detail && !detail.stale && detail.accessKey && detail.accessKeyId === renameNext) {

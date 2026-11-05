@@ -16,60 +16,37 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any
 
-from homeassistant.core import HomeAssistant
+from homeassistant.core import CoreState, HomeAssistant
 from homeassistant.helpers.storage import Store
 from homeassistant.util.dt import parse_datetime, utcnow
 
+from .access_key_schema import normalize_access_key_root
 from .durable_storage import DurableStorageError, DurableStore
 from .const import (
-    CONVERSATION_LOG_DEFAULTS, CONVERSATION_LOG_LIMITS,
-    AGENTCLI_MAX_ITERATIONS,
-    AGENTCLI_MAX_ITERATIONS_MAX,
-    AGENTCLI_MAX_ITERATIONS_MIN,
-    AGENTCLI_SCROLLBACK_DEFAULT,
-    PROVIDER_CATALOG_REFRESH_HOURS_DEFAULT,
-    PROVIDER_CATALOG_REFRESH_HOURS_MAX,
-    PROVIDER_CATALOG_REFRESH_HOURS_MIN,
-    AGENTCLI_SCROLLBACK_MAX,
-    AGENTCLI_SCROLLBACK_MIN,
-    COMMAND_ROUTING_MODES, COMMAND_ROUTING_LANGUAGES, COMMAND_ROUTING_DEFAULT_LANGUAGES,
-    CHAT_COMMAND_ROUTING_MODES, TOOL_ROUTING_MODES,
-    COMMAND_ROUTING_TIMEOUT_DEFAULT_MS,
-    DECISION_TIMEOUT_DEFAULT_MS, DECISION_TIMEOUT_MIN_MS, DECISION_TIMEOUT_MAX_MS,
-    DECISION_REQUEST_BUDGET_MAX,
-    COMMAND_ROUTING_TIMEOUT_MIN_MS,
-    COMMAND_ROUTING_TIMEOUT_MAX_MS,
-    CONVERSATION_STYLES,
-    CONVERSATION_STYLE_DIRECT,
-    DETAIL_LEVELS,
-    DETAIL_LEVEL_BALANCED,
-    DETAIL_LEVEL_CONCISE,
-    CAP_ALLOW,
-    CAP_CONFIRM,
-    CAP_DENY,
-    CAP_MODES,
-    CAPABILITY_NAMES,
-    CAP_GRANT_TRANSITIONS,
-    CONFIRM_AVAILABLE_CAPS,
-    CONFIRM_ONLY_CAPS,
-    DEFAULT_PRESET_NAME,
-    DEFAULT_CONFIRM_INLINE_WAIT_SECONDS,
-    DEFAULT_RATE_LIMIT_BURST,
-    DEFAULT_RATE_LIMIT_REQUESTS,
-    ACCESS_KEY_NOTES_MAX_LENGTH,
-    MAX_CONFIRM_INLINE_WAIT_SECONDS,
-    MIN_CONFIRM_INLINE_WAIT_SECONDS,
-    MAX_PRESETS_PER_ACCESS_KEY,
-    MESA_MODE_ADVISORY,
-    MESA_MODES,
-    PERSONA_CUSTOM,
-    PERSONA_HOME_COMPANION,
-    PERSONA_NAMES,
-    STORAGE_KEY,
-    STORAGE_VERSION,
-    ACCESS_KEY_HEX_LENGTH,
-    ACCESS_KEY_PREFIX,
+    AUDIT_FLUSH_INTERVALS, AUDIT_LOG_MAXLENS, CONVERSATION_LOG_DEFAULTS, CONVERSATION_LOG_LIMITS,
+    CONVERSATION_STYLES, CONVERSATION_STYLE_DIRECT, DETAIL_LEVELS, DETAIL_LEVEL_BALANCED,
+    DETAIL_LEVEL_CONCISE, CAP_ALLOW, CAP_CONFIRM, CAP_DENY, CAP_MODES, CAPABILITY_NAMES,
+    CAP_GRANT_TRANSITIONS, CONFIRM_AVAILABLE_CAPS, CONFIRM_ONLY_CAPS, DEFAULT_PRESET_NAME,
+    DEFAULT_CONFIRM_INLINE_WAIT_SECONDS, ACCESS_KEY_MUTABLE_FIELDS, DEFAULT_RATE_LIMIT_BURST,
+    DEFAULT_RATE_LIMIT_REQUESTS, ACCESS_KEY_NOTES_MAX_LENGTH, MAX_CONFIRM_INLINE_WAIT_SECONDS,
+    MIN_CONFIRM_INLINE_WAIT_SECONDS, MAX_PRESETS_PER_ACCESS_KEY, MESA_MODE_ADVISORY, MESA_MODES,
+    PERSONA_CUSTOM, PERSONA_HOME_COMPANION, PERSONA_NAMES, STORAGE_KEY, STORAGE_VERSION,
+    ACCESS_KEY_HEX_LENGTH, ACCESS_KEY_PREFIX,
 )
+from .personas import detect_persona
+from .provider_constants import (
+    AGENTCLI_MAX_ITERATIONS, AGENTCLI_MAX_ITERATIONS_MAX, AGENTCLI_MAX_ITERATIONS_MIN,
+    AGENTCLI_SCROLLBACK_DEFAULT, PROVIDER_CATALOG_REFRESH_HOURS_DEFAULT,
+    PROVIDER_CATALOG_REFRESH_HOURS_MAX, PROVIDER_CATALOG_REFRESH_HOURS_MIN, AGENTCLI_SCROLLBACK_MAX,
+    AGENTCLI_SCROLLBACK_MIN,
+)
+from .routing.routing_tables import (
+    COMMAND_ROUTING_MODES, COMMAND_ROUTING_LANGUAGES, COMMAND_ROUTING_DEFAULT_LANGUAGES,
+    CHAT_COMMAND_ROUTING_MODES, TOOL_ROUTING_MODES, COMMAND_ROUTING_TIMEOUT_DEFAULT_MS,
+    DECISION_TIMEOUT_DEFAULT_MS, DECISION_TIMEOUT_MIN_MS, DECISION_TIMEOUT_MAX_MS,
+    DECISION_REQUEST_BUDGET_MAX, COMMAND_ROUTING_TIMEOUT_MIN_MS, COMMAND_ROUTING_TIMEOUT_MAX_MS,
+)
+from .const import APPROVAL_REASON_FORMAT_INCOMPATIBLE
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -402,7 +379,7 @@ class AccessKeyRecord:
     # staleness axis. settings_version catches the OPERATOR changing the access key;
     # this catches the CODE changing (a deploy) under a client that already
     # fetched its schemas. Empty means never recorded and is deliberately NOT
-    # treated as stale: access_key_store cannot import mcp_view to learn the current
+    # treated as stale: access_key_store cannot import tool_catalog to learn the current
     # fingerprint (the dependency runs the other way), and guessing a baseline
     # would advise every such access key once for nothing. The first tools/list
     # records it.
@@ -486,7 +463,7 @@ class AccessKeyRecord:
         for p in data.get("presets") or []:
             try:
                 presets.append(AccessKeyPreset.from_dict(p))
-            except Exception as exc:  # noqa: BLE001 - any unparseable preset is dropped, never the access key
+            except Exception as exc:  # any unparseable preset is dropped, never the access key
                 _LOGGER.warning(
                     "Dropping corrupt preset %r on access key %r: %s",
                     p.get("id", "?") if isinstance(p, dict) else "?",
@@ -597,7 +574,7 @@ class ArchivedAccessKeyRecord:
         )
 
 
-def _clamp_int(value: Any, valid: set[int], default: int) -> int:
+def _clamp_int(value: Any, valid: set[int] | frozenset[int], default: int) -> int:
     try:
         converted = int(value)
     except (TypeError, ValueError):
@@ -836,12 +813,12 @@ class GlobalSettings:
             log_client_ip=bool(data.get("log_client_ip", True)),
             notify_on_rate_limit=bool(data.get("notify_on_rate_limit", False)),
             notify_on_approval=bool(data.get("notify_on_approval", True)),
-            audit_flush_interval=_clamp_int(data.get("audit_flush_interval"), {0, 5, 10, 15, 30, 60}, 15),
+            audit_flush_interval=_clamp_int(data.get("audit_flush_interval"), AUDIT_FLUSH_INTERVALS, 15),
             conversation_log_enabled=data.get("conversation_log_enabled") is True,
             conversation_log_max_entries=_clamp_range(data.get("conversation_log_max_entries"), *CONVERSATION_LOG_LIMITS["conversation_log_max_entries"], CONVERSATION_LOG_DEFAULTS["conversation_log_max_entries"]),
             conversation_log_max_days=_clamp_range(data.get("conversation_log_max_days"), *CONVERSATION_LOG_LIMITS["conversation_log_max_days"], CONVERSATION_LOG_DEFAULTS["conversation_log_max_days"]),
             conversation_log_max_mb=_clamp_range(data.get("conversation_log_max_mb"), *CONVERSATION_LOG_LIMITS["conversation_log_max_mb"], CONVERSATION_LOG_DEFAULTS["conversation_log_max_mb"]),
-            audit_log_maxlen=_clamp_int(data.get("audit_log_maxlen"), {100, 1000, 5000, 10000}, 10000),
+            audit_log_maxlen=_clamp_int(data.get("audit_log_maxlen"), AUDIT_LOG_MAXLENS, 10000),
             mesa_mode=mesa_mode if mesa_mode in MESA_MODES else MESA_MODE_ADVISORY,
             mesa_inject_enabled=bool(data.get("mesa_inject_enabled", False)),
             access_key_presets_enabled=bool(data.get("access_key_presets_enabled", False)),
@@ -939,8 +916,6 @@ class _PhoenixStore(DurableStore[dict]):
         for approval in raw.get("pending_approvals", []):
             if (isinstance(approval, dict) and approval.get("status") == "pending"
                     and old_major_version in (2, 3) and not approval.get("execution_started_at")):
-                from .const import APPROVAL_REASON_FORMAT_INCOMPATIBLE
-
                 approval["status"] = "cancelled"
                 approval["resolved_at"] = utcnow().isoformat()
                 approval["rejected_reason"] = APPROVAL_REASON_FORMAT_INCOMPATIBLE
@@ -998,7 +973,7 @@ class AccessKeyStore:
             try:
                 record = AccessKeyRecord.from_dict(r)
                 access_keys[record.id] = record
-            except Exception as exc:  # noqa: BLE001 - any unparseable record is skipped; one bad record must never abort setup
+            except Exception as exc:  # any unparseable record is skipped; one bad record must never abort setup
                 _LOGGER.warning(
                     "Skipping corrupt access key record %r: %s",
                     r.get("id", "?") if isinstance(r, dict) else "?", exc,
@@ -1010,7 +985,7 @@ class AccessKeyStore:
             try:
                 archived_record = ArchivedAccessKeyRecord.from_dict(r)
                 archived[archived_record.id] = archived_record
-            except Exception as exc:  # noqa: BLE001 - any unparseable record is skipped; one bad record must never abort setup
+            except Exception as exc:  # any unparseable record is skipped; one bad record must never abort setup
                 _LOGGER.warning(
                     "Skipping corrupt archived access key record %r: %s",
                     r.get("id", "?") if isinstance(r, dict) else "?", exc,
@@ -1182,9 +1157,6 @@ class AccessKeyStore:
     def list_archived(self) -> list[ArchivedAccessKeyRecord]:
         return list(self._archived.values())
 
-    def active_access_key_count(self) -> int:
-        return len(self._access_keys)
-
     def name_slug_exists(self, name: str, exclude_access_key_id: str | None = None) -> bool:
         """Return True if an access key with an equivalent slug already exists.
 
@@ -1245,17 +1217,6 @@ class AccessKeyStore:
         access_key = self._access_keys.get(access_key_id)
         if access_key is None:
             return None
-        mutable_fields = {
-            "name",
-            "pass_through",
-            "use_assist_exposure",
-            "announce_all_tools",
-            "confirm_inline_wait_seconds",
-            "rate_limit_requests",
-            "rate_limit_burst",
-            "persona",
-            "notes",
-        }
         cap_fields = set(CAPABILITY_NAMES)
         grant_only = bool(kwargs) and access_key.persona != PERSONA_HOME_COMPANION and all(
             key in cap_fields and (
@@ -1281,7 +1242,7 @@ class AccessKeyStore:
                     )
                 setattr(access_key, key, value)
                 cap_changed = True
-            elif key in mutable_fields:
+            elif key in ACCESS_KEY_MUTABLE_FIELDS:
                 if key == "persona" and value not in PERSONA_NAMES:
                     raise ValueError(f"Unknown persona: {value!r}")
                 if key == "confirm_inline_wait_seconds":
@@ -1302,7 +1263,6 @@ class AccessKeyStore:
         # Custom named in the same change is the operator's choice and stands, even
         # when a preset happens to match its settings.
         if cap_changed and kwargs.get("persona") != "custom" and access_key.persona != PERSONA_HOME_COMPANION:
-            from .personas import detect_persona  # noqa: PLC0415 - avoid circular import at module load
             access_key.persona = detect_persona(access_key.caps_dict())
         # Anything beyond a bare rename or an inline-wait tweak changes what the
         # connected agent may see or do, so advance the staleness counter (drives
@@ -1488,10 +1448,20 @@ class AccessKeyStore:
             self._usage_version += 1
 
     async def async_flush_last_used(self) -> None:
-        """Persist changed telemetry without rewriting a clean access key store."""
+        """Persist changed telemetry without rewriting a clean access key store.
+
+        During shutdown the write barrier refuses every save, and usage needs no
+        barrier: it goes to HA's final write, which nothing newer can overtake
+        because the barrier also refuses every other save until then.
+        """
         async with self.async_lock:
-            if self._usage_version != self._saved_usage_version:
-                await self.async_save()
+            if self._usage_version == self._saved_usage_version:
+                return
+            if self._hass.state is CoreState.stopping:
+                await Store.async_save(self._store, copy.deepcopy(self._payload()))
+                self._saved_usage_version = self._usage_version
+                return
+            await self.async_save()
 
     async def async_delete_archived(self, access_key_id: str) -> bool:
         """Permanently delete an archived access key record. Returns False if not found."""
@@ -1626,7 +1596,6 @@ def _normalize_storage_root(raw: object) -> tuple[dict, bool]:
             "Phoenix MCP storage root is %s, not an object; ignoring it", type(raw).__name__,
         )
         return {}, True
-    from .access_key_schema import normalize_access_key_root
 
     raw, changed = normalize_access_key_root(raw)
     for key, expected in _STORAGE_COLLECTIONS.items():

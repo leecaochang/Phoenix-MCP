@@ -156,7 +156,7 @@ async def test_saved_permission_previews_convert_only_owned_paths(hass, hass_sto
 
 @pytest.mark.parametrize('tool', ['call_service', 'call_service_mesa_approved'])
 async def test_saved_command_proof_conversion_keeps_original_authority(hass, hass_storage, tool):
-    from custom_components.phoenix_mcp.const import COMMAND_ROUTING_PLAN_KEY
+    from custom_components.phoenix_mcp.routing.routing_tables import COMMAND_ROUTING_PLAN_KEY
 
     proof = {'token_id': 'existing', 'token_version': 17, 'settings': 'original-settings-digest',
              'fingerprints': {'light.fixture': 'original-target-digest'},

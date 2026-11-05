@@ -294,6 +294,7 @@ POST   /api/phoenix-mcp/admin/access-keys/{id}/presets/{pid}/apply
 | 400 | `invalid_request` | `adminError.presetNameInvalidCharacters` | `name` 包含被拒絕的字元。 |
 | 400 | `invalid_request` | `adminError.presetNameTaken` | 金鑰已有使用此名稱的預設。 |
 | 400 | `invalid_request` | `adminError.presetLimitReached` | 金鑰已有 8 個預設。`message_params` 包含 `max`。 |
+| 400 | `invalid_request` | `adminError.presetSaveRejected` | Phoenix 拒絕了傳送的預設。 |
 
 ### 重新命名預設 {#preset-rename}
 

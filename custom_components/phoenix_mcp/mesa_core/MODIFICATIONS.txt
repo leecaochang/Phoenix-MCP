@@ -1,0 +1,3 @@
+This directory is a modified copy of the mesa-core package.
+Absolute mesa_core imports are rewritten to custom_components.phoenix_mcp.mesa_core.
+Nothing else differs from the upstream release.

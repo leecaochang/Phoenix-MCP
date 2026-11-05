@@ -2,6 +2,7 @@
 import React, { useContext, useEffect, useRef, useCallback, useState } from "react";
 import { createPortal } from "react-dom";
 import { MenuRootContext } from "../ui/Menu";
+import { isImeKey } from "../utils/ime";
 
 interface Props {
   titleId: string;
@@ -161,6 +162,7 @@ export function Modal({ titleId, onClose, onNavigatePrevious, onNavigateNext, re
     modalStack.push(close);
     const onKey = (e: KeyboardEvent) => {
       if (modalStack[modalStack.length - 1] !== close) return;
+      if (isImeKey(e)) return;
       if (e.key === "Escape") {
         e.stopPropagation();
         close();
@@ -168,7 +170,7 @@ export function Modal({ titleId, onClose, onNavigatePrevious, onNavigateNext, re
       }
       if (
         (e.key !== "ArrowUp" && e.key !== "ArrowDown")
-        || e.altKey || e.ctrlKey || e.metaKey || e.shiftKey || e.isComposing
+        || e.altKey || e.ctrlKey || e.metaKey || e.shiftKey
         || ownsVerticalArrows(e.composedPath()[0] ?? e.target)
       ) return;
       if (!recordNavigationRef.current) return;
@@ -204,10 +206,12 @@ export function Modal({ titleId, onClose, onNavigatePrevious, onNavigateNext, re
     }
     const first = focusable[0];
     const last = focusable[focusable.length - 1];
-    if (e.shiftKey && activeElement() === first) {
+    const active = activeElement();
+    // A click on the dialog's plain text focuses the dialog itself, which sits before its first control.
+    if (e.shiftKey && (active === first || active === modal)) {
       e.preventDefault();
       last.focus();
-    } else if (!e.shiftKey && activeElement() === last) {
+    } else if (!e.shiftKey && active === last) {
       e.preventDefault();
       first.focus();
     }

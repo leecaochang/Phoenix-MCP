@@ -12,13 +12,17 @@ import {
   getSessionDraft, setSessionDraft,
   getSessionUsage, setSessionUsage,
   agentCliOpenPatch, getDurable, patchDurable,
-  __resetAgentCliState, __reloadFromStorage, setAgentCliOwner,
+  __resetAgentCliState, __reloadFromStorage, setAgentCliOwner, purgeAgentCliStorage, onSavedConversationChange,
 } from "../utils/agentcli_state";
+import { getReasonDraft, setReasonDraft } from "../utils/approval_reason_draft";
 
 const CONV_KEY = "phx-agentcli-conversation:test-admin";
 
 beforeEach(() => __resetAgentCliState());
 afterEach(() => vi.restoreAllMocks());
+
+/** What a page does last: a pending draft is saved. */
+const flushAll = () => window.dispatchEvent(new Event("pagehide"));
 
 describe("conversation survives a reload", () => {
   it("restores transcript, draft, and usage", () => {
@@ -242,4 +246,115 @@ it("keeps the owner-scoped access key selection when loading the former field", 
   expect(saved).not.toHaveProperty("tokenId");
   setAgentCliOwner("different-owner");
   expect(getDurable().accessKeyId).toBe("");
+});
+
+describe("what is left in the browser", () => {
+  const day = 24 * 60 * 60 * 1000;
+  const stored = () => Object.keys(localStorage).filter((key) => key.startsWith("phx-agentcli"));
+
+  it("removes every user's chat and unsent rejection reasons", () => {
+    setSessionTurns([{ text: "alarm code 1234" }]);
+    patchDurable({ accessKeyId: "t1" });
+    setAgentCliOwner("second-admin");
+    setSessionTurns([{ text: "second" }]);
+    setReasonDraft("a1", "not this one");
+
+    purgeAgentCliStorage();
+
+    expect(stored()).toEqual([]);
+    expect(getReasonDraft("a1")).toBe("");
+  });
+
+  it("stays removed when this page saves afterwards, in this bundle or another", () => {
+    setSessionDraft("typing");
+    setSessionTurns([{ text: "before the wipe" }]);
+    purgeAgentCliStorage();
+
+    setSessionTurns([{ text: "a turn folded at pagehide" }], "test-admin");
+    setSessionUsage({ input: 1, output: 1, context: 1, noData: false }, "test-admin");
+    patchDurable({ open: true }, "test-admin");
+    flushAll();
+    expect(stored()).toEqual([]);
+    expect(localStorage.getItem("null")).toBeNull();
+
+    setAgentCliOwner("next-user");
+    setSessionTurns([{ text: "works again for the next identity" }]);
+    expect(stored()).toHaveLength(1);
+    purgeAgentCliStorage();
+    setAgentCliOwner("test-admin");
+  });
+
+  it("closes the other bundles in the page", () => {
+    setSessionTurns([{ text: "before" }]);
+    window.dispatchEvent(new Event("phx-agentcli-purged"));
+    setSessionTurns([{ text: "after" }], "test-admin");
+    expect(localStorage.getItem(CONV_KEY)).toContain("before");
+    expect(localStorage.getItem(CONV_KEY)).not.toContain("after");
+  });
+
+  it("deletes a conversation left unused past its age the next time a user signs in", () => {
+    vi.useFakeTimers({ now: 0 });
+    setSessionTurns([{ text: "old" }]);
+    vi.setSystemTime(29 * day);
+    setAgentCliOwner(null);
+    setAgentCliOwner("test-admin");
+    expect(getSessionTurns()).toEqual([{ text: "old" }]);
+    setSessionUsage({ input: 1, output: 1, context: 1, noData: false });
+    vi.setSystemTime(59 * day);
+    setAgentCliOwner(null);
+    setAgentCliOwner("test-admin");
+    expect(getSessionTurns()).toEqual([{ text: "old" }]);
+    vi.setSystemTime(90 * day);
+    setAgentCliOwner(null);
+    setAgentCliOwner("test-admin");
+    expect(getSessionTurns()).toEqual([]);
+    expect(localStorage.getItem(CONV_KEY)).toBeNull();
+    vi.useRealTimers();
+  });
+
+  it("gives a conversation saved before ages were recorded the full age from today", () => {
+    vi.useFakeTimers({ now: 1000 * day });
+    localStorage.setItem(CONV_KEY, JSON.stringify({ turns: [{ text: "kept" }] }));
+    setAgentCliOwner(null);
+    setAgentCliOwner("test-admin");
+    expect(getSessionTurns()).toEqual([{ text: "kept" }]);
+    vi.setSystemTime(1031 * day);
+    setAgentCliOwner(null);
+    setAgentCliOwner("test-admin");
+    expect(getSessionTurns()).toEqual([]);
+    vi.useRealTimers();
+  });
+});
+
+describe("another tab saving", () => {
+  const otherTabSaves = (saved: Record<string, unknown>) => {
+    const value = JSON.stringify(saved);
+    localStorage.setItem(CONV_KEY, value);
+    window.dispatchEvent(new StorageEvent("storage", { key: CONV_KEY, newValue: value }));
+  };
+
+  it("replaces this tab's cached copy", () => {
+    setSessionTurns([{ text: "mine" }]);
+    otherTabSaves({ turns: [{ text: "theirs" }], turnsRevision: 0.5, logConversationId: "theirs" });
+    expect(getSessionTurns()).toEqual([{ text: "theirs" }]);
+    expect(getLogConversationId(true)).toBe("theirs");
+  });
+
+  it("tells a listener only when the turns moved, not for a draft", () => {
+    const listener = vi.fn();
+    const stop = onSavedConversationChange(listener);
+    otherTabSaves({ turns: [{ text: "theirs" }], turnsRevision: 0.5 });
+    expect(listener).toHaveBeenCalledOnce();
+    otherTabSaves({ turns: [{ text: "theirs" }], turnsRevision: 0.5, draft: "typing there" });
+    expect(listener).toHaveBeenCalledOnce();
+    stop();
+  });
+
+  it("ignores other keys and other users", () => {
+    setSessionTurns([{ text: "mine" }]);
+    window.dispatchEvent(new StorageEvent("storage", { key: "phx-agentcli-conversation:someone-else", newValue: "{}" }));
+    window.dispatchEvent(new StorageEvent("storage", { key: "phx-theme", newValue: "dark" }));
+    localStorage.removeItem(CONV_KEY);
+    expect(getSessionTurns()).toEqual([{ text: "mine" }]);
+  });
 });

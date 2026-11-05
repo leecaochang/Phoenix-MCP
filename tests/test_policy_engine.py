@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from itertools import product
 from types import SimpleNamespace
 from typing import Any
@@ -36,6 +36,7 @@ from custom_components.phoenix_mcp.policy_engine import (
     resolve_intent_entities,
     resolve_service_targets,
     scrub_sensitive_attributes,
+    service_target_binding_valid,
 )
 from custom_components.phoenix_mcp.access_key_store import PermissionNode, PermissionTree, AccessKeyRecord
 from custom_components.phoenix_mcp.const import DOMAIN
@@ -799,40 +800,40 @@ class TestScrubSensitiveAttributes:
     def _state(self, entity_id: str, attrs: dict) -> State:
         return State(entity_id, "on", attrs)
 
-    def test_removes_entity_picture(self):
+    def test_removes_entity_picture(self, hass):
         state = self._state("camera.front", {"entity_picture": "/api/camera/front", "name": "Front"})
-        result = scrub_sensitive_attributes(state)
+        result = scrub_sensitive_attributes(state, _make_access_key(), hass)
         assert "entity_picture" not in result["attributes"]
         assert result["attributes"]["name"] == "Front"
 
-    def test_removes_stream_url(self):
+    def test_removes_stream_url(self, hass):
         state = self._state("camera.front", {"stream_url": "rtsp://...", "name": "Cam"})
-        result = scrub_sensitive_attributes(state)
+        result = scrub_sensitive_attributes(state, _make_access_key(), hass)
         assert "stream_url" not in result["attributes"]
 
-    def test_removes_access_token(self):
+    def test_removes_access_token(self, hass):
         state = self._state("camera.front", {"access_token": "secret123"})
-        result = scrub_sensitive_attributes(state)
+        result = scrub_sensitive_attributes(state, _make_access_key(), hass)
         assert "access_token" not in result["attributes"]
 
-    def test_removes_still_image_url(self):
+    def test_removes_still_image_url(self, hass):
         state = self._state("camera.front", {"still_image_url": "http://..."})
-        result = scrub_sensitive_attributes(state)
+        result = scrub_sensitive_attributes(state, _make_access_key(), hass)
         assert "still_image_url" not in result["attributes"]
 
-    def test_preserves_all_safe_attributes(self):
+    def test_preserves_all_safe_attributes(self, hass):
         attrs = {"friendly_name": "Test", "brightness": 255, "color_temp": 300}
         state = self._state("light.test", attrs)
-        result = scrub_sensitive_attributes(state)
+        result = scrub_sensitive_attributes(state, _make_access_key(), hass)
         assert result["attributes"] == attrs
 
-    def test_preserves_entity_id_and_state(self):
+    def test_preserves_entity_id_and_state(self, hass):
         state = self._state("light.test", {})
-        result = scrub_sensitive_attributes(state)
+        result = scrub_sensitive_attributes(state, _make_access_key(), hass)
         assert result["entity_id"] == "light.test"
         assert result["state"] == "on"
 
-    def test_scrubs_all_sensitive_at_once(self):
+    def test_scrubs_all_sensitive_at_once(self, hass):
         state = self._state("camera.x", {
             "entity_picture": "x",
             "stream_url": "x",
@@ -840,10 +841,10 @@ class TestScrubSensitiveAttributes:
             "still_image_url": "x",
             "safe_attr": "keep",
         })
-        result = scrub_sensitive_attributes(state)
+        result = scrub_sensitive_attributes(state, _make_access_key(), hass)
         assert set(result["attributes"].keys()) == {"safe_attr"}
 
-    def test_scrubs_sensitive_key_substrings(self):
+    def test_scrubs_sensitive_key_substrings(self, hass):
         # Keys not in the fixed list but matching a sensitive substring are dropped.
         state = self._state("sensor.thirdparty", {
             "api_key": "x",
@@ -854,7 +855,7 @@ class TestScrubSensitiveAttributes:
             "friendly_name": "keep",
             "battery": 90,
         })
-        result = scrub_sensitive_attributes(state)
+        result = scrub_sensitive_attributes(state, _make_access_key(), hass)
         assert set(result["attributes"].keys()) == {"friendly_name", "battery"}
 
 
@@ -1536,7 +1537,9 @@ class TestParseRelativeTime:
 
     @pytest.mark.parametrize("value", ["366d", "52w", "12mo"])
     def test_range_cap_allows_a_year(self, value):
-        assert isinstance(parse_relative_time(value), datetime)
+        now = datetime(2026, 4, 10, 12, 0, 0)
+        with patch("custom_components.phoenix_mcp.policy_engine.utcnow", return_value=now):
+            assert now - parse_relative_time(value) >= timedelta(days=360)
 
     @pytest.mark.parametrize("value", ["now", " NOW "])
     def test_now_is_the_current_time(self, value):
@@ -1545,12 +1548,14 @@ class TestParseRelativeTime:
             assert parse_relative_time(value) == datetime(2026, 4, 10, 12, 0, 0)
 
     def test_whitespace_stripped(self):
-        result = parse_relative_time("  6h  ")
-        assert isinstance(result, datetime)
+        now = datetime(2026, 4, 10, 12, 0, 0)
+        with patch("custom_components.phoenix_mcp.policy_engine.utcnow", return_value=now):
+            assert parse_relative_time("  6h  ") == now - timedelta(hours=6)
 
     def test_zero_value(self):
-        result = parse_relative_time("0h")
-        assert isinstance(result, datetime)
+        now = datetime(2026, 4, 10, 12, 0, 0)
+        with patch("custom_components.phoenix_mcp.policy_engine.utcnow", return_value=now):
+            assert parse_relative_time("0h") == now
 
     def test_invalid_format_raises(self):
         with pytest.raises(ValueError):
@@ -1815,3 +1820,47 @@ async def test_restored_composite_device_keeps_every_owner(hass: HomeAssistant):
 def test_registry_shape_without_single_owner_uses_owner_set():
     assert device_config_entry_ids(SimpleNamespace(config_entries={"b", "a", None})) == ["a", "b"]
     assert device_config_entry_ids(SimpleNamespace()) == []
+
+
+def _companion_key(**fields) -> AccessKeyRecord:
+    key = _make_access_key(**fields)
+    key.persona = "home_companion"
+    return key
+
+
+async def test_home_companion_is_never_pass_through(hass: HomeAssistant):
+    hass.states.async_set("light.a", "on")
+    assert resolve("light.a", _companion_key(pass_through=True), hass) == Permission.NO_ACCESS
+
+
+async def test_home_companion_grant_on_a_read_domain_stays_read(hass: HomeAssistant):
+    hass.states.async_set("sensor.temp", "20", {"device_class": "temperature"})
+    assert resolve("sensor.temp", _companion_key(domains={"sensor": "GREEN"}), hass) == Permission.READ
+    hass.states.async_set("light.a", "on")
+    assert resolve("light.a", _companion_key(domains={"light": "GREEN"}), hass) == Permission.WRITE
+
+
+async def test_malformed_device_ancestry_confers_nothing_through_the_domain(hass: HomeAssistant):
+    hass.states.async_set("light.a", "on")
+    key = _make_access_key(domains={"light": "GREEN"})
+    assert resolve("light.a", key, hass) == Permission.WRITE
+    with patch("custom_components.phoenix_mcp.policy_engine.device_authority_chain", return_value=None):
+        assert resolve("light.a", key, hass) == Permission.NO_ACCESS
+
+
+def _named_script(hass: HomeAssistant, object_id: str, **fields) -> str:
+    return er.async_get(hass).async_get_or_create(
+        "script", "script", object_id, suggested_object_id=object_id, **fields).entity_id
+
+
+async def test_named_script_service_takes_exactly_its_own_entity(hass: HomeAssistant):
+    run = _named_script(hass, "run")
+    other = _named_script(hass, "other")
+    assert service_target_binding_valid("script", "run", [run], hass)
+    assert not service_target_binding_valid("script", "run", [run, other], hass)
+    assert not service_target_binding_valid("script", "run", [other], hass)
+
+
+async def test_named_script_service_refuses_a_disabled_script(hass: HomeAssistant):
+    run = _named_script(hass, "run", disabled_by=er.RegistryEntryDisabler.USER)
+    assert not service_target_binding_valid("script", "run", [run], hass)

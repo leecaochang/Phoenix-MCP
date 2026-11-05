@@ -1,0 +1,685 @@
+"""Service calls, with their capability, entity, MESA and target checks."""
+
+from __future__ import annotations
+
+import asyncio
+import json
+import logging
+from typing import Any
+import voluptuous as vol
+
+from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import (
+    HomeAssistantError, ServiceNotFound, ServiceValidationError, Unauthorized,
+)
+
+from ..access_key_store import AccessKeyRecord
+from ..approval_targets import TARGETS_CHANGED, targets_current
+from ..audit import Outcome
+from ..const import (
+    CAP_DENY, DUAL_GATE_SERVICES, HIGH_RISK_DOMAINS, MUSIC_ASSISTANT_LIBRARY_SERVICES,
+    NO_TARGET_SERVICES, PROXY_TIMEOUT_SECONDS, SERVICE_RESULT_STATES_MAX, APPROVAL_TARGETS_KEY,
+)
+from ..data import PhoenixData
+from ..helpers import (
+    diff_summary_fields as _summary, effective_cap,
+    sanitize_service_data as _sanitize_service_data, service_capability,
+    service_not_found_hint as _service_not_found_hint, str_arg,
+    validation_error_message as _validation_error_message,
+)
+from ..household_authority import household_service_kwargs
+from ..mesa import async_apply_mesa_to_call, fire_mesa_blocked_event
+from ..policy_engine import (
+    call_needs_physical_gate, esphome_entry_writable, filter_service_response,
+    music_assistant_readable_entries, Permission, resolve, resolve_esphome_user_service,
+    resolve_service_targets, service_target_binding_valid,
+)
+from ..request_authority import check_request_authority, mark_dispatch_started, RequestAuthority
+from ..routing.command_execution import service_plan_is_current, bind_service_plan
+from ..routing.command_verification import async_verify_command_state
+from ..routing.routing_tables import COMMAND_ROUTING_PLAN_KEY
+from ..service_targets import (
+    dedicated_tool_refusal, secondary_target_error, template_fields, template_fields_error,
+    unbound_service_targets, unbound_target_error, unsupported_secondary_targets,
+)
+from ..tool_common import (
+    _add_mesa_advisory, _CAP_FORBIDDEN_MESSAGE, _gate, _mesa_confirm_annotation, _pending_or_inline, _tool_error, _tool_refused_before_write, _tool_success, MESA_DENIED_MESSAGE,
+)
+from ..request_authority import _approved_exec_ctx
+from ..tool_contracts import normalize_tool_args, service_name_error
+from .esphome import _ESPHOME_DOMAIN
+from .system import _execute_restart_ha
+
+
+_LOGGER = logging.getLogger(__name__)
+
+
+async def _tool_call_service(
+    args: dict,
+    access_key: AccessKeyRecord,
+    hass: HomeAssistant,
+    data: PhoenixData,
+    request_id: str = "",
+    client_ip: str | None = None,
+) -> tuple[dict, str, str]:
+    """MCP tool: call a HA service with entity targets filtered to WRITE-permitted entities."""
+    args, error = normalize_tool_args("call_service", args)
+    if error:
+        # Diagnostics must not override a capability denial. Inspect only the
+        # recognized service/selector shape; never repair an unknown selector.
+        service_arg = args.get("service")
+        domain = str_arg(service_arg.get("domain")) if isinstance(service_arg, dict) else str_arg(args.get("domain"))
+        service = str_arg(service_arg.get("name")) if isinstance(service_arg, dict) else str_arg(service_arg)
+        service_key = f"{domain}/{service}"
+        cap = None
+        if (dedicated := dedicated_tool_refusal(domain, service)) is not None:
+            cap = dedicated[0]
+        elif service_key in DUAL_GATE_SERVICES:
+            cap = "cap_restart"
+        elif call_needs_physical_gate(
+            domain=domain, service=service,
+            entity_id=args.get("entity_id"), device_id=args.get("device_id"),
+            area_id=args.get("area_id"), access_key=access_key, hass=hass,
+        ):
+            cap = "cap_physical_control"
+        elif service_key in NO_TARGET_SERVICES:
+            cap = "cap_yaml_edit"
+        if cap is not None and effective_cap(access_key, cap) == CAP_DENY:
+            return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "call_service"
+        return _tool_error(error), "invalid_request", "call_service"
+    # Coerced before anything gates on them: service_key and the physical-gate
+    # domain check are set-membership tests, so a list-valued domain raises
+    # instead of being refused.
+    domain = str_arg(args.get("domain"))
+    service = str_arg(args.get("service"))
+    if not domain or not service:
+        return _tool_error("Missing required arguments: domain and service"), "invalid_request", "call_service"
+
+    try:
+        household_service_kwargs(hass, domain, service)
+    except Unauthorized:
+        return _tool_error("Forbidden."), "denied", "call_service"
+
+    if (dedicated := dedicated_tool_refusal(domain, service)) is not None:
+        if effective_cap(access_key, dedicated[0]) == CAP_DENY:
+            return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "call_service"
+        return _tool_error(dedicated[1]), "invalid_request", "call_service"
+
+    service_key = f"{domain}/{service}"
+    secondary_targets = await unsupported_secondary_targets(
+        hass, args.get("service_data"), domain=domain, service=service
+    )
+    if secondary_targets:
+        return (
+            _tool_error(secondary_target_error(secondary_targets)),
+            "invalid_request",
+            "call_service",
+        )
+    if templated := template_fields(args.get("service_data")):
+        return _tool_error(template_fields_error(templated)), "invalid_request", "call_service"
+
+
+    targetless = (service_key in DUAL_GATE_SERVICES | NO_TARGET_SERVICES | MUSIC_ASSISTANT_LIBRARY_SERVICES
+                  or domain == _ESPHOME_DOMAIN)
+    if not targetless and not any((args.get("entity_id"), args.get("device_id"), args.get("area_id"))):
+        if (call_needs_physical_gate(domain=domain, service=service, access_key=access_key, hass=hass)
+                and effective_cap(access_key, "cap_physical_control") == CAP_DENY):
+            return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "call_service"
+        return (
+            _tool_error("An explicit entity_id, device_id, or area_id target is required for an entity service. Targetless services outside the supported allowlist are unavailable through call_service."),
+            "invalid_request", "call_service",
+        )
+
+    targets: list[str] = []
+    if not targetless:
+        targets, _ = resolve_service_targets(
+            entity_id=args.get("entity_id"), device_id=args.get("device_id"),
+            area_id=args.get("area_id"), service_domain=domain, access_key=access_key, hass=hass,
+        )
+        if unbound := await unbound_service_targets(hass, targets, domain=domain, service=service):
+            return _tool_refused_before_write(unbound_target_error(domain, service, unbound)), "denied", "call_service"
+
+    bound_args = bind_service_plan(args, hass, data, access_key)
+    if bound_args is None:
+        return _tool_error("Command targets or configuration changed."), "denied", "call_service"
+    args = bound_args
+
+    required_cap = _service_required_cap(args, domain, service, access_key, hass)
+    if required_cap is not None:
+        # An approval must bind the targets it will act on, and a key holding none
+        # of them queues nothing. A denied capability refuses without resolving.
+        bind_targets = not targetless and effective_cap(access_key, required_cap) != CAP_DENY
+        if bind_targets and not targets:
+            return _tool_error("Forbidden."), "denied", "call_service"
+        blocked = await _gate(
+            required_cap, access_key, hass, data,
+            tool_name="call_service", args=args, request_id=request_id,
+            client_ip=client_ip, diff=lambda: _build_diff_call_service(args, access_key, hass),
+            target_entities=targets if bind_targets else None,
+        )
+        if blocked is not None:
+            return blocked
+    return await _execute_call_service(
+        args, access_key, hass, data, request_id=request_id, client_ip=client_ip,
+    )
+
+
+def _service_required_cap(
+    args: dict, domain: str, service: str, access_key: AccessKeyRecord, hass: HomeAssistant,
+) -> str | None:
+    """The capability this call needs at admission and again at execution."""
+    if f"{domain}/{service}" not in DUAL_GATE_SERVICES and call_needs_physical_gate(
+        domain=domain, service=service,
+        entity_id=args.get("entity_id"), device_id=args.get("device_id"),
+        area_id=args.get("area_id"), access_key=access_key, hass=hass,
+    ):
+        return "cap_physical_control"
+    return service_capability(domain, service, args.get("service_data"))
+
+
+async def _dispatch_no_target_tool_call(
+    hass: HomeAssistant,
+    access_key: AccessKeyRecord,
+    *,
+    domain: str,
+    service: str,
+    service_data: dict,
+    resource: str,
+    timeout_noun: str,
+    surface_validation_errors: bool,
+) -> tuple[dict, Outcome, str]:
+    """Call a service that takes NO entity target, and map the outcome.
+
+    Covers three families: the dual-gate services (no entities in hass.states),
+    the config-reload family (whose schemas reject an entity_id), and ESPHome
+    user-defined actions (schema built from only the arguments the device
+    declared).
+
+    Authorization has already happened by the time this runs; it decides nothing.
+
+    The caller chooses whether validation detail is safe to surface. For
+    NO_TARGET_SERVICES it is safe because the message describes the caller's
+    own reloadable config after the cap_yaml_edit authorization gate.
+    """
+    if domain in HIGH_RISK_DOMAINS:
+        _LOGGER.info(
+            "High-risk service call %s/%s by access key %s",
+            domain, service, access_key.name,
+        )
+    try:
+        async with asyncio.timeout(PROXY_TIMEOUT_SECONDS):
+            service_context = household_service_kwargs(hass, domain, service)
+            mark_dispatch_started()
+            await hass.services.async_call(
+                domain, service, service_data, blocking=True, return_response=False,
+                **service_context,
+            )
+    except asyncio.TimeoutError:
+        subject = "the device" if timeout_noun == "Action" else "HA"
+        return (
+            _tool_success(json.dumps({
+                "success": True,
+                "partial": True,
+                "verified": None,
+                "message": f"{timeout_noun} dispatched but {subject} did not respond within the timeout window.",
+            })),
+            "allowed",
+            resource,
+        )
+    except ServiceNotFound:
+        # Generic: never confirm or deny service existence.
+        return _tool_error("Forbidden."), "denied", resource
+    except (ServiceValidationError, vol.Invalid) as err:
+        if not surface_validation_errors:
+            return _tool_error("Forbidden."), "denied", resource
+        return _tool_error(_validation_error_message(err)), "invalid_request", resource
+    except HomeAssistantError:
+        return _tool_error("Forbidden."), "denied", resource
+    # Nothing to read back: such an action changes no entity's state.
+    return _tool_success(json.dumps({
+        "success": True, "verified": None,
+        "note": "Home Assistant accepted the action; an action without a target has no state to read back.",
+    })), "allowed", resource
+
+
+async def _execute_music_assistant_library_read(
+    args: dict,
+    service_data: dict,
+    access_key: AccessKeyRecord,
+    hass: HomeAssistant,
+    *,
+    domain: str,
+    service: str,
+    resource: str,
+) -> tuple[dict, Outcome, str]:
+    """Run music_assistant.search or get_library, scoped by its config entry.
+
+    These name a Music Assistant entry instead of an entity target and only
+    return a response, so they need cap_service_response and Read on at least
+    one entity of that entry. An unknown, unloaded, foreign or unreadable entry
+    is refused alike, so the refusal reveals no entry. With one readable entry
+    the caller may leave config_entry_id out. MESA does not apply: nothing is
+    actuated, and for the same reason every refusal here is refused-before-write:
+    an agent turn may correct the call instead of stopping at an unknown outcome.
+    The response passes through the service-response redaction.
+    """
+    if effective_cap(access_key, "cap_service_response") == CAP_DENY:
+        return _tool_refused_before_write(_CAP_FORBIDDEN_MESSAGE), "denied", resource
+    if any((args.get("entity_id"), args.get("device_id"), args.get("area_id"))):
+        return (
+            _tool_refused_before_write(f"{domain}.{service} takes config_entry_id in service_data, not an entity_id, device_id or area_id target."),
+            "invalid_request", resource,
+        )
+    readable = music_assistant_readable_entries(hass, access_key)
+    entry_id = service_data.get("config_entry_id")
+    if entry_id is None and len(readable) == 1:
+        service_data = {**service_data, "config_entry_id": readable[0]}
+    elif entry_id is None and readable:
+        return _tool_refused_before_write("Several Music Assistant servers are readable; pass config_entry_id in service_data."), "invalid_request", resource
+    elif entry_id not in readable:
+        return _tool_refused_before_write("Forbidden."), "denied", resource
+    try:
+        async with asyncio.timeout(PROXY_TIMEOUT_SECONDS):
+            service_context = household_service_kwargs(hass, domain, service)
+            mark_dispatch_started()
+            response = await hass.services.async_call(
+                domain, service, service_data, blocking=True, return_response=True,
+                **service_context,
+            )
+    except asyncio.TimeoutError:
+        return _tool_refused_before_write("Music Assistant did not answer within the timeout window."), "invalid_request", resource
+    except ServiceNotFound:
+        return _tool_refused_before_write("Forbidden."), "denied", resource
+    except (ServiceValidationError, vol.Invalid) as err:
+        # Authorized by now; the message is about the caller's own arguments.
+        return _tool_refused_before_write(_validation_error_message(err)), "invalid_request", resource
+    except HomeAssistantError:
+        return _tool_refused_before_write("Forbidden."), "denied", resource
+    body = {"success": True, "service_response": filter_service_response(response, access_key, hass)}
+    return _tool_success(json.dumps(body, default=str)), "allowed", resource
+
+
+async def _execute_call_service(
+    args: dict,
+    access_key: AccessKeyRecord,
+    hass: HomeAssistant,
+    data: PhoenixData,
+    *,
+    request_id: str = "",
+    client_ip: str | None = None,
+    mesa_approved: bool = False,
+) -> tuple[dict, str, str]:
+    # Coerced before anything gates on them: service_key and the physical-gate
+    # domain check are set-membership tests, so a list-valued domain raises
+    # instead of being refused.
+    domain = str_arg(args.get("domain"))
+    service = str_arg(args.get("service"))
+    if not domain or not service:
+        return _tool_error("Missing required arguments: domain and service"), "invalid_request", "call_service"
+    # Saved approval arguments reach this executor without the request contract.
+    if name_error := service_name_error(domain, service):
+        return _tool_error(name_error), "invalid_request", "call_service"
+
+    if (dedicated := dedicated_tool_refusal(domain, service)) is not None:
+        if effective_cap(access_key, dedicated[0]) == CAP_DENY:
+            return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "call_service"
+        return _tool_error(dedicated[1]), "invalid_request", "call_service"
+
+
+    resource = f"service:{domain}/{service}"
+    service_key = f"{domain}/{service}"
+
+    required_cap = _service_required_cap(args, domain, service, access_key, hass)
+    if required_cap is not None and effective_cap(access_key, required_cap) == CAP_DENY:
+        return _tool_error("Forbidden."), "denied", resource
+
+    # Re-run at the executor choke point. Confirm stores caller arguments and a
+    # service can register or change its description while approval is pending,
+    # so the request-time precheck alone is not an authorization boundary.
+    secondary_targets = await unsupported_secondary_targets(
+        hass, args.get("service_data"), domain=domain, service=service
+    )
+    if secondary_targets:
+        return (
+            _tool_error(secondary_target_error(secondary_targets)),
+            "invalid_request",
+            resource,
+        )
+    if templated := template_fields(args.get("service_data")):
+        return _tool_error(template_fields_error(templated)), "invalid_request", resource
+
+    check_request_authority()
+    entity_id = args.get("entity_id")
+    device_id = args.get("device_id")
+    area_id = args.get("area_id")
+    # Selector-bearing service data has already refused at the shared boundary.
+    service_data = _sanitize_service_data(args.get("service_data"))
+
+    local_plan = COMMAND_ROUTING_PLAN_KEY in args
+    if not service_plan_is_current(args, hass, data, access_key):
+        return _tool_error("Command targets or configuration changed."), "denied", resource
+
+    # DUAL_GATE_SERVICES have no entities in hass.states; routing them through
+    # resolve_service_targets always produces an empty list and a spurious 403.
+    # The cap_restart gate above is the only permission check required.
+    if service_key == "homeassistant/restart" and not service_data:
+        # One restart path, so every restart leaves the durable restart receipt.
+        return await _execute_restart_ha({}, access_key, hass, data)
+    if service_key in DUAL_GATE_SERVICES:
+        return await _dispatch_no_target_tool_call(
+            hass, access_key, domain=domain, service=service, service_data=service_data,
+            resource=resource, timeout_noun="Service",
+            surface_validation_errors=False,
+        )
+
+    # NO_TARGET_SERVICES are domain-wide config reloads that take no entity target.
+    # The normal path below always attaches an explicit entity_id list, which
+    # these services' schemas reject, so call them with bare service_data.
+    # The cap_yaml_edit gate above is the only permission check required; any
+    # entity/device/area the caller passed is ignored (these services have no
+    # target semantics). MESA does not apply (no entities to govern).
+    if service_key in NO_TARGET_SERVICES:
+        # surface_validation_errors=True: post-authorization (cap_yaml_edit is
+        # already granted) and the message describes the caller's own reloadable
+        # config, not hidden state.
+        return await _dispatch_no_target_tool_call(
+            hass, access_key, domain=domain, service=service, service_data=service_data,
+            resource=resource, timeout_noun="Service",
+            surface_validation_errors=True,
+        )
+
+    if service_key in MUSIC_ASSISTANT_LIBRARY_SERVICES:
+        return await _execute_music_assistant_library_read(
+            args, service_data, access_key, hass, domain=domain, service=service, resource=resource,
+        )
+
+    # ESPHome user-defined actions (esphome.<device>_<action>) take NO entity
+    # target: HA builds their schema from only the arguments the device declared,
+    # so attaching the flattened entity_id list makes voluptuous reject the call
+    # outright, and routing them through resolve_service_targets yields
+    # an empty list and a spurious 403. Authorization is the owning DEVICE's write
+    # scope rather than a capability: the action is defined by that device's own
+    # firmware and can only act on it, so an access key that may already actuate the
+    # device's entities is exactly the access key that may invoke its actions. MESA
+    # does not apply (no entity target to govern). A service no LOADED entry
+    # claims falls through to the normal path and refuses uniformly, so a stale
+    # registration left behind by an unload reveals nothing.
+    if domain == _ESPHOME_DOMAIN:
+        esphome_entry = resolve_esphome_user_service(hass, service)
+        if esphome_entry is not None:
+            if not esphome_entry_writable(hass, esphome_entry, access_key):
+                return _tool_error("Forbidden."), "denied", resource
+            # A device-defined schema makes a wrong argument NAME the likeliest
+            # failure, and the caller can fix it, so validation errors surface.
+            return await _dispatch_no_target_tool_call(
+                hass, access_key, domain=domain, service=service, service_data=service_data,
+                resource=resource, timeout_noun="Action",
+                surface_validation_errors=True,
+            )
+
+    if not any((entity_id, device_id, area_id)):
+        if domain == "esphome":
+            return _tool_error("Forbidden."), "denied", resource
+        return (
+            _tool_error("An explicit entity_id, device_id, or area_id target is required for an entity service. Targetless services outside the supported allowlist are unavailable through call_service."),
+            "invalid_request", resource,
+        )
+    permitted_entities, _visible_count = resolve_service_targets(
+        entity_id=entity_id,
+        device_id=device_id,
+        area_id=area_id,
+        service_domain=domain,
+        access_key=access_key,
+        hass=hass,
+    )
+
+    if not permitted_entities or not service_target_binding_valid(domain, service, permitted_entities, hass):
+        return _tool_error("Forbidden."), "denied", resource
+
+    # Re-run here for the same reason as the selector check: a service's
+    # description can change while an approval is pending.
+    if unbound := await unbound_service_targets(hass, permitted_entities, domain=domain, service=service):
+        return _tool_refused_before_write(unbound_target_error(domain, service, unbound)), "denied", resource
+
+    if not service_plan_is_current(args, hass, data, access_key, permitted_entities):
+        return _tool_error("Command targets or configuration changed."), "denied", resource
+
+    if not targets_current(args, permitted_entities, hass):
+        return _tool_error(TARGETS_CHANGED), "denied", resource
+
+    # MESA enforcement runs last, on the flattened entity list Phoenix MCP already
+    # permitted (targets are always flattened to explicit entity_ids; device_id,
+    # area_id and "all" never reach HA). MESA never sees entities Phoenix MCP
+    # denied; it can drop entities, gate the whole call for confirmation, or
+    # block outright.
+    exact_approval = APPROVAL_TARGETS_KEY in args or _approved_exec_ctx.get()
+    local_constraints: dict[str, Any] = {"require_all": True} if local_plan or exact_approval else {}
+    if local_plan:
+        local_constraints["approval_args"] = args
+    mesa_outcome = await async_apply_mesa_to_call(
+        hass, data, access_key,
+        domain=domain, service=service, service_data=service_data,
+        entities=permitted_entities,
+        request_id=request_id, client_ip=client_ip, session_id=request_id,
+        confirm_approved=mesa_approved or _approved_exec_ctx.get(),
+        **local_constraints,
+    )
+    if mesa_outcome.blocked:
+        fire_mesa_blocked_event(hass, access_key, mesa_outcome.blocked)
+    if mesa_outcome.decision == "pending":
+        # Same holding behaviour as a capability confirm (tool_common._gate):
+        # one definition, so the two kinds of gate cannot answer differently.
+        return await _pending_or_inline(hass, data, access_key, mesa_outcome.approval)
+    if mesa_outcome.decision == "deny":
+        return _tool_error(MESA_DENIED_MESSAGE), "denied", resource
+    check_request_authority()
+    permitted_entities = mesa_outcome.entities
+    if not service_target_binding_valid(domain, service, permitted_entities, hass):
+        return _tool_error("Forbidden."), "denied", resource
+    if not service_plan_is_current(args, hass, data, access_key, permitted_entities):
+        return _tool_error("Command targets or configuration changed."), "denied", resource
+
+    if not targets_current(args, permitted_entities, hass):
+        return _tool_error(TARGETS_CHANGED), "denied", resource
+
+    if domain in HIGH_RISK_DOMAINS:
+        _LOGGER.info(
+            "High-risk service call %s/%s by access key %s",
+            domain, service, access_key.name,
+        )
+
+    call_data = dict(service_data)
+    call_data["entity_id"] = permitted_entities
+
+    use_return_response = False
+    if effective_cap(access_key, "cap_service_response") != CAP_DENY:
+        try:
+            # Local: inside a guard for releases that lack it.
+            from homeassistant.core import SupportsResponse as _SR
+            handler = hass.services.async_services().get(domain, {}).get(service)
+            use_return_response = (
+                handler is not None and
+                getattr(handler, "supports_response", None) not in (None, _SR.NONE)
+            )
+        except Exception:
+            _LOGGER.debug(
+                "supports_response probe failed for %s/%s; calling without return_response",
+                domain, service, exc_info=True,
+            )
+
+    # HA runs this same check before the handler, so a failure here proves nothing
+    # ran: an agent turn can correct the call instead of stopping at an unknown outcome.
+    registered = hass.services.async_services().get(domain, {}).get(service)
+    if registered is not None and registered.schema is not None:
+        try:
+            registered.schema(dict(call_data))
+        except vol.Invalid as err:
+            return _tool_refused_before_write(_validation_error_message(err)), "invalid_request", resource
+
+    try:
+        async with asyncio.timeout(PROXY_TIMEOUT_SECONDS):
+            service_context = household_service_kwargs(hass, domain, service)
+            mark_dispatch_started()
+            svc_response = await hass.services.async_call(
+                domain,
+                service,
+                call_data,
+                blocking=True,
+                return_response=use_return_response,
+                **service_context,
+            )
+    except asyncio.TimeoutError:
+        return (
+            _tool_success(json.dumps({
+                "success": True,
+                "partial": True,
+                "message": "Service dispatched but HA did not respond within the timeout window.",
+            })),
+            "allowed",
+            resource,
+        )
+    except ServiceNotFound:
+        # For most domains, return a generic error: never confirm or deny
+        # service existence (no enumeration oracle). But for a curated set of
+        # core actuator domains (DOMAIN_SERVICE_HINTS), name the valid core service
+        # verbs so an agent that guessed the wrong one (e.g. valve.open instead of
+        # valve.open_valve) can self-correct. This is leak-safe: the catch is
+        # post-authorization (the access key already proved WRITE on an entity in this
+        # domain) and the verbs come from a hardcoded public HA-core list, not a
+        # live hass.services lookup, so nothing hidden is revealed.
+        hint = _service_not_found_hint(domain, service)
+        if hint is not None:
+            return _tool_error(hint[0]), "invalid_request", resource
+        return _tool_error("Forbidden."), "denied", resource
+    except ServiceValidationError as err:
+        # The access key already holds WRITE on this entity and invoked a real service;
+        # a validation error is about the caller's own argument (e.g. an
+        # out-of-range setpoint), not about hidden entities or services, so it is
+        # safe to surface and lets the agent self-correct instead of reading it as
+        # a permission denial. (ServiceNotFound subclasses ServiceValidationError
+        # but is caught above and stays generic, preserving the no-oracle rule.)
+        return _tool_error(_validation_error_message(err)), "invalid_request", resource
+    except vol.Invalid as err:
+        # hass.services.async_call validates service_data against the target
+        # service's own schema with plain voluptuous, and re-raises vol.Invalid/
+        # MultipleInvalid unwrapped rather than as a HomeAssistantError (e.g. a
+        # service whose schema does not accept entity_id at all, called with a
+        # resolved entity target still attached). The ServiceValidationError/
+        # HomeAssistantError handlers above do not catch it, since vol.Invalid
+        # subclasses neither; unhandled it would reach the dispatch-level safety
+        # net as a bare "Internal error" and lose the actionable detail
+        # voluptuous provides. Safe to surface for the same reason as
+        # ServiceValidationError: it describes the caller's own argument shape,
+        # not hidden state.
+        return _tool_error(_validation_error_message(err)), "invalid_request", resource
+    except HomeAssistantError:
+        return _tool_error("Forbidden."), "denied", resource
+
+    body: dict[str, Any] = {"success": True}
+    if local_plan:
+
+        body["state_verification"] = await async_verify_command_state(
+            hass, data, access_key, args[COMMAND_ROUTING_PLAN_KEY],
+        )
+        check_request_authority()
+        access_key = RequestAuthority(hass, data, access_key.id, access_key.access_key_hash).current_access_key()
+    filtered_response = filter_service_response(svc_response, access_key, hass) if svc_response is not None else None
+    if filtered_response is not None:
+        body["service_response"] = filtered_response
+    try:
+        body["targets"] = _service_call_targets(permitted_entities, access_key, hass)
+    except Exception:  # the effect already happened; the report is optional
+        _LOGGER.debug("Could not describe call_service targets", exc_info=True)
+    if mesa_outcome.warnings:
+        _add_mesa_advisory(body, mesa_outcome.warnings)
+
+    return _tool_success(json.dumps(body, default=str)), "allowed", resource
+
+
+def _service_call_targets(entity_ids: list[str], access_key: AccessKeyRecord, hass: HomeAssistant) -> dict[str, Any]:
+    """Name what the call acted on and how each target reads right after it.
+
+    These are the entities the access key was already permitted to write, so
+    nothing hidden is revealed. Home Assistant skips an unavailable target
+    without failing the call, which is why those are listed separately.
+    """
+    states: list[dict[str, Any]] = []
+    unavailable: list[str] = []
+    for entity_id in entity_ids:
+        if resolve(entity_id, access_key, hass) not in (Permission.READ, Permission.WRITE):
+            continue
+        state = hass.states.get(entity_id)
+        value = state.state if state is not None else None
+        if value in (None, "unavailable"):
+            unavailable.append(entity_id)
+        if len(states) < SERVICE_RESULT_STATES_MAX:
+            states.append({"entity_id": entity_id, "state": value})
+    result: dict[str, Any] = {"count": len(entity_ids), "states_after_call": states}
+    if len(entity_ids) > len(states):
+        result["states_omitted"] = len(entity_ids) - len(states)
+    if unavailable:
+        result["unavailable"] = unavailable[:SERVICE_RESULT_STATES_MAX]
+    return result
+
+
+async def _execute_call_service_mesa_approved(
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData
+) -> tuple[dict, str, str]:
+    """Re-run a MESA-gated service call after admin approval.
+
+    Registered under MESA_APPROVED_EXECUTOR but never dispatchable from the tool
+    router, so an access key cannot reach the confirm-approved path itself. Re-runs
+    Phoenix MCP scope resolution and MESA evaluation; only control_mode:confirm blocks
+    are treated as satisfied, so an entity that became prohibited or read_only
+    since the request is still rejected.
+    """
+    return await _execute_call_service(args, access_key, hass, data, mesa_approved=True)
+
+
+# --- Diff builders for Confirm-eligible tools ---------------------------------
+# Each builder produces the structured payload shown in the admin Approvals UI.
+# Diffs are best-effort: anything missing or non-fatal renders an empty preview
+# rather than blocking creation of the pending approval.
+
+
+def _build_diff_call_service(args: dict, access_key: AccessKeyRecord, hass: HomeAssistant) -> dict:
+    """Diff for call_service. Resolves entity targets read-only and lists service params."""
+    domain = args.get("domain", "")
+    service = args.get("service", "")
+    # Sanitised like the executor's, so the approver reviews the call that will
+    # run. Showing a selector the executor strips would describe a call reaching
+    # a whole floor and invite a rejection of something that never had that reach.
+    service_data = _sanitize_service_data(args.get("service_data"))
+    entity_arg = args.get("entity_id")
+    if isinstance(entity_arg, str):
+        entity_ids: list[str] = [entity_arg]
+    elif isinstance(entity_arg, list):
+        entity_ids = [e for e in entity_arg if isinstance(e, str)]
+    else:
+        entity_ids = []
+    preview = {
+        "domain": domain,
+        "service": service,
+        "service_data": service_data,
+        "requested_entity_ids": entity_ids,
+        "device_id": args.get("device_id"),
+        "area_id": args.get("area_id"),
+    }
+    # Read-only target resolution for the MESA note; the executor re-resolves
+    # at approve time. Dual-gate and no-target reloads have no targets and
+    # resolve to nothing, so they never carry the note.
+    resolved, _count = resolve_service_targets(
+        entity_id=args.get("entity_id"), device_id=args.get("device_id"),
+        area_id=args.get("area_id"), service_domain=domain,
+        access_key=access_key, hass=hass,
+    )
+    mesa_note = _mesa_confirm_annotation(access_key, hass, [(domain, service, resolved)])
+    if mesa_note:
+        preview["mesa"] = mesa_note
+    return {
+        "kind": "service_preview",
+        **_summary("call_service.mesa" if mesa_note else "call_service",
+                   domain=domain, service=service),
+        "target": {"type": "service", "id": f"{domain}/{service}", "label": f"{domain}/{service}"},
+        "preview": preview,
+    }

@@ -176,7 +176,7 @@ describe("changes across Settings windows", () => {
     await waitFor(() => expect(api.getSettings).toHaveBeenCalledTimes(1));
   });
 
-  it("saves each retention limit by itself shortly after it changes, with no Save or Discard (user, 2026-10-31)", async () => {
+  it("saves each retention limit by itself shortly after it changes, with no Save or Discard", async () => {
     vi.mocked(api.patchSettings).mockImplementation(async (patch) => ({ ...BASE_SETTINGS, ...patch }) as GlobalSettings);
     renderSettings();
     const logs = settingsWindow("Logs and Notifications");
@@ -347,7 +347,7 @@ describe("Find Setting on the toolbar", () => {
     const { registry } = renderSettings();
     const add = () => toolsFor(registry).flatMap((g) => g.tools).find((t) => t.id === "addAccount");
     await waitFor(() => expect(add()).toBeTruthy());
-    // Hidden until asked for (user, 2026-10-31); Decision Provider adds its accounts on its own.
+    // Hidden until asked for; Decision Provider adds its accounts on its own.
     const accountsPicker = () => document.querySelector(".phx-providers .agentcli-add");
     expect(accountsPicker()).toBeNull();
     expect(add()!.pressed).toBe(false);
@@ -441,7 +441,7 @@ describe("AI Providers", () => {
       ["Work Anthropic", "Anthropic", "claude-opus-5"],
       ["Kitchen Ollama", "Ollama", "qwen3 (automatic)"],
     ]);
-    // Nothing is open until an account is chosen (user, 2026-10-31).
+    // Nothing is open until an account is chosen.
     expect(providers.queryByRole("region", { name: "Work Anthropic" })).toBeNull();
     fireEvent.click(rows[0]);
     expect(rows[0].nextElementSibling?.contains(providers.getByRole("region", { name: "Work Anthropic" }))).toBe(true);

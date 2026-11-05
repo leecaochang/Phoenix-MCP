@@ -4,19 +4,19 @@ from unittest.mock import patch
 import pytest
 
 from custom_components.phoenix_mcp.const import MAX_SEARCH_QUERY_LEN
-from custom_components.phoenix_mcp.numeric_evidence import read_explicit_percentage, compare_percentage
+from custom_components.phoenix_mcp.routing.numeric_evidence import read_explicit_percentage, compare_percentage
 
 
 @pytest.mark.parametrize('language,text', [('en', 'two'), ('de', 'zwei'), ('es', 'dos'),
     ('fr', 'deux'), ('it', 'due'), ('nl', 'twee'), ('pl', 'dwa'), ('ru', 'два'), ('zh-CN', '二')])
 def test_clarification_cardinals_reuse_ha_number_spellings(language, text):
-    from custom_components.phoenix_mcp.numeric_evidence import read_choice_number
+    from custom_components.phoenix_mcp.routing.numeric_evidence import read_choice_number
     assert read_choice_number(text, language, 5) == 2
 
 
 @pytest.mark.parametrize('text', ['two and three', '-2', '0', '6', 'second', '2.5', 'pick 2', '٢'])
 def test_clarification_requires_a_whole_bounded_cardinal(text):
-    from custom_components.phoenix_mcp.numeric_evidence import read_choice_number
+    from custom_components.phoenix_mcp.routing.numeric_evidence import read_choice_number
     assert read_choice_number(text, 'en', 5) is None
 
 
@@ -84,7 +84,7 @@ def test_no_unevaluated_language_assumption(language):
 
 def test_input_budget_and_missing_number_dependency_fail_closed():
     assert read_explicit_percentage('x' * MAX_SEARCH_QUERY_LEN + '37%', 'en') is None
-    with patch('custom_components.phoenix_mcp.numeric_evidence._number_words', side_effect=ImportError):
+    with patch('custom_components.phoenix_mcp.routing.numeric_evidence._number_words', side_effect=ImportError):
         assert read_explicit_percentage('Set the device to 37 percent.', 'en') is None
 
 
@@ -118,7 +118,7 @@ def test_new_languages_verify_digits_and_ha_spelled_values(language, value):
     ('zh-CN', '不要把亮度设为百分之三十七。', 37),
 ])
 def test_multilingual_value_evidence_does_not_decide_intent(language, sentence, value):
-    from custom_components.phoenix_mcp.numeric_evidence import has_percentage_unit
+    from custom_components.phoenix_mcp.routing.numeric_evidence import has_percentage_unit
     assert has_percentage_unit(sentence)
     assert read_explicit_percentage(sentence, language) == value
 
@@ -163,7 +163,7 @@ def test_other_numeric_evidence_is_never_discarded_in_new_languages(language, se
     ('set value to 2 or 3', 'en', None), ('set value to １２', 'en', None),
 ])
 def test_scalar_evidence_preserves_values_and_rejects_dates_and_ambiguity(sentence, language, expected):
-    from custom_components.phoenix_mcp.numeric_evidence import read_explicit_scalar
+    from custom_components.phoenix_mcp.routing.numeric_evidence import read_explicit_scalar
     assert read_explicit_scalar(sentence, language) == expected
 
 
@@ -175,7 +175,7 @@ def test_scalar_evidence_preserves_values_and_rejects_dates_and_ambiguity(senten
     ('设为21.5℃', '°C', True), ('设为21.5℉', '°C', False),
 ])
 def test_explicit_unit_markers_never_convert_values(sentence, unit, expected):
-    from custom_components.phoenix_mcp.numeric_evidence import explicit_unit_matches
+    from custom_components.phoenix_mcp.routing.numeric_evidence import explicit_unit_matches
     assert explicit_unit_matches(sentence, unit) is expected
 
 
@@ -248,7 +248,7 @@ def test_conjunction_is_not_a_competing_number(language, sentence, expected):
 
 
 def test_all_assist_languages_can_read_literal_percent_symbols():
-    from custom_components.phoenix_mcp.const import COMMAND_ROUTING_LANGUAGES
+    from custom_components.phoenix_mcp.routing.routing_tables import COMMAND_ROUTING_LANGUAGES
     for language in set(COMMAND_ROUTING_LANGUAGES.values()):
         assert read_explicit_percentage('37%', language) == 37, language
         assert read_explicit_percentage('137%', language) is None, language
@@ -259,9 +259,11 @@ def test_all_assist_languages_can_read_literal_percent_symbols():
 def test_phoenix_ui_languages_require_routing_and_number_evidence_support():
     import re
     from pathlib import Path
-    from custom_components.phoenix_mcp.command_routing import routing_language
-    from custom_components.phoenix_mcp.const import DECISION_PERCENTAGE_EVIDENCE_LANGUAGES, DECISION_PERCENTAGE_LANGUAGE_UNITS
-    from custom_components.phoenix_mcp.numeric_evidence import _number_words
+    from custom_components.phoenix_mcp.routing.command_routing import routing_language
+    from custom_components.phoenix_mcp.routing.routing_tables import (
+        DECISION_PERCENTAGE_EVIDENCE_LANGUAGES, DECISION_PERCENTAGE_LANGUAGE_UNITS,
+    )
+    from custom_components.phoenix_mcp.routing.numeric_evidence import _number_words
     source = (Path(__file__).parents[1] / 'frontend_src/i18n/index.ts').read_text()
     languages = re.findall(r'\{ code: "([^"]+)", endonym:', source)
     assert languages
@@ -285,5 +287,5 @@ def test_phoenix_ui_languages_require_routing_and_number_evidence_support():
     ('en', 'set it to - 37%'),
 ])
 def test_scalar_fallback_never_discards_refused_spelled_numeric_evidence(language, sentence):
-    from custom_components.phoenix_mcp.numeric_evidence import read_explicit_scalar
+    from custom_components.phoenix_mcp.routing.numeric_evidence import read_explicit_scalar
     assert read_explicit_scalar(sentence, language) is None

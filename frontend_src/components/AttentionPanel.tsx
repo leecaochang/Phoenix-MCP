@@ -6,8 +6,8 @@ import { ActionButton } from "../ui/ActionButton";
 import { Icon } from "../ui/Icon";
 import { InlineConfirm } from "../ui/InlineConfirm";
 
-const TITLES = { agent: "attention.actionTitle", calendar: "attention.actionTitle", mesa: "attention.mesaTitle", calendar_storage: "attention.calendar_storageTitle" };
-const HELP = { mesa: "attention.mesaHelp", calendar_storage: "attention.calendar_storageHelp" };
+const TITLES = { agent: "attention.actionTitle", calendar: "attention.actionTitle", mesa: "attention.mesaTitle", calendar_storage: "attention.calendar_storageTitle", audit_storage: "attention.audit_storageTitle" };
+const HELP = { mesa: "attention.mesaHelp", calendar_storage: "attention.calendar_storageHelp", audit_storage: "attention.audit_storageHelp" };
 
 export interface AttentionState {
   items: AttentionItem[];
@@ -75,7 +75,7 @@ export function useAttention(): AttentionState {
 }
 
 /**
- * The review list, in the UI2 style (user, 2026-10-29): each item says what
+ * The review list: each item says what
  * happened and what to check, and Mark Reviewed asks for the acknowledgement
  * in place, like every other confirmation in the panel. The list keeps itself
  * up to date, so there is no Refresh.

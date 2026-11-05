@@ -132,3 +132,106 @@ it("rejects slash-backslash network paths while retaining local and HTTPS links"
   expect(renderMarkdown("[local](/config/entities)")).toContain('href="/config/entities"');
   expect(renderMarkdown("[remote](https://example.com/path)")).toContain('href="https://example.com/path"');
 });
+
+describe("inline markers around addresses and code", () => {
+  it("leaves a link's address alone", () => {
+    expect(renderMarkdown("[x](https://a/_b_/c)")).toContain('href="https://a/_b_/c"');
+    expect(renderMarkdown("[x](https://a/*b*/c)")).toContain('href="https://a/*b*/c"');
+    expect(renderMarkdown("[x](https://a/foo-_bar_)")).toContain('href="https://a/foo-_bar_"');
+  });
+
+  it("leaves a bare address alone, and still sees emphasis around it", () => {
+    expect(renderMarkdown("https://a/_b_")).toBe("<p>https://a/_b_</p>");
+    expect(renderMarkdown("**https://a.com** and _https://b.com/x_"))
+      .toBe("<p><strong>https://a.com</strong> and <em>https://b.com/x</em></p>");
+    expect(renderMarkdown("see https://a/b_c_d, then stop.")).toBe("<p>see https://a/b_c_d, then stop.</p>");
+  });
+
+  it("leaves code alone", () => {
+    expect(renderMarkdown("`a _b_ *c*`")).toBe("<p><code>a _b_ *c*</code></p>");
+  });
+
+  it("still renders markers inside a link's text, and keeps them inside the link", () => {
+    expect(renderMarkdown("[**b**](https://a)")).toContain("><strong>b</strong></a>");
+    expect(renderMarkdown("[`c`](https://a)")).toContain("><code>c</code></a>");
+    expect(renderMarkdown("**[a](https://b)**")).toMatch(/^<p><strong><a [^>]*>a<\/a><\/strong><\/p>$/);
+  });
+
+  it("keeps an IPv6 host in a link", () => {
+    expect(renderMarkdown("[ha](http://[fe80::1]:8123/x)")).toContain('href="http://[fe80::1]:8123/x"');
+  });
+
+  it("cannot put held markup in an href, where its quotes would end the attribute", () => {
+    const html = renderMarkdown('[x](http://a/`"onx=1`)');
+    expect(html).not.toContain("<a ");
+    const box = document.createElement("div");
+    box.innerHTML = html;
+    expect(box.querySelector("[onx]")).toBeNull();
+  });
+
+  it("gives no way to reach a held marker from the source", () => {
+    const forged = `a ${String.fromCharCode(1)}0${String.fromCharCode(2)} \`b\``;
+    expect(renderMarkdown(forged)).toBe("<p>a 0 <code>b</code></p>");
+  });
+});
+
+describe("hostile input stays inert", () => {
+  const ALLOWED = new Set(["P", "STRONG", "EM", "CODE", "PRE", "A", "TABLE", "THEAD", "TBODY", "TR", "TH", "TD",
+    "H1", "H2", "H3", "H4", "H5", "H6", "UL", "OL", "LI", "BLOCKQUOTE", "HR", "SPAN", "DIV"]);
+  const PAYLOADS = [
+    "<img src=x onerror=alert(1)>", "[x](javascript:alert(1))", "[x](JaVaScRiPt:alert(1))",
+    "[x](data:text/html,<script>alert(1)</script>)", '[x](http://a"onmouseover="alert(1))',
+    "[x](http://a'onmouseover='alert(1))", "[x](//evil.example)", "[x](/\\evil.example)", "[x](\\\\evil.example)",
+    '[x](http://a/`"onx=1`)', '[**"x**](http://a)', "| a | b |\n|---|---|\n| <script>1</script> | [q](javascript:1) |",
+    "# <svg onload=1>", "> <iframe src=javascript:1>", "```\n</code></pre><script>1</script>\n```", '[a](http://x_y_"z_)',
+    '[a](http://x/*"*)', "*[a*](http://x)", '_"onclick=x_', "[x](http://a&quot;onclick=alert(1))", '<a href="javascript:1">x</a>',
+    "[x](https://a)<script>", "[<b>](https://a)", '[x](/foo"><script>alert(1)</script>)', '[x](/foo\n"onclick=1)',
+  ];
+  const FRAGMENTS = ["*", "_", "`", "[", "]", "(", ")", '"', "'", "<", ">", "javascript:", "http://a", "/x", " ", "\n", "|", "---",
+    "**", "__", "&", "#", "onerror=", "<img src=x ", "\\"];
+
+  /** A fixed sequence, so a failure repeats. */
+  function generated(count: number): string[] {
+    let seed = 20261105;
+    const next = (limit: number) => { seed = (seed * 48271) % 2147483647; return seed % limit; };
+    return Array.from({ length: count }, () => Array.from({ length: 3 + next(14) }, () => FRAGMENTS[next(FRAGMENTS.length)]).join(""));
+  }
+
+  it("yields only allow-listed tags, attributes and addresses", () => {
+    const bad: string[] = [];
+    for (const source of [...PAYLOADS, ...generated(400)]) {
+      for (const options of [{}, { guideLinks: true, stackTables: true }]) {
+        const box = new DOMParser().parseFromString(`<div>${renderMarkdown(source, options)}</div>`, "text/html");
+        for (const el of box.body.querySelectorAll("div *")) {
+          if (!ALLOWED.has(el.tagName)) bad.push(`${el.tagName}: ${source}`);
+          for (const attr of el.attributes) {
+            const onLink = el.tagName === "A" && ["href", "target", "rel", "data-guide-topic", "data-guide-anchor"].includes(attr.name);
+            if (!onLink && attr.name !== "class") bad.push(`${attr.name} on ${el.tagName}: ${source}`);
+            if (attr.name === "href" && !/^(https?:\/\/|\/(?![/\\])|#$)/i.test(attr.value)) bad.push(`href ${attr.value}: ${source}`);
+          }
+        }
+      }
+    }
+    expect(bad).toEqual([]);
+  });
+});
+
+describe("hostile input stays cheap", () => {
+  const SIZE = 200_000;
+  it.each([
+    ["opening brackets", "[".repeat(SIZE)],
+    ["link openings", "[x](".repeat(SIZE / 4)],
+    ["link openings with an address", "[x](a".repeat(SIZE / 5)],
+    ["IPv6 openings", "[x](http://[a:".repeat(SIZE / 14)],
+    ["an unclosed IPv6 host", `[x](http://[${"a:".repeat(SIZE / 2)}`],
+    ["markers", "*a ".repeat(SIZE / 3)],
+    ["backticks", "`a".repeat(SIZE / 2)],
+    ["a marker-heavy address tail", `http://${"_.".repeat(SIZE / 2)}`],
+    ["spaces before a table separator", `a|b\n${" ".repeat(SIZE)}|`],
+    ["spaces in a table header", `${" ".repeat(SIZE)}|x\n${" ".repeat(SIZE)}|-x`],
+  ])("%s", (_name, source) => {
+    const started = performance.now();
+    renderMarkdown(source);
+    expect(performance.now() - started).toBeLessThan(1000);
+  });
+});

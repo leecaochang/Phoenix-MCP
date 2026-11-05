@@ -33,11 +33,9 @@ import aiohttp
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
-from .const import (
-    ESPHOME_BUILDER_OUTPUT_MAX_CHARS,
-    ESPHOME_BUILDER_REQUEST_TIMEOUT_SECONDS,
-    ESPHOME_BUILDER_VERIFIED_VERSION,
-    ESPHOME_COMPILER_VERIFIED_VERSION,
+from .esphome_constants import (
+    ESPHOME_BUILDER_OUTPUT_MAX_CHARS, ESPHOME_BUILDER_REQUEST_TIMEOUT_SECONDS,
+    ESPHOME_BUILDER_VERIFIED_VERSION, ESPHOME_COMPILER_VERIFIED_VERSION,
 )
 
 _LOGGER = logging.getLogger(__name__)

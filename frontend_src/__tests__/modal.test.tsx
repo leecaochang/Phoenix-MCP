@@ -41,6 +41,23 @@ describe("Modal Escape handling", () => {
 });
 
 describe("Modal focus handling", () => {
+  it("wraps Shift+Tab from the dialog itself, where a click on its text puts focus", () => {
+    render(
+      <>
+        <button>behind</button>
+        <Modal titleId="t" onClose={() => {}}>
+          <p>text</p>
+          <button>first</button>
+          <button>last</button>
+        </Modal>
+      </>,
+    );
+    const dialog = document.querySelector<HTMLElement>("[role='dialog']")!;
+    dialog.focus();
+    fireEvent.keyDown(dialog, { key: "Tab", shiftKey: true });
+    expect(document.activeElement?.textContent).toBe("last");
+  });
+
   it("focuses the dialog itself when no focusable child exists", () => {
     render(
       <Modal titleId="t" onClose={() => {}}>

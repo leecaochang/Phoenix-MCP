@@ -181,6 +181,10 @@
   color: var(--phx-text-2);
   cursor: pointer;
 }
+/* As large as a touch target gets inside a title bar's height. */
+@media (pointer: coarse) {
+  .phx-window-control { width: 32px; height: 32px; }
+}
 .phx-window-control:hover:not(:disabled):not([aria-disabled="true"]) { background: var(--phx-hover); color: var(--phx-text); }
 /* At the end of the Guide's history, Back or Forward is greyed out and does nothing, keeping focus. */
 .phx-window-control:disabled, .phx-window-control[aria-disabled="true"] { opacity: 0.35; cursor: default; }
@@ -191,7 +195,7 @@
 /* F6 lands on a window, the toolbar or the Guide itself: show where focus went. */
 .phx-window-body:focus-visible { outline: 2px solid var(--phx-focus); outline-offset: -2px; }
 /* Windows that follow their content (Access Keys, Settings) are as tall as it, never scrolling inside, unless one is maximized.
-   Dragging a border gives a window a height of its own (user, 2026-10-31). */
+   Dragging a border gives a window a height of its own. */
 .phx-workspace.phx-content-sized:not(.phx-has-maximized) .phx-window-body { height: auto; overflow: hidden; }
 /* One held to its share of the visible height (the key list) scrolls inside instead. */
 .phx-workspace.phx-content-sized:not(.phx-has-maximized) .phx-window-body.phx-window-capped { max-height: var(--phx-window-cap); overflow: auto; }

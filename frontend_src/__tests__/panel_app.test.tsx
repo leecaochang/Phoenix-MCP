@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { act, fireEvent, waitFor } from "@testing-library/react";
-import { setAgentCliOwner, patchDurable as patchAgentCliDurable } from "../utils/agentcli_state";
+import { getDurable as getAgentCliDurable, getSessionTurns, setAgentCliOwner, setSessionTurns, patchDurable as patchAgentCliDurable } from "../utils/agentcli_state";
+import { api } from "../api";
 
 // Lets the REAL PhoenixApp tree render (with a mocked api) so the app-level
 // effects are covered: access key loading propagating into the list, the
@@ -79,6 +80,26 @@ describe("phoenix-mcp-panel full app shell", () => {
   afterEach(() => {
     document.querySelectorAll("phoenix-mcp-panel").forEach((el) => el.remove());
     delete (window as unknown as Record<string, unknown>).__phxAgentChat;
+  });
+
+  it("holds Agent Chat back until its lists are read, so the saved conversation and choices survive", async () => {
+    const instances = [{ id: "i1", kind: "claude", name: "A", model: "m" }, { id: "i2", kind: "claude", name: "B", model: "m" }];
+    let listed: (value: never) => void = () => {};
+    const providers = vi.spyOn(api, "getAgentCliProviders").mockReturnValue(new Promise((resolve) => { listed = resolve as never; }));
+    const models = vi.spyOn(api, "getAgentCliModels").mockResolvedValue({ models: ["m"] } as never);
+    delete (window as unknown as Record<string, unknown>).__phxAgentChat;
+    patchAgentCliDurable({ open: true, accessKeyId: "tok-1", instanceId: "i2" });
+    setSessionTurns([{ entries: [{ kind: "user", text: "keep me" }], messages: [{ role: "user", content: "keep me" }], lines: 1 }]);
+    const el = mountPanel();
+    await waitFor(() => expect(el.shadowRoot!.textContent).toContain("shell-access-key"));
+    expect(el.shadowRoot!.querySelector(".agentcli-window")).toBeNull();
+    await act(async () => { listed({ instances } as never); });
+    await waitFor(() => expect(el.shadowRoot!.querySelector(".agentcli-window")).toBeTruthy());
+    expect(el.shadowRoot!.textContent).toContain("keep me");
+    expect(getSessionTurns()).toHaveLength(1);
+    expect(getAgentCliDurable()).toMatchObject({ accessKeyId: "tok-1", instanceId: "i2" });
+    providers.mockRestore();
+    models.mockRestore();
   });
 
   it("loads access keys through the real tree and shows them in the list", async () => {
@@ -334,7 +355,7 @@ describe("phoenix-mcp-panel full app shell", () => {
       expect(items()).toContain("Expand Toolbar");
     });
 
-    it("puts the tools on the main row from its menu, back on two rows while they do not fit (user, 2026-11-01)", async () => {
+    it("puts the tools on the main row from its menu, back on two rows while they do not fit", async () => {
       const { connection } = userData();
       const el = mountWith(connection);
       const bar = () => el.shadowRoot!.querySelector<HTMLElement>(".phx-toolbar")!;

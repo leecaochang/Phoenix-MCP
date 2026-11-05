@@ -15,6 +15,8 @@ from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.util import slugify
 from homeassistant.util.dt import utcnow
+from homeassistant.helpers import entity_registry as er
+from homeassistant.helpers import device_registry as dr
 
 from .const import DOMAIN
 from .access_key_store import access_key_name_slug
@@ -183,7 +185,6 @@ class PhoenixAccessKeySensor(SensorEntity):
 @callback
 def _async_migrate_unique_ids(hass: HomeAssistant, access_keys: list[AccessKeyRecord]) -> None:
     """Move name-based sensor unique IDs to access-key-ID-based ones, keeping entity IDs."""
-    from homeassistant.helpers import entity_registry as er
 
     registry = er.async_get(hass)
     for access_key in access_keys:
@@ -234,7 +235,6 @@ async def async_rename_access_key_sensors(
     and unique_id derives from the access key ID, so entity_ids, and any dashboard
     card or automation naming them, survive the rename.
     """
-    from homeassistant.helpers import device_registry as dr  # noqa: PLC0415
 
     data: PhoenixData = hass.data[DOMAIN]
     old_slug = access_key_name_slug(old_name)
@@ -291,9 +291,9 @@ async def async_remove_access_key_sensors(
     Removing from the entity registry prevents 'unavailable' ghost entries after
     the access key is gone. The associated device is also removed from the device registry.
     """
-    from homeassistant.helpers import device_registry as dr
-    from homeassistant.helpers import entity_registry as er
-    from homeassistant.helpers.recorder import DATA_INSTANCE, get_instance
+    # Local: not part of the recorded Home Assistant import floor.
+    from homeassistant.helpers.recorder import DATA_INSTANCE
+    from homeassistant.helpers.recorder import get_instance
     data: PhoenixData = hass.data[DOMAIN]
     sensors = data.platform_entities.pop(access_key_slug, [])
     if sensors:

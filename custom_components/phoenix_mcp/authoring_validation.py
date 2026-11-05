@@ -17,12 +17,13 @@ from homeassistant.core import HomeAssistant
 from homeassistant.loader import IntegrationNotFound, async_get_integration
 
 from .const import AUTHORING_MAX_ERRORS, AUTHORING_MAX_PATH_DEPTH
+from .yaml_includes import TAG_STRING_REFUSAL, contains_tag_strings
 
 _LOGGER = logging.getLogger(__name__)
 
 # Only schema vocabulary can be disclosed; dynamic field names and selector
 # values may contain credentials or inaccessible resource identifiers.
-_FIELDS = frozenset("alias description id trigger triggers condition conditions action actions sequence mode max max_exceeded initial_state enabled variables trigger_variables fields trace icon use_blueprint path input platform entity_id device_id area_id floor_id label_id service target data value_template template delay wait_template timeout continue_on_timeout repeat count while until choose default then else if for from to at above below event event_type event_data name required selector advanced example stored_traces".split())
+_FIELDS = frozenset("alias description id trigger triggers condition conditions action actions sequence mode max max_exceeded initial_state enabled variables trigger_variables fields trace icon use_blueprint path input platform entity_id device_id area_id floor_id label_id service target data value_template template delay wait_template timeout continue_on_timeout repeat count while until choose default then else if for from to at above below event event_type event_data name required selector advanced example stored_traces entities metadata".split())
 _ROOT_FIELDS = frozenset("alias description trigger triggers condition conditions action actions sequence mode max max_exceeded initial_state enabled variables trigger_variables fields trace icon use_blueprint".split())
 
 # Names Core resolves without registering them as keys: undotted legacy trigger
@@ -30,6 +31,12 @@ _ROOT_FIELDS = frozenset("alias description trigger triggers condition condition
 # both sets to Core's alias tables.
 _LEGACY_TRIGGER_KEYS = frozenset({"device", "event", "numeric_state", "state", "time", "time_pattern"})
 _BUILTIN_CONDITION_KEYS = frozenset({"and", "device", "not", "numeric_state", "or", "state", "template", "time", "trigger"})
+
+# Older HA validates with voluptuous, which reports an undeclared key as a plain
+# Invalid carrying this fixed text; newer HA validates with probatio, which has
+# a class for it. The text is only compared, never shown.
+_EXTRA_KEY_CLASSES = frozenset({"ExtraInvalid", "ExtraKeysInvalid"})
+_VOLUPTUOUS_EXTRA_KEY_TEXT = "extra keys not allowed"
 # Only a key in Core's own key syntax is echoed back to the caller.
 _ECHOABLE_KEY = re.compile(r"[a-z0-9_]{1,64}(\.[a-z0-9_]{1,64})?")
 _MATCH_LIMIT = 3
@@ -43,20 +50,26 @@ def expected_shape(domain: str) -> str:
     """Return a small native config example without imposing optional fields."""
     if domain == "automation":
         return 'Expected shape: config={"triggers": [{"trigger": "time", "at": "12:00:00"}], "actions": [{"delay": "00:00:01"}]}.'
+    if domain == "scene":
+        return 'Expected shape: config={"name": "My scene", "entities": {"light.example": "on"}}, plus optional icon and metadata.'
     return 'Expected shape: script_id="my_script", config={"sequence": [{"delay": "00:00:01"}]}.'
 
 
-def validation_message(domain: str, error: vol.Invalid | None = None, extra: Iterable[str] = ()) -> str:
+def validation_message(
+    domain: str, error: vol.Invalid | None = None, extra: Iterable[str] = (), *, path_offset: int = 0,
+) -> str:
     """Project error classes and paths, never validator text or input values.
 
     ``extra`` carries findings built by Phoenix itself, such as unknown keys.
+    ``path_offset`` skips leading path parts of a schema wrapped around the
+    caller's config, so paths start at what the caller sent.
     """
     findings = []
     errors = error.errors if isinstance(error, vol.MultipleInvalid) else [error]
     for item in errors[:AUTHORING_MAX_ERRORS]:
         path = "config"
         if item is not None:
-            for part in item.path[:AUTHORING_MAX_PATH_DEPTH]:
+            for part in item.path[path_offset:path_offset + AUTHORING_MAX_PATH_DEPTH]:
                 if isinstance(part, vol.Marker):
                     part = part.schema
                 if type(part) is int and 0 <= part <= 100000:
@@ -69,7 +82,7 @@ def validation_message(domain: str, error: vol.Invalid | None = None, extra: Ite
         reason = "has an invalid value or structure"
         if isinstance(item, vol.RequiredFieldInvalid):
             reason = "is required"
-        elif type(item).__name__ in {"ExtraInvalid", "ExtraKeysInvalid"}:
+        elif type(item).__name__ in _EXTRA_KEY_CLASSES or getattr(item, "msg", None) == _VOLUPTUOUS_EXTRA_KEY_TEXT:
             reason = "is not supported at this location"
         elif isinstance(item, vol.TypeInvalid):
             reason = "has the wrong type"
@@ -108,9 +121,11 @@ async def async_unknown_key_findings(hass: HomeAssistant, config: Any) -> list[s
     if not sites:
         return []
     try:
+        # Local: inside a guard for releases that lack it.
         from homeassistant.helpers.condition import (
             async_get_all_descriptions as async_get_all_condition_descriptions,
         )
+        # Local: inside a guard for releases that lack it.
         from homeassistant.helpers.trigger import (
             async_get_all_descriptions as async_get_all_trigger_descriptions,
         )
@@ -240,7 +255,6 @@ def authoring_input_error(args: dict, domain: str) -> str | None:
         findings.append("config must be an object containing one " + domain + "; do not wrap it in a domain or resource ID.")
         findings.append(expected_shape(domain))
     else:
-        from .yaml_includes import TAG_STRING_REFUSAL, contains_tag_strings  # noqa: PLC0415
         if contains_tag_strings(config):
             findings.append(TAG_STRING_REFUSAL)
         if "enabled" in config or "enabled" in args:

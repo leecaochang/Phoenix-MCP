@@ -19,7 +19,7 @@ from homeassistant.util.dt import utcnow
 
 from custom_components.phoenix_mcp.access_key_store import AccessKeyRecord, PermissionNode, PermissionTree
 from custom_components.phoenix_mcp.data import PhoenixData
-from custom_components.phoenix_mcp.mcp_view import _call_tool
+from custom_components.phoenix_mcp.tool_dispatch import _call_tool
 from tests.runtime_fixtures import mesa_off_store
 
 
@@ -314,4 +314,4 @@ async def test_a_list_that_goes_unavailable_after_the_write_is_not_claimed(hass,
     key = await _added_list(hass, lost)
     body, outcome = await _call(hass, "set_todo_item", {"entity_id": "todo.lost", "action": "add", "summary": "Tea"}, key)
     assert len(lost.todo_items) == 1
-    assert outcome == "allowed" and body["applied"] is None and body["verified"] is False and "item" not in body
+    assert outcome == "invalid_request" and body["applied"] is None and body["verified"] is False and "item" not in body

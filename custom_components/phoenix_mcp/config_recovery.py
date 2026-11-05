@@ -8,6 +8,7 @@ from contextvars import ContextVar
 from copy import deepcopy
 from datetime import timedelta
 import json
+import re
 from typing import Any
 import uuid
 
@@ -15,10 +16,12 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.storage import Store
 from homeassistant.util.dt import parse_datetime, utcnow
 
-from .const import (CONFIG_RECOVERY_MAX_BYTES, CONFIG_RECOVERY_MAX_RECORDS,
+from .access_key_schema import normalize_access_key_fields
+from .const import (CONFIG_RECOVERY_LAYOUT_MAX_DEPTH, CONFIG_RECOVERY_MAX_BYTES,
+                    CONFIG_RECOVERY_MAX_DEPTH, CONFIG_RECOVERY_MAX_RECORDS,
                     CONFIG_RECOVERY_RETENTION_DAYS, CONFIG_RECOVERY_PER_RESOURCE,
-                    CONFIG_RECOVERY_UNRESOLVED)
-from .helpers import redact_structure
+                    CONFIG_RECOVERY_UNRESOLVED, REDACTION_SENTINEL)
+from .helpers import is_sensitive_key, redact_secrets_in_text
 from .recovery_storage import RecoveryStorage
 from .ws_dispatch import ws_commands_unsettled
 
@@ -27,7 +30,7 @@ recovery_source: ContextVar[dict | None] = ContextVar("phoenix_recovery_source",
 recovery_resolution: ContextVar[str | None] = ContextVar("phoenix_recovery_resolution", default=None)
 
 
-def runtime_identity(hass) -> str:
+def runtime_identity(hass: HomeAssistant) -> str:
     """Identify this HA runtime across Phoenix reloads and client reconnects."""
     return hass.data.setdefault("phoenix_mcp_runtime_identity", uuid.uuid4().hex)
 
@@ -35,6 +38,10 @@ def runtime_identity(hass) -> str:
 class ConfigurationRecoveryError(ValueError):
     """A protected mutation cannot proceed safely."""
 
+
+# Every snapshot refusal starts with this text; a refusal that can name the
+# failing location adds it after this sentence.
+SNAPSHOT_UNSAFE_MESSAGE = "A complete secret-safe recovery snapshot is unavailable; nothing was dispatched."
 
 # The refusals an administrator can act on, by their exact agent text, with the
 # adminError key that says the same in the reader's language. Any other refusal
@@ -51,34 +58,124 @@ _OPERATOR_KEYS = {
     "The configuration changed after review; review a fresh request.": "recoveryChangedAfterReview",
     "Administrator restoration authority changed.": "recoveryAuthorityChanged",
     "Helper storage could not be read.": "recoveryHelperUnreadable",
-    "A complete secret-safe recovery snapshot is unavailable; nothing was dispatched.": "recoverySnapshotUnsafe",
+    SNAPSHOT_UNSAFE_MESSAGE: "recoverySnapshotUnsafe",
 }
+
+
+_SNAPSHOT_LOCATION_LABEL = " Blocked at "
+_SNAPSHOT_LOCATION = re.compile(re.escape(SNAPSHOT_UNSAFE_MESSAGE + _SNAPSHOT_LOCATION_LABEL) + r"(.+): [^:]*\.\Z", re.S)
 
 
 def recovery_error_key(message: str) -> str:
     """The adminError key for a recovery refusal's agent text."""
+    if message.startswith(SNAPSHOT_UNSAFE_MESSAGE):
+        return "recoverySnapshotUnsafeAt" if recovery_error_params(message) else "recoverySnapshotUnsafe"
     return _OPERATOR_KEYS.get(message, "recoveryBlocked")
+
+
+def recovery_error_params(message: str) -> dict[str, str] | None:
+    """The refused location of an unsafe snapshot, for the panel's own language."""
+    match = _SNAPSHOT_LOCATION.match(message)
+    return {"location": match[1]} if match else None
+
+
+# Key parts that name ordinary things in a dashboard layout (a media session, a
+# community card) and so do not by themselves mark a credential there. Removing
+# them leaves real markers standing, so session_token still counts.
+_LAYOUT_ORDINARY_KEY_PARTS = re.compile(r"session|community")
+# Only a key spelled like this reaches a refusal: a dotted key can be an entity ID
+# the access key may not see.
+_NAMEABLE_KEY = re.compile(r"[A-Za-z_][A-Za-z0-9_-]{0,63}")
+_PATH_MAX_PARTS = 12
+_SCRUB_MARKERS = ("<phoenix-access-key>", "<phoenix-token>")
+
+
+def _credential_key(key: Any, value: Any, layout: bool) -> bool:
+    """Whether a key marks its value as a credential a snapshot must not hold.
+
+    A dashboard layout already sits in Home Assistant's storage and has its own
+    scrubbed reads, so a layout is refused for what can really be a credential:
+    no flag, blank or count is one (a card's max_tokens: 5). Every other snapshot
+    keeps the plain key-name rule.
+    """
+    if not is_sensitive_key(key):
+        return False
+    if not layout:
+        return True
+    if value is None or isinstance(value, bool) or value == "":
+        return False
+    remainder = _LAYOUT_ORDINARY_KEY_PARTS.sub("", key.lower())
+    if isinstance(value, (int, float)):
+        remainder = remainder.replace("tokens", "")
+    return is_sensitive_key(remainder)
+
+
+def _holds_placeholder(text: str, layout: bool) -> bool:
+    """Whether a string stands in for a scrubbed value.
+
+    A layout's text may mention the redaction placeholder, as Markdown can. Only
+    a value that is nothing but the placeholder reads as a lost value there.
+    """
+    if any(marker in text for marker in _SCRUB_MARKERS):
+        return True
+    return text == REDACTION_SENTINEL if layout else REDACTION_SENTINEL in text
+
+
+def _unsafe_location(node: Any, path: tuple, layout: bool, depth: int = 0) -> tuple[tuple, str] | None:
+    """The first place a snapshot cannot be held losslessly, with the reason."""
+    if depth > (CONFIG_RECOVERY_LAYOUT_MAX_DEPTH if layout else CONFIG_RECOVERY_MAX_DEPTH):
+        return path, "it is nested too deeply to copy safely"
+    if isinstance(node, str):
+        if _holds_placeholder(node, layout) or redact_secrets_in_text(node) != node:
+            return path, "its text holds a credential or a redaction placeholder"
+        return None
+    if isinstance(node, dict):
+        for key, value in node.items():
+            child = (*path, key)
+            if _credential_key(key, value, layout) or _holds_placeholder(key, False):
+                return child, "its key name marks a credential"
+            if found := _unsafe_location(value, child, layout, depth + 1):
+                return found
+    elif isinstance(node, list):
+        for index, item in enumerate(node):
+            if found := _unsafe_location(item, (*path, index), layout, depth + 1):
+                return found
+    return None
+
+
+def _path_label(path: tuple) -> str:
+    """A bounded, value-free label for a location in a snapshot."""
+    label = ""
+    for part in path[:_PATH_MAX_PARTS]:
+        if isinstance(part, int):
+            label += f"[{part}]"
+        elif isinstance(part, str) and _NAMEABLE_KEY.fullmatch(part):
+            label += f".{part}" if label else part
+        else:
+            label += "[key]"
+    return label + ("..." if len(path) > _PATH_MAX_PARTS else "")
 
 
 def safe_snapshot(value: dict | None) -> dict | None:
     """Admit only bounded JSON that survives scrubbing without losing information.
 
     Redaction is not a reversible encoding. Refuse rather than persist raw values
-    or advertise an incomplete payload as a usable safety copy.
+    or advertise an incomplete payload as a usable safety copy, and name the
+    location so the refusal can be acted on.
     """
     try:
         encoded = json.dumps(value, allow_nan=False)
         if len(encoded.encode()) > CONFIG_RECOVERY_MAX_BYTES:
-            raise ValueError
+            raise ConfigurationRecoveryError(f"{SNAPSHOT_UNSAFE_MESSAGE} It is over the recovery size limit.")
         snapshot = json.loads(encoded)
-        if redact_structure(snapshot) != snapshot:
-            raise ValueError
-        if any(marker in encoded for marker in ("<redacted>", "<phoenix-access-key>", "<phoenix-token>")):
-            raise ValueError
+        layout = isinstance(snapshot, dict) and snapshot.get("snapshot_type") == "dashboard_layout"
+        if found := _unsafe_location(snapshot, (), layout):
+            path, reason = found
+            raise ConfigurationRecoveryError(f"{SNAPSHOT_UNSAFE_MESSAGE}{_SNAPSHOT_LOCATION_LABEL}{_path_label(path)}: {reason}.")
+    except ConfigurationRecoveryError:
+        raise
     except Exception:
-        raise ConfigurationRecoveryError(
-            "A complete secret-safe recovery snapshot is unavailable; nothing was dispatched."
-        ) from None
+        raise ConfigurationRecoveryError(SNAPSHOT_UNSAFE_MESSAGE) from None
     return snapshot
 
 
@@ -110,7 +207,6 @@ class ConfigurationRecovery:
         try:
             raw = await self._store.async_load()
             records = {} if raw is None else raw["records"]
-            from .access_key_schema import normalize_access_key_fields
 
             if isinstance(records, dict):
                 records = {rid: normalize_access_key_fields(row) if isinstance(row, dict) else row

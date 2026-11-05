@@ -14,7 +14,8 @@ from custom_components.phoenix_mcp.data import PhoenixData
 from custom_components.phoenix_mcp.mesa import async_setup_mesa, evaluate_service_entities
 from custom_components.phoenix_mcp.mesa_audit import attach_mesa_audit_bridge, detach_mesa_audit_bridge
 from custom_components.phoenix_mcp.mesa_core import ControlMode, MetadataOrigin, SemanticProfile
-from custom_components.phoenix_mcp.mcp_view import _execute_call_service, async_execute_approved_tool
+from custom_components.phoenix_mcp.tools.service import _execute_call_service
+from custom_components.phoenix_mcp.tool_dispatch import async_execute_approved_tool
 from custom_components.phoenix_mcp.access_key_store import GlobalSettings, AccessKeyRecord, AccessKeyStore
 from custom_components.phoenix_mcp.tools.native import _tool_intent_action
 
@@ -133,7 +134,7 @@ async def test_host_read_only_audit_is_attributed_once_and_excludes_previews(has
 
 @pytest.mark.parametrize("hour,blocked", [(12, False), (23, True)])
 async def test_registry_mutation_honors_inherited_temporal_read_only(hass, env, hour, blocked):
-    from custom_components.phoenix_mcp.mcp_view import _call_tool
+    from custom_components.phoenix_mcp.tool_dispatch import _call_tool
 
     data, access_key, entity, _ = env
     condition = {"type": "time_range", "start_time": "23:00", "end_time": "06:00"}

@@ -16,9 +16,8 @@ from custom_components.phoenix_mcp.access_key_store import (
 from custom_components.phoenix_mcp.config_recovery import ConfigurationRecoveryError
 from custom_components.phoenix_mcp.const import STORAGE_HELPER_TYPES
 from custom_components.phoenix_mcp.data import PhoenixData
-from custom_components.phoenix_mcp.mcp_view import (
-    _call_tool, async_execute_approved_tool, async_restore_version,
-)
+from custom_components.phoenix_mcp.tool_dispatch import _call_tool, async_execute_approved_tool
+from custom_components.phoenix_mcp.tools.restore import async_restore_version
 from custom_components.phoenix_mcp.mesa import async_setup_mesa
 from custom_components.phoenix_mcp.mesa_core import MetadataOrigin, SemanticProfile
 from custom_components.phoenix_mcp.tools import helper

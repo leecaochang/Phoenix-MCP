@@ -12,11 +12,9 @@ import json
 import pytest
 from jinja2 import TemplateSyntaxError
 
-from custom_components.phoenix_mcp.const import (
-    TEMPLATE_DIAGNOSTIC_BYTES,
-    TEMPLATE_DIAGNOSTIC_MESSAGE_CHARS,
-    TEMPLATE_DIAGNOSTIC_SOURCE_CHARS,
-    TEMPLATE_FAILURE_MESSAGES,
+from custom_components.phoenix_mcp.const import TEMPLATE_FAILURE_MESSAGES
+from custom_components.phoenix_mcp.template_limits import (
+    TEMPLATE_DIAGNOSTIC_BYTES, TEMPLATE_DIAGNOSTIC_MESSAGE_CHARS, TEMPLATE_DIAGNOSTIC_SOURCE_CHARS,
 )
 from custom_components.phoenix_mcp.helpers import render_template_snapshot
 from custom_components.phoenix_mcp.template_diagnostics import (

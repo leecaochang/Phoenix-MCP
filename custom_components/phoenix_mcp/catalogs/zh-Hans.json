@@ -13,6 +13,7 @@
       "empty": "（空）",
       "httpStatus": "服务器返回了 HTTP {status}。请刷新后重试。",
       "invalidResponse": "服务器返回了无效响应。请刷新后重试。",
+      "labelValue": "{label}：{value}",
       "listSeparator": "、",
       "loadMore": "加载更多",
       "loading": "加载中…",
@@ -41,9 +42,11 @@
       "killSwitchShort": "紧急停止已启用",
       "killSwitchTitle": "Phoenix MCP 当前不响应任何智能体请求。请在“设置”中关闭紧急停止开关以恢复服务。",
       "loadAccessKeysFailed": "加载访问密钥失败。",
+      "loadSettingsFailed": "加载设置失败。",
       "offlineBody": "Home Assistant 没有响应，通常是因为正在重启。正在重试，请稍候...",
       "offlineTitle": "Phoenix 当前不可用",
       "renderFailed": "无法显示此视图。请刷新重试，或选择其他栏目。",
+      "retrySettingsHelp": "重新从 Home Assistant 读取设置。",
       "sectionsAria": "Phoenix MCP 导航",
       "srTitle": "Phoenix MCP 访问密钥管理",
       "tabAccessKeys": "访问密钥",
@@ -51,7 +54,8 @@
       "tabAudit": "审计日志",
       "tabChanges": "变更",
       "tabSettings": "设置",
-      "killSwitchHelp": "紧急停止开关已开启，因此智能体会被拒绝。选择即可打开“安全”并将其关闭。"
+      "killSwitchHelp": "紧急停止开关已开启，因此智能体会被拒绝。选择即可打开“安全”并将其关闭。",
+      "chatListsFailed": "Agent Chat 无法加载访问密钥或 AI 提供商。打开它或 Home Assistant 重新连接时会再次尝试。"
     },
     "caps": {
       "cap_automation_write": {
@@ -140,7 +144,7 @@
       },
       "cap_registry_write": {
         "label": "管理实体注册表",
-        "description": "编辑实体和设备，管理区域、楼层、标签和类别，并删除失效条目。"
+        "description": "编辑实体和设备，管理区域、楼层、标签和类别，删除失效条目，并清除实体的历史记录。"
       },
       "cap_restart": {
         "label": "重启或停止 Home Assistant",
@@ -184,7 +188,7 @@
       "modeDescDeny": "阻止此能力。除非开启“始终声明全部工具”，否则此密钥的智能体看不到它的工具。",
       "noBuilder": "未检测到 Device Builder 加载项",
       "noEsphome": "未检测到 ESPHome",
-      "passThroughNotice": "<strong>直通模式已启用。</strong>除非设为“确认”，“读取配置”、“模板渲染”、“搜索与发现”、“读取注册表”、“自动化跟踪”、“诊断”、“广播”、“服务响应数据”都视为“允许”。其他所有能力按下方的设置执行。",
+      "passThroughNotice": "<strong>直通模式已启用。</strong>“读取配置”、“模板渲染”、“搜索与发现”、“读取注册表”、“自动化跟踪”、“诊断”、“广播”、“服务响应数据”都视为“允许”。其他所有能力按下方的设置执行。",
       "tierConfigWrite": "配置变更",
       "tierEveryday": "日常操作",
       "tierIrreversible": "高风险",
@@ -236,7 +240,7 @@
       },
       "read_only": {
         "label": "只读观察者",
-        "description": "读取状态、历史记录和日志。配置变更、语音播报、门锁、警报、卷帘和阀门均拒绝访问。"
+        "description": "读取状态、历史记录和日志。配置变更、语音播报、门锁、警报、卷帘和阀门均拒绝访问。但仍可控制设为 W 的任何对象。"
       },
       "voice_assistant": {
         "label": "语音助手",
@@ -254,7 +258,8 @@
       "mesaProfile": "MESA 策略",
       "profileCreate": "为 {key} 创建 MESA 策略",
       "profileSet": "{key} 已设置 MESA 策略，点击编辑",
-      "registryLoadFailed": "加载实体注册表失败。"
+      "registryLoadFailed": "加载实体注册表失败。",
+      "openFailed": "无法打开 MESA 策略编辑器。请重新加载页面后重试。"
     },
     "mesa": {
       "addAreaProfile": "添加区域策略",
@@ -646,6 +651,7 @@
       "mesaArchiveRequired": "archive 为必填项。",
       "mesaProfileExists": "策略已存在。请在编辑模式中打开。",
       "mesaConflictModeInvalid": "on_conflict 必须为 skip 或 overwrite。",
+      "mesaSaveFailed": "无法保存 MESA 更改，之前的设置仍然有效。",
       "mesaUnavailable": "MESA 当前不可用。",
       "nonNegativeRequired": "{field} 不能为负数。",
       "nothingToContinue": "没有可继续的对话。",
@@ -780,7 +786,9 @@
       "restoreNoConfigSide": "此版本在该侧没有可还原的配置。",
       "restoreYamlTags": "此版本包含 !secret 或 !include 等 YAML 标签，无法自动还原。请手动重新创建。",
       "restoreToolReported": "无法应用还原。工具报告：{detail}",
-      "capabilityAllowUnsupported": "{capability} 不支持“允许”模式。"
+      "capabilityAllowUnsupported": "{capability} 不支持“允许”模式。",
+      "recoverySnapshotUnsafeAt": "此项目没有不含机密的完整副本，因此未进行任何更改。Phoenix 在 {location} 处拒绝了它。",
+      "invalidHostHeader": "请求的 Host 标头不是有效地址。"
     },
     "audit": {
       "accessPassThrough": "直通",
@@ -1266,7 +1274,7 @@
       "create": "创建",
       "createFailed": "创建访问密钥失败。",
       "createPtUnderstand": "我了解此访问密钥拥有广泛的 Home Assistant 访问权限",
-      "createPtWarning": "<strong>此访问密钥可以读取和控制所有 Home Assistant 实体。</strong>除非将它们设为“确认”，直通模式还会开启“读取配置”、“模板渲染”、“搜索与发现”、“读取注册表”、“自动化跟踪”、“诊断”、“广播”、“服务响应数据”。“诊断”和“服务响应数据”可能泄露敏感信息。其他所有能力保持各自的设置，MESA 规则、Phoenix MCP 屏蔽列表、敏感属性移除、速率限制、吊销和过期同样继续生效。请仅在可以放心托付整个家的 MCP 客户端上使用。",
+      "createPtWarning": "<strong>此访问密钥可以读取和控制所有 Home Assistant 实体。</strong>直通模式还会开启“读取配置”、“模板渲染”、“搜索与发现”、“读取注册表”、“自动化跟踪”、“诊断”、“广播”、“服务响应数据”。“诊断”和“服务响应数据”可能泄露敏感信息。其他所有能力保持各自的设置，MESA 规则、Phoenix MCP 屏蔽列表、敏感属性移除、速率限制、吊销和过期同样继续生效。请仅在可以放心托付整个家的 MCP 客户端上使用。",
       "createAccessKey": "创建访问密钥",
       "daysAgo": "{d} 天前",
       "delete": "删除",
@@ -1280,7 +1288,7 @@
       "done": "完成",
       "empty": "尚无访问密钥。创建一个即可开始。",
       "emptyFiltered": "没有符合筛选条件的访问密钥。",
-      "enablePtBody": "<strong>此密钥将可以读取和控制所有实体。</strong>除非设为“确认”，八项读取和诊断能力也会开启。",
+      "enablePtBody": "<strong>此密钥将可以读取和控制所有实体。</strong>八项读取和诊断能力也会开启。",
       "enablePtCheck": "我了解访问密钥 <code>{name}</code> 将拥有广泛的 Home Assistant 访问权限",
       "enablePtFailed": "启用直通模式失败。",
       "enablePtLabel": "启用直通模式",
@@ -1344,7 +1352,7 @@
       "presetNewName": "新预设名称",
       "presetNoChange": "此预设与当前设置一致，因此不会更改任何设置。但应用它仍算作一次设置变更：已连接的智能体会在下次调用时收到通知，速率限制计数也会重新开始。",
       "presetPtUnderstand": "我了解此预设会启用直通模式",
-      "presetPtWarning": "<strong>此预设会开启直通模式。</strong>访问密钥随后可以读取和控制所有实体，并且除非设为“确认”，还会开启另外八项能力，包括“诊断”和“服务响应数据”。其他能力、MESA 规则、Phoenix MCP 屏蔽列表以及敏感属性移除仍然适用。",
+      "presetPtWarning": "<strong>此预设会开启直通模式。</strong>访问密钥随后可以读取和控制所有实体，并且还会开启另外八项能力，包括“诊断”和“服务响应数据”。其他能力、MESA 规则、Phoenix MCP 屏蔽列表以及敏感属性移除仍然适用。",
       "presetRenameTitle": "重命名此预设；点击其他位置即可保存",
       "presetRevert": "还原",
       "presetRevertBody": "这将放弃 <strong>{name}</strong> 上未保存的更改：",
@@ -1357,7 +1365,7 @@
       "presetSwitchTo": "切换到",
       "ptConvertBody": "此密钥会立即遵循其权限树。如果其中没有任何授权，它将失去所有实体访问权限。",
       "ptConvertFailed": "转换访问密钥失败。",
-      "ptNoticeCaps": "除非设为“确认”，八项读取和诊断能力也会开启。其余能力保持各自的设置。",
+      "ptNoticeCaps": "八项读取和诊断能力也会开启。其余能力保持各自的设置。",
       "ptNoticeIntro": "<strong>直通访问密钥。</strong>它会跳过权限树并访问所有实体，敏感属性会被移除。",
       "ptNoticeUsage": "直通模式可能会把每个实体的信息都发送给模型，比限定范围的权限树消耗更多 token。",
       "rateBurstLabel": "每秒突发上限（0 表示不限制每秒请求数）",
@@ -1585,7 +1593,7 @@
       "voiceAccessKeyAria": "语音智能体访问密钥",
       "voiceAccessKeyHelp": "决定此语音智能体可以访问哪些实体和操作。",
       "wipeBusy": "清除中…",
-      "wipeCoreHelp": "删除所有访问密钥、设置、审批、变更记录和日志。此操作无法撤销。",
+      "wipeCoreHelp": "删除所有访问密钥、设置、审批、变更记录和日志。安全副本会保留。此操作无法撤销。",
       "wipeCoreLabel": "删除 Phoenix MCP 核心数据",
       "wipeFailed": "清除失败。",
       "wipeMesaHelp": "删除所有 MESA 策略。默认关闭；如需保留副本，请先导出策略。",
@@ -1760,6 +1768,7 @@
       "clearHistory": "清除聊天记录",
       "configureFirst": "请先配置一个提供商",
       "connection": "连接",
+      "connectionLost": "在此回复完成之前，与 Home Assistant 的连接已断开。",
       "continue": "继续",
       "decreaseTextSize": "减小文字",
       "dockedClosed": "Agent Chat 已关闭。",
@@ -1791,6 +1800,7 @@
         "empty_turn": "模型结束了本轮，但没有给出文字回复。",
         "internal": "内部错误。",
         "max_tokens_stop": "模型因达到输出长度上限而停止。可以让它继续，或调高模型的输出 Token 上限（Ollama 请调整 num_predict/context 设置）。",
+        "memory_trimmed": "对话已超出单次请求可容纳的大小，因此模型不再记得最早的消息。这些消息仍保留在屏幕上。",
         "model_api_unsupported": "此模型尚未通过 OpenCode Chat Completions 兼容性验证。请选择受支持的模型。",
         "network": "提供商暂时不可用。",
         "ollama_backend": "提供商暂时不可用。",
@@ -1809,6 +1819,7 @@
         "provider_transient": "提供商暂时不可用。",
         "quota": "提供商账户余额不足或已达到支出上限，不会重试。",
         "rate_limit": "提供商暂时不可用。",
+        "request_too_large": "此消息太大，无法发送。请缩短内容、移除图片，或使用 /clear 开始新对话。",
         "too_many_tools": "此访问密钥提供 {count} 个工具，但 {provider} 每个请求最多只接受 {limit} 个。请缩减该访问密钥的能力，或选择其他提供商。",
         "tool_call_cut": "与模型的连接在工具调用中途中断，因此该操作未执行。没有任何改动被应用，问题也不在请求本身；请重新发送。",
         "tool_call_truncated": "模型在工具调用中途达到输出长度上限，因此该操作未执行。所请求的改动过大，无法在一次调用中输出；请尝试改为更小的改动。",
@@ -1816,7 +1827,9 @@
         "review_changed": "审核工具调用期间，访问密钥的工具或对话发生了变化，因此未执行任何操作。请重新发送请求。",
         "kill_switch": "紧急停止开关已开启，因此代理已停止。没有再执行任何操作。",
         "unreachable": "无法连接 Home Assistant，因此未能完成。等待你批准的内容已取消。",
-        "upstream": "提供商暂时不可用。"
+        "upstream": "提供商暂时不可用。",
+        "provider_slow": "提供商在 {seconds} 秒内没有回复。",
+        "result_withheld": "{length} 字节的结果超出了请求的上下文容量，未提供给模型。"
       },
       "options": "选项",
       "popIn": "移回 Home Assistant",
@@ -2579,7 +2592,9 @@
       "saveFailed": "无法保存核对结果。此操作仍需核对。",
       "showInAudit": "在审计日志中查看",
       "title": "需要关注",
-      "unknown": "在 Phoenix 记录此操作是否已执行之前，对话就已结束，因此它可能已经执行。如有“在审计日志中查看”，可查看 Phoenix 记录的内容；等待审批的操作，其状态在“审批”中。重试前请检查 Home Assistant 本身。"
+      "unknown": "在 Phoenix 记录此操作是否已执行之前，对话就已结束，因此它可能已经执行。如有“在审计日志中查看”，可查看 Phoenix 记录的内容；等待审批的操作，其状态在“审批”中。重试前请检查 Home Assistant 本身。",
+      "audit_storageTitle": "审计日志未写入存储",
+      "audit_storageHelp": "最近的审计条目只保存在内存中，重启后会丢失。请查看 Home Assistant 日志。下一次保存成功后，此项会消失。"
     },
     "workspace": {
       "addToMy": "添加到我的工作区",

@@ -40,7 +40,7 @@ async def test_lifecycle_drains_policy_callbacks_before_runtime_disposal(hass, e
     from homeassistant.const import EVENT_HOMEASSISTANT_STOP
     from custom_components.phoenix_mcp.mesa_core import ProfileStore, ashutdown_policy_workers
     from custom_components.phoenix_mcp.mesa_core.backends import MemoryBackend
-    from custom_components.phoenix_mcp.mcp_view import PhoenixMcpView
+    from custom_components.phoenix_mcp.mcp_transport import PhoenixMcpView
 
     _, entry, _ = await _run_setup(hass)
     data = hass.data[DOMAIN]
@@ -230,7 +230,7 @@ async def test_setup_skips_client_routes_when_kill_switch_on(hass: HomeAssistant
     # This includes the agentCLI provider-config admin views, which are also
     # kill-switch-immune; only the agentCLI streaming chat view is gated.
     from custom_components.phoenix_mcp.admin_view import ALL_ADMIN_VIEWS
-    from custom_components.phoenix_mcp.agentcli import ALL_AGENTCLI_ADMIN_VIEWS
+    from custom_components.phoenix_mcp.agentcli_views import ALL_AGENTCLI_ADMIN_VIEWS
     assert view_count == len(ALL_ADMIN_VIEWS) + len(ALL_AGENTCLI_ADMIN_VIEWS)
 
 
@@ -285,7 +285,7 @@ async def test_mandatory_platform_failure_rolls_back_every_published_surface(
 
     # HA cannot unregister aiohttp routes. They survive the rollback by design,
     # but the process-wide readiness marker makes them refuse every request.
-    from custom_components.phoenix_mcp.mcp_view import PhoenixMcpView
+    from custom_components.phoenix_mcp.mcp_transport import PhoenixMcpView
 
     view = PhoenixMcpView()
     view.hass = hass

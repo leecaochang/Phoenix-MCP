@@ -21,15 +21,8 @@ from custom_components.phoenix_mcp.esphome_builder import (
     BuilderUnavailable,
 )
 from custom_components.phoenix_mcp.tools import esphome
-from tests.test_mcp_esphome_firmware_tools import FakeBuilder
-from tests.test_mcp_esphome_tools import (
-    _call,
-    _device_info,
-    _esphome_entry,
-    _json,
-    _runtime,
-    _yaml_access_key,
-)
+from tests.runtime_fixtures import FakeBuilder
+from tests.runtime_fixtures import esphome_call as _call, esphome_device_info as _device_info, esphome_entry as _esphome_entry, esphome_json as _json, esphome_runtime as _runtime, esphome_yaml_access_key as _yaml_access_key
 
 _DASHBOARD_PATCH = "custom_components.phoenix_mcp.tools.esphome._esphome_dashboard"
 _COMMAND_PATCH = "custom_components.phoenix_mcp.tools.esphome.async_builder_command"
@@ -290,7 +283,7 @@ class TestValidateMigration:
         (esphome_dir / FILE).write_text(MIGRATABLE_YAML)
         # Respelling the password key to a name the mask does not know would show
         # its value on the migrated side.
-        migrate = {"yaml_diff": {"fromLine": 10, "toLine": 10, "replacement": '    pw: "short1"\n'},
+        migrate = {"yaml_diff": {"fromLine": 10, "toLine": 10, "replacement": '    remark: "short1"\n'},
                    "changes": []}
         (esphome_dir / FILE).write_text(MIGRATABLE_YAML.replace("realotapassword", "short1"))
         content, _, _ = await _run("validate_esphome_yaml", {"file": FILE}, hass, self._builder(migrate))

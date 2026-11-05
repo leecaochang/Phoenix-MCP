@@ -11,10 +11,11 @@ import pytest
 from homeassistant.util.dt import utcnow
 
 from custom_components.phoenix_mcp.const import UNKNOWN_ARGUMENT_PROTECTED_FIELDS
-from custom_components.phoenix_mcp.mcp_view import _call_tool
+from custom_components.phoenix_mcp.tool_dispatch import _call_tool
 from custom_components.phoenix_mcp.access_key_store import PermissionNode, PermissionTree, AccessKeyRecord
 from custom_components.phoenix_mcp.tool_contracts import normalize_tool_args, unknown_argument_error
 from custom_components.phoenix_mcp.tool_defs import _ENTITY_TOOL_DEFS, _SYSTEM_TOOL_DEFS
+from tests.runtime_fixtures import patch_readers
 
 
 DEFINITIONS = {d['name']: d for d in (*_ENTITY_TOOL_DEFS, *_SYSTEM_TOOL_DEFS)}
@@ -71,11 +72,11 @@ async def test_fixed_capability_guard_precedes_io_and_approval(hass, name, args,
     cap = DEFINITIONS[name]['cap']
     data = MagicMock()
     with (
-        patch('custom_components.phoenix_mcp.tools.lovelace.async_get_lovelace_config', new_callable=AsyncMock) as read,
+        patch_readers('custom_components.phoenix_mcp.tools.lovelace.async_get_lovelace_config', new_callable=AsyncMock) as read,
         patch('custom_components.phoenix_mcp.tools.config_files._resolve_yaml_read_path') as yaml_path,
         patch('custom_components.phoenix_mcp.tools.config_files._resolve_fs_path') as file_path,
         patch('custom_components.phoenix_mcp.tools.lovelace._gate', new_callable=AsyncMock) as dashboard_gate,
-        patch('custom_components.phoenix_mcp.mcp_view._gate', new_callable=AsyncMock) as registry_gate,
+        patch('custom_components.phoenix_mcp.tools.system._gate', new_callable=AsyncMock) as registry_gate,
     ):
         result, outcome, _ = await _call_tool(name, args, access_key(**{cap: mode}), hass, data)
     text = result['content'][0]['text']
@@ -164,7 +165,7 @@ async def test_yaml_typo_does_not_fall_back_to_the_default_file(hass):
 
 
 async def test_intentional_default_reaches_read_and_unrelated_extra_is_refused(hass):
-    with patch('custom_components.phoenix_mcp.tools.lovelace.async_get_lovelace_config', new_callable=AsyncMock, return_value={'views': []}) as read:
+    with patch_readers('custom_components.phoenix_mcp.tools.lovelace.async_get_lovelace_config', new_callable=AsyncMock, return_value={'views': []}) as read:
         _, outcome, _ = await _call_tool('get_dashboard_config', {'unrelated': True}, access_key(cap_lovelace_write='allow'), hass, MagicMock())
         assert outcome == 'invalid_request'
         read.assert_not_awaited()
@@ -214,12 +215,15 @@ async def test_toggle_target_typo_still_honors_physical_denial(hass):
 
 async def test_approved_executor_accepts_normalized_patch_shape(hass):
     from custom_components.phoenix_mcp.data import PhoenixData
-    from custom_components.phoenix_mcp.mcp_view import _EXECUTOR_REGISTRY
+    from custom_components.phoenix_mcp.tool_catalog import _EXECUTOR_REGISTRY
     from custom_components.phoenix_mcp.version_store import VersionStore
 
     data = PhoenixData(store=MagicMock(), rate_limiter=MagicMock(), audit=MagicMock(), versions=VersionStore())
+    async def read(*_args, **_kwargs):
+        return save.await_args.args[2] if save.await_count else {'views': []}
+
     with (
-        patch('custom_components.phoenix_mcp.tools.lovelace.async_get_lovelace_config', new_callable=AsyncMock, return_value={'views': []}),
+        patch_readers('custom_components.phoenix_mcp.tools.lovelace.async_get_lovelace_config', read),
         patch('custom_components.phoenix_mcp.tools.lovelace.async_save_lovelace_config', new_callable=AsyncMock) as save,
         patch('custom_components.phoenix_mcp.tool_contracts.unknown_argument_error', side_effect=AssertionError('public-only check')),
     ):

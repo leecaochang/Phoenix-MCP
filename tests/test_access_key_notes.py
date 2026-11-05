@@ -9,7 +9,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from custom_components.phoenix_mcp import agentcli, mcp_view
+from custom_components.phoenix_mcp import agent_chat, agent_turn, tool_defs, tool_dispatch
+from custom_components.phoenix_mcp.llm import base as llm_base
 from custom_components.phoenix_mcp.access_key_store import (
     AccessKeyRecord,
     GlobalSettings,
@@ -22,14 +23,12 @@ from custom_components.phoenix_mcp.access_key_store import (
 from custom_components.phoenix_mcp.admin_view import PhoenixAdminAccessKeyView
 from custom_components.phoenix_mcp.agent_recovery import AgentRecovery
 from custom_components.phoenix_mcp.assist_api import PhoenixAssistAPI
-from custom_components.phoenix_mcp.const import (
-    ACCESS_KEY_NOTES_MAX_LENGTH,
-    AGENTCLI_CLIENT_IP,
-    DOMAIN,
-)
+from custom_components.phoenix_mcp.const import ACCESS_KEY_NOTES_MAX_LENGTH, DOMAIN
+from custom_components.phoenix_mcp.provider_constants import AGENTCLI_CLIENT_IP
 from custom_components.phoenix_mcp.data import PhoenixData
 from custom_components.phoenix_mcp.helpers import ACCESS_KEY_NOTES_FRAMING
 from custom_components.phoenix_mcp.personas import get_persona_caps
+from tests.runtime_fixtures import patch_readers
 
 BASE = "http://homeassistant.local"
 NOTES = (
@@ -217,7 +216,7 @@ async def test_a_non_administrator_cannot_write_notes(admin_env):
 
 def test_no_agent_tool_names_notes():
     """Agents read notes; no advertised tool can write or even name them."""
-    for tool in (*mcp_view._ENTITY_TOOL_DEFS, *mcp_view._NATIVE_TOOL_DEFS, *mcp_view._SYSTEM_TOOL_DEFS):
+    for tool in (*tool_defs._ENTITY_TOOL_DEFS, *tool_defs._NATIVE_TOOL_DEFS, *tool_defs._SYSTEM_TOOL_DEFS):
         assert "notes" not in json.dumps(tool.get("inputSchema", {})), tool["name"]
 
 
@@ -227,7 +226,7 @@ def test_no_agent_tool_names_notes():
 
 def test_the_primer_carries_framed_notes_redacted_to_the_current_scope(home):
     key = _scoped()
-    primer = mcp_view._build_instructions(key, _settings_data(), BASE, home)
+    primer = tool_dispatch._build_instructions(key, _settings_data(), BASE, home)
     assert ACCESS_KEY_NOTES_FRAMING in primer
     assert "<administrator_notes>\nThe guest room is the den." in primer
     assert "light.kitchen" in primer
@@ -241,19 +240,19 @@ def test_the_primer_carries_framed_notes_redacted_to_the_current_scope(home):
 
     # Narrowing the scope later hides an ID the notes name, without editing them.
     key.permissions.entities.pop("light.kitchen")
-    assert "light.kitchen" not in mcp_view._build_instructions(key, _settings_data(), BASE, home)
+    assert "light.kitchen" not in tool_dispatch._build_instructions(key, _settings_data(), BASE, home)
 
 
 def test_no_notes_adds_nothing(home):
-    primer = mcp_view._build_instructions(_scoped(notes=None), _settings_data(), BASE, home)
+    primer = tool_dispatch._build_instructions(_scoped(notes=None), _settings_data(), BASE, home)
     assert ACCESS_KEY_NOTES_FRAMING not in primer and "administrator_notes" not in primer
 
 
 def test_each_key_sees_only_its_own_notes(home):
     alpha = _scoped(notes="alpha household notes", id="a", name="alpha")
     bravo = _scoped(notes="bravo household notes", id="b", name="bravo")
-    alpha_primer = mcp_view._build_instructions(alpha, _settings_data(), BASE, home)
-    bravo_primer = mcp_view._build_instructions(bravo, _settings_data(), BASE, home)
+    alpha_primer = tool_dispatch._build_instructions(alpha, _settings_data(), BASE, home)
+    bravo_primer = tool_dispatch._build_instructions(bravo, _settings_data(), BASE, home)
     assert "alpha household" in alpha_primer and "bravo household" not in alpha_primer
     assert "bravo household" in bravo_primer and "alpha household" not in bravo_primer
 
@@ -262,19 +261,19 @@ def test_the_context_documents_carry_the_notes(home):
     home.data[DOMAIN] = _settings_data()
     home.data[DOMAIN].store.get_entity_hints.return_value = {}
     key = _scoped()
-    plain = mcp_view._build_context_plain(key, home)
+    plain = tool_dispatch._build_context_plain(key, home)
     assert "<administrator_notes>" in plain and "lock.front_door" not in plain
-    notes = mcp_view._build_context_json(key, home)["notes"]
+    notes = tool_dispatch._build_context_json(key, home)["notes"]
     assert notes.startswith("The guest room is the den.") and "lock.front_door" not in notes
-    assert mcp_view._build_context_json(_scoped(notes=None), home)["notes"] is None
+    assert tool_dispatch._build_context_json(_scoped(notes=None), home)["notes"] is None
 
 
 def test_a_companion_wrapper_never_carries_notes(home):
     """Its notes reach the inner turn instead, the same for every ingress."""
     key = _scoped(persona="home_companion", **get_persona_caps("home_companion"))
-    assert "administrator_notes" not in mcp_view._build_instructions(key, _settings_data(), BASE, home)
-    assert "administrator_notes" not in mcp_view._build_context_plain(key, home)
-    assert "notes" not in mcp_view._build_context_json(key, home)
+    assert "administrator_notes" not in tool_dispatch._build_instructions(key, _settings_data(), BASE, home)
+    assert "administrator_notes" not in tool_dispatch._build_context_plain(key, home)
+    assert "notes" not in tool_dispatch._build_context_json(key, home)
 
 
 class _Provider:
@@ -293,8 +292,8 @@ def _capture_system_prompts():
 
     async def stream(provider, session, **kwargs):
         prompts.append(kwargs["system_prompt"])
-        yield {"type": agentcli.EV_TEXT, "text": "Done."}
-        yield {"type": agentcli.EV_DONE, "stop_reason": "end_turn",
+        yield {"type": llm_base.EV_TEXT, "text": "Done."}
+        yield {"type": llm_base.EV_DONE, "stop_reason": "end_turn",
                "assistant_msg": {"role": "assistant", "content": "Done."}}
     return prompts, stream
 
@@ -305,21 +304,21 @@ async def test_phoenix_agent_surfaces_put_the_notes_in_their_system_prompt(home,
     prompts, stream = _capture_system_prompts()
     data = _settings_data()
     data.store.get_access_key_by_id.return_value = key
-    with patch.object(agentcli, "_stream_turn_resilient", stream), \
-         patch.object(agentcli, "build_mcp_tool_list", return_value=[]), \
-         patch.object(agentcli, "build_agent_tool_list", return_value=[]):
+    with patch.object(agent_turn, "_stream_turn_resilient", stream), \
+         patch_readers("custom_components.phoenix_mcp.tool_catalog.build_mcp_tool_list", return_value=[]), \
+         patch_readers("custom_components.phoenix_mcp.tool_catalog.build_agent_tool_list", return_value=[]):
         if surface == "chat":
             async def emit(_name, _payload):
                 return None
-            await agentcli.async_run_agent_turn(
+            await agent_chat.async_run_agent_turn(
                 hass=home, data=data, access_key=key, provider=_Provider(), session=MagicMock(),
                 messages=[{"role": "user", "content": "hello"}], options={}, client_ip=AGENTCLI_CLIENT_IP,
                 base_url=BASE, emit=emit, cancel=asyncio.Event(),
             )
         elif surface == "voice":
-            await agentcli.async_run_voice_turn(home, data, key, _Provider(), MagicMock(), BASE, "hello", language="en")
+            await agent_chat.async_run_voice_turn(home, data, key, _Provider(), MagicMock(), BASE, "hello", language="en")
         else:
-            await agentcli.async_run_ai_task(home, data, key, _Provider(), MagicMock(), BASE, "summarize")
+            await agent_chat.async_run_ai_task(home, data, key, _Provider(), MagicMock(), BASE, "summarize")
     assert prompts and "<administrator_notes>\nThe guest room is the den." in prompts[0]
     assert "lock.front_door" not in prompts[0]
 
@@ -350,8 +349,7 @@ async def test_assist_follows_the_bound_key_and_its_notes(home):
 
 @pytest.fixture
 async def mcp_env(home, access_key_store):
-    data = PhoenixData(store=access_key_store, rate_limiter=MagicMock(), audit=MagicMock(), hass=home,
-                       enforce_mcp_lifecycle=False)
+    data = PhoenixData(store=access_key_store, rate_limiter=MagicMock(), audit=MagicMock(), hass=home)
     home.data[DOMAIN] = data
     key, _ = await access_key_store.async_create_access_key("notes-key", "admin")
     key.permissions = PermissionTree(entities={"light.kitchen": PermissionNode("GREEN")})
@@ -361,7 +359,7 @@ async def mcp_env(home, access_key_store):
 
 
 async def _rpc(hass, data, key, method, params=None, client_ip="127.0.0.1"):
-    response, *_ = await mcp_view._dispatch_mcp(method, 1, params or {}, key, hass, data, client_ip, base_url=BASE)
+    response, *_ = await tool_dispatch._dispatch_mcp(method, 1, params or {}, key, hass, data, client_ip, base_url=BASE)
     return response
 
 
@@ -410,7 +408,7 @@ async def test_a_companion_key_never_gets_the_notice(home, mcp_env):
     await data.store.async_patch_access_key(key.id, persona="home_companion", **get_persona_caps("home_companion"))
     await data.store.async_patch_access_key(key.id, notes="The guest room is the den.")
     result = {"content": [{"type": "text", "text": "ok"}]}
-    mcp_view._maybe_append_stale_advisory(result, key, data, "127.0.0.1", home)
+    tool_dispatch._maybe_append_stale_advisory(result, key, data, "127.0.0.1", home)
     assert "administrator notes" not in json.dumps(result)
     assert key.notes_delivered_version < key.notes_version
 
@@ -436,7 +434,7 @@ def test_every_surface_says_when_to_orient_the_same_way(home):
     from custom_components.phoenix_mcp.tool_defs import _SYSTEM_TOOL_DEFS, _ENTITY_TOOL_DEFS
 
     descriptions = {d["name"]: d["description"] for d in (*_ENTITY_TOOL_DEFS, *_SYSTEM_TOOL_DEFS)}
-    primer = mcp_view._build_instructions(_scoped(notes=None), _settings_data(), BASE, home)
+    primer = tool_dispatch._build_instructions(_scoped(notes=None), _settings_data(), BASE, home)
     for surface in (primer, PHOENIX_SKILL_MARKDOWN, descriptions["get_capability_summary"]):
         assert ORIENTATION_GUIDANCE in surface
     for surface in (primer, PHOENIX_SKILL_MARKDOWN, *descriptions.values()):

@@ -180,7 +180,7 @@ function routeHeading(payload: Record<string, unknown> | null): string {
     : route === "decision_provider" ? "conversations.routeDecision"
     : route === "decision_result" ? "conversations.routeDecisionResult"
     : route === "decision" ? "conversations.routeDecisionLocal" : route === "local" ? "conversations.routeLocal" : "conversations.event.routing";
-  return t(key) + (typeof payload?.provider === "string" ? `: ${payload.provider}` : "");
+  return typeof payload?.provider === "string" ? t("common.labelValue", { label: t(key), value: payload.provider }) : t(key);
 }
 
 const ROUTING_PURPOSE: Record<string, string> = {

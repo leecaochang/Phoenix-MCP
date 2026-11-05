@@ -182,21 +182,19 @@ class TestBroadcast:
 #   - notifications Phoenix itself raises
 MESA_EXEMPT_ACTUATORS = {
     "helpers.py::fire_rate_limit_events": "persistent_notification Phoenix raises about itself",
-    "mcp_view.py::_dispatch_no_target_tool_call": "NO_TARGET_SERVICES take no entity (rule 15)",
-    "mcp_view.py::_execute_restart_ha": "homeassistant.restart has no entity target",
+    "tools/service.py::_dispatch_no_target_tool_call": "NO_TARGET_SERVICES take no entity (rule 15)",
+    "tools/system.py::_execute_restart_ha": "homeassistant.restart has no entity target",
     "tools/native.py::_first_search_result": "media search before the gated play; nothing actuated",
     "tools/native.py::_first_source_result": "media search before the gated play; nothing actuated",
-    "mcp_view.py::_execute_music_assistant_library_read": "response-only library read; no entity target, nothing actuated",
+    "tools/service.py::_execute_music_assistant_library_read": "response-only library read; no entity target, nothing actuated",
     "tools/native.py::_relative_volume_worker": (
         "private relative-volume worker runs only after its enclosing executor "
         "MESA-gates the complete frozen target plan"
     ),
     "radio.py::async_permit_join": "Zigbee coordinator operation, not entity actuation",
-    "radio.py::async_remove_device": "Zigbee coordinator operation, not entity actuation",
-    "tools/authoring.py::_execute_delete_automation": "automation.reload after a config write",
-    "tools/authoring.py::_execute_delete_script": "script.reload after a config write",
+    "radio.py::async_remove_device": "backend of remove_zigbee_device, whose tool and executor hold the MESA gate",
     "tools/authoring.py::_finish_entity_write": "automation.reload, script.reload or scene.reload after a gated config write; domain supplied by the owning executor",
-    "tools/authoring.py::_execute_delete_scene": "scene.reload after a config write",
+    "tools/authoring.py::_finish_entity_delete": "automation.reload, script.reload or scene.reload after a config write",
     "tools/todo.py::_items": "todo.get_items only reads a list the key can READ; item changes run through call_service and its MESA gate",
 }
 

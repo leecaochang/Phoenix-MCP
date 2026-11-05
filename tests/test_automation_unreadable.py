@@ -18,7 +18,7 @@ from homeassistant.util.dt import utcnow
 
 from custom_components.phoenix_mcp import yaml_includes as yi
 from custom_components.phoenix_mcp.access_key_store import AccessKeyRecord, PermissionNode, PermissionTree
-from custom_components.phoenix_mcp.mcp_view import _call_tool
+from custom_components.phoenix_mcp.tool_dispatch import _call_tool
 
 ACTIONS = [{"delay": {"seconds": 1}}]
 

@@ -22,15 +22,20 @@ mesa-core is read-only: never modify it or reach into its private state.
 from __future__ import annotations
 
 import asyncio
+import glob
 import hashlib
+import inspect
 import json
 import logging
+import math
 import os
 import threading
 from dataclasses import dataclass, field
 from datetime import datetime
+from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any, Callable, TypeVar
 
+from homeassistant.components.light.const import DATA_PROFILES as LIGHT_DATA_PROFILES
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import area_registry as ar_mod
 from homeassistant.helpers import device_registry as dr_mod
@@ -39,22 +44,25 @@ from homeassistant.helpers import sun as sun_mod
 from homeassistant.helpers.event import async_track_time_interval
 from homeassistant.helpers.storage import Store
 from homeassistant.util.async_ import run_callback_threadsafe
+from homeassistant.util.percentage import percentage_to_ranged_value, ranged_value_to_percentage
 from homeassistant.util.yaml import load_yaml as _load_yaml
 
 from homeassistant.util import dt as dt_util
 
 from . import mesa_audit
-from .device_semantics import device_authority_chain, device_registry_snapshot, effective_entity_area_id
-from .helpers import diff_summary_fields
+from .approval_targets import bind_targets, bound_preview
+from .approvals import (
+    create_approval_notification, async_create_pending_approval, fire_approval_requested_event,
+)
+from .audit import generate_request_id
+from .device_semantics import device_authority_chain, device_effective_area_id, device_registry_snapshot
+from .durable_storage import DurableStorageError, DurableStore, MesaSaveError
+from .helpers import diff_summary_fields, redact_inaccessible_entity_ids_in_text
+from .policy_engine import group_member_ids
 from .const import (
-    MESA_APPROVED_EXECUTOR,
-    MESA_CONFIRM_CAP,
-    MESA_HOST_CALLBACK_TIMEOUT_SECONDS,
-    MESA_LEASE_SWEEP_INTERVAL,
-    MESA_MODE_ENFORCED,
-    MESA_MODE_OFF,
-    MESA_STORAGE_KEY,
-    MESA_STORAGE_VERSION,
+    MESA_APPROVED_EXECUTOR, MESA_CONFIRM_CAP, MESA_HOST_CALLBACK_TIMEOUT_SECONDS,
+    MESA_LEASE_SWEEP_INTERVAL, MESA_MODE_ENFORCED, MESA_MODE_ADVISORY, MESA_MODE_OFF,
+    MESA_STORAGE_KEY, MESA_STORAGE_VERSION, DOMAIN, APPROVAL_TARGETS_KEY,
 )
 from .mesa_core import (
     CallerContext,
@@ -68,6 +76,8 @@ from .mesa_core import (
 )
 from .mesa_core.backends import StorageBackend
 from .mesa_core.exceptions import MesaError
+from .mesa_core.profile import CONTROL_MODE_RANK
+from .request_authority import dispatch_client_ip, dispatch_request_id, check_request_authority
 
 if TYPE_CHECKING:
     from .approvals import PendingApproval
@@ -78,12 +88,33 @@ if TYPE_CHECKING:
 _LOGGER = logging.getLogger(__name__)
 
 # MESA's rule name for a call whose parameters name a target other than the
-# entity the decision was made for. Unreachable once target resolution has
-# consumed the selectors, so it is treated as a defect signal rather than a
-# policy outcome.
+# entity the decision was made for. A caller can still reach it with a field
+# that is a target selector to MESA but plain data to Home Assistant, such as
+# config_entry_id, so it describes the request and never a Phoenix fault.
 _RULE_CONTRADICTORY_TARGET = "contradictory_target"
 
+# Home Assistant's generic turn services forward their data unchanged to the
+# same service on each target's own domain.
+_GENERIC_TURN_SERVICES = frozenset({"turn_on", "turn_off", "toggle"})
+
+_LIGHT_FULL_BRIGHTNESS = 255
+_FAN_PERCENTAGE_SERVICES = ("turn_on", "set_percentage")
+_FAN_STEP_SERVICES = frozenset({"increase_speed", "decrease_speed"})
+_CLIMATE_RANGE_ENDS = ("target_temp_high", "target_temp_low")
+
 _AUTOMATION_YAML = "automations.yaml"
+
+
+class MesaStorageCorruptError(MesaError):
+    """The stored profile set cannot be trusted, so MESA must not start from it."""
+
+
+def _exchange_documents(documents: dict[str, dict[str, Any]], first: str, second: str) -> None:
+    moved_first, moved_second = documents.pop(first, None), documents.pop(second, None)
+    if moved_first is not None:
+        documents[second] = moved_first
+    if moved_second is not None:
+        documents[first] = moved_second
 
 
 class PhoenixMesaBackend(StorageBackend):
@@ -117,6 +148,14 @@ class PhoenixMesaBackend(StorageBackend):
         """Deep-enough copy for persistence (profile docs are plain JSON)."""
         return {k: dict(v) for k, v in self._data.items()}
 
+    def restore(self, documents: dict[str, dict[str, Any]]) -> None:
+        """Replace the whole in-memory set with a saved snapshot."""
+        self._data = {k: dict(v) for k, v in documents.items()}
+
+    def exchange(self, first: str, second: str) -> None:
+        """Swap the documents under two keys, either of which may be empty."""
+        _exchange_documents(self._data, first, second)
+
 
 @dataclass
 class MesaRuntime:
@@ -145,16 +184,28 @@ class MesaRuntime:
     # key next to "profiles"; mesa-core never sees it).
     suggestions: list = field(default_factory=list)
     dismissed_suggestions: set[str] = field(default_factory=set)
+    # What storage holds, which a failed save returns memory to.
+    durable_profiles: dict[str, dict[str, Any]] = field(default_factory=dict)
+    durable_dismissed: list[str] = field(default_factory=list)
 
     async def async_save(self) -> None:
         """Persist the current profile set to HA storage.
 
-        Callers already hold ``self.lock`` for the mutate-then-save sequence.
+        Callers already hold ``self.lock`` for the mutate-then-save sequence. A
+        failed write returns memory to the last durable set before raising
+        MesaSaveError, so a change reported as failed is not left in force while
+        storage holds the old policy.
         """
-        await self.ha_store.async_save({
-            "profiles": self.backend.snapshot(),
-            "dismissed_suggestions": sorted(self.dismissed_suggestions),
-        })
+        profiles = self.backend.snapshot()
+        dismissed = sorted(self.dismissed_suggestions)
+        try:
+            await self.ha_store.async_save({"profiles": profiles, "dismissed_suggestions": dismissed})
+        except DurableStorageError as err:
+            self.backend.restore(self.durable_profiles)
+            self.dismissed_suggestions = set(self.durable_dismissed)
+            raise MesaSaveError("MESA profiles could not be saved.") from err
+        self.durable_profiles = profiles
+        self.durable_dismissed = dismissed
 
     async def async_wipe(self) -> None:
         """Delete every MESA profile and reset all Phoenix-side MESA caches.
@@ -208,14 +259,17 @@ def _on_event_loop(hass: HomeAssistant, callback: Callable[..., _T]) -> Callable
 def _build_get_entity_area(hass: HomeAssistant) -> Callable[[str], str | None]:
     """Return a sync callback mapping entity_id to its effective area_id.
 
-    The entity's own area, else its device's effective area. Reading the device's
-    area walks the device registry, so the lookup runs on the event loop.
+    The entity's own area, else its device's effective area. Runs once per
+    resolved entity, so it reads the device and its parent directly instead of
+    building a whole-registry snapshot, and on the event loop, where the
+    registries change.
     """
 
     def _get_entity_area(entity_id: str) -> str | None:
-        er = er_mod.async_get(hass)
-        entry = er.async_get(entity_id)
-        return effective_entity_area_id(entry, device_registry_snapshot(hass))
+        entry = er_mod.async_get(hass).async_get(entity_id)
+        if entry is None:
+            return None
+        return entry.area_id or device_effective_area_id(hass, entry.device_id)
 
     return _on_event_loop(hass, _get_entity_area)
 
@@ -342,7 +396,7 @@ def build_expand_target(hass: HomeAssistant) -> Callable[[str, str], list[str]]:
                 for device in dr_mod.async_entries_for_label(dev_reg, ref):
                     out.extend(_device_entities(ent_reg, device.id))
                 return out
-        except Exception:  # noqa: BLE001 - fail-quiet per the docstring
+        except Exception:  # fail-quiet per the docstring
             return []
         return []
 
@@ -351,7 +405,7 @@ def build_expand_target(hass: HomeAssistant) -> Callable[[str, str], list[str]]:
     def _expand_target_from_any_thread(kind: str, ref: str) -> list[str]:
         try:
             return on_loop(kind, ref)
-        except Exception:  # noqa: BLE001 - fail-quiet per the docstring, including a loop that is stopping
+        except Exception:  # fail-quiet per the docstring, including a loop that is stopping
             return []
 
     return _expand_target_from_any_thread
@@ -363,6 +417,24 @@ def _build_get_state(hass: HomeAssistant) -> Callable[[str], str | None]:
         return state.state if state is not None else None
 
     return _get_state
+
+
+def _build_get_calendar_events(hass: HomeAssistant) -> Callable[[str], list[str]]:
+    """Return a sync callback naming a calendar entity's current event, if any.
+
+    Backs mesa-core's calendar_entity temporal condition, which holds while the
+    list is non-empty. A calendar entity is "on" exactly while one of its events
+    is running, so its cached state answers without a fetch. Anything but on or
+    off raises, which mesa-core treats as unevaluable (fail-closed).
+    """
+
+    def _get_calendar_events(calendar_id: str) -> list[str]:
+        state = hass.states.get(calendar_id)
+        if state is None or state.state not in ("on", "off"):
+            raise LookupError(f"{calendar_id} reports no usable state")
+        return [str(state.attributes.get("message") or calendar_id)] if state.state == "on" else []
+
+    return _get_calendar_events
 
 
 def _build_get_solar_elevation(hass: HomeAssistant) -> Callable[[datetime], float | None]:
@@ -379,7 +451,7 @@ def _build_get_solar_elevation(hass: HomeAssistant) -> Callable[[datetime], floa
         try:
             location, elevation = sun_mod.get_astral_location(hass)
             return float(location.solar_elevation(at, elevation))
-        except Exception:  # noqa: BLE001 - fail-closed per the mesa-core contract
+        except Exception:  # fail-closed per the mesa-core contract
             return None
 
     return _get_solar_elevation
@@ -392,7 +464,6 @@ def _build_on_lease_event(hass: HomeAssistant) -> Callable[[dict[str, Any]], Non
     callback fires there; hass.add_job hops back to the event loop before touching
     the bus (async_fire is a @callback, loop-only).
     """
-    from .const import DOMAIN  # noqa: PLC0415 - matches fire_mesa_blocked_event
 
     def _on_lease_event(payload: dict[str, Any]) -> None:
         hass.add_job(hass.bus.async_fire, f"{DOMAIN}_mesa_lease_expired", dict(payload))
@@ -421,12 +492,34 @@ def async_track_lease_expiry(hass: HomeAssistant, runtime: MesaRuntime) -> Calla
         sweeping = True
         try:
             await hass.async_add_executor_job(runtime.lease_manager.expire)
-        except Exception:  # noqa: BLE001 - leases are advisory; the next sweep retries
+        except Exception:  # leases are advisory; the next sweep retries
             _LOGGER.debug("Phoenix MCP MESA: lease expiry sweep failed", exc_info=True)
         finally:
             sweeping = False
 
     return async_track_time_interval(hass, _sweep, MESA_LEASE_SWEEP_INTERVAL)
+
+
+async def async_end_leases(hass: HomeAssistant, runtime: MesaRuntime) -> None:
+    """End every lease while unloading, so each still fires its ended event.
+
+    Leases live only in this runtime, which a reload replaces, and an automation
+    waiting on phoenix_mcp_mesa_lease_expired must not be left waiting. Client
+    disconnects are no release point, since a lease belongs to its access key. Runs
+    in the executor for the same reason as the sweep. Fails quiet: leases are
+    advisory, and a failure here must not hold up the unload.
+    """
+
+    def _end_all() -> None:
+        manager = runtime.lease_manager
+        manager.expire()
+        for session_id in {lease.session_id for lease in manager.active_leases()}:
+            manager.release_session(session_id)
+
+    try:
+        await hass.async_add_executor_job(_end_all)
+    except Exception:  # advisory cleanup never blocks an unload
+        _LOGGER.debug("Phoenix MCP MESA: ending leases at unload failed", exc_info=True)
 
 
 def _numeric_threshold_example(nt_spec: dict[str, Any]) -> dict[str, Any]:
@@ -503,7 +596,8 @@ async def async_semantic_moments(hass: HomeAssistant, entity_id: str) -> list[di
     they fail, moments are returned without those keys.
     """
     try:
-        from homeassistant.components.websocket_api.automation import (  # noqa: PLC0415
+        # Local: optional component, imported only when this path runs.
+        from homeassistant.components.websocket_api.automation import (
             async_get_conditions_for_target,
             async_get_triggers_for_target,
         )
@@ -511,28 +605,30 @@ async def async_semantic_moments(hass: HomeAssistant, entity_id: str) -> list[di
         target = {"entity_id": entity_id}
         triggers = await async_get_triggers_for_target(hass, target, False)
         conditions = await async_get_conditions_for_target(hass, target, False)
-    except Exception:  # noqa: BLE001 - degrade to field-omitted, never break the tool
+    except Exception:  # degrade to field-omitted, never break the tool
         _LOGGER.debug("semantic moments lookup failed for %s", entity_id, exc_info=True)
         return None
 
     trigger_schemas: dict[str, Any] = {}
     try:
-        from homeassistant.helpers.trigger import (  # noqa: PLC0415
+        # Local: inside a guard for releases that lack it.
+        from homeassistant.helpers.trigger import (
             async_get_all_descriptions as async_get_all_trigger_descriptions,
         )
 
         trigger_schemas = await async_get_all_trigger_descriptions(hass)
-    except Exception:  # noqa: BLE001 - schema is best-effort; ids above still stand
+    except Exception:  # schema is best-effort; ids above still stand
         _LOGGER.debug("semantic moments trigger schema lookup failed for %s", entity_id, exc_info=True)
 
     condition_schemas: dict[str, Any] = {}
     try:
-        from homeassistant.helpers.condition import (  # noqa: PLC0415
+        # Local: inside a guard for releases that lack it.
+        from homeassistant.helpers.condition import (
             async_get_all_descriptions as async_get_all_condition_descriptions,
         )
 
         condition_schemas = await async_get_all_condition_descriptions(hass)
-    except Exception:  # noqa: BLE001 - schema is best-effort; ids above still stand
+    except Exception:  # schema is best-effort; ids above still stand
         _LOGGER.debug("semantic moments condition schema lookup failed for %s", entity_id, exc_info=True)
 
     moments: list[dict[str, Any]] = []
@@ -571,7 +667,7 @@ def read_automation_configs(hass: HomeAssistant) -> list[dict[str, Any]]:
         return []
     try:
         data = _load_yaml(path)
-    except Exception:  # noqa: BLE001 - a broken YAML file must not crash setup
+    except Exception:  # a broken YAML file must not crash setup
         _LOGGER.warning("MESA: could not parse %s for trigger validation", path, exc_info=True)
         return []
     return [item for item in data if isinstance(item, dict)] if isinstance(data, list) else []
@@ -593,16 +689,42 @@ def build_caller_context(access_key: AccessKeyRecord, session_id: str) -> Caller
     )
 
 
+def _corrupt_copies(path: str) -> list[str]:
+    """Copies Home Assistant set aside when a store could not be parsed. Touches the disk."""
+    return glob.glob(f"{glob.escape(path)}.corrupt.*")
+
+
 async def async_setup_mesa(hass: HomeAssistant, mesa_mode: str) -> MesaRuntime:
     """Construct the MESA runtime, loading any persisted profiles.
 
     Built even when the kill switch is on: the admin profile API must work
     regardless, and the enforcement gate is never reached when no client routes
     are registered.
+
+    Raises MesaStorageCorruptError rather than starting without the stored
+    policy, so the gates fail closed through the setup-failure path. Home
+    Assistant moves an undecodable file aside and reports an empty store, so a
+    corrupt copy with no file in its place keeps refusing across reloads until
+    the operator restores the copy or deletes it.
     """
-    ha_store: Store[dict] = Store(hass, MESA_STORAGE_VERSION, MESA_STORAGE_KEY)
-    raw = await ha_store.async_load() or {}
-    backend = PhoenixMesaBackend(raw.get("profiles") or {})
+    ha_store: Store[dict] = DurableStore(hass, MESA_STORAGE_VERSION, MESA_STORAGE_KEY, atomic_writes=True)
+    raw = await ha_store.async_load()
+    if raw is None:
+        corrupt = await hass.async_add_executor_job(_corrupt_copies, ha_store.path)
+        if corrupt:
+            raise MesaStorageCorruptError(
+                f"MESA profile storage is corrupt. Copy {sorted(corrupt)[-1]} back to {ha_store.path}, "
+                "or delete it to start with no profiles, then reload Phoenix MCP."
+            )
+        raw = {}
+    profiles = raw.get("profiles", {}) if isinstance(raw, dict) else None
+    if not isinstance(profiles, dict) or not all(isinstance(doc, dict) for doc in profiles.values()):
+        raise MesaStorageCorruptError(
+            f"MESA profile storage at {ha_store.path} has an invalid shape. "
+            "Restore it from a backup, then reload Phoenix MCP."
+        )
+    backend = PhoenixMesaBackend(profiles)
+    dismissed = {k for k in (raw.get("dismissed_suggestions") or []) if isinstance(k, str)}
 
     get_entity_area = _build_get_entity_area(hass)
     get_entity_integration = _build_get_entity_integration(hass)
@@ -636,6 +758,7 @@ async def async_setup_mesa(hass: HomeAssistant, mesa_mode: str) -> MesaRuntime:
         interactive=False,
         get_state=_build_get_state(hass),
         get_solar_elevation=_build_get_solar_elevation(hass),
+        get_calendar_events=_build_get_calendar_events(hass),
     )
     validator = TriggerValidator(store=store, expand_target=build_expand_target(hass))
     lease_manager = LeaseManager(
@@ -653,9 +776,9 @@ async def async_setup_mesa(hass: HomeAssistant, mesa_mode: str) -> MesaRuntime:
         validator=validator,
         ha_store=ha_store,
         lease_manager=lease_manager,
-        dismissed_suggestions={
-            k for k in (raw.get("dismissed_suggestions") or []) if isinstance(k, str)
-        },
+        dismissed_suggestions=dismissed,
+        durable_profiles=backend.snapshot(),
+        durable_dismissed=sorted(dismissed),
     )
 
 
@@ -731,8 +854,9 @@ def refresh_orphans(hass: HomeAssistant, runtime: MesaRuntime) -> None:
     store's ``find_orphans``), device profiles whose device was removed, area
     profiles whose area was deleted, and integration profiles whose integration is
     neither producing entities nor loaded as a component. MESA never auto-deletes
-    a profile (a rename or temporary removal must not lose authored intent); this
-    only surfaces them for manual cleanup.
+    a profile (a temporary removal must not lose authored intent); this only
+    surfaces them for manual cleanup. A registry rename does not leave an orphan:
+    carry_renamed_profile moves the profile with the entity.
 
     The scoped kinds are computed here because ``find_orphans`` returns scoped
     orphans as their full reserved key (``__device__:abc``), which would change
@@ -754,6 +878,85 @@ def refresh_orphans(hass: HomeAssistant, runtime: MesaRuntime) -> None:
     runtime.orphan_integrations = [
         i for i in runtime.store.integration_keys() if i not in known_integrations
     ]
+
+
+def _stored_control_rank(runtime: MesaRuntime, entity_id: str) -> int | None:
+    """Restrictiveness of a stored entity profile's own mode, or None if unreadable."""
+    try:
+        profile = runtime.store.get(entity_id)
+    except (MesaError, ValueError):
+        return None
+    mode = profile.operational_boundaries.control_mode if profile is not None else None
+    return CONTROL_MODE_RANK[mode] if isinstance(mode, ControlMode) else -1
+
+
+def carry_renamed_profile(runtime: MesaRuntime, old_entity_id: str, new_entity_id: str) -> bool:
+    """Move an entity profile to the entity's new id. Returns whether it had one.
+
+    Synchronous so the registry event moves it before any later call can address
+    the new id; when this returns True the caller persists the result and refreshes
+    the orphan list. Profiles are keyed by entity id, so without this the renamed
+    entity loses its protection while the permission grant follows it.
+
+    Home Assistant frees the new id before a rename, so a profile already stored
+    there describes an entity that is gone or one that does not exist yet. Neither
+    is deleted, and the stricter of the two governs the renamed entity: this
+    exchange never loosens policy. The other stays under the old id, where it shows
+    as an orphan for the operator to resolve. A mode that cannot be read counts as
+    strictest, since its document may hold a restriction that cannot be compared.
+    """
+    if runtime.backend.read(old_entity_id) is None:
+        return False
+    if runtime.backend.read(new_entity_id) is not None:
+        ranks = [_stored_control_rank(runtime, eid) for eid in (old_entity_id, new_entity_id)]
+        _LOGGER.warning(
+            "MESA: %s was renamed to %s, which already has a profile. Both are kept; "
+            "the stricter applies to %s and the other is now an orphan to review.",
+            old_entity_id, new_entity_id, new_entity_id,
+        )
+        if ranks[1] is None or (ranks[0] is not None and ranks[0] <= ranks[1]):
+            return True
+    runtime.backend.exchange(old_entity_id, new_entity_id)
+    _exchange_documents(runtime.durable_profiles, old_entity_id, new_entity_id)
+    return True
+
+
+async def async_persist_renamed_profile(hass: HomeAssistant, runtime: MesaRuntime) -> None:
+    """Save a carried profile. A failed write leaves the carried set in force."""
+    async with runtime.lock:
+        try:
+            await runtime.async_save()
+        except MesaSaveError:
+            _LOGGER.error("MESA: a renamed entity's profile could not be saved; it holds until the next restart")
+        refresh_orphans(hass, runtime)
+
+
+def area_profile_exits(
+    data: PhoenixData, moves: Mapping[str, str | None]
+) -> list[str]:
+    """The entities an area change would take out of a profiled area.
+
+    ``moves`` maps each affected entity to its effective area after the change.
+    Area is an input to policy, so a move out of a profiled area can lift a
+    restriction, while a move into one only tightens: inheritance layers never
+    loosen. Only a move that leaves a profile is therefore a MESA action, so an
+    ordinary room change for an entity with a restrictive domain default stays
+    unaffected. With the runtime unavailable every changed entity is returned, for
+    the gate to refuse.
+    """
+    runtime = data.mesa
+    if data.store.get_settings().mesa_mode == MESA_MODE_OFF:
+        return []
+    if runtime is None:
+        return sorted(moves)
+    get_area = _build_get_entity_area(runtime.hass)
+    return sorted(
+        entity_id
+        for entity_id, after in moves.items()
+        if (before := get_area(entity_id)) is not None
+        and before != after
+        and runtime.store.get_area_profile(before) is not None
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -808,6 +1011,10 @@ def evaluate_registry_action(
     cannot bypass a restrictive ancestor. The returned fingerprint covers the
     whole resolved explanation, not only the final control-mode string; an
     approval can therefore satisfy only the MESA state it actually previewed.
+
+    Every caller is a real gate, so a refusal here reaches the MESA audit trail
+    under the dispatching request. An executor resuming an approval has none and
+    gets a request id of its own.
     """
     runtime = data.mesa
     settings = data.store.get_settings()
@@ -857,16 +1064,19 @@ def evaluate_registry_action(
         "provided_by_origin": control.provided_by_origin if control is not None else None,
         "profile_fingerprint": fingerprint[:16],
     }
-    verdict = evaluate_service_entities(
-        runtime,
-        settings.mesa_mode,
-        access_key,
-        [entity_id],
-        domain=registry_domain,
-        service=action,
-        service_data=dict(service_data or {}),
-        session_id=session_id,
-    )
+    with mesa_audit.request_context(
+        access_key, dispatch_request_id.get() or generate_request_id(), dispatch_client_ip.get()
+    ):
+        verdict = evaluate_service_entities(
+            runtime,
+            settings.mesa_mode,
+            access_key,
+            [entity_id],
+            domain=registry_domain,
+            service=action,
+            service_data=dict(service_data or {}),
+            session_id=session_id,
+        )
     reason = boundaries.control_reason or entity_id
     if verdict.confirm:
         return RegistryMesaDecision(
@@ -905,6 +1115,212 @@ def _host_enforced(settings_mode: str, result: Any) -> bool:
     return getattr(boundaries, "enforcement_mode", "advisory") == "enforced"
 
 
+def evaluate_service_call(
+    runtime: MesaRuntime,
+    settings_mode: str,
+    access_key: AccessKeyRecord,
+    entities: list[str],
+    *,
+    domain: str,
+    service: str,
+    service_data: dict[str, Any],
+    session_id: str,
+    confirm_approved: bool = False,
+    service_data_by_entity: dict[str, dict[str, Any]] | None = None,
+) -> MesaVerdict:
+    """Evaluate a service call, looking through group helpers to the members it actuates.
+
+    A group reaches its members, so a policy on a member governs the group: a
+    blocked member blocks the group and a member needing confirmation sends the
+    group to confirmation. The verdict names the group, never the member, which
+    the access key may not be able to see.
+    """
+    verdict = evaluate_service_entities(
+        runtime, settings_mode, access_key, entities, domain=domain, service=service,
+        service_data=service_data, session_id=session_id, confirm_approved=confirm_approved,
+        service_data_by_entity=service_data_by_entity,
+    )
+    for group in [*verdict.allowed, *verdict.confirm]:
+        members = group_member_ids(group, runtime.hass)
+        if members == frozenset():
+            continue
+        group_data = service_data_by_entity[group] if service_data_by_entity is not None else service_data
+        member_verdict = None if members is None else evaluate_service_entities(
+            runtime, settings_mode, access_key, sorted(members), domain=domain, service=service,
+            service_data=group_data, session_id=session_id, confirm_approved=confirm_approved,
+        )
+        if member_verdict is None or member_verdict.blocked:
+            rule = member_verdict.blocked[0][1] if member_verdict is not None else "control_mode:blocked"
+            verdict.allowed = [entity_id for entity_id in verdict.allowed if entity_id != group]
+            verdict.confirm = [entity_id for entity_id in verdict.confirm if entity_id != group]
+            verdict.blocked.append((group, rule, f"A member of {group} is blocked by policy."))
+        elif member_verdict.confirm and group in verdict.allowed:
+            verdict.allowed.remove(group)
+            verdict.confirm.append(group)
+        if member_verdict is not None and member_verdict.warnings:
+            verdict.warnings.append(f"{group}: a member of this group has an advisory policy restriction.")
+    return verdict
+
+
+def _finite_number(value: Any) -> float | None:
+    """A numeric value as Home Assistant's own coercion reads it, else None."""
+    if isinstance(value, bool):
+        return None
+    try:
+        number = float(value)
+    except (TypeError, ValueError, OverflowError):
+        return None
+    return number if math.isfinite(number) else None
+
+
+def _light_default_brightness(hass: HomeAssistant, entity_id: str, params: dict[str, Any]) -> float | None:
+    """The brightness Home Assistant's default light profile gives this call, if any.
+
+    The profile store is asked the way the light service asks it, on a copy, so the
+    rule for when a default applies stays Home Assistant's.
+    """
+    profiles = hass.data.get(LIGHT_DATA_PROFILES)
+    if profiles is None:
+        return None
+    state = hass.states.get(entity_id)
+    applied = dict(params)
+    profiles.apply_default(entity_id, state is not None and state.state == "on", applied)
+    return _finite_number(applied.get("brightness"))
+
+
+def _light_limit_params(hass: HomeAssistant, entity_id: str, params: dict[str, Any]) -> dict[str, Any]:
+    """Add the absolute brightness a light.turn_on call amounts to.
+
+    mesa-core matches a declared limit on the exact parameter name, while Home
+    Assistant accepts one brightness as brightness, brightness_pct or a step from
+    the current level. Both absolute forms are added, so a limit on either sees
+    the same value and the caller's own parameters stay as sent. A brightness that
+    cannot be worked out, including one a named light profile supplies, is added
+    as None: mesa-core refuses a value it cannot compare, and only for a limit on
+    that parameter. A call naming no brightness measures the default light profile
+    when one applies. Otherwise the light keeps or restores a level no state shows,
+    and nothing is added.
+    """
+    scale = _LIGHT_FULL_BRIGHTNESS / 100
+    if "brightness_step" in params or "brightness_step_pct" in params:
+        state = hass.states.get(entity_id)
+        current = _finite_number(state.attributes.get("brightness")) if state and state.state == "on" else None
+        step = (
+            _finite_number(params["brightness_step"]) if "brightness_step" in params
+            else (pct * scale if (pct := _finite_number(params["brightness_step_pct"])) is not None else None)
+        )
+        brightness = None if step is None else min(max((current or 0) + step, 0), _LIGHT_FULL_BRIGHTNESS)
+    elif "brightness_pct" in params:
+        pct = _finite_number(params["brightness_pct"])
+        brightness = None if pct is None else pct * scale
+    elif "brightness" in params:
+        brightness = _finite_number(params["brightness"])
+    elif "profile" in params:
+        brightness = None
+    elif (brightness := _light_default_brightness(hass, entity_id, params)) is None:
+        return params
+    return {
+        "brightness": brightness,
+        "brightness_pct": None if brightness is None else brightness / scale,
+        **params,
+    }
+
+
+def _fan_stepped_percentage(hass: HomeAssistant, entity_id: str, service: str, params: dict[str, Any]) -> float | None:
+    """The percentage a fan speed step lands on, or None when it cannot be worked out.
+
+    Follows FanEntity: an explicit step moves from the current percentage, and the
+    default step moves one speed through the fan's speed range.
+    """
+    state = hass.states.get(entity_id)
+    attributes = state.attributes if state is not None else {}
+    current = _finite_number(attributes.get("percentage")) or 0
+    modifier = 1 if service == "increase_speed" else -1
+    if "percentage_step" in params:
+        step = _finite_number(params["percentage_step"])
+        return None if step is None else max(0, min(100, current + step * modifier))
+    step = _finite_number(attributes.get("percentage_step"))
+    if not step or step <= 0:
+        return None
+    speed_range = (1, round(100 / step))
+    index = math.ceil(percentage_to_ranged_value(speed_range, current))
+    return max(0, min(100, ranged_value_to_percentage(speed_range, index + modifier)))
+
+
+def _fan_limit_forms(
+    hass: HomeAssistant, entity_id: str, service: str, params: dict[str, Any]
+) -> list[tuple[str, dict[str, Any]]]:
+    """The percentage services a fan call amounts to.
+
+    fan.turn_on and fan.set_percentage set one percentage, and a speed step ends
+    on one, so a limit on either service measures all of them.
+    """
+    if service in _FAN_STEP_SERVICES:
+        measured = {**params, "percentage": _fan_stepped_percentage(hass, entity_id, service, params)}
+    elif service in _FAN_PERCENTAGE_SERVICES and "percentage" in params:
+        measured = params
+    else:
+        return []
+    return [(f"fan.{name}", measured) for name in _FAN_PERCENTAGE_SERVICES if name != service]
+
+
+def _climate_limit_forms(params: dict[str, Any]) -> list[tuple[str, dict[str, Any]]]:
+    """The setpoints of a climate.set_temperature call under each other's names.
+
+    A call sets one temperature or a low and high range. Each end of a range meets
+    a limit on temperature, and a single temperature meets a limit on either end.
+    """
+    service = "climate.set_temperature"
+    forms = [
+        (service, {**params, "temperature": params[end]})
+        for end in _CLIMATE_RANGE_ENDS if end in params
+    ]
+    if "temperature" in params:
+        forms.append((service, {**dict.fromkeys(_CLIMATE_RANGE_ENDS, params["temperature"]), **params}))
+    return forms
+
+
+def _limit_equivalents(
+    runtime: MesaRuntime, entity_id: str, domain: str, service: str, params: dict[str, Any]
+) -> list[tuple[str, dict[str, Any]]]:
+    """The calls a service call amounts to, which a declared limit also measures.
+
+    mesa-core compares a limit with the exact service and parameter named. A
+    generic homeassistant turn service runs as the same service on the entity's
+    own domain with its data forwarded, a toggle with data turns an off entity on
+    with that data, and a light, a fan and a thermostat each take one value under
+    several names or services. Each form must meet the same limit. A toggle with
+    no data on a light that is on only turns it off, so it measures nothing.
+    """
+    own_domain = domain
+    if domain == "homeassistant" and service in _GENERIC_TURN_SERVICES:
+        own_domain = entity_id.partition(".")[0]
+    services = [f"{own_domain}.{service}"]
+    measured = params
+    if own_domain == "light" and service in ("turn_on", "toggle"):
+        state = runtime.hass.states.get(entity_id)
+        if service == "turn_on" or params or state is None or state.state != "on":
+            measured = _light_limit_params(runtime.hass, entity_id, params)
+    if service == "toggle" and measured:
+        services.append(f"{own_domain}.turn_on")
+    exact = f"{domain}.{service}"
+    forms = [
+        (name, measured) for name in services
+        if name != exact or measured is not params
+    ]
+    if own_domain == "fan":
+        forms.extend(_fan_limit_forms(runtime.hass, entity_id, "turn_on" if service == "toggle" else service, params))
+    elif own_domain == "climate" and service == "set_temperature":
+        forms.extend(_climate_limit_forms(params))
+    return forms
+
+
+def _carries_limits(result: Any) -> bool:
+    """Whether a resolved profile holds a limit, directly or in a temporal constraint."""
+    boundaries = result.effective_profile.operational_boundaries
+    return bool(boundaries.declared_limits or boundaries.temporal_constraints)
+
+
 def evaluate_service_entities(
     runtime: MesaRuntime,
     settings_mode: str,
@@ -923,7 +1339,10 @@ def evaluate_service_entities(
     The public evaluated mode includes temporal and privacy adjustments from
     this call. Phoenix always vetoes read-only writes. Non-interactive Confirm
     blocks enter the admin gate; advisory Confirm allows with a host warning.
-    Approval satisfies only confirmation, never another restriction.
+    Approval satisfies only confirmation, never another restriction. Warnings
+    and reasons can name an entity other than the target, such as a limit's
+    predicate entity, so what the key cannot read is redacted here, for every
+    gate and preview alike.
     """
     verdict = MesaVerdict()
     caller = build_caller_context(access_key, session_id)
@@ -935,20 +1354,44 @@ def evaluate_service_entities(
             if service_data_by_entity is not None
             else service_data
         )
+        # The parameters this call will execute, not a filtered view of them: a
+        # decision made about a different payload than the one sent is the
+        # divergence the target check exists to catch, and the audit record would
+        # describe a call that never happened. service_data has already had its
+        # target selectors CONSUMED by target resolution, so they are absent from
+        # the outgoing call too. The one exception is a non-mapping target, which
+        # is a data field such as a notification recipient, selects nothing in
+        # hass.services.async_call, and has no entity for mesa-core to compare.
+        # The resolved entity goes last so no caller value can displace it.
+        service_params = {
+            key: value for key, value in entity_service_data.items()
+            if key != "target" or isinstance(value, Mapping)
+        }
         result = runtime.enforcer.evaluate(
             entity_id=entity_id,
             service=service_str,
-            # The parameters this call will execute, not a filtered view of them:
-            # a decision made about a different payload than the one sent is the
-            # divergence the target check exists to catch, and the audit record
-            # would describe a call that never happened. service_data has already
-            # had its target selectors CONSUMED by target resolution, so they are
-            # absent from the outgoing call too and nothing needs withholding. The
-            # resolved entity goes last so no caller value can displace it.
-            service_params={**entity_service_data, "entity_id": entity_id},
+            service_params={**service_params, "entity_id": entity_id},
             caller_context=caller,
             current_time=now,
         )
+        # Equivalent forms decide nothing but limits, so a profile without one
+        # is judged by the call alone.
+        for equivalent_service, equivalent_params in _limit_equivalents(
+            runtime, entity_id, domain, service, service_params
+        ):
+            if not result.allowed or not _carries_limits(result):
+                break
+            equivalent = runtime.enforcer.evaluate(
+                entity_id=entity_id,
+                service=equivalent_service,
+                service_params={**equivalent_params, "entity_id": entity_id},
+                caller_context=caller,
+                current_time=now,
+            )
+            if not equivalent.allowed and (equivalent.rule_applied or "").startswith("declared_limit:"):
+                result = equivalent
+            else:
+                verdict.warnings.extend(w for w in equivalent.warnings if w not in result.warnings)
         mode = result.evaluated_control_mode
         rule = result.rule_applied or "control_mode:blocked"
         confirmation = mode is ControlMode.CONFIRM and (
@@ -968,6 +1411,8 @@ def evaluate_service_entities(
         if result.allowed and mode is None:
             verdict.blocked.append((entity_id, "policy_unavailable", "MESA returned no evaluated control mode."))
             continue
+        if result.rule_applied == "policy_unavailable":
+            mesa_audit.record_policy_failure(entity_id, service_str, caller, result)
         if confirmation:
             if confirm_approved or not _host_enforced(settings_mode, result):
                 verdict.allowed.append(entity_id)
@@ -984,18 +1429,20 @@ def evaluate_service_entities(
             verdict.allowed.append(entity_id)
             continue
         if rule == _RULE_CONTRADICTORY_TARGET:
-            # Not a policy decision about the entity: it means the payload
-            # named a target other than the one the decision was made for,
-            # which cannot happen once target resolution has consumed the
-            # selectors. Reaching it is a Phoenix MCP bug, and the caller
-            # only ever sees the uniform refusal, so log it or the cause is
-            # invisible.
-            _LOGGER.error(
-                "MESA refused %s on %s as a contradictory target, which means the "
-                "evaluated parameters diverged from the resolved targets: %s",
-                service_str, entity_id, result.reason,
-            )
+            # The caller sees the uniform refusal and the MESA audit row carries
+            # the conflict. A caller chooses these parameters, so this stays below
+            # the levels an operator watches.
+            _LOGGER.debug("MESA refused %s on %s: %s", service_str, entity_id, result.reason)
         verdict.blocked.append((entity_id, rule, result.reason))
+    if verdict.warnings or verdict.blocked:
+        hass = runtime.hass
+        verdict.warnings = list(dict.fromkeys(
+            redact_inaccessible_entity_ids_in_text(warning, access_key, hass) for warning in verdict.warnings
+        ))
+        verdict.blocked = [
+            (entity_id, rule, redact_inaccessible_entity_ids_in_text(reason, access_key, hass))
+            for entity_id, rule, reason in verdict.blocked
+        ]
     return verdict
 
 
@@ -1032,7 +1479,7 @@ def entity_control_mode(
         if cm is None:
             cm = result.effective_profile.operational_boundaries.control_mode
         return getattr(cm, "value", cm) if cm is not None else None
-    except Exception:  # noqa: BLE001 - advisory display must never break the caller
+    except Exception:  # advisory display must never break the caller
         return None
 
 
@@ -1059,13 +1506,13 @@ def mesa_confirm_preview(
         settings = data.store.get_settings()
         if runtime is None or settings.mesa_mode == MESA_MODE_OFF or not entities:
             return []
-        verdict = evaluate_service_entities(
+        verdict = evaluate_service_call(
             runtime, settings.mesa_mode, access_key, list(entities),
             domain=domain, service=service, service_data=service_data,
             session_id="approval_diff",
         )
         return list(verdict.confirm)
-    except Exception:  # noqa: BLE001 - advisory annotation only
+    except Exception:  # advisory annotation only
         return []
 
 
@@ -1135,6 +1582,26 @@ class MesaGateOutcome:
     warnings: list[str] = field(default_factory=list)
 
 
+UNRESOLVED_CONTEXT_WARNING = (
+    "MESA could not check this because it has no registry entity to resolve a policy through; "
+    "proceeding because MESA is in advisory mode."
+)
+
+
+def unresolved_context_refused(data: PhoenixData, device_id: str | None = None) -> bool:
+    """Whether a target with no registry entity must be refused rather than warned about.
+
+    mesa-core resolves policy through an entity, so such a target cannot be judged.
+    Enforced mode and a failed runtime refuse what they cannot judge. Advisory warns,
+    as it does for everything else, unless the operator stored a profile for this
+    very device: that is a known policy, and it cannot be evaluated here.
+    """
+    runtime = data.mesa
+    if runtime is None or data.store.get_settings().mesa_mode != MESA_MODE_ADVISORY:
+        return True
+    return device_id is not None and device_id in runtime.store.device_keys()
+
+
 async def async_apply_mesa_to_call(
     hass: HomeAssistant,
     data: PhoenixData,
@@ -1150,7 +1617,7 @@ async def async_apply_mesa_to_call(
     confirm_approved: bool = False,
     approval_tool_name: str = MESA_APPROVED_EXECUTOR,
     approval_args: dict[str, Any] | None = None,
-    approval_diff: dict[str, Any] | None = None,
+    approval_diff: dict[str, Any] | Callable[[], Any] | None = None,
     require_all: bool = False,
     service_data_by_entity: dict[str, dict[str, Any]] | None = None,
 ) -> MesaGateOutcome:
@@ -1166,7 +1633,8 @@ async def async_apply_mesa_to_call(
     optional approval fields let another exact-action executor reuse this gate;
     ``require_all`` turns the normal safe subset behavior into all-or-nothing.
     ``service_data_by_entity`` describes one logical operation whose exact
-    service parameters differ per target.
+    service parameters differ per target. ``approval_diff`` may be a zero-arg
+    builder, sync or async, read only when an approval is created.
     """
     runtime = data.mesa
     settings = data.store.get_settings()
@@ -1183,7 +1651,7 @@ async def async_apply_mesa_to_call(
     # dry_run_service / find_available_actions to PREVIEW a verdict, and a
     # preview is not a denial worth a row in the operator's log.
     with mesa_audit.request_context(access_key, request_id, client_ip):
-        verdict = evaluate_service_entities(
+        verdict = evaluate_service_call(
             runtime,
             settings.mesa_mode,
             access_key,
@@ -1209,17 +1677,18 @@ async def async_apply_mesa_to_call(
             verdict,
             service_data_by_entity=service_data_by_entity,
         )
-        if approval_diff is None:
+        supplied_diff: Any = approval_diff() if callable(approval_diff) else approval_diff
+        if inspect.isawaitable(supplied_diff):
+            supplied_diff = await supplied_diff
+        if supplied_diff is None:
             diff = mesa_diff
         else:
-            diff = dict(approval_diff)
+            diff = dict(supplied_diff)
             preview = dict(diff.get("preview") or {})
             preview["mesa"] = mesa_diff["preview"]["mesa"]
             diff["preview"] = preview
-        from .approval_targets import bind_targets, bound_preview
         saved_args = (dict(approval_args) if approval_args is not None else _mesa_call_args(
             domain, service, service_data, verdict.confirm + verdict.allowed))
-        from .const import APPROVAL_TARGETS_KEY
         if approval_tool_name in (MESA_APPROVED_EXECUTOR, "HassSetVolumeRelative"):
             if APPROVAL_TARGETS_KEY not in saved_args:
                 saved_args = bind_targets(saved_args, verdict.confirm + verdict.allowed, hass)
@@ -1251,6 +1720,7 @@ async def async_apply_mesa_to_call(
     # in-scope entity's control_mode even to an access key that lacks profile-read access.
     # Not an enumeration oracle (the access key targeted an entity it already has WRITE on).
     # Hiding it would mean gating warnings on cap_config_read at the surfacing sites.
+    mesa_audit.note_mesa_advisory(verdict.warnings)
     return MesaGateOutcome(
         decision="allow",
         entities=verdict.allowed,
@@ -1277,13 +1747,7 @@ async def async_create_mesa_approval(
     MESA confirm-approved semantics; bounded domain tools may supply their own
     registered exact-action executor.
     """
-    from .approvals import (
-        create_approval_notification,
-        async_create_pending_approval,
-        fire_approval_requested_event,
-    )
 
-    from .request_authority import check_request_authority
 
     async with data.store.async_lock:
         # As the capability and registry paths do: a request whose key, runtime or
@@ -1309,7 +1773,6 @@ def fire_mesa_blocked_event(
     hass: HomeAssistant, access_key: AccessKeyRecord, blocked: list[tuple[str, str, str]]
 ) -> None:
     """Fire phoenix_mcp_mesa_blocked for each entity MESA refused (automation hooks)."""
-    from .const import DOMAIN
 
     for entity_id, rule, _reason in blocked:
         hass.bus.async_fire(
@@ -1343,6 +1806,6 @@ def release_access_key_leases(data: Any, access_key_id: str) -> int:
         return 0
     try:
         return runtime.lease_manager.release_session(access_key_id)
-    except Exception:  # noqa: BLE001 - advisory cleanup never blocks a revocation
+    except Exception:  # advisory cleanup never blocks a revocation
         _LOGGER.debug("Phoenix MCP: releasing leases for access key %s failed", access_key_id, exc_info=True)
         return 0

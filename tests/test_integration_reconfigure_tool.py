@@ -6,7 +6,6 @@ import asyncio
 import json
 from pathlib import Path
 import uuid
-from datetime import timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -17,20 +16,19 @@ from homeassistant.util.dt import utcnow
 from pytest_homeassistant.common import MockConfigEntry
 
 from custom_components.phoenix_mcp.const import DOMAIN
-from custom_components.phoenix_mcp.const import APPROVAL_SUMMARY_TEMPLATES
+from custom_components.phoenix_mcp.catalog_templates import APPROVAL_SUMMARY_TEMPLATES
 from custom_components.phoenix_mcp.approvals import PendingApproval
 from custom_components.phoenix_mcp.data import PhoenixData
-from custom_components.phoenix_mcp.mcp_view import (
+from custom_components.phoenix_mcp.tools.integrations import (
     _CONFIG_ENTRY_CONTEXT_FINGERPRINT,
     _CONFIG_ENTRY_PRIVATE_IDENTITY_FINGERPRINT,
     _CONFIG_ENTRY_RECONFIGURE_SNAPSHOT,
     _CONFIG_ENTRY_STABLE_IDENTITY_FINGERPRINT,
     _ConfigEntryPrivateIdentity,
     _build_diff_reconfigure_integration,
-    _call_tool,
     _config_entry_private_identity,
-    async_execute_approved_tool,
 )
+from custom_components.phoenix_mcp.tool_dispatch import _call_tool, async_execute_approved_tool
 from custom_components.phoenix_mcp.mesa import async_setup_mesa
 from custom_components.phoenix_mcp.access_key_store import (
     GlobalSettings,
@@ -165,7 +163,7 @@ async def test_complete_config_entry_write_is_required(
     data = await _data(hass)
     runner = AsyncMock()
     with patch(
-        "custom_components.phoenix_mcp.mcp_view.async_run_reconfigure_flow", runner
+        "custom_components.phoenix_mcp.tools.integrations.async_run_reconfigure_flow", runner
     ):
         content, outcome, _resource = await _call_tool(
             "reconfigure_integration",
@@ -233,7 +231,7 @@ async def test_approval_binds_private_identity_and_keeps_exact_durable_args(
         "config": {"host": "10.0.0.8", "password": "exact-secret"},
         "menu_choices": ["local"],
     }
-    with patch("custom_components.phoenix_mcp.mcp_view._gate", gate):
+    with patch("custom_components.phoenix_mcp.tools.integrations._gate", gate):
         _content, outcome, _resource = await _call_tool(
             "reconfigure_integration",
             args,
@@ -279,7 +277,7 @@ async def test_identity_race_refuses_before_starting_flow(hass, reconfigure_env)
     data = await _data(hass)
     gate = AsyncMock(return_value=({}, "pending_approval", "approval"))
     args = {"entry_id": reconfigure_env["entry"].entry_id, "config": {"host": "new"}}
-    with patch("custom_components.phoenix_mcp.mcp_view._gate", gate):
+    with patch("custom_components.phoenix_mcp.tools.integrations._gate", gate):
         await _call_tool(
             "reconfigure_integration",
             args,
@@ -294,7 +292,7 @@ async def test_identity_race_refuses_before_starting_flow(hass, reconfigure_env)
     )
     runner = AsyncMock()
     with patch(
-        "custom_components.phoenix_mcp.mcp_view.async_run_reconfigure_flow", runner
+        "custom_components.phoenix_mcp.tools.integrations.async_run_reconfigure_flow", runner
     ):
         content, outcome, _resource = await async_execute_approved_tool(
             "reconfigure_integration",
@@ -323,7 +321,7 @@ async def test_same_domain_shared_owner_is_blocked(hass, reconfigure_env):
         }],
     )
     with patch(
-        "custom_components.phoenix_mcp.mcp_view._config_entry_private_identity",
+        "custom_components.phoenix_mcp.tools.integrations._config_entry_private_identity",
         return_value=identity,
     ):
         content, outcome, _resource = await _call_tool(
@@ -349,11 +347,9 @@ async def test_applied_result_is_versioned_redacted_and_never_retryable(
         True,
         "Home Assistant accepted the reconfigure flow.",
         {"reload_verified": True},
-        entry.modified_at,
-        entry.modified_at + timedelta(seconds=1),
     )
     with patch(
-        "custom_components.phoenix_mcp.mcp_view.async_run_reconfigure_flow",
+        "custom_components.phoenix_mcp.tools.integrations.async_run_reconfigure_flow",
         new=AsyncMock(return_value=flow_result),
     ):
         content, outcome, _resource = await _call_tool(
@@ -399,16 +395,14 @@ async def test_post_apply_private_identity_change_has_explicit_status(
         True,
         "Home Assistant accepted the reconfigure flow.",
         {"reload_verified": True},
-        entry.modified_at,
-        entry.modified_at + timedelta(seconds=1),
     )
     with (
         patch(
-            "custom_components.phoenix_mcp.mcp_view._config_entry_private_identity",
+            "custom_components.phoenix_mcp.tools.integrations._config_entry_private_identity",
             side_effect=[initial, initial, changed],
         ),
         patch(
-            "custom_components.phoenix_mcp.mcp_view.async_run_reconfigure_flow",
+            "custom_components.phoenix_mcp.tools.integrations.async_run_reconfigure_flow",
             new=AsyncMock(return_value=flow_result),
         ),
     ):

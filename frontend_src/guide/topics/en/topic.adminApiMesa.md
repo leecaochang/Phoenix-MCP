@@ -12,6 +12,7 @@ Every MESA endpoint except `device-options`, `integration-options` and `vocabula
 | Status | `error` | `message_key` | When |
 |---|---|---|---|
 | 503 | `service_unavailable` | `adminError.mesaUnavailable` | MESA isn't running. |
+| 503 | `service_unavailable` | `adminError.mesaSaveFailed` | Phoenix couldn't save the change, so it undid it. |
 
 Every change adds an audit log entry with the request path. Export adds one too, although it changes nothing.
 
@@ -185,6 +186,10 @@ Send `{ "deployment_defaults": { ... } }`, or the inner object alone, with only 
 | `domain_overrides` | object | Keyed by domain. Each value is an object. |
 
 The response has the same shape as a read.
+
+| Status | `error` | `message_key` | When |
+|---|---|---|---|
+| 400 | `invalid_request` | `adminError.deploymentDefaultsInvalid` | MESA refused the defaults. `message_params.detail` says why. |
 
 ## Issues and the tag vocabulary {#issues}
 

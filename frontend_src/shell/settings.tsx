@@ -19,6 +19,7 @@ import { ResultCount } from "../components/common";
 import type { GlobalSettings } from "../types";
 import { t } from "../i18n";
 import { injectSessionBlocked } from "../inject/compatibility";
+import { onConnectionChange } from "../utils/connection";
 import { useLatestRequest } from "../utils/latest_request";
 import { matchesListSearch } from "../utils/list_search";
 import { MenuRootContext } from "../ui/Menu";
@@ -27,6 +28,7 @@ import type { Tool } from "./tools";
 import { ControllerContext } from "./dock/TitleBar";
 import { visibleWindowEl } from "./visibility";
 import { HOME_TAB_LABEL_KEYS, SETTING_INDEX, SETTINGS_WINDOW_TITLE_KEYS, type AriaName, type HomeTab, type SettingEntry, type SettingsWindowId } from "./settingsIndex";
+import { isImeKey } from "../utils/ime";
 
 export type Theme = "light" | "dark" | "auto";
 
@@ -91,7 +93,7 @@ export const settingAnchor = (id: string): string => id.replace(/([a-z0-9])([A-Z
 const SETTING_ROW = ".toggle-row, .agentcli-settings-field, .conversation-limit, .routing-choices, .agentcli-add, .phx-kill-switch, .phx-window-actions";
 
 /**
- * The Guide section for a control in a Settings window (user, 2026-11-01): the
+ * The Guide section for a control in a Settings window: the
  * indexed setting whose row holds the control. When several hold it (the AI
  * Providers accounts surround the rest of that window) the closest wins.
  */
@@ -210,10 +212,17 @@ export function SettingsProvider({ settings, onSettingsChange, theme, onThemeCha
   const [info, setInfo] = useState<SettingsInfo | null>(null);
   const infoAsked = useRef(false);
   useEffect(() => {
-    if (!active || infoAsked.current) return;
-    infoAsked.current = true;
-    api.getInfo().then((r) => setInfo({ version: r.version, minHaVersion: r.min_ha_version, githubUrl: r.github_url })).catch(() => {});
-  }, [active]);
+    if (!active || info) return;
+    const ask = () => {
+      if (infoAsked.current) return;
+      infoAsked.current = true;
+      api.getInfo()
+        .then((r) => setInfo({ version: r.version, minHaVersion: r.min_ha_version, githubUrl: r.github_url }))
+        .catch(() => { infoAsked.current = false; });
+    };
+    ask();
+    return onConnectionChange((up) => { if (up) ask(); });
+  }, [active, info]);
 
   const [homeTab, setHomeTab] = useState<HomeTab>("voice");
   const [findOpen, setFindOpen] = useState(false);
@@ -393,6 +402,7 @@ function FindSettingPanel({ root, onClose, onPick }: { root: HTMLElement; onClos
     <div ref={panel} className="phx-find-setting" role="dialog" aria-label={t("workspace.findSetting")}
       style={place ? { top: place.top, left: place.left } : { visibility: "hidden" }}
       onKeyDown={(e) => {
+        if (isImeKey(e)) return;
         if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); close(); return; }
         if (e.key === "ArrowDown" || e.key === "ArrowUp") { e.preventDefault(); move(e.target as HTMLElement, e.key === "ArrowDown" ? 1 : -1); }
       }}>
@@ -400,7 +410,7 @@ function FindSettingPanel({ root, onClose, onPick }: { root: HTMLElement; onClos
         <Icon name="search" size={16} />
         <input type="search" className="input" aria-label={t("workspace.findSetting")} placeholder={t("workspace.findSettingPlaceholder")}
           value={query} onChange={(e) => setQuery(e.target.value)}
-          onKeyDown={(e) => { if (e.key === "Enter" && results[0]) { e.preventDefault(); onPick(results[0].id); } }} />
+          onKeyDown={(e) => { if (e.key === "Enter" && results[0] && !isImeKey(e)) { e.preventDefault(); onPick(results[0].id); } }} />
       </label>
       <ResultCount count={results.length} query={query} />
       <div className="phx-find-setting-results" role="group" aria-label={t("workspace.findSettingResults")}>

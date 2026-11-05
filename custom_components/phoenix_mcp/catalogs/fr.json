@@ -13,6 +13,7 @@
       "empty": "(vide)",
       "httpStatus": "Le serveur a répondu avec le code HTTP {status}. Actualisez et réessayez.",
       "invalidResponse": "Le serveur a renvoyé une réponse invalide. Actualisez et réessayez.",
+      "labelValue": "{label} : {value}",
       "listSeparator": ", ",
       "loadMore": "Charger plus",
       "loading": "Chargement...",
@@ -222,7 +223,7 @@
       },
       "cap_registry_write": {
         "label": "Gérer le registre des entités",
-        "description": "Modifier les entités et les appareils, gérer les pièces, étages, étiquettes et catégories, et supprimer les entrées obsolètes."
+        "description": "Modifier les entités et les appareils, gérer les pièces, étages, étiquettes et catégories, supprimer les entrées obsolètes et purger l’historique enregistré d’une entité."
       },
       "cap_radio_write": {
         "label": "Gestion radio",
@@ -266,7 +267,7 @@
       "modeDescAllow": "Laissez les agents de cette clé utiliser cette capacité sans vous demander.",
       "modeDescConfirm": "Chaque modification vous attend dans Approbations avant de s’exécuter. Les lectures s’exécutent sans demander.",
       "updateFailed": "Échec de la mise à jour de la capacité.",
-      "passThroughNotice": "<strong>La transmission directe est activée.</strong> Lecture de la configuration, Rendu de modèles, Recherche et découverte, Lecture du registre, Traces d'automatisation, Diagnostic, Diffusion et Données de réponse de service sont traités comme Autoriser, sauf s'ils sont réglés sur Confirmer. Toutes les autres capacités utilisent leur réglage ci-dessous.",
+      "passThroughNotice": "<strong>La transmission directe est activée.</strong> Lecture de la configuration, Rendu de modèles, Recherche et découverte, Lecture du registre, Traces d'automatisation, Diagnostic, Diffusion et Données de réponse de service sont traités comme Autoriser. Toutes les autres capacités utilisent leur réglage ci-dessous.",
       "esphomeBadgeTitle": "Sans le module complémentaire Device Builder, les outils ESPHome qui valident, compilent, flashent ou inspectent les appareils restent masqués pour cette clé d’accès. Avec l'intégration ESPHome, la lecture et la recherche dans le YAML des appareils fonctionnent toujours. La capacité peut néanmoins être définie dès maintenant.",
       "confirmUnavailable": "Cette capacité ne peut pas nécessiter d'approbation.",
       "cap_calendar_write": {
@@ -315,7 +316,7 @@
       },
       "read_only": {
         "label": "Observateur en lecture seule",
-        "description": "Lit les états, l’historique et les journaux. Les modifications de configuration, annonces, serrures, alarmes, volets et vannes sont refusées."
+        "description": "Lit les états, l’historique et les journaux. Les modifications de configuration, annonces, serrures, alarmes, volets et vannes sont refusées. Il peut quand même contrôler tout ce qui est réglé sur W."
       },
       "voice_assistant": {
         "label": "Assistant vocal",
@@ -364,7 +365,7 @@
       "create": "Créer",
       "createFailed": "Échec de la création de la clé d’accès.",
       "createPtUnderstand": "Je comprends que cette clé d’accès dispose d'un large accès à Home Assistant",
-      "createPtWarning": "<strong>Cette clé d’accès peut lire et contrôler toutes les entités de Home Assistant.</strong> La transmission directe active aussi Lecture de la configuration, Rendu de modèles, Recherche et découverte, Lecture du registre, Traces d'automatisation, Diagnostic, Diffusion et Données de réponse de service, sauf si vous les réglez sur Confirmer. Diagnostic et Données de réponse de service peuvent révéler des détails sensibles. Toutes les autres capacités gardent leur propre réglage, et les règles MESA, la liste de blocage Phoenix MCP, la suppression des attributs sensibles, les limites de débit, la révocation et l'expiration s'appliquent toujours. Utilisez-la uniquement avec des clients MCP à qui vous confieriez toute votre maison.",
+      "createPtWarning": "<strong>Cette clé d’accès peut lire et contrôler toutes les entités de Home Assistant.</strong> La transmission directe active aussi Lecture de la configuration, Rendu de modèles, Recherche et découverte, Lecture du registre, Traces d'automatisation, Diagnostic, Diffusion et Données de réponse de service. Diagnostic et Données de réponse de service peuvent révéler des détails sensibles. Toutes les autres capacités gardent leur propre réglage, et les règles MESA, la liste de blocage Phoenix MCP, la suppression des attributs sensibles, les limites de débit, la révocation et l'expiration s'appliquent toujours. Utilisez-la uniquement avec des clients MCP à qui vous confieriez toute votre maison.",
       "createAccessKey": "Créer une clé d’accès",
       "daysAgo": "il y a {d} j",
       "delete": "Supprimer",
@@ -378,7 +379,7 @@
       "done": "Terminé",
       "empty": "Aucune clé d’accès pour l'instant. Créez-en une pour commencer.",
       "emptyFiltered": "Aucune clé d’accès ne correspond au filtre.",
-      "enablePtBody": "<strong>Cette clé lira et contrôlera chaque entité.</strong> Huit capacités de lecture et de diagnostic s’activent aussi, sauf si elles sont réglées sur Confirmer.",
+      "enablePtBody": "<strong>Cette clé lira et contrôlera chaque entité.</strong> Huit capacités de lecture et de diagnostic s’activent aussi.",
       "enablePtCheck": "Je comprends que la clé d’accès <code>{name}</code> disposera d’un large accès à Home Assistant",
       "enablePtFailed": "Échec de l'activation de la transmission directe.",
       "enablePtLabel": "Activer la transmission directe",
@@ -443,7 +444,7 @@
       "presetNewName": "Nouveau nom de préréglage",
       "presetNoChange": "Ce préréglage correspond aux paramètres actuels, aucun paramètre ne change donc. L'appliquer compte quand même comme une modification des paramètres : les agents connectés en sont informés à leur prochain appel, et le décompte de la limite de débit repart de zéro.",
       "presetPtUnderstand": "Je comprends que ce préréglage active la transmission directe",
-      "presetPtWarning": "<strong>Ce préréglage active la transmission directe.</strong> La clé d’accès peut alors lire et contrôler toutes les entités, et huit autres capacités sont activées, dont Diagnostic et Données de réponse de service, sauf si elles sont réglées sur Confirmer. Les autres capacités, les règles MESA, la liste de blocage Phoenix MCP et la suppression des attributs sensibles s'appliquent toujours.",
+      "presetPtWarning": "<strong>Ce préréglage active la transmission directe.</strong> La clé d’accès peut alors lire et contrôler toutes les entités, et huit autres capacités sont activées, dont Diagnostic et Données de réponse de service. Les autres capacités, les règles MESA, la liste de blocage Phoenix MCP et la suppression des attributs sensibles s'appliquent toujours.",
       "presetRenameTitle": "Renommer ce préréglage ; enregistré lorsque vous cliquez ailleurs",
       "presetRevert": "Rétablir",
       "presetRevertBody": "Cela ignore les modifications non enregistrées sur <strong>{name}</strong> :",
@@ -456,7 +457,7 @@
       "presetSwitchTo": "Changer pour",
       "ptConvertBody": "La clé suit aussitôt son arbre des autorisations. Sans autorisation dans l’arbre, elle perd tout accès aux entités.",
       "ptConvertFailed": "Échec de la conversion de la clé d’accès.",
-      "ptNoticeCaps": "Huit capacités de lecture et de diagnostic sont aussi activées, sauf si elles sont réglées sur Confirmer. Les autres gardent leur propre réglage.",
+      "ptNoticeCaps": "Huit capacités de lecture et de diagnostic sont aussi activées. Les autres gardent leur propre réglage.",
       "ptNoticeIntro": "<strong>Clé d’accès en transmission directe.</strong> Elle contourne l’arbre des autorisations et atteint chaque entité, sans les attributs sensibles.",
       "ptNoticeUsage": "La transmission directe peut envoyer au modèle les détails de chaque entité, ce qui coûte plus de jetons qu’un arbre limité.",
       "rateBurstLabel": "Rafale par seconde (0 = pas de limite par seconde)",
@@ -519,9 +520,11 @@
       "killSwitchShort": "COUPE-CIRCUIT ACTIVÉ",
       "killSwitchTitle": "Phoenix MCP ne traite aucune demande d'agent. Désactivez le coupe-circuit dans Paramètres pour reprendre.",
       "loadAccessKeysFailed": "Échec du chargement des clés d’accès.",
+      "loadSettingsFailed": "Échec du chargement des paramètres.",
       "offlineBody": "Home Assistant ne répond pas, le plus souvent parce qu'il redémarre. Nouvelle tentative, veuillez patienter...",
       "offlineTitle": "Phoenix est indisponible",
       "renderFailed": "Cette vue ne peut pas être affichée. Actualisez pour réessayer ou choisissez une autre section.",
+      "retrySettingsHelp": "Relire les paramètres depuis Home Assistant.",
       "sectionsAria": "Sections de Phoenix MCP",
       "srTitle": "Gestion des clés d’accès Phoenix MCP",
       "tabAccessKeys": "Clés d’accès",
@@ -529,7 +532,8 @@
       "tabAudit": "Journal d’audit",
       "tabChanges": "Modifications",
       "tabSettings": "Paramètres",
-      "killSwitchHelp": "Le coupe-circuit est activé, les agents sont donc refusés. Sélectionnez pour ouvrir Sécurité et le désactiver."
+      "killSwitchHelp": "Le coupe-circuit est activé, les agents sont donc refusés. Sélectionnez pour ouvrir Sécurité et le désactiver.",
+      "chatListsFailed": "Agent Chat n’a pas pu charger ses clés d’accès ou ses fournisseurs d’IA. Il réessaie quand vous l’ouvrez ou quand Home Assistant se reconnecte."
     },
     "perms": {
       "addHint": "Ajouter une indication",
@@ -851,7 +855,8 @@
       "profileSet": "Profil MESA défini pour {key} - cliquer pour modifier",
       "profileCreate": "Créer un profil MESA pour {key}",
       "registryLoadFailed": "Échec du chargement du registre des entités.",
-      "mesaProfile": "Profil MESA"
+      "mesaProfile": "Profil MESA",
+      "openFailed": "Impossible d'ouvrir l'éditeur de profil MESA. Rechargez la page et réessayez."
     },
     "mesa": {
       "addAreaProfile": "Ajouter un profil de pièce",
@@ -1380,7 +1385,7 @@
       "voiceAccessKeyAria": "Clé d’accès de l'agent vocal",
       "voiceAccessKeyHelp": "Contrôle les entités et actions auxquelles cet agent vocal peut accéder.",
       "wipeBusy": "Effacement...",
-      "wipeCoreHelp": "Supprimez chaque clé d’accès, réglage, approbation, enregistrement de modification et journal. Action irréversible.",
+      "wipeCoreHelp": "Supprimez chaque clé d’accès, réglage, approbation, enregistrement de modification et journal. Les copies de récupération sont conservées. Action irréversible.",
       "wipeCoreLabel": "Supprimer les données principales de Phoenix MCP",
       "wipeFailed": "Échec de l'effacement.",
       "wipeMesaHelp": "Supprimez chaque profil MESA. Désactivé par défaut ; exportez d’abord vos profils pour en garder une copie.",
@@ -1519,6 +1524,7 @@
       "clearHistory": "Effacer l'historique du chat",
       "configureFirst": "Configurez d'abord un fournisseur",
       "connection": "Connexion",
+      "connectionLost": "La connexion à Home Assistant a été interrompue avant la fin de cette réponse.",
       "continue": "Continuer",
       "decreaseTextSize": "Réduire la taille du texte",
       "dockedClosed": "Agent Chat est fermé.",
@@ -1550,6 +1556,7 @@
         "empty_turn": "Le modèle a terminé le tour sans réponse textuelle.",
         "internal": "Erreur interne.",
         "max_tokens_stop": "Le modèle s'est arrêté car il a atteint sa limite de longueur de sortie. Demandez-lui de continuer, ou augmentez la limite de jetons de sortie du modèle (pour Ollama, ses paramètres num_predict/context).",
+        "memory_trimmed": "La conversation dépasse ce qu'une requête peut contenir : le modèle ne se souvient donc plus des messages les plus anciens. Ils restent affichés à l'écran.",
         "model_api_unsupported": "Ce modèle n’est pas validé pour OpenCode Chat Completions. Choisissez un modèle pris en charge.",
         "network": "Le fournisseur est temporairement indisponible.",
         "ollama_backend": "Le fournisseur est temporairement indisponible.",
@@ -1568,6 +1575,7 @@
         "provider_transient": "Le fournisseur est temporairement indisponible.",
         "quota": "Le compte de fournisseur n’a plus de crédit ou a atteint sa limite de dépenses. Aucun nouvel essai ne sera effectué.",
         "rate_limit": "Le fournisseur est temporairement indisponible.",
+        "request_too_large": "Ce message est trop volumineux pour être envoyé. Raccourcissez-le, retirez des images ou démarrez une nouvelle conversation avec /clear.",
         "too_many_tools": "Cette clé d’accès annonce {count} outils, mais {provider} en accepte au maximum {limit} par requête. Réduisez les capacités de la clé d’accès ou choisissez un autre fournisseur.",
         "tool_call_cut": "La connexion au modèle s'est terminée au milieu d'un appel d'outil, l'action n'a donc pas été exécutée. Rien n'a été appliqué et la requête elle-même n'était pas en cause ; renvoyez-la.",
         "tool_call_truncated": "Le modèle a atteint sa limite de longueur de sortie au milieu d'un appel d'outil, l'action n'a donc pas été exécutée. La modification demandée était trop volumineuse pour être émise en un seul appel ; essayez de demander une modification plus petite.",
@@ -1575,7 +1583,9 @@
         "review_changed": "Les outils de la clé d’accès ou la conversation ont changé pendant la vérification de l'appel d'outil, donc rien n'a été exécuté. Renvoyez la demande.",
         "kill_switch": "Le coupe-circuit d’urgence est activé, l’agent s’est donc arrêté. Rien d’autre n’a été exécuté.",
         "unreachable": "Home Assistant était injoignable, donc ceci n'a pas abouti. Tout ce qui attendait votre approbation a été annulé.",
-        "upstream": "Le fournisseur est temporairement indisponible."
+        "upstream": "Le fournisseur est temporairement indisponible.",
+        "provider_slow": "Le fournisseur n'a pas répondu dans un délai de {seconds} s.",
+        "result_withheld": "Un résultat de {length} octets ne tenait pas dans le contexte de la requête et n'a pas été transmis au modèle."
       },
       "options": "Réglages",
       "popIn": "Réintégrer dans Home Assistant",
@@ -1875,6 +1885,7 @@
       "mesaArchiveRequired": "archive est obligatoire.",
       "mesaProfileExists": "Un profil existe déjà. Ouvrez-le en mode modification.",
       "mesaConflictModeInvalid": "on_conflict doit être skip ou overwrite.",
+      "mesaSaveFailed": "La modification MESA n’a pas pu être enregistrée. Les réglages précédents restent en vigueur.",
       "mesaUnavailable": "MESA n'est pas disponible.",
       "nonNegativeRequired": "{field} doit être non négatif.",
       "nothingToContinue": "Il n'y a aucune conversation à continuer.",
@@ -2009,7 +2020,9 @@
       "restoreNoConfigSide": "Cette version ne contient aucune configuration à restaurer de ce côté.",
       "restoreYamlTags": "Cette version contient des balises YAML telles que !secret ou !include et ne peut pas être restaurée automatiquement. Recréez-la manuellement.",
       "restoreToolReported": "La restauration n'a pas pu être appliquée. L'outil a signalé : {detail}",
-      "capabilityAllowUnsupported": "{capability} ne prend pas en charge le mode Autoriser."
+      "capabilityAllowUnsupported": "{capability} ne prend pas en charge le mode Autoriser.",
+      "recoverySnapshotUnsafeAt": "Aucune copie complète de cet élément sans secrets n’est disponible, donc rien n’a été modifié. Phoenix l’a refusé à {location}.",
+      "invalidHostHeader": "L’en-tête Host de la requête n’est pas une adresse valide."
     },
     "mesaSuggestion": {
       "baseline_note": " Interdit correspond à la ligne de base intégrée pour ce domaine, le profil rend donc cette intention explicite. Pour autoriser plutôt le contrôle de l'agent soumis à l'approbation de l'administrateur, choisissez Confirmer dans l'Éditeur de profil avant d'enregistrer ; l'approbation s'applique lorsque MESA est appliqué.",
@@ -2579,7 +2592,9 @@
       "saveFailed": "La vérification n’a pas pu être enregistrée. L’action reste à vérifier.",
       "showInAudit": "Afficher dans le journal d'audit",
       "title": "À vérifier",
-      "unknown": "La conversation s'est terminée avant que Phoenix n'enregistre si cette action s'est exécutée ; elle a donc pu s'exécuter. Afficher dans le journal d'audit, lorsqu'il est proposé, montre ce que Phoenix a enregistré ; une action qui attendait une approbation a son statut dans Approbations. Vérifiez Home Assistant avant de réessayer."
+      "unknown": "La conversation s'est terminée avant que Phoenix n'enregistre si cette action s'est exécutée ; elle a donc pu s'exécuter. Afficher dans le journal d'audit, lorsqu'il est proposé, montre ce que Phoenix a enregistré ; une action qui attendait une approbation a son statut dans Approbations. Vérifiez Home Assistant avant de réessayer.",
+      "audit_storageTitle": "Le journal d’audit n’atteint pas le stockage",
+      "audit_storageHelp": "Les entrées d’audit récentes ne sont qu’en mémoire : un redémarrage les ferait perdre. Consultez les journaux Home Assistant. Ce message disparaît après le prochain enregistrement réussi."
     },
     "workspace": {
       "addToMy": "Ajouter à Mon espace de travail",

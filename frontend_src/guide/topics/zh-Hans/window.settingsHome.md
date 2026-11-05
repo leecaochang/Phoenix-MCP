@@ -71,7 +71,7 @@ Home Companion 密钥会把对话交给 Home Companion 处理，并隐藏 **{{la
 
 ## {{label:settings.aiTaskCard}} {#ai-task}
 
-为 Home Assistant 提供一个名为 Phoenix MCP AI Task 的 AI 任务实体，自动化和脚本用它生成文本或数据。它在自己的访问密钥范围内代表整个家庭行动，而不是代表单个用户。
+为 Home Assistant 提供一个名为 Phoenix MCP AI Task 的 AI 任务实体，自动化和脚本用它生成文本或数据。它在自己的访问密钥范围内代表整个家庭行动。如果 Home Assistant 告知任务由谁发起，任务只拥有该用户的权限。
 
 ### {{label:settings.aiTaskEnableLabel}} {#ai-task-enable}
 
@@ -113,6 +113,6 @@ Home Companion 密钥会把对话交给 Home Companion 处理，并隐藏 **{{la
 
 另一个模型获得其工具的访问密钥。使用 **{{label:settings.assistNotBound}}**（默认）时，不提供任何工具。**{{label:settings.killSwitchCard}}** 开启时也是如此。
 
-更改密钥会拒绝之前轮次的工具调用，因此对话无法保留旧密钥的权限。Home Assistant 的 MCP Server 使用同一个密钥，仅限管理员，且不受密钥的速率限制。
+更改密钥会拒绝之前轮次的工具调用，因此对话无法保留旧密钥的权限。Home Assistant 的 MCP Server 使用同一个密钥，且不受密钥的速率限制。
 
 相关：[通过 Home Assistant 的 MCP Server](guide:topic.connecting#ha-mcp-server)

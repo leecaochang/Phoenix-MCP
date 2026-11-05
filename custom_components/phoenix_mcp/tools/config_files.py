@@ -14,14 +14,19 @@ from __future__ import annotations
 from typing import Any
 import json
 import logging
+import hashlib
+import hmac
 import os
+import re
+import secrets
 
 from homeassistant.core import HomeAssistant
 
-from ..const import CAP_DENY, FILESYSTEM_ALLOWED_DIRS
+from ..const import CAP_DENY, FILESYSTEM_ALLOWED_DIRS, LIST_FILES_DEFAULT_LIMIT, LIST_FILES_MAX_LIMIT
 from ..tool_contracts import handler_arguments
-from ..helpers import content_hash, effective_cap, str_arg
-from ..tool_common import _read_text_capped, _tool_error, _tool_success, _usable_path_arg
+from ..helpers import content_hash, effective_cap, redact_secrets_in_text, str_arg
+from ..policy_engine import is_sensitive_key
+from ..tool_common import _read_text_capped, _tool_error, _tool_success, _usable_path_arg, fitted_offset_page, offset_page
 from ..access_key_store import AccessKeyRecord
 from .. import yaml_includes
 
@@ -29,6 +34,7 @@ _LOGGER = logging.getLogger(__name__)
 
 
 _CONFIG_YAML = "configuration.yaml"
+_FILE_HASH_KEY = secrets.token_bytes(32)
 
 
 # ---------------------------------------------------------------------------
@@ -53,11 +59,13 @@ def _resolve_fs_path(hass: HomeAssistant, path: Any) -> str | None:
     return None
 
 
-def _listdir(target: str) -> list[dict]:
-    return [
-        {"name": name, "is_dir": os.path.isdir(os.path.join(target, name))}
-        for name in sorted(os.listdir(target))
-    ]
+def _listdir_page(target: str, args: dict) -> tuple[list[dict], dict] | str:
+    """One page of a directory, probing only that page's entries; a string is a bad page argument."""
+    paged = offset_page(sorted(os.listdir(target)), args, default_limit=LIST_FILES_DEFAULT_LIMIT, max_limit=LIST_FILES_MAX_LIMIT)
+    if isinstance(paged, str):
+        return paged
+    names, envelope = paged
+    return [{"name": name, "is_dir": os.path.isdir(os.path.join(target, name))} for name in names], envelope
 
 
 async def _tool_list_files(
@@ -75,8 +83,12 @@ async def _tool_list_files(
     target = await hass.async_add_executor_job(_resolve_fs_path, hass, path)
     if target is None or not await hass.async_add_executor_job(os.path.isdir, target):
         return _tool_error("Directory not found."), "not_found", path
-    entries = await hass.async_add_executor_job(_listdir, target)
-    return _tool_success(json.dumps({"path": path, "entries": entries}, default=str)), "allowed", path
+    paged = await hass.async_add_executor_job(_listdir_page, target, args)
+    if isinstance(paged, str):
+        return _tool_error(paged), "invalid_request", path
+    entries, envelope = paged
+    body = fitted_offset_page(entries, envelope, lambda rows, env: {"path": path, **env, "entries": rows})
+    return _tool_success(json.dumps(body, default=str)), "allowed", path
 
 
 async def _tool_read_file(
@@ -112,9 +124,10 @@ async def _tool_read_file(
 # ---------------------------------------------------------------------------
 
 
+_BLOCK_VALUE_KEY_RE = re.compile(r"^\s*(?:-\s+)?([\w.\-]+)\s*:\s*(?:#.*)?$")
 _YAML_READ_REFUSED = (
     "Only .yaml and .yml files inside the Home Assistant configuration directory can "
-    "be read; secrets.yaml, the esphome directory, and hidden directories are excluded. "
+    "be read; files named like secrets, the esphome directory, and hidden directories are excluded. "
     "Use get_esphome_yaml for ESPHome device configuration."
 )
 
@@ -133,7 +146,7 @@ def _yaml_read_path_ok(rel: str) -> bool:
     if parts[0].lower() == "esphome":
         return False  # dedicated tool applies entity scope and credential masking
     name = parts[-1].lower()
-    return name != yaml_includes.SECRETS_YAML and name.endswith((".yaml", ".yml"))
+    return "secret" not in name and name.endswith((".yaml", ".yml"))
 
 
 def _resolve_yaml_read_path(hass: HomeAssistant, file_arg: Any) -> tuple[str, str] | None:
@@ -160,6 +173,39 @@ def _resolve_yaml_read_path(hass: HomeAssistant, file_arg: Any) -> tuple[str, st
     if not _yaml_read_path_ok(rel):
         return None
     return candidate, rel
+
+
+def _file_change_hash(text: str) -> str:
+    """A change detector over a file's raw text that cannot test a guess at a value.
+
+    The file may hold what the read redacts, and a plain hash would confirm a guessed
+    secret. Keyed for this process, so the value is comparable between two reads and
+    differs after a restart. No write takes it as an expected_hash.
+    """
+    return hmac.new(_FILE_HASH_KEY, text.encode("utf-8"), hashlib.sha256).hexdigest()
+
+
+def _redacted_yaml(text: str) -> str:
+    """YAML text with credentials removed, including a value on the lines under its key.
+
+    Files here need not follow HA's !secret convention: other software keeps its
+    configuration beside HA's, with a key's list or mapping on the following lines.
+    """
+    lines: list[str] = []
+    under_indent: int | None = None
+    for line in text.split("\n"):
+        indent = len(line) - len(line.lstrip())
+        if under_indent is not None:
+            if not line.strip() or indent > under_indent or (indent == under_indent and line.lstrip().startswith("- ")):
+                continue
+            under_indent = None
+        match = _BLOCK_VALUE_KEY_RE.match(line)
+        if match is not None and is_sensitive_key(match.group(1)):
+            lines.append(f"{line.rstrip()} <redacted>")
+            under_indent = indent
+        else:
+            lines.append(line)
+    return redact_secrets_in_text("\n".join(lines)) or ""
 
 
 def _fragment_text(fragment: Any) -> str:
@@ -207,7 +253,7 @@ async def _tool_get_yaml_config(
         # An absent file reads as empty content rather than an error, with the
         # same shape as the present-file case.
         body: dict[str, Any] = {
-            "path": rel, "exists": False, "content": "", "content_hash": content_hash(""),
+            "path": rel, "exists": False, "content": "", "content_hash": _file_change_hash(""),
         }
         if key is not None:
             body["key_found"] = False
@@ -221,9 +267,9 @@ async def _tool_get_yaml_config(
     except OSError:
         _LOGGER.exception("get_yaml_config failed to read %s", rel)
         return _tool_error(f"Failed to read {rel}."), "invalid_request", "get_yaml_config"
-    # content_hash is over the WHOLE file even when a fragment is returned, so it
-    # tells a caller whether the file changed between two reads.
-    body = {"path": rel, "exists": True, "content": content, "content_hash": content_hash(content)}
+    # The hash covers the WHOLE file even when a fragment is returned, so it tells a
+    # caller whether the file changed between two reads.
+    body = {"path": rel, "exists": True, "content": _redacted_yaml(content), "content_hash": _file_change_hash(content)}
     if key is not None:
         try:
             found, fragment = await hass.async_add_executor_job(
@@ -231,7 +277,11 @@ async def _tool_get_yaml_config(
         except yaml_includes.YamlParseError as err:
             return _tool_error(f"{rel} is not valid YAML: {err}"), "invalid_request", "get_yaml_config"
         body["key_found"] = found
-        body["content"] = _fragment_text(fragment) if found else ""
+        if any(is_sensitive_key(part) for part in key.strip().split(".")):
+            # The fragment is the bare value, with no key left for the text to reveal it by.
+            body["content"] = "<redacted>" if found else ""
+        else:
+            body["content"] = _redacted_yaml(_fragment_text(fragment)) if found else ""
         if (
             isinstance(fragment, yaml_includes.TaggedValue)
             and fragment.tag in yaml_includes.INCLUDE_TAGS

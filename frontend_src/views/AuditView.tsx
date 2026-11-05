@@ -63,10 +63,10 @@ export function AuditView({ accessKeys }: Props) {
   const [methodFilter, setMethodFilter] = useState("");
   const [resourceFilter, setResourceFilter] = useState("");
   const [ipFilter, setIpFilter] = useState("");
-  // Set by Needs Attention, to show what became of one uncertain write (user, 2026-10-29).
+  // Set by Needs Attention, to show what became of one uncertain write.
   const [requestFilter, setRequestFilter] = useState("");
   const [filtersOpen, setFiltersOpen] = useState(false);
-  // Hidden filters stop applying, and come back as they were when shown again (user, 2026-10-27).
+  // Hidden filters stop applying, and come back as they were when shown again.
   const filtersApply = !useOnToolbar() || filtersOpen;
 
   // Method/resource/ip are server-side filters; debounce them so typing does
@@ -129,6 +129,9 @@ export function AuditView({ accessKeys }: Props) {
   // Each load starts a generation; a background update applies only within the one it began in.
   const loadGeneration = useRef(0);
   const loadsRunning = useRef(0);
+  // How far the server's list has been read. The list is live and newest first, so a row added
+  // between reads repeats an old one on the next page: those are dropped, and rows.length falls behind.
+  const readTo = useRef(0);
 
   const load = useCallback(async (offset: number) => {
     const isLatest = beginLoad();
@@ -138,7 +141,12 @@ export function AuditView({ accessKeys }: Props) {
     try {
       const resp = await api.getAudit(query(offset));
       if (!isLatest()) return;
-      setEntries((prev) => (offset === 0 ? resp.entries : [...prev, ...resp.entries]));
+      readTo.current = offset + resp.entries.length;
+      setEntries((prev) => {
+        if (offset === 0) return resp.entries;
+        const shown = new Set(prev.map(auditEntryKey));
+        return [...prev, ...resp.entries.filter((e) => !shown.has(auditEntryKey(e)))];
+      });
       setTotal(resp.total);
       setHasMore(offset + resp.entries.length < resp.total);
       setError(null);
@@ -176,7 +184,10 @@ export function AuditView({ accessKeys }: Props) {
       const resp = await api.getAudit(query(0));
       if (generation !== loadGeneration.current || loadsRunning.current > 0) return;
       setEntries((prev) => {
-        if (prev.length <= PAGE_SIZE) return resp.entries;
+        if (prev.length <= PAGE_SIZE) {
+          readTo.current = resp.entries.length;
+          return resp.entries;
+        }
         const shown = new Set(prev.map(auditEntryKey));
         return [...resp.entries.filter((e) => !shown.has(auditEntryKey(e))), ...prev];
       });
@@ -371,7 +382,7 @@ export function AuditView({ accessKeys }: Props) {
           {(hasMore || rowLimit.hidden(entries.length)) && (
             <ActionButton icon="loadMore" label={loadingMore ? t("common.loading") : t("common.loadMore")} busy={loadingMore}
               helpText={t("help.loadMore", { count: localeNumber(rowLimit.step ?? PAGE_SIZE) })}
-              onClick={() => { if (!rowLimit.hidden(entries.length)) void load(entries.length); rowLimit.more(); }} />
+              onClick={() => { if (!rowLimit.hidden(entries.length)) void load(Math.max(entries.length, readTo.current)); rowLimit.more(); }} />
           )}
         </div>
       )}

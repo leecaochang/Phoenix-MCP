@@ -176,6 +176,17 @@ export function isSelfMutation(records: MutationRecord[]): boolean {
   return true;
 }
 
+/**
+ * Where Home Assistant renders the current page. Every scanned surface lives
+ * under it, and it leaves out the sidebar, the dialogs and the rest of the app.
+ * The document stands in when the path is not there, so a changed frontend
+ * costs a longer walk rather than the buttons.
+ */
+export function pageRoot(): Document | Element {
+  const main = document.querySelector("home-assistant")?.shadowRoot?.querySelector("home-assistant-main");
+  return main?.shadowRoot?.querySelector("partial-panel-resolver") ?? document;
+}
+
 /** Collect all elements matching `selector`, piercing open shadow roots. */
 export function deepQueryAll(selector: string, root: Document | ShadowRoot | Element = document): Element[] {
   const out: Element[] = [];

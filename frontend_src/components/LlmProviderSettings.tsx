@@ -10,6 +10,7 @@ import { t } from "../i18n";
 import { SettingLabel, helpRow } from "../ui/SettingLabel";
 import { tPlain } from "../i18n/rich";
 import { ProviderAddForm } from "./ProviderAddForm";
+import { isImeKey } from "../utils/ime";
 
 // Which account warnings the operator has closed. Persisted so a closed
 // warning stays closed across visits.
@@ -125,7 +126,7 @@ function cardResultText(r: CardResult): string {
   const vision = r.vision === "seen" ? t("settings.agentcliProbedVisionSeen")
     : r.vision === "unseen" ? t("settings.agentcliProbedVisionUnseen")
       : r.vision === "inconclusive" ? t("settings.agentcliProbedVisionInconclusive") : "";
-  return [t("settings.agentcliProbed", { calls: r.calls, found }), vision].filter(Boolean).join(" ");
+  return [t("settings.agentcliProbed", { calls: r.calls, found }), vision].filter(Boolean).join(t("common.sentenceSeparator"));
 }
 
 function notifyChanged() {
@@ -136,7 +137,7 @@ interface Props {
   settings: GlobalSettings;
   onChange: (key: keyof GlobalSettings, value: string | number | boolean) => void;
   saving: boolean;
-  /** The form adding an account is shown; the toolbar's Add Account shows and hides it (user, 2026-10-31). */
+  /** The form adding an account is shown; the toolbar's Add Account shows and hides it. */
   adding: boolean;
   onAddingChange: (adding: boolean) => void;
 }
@@ -144,7 +145,7 @@ interface Props {
 /** Hours between automatic provider model checks: the allowed range. */
 const CHECK_HOURS_MIN = 6;
 const CHECK_HOURS_MAX = 720;
-/** The default interval, as PROVIDER_CATALOG_REFRESH_HOURS_DEFAULT in const.py. */
+/** The default interval, as PROVIDER_CATALOG_REFRESH_HOURS_DEFAULT in provider_constants.py. */
 const CHECK_HOURS_DEFAULT = 24;
 
 export function LlmProviderSettings({ settings, onChange, saving, adding, onAddingChange }: Props) {
@@ -373,7 +374,7 @@ export function LlmProviderSettings({ settings, onChange, saving, adding, onAddi
   useEffect(() => () => window.clearTimeout(hoursTimer.current), []);
   const checksOn = settings.provider_catalog_refresh_enabled !== false;
 
-  // The account whose options show under its row; none until one is picked (user, 2026-10-31).
+  // The account whose options show under its row; none until one is picked.
   const selected = (instances ?? []).find((inst) => inst.id === selectedId) ?? null;
   const closeOptions = () => {
     setEditing(null);
@@ -463,7 +464,7 @@ export function LlmProviderSettings({ settings, onChange, saving, adding, onAddi
         </div>
         {editing === inst.id ? (
           <div ref={editBox} className="agentcli-settings-model-edit" data-guide="window.settingsProviders#change-model">
-            {/* Refresh Models sits beside the model it refreshes (user, 2026-10-31). */}
+            {/* Refresh Models sits beside the model it refreshes. */}
             <div className="agentcli-add-inline">
               <BusySelect className="input input-auto" value={modelDraft} busy={busy || refreshing !== null}
                       aria-label={t("settings.agentcliSelectModel")}
@@ -513,7 +514,7 @@ export function LlmProviderSettings({ settings, onChange, saving, adding, onAddi
             <ActionButton icon="edit" label={t("settings.accountChangeModel")} className="btn btn-outline btn-sm" busy={busy} guide="window.settingsProviders#change-model" help="settings.changeModelHelp"
               onClick={() => { setEditing(inst.id); setModelDraft(currentDraft(inst)); setModelError(null); setConfirmProbe(null); setConfirmRemove(null); }} />
             {/* Unlike everything else here, the check spends the operator's credit, so it asks first,
-                in place, as Remove does; what it costs reads in Help (user, 2026-10-31). The last-checked
+                in place, as Remove does; what it costs reads in Help. The last-checked
                 time rides on the button's tooltip. */}
             {confirmProbe === inst.id ? (
               <span className="row-actions" ref={askBox} data-guide="window.settingsProviders#check-options">
@@ -554,7 +555,7 @@ export function LlmProviderSettings({ settings, onChange, saving, adding, onAddi
   };
 
   return (
-    // What the accounts are for shows in Help over the window's empty space (user, 2026-10-31).
+    // What the accounts are for shows in Help over the window's empty space.
     <div ref={root} className="phx-providers" data-settings-anchor="providers" data-help-text={t("settings.providersIntro")}>
 
       {adding && (
@@ -614,7 +615,7 @@ export function LlmProviderSettings({ settings, onChange, saving, adding, onAddi
               disabled={!checksOn}
               onChange={(e) => onHoursInput(e.target.value)}
               onBlur={() => commitHoursNow(hoursInput)}
-              onKeyDown={(e) => { if (e.key === "Enter") commitHoursNow(hoursInput); }}
+              onKeyDown={(e) => { if (e.key === "Enter" && !isImeKey(e)) commitHoursNow(hoursInput); }}
             />
           </div>
         </div>

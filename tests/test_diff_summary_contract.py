@@ -3,7 +3,7 @@
 The summary an admin reads before approving is the confirm gate's safety
 property. Python produces it and the panel renders it, so the two must be the
 same sentence. These tests are cheap and pure (no hass, no builders invoked) and
-check the contract between const.DIFF_SUMMARY_TEMPLATES, the generated en.json
+check the contract between catalog_templates.DIFF_SUMMARY_TEMPLATES, the generated en.json
 entries, and the keys the builders name. When one fails, regenerate the catalog
 from the const templates (scripts/gen_diff_catalog.py) rather than editing
 en.json.
@@ -17,10 +17,8 @@ import pathlib
 import re
 import string
 
-from custom_components.phoenix_mcp.const import (
-    APPROVAL_SUMMARY_TEMPLATES,
-    DIFF_SUMMARY_TEMPLATES,
-    VERSION_SUMMARY_TEMPLATES,
+from custom_components.phoenix_mcp.catalog_templates import (
+    APPROVAL_SUMMARY_TEMPLATES, DIFF_SUMMARY_TEMPLATES, VERSION_SUMMARY_TEMPLATES,
 )
 from custom_components.phoenix_mcp.helpers import (
     diff_summary_fields,
@@ -213,7 +211,7 @@ def test_admin_error_keys_exist_in_the_catalog() -> None:
 
 def test_notification_templates_match_the_catalog() -> None:
     """The notification section is generated too, and HA renders it directly."""
-    from custom_components.phoenix_mcp.const import NOTIFICATION_TEMPLATES
+    from custom_components.phoenix_mcp.catalog_templates import NOTIFICATION_TEMPLATES
 
     stored = json.loads(CATALOG.read_text())["notification"]
     assert stored == dict(sorted(NOTIFICATION_TEMPLATES.items()))
@@ -237,9 +235,8 @@ def test_notification_text_falls_back_to_english() -> None:
 
 def test_mesa_suggestion_templates_match_the_catalog() -> None:
     """Generated like the diff sections; drift means someone hand-edited en.json."""
-    from custom_components.phoenix_mcp.const import (
-        MESA_SUGGESTION_PHRASES,
-        MESA_SUGGESTION_TEMPLATES,
+    from custom_components.phoenix_mcp.catalog_templates import (
+        MESA_SUGGESTION_PHRASES, MESA_SUGGESTION_TEMPLATES,
     )
 
     stored = json.loads(CATALOG.read_text())["panel"]["mesaSuggestion"]
@@ -254,10 +251,9 @@ def test_every_suggestion_sub_phrase_has_a_catalog_entry() -> None:
     section; a clause with no entry keeps its English text inside the translated
     sentence.
     """
-    from custom_components.phoenix_mcp.const import (
-        MESA_SUGGEST_RISKY_DOMAINS,
-        MESA_SUGGESTION_PHRASES,
-        MESA_SUGGESTION_TEMPLATES,
+    from custom_components.phoenix_mcp.const import MESA_SUGGEST_RISKY_DOMAINS
+    from custom_components.phoenix_mcp.catalog_templates import (
+        MESA_SUGGESTION_PHRASES, MESA_SUGGESTION_TEMPLATES,
     )
 
     for domain in MESA_SUGGEST_RISKY_DOMAINS:
@@ -280,7 +276,7 @@ def test_suggestion_reason_reproduces_from_key_and_params() -> None:
     The panel re-renders from the key, so a divergence would show an operator
     something other than what the record holds.
     """
-    from custom_components.phoenix_mcp.const import MESA_SUGGESTION_TEMPLATES
+    from custom_components.phoenix_mcp.catalog_templates import MESA_SUGGESTION_TEMPLATES
     from custom_components.phoenix_mcp.mesa_suggestions import _reason
 
     text, key, params = _reason(

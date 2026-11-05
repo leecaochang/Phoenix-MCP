@@ -11,16 +11,19 @@ from homeassistant.helpers import area_registry as ar, device_registry as dr, en
 from homeassistant.setup import async_setup_component
 from pytest_homeassistant.common import MockConfigEntry
 
-from custom_components.phoenix_mcp import agentcli, device_semantics
-from custom_components.phoenix_mcp.const import (
-    DOMAIN, DECISION_EXECUTION_CATEGORIES, DECISION_MAX_TARGETS, DECISION_BATCH_MAX_TARGETS,
+from custom_components.phoenix_mcp import device_semantics
+from custom_components.phoenix_mcp.llm import accounts as llm_accounts
+from custom_components.phoenix_mcp.const import DOMAIN
+from custom_components.phoenix_mcp.routing.routing_tables import (
+    DECISION_EXECUTION_CATEGORIES, DECISION_MAX_TARGETS, DECISION_BATCH_MAX_TARGETS,
     DECISION_MAX_TARGET_BYTES, DECISION_BATCH_MAX_TARGET_BYTES, DECISION_GROUPED_MAX_TARGETS,
 )
 from custom_components.phoenix_mcp.data import PhoenixData
-from custom_components.phoenix_mcp.decision_batch import async_preview_batch, capture_batch_targets
-from custom_components.phoenix_mcp.decision_provider import DecisionProvider, DecisionError
-from custom_components.phoenix_mcp.decision_targets import capture_targets, catalog_state
+from custom_components.phoenix_mcp.routing.decision_batch import async_preview_batch, capture_batch_targets
+from custom_components.phoenix_mcp.routing.decision_provider import DecisionProvider, DecisionError
+from custom_components.phoenix_mcp.routing.decision_targets import capture_targets, catalog_state
 from custom_components.phoenix_mcp.access_key_store import PermissionTree, PermissionNode
+from tests.runtime_fixtures import patch_readers
 
 
 @pytest.fixture
@@ -29,7 +32,7 @@ async def batch_home(hass, access_key_store):
     access_key.permissions = PermissionTree(domains={'light': PermissionNode(state='GREEN')})
     data = PhoenixData(store=access_key_store, rate_limiter=MagicMock(), audit=MagicMock())
     hass.data[DOMAIN] = data
-    store = agentcli.AgentCliStore(AsyncMock())
+    store = llm_accounts.AgentCliStore(AsyncMock())
     account = await store.add('typesafe', {'api_key': 'test-secret', 'model': 'jev-latest'})
     hass.data['_phoenix_agentcli_store'] = store
     await access_key_store.async_patch_settings(decision_provider_id=account)
@@ -77,7 +80,7 @@ async def test_one_real_request_with_two_independent_closed_choices(protocol, so
         return web.json_response(wire_response(payload))
     app = web.Application(); app.router.add_post('/' + protocol, handler)
     async with TestServer(app) as server, ClientSession() as session:
-        provider = DecisionProvider(agentcli.ProviderConfig('typesafe', 'm', str(server.make_url('')).rstrip('/')), protocol)
+        provider = DecisionProvider(llm_accounts.ProviderConfig('typesafe', 'm', str(server.make_url('')).rstrip('/')), protocol)
         result = await provider.route_and_target(session, 'switch it on', {'t0': {'eligible_categories': ['light_on']}}, 1000)
     assert len(seen) == 1 and set(seen[0]['questions']) == {'route', 'target'}
     assert not {'light_brightness', 'media_volume', 'cover_position'} & set(seen[0]['questions']['route']['criteria'])
@@ -86,7 +89,7 @@ async def test_one_real_request_with_two_independent_closed_choices(protocol, so
 
 @pytest.mark.parametrize('damage', ['missing', 'extra', 'invented', 'nonfinite', 'secret_model', 'wrong_distribution'])
 async def test_malformed_joint_answers_are_rejected(damage):
-    provider = DecisionProvider(agentcli.ProviderConfig('typesafe', 'm', 'https://example.test', 'test-secret'), 'systemone')
+    provider = DecisionProvider(llm_accounts.ProviderConfig('typesafe', 'm', 'https://example.test', 'test-secret'), 'systemone')
     async def response(*args):
         body = wire_response(args[4])
         if damage == 'missing': del body['answers']['target']
@@ -111,7 +114,7 @@ async def test_joint_preview_compares_local_match_without_execution(hass, batch_
         assert wire_targets(payload)['t0']['eligible_categories'] == ['light_off', 'light_on', 'state_query']
         return wire_response(payload)
     with (patch.object(DecisionProvider, '_request', side_effect=response) as request,
-          patch('custom_components.phoenix_mcp.mcp_view._dispatch_mcp') as dispatch):
+          patch_readers('custom_components.phoenix_mcp.tool_dispatch._dispatch_mcp') as dispatch):
         result = await preview(hass, batch_home, local)
     request.assert_awaited_once(); dispatch.assert_not_called()
     assert result['reason'] == 'target_selected' and result['executed'] is False and '_plan' not in result
@@ -316,8 +319,8 @@ async def test_joint_percentage_preview_uses_one_request_and_never_prepares_exec
             assert expected in descriptor['eligible_categories']
         return percentage_response(payload, category, entity_id, str(percent))
     with (patch.object(DecisionProvider, '_request', side_effect=response) as request,
-          patch('custom_components.phoenix_mcp.decision_batch._capture_plan') as plan,
-          patch('custom_components.phoenix_mcp.mcp_view._dispatch_mcp') as dispatch):
+          patch_readers('custom_components.phoenix_mcp.routing.command_execution._capture_plan') as plan,
+          patch_readers('custom_components.phoenix_mcp.tool_dispatch._dispatch_mcp') as dispatch):
         result = await percentage_preview(hass, home, entities[category])
     request.assert_awaited_once(); plan.assert_not_called(); dispatch.assert_not_called()
     assert result['proposal'] == {'intent': intent, 'entity_ids': [entity_id], field: percent}
@@ -378,7 +381,7 @@ async def test_joint_percentage_discards_changed_catalog_or_authority(hass, perc
 
 @pytest.mark.parametrize('kind,protocol', [('typesafe', 'systemone')])
 async def test_unqualified_endpoint_cannot_receive_extended_numeric_choices(kind, protocol):
-    provider = DecisionProvider(agentcli.ProviderConfig(kind, 'm', 'http://local.test/v1'), protocol)
+    provider = DecisionProvider(llm_accounts.ProviderConfig(kind, 'm', 'http://local.test/v1'), protocol)
     with patch.object(provider, '_request') as request, pytest.raises(DecisionError, match='unsupported_category'):
         await provider.route_and_target(None, 'request', {'t0': {}}, 1000, numeric_preview=True)
     request.assert_not_called()
@@ -424,7 +427,7 @@ async def test_extended_preview_preserves_metadata_byte_budget(hass, batch_home)
 
 @pytest.mark.parametrize('change', [False, True])
 async def test_larger_union_budget_is_preview_only_and_rechecks_competitors(hass, batch_home, change):
-    from custom_components.phoenix_mcp.decision_targets import CatalogLimitError
+    from custom_components.phoenix_mcp.routing.decision_targets import CatalogLimitError
     _, access_key, _, _, original = batch_home
     registry = er.async_get(hass)
     hass.states.async_set(original, 'off', {'supported_color_modes': ['brightness']})
@@ -489,7 +492,7 @@ async def test_packing_admits_full_union_previously_over_byte_budget(hass, batch
 
 
 async def test_compact_batch_fits_duplicate_heavy_catalog_without_dropping_candidates(hass, batch_home):
-    from custom_components.phoenix_mcp.decision_targets import CatalogLimitError
+    from custom_components.phoenix_mcp.routing.decision_targets import CatalogLimitError
     _, access_key, _, _, original = batch_home
     expected_entities = {original}
     registry = er.async_get(hass)
@@ -516,7 +519,7 @@ async def test_numeric_preview_reports_independent_value_evidence_without_execut
     async def response(*args):
         return percentage_response(args[4], category, entities[category], model_value)
     with (patch.object(DecisionProvider, '_request', side_effect=response),
-          patch('custom_components.phoenix_mcp.decision_batch._capture_plan') as prepare):
+          patch_readers('custom_components.phoenix_mcp.routing.command_execution._capture_plan') as prepare):
         result = await percentage_preview(hass, home, entities[category])
     assert result['value_check'] == {'status': status, 'source_value': 37}
     assert result['reason'] == 'target_selected' and result['executed'] is False
@@ -595,7 +598,7 @@ async def test_categorical_catalog_bounds_follow_qualified_account(hass, batch_h
         assert {item['entity_id'] for item in wire_targets(payload).values()} == expected
         return wire_response(payload, 'state_query', 't0')
     with (patch.object(DecisionProvider, '_request', side_effect=response) as request,
-          patch('custom_components.phoenix_mcp.mcp_view._dispatch_mcp') as dispatch):
+          patch_readers('custom_components.phoenix_mcp.tool_dispatch._dispatch_mcp') as dispatch):
         result = await preview(hass, batch_home)
     admitted = count <= (DECISION_GROUPED_MAX_TARGETS if qualified else DECISION_MAX_TARGETS)
     assert result['reason'] == ('target_selected' if admitted else 'too_many_targets')
@@ -613,7 +616,7 @@ async def test_preview_reports_only_validation_label_and_never_executes(hass, ba
         body['answers']['route']['probabilities']['private-provider-text'] = 0
         return body
     with (patch.object(DecisionProvider, '_request', side_effect=response),
-          patch('custom_components.phoenix_mcp.mcp_view._dispatch_mcp') as dispatch):
+          patch_readers('custom_components.phoenix_mcp.tool_dispatch._dispatch_mcp') as dispatch):
         result = await preview(hass, batch_home)
     assert result['reason'] == 'malformed'
     assert result['validation_check'] == 'probability_keys'
@@ -624,7 +627,7 @@ async def test_preview_reports_only_validation_label_and_never_executes(hass, ba
 
 
 async def test_large_operation_snapshot_uses_packed_budget_without_hiding_targets(hass, batch_home):
-    from custom_components.phoenix_mcp.decision_targets import CatalogLimitError
+    from custom_components.phoenix_mcp.routing.decision_targets import CatalogLimitError
     _, access_key, *_ = batch_home
     access_key.permissions = PermissionTree(domains={'sensor': PermissionNode(state='YELLOW')})
     registry = er.async_get(hass)
@@ -652,13 +655,13 @@ async def test_large_operation_snapshot_uses_packed_budget_without_hiding_target
 
 
 async def test_summary_scopes_do_not_compete_with_full_entity_catalog_budget(hass,batch_home):
-    from custom_components.phoenix_mcp.command_summary import summary_wire
+    from custom_components.phoenix_mcp.routing.command_summary import summary_wire
     _,access_key,*_=batch_home
     initial=capture_batch_targets(hass,access_key,extended=True)
     entity_bytes=len(json.dumps(catalog_state(initial[0]),ensure_ascii=False).encode())
     summary_bytes=len(json.dumps(summary_wire(initial[1]['state_summary'].targets),ensure_ascii=False).encode())
     assert summary_bytes>0
-    with patch('custom_components.phoenix_mcp.decision_batch.DECISION_GROUPED_TARGET_BYTES',entity_bytes):
+    with patch('custom_components.phoenix_mcp.routing.decision_batch.DECISION_GROUPED_TARGET_BYTES',entity_bytes):
         targets,catalogs=capture_batch_targets(hass,access_key,extended=True)
     assert targets==initial[0]
     assert catalogs['state_summary']==initial[1]['state_summary']
@@ -670,7 +673,7 @@ async def test_preview_probability_total_reports_bounded_question_diagnostics(ha
         body['answers']['target']['probabilities']['none'] = 0.1
         return body
     with (patch.object(DecisionProvider, '_request', side_effect=response),
-          patch('custom_components.phoenix_mcp.mcp_view._dispatch_mcp') as dispatch):
+          patch_readers('custom_components.phoenix_mcp.tool_dispatch._dispatch_mcp') as dispatch):
         result = await preview(hass, batch_home)
     assert result['reason'] == 'malformed'
     assert result['validation_check'] == 'probability_total'
@@ -716,8 +719,8 @@ async def test_joint_option_descriptions_include_exact_values_without_dropping_c
 
 @pytest.mark.parametrize('change', [None, 'scope', 'alias', 'account', 'settings'])
 async def test_real_catalog_guard_runs_between_kind_and_target_requests(hass, batch_home, change):
-    from custom_components.phoenix_mcp.command_routing import RoutingAuthority
-    from custom_components.phoenix_mcp.decision_batch import async_prepare_batch
+    from custom_components.phoenix_mcp.routing.command_routing import RoutingAuthority
+    from custom_components.phoenix_mcp.routing.decision_batch import async_prepare_batch
     data, access_key, store, account, entity_id = batch_home
     provider = DecisionProvider(store.resolve(account, purpose='decision'), 'systemone')
     authority = RoutingAuthority.capture(data, access_key)
@@ -731,7 +734,7 @@ async def test_real_catalog_guard_runs_between_kind_and_target_requests(hass, ba
         if change == 'settings': await data.store.async_patch_settings(decision_timeout_ms=1234)
         return {'model': 'jev-1.13.0', 'answers': {'catalog': {'type': 'choice', 'choice': 'entity',
             'confidence': 1, 'probabilities': {'entity': 1, 'collection': 0, 'provider': 0}}}}
-    with (patch('custom_components.phoenix_mcp.decision_provider.DECISION_BATCH_MAX_TARGET_BYTES', 1),
+    with (patch('custom_components.phoenix_mcp.routing.decision_provider.DECISION_BATCH_MAX_TARGET_BYTES', 1),
           patch.object(provider, '_request', side_effect=response) as request):
         if change:
             with pytest.raises(DecisionError, match='authority_changed|targets_changed'):
@@ -744,8 +747,8 @@ async def test_real_catalog_guard_runs_between_kind_and_target_requests(hass, ba
 
 @pytest.mark.parametrize('change', [None, 'competitor_alias', 'authority'])
 async def test_grouped_catalog_prepares_plan_only_while_all_competitors_remain_current(hass, batch_home, change):
-    from custom_components.phoenix_mcp.command_routing import RoutingAuthority
-    from custom_components.phoenix_mcp.decision_batch import async_prepare_batch, batch_catalog_digest
+    from custom_components.phoenix_mcp.routing.command_routing import RoutingAuthority
+    from custom_components.phoenix_mcp.routing.decision_batch import async_prepare_batch, batch_catalog_digest
     data, access_key, store, account, original = batch_home
     registry = er.async_get(hass)
     for index in range(254):
@@ -784,9 +787,9 @@ async def test_grouped_catalog_prepares_plan_only_while_all_competitors_remain_c
 
 
 async def test_low_confidence_scope_component_cannot_prepare_execution(hass, batch_home):
-    from custom_components.phoenix_mcp.command_routing import RoutingAuthority
-    from custom_components.phoenix_mcp.const import DECISION_SUMMARY_COMPONENTS
-    from custom_components.phoenix_mcp.decision_batch import async_prepare_batch
+    from custom_components.phoenix_mcp.routing.command_routing import RoutingAuthority
+    from custom_components.phoenix_mcp.routing.routing_tables import DECISION_SUMMARY_COMPONENTS
+    from custom_components.phoenix_mcp.routing.decision_batch import async_prepare_batch
     data, access_key, store, account, _ = batch_home
     provider = DecisionProvider(store.resolve(account, purpose='decision'), 'systemone')
     snapshot = capture_batch_targets(hass, access_key, extended=True)
@@ -800,7 +803,7 @@ async def test_low_confidence_scope_component_cannot_prepare_execution(hass, bat
     with (patch.object(provider, 'route_and_target', AsyncMock(return_value={
               'route': answer('state_summary'), 'target': answer('none'),
               'summary_scope': scope, 'summary': answer('on')})),
-          patch('custom_components.phoenix_mcp.decision_batch._capture_plan') as prepare):
+          patch_readers('custom_components.phoenix_mcp.routing.command_execution._capture_plan') as prepare):
         _, result = await async_prepare_batch(
             hass, RoutingAuthority.capture(data, access_key), provider, None,
             'Count all the lights that are currently on', 'en', 'chat')
@@ -817,8 +820,8 @@ async def test_low_confidence_scope_component_cannot_prepare_execution(hass, bat
 @pytest.mark.parametrize('probability', [0.5, 0.89, 0.90])
 async def test_joint_admission_requires_confident_unused_answers(
         hass, batch_home, ingress, operation, question, probability):
-    from custom_components.phoenix_mcp.command_routing import RoutingAuthority
-    from custom_components.phoenix_mcp.decision_batch import async_prepare_batch
+    from custom_components.phoenix_mcp.routing.command_routing import RoutingAuthority
+    from custom_components.phoenix_mcp.routing.decision_batch import async_prepare_batch
     data, access_key, store, account, lamp = batch_home
     access_key.permissions = PermissionTree(domains={
         domain: PermissionNode(state='GREEN') for domain in ('light', 'input_select')})
@@ -892,7 +895,7 @@ async def test_color_preview_requires_the_selected_literal_identity(hass, batch_
 
 
 async def test_temporal_catalog_pools_repeated_attributes_without_losing_competitors(hass, batch_home):
-    from custom_components.phoenix_mcp.decision_batch import batch_catalog_digest
+    from custom_components.phoenix_mcp.routing.decision_batch import batch_catalog_digest
     _, access_key, *_ = batch_home
     access_key.permissions = PermissionTree(domains={domain: PermissionNode(state='GREEN') for domain in ('light', 'timer')})
     registry = er.async_get(hass)
@@ -929,7 +932,7 @@ async def test_temporal_catalog_pools_repeated_attributes_without_losing_competi
         body = wire_response(payload, 'timer_duration', timer_key)
         body['answers']['value'].update(choice='value', probabilities={'value': 1.0, 'none': 0.0})
         return body
-    provider = DecisionProvider(agentcli.ProviderConfig('typesafe', 'jev-latest', 'https://example.test'), 'systemone')
+    provider = DecisionProvider(llm_accounts.ProviderConfig('typesafe', 'jev-latest', 'https://example.test'), 'systemone')
     with patch.object(provider, '_request', side_effect=response) as request:
         answers = await provider.route_temporal(MagicMock(), 'Start timer named Duration fixture for five minutes',
                                                'en', targets, {'kind': 'duration', 'value': '00:05:00'}, 'UTC', 1000)
@@ -947,9 +950,9 @@ async def test_temporal_groups_keep_all_candidates_and_require_one_confident_win
     targets = {f't{i}': {'entity_id': f'timer.fixture_{i}', 'name': f'Timer {i}',
                         'eligible_categories': ['timer_duration'], 'temporal_operations': {'timer_duration': 'duration'}}
                for i in range(count)}
-    cfg = agentcli.ProviderConfig('typesafe', 'jev-latest', 'https://api.typesafe.ai/v1')
+    cfg = llm_accounts.ProviderConfig('typesafe', 'jev-latest', 'https://api.typesafe.ai/v1')
     if case == 'unqualified':
-        cfg = agentcli.ProviderConfig('typesafe', 'other', 'https://example.test')
+        cfg = llm_accounts.ProviderConfig('typesafe', 'other', 'https://example.test')
     provider = DecisionProvider(cfg, 'systemone')
     async def response(*args):
         payload = args[4]

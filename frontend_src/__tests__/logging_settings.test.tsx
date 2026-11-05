@@ -1,5 +1,5 @@
 /**
- * The logging master switch (user, 2026-11-03): stored as disable_all_logging,
+ * The logging master switch: stored as disable_all_logging,
  * shown as Enable logging, on by default. Turning it off stores the flag as
  * true and greys the other logging switches.
  */

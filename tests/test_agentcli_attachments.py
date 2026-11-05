@@ -18,25 +18,20 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from PIL import Image
 import pytest
 
-import custom_components.phoenix_mcp.agentcli as ac
+from tests.runtime_fixtures import patch_readers
+
+from custom_components.phoenix_mcp import agent_turn, agentcli_views, const
 from custom_components.phoenix_mcp.agent_recovery import AgentRecovery
 from custom_components.phoenix_mcp.access_key_store import GlobalSettings
-from custom_components.phoenix_mcp.agentcli import (
-    AgentCliStore,
-    ClaudeProvider,
-    OpenAICompatProvider,
-    PhoenixAgentCliChatView,
-    ProviderConfig,
-    _chat_attachments,
-    _image_kind_and_size,
-    _refused_option,
-    _with_learned,
-)
-from custom_components.phoenix_mcp.const import (
-    AGENTCLI_ATTACHMENT_MAX_BYTES,
-    AGENTCLI_ATTACHMENT_MAX_COUNT,
-    AGENTCLI_ATTACHMENT_MAX_EDGE_PX,
-    MAX_REQUEST_BODY_BYTES,
+from custom_components.phoenix_mcp.llm.accounts import AgentCliStore, ProviderConfig, _with_learned
+from custom_components.phoenix_mcp.llm.provider_claude import ClaudeProvider
+from custom_components.phoenix_mcp.llm.provider_openai import OpenAICompatProvider
+from custom_components.phoenix_mcp.agentcli_views import PhoenixAgentCliChatView
+from custom_components.phoenix_mcp.agent_turn import _chat_attachments, _image_kind_and_size
+from custom_components.phoenix_mcp.llm.base import _refused_option
+from custom_components.phoenix_mcp.const import MAX_REQUEST_BODY_BYTES
+from custom_components.phoenix_mcp.provider_constants import (
+    AGENTCLI_ATTACHMENT_MAX_BYTES, AGENTCLI_ATTACHMENT_MAX_COUNT, AGENTCLI_ATTACHMENT_MAX_EDGE_PX,
 )
 from custom_components.phoenix_mcp.conversation_log import prompt_attachments, prompt_excerpt, sanitized
 
@@ -230,7 +225,7 @@ class _Stream:
         pass
 
 
-async def _post(hass, body: dict, *, cfg: ProviderConfig | None = None, persona: str = "custom"):
+async def _post(hass, body: dict, *, cfg: ProviderConfig | None = None, persona: str = "custom", url=None):
     data = MagicMock()
     data.agent_recovery = AgentRecovery()
     data.shutting_down = False
@@ -243,18 +238,29 @@ async def _post(hass, body: dict, *, cfg: ProviderConfig | None = None, persona:
         kind="chatgpt", model="m", base_url="https://x", api_key="k")
     view = PhoenixAgentCliChatView()
     view.hass = hass
-    hass.data[ac.DOMAIN] = data
-    with patch.object(ac.web, "StreamResponse", _Stream), \
-         patch.object(ac, "_get_secret_store", AsyncMock(return_value=store)), \
-         patch.object(ac, "async_get_clientsession", return_value=MagicMock()), \
-         patch.object(ac, "async_run_agent_turn", new=AsyncMock()) as turn:
-        response = await view.post(_request(json.dumps(
-            {"access_key_id": "t1", "instance_id": "i1", **body}).encode()))
+    hass.data[const.DOMAIN] = data
+    with patch.object(agent_turn.web, "StreamResponse", _Stream), \
+         patch_readers("custom_components.phoenix_mcp.llm.accounts._get_secret_store", AsyncMock(return_value=store)), \
+         patch.object(agentcli_views, "async_get_clientsession", return_value=MagicMock()), \
+         patch("custom_components.phoenix_mcp.agentcli_views.async_run_agent_turn", new=AsyncMock()) as turn:
+        request = _request(json.dumps({"access_key_id": "t1", "instance_id": "i1", **body}).encode())
+        if url is not None:
+            request.url = url
+        response = await view.post(request)
     return response, turn
 
 
 def _error_key(response) -> str:
     return json.loads(response.text)["message_key"]
+
+
+@pytest.mark.asyncio
+async def test_a_host_header_that_forms_no_url_is_refused_before_a_turn(hass):
+    response, turn = await _post(hass, {"user": "hello"}, url=MagicMock(origin=MagicMock(side_effect=ValueError)))
+
+    assert response.status == 400
+    assert _error_key(response) == "adminError.invalidHostHeader"
+    turn.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -369,7 +375,7 @@ async def test_a_model_without_vision_gets_notes_instead_of_history_images(hass)
     sent = json.dumps(turn.call_args.kwargs["messages"])
     for data in ("QUJD", "REVG", "R0hJ"):
         assert data not in sent
-    assert sent.count(ac._UNSEEN_IMAGE_NOTE) == 3
+    assert sent.count(agent_turn._UNSEEN_IMAGE_NOTE) == 3
     assert "what is wrong?" in sent and "snapshot" in sent
 
 
@@ -392,8 +398,8 @@ def test_image_payloads_are_counted_wherever_a_history_holds_them():
         {"role": "user", "content": [{"type": "image_url", "image_url": "data:image/png;base64,QUJD"}]},
         {"role": "user", "content": "plain text, no image"},
     ]
-    assert ac._image_payload_chars(history) == 40 + len("data:image/png;base64,QUJD")
-    assert ac._image_payload_chars("not a history") == 0
+    assert agent_turn._image_payload_chars(history) == 40 + len("data:image/png;base64,QUJD")
+    assert agent_turn._image_payload_chars("not a history") == 0
 
 
 # --------------------------------------------------------------------------- #

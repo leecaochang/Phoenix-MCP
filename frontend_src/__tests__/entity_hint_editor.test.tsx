@@ -71,7 +71,7 @@ describe("entity hint editor", () => {
     const editor = screen.getByRole("group", { name: "Entity Hint" });
     const input = within(editor).getByRole("textbox", { name: `Hint for ${DESK}` });
     expect(input).toHaveFocus();
-    // The caution moved to Help (user, 2026-10-28).
+    // The caution moved to Help.
     expect(within(editor).queryByText("Sent to agents and their model providers. Never include passwords or codes.")).toBeNull();
     expect(input).toHaveAttribute("data-help", "perms.hintCaution");
     expect(input).toHaveAttribute("aria-description", "Sent to agents and their model providers. Never include passwords or codes.");
@@ -147,7 +147,7 @@ describe("entity hint editor", () => {
     expect(mocks.patchEntityPermission).not.toHaveBeenCalled();
   });
 
-  it("closes unsaved on a click anywhere else, while its own Hint button still opens and closes it (user, 2026-10-28)", async () => {
+  it("closes unsaved on a click anywhere else, while its own Hint button still opens and closes it", async () => {
     await renderTree();
     const outside = document.createElement("input");
     document.body.appendChild(outside);

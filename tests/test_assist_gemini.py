@@ -3,15 +3,16 @@
 from __future__ import annotations
 
 import copy
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
 from custom_components.phoenix_mcp.assist_api import PhoenixAssistAPI, PhoenixAssistTool
 from custom_components.phoenix_mcp.assist_gemini import GeminiUnrepresentable, gemini_schema, unwrap_json_fields
 from custom_components.phoenix_mcp.const import DOMAIN
-from custom_components.phoenix_mcp.mcp_view import _TOOL_DEFS_BY_NAME
-from tests.test_assist_api import _ctx, _make_access_key, _make_data, _tool_input
+from custom_components.phoenix_mcp.tool_catalog import _TOOL_DEFS_BY_NAME
+from tests.runtime_fixtures import assist_ctx as _ctx, make_assist_access_key as _make_access_key, make_assist_data as _make_data, assist_tool_input as _tool_input
+from tests.runtime_fixtures import patch_readers
 
 
 def _lowered(tool: str) -> dict:
@@ -77,6 +78,6 @@ async def test_open_object_reaches_dispatch_as_the_object(hass):
         captured.update(params)
         return ({"result": {"content": [{"type": "text", "text": "{}"}]}}, "call_service", "call_service", "allowed")
 
-    with patch("custom_components.phoenix_mcp.mcp_view._dispatch_mcp", side_effect=fake_dispatch):
+    with patch_readers("custom_components.phoenix_mcp.tool_dispatch._dispatch_mcp", side_effect=fake_dispatch):
         await tool.async_call(hass, _tool_input(args), _ctx())
     assert captured["arguments"]["service"]["data"] == {"brightness": 10}

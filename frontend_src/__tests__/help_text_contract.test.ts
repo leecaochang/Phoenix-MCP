@@ -1,5 +1,5 @@
 /**
- * The Quick Help standard (user, 2026-11-02), checked on the English catalog: one
+ * The Quick Help standard, checked on the English catalog: one
  * sentence of about 15 words, 20 at most, and a second short one only for a default
  * or what is lost; none of the phrasings the Guide's Writing rules ban; and every Help
  * key present in the catalog. The keys are found where the source hands them to Help:

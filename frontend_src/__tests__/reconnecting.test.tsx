@@ -1,6 +1,6 @@
 /**
  * Behaviour: Home Assistant going away is announced once, over the whole
- * panel, instead of a raw fetch failure in every window (user, 2026-10-29).
+ * panel, instead of a raw fetch failure in every window.
  * The notice says what is happening, keeps asking, and clears itself when
  * Home Assistant answers again.
  */

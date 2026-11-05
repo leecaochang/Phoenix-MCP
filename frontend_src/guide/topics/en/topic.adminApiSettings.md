@@ -161,7 +161,7 @@ A missing flag, or one that isn't a boolean, uses its default. So `{"confirm": "
 
 - Access keys, archived keys, entity hints, and every setting back to its default.
 - Pending approvals. Phoenix dismisses their notifications and reports them resolved.
-- The audit log, the Conversation Log, version history and configuration recovery records.
+- The audit log, the Conversation Log, version history and the journal of agent writes with an unknown outcome.
 - Routing statistics, the decision request count, the card catalog cache and routing clarifications.
 - Rate limit counts, request counters and notification markers.
 - Per-key sensors and expiry timers. Phoenix also puts back any integration log level an agent changed for a limited time.
@@ -173,6 +173,8 @@ Afterwards, Phoenix applies each changed default, such as MESA mode, the Voice A
 
 `wipe_mesa` clears every MESA profile and dismissed suggestion.
 
+No flag clears configuration recovery records, the calendar write journal or dashboard resource records. Remove a resolved recovery record with its own endpoint.
+
 The response is `204` with no body.
 
 | Status | `error` | `message_key` | When |
@@ -180,6 +182,7 @@ The response is `204` with no body.
 | 400 | `invalid_request` | `adminError.wipeConfirmationRequired` | `confirm` isn't exactly `"WIPE"`. |
 | 409 | `conflict` | `adminError.approvalWipeInProgress` | An approval is running. Wait for it to finish. Only with `wipe_core`. |
 | 409 | `conflict` | `adminError.approvalWipeExecutionUncertain` | An approval may have applied without reporting back. Check its result first. Only with `wipe_core`. |
+| 503 | `service_unavailable` | `adminError.mesaSaveFailed` | Phoenix couldn't save the MESA change. Only with `wipe_mesa`. |
 
 Related: [Safety settings](guide:window.settingsSafety#data-management)
 
@@ -206,7 +209,7 @@ Returns Phoenix's version and what it offers agents.
 | `version` | Phoenix's version. |
 | `min_ha_version` | The oldest Home Assistant version Phoenix supports. |
 | `github_url` | The project's repository. |
-| `tool_count` | `total`, `native` and `additional`, counted from the tools running now. |
+| `tool_count` | `total`, `native` and `additional`, counted from the full tool catalog, whatever is turned on. |
 | `home_companion_reach` | `control_domains`, `read_domains` and `sensor_classes` for Home Companion keys. |
 
 ## Panel strings {#catalog}

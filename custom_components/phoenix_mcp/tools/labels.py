@@ -36,7 +36,8 @@ from ..policy_engine import (
     Permission, resolve_device_registry_access, resolve_location_registry_write, resolve_registry_access,
 )
 from ..request_authority import check_request_authority
-from ..tool_common import _approved_exec_ctx, _gate, _record_version, _restore_ctx, _tool_error, _tool_success
+from ..tool_common import _gate, _record_version, _restore_ctx, _tool_error, _tool_success
+from ..request_authority import _approved_exec_ctx
 
 _LOGGER = logging.getLogger(__name__)
 _TOOL = "set_label_or_category"

@@ -41,7 +41,7 @@ PACKAGE = pathlib.Path(__file__).resolve().parent.parent / "custom_components" /
 # (module filename, argument) maps to why it is read but not published.
 UNPUBLISHED_ARGS = {
     ("calendar.py", "_calendar_plan"): "INTERNAL server-created calendar identity, exact event fields and snapshot binding; public inputs are rebuilt before gating.",
-    ("mcp_view.py", "aliases"): (
+    ("registry.py", "aliases"): (
         "INTERNAL, not an alias. set_entity edits aliases by add/remove and has "
         "no absolute set-the-list form on purpose: Home Assistant builds its "
         "voice matching entirely from that list, so a whole-set write could drop "
@@ -51,16 +51,16 @@ UNPUBLISHED_ARGS = {
         "_restore_ctx is set. test_mcp_registry_tools.py pins that a caller "
         "sending it inside public changes outside a restore is refused."
     ),
-    ("mcp_view.py", "labels"): (
+    ("registry.py", "labels"): (
         "INTERNAL absolute form used only while restoring an entity or device "
         "version. Public set_entity/set_device edit labels with add/remove so a "
         "stale caller cannot replace labels it did not read."
     ),
-    ("mcp_view.py", "disabled_by"): (
+    ("registry.py", "disabled_by"): (
         "INTERNAL restore form preserving Home Assistant's exact disabler. Public "
         "set_entity and set_device expose only the user-controlled enabled boolean."
     ),
-    ("mcp_view.py", "hidden_by"): (
+    ("registry.py", "hidden_by"): (
         "INTERNAL restore form preserving Home Assistant's exact hider. Public "
         "set_entity exposes only the user-controlled hidden boolean."
     ),
@@ -91,7 +91,11 @@ UNPUBLISHED_ARGS = {
 # Catalog v2 handlers normalize structured public inputs to the internal executor
 # shape after the public-schema boundary. These keys are deliberately internal.
 NORMALIZED_ARGS = {
-    "mcp_view.py": {"add_aliases", "add_labels", "area_id", "categories", "context_id", "detailed", "device_class", "domain", "fields", "hidden", "icon", "new_entity_id", "remove_aliases", "remove_labels", "service_data", "title", "use_device_name"},
+    "history.py": {"detailed", "fields"},
+    "integrations.py": {"disabled_by", "title"},
+    "logs.py": {"context_id"},
+    "registry.py": {"add_aliases", "add_labels", "area_id", "categories", "device_class", "enabled", "hidden", "icon", "name", "new_entity_id", "remove_aliases", "remove_labels", "use_device_name"},
+    "service.py": {"area_id", "device_id", "domain", "entity_id", "service_data"},
     "discovery.py": {"area_id", "service_data"},
     "energy.py": {"device_name", "name", "new_statistic", "op", "source_type", "statistic"},
     "lovelace.py": {"op", "path", "value"},
@@ -269,16 +273,16 @@ def test_remove_device_publishes_only_owner_selection():
 
 
 def _modules() -> list[pathlib.Path]:
-    return [PACKAGE / "mcp_view.py", *sorted((PACKAGE / "tools").glob("*.py"))]
+    return sorted((PACKAGE / "tools").glob("*.py"))
 
 
 def _registered_handlers() -> dict[str, str]:
-    """Map tool name to its handler function name, read off mcp_view's own registry.
+    """Map tool name to its handler function name, read off the registration module.
 
     The registry is the source of truth, so a new tool is covered without editing
     this file.
     """
-    tree = ast.parse((PACKAGE / "mcp_view.py").read_text(encoding="utf-8"))
+    tree = ast.parse((PACKAGE / "tool_registration.py").read_text(encoding="utf-8"))
     found: dict[str, str] = {}
     for node in ast.walk(tree):
         if (

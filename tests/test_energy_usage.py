@@ -21,7 +21,7 @@ from homeassistant.util import dt as dt_util
 from pytest_homeassistant.components.recorder.common import async_wait_recording_done
 
 from custom_components.phoenix_mcp.access_key_store import AccessKeyRecord, PermissionNode, PermissionTree
-from custom_components.phoenix_mcp.mcp_view import _call_tool
+from custom_components.phoenix_mcp.tool_dispatch import _call_tool
 
 _WS = "custom_components.phoenix_mcp.tools.energy.async_ws_command"
 METERS = {"grid_in": 3.0, "grid_out": 1.0, "solar": 2.0, "battery_out": 0.5, "battery_in": 0.25, "workshop": 1.5,

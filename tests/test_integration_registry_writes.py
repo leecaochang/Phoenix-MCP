@@ -18,13 +18,12 @@ from pytest_homeassistant.common import MockConfigEntry
 
 from custom_components.phoenix_mcp.const import DOMAIN
 from custom_components.phoenix_mcp.data import PhoenixData
-from custom_components.phoenix_mcp.mcp_view import (
+from custom_components.phoenix_mcp.tools.integrations import (
     _CONFIG_ENTRY_CONTEXT_FINGERPRINT,
     _CONFIG_ENTRY_METADATA_SNAPSHOT,
-    _call_tool,
-    async_execute_approved_tool,
-    async_restore_version,
 )
+from custom_components.phoenix_mcp.tool_dispatch import _call_tool, async_execute_approved_tool
+from custom_components.phoenix_mcp.tools.restore import async_restore_version
 from custom_components.phoenix_mcp.policy_engine import (
     config_entry_registry_context,
     resolve_config_entry_registry_write,
@@ -189,7 +188,7 @@ async def test_metadata_noop_skips_gate_and_version(
 ):
     data = await _data(hass)
     gate = AsyncMock()
-    with patch("custom_components.phoenix_mcp.mcp_view._gate", gate):
+    with patch("custom_components.phoenix_mcp.tools.integrations._gate", gate):
         content, outcome, _ = await _call_tool(
             "set_integration",
             {
@@ -469,7 +468,7 @@ async def test_capability_approval_pins_membership_and_mesa(
         _profile(integration_env["entry"].domain, "confirm"),
     )
     gate = AsyncMock(return_value=({}, "pending_approval", "approval"))
-    with patch("custom_components.phoenix_mcp.mcp_view._gate", gate):
+    with patch("custom_components.phoenix_mcp.tools.integrations._gate", gate):
         _content, outcome, _ = await _call_tool(
             "reload_integration",
             {"entry_id": integration_env["entry_id"]},

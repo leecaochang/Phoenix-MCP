@@ -7,15 +7,15 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { BTN_CLASS } from "../inject/dom";
 
-const stored = vi.hoisted(() => ({ entities: [] as string[], integrations: [] as string[] }));
+const stored = vi.hoisted(() => ({ entities: [] as string[], integrations: [] as string[], reads: [] as string[] }));
 
 vi.mock("../api", () => ({
   setHass: vi.fn(),
   api: {
-    listMesaProfiles: async () => ({ profiles: stored.entities.map((entity_id) => ({ entity_id })), has_more: false }),
-    listMesaDevices: async () => ({ devices: [] }),
-    listMesaAreas: async () => ({ areas: [] }),
-    listMesaIntegrations: async () => ({ integrations: stored.integrations.map((integration) => ({ integration })) }),
+    listMesaProfiles: async () => { stored.reads.push("entities"); return { profiles: stored.entities.map((entity_id) => ({ entity_id })), has_more: false }; },
+    listMesaDevices: async () => { stored.reads.push("devices"); return { devices: [] }; },
+    listMesaAreas: async () => { stored.reads.push("areas"); return { areas: [] }; },
+    listMesaIntegrations: async () => { stored.reads.push("integrations"); return { integrations: stored.integrations.map((integration) => ({ integration })) }; },
   },
 }));
 vi.mock("../utils/card_harvest", () => ({ syncCardCatalog: vi.fn() }));
@@ -34,6 +34,7 @@ afterEach(() => {
   document.body.innerHTML = "";
   stored.entities = [];
   stored.integrations = [];
+  stored.reads = [];
   vi.useRealTimers();
   vi.resetModules();
 });
@@ -104,6 +105,49 @@ it("reads a detail page's own scope again before opening", async () => {
   await vi.advanceTimersByTimeAsync(200);
   expect(modal()?.getAttribute("scope")).toBe("integration");
   expect(modal()?.getAttribute("has-profile")).toBe("1");
+});
+
+it("reads no profile list on a page that can show no button", async () => {
+  start("/lovelace/0");
+  await boot();
+  await vi.advanceTimersByTimeAsync(5000);
+  expect(stored.reads).toEqual([]);
+});
+
+it("reads a scope's list once, on the first page that can show its buttons", async () => {
+  start("/lovelace/0");
+  await boot();
+  window.history.replaceState({}, "", "/config/integrations/integration/hue");
+  window.dispatchEvent(new Event("location-changed"));
+  await vi.advanceTimersByTimeAsync(5000);
+  expect(stored.reads).toEqual(["integrations"]);
+});
+
+it("opens one editor for two quick clicks, and a failed open tells the operator", async () => {
+  const row = entityRow("light.made_elsewhere");
+  await boot();
+  const button = row.querySelector<HTMLButtonElement>(`.${BTN_CLASS}`)!;
+  button.click();
+  button.click();
+  await vi.advanceTimersByTimeAsync(200);
+  await vi.dynamicImportSettled();
+  await vi.advanceTimersByTimeAsync(200);
+  expect(document.querySelectorAll("phx-mesa-quick-add-test-build")).toHaveLength(1);
+
+  modal()!.remove();
+  const toasts: string[] = [];
+  document.querySelector("home-assistant")!.addEventListener("hass-notification", (e) => toasts.push((e as CustomEvent).detail.message));
+  vi.spyOn(document.body, "appendChild").mockImplementationOnce(() => { throw new Error("fixture"); });
+  button.click();
+  await vi.advanceTimersByTimeAsync(200);
+  await vi.dynamicImportSettled();
+  expect(toasts).toEqual(["inject.openFailed"]);
+
+  // The failure leaves the button working.
+  button.click();
+  await vi.advanceTimersByTimeAsync(200);
+  await vi.dynamicImportSettled();
+  expect(modal()).not.toBeNull();
 });
 
 it("replaces the button when Home Assistant reuses a detail page for another target", async () => {

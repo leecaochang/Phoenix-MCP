@@ -49,7 +49,7 @@ class DebugCapture(logging.Handler):
             return
         try:
             message = record.getMessage()
-        except Exception:  # noqa: BLE001 - a bad format string must not break logging
+        except Exception:  # a bad format string must not break logging
             message = str(record.msg)
         truncated = len(message) > DEBUG_CAPTURE_MAX_CHARS
         self.records.append((next(self._sequence), record.created, record.levelname, record.name,

@@ -10,19 +10,22 @@ from typing import TYPE_CHECKING, Any
 
 from homeassistant.util.dt import parse_datetime, utcnow
 
-from .conversation_log import redact_device_codes
-from .helpers import notification_text
+from .approval_targets import bind_targets, bound_preview
+from .conversation_log import redact_device_codes, approval_event
+from .helpers import notification_text, redact_structure, effective_cap
 from .const import (
-    APPROVAL_DEFAULT_TTL_SECONDS,
-    CONFIG_RECOVERY_APPROVAL_ACCESS_KEY,
-    DOMAIN,
-    MAX_PENDING_APPROVALS_PER_ACCESS_KEY, APPROVAL_HISTORY_LIMIT, APPROVAL_HISTORY_DAYS, APPROVAL_PAYLOAD_RETENTION_SECONDS,
+    APPROVAL_DEFAULT_TTL_SECONDS, CONFIG_RECOVERY_APPROVAL_ACCESS_KEY, DOMAIN,
+    MAX_PENDING_APPROVALS_PER_ACCESS_KEY, APPROVAL_HISTORY_LIMIT, APPROVAL_HISTORY_DAYS,
+    APPROVAL_PAYLOAD_RETENTION_SECONDS, CAP_ALLOW, CAP_CONFIRM, CAP_DENY,
 )
+from .request_authority import household_authority, check_request_authority
+from collections.abc import Awaitable, Callable
 
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
 
-    from .access_key_store import AccessKeyStore
+    from .access_key_store import AccessKeyRecord, AccessKeyStore
+    from .data import PhoenixData
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -117,7 +120,6 @@ class PendingApproval:
         redact_args=False to keep the raw args the approved-action executor
         re-runs from. See helpers.redact_structure.
         """
-        from .helpers import redact_structure  # noqa: PLC0415
 
         # Device codes too (a disarm code, a PIN), which the general redaction keeps.
         public_args = redact_device_codes(redact_structure(self.args))
@@ -221,7 +223,6 @@ async def async_create_pending_approval(
         raise PendingApprovalCapacityError(
             f"access key {access_key_id} already has {pending_for_access_key} pending approvals"
         )
-    from .household_authority import household_authority
 
     household = household_authority.get()
     now = utcnow()
@@ -356,7 +357,7 @@ async def async_mark_execution_started(
         store.set_pending_approvals(raw)
         try:
             await store.async_save()
-        except Exception:  # noqa: BLE001 - see the docstring: this must fail closed
+        except Exception:  # see the docstring: this must fail closed
             _LOGGER.exception(
                 "Could not record the start of execution for approval %s; refusing to "
                 "run it, because a store that cannot take the marker cannot record the "
@@ -400,7 +401,7 @@ async def async_clear_execution_marker(
             store.set_pending_approvals(raw)
             try:
                 await store.async_save()
-            except Exception:  # noqa: BLE001 - the record is still pending either way
+            except Exception:  # the record is still pending either way
                 _LOGGER.exception(
                     "Could not clear the execution marker for approval %s; recovery "
                     "will resolve it as interrupted", approval_id,
@@ -450,8 +451,8 @@ async def async_reconcile_interrupted_approvals(
         store.set_pending_approvals(raw)
         await store.async_save()
         _LOGGER.warning(
-            "Phoenix MCP: %d approval(s) were being executed when Home Assistant "
-            "stopped; whether they applied is unknown, so they were resolved as "
+            "Phoenix MCP: %d approval(s) started running and never reported an "
+            "outcome; whether they applied is unknown, so they were resolved as "
             "failed rather than left approvable again", len(changed),
         )
     return changed
@@ -490,7 +491,10 @@ async def async_cancel_approvals_for_access_key(
         entry["resolved_at"] = now_iso
         entry["rejected_reason"] = REASON_EXECUTION_INTERRUPTED if interrupted else reason
         entry.pop("execution_started_at", None)
-        changed.append(PendingApproval.from_dict(entry))
+        try:
+            changed.append(PendingApproval.from_dict(entry))
+        except (KeyError, TypeError, ValueError):
+            continue
     if changed:
         store.set_pending_approvals(raw)
         await store.async_save()
@@ -522,7 +526,10 @@ async def async_cancel_queued_approvals_at_startup(
         entry["resolved_at"] = now_iso
         entry["rejected_reason"] = REASON_RESTARTED
         entry.pop("execution_started_at", None)
-        changed.append(PendingApproval.from_dict(entry))
+        try:
+            changed.append(PendingApproval.from_dict(entry))
+        except (KeyError, TypeError, ValueError):
+            continue
     if changed:
         store.set_pending_approvals(raw)
         await store.async_save()
@@ -550,7 +557,10 @@ def collect_pending_approvals_for_wipe(
         record["status"] = STATUS_CANCELLED
         record["resolved_at"] = now_iso
         record["rejected_reason"] = reason
-        out.append(PendingApproval.from_dict(record))
+        try:
+            out.append(PendingApproval.from_dict(record))
+        except (KeyError, TypeError, ValueError):
+            continue
     return out
 
 
@@ -581,7 +591,10 @@ async def async_expire_overdue_approval_records(
             continue
         entry["status"] = STATUS_EXPIRED
         entry["resolved_at"] = now_iso
-        expired.append(PendingApproval.from_dict(entry))
+        try:
+            expired.append(PendingApproval.from_dict(entry))
+        except (KeyError, TypeError, ValueError):
+            continue
     if expired:
         store.set_pending_approvals(raw)
         await store.async_save()
@@ -590,7 +603,6 @@ async def async_expire_overdue_approval_records(
 
 def fire_approval_requested_event(hass: HomeAssistant, approval: PendingApproval) -> None:
     """Fire an HA event when a new approval is queued."""
-    from .conversation_log import approval_event
     approval_event(hass, approval)
     hass.bus.async_fire(
         f"{DOMAIN}_approval_requested",
@@ -609,7 +621,6 @@ def fire_approval_requested_event(hass: HomeAssistant, approval: PendingApproval
 
 def fire_approval_resolved_event(hass: HomeAssistant, approval: PendingApproval) -> None:
     """Fire an HA event when an approval reaches a terminal state."""
-    from .conversation_log import approval_event
     approval_event(hass, approval, resolved=True)
     hass.bus.async_fire(
         f"{DOMAIN}_approval_resolved",
@@ -668,7 +679,8 @@ def create_approval_notification(hass: HomeAssistant, approval: PendingApproval)
     if data is not None and not data.store.get_settings().notify_on_approval:
         return
 
-    from homeassistant.components import persistent_notification  # noqa: PLC0415
+    # Local: optional component, imported only when this path runs.
+    from homeassistant.components import persistent_notification
 
     # Configuration recovery is Phoenix's own review, not an access key's request.
     recovery = approval.access_key_id == CONFIG_RECOVERY_APPROVAL_ACCESS_KEY
@@ -685,7 +697,8 @@ def create_approval_notification(hass: HomeAssistant, approval: PendingApproval)
 
 
 def dismiss_approval_notification(hass: HomeAssistant, approval_id: str) -> None:
-    from homeassistant.components import persistent_notification  # noqa: PLC0415
+    # Local: optional component, imported only when this path runs.
+    from homeassistant.components import persistent_notification
 
     persistent_notification.async_dismiss(
         hass,
@@ -735,3 +748,102 @@ async def async_prune_terminal_approvals(store: AccessKeyStore, *, skip_ids: set
         except BaseException:
             store.set_pending_approvals(original)
             raise
+
+
+@dataclass
+class CapabilityResult:
+    """Outcome of an async_evaluate_capability call.
+
+    mode is one of "allow" / "deny" / "confirm". When mode is "confirm",
+    approval is the freshly created PendingApproval record and the caller
+    must return a pending response without executing.
+    """
+
+    mode: str
+    approval: Any | None = None
+
+    @property
+    def is_deny(self) -> bool:
+        return self.mode == CAP_DENY
+
+    @property
+    def is_pending(self) -> bool:
+        return self.mode == CAP_CONFIRM
+
+
+# An approval diff, either already built or deferred behind a zero-arg builder.
+# Most builders read config off disk (or call the ESPHome add-on) while the diff
+# is read only when an approval is created, so deferring spares an allow or a deny
+# a result nobody looks at.
+DiffSource = dict | Callable[[], "dict | Awaitable[dict]"] | None
+
+
+async def _resolve_diff(diff: DiffSource) -> dict:
+    """Resolve a diff given either as a built dict or as a deferred builder.
+
+    Expensive builders (config off disk, a lovelace config, the ESPHome add-on)
+    are passed as a zero-arg callable and invoked here, on the confirm path alone;
+    cheap builders may pass a plain dict. Awaitability is tested with
+    collections.abc.Awaitable rather than inspect, so sync and async builders can
+    be mixed at the call sites.
+    """
+    if diff is None:
+        return {}
+    if not callable(diff):
+        return diff or {}
+    built = diff()
+    if isinstance(built, Awaitable):
+        built = await built
+    return built or {}
+
+
+async def async_evaluate_capability(
+    cap_name: str,
+    access_key: AccessKeyRecord,
+    hass: HomeAssistant,
+    data: PhoenixData,
+    *,
+    tool_name: str,
+    args: dict,
+    request_id: str,
+    diff: DiffSource = None,
+    client_ip: str | None = None,
+    target_entities: list[str] | None = None,
+) -> CapabilityResult:
+    """Resolve a capability check into Allow / Deny / Pending(approval).
+
+    Reads the effective cap mode (after pass-through interaction) and either
+    permits, denies, or creates a pending approval and returns a Confirm result.
+    Diff is supplied by the caller; it appears in the admin review UI. It may be
+    a dict or a zero-arg builder, and a builder is invoked only on the Confirm
+    path, so an allowed or denied call never pays for a diff nobody reads.
+    """
+
+    mode = effective_cap(access_key, cap_name)
+    if mode == CAP_ALLOW:
+        return CapabilityResult(CAP_ALLOW)
+    if mode == CAP_DENY:
+        return CapabilityResult(CAP_DENY)
+    # The diff is needed only on the confirm path, so a deferred builder runs here
+    # and nowhere else. Both early returns above leave it untouched.
+    if target_entities is not None:
+        args = bind_targets(args, target_entities, hass)
+    resolved_diff = await _resolve_diff(diff)
+    if target_entities is not None:
+        resolved_diff = bound_preview(resolved_diff, args)
+    async with data.store.async_lock:
+        check_request_authority()
+        approval = await async_create_pending_approval(
+            data.store,
+            access_key_id=access_key.id,
+            access_key_name=access_key.name,
+            tool_name=tool_name,
+            cap_name=cap_name,
+            args=args,
+            diff=resolved_diff,
+            request_id=request_id,
+            client_ip=client_ip,
+        )
+    create_approval_notification(hass, approval)
+    fire_approval_requested_event(hass, approval)
+    return CapabilityResult(CAP_CONFIRM, approval=approval)

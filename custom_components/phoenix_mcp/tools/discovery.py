@@ -7,7 +7,7 @@ returned, so a listing never becomes an oracle for entities the access key canno
   - Registry reads: areas, floors, zones, devices, and the entity search /
     overview / describe family.
   - Relationship analysis: which automations, scripts and scenes reference an
-    entity (`_references_for_entity`) and what it drives in turn
+    entity (`_references_for_entity_details`) and what it drives in turn
     (`_forward_references_details`), both walked out of the stored YAML configs.
   - Preview tools: whatif, dry_run_service, validate_automation_or_script,
     find_available_actions. They run the same gates a real call would and report
@@ -15,8 +15,8 @@ returned, so a listing never becomes an oracle for entities the access key canno
     mirror the physical-gate and no-target-service rules rather than
     approximating them.
 
-`_tool_get_capability_summary` lives in mcp_view: it reports on the published
-tool surface through _tool_gate_map, so it belongs with the registry that owns it.
+`_tool_get_capability_summary` lives in tools/system.py: it reports on the published
+tool surface through _tool_gate_map.
 """
 
 from __future__ import annotations
@@ -47,6 +47,7 @@ from homeassistant.util.dt import as_utc, parse_datetime, utcnow
 
 import voluptuous as vol
 from homeassistant.exceptions import HomeAssistantError
+from homeassistant.const import __version__ as ha_version
 
 from ..authoring_validation import async_validation_message, authoring_input_error
 from ..const import ANNOUNCEMENT_SERVICES, CAP_ALLOW, CAP_CONFIRM, CAP_DENY, DEVICE_LIST_DEFAULT_LIMIT, DEVICE_LIST_MAX_LIMIT, DUAL_GATE_SERVICES, MAX_COMPARE_LIST_VALUES, MAX_COMPARE_VALUE_CHARS, MAX_DANGLING_PATHS, MAX_CONFIG_CHECK_MESSAGES, MAX_SEARCH_QUERY_LEN, MAX_SEARCH_MEMBERS, MAX_SEARCH_MEMBER_CHECKS, MAX_SEARCH_MEMBER_ID_LEN, MESA_MODE_OFF, MUSIC_ASSISTANT_LIBRARY_SERVICES, STORAGE_HELPER_TYPES, NO_TARGET_SERVICES, PHYSICAL_GATE_DOMAINS, RUNTIME_SERVICE_GUIDANCE, SCRIPT_ENTITY_SERVICES, SEARCH_ENTITIES_MAX_LIMIT, SEARCH_FUZZY_MATCH_CUTOFF, SEARCH_POWER_TYPES, SEARCH_RADIO_TYPES, SERVICE_FIELDS_MAX, SERVICE_FIELD_MAX_DESCRIPTION, SERVICE_FIELD_MAX_OPTIONS, REFERENCE_WARNING_MAX
@@ -61,12 +62,13 @@ from ..device_semantics import (
     effective_entity_area_id,
     entity_name_source,
 )
-from ..service_targets import secondary_target_error, template_fields, template_fields_error, unsupported_secondary_targets
+from ..routing.intent_recognition import RecognitionUnavailable, async_recognize
+from ..service_targets import dedicated_tool_refusal, secondary_target_error, template_fields, template_fields_error, unbound_service_targets, unbound_target_error, unsupported_secondary_targets
 from ..tool_contracts import normalize_tool_args, state_projection
-from ..mesa import async_semantic_moments, build_expand_target, entity_control_mode, evaluate_service_entities
+from ..mesa import async_semantic_moments, build_expand_target, entity_control_mode, evaluate_service_call
 from ..mesa_core.trigger_validator import entities_by_role
 from ..mesa_tools import MESA_TOOLS_CAP, authored_restrictions
-from ..helpers import effective_cap, entity_hint_for_agent, is_announcement, parse_time_param as _parse_time_param, redact_diagnostics as _redact_diagnostics, redact_inaccessible_entity_ids_in_text, sanitize_service_data as _sanitize_service_data, str_arg, str_list_arg
+from ..helpers import effective_cap, entity_hint_for_agent, parse_time_param as _parse_time_param, redact_diagnostics as _redact_diagnostics, redact_inaccessible_entity_ids_in_text, sanitize_service_data as _sanitize_service_data, service_capability, str_arg, str_list_arg
 from .esphome import _ESPHOME_DOMAIN, _esphome_action_signature, _esphome_actions_for_entity, esphome_availability
 from ..tool_common import _project_state, _resolve_area_id, _tool_error, _tool_success, fitted_offset_page, longest_fitting, offset_page
 from ..ws_dispatch import WsDispatchError, async_get_lovelace_config, async_ws_command
@@ -77,6 +79,7 @@ from ..recorder_queries import iso_utc, state_timestamp
 from ..request_authority import check_request_authority
 from ..access_key_store import AccessKeyRecord
 from .. import yaml_includes
+from .helper import _helper_config_entry
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -165,11 +168,6 @@ def _references_for_entity_details(
                          **({"_identity_config": scene} if not scene.get("id") else {})})
 
     return refs, not_searched
-
-
-def _references_for_entity(hass: HomeAssistant, entity_id: str) -> list[dict]:
-    """Reverse references bound to consumer identities, without the not-searched gaps."""
-    return ConsumerIdentityIndex(hass).bind(_references_for_entity_details(hass, entity_id)[0])
 
 
 # ---------------------------------------------------------------------------
@@ -765,10 +763,9 @@ def _recognized_targets(
     HA's matcher treats an empty ``states`` list as "use every state", so the
     explicit empty guard is a security boundary, not an optimization.
     """
-    from homeassistant.helpers.intent import (  # noqa: PLC0415
-        MatchTargetsConstraints,
-        async_match_targets,
-    )
+    # Local: not part of the recorded Home Assistant import floor.
+    from homeassistant.helpers.intent import MatchTargetsConstraints
+    from homeassistant.helpers.intent import async_match_targets
 
     name_value = _recognized_entity_value(result, "name")
     area_value = _recognized_entity_value(result, "area")
@@ -849,7 +846,6 @@ async def _tool_recognize_intent(
         )
     language = language_arg.strip() if isinstance(language_arg, str) else hass.config.language
 
-    from ..intent_recognition import RecognitionUnavailable, async_recognize
 
     try:
         result = await async_recognize(hass, sentence, language)
@@ -1643,7 +1639,7 @@ async def _tool_search_entities(
 
         state = hass.states.get(eid)
         entry = registry.async_get(eid)
-        e = scrub_sensitive_attributes(state) if state is not None else {
+        e = scrub_sensitive_attributes(state, access_key, hass) if state is not None else {
             "entity_id": eid,
             "state": None,
             "attributes": {},
@@ -1963,9 +1959,10 @@ async def _tool_find_available_actions(
     fields_unavailable = False
     if include_fields:
         try:
-            from homeassistant.helpers.service import async_get_all_descriptions  # noqa: PLC0415
+            # Local: inside a guard for releases that lack it.
+            from homeassistant.helpers.service import async_get_all_descriptions
             descriptions = (await async_get_all_descriptions(hass)).get(entity_id.split(".")[0], {}) or {}
-        except Exception:  # noqa: BLE001 - descriptions are documentation, never required
+        except Exception:  # descriptions are documentation, never required
             _LOGGER.debug("Service descriptions unavailable for %s", entity_id, exc_info=True)
             fields_unavailable = True
         check_request_authority()
@@ -1982,7 +1979,9 @@ async def _tool_find_available_actions(
     actions: list[dict] = []
     for svc in sorted(hass.services.async_services().get(domain, {}).keys()):
         key = f"{domain}/{svc}"
-        if key not in NO_TARGET_SERVICES and not service_target_binding_valid(domain, svc, [entity_id], hass):
+        if key not in NO_TARGET_SERVICES and (
+                not service_target_binding_valid(domain, svc, [entity_id], hass)
+                or await unbound_service_targets(hass, [entity_id], domain=domain, service=svc)):
             continue
         available = writable
         reason: str | None = None
@@ -2003,6 +2002,8 @@ async def _tool_find_available_actions(
             available, reason = False, "requires notifications capability"
         elif key in ANNOUNCEMENT_SERVICES and not broadcast_ok:
             available, reason = False, "requires broadcast capability"
+        elif key == "scene/delete" and effective_cap(access_key, "cap_scene_write") == CAP_DENY:
+            available, reason = False, "requires scene write capability"
         entry = {"service": f"{domain}.{svc}", "available": available}
         if guidance := RUNTIME_SERVICE_GUIDANCE.get(key):
             entry["description"] = guidance
@@ -2057,12 +2058,12 @@ async def _tool_get_system_health(
     if effective_cap(access_key, "cap_diagnostics") == CAP_DENY:
         return _tool_error("Forbidden."), "denied", "get_system_health"
 
-    from homeassistant.const import __version__ as ha_version  # noqa: PLC0415
     integrations: dict = {}
     try:
-        from homeassistant.components import system_health  # noqa: PLC0415
+        # Local: optional component, imported only when this path runs.
+        from homeassistant.components import system_health
         integrations = await system_health.get_info(hass)
-    except Exception:  # noqa: BLE001 - system_health may be unavailable
+    except Exception:  # system_health may be unavailable
         integrations = {}
 
     # Per-integration health values are arbitrary and can carry embedded tokens,
@@ -2242,17 +2243,18 @@ def _safe_config_relpath(path: str) -> bool:
         part.startswith(".") for part in parts)
 
 
-async def _tool_check_config(
+async def _tool_check_ha_config(
     args: dict, access_key: AccessKeyRecord, hass: HomeAssistant
 ) -> tuple[dict, str, str]:
     """MCP tool: validate HA config files and return errors/warnings."""
+    # Local: not part of the recorded Home Assistant import floor.
+    from homeassistant.helpers import check_config
     if effective_cap(access_key, "cap_diagnostics") == CAP_DENY:
         return _tool_error("Forbidden."), "denied", "check_ha_config"
 
-    from homeassistant.helpers import check_config  # noqa: PLC0415
     try:
         result = await check_config.async_check_ha_config_file(hass)
-    except Exception:  # noqa: BLE001 - surface as a tool error, never 500
+    except Exception:  # surface as a tool error, never 500
         _LOGGER.warning("MCP check_config failed", exc_info=True)
         return _tool_error("Config check failed."), "invalid_request", "check_ha_config"
 
@@ -2616,7 +2618,7 @@ async def _tool_describe_entity(
     state = hass.states.get(entity_id)
 
     domain = entity_id.split(".")[0]
-    scrubbed = scrub_sensitive_attributes(state) if state is not None else {
+    scrubbed = scrub_sensitive_attributes(state, access_key, hass) if state is not None else {
         "state": None,
         "attributes": {},
     }
@@ -2702,7 +2704,6 @@ async def _entity_definition(
     """
     if entry is None:
         return None
-    from .helper import _helper_config_entry  # noqa: PLC0415 - helper imports this module
 
     def tool(name: str, cap: str) -> dict[str, str]:
         return {"read_with": name} if effective_cap(access_key, cap) != CAP_DENY else {}
@@ -2779,8 +2780,8 @@ def _state_matches(constraint: Any, value: Any) -> bool | None:
     return str(constraint) == value
 
 
-def _whatif_trigger(trig: dict, entity_id: str, current_state: str | None, hypothetical: str) -> bool | str:
-    """Best-effort: would this trigger fire if entity_id became `hypothetical`?
+def _whatif_trigger(trig: dict, current_state: str | None, hypothetical: str) -> bool | str:
+    """Best-effort: would this trigger fire if its entity became `hypothetical`?
 
     Evaluates state and numeric_state platforms; returns "unknown" for triggers
     that cannot be judged from a single state change (template, time, event, etc.).
@@ -2876,7 +2877,7 @@ async def _tool_whatif(
                 continue
             matched.append({
                 "platform": trig.get("platform") or trig.get("trigger"),
-                "would_fire": _whatif_trigger(trig, entity_id, current_state, hypothetical),
+                "would_fire": _whatif_trigger(trig, current_state, hypothetical),
             })
         if not matched:
             continue
@@ -2906,8 +2907,9 @@ async def _tool_whatif(
 
 async def _history_states(hass: HomeAssistant, start: Any, end: Any, entity_ids: list[str], *, include_start: bool = True) -> dict:
     """Recorder significant-states for a set of entities, no attributes."""
-    from homeassistant.components.recorder import get_instance  # noqa: PLC0415
-    from homeassistant.components.recorder import history as rec_history  # noqa: PLC0415
+    # Local: optional component, imported only when this path runs.
+    from homeassistant.components.recorder import get_instance
+    from homeassistant.components.recorder import history as rec_history
     fn = functools.partial(
         rec_history.get_significant_states,
         hass, start, end, entity_ids, None, include_start, True, False, True,
@@ -2923,7 +2925,7 @@ async def _history_states_at(hass: HomeAssistant, at: Any, entity_ids: list[str]
     )
 
 
-async def _tool_compare_state(
+async def _tool_compare_states(
     args: dict, access_key: AccessKeyRecord, hass: HomeAssistant
 ) -> tuple[dict, str, str]:
     """MCP tool: compare accessible entity states between two times."""
@@ -2963,7 +2965,7 @@ async def _tool_compare_state(
                 _history_states_at(hass, t1, accessible),
                 _history_states_at(hass, t2, accessible),
             )
-        except Exception:  # noqa: BLE001
+        except Exception:
             _LOGGER.warning("compare_state history failed", exc_info=True)
             return _tool_error("History call failed."), "invalid_request", "compare_states"
         for eid in accessible:
@@ -3096,7 +3098,7 @@ async def _tool_compare_entities(
         state = hass.states.get(eid)
         if state is None:
             return not_found
-        states.append(scrub_sensitive_attributes(state))
+        states.append(scrub_sensitive_attributes(state, access_key, hass))
 
     # Scrubbing runs before the diff, so an attribute Phoenix strips from a
     # state read can never be reintroduced here as a difference between two.
@@ -3173,7 +3175,7 @@ async def _tool_recent_activity(
             # The state at the window start lets a row that repeats the state, as
             # Home Assistant writes at every restart, be told from a change.
             result = await _history_states(hass, start, end, accessible_ids, include_start=True)
-        except Exception:  # noqa: BLE001
+        except Exception:
             _LOGGER.warning("recent_activity history failed", exc_info=True)
             return _tool_error("History call failed."), "invalid_request", "recent_activity"
         for eid, states in result.items():
@@ -3233,8 +3235,8 @@ async def _tool_dry_run_service(
     service = str_arg(args.get("service"))
     if not domain or not service:
         return _tool_error("Missing required arguments: domain and service"), "invalid_request", "dry_run_service"
-    if domain == "calendar" and service != "get_events":
-        return _tool_error("Use the dedicated calendar event authoring tools for calendar writes."), "invalid_request", "dry_run_service"
+    if (dedicated := dedicated_tool_refusal(domain, service)) is not None:
+        return _tool_error(dedicated[1]), "invalid_request", "dry_run_service"
     secondary_targets = await unsupported_secondary_targets(
         hass, args.get("service_data"), domain=domain, service=service
     )
@@ -3325,6 +3327,9 @@ async def _tool_dry_run_service(
 
     if not service_target_binding_valid(domain, service, permitted, hass):
         permitted = []
+    unbound = await unbound_service_targets(hass, permitted, domain=domain, service=service)
+    if unbound:
+        permitted = []
 
     # Predict the outcome in the same order call_service applies its gates: the
     # physical-control cap gate first (before target resolution and MESA), then an
@@ -3333,13 +3338,14 @@ async def _tool_dry_run_service(
     # pending. The predicate is the enforcing path's own, not a copy, so the
     # preview cannot drift from the call it predicts.
     physical_gate = physical_gate_applies(domain, service, permitted)
+    required_cap = service_capability(domain, service, service_data)
     predicted: str
-    if physical_gate and effective_cap(access_key, "cap_physical_control") != CAP_ALLOW:
+    if unbound:
+        predicted = "denied"
+    elif physical_gate and effective_cap(access_key, "cap_physical_control") != CAP_ALLOW:
         predicted = _cap_outcome(effective_cap(access_key, "cap_physical_control"))
-    elif domain == "notify" and effective_cap(access_key, "cap_notify") != CAP_ALLOW:
-        predicted = _cap_outcome(effective_cap(access_key, "cap_notify"))
-    elif is_announcement(domain, service, service_data) and effective_cap(access_key, "cap_broadcast") != CAP_ALLOW:
-        predicted = _cap_outcome(effective_cap(access_key, "cap_broadcast"))
+    elif required_cap is not None and effective_cap(access_key, required_cap) != CAP_ALLOW:
+        predicted = _cap_outcome(effective_cap(access_key, required_cap))
     elif not permitted:
         predicted = "denied"
     else:
@@ -3348,7 +3354,7 @@ async def _tool_dry_run_service(
     mesa: dict | None = None
     settings = data.store.get_settings()
     if data.mesa is not None and settings.mesa_mode != MESA_MODE_OFF and permitted:
-        verdict = evaluate_service_entities(
+        verdict = evaluate_service_call(
             data.mesa, settings.mesa_mode, access_key, permitted,
             domain=domain, service=service, service_data=service_data, session_id="dry_run",
         )
@@ -3376,6 +3382,9 @@ async def _tool_dry_run_service(
         "physical_gate": physical_gate,
         "predicted_outcome": predicted,
     }
+    if unbound:
+        body["unbound_targets"] = list(unbound)
+        body["unbound_reason"] = unbound_target_error(domain, service, unbound)
     return _tool_success(json.dumps(body, default=str)), "allowed", "dry_run_service"
 
 
@@ -3398,7 +3407,7 @@ def reference_warnings(hass: HomeAssistant, access_key: AccessKeyRecord, cfg_typ
     """A saved config's references that are missing or outside this access key's scope."""
     try:
         refs = config_entity_references(hass, cfg_type, config)
-    except Exception:  # noqa: BLE001 - a warning must never fail a saved write
+    except Exception:  # a warning must never fail a saved write
         return []
     missing = sorted(eid for eid in refs if resolve_read(eid, access_key, hass) not in (Permission.READ, Permission.WRITE))
     if not missing:
@@ -3409,7 +3418,7 @@ def reference_warnings(hass: HomeAssistant, access_key: AccessKeyRecord, cfg_typ
             f"{cfg_type} may not work as intended: {listed}{more}."]
 
 
-async def _tool_validate_config(
+async def _tool_validate_automation_or_script(
     args: dict, access_key: AccessKeyRecord, hass: HomeAssistant
 ) -> tuple[dict, str, str]:
     """MCP tool: validate an automation or script config without saving it."""

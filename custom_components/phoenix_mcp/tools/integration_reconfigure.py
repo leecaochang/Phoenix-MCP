@@ -59,8 +59,6 @@ class ReconfigureFlowResult:
     applied: bool
     reason: str
     details: dict[str, Any]
-    baseline_modified_at: datetime
-    commit_modified_at: datetime | None
 
 
 def _result_type(result: Mapping[str, Any]) -> Any:
@@ -296,10 +294,10 @@ async def async_run_reconfigure_flow(
     submit_boundary = 0
     result: Mapping[str, Any] | None = None
 
-    def _observed_apply() -> tuple[bool, datetime | None]:
+    def _observed_apply() -> bool:
         current = hass.config_entries.async_get_entry(entry.entry_id)
         commit = _modified(current) if current is not None else None
-        return submitted and (commit is None or commit != baseline), commit
+        return submitted and (commit is None or commit != baseline)
 
     try:
         try:
@@ -314,8 +312,6 @@ async def async_run_reconfigure_flow(
                 False,
                 "The integration's reconfigure flow could not be started.",
                 {"error": type(err).__name__},
-                baseline,
-                None,
             )
 
         for _step in range(FLOW_STEP_BUDGET):
@@ -335,13 +331,11 @@ async def async_run_reconfigure_flow(
                             "schema": _public_schema(result),
                             "step_id": result.get("step_id"),
                         },
-                        baseline,
-                        commit,
                     )
                 payload, missing = _form_payload(result, config, encountered)
                 if payload is None or missing:
                     await _abort_flow(hass, flow_id)
-                    applied, commit = _observed_apply()
+                    applied = _observed_apply()
                     return ReconfigureFlowResult(
                         STATUS_INCOMPLETE if applied else STATUS_ABORTED,
                         applied,
@@ -355,8 +349,6 @@ async def async_run_reconfigure_flow(
                             "schema": _public_schema(result),
                             "step_id": result.get("step_id"),
                         },
-                        baseline,
-                        commit,
                     )
                 submit_boundary = len(events) if not submitted else submit_boundary
                 submitted = True
@@ -378,8 +370,6 @@ async def async_run_reconfigure_flow(
                             "schema": _public_schema(result),
                             "step_id": result.get("step_id"),
                         },
-                        baseline,
-                        commit,
                     )
                 continue
 
@@ -392,7 +382,7 @@ async def async_run_reconfigure_flow(
                 )
                 if menu_index >= len(menu_choices):
                     await _abort_flow(hass, flow_id)
-                    applied, commit = _observed_apply()
+                    applied = _observed_apply()
                     return ReconfigureFlowResult(
                         STATUS_INCOMPLETE if applied else STATUS_ABORTED,
                         applied,
@@ -402,14 +392,12 @@ async def async_run_reconfigure_flow(
                             "menu_options": options,
                             "menu_choice_index": menu_index,
                         },
-                        baseline,
-                        commit,
                     )
                 choice = menu_choices[menu_index]
                 menu_index += 1
                 if options and choice not in options:
                     await _abort_flow(hass, flow_id)
-                    applied, commit = _observed_apply()
+                    applied = _observed_apply()
                     return ReconfigureFlowResult(
                         STATUS_INCOMPLETE if applied else STATUS_ABORTED,
                         applied,
@@ -419,8 +407,6 @@ async def async_run_reconfigure_flow(
                             "menu_options": options,
                             "menu_choice_index": menu_index - 1,
                         },
-                        baseline,
-                        commit,
                     )
                 result = await hass.config_entries.flow.async_configure(
                     flow_id, {"next_step_id": choice}
@@ -429,14 +415,12 @@ async def async_run_reconfigure_flow(
 
             if result_type in _UNSUPPORTED_TYPES:
                 await _abort_flow(hass, flow_id)
-                applied, commit = _observed_apply()
+                applied = _observed_apply()
                 return ReconfigureFlowResult(
                     STATUS_INCOMPLETE if applied else STATUS_ABORTED,
                     applied,
                     "Browser/OAuth and asynchronous progress steps are unsupported; use Home Assistant's frontend.",
                     {"step_type": getattr(result_type, "value", result_type)},
-                    baseline,
-                    commit,
                 )
 
             current = hass.config_entries.async_get_entry(entry.entry_id)
@@ -478,8 +462,6 @@ async def async_run_reconfigure_flow(
                         "unused_menu_choices": unused_menus,
                         "reload_verified": verified,
                     },
-                    baseline,
-                    commit,
                 )
 
             await _abort_flow(hass, flow_id)
@@ -502,8 +484,6 @@ async def async_run_reconfigure_flow(
                     else None,
                     "step_id": result.get("step_id"),
                 },
-                baseline,
-                commit,
             )
 
         await _abort_flow(hass, flow_id)
@@ -515,8 +495,6 @@ async def async_run_reconfigure_flow(
             applied,
             "The reconfigure flow exceeded Phoenix's bounded step budget.",
             {"step_budget": FLOW_STEP_BUDGET},
-            baseline,
-            commit,
         )
     except Exception as err:  # third-party flow boundary; retain ambiguity
         _LOGGER.exception("Reconfigure flow failed for %s", entry.entry_id)
@@ -533,8 +511,6 @@ async def async_run_reconfigure_flow(
                 else "The reconfigure flow failed before Phoenix observed an applied change."
             ),
             {"error": type(err).__name__},
-            baseline,
-            commit,
         )
     finally:
         remove_listener()

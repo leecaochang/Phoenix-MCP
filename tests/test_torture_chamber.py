@@ -30,18 +30,20 @@ import pytest
 from homeassistant.core import HomeAssistant
 from homeassistant.util.dt import utcnow
 
-from custom_components.phoenix_mcp import mcp_view, mesa_tools
+from custom_components.phoenix_mcp import mesa_tools, policy_engine, tool_catalog, tool_defs
+from custom_components.phoenix_mcp.tools import history as history_tools
+from custom_components.phoenix_mcp.tools import service as service_tools
 from custom_components.phoenix_mcp.const import CAPABILITY_NAMES
 from custom_components.phoenix_mcp.data import PhoenixData
-from custom_components.phoenix_mcp.mcp_view import _call_tool
+from custom_components.phoenix_mcp.tool_dispatch import _call_tool
 from custom_components.phoenix_mcp.access_key_store import GlobalSettings, PermissionTree, AccessKeyRecord
 from custom_components.phoenix_mcp.tool_contracts import normalize_tool_args
 from custom_components.phoenix_mcp.tools import discovery
 from custom_components.phoenix_mcp.version_store import VersionStore
+from tests.runtime_fixtures import SCHEMA_MARKER as MARKER, schema_baseline as _baseline, schema_placeholder as _placeholder
 
 # Threaded through every attack string. Its absence from a denied response is
 # invariant 4; making it distinctive keeps that check from matching prose.
-MARKER = "PHXTORTURE"
 
 VALID_OUTCOMES = frozenset({
     "allowed", "denied", "not_found", "rate_limited",
@@ -58,9 +60,9 @@ LEAK_MARKERS = ("Traceback (most recent call last)", "site-packages/homeassistan
 
 def _all_defs() -> list[dict]:
     return [
-        *mcp_view._ENTITY_TOOL_DEFS,
-        *mcp_view._NATIVE_TOOL_DEFS,
-        *mcp_view._SYSTEM_TOOL_DEFS,
+        *tool_defs._ENTITY_TOOL_DEFS,
+        *tool_defs._NATIVE_TOOL_DEFS,
+        *tool_defs._SYSTEM_TOOL_DEFS,
         *mesa_tools.mesa_tool_defs(),
     ]
 
@@ -84,72 +86,6 @@ def _archetype(tool_def: dict) -> str:
 
 # ------------------------------------------------------------------ the attacks
 
-def _placeholder(name: str, schema: dict):
-    """Build a recursively valid seed so one hostile field reaches its own boundary."""
-    if "const" in schema:
-        return schema["const"]
-    if schema.get("enum"):
-        return schema["enum"][0]
-    for choice_key in ("oneOf", "anyOf"):
-        choices = schema.get(choice_key)
-        if choices and not schema.get("type") and not schema.get("properties"):
-            return _placeholder(name, choices[0])
-    kind = schema.get("type")
-    if isinstance(kind, list):
-        kind = next((item for item in kind if item != "null"), kind[0])
-    if kind == "object":
-        properties = schema.get("properties", {}) or {}
-        required = set(schema.get("required", []) or [])
-        if schema.get("anyOf"):
-            required.update(schema["anyOf"][0].get("required", []) or [])
-        for clause in schema.get("allOf", []) or []:
-            options = clause.get("anyOf", []) or []
-            if options:
-                required.update(options[0].get("required", []) or [])
-            required.update(clause.get("required", []) or [])
-        minimum = int(schema.get("minProperties", 0) or 0)
-        if len(required) < minimum:
-            required.update(list(properties)[:minimum])
-        return {
-            field: _placeholder(field, properties.get(field, {}))
-            for field in properties
-            if field in required
-        }
-    if kind == "array":
-        count = max(0, int(schema.get("minItems", 0) or 0))
-        return [_placeholder(name, schema.get("items", {})) for _ in range(count)]
-    if kind == "boolean":
-        return False
-    if kind in ("integer", "number"):
-        value = schema.get("minimum", 1)
-        exclusive = schema.get("exclusiveMinimum")
-        if isinstance(exclusive, (int, float)) and not isinstance(exclusive, bool):
-            value = max(value, exclusive + 1)
-        maximum = schema.get("maximum")
-        if isinstance(maximum, (int, float)):
-            value = min(value, maximum)
-        return int(value) if kind == "integer" else value
-    if name == "entity_id":
-        return "light.phx_ghost"
-    if name.endswith("_id"):
-        return "phx_ghost_id"
-    value = "light.phx_ghost" if name == "entity_id" else f"{MARKER}_value"
-    minimum = int(schema.get("minLength", 0) or 0)
-    if len(value) < minimum:
-        value += "x" * (minimum - len(value))
-    maximum = schema.get("maxLength")
-    return value[:maximum] if isinstance(maximum, int) else value
-
-
-def _baseline(tool_def: dict) -> dict:
-    """Use a semantic fixture when a schema omits a cross-field requirement."""
-    if tool_def["name"] == "edit_energy_config":
-        return {
-            "operation": "remove_device",
-            "target": {"kind": "statistic", "id": "sensor.phx_ghost"},
-            "changes": {},
-        }
-    return _placeholder("arguments", tool_def.get("inputSchema", {}) or {})
 
 
 def _hostile_values(kind: str | None) -> list:
@@ -330,9 +266,9 @@ async def test_structured_get_state_seed_reaches_permission_resolution(
     tool_def = next(item for item in ALL_DEFS if item["name"] == "get_state")
     properties = tool_def["inputSchema"]["properties"]
     seed = {name: _placeholder(name, spec) for name, spec in properties.items()}
-    resolver = MagicMock(return_value=mcp_view.Permission.NOT_FOUND)
+    resolver = MagicMock(return_value=policy_engine.Permission.NOT_FOUND)
 
-    with patch.object(mcp_view, "resolve_read", resolver):
+    with patch.object(history_tools, "resolve_read", resolver):
         result, outcome, resource = await _call_tool(
             "get_state", seed, _access_key("allow"), hass, _data(), "req", "1.2.3.4"
         )
@@ -345,9 +281,9 @@ async def test_structured_get_state_list_seed_reaches_permission_resolution(
     hass: HomeAssistant,
 ):
     """Positive control for the list form: every requested ID reaches the resolver."""
-    resolver = MagicMock(return_value=mcp_view.Permission.NOT_FOUND)
+    resolver = MagicMock(return_value=policy_engine.Permission.NOT_FOUND)
 
-    with patch.object(mcp_view, "resolve_read", resolver):
+    with patch.object(history_tools, "resolve_read", resolver):
         result, outcome, _ = await _call_tool(
             "get_state", {"entity_id": ["light.a", "light.b"], "projection": {"kind": "compact"}},
             _access_key("allow"), hass, _data(),
@@ -365,7 +301,7 @@ async def test_structured_call_service_seed_reaches_executor(hass: HomeAssistant
     expected = ({"content": [{"type": "text", "text": "reached"}]}, "allowed", "service")
     executor = AsyncMock(return_value=expected)
 
-    with patch.object(mcp_view, "_execute_call_service", executor):
+    with patch.object(service_tools, "_execute_call_service", executor):
         result = await _call_tool("call_service", seed, _access_key("allow"), hass, _data())
 
     assert result == expected
@@ -412,7 +348,7 @@ async def test_get_state_attack_reaches_deliberately_broken_resolver(
         if str(args.get("entity_id", "")).startswith("../../../etc/")
     )
 
-    with patch.object(mcp_view, "resolve_read", side_effect=RuntimeError("mutation reached")):
+    with patch.object(history_tools, "resolve_read", side_effect=RuntimeError("mutation reached")):
         with pytest.raises(RuntimeError, match="mutation reached"):
             await _call_tool(
                 "get_state", attack, _access_key("allow"), hass, _data(), "req", "1.2.3.4"
@@ -445,7 +381,7 @@ async def test_denied_access_key_survives_hostile_input(tool_def: dict, hass: Ho
 # "'x' is not of type 'integer'" is a statement about the caller's own input,
 # not about the instance; the same reasoning lets ServiceValidationError text
 # through so an agent can self-correct.
-CAP_GATED_DEFS = [d for d in ALL_DEFS if mcp_view._tool_caps(d)]
+CAP_GATED_DEFS = [d for d in ALL_DEFS if tool_catalog._tool_caps(d)]
 
 
 @pytest.mark.parametrize("tool_def", CAP_GATED_DEFS, ids=lambda d: d["name"])
@@ -462,7 +398,7 @@ async def test_cap_denied_tool_never_echoes_the_payload(tool_def: dict, hass: Ho
         result, _outcome, _resource = await _call_tool(name, args, access_key, hass, data, "req", "1.2.3.4")
         text = "\n".join(i["text"] for i in result["content"])
         assert MARKER not in text, (
-            f"{name}/{label}: an access key denied {mcp_view._tool_caps(tool_def)} got its own payload "
+            f"{name}/{label}: an access key denied {tool_catalog._tool_caps(tool_def)} got its own payload "
             f"echoed back, so the error text is a validity oracle: {text[:300]}"
         )
 

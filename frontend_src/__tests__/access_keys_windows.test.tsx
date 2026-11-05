@@ -1,6 +1,6 @@
 /**
- * Behaviour: the selected key's windows keep their help in the Help window
- * (user, 2026-10-28). Persona and Capabilities show descriptions only in
+ * Behaviour: the selected key's windows keep their help in the Help window.
+ * Persona and Capabilities show descriptions only in
  * icons-and-text mode and always name them for Help and screen readers, with
  * risky capabilities marked in icons-only mode; Key Settings has Guidance,
  * Agent Behavior and Rate Limiting with every explanation in Help, and
@@ -152,7 +152,7 @@ describe("Key Settings", () => {
     expect(container.querySelector(".access-key-notes-help")).toBeNull();
     const guidance = screen.getByRole("textbox", { name: /Notes for agents/ });
     expect(guidance).toHaveAttribute("data-help", "help.guidance");
-    // Who receives it is part of its Help text, not a line under the box (user, 2026-10-28).
+    // Who receives it is part of its Help text, not a line under the box.
     expect(guidance).toHaveAttribute("aria-description", t("help.guidance"));
     expect(screen.getByRole("combobox", { name: /inline approval wait/i })).toHaveAttribute("data-help", "help.inlineWait");
     expect(screen.getByRole("checkbox", { name: "Always announce all tools" })).toHaveAttribute("data-help", "accessKeys.announceAllHelp");
@@ -276,7 +276,7 @@ describe("Custom persona", () => {
 });
 
 describe("Confirmations", () => {
-  it("shows Switch to Scoped Mode at once for a pass-through key, its explanation in Help (user, 2026-10-31)", async () => {
+  it("shows Switch to Scoped Mode at once for a pass-through key, its explanation in Help", async () => {
     current = accessKey({ pass_through: true });
     vi.mocked(api.patchAccessKey).mockResolvedValue(accessKey({ pass_through: false }) as never);
     const { container } = show(<PermissionsWindow />);
@@ -324,7 +324,7 @@ describe("Archived keys", () => {
     expect(api.deleteArchivedAccessKey).toHaveBeenCalledWith("a1");
   });
 
-  it("chooses a row with a click, and Up and Down step through the rows (user, 2026-10-31)", () => {
+  it("chooses a row with a click, and Up and Down step through the rows", () => {
     const three = [...archived, { ...archived[0], id: "a2", name: "older_agent" }, { ...archived[0], id: "a3", name: "oldest_agent", revoked: false }];
     render(<ArchivedAccessKeyTable accessKeys={three as never} onDeleted={vi.fn()} />);
     const row = (name: RegExp) => screen.getByRole("row", { name });
@@ -339,7 +339,7 @@ describe("Archived keys", () => {
     expect(screen.getByRole("row", { name: /^oldest_agent, Expired$/ })).toBeInTheDocument();
   });
 
-  it("cancels the confirmation on a click anywhere else, not on one inside it (user, 2026-10-28)", () => {
+  it("cancels the confirmation on a click anywhere else, not on one inside it", () => {
     const outside = document.createElement("button");
     document.body.appendChild(outside);
     try {
@@ -410,7 +410,7 @@ describe("Key list", () => {
 });
 
 describe("New key dialog", () => {
-  it("sits over the whole workspace, not inside the Access Keys window, in the UI2 style", async () => {
+  it("sits over the whole workspace, not inside the Access Keys window, in the plain style", async () => {
     vi.mocked(api.createAccessKey).mockResolvedValue({ ...accessKey({ id: "k9", name: "new_agent" }), access_key: "phx_secret" } as never);
     const shell = document.createElement("div");
     shell.className = "phx-shell";
@@ -445,7 +445,7 @@ describe("New key dialog", () => {
 describe("the Guide", () => {
   const inWindow = (id: string, content: ReactNode) => show(<div data-phx-window={id}>{content}</div>);
 
-  it("opens the section of the persona, capability, setting or tree control selected (user, 2026-11-01)", async () => {
+  it("opens the section of the persona, capability, setting or tree control selected", async () => {
     const persona = inWindow("persona", <PersonaWindow />);
     const builder = await screen.findByRole("button", { name: /Automation Builder/ });
     expect(guideTargetFor(builder)).toEqual({ windowId: "persona", topic: "window.persona", anchor: "automation-builder" });

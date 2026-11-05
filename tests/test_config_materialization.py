@@ -22,7 +22,7 @@ from homeassistant.util.dt import utcnow
 from tests.runtime_fixtures import mesa_off_store
 
 from custom_components.phoenix_mcp.data import PhoenixData
-from custom_components.phoenix_mcp.mcp_view import _call_tool
+from custom_components.phoenix_mcp.tool_dispatch import _call_tool
 from custom_components.phoenix_mcp.access_key_store import PermissionNode, PermissionTree, AccessKeyRecord
 from custom_components.phoenix_mcp.version_store import VersionStore
 
@@ -79,7 +79,7 @@ class TestCreateMaterialization:
     """Each test asserts on hass.states with NO await in between: any awaited
     settle (async_block_till_done) would mask the very race being probed."""
 
-    async def test_automation_exists_the_moment_create_returns(self, hass: HomeAssistant):
+    async def test_automation_exists_the_moment_create_returns(self, hass: HomeAssistant, immediate_authoring_observation):
         assert await async_setup_component(hass, "automation", {})
         await hass.async_block_till_done()
 
@@ -254,7 +254,7 @@ class TestCreateMaterialization:
         assert state is not None, "create_helper returned before the person existed"
         assert state.attributes["friendly_name"] == "Materialization Person"
 
-    async def test_edit_is_visible_the_moment_edit_returns(self, hass: HomeAssistant):
+    async def test_edit_is_visible_the_moment_edit_returns(self, hass: HomeAssistant, immediate_authoring_observation):
         """The same property for a rename, which an agent reads back to confirm an edit."""
         assert await async_setup_component(hass, "automation", {})
         await hass.async_block_till_done()

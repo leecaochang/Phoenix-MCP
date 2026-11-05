@@ -27,7 +27,8 @@ from homeassistant.util.dt import utcnow
 from pytest_homeassistant.common import MockConfigEntry
 import voluptuous as vol
 
-from custom_components.phoenix_mcp.mcp_view import _EXECUTOR_REGISTRY, _call_tool
+from custom_components.phoenix_mcp.tool_catalog import _EXECUTOR_REGISTRY
+from custom_components.phoenix_mcp.tool_dispatch import _call_tool
 from custom_components.phoenix_mcp.access_key_store import PermissionNode, PermissionTree, AccessKeyRecord
 
 def options_schema(current: dict | None = None) -> vol.Schema:

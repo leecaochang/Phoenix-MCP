@@ -2,7 +2,7 @@
 
 Approval summaries, diffs, version summaries, MESA suggestion reasons,
 notifications and voice declines are authored once, as Python templates in
-const.py: the same sentence is persisted on records (the audit trail) and
+catalog_templates.py: the same sentence is persisted on records (the audit trail) and
 rendered by the panel in the operator's language. This copies those template
 dicts into custom_components/phoenix_mcp/catalogs/en.json (panel.diff,
 panel.approvalSummary, panel.version, panel.mesaSuggestion, notification and
@@ -21,14 +21,9 @@ import sys
 REPO = pathlib.Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO))
 
-from custom_components.phoenix_mcp.const import (  # noqa: E402
-    APPROVAL_SUMMARY_TEMPLATES,
-    APPROVAL_SUMMARY_UI,
-    DIFF_SUMMARY_TEMPLATES,
-    MESA_SUGGESTION_PHRASES,
-    MESA_SUGGESTION_TEMPLATES,
-    NOTIFICATION_TEMPLATES,
-    VOICE_TEMPLATES,
+from custom_components.phoenix_mcp.catalog_templates import (
+    APPROVAL_SUMMARY_TEMPLATES, APPROVAL_SUMMARY_UI, DIFF_SUMMARY_TEMPLATES,
+    MESA_SUGGESTION_PHRASES, MESA_SUGGESTION_TEMPLATES, NOTIFICATION_TEMPLATES, VOICE_TEMPLATES,
     VERSION_SUMMARY_TEMPLATES,
 )
 

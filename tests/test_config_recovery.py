@@ -14,9 +14,11 @@ from tests.runtime_fixtures import mesa_off_store
 
 from custom_components.phoenix_mcp.config_recovery import ConfigurationRecovery, ConfigurationRecoveryError
 from custom_components.phoenix_mcp.data import PhoenixData
-from custom_components.phoenix_mcp.mcp_view import _restore_access_key, _call_tool
+from custom_components.phoenix_mcp.tools.restore import _restore_access_key
+from custom_components.phoenix_mcp.tool_dispatch import _call_tool
 from custom_components.phoenix_mcp.access_key_store import PermissionNode, PermissionTree, AccessKeyRecord
-from custom_components.phoenix_mcp.template_recovery import template_snapshot, restore_template
+from custom_components.phoenix_mcp.template_snapshots import template_snapshot
+from custom_components.phoenix_mcp.template_recovery import restore_template
 from homeassistant.util.dt import utcnow
 
 
@@ -74,7 +76,7 @@ async def test_scrubber_failure_and_retryable_initialization():
     recovery = ConfigurationRecovery(store)
     with pytest.raises(ConfigurationRecoveryError):
         await recovery.async_load()
-    with patch("custom_components.phoenix_mcp.config_recovery.redact_structure", side_effect=RuntimeError):
+    with patch("custom_components.phoenix_mcp.config_recovery._unsafe_location", side_effect=RuntimeError):
         with pytest.raises(ConfigurationRecoveryError):
             await recovery.begin("r", "delete", "t", {})
     store.async_save.assert_not_awaited()
@@ -322,7 +324,7 @@ async def test_agent_blueprint_restore_uses_ha_blueprint_command(hass):
         path.write_text(Blueprint(yaml_util.parse_yaml(payload["yaml"]), expected_domain="automation", schema=BLUEPRINT_SCHEMA).yaml(), encoding="utf-8")
         return {"overrides_existing": True}
 
-    with patch("custom_components.phoenix_mcp.ws_dispatch.async_ws_command", AsyncMock(side_effect=ws)):
+    with patch("custom_components.phoenix_mcp.tools.recovery.async_ws_command", AsyncMock(side_effect=ws)):
         result, outcome, _ = await _execute_restore_configuration({
             "recovery_id": rid, "side": "before",
             "snapshot_digest": content_hash(snapshot),
@@ -372,7 +374,7 @@ async def test_agent_dashboard_registry_restore_uses_dashboard_command(hass):
         "resource_id": "dashboard-one", "exists": True, "dashboard": row,
     }
     with patch("custom_components.phoenix_mcp.tools.lovelace.async_ws_command", AsyncMock(side_effect=ws)), patch(
-        "custom_components.phoenix_mcp.ws_dispatch.async_ws_command", AsyncMock(side_effect=ws),
+        "custom_components.phoenix_mcp.tools.recovery.async_ws_command", AsyncMock(side_effect=ws),
     ):
         result, outcome, _ = await _execute_restore_configuration({
             "recovery_id": rid, "side": "before",
@@ -400,7 +402,8 @@ async def test_real_template_collision_never_creates(hass):
 
 
 async def test_real_template_settings_and_deleted_restore_from_history(hass):
-    from custom_components.phoenix_mcp.mcp_view import _execute_remove_integration, async_restore_version
+    from custom_components.phoenix_mcp.tools.integrations import _execute_remove_integration
+    from custom_components.phoenix_mcp.tools.restore import async_restore_version
     from custom_components.phoenix_mcp.tools.helper import _execute_set_config_entry_options
     entry = await create_template(hass)
     runtime = data()
@@ -454,7 +457,7 @@ async def test_numeric_version_is_not_a_helper_entity_reference(hass):
 
 
 async def test_template_storage_failure_prevents_removal(hass):
-    from custom_components.phoenix_mcp.mcp_view import _execute_remove_integration
+    from custom_components.phoenix_mcp.tools.integrations import _execute_remove_integration
     entry = await create_template(hass)
     runtime = data()
     runtime.config_recovery = ConfigurationRecovery(MagicMock(async_save=AsyncMock(side_effect=OSError)))
@@ -464,7 +467,7 @@ async def test_template_storage_failure_prevents_removal(hass):
 
 
 async def test_template_identity_changes_during_safety_save_refuse(hass):
-    from custom_components.phoenix_mcp.mcp_view import _execute_remove_integration
+    from custom_components.phoenix_mcp.tools.integrations import _execute_remove_integration
     entry = await create_template(hass)
     runtime = data()
     async def change(_):
@@ -477,7 +480,7 @@ async def test_template_identity_changes_during_safety_save_refuse(hass):
 
 
 async def test_restart_lost_response_is_not_replayed_and_fresh_runtime_is_distinct(hass):
-    from custom_components.phoenix_mcp.mcp_view import _execute_restart_ha, _tool_get_config
+    from custom_components.phoenix_mcp.tools.system import _execute_restart_ha, _tool_get_config
     runtime = data()
     access_key = _restore_access_key("admin")
     with patch.object(type(hass.services), "async_call", new=AsyncMock(side_effect=asyncio.TimeoutError)) as dispatch:
@@ -647,7 +650,7 @@ async def test_admin_restore_refusal_names_active_or_unreviewed_record(hass, has
     view.hass = hass
     with patch("custom_components.phoenix_mcp.admin_view._read_body",
                new=AsyncMock(return_value={"action": "restore", "side": "before"})), \
-         patch("custom_components.phoenix_mcp.mcp_view.async_restore_version", new=AsyncMock()) as restore:
+         patch("custom_components.phoenix_mcp.admin_view.async_restore_version", new=AsyncMock()) as restore:
         response = await view.post(request, recovery_id=rid)
     assert response.status == 409
     assert json.loads(response.text)["message_key"] == key
@@ -733,12 +736,16 @@ def test_recovery_refusals_name_their_own_operator_text():
 
     root = Path(config_recovery.__file__).parent
     raised = set()
-    for path in [*root.glob("*.py"), *root.glob("tools/*.py")]:
+    for path in [*root.glob("*.py"), *root.glob("routing/*.py"), *root.glob("tools/*.py")]:
         for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
             if (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
                     and node.func.id == "ConfigurationRecoveryError" and node.args
                     and isinstance(node.args[0], ast.Constant) and isinstance(node.args[0].value, str)):
                 raised.add(node.args[0].value)
+            if (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+                    and node.func.id == "ConfigurationRecoveryError" and node.args
+                    and isinstance(node.args[0], ast.Name) and node.args[0].id == "SNAPSHOT_UNSAFE_MESSAGE"):
+                raised.add(config_recovery.SNAPSHOT_UNSAFE_MESSAGE)
     assert raised, "no ConfigurationRecoveryError messages were found"
     for message, key in config_recovery._OPERATOR_KEYS.items():
         assert message in raised, message

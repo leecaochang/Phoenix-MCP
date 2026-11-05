@@ -6,6 +6,7 @@ import { localeNumber } from "../i18n/format";
 import { t } from "../i18n";
 import { tRich } from "../i18n/rich";
 import { SettingLabel, helpRow } from "../ui/SettingLabel";
+import { isImeKey } from "../utils/ime";
 
 interface Props {
   settings: GlobalSettings;
@@ -38,7 +39,7 @@ export function ConversationSettings({ settings, saving, onChange }: Props) {
   ];
   const [draft, setDraft] = useState(saved.map(String));
   useEffect(() => setDraft(saved.map(String)), [saved[0], saved[1], saved[2]]); // eslint-disable-line react-hooks/exhaustive-deps
-  // Each limit saves itself shortly after it changes, as every setting in Settings does (user, 2026-10-31).
+  // Each limit saves itself shortly after it changes, as every setting in Settings does.
   // A value out of range is not saved, and goes back to the saved one when the field is left.
   const timers = useRef<number[]>([]);
   useEffect(() => () => timers.current.forEach((timer) => window.clearTimeout(timer)), []);
@@ -59,7 +60,7 @@ export function ConversationSettings({ settings, saving, onChange }: Props) {
     window.clearTimeout(timers.current[index]);
     if (valid(index, raw)) timers.current[index] = window.setTimeout(() => commit(index, raw), SAVE_DELAY_MS);
   };
-  // With all logging off nothing is recorded, so recording and its limits are greyed and say why in Help (user, 2026-10-31).
+  // With all logging off nothing is recorded, so recording and its limits are greyed and say why in Help.
   const off = !!settings.disable_all_logging;
   const recordHelp = t(off ? "conversations.loggingDisabled" : "conversations.enableHelp");
   return <div className="phx-settings-form">
@@ -81,11 +82,11 @@ export function ConversationSettings({ settings, saving, onChange }: Props) {
             data-help={off ? "conversations.loggingDisabled" : helpKey}
             onChange={(e) => edit(index, e.target.value)}
             onBlur={(e) => commit(index, e.target.value)}
-            onKeyDown={(e) => { if (e.key === "Enter") commit(index, e.currentTarget.value); }} />
+            onKeyDown={(e) => { if (e.key === "Enter" && !isImeKey(e)) commit(index, e.currentTarget.value); }} />
         </div>)}
       </div>
     </fieldset>
-    {/* What the log takes now, under the limits that bound it (user, 2026-10-31). */}
+    {/* What the log takes now, under the limits that bound it. */}
     {!!storage?.max_bytes && <p className="conversation-secondary conversation-storage">{tRich("conversations.storage", { strong: (chunk) => <strong>{chunk}</strong> },
       { used: localeNumber(Math.round(storage!.bytes / 10000) / 100), limit: localeNumber(storage!.max_bytes! / 1000000) })}</p>}
   </div>;

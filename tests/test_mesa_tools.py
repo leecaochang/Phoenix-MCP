@@ -950,14 +950,22 @@ async def test_revoking_a_access_key_releases_the_leases_it_held(env):
     Bookkeeping, not safety: the access key's next call is refused by authentication
     regardless, and mesa-core drops the lease on its own within the duration cap.
     This only shortens the window in which another access key is told an entity is
-    busy on behalf of an access key that no longer exists.
+    busy on behalf of an access key that no longer exists. Driven through the admin
+    revoke handler, so it fails if that path stops releasing.
     """
-    from custom_components.phoenix_mcp.mesa import release_access_key_leases
+    from homeassistant.components.http.const import KEY_AUTHENTICATED, KEY_HASS_USER
+
+    from custom_components.phoenix_mcp.access_key_store import AccessKeyStore
+    from custom_components.phoenix_mcp.admin_view import PhoenixAdminAccessKeyView
+    from custom_components.phoenix_mcp.const import DOMAIN
 
     runtime = await async_setup_mesa(env, "advisory")
-    data = PhoenixData(store=MagicMock(), rate_limiter=MagicMock(), audit=MagicMock(),
-                       mesa=runtime)
+    store = await AccessKeyStore.async_create(env)
+    record, _raw = await store.async_create_access_key("holder", "admin")
     holder = _access_key(domains={"light": "GREEN"})
+    holder.id = record.id
+    data = PhoenixData(store=store, rate_limiter=MagicMock(), audit=MagicMock(), mesa=runtime)
+    env.data[DOMAIN] = data
 
     granted, _, _ = await _call(
         "mesa_request_lease",
@@ -966,7 +974,16 @@ async def test_revoking_a_access_key_releases_the_leases_it_held(env):
     )
     assert granted["granted"] is True
 
-    assert release_access_key_leases(data, holder.id) == 1
+    user = MagicMock(is_admin=True, id="admin")
+    state = {KEY_HASS_USER: user, KEY_AUTHENTICATED: True}
+    request = MagicMock(method="DELETE", path="/api/phoenix-mcp/admin/access-keys/tok", remote="127.0.0.1")
+    request.get = MagicMock(side_effect=lambda key, default=None: state.get(key, default))
+    request.__getitem__ = MagicMock(side_effect=lambda key: state[key])
+    request.__setitem__ = MagicMock(side_effect=lambda key, value: state.__setitem__(key, value))
+    view = PhoenixAdminAccessKeyView()
+    view.hass = env
+    response = await view.delete(request, access_key_id=holder.id)
+    assert response.status in (200, 204)
 
     # Another access key can now take the entity the revoked one was holding.
     other = _access_key(domains={"light": "GREEN"})
@@ -979,13 +996,43 @@ async def test_revoking_a_access_key_releases_the_leases_it_held(env):
     assert retaken["granted"] is True
 
 
-@pytest.mark.asyncio
-async def test_releasing_leases_is_safe_when_mesa_is_not_loaded(env):
-    """Revocation must finish even with no MESA runtime to clean up."""
-    from custom_components.phoenix_mcp.mesa import release_access_key_leases
+async def _hidden_automation_env(env, *, level: str = "critical"):
+    """A lease on a visible light, inside a protected automation the key cannot see."""
+    from homeassistant.helpers import entity_registry as er
 
-    data = PhoenixData(store=MagicMock(), rate_limiter=MagicMock(), audit=MagicMock(), mesa=None)
-    assert release_access_key_leases(data, "tok") == 0
+    runtime = await async_setup_mesa(env, "advisory")
+    automation = er.async_get(env).async_get_or_create(
+        "automation", "automation", "guard", suggested_object_id="secret_guard"
+    ).entity_id
+    env.states.async_set(automation, "on")
+    runtime.store.set(automation, SemanticProfile.from_dict(automation, {"semantic_profile": {
+        "cooperative_priority": {"level": level},
+        "environmental_dependencies": {"trigger_entities": ["light.a"]},
+    }}, default_origin=MetadataOrigin.USER))
+    data = PhoenixData(store=MagicMock(), rate_limiter=MagicMock(), audit=MagicMock(), mesa=runtime)
+    return data, automation
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("level", ["critical", "protected"])
+async def test_a_lease_response_names_no_automation_the_key_cannot_read(env, level):
+    data, automation = await _hidden_automation_env(env, level=level)
+    payload, _outcome, _error = await _call(
+        "mesa_request_lease", {"entities": ["light.a"], "duration_seconds": 5},
+        _access_key(domains={"light": "GREEN"}), env, data,
+    )
+    assert automation not in json.dumps(payload)
+    assert "secret_guard" not in json.dumps(payload)
+
+
+@pytest.mark.asyncio
+async def test_a_lease_response_keeps_an_automation_the_key_can_read(env):
+    data, automation = await _hidden_automation_env(env)
+    payload, _outcome, _error = await _call(
+        "mesa_request_lease", {"entities": ["light.a"], "duration_seconds": 5},
+        _access_key(domains={"light": "GREEN", "automation": "YELLOW"}), env, data,
+    )
+    assert automation in json.dumps(payload)
 
 
 @pytest.fixture
@@ -1088,7 +1135,7 @@ async def test_scoped_tools_explain_and_query_the_parent_device_level(hass, stri
 @pytest.mark.asyncio
 async def test_a_denied_capability_gets_the_shared_capability_text(env):
     # The same refusal every other tool gives, so an agent knows what would change it.
-    from custom_components.phoenix_mcp.mcp_view import _call_tool
+    from custom_components.phoenix_mcp.tool_dispatch import _call_tool
     from custom_components.phoenix_mcp.tool_common import _CAP_FORBIDDEN_MESSAGE
 
     data = await _data_with_profiles(env)

@@ -3,6 +3,7 @@
 // only tags present in the registry can be committed.
 import React, { useId, useMemo, useRef, useState } from "react";
 import { t } from "../i18n";
+import { isImeKey } from "../utils/ime";
 
 const MAX_DEFAULT = 6;
 
@@ -72,12 +73,18 @@ export function TagInput({
   }
 
   function onKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (isImeKey(e)) return;
     if (e.key === "ArrowDown") { e.preventDefault(); setOpen(true); setActive((a) => Math.min(a + 1, matches.length - 1)); }
     else if (e.key === "ArrowUp") { e.preventDefault(); setActive((a) => Math.max(a - 1, 0)); }
     else if (e.key === "Enter" || e.key === ",") {
       if (query.trim() || matches.length) { e.preventDefault(); commit(); }
     }
-    else if (e.key === "Escape") { setOpen(false); setQuery(""); }
+    else if (e.key === "Escape") {
+      // An open list takes the key for itself: the field keeps its text, a dialog around it stays.
+      if (open && matches.length > 0) e.stopPropagation();
+      else setQuery("");
+      setOpen(false);
+    }
     else if (e.key === "Backspace" && query === "" && value.length > 0) { removeAt(value.length - 1); }
   }
 

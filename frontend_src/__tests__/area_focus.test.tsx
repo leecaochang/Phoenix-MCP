@@ -1,5 +1,5 @@
 /**
- * F6 and Shift+F6 move focus between the panel's areas (user, 2026-11-01):
+ * F6 and Shift+F6 move focus between the panel's areas:
  * the toolbar, each window in reading order, the Guide; folded windows by their
  * menu button; and back to where focus last was in an area.
  */
@@ -86,6 +86,38 @@ describe("area focus", () => {
     f6(); // to the Guide
     f6(true); // back to the right window
     expect(document.activeElement).toBe(field);
+  });
+
+  it("stays inside an open dialog, and moves again once it closes", () => {
+    function WithDialog({ open, hidden = false }: { open: boolean; hidden?: boolean }) {
+      const root = useRef<HTMLDivElement | null>(null);
+      useAreaKeys(root);
+      return (
+        <div ref={root}>
+          <div className="phx-toolbar"><button>Access Keys</button></div>
+          <div hidden={hidden}>
+            {open && <div className="modal" role="dialog" aria-modal="true" tabIndex={-1}><button>Inside</button></div>}
+          </div>
+        </div>
+      );
+    }
+    const { container, getByText, rerender } = render(<WithDialog open />);
+    place(container.querySelector(".phx-toolbar")!, 0, 0);
+    const inside = getByText("Inside");
+    inside.focus();
+    expect(fireEvent.keyDown(inside, { key: "F6", bubbles: true })).toBe(false);
+    expect(document.activeElement).toBe(inside);
+
+    // A dialog left in a workspace that is not showing holds nothing back.
+    rerender(<WithDialog open hidden />);
+    (document.activeElement as HTMLElement | null)?.blur?.();
+    f6();
+    expect(document.activeElement).toBe(container.querySelector(".phx-toolbar"));
+
+    rerender(<WithDialog open={false} />);
+    (document.activeElement as HTMLElement | null)?.blur?.();
+    f6();
+    expect(document.activeElement).toBe(container.querySelector(".phx-toolbar"));
   });
 
   it("reaches a folded window by its menu button", () => {

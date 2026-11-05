@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from .const import COMMAND_ROUTING_PLAN_KEY, MESA_APPROVED_EXECUTOR
+from .const import MESA_APPROVED_EXECUTOR
+from .routing.routing_tables import COMMAND_ROUTING_PLAN_KEY
 
 # Historical payloads and configuration snapshots are deliberately not traversed.
 _FIELDS = {

@@ -69,37 +69,67 @@ function esc(s: string): string {
 // character or end-of-string. This mirrors the GFM rule that emphasis markers
 // flanked by alphanumerics on the inside edge do not delimit, so intra-word
 // underscores (the common case) stay literal.
-function inline(s: string, opts: MarkdownOptions = {}): string {
-  s = s.replace(/`([^`]+)`/g, (_m, c) => `<code>${c}</code>`);
+function emphasize(s: string): string {
   s = s.replace(/(^|[^\w*])\*\*(\S(?:[^*]*?\S)?)\*\*(?!\w)/g, "$1<strong>$2</strong>");
   s = s.replace(/(^|[^\w_])__(\S(?:[^_]*?\S)?)__(?!\w)/g, "$1<strong>$2</strong>");
   s = s.replace(/(^|[^\w*])\*(\S(?:[^*]*?\S)?)\*(?!\w)/g, "$1<em>$2</em>");
-  s = s.replace(/(^|[^\w_])_(\S(?:[^_]*?\S)?)_(?!\w)/g, "$1<em>$2</em>");
-  s = s.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (_m, text: string, url: string) => {
+  return s.replace(/(^|[^\w_])_(\S(?:[^_]*?\S)?)_(?!\w)/g, "$1<em>$2</em>");
+}
+
+// A piece of finished markup held out of the text while emphasis runs. Control
+// characters are stripped from the source before any line gets here, so the
+// text cannot contain a held marker of its own.
+// eslint-disable-next-line no-control-regex
+const HELD_RE = /\x01(\d+)\x02/g;
+
+// A link's text and address both stop at "[", which bounds the work from each
+// opening bracket by the next one: a line of brackets stays linear. The only
+// "[" an address may hold is the one around an IPv6 host. An address cannot hold
+// a held marker either: that markup would land inside the href attribute.
+// eslint-disable-next-line no-control-regex
+const LINK_RE = /\[([^[\]]+)\]\(((?:[^)\s[\x01]|\[[0-9A-Fa-f:.]*\])+)\)/g;
+
+// A bare address, to keep its markers literal. It is left as text, not made a link.
+const BARE_URL_RE = /https?:\/\/\S+/g;
+const URL_TAIL = "*_.,;:!?)]";
+
+function inline(s: string, opts: MarkdownOptions = {}): string {
+  const held: string[] = [];
+  const hold = (html: string): string => `\x01${held.push(html) - 1}\x02`;
+  s = s.replace(/`([^`]+)`/g, (_m, c: string) => hold(`<code>${c}</code>`));
+  s = s.replace(LINK_RE, (_m, text: string, url: string) => {
     // Absolute http(s), or a root-relative path that is NOT scheme-relative:
     // "//evil.example" starts with "/" but browsers resolve it as an external
     // https:// host, so a bare "/" allow-rule would let it through. Require a
     // single leading slash not followed by a slash or backslash.
     if (/^(https?:\/\/|\/(?![\/\\]))/i.test(url)) {
       const safe = url.replace(/"/g, "%22");
-      return `<a href="${safe}" target="_blank" rel="noopener noreferrer">${text}</a>`;
+      return hold(`<a href="${safe}" target="_blank" rel="noopener noreferrer">${emphasize(text)}</a>`);
     }
     const topic = opts.guideLinks ? GUIDE_TOPIC_RE.exec(url) : null;
     if (topic && (topic[1] || topic[2])) {
       const to = topic[1] ? ` data-guide-topic="${topic[1]}"` : "";
       const at = topic[2] ? ` data-guide-anchor="${topic[2]}"` : "";
-      return `<a href="#" class="phx-guide-link"${to}${at}>${text}</a>`;
+      return hold(`<a href="#" class="phx-guide-link"${to}${at}>${emphasize(text)}</a>`);
     }
     return text;
   });
-  return s;
+  s = s.replace(BARE_URL_RE, (url) => {
+    // Closing emphasis or punctuation after an address is not part of it.
+    let end = url.length;
+    while (end > 0 && URL_TAIL.includes(url[end - 1])) end -= 1;
+    return hold(url.slice(0, end)) + url.slice(end);
+  });
+  const restore = (text: string): string => text.replace(HELD_RE, (_m, i: string) => restore(held[Number(i)]));
+  return restore(emphasize(s));
 }
 
 // GFM table detection. A separator row is dashes (optionally colon-aligned)
-// between pipes; it must contain a pipe so a lone "---" stays an <hr>.
-const TABLE_SEP_RE = /^\s*\|?\s*:?-{1,}:?\s*(\|\s*:?-{1,}:?\s*)*\|?\s*$/;
+// between pipes; it must contain a pipe so a lone "---" stays an <hr>. The line
+// is trimmed first: runs of spaces at its ends would make this pattern quadratic.
+const TABLE_SEP_RE = /^\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)*\|?$/;
 function isTableSep(line: string): boolean {
-  return line.includes("|") && TABLE_SEP_RE.test(line);
+  return line.includes("|") && TABLE_SEP_RE.test(line.trim());
 }
 function splitTableRow(line: string): string[] {
   let s = line.trim();

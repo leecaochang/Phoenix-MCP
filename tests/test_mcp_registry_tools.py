@@ -25,7 +25,7 @@ from homeassistant.helpers import floor_registry as fr
 from homeassistant.util.dt import utcnow
 from pytest_homeassistant.common import MockConfigEntry
 
-from custom_components.phoenix_mcp.mcp_view import _call_tool
+from custom_components.phoenix_mcp.tool_dispatch import _call_tool
 from custom_components.phoenix_mcp.household_authority import household_scope
 from custom_components.phoenix_mcp.access_key_store import PermissionNode, PermissionTree, AccessKeyRecord
 
@@ -1022,7 +1022,7 @@ class TestSearchByPower:
         hass, hidden = power_env
         content, _, _ = await _call("search_entities", {"power": "battery", "radio": "zwave"}, self._key(hidden), hass)
         assert _result_json(content)["total"] == 0
-        from custom_components.phoenix_mcp.mcp_view import _resolve_select
+        from custom_components.phoenix_mcp.tools.history import _resolve_select
         data = MagicMock()
         data.mesa = None
         chosen, selection = await _resolve_select({"power": "battery", "radio": "zigbee"}, "get_history",
@@ -1431,7 +1431,7 @@ class TestEntityAliases:
         Resolving it to the entity's current name instead would freeze that
         name: a later rename would silently stop matching by voice.
         """
-        from custom_components.phoenix_mcp.mcp_view import _entity_meta_snapshot
+        from custom_components.phoenix_mcp.tools.registry import _entity_meta_snapshot
 
         eid = reg_env["light_kitchen"]
         await self._set(hass, eid, add_aliases=["lounge lamp"])
@@ -1445,7 +1445,7 @@ class TestEntityAliases:
         Reproducing the admin's chosen snapshot is the operation, exactly as a
         YAML restore is exempt from the removal guard.
         """
-        from custom_components.phoenix_mcp.mcp_view import _execute_set_entity
+        from custom_components.phoenix_mcp.tools.registry import _execute_set_entity
         from custom_components.phoenix_mcp.tool_common import _restore_ctx
 
         eid = reg_env["light_kitchen"]
@@ -1481,7 +1481,7 @@ class TestEntityAliases:
     async def test_the_approval_diff_shows_resolved_names_on_both_sides(self, hass, reg_env):
         """An operator approves a change to what voice matches, not to a list
         containing a sentinel they have never heard of."""
-        from custom_components.phoenix_mcp.mcp_view import _build_diff_set_entity
+        from custom_components.phoenix_mcp.tools.registry import _build_diff_set_entity
 
         eid = reg_env["light_kitchen"]
         access_key = _access_key(cap_registry_write="allow")

@@ -13,7 +13,7 @@ import { AgentCliSettings } from "../components/AgentCliSettings";
 import { AiTaskSettings } from "../components/AiTaskSettings";
 import { AssistBridgeSettings } from "../components/AssistBridgeSettings";
 import { BusyInput, BusySelect } from "../components/BusyButton";
-import { Loading } from "../components/common";
+import { ErrorMsg, Loading } from "../components/common";
 import { ConversationSettings } from "../components/ConversationSettings";
 import { DecisionProviderSettings } from "../components/DecisionProviderSettings";
 import { KillSwitch } from "../components/KillSwitch";
@@ -26,6 +26,7 @@ import { DEFAULT_WIPE_SCOPES, WIPE_SCOPES, WipeConfirmModal, type WipeScopes } f
 import { LANGUAGES, LANGUAGE_AUTO, t, tn } from "../i18n";
 import { tPlain } from "../i18n/rich";
 import { injectSessionBlocked, subscribeInjectCompatibility } from "../inject/compatibility";
+import { usePanelDataOrNull } from "../shell/PanelData";
 import { useFindSettingTool, useSettings, useSettingsChange, type Theme } from "../shell/settings";
 import { HOME_TAB_LABEL_KEYS, HOME_TABS, SETTINGS_WINDOW_TITLE_KEYS, type HomeTab, type SettingsWindowId } from "../shell/settingsIndex";
 import { WindowPlaceContext, useToolbarTools, type Tool } from "../shell/tools";
@@ -71,6 +72,18 @@ function SettingsBody({ error, children }: { error: string | null; children: Rea
   );
 }
 
+/** A window with no settings yet: waiting for them, or saying the read failed and offering another. */
+function SettingsPending() {
+  const panel = usePanelDataOrNull();
+  if (!panel?.settingsError) return <Loading />;
+  return (
+    <div className="phx-window-pad phx-settings">
+      <ErrorMsg msg={panel.settingsError} />
+      <button type="button" className="btn btn-sm" data-help="shell.retrySettingsHelp" onClick={panel.retrySettings}>{t("conversations.retry")}</button>
+    </div>
+  );
+}
+
 /**
  * A section folded into its title until opened; Find Setting opens it to reach a setting inside.
  * Its title names its Guide section; the settings inside name their own.
@@ -87,14 +100,14 @@ function Disclosure({ title, guide, help, children }: { title: string; guide: st
 export function AiProvidersWindow() {
   const { settings, saving, change, error } = useSettingsChange();
   const s = useSettings();
-  // Adding an account opens on request, from the toolbar or Find Setting (user, 2026-10-31).
+  // Adding an account opens on request, from the toolbar or Find Setting.
   const [adding, setAdding] = useState(false);
   const revealedAdd = s?.revealed?.id === "providerAdd" ? s.revealed.n : 0;
   useEffect(() => { if (revealedAdd) setAdding(true); }, [revealedAdd]);
   useSettingsTools("settingsProviders", [
     { id: "addAccount", label: t("settings.addAccount"), icon: "add", help: "settings.addAccountHelp", pressed: adding, onSelect: () => setAdding((open) => !open) },
   ]);
-  if (!settings) return <Loading />;
+  if (!settings) return <SettingsPending />;
   return (
     <SettingsBody error={error}>
       <LlmProviderSettings settings={settings} onChange={change} saving={saving} adding={adding} onAddingChange={setAdding} />
@@ -108,7 +121,7 @@ export function AiProvidersWindow() {
 export function AgentChatSettingsWindow() {
   const { settings, saving, change, error } = useSettingsChange();
   useSettingsTools("settingsChat");
-  if (!settings) return <Loading />;
+  if (!settings) return <SettingsPending />;
   return (
     <SettingsBody error={error}>
       <AgentCliSettings
@@ -138,7 +151,7 @@ const STATISTICS_WINDOW = { chat: "chatRoutingStatistics", voice: "voiceRoutingS
 
 /**
  * Show Routing Statistics: opens and closes the surface's counts floating over the
- * workspace (user, 2026-10-31). Where the workspace has no such window, as outside
+ * workspace. Where the workspace has no such window, as outside
  * the shell, the counts unfold in place instead.
  */
 function RoutingStatisticsButton({ surface }: { surface: "voice" | "chat" }) {
@@ -174,7 +187,7 @@ export function HomeAssistantWindow() {
   const s = useSettings();
   const { settings, saving, change, saveForResult, error } = useSettingsChange();
   useSettingsTools("settingsHome");
-  if (!s || !settings) return <Loading />;
+  if (!s || !settings) return <SettingsPending />;
   const current = s.homeTab;
   const onKeyDown = (e: KeyboardEvent<HTMLButtonElement>) => {
     const at = HOME_TABS.indexOf(current);
@@ -216,7 +229,7 @@ export function SafetyWindow() {
   const [scopes, setScopes] = useState<WipeScopes>(DEFAULT_WIPE_SCOPES);
   const [showWipe, setShowWipe] = useState(false);
   useSettingsTools("settingsSafety");
-  if (!settings) return <Loading />;
+  if (!settings) return <SettingsPending />;
   const nothingSelected = !scopes.core && !scopes.providers && !scopes.mesa;
   // The warning about Enforced without profiles applies only while Enforced is chosen.
   const mesaModeHelp = settings.mesa_mode === "enforced"
@@ -227,7 +240,7 @@ export function SafetyWindow() {
       <div id="phx-kill-switch-card" className="phx-kill-switch">
         <KillSwitch settings={settings} onToggle={(value) => change("kill_switch", value)} saving={saving} />
       </div>
-      {/* What the modes do, and what Enforced means without profiles, is in Help (user, 2026-10-31). */}
+      {/* What the modes do, and what Enforced means without profiles, is in Help. */}
       <div className="toggle-row toggle-row-stacked-control" {...helpRow(mesaModeHelp)}>
         <SettingLabel help={mesaModeHelp}><span>{t("settings.mesaModeLabel")}</span></SettingLabel>
         <BusySelect aria-label={t("settings.mesaModeAria")} className="input input-auto" value={settings.mesa_mode} busy={saving}
@@ -238,7 +251,7 @@ export function SafetyWindow() {
         </BusySelect>
       </div>
       <Disclosure title={t("settings.dataCard")} guide="window.settingsSafety#data-management" help="settings.dataCardHelp">
-        {/* The choices form one group, without rules between them (user, 2026-10-31). */}
+        {/* The choices form one group, without rules between them. */}
         <div className="phx-setting-checks">
           {WIPE_SCOPES.map((scope) => (
             <div key={scope.key} className="toggle-row" {...helpRow(t(scope.helpKey))}>
@@ -264,7 +277,7 @@ export function SafetyWindow() {
 export function LogsSettingsWindow() {
   const { settings, saving, change, error } = useSettingsChange();
   useSettingsTools("settingsLogs");
-  if (!settings) return <Loading />;
+  if (!settings) return <SettingsPending />;
   const greyed = settings.disable_all_logging ? " toggle-row-greyed" : "";
   return (
     <SettingsBody error={error}>
@@ -291,7 +304,7 @@ export function LogsSettingsWindow() {
             </BusySelect>
           </div>
         </section>
-        {/* The Conversation Log's settings fold under its name (user, 2026-10-31). */}
+        {/* The Conversation Log's settings fold under its name. */}
         <Disclosure title={t("conversations.title")} guide="window.settingsLogs#conversation-log" help="conversations.settingsHelp">
           <ConversationSettings settings={settings} saving={saving} onChange={change} />
         </Disclosure>
@@ -312,7 +325,7 @@ export function GeneralSettingsWindow() {
   const { settings, saving, change, error } = useSettingsChange();
   const injectBlocked = useSyncExternalStore(subscribeInjectCompatibility, injectSessionBlocked);
   useSettingsTools("settingsGeneral");
-  if (!s || !settings) return <Loading />;
+  if (!s || !settings) return <SettingsPending />;
   const info = s.info;
   return (
     <SettingsBody error={error}>
@@ -342,9 +355,9 @@ export function GeneralSettingsWindow() {
           {PALETTES.map((p) => <option key={p} value={p}>{t(PALETTE_LABEL_KEYS[p])}</option>)}
         </select>
       </div>
-      {/* A rule sets the presets and profile buttons apart; no heading names them (user, 2026-10-31). */}
+      {/* A rule sets the presets and profile buttons apart; no heading names them. */}
       <hr className="settings-divider" />
-      {/* The two switches form one group, without a rule between them (user, 2026-10-31). */}
+      {/* The two switches form one group, without a rule between them. */}
       <div className="phx-setting-checks">
         <div className="toggle-row" {...helpRow(t("settings.presetsHelp"))}>
           <SettingLabel help={t("settings.presetsHelp")}><span>{t("settings.presetsLabel")}</span></SettingLabel>

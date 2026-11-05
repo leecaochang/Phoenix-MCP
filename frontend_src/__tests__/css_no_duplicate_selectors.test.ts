@@ -106,7 +106,7 @@ describe("panel stylesheet", () => {
   });
 
   it("gives every dropdown one width and every number field another", () => {
-    // A third of the row within bounds, and six digits with their arrows (user, 2026-10-31).
+    // A third of the row within bounds, and six digits with their arrows.
     expect(CSS).toMatch(/select\.input:not\(\.agentcli-select\)\s*\{[^}]*width:\s*clamp\(10rem,\s*33%,\s*18rem\);/s);
     expect(CSS).toMatch(/input\.input\[type="number"\]:not\(\.agentcli-number\)\s*\{[^}]*width:\s*7rem;/s);
     // No other rule gives a dropdown or number field in a window a width of its own.
@@ -144,7 +144,7 @@ describe("panel stylesheet", () => {
 
   it("keeps long localized approval text inside the Approvals windows", () => {
     // Every window's filters share one shape, so the search gives way to the choices
-    // beside it instead of pushing them out of the window (user, 2026-10-29).
+    // beside it instead of pushing them out of the window.
     expect(CSS).toMatch(/\.filter-row\s*\{[^}]*flex-wrap:\s*wrap;/s);
     expect(CSS).toMatch(/\.filter-row\s+input\[type="search"\]\s*\{[^}]*min-width:\s*0;/s);
     // A long request title wraps in Review and in Request Details.

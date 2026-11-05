@@ -7,10 +7,7 @@ degradations.
 """
 from __future__ import annotations
 
-import hashlib
 import ast
-import secrets
-import uuid
 from copy import deepcopy
 from datetime import timedelta
 from functools import partial
@@ -51,44 +48,15 @@ from custom_components.phoenix_mcp.assist_api import (
     async_register_assist_api,
     async_unregister_assist_api,
 )
-from custom_components.phoenix_mcp.const import ASSIST_CLIENT_IP, DOMAIN, ACCESS_KEY_PREFIX
-from custom_components.phoenix_mcp.access_key_store import GlobalSettings, PermissionTree, AccessKeyRecord
+from custom_components.phoenix_mcp.const import ASSIST_CLIENT_IP, DOMAIN
+from tests.runtime_fixtures import assist_ctx as _ctx, assist_tool_input as _tool_input, make_assist_access_key as _make_access_key, make_assist_data as _make_data
+from tests.runtime_fixtures import patch_readers
 
 
 @pytest.fixture(params=list(_PROVIDER_RENDERINGS))
 def to_openapi(request):
     """Render a tool schema the way each installed HA provider generation does."""
     return _PROVIDER_RENDERINGS[request.param]
-
-
-def _make_access_key(*, announce_all: bool = False, cap_config_read: str = "allow") -> AccessKeyRecord:
-    from homeassistant.util.dt import utcnow
-
-    raw = ACCESS_KEY_PREFIX + secrets.token_hex(32)
-    return AccessKeyRecord(
-        id=str(uuid.uuid4()),
-        name="voice-access-key",
-        access_key_hash=hashlib.sha256(raw.encode()).hexdigest(),
-        created_at=utcnow(),
-        created_by="admin",
-        cap_config_read=cap_config_read,
-        announce_all_tools=announce_all,
-        permissions=PermissionTree(),
-    )
-
-
-def _make_data(access_key: AccessKeyRecord | None, *, kill_switch: bool = False, bound_id=None) -> SimpleNamespace:
-    settings = GlobalSettings(kill_switch=kill_switch, assist_bound_access_key_id=bound_id)
-    store = MagicMock()
-    store.get_settings.return_value = settings
-    store.get_access_key_by_id.side_effect = lambda tid: access_key if (access_key and tid == access_key.id) else None
-    return SimpleNamespace(
-        store=store,
-        mesa=None,
-        ready=True,
-        shutting_down=False,
-        assist_api_unregister=None,
-    )
 
 
 # --------------------------------------------------------------------------- #
@@ -186,7 +154,7 @@ def test_installed_assist_converter_preserves_json_schema_validation(schema, acc
 @pytest.mark.asyncio
 async def test_assist_provider_schemas_preserve_complete_catalog(hass, hass_admin_user, to_openapi):
     """Exercise HA's serializer hook for the whole native, Phoenix and MESA catalog."""
-    from custom_components.phoenix_mcp.agentcli import build_mcp_tool_list
+    from custom_components.phoenix_mcp.tool_catalog import build_mcp_tool_list
 
     access_key = _make_access_key(announce_all=True)
     data = _make_data(access_key, bound_id=access_key.id)
@@ -212,7 +180,7 @@ async def test_assist_serializer_preserves_extensions_and_isolates_mutation(hass
     access_key = _make_access_key()
     data = _make_data(access_key, bound_id=access_key.id)
     definition = {"name": "fixture", "description": "Schema fixture.", "inputSchema": schema}
-    with patch("custom_components.phoenix_mcp.agentcli.build_mcp_tool_list", return_value=[definition]):
+    with patch_readers("custom_components.phoenix_mcp.tool_catalog.build_mcp_tool_list", return_value=[definition]):
         instance = await PhoenixAssistAPI(hass, data).async_get_api_instance(_ctx())
     schema["properties"].clear()
     tool = instance.tools[0]
@@ -246,11 +214,11 @@ async def test_assist_schema_snapshots_are_isolated_between_turns(hass, to_opena
     data = _make_data(access_key, bound_id=access_key.id)
     first_schema = {"type": "object", "properties": {"value": {"type": "integer", "maximum": 3}}}
     second_schema = {"type": "object", "properties": {"value": {"type": "integer", "maximum": 1}}}
-    with patch("custom_components.phoenix_mcp.agentcli.build_mcp_tool_list", return_value=[
+    with patch_readers("custom_components.phoenix_mcp.tool_catalog.build_mcp_tool_list", return_value=[
         {"name": "fixture", "inputSchema": first_schema},
     ]):
         first = await PhoenixAssistAPI(hass, data).async_get_api_instance(_ctx())
-    with patch("custom_components.phoenix_mcp.agentcli.build_mcp_tool_list", return_value=[
+    with patch_readers("custom_components.phoenix_mcp.tool_catalog.build_mcp_tool_list", return_value=[
         {"name": "fixture", "inputSchema": second_schema},
     ]):
         second = await PhoenixAssistAPI(hass, data).async_get_api_instance(_ctx())
@@ -262,7 +230,7 @@ async def test_assist_schema_snapshots_are_isolated_between_turns(hass, to_opena
 async def test_assist_safely_omits_schemas_incompatible_with_installed_gemini_formatter(hass, caplog):
     """Run HA's pure formatter without requiring the optional Google SDK."""
     from homeassistant.helpers import llm
-    from custom_components.phoenix_mcp.agentcli import build_mcp_tool_list
+    from custom_components.phoenix_mcp.tool_catalog import build_mcp_tool_list
 
     source = Path(llm.__file__).parents[1] / "components/google_generative_ai_conversation/entity.py"
     tree = ast.parse(source.read_text())
@@ -325,7 +293,7 @@ async def test_assist_omits_real_incompatible_schema_without_breaking_other_tool
                    keyword: False if keyword == "unevaluatedProperties" else "#anchor"}}}
     definitions = [{"name": "unsupported", "inputSchema": unsupported},
                    {"name": "supported", "inputSchema": {"type": "object"}}]
-    with patch("custom_components.phoenix_mcp.agentcli.build_mcp_tool_list", return_value=definitions):
+    with patch_readers("custom_components.phoenix_mcp.tool_catalog.build_mcp_tool_list", return_value=definitions):
         instance = await PhoenixAssistAPI(hass, data).async_get_api_instance(_ctx())
     if keyword == "unevaluatedProperties" and not vol.Schema.__module__.startswith("probatio."):
         assert [tool.name for tool in instance.tools] == ["unsupported", "supported"]
@@ -377,7 +345,7 @@ async def test_kill_switch_yields_no_tools(hass):
 
 @pytest.mark.asyncio
 async def test_bound_instance_tools_mirror_tools_list_gating(hass, hass_admin_user):
-    from custom_components.phoenix_mcp.agentcli import build_mcp_tool_list
+    from custom_components.phoenix_mcp.tool_catalog import build_mcp_tool_list
 
     access_key = _make_access_key(cap_config_read="allow")
     data = _make_data(access_key, bound_id=access_key.id)
@@ -403,7 +371,7 @@ async def test_announce_all_widens_the_tool_set(hass):
 
 @pytest.mark.asyncio
 async def test_one_unconvertible_schema_is_skipped_not_fatal(hass, hass_admin_user):
-    from custom_components.phoenix_mcp.agentcli import build_mcp_tool_list
+    from custom_components.phoenix_mcp.tool_catalog import build_mcp_tool_list
 
     access_key = _make_access_key()
     data = _make_data(access_key, bound_id=access_key.id)
@@ -425,7 +393,7 @@ async def test_one_unconvertible_schema_is_skipped_not_fatal(hass, hass_admin_us
         return out
 
     with patch.object(assist_api, "_convert_to_voluptuous", side_effect=flaky), \
-         patch("custom_components.phoenix_mcp.agentcli.build_mcp_tool_list", side_effect=tagged_list):
+         patch_readers("custom_components.phoenix_mcp.tool_catalog.build_mcp_tool_list", side_effect=tagged_list):
         instance = await PhoenixAssistAPI(hass, data).async_get_api_instance(_ctx(hass_admin_user.id))
 
     got = {t.name for t in instance.tools}
@@ -451,7 +419,7 @@ async def test_tool_call_dispatches_with_assist_sentinel(hass):
         return ({"result": {"content": [{"type": "text", "text": '{"state": "on"}'}]}}, "get_state", "get_state", "allowed")
 
     tool = PhoenixAssistTool("get_state", "d", MagicMock(), access_key.id)
-    with patch("custom_components.phoenix_mcp.mcp_view._dispatch_mcp", side_effect=fake_dispatch):
+    with patch_readers("custom_components.phoenix_mcp.tool_dispatch._dispatch_mcp", side_effect=fake_dispatch):
         result = await tool.async_call(hass, _tool_input({"entity_id": "light.x"}), _ctx())
 
     assert captured["client_ip"] == ASSIST_CLIENT_IP
@@ -484,8 +452,8 @@ async def test_confirm_gated_call_returns_queued(hass):
         return (pending, "call_service", "call_service", "pending_approval")
 
     tool = PhoenixAssistTool("call_service", "d", MagicMock(), access_key.id)
-    with patch("custom_components.phoenix_mcp.mcp_view._dispatch_mcp", side_effect=fake_dispatch), \
-         patch("custom_components.phoenix_mcp.agentcli.get_approval", return_value=record):
+    with patch_readers("custom_components.phoenix_mcp.tool_dispatch._dispatch_mcp", side_effect=fake_dispatch), \
+         patch_readers("custom_components.phoenix_mcp.approvals.get_approval", return_value=record):
         result = await tool.async_call(hass, _tool_input({}), _ctx())
 
     body, error = assist_result_parts(result)
@@ -519,7 +487,7 @@ async def _call_retained(hass, tool):
     async def dispatch(method, msg_id, params, *a, **k):
         return ({"result": {"content": [{"type": "text", "text": '{"ok": true}'}]}}, "m", "r", "allowed")
 
-    with patch("custom_components.phoenix_mcp.mcp_view._dispatch_mcp", side_effect=dispatch):
+    with patch_readers("custom_components.phoenix_mcp.tool_dispatch._dispatch_mcp", side_effect=dispatch):
         return assist_result_parts(await tool.async_call(hass, _tool_input({}), _ctx()))
 
 
@@ -570,7 +538,7 @@ async def test_retained_tool_goes_through_dispatch_with_the_live_key(hass):
     dispatch = AsyncMock(return_value=(
         {"result": {"isError": True, "content": [{"type": "text", "text": "Forbidden."}]}}, "m", "r", "denied",
     ))
-    with patch("custom_components.phoenix_mcp.mcp_view._dispatch_mcp", dispatch):
+    with patch_readers("custom_components.phoenix_mcp.tool_dispatch._dispatch_mcp", dispatch):
         body, _ = assist_result_parts(await tool.async_call(hass, _tool_input({}), _ctx()))
     assert dispatch.await_args.args[3].cap_config_read == "deny"
     assert body["error"] == "Forbidden."
@@ -598,7 +566,7 @@ async def test_retained_tool_refuses_after_rebind_or_unbind(hass, rebound_to):
 
     dispatch = AsyncMock()
     tool = PhoenixAssistTool("get_state", "d", MagicMock(), access_key.id)
-    with patch("custom_components.phoenix_mcp.mcp_view._dispatch_mcp", dispatch):
+    with patch_readers("custom_components.phoenix_mcp.tool_dispatch._dispatch_mcp", dispatch):
         result = await tool.async_call(hass, _tool_input({"entity_id": "light.x"}), _ctx())
 
     body, error = assist_result_parts(result)
@@ -617,7 +585,7 @@ async def test_error_result_is_surfaced_not_raised(hass):
         return ({"result": {"content": [{"type": "text", "text": "Forbidden."}], "isError": True}}, "x", "x", "denied")
 
     tool = PhoenixAssistTool("get_state", "d", MagicMock(), access_key.id)
-    with patch("custom_components.phoenix_mcp.mcp_view._dispatch_mcp", side_effect=fake_dispatch):
+    with patch_readers("custom_components.phoenix_mcp.tool_dispatch._dispatch_mcp", side_effect=fake_dispatch):
         result = await tool.async_call(hass, _tool_input({}), _ctx())
     body, error = assist_result_parts(result)
     assert body == {"error": "Forbidden."}
@@ -628,7 +596,7 @@ async def test_error_result_is_surfaced_not_raised(hass):
 async def test_assist_tools_carry_phoenix_hints_as_ha_annotations(hass, hass_admin_user):
     """HA 2026.10 forwards annotations through its own MCP server; an omitted one reads as destructive."""
     from homeassistant.helpers import llm
-    from custom_components.phoenix_mcp.agentcli import build_mcp_tool_list
+    from custom_components.phoenix_mcp.tool_catalog import build_mcp_tool_list
 
     if not hasattr(llm, "ToolAnnotations"):
         pytest.skip("Home Assistant before 2026.10 has no tool annotations")
@@ -681,7 +649,7 @@ async def test_older_home_assistant_keeps_plain_results_and_no_annotations(hass,
     async def fake_dispatch(*a, **k):
         return ({"result": {"content": [{"type": "text", "text": "Forbidden."}], "isError": True}}, "x", "x", "denied")
 
-    with patch("custom_components.phoenix_mcp.mcp_view._dispatch_mcp", side_effect=fake_dispatch):
+    with patch_readers("custom_components.phoenix_mcp.tool_dispatch._dispatch_mcp", side_effect=fake_dispatch):
         result = await tool.async_call(hass, _tool_input({}), _ctx())
     assert result == {"error": "Forbidden."}
 
@@ -689,11 +657,3 @@ async def test_older_home_assistant_keeps_plain_results_and_no_annotations(hass,
 # --------------------------------------------------------------------------- #
 # Helpers
 # --------------------------------------------------------------------------- #
-
-def _ctx(user_id=None):
-    from homeassistant.core import Context
-    return SimpleNamespace(platform="conversation", context=Context(user_id=user_id), language="en", assistant="conversation", device_id=None)
-
-
-def _tool_input(args):
-    return SimpleNamespace(id="ti-1", tool_name="t", tool_args=args, external=False)

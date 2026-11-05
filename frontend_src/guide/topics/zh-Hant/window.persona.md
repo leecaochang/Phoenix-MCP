@@ -11,7 +11,7 @@
 
 ## {{label:personas.read_only.label}} {#read-only}
 
-只讀取：設定、模板、系統日誌、搜尋、登錄檔、自動化追蹤、診斷和服務回應資料。它不變更任何設定。
+只讀取：設定、範本、系統日誌、搜尋、登錄、自動化追蹤、診斷和服務回應資料。它不變更任何設定，但仍可控制權限樹中設為 W 的任何對象。
 
 ## {{label:personas.voice_assistant.label}} {#voice-assistant}
 

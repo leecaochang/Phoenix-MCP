@@ -68,6 +68,7 @@
       "mesaArchiveRequired": "archive 為必填項。",
       "mesaProfileExists": "策略已存在。請在編輯模式中開啟。",
       "mesaConflictModeInvalid": "on_conflict 必須為 skip 或 overwrite。",
+      "mesaSaveFailed": "無法儲存 MESA 變更，先前的設定仍然有效。",
       "mesaUnavailable": "MESA 目前不可用。",
       "nameRequired": "name 為必填項。",
       "nodeIdInvalidChars": "節點 ID 包含無效字元。",
@@ -211,7 +212,9 @@
       "restoreNoConfigSide": "此版本在該側沒有可還原的設定。",
       "restoreYamlTags": "此版本包含 !secret 或 !include 等 YAML 標籤，無法自動還原。請手動重新建立。",
       "restoreToolReported": "無法套用還原。工具回報：{detail}",
-      "capabilityAllowUnsupported": "{capability} 不支援「允許」模式。"
+      "capabilityAllowUnsupported": "{capability} 不支援「允許」模式。",
+      "recoverySnapshotUnsafeAt": "此項目沒有不含機密的完整副本，因此未進行任何變更。Phoenix 在 {location} 處拒絕了它。",
+      "invalidHostHeader": "請求的 Host 標頭不是有效位址。"
     },
     "agentchat": {
       "accessKey": "存取金鑰",
@@ -244,6 +247,7 @@
       "clearHistory": "清除聊天記錄",
       "configureFirst": "請先設定一個提供者",
       "connection": "連線",
+      "connectionLost": "在此回覆完成之前，與 Home Assistant 的連線已中斷。",
       "continue": "繼續",
       "decreaseTextSize": "縮小文字",
       "dockedClosed": "Agent Chat 已關閉。",
@@ -275,6 +279,7 @@
         "empty_turn": "模型結束了本輪，但沒有給出文字回覆。",
         "internal": "內部錯誤。",
         "max_tokens_stop": "模型因達到輸出長度上限而停止。可以讓它繼續，或調高模型的輸出 Token 上限（Ollama 請調整 num_predict/context 設定）。",
+        "memory_trimmed": "對話已超出單次請求可容納的大小，因此模型不再記得最早的訊息。這些訊息仍保留在畫面上。",
         "model_api_unsupported": "此模型尚未通過 OpenCode Chat Completions 相容性驗證。請選擇受支援的模型。",
         "network": "提供方暫時無法使用。",
         "ollama_backend": "提供方暫時無法使用。",
@@ -293,6 +298,7 @@
         "provider_transient": "提供方暫時無法使用。",
         "quota": "提供者帳戶餘額不足或已達到支出上限，不會重試。",
         "rate_limit": "提供方暫時無法使用。",
+        "request_too_large": "此訊息太大，無法傳送。請縮短內容、移除圖片，或使用 /clear 開始新對話。",
         "too_many_tools": "此存取金鑰提供 {count} 個工具，但 {provider} 每個請求最多只接受 {limit} 個。請縮減該存取金鑰的能力，或選擇其他提供者。",
         "tool_call_cut": "與模型的連線在工具呼叫中途中斷，因此該操作未執行。沒有任何改動被套用，問題也不在請求本身；請重新發送。",
         "tool_call_truncated": "模型在工具呼叫中途達到輸出長度上限，因此該操作未執行。所請求的改動過大，無法在一次呼叫中輸出；請嘗試改為更小的改動。",
@@ -300,7 +306,9 @@
         "review_changed": "審查工具呼叫期間，存取金鑰的工具或對話發生了變化，因此未執行任何操作。請重新傳送請求。",
         "kill_switch": "緊急停止開關已開啟，因此代理已停止。沒有再執行任何操作。",
         "unreachable": "無法連線 Home Assistant，因此未能完成。等待你核准的項目已取消。",
-        "upstream": "提供方暫時無法使用。"
+        "upstream": "提供方暫時無法使用。",
+        "provider_slow": "提供方在 {seconds} 秒內沒有回覆。",
+        "result_withheld": "{length} 位元組的結果超出了請求的上下文容量，未提供給模型。"
       },
       "options": "選項",
       "popIn": "移回 Home Assistant",
@@ -898,7 +906,7 @@
         "label": "讀取登錄檔"
       },
       "cap_registry_write": {
-        "description": "編輯實體和裝置，管理分區、樓層、分類和類別，並刪除失效條目。",
+        "description": "編輯實體和裝置，管理分區、樓層、分類和類別，刪除失效條目，並清除實體的歷史記錄。",
         "label": "管理實體登錄檔"
       },
       "cap_restart": {
@@ -943,7 +951,7 @@
       "modeDescDeny": "阻止此能力。除非開啟「始終宣告全部工具」，否則此金鑰的智慧體看不到它的工具。",
       "noBuilder": "未檢測到 Device Builder 載入項",
       "noEsphome": "未檢測到 ESPHome",
-      "passThroughNotice": "<strong>直通模式已啟用。</strong>除非設為「確認」，「讀取設定」、「模板渲染」、「搜尋與發現」、「讀取登錄檔」、「自動化追蹤」、「診斷」、「廣播」、「服務回應資料」都視為「允許」。其他所有能力按下方的設定執行。",
+      "passThroughNotice": "<strong>直通模式已啟用。</strong>「讀取設定」、「模板渲染」、「搜尋與發現」、「讀取登錄檔」、「自動化追蹤」、「診斷」、「廣播」、「服務回應資料」都視為「允許」。其他所有能力按下方的設定執行。",
       "tierConfigWrite": "設定變更",
       "tierEveryday": "日常操作",
       "tierIrreversible": "高風險",
@@ -1066,6 +1074,7 @@
       "empty": "（空）",
       "httpStatus": "伺服器傳回了 HTTP {status}。請重新整理後再試。",
       "invalidResponse": "伺服器傳回了無效回應。請重新整理後再試。",
+      "labelValue": "{label}：{value}",
       "listSeparator": "、",
       "loadMore": "載入更多",
       "loading": "載入中…",
@@ -1206,7 +1215,8 @@
       "mesaProfile": "MESA 策略",
       "profileCreate": "為 {key} 建立 MESA 策略",
       "profileSet": "{key} 已設定 MESA 策略，點選編輯",
-      "registryLoadFailed": "載入實體登錄檔失敗。"
+      "registryLoadFailed": "載入實體登錄檔失敗。",
+      "openFailed": "無法開啟 MESA 策略編輯器。請重新載入頁面後再試一次。"
     },
     "mesa": {
       "addAreaProfile": "新增分區策略",
@@ -1621,7 +1631,7 @@
         "label": "高階使用者"
       },
       "read_only": {
-        "description": "讀取狀態、歷史記錄和日誌。設定變更、語音播報、門鎖、警報、捲簾和閥門均拒絕存取。",
+        "description": "讀取狀態、歷史記錄和日誌。設定變更、語音播報、門鎖、警報、捲簾和閥門均拒絕存取。但仍可控制設為 W 的任何對象。",
         "label": "唯讀觀察者"
       },
       "voice_assistant": {
@@ -1856,7 +1866,7 @@
       "voiceAccessKeyAria": "語音智慧體存取金鑰",
       "voiceAccessKeyHelp": "決定此語音智慧體可以存取哪些實體和操作。",
       "wipeBusy": "清除中…",
-      "wipeCoreHelp": "刪除所有存取金鑰、設定、核准、變更記錄和日誌。此操作無法撤銷。",
+      "wipeCoreHelp": "刪除所有存取金鑰、設定、核准、變更記錄和日誌。安全副本會保留。此操作無法撤銷。",
       "wipeCoreLabel": "刪除 Phoenix MCP 核心資料",
       "wipeFailed": "清除失敗。",
       "wipeMesaHelp": "刪除所有 MESA 策略。預設關閉；如需保留副本，請先匯出策略。",
@@ -1982,9 +1992,11 @@
       "killSwitchShort": "緊急停止已啟用",
       "killSwitchTitle": "Phoenix MCP 目前不回應任何智慧體請求。請在「設定」中關閉緊急停止開關以恢復服務。",
       "loadAccessKeysFailed": "載入存取金鑰失敗。",
+      "loadSettingsFailed": "載入設定失敗。",
       "offlineBody": "Home Assistant 沒有回應，通常是因為正在重新啟動。正在重試，請稍候...",
       "offlineTitle": "Phoenix 目前無法使用",
       "renderFailed": "無法顯示此檢視。請重新整理再試，或選擇其他區段。",
+      "retrySettingsHelp": "重新從 Home Assistant 讀取設定。",
       "sectionsAria": "Phoenix MCP 導航",
       "srTitle": "Phoenix MCP 存取金鑰管理",
       "tabAccessKeys": "存取金鑰",
@@ -1992,7 +2004,8 @@
       "tabAudit": "稽核日誌",
       "tabChanges": "變更",
       "tabSettings": "設定",
-      "killSwitchHelp": "緊急停止開關已開啟，因此智慧體會被拒絕。選擇即可開啟「安全」並將其關閉。"
+      "killSwitchHelp": "緊急停止開關已開啟，因此智慧體會被拒絕。選擇即可開啟「安全」並將其關閉。",
+      "chatListsFailed": "Agent Chat 無法載入存取金鑰或 AI 供應商。開啟它或 Home Assistant 重新連線時會再次嘗試。"
     },
     "accessKeys": {
       "announceAllHelp": "向此金鑰的智慧體提供所有工具，包括它無法使用的工具。僅用於排查問題；會消耗更多 token。",
@@ -2030,7 +2043,7 @@
       "create": "建立",
       "createFailed": "建立存取金鑰失敗。",
       "createPtUnderstand": "我瞭解此存取金鑰擁有廣泛的 Home Assistant 存取權限",
-      "createPtWarning": "<strong>此存取金鑰可以讀取和控制所有 Home Assistant 實體。</strong>除非將它們設為「確認」，直通模式還會開啟「讀取設定」、「模板渲染」、「搜尋與發現」、「讀取登錄檔」、「自動化追蹤」、「診斷」、「廣播」、「服務回應資料」。「診斷」和「服務回應資料」可能洩露敏感資訊。其他所有能力保持各自的設定，MESA 規則、Phoenix MCP 封鎖清單、敏感屬性移除、速率限制、撤銷和過期同樣繼續生效。請僅在可以放心託付整個家的 MCP 用戶端上使用。",
+      "createPtWarning": "<strong>此存取金鑰可以讀取和控制所有 Home Assistant 實體。</strong>直通模式還會開啟「讀取設定」、「模板渲染」、「搜尋與發現」、「讀取登錄檔」、「自動化追蹤」、「診斷」、「廣播」、「服務回應資料」。「診斷」和「服務回應資料」可能洩露敏感資訊。其他所有能力保持各自的設定，MESA 規則、Phoenix MCP 封鎖清單、敏感屬性移除、速率限制、撤銷和過期同樣繼續生效。請僅在可以放心託付整個家的 MCP 用戶端上使用。",
       "createAccessKey": "建立存取金鑰",
       "daysAgo": "{d} 天前",
       "delete": "刪除",
@@ -2044,7 +2057,7 @@
       "done": "完成",
       "empty": "尚無存取金鑰。建立一個即可開始。",
       "emptyFiltered": "沒有符合篩選條件的存取金鑰。",
-      "enablePtBody": "<strong>此金鑰將可以讀取和控制所有實體。</strong>除非設為「確認」，八項讀取和診斷能力也會開啟。",
+      "enablePtBody": "<strong>此金鑰將可以讀取和控制所有實體。</strong>八項讀取和診斷能力也會開啟。",
       "enablePtCheck": "我瞭解存取金鑰 <code>{name}</code> 將擁有廣泛的 Home Assistant 存取權限",
       "enablePtFailed": "啟用直通模式失敗。",
       "enablePtLabel": "啟用直通模式",
@@ -2109,7 +2122,7 @@
       "presetNewName": "新預設名稱",
       "presetNoChange": "此預設與目前設定一致，因此不會更改任何設定。但套用它仍算作一次設定變更：已連線的智慧體會在下次呼叫時收到通知，速率限制計數也會重新開始。",
       "presetPtUnderstand": "我瞭解此預設會啟用直通模式",
-      "presetPtWarning": "<strong>此預設會開啟直通模式。</strong>存取金鑰隨後可以讀取和控制所有實體，並且除非設為「確認」，還會開啟另外八項能力，包括「診斷」和「服務回應資料」。其他能力、MESA 規則、Phoenix MCP 封鎖清單以及敏感屬性移除仍然適用。",
+      "presetPtWarning": "<strong>此預設會開啟直通模式。</strong>存取金鑰隨後可以讀取和控制所有實體，並且還會開啟另外八項能力，包括「診斷」和「服務回應資料」。其他能力、MESA 規則、Phoenix MCP 封鎖清單以及敏感屬性移除仍然適用。",
       "presetRenameTitle": "重新命名此預設；點選其他位置即可儲存",
       "presetRevert": "還原",
       "presetRevertBody": "這將放棄 <strong>{name}</strong> 上未儲存的更改：",
@@ -2122,7 +2135,7 @@
       "presetSwitchTo": "切換到",
       "ptConvertBody": "此金鑰會立即遵循其權限樹。如果其中沒有任何授權，它將失去所有實體存取權限。",
       "ptConvertFailed": "轉換存取金鑰失敗。",
-      "ptNoticeCaps": "除非設為「確認」，八項讀取和診斷能力也會開啟。其餘能力保持各自的設定。",
+      "ptNoticeCaps": "八項讀取和診斷能力也會開啟。其餘能力保持各自的設定。",
       "ptNoticeIntro": "<strong>直通存取金鑰。</strong>它會略過權限樹並存取所有實體，敏感屬性會被移除。",
       "ptNoticeUsage": "直通模式可能會把每個實體的資訊都傳送給模型，比限定範圍的權限樹消耗更多 token。",
       "rateBurstLabel": "每秒突發上限（0 表示不限制每秒請求數）",
@@ -2585,7 +2598,9 @@
       "saveFailed": "無法儲存核對結果。此操作仍需核對。",
       "showInAudit": "在稽核記錄中檢視",
       "title": "需要關注",
-      "unknown": "在 Phoenix 記錄此操作是否已執行之前，對話就已結束，因此它可能已經執行。如有「在稽核記錄中檢視」，可查看 Phoenix 記錄的內容；等待核准的操作，其狀態在「核准」中。重試前請檢查 Home Assistant 本身。"
+      "unknown": "在 Phoenix 記錄此操作是否已執行之前，對話就已結束，因此它可能已經執行。如有「在稽核記錄中檢視」，可查看 Phoenix 記錄的內容；等待核准的操作，其狀態在「核准」中。重試前請檢查 Home Assistant 本身。",
+      "audit_storageTitle": "稽核記錄未寫入儲存空間",
+      "audit_storageHelp": "最近的稽核項目只保存在記憶體中，重新啟動後會遺失。請查看 Home Assistant 記錄。下一次儲存成功後，此項目會消失。"
     },
     "workspace": {
       "addToMy": "新增到我的工作區",

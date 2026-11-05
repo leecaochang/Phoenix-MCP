@@ -25,7 +25,7 @@ from pytest_homeassistant.common import MockConfigEntry
 from custom_components.phoenix_mcp.const import REDACTION_SENTINEL
 from custom_components.phoenix_mcp.data import PhoenixData
 from custom_components.phoenix_mcp.helpers import content_hash
-from custom_components.phoenix_mcp.mcp_view import _call_tool
+from custom_components.phoenix_mcp.tool_dispatch import _call_tool
 from custom_components.phoenix_mcp.tool_common import resolve_json_path, redaction_sentinel_path
 from custom_components.phoenix_mcp.access_key_store import PermissionTree, AccessKeyRecord
 from custom_components.phoenix_mcp.version_store import VersionStore

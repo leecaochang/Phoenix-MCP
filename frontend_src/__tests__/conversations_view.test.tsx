@@ -35,6 +35,20 @@ beforeEach(() => {
 });
 
 describe("ConversationsView", () => {
+  it("says storage is unavailable from a region already in the page", async () => {
+    let answer = list();
+    vi.mocked(api.getConversations).mockImplementation(async () => answer);
+    const view = render(<Logs />);
+    await view.findAllByText(/get_state|one|MCP/);
+    const region = view.container.querySelector(".phx-status-region");
+    expect(region).toHaveAttribute("role", "status");
+    expect(region).toBeEmptyDOMElement();
+    answer = { ...list(), available: false };
+    fireEvent.click(view.getByRole("button", { name: /refresh/i }));
+    await waitFor(() => expect(region?.textContent).not.toBe(""));
+    expect(view.container.querySelector(".phx-status-region")).toBe(region);
+  });
+
   it("keeps the log shown when a background update fails, as the Audit Log does", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     const view = render(<Logs />);
@@ -121,7 +135,7 @@ describe("ConversationsView", () => {
     expect(view.queryByText("Clear Conversation History")).toBeNull();
     const clear = registry.latest("logs", "conversationLog", "clear");
     expect(clear).toMatchObject({ label: "Clear Conversation History", disabled: false });
-    // Red only once it asks to confirm (user, 2026-10-28).
+    // Red only once it asks to confirm.
     expect(clear!.tone).toBeUndefined();
     act(() => clear!.onSelect!());
     expect(api.clearConversations).not.toHaveBeenCalled();
@@ -154,7 +168,7 @@ describe("ConversationsView", () => {
     fireEvent.change(search, { target: { value: "lamp" } });
     act(() => registry.latest("logs", "conversationLog", "filters")!.onSelect!());
     expect(view.queryByRole("searchbox")).toBeNull();
-    // Hidden filters stop applying (user, 2026-10-27), and come back as they were when shown again.
+    // Hidden filters stop applying, and come back as they were when shown again.
     expect(registry.latest("logs", "conversationLog", "filters")!.badge).toBeUndefined();
     await waitFor(() => expect(vi.mocked(api.getConversations)).toHaveBeenLastCalledWith(expect.objectContaining({ search: "" })));
     act(() => registry.latest("logs", "conversationLog", "filters")!.onSelect!());

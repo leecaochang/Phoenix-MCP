@@ -102,4 +102,6 @@ The panel works with a screen reader. Windows, fields and buttons have names in 
 
 Phoenix announces changes that happen away from your focus. It says how many rows a filter or search left once you stop typing. Errors are read straight away and stay until you dismiss them. In Select Multiple, the number of ticked requests is read as you tick them.
 
+Results that appear elsewhere, such as a finished batch approval or an import, are read too. Pressing F6 to reach Quick Help keeps the text of the control you just left.
+
 A table whose rows you can choose takes one Tab stop. Then use the arrow keys, Home and End to move between rows. In Permissions, the arrow keys only move between the levels; Enter or Space sets one, so nothing changes on the way past.

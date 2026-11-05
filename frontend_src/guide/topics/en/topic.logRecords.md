@@ -6,7 +6,7 @@ Phoenix keeps two logs. The audit log is a short record of every action and its 
 ## What makes an audit entry {#audit-entries}
 
 - **Agent actions**: each tool call from an MCP client, Agent Chat, the voice agent, Assist, AI Task or Home Companion. The entry holds the tool's name and arguments, never its result.
-- **Other MCP requests**: listing tools, starting and ending a session, and requests a key wasn't allowed to make.
+- **Other MCP requests**: listing tools, starting and ending a session, and requests a key wasn't allowed to make. If an app disconnects during a change, an entry named `request/cancelled` records it.
 - **MESA blocks**: an extra entry for each entity MESA refused. These need the mesa_core.audit logger at its default level, INFO; raising it in Home Assistant's logger settings hides them, though the blocks still happen.
 - **Approvals**: each request queued for approval, and what happened to it: approved, carried out, rejected, cancelled or failed.
 - **Your changes in the panel**: access keys, permissions, settings, MESA profiles, restores, wipes and other administrator actions. These show the administrator instead of an access key. A settings change names what changed, even one that turns logging off.
@@ -23,7 +23,7 @@ Turn on the [Conversation Log](guide:window.settingsLogs#conversation-log) to se
 - **{{label:audit.outcomeDenied}}**: refused by permissions or MESA, or an approval that was rejected, expired or cancelled.
 - **{{label:audit.outcomePendingApproval}}**: waiting for your approval.
 - **{{label:audit.outcomeRateLimited}}**: the key sent too many requests.
-- **{{label:audit.outcomeInvalidRequest}}**, **{{label:audit.outcomeNotFound}}** and **{{label:audit.outcomeNotImplemented}}**: the request was malformed, named something that doesn't exist, or asked for something Phoenix doesn't do.
+- **{{label:audit.outcomeInvalidRequest}}**, **{{label:audit.outcomeNotFound}}** and **{{label:audit.outcomeNotImplemented}}**: the request was malformed, named something that doesn't exist, or asked for something Phoenix doesn't do. A change Phoenix couldn't confirm is also {{label:audit.outcomeInvalidRequest}}, even though it may have landed.
 
 Which outcomes are recorded is up to the [audit log settings](guide:window.settingsLogs#audit-log).
 

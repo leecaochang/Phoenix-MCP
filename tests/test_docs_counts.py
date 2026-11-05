@@ -3,7 +3,7 @@
 Counts embedded in prose rot silently: the sentence still reads fine and only
 the number is wrong. The checks are mechanical, the written-out number list is
 generated so it has no gaps, and the counts come from
-`mcp_view.tool_catalog_counts()` (also served by the admin info endpoint),
+`tool_catalog.tool_catalog_counts()` (also served by the admin info endpoint),
 never re-derived here.
 
 The localized READMEs restate the headline counts and have their own patterns,
@@ -21,12 +21,11 @@ import re
 
 import pytest
 
-from custom_components.phoenix_mcp.const import (
-    AGENTCLI_MAX_TOOLS_PER_REQUEST,
-    AGENTCLI_PROVIDERS,
-    CAPABILITY_NAMES,
+from custom_components.phoenix_mcp.const import CAPABILITY_NAMES
+from custom_components.phoenix_mcp.provider_constants import (
+    AGENTCLI_MAX_TOOLS_PER_REQUEST, AGENTCLI_PROVIDERS,
 )
-from custom_components.phoenix_mcp.mcp_view import tool_catalog_counts
+from custom_components.phoenix_mcp.tool_catalog import tool_catalog_counts
 from custom_components.phoenix_mcp.personas import PERSONA_DEFINITIONS
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent

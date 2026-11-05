@@ -29,7 +29,7 @@ beforeEach(() => {
 it("offers only local routing and TypeSafe / JEV", async () => {
   render(<DecisionProviderSettings settings={settings} onChange={vi.fn()} saving={false} />);
   await screen.findByText("TypeSafe / JEV");
-  // With no account added, No Decision Provider is the only choice, and it is chosen (user, 2026-10-31).
+  // With no account added, No Decision Provider is the only choice, and it is chosen.
   const none = screen.getByRole("radio", { name: "No decision provider" });
   expect(none).toBeChecked();
   expect(screen.getAllByRole("radio")).toHaveLength(1);
@@ -205,7 +205,7 @@ it("opens an account's options when it is chosen, and asks in place before remov
   const account = await screen.findByRole("radio", { name: "My decision account" });
   expect(account).not.toBeChecked();
   expect(screen.queryByLabelText("API key")).toBeNull();
-  // Nothing is open until an account is chosen (user, 2026-10-31).
+  // Nothing is open until an account is chosen.
   expect(screen.queryByRole("button", { name: "Remove My decision account" })).toBeNull();
   fireEvent.click(account);
   expect(change).toHaveBeenCalledExactlyOnceWith("decision_provider_id", "decision");
@@ -277,7 +277,7 @@ it("shows the account's actions, with Refresh Models beside the model and cancel
   fireEvent.click(await screen.findByRole("radio", { name: "JEV" }));
   await screen.findByRole("button", { name: "Change Model" });
   expect(screen.queryByLabelText("Model for JEV")).toBeNull();
-  // A decision model has no options to check (user, 2026-10-31).
+  // A decision model has no options to check.
   expect(screen.queryByRole("button", { name: "Check Options" })).toBeNull();
   for (const name of ["Change Model", "Remove JEV"]) {
     const button = screen.getByRole("button", { name });
@@ -409,7 +409,7 @@ it("chooses with the keyboard like any radio group", async () => {
   const user = userEvent.setup();
   none.focus();
   await user.keyboard("{ArrowDown}");
-  // One group (user, 2026-10-31): moving to an account chooses it, and the default follows on the server.
+  // One group: moving to an account chooses it, and the default follows on the server.
   expect(onChange).toHaveBeenCalledExactlyOnceWith("decision_provider_id", "one");
   expect(onChange).not.toHaveBeenCalledWith("decision_provider_default_id", expect.anything());
 });

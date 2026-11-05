@@ -62,6 +62,7 @@ class ConsumerIdentityIndex:
         if config.get("id"):
             return str(config["id"])
         if kind == "scene":
+            # Local: ships with an optional component, not with this integration.
             import voluptuous as vol
             from homeassistant.components.homeassistant.scene import STATES_SCHEMA
 

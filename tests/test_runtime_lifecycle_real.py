@@ -3,6 +3,7 @@
 import asyncio
 import copy
 from datetime import timedelta
+import logging
 
 from homeassistant.setup import async_setup_component
 from homeassistant.util.dt import utcnow
@@ -10,7 +11,7 @@ import pytest
 from homeassistant.config_entries import ConfigEntryState
 from pytest_homeassistant.common import MockConfigEntry
 
-from custom_components.phoenix_mcp.agentcli import _get_secret_store
+from custom_components.phoenix_mcp.llm.accounts import _get_secret_store
 from custom_components.phoenix_mcp.const import DOMAIN
 from custom_components.phoenix_mcp.access_key_store import AccessKeyStore
 
@@ -37,6 +38,15 @@ async def test_unreadable_calendar_journal_does_not_abort_entry(hass, hass_stora
         await data.calendar_writes.save()
     assert hass_storage[key] == stored
     assert await hass.config_entries.async_unload(entry.entry_id)
+
+
+def _mesa_profile(key: str, mode: str):
+    from custom_components.phoenix_mcp.mesa_core import MetadataOrigin, SemanticProfile
+
+    return SemanticProfile.from_dict(
+        key, {"semantic_profile": {"operational_boundaries": {"control_mode": mode}}},
+        default_origin=MetadataOrigin.USER,
+    )
 
 
 async def _setup_runtime(hass):
@@ -97,8 +107,8 @@ async def test_unload_drains_owned_decision_job(hass, enable_custom_integrations
 
 async def test_unload_persists_dirty_routing_statistics(hass, hass_storage, enable_custom_integrations):
     """An unsaved completed turn survives a real entry unload and reload."""
-    from custom_components.phoenix_mcp.const import ROUTING_STATISTICS_STORAGE_KEY
-    from custom_components.phoenix_mcp.routing_statistics import TurnStatistics
+    from custom_components.phoenix_mcp.routing.routing_tables import ROUTING_STATISTICS_STORAGE_KEY
+    from custom_components.phoenix_mcp.routing.routing_statistics import TurnStatistics
 
     entry, data = await _setup_runtime(hass)
     statistics = data.routing_statistics
@@ -136,7 +146,7 @@ async def test_real_entry_reload_has_stable_routes_and_deletion_retires_credenti
     from homeassistant.helpers import llm
 
     entry, data = await _setup_runtime(hass)
-    assert data.ready and not data.mesa_setup_failed and data.enforce_mcp_lifecycle
+    assert data.ready and not data.mesa_setup_failed
     access_key, _ = await data.store.async_create_access_key("lifecycle", "admin")
     secrets = await _get_secret_store(hass)
     account = await secrets.add("chatgpt", {"api_key": "synthetic-example-key", "model": "example"})
@@ -410,6 +420,138 @@ async def test_an_entity_rename_carries_its_grant_over(hass, enable_custom_integ
         assert data.versions.list_for("entity", "light.before") == []
     finally:
         assert await hass.config_entries.async_unload(entry.entry_id)
+
+
+async def test_an_entity_rename_carries_its_mesa_profile(hass, enable_custom_integrations, hass_storage):
+    """Protection follows the entity from the moment the registry event fires."""
+    from homeassistant.helpers import entity_registry as er
+    from custom_components.phoenix_mcp.const import MESA_STORAGE_KEY
+
+    entry, data = await _setup_runtime(hass)
+    try:
+        registry = er.async_get(hass)
+        entity = registry.async_get_or_create("light", "test", "vault", suggested_object_id="vault")
+        data.mesa.store.set(entity.entity_id, _mesa_profile(entity.entity_id, "prohibited"))
+        await data.mesa.async_save()
+
+        registry.async_update_entity(entity.entity_id, new_entity_id="light.vault2")
+        # No await: nothing may run between the rename and the move.
+        assert data.mesa.store.get("light.vault2") is not None
+        assert data.mesa.store.get("light.vault") is None
+
+        await hass.async_block_till_done(wait_background_tasks=True)
+        stored = hass_storage[MESA_STORAGE_KEY]["data"]["profiles"]
+        assert "light.vault2" in stored and "light.vault" not in stored
+        assert data.mesa.orphans == []
+    finally:
+        assert await hass.config_entries.async_unload(entry.entry_id)
+
+
+@pytest.mark.parametrize(("old_mode", "new_mode", "governs", "orphan"), [
+    ("prohibited", "autonomous", "prohibited", "autonomous"),
+    ("autonomous", "prohibited", "prohibited", "autonomous"),
+    ("confirm", "confirm", "confirm", "confirm"),
+])
+async def test_a_rename_onto_a_profiled_id_keeps_both_and_never_loosens(
+    hass, enable_custom_integrations, caplog, old_mode, new_mode, governs, orphan,
+):
+    from homeassistant.helpers import entity_registry as er
+
+    entry, data = await _setup_runtime(hass)
+    try:
+        registry = er.async_get(hass)
+        entity = registry.async_get_or_create("light", "test", "taken", suggested_object_id="before")
+        data.mesa.store.set("light.before", _mesa_profile("light.before", old_mode))
+        data.mesa.store.set("light.after", _mesa_profile("light.after", new_mode))
+        await data.mesa.async_save()
+
+        registry.async_update_entity(entity.entity_id, new_entity_id="light.after")
+        await hass.async_block_till_done(wait_background_tasks=True)
+
+        mode = lambda eid: data.mesa.store.get(eid).operational_boundaries.control_mode.value
+        assert mode("light.after") == governs
+        assert mode("light.before") == orphan
+        assert data.mesa.orphans == ["light.before"]
+        assert "already has a profile" in caplog.text
+    finally:
+        assert await hass.config_entries.async_unload(entry.entry_id)
+
+
+async def test_a_rename_whose_save_fails_keeps_the_entity_protected(
+    hass, enable_custom_integrations, caplog,
+):
+    """A failed save returns memory to the durable set, which the move already updated."""
+    from unittest.mock import patch
+
+    from homeassistant.helpers import entity_registry as er
+    from homeassistant.util.file import WriteError
+
+    entry, data = await _setup_runtime(hass)
+    try:
+        registry = er.async_get(hass)
+        entity = registry.async_get_or_create("light", "test", "held", suggested_object_id="held")
+        data.mesa.store.set(entity.entity_id, _mesa_profile(entity.entity_id, "prohibited"))
+        await data.mesa.async_save()
+        with patch("homeassistant.helpers.storage.Store._async_write_data", side_effect=WriteError("full")):
+            registry.async_update_entity(entity.entity_id, new_entity_id="light.held2")
+            await hass.async_block_till_done(wait_background_tasks=True)
+        assert data.mesa.store.get("light.held2") is not None
+        assert "could not be saved" in caplog.text
+    finally:
+        assert await hass.config_entries.async_unload(entry.entry_id)
+
+
+async def test_a_corrupt_store_starts_the_integration_with_the_gates_closed(hass, enable_custom_integrations):
+    """Reads and recovery stay up; state changes refuse, and the operator is told."""
+    from pathlib import Path
+
+    from custom_components.phoenix_mcp.const import MESA_STORAGE_KEY
+
+    path = Path(hass.config.path(".storage", f"{MESA_STORAGE_KEY}.corrupt.2026-01-01T00:00:00+00:00"))
+    path.parent.mkdir(exist_ok=True)
+    path.write_text("not json")
+    entry, data = await _setup_runtime(hass)
+    try:
+        assert data.mesa is None
+        assert data.mesa_setup_failed is True
+    finally:
+        assert await hass.config_entries.async_unload(entry.entry_id)
+
+
+async def test_unload_ends_leases_so_their_event_still_fires(hass, enable_custom_integrations):
+    """A reload replaces the lease manager, so a lease must end before it goes."""
+    entry, data = await _setup_runtime(hass)
+    ended = []
+    hass.bus.async_listen(f"{DOMAIN}_mesa_lease_expired", ended.append)
+    entity = "light.leased"
+    hass.states.async_set(entity, "on")
+    granted = data.mesa.lease_manager.request([entity], 30, session_id="key", caller_id="key")
+    assert granted.granted
+
+    assert await hass.config_entries.async_unload(entry.entry_id)
+    await hass.async_block_till_done()
+
+    assert [event.data["lease_id"] for event in ended] == [granted.lease_id]
+
+
+async def test_reload_leaves_logger_handlers_where_it_found_them(hass, enable_custom_integrations):
+    """Debug capture attaches to shared loggers, so unload must take it off again."""
+    from custom_components.phoenix_mcp.debug_capture import async_detach_debug_capture
+
+    loggers = [logging.getLogger(name) for name in ("homeassistant.components", "custom_components")]
+    baseline = [list(logger.handlers) for logger in loggers]
+    entry, _ = await _setup_runtime(hass)
+    try:
+        attached = [len(logger.handlers) for logger in loggers]
+        assert attached == [len(handlers) + 1 for handlers in baseline]
+        for _cycle in range(2):
+            assert await hass.config_entries.async_reload(entry.entry_id)
+            await hass.async_block_till_done()
+            assert [len(logger.handlers) for logger in loggers] == attached
+        assert await hass.config_entries.async_unload(entry.entry_id)
+        assert [list(logger.handlers) for logger in loggers] == baseline
+    finally:
+        async_detach_debug_capture(hass)
 
 
 async def test_setup_refuses_a_home_assistant_older_than_the_minimum(hass, enable_custom_integrations, caplog, monkeypatch):

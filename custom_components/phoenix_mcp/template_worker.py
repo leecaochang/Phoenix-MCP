@@ -22,15 +22,16 @@ def main() -> None:
     try:
         # Run by filename so spawn works independently of HA's process entry point.
         sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-        # Load the stdlib-only constants without executing the integration package,
+        # Load the import-free limits without executing the integration package,
         # whose __init__ imports Home Assistant before the worker limits are active.
-        limits = runpy.run_path(str(Path(__file__).with_name("const.py")))
+        limits = runpy.run_path(str(Path(__file__).with_name("template_limits.py")))
         cpu_seconds = limits["TEMPLATE_WORKER_CPU_SECONDS"]
         memory_bytes = limits["TEMPLATE_WORKER_MEMORY_BYTES"]
         input_bytes = limits["TEMPLATE_WORKER_INPUT_BYTES"]
         resource.setrlimit(resource.RLIMIT_CPU, (cpu_seconds, cpu_seconds))
         resource.setrlimit(resource.RLIMIT_AS, (memory_bytes, memory_bytes))
         phase = "imports"
+        # Local: these run only after the resource limits above are in force.
         from homeassistant.util import dt as dt_util
         from custom_components.phoenix_mcp.helpers import ScrubbedState, render_template_snapshot
         from custom_components.phoenix_mcp.template_diagnostics import describe_template_failure

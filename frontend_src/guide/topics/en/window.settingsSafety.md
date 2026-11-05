@@ -33,7 +33,9 @@ You can't undo a wipe. It's refused while an approved request is still running.
 
 Deletes every access key, pending approval and entity hint, and resets all settings to their defaults. This also turns off the kill switch.
 
-It also deletes the audit log, Conversation Log, change history, routing statistics and rate-limit counts, and removes the voice assistant Phoenix created, unless it's Home Assistant's only assistant.
+It also deletes the audit log, Conversation Log, change history, routing statistics and rate-limit counts, and removes the voice assistant Phoenix created, unless it's Home Assistant's only assistant. Agent Chat conversations go too, in this browser only.
+
+Safety copies, the calendar change journal and dashboard resource records stay. To remove those, see [Removing Phoenix completely](guide:topic.security#removing).
 
 ### {{label:settings.wipeProvidersLabel}} {#wipe-providers}
 

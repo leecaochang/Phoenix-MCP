@@ -11,7 +11,7 @@ With any [{{label:settings.colorThemeLabel}}](guide:window.settingsGeneral#color
 
 ## {{label:personas.read_only.label}} {#read-only}
 
-Reads only: configuration, templates, system logs, search, the registry, automation traces, diagnostics and service response data. It changes no configuration.
+Reads only: configuration, templates, system logs, search, the registry, automation traces, diagnostics and service response data. It changes no configuration, but it can still control anything set to W in the tree.
 
 ## {{label:personas.voice_assistant.label}} {#voice-assistant}
 

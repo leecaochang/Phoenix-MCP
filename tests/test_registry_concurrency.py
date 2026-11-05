@@ -15,7 +15,9 @@ from homeassistant.helpers import label_registry as lr
 from homeassistant.util.dt import utcnow
 from pytest_homeassistant.common import MockConfigEntry
 
-from custom_components.phoenix_mcp import mcp_view as view
+from custom_components.phoenix_mcp import mcp_transport
+from custom_components.phoenix_mcp.tools import registry as registry_tools
+from custom_components.phoenix_mcp.tools import restore as restore_tools
 from custom_components.phoenix_mcp.const import DOMAIN
 from custom_components.phoenix_mcp.data import PhoenixData
 from custom_components.phoenix_mcp.request_authority import (
@@ -74,7 +76,7 @@ async def test_overlapping_writes_capture_their_own_results(
 ):
     access_key, data, device_id, entities, labels = commit_env
     target = entities[0] if kind == "entity" else device_id
-    execute = getattr(view, f"_execute_set_{kind}")
+    execute = getattr(registry_tools, f"_execute_set_{kind}")
     entered, release = asyncio.Event(), asyncio.Event()
     captured = []
 
@@ -84,7 +86,7 @@ async def test_overlapping_writes_capture_their_own_results(
             entered.set()
             await release.wait()
 
-    with patch.object(view, "_record_version", side_effect=record):
+    with patch.object(registry_tools, "_record_version", side_effect=record):
         first = asyncio.create_task(execute(
             {f"{kind}_id": target, "add_labels": [labels[0]]}, access_key, hass, data
         ))
@@ -98,7 +100,7 @@ async def test_overlapping_writes_capture_their_own_results(
                     timestamp=utcnow().isoformat(), alias=None, access_key_id=None,
                     access_key_name=None, request_id=None, approved_by_user_id=None,
                 )
-                second = await view.async_restore_version(snapshot, "admin", hass, data, side="before")
+                second = await restore_tools.async_restore_version(snapshot, "admin", hass, data, side="before")
             else:
                 second = await execute(
                     {f"{kind}_id": target,
@@ -138,14 +140,14 @@ async def test_aliases_and_category_scopes_merge_during_history_wait(hass, commi
             entered.set()
             await release.wait()
 
-    with patch.object(view, "_record_version", side_effect=record):
-        task = asyncio.create_task(view._execute_set_entity(
+    with patch.object(registry_tools, "_record_version", side_effect=record):
+        task = asyncio.create_task(registry_tools._execute_set_entity(
             {"entity_id": entities[0], "add_aliases": ["first alias"],
              "categories": {"first": categories["first"]}}, access_key, hass, data,
         ))
         try:
             await asyncio.wait_for(entered.wait(), 1)
-            second = await view._execute_set_entity(
+            second = await registry_tools._execute_set_entity(
                 {"entity_id": entities[0], "add_aliases": ["second alias"],
                  "categories": {"second": categories["second"]}}, access_key, hass, data,
             )
@@ -172,15 +174,15 @@ async def test_rename_then_delete_does_not_reopen_first_commit(hass, commit_env)
             await release.wait()
 
     renamed = "light.renamed"
-    with patch.object(view, "_record_version", side_effect=record):
-        task = asyncio.create_task(view._execute_set_entity(
+    with patch.object(registry_tools, "_record_version", side_effect=record):
+        task = asyncio.create_task(registry_tools._execute_set_entity(
             {"entity_id": entities[0], "new_entity_id": renamed}, access_key, hass, data
         ))
         try:
             await asyncio.wait_for(entered.wait(), 1)
-            _body(await view._execute_delete_entity({"entity_id": renamed}, access_key, hass, data))
+            _body(await registry_tools._execute_delete_entity({"entity_id": renamed}, access_key, hass, data))
             # Independent resources can finish while the first history save is blocked.
-            _body(await view._execute_set_entity(
+            _body(await registry_tools._execute_set_entity(
                 {"entity_id": entities[1], "name": "Independent"}, access_key, hass, data
             ))
         finally:
@@ -206,8 +208,8 @@ async def test_commit_revalidates_after_preparation_wait(hass, commit_env, chang
     authority_ctx = request_authority.set(RequestAuthority(hass, data, access_key.id, access_key.access_key_hash))
     version_ctx = policy_version.set(access_key.settings_version)
     try:
-        with patch.object(view, "_gate", side_effect=gate):
-            task = asyncio.create_task(view._tool_set_entity(args, access_key, hass, data))
+        with patch.object(registry_tools, "_gate", side_effect=gate):
+            task = asyncio.create_task(registry_tools._tool_set_entity(args, access_key, hass, data))
             await asyncio.wait_for(entered.wait(), 1)
             if change == "label":
                 lr.async_get(hass).async_delete(labels[0])
@@ -239,15 +241,15 @@ async def test_cancellation_after_commit_keeps_write_and_allows_next_write(hass,
         entered.set()
         await asyncio.Event().wait()
 
-    with patch.object(view, "_record_version", side_effect=record):
-        task = asyncio.create_task(view._execute_set_entity(
+    with patch.object(registry_tools, "_record_version", side_effect=record):
+        task = asyncio.create_task(registry_tools._execute_set_entity(
             {"entity_id": entities[0], "add_labels": [labels[0]]}, access_key, hass, data
         ))
         await asyncio.wait_for(entered.wait(), 1)
         task.cancel()
         with pytest.raises(asyncio.CancelledError):
             await task
-    _body(await view._execute_set_entity(
+    _body(await registry_tools._execute_set_entity(
         {"entity_id": entities[0], "add_labels": [labels[1]]}, access_key, hass, data
     ))
     assert er.async_get(hass).async_get(entities[0]).labels == set(labels)
@@ -261,8 +263,8 @@ async def test_cancelled_preparation_does_not_commit(hass, commit_env):
         entered.set()
         await asyncio.Event().wait()
 
-    with patch.object(view, "_gate", side_effect=gate), patch.object(view, "_record_version", AsyncMock()) as record:
-        task = asyncio.create_task(view._tool_set_entity(
+    with patch.object(registry_tools, "_gate", side_effect=gate), patch.object(registry_tools, "_record_version", AsyncMock()) as record:
+        task = asyncio.create_task(registry_tools._tool_set_entity(
             {"entity_id": entities[0], "changes": {"add_labels": [labels[0]]}}, access_key, hass, data
         ))
         await asyncio.wait_for(entered.wait(), 1)
@@ -282,7 +284,7 @@ async def test_batch_keeps_successful_registry_progress_when_later_item_fails(ha
         }}
         for index, label in enumerate([labels[0], "missing-label", labels[1]], 1)
     ]
-    results = await view._dispatch_streamable_batch(
+    results = await mcp_transport._dispatch_streamable_batch(
         items, access_key, hass, data, "test", base_url="http://test"
     )
     assert [item["id"] for item in results] == [1, 2, 3]

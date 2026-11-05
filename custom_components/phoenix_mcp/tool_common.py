@@ -5,9 +5,8 @@ envelopes (_tool_success/_tool_error/_tool_pending), the capability gate and its
 inline-confirm wait, the progress bus the SSE writer drains, configuration
 version capture, and the scoped file read/write plus compare-and-swap helpers.
 
-These live here rather than in mcp_view so a per-domain tool module (see
-tools/) can depend on them without importing the transport that dispatches it,
-which would be a cycle. mcp_view imports the names it uses from here.
+These live here so a per-domain tool module (see tools/) can depend on them
+without importing the dispatcher above it.
 """
 
 
@@ -18,10 +17,16 @@ import json
 from contextvars import ContextVar
 import logging
 import os
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers import category_registry as cr
+from homeassistant.helpers import label_registry as lr
 
+from .approvals import (
+    async_create_pending_approval, create_approval_notification, fire_approval_requested_event,
+    STATUS_PENDING, list_approvals, STATUS_APPROVED, get_approval,
+)
 from .const import (
     DOMAIN,
     DOMAIN_IMPORTANT_ATTRIBUTES,
@@ -33,19 +38,20 @@ from .const import (
     REGISTRY_ID_HINT_MAX,
     TOOL_RESULT_MAX_BYTES,
 )
-from .data import PhoenixData
+from .conversation_log import record_event, json_size
+from .mesa_audit import note_mesa_advisory
 from .device_semantics import (
     device_registry_snapshot_from_registry,
     effective_entity_area_id,
 )
 from .mesa import mesa_confirm_preview
-from .helpers import (
-    content_hash,
-    DiffSource,
-    async_evaluate_capability,
-    version_summary_fields as _version_summary,
-)
+from .helpers import content_hash, version_summary_fields as _version_summary
+from .approvals import DiffSource, async_evaluate_capability
 from .access_key_store import AccessKeyRecord
+from .request_authority import check_request_authority
+
+if TYPE_CHECKING:
+    from .data import PhoenixData
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -62,23 +68,25 @@ def serialize_ha_schema(schema: Any, custom_serializer: Any) -> Any:
     Serialization leaves out a field's `visible` condition (HA 2026.11). HA's own
     frontend receives it from a second step, so an agent reads it the same way.
     """
+    # Local: not part of the recorded Home Assistant import floor.
+    from homeassistant import data_entry_flow
     if type(schema).__module__.startswith("probatio"):
-        import probatio  # noqa: PLC0415
-        from homeassistant import data_entry_flow  # noqa: PLC0415
+        # Local: ships with an optional component, not with this integration.
+        import probatio
 
         converted = probatio.to_field_list(schema, custom_serializer=custom_serializer)
         add_conditions = getattr(data_entry_flow, "add_visible_conditions_to_serialized_schema", None)
         if add_conditions is not None and isinstance(converted, list):
             add_conditions(schema, converted)
         return converted
-    import voluptuous_serialize  # noqa: PLC0415
+    # Local: ships with an optional component, not with this integration.
+    import voluptuous_serialize
 
     return voluptuous_serialize.convert(schema, custom_serializer=custom_serializer)
 
 
 def unknown_label_message(hass: HomeAssistant, label_id: str) -> str:
     """Refuse an unknown label and name the label IDs that do exist."""
-    from homeassistant.helpers import label_registry as lr  # noqa: PLC0415
 
     known = sorted(lr.async_get(hass).async_list_labels(), key=lambda label: label.label_id)
     listed = ", ".join(f"{label.label_id} ({label.name})" for label in known[:REGISTRY_ID_HINT_MAX])
@@ -89,7 +97,6 @@ def unknown_label_message(hass: HomeAssistant, label_id: str) -> str:
 
 def unknown_category_message(hass: HomeAssistant, scope: str, category_id: str) -> str:
     """Refuse an unknown category and name the categories of that scope."""
-    from homeassistant.helpers import category_registry as cr  # noqa: PLC0415
 
     known = sorted(cr.async_get(hass).async_list_categories(scope=scope), key=lambda item: item.category_id)
     listed = ", ".join(f"{item.category_id} ({item.name})" for item in known[:REGISTRY_ID_HINT_MAX])
@@ -100,7 +107,6 @@ def unknown_category_message(hass: HomeAssistant, scope: str, category_id: str) 
 
 def stored_result_bytes(value: Any) -> int:
     """Bytes a tool result's JSON text takes as the Conversation Log stores it."""
-    from .conversation_log import json_size  # noqa: PLC0415
 
     return json_size(json.dumps(value, default=str))
 
@@ -184,6 +190,25 @@ def _tool_error(message: str) -> dict:
     return {"content": [{"type": "text", "text": message}], "isError": True}
 
 
+class UncertainOutcome(dict):
+    """A tool error from a write that was dispatched and may have landed.
+
+    It serializes as the ordinary error dict. The approve path closes such a run
+    as interrupted, not failed, so nobody reads it as an action that did nothing.
+    A copy that drops the type reads as a failure with its text intact.
+    """
+
+
+def _tool_uncertain(body: dict) -> dict:
+    """A dispatched write whose outcome is not confirmed, with its details as JSON.
+
+    Always an error, audited as invalid_request: a caller branching on isError
+    must not read an unconfirmed write as success, and Phoenix's agent loops hold
+    the unknown-outcome barrier for it. The body says what is known.
+    """
+    return UncertainOutcome(_tool_error(json.dumps(body, default=str)))
+
+
 class RefusedBeforeWrite(dict):
     """A tool error returned before the call could write anything.
 
@@ -211,7 +236,7 @@ def _tool_pending(approval: Any, waited_seconds: int | None = None, *, notified:
     waiting on a single id serialises the agent, since no later approval can be
     created until that wait ends), finish only if nothing depends on the outcome.
     Wording that reads as "tell the user and finish now" makes an early return
-    look like success. The agent primer in mcp_view must say the same.
+    look like success. The agent primer in tool_dispatch must say the same.
 
     `waited_seconds` is set only on the inline-wait timeout path and states a FACT
     rather than different advice: that hold already spent its budget, so blocking
@@ -257,77 +282,97 @@ def _approval_notifies(data: Any) -> bool:
     return bool(data.store.get_settings().notify_on_approval)
 
 
-def _tool_inline_resolved(approval: Any) -> dict:
-    """Result for an inline-waited confirm that resolved without applying; isError is True.
+def _stored_tool_text(approval: Any) -> str | None:
+    """The text of the tool result stored on an approval, if it holds any."""
+    result = getattr(approval, "result", None)
+    if not isinstance(result, dict):
+        return None
+    tool_result = result.get("tool_result")
+    if not isinstance(tool_result, dict):
+        return None
+    return "\n".join(
+        item.get("text", "") for item in tool_result.get("content", [])
+        if isinstance(item, dict) and item.get("type") == "text"
+    ).strip() or None
 
-    Tells the agent the outcome (with any reason) and not to retry, rather than
-    handing back a stale pending stub. An APPROVED action whose executor then
-    failed ("execution_failed") lands here too and must read as a failure to fix,
-    never as a refusal, or the agent treats an approval as a refusal and loops
-    retrying the same doomed call.
+
+def execution_failure_text(approval: Any) -> str | None:
+    """The executor's error text for an approved action whose execution failed, else None.
+
+    The approve path stores the error result and resolves the record as failed
+    with the "execution_failed" slug. Reporting that case as a bare "rejected"
+    would make an agent treat an approval as a refusal and loop retrying the same
+    doomed call instead of fixing the reported cause. None for a real admin
+    rejection or any other state.
+    """
+    if getattr(approval, "rejected_reason", None) != "execution_failed":
+        return None
+    return _stored_tool_text(approval)
+
+
+def approval_outcome(status: str, approval: Any) -> tuple[str, str]:
+    """The status and message an agent reads for an approval that did not apply cleanly.
+
+    Every surface that reports a resolved approval reads this, so none of them can
+    tell an agent "not applied" about an action that was approved and started.
+    An APPROVED action whose executor failed must read as a failure to fix, never
+    as a refusal, or the agent loops retrying the same doomed call.
     """
     reason = getattr(approval, "rejected_reason", None)
-    if reason == "execution_failed":
-        result = getattr(approval, "result", None)
-        tool_result = result.get("tool_result") if isinstance(result, dict) else None
-        parts = [
-            item.get("text", "")
-            for item in (tool_result or {}).get("content", [])
-            if isinstance(item, dict) and item.get("type") == "text"
-        ]
-        failure = " ".join(p for p in parts if p).strip()
-        if failure:
-            body = json.dumps({
-                "status": "execution_failed",
-                "approval_id": approval.id,
-                "message": (
-                    f"The operator APPROVED this action, but executing it failed: {failure} "
-                    "Do not retry the same call unchanged; fix the reported cause first "
-                    "(for example, if it reports a stale expected_hash, re-read the "
-                    "resource for the current content_hash)."
-                ),
-            })
-            return {"content": [{"type": "text", "text": body}], "isError": True}
-    if approval.status == "failed" and reason == "execution_interrupted":
-        body = json.dumps({
-            "status": "failed",
-            "approval_id": approval.id,
-            "message": (
+    failure = execution_failure_text(approval)
+    if failure is not None:
+        return "execution_failed", (
+            f"The operator APPROVED this action, but executing it failed: {failure} "
+            "Do not retry the same call unchanged; fix the reported cause first "
+            "(for example, if it reports a stale expected_hash, re-read the "
+            "resource for the current content_hash)."
+        )
+    if status == "failed":
+        if reason == "execution_interrupted":
+            return status, (
                 "The operator APPROVED this action and execution started, but its "
                 "final outcome was interrupted. It may have partly applied. Check "
                 "the real-world result before proposing any retry."
-            ),
-        })
-        return {"content": [{"type": "text", "text": body}], "isError": True}
-    # A rejection with a reason is the operator steering the next proposal, not a
-    # stop signal: iterating through reject-with-reason rounds is the normal
-    # card-building workflow, and stricter forbid-variations wording would stall
-    # it (agentcli._resolved_result words the same case). A reasonless rejection
-    # means ask first.
-    if approval.status == "rejected" and reason:
-        message = (
+                + (f" Reported: {text}" if (text := _stored_tool_text(approval)) else "")
+            )
+        detail = f" Reason: {reason}." if reason else ""
+        return status, (
+            f"The operator approved this action, but it could not complete.{detail} "
+            "Do not treat this as an operator rejection or retry it unchanged."
+        )
+    # A rejection with a reason is the operator STEERING, not stopping: iterating
+    # on a proposal through several reject-with-reason rounds is the normal way a
+    # card gets built. Do not add a strict alternative (forbid variations, escalate
+    # to a hard stop on the second rejection): models turn pedantic, give up, or
+    # side-step the tools entirely. Only a reasonless rejection means ask first.
+    if status == "rejected" and reason:
+        return status, (
             f"This action was not applied (it was rejected). Reason: {reason}. "
             "That reason is the operator's direction for what to do next: "
             "address it in your next proposal instead of resubmitting the "
             "same change."
         )
-    elif approval.status == "rejected":
-        message = (
+    if status == "rejected":
+        return status, (
             "This action was not applied (it was rejected, no reason given). "
             "Do not resubmit the same change; ask the operator how they "
             "would like to proceed."
         )
-    else:
-        detail = f" Reason: {reason}." if reason else ""
-        message = (
-            f"This action was not applied (it was {approval.status}).{detail} "
-            "Do not retry it; report the outcome to the user."
-        )
-    body = json.dumps({
-        "status": approval.status,
-        "approval_id": approval.id,
-        "message": message,
-    })
+    detail = f" Reason: {reason}." if reason else ""
+    return status, (
+        f"This action was not applied (it was {status}).{detail} "
+        "Do not retry it; report the outcome to the user."
+    )
+
+
+def _tool_inline_resolved(approval: Any) -> dict:
+    """Result for an inline-waited confirm that resolved without applying; isError is True.
+
+    Tells the agent the outcome (with any reason) and not to retry, rather than
+    handing back a stale pending stub.
+    """
+    status, message = approval_outcome(approval.status, approval)
+    body = json.dumps({"status": status, "approval_id": approval.id, "message": message})
     return {"content": [{"type": "text", "text": body}], "isError": True}
 
 
@@ -421,7 +466,7 @@ _OPERATOR_ACCEPTED_NOTE = (
 def _operator_accepted_result(tool_result: dict) -> dict:
     """Return the executed result with the operator-accepted note appended as a text item.
 
-    Same in-band pattern as mcp_view._STALE_TOOLS_ADVISORY. Shallow-copies, so the
+    Same in-band pattern as tool_dispatch._STALE_TOOLS_ADVISORY. Shallow-copies, so the
     stored approval record's result is never mutated.
     """
     out = dict(tool_result)
@@ -482,11 +527,6 @@ async def _await_inline_confirm(
     audited separately by the approve/reject path), so enabling the wait changes
     only what the agent receives, never how the request is logged.
     """
-    from .approvals import (  # noqa: PLC0415
-        STATUS_APPROVED,
-        STATUS_PENDING,
-        get_approval,
-    )
 
     wait = min(access_key.confirm_inline_wait_seconds, MAX_CONFIRM_INLINE_WAIT_SECONDS)
     approval_id = approval.id
@@ -534,6 +574,21 @@ async def _await_inline_confirm(
     return _tool_inline_resolved(latest), "pending_approval", resource
 
 
+def _with_mesa_advisory(result: tuple[dict, str, str], warnings: list[str]) -> tuple[dict, str, str]:
+    """Add MESA's advisory warnings to a successful JSON tool result."""
+    content, outcome, resource = result
+    if not warnings or content.get("isError"):
+        return result
+    try:
+        body = json.loads(content["content"][0]["text"])
+    except (KeyError, IndexError, TypeError, ValueError):
+        return result
+    if not isinstance(body, dict):
+        return result
+    _add_mesa_advisory(body, warnings)
+    return _tool_success(json.dumps(body, default=str)), outcome, resource
+
+
 async def _pending_or_inline(
     hass: HomeAssistant,
     data: PhoenixData,
@@ -571,11 +626,10 @@ def _access_key_has_other_pending(data: PhoenixData, access_key: AccessKeyRecord
     call would ever wait. Fail-quiet: an unreadable store cannot prove a backlog,
     so the default is to wait.
     """
-    from .approvals import STATUS_PENDING, list_approvals  # noqa: PLC0415
 
     try:
         pending = list_approvals(data.store, status=STATUS_PENDING, access_key_id=access_key.id)
-    except Exception:  # noqa: BLE001 - advisory only; never fail a gate over this
+    except Exception:  # advisory only; never fail a gate over this
         _LOGGER.debug("Could not read pending approvals for %s", access_key.id, exc_info=True)
         return False
     return any(entry.id != approval.id for entry in pending)
@@ -691,7 +745,6 @@ async def _record_version(
     list; callers with op context (the card tools) pass their own, and everything
     else gets the computed default (None where the alias already tells the story).
     """
-    from .conversation_log import record_event
     record_event(data, "change", {"resource_type": resource_type, "resource_id": resource_id,
                                   "action": action, "before": before, "after": after})
     ctx = _restore_ctx.get()
@@ -715,7 +768,7 @@ async def _record_version(
             approved_by_user_id=approved_by_user_id,
             **(summary or {}),
         )
-    except Exception:  # noqa: BLE001 - history capture must never break a write
+    except Exception:  # history capture must never break a write
         _LOGGER.exception(
             "Failed to record %s version for %s %s", action, resource_type, resource_id
         )
@@ -781,8 +834,7 @@ def _cas_conflict(
     None (no expected_hash) skips the check.
 
     `current` is the target's content normalized so an absent target hashes the
-    way its read tool reports it: "" for a missing raw file (get_yaml_config and
-    read_file return content ""), None for an absent dashboard
+    way its read tool reports it: "" for a missing raw file, None for an absent dashboard
     (get_dashboard_config returns not_found with no hash, so any expected_hash for
     it is a genuine conflict).
     """
@@ -896,22 +948,10 @@ def _truncate(text: str, max_chars: int = MAX_DIFF_INLINE_BYTES) -> str:
     return text[:max_chars] + f"\n... ({len(text) - max_chars} more characters)"
 
 
-# Set True by a service-call path when MESA waved the action through under
-# advisory mode (warnings emitted, not gated). Read at the tools/call logging
-# point to flag the audit entry. A ContextVar is per-async-task and propagates
-# within the same request, so it survives the await into _call_tool and back.
-_mesa_advisory_ctx: ContextVar[bool] = ContextVar("phoenix_mcp_mesa_advisory", default=False)
-
-
-# Set while async_execute_approved_tool runs an admin-approved action, so the MESA
-# gate treats that approval as the human confirmation it asks for (confirm-approved
-# semantics: confirm-mode entities proceed, prohibited/read_only entities are
-# still rejected). Without it, an action gated by BOTH a confirm-mode capability
-# and a MESA confirm-mode entity would need two sequential approvals: approving
-# the capability gate re-runs the call, which would then queue a second, separate
-# MESA approval for the action the admin just reviewed.
-# asyncio-safe: scoped to the approving request's task.
-_approved_exec_ctx: ContextVar[bool] = ContextVar("phoenix_mcp_approved_exec", default=False)
+def _add_mesa_advisory(body: dict, warnings: list[str]) -> None:
+    """Put MESA's advisory warnings on a tool result and flag its audit row."""
+    body["mesa_advisory"] = warnings
+    note_mesa_advisory(warnings)
 
 
 def _mesa_confirm_annotation(
@@ -954,7 +994,7 @@ def _mesa_confirm_annotation(
                 "listed under MESA confirm; no separate MESA approval will be queued."
             ],
         }
-    except Exception:  # noqa: BLE001 - annotation only; never block the gate diff
+    except Exception:  # annotation only; never block the gate diff
         return None
 
 
@@ -978,14 +1018,8 @@ async def _create_registry_mesa_approval(
     cap_name: str = "cap_registry_write",
 ) -> tuple[dict, str, str]:
     """Create the normal registry approval when only MESA requires confirm."""
-    from .approvals import (  # noqa: PLC0415
-        async_create_pending_approval,
-        create_approval_notification,
-        fire_approval_requested_event,
-    )
 
     async with data.store.async_lock:
-        from .request_authority import check_request_authority
         check_request_authority()
         approval = await async_create_pending_approval(
             data.store,

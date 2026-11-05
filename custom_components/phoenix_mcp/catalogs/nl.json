@@ -89,9 +89,11 @@
       "killSwitchShort": "NOODSTOP AAN",
       "killSwitchTitle": "Phoenix MCP verwerkt geen agentverzoeken. Schakel de noodstop uit in Instellingen om verder te gaan.",
       "loadAccessKeysFailed": "Toegangssleutels laden is mislukt.",
+      "loadSettingsFailed": "Instellingen laden is mislukt.",
       "offlineBody": "Home Assistant antwoordt niet, meestal omdat het opnieuw opstart. Opnieuw proberen, even geduld...",
       "offlineTitle": "Phoenix is niet bereikbaar",
       "renderFailed": "Deze weergave kon niet worden getoond. Vernieuw om opnieuw te proberen of kies een andere sectie.",
+      "retrySettingsHelp": "De instellingen opnieuw uit Home Assistant lezen.",
       "sectionsAria": "Phoenix MCP-secties",
       "srTitle": "Phoenix MCP-beheer van toegangssleutels",
       "tabAccessKeys": "Toegangssleutels",
@@ -99,7 +101,8 @@
       "tabAudit": "Auditlogboek",
       "tabChanges": "Wijzigingen",
       "tabSettings": "Instellingen",
-      "killSwitchHelp": "De noodstop staat aan, dus agents worden geweigerd. Selecteer om Veiligheid te openen en hem uit te schakelen."
+      "killSwitchHelp": "De noodstop staat aan, dus agents worden geweigerd. Selecteer om Veiligheid te openen en hem uit te schakelen.",
+      "chatListsFailed": "Agent Chat kon zijn toegangssleutels of AI-providers niet laden. Het probeert het opnieuw als je het opent of als Home Assistant opnieuw verbinding maakt."
     },
     "common": {
       "after": "Na",
@@ -114,6 +117,7 @@
       "empty": "(leeg)",
       "httpStatus": "De server antwoordde met HTTP {status}. Vernieuw de pagina en probeer het opnieuw.",
       "invalidResponse": "De server heeft een ongeldig antwoord teruggegeven. Vernieuw en probeer opnieuw.",
+      "labelValue": "{label}: {value}",
       "listSeparator": ", ",
       "loadMore": "Meer laden",
       "loading": "Laden...",
@@ -138,7 +142,8 @@
       "mesaProfile": "MESA-profiel",
       "profileCreate": "Maak een MESA-profiel voor {key}",
       "profileSet": "MESA-profiel ingesteld voor {key} - klik om te bewerken",
-      "registryLoadFailed": "Het entiteitenregister laden is mislukt."
+      "registryLoadFailed": "Het entiteitenregister laden is mislukt.",
+      "openFailed": "De MESA-profieleditor kon niet worden geopend. Laad de pagina opnieuw en probeer het nog eens."
     },
     "personas": {
       "automation_builder": {
@@ -175,7 +180,7 @@
         "label": "Ervaren gebruiker"
       },
       "read_only": {
-        "description": "Leest statussen, geschiedenis en logboeken. Configuratiewijzigingen, aankondigingen, sloten, alarmen, rolluiken en kleppen worden geweigerd.",
+        "description": "Leest statussen, geschiedenis en logboeken. Configuratiewijzigingen, aankondigingen, sloten, alarmen, rolluiken en kleppen worden geweigerd. Alles wat op W staat, kan hij nog steeds bedienen.",
         "label": "Alleen-lezen waarnemer"
       },
       "voice_assistant": {
@@ -488,7 +493,7 @@
         "label": "Register lezen"
       },
       "cap_registry_write": {
-        "description": "Entiteiten en apparaten bewerken, ruimtes, verdiepingen, labels en categorieën beheren, en verouderde items verwijderen.",
+        "description": "Entiteiten en apparaten bewerken, ruimtes, verdiepingen, labels en categorieën beheren, verouderde items verwijderen en de vastgelegde geschiedenis van een entiteit wissen.",
         "label": "Entiteitenregister beheren"
       },
       "cap_restart": {
@@ -533,7 +538,7 @@
       "modeDescDeny": "Blokkeer deze mogelijkheid. De tools zijn verborgen voor de agents van deze sleutel, tenzij Altijd alle tools aankondigen aan staat.",
       "noBuilder": "Device Builder-add-on niet gedetecteerd",
       "noEsphome": "ESPHome niet gedetecteerd",
-      "passThroughNotice": "<strong>Pass-through is ingeschakeld.</strong> Configuratie lezen, Sjablonen renderen, Zoeken en ontdekken, Register lezen, Automatiseringstraces, Diagnostiek, Omroepen en Service-antwoordgegevens worden behandeld als Toestaan, tenzij ze op Bevestigen staan. Alle andere mogelijkheden gebruiken hun instelling hieronder.",
+      "passThroughNotice": "<strong>Pass-through is ingeschakeld.</strong> Configuratie lezen, Sjablonen renderen, Zoeken en ontdekken, Register lezen, Automatiseringstraces, Diagnostiek, Omroepen en Service-antwoordgegevens worden behandeld als Toestaan. Alle andere mogelijkheden gebruiken hun instelling hieronder.",
       "tierConfigWrite": "Configuratiewijzigingen",
       "tierEveryday": "Dagelijkse acties",
       "tierIrreversible": "Hoog risico",
@@ -858,6 +863,7 @@
       "clearHistory": "Chatgeschiedenis wissen",
       "configureFirst": "Configureer eerst een provider",
       "connection": "Verbinding",
+      "connectionLost": "De verbinding met Home Assistant werd verbroken voordat dit antwoord klaar was.",
       "continue": "Doorgaan",
       "decreaseTextSize": "Tekst verkleinen",
       "dockedClosed": "Agent Chat is gesloten.",
@@ -889,6 +895,7 @@
         "empty_turn": "Het model beëindigde de beurt zonder tekstuele reactie.",
         "internal": "Interne fout.",
         "max_tokens_stop": "Het model stopte omdat het zijn uitvoerlimiet had bereikt. Vraag het om verder te gaan, of verhoog de uitvoertokenlimiet van het model (voor Ollama: de instellingen num_predict/context).",
+        "memory_trimmed": "Het gesprek is groter geworden dan in één verzoek past, dus het model onthoudt de oudste berichten niet meer. Ze blijven op het scherm staan.",
         "model_api_unsupported": "Dit model is niet gevalideerd voor OpenCode Chat Completions. Kies een ondersteund model.",
         "network": "De provider is tijdelijk niet beschikbaar.",
         "ollama_backend": "De provider is tijdelijk niet beschikbaar.",
@@ -907,6 +914,7 @@
         "provider_transient": "De provider is tijdelijk niet beschikbaar.",
         "quota": "Het provideraccount heeft geen tegoed meer of heeft de bestedingslimiet bereikt. Er volgt geen nieuwe poging.",
         "rate_limit": "De provider is tijdelijk niet beschikbaar.",
+        "request_too_large": "Dit bericht is te groot om te verzenden. Maak het korter, verwijder afbeeldingen of begin een nieuw gesprek met /clear.",
         "too_many_tools": "Deze toegangssleutel biedt {count} tools aan, maar {provider} accepteert er maximaal {limit} per verzoek. Beperk de mogelijkheden van de toegangssleutel of kies een andere provider.",
         "tool_call_cut": "De verbinding met het model werd verbroken midden in een toolaanroep, dus de actie is niet uitgevoerd. Er is niets toegepast en het verzoek zelf was niet de oorzaak; stuur het opnieuw.",
         "tool_call_truncated": "Het model bereikte zijn uitvoerlimiet midden in een toolaanroep, dus de actie is niet uitgevoerd. De gevraagde wijziging was te groot om in één aanroep te verzenden; vraag om een kleinere wijziging.",
@@ -914,7 +922,9 @@
         "review_changed": "De tools van de toegangssleutel of het gesprek zijn gewijzigd terwijl de toolaanroep werd beoordeeld, dus er is niets uitgevoerd. Verstuur het verzoek opnieuw.",
         "kill_switch": "De noodstop staat aan, dus de agent is gestopt. Er is verder niets uitgevoerd.",
         "unreachable": "Home Assistant was niet bereikbaar, dus dit is niet afgerond. Alles wat op je goedkeuring wachtte, is geannuleerd.",
-        "upstream": "De provider is tijdelijk niet beschikbaar."
+        "upstream": "De provider is tijdelijk niet beschikbaar.",
+        "provider_slow": "De provider heeft niet binnen {seconds} s geantwoord.",
+        "result_withheld": "Een resultaat van {length} bytes paste niet in de context van het verzoek en is niet aan het model doorgegeven."
       },
       "options": "Opties",
       "popIn": "Terug in Home Assistant",
@@ -1057,6 +1067,7 @@
       "mesaArchiveRequired": "archive is vereist.",
       "mesaProfileExists": "Er bestaat al een profiel. Open het in de bewerkingsmodus.",
       "mesaConflictModeInvalid": "on_conflict moet skip of overwrite zijn.",
+      "mesaSaveFailed": "De MESA-wijziging kon niet worden opgeslagen, dus de vorige instellingen blijven gelden.",
       "mesaUnavailable": "MESA is niet beschikbaar.",
       "nameRequired": "name is vereist.",
       "nodeIdInvalidChars": "Knooppunt-ID bevat ongeldige tekens.",
@@ -1200,7 +1211,9 @@
       "restoreNoConfigSide": "Deze versie heeft aan die kant geen configuratie om te herstellen.",
       "restoreYamlTags": "Deze versie bevat YAML-tags zoals !secret of !include en kan niet automatisch worden hersteld. Maak deze handmatig opnieuw aan.",
       "restoreToolReported": "Het herstel kon niet worden toegepast. De tool meldde: {detail}",
-      "capabilityAllowUnsupported": "{capability} ondersteunt de Toestaan-modus niet."
+      "capabilityAllowUnsupported": "{capability} ondersteunt de Toestaan-modus niet.",
+      "recoverySnapshotUnsafeAt": "Er is geen volledige kopie van dit item zonder geheimen beschikbaar, dus er is niets gewijzigd. Phoenix heeft het geweigerd bij {location}.",
+      "invalidHostHeader": "De Host-header van het verzoek is geen geldig adres."
     },
     "wizard": {
       "accessSub": "Selecteer het driehoekje naast <code>light</code> om de lichtgroep te openen. Daarin staan je lichtapparaten; selecteer het driehoekje naast een apparaat om de entiteiten te zien. Of typ de naam van je licht in het filterveld. Selecteer daarna <strong>W</strong> bij een licht dat je kunt controleren, zodat de agent het kan lezen en bedienen. Je kunt later meer machtigingen toevoegen.",
@@ -1352,7 +1365,7 @@
       "create": "Maken",
       "createFailed": "Toegangssleutel aanmaken is mislukt.",
       "createPtUnderstand": "Ik begrijp dat deze toegangssleutel brede toegang tot Home Assistant heeft",
-      "createPtWarning": "<strong>Deze toegangssleutel kan alle Home Assistant-entiteiten lezen en bedienen.</strong> Pass-through schakelt ook Configuratie lezen, Sjablonen renderen, Zoeken en ontdekken, Register lezen, Automatiseringstraces, Diagnostiek, Omroepen en Service-antwoordgegevens in, tenzij je ze op Bevestigen zet. Diagnostiek en Service-antwoordgegevens kunnen gevoelige details prijsgeven. Alle andere mogelijkheden houden hun eigen instelling, en MESA-regels, de Phoenix MCP-blokkeerlijst, het verwijderen van gevoelige attributen, snelheidslimieten, intrekking en verloop blijven van toepassing. Gebruik deze alleen met MCP-clients aan wie je je hele huis toevertrouwt.",
+      "createPtWarning": "<strong>Deze toegangssleutel kan alle Home Assistant-entiteiten lezen en bedienen.</strong> Pass-through schakelt ook Configuratie lezen, Sjablonen renderen, Zoeken en ontdekken, Register lezen, Automatiseringstraces, Diagnostiek, Omroepen en Service-antwoordgegevens in. Diagnostiek en Service-antwoordgegevens kunnen gevoelige details prijsgeven. Alle andere mogelijkheden houden hun eigen instelling, en MESA-regels, de Phoenix MCP-blokkeerlijst, het verwijderen van gevoelige attributen, snelheidslimieten, intrekking en verloop blijven van toepassing. Gebruik deze alleen met MCP-clients aan wie je je hele huis toevertrouwt.",
       "createAccessKey": "Toegangssleutel maken",
       "daysAgo": "{d} d geleden",
       "delete": "Verwijderen",
@@ -1366,7 +1379,7 @@
       "done": "Klaar",
       "empty": "Nog geen toegangssleutels. Maak er een aan om te beginnen.",
       "emptyFiltered": "Geen toegangssleutels komen overeen met het filter.",
-      "enablePtBody": "<strong>Deze sleutel gaat elke entiteit lezen en bedienen.</strong> Ook acht lees- en diagnosemogelijkheden gaan aan, tenzij ze op Bevestigen staan.",
+      "enablePtBody": "<strong>Deze sleutel gaat elke entiteit lezen en bedienen.</strong> Ook acht lees- en diagnosemogelijkheden gaan aan.",
       "enablePtCheck": "Ik begrijp dat toegangssleutel <code>{name}</code> brede toegang tot Home Assistant zal hebben",
       "enablePtFailed": "Pass-through inschakelen is mislukt.",
       "enablePtLabel": "Pass-through inschakelen",
@@ -1431,7 +1444,7 @@
       "presetNewName": "Nieuwe voorinstellingsnaam",
       "presetNoChange": "Deze voorinstelling komt overeen met de huidige instellingen, dus er verandert geen instelling. Toepassen telt toch als een wijziging van de instellingen: verbonden agents horen dat bij hun volgende aanroep en de telling voor de snelheidslimiet begint opnieuw.",
       "presetPtUnderstand": "Ik begrijp dat deze voorinstelling pass-through inschakelt",
-      "presetPtWarning": "<strong>Deze voorinstelling schakelt pass-through in.</strong> De toegangssleutel kan dan alle entiteiten lezen en bedienen, en acht andere mogelijkheden worden ingeschakeld, waaronder Diagnostiek en Service-antwoordgegevens, tenzij die op Bevestigen staan. Andere mogelijkheden, MESA-regels, de Phoenix MCP-blokkeerlijst en het verwijderen van gevoelige attributen blijven van toepassing.",
+      "presetPtWarning": "<strong>Deze voorinstelling schakelt pass-through in.</strong> De toegangssleutel kan dan alle entiteiten lezen en bedienen, en acht andere mogelijkheden worden ingeschakeld, waaronder Diagnostiek en Service-antwoordgegevens. Andere mogelijkheden, MESA-regels, de Phoenix MCP-blokkeerlijst en het verwijderen van gevoelige attributen blijven van toepassing.",
       "presetRenameTitle": "Deze voorinstelling hernoemen; wordt opgeslagen wanneer je wegklikt",
       "presetRevert": "Terugdraaien",
       "presetRevertBody": "Hiermee worden de niet-opgeslagen wijzigingen op <strong>{name}</strong> verwijderd:",
@@ -1444,7 +1457,7 @@
       "presetSwitchTo": "Schakelen naar",
       "ptConvertBody": "De sleutel volgt meteen zijn Machtigingsboom. Zonder toekenningen daarin verliest hij alle toegang tot entiteiten.",
       "ptConvertFailed": "Toegangssleutel omzetten is mislukt.",
-      "ptNoticeCaps": "Ook acht lees- en diagnosemogelijkheden staan aan, tenzij ze op Bevestigen staan. De rest houdt zijn eigen instelling.",
+      "ptNoticeCaps": "Ook acht lees- en diagnosemogelijkheden staan aan. De rest houdt zijn eigen instelling.",
       "ptNoticeIntro": "<strong>Pass-through-toegangssleutel.</strong> Hij slaat de Machtigingsboom over en bereikt elke entiteit, met gevoelige attributen verwijderd.",
       "ptNoticeUsage": "Pass-through kan gegevens van elke entiteit naar het model sturen, wat meer tokens kost dan een afgebakende boom.",
       "rateBurstLabel": "Burst per seconde (0 = geen limiet per seconde)",
@@ -2003,7 +2016,7 @@
       "voiceAccessKeyAria": "Toegangssleutel voor spraakagent",
       "voiceAccessKeyHelp": "Bepaalt tot welke entiteiten en acties deze spraakagent toegang heeft.",
       "wipeBusy": "Wissen...",
-      "wipeCoreHelp": "Verwijder elke toegangssleutel, instelling, goedkeuring, wijzigingsrecord en elk logboek. Dit kan niet ongedaan worden gemaakt.",
+      "wipeCoreHelp": "Verwijder elke toegangssleutel, instelling, goedkeuring, wijzigingsrecord en elk logboek. Herstelkopieën blijven bewaard. Dit kan niet ongedaan worden gemaakt.",
       "wipeCoreLabel": "Kerngegevens van Phoenix MCP verwijderen",
       "wipeFailed": "Wissen mislukt.",
       "wipeMesaHelp": "Verwijder elk MESA-profiel. Standaard uit; exporteer je profielen eerst om een kopie te bewaren.",
@@ -2660,7 +2673,9 @@
       "saveFailed": "De controle kon niet worden opgeslagen. De actie moet nog worden gecontroleerd.",
       "showInAudit": "Tonen in auditlogboek",
       "title": "Aandacht nodig",
-      "unknown": "Het gesprek eindigde voordat Phoenix vastlegde of deze actie is uitgevoerd, dus hij kan zijn uitgevoerd. Tonen in auditlogboek, waar aangeboden, laat zien wat Phoenix heeft vastgelegd; een actie die op goedkeuring wachtte, heeft haar status onder Goedkeuringen. Controleer Home Assistant zelf voordat je het opnieuw probeert."
+      "unknown": "Het gesprek eindigde voordat Phoenix vastlegde of deze actie is uitgevoerd, dus hij kan zijn uitgevoerd. Tonen in auditlogboek, waar aangeboden, laat zien wat Phoenix heeft vastgelegd; een actie die op goedkeuring wachtte, heeft haar status onder Goedkeuringen. Controleer Home Assistant zelf voordat je het opnieuw probeert.",
+      "audit_storageTitle": "Het auditlogboek bereikt de opslag niet",
+      "audit_storageHelp": "Recente auditregels staan alleen in het geheugen, dus een herstart zou ze kwijtraken. Controleer de Home Assistant-logboeken. Dit verdwijnt zodra de volgende opslag lukt."
     },
     "workspace": {
       "addToMy": "Toevoegen aan Mijn werkruimte",

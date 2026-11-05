@@ -55,7 +55,7 @@ How many days to keep a conversation: 1 to 365 (default 7).
 
 ### {{label:conversations.limit.mb}} {#conversation-size}
 
-How much space the log can use: 1 to 250 MB (default 25). The space used now is shown below the limits.
+How much space the log can use: 1 to 250 MB (default 25). The space used now is shown below the limits. A large log takes longer to load when Home Assistant starts, and can use about twice this size in memory.
 
 ## {{label:settings.privacySection}} {#privacy}
 
@@ -65,7 +65,7 @@ Choose what the logs show about your home and the people using Phoenix.
 
 When off, the audit log's {{label:audit.rowResource}} column shows [redacted], and the Conversation Log leaves out what was said and done. On by default.
 
-The audit log's payload hides entity IDs too, though free text in a tool call's arguments can still name one. Conversation content already recorded is removed the next time Phoenix starts.
+The audit log's payload then keeps only the names of a tool call's arguments, not their values. Other payload text, such as an approval's reason, can still name an entity. Conversation content already recorded is removed the next time Phoenix starts.
 
 ### {{label:settings.logClientIpLabel}} {#log-client-ip}
 

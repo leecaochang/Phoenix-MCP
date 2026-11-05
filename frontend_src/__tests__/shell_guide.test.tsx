@@ -17,7 +17,7 @@ import { GUIDE_LANGUAGES, GuideWindow, besideRect, fitGuideRect, clearGuideCache
 import { WIZARD_STEPS } from "../views/OnboardingWizard";
 import { GUIDE_CLOSED, WORKSPACE_IDS, readGuide } from "../shell/storage";
 import { WorkspaceController } from "../shell/dock/controller";
-import { LANGUAGES, flattenCatalog } from "../i18n";
+import { LANGUAGES, flattenCatalog, primeTranslations } from "../i18n";
 import en from "../../custom_components/phoenix_mcp/catalogs/en.json";
 
 const TOPICS = resolve(__dirname, "../guide/topics");
@@ -88,7 +88,7 @@ describe("rendering a topic", () => {
     expect(findTopic([english], "logs", null)?.title).toBe("en workspace.logs");
     expect(findTopic([null, english], "mesa", null)).toBeNull();
     expect(topicById([fr, english], "window.auditLog")?.title).toBe("en window.auditLog");
-    // French ships translated pages (Welcome, user 2026-11-03); a language with none reads English only.
+    // French ships translated pages (Welcome); a language with none reads English only.
     expect(guideLanguages("fr")).toEqual(["fr", "en"]);
     expect(guideLanguages("xx")).toEqual(["en"]);
     expect(guideLanguages("en")).toEqual(["en"]);
@@ -97,6 +97,21 @@ describe("rendering a topic", () => {
 
 describe("the Guide window", () => {
   afterEach(() => { vi.unstubAllGlobals(); clearGuideCache(); });
+
+  it("names the catalog on display in its pop-out, not Home Assistant's language", async () => {
+    primeTranslations(en.panel, "fr");
+    const page = document.implementation.createHTMLDocument("popup");
+    const popup = { document: page, closed: false, focus: () => {}, close: () => {}, addEventListener: () => {}, removeEventListener: () => {} };
+    vi.stubGlobal("open", vi.fn(() => popup));
+    vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true, json: async () => ({ format: GUIDE_FORMAT, language: "en", topics: {} }) })));
+    document.documentElement.lang = "de";
+    const controller = new WorkspaceController("logs", [], () => {}, (id) => id);
+    render(<GuideWindow workspace="logs" controller={controller} language="en" rect={{ x: 10, y: 10, w: 360, h: 400 }} onRect={() => {}} onClose={() => {}} />);
+    fireEvent.click(screen.getByRole("button", { name: /Pop Out/ }));
+    await waitFor(() => expect(page.documentElement.lang).toBe("fr"));
+    document.documentElement.lang = "";
+    primeTranslations(en.panel);
+  });
 
   it("shows the workspace overview, follows a topic link and goes back, and moves on with the focused window", async () => {
     const topics = {
@@ -154,7 +169,7 @@ describe("the Guide window", () => {
     // Its own width beside the wizard, whatever size the user gave it elsewhere.
     expect(guide.style.width).toBe("400px");
     expect(within(guide).queryByRole("button", { name: "Close" })).toBeNull();
-    // It can still be resized from its edges (user, 2026-11-03).
+    // It can still be resized from its edges.
     expect(guide.querySelectorAll(".agentcli-resize").length).toBeGreaterThan(0);
 
     // A click on the title bar saves nothing: the place beside the step is not the reader's.

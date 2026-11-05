@@ -31,7 +31,8 @@ from homeassistant.components.backup import (
 from homeassistant.setup import async_setup_component
 from pytest_homeassistant.common import MockModule, mock_integration, mock_platform
 
-from custom_components.phoenix_mcp import mcp_view
+from custom_components.phoenix_mcp import tool_dispatch
+from custom_components.phoenix_mcp.tools import backup as backup_tools
 from custom_components.phoenix_mcp.access_key_store import AccessKeyStore
 from custom_components.phoenix_mcp.audit import AuditLog
 from custom_components.phoenix_mcp.const import DOMAIN
@@ -122,7 +123,7 @@ def _configure(manager, agent_ids: list[str], password: str | None = BACKUP_KEY)
 
 
 async def _call(env, name: str, args: dict):
-    return await mcp_view._call_tool(name, args, env["key"], env["hass"], env["data"])
+    return await tool_dispatch._call_tool(name, args, env["key"], env["hass"], env["data"])
 
 
 def _body(result) -> dict:
@@ -223,7 +224,7 @@ class TestDestinationAndEncryption:
         manager.config.update(agents={"test.remote": {"protected": False}})
         hold = asyncio.Event()
         backup_env["remote"].hold_upload = hold
-        with patch.object(mcp_view, "BACKUP_COMPLETION_WAIT_SECONDS", 0.05):
+        with patch.object(backup_tools, "BACKUP_COMPLETION_WAIT_SECONDS", 0.05):
             body = _body(await _call(backup_env, "create_backup", {}))
         hold.set()
         await backup_env["hass"].async_block_till_done()
@@ -269,7 +270,7 @@ class TestRefusals:
         key.cap_backup = "allow"
         data = PhoenixData(store=store, rate_limiter=RateLimiter(), audit=AuditLog())
         hass.data[DOMAIN] = data
-        result = await mcp_view._call_tool("create_backup", {}, key, hass, data)
+        result = await tool_dispatch._call_tool("create_backup", {}, key, hass, data)
         assert result[1] == "invalid_request"
         assert "not available" in result[0]["content"][0]["text"]
 
@@ -288,7 +289,7 @@ class TestOutcome:
         hold = asyncio.Event()
         backup_env["remote"].hold_upload = hold
         _configure(backup_env["manager"], ["test.remote"])
-        with patch.object(mcp_view, "BACKUP_COMPLETION_WAIT_SECONDS", 0.05):
+        with patch.object(backup_tools, "BACKUP_COMPLETION_WAIT_SECONDS", 0.05):
             body = _body(await _call(backup_env, "create_backup", {}))
         assert body["status"] == "started" and body["created"] is False and body["verified"] is False
         assert "manager_state" in body["message"]
@@ -338,7 +339,7 @@ class TestBackupKeyNeverLeaves:
         data = backup_env["data"]
         backup_env["key"].cap_backup = "confirm"
         # Through the MCP dispatcher, so the audit log and conversation log record it.
-        pending = await mcp_view._dispatch_mcp(
+        pending = await tool_dispatch._dispatch_mcp(
             "tools/call", 1, {"name": "create_backup", "arguments": {"name": "Reviewed"}},
             backup_env["key"], backup_env["hass"], data, "127.0.0.1", "")
         assert pending[3] == "pending_approval", pending
@@ -347,7 +348,7 @@ class TestBackupKeyNeverLeaves:
         # Positive control: the preview really is the resolved plan.
         assert '"encrypted": true' in approval_text and "test.remote" in approval_text
         assert approval["diff"]["preview"]["unencrypted_agent_ids"] == []
-        result = await mcp_view.async_execute_approved_tool(
+        result = await tool_dispatch.async_execute_approved_tool(
             "create_backup", approval["args"], backup_env["key"], backup_env["hass"], data)
         assert result[1] == "allowed" and _body(result)["encrypted"] is True
         assert data.audit.query() and data.conversations.query()["entries"]

@@ -3,8 +3,10 @@ import pytest
 from homeassistant.core import State
 from homeassistant.setup import async_setup_component
 
-from custom_components.phoenix_mcp.command_operations import service_arguments, supports_command, valid_target_value
-from custom_components.phoenix_mcp.const import COMMAND_ROUTING_ENTITY_COMMANDS, DECISION_ENTITY_CATEGORIES
+from custom_components.phoenix_mcp.routing.command_operations import service_arguments, supports_command, valid_target_value
+from custom_components.phoenix_mcp.routing.routing_tables import (
+    COMMAND_ROUTING_ENTITY_COMMANDS, DECISION_ENTITY_CATEGORIES,
+)
 from custom_components.phoenix_mcp.entity_commands import _FEATURES, valid_entity_value, value_choices, literal_text
 
 
@@ -51,7 +53,7 @@ def test_text_metadata_excludes_secret_and_unvalidated_fields(domain, attrs):
 
 
 def test_choices_are_complete_and_bound_to_known_values():
-    from custom_components.phoenix_mcp.decision_provider import DecisionError
+    from custom_components.phoenix_mcp.routing.decision_provider import DecisionError
     targets = {'t0': {'entity_operations': {'select_option': {'kind': 'option', 'options': ['Away', 'Home']},
                                           'input_text_value': {'kind': 'text'}}}}
     assert set(value_choices('Set the label to "Visitor"', targets).values()) == {'Away', 'Home', 'Visitor'}
@@ -85,7 +87,7 @@ async def test_timer_duration_projection_matches_native_schema(hass):
     ('counter_increment', None, '4', {}, False),
 ])
 def test_entity_observation_uses_actual_property_without_claiming_momentary_completion(category, value, state, attrs, matched):
-    from custom_components.phoenix_mcp.command_verification import state_matches
+    from custom_components.phoenix_mcp.routing.command_verification import state_matches
     domain = COMMAND_ROUTING_ENTITY_COMMANDS[category][0]
     proposal = {'intent': DECISION_ENTITY_CATEGORIES[category], 'entity_ids': [domain + '.test']}
     if value is not None: proposal['value'] = value
@@ -95,7 +97,7 @@ def test_entity_observation_uses_actual_property_without_claiming_momentary_comp
 @pytest.mark.parametrize('remaining,matched', [(300, True), (100, False)])
 def test_timer_duration_observation_does_not_confuse_an_old_countdown_with_a_restart(remaining, matched):
     from datetime import UTC, datetime, timedelta
-    from custom_components.phoenix_mcp.command_verification import state_matches
+    from custom_components.phoenix_mcp.routing.command_verification import state_matches
     proposal = {'intent': 'PhoenixTimerDuration', 'entity_ids': ['timer.test'], 'value': '00:05:00'}
     state = State('timer.test', 'active', {'duration': '0:05:00',
         'finishes_at': (datetime.now(UTC) + timedelta(seconds=remaining)).isoformat()})
@@ -129,7 +131,7 @@ async def test_fixed_arguments_match_native_schema_and_reject_injected_values(ha
     ('fan_oscillate_on', 'oscillating', True),
 ])
 def test_fixed_action_observation_needs_reported_property(category, field, value):
-    from custom_components.phoenix_mcp.command_verification import state_matches
+    from custom_components.phoenix_mcp.routing.command_verification import state_matches
     domain = COMMAND_ROUTING_ENTITY_COMMANDS[category][0]
     proposal = {'intent': DECISION_ENTITY_CATEGORIES[category], 'entity_ids': [domain + '.test']}
     assert not state_matches(proposal, State(domain + '.test', 'on'))

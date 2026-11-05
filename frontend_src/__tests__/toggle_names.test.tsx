@@ -1,5 +1,5 @@
 /**
- * A switch's name flips it, as a label flips its checkbox (user, 2026-10-31):
+ * A switch's name flips it, as a label flips its checkbox:
  * the name's own text acts, the row's empty space and description do not, and
  * a disabled switch stays as it is.
  */

@@ -14,5 +14,12 @@ export default defineConfig({
     globals: true,
     setupFiles: ["./frontend_src/__tests__/setup.ts"],
     include: ["frontend_src/__tests__/**/*.test.{ts,tsx}"],
+    // Report only: no threshold, so `--coverage` never fails a run.
+    coverage: {
+      provider: "v8",
+      include: ["frontend_src/**/*.{ts,tsx}"],
+      exclude: ["frontend_src/__tests__/**"],
+      reporter: ["text-summary"],
+    },
   },
 });

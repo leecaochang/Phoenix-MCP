@@ -120,7 +120,7 @@ const validBox = (b: unknown): b is FloatBox => !!b && typeof b === "object"
  * a floating window's size as measured on screen, and a frame no longer on screen
  * measures 0 by 0: the panel saves as Home Assistant removes it during a restart,
  * and a hidden workspace saves too. A frame restored at width 0 shows its content
- * without title bar or border (user, 2026-11-02). Each window takes the box last
+ * without title bar or border. Each window takes the box last
  * measured on screen, else its saved place when that has a size, else the
  * default floating size.
  */
@@ -135,11 +135,6 @@ export function withFloatSizes(json: SerializedDockview, boxes: ReadonlyMap<stri
     return { ...entry, position: { left: FLOAT_BOUNDS.left, top: FLOAT_BOUNDS.top, width: FLOAT_BOUNDS.minWidth, height: FLOAT_BOUNDS.minHeight } };
   });
   return { ...json, floatingGroups };
-}
-
-export interface WindowSpec {
-  id: string;
-  title: string;
 }
 
 /** Optional parts of a workspace definition. */
@@ -178,7 +173,7 @@ export interface WorkspaceExtras {
   /**
    * Windows that are as tall as their content although the rest of the
    * workspace is not: Review takes the height its request needs and the window
-   * below it takes the space left (user, 2026-10-29).
+   * below it takes the space left.
    */
   contentWindows?: readonly string[];
   /**
@@ -260,9 +255,8 @@ export class WorkspaceController {
   /**
    * Windows whose height the user dragged or set from the keyboard: they keep it
    * instead of following their content, scrolling inside when it needs more,
-   * until the workspace is reset (user, 2026-10-31: Review and Suggested
-   * Profiles snapped back, and Access Keys and Settings windows could not be
-   * resized at all).
+   * until the workspace is reset. Without this a dragged window would snap
+   * back, or could not be resized at all.
    */
   private heldHeights = new Set<string>();
   /** Windows hidden in place, keeping their spot in the arrangement (see `setHiddenWindows`). */
@@ -371,7 +365,7 @@ export class WorkspaceController {
     if (!this.natural.size) return;
     // A floating window has no place in the grid: it takes its content's height directly,
     // also over a maximized window, as Needs Attention does over the key list that Access
-    // Keys keeps maximized until a key is chosen (user, 2026-11-02).
+    // Keys keeps maximized until a key is chosen.
     for (const [id, h] of this.natural) if (this.followsContent(id) && this.hostOf(id) === "float") this.sizeFloating(id, h);
     if (api.hasMaximizedGroup()) return;
     const targets: Heights = {};
@@ -388,10 +382,10 @@ export class WorkspaceController {
       let target = Math.max(MIN_WINDOW_HEIGHT, h);
       const fills = this.fillsShare(id);
       // A window the workspace names may shrink to its content, but never take room another
-      // window needs: a long request must not resize Needs Attention (user, 2026-10-29).
+      // window needs: a long request must not resize Needs Attention.
       // Needs Attention itself is not held back, so what it holds is always shown.
       if (this.contentOwn.has(id) && !fills) target = Math.min(target, canvas.roomFor(id));
-      // Held to its share of the visible height, a window scrolls inside (user, 2026-10-31: the key list).
+      // Held to its share of the visible height, a window scrolls inside.
       const share = this.transient.has(id) ? undefined : this.extras.contentMax?.[id];
       const cap = share ? Math.round(canvas.visibleHeight() * share) : 0;
       if (cap > MIN_WINDOW_HEIGHT) { target = fills ? cap : Math.min(target, cap); this.caps.set(id, cap); } else this.caps.delete(id);
@@ -401,7 +395,7 @@ export class WorkspaceController {
     if (Object.keys(targets).length) this.batch(() => canvas.apply(targets));
     this.markSlack();
     // Once the grid has settled: a frame ended against heights from a passing layout
-    // would stay cut off until something else moved (user, 2026-10-31, every window
+    // would stay cut off until something else moved (every window
     // drawn 2 pixels tall in Firefox and Safari).
     if (typeof requestAnimationFrame === "function") {
       cancelAnimationFrame(this.slackFrame);
@@ -427,7 +421,7 @@ export class WorkspaceController {
    * Draw a floating window at the height its content needs, up to its share of
    * the workspace (a third unless the workspace says otherwise) and never past
    * its visible height, so a notice with two lines in it is not a half-empty
-   * box (user, 2026-10-30). Needs Attention takes all the height it needs. A window in the lower half keeps its bottom edge,
+   * box. Needs Attention takes all the height it needs. A window in the lower half keeps its bottom edge,
    * so one opened in the bottom corner grows upward and shrinks back down;
    * either way it stays inside the workspace.
    */
@@ -436,7 +430,7 @@ export class WorkspaceController {
     if (!group) return;
     const visible = this.visibleHeight();
     // Needs Attention is never held to a share, floating or docked, so what it holds is
-    // always shown (user, 2026-11-02, it scrolled at the bottom of an iPad screen).
+    // always shown.
     const share = this.transient.has(id) ? 1 : this.extras.contentMax?.[id] ?? 1 / 3;
     const cap = Math.round(Math.min(visible * share, visible - 2 * FLOAT_MARGIN));
     const target = Math.max(MIN_WINDOW_HEIGHT, cap > MIN_WINDOW_HEIGHT ? Math.min(Math.round(needed), cap) : Math.round(needed));
@@ -483,7 +477,7 @@ export class WorkspaceController {
 
   /**
    * A folded window under the last open window of a column sits right under that
-   * window's frame, not at the foot of the column (user, 2026-10-31). The grid gives
+   * window's frame, not at the foot of the column. The grid gives
    * the column's spare height to the open window, whose frame ends at its content
    * (see `markSlack`); the folded windows below it are lifted by that spare height.
    */
@@ -703,7 +697,7 @@ export class WorkspaceController {
     if (shown) {
       // A hidden workspace measures nothing, so anything laid out while it was away
       // (a pinned band's own height) was laid out against zero: do it again now that
-      // there is something to measure (user, 2026-10-30, a band that came back empty).
+      // there is something to measure.
       for (const [, host] of this.attached(LAYOUT_ORDER)) host.canvas?.apply();
       this.followContent();
       this.applyHeldMaximized();
@@ -1003,8 +997,8 @@ export class WorkspaceController {
   /**
    * Windows hidden in place come back at the widths of the arrangement just laid
    * out, not at shares remembered from the one before it: after Reset This
-   * Workspace the Access Keys columns came back at the old dragged widths
-   * (user, 2026-10-31). A reset's columns share the width equally (see
+   * Workspace the Access Keys columns came back at the old dragged widths.
+   * A reset's columns share the width equally (see
    * `equalizeColumns`); that is recorded as intended rather than measured, since
    * Dockview sizes columns unreliably while some of their windows are hidden.
    * A loaded arrangement keeps the shares it was saved with.
@@ -1063,7 +1057,7 @@ export class WorkspaceController {
       this.floatedFrom.clear();
       this.pinnedFrom.clear();
       // Floating windows come back at their default place and size, not where they were
-      // last moved (user, 2026-10-30).
+      // last moved.
       this.floatBoxes.clear();
       // The default arrangement's pairs come back in their default order and shares.
       this.pairLeft.clear();
@@ -1110,7 +1104,7 @@ export class WorkspaceController {
 
   /**
    * Keep a window maximized while it is all there is to show, as the key list
-   * is until a key is chosen (user, 2026-10-31); null gives the arrangement
+   * is until a key is chosen; null gives the arrangement
    * back. It is maximized again whenever the workspace is shown or reset.
    */
   holdMaximized(id: string | null): void {
@@ -1174,7 +1168,7 @@ export class WorkspaceController {
         changed = true;
       } else if (allowed && !panel && !this.closed.has(id)) {
         // A window the workspace floats (MESA's findings) comes up over the
-        // workspace instead of taking space from it (user, 2026-10-30).
+        // workspace instead of taking space from it.
         if (home.host === "float") this.openFloating(id);
         else {
           const anchor = api.getPanel(home.neighbor);
@@ -1562,7 +1556,7 @@ export class WorkspaceController {
    * the bottom corner: the size and place a window the workspace floats takes
    * when it has none of its own yet. The width stays within the floating bounds,
    * or the window's own width, so a wide screen does not stretch it. The corner
-   * keeps it off the list the workspace is built around (user, 2026-10-30); from
+   * keeps it off the list the workspace is built around; from
    * there the user moves it.
    */
   openFloating(id: string, fraction = 1 / 3): void {
@@ -1574,8 +1568,7 @@ export class WorkspaceController {
     }
     this.toggleFloating(id, width, height);
     // The window opens at a share of the workspace; content that has not changed since
-    // reports no new height, so take the height it is known to need (user, 2026-11-02,
-    // Needs Attention shrank again after Reset Workspace).
+    // reports no new height, so take the height it is known to need.
     this.requestFollow();
   }
 
@@ -1643,8 +1636,8 @@ export class WorkspaceController {
   /**
    * Keep every floating window inside its layer: one larger than the layer shrinks to
    * fit and Dockview then moves it back on screen. A layout saved on a larger screen
-   * opens on a smaller one, such as an iPad, with nothing past its edges (user,
-   * 2026-11-02). A hidden layer measures 0 by 0 and is left alone; a folded window
+   * opens on a smaller one, such as an iPad, with nothing past its edges.
+   * A hidden layer measures 0 by 0 and is left alone; a folded window
    * keeps its unfolded height.
    */
   fitFloats(): void {
@@ -1699,7 +1692,7 @@ export class WorkspaceController {
   /**
    * Size a floating window from the keyboard, in place: Dockview resizes a
    * floating group through its own size call, so the window is not laid out
-   * again and does not flicker (user, 2026-11-03). It grows only into the room
+   * again and does not flicker. It grows only into the room
    * right of and below it, so its top-left corner stays put; a folded window
    * keeps its height.
    */
@@ -1856,7 +1849,7 @@ export class WorkspaceController {
   showTransient(id: string): void {
     if (!this.api || this.hostOf(id)) return;
     // Over the workspace, not across the top of it: a window that comes and goes may
-    // not squeeze the windows the workspace is built from (user, 2026-10-30).
+    // not squeeze the windows the workspace is built from.
     this.openFloating(id);
   }
 

@@ -5,7 +5,7 @@
  * Help, Agent Chat, and last the workspaces), keeping their names
  * as tooltips and accessible names. The toolbar options never carry text.
  *
- * A toolbar set to one row (user, 2026-11-01) puts the tools after the main
+ * A toolbar set to one row puts the tools after the main
  * row's workspaces, with every label shown; while that does not fit, it goes
  * back to two rows and the rule above, and returns to one row once there is room.
  */

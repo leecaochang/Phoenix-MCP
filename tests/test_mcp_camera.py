@@ -14,7 +14,7 @@ from homeassistant.util.dt import utcnow
 
 from custom_components.phoenix_mcp.const import MESA_MODE_ADVISORY, MESA_MODE_OFF
 from custom_components.phoenix_mcp.data import PhoenixData
-from custom_components.phoenix_mcp.mcp_view import _call_tool
+from custom_components.phoenix_mcp.tool_dispatch import _call_tool
 from custom_components.phoenix_mcp.access_key_store import PermissionNode, PermissionTree, AccessKeyRecord
 
 

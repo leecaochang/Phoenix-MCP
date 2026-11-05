@@ -1,5 +1,5 @@
 ---
-{ "id": "window.agentChat", "title": "{{label:agentchat.title}}", "parent": "workspace.my", "order": 5, "keywords": ["chat", "agent", "assistant", "conversation", "Shift+A"], "sectionKeywords": { "opening": ["open", "shortcut", "Shift+A", "every page", "pop out"], "window": ["minimize", "maximize", "move", "resize", "dock", "close"], "options": ["verbose", "timestamps", "footer", "text size"], "connection": ["access key", "provider", "model", "thinking", "temperature", "account", "Anthropic", "Claude", "DeepSeek", "OpenAI", "ChatGPT", "GPT", "Gemini", "Google", "Grok", "xAI", "Groq", "Kimi", "Moonshot", "Meta", "Llama", "MiniMax", "Mistral AI", "NVIDIA NIM", "Xiaomi MiMo", "Tencent Cloud TokenHub", "OpenCode", "Ollama", "OpenRouter", "Together AI", "Cerebras", "Fireworks AI", "Alibaba Cloud Model Studio", "Qwen", "DashScope", "Z.ai", "Zhipu", "GLM"], "conversation": ["send", "stop", "steps", "working", "copy", "tokens", "usage"], "check-in": ["paused", "continue", "steps before check-in"], "images": ["attach", "image", "photo", "paste", "picture"], "approvals": ["approve", "reject", "review", "waiting"], "clear": ["clear chat history", "/clear", "new conversation"], "privacy": ["stored", "browser", "sent to the provider", "history"] }, "covers": ["frontend_src/components/AgentCliWindow.tsx", "frontend_src/inject/agentchat.ts", "frontend_src/utils/agentcli_state.ts", "frontend_src/utils/chat_attachments.ts", "custom_components/phoenix_mcp/agentcli.py", "frontend_src/inject/AgentChatWindow.tsx", "frontend_src/utils/agentchat_review.ts", "frontend_src/utils/agentchat_shortcut.ts", "frontend_src/utils/chat_notice.ts"] }
+{ "id": "window.agentChat", "title": "{{label:agentchat.title}}", "parent": "workspace.my", "order": 5, "keywords": ["chat", "agent", "assistant", "conversation", "Shift+A"], "sectionKeywords": { "opening": ["open", "shortcut", "Shift+A", "every page", "pop out"], "window": ["minimize", "maximize", "move", "resize", "dock", "close"], "options": ["verbose", "timestamps", "footer", "text size"], "connection": ["access key", "provider", "model", "thinking", "temperature", "account", "Anthropic", "Claude", "DeepSeek", "OpenAI", "ChatGPT", "GPT", "Gemini", "Google", "Grok", "xAI", "Groq", "Kimi", "Moonshot", "Meta", "Llama", "MiniMax", "Mistral AI", "NVIDIA NIM", "Xiaomi MiMo", "Tencent Cloud TokenHub", "OpenCode", "Ollama", "OpenRouter", "Together AI", "Cerebras", "Fireworks AI", "Alibaba Cloud Model Studio", "Qwen", "DashScope", "Z.ai", "Zhipu", "GLM"], "conversation": ["send", "stop", "steps", "working", "copy", "tokens", "usage"], "check-in": ["paused", "continue", "steps before check-in"], "images": ["attach", "image", "photo", "paste", "picture"], "approvals": ["approve", "reject", "review", "waiting"], "clear": ["clear chat history", "/clear", "new conversation"], "privacy": ["stored", "browser", "sent to the provider", "history"] }, "covers": ["frontend_src/components/AgentCliWindow.tsx", "frontend_src/inject/agentchat.ts", "frontend_src/utils/agentcli_state.ts", "frontend_src/utils/chat_attachments.ts", "custom_components/phoenix_mcp/agent_chat.py", "custom_components/phoenix_mcp/agent_turn.py", "custom_components/phoenix_mcp/agent_dispatch.py", "custom_components/phoenix_mcp/agentcli_views.py", "custom_components/phoenix_mcp/llm/", "custom_components/phoenix_mcp/provider_constants.py", "frontend_src/inject/AgentChatWindow.tsx", "frontend_src/utils/agentchat_review.ts", "frontend_src/utils/agentchat_shortcut.ts", "frontend_src/utils/chat_notice.ts"] }
 ---
 Talk to an AI agent about your home. It acts through one of your access keys, so it can do only what that key allows, and every action is checked and logged like any other.
 
@@ -48,6 +48,8 @@ Changing the access key or provider starts a new conversation. You can't change 
 
 Press Enter to send, or Shift+Enter for a new line. While the agent works, a line shows what it's doing and how long it has waited for the provider. **{{label:agentchat.stop}}** ends the reply and puts your message back in the box.
 
+If the connection drops during a reply, a grey notice tells you. Your message comes back only if nothing had arrived yet, because the agent may already have acted.
+
 Copy a message with its copy button. The footer shows the tokens used in this conversation, and how much of the model's context the last request took.
 
 ## Pausing to check in {#check-in}
@@ -58,7 +60,7 @@ Approving or rejecting an action resets the count. Set the number in [{{label:se
 
 ## Images {#images}
 
-Paste an image, drop it on the window, or use the attach button: up to 4 per message. Phoenix shrinks large photos before sending them.
+Paste an image, drop it on the window, or use the attach button: up to 4 per message. Phoenix shrinks large photos before sending them. After shrinking, an image can be up to 2 MiB, and a message's images up to 4 MiB in total.
 
 Images can't be sent with a Home Companion key, or to a model that only reads text. They aren't kept after a reload, so the agent can't see them again later.
 
@@ -76,6 +78,16 @@ Starts a new conversation straight away, without asking. Typing /clear does the 
 
 ## What's kept, and where {#privacy}
 
-The conversation is kept in this browser for your Home Assistant user, so it's still there after a reload. The newest messages, within [{{label:settings.agentcliScrollbackLabel}}](guide:window.settingsChat#chat-memory), are sent to the provider with each message. Phoenix keeps no copy on the server, except in the Conversation Log when that's on.
+There's one conversation per browser for each Home Assistant user, kept in this browser, so it's still there after a reload. Tabs share it. The newest messages, within [{{label:settings.agentcliScrollbackLabel}}](guide:window.settingsChat#chat-memory), and tool results are sent to the provider with each message. Phoenix keeps no copy on the server, except in the Conversation Log when that's on.
+
+If two tabs run a reply at the same moment, the one that finishes last is the one kept.
+
+A very long conversation stays on screen, but its oldest messages stop being sent, and a notice tells you once.
+
+Phoenix deletes a conversation after 30 days without use. It also deletes it when someone who isn't an administrator signs in on this browser, and when you delete core data in this browser. Other browsers keep theirs.
+
+While a reply runs, Phoenix sets aside Home Assistant's profile option that closes the connection on a hidden page, so the reply isn't cut off. The option comes back when the reply ends, and your profile page shows it off until then. If the page crashes, the next Home Assistant page you open puts it back a few minutes later.
+
+Related: [What leaves your home](guide:topic.security#leaves-home)
 
 Only administrators can use Agent Chat.

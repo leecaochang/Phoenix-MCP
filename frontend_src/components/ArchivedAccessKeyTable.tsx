@@ -20,7 +20,7 @@ export function ArchivedAccessKeyTable({ accessKeys, onDeleted }: Props) {
   const [deleting, setDeleting] = useState<string | null>(null);
   const [confirmId, setConfirmId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  // A row can be chosen, so Up and Down step through a long list and keep the row in view (user, 2026-10-31).
+  // A row can be chosen, so Up and Down step through a long list and keep the row in view.
   const [chosen, setChosen] = useState<string | null>(null);
   // A click anywhere else cancels a delete waiting for its confirmation.
   const confirming = useRef<HTMLSpanElement | null>(null);
@@ -46,13 +46,13 @@ export function ArchivedAccessKeyTable({ accessKeys, onDeleted }: Props) {
 
   const statusOf = (k: ArchivedAccessKeyRecord) => (k.revoked ? "Revoked" : "Expired");
   const columns: Column<ArchivedAccessKeyRecord>[] = [
-    // Up to 16 characters of a name show, as in the key list (user, 2026-10-31).
+    // Up to 16 characters of a name show, as in the key list.
     { id: "name", label: t("accessKeys.colName"), width: 160, maxWidth: 320, maxChars: 16, sortValue: (k) => k.name.toLowerCase(), title: (k) => k.name, cell: (k) => k.name },
     { id: "status", label: t("accessKeys.colStatus"), width: 120, sortValue: statusOf, cell: (k) => <AccessKeyStatus status={statusOf(k)} /> },
     { id: "created", label: t("accessKeys.colCreated"), width: 120, sortValue: (k) => k.created_at ?? "", cell: (k) => formatDate(k.created_at) },
     { id: "archived", label: t("accessKeys.colArchivedOn"), width: 120, sortValue: (k) => k.revoked_at ?? "", cell: (k) => formatDate(k.revoked_at) },
     { id: "lastUsed", label: t("accessKeys.colLastUsed"), width: 120, sortValue: (k) => k.last_used_at ?? "", cell: (k) => formatDate(k.last_used_at) },
-    // Delete Permanently turns red to confirm, in place, with Cancel beside it (user, 2026-10-28).
+    // Delete Permanently turns red to confirm, in place, with Cancel beside it.
     { id: "actions", label: t("accessKeys.colActions"), width: 200, maxWidth: 320, className: "phx-td-actions",
       cell: (k) => (
         <span className="row-actions" ref={confirmId === k.id ? confirming : undefined}>

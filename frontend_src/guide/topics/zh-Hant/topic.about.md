@@ -3,13 +3,13 @@
 ---
 Phoenix MCP 讓 AI 智慧體安全地在你的 Home Assistant 中工作。每個智慧體都有自己的存取金鑰，由你決定該金鑰可以檢視和執行什麼。
 
-## 兩種使用方式 {#ways}
+## 三種使用方式 {#ways}
 
 - **Agent Chat**：直接在 Home Assistant 內與 AI 模型聊天。你新增 AI 提供者的帳戶，Phoenix 會替你執行智慧體。
 - **外部應用程式**：用存取金鑰連接 MCP 用戶端，例如桌面助理或程式開發工具。應用程式自己的模型負責思考。
 - **Home Assistant 自帶的助理**：Phoenix 可以作為語音智慧體回答、執行 AI 任務操作，或把自己的工具借給其他助理。
 
-無論哪種方式，每個操作都會經過相同的檢查，並記錄在稽核日誌中。
+無論使用哪種方式，每個操作都會經過相同的檢查，稽核日誌也會記錄它。
 
 相關：[{{label:agentchat.title}}](guide:window.agentChat)、[連線外部應用程式](guide:topic.connecting)、[語音智慧體、AI 任務或 Assist 工具提供方](guide:topic.homeAssistantFeatures)
 

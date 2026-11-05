@@ -53,7 +53,11 @@ Phoenix 沒有自己的遠端服務。家庭網路外的應用程式會像瀏覽
 
 ## 透過 Home Assistant 的 MCP Server {#ha-mcp-server}
 
-登入 Home Assistant 本身的應用程式，例如託管連接器，可以透過 Home Assistant 的 Model Context Protocol 整合存取 Phoenix 的工具，位址為 /api/mcp/phoenix_mcp。在 2026.11 之前，它叫 MCP Server。它們使用綁定到 [Assist 工具提供方](guide:topic.homeAssistantFeatures#assist-tool-provider)的金鑰，並且需要管理員登入。
+登入 Home Assistant 本身的應用程式，例如託管連接器，可以透過 Home Assistant 的 Model Context Protocol 整合存取 Phoenix 的工具。在 2026.11 之前，它叫 MCP Server。它們使用綁定到 [Assist 工具提供方](guide:topic.homeAssistantFeatures#assist-tool-provider)的金鑰。
+
+在 2026.11 上，請使用 /api/mcp/phoenix_mcp，它需要管理員登入。Home Assistant 2026.7 沒有這個位址，2026.11 之前的其他版本也可能沒有，因此請在這些版本上使用 /api/mcp。
+
+/api/mcp 位址遵循該整合的 Require an administrator account 選項。新條目會開啟它，較早的條目會保持關閉，2026.7 沒有這個選項。非管理員只能使用家庭工具，並受他們自己的 Home Assistant 權限限制。
 
 在這條路徑上，金鑰的速率限制不適用，稽核日誌會把呼叫顯示為 Assist，應用程式只有主動要求時才會收到 Phoenix 的說明。
 

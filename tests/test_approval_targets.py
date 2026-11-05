@@ -9,7 +9,7 @@ from homeassistant.helpers import area_registry as ar, entity_registry as er
 from custom_components.phoenix_mcp.approvals import get_approval
 from custom_components.phoenix_mcp.const import DOMAIN
 from custom_components.phoenix_mcp.data import PhoenixData
-from custom_components.phoenix_mcp.mcp_view import _call_tool, async_execute_approved_tool
+from custom_components.phoenix_mcp.tool_dispatch import _call_tool, async_execute_approved_tool
 from custom_components.phoenix_mcp.access_key_store import PermissionNode, PermissionTree
 from custom_components.phoenix_mcp.approval_targets import TARGETS_CHANGED
 from custom_components.phoenix_mcp.tool_common import RefusedBeforeWrite
@@ -227,7 +227,7 @@ async def test_identical_concurrent_requests_keep_independent_bound_records(hass
 
 async def test_drift_during_service_description_wait_refuses_dispatch(hass, target_runtime, monkeypatch):
     import asyncio
-    from custom_components.phoenix_mcp import mcp_view
+    from custom_components.phoenix_mcp.tools import service as service_tools
 
     access_key, data, area, _first, second, calls = target_runtime
     args = {'service': {'domain': 'cover', 'name': 'open_cover'}, 'targets': [{'kind': 'area', 'ids': [area.id]}]}
@@ -239,7 +239,7 @@ async def test_drift_during_service_description_wait_refuses_dispatch(hass, targ
         await release.wait()
         return ()
 
-    monkeypatch.setattr(mcp_view, 'unsupported_secondary_targets', suspended)
+    monkeypatch.setattr(service_tools, 'unsupported_secondary_targets', suspended)
     task = asyncio.create_task(async_execute_approved_tool('call_service', approval.args, access_key, hass, data))
     await started.wait()
     er.async_get(hass).async_update_entity(second.entity_id, area_id=area.id)

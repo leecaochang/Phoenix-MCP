@@ -38,7 +38,7 @@ function keyOf(record: LogRecord, entry: LogRecord["entry"] = record.entry): str
 /**
  * A request Needs Attention asked the Audit Log to show. The window narrows
  * itself to that one request and shows the filter, so it is plain why the list
- * is short and a click clears it (user, 2026-10-29).
+ * is short and a click clears it.
  */
 export class AuditFocus {
   private value: string | null = null;

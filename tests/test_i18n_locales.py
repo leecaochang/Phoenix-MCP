@@ -84,3 +84,11 @@ def test_permission_button_tooltips_keep_the_english_mnemonic(language: str) -> 
     assert missing == []
     # Not vacuous: these keys must actually be in the locale.
     assert all(key in catalog for key in MNEMONICS), f"{language} is missing tooltip keys"
+
+
+def test_norwegian_macrolanguage_tags_resolve_to_bokmal():
+    from custom_components.phoenix_mcp.locales import canonical_language
+
+    assert [canonical_language(tag) for tag in ("no", "no-NO", "nb", "nb-NO")] == ["nb"] * 4
+    # Nynorsk is a language of its own, not a spelling of Bokmal.
+    assert canonical_language("nn") == "en"

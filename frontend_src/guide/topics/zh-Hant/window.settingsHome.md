@@ -71,7 +71,7 @@ Home Companion 金鑰會把對話交給 Home Companion 處理，並隱藏 **{{la
 
 ## {{label:settings.aiTaskCard}} {#ai-task}
 
-為 Home Assistant 提供一個名為 Phoenix MCP AI Task 的 AI 任務實體，自動化和腳本用它產生文字或資料。它在自己的存取金鑰範圍內代表整個家庭行動，而不是代表單一使用者。
+為 Home Assistant 提供一個名為 Phoenix MCP AI Task 的 AI 任務實體，自動化和腳本用它產生文字或資料。它在自己的存取金鑰範圍內代表整個家庭行動。如果 Home Assistant 告知任務由誰發起，任務只擁有該使用者的權限。
 
 ### {{label:settings.aiTaskEnableLabel}} {#ai-task-enable}
 
@@ -113,6 +113,6 @@ Home Companion 金鑰會把對話交給 Home Companion 處理，並隱藏 **{{la
 
 另一個模型取得其工具的存取金鑰。使用 **{{label:settings.assistNotBound}}**（預設）時，不提供任何工具。**{{label:settings.killSwitchCard}}** 開啟時也是如此。
 
-變更金鑰會拒絕先前輪次的工具呼叫，因此對話無法保留舊金鑰的權限。Home Assistant 的 MCP Server 使用同一個金鑰，僅限管理員，且不受金鑰的速率限制。
+變更金鑰會拒絕先前輪次的工具呼叫，因此對話無法保留舊金鑰的權限。Home Assistant 的 MCP Server 使用同一個金鑰，且不受金鑰的速率限制。
 
 相關：[透過 Home Assistant 的 MCP Server](guide:topic.connecting#ha-mcp-server)

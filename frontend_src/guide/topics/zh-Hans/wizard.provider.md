@@ -1,7 +1,7 @@
 ---
 { "id": "wizard.provider", "title": "设置模型提供商", "parent": "workspace.accessKeys", "order": 104, "keywords": ["Anthropic", "Claude", "DeepSeek", "OpenAI", "ChatGPT", "GPT", "Gemini", "Google", "Grok", "xAI", "Groq", "Kimi", "Moonshot", "Meta", "Llama", "MiniMax", "Mistral AI", "NVIDIA NIM", "Xiaomi MiMo", "Tencent Cloud TokenHub", "OpenCode", "Ollama", "OpenRouter", "Together AI", "Cerebras", "Fireworks AI", "Alibaba Cloud Model Studio", "Qwen", "DashScope", "Z.ai", "Zhipu", "GLM", "深度求索", "通义千问", "千问", "阿里云百炼", "百炼", "智谱", "月之暗面", "腾讯云", "小米", "谷歌", "离线", "本地模型"] }
 ---
-Agent Chat 会使用你自己的账户，把对话发送给你选择的模型提供商。
+Agent Chat 会使用你自己的账户，把对话以及智能体的工具读取到的内容发送给你选择的模型提供商。[哪些数据会离开你的家](guide:topic.security#leaves-home)提供了更多说明。
 
 选择一个已添加的账户，或添加一个：选择提供商，填写其字段，然后选择 **{{label:settings.agentcliValidate}}**。大多数提供商只需要 API 密钥；有些还会要求区域，本地 Ollama 服务器则需要其地址。
 

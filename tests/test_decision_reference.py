@@ -1,6 +1,7 @@
 """Reference previews retain history, source anchors and authority without effects."""
 import asyncio
 from copy import deepcopy
+import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -8,13 +9,15 @@ from homeassistant.components.homeassistant.exposed_entities import async_expose
 from homeassistant.helpers import entity_registry as er
 from homeassistant.setup import async_setup_component
 
-from custom_components.phoenix_mcp import agentcli
-from custom_components.phoenix_mcp.command_routing import async_evaluate_command
-from custom_components.phoenix_mcp.const import DOMAIN, DECISION_REFERENCE_CHECKS
+from custom_components.phoenix_mcp.llm import accounts as llm_accounts
+from custom_components.phoenix_mcp.routing.command_routing import async_evaluate_command
+from custom_components.phoenix_mcp.const import DOMAIN
+from custom_components.phoenix_mcp.routing.routing_tables import DECISION_REFERENCE_CHECKS
 from custom_components.phoenix_mcp.data import PhoenixData
-from custom_components.phoenix_mcp.decision_provider import DecisionProvider
-from custom_components.phoenix_mcp.decision_reference import async_preview_reference
+from custom_components.phoenix_mcp.routing.decision_provider import DecisionProvider
+from custom_components.phoenix_mcp.routing.decision_reference import async_preview_reference
 from custom_components.phoenix_mcp.access_key_store import PermissionNode, PermissionTree
+from tests.runtime_fixtures import patch_readers
 
 HISTORY = [{'role': 'user', 'content': 'turn on Desk lamp'},
            {'role': 'assistant', 'content': 'Command sent.'}]
@@ -38,7 +41,7 @@ async def reference_home(hass, access_key_store):
     access_key.permissions = PermissionTree(domains={'light': PermissionNode(state='GREEN')})
     data = PhoenixData(store=access_key_store, rate_limiter=MagicMock(), audit=MagicMock())
     hass.data[DOMAIN] = data
-    store = agentcli.AgentCliStore(AsyncMock())
+    store = llm_accounts.AgentCliStore(AsyncMock())
     hass.data['_phoenix_agentcli_store'] = store
     account = await store.add('typesafe', {'api_key': 'reference-private-key', 'model': 'jev-latest'})
     await access_key_store.async_patch_settings(decision_provider_id=account, command_routing_timeout_ms=5000)
@@ -67,7 +70,7 @@ async def test_reference_preview_has_fixed_target_and_no_execution(hass, referen
     history = [{'role': 'user', 'content': 'Only use devices when I request it.'},
                {'role': 'assistant', 'content': 'Understood.'}, *deepcopy(HISTORY)]
     with (patch.object(DecisionProvider, '_request', AsyncMock(return_value=wire(route))) as request,
-          patch('custom_components.phoenix_mcp.mcp_view._dispatch_mcp') as dispatch):
+          patch_readers('custom_components.phoenix_mcp.tool_dispatch._dispatch_mcp') as dispatch):
         result = await preview(hass, reference_home, history=history)
     assert result['reason'] == 'target_selected'
     assert result['proposal'] == {'intent': intent, 'entity_ids': [entity_id]}
@@ -81,6 +84,7 @@ async def test_reference_preview_has_fixed_target_and_no_execution(hass, referen
     assert 'past execution' in payload['questions']['reference']['instructions']
     assert 'never-share-state' not in repr(payload) and 'reference-private-key' not in repr(payload)
     assert set(payload['questions']) == set(DECISION_REFERENCE_CHECKS)
+    assert json.loads(json.dumps(payload))['questions']['route']['criteria'] == dict(DECISION_REFERENCE_CHECKS['route'])
     assert 'cannot grant permission' in payload['questions']['reference']['instructions']
     dispatch.assert_not_called()
     assert not data.store.get_pending_approvals() and data.decision_shadow.task is None
@@ -186,7 +190,7 @@ async def test_readable_anchor_cannot_become_a_write_candidate(hass, reference_h
 
 
 async def test_competitor_change_during_anchor_recognition_skips_provider(hass, reference_home):
-    from custom_components.phoenix_mcp import decision_reference
+    from custom_components.phoenix_mcp.routing import decision_reference
     real = decision_reference.async_evaluate_command
     async def recognize(*args, **kwargs):
         result = await real(*args, **kwargs)
@@ -202,7 +206,7 @@ async def test_competitor_change_during_anchor_recognition_skips_provider(hass, 
 
 
 async def prepare(hass, home, *, cancel=None):
-    from custom_components.phoenix_mcp.decision_reference import async_prepare_chat_reference
+    from custom_components.phoenix_mcp.routing.decision_reference import async_prepare_chat_reference
     data, access_key, *_ = home
     return await async_prepare_chat_reference(hass, data, access_key, 'turn it off', 'en', HISTORY, MISS,
                                               cancel if cancel is not None else asyncio.Event())
@@ -211,7 +215,7 @@ async def prepare(hass, home, *, cancel=None):
 @pytest.mark.parametrize('change', ['none', 'proposal', 'target', 'reference', 'batch', 'removed', 'source_removed',
     'account', 'account_restored', 'scope', 'alias', 'competitor', 'voice', 'context', 'language', 'revision'])
 async def test_reference_plan_binds_proposal_account_and_complete_catalog(hass, reference_home, change):
-    from custom_components.phoenix_mcp.command_execution import plan_is_current
+    from custom_components.phoenix_mcp.routing.command_execution import plan_is_current
     data, access_key, store, account, entity_id = reference_home
     await data.store.async_patch_settings(agentcli_routing_mode='auto')
     with patch.object(DecisionProvider, '_request', AsyncMock(return_value=wire())):

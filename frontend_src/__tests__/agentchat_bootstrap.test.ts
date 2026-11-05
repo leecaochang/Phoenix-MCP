@@ -18,6 +18,35 @@ describe("global Agent Chat bootstrap", () => {
     vi.resetModules();
   });
 
+  it("removes an admin's chat from the browser when a non-admin session opens here", async () => {
+    vi.useFakeTimers();
+    localStorage.setItem("phx-agentcli-conversation:an-admin", JSON.stringify({ turns: [{ text: "tool output" }] }));
+    localStorage.setItem("phx-agentcli:an-admin", JSON.stringify({ accessKeyId: "k" }));
+    const homeAssistant = document.createElement("home-assistant") as HTMLElement & { hass: Record<string, unknown> };
+    homeAssistant.hass = { user: { id: "a-member", is_admin: false } };
+    document.body.appendChild(homeAssistant);
+
+    await import("../inject/agentchat");
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(Object.keys(localStorage).filter((key) => key.startsWith("phx-agentcli"))).toEqual([]);
+    expect((window as unknown as Record<string, unknown>).__phxAgentChat).toBeUndefined();
+  });
+
+  it("leaves another admin's chat where it is", async () => {
+    vi.useFakeTimers();
+    localStorage.setItem("phx-agentcli-conversation:an-admin", JSON.stringify({ turns: [{ text: "tool output" }] }));
+    const homeAssistant = document.createElement("home-assistant") as HTMLElement & { hass: Record<string, unknown> };
+    homeAssistant.hass = { enableShortcuts: true, user: { id: "other-admin", is_admin: true } };
+    document.body.appendChild(homeAssistant);
+
+    await import("../inject/agentchat");
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(localStorage.getItem("phx-agentcli-conversation:an-admin")).not.toBeNull();
+    localStorage.clear();
+  });
+
   it("installs after hass.user arrives later than the module", async () => {
     vi.useFakeTimers();
     const homeAssistant = document.createElement("home-assistant") as HTMLElement & {

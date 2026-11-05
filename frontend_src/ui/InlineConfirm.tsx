@@ -4,7 +4,7 @@
  * require an acknowledgement before Confirm becomes available. Focus moves
  * into it when it opens, so a confirmation started from a menu is reached
  * without hunting for it, and the whole box scrolls into view; Escape, Cancel or a click anywhere else closes it
- * unless the action is running. It is a plain UI2 box (user, 2026-10-28): the window's own surface
+ * unless the action is running. It is a plain box: the window's own surface
  * and a hairline with a heading, no coloured accents.
  */
 
@@ -12,6 +12,7 @@ import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode, ty
 import { ActionButton } from "./ActionButton";
 import type { IconName } from "./Icon";
 import { useClickAway } from "./useClickAway";
+import { isImeKey } from "../utils/ime";
 
 export function InlineConfirm({
   label, title, tone = "warning", children, help, acknowledge, confirmLabel, confirmIcon = "check", confirmClassName = "btn btn-primary btn-sm",
@@ -69,7 +70,7 @@ export function InlineConfirm({
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     // Focus alone does not bring the box into view on an iPhone, and a box opened from a
-    // toolbar can start below the screen (user, 2026-11-02): show the whole box first.
+    // toolbar can start below the screen: show the whole box first.
     root.current?.scrollIntoView?.({ block: "nearest" });
     root.current?.querySelector<HTMLElement>("input, button:not([disabled])")?.focus({ preventScroll: true });
   }, []);
@@ -77,7 +78,7 @@ export function InlineConfirm({
     <div ref={root} className={`phx-inline-confirm is-${tone}`} role="group" aria-label={label} aria-describedby={described} data-help-text={help}
       data-help-controls={help ? "" : undefined}
       onKeyDown={(e) => {
-        if (e.key !== "Escape" || busy) return;
+        if (e.key !== "Escape" || busy || isImeKey(e)) return;
         e.preventDefault();
         e.stopPropagation();
         onCancel();

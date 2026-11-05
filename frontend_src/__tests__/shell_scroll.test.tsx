@@ -289,7 +289,7 @@ describe("windows hidden in place (Access Keys with no key chosen)", () => {
     add("caps", { referencePanel: "persona", direction: "below" });
   };
 
-  it("come back at the arrangement's widths after a reset, not the ones from before it (user, 2026-10-31)", () => {
+  it("come back at the arrangement's widths after a reset, not the ones from before it", () => {
     const columns: Arrange = (_, add) => {
       add("list");
       add("tree", { referencePanel: "list", direction: "right" });
@@ -320,7 +320,7 @@ describe("windows hidden in place (Access Keys with no key chosen)", () => {
     expect(w.canvas.height).toBe(1200);
   });
 
-  it("keep the list maximized while it is held so, and give the arrangement back after (user, 2026-10-31)", () => {
+  it("keep the list maximized while it is held so, and give the arrangement back after", () => {
     const w = mount(["list", "persona", "tree", "caps"], keyLayout, { heights: { list: 300, persona: 400, tree: 700, caps: 500 } });
     w.controller.setShown(true);
     w.controller.setHiddenWindows(["persona", "tree", "caps"]);
@@ -357,7 +357,7 @@ describe("windows hidden in place (Access Keys with no key chosen)", () => {
 });
 
 describe("windows that follow their content (Access Keys)", () => {
-  it("take the height their content reports until the user gives one a height of its own (user, 2026-10-31)", async () => {
+  it("take the height their content reports until the user gives one a height of its own", async () => {
     const w = mount(["a", "b"], stacked, { heights: { a: 300, b: 300 }, contentHeights: true });
     expect(w.controller.contentSized).toBe(true);
     w.controller.contentResized("a", 520);
@@ -417,7 +417,7 @@ describe("windows that follow their content (Access Keys)", () => {
     expect(again.heights().a).toBe(300);
   });
 
-  it("hold a window to its share of the visible height, scrolling inside beyond it (user, 2026-10-31: the key list)", async () => {
+  it("hold a window to its share of the visible height, scrolling inside beyond it", async () => {
     const w = mount(["a", "b"], stacked, { heights: { a: 300, b: 300 }, contentHeights: true, contentMax: { a: 1 / 2 } });
     w.controller.contentResized("a", 900);
     w.controller.contentResized("b", 900);

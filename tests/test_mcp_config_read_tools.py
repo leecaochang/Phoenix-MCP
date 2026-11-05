@@ -22,7 +22,7 @@ from homeassistant.util.dt import utcnow
 from pytest_homeassistant.common import MockConfigEntry
 
 from custom_components.phoenix_mcp.data import PhoenixData
-from custom_components.phoenix_mcp.mcp_view import _call_tool
+from custom_components.phoenix_mcp.tool_dispatch import _call_tool
 from custom_components.phoenix_mcp.tools.authoring import _read_automations_yaml
 from custom_components.phoenix_mcp.access_key_store import PermissionNode, PermissionTree, AccessKeyRecord
 from custom_components.phoenix_mcp.version_store import VersionStore
@@ -253,7 +253,7 @@ class TestApprovalDiffCompleteness:
         import asyncio as _asyncio
         from unittest.mock import AsyncMock as _AsyncMock
 
-        from custom_components.phoenix_mcp.mcp_view import async_execute_approved_tool
+        from custom_components.phoenix_mcp.tool_dispatch import async_execute_approved_tool
         from custom_components.phoenix_mcp.tools.authoring import _truncate
 
         class _ApprStore:

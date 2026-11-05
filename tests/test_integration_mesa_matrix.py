@@ -18,11 +18,8 @@ from pytest_homeassistant.common import MockConfigEntry
 
 from custom_components.phoenix_mcp.const import DOMAIN
 from custom_components.phoenix_mcp.data import PhoenixData
-from custom_components.phoenix_mcp.mcp_view import (
-    _call_tool,
-    _config_entry_action_decision,
-    async_execute_approved_tool,
-)
+from custom_components.phoenix_mcp.tool_dispatch import _call_tool, async_execute_approved_tool
+from custom_components.phoenix_mcp.tools.integrations import _config_entry_action_decision
 from custom_components.phoenix_mcp.mesa import async_setup_mesa
 from custom_components.phoenix_mcp.mesa_core import MetadataOrigin, SemanticProfile
 from custom_components.phoenix_mcp.access_key_store import (
@@ -255,13 +252,13 @@ async def test_each_confirm_scope_creates_one_merged_approval(
     gate = AsyncMock(return_value=None)
     create = AsyncMock(return_value=({}, "pending_approval", "approval"))
     with (
-        patch("custom_components.phoenix_mcp.mcp_view._gate", gate),
+        patch("custom_components.phoenix_mcp.tools.integrations._gate", gate),
         patch(
-            "custom_components.phoenix_mcp.mcp_view._create_registry_mesa_approval",
+            "custom_components.phoenix_mcp.tools.integrations._create_registry_mesa_approval",
             create,
         ),
         patch(
-            "custom_components.phoenix_mcp.mcp_view._registry_relationships_preview",
+            "custom_components.phoenix_mcp.tools.integrations._registry_relationships_preview",
             AsyncMock(return_value={"consumers": []}),
         ),
     ):
@@ -292,7 +289,7 @@ async def test_all_scope_pending_approval_revalidates_every_race(
         _set_scope(data, env, scope, "confirm")
     approving_access_key = _access_key(env, cap="confirm")
     gate = AsyncMock(return_value=({}, "pending_approval", "approval"))
-    with patch("custom_components.phoenix_mcp.mcp_view._gate", gate):
+    with patch("custom_components.phoenix_mcp.tools.integrations._gate", gate):
         _content, outcome, _ = await _call_tool(
             "reload_integration",
             {"entry_id": env["entry_id"]},

@@ -55,7 +55,7 @@ Phoenix 的感測器會繼續計數，通知仍會到達。
 
 ### {{label:conversations.limit.mb}} {#conversation-size}
 
-日誌可以佔用多少空間：1 到 250 MB（預設 25）。目前使用的空間會顯示在限制下方。
+日誌可以佔用多少空間：1 到 250 MB（預設 25）。目前使用的空間會顯示在限制下方。日誌較大時，Home Assistant 啟動時載入它所需的時間更長，記憶體用量也可能達到此大小的約兩倍。
 
 ## {{label:settings.privacySection}} {#privacy}
 
@@ -65,7 +65,7 @@ Phoenix 的感測器會繼續計數，通知仍會到達。
 
 關閉時，稽核日誌的 {{label:audit.rowResource}} 欄會顯示 [redacted]，對話記錄會省略說了什麼和做了什麼。預設為開啟。
 
-稽核日誌的負載也會隱藏實體 ID，但工具呼叫參數中的自由文字仍可能提到一個。已記錄的對話內容會在 Phoenix 下次啟動時移除。
+此時稽核日誌的負載只保留工具呼叫參數的名稱，不保留它們的值。負載中的其他文字（例如核准原因）仍可能提到實體。已記錄的對話內容會在 Phoenix 下次啟動時移除。
 
 ### {{label:settings.logClientIpLabel}} {#log-client-ip}
 

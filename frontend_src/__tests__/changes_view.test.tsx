@@ -80,7 +80,7 @@ describe("the Changes list", () => {
     await view.findByText("Zebra lamp");
     fireEvent.click(view.getByRole("button", { name: "Item" }));
     expect(rowsOf(listWindow())[0]).toHaveTextContent("Alpha lamp");
-    // Letters in order are not a match; each word has to appear as it was typed (user, 2026-10-29).
+    // Letters in order are not a match; each word has to appear as it was typed.
     fireEvent.change(view.getByRole("searchbox"), { target: { value: "zbr lmp" } });
     expect(view.queryByText("Zebra lamp")).toBeNull();
     fireEvent.change(view.getByRole("searchbox"), { target: { value: "lamp zebra" } });
@@ -91,6 +91,21 @@ describe("the Changes list", () => {
     fireEvent.change(view.getByRole("searchbox"), { target: { value: "lamp" } });
     fireEvent.change(view.getByLabelText("Action"), { target: { value: "delete" } });
     expect(await view.findByText("No changes match these filters.")).toBeVisible();
+  });
+
+  it("drops rows a live feed repeats on the next page, and reads on from where the server's feed was read", async () => {
+    vi.mocked(api.listVersions)
+      .mockResolvedValueOnce(page([version({ id: "v9", alias: "Item 9" }), version({ id: "v8", alias: "Item 8" })], 6))
+      .mockResolvedValueOnce(page([version({ id: "v8", alias: "Item 8" }), version({ id: "v7", alias: "Item 7" })], 7))
+      .mockResolvedValueOnce(page([version({ id: "v6", alias: "Item 6" })], 7));
+    const view = renderChanges();
+    await view.findByText("Item 9");
+    fireEvent.click(view.getByText("Load More"));
+    await view.findByText("Item 7");
+    expect(rowsOf(listWindow())).toHaveLength(3);
+    fireEvent.click(view.getByText("Load More"));
+    await view.findByText("Item 6");
+    expect(vi.mocked(api.listVersions).mock.calls.map(([params]) => params?.offset)).toEqual([0, 2, 4]);
   });
 
   it("gives a filter a full page at a time, however few changes each page of the history holds", async () => {
@@ -227,7 +242,7 @@ describe("Comparison and Restore", () => {
     vi.mocked(api.getVersion).mockResolvedValue(record(edit));
     const view = renderChanges();
     await choose("My automation");
-    // Showing another set of changes leaves nothing chosen in the list (user, 2026-10-29).
+    // Showing another set of changes leaves nothing chosen in the list.
     fireEvent.change(view.getByLabelText("Action"), { target: { value: "delete" } });
     await waitFor(() => expect(comparisonWindow().querySelector(".change-comparison")).toBeNull());
     expect(within(comparisonWindow()).getByText("Select a change to compare.")).toBeVisible();
@@ -452,7 +467,7 @@ describe("Comparison of device YAML", () => {
     fireEvent.click(view.getByRole("button", { name: /code editor view/i }));
     expect(view.container.querySelectorAll(".diff-line").length).toBe(0);
     expect(comparisonWindow().textContent).toContain("name: rf-blaster2");
-    // No explanatory hint in Comparison (user, 2026-10-27): just the controls and Restore.
+    // No explanatory hint in Comparison: just the controls and Restore.
     expect(view.container.querySelector(".change-diff-hint")).toBeNull();
   });
 

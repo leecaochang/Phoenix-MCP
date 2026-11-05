@@ -28,17 +28,11 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er_mod
 
 from .const import (
-    BLOCKED_DOMAINS,
-    MESA_SUGGEST_CONSOLIDATE_THRESHOLD,
-    MESA_SUGGEST_COVER_DEVICE_CLASSES,
-    MESA_SUGGEST_FANOUT_THRESHOLD,
-    MESA_SUGGEST_MAX_EVIDENCE_IDS,
-    MESA_SUGGEST_RISKY_DOMAINS,
-    MESA_SUGGEST_SIGNAL_BLAST_RADIUS,
-    MESA_SUGGEST_SIGNAL_NAKED_RISKY,
-    MESA_SUGGESTION_PHRASES,
-    MESA_SUGGESTION_TEMPLATES,
+    BLOCKED_DOMAINS, MESA_SUGGEST_CONSOLIDATE_THRESHOLD, MESA_SUGGEST_COVER_DEVICE_CLASSES,
+    MESA_SUGGEST_FANOUT_THRESHOLD, MESA_SUGGEST_MAX_EVIDENCE_IDS, MESA_SUGGEST_RISKY_DOMAINS,
+    MESA_SUGGEST_SIGNAL_BLAST_RADIUS, MESA_SUGGEST_SIGNAL_NAKED_RISKY,
 )
+from .catalog_templates import MESA_SUGGESTION_PHRASES, MESA_SUGGESTION_TEMPLATES
 from .mesa_core import ControlMode, DeploymentDefaults
 
 if TYPE_CHECKING:
@@ -93,18 +87,20 @@ def _automation_refs(hass: HomeAssistant, entity_id: str) -> list[str] | None:
     component or a moved API skips the signal, it never breaks the scan.
     """
     try:
-        from homeassistant.components.automation import entities_in_automation  # noqa: PLC0415
+        # Local: optional component, imported only when this path runs.
+        from homeassistant.components.automation import entities_in_automation
         return entities_in_automation(hass, entity_id)
-    except Exception:  # noqa: BLE001 - degrade to signal-skipped
+    except Exception:  # degrade to signal-skipped
         return None
 
 
 def _script_refs(hass: HomeAssistant, entity_id: str) -> list[str] | None:
     """Entities referenced by a script, or None when unavailable."""
     try:
-        from homeassistant.components.script import entities_in_script  # noqa: PLC0415
+        # Local: optional component, imported only when this path runs.
+        from homeassistant.components.script import entities_in_script
         return entities_in_script(hass, entity_id)
-    except Exception:  # noqa: BLE001 - degrade to signal-skipped
+    except Exception:  # degrade to signal-skipped
         return None
 
 
@@ -160,7 +156,7 @@ def _default_covered(defaults: DeploymentDefaults | None, domain: str) -> bool:
         return False
     try:
         return defaults.control_mode_for(domain) is not ControlMode.AUTONOMOUS
-    except Exception:  # noqa: BLE001 - malformed override value: fail open to suggesting
+    except Exception:  # malformed override value: fail open to suggesting
         return False
 
 

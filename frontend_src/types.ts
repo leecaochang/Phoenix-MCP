@@ -905,7 +905,7 @@ export interface ConversationListResponse {
 /** Administrator-visible dispatch metadata, never action payloads. */
 export interface AttentionItem {
   id: string;
-  kind: "agent" | "calendar" | "mesa" | "calendar_storage";
+  kind: "agent" | "calendar" | "mesa" | "calendar_storage" | "audit_storage";
   tool?: string;
   access_key_name?: string;
   started_at?: string;
