@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import time
 import uuid
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -153,6 +154,7 @@ class FakeBroker:
 
 @pytest.fixture
 def broker(monkeypatch) -> FakeBroker:
+    monkeypatch.setattr(radio, "ZIGBEE_CONFIRM_SECONDS", 0)
     fake = FakeBroker()
     fake.retained["zigbee2mqtt/bridge/info"] = json.dumps(BRIDGE_INFO)
     fake.retained["zigbee2mqtt/bridge/devices"] = json.dumps([
@@ -1206,6 +1208,48 @@ class TestPermitZigbeeJoin:
         )
         assert res[1] == "invalid_request"
         assert "backend" in _text(res)
+
+    @pytest.mark.parametrize(("reported", "duration", "verified"), [
+        ({"permit_join": True, "permit_join_end": "soon"}, 30, True),
+        ({"permit_join": True, "permit_join_end": "late"}, 30, False),
+        ({"permit_join": True}, 30, True),
+        ({"permit_join": False}, 30, False),
+        ({"permit_join": False}, 0, True),
+        ({"permit_join": True, "permit_join_end": "soon"}, 0, False),
+    ])
+    async def test_z2m_reads_the_join_window_back(self, hass, radio_env, broker, reported, duration, verified):
+        hass.config.components.add("mqtt")
+        if "permit_join_end" in reported:
+            seconds = 30 if reported["permit_join_end"] == "soon" else 240
+            reported = {**reported, "permit_join_end": int((time.time() + seconds) * 1000)}
+        broker.retained["zigbee2mqtt/bridge/info"] = json.dumps({**BRIDGE_INFO, **reported})
+        res = await _call_tool(
+            "permit_zigbee_join", {"duration": duration},
+            _light_access_key(cap_radio_write="allow"), hass, _data(),
+        )
+        assert res[1] == "allowed"
+        assert _body(res)["verified"] is verified
+        assert ("does not match" in _body(res)["message"]) is (not verified)
+
+    async def test_z2m_read_back_that_cannot_run_is_reported_as_unknown(self, hass, radio_env, broker):
+        hass.config.components.add("mqtt")
+        del broker.retained["zigbee2mqtt/bridge/info"]
+        res = await _call_tool(
+            "permit_zigbee_join", {"duration": 30},
+            _light_access_key(cap_radio_write="allow"), hass, _data(),
+        )
+        assert res[1] == "allowed"
+        assert _body(res)["verified"] is None
+
+    async def test_zha_reports_no_join_state(self, hass, radio_env, broker, monkeypatch):
+        monkeypatch.setattr(radio, "present_zigbee_backends", lambda _hass: ["zha"])
+        hass.services.async_register("zha", "permit", AsyncMock())
+        res = await _call_tool(
+            "permit_zigbee_join", {"duration": 30},
+            _light_access_key(cap_radio_write="allow"), hass, _data(),
+        )
+        assert res[1] == "allowed"
+        assert _body(res)["verified"] is None
 
     async def test_z2m_allow_publishes_permit(self, hass, radio_env, broker):
         hass.config.components.add("mqtt")
@@ -2345,6 +2389,35 @@ class TestRemoveZigbeeDevice:
             bodies.add(json.dumps(res[0]))
         assert len(bodies) == 1
 
+    async def test_z2m_reads_the_device_list_back(self, hass, radio_env, broker):
+        hass.config.components.add("mqtt")
+        devices = json.loads(broker.retained["zigbee2mqtt/bridge/devices"])
+        broker.retained["zigbee2mqtt/bridge/devices"] = json.dumps(
+            [d for d in devices if d.get("ieee_address") != Z2M_BULB_IEEE]
+        )
+        res = await _call_tool(
+            "remove_zigbee_device", {"device_id": radio_env["z2m_bulb"]},
+            _light_access_key(cap_radio_write="allow"), hass, _data(),
+        )
+        body = _body(res)
+        assert (body["removed"], body["verified"]) == (True, True)
+
+    async def test_zha_reads_the_device_list_back(self, hass, radio_env, broker, monkeypatch):
+        hass.services.async_register("zha", "remove", AsyncMock())
+        listing = AsyncMock(return_value=[{"ieee": "00:00:00:00:00:00:00:01"}])
+        monkeypatch.setattr(radio, "async_ws_command", listing)
+        res = await _call_tool(
+            "remove_zigbee_device", {"device_id": radio_env["zha_bulb"]},
+            _light_access_key(cap_radio_write="allow"), hass, _data(),
+        )
+        assert _body(res)["verified"] is True
+        listing.return_value = [{"ieee": ZHA_BULB_IEEE.upper()}]
+        res = await _call_tool(
+            "remove_zigbee_device", {"device_id": radio_env["zha_bulb"]},
+            _light_access_key(cap_radio_write="allow"), hass, _data(),
+        )
+        assert (_body(res)["removed"], _body(res)["verified"]) == (False, False)
+
     async def test_z2m_allow_removes(self, hass, radio_env, broker):
         hass.config.components.add("mqtt")
         res = await _call_tool(
@@ -2352,7 +2425,9 @@ class TestRemoveZigbeeDevice:
             _light_access_key(cap_radio_write="allow"), hass, _data(),
         )
         assert res[1] == "allowed"
-        assert _body(res)["removed"] is True
+        # The fake network keeps the device listed, and the result says so.
+        assert (_body(res)["removed"], _body(res)["verified"]) == (False, False)
+        assert "still lists" in _body(res)["message"]
         topic, request = broker.published[-1]
         assert topic == "zigbee2mqtt/bridge/request/device/remove"
         assert request["id"] == Z2M_BULB_IEEE and request["force"] is False
@@ -2366,6 +2441,7 @@ class TestRemoveZigbeeDevice:
         )
         assert res[1] == "allowed"
         assert _body(res)["partial"] is True
+        assert _body(res)["verified"] is None
 
     async def test_zha_allow_calls_remove_service(self, hass, radio_env, broker):
         calls = []

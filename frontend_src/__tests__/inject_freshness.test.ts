@@ -105,3 +105,22 @@ it("reads a detail page's own scope again before opening", async () => {
   expect(modal()?.getAttribute("scope")).toBe("integration");
   expect(modal()?.getAttribute("has-profile")).toBe("1");
 });
+
+it("replaces the button when Home Assistant reuses a detail page for another target", async () => {
+  start("/config/integrations/integration/hue");
+  const page = document.createElement("hass-subpage");
+  document.body.appendChild(page);
+  page.attachShadow({ mode: "open" }).innerHTML = '<div class="main-title"></div>';
+  page.innerHTML = '<ha-icon-button slot="toolbar-icon"></ha-icon-button>';
+  await boot();
+  expect(page.querySelector<HTMLButtonElement>(`.${BTN_CLASS}`)!.dataset.phxKey).toBe("hue");
+
+  // The page stays in the DOM with Phoenix's button first in the slot; only the URL moves.
+  window.history.pushState({}, "", "/config/integrations/integration/mqtt");
+  window.dispatchEvent(new Event("location-changed"));
+  await vi.advanceTimersByTimeAsync(200);
+
+  const buttons = page.querySelectorAll<HTMLButtonElement>(`.${BTN_CLASS}`);
+  expect([...buttons].map((button) => button.dataset.phxKey)).toEqual(["mqtt"]);
+  expect((window as unknown as { __phxMesaInjectCompatibility?: { blocked: boolean } }).__phxMesaInjectCompatibility?.blocked).toBe(false);
+});

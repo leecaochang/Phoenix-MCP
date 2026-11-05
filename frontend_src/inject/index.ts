@@ -322,8 +322,10 @@ function scanSubpage(scope: Exclude<Scope, "entity">, key: string): void {
     // means a rename in one direction degrades to the title fallback rather than
     // to a missing control. querySelector returns the first in DOCUMENT order, so
     // a page mixing them still yields its leading action.
+    // Phoenix's own button shares the slot and sits first, so it is left out: removing
+    // a stale one below would otherwise leave nothing to insert the new one before.
     const firstAction = host.querySelector<HTMLElement>(
-      ':scope > [slot="toolbar-icon"], :scope > [slot="toolbar-icons"]',
+      `:scope > [slot="toolbar-icon"]:not(.${BTN_CLASS}), :scope > [slot="toolbar-icons"]:not(.${BTN_CLASS})`,
     );
     if (!title && !firstAction) continue;
     // Direct children only on the host: a data-table subpage has injected row

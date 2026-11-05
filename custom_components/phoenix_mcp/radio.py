@@ -26,8 +26,10 @@ import json
 import logging
 import math
 import re
+import time
 import uuid
 from decimal import Decimal, InvalidOperation
+from collections.abc import Awaitable
 from typing import Any, Callable
 
 from homeassistant.core import HomeAssistant, callback
@@ -39,6 +41,8 @@ from .const import (
     Z2M_DEVICE_OPTIONS_RESPONSE_TIMEOUT_SECONDS,
     Z2M_REQUEST_TIMEOUT_SECONDS,
     Z2M_RETAINED_READ_TIMEOUT_SECONDS,
+    ZIGBEE_CONFIRM_SECONDS,
+    ZIGBEE_PERMIT_END_TOLERANCE_SECONDS,
     ZIGBEE_TOPOLOGY_SCAN_TIMEOUT_SECONDS,
 )
 from .device_semantics import device_entry_value, device_registry_snapshot
@@ -2314,6 +2318,60 @@ async def async_permit_join(
             raise RadioError("ZHA is not available.") from exc
         return {"backend": backend, "time": duration}
     raise RadioError(f"Unknown Zigbee backend: {backend}")
+
+
+async def _async_confirm(check: Callable[[], Awaitable[bool]]) -> bool | None:
+    """Read until `check` holds: True, False if it never did, None if it could not be read."""
+    deadline = time.monotonic() + ZIGBEE_CONFIRM_SECONDS
+    while True:
+        try:
+            if await check():
+                return True
+        except (RadioError, WsDispatchError, TimeoutError):
+            return None
+        if time.monotonic() >= deadline:
+            return False
+        await asyncio.sleep(0.25)
+
+
+async def async_confirm_permit_join(hass: HomeAssistant, backend: str, duration: int) -> bool | None:
+    """Read the join window back. ZHA reports no join state, so its answer is None."""
+    if backend != BACKEND_Z2M:
+        return None
+
+    async def window_matches() -> bool:
+        info = await async_z2m_retained(hass, "bridge/info", timeout=ZIGBEE_CONFIRM_SECONDS)
+        if not isinstance(info, dict):
+            raise RadioError("Unexpected Zigbee2MQTT bridge info payload.")
+        if duration == 0:
+            return info.get("permit_join") is False
+        end = info.get("permit_join_end")
+        # Older Zigbee2MQTT releases report that it is open, without an end.
+        if info.get("permit_join") is not True or not isinstance(end, int):
+            return info.get("permit_join") is True and end is None
+        return abs(end / 1000 - (time.time() + duration)) <= ZIGBEE_PERMIT_END_TOLERANCE_SECONDS
+
+    return await _async_confirm(window_matches)
+
+
+async def async_confirm_device_removed(hass: HomeAssistant, backend: str, ieee: str) -> bool | None:
+    """Read the backend's device list back: True once `ieee` has left it."""
+
+    async def absent() -> bool:
+        if backend == BACKEND_Z2M:
+            devices = await async_z2m_retained(hass, "bridge/devices", timeout=ZIGBEE_CONFIRM_SECONDS)
+            key = "ieee_address"
+        else:
+            devices = await async_ws_command(hass, "zha/devices", {})
+            key = "ieee"
+        if not isinstance(devices, list):
+            raise RadioError("Unexpected Zigbee device list payload.")
+        return not any(
+            isinstance(item, dict) and str(item.get(key)).lower() == ieee.lower()
+            for item in devices
+        )
+
+    return await _async_confirm(absent)
 
 
 async def async_reconfigure_device(hass: HomeAssistant, backend: str, ieee: str) -> dict[str, Any]:

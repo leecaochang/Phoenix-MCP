@@ -64,3 +64,5 @@ Babel==2.18.0
 
 # Subprocess instrumentation uses coverage.py's supported patch mechanism.
 coverage==7.16.2
+# Coverage in pytest; the test package does not pull it in.
+pytest-cov==7.1.0

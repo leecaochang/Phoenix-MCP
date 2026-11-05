@@ -1,5 +1,5 @@
 ---
-{ "id": "topic.connecting", "title": "连接外部应用", "parent": "topic.about", "order": 20, "keywords": ["MCP 客户端", "连接", "设置", "外部智能体"], "sectionKeywords": { "commands": ["Claude Code", "Gemini CLI", "Antigravity", "Codex", "Cursor", "DeepSeek Harness", "代码片段", "命令"], "credentials": ["机密", "泄露", "保护", "Bearer"], "several-keys": ["多个配置", "多个密钥", "服务器名称"], "connection": ["URL", "端点", "Streamable HTTP", "SSE", "协议", "会话"], "reconnect": ["工具已更改", "刷新工具"], "primer": ["指令", "备注", "技能", "SKILL.md"], "ha-mcp-server": ["Home Assistant MCP Server", "/api/mcp", "托管", "连接器"], "problems": ["401", "403", "429", "503", "未授权", "禁止", "排查"] } }
+{"id": "topic.connecting", "title": "连接外部应用", "parent": "topic.about", "order": 20, "keywords": ["MCP 客户端", "连接", "设置", "外部智能体"], "sectionKeywords": {"commands": ["Claude Code", "Gemini CLI", "Antigravity", "Codex", "Cursor", "DeepSeek Harness", "代码片段", "命令"], "credentials": ["机密", "泄露", "保护", "Bearer"], "several-keys": ["多个配置", "多个密钥", "服务器名称"], "connection": ["URL", "端点", "Streamable HTTP", "SSE", "协议", "会话"], "reconnect": ["工具已更改", "刷新工具"], "primer": ["指令", "备注", "技能", "SKILL.md"], "ha-mcp-server": ["Home Assistant MCP Server", "/api/mcp", "托管", "连接器"], "problems": ["401", "403", "429", "503", "未授权", "禁止", "排查"], "remote": ["远程访问", "Nabu Casa", "外出", "VPN", "Tailscale", "反向代理", "https"]}}
 ---
 外部应用，例如编码助手或桌面聊天应用，使用一个访问密钥连接到 Phoenix。应用自己的模型负责思考，Phoenix 决定它可以做什么。
 
@@ -32,6 +32,12 @@ Phoenix 会显示 Claude Code、Gemini CLI、Antigravity CLI、Codex、Cursor �
 应用连接到你的 Home Assistant 地址加 /api/phoenix-mcp，并把密钥作为 Bearer 令牌发送。设置命令中的 URL 是你的浏览器使用的地址；如果应用通过其他方式访问 Home Assistant，请在那里修改。
 
 Phoenix 通过 Streamable HTTP 使用 MCP。使用 SSE 传输的旧应用设置无法连接。耗时较长的操作会每 15 秒发送一条消息来保持连接。
+
+## 从家庭网络外连接 {#remote}
+
+Phoenix 没有自己的远程服务。家庭网络外的应用会像浏览器一样访问它：通过你的 Nabu Casa 地址、你自己的域名，或 Tailscale 等 VPN。把设置命令中的 URL 改为该地址，后面加上 /api/phoenix-mcp。
+
+在家庭网络外请使用 https 地址，因为密钥会随每个请求发送。反向代理必须传递 Authorization 标头，并允许长时间响应。托管应用从其提供商的服务器连接，因此家庭网络或 VPN 地址对它们无效。
 
 ## 工具发生变化时 {#reconnect}
 

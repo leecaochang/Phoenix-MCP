@@ -1149,6 +1149,10 @@ HOUSEHOLD_ADMIN_TOOLS = frozenset({"get_audit_summary", "get_approval_status", "
 Z2M_BASE_TOPIC = "zigbee2mqtt"
 Z2M_REQUEST_TIMEOUT_SECONDS = 30.0
 Z2M_RETAINED_READ_TIMEOUT_SECONDS = 5.0
+# How long a Zigbee write's read-back waits for the backend to report the change.
+ZIGBEE_CONFIRM_SECONDS = 3.0
+# Allowance between the requested join window and the end Zigbee2MQTT reports.
+ZIGBEE_PERMIT_END_TOLERANCE_SECONDS = 10
 # A topology request actively queries each router and Zigbee2MQTT documents a
 # normal completion window of ten seconds to two minutes. MCP's SSE keepalives
 # keep the client connection alive while this longer, approval-gated operation

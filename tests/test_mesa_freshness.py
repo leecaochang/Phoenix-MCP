@@ -46,7 +46,8 @@ async def test_natural_expiry_fires_without_another_lease_operation(hass):
         await hass.async_block_till_done()
         assert events == []  # Nothing sweeps before the interval elapses.
         async_fire_time_changed(hass, utcnow() + MESA_LEASE_SWEEP_INTERVAL + timedelta(seconds=1))
-        await hass.async_block_till_done()
+        # HA runs an interval's job as a background task, which the default wait leaves out.
+        await hass.async_block_till_done(wait_background_tasks=True)
     finally:
         cancel()
     assert [(e["reason"], e["lease_id"], e["entities"]) for e in events] == [
@@ -62,7 +63,7 @@ async def test_lease_sweep_stops_at_cancel(hass):
     cancel()
     with patch.object(runtime.lease_manager, "expire") as expire:
         async_fire_time_changed(hass, utcnow() + MESA_LEASE_SWEEP_INTERVAL * 3)
-        await hass.async_block_till_done()
+        await hass.async_block_till_done(wait_background_tasks=True)
     expire.assert_not_called()
 
 

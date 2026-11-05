@@ -1,5 +1,5 @@
 ---
-{ "id": "topic.connecting", "title": "Connecting External Apps", "parent": "topic.about", "order": 20, "keywords": ["MCP client", "connect", "setup", "external agent"], "sectionKeywords": { "commands": ["Claude Code", "Gemini CLI", "Antigravity", "Codex", "Cursor", "DeepSeek Harness", "snippet", "command"], "credentials": ["secret", "leak", "protect", "bearer"], "several-keys": ["profiles", "more than one key", "server name"], "connection": ["URL", "endpoint", "Streamable HTTP", "SSE", "protocol", "session"], "reconnect": ["tools changed", "refresh tools"], "primer": ["instructions", "notes", "skill", "SKILL.md"], "ha-mcp-server": ["Home Assistant MCP Server", "/api/mcp", "hosted", "connector"], "problems": ["401", "403", "429", "503", "unauthorized", "forbidden", "troubleshooting"] }, "covers": ["frontend_src/components/ConnectInstructions.tsx", "frontend_src/wizard_helpers.ts", "custom_components/phoenix_mcp/mcp_view.py", "custom_components/phoenix_mcp/helpers.py", "custom_components/phoenix_mcp/skill_view.py", "custom_components/phoenix_mcp/assist_api.py"] }
+{"id": "topic.connecting", "title": "Connecting External Apps", "parent": "topic.about", "order": 20, "keywords": ["MCP client", "connect", "setup", "external agent", "remote"], "sectionKeywords": {"commands": ["Claude Code", "Gemini CLI", "Antigravity", "Codex", "Cursor", "DeepSeek Harness", "snippet", "command"], "credentials": ["secret", "leak", "protect", "bearer"], "several-keys": ["profiles", "more than one key", "server name"], "connection": ["URL", "endpoint", "Streamable HTTP", "SSE", "protocol", "session"], "reconnect": ["tools changed", "refresh tools"], "primer": ["instructions", "notes", "skill", "SKILL.md"], "ha-mcp-server": ["Home Assistant MCP Server", "/api/mcp", "hosted", "connector"], "problems": ["401", "403", "429", "503", "unauthorized", "forbidden", "troubleshooting"], "remote": ["remote access", "Nabu Casa", "outside the home", "away from home", "VPN", "Tailscale", "reverse proxy", "https"]}, "covers": ["frontend_src/components/ConnectInstructions.tsx", "frontend_src/wizard_helpers.ts", "custom_components/phoenix_mcp/mcp_view.py", "custom_components/phoenix_mcp/helpers.py", "custom_components/phoenix_mcp/skill_view.py", "custom_components/phoenix_mcp/assist_api.py"]}
 ---
 An external app, such as a coding assistant or a desktop chat app, connects to Phoenix with one access key. The app's own model does the thinking, and Phoenix decides what it may do.
 
@@ -32,6 +32,12 @@ Renaming a key keeps it working, but new setup commands use the new name.
 Apps connect to your Home Assistant address followed by /api/phoenix-mcp, sending the key as a bearer token. The URL in the setup commands is the one your browser uses; change it there if the app reaches Home Assistant another way.
 
 Phoenix speaks MCP over Streamable HTTP. Older app settings that use the SSE transport won't connect. Long actions keep the connection alive with a message every 15 seconds.
+
+## Connecting from outside your home {#remote}
+
+Phoenix has no remote service of its own. An app outside your home reaches it the same way your browser would: through your Nabu Casa address, your own domain, or a VPN such as Tailscale. Change the URL in the setup commands to that address, followed by /api/phoenix-mcp.
+
+Use an https address outside your home, because the key travels with every request. A reverse proxy must pass the Authorization header through and allow long responses. Hosted apps connect from their provider's servers, so a home network or VPN address won't work for them.
 
 ## When the tools change {#reconnect}
 

@@ -2197,11 +2197,14 @@ async def _execute_permit_zigbee_join(
     except HomeAssistantError as exc:
         _LOGGER.error("permit_zigbee_join failed: %s", exc)
         return _tool_error("Failed to change the Zigbee join window."), "denied", "permit_zigbee_join"
-    body: dict[str, Any] = {"success": True, "backend": backend, "duration": duration}
+    verified = await radio_backend.async_confirm_permit_join(hass, backend, duration)
+    body: dict[str, Any] = {"success": True, "backend": backend, "duration": duration, "verified": verified}
     if duration == 0:
         body["message"] = "Join window closed."
     else:
         body["message"] = f"Network open for joining for {duration} seconds."
+    if verified is False:
+        body["message"] = "The network accepted the request, but its reported join window does not match."
     if router_label:
         body["via_device"] = router_label
     return _tool_success(json.dumps(body)), "allowed", "permit_zigbee_join"
@@ -3254,19 +3257,25 @@ async def _execute_remove_zigbee_device(
         body = {
             "success": True,
             "partial": True,
+            "verified": None,
             "message": "Removal started; the network drops the device when it responds or times out.",
         }
         return _tool_success(json.dumps(body)), "allowed", device.id
     except HomeAssistantError as exc:
         _LOGGER.error("remove_zigbee_device failed for %s: %s", ieee, exc)
         return _tool_error("Failed to remove the device."), "denied", device.id
+    verified = await radio_backend.async_confirm_device_removed(hass, backend, ieee)
     return (
         _tool_success(json.dumps({
             "success": True,
-            "removed": True,
+            "removed": verified is not False,
+            "verified": verified,
             "ieee": ieee,
             "backend": backend,
-            "message": "Device removed. Re-pair it to rejoin the network.",
+            "message": (
+                "The network accepted the removal, but it still lists the device."
+                if verified is False else "Device removed. Re-pair it to rejoin the network."
+            ),
         })),
         "allowed",
         device.id,
