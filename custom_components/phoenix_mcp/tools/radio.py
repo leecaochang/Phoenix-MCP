@@ -61,7 +61,13 @@ from ..tool_common import (
     _tool_success,
     _truncate,
 )
-from ..policy_engine import Permission, device_config_entry_ids, resolve
+from ..policy_engine import (
+    Permission,
+    device_config_entry_ids,
+    resolve,
+    resolve_device_registry_access,
+    resolve_device_registry_write,
+)
 from ..proxy_diagnostics import bluetooth_network, full_pass_through, serial_inventory
 from ..access_key_store import AccessKeyRecord
 from .. import radio as radio_backend
@@ -347,27 +353,36 @@ def _resolve_radio_device(
     out-of-scope device return identical not_found bodies (no existence oracle).
     Write ops additionally require WRITE on at least one of the device's entities;
     a visible but READ-only device gets a specific message, since the access key can
-    already see it. A visible non-radio device (including the Z2M bridge itself,
+    already see it. A device with no live entity, such as a repeater whose only
+    sensor is disabled, follows the registry resolvers instead, so its writes need
+    WRITE on the device itself rather than on an attached entity. A visible non-radio device (including the Z2M bridge itself,
     which never detects as a radio device, protecting the coordinator) is
     invalid_request.
     """
     device_id = str(args.get("device_id") or "").strip()
     if not device_id:
         return _tool_error("device_id is required."), "invalid_request", tool_name
-    device = device_registry_snapshot(hass).get(device_id)
+    snapshot = device_registry_snapshot(hass)
+    device = snapshot.get(device_id)
     ent_reg = er.async_get(hass)
     accessible = [
         eid for eid in _accessible_entity_ids(access_key, hass)
         if (entry := ent_reg.async_get(eid)) is not None and entry.device_id == device_id
     ]
-    if device is None or not accessible:
+    visible = bool(accessible) or resolve_device_registry_access(
+        device_id, access_key, hass, snapshot=snapshot
+    ) in (Permission.READ, Permission.WRITE)
+    if device is None or not visible:
         return _tool_error("Device not found."), "not_found", device_id
     detected = radio_backend.zigbee_backend_for_device(device)
     if detected is None:
         return _tool_error("Not a radio-managed device."), "invalid_request", device_id
-    if require_write and not any(
-        resolve(eid, access_key, hass) == Permission.WRITE for eid in accessible
-    ):
+    may_write = (
+        any(resolve(eid, access_key, hass) == Permission.WRITE for eid in accessible)
+        if accessible
+        else resolve_device_registry_write(device_id, access_key, hass, snapshot=snapshot) == Permission.WRITE
+    )
+    if require_write and not may_write:
         return (
             _tool_error("Read-only access to this device; radio writes need write access."),
             "denied",

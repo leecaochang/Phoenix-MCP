@@ -38,6 +38,7 @@ from custom_components.phoenix_mcp.access_key_store import PermissionNode, Permi
 Z2M_BULB_IEEE = "0x00158d0001112222"
 Z2M_LOCK_IEEE = "0x00158d0009998888"
 ZHA_BULB_IEEE = "00:11:22:33:44:55:66:77"
+REPEATER_IEEE = "0x00124b0000000abc"
 ZHA_TARGET_IEEE = "00:11:22:33:44:55:66:88"
 Z2M_GROUP_NAME = "Test Zigbee Group"
 Z2M_GROUP_ID = 42
@@ -2377,6 +2378,61 @@ class TestConfigureZigbeeReporting:
         )
         assert result[1] == "invalid_request"
         assert "mismatched reporting confirmation" in _text(result)
+
+
+def _repeater(hass) -> str:
+    """A repeater whose only entity Zigbee2MQTT ships disabled, so it has no state."""
+    entry = hass.config_entries.async_get_entry("e_radio")
+    device = dr.async_get(hass).async_get_or_create(
+        config_entry_id=entry.entry_id, identifiers={("mqtt", f"zigbee2mqtt_{REPEATER_IEEE}")},
+        name="Repeater",
+    )
+    er.async_get(hass).async_get_or_create(
+        "sensor", "mqtt", "repeater_linkquality", config_entry=entry, device_id=device.id,
+        disabled_by=er.RegistryEntryDisabler.INTEGRATION,
+    )
+    return device.id
+
+
+class TestDeviceWithNoLiveEntity:
+    @pytest.mark.parametrize(("state", "outcome"), [("GREEN", "allowed"), ("YELLOW", "denied"), ("RED", "not_found")])
+    async def test_a_device_grant_decides(self, hass, radio_env, broker, state, outcome):
+        hass.config.components.add("mqtt")
+        device_id = _repeater(hass)
+        key = _access_key(tree=PermissionTree(devices={device_id: PermissionNode(state=state)}), cap_radio_write="allow")
+        res = await _call_tool("remove_zigbee_device", {"device_id": device_id}, key, hass, _data())
+        assert res[1] == outcome
+        removed = any(topic.endswith("bridge/request/device/remove") for topic, _ in broker.published)
+        assert removed is (outcome == "allowed")
+
+    async def test_a_grant_on_its_disabled_entity_or_domain_cannot_remove_it(self, hass, radio_env, broker):
+        hass.config.components.add("mqtt")
+        device_id = _repeater(hass)
+        entity = er.async_get(hass).async_get_entity_id("sensor", "mqtt", "repeater_linkquality")
+        for tree in (PermissionTree(entities={entity: PermissionNode(state="GREEN")}),
+                     PermissionTree(domains={"sensor": PermissionNode(state="GREEN")})):
+            res = await _call_tool(
+                "remove_zigbee_device", {"device_id": device_id},
+                _access_key(tree=tree, cap_radio_write="allow"), hass, _data(),
+            )
+            assert res[1] != "allowed", tree
+        assert not any(topic.endswith("bridge/request/device/remove") for topic, _ in broker.published)
+
+    async def test_no_grant_reads_like_a_device_that_does_not_exist(self, hass, radio_env, broker):
+        device_id = _repeater(hass)
+        key = _light_access_key(cap_radio_write="allow")
+        hidden = await _call_tool("remove_zigbee_device", {"device_id": device_id}, key, hass, _data())
+        ghost = await _call_tool("remove_zigbee_device", {"device_id": "ghost"}, key, hass, _data())
+        assert hidden[1] == ghost[1] == "not_found"
+        assert json.dumps(hidden[0]) == json.dumps(ghost[0])
+
+    async def test_a_live_entity_keeps_the_existing_rule(self, hass, radio_env, broker):
+        hass.config.components.add("mqtt")
+        res = await _call_tool(
+            "remove_zigbee_device", {"device_id": radio_env["z2m_bulb"]},
+            _read_only_light_access_key(cap_radio_write="allow"), hass, _data(),
+        )
+        assert res[1] == "denied"
 
 
 class TestRemoveZigbeeDevice:
