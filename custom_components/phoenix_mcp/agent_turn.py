@@ -56,7 +56,7 @@ from .provider_constants import (
     AGENT_CHAT_TOOL_RESULT_MAX_CHARS,
 )
 from .routing.routing_statistics import provider_events
-from .routing.tool_routing import create_review_state, async_review_tools, withheld_results
+from .routing.tool_routing import create_review_state, async_review_tools, ToolReviewState, withheld_results
 from .tool_catalog import build_agent_tool_list
 from .tool_common import (
     _operator_accepted_result, approval_outcome, execution_failure_text, _ProgressBus,
@@ -64,6 +64,7 @@ from .tool_common import (
 )
 from .tool_defs import _NATIVE_TOOL_PUBLIC_TO_INTERNAL
 from .tool_input import tool_arguments_error
+from .tool_loading import ToolLoader
 from .tool_dispatch import _dispatch_mcp
 from .time_text import parse_datetime
 
@@ -1503,6 +1504,359 @@ class _HeadlessTurnResult:
     recovery_turn_id: str = ""
 
 
+@dataclasses.dataclass
+class _HeadlessRun:
+    """What the steps of one headless turn share: its fixed inputs and its running state."""
+
+    hass: HomeAssistant
+    data: PhoenixData
+    access_key: AccessKeyRecord
+    provider: ClaudeProvider | OpenAICompatProvider
+    session: ClientSession
+    base_url: str
+    client_ip: str
+    system: str
+    max_iterations: int
+    routing_surface: str
+    routing_language: object
+    first_reply_seconds: float | None
+    loader: ToolLoader | None
+    review_state: ToolReviewState | None
+    agent_tools: list[dict]
+    messages: list[dict]
+    access_key_id: str
+    cancel: asyncio.Event  # never fired; the stream primitive expects one
+    final_text: str = ""
+    review_urls: list[str] = dataclasses.field(default_factory=list)
+    # Bound the TOTAL provider output retained across the turn, matching
+    # async_run_agent_turn: assistant and tool messages are retained across every
+    # round and the growing transcript is re-sent on each one, so without a
+    # ceiling a faulty or hostile provider could inflate it. Checked BEFORE the
+    # append, so the offending message is never retained.
+    turn_output_bytes: int = 0
+    # Set when a dispatch was refused because the access key lost authority mid-turn.
+    # The round that discovers it still finishes and still feeds the refusals
+    # back, so the model gets ONE turn to tell the user; asking for tools again
+    # after that is stopped rather than repeated, because every call would be refused
+    # identically to the same dead access key. The interactive loop ends the turn
+    # outright here; headless allows the one intervening round so the model can say
+    # what happened.
+    authority_lost: bool = False
+    # Only a break clears this. Falling out of the for is the runaway case: the
+    # round that exhausts the budget is by definition a tool round, which has
+    # already reset final_text, so the caller would otherwise receive "".
+    exhausted: bool = True
+    focus_declined: bool = False
+    dispatch_started: bool = False
+    write_started: bool = False
+    format_corrections: int = 0
+    report_only: bool = False
+    stop_reason: str = "end_turn"
+
+
+@dataclasses.dataclass
+class _HeadlessRound:
+    """What one model call left for the rest of its round.
+
+    ``ending`` is the result that ends the turn at once; ``correct_format`` asks for another
+    round; ``invalid`` is a malformed tool call to hand back to the model.
+    """
+
+    tool_calls: list[dict] = dataclasses.field(default_factory=list)
+    assistant_msg: dict | None = None
+    invalid: dict | None = None
+    call_text: str = ""
+    correct_format: bool = False
+    ending: _HeadlessTurnResult | None = None
+
+
+def _corrects_invalid_tools(run: _HeadlessRun, final_round: bool, iteration: int) -> bool:
+    """Hand malformed tool-call JSON back as tool errors while a round remains for the corrected call.
+
+    Home Companion keeps its own stricter budget and never corrects after a write.
+    """
+    companion = internal_turn(run.access_key)
+    limit = HOME_COMPANION_MAX_FORMAT_CORRECTIONS if companion else AGENT_CHAT_MAX_TOOL_CALL_CORRECTIONS
+    return (not final_round and run.format_corrections < limit and iteration < run.max_iterations - 1
+            and not (companion and run.write_started))
+
+
+def _corrects_format_error(run: _HeadlessRun, ev: dict, tool_calls: list[dict], iteration: int) -> bool:
+    """Whether a Home Companion format error can be corrected instead of ending the turn."""
+    return (internal_turn(run.access_key) and not run.write_started and not tool_calls
+            and (ev.get('code') in HOME_COMPANION_FORMAT_ERROR_CODES
+                 or (ev.get('diagnostic') or {}).get('category') in HOME_COMPANION_FORMAT_ERROR_CODES)
+            and run.format_corrections < HOME_COMPANION_MAX_FORMAT_CORRECTIONS
+            and iteration < run.max_iterations - 1)
+
+
+def _headless_stream_failure(run: _HeadlessRun, ev: dict) -> _HeadlessTurnResult:
+    """The result of a provider error: its outcome is unknown once a write started."""
+    return _HeadlessTurnResult(
+        run.final_text, run.review_urls,
+        outcome=TURN_OUTCOME_UNKNOWN if run.write_started else TURN_PROVIDER_ERROR,
+        detail=(voice_text(run.routing_language, "model_api_unsupported")
+                if ev.get("code") == "model_api_unsupported"
+                else str(ev.get("message") or _HEADLESS_PROVIDER_ERROR)),
+        detail_code=str(ev.get("code") or ""),
+        focus_declined=run.focus_declined,
+    )
+
+
+async def _stream_headless_round(
+    run: _HeadlessRun, *, round_system: str, tools: list[dict], final_round: bool, iteration: int,
+    usage: HeadlessUsage | None,
+) -> _HeadlessRound:
+    """Read one model call into a round, leaving its stop reason on ``run``."""
+    model = _HeadlessRound()
+    run.stop_reason = "end_turn"
+    async for ev in _stream_turn_resilient(
+        run.provider, run.session, system_prompt=round_system, messages=run.messages,
+        tools=tools, options={}, cancel=run.cancel, dispatch_started=run.dispatch_started,
+        write_started=run.write_started, first_reply_seconds=run.first_reply_seconds,
+    ):
+        etype = ev["type"]
+        if etype == EV_INVALID_TOOLS:
+            if _corrects_invalid_tools(run, final_round, iteration):
+                model.invalid = ev
+                continue
+            ev = _invalid_tools_error()
+            etype = EV_ERROR
+        if etype == EV_TEXT:
+            model.call_text += ev["text"]
+        elif etype == EV_TOOL:
+            model.tool_calls.append(ev)
+        elif etype == EV_USAGE:
+            if usage is not None:
+                usage.report(ev)
+        elif etype == EV_DONE:
+            run.stop_reason = ev["stop_reason"]
+            model.assistant_msg = ev["assistant_msg"]
+        elif etype == EV_ERROR:
+            if _corrects_format_error(run, ev, model.tool_calls, iteration):
+                run.format_corrections += 1
+                run.messages.append({'role': 'user', 'content': (
+                    'Your previous response was malformed and none of the tools in that response ran. '
+                    'Use valid JSON objects for tool arguments, including quoted string values. '
+                    'Keep the original task and restrictions unchanged.')})
+                model.correct_format = True
+                break
+            model.ending = _headless_stream_failure(run, ev)
+            return model
+    return model
+
+
+def _hand_back_invalid_tools(run: _HeadlessRun, invalid: dict) -> _HeadlessTurnResult | None:
+    """Return a malformed tool call to the model as tool errors, unless that passes the ceiling."""
+    run.format_corrections += 1
+    prospective = run.turn_output_bytes + len(json.dumps(invalid["assistant_msg"], default=str))
+    if prospective > AGENT_CHAT_MAX_TURN_OUTPUT_BYTES:
+        return _HeadlessTurnResult(
+            run.final_text, run.review_urls, outcome=TURN_OUTPUT_LIMIT, focus_declined=run.focus_declined,
+        )
+    run.provider.append_assistant(run.messages, invalid["assistant_msg"])
+    run.turn_output_bytes = prospective
+    run.provider.append_tool_results(run.messages, invalid["results"])
+    return None
+
+
+def _strip_headless_focus_marker(run: _HeadlessRun, model: _HeadlessRound) -> None:
+    """Remove the private focus marker from a round, noting that the model declined."""
+    model.call_text, text_declined = _strip_focus_marker_text(model.call_text)
+    run.focus_declined = run.focus_declined or text_declined
+    if model.assistant_msg is not None:
+        model.assistant_msg, message_declined = _strip_focus_marker_message(model.assistant_msg)
+        run.focus_declined = run.focus_declined or message_declined
+
+
+def _refuse_final_round_tools(run: _HeadlessRun, tool_calls: list[dict]) -> _HeadlessTurnResult:
+    """End a turn whose final round asked for tools.
+
+    A provider ignoring the final-round instruction cannot dispatch another batch and leave
+    no round for reporting its outcome.
+    """
+    for proposed in tool_calls:
+        record_rejected_tool(proposed.get("id"), proposed.get("name"), proposed.get("input"),
+                             reason="No tools are permitted in the final response round.", stage="round_limit")
+    return _HeadlessTurnResult("", run.review_urls, outcome=TURN_EXHAUSTED)
+
+
+def _retry_invalid_read_report(run: _HeadlessRun, iteration: int) -> bool:
+    """Spend a correction on a read answer that failed validation; False when the answer stands."""
+    if (not run.write_started and invalid_read_report(run.access_key, run.final_text)
+            and run.format_corrections < HOME_COMPANION_MAX_FORMAT_CORRECTIONS
+            and iteration < run.max_iterations - 1):
+        run.format_corrections += 1
+        run.report_only = True
+        run.messages.append({'role': 'user', 'content': (
+            'Your final report did not pass validation. Return exactly one JSON object '
+            'with status and a nonempty message; an answer already written belongs in message. For a count, copy the unchanged server-provided read_answer reference '
+            'from the received search result. Do not invent a count or source index. '
+            'Do not repeat discovery or run a control. Keep the original task and restrictions unchanged.')})
+        run.final_text = ''
+        return True
+    return False
+
+
+def _refuse_invalid_proposals(
+    run: _HeadlessRun, tool_calls: list[dict], validation_results: list[dict], iteration: int,
+) -> _HeadlessTurnResult | None:
+    """Refuse a batch that failed preflight: a result ends the turn, None spends a correction round."""
+    for proposed, validation in zip(tool_calls, validation_results):
+        record_rejected_tool(proposed.get("id"), proposed.get("name"), proposed.get("input"),
+                             reason=validation["result_text"], stage="companion_preflight")
+    if run.write_started:
+        incomplete_proposal(run.access_key)
+        return _HeadlessTurnResult(json.dumps({'status': 'refused', 'message': 'A later control proposal was invalid and was not run.'}), run.review_urls)
+    if (run.format_corrections >= HOME_COMPANION_MAX_FORMAT_CORRECTIONS
+            or iteration >= run.max_iterations - 2):
+        return _HeadlessTurnResult('', run.review_urls, outcome=TURN_PROVIDER_ERROR)
+    run.format_corrections += 1
+    run.provider.append_tool_results(run.messages, validation_results)
+    run.final_text = ''
+    return None
+
+
+def _with_read_answer(result_text: str, reference: dict) -> str:
+    """Add the server's count reference to a tool result, inside it when it is a JSON object."""
+    try:
+        body = json.loads(result_text)
+    except (ValueError, TypeError):
+        body = None
+    if isinstance(body, dict):
+        return json.dumps({**body, 'read_answer': reference}, ensure_ascii=False)
+    return result_text + '\nread_answer: ' + json.dumps(reference)
+
+
+async def _dispatch_headless_call(run: _HeadlessRun, tc: dict, results: list[dict]) -> _HeadlessTurnResult | None:
+    """Dispatch one call under a freshly resolved key, adding its row to ``results``.
+
+    Returns the result that ends the turn, or None to go on to the next call.
+    """
+    name = str(tc.get("name") or "")[:MAX_TOOL_NAME_LENGTH]
+    dispatch_access_key = _current_dispatch_access_key(run.data, run.access_key_id)
+    if dispatch_access_key is None:
+        record_rejected_tool(tc.get("id"), name, tc.get("input"),
+                             reason="This access key is no longer authorized; the tool was not run.", stage="authority_guard")
+        run.authority_lost = True
+        results.append({
+            "tool_use_id": tc.get("id"), "tool_name": name,
+            "result_text": "This access key is no longer authorized; not run.",
+            "is_error": True,
+        })
+        return None
+    dispatch_request_id = generate_request_id()
+    if ambiguous_control(dispatch_access_key, run.hass, name, tc.get("input")):
+        record_rejected_tool(tc.get("id"), name, tc.get("input"),
+                             reason="The target is ambiguous; no action was executed.", stage="target_guard")
+        return _HeadlessTurnResult(json.dumps({'status': 'clarification_needed', 'message': 'Ambiguous target.'}), run.review_urls)
+    run.dispatch_started = True
+    run.write_started = run.write_started or not tool_is_read_only(name)
+    try:
+        resp_msg, _m, _r, outcome = await dispatch_agent_tool(
+            _dispatch_mcp, hass=run.hass, data=run.data, access_key=dispatch_access_key,
+            name=name, arguments=tc.get("input") or {}, tool_id=tc.get("id"),
+            client_ip=run.client_ip, base_url=run.base_url, request_id=dispatch_request_id,
+        )
+    except RecoveryRequired:
+        return _HeadlessTurnResult("", run.review_urls, outcome=TURN_OUTCOME_UNKNOWN)
+    result = dispatch_tool_result(resp_msg)
+    if outcome in ("denied", "invalid_request") and (resp_msg or {}).get("error", {}).get("code") == -32000:
+        run.authority_lost = True
+    pending = _parse_pending(
+        result,
+        outcome=outcome,
+        data=run.data,
+        access_key_id=run.access_key_id,
+        tool_name=name,
+        request_id=dispatch_request_id,
+    )
+    if pending:
+        if pending.get("review_url"):
+            run.review_urls.append(pending["review_url"])
+        results.append({
+            "tool_use_id": tc.get("id"), "tool_name": name,
+            "result_text": json.dumps({
+                "status": "queued_for_approval",
+                "message": "Queued for admin approval in the Phoenix MCP panel; not applied yet.",
+            }),
+            "is_error": False,
+        })
+        if internal_turn(dispatch_access_key):
+            return _HeadlessTurnResult("", run.review_urls)
+        return None
+    content = result.get("content", [])
+    result_text = _flatten_text(content)
+    reference = count_source(dispatch_access_key, name)
+    if reference is not None:
+        result_text = _with_read_answer(result_text, reference)
+    results.append({
+        "tool_use_id": tc.get("id"), "tool_name": name,
+        "result_text": result_text,
+        "images": _extract_image_blocks(content),
+        "is_error": bool(result.get("isError")),
+    })
+    return None
+
+
+async def _run_headless_tools(
+    run: _HeadlessRun, tool_calls: list[dict], iteration: int,
+) -> _HeadlessTurnResult | None:
+    """Review and dispatch a round's calls and feed the results back; a result ends the turn."""
+    # The answer is the model's LAST text (after tools resolve), not the
+    # intermediate "let me check..." text before a tool round; reset it here.
+    run.final_text = ""
+    slots, tool_calls = _local_tool_results(run.loader, tool_calls, run.data)
+    if run.review_state is not None and tool_calls:
+        review = await async_review_tools(run.hass, run.data, run.review_state, surface=run.routing_surface,
+            language=run.routing_language, messages=run.messages, calls=tool_calls, system=run.system,
+            remaining_rounds=run.max_iterations - iteration - 1, announced_tools=run.agent_tools)
+        if review.action != "continue":
+            run.provider.append_tool_results(run.messages, _merged_results(slots, withheld_results(tool_calls, review)))
+            if review.action == "stop":
+                return _HeadlessTurnResult("", run.review_urls, outcome=TURN_AUTHORITY_LOST)
+            return None
+    results: list[dict] = []
+    for tc in tool_calls:
+        if (ending := await _dispatch_headless_call(run, tc, results)) is not None:
+            return ending
+    # Measured against the longer final-round prompt, which the next round may use.
+    append_fitting_results(run.access_key, run.system + _FINAL_ROUND_SYSTEM, run.messages,
+                           _merged_results(slots, results), run.provider.append_tool_results)
+    return None
+
+
+def _headless_turn_ending(run: _HeadlessRun) -> _HeadlessTurnResult:
+    """The result of a turn whose rounds are over, naming the actionable cause first."""
+    if run.authority_lost:
+        # Reported ahead of exhaustion: a turn can hit both (authority lost in the
+        # final allowed round), and the access key dying is the actionable cause. It
+        # also cannot be inferred from the outside: the closing round often ends
+        # normally, so without this the turn would look like an ordinary success
+        # that produced nothing.
+        return _HeadlessTurnResult(
+            run.final_text, run.review_urls, outcome=TURN_AUTHORITY_LOST,
+            focus_declined=run.focus_declined,
+        )
+    if run.exhausted:
+        return _HeadlessTurnResult(
+            run.final_text, run.review_urls, outcome=TURN_EXHAUSTED,
+            focus_declined=run.focus_declined,
+        )
+    if run.stop_reason == "max_tokens":
+        # The model stopped at its OWN output limit, so `text` is a sentence that
+        # was cut off mid-thought. Reported rather than returned bare: a spoken
+        # half-answer gets acted on, and a half-written JSON document fails to
+        # parse and is then blamed on the model's formatting.
+        return _HeadlessTurnResult(
+            run.final_text, run.review_urls, outcome=TURN_TRUNCATED,
+            focus_declined=run.focus_declined,
+        )
+    return _HeadlessTurnResult(
+        run.final_text, run.review_urls, focus_declined=run.focus_declined,
+    )
+
+
 @recovery_turn
 async def _run_headless_turn(
     hass: HomeAssistant,
@@ -1543,293 +1897,69 @@ async def _run_headless_turn(
     tools_key = tuple(tool["name"] for tool in declared)
     if (too_many := _tool_limit_problem(provider, tools)) is not None:
         return _HeadlessTurnResult("", [], outcome=TURN_PROVIDER_ERROR, detail=too_many["message"])
-    messages: list[dict] = [{"role": "user", "content": seed}]
-    access_key_id = access_key.id
-    cancel = asyncio.Event()  # never fired; the stream primitive expects one
-    final_text = ""
-    review_urls: list[str] = []
-    # Bound the TOTAL provider output retained across the turn, matching
-    # async_run_agent_turn: assistant and tool messages are retained across every
-    # round and the growing transcript is re-sent on each one, so without a
-    # ceiling a faulty or hostile provider could inflate it. Checked BEFORE the
-    # append, so the offending message is never retained.
-    turn_output_bytes = 0
-    # Set when a dispatch was refused because the access key lost authority mid-turn.
-    # The round that discovers it still finishes and still feeds the refusals
-    # back, so the model gets ONE turn to tell the user; asking for tools again
-    # after that is stopped rather than repeated (see below).
-    authority_lost = False
-    # Only a break clears this. Falling out of the for is the runaway case: the
-    # round that exhausts the budget is by definition a tool round, which has
-    # already reset final_text, so the caller would otherwise receive "".
-    exhausted = True
-    focus_declined = False
-    dispatch_started = False
-    write_started = False
+    run = _HeadlessRun(
+        hass=hass, data=data, access_key=access_key, provider=provider, session=session, base_url=base_url,
+        client_ip=client_ip, system=system, max_iterations=max_iterations, routing_surface=routing_surface,
+        routing_language=routing_language, first_reply_seconds=first_reply_seconds, loader=loader,
+        review_state=review_state, agent_tools=agent_tools, messages=[{"role": "user", "content": seed}],
+        access_key_id=access_key.id, cancel=asyncio.Event(),
+    )
 
-    format_corrections = 0
-    report_only = False
     for iteration in range(max_iterations):
-        final_round = response_only or report_only or (reserve_final_round and iteration == max_iterations - 1)
+        final_round = response_only or run.report_only or (reserve_final_round and iteration == max_iterations - 1)
         round_system = system
         if final_round:
             round_system += _FINAL_ROUND_SYSTEM
-        if not check_turn_context(access_key, round_system, messages):
-            return _HeadlessTurnResult("", review_urls, outcome=TURN_OUTPUT_LIMIT)
+        if not check_turn_context(access_key, round_system, run.messages):
+            return _HeadlessTurnResult("", run.review_urls, outcome=TURN_OUTPUT_LIMIT)
         if (usage := headless_usage.get()) is not None:
             usage.start_call()
         if loader is not None and not final_round:
             definitions = loader.round_tools()
             if (key := tuple(tool["name"] for tool in definitions)) != tools_key:
                 tools, tools_key = provider.format_tools(definitions), key
-        tool_calls: list[dict] = []
-        assistant_msg: dict | None = None
-        invalid: dict | None = None
-        stop_reason = "end_turn"
-        call_text = ""
-        correct_format = False
-        async for ev in _stream_turn_resilient(
-            provider, session, system_prompt=round_system, messages=messages,
-            tools=[] if final_round else tools, options={}, cancel=cancel, dispatch_started=dispatch_started,
-            write_started=write_started, first_reply_seconds=first_reply_seconds,
-        ):
-            etype = ev["type"]
-            if etype == EV_INVALID_TOOLS:
-                # Hand malformed tool-call JSON back as tool errors while a round
-                # remains for the corrected call. Home Companion keeps its own
-                # stricter budget and never corrects after a write.
-                companion = internal_turn(access_key)
-                limit = HOME_COMPANION_MAX_FORMAT_CORRECTIONS if companion else AGENT_CHAT_MAX_TOOL_CALL_CORRECTIONS
-                if (not final_round and format_corrections < limit and iteration < max_iterations - 1
-                        and not (companion and write_started)):
-                    invalid = ev
-                    continue
-                ev = _invalid_tools_error()
-                etype = EV_ERROR
-            if etype == EV_TEXT:
-                call_text += ev["text"]
-            elif etype == EV_TOOL:
-                tool_calls.append(ev)
-            elif etype == EV_USAGE:
-                if usage is not None:
-                    usage.report(ev)
-            elif etype == EV_DONE:
-                stop_reason = ev["stop_reason"]
-                assistant_msg = ev["assistant_msg"]
-            elif etype == EV_ERROR:
-                if (internal_turn(access_key) and not write_started and not tool_calls
-                        and (ev.get('code') in HOME_COMPANION_FORMAT_ERROR_CODES
-                             or (ev.get('diagnostic') or {}).get('category') in HOME_COMPANION_FORMAT_ERROR_CODES)
-                        and format_corrections < HOME_COMPANION_MAX_FORMAT_CORRECTIONS
-                        and iteration < max_iterations - 1):
-                    format_corrections += 1
-                    messages.append({'role': 'user', 'content': (
-                        'Your previous response was malformed and none of the tools in that response ran. '
-                        'Use valid JSON objects for tool arguments, including quoted string values. '
-                        'Keep the original task and restrictions unchanged.')})
-                    correct_format = True
-                    break
-                return _HeadlessTurnResult(
-                    final_text, review_urls,
-                    outcome=TURN_OUTCOME_UNKNOWN if write_started else TURN_PROVIDER_ERROR,
-                    detail=(voice_text(routing_language, "model_api_unsupported")
-                            if ev.get("code") == "model_api_unsupported"
-                            else str(ev.get("message") or _HEADLESS_PROVIDER_ERROR)),
-                    detail_code=str(ev.get("code") or ""),
-                    focus_declined=focus_declined,
-                )
-        if correct_format:
+        model = await _stream_headless_round(
+            run, round_system=round_system, tools=[] if final_round else tools, final_round=final_round,
+            iteration=iteration, usage=usage,
+        )
+        if model.ending is not None:
+            return model.ending
+        if model.correct_format:
             continue
-        if invalid is not None:
-            format_corrections += 1
-            prospective = turn_output_bytes + len(json.dumps(invalid["assistant_msg"], default=str))
-            if prospective > AGENT_CHAT_MAX_TURN_OUTPUT_BYTES:
-                return _HeadlessTurnResult(
-                    final_text, review_urls, outcome=TURN_OUTPUT_LIMIT, focus_declined=focus_declined,
-                )
-            provider.append_assistant(messages, invalid["assistant_msg"])
-            turn_output_bytes = prospective
-            provider.append_tool_results(messages, invalid["results"])
+        if model.invalid is not None:
+            if (ending := _hand_back_invalid_tools(run, model.invalid)) is not None:
+                return ending
             continue
         if detect_focus_refusal:
-            call_text, text_declined = _strip_focus_marker_text(call_text)
-            focus_declined = focus_declined or text_declined
-            if assistant_msg is not None:
-                assistant_msg, message_declined = _strip_focus_marker_message(assistant_msg)
-                focus_declined = focus_declined or message_declined
-        final_text += call_text
-        if assistant_msg is not None:
-            prospective = turn_output_bytes + len(json.dumps(assistant_msg, default=str))
+            _strip_headless_focus_marker(run, model)
+        run.final_text += model.call_text
+        if model.assistant_msg is not None:
+            prospective = run.turn_output_bytes + len(json.dumps(model.assistant_msg, default=str))
             if prospective > AGENT_CHAT_MAX_TURN_OUTPUT_BYTES:
                 return _HeadlessTurnResult(
-                    final_text, review_urls, outcome=TURN_OUTPUT_LIMIT,
-                    focus_declined=focus_declined,
+                    run.final_text, run.review_urls, outcome=TURN_OUTPUT_LIMIT,
+                    focus_declined=run.focus_declined,
                 )
-            provider.append_assistant(messages, assistant_msg)
-            turn_output_bytes = prospective
-        if final_round and tool_calls:
-            for proposed in tool_calls:
-                record_rejected_tool(proposed.get("id"), proposed.get("name"), proposed.get("input"),
-                                     reason="No tools are permitted in the final response round.", stage="round_limit")
-            # A provider ignoring the final-round instruction cannot dispatch
-            # another batch and leave no round for reporting its outcome.
-            return _HeadlessTurnResult("", review_urls, outcome=TURN_EXHAUSTED)
-        if stop_reason != "tool_use":
-            if (not write_started and invalid_read_report(access_key, final_text)
-                    and format_corrections < HOME_COMPANION_MAX_FORMAT_CORRECTIONS
-                    and iteration < max_iterations - 1):
-                format_corrections += 1
-                report_only = True
-                messages.append({'role': 'user', 'content': (
-                    'Your final report did not pass validation. Return exactly one JSON object '
-                    'with status and a nonempty message; an answer already written belongs in message. For a count, copy the unchanged server-provided read_answer reference '
-                    'from the received search result. Do not invent a count or source index. '
-                    'Do not repeat discovery or run a control. Keep the original task and restrictions unchanged.')})
-                final_text = ''
+            provider.append_assistant(run.messages, model.assistant_msg)
+            run.turn_output_bytes = prospective
+        if final_round and model.tool_calls:
+            return _refuse_final_round_tools(run, model.tool_calls)
+        if run.stop_reason != "tool_use":
+            if _retry_invalid_read_report(run, iteration):
                 continue
-            exhausted = False
+            run.exhausted = False
             break
-        if authority_lost:
-            # The previous round fed back "no longer authorized" for every call
-            # and this round asked for tools again rather than answering. Every
-            # one would be refused identically, so stop instead of spending the
-            # remaining rounds re-reporting the same refusal to the same dead
-            # access key. The interactive loop ends the turn outright here; headless
-            # allows the one intervening round so the model can say what happened.
-            exhausted = False
+        if run.authority_lost:
+            run.exhausted = False
             break
-
-        if validation_results := preflight_control_calls(access_key, tool_calls):
-            for proposed, validation in zip(tool_calls, validation_results):
-                record_rejected_tool(proposed.get("id"), proposed.get("name"), proposed.get("input"),
-                                     reason=validation["result_text"], stage="companion_preflight")
-            if write_started:
-                incomplete_proposal(access_key)
-                return _HeadlessTurnResult(json.dumps({'status': 'refused', 'message': 'A later control proposal was invalid and was not run.'}), review_urls)
-            if (format_corrections >= HOME_COMPANION_MAX_FORMAT_CORRECTIONS
-                    or iteration >= max_iterations - 2):
-                return _HeadlessTurnResult('', review_urls, outcome=TURN_PROVIDER_ERROR)
-            format_corrections += 1
-            provider.append_tool_results(messages, validation_results)
-            final_text = ''
+        if validation_results := preflight_control_calls(access_key, model.tool_calls):
+            if (ending := _refuse_invalid_proposals(run, model.tool_calls, validation_results, iteration)) is not None:
+                return ending
             continue
+        if (ending := await _run_headless_tools(run, model.tool_calls, iteration)) is not None:
+            return ending
 
-        # The answer is the model's LAST text (after tools resolve), not the
-        # intermediate "let me check..." text before a tool round; reset it here.
-        final_text = ""
-        slots, tool_calls = _local_tool_results(loader, tool_calls, data)
-        if review_state is not None and tool_calls:
-            review = await async_review_tools(hass, data, review_state, surface=routing_surface,
-                language=routing_language, messages=messages, calls=tool_calls, system=system,
-                remaining_rounds=max_iterations - iteration - 1, announced_tools=agent_tools)
-            if review.action != "continue":
-                provider.append_tool_results(messages, _merged_results(slots, withheld_results(tool_calls, review)))
-                if review.action == "stop":
-                    return _HeadlessTurnResult("", review_urls, outcome=TURN_AUTHORITY_LOST)
-                continue
-        results: list[dict] = []
-        for tc in tool_calls:
-            name = str(tc.get("name") or "")[:MAX_TOOL_NAME_LENGTH]
-            dispatch_access_key = _current_dispatch_access_key(data, access_key_id)
-            if dispatch_access_key is None:
-                record_rejected_tool(tc.get("id"), name, tc.get("input"),
-                                     reason="This access key is no longer authorized; the tool was not run.", stage="authority_guard")
-                authority_lost = True
-                results.append({
-                    "tool_use_id": tc.get("id"), "tool_name": name,
-                    "result_text": "This access key is no longer authorized; not run.",
-                    "is_error": True,
-                })
-                continue
-            dispatch_request_id = generate_request_id()
-            if ambiguous_control(dispatch_access_key, hass, name, tc.get("input")):
-                record_rejected_tool(tc.get("id"), name, tc.get("input"),
-                                     reason="The target is ambiguous; no action was executed.", stage="target_guard")
-                return _HeadlessTurnResult(json.dumps({'status': 'clarification_needed', 'message': 'Ambiguous target.'}), review_urls)
-            dispatch_started = True
-            write_started = write_started or not tool_is_read_only(name)
-            try:
-                resp_msg, _m, _r, outcome = await dispatch_agent_tool(
-                    _dispatch_mcp, hass=hass, data=data, access_key=dispatch_access_key,
-                    name=name, arguments=tc.get("input") or {}, tool_id=tc.get("id"),
-                    client_ip=client_ip, base_url=base_url, request_id=dispatch_request_id,
-                )
-            except RecoveryRequired:
-                return _HeadlessTurnResult("", review_urls, outcome=TURN_OUTCOME_UNKNOWN)
-            result = dispatch_tool_result(resp_msg)
-            if outcome in ("denied", "invalid_request") and (resp_msg or {}).get("error", {}).get("code") == -32000:
-                authority_lost = True
-            pending = _parse_pending(
-                result,
-                outcome=outcome,
-                data=data,
-                access_key_id=access_key_id,
-                tool_name=name,
-                request_id=dispatch_request_id,
-            )
-            if pending:
-                if pending.get("review_url"):
-                    review_urls.append(pending["review_url"])
-                results.append({
-                    "tool_use_id": tc.get("id"), "tool_name": name,
-                    "result_text": json.dumps({
-                        "status": "queued_for_approval",
-                        "message": "Queued for admin approval in the Phoenix MCP panel; not applied yet.",
-                    }),
-                    "is_error": False,
-                })
-                if internal_turn(dispatch_access_key):
-                    return _HeadlessTurnResult("", review_urls)
-                continue
-            content = result.get("content", [])
-            result_text = _flatten_text(content)
-            reference = count_source(dispatch_access_key, name)
-            if reference is not None:
-                try:
-                    body = json.loads(result_text)
-                except (ValueError, TypeError):
-                    body = None
-                if isinstance(body, dict):
-                    result_text = json.dumps({**body, 'read_answer': reference}, ensure_ascii=False)
-                else:
-                    result_text += '\nread_answer: ' + json.dumps(reference)
-            results.append({
-                "tool_use_id": tc.get("id"), "tool_name": name,
-                "result_text": result_text,
-                "images": _extract_image_blocks(content),
-                "is_error": bool(result.get("isError")),
-            })
-        # Measured against the longer final-round prompt, which the next round may use.
-        append_fitting_results(access_key, system + _FINAL_ROUND_SYSTEM, messages, _merged_results(slots, results),
-                               provider.append_tool_results)
-
-    if authority_lost:
-        # Reported ahead of exhaustion: a turn can hit both (authority lost in the
-        # final allowed round), and the access key dying is the actionable cause. It
-        # also cannot be inferred from the outside: the closing round often ends
-        # normally, so without this the turn would look like an ordinary success
-        # that produced nothing.
-        return _HeadlessTurnResult(
-            final_text, review_urls, outcome=TURN_AUTHORITY_LOST,
-            focus_declined=focus_declined,
-        )
-    if exhausted:
-        return _HeadlessTurnResult(
-            final_text, review_urls, outcome=TURN_EXHAUSTED,
-            focus_declined=focus_declined,
-        )
-    if stop_reason == "max_tokens":
-        # The model stopped at its OWN output limit, so `text` is a sentence that
-        # was cut off mid-thought. Reported rather than returned bare: a spoken
-        # half-answer gets acted on, and a half-written JSON document fails to
-        # parse and is then blamed on the model's formatting.
-        return _HeadlessTurnResult(
-            final_text, review_urls, outcome=TURN_TRUNCATED,
-            focus_declined=focus_declined,
-        )
-    return _HeadlessTurnResult(
-        final_text, review_urls, focus_declined=focus_declined,
-    )
+    return _headless_turn_ending(run)
 
 
 def _status_of(result: dict) -> str:
