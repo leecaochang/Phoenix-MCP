@@ -1487,8 +1487,9 @@ headless_usage: ContextVar[HeadlessUsage | None] = ContextVar("phoenix_headless_
 class _HeadlessTurnResult:
     """What one headless turn produced, and how it ended.
 
-    ``text`` is the model's last text, so a partial answer survives a failure. ``outcome`` is
-    a TURN_* code, so a non-OK ending is not mistaken for a reply. ``detail`` carries the
+    ``text`` is what the model finished saying since its last tool round; the text of a call
+    that fails mid-stream is dropped, so a spoken reply never reads out half an answer.
+    ``outcome`` is a TURN_* code, so a non-OK ending is not mistaken for a reply. ``detail`` carries the
     provider's error text for TURN_PROVIDER_ERROR only.
     """
 

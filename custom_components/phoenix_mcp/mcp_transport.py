@@ -23,7 +23,7 @@ from .const import (
     DOMAIN, MAX_BATCH_ITEMS, MCP_AUTHORITY_CHANGED_ERROR, MCP_DISCOVER_TTL_MS,
     MCP_LEGACY_PROTOCOL_VERSION_PREFERRED, MCP_LEGACY_PROTOCOL_VERSIONS,
     MCP_LEGACY_SESSION_BUSY_RETRY_SECONDS, MCP_PROTOCOL_VERSIONS, MCP_SSE_KEEPALIVE_SECONDS,
-    PHOENIX_VERSION, MAX_REQUEST_BODY_BYTES as _MAX_BODY,
+    PHOENIX_VERSION, MAX_REQUEST_BODY_BYTES as _MAX_BODY, MCP_BODY_READ_TIMEOUT_SECONDS,
 )
 from .conversation_log import transport_session
 from .data import PhoenixData
@@ -32,6 +32,7 @@ from .helpers import (
 )
 from .access_key_auth import (
     async_get_authenticated_access_key as _async_get_authenticated_access_key,
+    unauthorized_response,
 )
 from .rate_limiter import RateLimitResult
 from .request_authority import AuthorityChangedError, request_authority, RequestAuthority
@@ -902,19 +903,20 @@ async def _read_post_body(post: _McpPost) -> list[bytes] | web.Response:
     chunks: list[bytes] = []
     total = 0
     try:
-        while True:
-            chunk = await request.content.read(_MAX_BODY - total + 1)
-            if not chunk:
-                break
-            chunks.append(chunk)
-            total += len(chunk)
-            if total > _MAX_BODY:
-                return post.audited(
-                    _error("request_too_large", "Request body too large.", 413, request_id)
-                )
-            at_eof = getattr(request.content, "at_eof", None)
-            if callable(at_eof) and at_eof():
-                break
+        async with asyncio.timeout(MCP_BODY_READ_TIMEOUT_SECONDS):
+            while True:
+                chunk = await request.content.read(_MAX_BODY - total + 1)
+                if not chunk:
+                    break
+                chunks.append(chunk)
+                total += len(chunk)
+                if total > _MAX_BODY:
+                    return post.audited(
+                        _error("request_too_large", "Request body too large.", 413, request_id)
+                    )
+                at_eof = getattr(request.content, "at_eof", None)
+                if callable(at_eof) and at_eof():
+                    break
     except Exception:
         return post.audited(
             _error("invalid_request", "Failed to read request body.", 400, request_id)
@@ -922,15 +924,21 @@ async def _read_post_body(post: _McpPost) -> list[bytes] | web.Response:
     return chunks
 
 
-def _authority_lost_response(post: _McpPost) -> web.Response:
-    """Answer a request whose authority ended while its body was being read."""
-    data, hass, request_id = post.data, post.hass, post.request_id
-    unavailable = not data.ready or data.shutting_down or data.store.get_settings().kill_switch or hass.data.get(DOMAIN) is not data
-    return _error(
-        "service_unavailable" if unavailable else "unauthorized",
-        "Service unavailable." if unavailable else "Unauthorized.",
-        503 if unavailable else 401, request_id,
-    )
+def _authority_lost_response(
+    hass: HomeAssistant,
+    data: PhoenixData,
+    access_key: AccessKeyRecord,
+    request_id: str,
+    client_ip: str,
+    *,
+    method: str,
+    resource: str,
+) -> web.Response:
+    """Audit and answer a request whose authority ended after it was admitted."""
+    _log(data, access_key, request_id=request_id, method=method, resource=resource, outcome="denied", client_ip=client_ip)
+    if not data.ready or data.shutting_down or data.store.get_settings().kill_switch or hass.data.get(DOMAIN) is not data:
+        return _error("service_unavailable", "Service unavailable.", 503, request_id)
+    return unauthorized_response(request_id)
 
 
 def _batch_refusal(post: _McpPost, parsed: list) -> web.Response | None:
@@ -1392,17 +1400,8 @@ class PhoenixMcpView(PhoenixView):
         try:
             access_key = authority.current_access_key()
         except AuthorityChangedError:
-            unavailable = (
-                not data.ready
-                or data.shutting_down
-                or data.store.get_settings().kill_switch
-                or hass.data.get(DOMAIN) is not data
-            )
-            return _error(
-                "service_unavailable" if unavailable else "unauthorized",
-                "Service unavailable." if unavailable else "Unauthorized.",
-                503 if unavailable else 401,
-                request_id,
+            return _authority_lost_response(
+                hass, data, access_key, request_id, client_ip, method="DELETE", resource="mcp:session",
             )
 
         session_id = request.headers.get("Mcp-Session-Id")
@@ -1484,7 +1483,9 @@ class PhoenixMcpView(PhoenixView):
         try:
             post.access_key = authority.current_access_key()
         except AuthorityChangedError:
-            return _authority_lost_response(post)
+            return _authority_lost_response(
+                hass, data, access_key, request_id, client_ip, method="POST", resource="/api/phoenix-mcp",
+            )
         body_bytes = b"".join(chunks)
         if not body_bytes:
             return post.parse_error_response()

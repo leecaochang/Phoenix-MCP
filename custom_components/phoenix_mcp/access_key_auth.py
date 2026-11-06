@@ -31,6 +31,13 @@ if TYPE_CHECKING:
 _LOGGER = logging.getLogger(__name__)
 
 
+def unauthorized_response(request_id: str) -> web.Response:
+    """The 401 for a bearer key that is absent, unknown or no longer valid."""
+    response = build_error_response("unauthorized", "Unauthorized.", 401, request_id)
+    response.headers["WWW-Authenticate"] = 'Bearer realm="Phoenix MCP"'
+    return response
+
+
 async def async_get_authenticated_access_key(
     hass: HomeAssistant,
     request: web.Request,
@@ -52,8 +59,7 @@ async def async_get_authenticated_access_key(
         # at runtime, so the routes stay and refuse service with 503.
         return build_error_response("service_unavailable", "Service unavailable.", 503, request_id)
 
-    _401 = build_error_response("unauthorized", "Unauthorized.", 401, request_id)
-    _401.headers["WWW-Authenticate"] = 'Bearer realm="Phoenix MCP"'
+    _401 = unauthorized_response(request_id)
 
     for key in ("token", "access_token"):
         if key in request.query:

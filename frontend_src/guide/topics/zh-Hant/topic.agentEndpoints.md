@@ -67,6 +67,7 @@ MCP 端點在 POST 和 DELETE 上都會拒絕來自其他網站網頁的請求�
 | 404 | 錯誤 | `2026-07-28`：方法不存在。 |
 | 400 | JSON-RPC 錯誤 `-32600` | `2026-07-28` 下的批次，過大或為空的舊版批次，或不含請求且有訊息被拒絕的舊版批次。 |
 | 413 | `request_too_large` | 本文超過 1 MiB。 |
+| 400 | `invalid_request` | 無法讀取本文，或 30 秒後本文仍未傳完。 |
 | 403 | `forbidden` | `Origin` 不被允許。 |
 | 503 | `service_unavailable` | Phoenix 尚未就緒。 |
 

@@ -1023,6 +1023,82 @@ async def test_authority_lost_while_reading_answers_by_what_was_lost(env, hass, 
         response = await client.post(ROUTE, headers=_headers(raw), json=PING)
     assert response.status == status
     assert error in await response.read()
+    assert ("WWW-Authenticate" in response.headers) is (status == 401)
+    assert _audit_rows(data) == [("POST", ROUTE, "denied")]
+
+
+@pytest.mark.parametrize("lose,status", [
+    (lambda hass, data, key: setattr(key, "revoked", True), 401),
+    (lambda hass, data, key: setattr(data.store.get_settings(), "kill_switch", True), 503),
+], ids=["revoked", "kill-switch"])
+async def test_authority_lost_before_a_session_delete_is_audited(env, hass, lose, status):
+    client, data = env
+    key, raw = await _key(data)
+
+    async def authenticate(*args):
+        result = await async_get_authenticated_access_key(*args)
+        lose(hass, data, key)
+        return result
+
+    with patch.object(mcp_transport, "_async_get_authenticated_access_key", authenticate):
+        response = await client.delete(ROUTE, headers=_headers(raw, **{"Mcp-Session-Id": "s"}))
+    assert response.status == status
+    assert ("WWW-Authenticate" in response.headers) is (status == 401)
+    assert _audit_rows(data) == [("DELETE", "mcp:session", "denied")]
+
+
+async def test_a_body_that_stops_arriving_is_refused_for_the_authenticated_key(env):
+    client, data = env
+    _, raw = await _key(data)
+
+    async def stalled():
+        yield b"{"
+        await asyncio.Event().wait()
+
+    with patch.object(mcp_transport, "MCP_BODY_READ_TIMEOUT_SECONDS", 0.05):
+        async with asyncio.timeout(5):
+            response = await client.post(ROUTE, headers=_headers(raw), data=stalled())
+    assert response.status == 400
+    assert b"Failed to read request body." in await response.read()
+    assert _audit_rows(data) == [("POST", ROUTE, "invalid_request")]
+
+
+async def test_a_malformed_chunk_after_the_first_ends_the_request(env):
+    client, data = env
+    _, raw = await _key(data)
+    head = b"\r\n".join([
+        b"POST " + ROUTE.encode() + b" HTTP/1.1",
+        f"Host: {client.server.host}:{client.server.port}".encode(),
+        b"Authorization: Bearer " + raw.encode(), b"Connection: close",
+        b"Transfer-Encoding: chunked"])
+    reader, writer = await asyncio.open_connection(client.server.host, client.server.port)
+    try:
+        with patch.object(mcp_transport, "MCP_BODY_READ_TIMEOUT_SECONDS", 0.3):
+            writer.write(head + b"\r\n\r\n1\r\n{\r\n")
+            await writer.drain()
+            await asyncio.sleep(0.05)  # The handler is now reading past its first chunk.
+            writer.write(b"zz\r\nnot a chunk\r\n")
+            await writer.drain()
+            async with asyncio.timeout(3):
+                reply = await reader.read(4000)
+    finally:
+        writer.close()
+    assert b" 400 " in reply.split(b"\r\n")[0], reply
+    assert _audit_rows(data) == [("POST", ROUTE, "invalid_request")]
+
+
+async def test_a_slow_body_that_finishes_in_time_is_served(env):
+    client, data = env
+    _, raw = await _key(data)
+    message = json.dumps(INITIALIZE).encode()
+
+    async def slow():
+        yield message[:4]
+        await asyncio.sleep(0.05)
+        yield message[4:]
+
+    response = await client.post(ROUTE, headers=_headers(raw, **{"Content-Type": "application/json"}), data=slow())
+    assert response.status == 200, await response.text()
 
 
 @pytest.mark.parametrize("body,method", [

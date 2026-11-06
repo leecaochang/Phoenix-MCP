@@ -208,7 +208,10 @@ def _usage_int(value: Any) -> int:
     absent or malformed. bool is excluded explicitly (it subclasses int)."""
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         return 0
-    return max(0, int(value))
+    try:
+        return max(0, int(value))
+    except (OverflowError, ValueError):  # JSON numbers can parse as NaN or infinity.
+        return 0
 
 
 # Provider error bodies are JSON {"error": {"message", "type", "code"}} on both

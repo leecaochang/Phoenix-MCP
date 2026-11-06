@@ -11,7 +11,7 @@ from custom_components.phoenix_mcp.llm import provider_openai
 from custom_components.phoenix_mcp.llm.accounts import ProviderConfig
 from custom_components.phoenix_mcp.llm.base import (
     EV_DONE, EV_ERROR, EV_INVALID_TOOLS, EV_TEXT, EV_THINKING, EV_TOOL, EV_USAGE,
-    _ProviderResponseError,
+    _ProviderResponseError, _usage_int,
 )
 from custom_components.phoenix_mcp.llm.provider_openai import (
     OpenAICompatProvider,
@@ -321,6 +321,72 @@ async def test_mistral_string_deltas_after_blocks_become_a_text_block():
                            _frame({"content": " two"}), _frame({"content": ""}), _frame(finish="stop"))
     assert [e["text"] for e in events[:-1]] == ["one", " two"]
     assert events[-1]["assistant_msg"]["content"] == [block, {"type": "text", "text": "one two"}]
+
+
+@pytest.mark.asyncio
+async def test_mistral_string_deltas_before_the_first_block_are_replayed_in_order():
+    block = {"type": "text", "text": "Later"}
+    events = await _events(_provider("mistral"), _frame({"content": "Hello there, friend"}), _frame({"content": [block]}),
+                           _frame({"content": " after"}), _frame(finish="stop"))
+    assert [e["text"] for e in events[:-1]] == ["Hello there, ", "friend", "Later", " after"]
+    assert events[-1]["assistant_msg"]["content"] == [
+        {"type": "text", "text": "Hello there, friend"}, {"type": "text", "text": "Later after"},
+    ]
+
+
+@pytest.mark.asyncio
+async def test_mistral_earlier_text_joins_the_replay_once():
+    first, second = {"type": "thinking", "thinking": []}, {"type": "text", "text": "Later"}
+    events = await _events(_provider("mistral"), _frame({"content": "Hello there, friend"}), _frame({"content": [first]}),
+                           _frame({"content": [second]}), _frame(finish="stop"))
+    assert events[-1]["assistant_msg"]["content"] == [{"type": "text", "text": "Hello there, friend"}, first, second]
+
+
+@pytest.mark.asyncio
+async def test_mistral_inline_thinking_before_a_block_stays_out_of_the_replay():
+    block = {"type": "thinking", "thinking": [{"type": "text", "text": "deep"}]}
+    events = await _events(_provider("mistral"), _frame({"content": "<think>private</think>Answer"}),
+                           _frame({"content": [block]}), _frame(finish="stop"))
+    assert [e["text"] for e in events if e["type"] == EV_TEXT] == ["Answer"]
+    assert events[-1]["assistant_msg"]["content"] == [{"type": "text", "text": "Answer"}, block]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("show", [False, True], ids=["hidden", "shown"])
+async def test_mistral_unclosed_inline_thinking_before_a_block_stays_thinking(show):
+    block = {"type": "text", "text": "Done"}
+    events = await _events(_provider("mistral"), _frame({"content": "<think>unfinished"}),
+                           _frame({"content": [block]}), _frame(finish="stop"), show_thinking=show)
+    assert [e["text"] for e in events if e["type"] == EV_TEXT] == ["Done"]
+    assert bool([e for e in events if e["type"] == EV_THINKING]) is show
+    assert events[-1]["assistant_msg"]["content"] == [block]
+
+
+@pytest.mark.asyncio
+async def test_mistral_list_with_no_usable_block_leaves_the_plain_reply_alone():
+    events = await _events(_provider("mistral"), _frame({"content": "Hello there, friend"}), _frame({"content": ["junk"]}),
+                           _frame({"content": " again"}), _frame(finish="stop"))
+    assert events[-1]["assistant_msg"]["content"] == "Hello there, friend again"
+
+
+@pytest.mark.parametrize("value", [float("nan"), float("inf"), float("-inf"), 1e400, -1e400])
+def test_usage_int_answers_zero_for_a_number_with_no_integer(value):
+    assert _usage_int(value) == 0
+
+
+@pytest.mark.parametrize("value,expected", [(12, 12), (12.9, 12), (-3, 0), (True, 0), ("12", 0), (None, 0)])
+def test_usage_int_keeps_counts_and_refuses_other_shapes(value, expected):
+    assert _usage_int(value) == expected
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("bad", ["NaN", "Infinity", "-Infinity", "1e400"])
+async def test_a_token_count_with_no_integer_does_not_cost_the_response(bad):
+    usage = 'data: {"choices": [], "usage": {"prompt_tokens": %s, "completion_tokens": 5}}' % bad
+    events = await _events(_provider(), _frame({"content": "hello there"}), _frame(finish="stop"), usage)
+    assert not [e for e in events if e["type"] == EV_ERROR]
+    assert [(e["input_tokens"], e["output_tokens"]) for e in events if e["type"] == EV_USAGE] == [(0, 5)]
+    assert events[-1]["assistant_msg"]["content"] == "hello there"
 
 
 @pytest.mark.asyncio

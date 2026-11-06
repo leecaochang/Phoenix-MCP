@@ -984,6 +984,12 @@ def _segment_events(
 
 def _mistral_block_events(content: list, stream: _ChatStream, show_thinking: bool) -> Iterator[dict]:
     """Retain Mistral's structured content blocks and yield what each one shows."""
+    if not stream.mistral_content_parts and any(isinstance(block, dict) for block in content):
+        # Replay sends only the retained parts, so text that streamed as plain deltas joins
+        # them first. The think splitter is not fed after this, so its held tail ends here.
+        yield from _segment_events(stream.think.flush(), stream, show_thinking)
+        if stream.text_parts:
+            stream.mistral_content_parts.append({"type": "text", "text": "".join(stream.text_parts)})
     for block in content:
         if not isinstance(block, dict):
             continue
