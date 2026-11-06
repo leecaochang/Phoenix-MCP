@@ -1,22 +1,12 @@
-"""Assist bridge: expose Phoenix MCP's scoped tools to HA's native Assist/voice pipeline.
+"""Assist bridge: expose Phoenix MCP's scoped tools to HA's native Assist and voice pipeline.
 
-Registers a Home Assistant ``llm.API`` whose tools are the Phoenix MCP tool surface of a
-single admin-chosen (bound) access key. Every tool call flows through the same
-``_dispatch_mcp`` path an external MCP client uses, so per-access-key scoping, MESA, the
-approval gate, and the audit log apply identically. A voice turn cannot show inline
-Approve/Reject buttons, so confirm-gated actions degrade to "queued, approve in the
-Phoenix MCP panel" (the per-call access key copy forces ``confirm_inline_wait_seconds`` to 0
-so the turn never blocks). The bound access key stays a normal, live-editable access key; it is
-re-resolved on every instance build and tool call, so cap/scope edits take effect on
-the next call with no re-registration.
+Registers an ``llm.API`` whose tools are the surface of one admin-chosen access key,
+re-resolved on every instance build and call. Calls flow through ``_dispatch_mcp``, so scope,
+MESA, approvals and audit apply. A per-call key copy sets ``confirm_inline_wait_seconds`` to
+0, so a turn never blocks.
 
-HA-COUPLING POINT (re-verify on HA upgrades, same posture as ws_dispatch):
-``homeassistant.helpers.llm`` (async_register_api / API / Tool / APIInstance) is under
-active refactoring. Probatio-based HA uses ``probatio.from_openapi``; the original
-Voluptuous engine uses a JSON Schema validator wrapped as a native HA schema so bounds
-and composition stay intact. Both paths keep the original JSON Schema through HA's
-custom serializer hook. The validator is resolved in the executor before registration,
-and schemas that cannot be supported are omitted individually.
+Probatio-based HA uses ``probatio.from_openapi``; Voluptuous HA wraps a JSON Schema validator.
+Both keep the original schema, and unsupportable schemas are omitted individually.
 """
 from __future__ import annotations
 
@@ -38,7 +28,8 @@ from .assist_gemini import gemini_schema, unwrap_json_fields
 from .assist_schema import legacy_schema
 from .audit import generate_request_id
 from .const import ASSIST_CLIENT_IP, DOMAIN
-from .helpers import instance_base_url as _base_url, access_key_notes_block
+from .helpers import instance_base_url as _base_url
+from .redaction import access_key_notes_block
 from .home_companion import is_companion
 from .household_authority import household_scope
 from .request_authority import AuthorityChangedError
@@ -148,9 +139,7 @@ _MCP_HINTS = (
 def _tool_annotations(hints: Any) -> Any:
     """Map a tool's MCP hints onto HA's tool annotations, or None before HA has them.
 
-    HA 2026.10 forwards these through its own MCP server. Phoenix states every hint;
-    one that is missing or malformed keeps HA's least-safe default, as HA's own MCP
-    client does.
+    A missing or malformed hint keeps HA's least-safe default, as HA's own MCP client does.
     """
     annotations_type = getattr(_llm, "ToolAnnotations", None)
     if annotations_type is None:
@@ -170,9 +159,7 @@ def _tool_result(data: dict, *, error: bool) -> Any:
 def _unwrap_result(result: dict) -> dict:
     """Turn an MCP CallToolResult into the JSON object HA's Tool contract expects.
 
-    Phoenix MCP tool results are ``{"content": [{"type": "text", "text": ...}], "isError"?}``.
-    Most tools put a JSON object in that text; errors put a plain sentence. A dict
-    passes through verbatim; anything else is wrapped so the return is always a dict.
+    A JSON object in the text passes through verbatim; anything else is wrapped into a dict.
     """
 
     text = _flatten_text(result.get("content", []))

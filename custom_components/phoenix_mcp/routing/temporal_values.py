@@ -7,8 +7,10 @@ from typing import Any
 from homeassistant.core import HomeAssistant
 
 from ..const import MAX_SEARCH_QUERY_LEN
+from .intent_recognition import RecognitionUnavailable, SentenceTriggerMatch, async_recognize
 from .routing_tables import (
     COMMAND_ROUTING_TEMPORAL_OPERATIONS, COMMAND_ROUTING_TIMER_OBSERVATION_TOLERANCE_SECONDS,
+    COMMAND_ROUTING_PROOF_FIELDS,
 )
 
 # These patterns read literal value notation, not intents or target names.
@@ -62,14 +64,12 @@ def read_temporal_value(sentence: str) -> dict[str, str] | None:
 async def async_read_temporal_value(hass: HomeAssistant, sentence: str, language: str) -> dict[str, str] | None:
     """Read a literal value, else a timer duration from HA's strict HassStartTimer match.
 
-    The duration is evidence only, never authority: it needs a named timer, only
-    hours/minutes/seconds slots, and under 24 hours. Raises SentenceTriggerMatch
-    when a custom sentence trigger owns the sentence.
+    The duration is evidence, never authority: it needs a named timer, only time-unit slots, and
+    under 24 hours. Raises SentenceTriggerMatch when a custom sentence trigger owns the sentence.
     """
     source = read_temporal_value(sentence)
     if source is not None or not hass.states.async_entity_ids("timer"):
         return source
-    from .intent_recognition import RecognitionUnavailable, SentenceTriggerMatch, async_recognize
     try:
         recognized = await async_recognize(hass, sentence, language, strict=True)
     except RecognitionUnavailable:
@@ -140,7 +140,6 @@ def temporal_supports(state: Any, intent: str) -> bool:
 
 
 def temporal_arguments(proposal: dict) -> dict | None:
-    from .routing_tables import COMMAND_ROUTING_PROOF_FIELDS
     spec = COMMAND_ROUTING_TEMPORAL_OPERATIONS.get(proposal.get("intent", ""))
     if spec is None:
         return None

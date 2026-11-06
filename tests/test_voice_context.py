@@ -9,7 +9,8 @@ from pytest_homeassistant.common import MockConfigEntry
 
 from custom_components.phoenix_mcp import voice_agent
 from custom_components.phoenix_mcp.routing import command_routing
-from custom_components.phoenix_mcp.routing.command_execution import _capture_plan, plan_is_current
+from custom_components.phoenix_mcp.routing.command_plan import _capture_plan
+from custom_components.phoenix_mcp.routing.plan_currency import plan_is_current
 from custom_components.phoenix_mcp.const import DOMAIN
 from custom_components.phoenix_mcp.data import PhoenixData
 from custom_components.phoenix_mcp.access_key_store import PermissionNode, PermissionTree

@@ -563,6 +563,7 @@
       "verboseHint": "Näytä agentin työkalukutsut, työkalutulokset ja miettiminen. Vastaukset, kuvat, edistyminen, hyväksynnät ja ilmoitukset näytetään aina.",
       "workingOn": "Työn alla: {name}",
       "workingSpinner": "Työskennellään…",
+      "otherTabTurn": "Toinen välilehti suorittaa vastausta tässä keskustelussa. Jos tämäkin välilehti suorittaa vastausta, viimeisenä valmistunut vastaus säilyy.",
       "pausedAfter": {
         "one": "Keskeytetty {count} vaiheen jälkeen. Jatketaanko?",
         "other": "Keskeytetty {count} vaiheen jälkeen. Jatketaanko?"

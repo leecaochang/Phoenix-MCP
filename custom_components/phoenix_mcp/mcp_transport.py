@@ -47,25 +47,14 @@ _LOGGER = logging.getLogger(__name__)
 
 
 def _valid_jsonrpc_id(raw_id: Any) -> bool:
-    """Is this an MCP-conforming request id?
-
-    MCP narrows JSON-RPC's general Number shape to strings and integers, and a
-    request ID must not be null. `bool` is excluded explicitly because it is a
-    subclass of `int` in Python.
-    """
+    """Return whether this is an MCP-conforming request id: a string or a non-bool int."""
     if isinstance(raw_id, bool):
         return False
     return isinstance(raw_id, (str, int))
 
 
 def _sanitize_jsonrpc_id(raw_id: Any) -> str | int | None:
-    """Reduce a JSON-RPC id to something safe to put in a RESPONSE envelope.
-
-    Only for the error paths, where a reply has to carry an id and the request's
-    own is unusable: the spec says an Invalid Request answers with `id: null`.
-    A conforming request never needs this, since `_classify_jsonrpc_message`
-    refuses a bad id before dispatch rather than quietly repairing it.
-    """
+    """Reduce a JSON-RPC id to something safe for an error RESPONSE envelope."""
     return raw_id if _valid_jsonrpc_id(raw_id) else None
 
 
@@ -256,23 +245,13 @@ def _modernize_response(response_msg: dict | None, method: str) -> dict | None:
 
 
 def _classify_jsonrpc_message(body: dict) -> tuple[str, Any]:
-    """Validate one JSON-RPC message envelope (jsonrpc == "2.0" already checked).
-
-    Runs before dispatch in BOTH the single-request and batch paths, so the shape
-    is validated once. A non-object `params` or non-string `method` would make
-    the tools/call dispatcher raise before the per-call exception net and escape
-    as an aiohttp 500, and a malformed `id` must never be coerced to None and
-    dispatched: the side effect would apply and be answered with an id the
-    sender cannot correlate. Returns one of:
-      ("dispatch", (method, params)) - a well-formed request for _dispatch_mcp.
-      ("accepted", None) - a JSON-RPC response object (no method, carries
-          result/error): the legacy transport accepts it without a reply; the
-          modern transport rejects it before this classification.
-      ("unsupported", (code, message)) - a STRUCTURALLY VALID request that cannot
-          be dispatched (positional params): error a real request, STAY SILENT
-          for a notification, since the envelope is valid.
-      ("error", (code, message)) - a malformed envelope; the caller emits the
-          JSON-RPC error with the message's own id.
+    """Validate one JSON-RPC envelope before dispatch; jsonrpc == "2.0" is already checked.
+    Returns one of:
+    - ("dispatch", (method, params)): a well-formed request.
+    - ("accepted", None): a JSON-RPC response object, accepted by the legacy transport.
+    - ("unsupported", (code, message)): valid but undispatchable; a notification stays silent.
+    - ("error", (code, message)): malformed; the caller replies with the message's own id.
+    A malformed id is never coerced and dispatched, as the reply could not be correlated.
     """
     method = body.get("method")
     # A response object carries result/error and no method. The legacy transport
@@ -315,9 +294,8 @@ async def _handle_streamable_batch(
 ) -> web.Response:
     """Dispatch a JSON-RPC batch array per MCP 2025-03-26.
 
-    Each item is dispatched independently. Failed items produce per-item error objects
-    rather than failing the whole batch. Notifications (no id) produce no response entry.
-    Returns 202 when all items are notifications; 200 with a results array otherwise.
+    Items fail individually and notifications produce no entry. Returns 202 when all items are
+    notifications, otherwise 200 with a results array.
     """
     if not items:
         _audit_mcp_transport(
@@ -367,12 +345,9 @@ async def _handle_streamable_batch(
 
 
 def _batch_expects_response(items: list) -> bool:
-    """Whether a batch produces any reply entry, without dispatching anything.
+    """Return whether a batch produces any reply entry, without dispatching anything.
 
-    Mirrors the per-item suppression rules in _dispatch_streamable_batch so the
-    SSE path can decide between a stream and a bare 202 BEFORE preparing a
-    response. Any change to those rules must change this too; a test holds the
-    two in agreement.
+    Mirrors the suppression rules in _dispatch_streamable_batch; a change there changes this.
     """
     for item in items:
         if not isinstance(item, dict) or item.get("jsonrpc") != "2.0":
@@ -399,9 +374,8 @@ async def _dispatch_streamable_batch(
 ) -> list[dict]:
     """Dispatch each batch item in order, returning only the entries that reply.
 
-    Items are dispatched sequentially (not via asyncio.gather) so a batch can
-    never run up to MAX_BATCH_ITEMS side-effecting tools concurrently and
-    interleave writes; order is preserved and one item's failure stays isolated.
+    Sequential, not gathered, so side-effecting tools never interleave; failures stay
+    isolated.
     """
     bus = _progress_ctx.get()
     batch_policy_version = access_key.settings_version
@@ -559,12 +533,10 @@ def _rate_limit_headers(access_key: AccessKeyRecord, rl_result: Any) -> dict[str
 
 
 def _progress_token(method: str, params: dict) -> str | int | None:
-    """The client's progressToken for this request, if it asked for progress.
+    """Return the client's progressToken for this request, if it asked for progress.
 
-    Per the MCP spec a token is a string or integer in `params._meta`, and a
-    server may only send progress notifications for a request that carried one.
-    Anything else (absent, wrong type) means no progress: never an error, since a
-    malformed _meta must not fail an otherwise valid call.
+    A token is a string or integer in ``params._meta``. Anything else means no progress, never
+    an error.
     """
     if method != "tools/call" or not isinstance(params, dict):
         return None
@@ -612,16 +584,10 @@ async def _mcp_sse_response(
     cancel_on_disconnect: bool,
     msg_id: Any = None,
 ) -> web.StreamResponse:
-    """Run `dispatch` and deliver its JSON-RPC result as a single SSE message.
+    """Run ``dispatch`` and deliver its JSON-RPC result as a single SSE message.
 
-    Same response, different framing: the client gets exactly the payload the
-    plain JSON path would have returned, but the connection carries a frame every
-    MCP_SSE_KEEPALIVE_SECONDS while the work is in flight. That matters because a
-    confirm gate can hold a tools/call for minutes with nothing on the wire, which
-    is what an intermediary drops.
-
-    Only this function writes to the stream. Handler code deep in a tool sets
-    bus.status instead, so two coroutines can never interleave frames.
+    The payload matches the plain JSON path, with a frame every MCP_SSE_KEEPALIVE_SECONDS so
+    an intermediary does not drop a held gate. Only this function writes to the stream.
     """
     resp = web.StreamResponse(
         status=200,
@@ -714,16 +680,7 @@ def _log_dispatch_task_error(task: asyncio.Task) -> None:
 
 
 def _parse_mcp_body(body_bytes: bytes) -> Any:
-    """Parse one HTTP body under MCP's JSON rules, or raise ValueError or RecursionError.
-
-    Messages must be UTF-8, so the body is decoded strictly: json.loads would
-    otherwise detect UTF-16 or UTF-32 and pass surrogate bytes. Home Assistant's
-    orjson parser would refuse those, but it turns a large integer into a float,
-    which breaks request id validation, so the standard parser stays with its
-    depth limit and non-finite hooks. An escaped lone surrogate still parses, so
-    the result is encoded once to refuse it: Home Assistant cannot serialize one,
-    and a value holding it breaks whatever later writes that value out.
-    """
+    """Parse one HTTP body under MCP's JSON rules; raise ValueError or RecursionError."""
     parsed = json.loads(body_bytes.decode("utf-8"), parse_constant=_reject_non_finite, parse_float=_parse_finite_float)
     json.dumps(parsed, ensure_ascii=False).encode("utf-8")
     return parsed
@@ -731,18 +688,9 @@ def _parse_mcp_body(body_bytes: bytes) -> Any:
 
 def _origin_rejected(hass: HomeAssistant, request: web.Request, request_id: str) -> web.Response | None:
     """Refuse a browser cross-origin (DNS-rebinding) request per the MCP transport spec.
-
-    The MCP Streamable HTTP transport says a server MUST validate the Origin
-    header to prevent DNS-rebinding: a malicious web page resolving a hostname to
-    127.0.0.1 could otherwise drive a locally-bound MCP server from the victim's
-    browser. Only browsers send Origin, so an ABSENT Origin (every real,
-    non-browser MCP client) is allowed; a PRESENT Origin is accepted only when it
-    matches one of Home Assistant's own configured URLs. It is validated against
-    HA's configured URLs via is_hass_url, never the request's own Host header,
-    which a rebinding attacker also forges. This is defense in depth: Phoenix MCP
-    already requires its access key sent as a bearer credential, which such a page cannot know, so a rebound
-    request still gets the uniform 401; the Origin check refuses it one step
-    earlier.
+    An absent Origin is allowed, as only browsers send one. A present Origin must match HA's
+    configured URLs through is_hass_url, never the forgeable Host header. Defense in depth:
+    such a request would still fail bearer authentication.
     """
     # Local: not part of the recorded Home Assistant import floor.
     from homeassistant.helpers.network import is_hass_url
@@ -796,11 +744,9 @@ def _validate_legacy_initialize(params: dict) -> tuple[int, str] | None:
 
 
 def _open_legacy_session(data: PhoenixData, access_key: AccessKeyRecord) -> str | None:
-    """Allocate within both quotas, closing this access key's own stale session first.
+    """Allocate within both quotas, closing this key's own stale session first.
 
-    A client that restarts without DELETE leaves its old session behind, so a full
-    quota closes the key's least recently used session with no request open; its
-    client receives 404 and initializes again. Another access key's session is
+    A full quota closes the key's least recently used idle session. Another key's session is
     never closed, and None means every candidate is busy.
     """
     _prune_legacy_sessions(data)
@@ -823,11 +769,10 @@ def _open_legacy_session(data: PhoenixData, access_key: AccessKeyRecord) -> str 
 
 
 def _legacy_session_retry_after(data: PhoenixData, access_key: AccessKeyRecord) -> int:
-    """Seconds until a refused initialize can find room.
+    """Return the seconds until a refused initialize can find room.
 
-    The access key's own sessions are all busy: one frees when its request ends,
-    so a short wait. Otherwise other keys fill the quota: a slot frees when the
-    stalest of their sessions reaches its idle limit.
+    Short when the key's own sessions are busy; else until the stalest other session idles
+    out.
     """
     if any(state.get("access_key_id") == access_key.id for state in data.mcp_sessions.values()):
         return MCP_LEGACY_SESSION_BUSY_RETRY_SECONDS
@@ -870,13 +815,8 @@ def _legacy_session_error_response(
 class PhoenixMcpView(PhoenixView):
     """POST/DELETE /api/phoenix-mcp - MCP Streamable HTTP transport.
 
-    The revisions implemented are const.MCP_PROTOCOL_VERSIONS; read the comment
-    there before adding one, since the list is a compliance claim.
-
-    Served from the integration's base path so the URL an operator pastes into
-    an MCP client config is as short as possible. The trailing-slash form is
-    registered too: aiohttp treats it as a distinct resource and does not
-    redirect, so without it a stray slash in a client config would 404.
+    The implemented revisions are const.MCP_PROTOCOL_VERSIONS, a compliance claim. The
+    trailing-slash form is registered too, as aiohttp would otherwise 404 it.
     """
 
     url = "/api/phoenix-mcp"

@@ -20,7 +20,8 @@ from .config_recovery import ConfigurationRecoveryError, recovery_resolution, ru
 from .const import (CONFIG_RECOVERY_APPROVAL_CAP, CONFIG_RECOVERY_APPROVAL_ACCESS_KEY,
                     CONFIG_RECOVERY_UNRESOLVED, CONFIG_RECOVERY_OBSERVATION_TIMEOUT,
                     CONFIG_RECOVERY_SWEEP_BATCH, DOMAIN)
-from .helpers import content_hash, diff_summary_fields as _summary
+from .helpers import content_hash
+from .catalog_text import diff_summary_fields as _summary
 from .request_authority import execution_guard, check_request_authority
 from .template_snapshots import template_snapshot
 from .tool_common import _restore_ctx, _tool_success, _tool_error, _read_text_capped
@@ -188,7 +189,7 @@ async def _queue_recovery(hass: HomeAssistant, data, record: dict, observed: dic
                 return
             if existing.get("args") != args:
                 replaced = await async_update_approval_status(data.store, existing["id"], status="cancelled",
-                    rejected_reason=REASON_RECOVERY_REVIEW_REPLACED)
+                    closure_reason=REASON_RECOVERY_REVIEW_REPLACED)
                 existing = None
         if existing is not None:
             approval = PendingApproval.from_dict(existing)

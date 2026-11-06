@@ -38,6 +38,21 @@ if (!customElements.get("ha-list-item")) {
   });
 }
 
+// Reduced from HA's ha-row-item family: ha-list-item-button wraps every slot in
+// a native button, and ha-list-item-base renders them in a plain row.
+function defineRow(tag: string, wrapper: string) {
+  if (customElements.get(tag)) return;
+  customElements.define(tag, class extends HTMLElement {
+    constructor() {
+      super();
+      this.attachShadow({ mode: "open" }).innerHTML =
+        `<${wrapper} id="item"><slot name="start"></slot><slot name="headline"></slot><slot name="end"></slot></${wrapper}>`;
+    }
+  });
+}
+defineRow("ha-list-item-button", "button");
+defineRow("ha-list-item-base", "div");
+
 afterEach(() => {
   const host = window as unknown as { __phxMesaInjectActive?: { dispose: () => void } };
   host.__phxMesaInjectActive?.dispose();
@@ -183,6 +198,50 @@ describe("HA frontend 20260826.7 injection templates", () => {
     const rows = root.querySelectorAll("ha-list-item");
     expect(rows[0].hasAttribute("hasmeta")).toBe(false);
     expect(rows[1].hasAttribute("hasmeta")).toBe(true);
+  });
+
+  it("adds the button to the end slot of the migrated People rows without opening the person", async () => {
+    const sr = start("/config/person", {
+      "person.storage": { attributes: { id: "storage-id" } },
+      "person.yaml": { attributes: { id: "yaml-id" } },
+    });
+    const page = document.createElement("ha-config-person");
+    sr.appendChild(page);
+    const root = page.attachShadow({ mode: "open" });
+    const list = root.appendChild(document.createElement("ha-list-base"));
+    const opened: string[] = [];
+    for (const [tag, id] of [["ha-list-item-button", "storage-id"], ["ha-list-item-base", "yaml-id"], ["ha-list-item-button", "missing"]]) {
+      const row = document.createElement(tag);
+      row.setAttribute("ha-list-item", "");
+      row.addEventListener("click", () => opened.push(id));
+      const badge = document.createElement("ha-person-badge");
+      badge.slot = "start";
+      Object.assign(badge, { person: { id, name: "Same display name" } });
+      const headline = document.createElement("span");
+      headline.slot = "headline";
+      row.append(badge, headline);
+      list.appendChild(row);
+    }
+    await boot();
+    const buttons = root.querySelectorAll<HTMLButtonElement>(`.${BTN_CLASS}`);
+    expect(Array.from(buttons, (b) => b.dataset.phxKey)).toEqual(["person.storage", "person.yaml"]);
+    for (const button of buttons) {
+      expect(button.slot).toBe("end");
+      expect(button.parentElement!.hasAttribute("hasmeta")).toBe(false);
+      const slot = button.parentElement!.shadowRoot!.querySelector<HTMLSlotElement>('slot[name="end"]');
+      expect(slot?.assignedElements()).toContain(button);
+    }
+    buttons[0].click();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(document.querySelector("phx-mesa-quick-add-test-build")?.getAttribute("key")).toBe("person.storage");
+    expect(opened).toEqual([]);
+    await vi.advanceTimersByTimeAsync(2200);
+    expect(root.querySelectorAll(`.${BTN_CLASS}`)).toHaveLength(2);
+    (root.querySelector("ha-list-item-button") as HTMLElement).click();
+    expect(opened).toEqual(["storage-id"]);
+    const controller = (window as unknown as { __phxMesaInjectActive: { dispose: () => void } }).__phxMesaInjectActive;
+    controller.dispose();
+    expect(root.querySelector(`.${BTN_CLASS}`)).toBeNull();
   });
 
   it("preserves integration detail toolbar injection", async () => {

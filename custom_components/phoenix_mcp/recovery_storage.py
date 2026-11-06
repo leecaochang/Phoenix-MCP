@@ -28,11 +28,9 @@ def _digest(snapshot: dict) -> str:
 class RecoveryStorage:
     """Keep snapshots immutable and publish their references as the write barrier.
 
-    ConfigurationRecovery owns serialization and supplies replacement rows with
-    immutable snapshots. Only the current committed rows are cached. All writes
-    finish before cancellation releases the owner's lock, including executor I/O.
-    Unreferenced blobs are removed only after a successful index commit; a failed
-    cleanup leaves a harmless orphan which the next load can discover.
+    ConfigurationRecovery owns serialization. Writes finish before cancellation releases the
+    lock. Unreferenced blobs go only after an index commit; a failed cleanup leaves a harmless
+    orphan.
     """
 
     def __init__(self, hass: HomeAssistant) -> None:

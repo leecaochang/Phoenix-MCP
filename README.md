@@ -10,7 +10,7 @@
 
 **English** | [Español](README.es.md) | [Français](README.fr.md) | [Italiano](README.it.md) | [Deutsch](README.de.md) | [Nederlands](README.nl.md) | [Polski](README.pl.md) | [简体中文](README.zh-CN.md) | [繁體中文](README.zh-Hant.md) | [日本語](README.ja.md) | [한국어](README.ko.md) | [Русский](README.ru.md) | [Svenska](README.sv.md) | [Dansk](README.da.md) | [Norsk Bokmål](README.nb.md) | [Suomi](README.fi.md)
 
-Phoenix MCP gives your AI agents safe, limited access to Home Assistant through MCP (Model Context Protocol), an open standard for connecting AI apps to tools and data. Security and safety are crucial when using AI, and Phoenix MCP has undergone many months of development and repeated security reviews. Each agent has its own access key, limited to only the entities and capabilities you allow. An additional safety layer (MESA) can make a selected entity confirm-only or off-limits, no matter what permissions an access key is granted.
+Phoenix MCP gives your AI agents safe, limited access to Home Assistant through MCP (Model Context Protocol), an open standard for connecting AI apps to tools and data. Security and safety are crucial when using AI, and Phoenix MCP has undergone many months of development and security reviews. Each agent has its own access key, limited to only the entities and capabilities you allow. An additional safety layer (MESA) can make a selected entity confirm-only or off-limits, no matter what permissions an access key is granted.
 
 Phoenix MCP runs entirely inside Home Assistant, with no separate service to deploy. Use the apps you already have, such as Claude Code, Cursor, ChatGPT, or Gemini, or chat from inside Home Assistant itself with your choice of AI provider, in the cloud or locally via Ollama.
 

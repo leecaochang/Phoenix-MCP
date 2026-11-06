@@ -20,7 +20,7 @@ import re
 import pytest
 
 from custom_components.phoenix_mcp.const import CAPABILITY_NAMES
-from custom_components.phoenix_mcp.provider_constants import AGENTCLI_PROVIDERS
+from custom_components.phoenix_mcp.provider_constants import AGENT_CHAT_PROVIDERS
 from custom_components.phoenix_mcp.tool_defs import (
     _ENTITY_TOOL_DEFS,
     _NATIVE_TOOL_DEFS,
@@ -31,6 +31,7 @@ from custom_components.phoenix_mcp.mesa_tools import mesa_tool_defs
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 GUIDE = ROOT / "frontend_src" / "guide" / "topics" / "en"
 PKG = ROOT / "custom_components" / "phoenix_mcp"
+ADMIN_FILES = tuple(f"admin/{path.name}" for path in sorted((PKG / "admin").glob("*.py")))
 
 
 def _page(*names: str) -> str:
@@ -67,13 +68,13 @@ def test_admin_api_documents_every_provider_kind() -> None:
     # Code-wrapped, not bare substring: "meta" would otherwise be satisfied by
     # the word "metadata" anywhere on the pages.
     pages = _admin_api_pages()
-    missing = sorted(k for k in AGENTCLI_PROVIDERS if f"`{k}`" not in pages)
+    missing = sorted(k for k in AGENT_CHAT_PROVIDERS if f"`{k}`" not in pages)
     assert missing == [], f"Admin API pages missing provider kinds: {missing}"
 
 
 def test_admin_api_documents_every_emitted_error_code() -> None:
     src = "\n".join((PKG / name).read_text(encoding="utf-8") for name in (
-        "admin_view.py", "agent_turn.py", "agent_chat.py", "agentcli_views.py"))
+        *ADMIN_FILES, "agent_turn.py", "agent_chat.py", "agent_chat_views.py"))
     codes = set(re.findall(r'_err\(\s*"([a-z_]+)"', src))
     assert len(codes) >= 6, f"error-code extraction broke: {sorted(codes)}"
     pages = _admin_api_pages()
@@ -83,7 +84,7 @@ def test_admin_api_documents_every_emitted_error_code() -> None:
 
 def test_admin_api_documents_every_sse_frame() -> None:
     src = "\n".join((PKG / name).read_text(encoding="utf-8") for name in (
-        "agent_turn.py", "agent_chat.py", "agentcli_views.py"))
+        "agent_turn.py", "agent_chat.py", "agent_chat_views.py"))
     frames = set(re.findall(r'emit\(\s*"([a-z_]+)"', src))
     assert len(frames) >= 10, f"SSE frame extraction broke: {sorted(frames)}"
     page = _page("topic.adminApiChat")
@@ -93,7 +94,7 @@ def test_admin_api_documents_every_sse_frame() -> None:
 
 @pytest.mark.parametrize("pages,module_names", [
     (("topic.agentEndpoints",), ("mcp_transport", "skill_view")),
-    ((), ("admin_view", "agentcli_views")),
+    ((), (*(name.removesuffix(".py").replace("/", ".") for name in ADMIN_FILES), "agent_chat_views")),
 ])
 def test_route_reference_matches_methods_and_paths(pages, module_names) -> None:
     """A documented URL alone cannot pin an omitted DELETE or wrong verb."""

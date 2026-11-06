@@ -13,19 +13,19 @@ from custom_components.phoenix_mcp.const import DOMAIN
 
 def _client_view_classes():
     """Return the complete kill-switch-gated client route set."""
-    from custom_components.phoenix_mcp.agentcli_views import ALL_AGENTCLI_CHAT_VIEWS
+    from custom_components.phoenix_mcp.agent_chat_views import ALL_AGENT_CHAT_CHAT_VIEWS
     from custom_components.phoenix_mcp.mcp_transport import ALL_MCP_VIEWS
     from custom_components.phoenix_mcp.skill_view import ALL_SKILL_VIEWS
 
-    return list(ALL_MCP_VIEWS) + list(ALL_SKILL_VIEWS) + list(ALL_AGENTCLI_CHAT_VIEWS)
+    return list(ALL_MCP_VIEWS) + list(ALL_SKILL_VIEWS) + list(ALL_AGENT_CHAT_CHAT_VIEWS)
 
 
 def _all_view_classes():
     """Return every route class registered by the integration."""
-    from custom_components.phoenix_mcp.admin_view import ALL_ADMIN_VIEWS
-    from custom_components.phoenix_mcp.agentcli_views import ALL_AGENTCLI_ADMIN_VIEWS
+    from custom_components.phoenix_mcp.admin.registry import ALL_ADMIN_VIEWS
+    from custom_components.phoenix_mcp.agent_chat_views import ALL_AGENT_CHAT_ADMIN_VIEWS
 
-    return list(ALL_ADMIN_VIEWS) + list(ALL_AGENTCLI_ADMIN_VIEWS) + _client_view_classes()
+    return list(ALL_ADMIN_VIEWS) + list(ALL_AGENT_CHAT_ADMIN_VIEWS) + _client_view_classes()
 
 
 @pytest.fixture

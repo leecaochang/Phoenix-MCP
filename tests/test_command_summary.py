@@ -10,7 +10,9 @@ from homeassistant.helpers import area_registry as ar, entity_registry as er
 from homeassistant.setup import async_setup_component
 
 from custom_components.phoenix_mcp.audit import AuditLog
-from custom_components.phoenix_mcp.routing.command_execution import _capture_plan, plan_is_current, async_execute_chat_command
+from custom_components.phoenix_mcp.routing.command_plan import _capture_plan
+from custom_components.phoenix_mcp.routing.plan_currency import plan_is_current
+from custom_components.phoenix_mcp.routing.command_execution import async_execute_chat_command
 from custom_components.phoenix_mcp.routing.command_routing import RoutingAuthority, async_evaluate_command
 from custom_components.phoenix_mcp.routing.command_summary import summary_catalog, summary_proposal, summary_text
 from custom_components.phoenix_mcp.const import DOMAIN
@@ -57,7 +59,7 @@ async def test_summary_catalog_overflow_refuses_without_truncation(hass, summary
 
 @pytest.mark.parametrize('private', ['light.hidden_private', 'phx_' + 'a'*64])
 async def test_summary_area_metadata_cannot_disclose_hidden_ids_or_secrets(hass, summary_home, private):
-    from custom_components.phoenix_mcp.routing.decision_provider import DecisionError
+    from custom_components.phoenix_mcp.routing.decision_types import DecisionError
     _, access_key, ids = summary_home
     entry = er.async_get(hass).async_get(ids[0])
     ar.async_get(hass).async_update(entry.area_id, aliases={private})
@@ -312,7 +314,7 @@ async def test_summary_area_metadata_cannot_disclose_configured_secret(hass,summ
 
 async def test_local_count_does_not_build_unrelated_provider_catalog(hass,summary_home):
     data,access_key,_=summary_home
-    with patch('custom_components.phoenix_mcp.routing.command_summary.summary_catalog',side_effect=AssertionError('Unrelated catalog must not be built')):
+    with patch('custom_components.phoenix_mcp.routing.decision_batch.summary_catalog',side_effect=AssertionError('Unrelated catalog must not be built')):
         result=await async_evaluate_command(hass,data,access_key,'how many lights are on','en',preview=True)
         assert result['proposal']['summary_mode']=='on'
         assert _capture_plan(hass,data,access_key,result['proposal'],ingress='chat') is not None

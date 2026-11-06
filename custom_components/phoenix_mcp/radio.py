@@ -1,21 +1,11 @@
-"""Radio network management: protocol/backend detection, projections, and ops.
+"""Radio network management: protocol and backend detection, projections, and ops.
 
-The radio tools are protocol-generic at the tool layer and backend-specific
-here. Zigbee has two backends:
+Protocol-generic at the tool layer, backend-specific here. Zigbee has "z2m" (MQTT bridge
+topics, through the _mqtt_subscribe and _mqtt_publish seams) and "zha" (ws_dispatch, the zha
+services and a direct scoped zigpy topology scan).
 
-- "z2m" (Zigbee2MQTT): MQTT request/response topics (<base>/bridge/request/...
-  answered on <base>/bridge/response/...) and retained state topics
-  (<base>/bridge/info, <base>/bridge/devices), reached only through the
-  _mqtt_subscribe/_mqtt_publish seams.
-- "zha": ws_dispatch for reads, bindings and groups, the zha.permit/zha.remove
-  services, the reconfigure task starter, and a direct scoped zigpy topology
-  scan (the HA websocket topology command never returns a result). Every write
-  or active scan has a fixed shape and resolves radio identifiers from
-  registry-scoped objects.
-
-Every read is an ALLOWLIST projection, never a blocklist strip: raw payloads can
-carry network key material (zigpy NetworkBackup keys; Z2M bridge/info embeds the
-full Z2M config), and an allowlist means a field added upstream cannot leak.
+Every read is an allowlist projection, never a blocklist strip: raw payloads can carry network
+key material, and a field added upstream must not leak.
 """
 
 from __future__ import annotations
@@ -127,10 +117,7 @@ class ZigbeeGroupConfigurationError(ValueError):
 def zigbee_backend_for_device(device: Any) -> tuple[str, str] | None:
     """Return (backend, ieee) for a Zigbee device registry entry, else None.
 
-    ZHA devices carry a ("zha", "<ieee>") identifier; Zigbee2MQTT devices carry
-    ("mqtt", "zigbee2mqtt_0x<ieee>") from MQTT discovery. The Z2M bridge device
-    itself ("zigbee2mqtt_bridge_...") intentionally does not match, so the
-    coordinator can never be targeted by the device-scoped radio tools.
+    The Z2M bridge device does not match, so radio tools can never target the coordinator.
     """
     for ident in getattr(device, "identifiers", ()) or ():
         if not isinstance(ident, (list, tuple)) or len(ident) < 2:
@@ -146,10 +133,8 @@ def zigbee_backend_for_device(device: Any) -> tuple[str, str] | None:
 def device_radio_types(device: Any) -> set[str]:
     """Return the const.SEARCH_RADIO_TYPES a device registry entry connects through.
 
-    Read from what each integration records, never from names: Zigbee as above,
-    Z-Wave JS and Matter by their identifier domains, Bluetooth by a Bluetooth
-    address connection. A Matter device may run over Thread or Wi-Fi; the
-    registry does not say which, so matter is reported as a protocol.
+    Read from what each integration records, never names. Matter is reported as a protocol,
+    since the registry does not say Thread or Wi-Fi.
     """
     found = set()
     if zigbee_backend_for_device(device) is not None:
@@ -203,9 +188,7 @@ def present_zigbee_backends(hass: HomeAssistant) -> list[str]:
 def visible_zigbee_device_map(hass: HomeAssistant, accessible_entity_ids: set[str]) -> dict[str, str]:
     """Map ieee to device_id for every Zigbee device the access key can see.
 
-    A device is visible when at least one of its entities is in the access key's
-    accessible set (the get_device rule). Decides which neighbor identifiers a
-    scoped access key may see un-redacted.
+    Visible means at least one entity is in the key's accessible set (the get_device rule).
     """
 
     ent_reg = er.async_get(hass)
@@ -227,8 +210,7 @@ def visible_zigbee_device_map(hass: HomeAssistant, accessible_entity_ids: set[st
 
 
 # ---------------------------------------------------------------------------
-# Z2M MQTT plumbing. The two seams below are the module's only broker contact,
-# so a test can replace them without any MQTT client.
+# Z2M MQTT plumbing. The two seams below are the module's only broker contact.
 # ---------------------------------------------------------------------------
 
 
@@ -266,13 +248,8 @@ async def async_z2m_request(
 ) -> dict[str, Any]:
     """Run one Z2M bridge request and await its matched response.
 
-    Subscribes to <base>/bridge/response/<path> before publishing
-    <base>/bridge/request/<path>, tags the request with a transaction id that
-    Z2M echoes back (so a concurrent admin's identical request cannot be
-    mistaken for this one), and awaits the matching response. Raises RadioError on
-    a Z2M-reported error or an unavailable broker; a response timeout raises
-    TimeoutError so callers can distinguish "still working, no answer yet"
-    (e.g. a sleepy device mid-reinterview) from a hard failure.
+    Subscribes before publishing and matches on a transaction id. Raises RadioError on a Z2M
+    error or unavailable broker, and TimeoutError for "no answer yet".
     """
     transaction = uuid.uuid4().hex[:12]
     future: asyncio.Future = hass.loop.create_future()
@@ -313,11 +290,9 @@ async def async_z2m_retained(
     *,
     timeout: float = Z2M_RETAINED_READ_TIMEOUT_SECONDS,
 ) -> Any:
-    """Read a retained Z2M bridge topic (<base>/<topic_suffix>).
+    """Read a retained Z2M bridge topic (<base>/<topic_suffix>); the first payload wins.
 
-    The broker delivers a retained message immediately on subscribe; the first
-    payload wins. Raises RadioError when nothing arrives (Z2M down or the
-    topic was never published).
+    Raises RadioError when nothing arrives.
     """
     future: asyncio.Future = hass.loop.create_future()
 
@@ -383,9 +358,7 @@ def project_z2m_network(info: Any) -> dict[str, Any]:
 def project_zha_network(raw: Any) -> dict[str, Any]:
     """Project a zha/network/settings payload to the safe network summary.
 
-    The settings blob is a zigpy NetworkBackup; its network_info carries the
-    network key, TC link key, key table, and stack-specific secrets, none of
-    which may ever appear here.
+    The source is a zigpy NetworkBackup, whose keys and stack secrets never appear here.
     """
     raw = raw if isinstance(raw, dict) else {}
     settings = raw.get("settings") or {}
@@ -443,12 +416,8 @@ def project_zigbee_topology(
 ) -> dict[str, Any]:
     """Project a raw topology to registry-scoped nodes and neighbor links.
 
-    Raw maps contain every IEEE/NWK address, Z2M friendly name, model, failure,
-    and optional routing-table entry. None of those cross this boundary. A
-    caller sees only device registry ids already reachable through its entity
-    scope, plus one opaque coordinator node. Links involving anything else are
-    omitted; ``partial`` says only that some topology could not be represented,
-    never how many hidden devices exist.
+    A caller sees only device registry ids in its entity scope plus one opaque coordinator
+    node; other links are omitted. ``partial`` never says how many devices are hidden.
     """
     raw = raw if isinstance(raw, dict) else {}
     source_nodes = raw.get("nodes")
@@ -705,9 +674,8 @@ def _option_definition_map(entry: Any) -> dict[str, dict[str, Any]]:
 def z2m_exposed_property_map(entry: Any) -> dict[str, dict[str, Any]]:
     """Map unique exposed property names to their raw leaf definitions.
 
-    Converter exposes are recursive and local converters may repeat a property.
-    Repeated properties are omitted because Phoenix cannot prove which endpoint
-    a direct MQTT read or write would address.
+    Repeated properties are omitted, since no endpoint can be proved for a direct read or
+    write.
     """
     entry = entry if isinstance(entry, dict) else {}
     definition = entry.get("definition")
@@ -835,11 +803,8 @@ def z2m_effective_device_options(
 ) -> dict[str, Any]:
     """Reconstruct Z2M Device.options and select converter-defined options.
 
-    Zigbee2MQTT's Device.options getter merges config.device_options with the
-    device's own config.devices[ieee] block. bridge/info publishes that
-    default-expanded config after removing its known secrets. Only properties
-    declared by definition.options are selected, so the rest of the bridge config
-    never crosses Phoenix's allowlist boundary.
+    Merges config.device_options with the device's own block. Only definition.options
+    properties are selected, so the rest of the bridge config stays out.
     """
     info = info if isinstance(info, dict) else {}
     config = info.get("config") if isinstance(info.get("config"), dict) else {}
@@ -1133,11 +1098,10 @@ def _z2m_cluster_list(value: Any, path: str) -> list[str]:
 
 
 def z2m_radio_configuration(entry: Any) -> dict[str, Any]:
-    """Normalize the exact endpoint/binding/reporting slice of one Z2M device.
+    """Normalize the exact endpoint, binding and reporting slice of one Z2M device.
 
-    This is both the content-hash source and the mutation validator. It fails
-    closed rather than truncating: approving against a partial endpoint tree
-    could hide a conflicting binding or reporting record.
+    Both the content-hash source and the mutation validator. Fails closed, not truncated, as a
+    partial tree could hide a conflicting record.
     """
     entry = entry if isinstance(entry, dict) else {}
     raw_endpoints = entry.get("endpoints")
@@ -1662,14 +1626,9 @@ def project_zha_device(
     pass_through: bool,
 ) -> dict[str, Any]:
     """Project a zha/device payload to the scoped per-device view.
-
-    The entities list is filtered to the access key's accessible set. Neighbor
-    metrics (lqi, depth, relationship) always pass through, but neighbor
-    ieee/nwk identifiers are replaced with "<redacted>" unless the neighbor
-    maps to a device the access key can see (then its device_id is included so the
-    agent can chain another get_radio_device call). Routes are intentionally
-    omitted: they carry only nwk shorts, which cannot be scope-checked without
-    whole-network enumeration. Pass-through access keys see everything.
+    Entities are filtered to the key's set. Neighbor metrics pass, but ieee and nwk become
+    "<redacted>" unless the neighbor is visible, when its device_id is added. Routes are
+    omitted, being uncheckable. Pass-through sees everything.
     """
     raw = raw if isinstance(raw, dict) else {}
     projected = {
@@ -1811,10 +1770,8 @@ async def async_confirm_z2m_device_options(
 ) -> tuple[dict[str, Any], dict[str, Any], str, bool]:
     """Confirm requested options from retained state after a missing response.
 
-    Zigbee2MQTT's correlated bridge response remains the primary confirmation.
-    This bounded fallback exists because the option write can be persisted to
-    bridge/info even when Phoenix never receives that response. Only an exact,
-    type-preserving match of every requested converter option counts as success.
+    A bounded fallback for a persisted write whose response was lost. Only an exact,
+    type-preserving match of every requested option counts as success.
     """
     deadline = hass.loop.time() + timeout
     expected_hash = z2m_options_hash(expected)
@@ -1888,13 +1845,10 @@ def _get_zha_gateway(hass: HomeAssistant) -> Any:
 async def async_scan_zha_topology(
     hass: HomeAssistant, visible_ieees: set[str]
 ) -> dict[str, Any]:
-    """Scan only access-key-visible ZHA routers and return an internal raw map.
+    """Scan only key-visible ZHA routers and return an internal raw map.
 
-    ZHA's websocket update command intentionally has no result and would always
-    time out through Phoenix's synthetic dispatcher. Calling zigpy's topology
-    object directly also allows passing only visible devices instead of probing
-    every router on a partially scoped access key. The returned IEEE values are
-    internal and must pass through :func:`project_zigbee_topology`.
+    Uses zigpy directly, as ZHA's websocket update has no result. The returned IEEE values
+    must pass through :func:`project_zigbee_topology`.
     """
     try:
         gateway = _get_zha_gateway(hass)

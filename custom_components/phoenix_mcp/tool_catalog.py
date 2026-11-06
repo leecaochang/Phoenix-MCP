@@ -10,7 +10,8 @@ from homeassistant.core import HomeAssistant
 from .access_key_store import AccessKeyRecord
 from .const import CALL_SERVICE_NO_TARGET_CAPS, CAP_DENY, HOME_COMPANION_TOOLS
 from .data import PhoenixData
-from .helpers import access_key_has_write_scope, content_hash, effective_cap
+from .helpers import content_hash
+from .capability import access_key_has_write_scope, effective_cap
 from .home_companion import is_companion, internal_turn, wrapper_tool
 from .household_authority import household_tool_access
 from .mesa_tools import mesa_tool_defs
@@ -29,19 +30,7 @@ del _def
 
 
 def _catalog_fingerprint() -> str:
-    """Hash of every tool NAME and inputSchema this build defines.
-
-    The second staleness signal, alongside settings_version: that one tracks the
-    operator changing an access key, this one tracks the code changing under a client
-    that already fetched its tool list. A client enforces its cached schema
-    before sending, so an argument added after that fetch is unusable to it and
-    no server-side leniency helps; advising a reconnect is the only remedy.
-
-    Hashes the FULL static catalog, never the per-access-key announced subset, so a
-    permission change does not masquerade as a deploy. Descriptions are excluded:
-    reworded guidance needs no refetch, and counting prose edits as staleness
-    would fire the notice constantly and train operators to ignore it.
-    """
+    """Hash every tool name and inputSchema this build defines."""
     catalog = [
         (d["name"], d.get("inputSchema"))
         for d in (*_ENTITY_TOOL_DEFS, *_NATIVE_TOOL_DEFS, *_SYSTEM_TOOL_DEFS, *mesa_tool_defs())
@@ -53,12 +42,10 @@ _TOOL_CATALOG_FINGERPRINT = _catalog_fingerprint()
 
 
 def tool_catalog_counts() -> dict[str, int]:
-    """The tool count, from the registry itself. The ONLY place it is defined.
+    """Return the tool counts from the registry, the one definition.
 
-    Every other statement of the count derives from here: the docs contract
-    tests and the admin info endpoint. Native means HA's own
-    domain-prefixed MCP tool names, which Phoenix implements 1:1; additional is
-    everything Phoenix defines beyond them, mesa_* included.
+    Native means HA's domain-prefixed tool names; additional is everything else, mesa_*
+    included.
     """
     names = {
         d["name"]
@@ -117,17 +104,10 @@ def _write_gate_open(internal_name: str, access_key: AccessKeyRecord, has_write:
 def _tool_is_announced(
     tool_def: dict, access_key: AccessKeyRecord, has_write: bool, hass: HomeAssistant
 ) -> bool:
-    """Whether a tool should appear in tools/list for this access key.
-
-    cap-tied tools gate on their capability; write/action tools gate on write
-    scope; a tool carrying a "requires" key additionally needs that system
-    surface to exist; everything else (reads, GetDateTime, get_approval_status)
-    is always announced. The caller applies the announce_all_tools override
-    separately.
-
-    TWO MIRRORS: this predicate and _tool_gate_map (get_capability_summary)
-    decide announcement independently; build_mcp_tool_list (Agent Chat,
-    Assist, voice, AI Task) calls this one. Change both together.
+    """Return whether a tool appears in tools/list for this access key.
+    Cap-tied tools gate on the cap, write tools on write scope, ``requires`` on its system
+    surface; the rest always show. The caller applies announce_all_tools. _tool_gate_map
+    decides independently, so change both together.
     """
     caps = _tool_required_caps(tool_def)
     any_caps = _tool_any_caps(tool_def)
@@ -184,16 +164,9 @@ _TOOL_CONTEXT_PARAMS = ("data", "request_id", "client_ip")
 
 def _register_tool(name: str, handler: Any, /, **bound: Any) -> None:
     """Bind a tool name to its handler. Called once per tool at module import.
-
-    The handler's parameter names are read from its code object (not
-    inspect.signature, which can evaluate annotations eagerly on Python 3.14) so
-    the dispatcher passes just the context each one takes, instead of every
-    handler accepting a uniform signature it mostly ignores. bound supplies
-    per-registration constants, which is how the dashboard card ops and the
-    mesa_* tools share one handler each.
-
-    name and handler are positional-only so that no bound kwarg (the card ops
-    bind their own tool_name) can collide with this function's own parameters.
+    Parameter names come from the code object, as inspect.signature can evaluate annotations
+    on Python 3.14. ``bound`` holds per-registration constants; name and handler stay
+    positional-only.
     """
     if name in _TOOL_HANDLERS:
         raise ValueError(f"duplicate tool registration: {name}")

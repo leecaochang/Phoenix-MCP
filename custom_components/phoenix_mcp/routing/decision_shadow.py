@@ -10,20 +10,29 @@ from typing import Any
 
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
+from .command_plan import _capture_plan
 from .command_routing import RoutingAuthority, routing_language, routing_languages, effective_routing_mode
 from .command_operations import numeric_operation
 from ..const import MAX_SEARCH_QUERY_LEN
+from .command_target import _digest
+from .decision_batch import async_prepare_batch, batch_execution_eligible
+from .decision_targets import capture_sequential_targets
 from .routing_tables import (
     DECISION_TARGET_INTENTS, DECISION_HYBRID_REASONS, DECISION_NUMERIC_CATEGORIES,
     DECISION_EXECUTION_CATEGORIES, DECISION_ENTITY_CATEGORIES,
 )
-from .decision_provider import DecisionError, DecisionProvider, _evaluate_guarded, confident_choice
+from .decision_provider import DecisionProvider, _evaluate_guarded
+from .decision_types import DecisionError, confident_choice
 from .routing_tables import TOOL_ROUTING_SETTINGS, TOOL_ROUTING_REASONS
 from .decision_metrics import DecisionMetrics
 from copy import deepcopy
 from homeassistant.core import HomeAssistant
 from .decision_identity import explicit_write_target
 from .numeric_evidence import read_explicit_percentage, compare_percentage
+from ..conversation_log import record_current
+from ..llm.accounts import (
+    loaded_decision_account, _get_secret_store, PROVIDER_DEFINITIONS, decision_account_fingerprint,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -133,14 +142,9 @@ class DecisionShadow:
     async def _evaluate(self, hass: HomeAssistant, data: Any, authority: RoutingAuthority,
                         sentence: object, language: object, targets: bool = False, prepare: bool = False, ingress: str = "voice",
                         joint_only: bool = False) -> dict:
-        from ..llm.accounts import (
-            _get_secret_store, PROVIDER_DEFINITIONS, decision_account_fingerprint,
-        )
-        from .decision_batch import async_prepare_batch, batch_execution_eligible
 
         started = monotonic()
         def result(reason: str, decision: dict | None = None, *, selection: dict | None = None) -> dict:
-            from ..conversation_log import record_current
             record_current("routing", {"route": "decision_result", "reason": reason,
                                        "choice": decision.get("choice") if decision else None,
                                        "selection_reason": selection.get("reason") if selection else None,
@@ -225,7 +229,6 @@ class DecisionShadow:
     async def _select_target(self, hass: HomeAssistant, authority: RoutingAuthority, provider: DecisionProvider,
                              session: Any, sentence: str, category: dict, timeout_ms: int,
                              *, prepare: bool = False, ingress: str = "voice", language: str = "en") -> dict:
-        from .decision_targets import capture_sequential_targets
 
         started = monotonic()
         def result(reason: str, entity_id: str | None = None, decision: dict | None = None) -> dict:
@@ -246,7 +249,6 @@ class DecisionShadow:
             operation = numeric_operation(DECISION_TARGET_INTENTS[category["choice"]])
             if prepare and operation is not None:
                 return result("numeric_unverified")
-            from ..llm.accounts import loaded_decision_account
             def request_guard() -> None:
                 latest = authority.current(hass)
                 if latest is None or loaded_decision_account(hass, authority.settings.decision_provider_id or '') != provider.cfg:
@@ -287,7 +289,6 @@ class DecisionShadow:
             if operation is not None:
                 selection["value_check"] = compare_percentage(source_value, proposal[operation.proposal_field])
             if prepare:
-                from .command_execution import _capture_plan, _digest
                 plan = _capture_plan(hass, authority.data, access_key, proposal, ingress=ingress)
                 if plan is None:
                     return result("targets_changed")

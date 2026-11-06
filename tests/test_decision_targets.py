@@ -15,13 +15,14 @@ from homeassistant.setup import async_setup_component
 
 from custom_components.phoenix_mcp import device_semantics
 from custom_components.phoenix_mcp.llm import accounts as llm_accounts
-from custom_components.phoenix_mcp.routing.command_execution import _target_fingerprint
+from custom_components.phoenix_mcp.routing.command_target import _target_fingerprint
 from custom_components.phoenix_mcp.const import DOMAIN
 from custom_components.phoenix_mcp.routing.routing_tables import (
     DECISION_BRIGHTNESS_CHOICES, DECISION_MAX_TARGETS, DECISION_ROUTE_CHOICES,
 )
 from custom_components.phoenix_mcp.data import PhoenixData
-from custom_components.phoenix_mcp.routing.decision_provider import DecisionError, DecisionProvider
+from custom_components.phoenix_mcp.routing.decision_types import DecisionError
+from custom_components.phoenix_mcp.routing.decision_provider import DecisionProvider
 from custom_components.phoenix_mcp.routing.decision_shadow import async_preview_decision
 from custom_components.phoenix_mcp.routing.decision_targets import capture_targets, CatalogLimitError
 from custom_components.phoenix_mcp.access_key_store import PermissionTree, PermissionNode
@@ -432,7 +433,7 @@ async def test_sequential_value_evidence_is_diagnostic_only(hass, target_home, s
     first, _ = mocks('light_brightness')
     answer = {**choice('t0', ['t0', 'none']), 'brightness_pct': model_value}
     with (first, patch.object(DecisionProvider, 'select_target', AsyncMock(return_value=answer)),
-          patch_readers('custom_components.phoenix_mcp.routing.command_execution._capture_plan') as prepare):
+          patch_readers('custom_components.phoenix_mcp.routing.command_plan._capture_plan') as prepare):
         result = await async_preview_decision(hass, data, access_key, sentence, 'en',
                                               {'reason': 'no_match', 'proposal': None}, targets=True)
     assert result['target_selection']['value_check'] == evidence
@@ -445,7 +446,7 @@ async def test_target_selector_cannot_prepare_numeric_plan_even_with_matching_va
     data, access_key, store, account, _ = target_home
     provider = DecisionProvider(store.resolve(account, purpose='decision'), 'systemone')
     with (patch.object(provider, 'select_target') as select,
-          patch_readers('custom_components.phoenix_mcp.routing.command_execution._capture_plan') as prepare):
+          patch_readers('custom_components.phoenix_mcp.routing.command_plan._capture_plan') as prepare):
         result = await data.decision_shadow._select_target(
             hass, RoutingAuthority.capture(data, access_key), provider, None, 'Set the lamp to 37 percent',
             choice('light_brightness', DECISION_ROUTE_CHOICES), 1000, prepare=True,

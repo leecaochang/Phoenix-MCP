@@ -18,7 +18,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.util.dt import utcnow
 
 from custom_components.phoenix_mcp.const import REDACTION_SENTINEL
-from custom_components.phoenix_mcp.helpers import redact_structure
+from custom_components.phoenix_mcp.redaction import redact_structure
 from custom_components.phoenix_mcp.policy_engine import filter_service_response
 from custom_components.phoenix_mcp.access_key_store import PermissionTree, AccessKeyRecord
 

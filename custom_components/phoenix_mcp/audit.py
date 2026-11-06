@@ -22,7 +22,7 @@ from .const import (
 from .conversation_log import sanitized
 from .helpers import log_internal_failure
 from .request_authority import household_authority
-from .provider_constants import AGENTCLI_CLIENT_IP
+from .provider_constants import AGENT_CHAT_CLIENT_IP
 from .access_key_store import GlobalSettings
 
 if TYPE_CHECKING:
@@ -50,19 +50,17 @@ _REDACTED = "[redacted]"
 # Sources that are Phoenix's own surfaces, not a caller's address: Log client IP
 # off hides addresses, and these name no one.
 _INTERNAL_SOURCES = frozenset({
-    AGENTCLI_CLIENT_IP, ASSIST_CLIENT_IP, VOICE_AGENT_CLIENT_IP, AI_TASK_CLIENT_IP, HOME_COMPANION_CLIENT_IP,
+    AGENT_CHAT_CLIENT_IP, ASSIST_CLIENT_IP, VOICE_AGENT_CLIENT_IP, AI_TASK_CLIENT_IP, HOME_COMPANION_CLIENT_IP,
 })
 # Payload keys that hold entity IDs, hidden with the resource when Log entity IDs is off.
 _ENTITY_KEYS = frozenset({"entity_id", "entity_ids", "entity", "entities"})
 
 
 def _without_entity_ids(value: Any, depth: int = 0) -> Any:
-    """A payload with nothing that identifies an entity.
+    """Return a payload with nothing that identifies an entity.
 
-    Entity-ID fields are replaced, and a tool's arguments keep only their names,
-    because a query, a template, a device or area selector or a native tool's
-    name argument identifies an entity as well as an entity_id does. A name with
-    a dot has the shape of an entity ID and is left out too.
+    Entity-ID fields are replaced, and a tool's arguments keep only their names, leaving out
+    dotted names, as any argument can identify an entity.
     """
     if depth > CONVERSATION_LOG_MAX_DEPTH:
         return _REDACTED
@@ -86,11 +84,7 @@ def _argument_names(arguments: Any) -> Any:
 
 
 def _storable_text(value: Any) -> Any:
-    """Escape what the JSON writer refuses, so one client string cannot fail a whole save.
-
-    Home Assistant's Store logs a write failure and keeps going, so a lone
-    surrogate in one row would silently stop the log reaching disk.
-    """
+    """Escape what the JSON writer refuses, so one string cannot fail a whole save."""
     return value.encode("utf-8", "backslashreplace").decode("utf-8") if isinstance(value, str) else value
 
 
@@ -155,15 +149,10 @@ def _clipped(value: Any, limit: int = AUDIT_PAYLOAD_SCAN_CHARS) -> tuple[Any, bo
 
 
 def _logged_payload(payload: Any) -> str | None:
-    """A payload as the audit log keeps it: redacted as the Conversation Log redacts, then capped.
-
-    The Conversation Log's sanitizer also hides device codes (an alarm or lock
-    `code`, a PIN, a Wi-Fi key), in keys and in free text, which the general
-    secret redaction keeps. Text past the scan limit cannot reach the kept part
-    of the row, so it is cut first; what was cut may be what marked the text as a
-    service call, so a clipped payload is sanitized as one. A stored payload from
-    an older version may be a capped string that is no longer JSON; it is cleaned
-    as text. A payload that cannot be sanitized is left out rather than kept raw.
+    """Return a payload as the audit log keeps it: redacted, then capped, or None.
+    Uses the Conversation Log's sanitizer, which also hides device codes. Text past the scan
+    limit is cut first, and a clipped or legacy string is cleaned as text. A payload that
+    cannot be sanitized is left out, never kept raw.
     """
 
     try:
@@ -245,15 +234,10 @@ class AuditEntry:
 
 
 class AuditLog:
-    """Circular buffer audit log.
+    """Circular buffer audit log, optionally persisted through a Store.
 
-    Logging toggles from GlobalSettings are evaluated at record time, not at
-    query time. Sensor counters in sensor.py are updated independently of
-    these toggles and always reflect total activity.
-
-    When a Store is provided, the log can be persisted to disk via async_save()
-    and restored on startup via async_load(). Without a store it is purely
-    in-memory.
+    Logging toggles apply at record time, not query time. Counters in sensor.py ignore these
+    toggles and reflect total activity.
     """
 
     def __init__(self, maxlen: int = AUDIT_LOG_MAXLEN, store: Store | None = None) -> None:
@@ -282,12 +266,9 @@ class AuditLog:
         originating_access_key_id: str | None = None,
     ) -> None:
         """Append an audit entry, subject to the current logging settings.
-
-        Returns without writing if disable_all_logging or the relevant per-outcome
-        toggle is off. resource and the payload's entity-ID fields are redacted when
-        log_entity_names is off, and client_ip when log_client_ip is off unless it
-        names one of Phoenix's own surfaces. pending_approval and approval/*
-        lifecycle rows ignore the log_allowed/log_denied toggles.
+        Skipped by disable_all_logging or the per-outcome toggle, except pending_approval and
+        approval/* rows. log_entity_names and log_client_ip redact names and IPs, keeping
+        Phoenix's own surfaces named.
         """
         if settings.disable_all_logging:
             return
@@ -405,11 +386,9 @@ class AuditLog:
         limit: int = 100,
         offset: int = 0,
     ) -> list[AuditEntry] | None:
-        """Return filtered, paginated audit entries in reverse-chronological order.
+        """Return filtered, paginated entries, newest first, or None for an unknown outcome.
 
-        Returns None when outcome is not a recognised value, allowing the caller
-        to return a 400 error rather than silently returning an empty list.
-        limit is capped at MAX_QUERY_LIMIT (500). offset is applied after filtering.
+        ``limit`` is capped at MAX_QUERY_LIMIT; ``offset`` applies after filtering.
         """
         entries = self._filtered(
             access_key_id=access_key_id, outcome=outcome, client_ip=client_ip,
@@ -446,11 +425,7 @@ class AuditLog:
         self._log.clear()
 
     def resize(self, maxlen: int) -> None:
-        """Replace the deque with a new one of the given maxlen.
-
-        If maxlen is smaller than the current length, the oldest entries are
-        dropped automatically by the deque constructor.
-        """
+        """Replace the deque with one of the given maxlen, dropping the oldest entries."""
         self._log = deque(self._log, maxlen=maxlen)
 
     async def async_save(self) -> None:

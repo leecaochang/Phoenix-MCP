@@ -321,7 +321,7 @@ def _admin_post(body: dict):
 
 async def test_harvest_report_records_the_servers_own_resource_list(lovelace) -> None:
     """Provenance comes from the server's read at report time, not the browser's claim."""
-    from custom_components.phoenix_mcp.admin_view import PhoenixAdminCardCatalogView
+    from custom_components.phoenix_mcp.admin.settings import PhoenixAdminCardCatalogView
     from custom_components.phoenix_mcp.const import DOMAIN
 
     data = _data()

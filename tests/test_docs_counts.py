@@ -23,7 +23,7 @@ import pytest
 
 from custom_components.phoenix_mcp.const import CAPABILITY_NAMES
 from custom_components.phoenix_mcp.provider_constants import (
-    AGENTCLI_MAX_TOOLS_PER_REQUEST, AGENTCLI_PROVIDERS,
+    AGENT_CHAT_MAX_TOOLS_PER_REQUEST, AGENT_CHAT_PROVIDERS,
 )
 from custom_components.phoenix_mcp.tool_catalog import tool_catalog_counts
 from custom_components.phoenix_mcp.personas import PERSONA_DEFINITIONS
@@ -119,11 +119,11 @@ def _stale_counts(text: str, name: str = "fixture") -> list[str]:
     counts = tool_catalog_counts()
     allowed = {
         # The catalog total, or the per-request limit some providers impose.
-        "tool": {counts["total"], AGENTCLI_MAX_TOOLS_PER_REQUEST},
+        "tool": {counts["total"], AGENT_CHAT_MAX_TOOLS_PER_REQUEST},
         "capabilit": {len(CAPABILITY_NAMES)},
         "persona": {len(PERSONA_DEFINITIONS)},
         "switches": {len(CAPABILITY_NAMES)},
-        "provider": {len(AGENTCLI_PROVIDERS)},
+        "provider": {len(AGENT_CHAT_PROVIDERS)},
     }
 
     # Remove non-prose first, preserving block boundaries while joining inline

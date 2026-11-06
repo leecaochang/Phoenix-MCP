@@ -159,15 +159,15 @@ async def test_non_tool_exception_is_scrubbed_and_retains_rpc_id(http_authority,
 async def test_all_admin_routes_reject_real_read_only_ha_identity(hass, hass_client, hass_read_only_access_token):
     import inspect
     import re
-    from custom_components.phoenix_mcp.admin_view import ALL_ADMIN_VIEWS
-    from custom_components.phoenix_mcp.agentcli_views import (
-        ALL_AGENTCLI_ADMIN_VIEWS,
-        ALL_AGENTCLI_CHAT_VIEWS,
+    from custom_components.phoenix_mcp.admin.registry import ALL_ADMIN_VIEWS
+    from custom_components.phoenix_mcp.agent_chat_views import (
+        ALL_AGENT_CHAT_ADMIN_VIEWS,
+        ALL_AGENT_CHAT_CHAT_VIEWS,
     )
     assert await async_setup_component(hass, "http", {})
     store = await AccessKeyStore.async_create(hass)
     hass.data[DOMAIN] = PhoenixData(store=store, rate_limiter=RateLimiter(), audit=AuditLog())
-    views = ALL_ADMIN_VIEWS + ALL_AGENTCLI_ADMIN_VIEWS + ALL_AGENTCLI_CHAT_VIEWS
+    views = ALL_ADMIN_VIEWS + ALL_AGENT_CHAT_ADMIN_VIEWS + ALL_AGENT_CHAT_CHAT_VIEWS
     for view_cls in views:
         view = view_cls()
         view.hass = hass

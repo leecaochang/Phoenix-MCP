@@ -13,7 +13,9 @@ from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
 
 from .command_routing import RoutingAuthority, routing_language
-from .command_execution import _capture_plan, _digest
+from .command_plan import _capture_plan
+from .command_summary import summary_proposal, summary_catalog
+from .command_target import _digest
 from .command_operations import numeric_operation
 from ..const import MAX_SEARCH_QUERY_LEN
 from .routing_tables import (
@@ -26,12 +28,19 @@ from .routing_tables import (
     DECISION_BATCH_MAX_TARGETS, COMMAND_ROUTING_TEMPORAL_OPERATIONS,
 )
 from .decision_identity import explicit_write_target
-from .decision_provider import DecisionError, DecisionValidationError, DecisionProvider, _evaluate_guarded, confident_choice, revision_admitted
+from .decision_provider import (
+    DecisionValidationError, DecisionProvider, _evaluate_guarded, revision_admitted,
+)
+from .decision_types import DecisionError, confident_choice
 from .decision_targets import catalog_state, capture_targets, CatalogLimitError, TargetSnapshot
 from ..device_semantics import device_registry_snapshot
-from ..helpers import redact_secrets_in_text, redact_inaccessible_entity_ids_in_text
+from ..entity_commands import chosen_entity_value, literal_text
+from ..redaction import redact_secrets_in_text, redact_inaccessible_entity_ids_in_text
 from .numeric_evidence import read_explicit_percentage, compare_percentage, has_percentage_unit, read_explicit_scalar, explicit_unit_matches
-from .temporal_values import valid_temporal_value
+from .temporal_values import (
+    valid_temporal_value, explicit_timer_duration, async_read_temporal_value,
+)
+from ..llm.accounts import loaded_decision_account, _get_secret_store, PROVIDER_DEFINITIONS
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -51,7 +60,6 @@ def capture_batch_targets(hass: HomeAssistant, access_key: Any, *, numeric_previ
                                           compact=extended, max_bytes=operation_bytes)
                  for category in sorted(categories)}
     if extended and not temporal:
-        from .command_summary import summary_catalog
         try:
             snapshots['state_summary'] = summary_catalog(hass, access_key, devices=devices,
                                                           max_targets=max_targets, max_bytes=operation_bytes)
@@ -114,9 +122,7 @@ async def async_prepare_batch(hass: HomeAssistant, authority: RoutingAuthority, 
     if (redact_inaccessible_entity_ids_in_text(redact_secrets_in_text(sentence) or "", current, hass) != sentence
             or (provider.cfg.api_key and provider.cfg.api_key in sentence)):
         raise DecisionError("context_unavailable")
-    from .temporal_values import async_read_temporal_value
     source = await async_read_temporal_value(hass, sentence, language)
-    from ..llm.accounts import loaded_decision_account
     current = authority.current(hass)
     account = authority.settings.decision_provider_id
     if current is None or not account or loaded_decision_account(hass, account) != provider.cfg:
@@ -128,7 +134,6 @@ async def async_prepare_batch(hass: HomeAssistant, authority: RoutingAuthority, 
     numeric = False
     scalar = False
     source_value: int | float | None = None
-    from ..entity_commands import literal_text
     if percentage_execution_eligible(provider.cfg, language) and literal_text(sentence) is None:
         source_value = await hass.async_add_executor_job(read_explicit_percentage, sentence, language)
         if source_value is None:
@@ -227,7 +232,6 @@ async def async_prepare_batch(hass: HomeAssistant, authority: RoutingAuthority, 
             or answer["percentage"]["model"] != category["model"] or not confident_choice(answer["percentage"])):
         return category, {**selection, "reason": "numeric_unverified"}
     if category['choice'] == 'state_summary':
-        from .command_summary import summary_proposal
         choice = answer.get('summary', {})
         if not confident_choice(choice) or choice.get('model') != category['model']:
             return category, {**selection, 'reason': 'low_probability'}
@@ -239,7 +243,6 @@ async def async_prepare_batch(hass: HomeAssistant, authority: RoutingAuthority, 
         return category, {**selection, 'reason': 'category_mismatch'}
     typed = proposal["intent"] in COMMAND_ROUTING_VALUE_INTENTS
     if typed:
-        from ..entity_commands import chosen_entity_value
         value = chosen_entity_value(answer, sentence, targets, descriptor, category["choice"])
         if value is None:
             return category, {**selection, "reason": "numeric_unverified"}
@@ -291,7 +294,6 @@ async def async_preview_batch(hass: HomeAssistant, data: Any, access_key: Any, s
 
     async def evaluate() -> dict:
         deadline = asyncio.get_running_loop().time() + authority.settings.decision_timeout_ms / 1000
-        from ..llm.accounts import _get_secret_store, PROVIDER_DEFINITIONS
 
         def rejected(error: DecisionError) -> dict:
             if isinstance(error, CatalogLimitError):
@@ -315,7 +317,6 @@ async def async_preview_batch(hass: HomeAssistant, data: Any, access_key: Any, s
             provider = DecisionProvider(cfg, PROVIDER_DEFINITIONS[cfg.kind].adapter,
                                         request_budget=data.decision_budget, request_limit=authority.settings.decision_request_budget,
                                         metrics=runtime.metrics, metric_scope="preview")
-            from .temporal_values import async_read_temporal_value
             async with asyncio.timeout_at(deadline):
                 temporal = await async_read_temporal_value(hass, sentence, lang)
             current = authority.current(hass)
@@ -398,7 +399,6 @@ async def async_preview_batch(hass: HomeAssistant, data: Any, access_key: Any, s
                 return result("category_mismatch", decision=answer)
             proposal: dict[str, Any] = {"intent": DECISION_TARGET_INTENTS[category["choice"]], "entity_ids": [descriptor["entity_id"]] if not is_summary else []}
             if category['choice'] == 'state_summary':
-                from .command_summary import summary_proposal
                 choice = answer.get('summary', {})
                 if not confident_choice(choice):
                     return result('low_probability', decision=answer)
@@ -409,7 +409,6 @@ async def async_preview_batch(hass: HomeAssistant, data: Any, access_key: Any, s
             elif answer.get('summary', {}).get('choice', 'none') != 'none':
                 return result('category_mismatch', decision=answer)
             if proposal["intent"] in COMMAND_ROUTING_VALUE_INTENTS:
-                from ..entity_commands import chosen_entity_value
                 chosen_value = chosen_entity_value(answer, sentence, targets, descriptor, category["choice"])
                 if chosen_value is None:
                     return result("numeric_unverified", decision=answer)
@@ -470,7 +469,6 @@ def temporal_proposal(answer: dict, targets: dict, source: dict, sentence: str =
         return "category_mismatch", None
     kind = COMMAND_ROUTING_TEMPORAL_OPERATIONS[intent][3]
     if kind == "duration" and source["kind"] != "duration":
-        from .temporal_values import explicit_timer_duration
         if not explicit_timer_duration(sentence, source):
             return "numeric_unverified", None
     if (source["kind"] != kind and not (kind == "duration" and source["kind"] == "time")) or not valid_temporal_value(kind, source["value"], dt_util.get_default_time_zone()):
@@ -484,7 +482,6 @@ def temporal_proposal(answer: dict, targets: dict, source: dict, sentence: str =
 async def async_prepare_temporal(hass: HomeAssistant, authority: RoutingAuthority, provider: Any, session: Any,
                                  sentence: str, language: str, ingress: str, source: dict) -> tuple[dict, dict]:
     """Use the existing decision slot/deadline, with no retries or model-written values."""
-    from ..llm.accounts import loaded_decision_account
     current = authority.current(hass)
     if current is None:
         raise DecisionError("authority_changed")

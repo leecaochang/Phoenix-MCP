@@ -101,7 +101,7 @@ async def test_new_sentence_trigger_refuses_timer_evidence(hass):
     from custom_components.phoenix_mcp.routing.intent_recognition import SentenceTriggerMatch
     from custom_components.phoenix_mcp.routing.temporal_values import async_read_temporal_value
     hass.states.async_set('timer.test', 'idle')
-    with patch('custom_components.phoenix_mcp.routing.intent_recognition.async_recognize', AsyncMock(side_effect=SentenceTriggerMatch)):
+    with patch('custom_components.phoenix_mcp.routing.temporal_values.async_recognize', AsyncMock(side_effect=SentenceTriggerMatch)):
         with pytest.raises(SentenceTriggerMatch):
             await async_read_temporal_value(hass, 'Start timer named Test for five minutes', 'en')
 

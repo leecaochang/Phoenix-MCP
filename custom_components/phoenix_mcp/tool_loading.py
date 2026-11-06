@@ -1,13 +1,9 @@
 """Tool-level loading for providers whose tools-array cap the catalog exceeds.
 
-Phoenix's own agent loops are the client here, so a catalog larger than a
-provider's documented cap is declared in parts instead of refused: a starting
-set, the client-local load_tools function and the deferred tools the model has
-loaded, with a directory of every deferred tool in the system prompt. Nothing
-is hidden and nothing is granted: the directory lists the access key's own
-announced catalog, loading only declares definitions that catalog holds, and
-every call still goes through the shared dispatcher with all its checks.
-External MCP clients and providers without a cap keep the complete catalog.
+Phoenix's own loops declare such a catalog in parts: a starting set, the client-local
+load_tools function and the loaded deferred tools, with a directory in the system prompt.
+Nothing is hidden or granted: every call still goes through the shared dispatcher. External
+clients and uncapped providers keep the complete catalog.
 """
 
 from __future__ import annotations
@@ -17,7 +13,7 @@ import json
 import re
 from typing import Any
 
-from .provider_constants import AGENTCLI_DEFERRED_TOOL_GROUPS, AGENTCLI_LOAD_TOOLS_NAME
+from .provider_constants import AGENT_CHAT_DEFERRED_TOOL_GROUPS, AGENT_CHAT_LOAD_TOOLS_NAME
 from .tool_catalog import _TOOL_DEFS_BY_NAME, _tool_caps
 
 
@@ -26,7 +22,7 @@ def tool_group(name: str) -> str | None:
 
     definition = _TOOL_DEFS_BY_NAME.get(name)
     caps = _tool_caps(definition) if definition is not None else ()
-    for group, (group_caps, fragments, _summary) in AGENTCLI_DEFERRED_TOOL_GROUPS.items():
+    for group, (group_caps, fragments, _summary) in AGENT_CHAT_DEFERRED_TOOL_GROUPS.items():
         if (caps and caps[0] in group_caps) or any(fragment in name for fragment in fragments):
             return group
     return None
@@ -50,7 +46,7 @@ class ToolLoader:
     def __init__(self, catalog: list[dict], limit: int) -> None:
         self.limit = limit
         self._by_name = {tool["name"]: tool for tool in catalog}
-        members: dict[str, list[str]] = {group: [] for group in AGENTCLI_DEFERRED_TOOL_GROUPS}
+        members: dict[str, list[str]] = {group: [] for group in AGENT_CHAT_DEFERRED_TOOL_GROUPS}
         self.starting: list[dict] = []
         for tool in catalog:
             group = tool_group(tool["name"])
@@ -75,10 +71,8 @@ class ToolLoader:
 
     def round_tools(self) -> list[dict]:
         """Start a model round and return the definitions it declares.
-
-        A call is checked against this round's declaration, so a tool loaded by
-        an earlier call in the same response is still refused: the model chose
-        that call without its definition.
+        A tool loaded earlier in the same response stays refused, as its call lacked the
+        definition.
         """
         self._pinned.clear()
         tools = [self.loader_tool(), *self.starting, *(self._by_name[name] for name in self._loaded)]
@@ -87,7 +81,7 @@ class ToolLoader:
 
     def loader_tool(self) -> dict:
         return {
-            "name": AGENTCLI_LOAD_TOOLS_NAME,
+            "name": AGENT_CHAT_LOAD_TOOLS_NAME,
             "description": ("Load deferred tools from the deferred tool directory so they can be called from the "
                             "next step. Give exact tool names, or one group to load all of its tools. Loading "
                             "grants no permission; every call is still checked."),
@@ -102,19 +96,19 @@ class ToolLoader:
         lines = [
             "\n\nDeferred tools: this provider accepts at most "
             f"{self.limit} tools in one request, so these tools of this access key are not loaded yet. Call "
-            f"{AGENTCLI_LOAD_TOOLS_NAME} with exact names, or one group, before calling any of them. At most "
+            f"{AGENT_CHAT_LOAD_TOOLS_NAME} with exact names, or one group, before calling any of them. At most "
             f"{self.capacity} deferred tools stay loaded; loading more unloads the least recently used ones. "
             "The rule that a tool absent from the list is unavailable does not apply to the tools listed here.",
         ]
         for group, names in self.groups.items():
-            lines.append(f"\n[{group}] {AGENTCLI_DEFERRED_TOOL_GROUPS[group][2]}")
+            lines.append(f"\n[{group}] {AGENT_CHAT_DEFERRED_TOOL_GROUPS[group][2]}")
             lines += [f"- {name}: {_first_sentence(self._by_name[name].get('description'))}" for name in names]
         return "\n".join(lines)
 
     def blocked(self, name: str) -> str | None:
         """The refusal for a call to a deferred tool this round did not declare, else None."""
         if name in self.deferred and name not in self._declared:
-            return f"{name} is not loaded. Load it with {AGENTCLI_LOAD_TOOLS_NAME} first; nothing was run."
+            return f"{name} is not loaded. Load it with {AGENT_CHAT_LOAD_TOOLS_NAME} first; nothing was run."
         return None
 
     def use(self, name: str) -> None:

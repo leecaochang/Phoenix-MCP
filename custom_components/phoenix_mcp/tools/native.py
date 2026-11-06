@@ -1,23 +1,11 @@
 """Native HA MCP tools: the Hass* surface HA itself publishes, implemented 1:1.
 
-Public names are translated to the stable internal operation names at the
-transport boundary. Parity with HA's shapes is the contract: a successful action
-returns the native envelope ({"speech": {}, "response_type": "action_done",
-"data": {"success": [], "failed": []}}) and HassCancelAllTimers always carries
-speech_slots {"canceled": N}, including N=0. A request matching nothing
-accessible is an error identical to a denial.
-
-HA-coupling points, re-verified on HA upgrades, each reasoned above its table:
-homeassistant.turn_on/off silently no-ops on lock/cover/vacuum/valve, so
-_TURN_DOMAIN_SERVICES routes those to their domain services;
-_POSITION_DOMAIN_SERVICES covers valves as well as covers. Target matching uses
-async_match_targets with assistant=None: Phoenix scopes by its own permission
-tree, not Assist exposure.
-
-_yaml_scalar and its tables quote entity-supplied text so a state value cannot
-become a new YAML key or list item in the GetLiveContext block a model reads as
-instructions. tool_registration registers these tools and this module never imports
-the dispatcher.
+Public names translate to stable internal operation names at the transport boundary. Parity with
+HA's shapes is the contract, and a request matching nothing accessible is an error identical to a
+denial. HA-coupling points are reasoned above their tables and re-verified on HA upgrades. Target
+matching uses async_match_targets with assistant=None: Phoenix scopes by its own permission tree,
+not Assist exposure. _yaml_scalar quotes entity-supplied text so a state value cannot become a new
+YAML key in the GetLiveContext block. This module never imports the dispatcher.
 """
 
 from __future__ import annotations
@@ -48,7 +36,10 @@ from ..device_semantics import device_registry_snapshot, effective_entity_area_i
 from ..household_authority import household_service_kwargs
 from ..mesa import async_apply_mesa_to_call, fire_mesa_blocked_event
 from ..request_authority import check_request_authority, dispatch_request_id
-from ..helpers import diff_summary_fields as _summary, effective_cap, str_arg, validation_error_message as _validation_error_message
+from ..helpers import validation_error_message as _validation_error_message
+from ..tool_input import str_arg
+from ..catalog_text import diff_summary_fields as _summary
+from ..capability import effective_cap
 from ..tool_common import (
     _gate, _mesa_confirm_annotation, _pending_or_inline, _tool_error, _tool_refused_before_write, _tool_success,
 )
@@ -146,10 +137,8 @@ def _looks_numeric(s: str) -> bool:
 def _yaml_scalar(value: Any) -> str:
     """Format a state or attribute value as a single-line YAML scalar string.
 
-    Untrusted entity text (friendly names, media titles, etc.) is embedded in the
-    GetLiveContext prompt, so control characters are collapsed and any
-    structurally significant string is single-quoted to prevent an entity name
-    from injecting new lines or list items into the prompt structure.
+    Entity text is embedded in the GetLiveContext prompt, so control characters collapse and
+    structural strings are single-quoted, preventing injected lines or list items.
     """
     if value is None:
         return ""
@@ -308,16 +297,12 @@ async def _mesa_gate_native(
 ) -> _MesaGate:
     """Run MESA over an already-flattened list for a native tool.
 
-    Factored out of _tool_intent_action so the native tools that cannot route
-    through it (HassCancelAllTimers, HassBroadcast, the frozen relative-volume
-    plan) enforce the same policy: each actuates entities with its own
-    hass.services.async_call, so skipping this gate would actuate a MESA
-    read_only or prohibited entity that _tool_intent_action denies.
-
-    A MESA deny returns the same refusal as no match. data defaults to
-    hass.data[DOMAIN] and request_id to the dispatch request id. The shared gate
-    distinguishes an explicit off mode from a failed production runtime.
+    A deny returns the same refusal as no match. data defaults to hass.data[DOMAIN], request_id to
+    the dispatch id. The shared gate separates an explicit off mode from a failed runtime.
     """
+    # HassCancelAllTimers, HassBroadcast and the frozen relative-volume plan actuate with their own
+    # service calls, so skipping this gate would actuate a MESA read_only or prohibited entity that
+    # _tool_intent_action denies.
     try:
         household_service_kwargs(hass, service_domain, service_name)
     except Unauthorized:
@@ -373,9 +358,8 @@ async def _tool_intent_action(
 ) -> tuple[dict, str, str]:
     """Execute a service call on pre-resolved, permission-filtered entity list.
 
-    The choke point for every native Hass* tool that maps onto one service call.
-    MESA runs here via _mesa_gate_native, on the already-flattened list; the
-    tools that cannot route through this function call that gate directly.
+    The choke point for native Hass* tools that map onto one service call. MESA runs here via
+    _mesa_gate_native on the flattened list.
     """
     entities = [entity_id for entity_id in entities if not group_member_denied(entity_id, access_key, hass)]
     if not entities:
@@ -504,15 +488,11 @@ def _no_selector_refusal(
 ) -> tuple[dict, str, str] | None:
     """Refuse a native action that carries no usable selector, or None to proceed.
 
-    Caller-provided selectors are checked before a tool adds its fixed domain.
-    Otherwise an omitted, malformed, or unsupported selector can be replaced by
-    that domain and expand to every writable entity in it.
-
-    Safe to distinguish because it is decided entirely from the caller's own
-    arguments, before any resolution: no entity, area or permission is consulted,
-    so this can never become an oracle. The genuinely sensitive pair, "matched
-    nothing" and "denied", stay byte-identical.
+    Checked before a tool adds its fixed domain, or a bad selector would expand to every writable
+    entity in it. Decided from the caller's own arguments alone.
     """
+    # No entity, area or permission is consulted, so this can never become an oracle. The sensitive
+    # pair, "matched nothing" and "denied", stay byte-identical.
     selectors = normalize_intent_selectors(
         name=args.get("name") if "name" in selector_names else None,
         area=args.get("area") if "area" in selector_names else None,
@@ -548,9 +528,8 @@ def _fixed_domain_refusal(
 ) -> tuple[dict, str, str] | None:
     """Validate targeting for a tool that always acts in one domain.
 
-    The caller's domain is a constraint, not a hint that may be discarded. A
-    well-shaped but different domain must fail before the handler substitutes
-    its fixed domain, or the wrong value becomes a whole-domain action.
+    The caller's domain is a constraint: a different domain must fail before the handler substitutes
+    its own, or it becomes a whole-domain action.
     """
     refusal = _no_selector_refusal(args, tool_name, selector_names)
     if refusal is not None:
@@ -590,14 +569,11 @@ async def _hass_turn_gate(
 ) -> tuple[dict, str, str]:
     """Shared gate for HassTurnOn/HassTurnOff.
 
-    Lock, alarm, cover and valve targets (PHYSICAL_GATE_DOMAINS) actuate physical
-    hardware, so a call that targets any of them is subject to
-    cap_physical_control. When that cap is confirm AND physical entities are in
-    scope, the whole call is gated as a pending approval (the executor re-runs it
-    on approval). When the cap is deny the executor drops the physical entities
-    and names them in not_permitted; non-physical entities always proceed
-    immediately.
+    With cap_physical_control at confirm and physical entities in scope, the whole call becomes a
+    pending approval. At deny the executor drops and names them in not_permitted.
     """
+    # PHYSICAL_GATE_DOMAINS targets actuate physical hardware. Non-physical entities proceed
+    # immediately under deny, and the executor re-runs the call on approval.
     refusal = _no_selector_refusal(args, tool_name)
     if refusal is not None:
         return refusal
@@ -636,9 +612,8 @@ _TURN_DOMAIN_SERVICES: dict[str, tuple[str, str, str]] = {
 def _turn_service_groups(service: str, entities: list[str]) -> list[tuple[str, str, list[str]]]:
     """Group entities by the service that actuates them for a turn_on/turn_off.
 
-    Returns (service_domain, service_name, entities) groups in first-seen order.
-    Domains in _TURN_DOMAIN_SERVICES (lock, cover, vacuum, valve) route to their own
-    domain services; every other domain stays on homeassistant.turn_on/off.
+    Returns (service_domain, service_name, entities) in first-seen order. _TURN_DOMAIN_SERVICES
+    domains use their own services, the rest homeassistant.turn_on/off.
     """
     on = service == "turn_on"
     grouped: dict[tuple[str, str], list[str]] = {}
@@ -678,17 +653,13 @@ def _with_declined_targets(
 ) -> tuple[dict, str, str]:
     """Name the targets a capability removed from an otherwise successful action.
 
-    "Turn off everything in the hall" resolves a light and a lock; with
-    cap_physical_control deny the lock is dropped and the light succeeds, which
-    would read as a hall holding one light. The dropped entities are listed in
-    `not_permitted`, only when non-empty. Deliberately NOT data.failed: HA fills
-    that only when a service call RAISED, so a client written against HA's shape
-    would read a declined target as a transport error on a successful call.
-
-    Leak-safe: each entity resolved WRITE for this access key before the capability
-    removed it. The outcome check keeps a REFUSAL from ever being annotated; that
-    must not rest on a refusal body happening to be unparseable plain text.
+    Dropped entities go in `not_permitted` when non-empty, never data.failed, which HA fills only
+    when a service call raised. A refusal is never annotated.
     """
+    # "Turn off everything in the hall" with cap_physical_control deny drops the lock and succeeds
+    # on the light, which would read as a hall holding one light. Leak-safe: each entity resolved
+    # write for this key before the capability removed it. The outcome check, not an unparseable
+    # refusal body, keeps a refusal unannotated.
     response, outcome, resource = result
     if not declined or outcome != "allowed":
         return result
@@ -1581,9 +1552,8 @@ async def _first_source_result(
 ) -> dict[str, Any] | tuple[dict, str, str]:
     """The play_media data for a Music Assistant item from one source, or a refusal.
 
-    Only Music Assistant says where a result comes from: `library` searches the
-    library alone, and `streaming` keeps the results a connected service answered.
-    As with a plain search, MESA gates the play and a refusal here wrote nothing.
+    `library` searches the library alone and `streaming` keeps connected services' results. MESA
+    gates the play; a refusal here wrote nothing.
     """
     resource = "HassMediaSearchAndPlay"
     if source not in ("library", "streaming"):
@@ -1786,10 +1756,8 @@ async def _execute_hass_stop_moving(
 def _vacuums_supporting(entities: list[str], hass: HomeAssistant, feature_bit: int) -> list[str]:
     """Keep only the entities whose supported_features carry feature_bit.
 
-    HA's vacuum intents set required_features, so a vacuum that cannot start,
-    dock, or clean a named area is never targeted in the first place. Without the
-    same filter the service would be called anyway and the tool would report
-    success for a vacuum that could not act on it.
+    Mirrors the required_features of HA's vacuum intents; otherwise the tool would report success
+    for a vacuum that could not act.
     """
     kept: list[str] = []
     for entity_id in entities:
@@ -1810,10 +1778,8 @@ async def _vacuum_action(
 ) -> tuple[dict, str, str]:
     """Shared body for HassVacuumStart and HassVacuumReturnToBase.
 
-    domains is pinned to vacuum rather than taken from the caller, matching how
-    every other domain-locked native tool resolves: without it, an area-only call
-    would resolve every writable entity in that area and call a vacuum service on
-    all of them.
+    domains is pinned to vacuum, or an area-only call would call a vacuum service on every writable
+    entity in that area.
     """
     refusal = _fixed_domain_refusal(
         args, tool_name, "vacuum", _DOMAIN_TARGET_SELECTORS
@@ -1867,13 +1833,11 @@ async def _tool_hass_vacuum_clean_area(
 ) -> tuple[dict, str, str]:
     """MCP tool: HassVacuumCleanArea - send a vacuum to clean a named area.
 
-    The odd one in this family, mirroring HA's own CleanAreaIntentHandler: `area`
-    names the room to CLEAN and rides in the service data as cleaning_area_id, it
-    does NOT scope which entities are targeted, and `name` picks which vacuum
-    does the work. Omitting `name` uses every accessible vacuum that supports the
-    feature, so the zero-selector rule that applies to the generic action tools
-    does not apply here.
+    As in HA's CleanAreaIntentHandler, `area` is the room to clean, not a target scope; `name` picks
+    the vacuum. Omitting it uses every accessible supporting vacuum.
     """
+    # `area` rides in the service data as cleaning_area_id, so the zero-selector rule of the generic
+    # action tools does not apply here.
     area_name = str_arg(args.get("area"))
     if not area_name:
         return _tool_error("Missing required argument: area"), "invalid_request", "HassVacuumCleanArea"
@@ -1960,9 +1924,7 @@ async def _tool_hass_broadcast(
 def _build_diff_hass_turn(service: str, physical: list[str], args: dict, access_key: AccessKeyRecord, hass: HomeAssistant) -> dict:
     """Diff payload for a HassTurnOn/Off approval triggered by physical entities.
 
-    Only the physical (lock/alarm/cover/valve) targets are listed, since those
-    are the entities cap_physical_control gates; non-physical targets are not
-    part of the approval decision.
+    Only physical targets are listed, since cap_physical_control gates only those.
     """
     targets = []
     for eid in physical:

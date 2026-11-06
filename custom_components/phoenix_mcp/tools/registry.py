@@ -9,6 +9,7 @@ import json
 import logging
 from typing import Any
 
+import attr
 from homeassistant.core import HomeAssistant, valid_entity_id
 from homeassistant.helpers import (
     area_registry as ar, category_registry as cr, device_registry as dr, entity_registry as er,
@@ -21,11 +22,11 @@ from ..const import CAP_DENY, DOMAIN, MAX_ENTITY_ALIAS_LENGTH, MAX_ENTITY_ALIASE
 from ..data import PhoenixData
 from ..device_semantics import (
     device_effective_area_id, device_entry_value, device_registry_snapshot,
-    entity_follows_device_name, entity_name_source, update_device_registry_entry,
+    entity_follows_device_name, entity_full_name, entity_name_source, update_device_registry_entry,
 )
-from ..helpers import (
-    _scrub_log_text, diff_summary_fields as _summary, effective_cap, redact_diagnostics,
-)
+from ..catalog_text import diff_summary_fields as _summary
+from ..capability import effective_cap
+from ..redaction import _scrub_log_text, redact_diagnostics
 from ..mesa import (
     area_profile_exits, evaluate_registry_action, fire_mesa_blocked_event, RegistryMesaDecision,
     unresolved_context_refused, UNRESOLVED_CONTEXT_WARNING,
@@ -49,11 +50,8 @@ _LOGGER = logging.getLogger(__name__)
 def _entity_meta_snapshot(entry: Any) -> dict:
     """The registry metadata fields set_entity can change (for version capture).
 
-    `aliases` is stored in Home Assistant's OWN wire form, an ordered list whose
-    `None` member is the COMPUTED_NAME sentinel (see `_alias_wire`). Raw rather
-    than resolved, because this payload is what a restore replays and the
-    sentinel has to survive it: resolving it to the entity's current name would
-    freeze that name, so a later rename would silently stop matching by voice.
+    `aliases` stays in HA's raw wire form (see `_alias_wire`): restore replays it, and resolving the
+    COMPUTED_NAME sentinel would freeze the name and break voice matching after a rename.
     """
     return {
         "entity_id": entry.entity_id,
@@ -70,12 +68,8 @@ def _entity_meta_snapshot(entry: Any) -> dict:
 
 
 def _alias_wire(aliases: Any) -> list[str | None]:
-    """An entity's alias list as JSON, mirroring HA's own `aliases_v2` encoding.
-
-    HA serializes the COMPUTED_NAME sentinel as null and Phoenix does the same,
-    so a version snapshot round-trips exactly and nothing has to invent a
-    representation HA would not recognise.
-    """
+    """An entity's alias list as JSON, mirroring HA's own `aliases_v2` encoding."""
+    # HA serializes the COMPUTED_NAME sentinel as null, so a version snapshot round-trips exactly.
     return [None if alias is er.COMPUTED_NAME else alias for alias in (aliases or ())]
 
 
@@ -87,11 +81,8 @@ def _alias_unwire(aliases: Any) -> list:
 def _alias_edit(value: Any, field: str) -> list[str] | str:
     """Normalize an add_aliases / remove_aliases argument, or refuse it.
 
-    Wrong shapes are REFUSED rather than degraded to absent. These arguments
-    change what Home Assistant will answer to by voice, so a value that quietly
-    coerced to an empty list would report a change nobody made; and a list with
-    a non-string member is refused rather than having that member dropped,
-    because a dropped member is an alias the caller meant to act on.
+    Wrong shapes and non-string members are refused rather than degraded: a coerced empty list would
+    report a voice change nobody made.
     """
     if isinstance(value, str):
         candidates = [value]
@@ -119,19 +110,13 @@ def _apply_alias_edits(
 ) -> tuple[list, list[str], list[str]] | str:
     """The new alias list, plus what actually changed, or a refusal message.
 
-    ADD APPENDS and REMOVE FILTERS STRINGS, which is the whole reason this tool
-    has no absolute set-the-aliases form. Home Assistant seeds every entity with
-    a COMPUTED_NAME sentinel meaning "match my own current name", and builds the
-    voice matching trie from this list alone, so an absolute write that dropped
-    the sentinel would stop the entity answering to its own name, and an empty
-    list would remove it from voice control entirely. Neither is reachable here:
-    the sentinel is not a string, so nothing a caller names can match it, and
-    order is preserved because Home Assistant preserves it deliberately.
-
-    Matching is case-insensitive on both sides, since that is how the value is
-    ultimately used: hassil matches spoken text without regard to case, so two
-    aliases differing only in case are the same alias.
+    Add appends and remove filters strings, preserving order and the COMPUTED_NAME sentinel.
+    Matching ignores case, as hassil does, so aliases differing only in case are one.
     """
+    # HA seeds every entity with a sentinel meaning "match my own current name" and builds the voice
+    # trie from this list alone. An absolute write dropping it would stop the entity answering to
+    # its name, and an empty list would remove it from voice control, which is why this tool has no
+    # set-the-aliases form.
     folded_remove = {alias.casefold() for alias in remove}
     kept = [
         alias for alias in current
@@ -540,9 +525,8 @@ def _entity_mesa_actions(
 ) -> list[tuple[str, dict[str, Any]]]:
     """The MESA actions in one set_entity edit, each with its synthetic parameters.
 
-    Renaming identifies the entity differently, disabling takes it out of service,
-    and leaving a profiled area lifts that area's policy. Other metadata is not an
-    actuation. An edit that leaves the state as it is changes nothing to gate.
+    Rename, disable and leaving a profiled area are actions; other metadata is not, and an edit
+    leaving the state as it is gates nothing.
     """
     if entry is None:
         return []
@@ -870,9 +854,8 @@ def _device_area_exits(
 ) -> list[str]:
     """Entities a set_device area change would take out of a profiled area.
 
-    An entity with its own area stays there, as does a child device with its own;
-    a child without one follows this device. Clearing a child's own area returns
-    it to its parent's.
+    Entities and child devices with their own area stay; a child without one follows this device,
+    and clearing a child's area returns it to its parent's.
     """
     if "area_id" not in args:
         return []
@@ -895,12 +878,11 @@ def _device_area_exits(
 def _device_mesa_service_data(args: dict) -> dict[str, Any]:
     """Metadata parameters for MESA after Phoenix expands the exact targets.
 
-    device_id and area_id are Home Assistant target selectors. Passing either
-    while asking mesa-core to evaluate one already-resolved entity is correctly
-    rejected as contradictory: the selector could expand to other entities.
-    A move out of a profiled area is judged on where the entity is now, so only
-    the fields that describe rename or enable/disable belong in the synthetic call.
+    Only rename and enable/disable fields belong here.
     """
+    # device_id and area_id are target selectors that could expand to other entities, so mesa-core
+    # rejects them beside one resolved entity as contradictory. A move out of a profiled area is
+    # judged on where the entity is now.
     return {
         field: args[field]
         for field in ("name", "enabled", "disabled_by")
@@ -1479,11 +1461,11 @@ class _DeviceRemovalContext:
 async def _async_device_removal_hook(hass: HomeAssistant, entry: Any) -> Any | None:
     """Load an integration and return its device-removal hook, if supported.
 
-    Home Assistant's config-entry support cache can be uninitialized. Loading
-    the component is the authoritative check and is repeated in the executor.
-    The async component getter is newer than Phoenix's minimum HA version, so
-    retain the synchronous getter fallback used by Home Assistant 2025.2.
+    Loading is the authoritative check, repeated in the executor, since HA's support cache can be
+    uninitialized.
     """
+    # The async component getter is newer than Phoenix's minimum HA version, so the synchronous
+    # getter used by Home Assistant 2025.2 stays as a fallback.
     try:
         integration = await loader.async_get_integration(hass, entry.domain)
         async_get_component = getattr(integration, "async_get_component", None)
@@ -2087,6 +2069,23 @@ async def _execute_remove_device(
     return _tool_success(json.dumps(body, default=str)), "allowed", device_id
 
 
+def _changes_composed_name(args: dict) -> bool:
+    """Whether a set_entity call changes what Home Assistant builds the entity's name from."""
+    return any(field in args for field in ("name", "use_device_name", "area_id"))
+
+
+def _composed_name_after(hass: HomeAssistant, entry: er.RegistryEntry, args: dict) -> str | None:
+    """The name Home Assistant would build once this call applies; the executor stores the same values."""
+    changes: dict[str, Any] = {}
+    if "name" in args:
+        changes["name"] = args["name"] or None
+    if "use_device_name" in args:
+        changes["name"] = "" if args["use_device_name"] else None
+    if "area_id" in args:
+        changes["area_id"] = args["area_id"] or None
+    return entity_full_name(hass, attr.evolve(entry, **changes))
+
+
 async def _build_diff_set_entity(
     args: dict,
     access_key: AccessKeyRecord,
@@ -2105,6 +2104,11 @@ async def _build_diff_set_entity(
         preview["use_device_name"] = {
             "before": entity_name_source(hass, entry) == "device",
             "after": args["use_device_name"],
+        }
+    if entry is not None and _changes_composed_name(args):
+        preview["composed_name"] = {
+            "before": er.async_get_full_entity_name(hass, entry),
+            "after": _composed_name_after(hass, entry, args),
         }
     if "enabled" in args:
         fields.append("enabled")
@@ -2188,13 +2192,10 @@ async def _build_diff_set_entity(
         )
     if mesa_decision is not None:
         preview["mesa"] = _mesa_preview(mesa_decision)
-    target_label = before.get("name")
-    if not target_label and entry is not None:
-        target_label = er.async_get_full_entity_name(hass, entry)
     return {
         "kind": "system_action",
         **_summary("set_entity", fields=", ".join(fields) or "nothing", entity_id=entity_id),
-        "target": {"type": "entity", "id": entity_id, "label": target_label or entity_id},
+        "target": {"type": "entity", "id": entity_id, "label": entity_full_name(hass, entry) or entity_id},
         "preview": preview,
     }
 
@@ -2228,7 +2229,7 @@ async def _build_diff_delete_entity(
     return {
         "kind": "system_action",
         **_summary("delete_entity", entity_id=entity_id),
-        "target": {"type": "entity", "id": entity_id, "label": snap.get("name") or entity_id},
+        "target": {"type": "entity", "id": entity_id, "label": entity_full_name(hass, entry) or entity_id},
         "preview": preview,
     }
 
@@ -2500,6 +2501,7 @@ def _commit_set_entity(
 
     public_after = {
         **after,
+        "composed_name": entity_full_name(hass, updated_entry),
         "name_source": entity_name_source(hass, updated_entry),
         "aliases": er.async_get_entity_aliases(hass, updated_entry),
     }
@@ -2536,7 +2538,7 @@ def _commit_set_entity(
     return _RegistryCommit(
         result=(_tool_success(json.dumps(body, default=str)), "allowed", updated_id),
         resource_type="entity", resource_id=updated_id, action="edit",
-        before=before, after=after, alias=after.get("name") or updated_id,
+        before=before, after=after, alias=entity_full_name(hass, updated_entry) or updated_id,
     )
 
 
@@ -2656,6 +2658,7 @@ def _commit_delete_entity(
         )
         return _registry_mesa_error(entry.entity_id, "delete", mesa_decision)
     before = _entity_meta_snapshot(entry)
+    label = entity_full_name(hass, entry)
     try:
         reg.async_remove(entity_id)
     except Exception as exc:  # surface a clean tool error
@@ -2670,5 +2673,5 @@ def _commit_delete_entity(
     return _RegistryCommit(
         result=(_tool_success(json.dumps(body)), "allowed", entity_id),
         resource_type="entity", resource_id=entity_id, action="delete",
-        before=before, after=None, alias=before.get("name") or entity_id,
+        before=before, after=None, alias=label or entity_id,
     )

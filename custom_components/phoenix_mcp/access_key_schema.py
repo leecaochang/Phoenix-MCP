@@ -16,6 +16,7 @@ _FIELDS = {
     "voice_agent_token_id": "voice_agent_access_key_id",
     "ai_task_token_id": "ai_task_access_key_id",
     "token_presets_enabled": "access_key_presets_enabled",
+    "rejected_reason": "closure_reason",
 }
 _REASONS = {
     "token_inactive": "access_key_inactive",
@@ -30,9 +31,9 @@ def normalize_access_key_fields(record: dict) -> dict:
     for legacy, canonical in _FIELDS.items():
         if legacy in result:
             result.setdefault(canonical, result.pop(legacy))
-    reason = result.get("rejected_reason")
+    reason = result.get("closure_reason")
     if isinstance(reason, str) and reason in _REASONS:
-        result["rejected_reason"] = _REASONS[reason]
+        result["closure_reason"] = _REASONS[reason]
     return result
 
 

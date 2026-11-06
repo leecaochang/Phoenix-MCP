@@ -1,22 +1,12 @@
 """Dashboard card catalog: which Lovelace cards this instance can actually render.
 
-Dashboard write tools accept any card dict with a non-empty string `type`, so an
-agent cannot otherwise learn which custom cards are installed. This module caches
-every card type the instance can render, with a one-line description, a
-documentation URL and a worked stub config.
+Harvested in a browser from ``window.customCards``, as static parsing misses cards that build
+their type strings. Harvested fields come from third-party code, so each is coerced, bounded
+and dropped on doubt.
 
-The catalog is HARVESTED IN A BROWSER, not read off disk: a card announces itself
-by pushing onto `window.customCards` (the registry HA's card picker reads) at
-runtime. A static parse of plugin JS misses cards that build their type strings by
-concatenation and cannot recover descriptions or stubs. Harvested payloads come
-from third-party card code, so every field is coerced, bounded and dropped on doubt.
-
-A NEVER-HARVESTED CATALOG IS NOT AN EMPTY ONE: `harvested_at is None` means no
-browser has reported, and callers must say so, since "no custom cards" makes an
-agent avoid every custom card. A HARVESTED CATALOG IS NOT NECESSARILY COMPLETE:
-each harvest records a fingerprint of the registered dashboard resources, and
-`assess_freshness` combines it with failed imports into the evidence a "not seen"
-answer may rely on.
+``harvested_at is None`` means no browser has reported, not that no cards exist. Each harvest
+fingerprints the dashboard resources, and ``assess_freshness`` combines that with failed
+imports into the evidence a "not seen" answer may rely on.
 """
 
 from __future__ import annotations
@@ -95,12 +85,7 @@ _FINGERPRINT = re.compile(r"[0-9a-f]{64}")
 
 
 def resource_fingerprint(resources: Iterable[Mapping[str, Any]] | None) -> str | None:
-    """Order-independent fingerprint of the registered resources, or None if unknown.
-
-    Covers each resource's type as well as its URL: switching a file between
-    module and js changes how the browser loads it, so it can stop a card
-    registering without any URL changing.
-    """
+    """Return an order-independent fingerprint of resource URLs and types, or None."""
     if resources is None:
         return None
     pairs = {(str(r.get("type")), r["url"]) for r in resources if isinstance(r.get("url"), str)}
@@ -117,11 +102,8 @@ def _url_fingerprint(resources: Iterable[Mapping[str, Any]]) -> str:
 class CatalogFreshness:
     """How far a harvested catalog can be trusted for a card it did not see.
 
-    Complete means the last harvest reported against the dashboard resources
-    registered now and every one of them imported. Even then "not seen" is
-    strong evidence rather than proof: a card can register later than every
-    follow-up harvest waited, or come from an integration rather than a
-    dashboard resource.
+    Complete means the last harvest matched today's resources and every one imported. Even
+    then "not seen" is strong evidence, not proof.
     """
 
     reasons: tuple[str, ...] = ()
@@ -136,9 +118,7 @@ def assess_freshness(
 ) -> CatalogFreshness:
     """Compare a harvested catalog with the dashboard resources registered now.
 
-    A catalog stored before fingerprints covered types still matches on its URLs
-    until the next harvest replaces it, so an upgrade does not report a change
-    that never happened.
+    An older URL-only fingerprint still matches on URLs until the next harvest replaces it.
     """
     reasons: list[str] = []
     if catalog.resource_fingerprint is None or current is None:
@@ -151,11 +131,7 @@ def assess_freshness(
 
 
 def _clean_str(value: object, limit: int = 300) -> str | None:
-    """Coerce a harvested string, or None for anything else.
-
-    Degrades a wrong-shaped value to absent rather than stringifying it, the
-    helpers.str_arg rule: str(True) invents content nobody authored.
-    """
+    """Return a bounded harvested string, or None for anything else; never stringify."""
     if not isinstance(value, str):
         return None
     text = value.strip()
@@ -165,10 +141,7 @@ def _clean_str(value: object, limit: int = 300) -> str | None:
 def _clean_stub(value: object) -> dict | None:
     """Keep a stub config only if it is a dict that serializes within bounds.
 
-    Stub configs come from third-party card code via getStubConfig, so the shape
-    is whatever that card returned. Anything non-dict, unserializable, or over
-    the cap is dropped: the catalog degrades to "no example" rather than
-    refusing the whole entry, since the card itself is still worth knowing about.
+    Anything else is dropped, leaving the entry without an example.
     """
     if not isinstance(value, dict):
         return None
@@ -188,10 +161,8 @@ def _clean_stub(value: object) -> dict | None:
 def sanitize_entries(raw: object) -> list[CardEntry]:
     """Build CardEntry rows from an untrusted harvest payload.
 
-    Drops anything without a usable `type`, de-duplicates by type keeping the
-    first occurrence, and caps the total. Never raises: a malformed payload
-    yields fewer rows, never an error, because a partial catalog is still useful
-    and a harvest failure must not break the admin request that carried it.
+    Drops entries without a usable ``type``, keeps the first of duplicates and caps the total.
+    Never raises: a malformed payload yields fewer rows.
     """
     if not isinstance(raw, list):
         return []
@@ -257,12 +228,7 @@ def _clean_fingerprint(value: object) -> str | None:
 class CardCatalogStore:
     """Persisted card catalog, replaced wholesale by each harvest.
 
-    Wholesale replacement rather than a merge is deliberate: a card removed from
-    the instance must disappear from the catalog, and a merge would keep
-    recommending it forever. The harvest is a full snapshot of what one browser
-    could see, so it is the complete answer or it is not used.
-
-    A None store keeps the catalog in memory only, matching VersionStore.
+    A merge would keep recommending removed cards. A None store keeps the catalog in memory.
     """
 
     def __init__(self, store: Store | None = None) -> None:

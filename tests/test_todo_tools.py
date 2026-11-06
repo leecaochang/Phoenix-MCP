@@ -9,7 +9,8 @@ from __future__ import annotations
 
 import json
 import uuid
-from unittest.mock import AsyncMock, MagicMock
+from datetime import UTC, date, datetime
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from homeassistant.components.todo import TodoItem, TodoItemStatus, TodoListEntity, TodoListEntityFeature
@@ -19,7 +20,10 @@ from homeassistant.util.dt import utcnow
 
 from custom_components.phoenix_mcp.access_key_store import AccessKeyRecord, PermissionNode, PermissionTree
 from custom_components.phoenix_mcp.data import PhoenixData
+from custom_components.phoenix_mcp.mesa import MesaVerdict, build_mesa_service_diff
+from custom_components.phoenix_mcp.service_targets import todo_items_in_review
 from custom_components.phoenix_mcp.tool_dispatch import _call_tool
+from custom_components.phoenix_mcp.tools.service import _build_diff_call_service
 from tests.runtime_fixtures import mesa_off_store
 
 
@@ -315,3 +319,183 @@ async def test_a_list_that_goes_unavailable_after_the_write_is_not_claimed(hass,
     body, outcome = await _call(hass, "set_todo_item", {"entity_id": "todo.lost", "action": "add", "summary": "Tea"}, key)
     assert len(lost.todo_items) == 1
     assert outcome == "invalid_request" and body["applied"] is None and body["verified"] is False and "item" not in body
+
+
+async def _set(hass, **args):
+    return await _call(hass, "set_todo_item", {"entity_id": "todo.shopping", **args})
+
+
+async def test_null_clears_due_and_description(hass, lists):
+    lists._attr_todo_items[0] = TodoItem(uid="milk", summary="Milk", status=TodoItemStatus.NEEDS_ACTION,
+                                         due=date(2026, 12, 1), description="Whole")
+    body, outcome = await _set(hass, action="update", item="milk", due=None, description=None)
+    assert outcome == "allowed" and body["verified"] is True
+    assert lists._attr_todo_items[0].due is None and lists._attr_todo_items[0].description is None
+    assert "due" not in body["item"] and "description" not in body["item"]
+
+
+async def test_an_empty_description_clears_and_omitted_fields_stay(hass, lists):
+    lists._attr_todo_items[0] = TodoItem(uid="milk", summary="Milk", status=TodoItemStatus.NEEDS_ACTION,
+                                         due=date(2026, 12, 1), description="Whole")
+    _, outcome = await _set(hass, action="update", item="milk", description="")
+    assert outcome == "allowed"
+    assert lists._attr_todo_items[0].description is None and lists._attr_todo_items[0].due == date(2026, 12, 1)
+    lists._attr_todo_items[0] = TodoItem(uid="milk", summary="Milk", status=TodoItemStatus.NEEDS_ACTION,
+                                         due=date(2026, 12, 1), description="Whole")
+    await _set(hass, action="update", item="milk", summary="Oat milk")
+    assert lists._attr_todo_items[0].due == date(2026, 12, 1) and lists._attr_todo_items[0].description == "Whole"
+
+
+async def test_an_empty_due_string_changes_nothing(hass, lists):
+    """A client padding optional fields with "" must not wipe a due date."""
+    lists._attr_todo_items[0] = TodoItem(uid="milk", summary="Milk", status=TodoItemStatus.NEEDS_ACTION,
+                                         due=date(2026, 12, 1))
+    await _set(hass, action="update", item="milk", summary="Oat milk", due="")
+    assert lists._attr_todo_items[0].due == date(2026, 12, 1)
+
+
+async def test_a_due_time_only_list_clears_through_its_own_field(hass, lists):
+    lists._attr_supported_features = (TodoListEntityFeature.UPDATE_TODO_ITEM
+                                      | TodoListEntityFeature.SET_DUE_DATETIME_ON_ITEM)
+    lists._attr_todo_items[0] = TodoItem(uid="milk", summary="Milk", status=TodoItemStatus.NEEDS_ACTION,
+                                         due=datetime(2026, 12, 1, 8, tzinfo=UTC))
+    lists.async_write_ha_state()
+    body, outcome = await _set(hass, action="update", item="milk", due=None)
+    assert outcome == "allowed" and body["verified"] is True
+    assert lists._attr_todo_items[0].due is None
+
+
+async def test_a_list_without_due_dates_refuses_clearing_one(hass, lists):
+    lists._attr_supported_features = TodoListEntityFeature.UPDATE_TODO_ITEM
+    lists.async_write_ha_state()
+    body, outcome = await _set(hass, action="update", item="milk", due=None)
+    assert outcome == "invalid_request" and "does not support due dates" in body
+
+
+async def test_a_clear_that_does_not_take_reads_back_as_unapplied(hass, lists):
+    lists._attr_todo_items[0] = TodoItem(uid="milk", summary="Milk", status=TodoItemStatus.NEEDS_ACTION,
+                                         due=date(2026, 12, 1))
+    lists.async_update_todo_item = AsyncMock()
+    body, _ = await _set(hass, action="update", item="milk", due=None)
+    assert body["verified"] is False and body["not_applied"] == ["due"]
+
+
+async def test_an_add_ignores_null_and_empty_fields(hass, lists):
+    body, outcome = await _set(hass, action="add", summary="Tea", due=None, description="")
+    assert outcome == "allowed" and body["verified"] is True
+    assert lists._attr_todo_items[-1].description is None
+
+
+async def test_description_must_be_text(hass, lists):
+    body, outcome = await _set(hass, action="update", item="milk", description=5)
+    assert outcome == "invalid_request" and "description" in body
+
+
+async def test_clear_completed_removes_exactly_the_completed_items(hass, lists):
+    body, outcome = await _set(hass, action="clear_completed")
+    assert outcome == "allowed" and body["verified"] is True and body["applied"] is True
+    assert [item["uid"] for item in body["removed"]] == ["eggs", "bread2"]
+    assert body["remaining_completed"] == 0
+    assert [item.uid for item in lists._attr_todo_items] == ["milk", "bread1"]
+
+
+async def test_clear_completed_never_uses_the_service_that_chooses_at_execution(hass, lists):
+    called = []
+    hass.bus.async_listen("call_service", lambda event: called.append(event.data["service"]))
+    await _set(hass, action="clear_completed")
+    await hass.async_block_till_done()
+    assert "remove_item" in called and "remove_completed_items" not in called
+
+
+async def test_clear_completed_with_nothing_to_clear_changes_nothing(hass, lists):
+    lists._attr_todo_items = [item for item in lists._attr_todo_items if item.status == TodoItemStatus.NEEDS_ACTION]
+    delete = lists.async_delete_todo_items = AsyncMock()
+    body, outcome = await _set(hass, action="clear_completed")
+    assert outcome == "allowed" and body["applied"] is False and body["removed"] == []
+    delete.assert_not_awaited()
+
+
+async def test_clear_completed_refuses_other_arguments(hass, lists):
+    body, outcome = await _set(hass, action="clear_completed", item="eggs")
+    assert outcome == "invalid_request" and "only the list" in body
+    assert len(lists._attr_todo_items) == 4
+
+
+async def test_clear_completed_on_a_list_without_uids_refuses(hass, lists):
+    lists._attr_todo_items[1] = TodoItem(summary="Eggs", status=TodoItemStatus.COMPLETED)
+    body, outcome = await _set(hass, action="clear_completed")
+    assert outcome == "invalid_request" and "no uid" in body
+
+
+async def test_clear_completed_works_through_at_most_one_batch(hass, lists, monkeypatch):
+    monkeypatch.setattr("custom_components.phoenix_mcp.tools.todo.TODO_ITEMS_MAX_LIMIT", 1)
+    body, outcome = await _set(hass, action="clear_completed")
+    assert outcome == "allowed" and [item["uid"] for item in body["removed"]] == ["eggs"]
+    assert body["remaining_completed"] == 1 and body["truncated"] is True
+
+
+async def test_clear_completed_needs_write_and_hides_unreadable_lists(hass, lists):
+    _, outcome = await _call(hass, "set_todo_item", {"entity_id": "todo.shopping", "action": "clear_completed"},
+                             _key("YELLOW"))
+    assert outcome == "denied"
+    assert len(lists._attr_todo_items) == 4
+    body, outcome = await _call(hass, "set_todo_item", {"entity_id": "todo.secret", "action": "clear_completed"})
+    assert outcome == "not_found" and body == "Todo list not found."
+
+
+async def test_clear_completed_says_when_the_list_cannot_be_read_back(hass, lists):
+    with patch("custom_components.phoenix_mcp.tools.todo._items", side_effect=[
+        [{"uid": "eggs", "summary": "Eggs", "status": "completed"}], RuntimeError("gone"),
+    ]):
+        content, outcome, _ = await _call_tool(
+            "set_todo_item", {"entity_id": "todo.shopping", "action": "clear_completed"}, _key(), hass, _data())
+    assert outcome == "invalid_request" and content["isError"] is True
+    assert json.loads(content["content"][0]["text"])["verified"] is False
+
+
+async def test_an_approval_shows_the_items_and_binds_their_uids(hass, lists):
+    args = {"domain": "todo", "service": "remove_item", "service_data": {"item": ["eggs", "bread2"]},
+            "entity_id": ["todo.shopping"]}
+    diff = _build_diff_call_service(args, _key(), hass)
+    assert diff["preview"]["todo_items"] == [
+        {"list": "todo.shopping", "uid": "eggs", "summary": "Eggs"},
+        {"list": "todo.shopping", "uid": "bread2", "summary": "bread"},
+    ]
+    assert diff["preview"]["service_data"] == {"item": ["eggs", "bread2"]}
+
+
+async def test_a_confirm_profile_queues_the_items_for_review_without_removing_them(hass, lists):
+    data = _data()
+    data.mesa = MagicMock()
+    data.store.get_settings().mesa_mode = "enforced"
+    approval = MagicMock(id="a", expires_at=utcnow())
+    verdict = MesaVerdict(confirm=["todo.shopping"])
+    with (patch("custom_components.phoenix_mcp.mesa.evaluate_service_call", return_value=verdict),
+          patch("custom_components.phoenix_mcp.mesa.async_create_mesa_approval",
+                AsyncMock(return_value=approval)) as create):
+        await _call_tool("set_todo_item", {"entity_id": "todo.shopping", "action": "clear_completed"},
+                         _key(), hass, data)
+    saved = create.await_args.kwargs
+    assert saved["args"]["service"] == "remove_item"
+    assert saved["args"]["service_data"] == {"item": ["eggs", "bread2"]}
+    assert saved["diff"]["preview"]["todo_items"] == [
+        {"list": "todo.shopping", "uid": "eggs", "summary": "Eggs"},
+        {"list": "todo.shopping", "uid": "bread2", "summary": "bread"},
+    ]
+    assert len(lists._attr_todo_items) == 4
+
+
+def test_a_review_without_items_adds_nothing(hass):
+    verdict = MesaVerdict(confirm=["todo.shopping"])
+    assert "todo_items" not in build_mesa_service_diff("todo", "remove_item", {"item": []}, verdict)["preview"]
+
+
+async def test_only_a_named_item_on_a_resolved_list_reaches_the_review(hass, lists):
+    data = {"item": "eggs"}
+    assert todo_items_in_review(hass, "todo", "remove_item", data, ["todo.shopping"]) == [
+        {"list": "todo.shopping", "uid": "eggs", "summary": "Eggs"}]
+    assert todo_items_in_review(hass, "todo", "remove_item", data, []) == []
+    assert todo_items_in_review(hass, "todo", "remove_item", {"item": 5}, ["todo.shopping"]) == []
+    assert todo_items_in_review(hass, "todo", "update_item", data, ["todo.shopping"]) == []
+    assert todo_items_in_review(hass, "light", "remove_item", data, ["todo.shopping"]) == []
+    assert todo_items_in_review(hass, "todo", "remove_item", data, ["todo.nothing"]) == []

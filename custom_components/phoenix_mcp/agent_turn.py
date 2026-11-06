@@ -33,7 +33,7 @@ from .const import (
 )
 from .conversation_log import record_rejected_tool
 from .data import PhoenixData
-from .helpers import voice_text
+from .catalog_text import voice_text
 from .home_companion import (
     internal_turn, preflight_control_calls, incomplete_proposal, invalid_read_report,
     append_fitting_results, check_turn_context, ambiguous_control, count_source, is_companion,
@@ -48,12 +48,12 @@ from .llm.base import (
 from .llm.provider_claude import ClaudeProvider
 from .llm.provider_openai import OpenAICompatProvider
 from .provider_constants import (
-    AGENTCLI_APPROVAL_WAIT_SECONDS, AGENTCLI_ATTACHMENT_MAX_BYTES,
-    AGENTCLI_ATTACHMENT_MAX_COUNT, AGENTCLI_ATTACHMENT_MAX_EDGE_PX,
-    AGENTCLI_ATTACHMENT_MAX_TOTAL_BYTES, AGENTCLI_MAX_TOOL_CALL_CORRECTIONS,
-    AGENTCLI_MAX_TURN_OUTPUT_BYTES, AGENTCLI_PROGRESS_INTERVAL_SECONDS,
-    AGENTCLI_RETRY_FIRST_REPLY_SECONDS, AGENTCLI_STATUS_INTERVAL_SECONDS,
-    AGENTCLI_TOOL_RESULT_MAX_CHARS,
+    AGENT_CHAT_APPROVAL_WAIT_SECONDS, AGENT_CHAT_ATTACHMENT_MAX_BYTES,
+    AGENT_CHAT_ATTACHMENT_MAX_COUNT, AGENT_CHAT_ATTACHMENT_MAX_EDGE_PX,
+    AGENT_CHAT_ATTACHMENT_MAX_TOTAL_BYTES, AGENT_CHAT_MAX_TOOL_CALL_CORRECTIONS,
+    AGENT_CHAT_MAX_TURN_OUTPUT_BYTES, AGENT_CHAT_PROGRESS_INTERVAL_SECONDS,
+    AGENT_CHAT_RETRY_FIRST_REPLY_SECONDS, AGENT_CHAT_STATUS_INTERVAL_SECONDS,
+    AGENT_CHAT_TOOL_RESULT_MAX_CHARS,
 )
 from .routing.routing_statistics import provider_events
 from .routing.tool_routing import create_review_state, async_review_tools, withheld_results
@@ -67,11 +67,10 @@ from .tool_dispatch import _dispatch_mcp
 
 
 def _clip_display(text: str) -> str:
-    """Cap tool-result text for the verbose panel view; the model still gets the
-    full result via the message history."""
-    if len(text) <= AGENTCLI_TOOL_RESULT_MAX_CHARS:
+    """Cap tool-result text for the verbose panel view; the model gets the full result."""
+    if len(text) <= AGENT_CHAT_TOOL_RESULT_MAX_CHARS:
         return text
-    return text[:AGENTCLI_TOOL_RESULT_MAX_CHARS] + f"\n… (truncated, {len(text)} chars total)"
+    return text[:AGENT_CHAT_TOOL_RESULT_MAX_CHARS] + f"\n… (truncated, {len(text)} chars total)"
 
 
 def _extract_image_blocks(content: Any) -> list[dict[str, str]]:
@@ -143,13 +142,13 @@ def _attachments_unreadable(rid: str) -> web.Response:
 
 
 def _attachment_too_large(rid: str) -> web.Response:
-    return _err("invalid_request", f"An attached image is larger than {AGENTCLI_ATTACHMENT_MAX_BYTES // _MIB} MB.",
-                400, rid, key="attachmentTooLarge", params={"max": AGENTCLI_ATTACHMENT_MAX_BYTES // _MIB})
+    return _err("invalid_request", f"An attached image is larger than {AGENT_CHAT_ATTACHMENT_MAX_BYTES // _MIB} MB.",
+                400, rid, key="attachmentTooLarge", params={"max": AGENT_CHAT_ATTACHMENT_MAX_BYTES // _MIB})
 
 
 # Base64 characters every image in one message may use, with room for each
 # image part's data-URI prefix.
-_ATTACHMENT_BUDGET_CHARS = -(-AGENTCLI_ATTACHMENT_MAX_TOTAL_BYTES * 4 // 3) + 1024
+_ATTACHMENT_BUDGET_CHARS = -(-AGENT_CHAT_ATTACHMENT_MAX_TOTAL_BYTES * 4 // 3) + 1024
 
 
 _UNSEEN_IMAGE_NOTE = "[An image was attached here, but this model cannot see images.]"
@@ -158,11 +157,8 @@ _UNSEEN_IMAGE_NOTE = "[An image was attached here, but this model cannot see ima
 def _without_history_images(messages: list) -> None:
     """Replace every image part in a request's history with a short text note.
 
-    For a model known not to see images: a refused image would otherwise be
-    resent with the history and refused again on every later message. Covers
-    attachments in user messages and camera images inside tool results. Edits
-    the request's own parsed body in place, iteratively, so a deeply nested
-    history cannot exhaust the stack.
+    For a model known not to see images, which would refuse them on every later message. Edits
+    the parsed body in place, iteratively, so deep nesting cannot exhaust the stack.
     """
     stack: list[Any] = [messages]
     while stack:
@@ -176,11 +172,9 @@ def _without_history_images(messages: list) -> None:
 
 
 def _image_payload_chars(value: Any) -> int:
-    """Base64 characters of the image parts in a chat history.
+    """Return the base64 characters of the image parts in a chat history.
 
-    The browser resends the newest attached images (and camera results) with
-    the history, so those ride in the attachment budget instead of the ordinary
-    body cap. Iterative, so a deeply nested history cannot exhaust the stack.
+    Resent images ride in the attachment budget, not the body cap. Iterative for deep nesting.
     """
     total = 0
     stack = [value]
@@ -204,18 +198,16 @@ def _image_payload_chars(value: Any) -> int:
 def _chat_attachments(value: Any, rid: str) -> list[dict[str, str]] | web.Response:
     """Validate the images an administrator attached to one chat message.
 
-    Returns the normalized images, or the refusal to send. Every image must
-    decode, match the type its header declares and fit the count, size and
-    dimension bounds; one bad image refuses the message rather than sending the
-    rest.
+    Returns the normalized images or the refusal to send. One image failing decoding, its
+    declared type, or the count, size or dimension bounds refuses the message.
     """
     if value is None:
         return []
     if not isinstance(value, list):
         return _attachments_unreadable(rid)
-    if len(value) > AGENTCLI_ATTACHMENT_MAX_COUNT:
-        return _err("invalid_request", f"Attach at most {AGENTCLI_ATTACHMENT_MAX_COUNT} images to one message.",
-                    400, rid, key="attachmentsTooMany", params={"max": AGENTCLI_ATTACHMENT_MAX_COUNT})
+    if len(value) > AGENT_CHAT_ATTACHMENT_MAX_COUNT:
+        return _err("invalid_request", f"Attach at most {AGENT_CHAT_ATTACHMENT_MAX_COUNT} images to one message.",
+                    400, rid, key="attachmentsTooMany", params={"max": AGENT_CHAT_ATTACHMENT_MAX_COUNT})
     images: list[dict[str, str]] = []
     total = 0
     for item in value:
@@ -223,27 +215,27 @@ def _chat_attachments(value: Any, rid: str) -> list[dict[str, str]] | web.Respon
         declared = item.get("mime_type") if isinstance(item, dict) else None
         if not isinstance(data, str) or not isinstance(declared, str):
             return _attachments_unreadable(rid)
-        if len(data) > -(-AGENTCLI_ATTACHMENT_MAX_BYTES * 4 // 3):
+        if len(data) > -(-AGENT_CHAT_ATTACHMENT_MAX_BYTES * 4 // 3):
             return _attachment_too_large(rid)
         try:
             decoded = base64.b64decode(data, validate=True)
         except (ValueError, binascii.Error):
             return _attachments_unreadable(rid)
-        if len(decoded) > AGENTCLI_ATTACHMENT_MAX_BYTES:
+        if len(decoded) > AGENT_CHAT_ATTACHMENT_MAX_BYTES:
             return _attachment_too_large(rid)
         header = _image_kind_and_size(decoded)
         if header is None or header[0] != declared.lower().strip():
             return _err("invalid_request", "Attach a JPEG, PNG or GIF image.", 400, rid, key="attachmentUnsupported")
         kind, width, height = header
-        if not (0 < width <= AGENTCLI_ATTACHMENT_MAX_EDGE_PX and 0 < height <= AGENTCLI_ATTACHMENT_MAX_EDGE_PX):
+        if not (0 < width <= AGENT_CHAT_ATTACHMENT_MAX_EDGE_PX and 0 < height <= AGENT_CHAT_ATTACHMENT_MAX_EDGE_PX):
             return _err("invalid_request",
-                        f"An attached image is larger than {AGENTCLI_ATTACHMENT_MAX_EDGE_PX} pixels on a side.",
-                        400, rid, key="attachmentDimensions", params={"max": AGENTCLI_ATTACHMENT_MAX_EDGE_PX})
+                        f"An attached image is larger than {AGENT_CHAT_ATTACHMENT_MAX_EDGE_PX} pixels on a side.",
+                        400, rid, key="attachmentDimensions", params={"max": AGENT_CHAT_ATTACHMENT_MAX_EDGE_PX})
         total += len(decoded)
-        if total > AGENTCLI_ATTACHMENT_MAX_TOTAL_BYTES:
+        if total > AGENT_CHAT_ATTACHMENT_MAX_TOTAL_BYTES:
             return _err("invalid_request",
-                        f"The attached images are larger than {AGENTCLI_ATTACHMENT_MAX_TOTAL_BYTES // _MIB} MB together.",
-                        400, rid, key="attachmentsTooLarge", params={"max": AGENTCLI_ATTACHMENT_MAX_TOTAL_BYTES // _MIB})
+                        f"The attached images are larger than {AGENT_CHAT_ATTACHMENT_MAX_TOTAL_BYTES // _MIB} MB together.",
+                        400, rid, key="attachmentsTooLarge", params={"max": AGENT_CHAT_ATTACHMENT_MAX_TOTAL_BYTES // _MIB})
         images.append({"data": data, "mime_type": kind})
     return images
 
@@ -254,7 +246,7 @@ def _flatten_text(content: list[dict]) -> str:
     )
 
 
-_AGENTCLI_LOCAL_TIME_FIELDS: dict[str, frozenset[str]] = {
+_AGENT_CHAT_LOCAL_TIME_FIELDS: dict[str, frozenset[str]] = {
     "get_state": frozenset({"last_changed", "last_updated", "last_reported"}),
     "get_history": frozenset({
         "start", "end", "when", "last_changed", "last_updated", "last_reported",
@@ -279,7 +271,7 @@ _AGENTCLI_LOCAL_TIME_FIELDS: dict[str, frozenset[str]] = {
 # Result times a read asks the model to send back as a query bound. Agent Chat
 # states them in Home Assistant's zone (the same instant), so a value echoed
 # unchanged meets the wall-time rule for query arguments.
-_AGENTCLI_LOCAL_RESUME_FIELDS: dict[str, frozenset[str]] = {
+_AGENT_CHAT_LOCAL_RESUME_FIELDS: dict[str, frozenset[str]] = {
     "get_logbook": frozenset({"older_end_time"}),
 }
 
@@ -308,12 +300,10 @@ def _agentcli_add_local_time_fields(
 ) -> str:
     """Add local companions without changing canonical tool-result timestamps.
 
-    This is an Agent Chat-only presentation layer. Cursor values deliberately get
-    no companion because they are opaque protocol inputs for a subsequent call;
-    resume times are restated in the local zone instead.
+    Agent Chat only. Opaque cursor values get no companion; resume times are restated locally.
     """
-    fields = _AGENTCLI_LOCAL_TIME_FIELDS.get(tool_name)
-    resume = _AGENTCLI_LOCAL_RESUME_FIELDS.get(tool_name, frozenset())
+    fields = _AGENT_CHAT_LOCAL_TIME_FIELDS.get(tool_name)
+    resume = _AGENT_CHAT_LOCAL_RESUME_FIELDS.get(tool_name, frozenset())
     if fields is None and not resume:
         return text
     fields = fields or frozenset()
@@ -342,7 +332,7 @@ def _agentcli_add_local_time_fields(
     return json.dumps(add_companions(payload), separators=(",", ":"), ensure_ascii=False)
 
 
-_AGENTCLI_RESOURCE_INVENTORY_TOOLS = frozenset({
+_AGENT_CHAT_RESOURCE_INVENTORY_TOOLS = frozenset({
     "list_automations", "list_scripts", "list_scenes", "list_helpers", "list_devices",
 })
 
@@ -352,12 +342,11 @@ def _agentcli_add_resource_match_guidance(
 ) -> str:
     """Repeat Agent Chat's premise guard beside discovery evidence for weaker models.
 
-    This provider-only suffix is not emitted in the visible tool summary and never changes the
-    external MCP result. Inventory lists always carry the conditional reminder. A filtered entity
-    search carries it only on a structurally proven zero match.
+    Provider-only: the visible summary and external MCP result never change. Inventory lists
+    always carry it, a filtered search only on a structurally proven zero match.
     """
     guidance: str | None = None
-    if tool_name in _AGENTCLI_RESOURCE_INVENTORY_TOOLS:
+    if tool_name in _AGENT_CHAT_RESOURCE_INVENTORY_TOOLS:
         guidance = (
             "If you called this inventory to identify a resource named by the operator and no "
             "plausible match appears, stop now. State the mismatch and ask one focused clarifying "
@@ -386,7 +375,7 @@ def _agentcli_add_resource_match_guidance(
 # states holds for each tool it names. Every tool reads a time without an offset
 # as Home Assistant local time; calendar reads also keep accepting the offsets
 # events carry, so they are not policed here.
-_AGENTCLI_LOCAL_QUERY_FIELDS: dict[str, frozenset[str]] = {
+_AGENT_CHAT_LOCAL_QUERY_FIELDS: dict[str, frozenset[str]] = {
     "get_history": frozenset({"start_time", "end_time"}),
     "get_statistics": frozenset({"start_time", "end_time"}),
     "get_logbook": frozenset({"start_time", "end_time"}),
@@ -402,12 +391,9 @@ def _agentcli_time_arg_error(
 ) -> str | None:
     """Refuse a query time the model shifted into another zone itself.
 
-    A wall time without an offset passes unchanged, since the tool reads it as
-    HA local time. A value already carrying HA's own offset for that instant,
-    such as a _local result value sent back, is exact and passes too; any other
-    offset is refused as a shift the model made itself.
+    A wall time without an offset, or one carrying HA's own offset for that instant, passes.
     """
-    for field in _AGENTCLI_LOCAL_QUERY_FIELDS.get(tool_name, ()):
+    for field in _AGENT_CHAT_LOCAL_QUERY_FIELDS.get(tool_name, ()):
         value = args.get(field)
         parsed = dt_util.parse_datetime(value) if isinstance(value, str) else None
         if parsed is None or parsed.tzinfo is None or parsed.utcoffset() is None:
@@ -484,27 +470,18 @@ def _parse_pending(
 
 
 def refused_before_write(approval: Any) -> bool:
-    """Whether an approved action's executor refused before it could write anything.
-
-    The approve path persists the flag only for a tool_common.RefusedBeforeWrite
-    result, so the failure has no outcome to reconcile. Anything else, including
-    a record without the flag, keeps the unknown-outcome handling.
-    """
+    """Return whether an approved action's executor refused before it could write."""
     result = getattr(approval, "result", None)
     return (getattr(approval, "status", None) == STATUS_FAILED
-            and getattr(approval, "rejected_reason", None) == "execution_failed"
+            and getattr(approval, "closure_reason", None) == "execution_failed"
             and isinstance(result, dict) and result.get("refused_before_write") is True)
 
 
 def _resolved_result(status: str, applied_result: dict | None, approval: Any = None) -> dict:
-    """A CallToolResult to feed back after an interactive approval resolves.
+    """Return a CallToolResult to feed back after an interactive approval resolves.
 
-    Anything that did not apply reads as tool_common.approval_outcome words it,
-    so a rejection with a reason is actually reported instead of a generic notice
-    and an approved-but-failed record never reads as a rejection. An approved
-    result carries the operator-accepted note
-    (tool_common._operator_accepted_result) so the agent treats the approved
-    change as settled instead of iterating on it.
+    A non-applied outcome reads as tool_common.approval_outcome words it. An approved result
+    carries the operator-accepted note, so the agent treats the change as settled.
     """
     if status == STATUS_APPROVED and applied_result is not None:
         return _operator_accepted_result(applied_result)
@@ -521,17 +498,10 @@ def _resolved_result(status: str, applied_result: dict | None, approval: Any = N
 
 
 async def _dispatch_with_progress(emit: Any, tool_id: Any, coro: Any) -> Any:
-    """Run one tool call, relaying whatever it reports while it is still running.
+    """Run one tool call, relaying what it reports through the progress bus as it runs.
 
-    Tools that hold the request open (a firmware build, a confirm gate) describe
-    what they are waiting on through the progress bus in tool_common, which
-    exists so an SSE-framed MCP request can emit notifications/progress. Agent Chat is the
-    other consumer of the same signal: it owns both ends of its own stream, so it
-    needs no progressToken negotiation and can always show the line.
-
-    The bus is set BEFORE the task is created so the task's copied context holds
-    the same object, matching how the MCP transport's SSE writer does it. Only changed
-    statuses are emitted, so a slow build does not spam the transcript.
+    The bus is set before the task is created, so the task's copied context holds the same
+    object. Only changed statuses are emitted.
     """
 
     bus = _ProgressBus()
@@ -540,7 +510,7 @@ async def _dispatch_with_progress(emit: Any, tool_id: Any, coro: Any) -> Any:
     last: str | None = None
     try:
         while True:
-            done, _pending = await asyncio.wait({task}, timeout=AGENTCLI_PROGRESS_INTERVAL_SECONDS)
+            done, _pending = await asyncio.wait({task}, timeout=AGENT_CHAT_PROGRESS_INTERVAL_SECONDS)
             if done:
                 return await task
             if bus.status and bus.status != last:
@@ -586,7 +556,7 @@ async def _cancel_agent_approval(
             return None
         resolved = await async_update_approval_status(
             data.store, approval_id, status=STATUS_CANCELLED,
-            rejected_reason=reason,
+            closure_reason=reason,
         )
     if resolved is not None and resolved.status == STATUS_CANCELLED:
         dismiss_approval_notification(hass, approval_id)
@@ -597,10 +567,9 @@ async def _cancel_agent_approval(
 async def _await_agent_approval(
     hass: HomeAssistant, data: PhoenixData, approval_id: str, cancel: asyncio.Event, timeout: float,
 ) -> dict:
-    """Block until an approval resolves (or cancel/timeout), then return a result.
+    """Block until an approval resolves or cancel or timeout, then return a result.
 
-    Modeled on tool_common._await_inline_confirm but tied to the live SSE
-    connection (long timeout) and cancel-aware. The bus event carries only IDs, so the
+    Tied to the live SSE connection and cancel-aware. The bus event carries only IDs, so the
     executed result is re-read from the persisted approval record.
     """
     future: asyncio.Future = hass.loop.create_future()
@@ -740,7 +709,7 @@ def _home_focus_output_contract(enabled: bool) -> str:
     )
 
 
-_AGENTCLI_ADDENDUM = (
+_AGENT_CHAT_ADDENDUM = (
     "\n\nYou are the assistant in an interactive chat inside the Home Assistant admin panel. "
     "The operator is present and reading your replies live. Take the actions the operator asks "
     "for directly using the tools above. The operator may name a home resource imprecisely or "
@@ -801,7 +770,7 @@ def _agentcli_time_guidance() -> str:
     Unchanged between turns, so it stays in the cached system prompt; the clock
     itself is the note _agentcli_time_context adds to the operator's message.
     """
-    *leading, last = sorted(_AGENTCLI_LOCAL_QUERY_FIELDS)
+    *leading, last = sorted(_AGENT_CHAT_LOCAL_QUERY_FIELDS)
     tools = f"{', '.join(leading)} and {last}"
     return (
         "\n\nThe operator's latest message ends with a Phoenix note giving Home Assistant's "
@@ -847,12 +816,7 @@ async def _cancelable_provider_events(events: Any, cancel: asyncio.Event) -> Asy
 
 
 def _after_dispatch_failure(ev: dict, write_started: bool) -> dict:
-    """A provider failure after this turn dispatched a tool: never retried, uncertain after a write.
-
-    Reads still stop automatic retries but cannot create an uncertain device
-    action, so only a write is reported as outcome unknown. Classified from
-    server annotations, never from the model.
-    """
+    """Report a provider failure after a tool dispatch: never retried, uncertain after a write."""
     ev = {**ev, "retryable": False, "dispatch_started": True}
     if write_started:
         ev = {**ev, "code": "provider_after_dispatch", "outcome": "outcome_unknown",
@@ -868,19 +832,10 @@ async def _stream_turn_resilient(
     write_started: bool = False,
     first_reply_seconds: float | None = None,
 ) -> AsyncIterator[dict]:
-    """provider.stream_turn wrapped with a bounded retry for a transient connection failure.
-
-    Covers a failure (e.g. a DNS/connect timeout) that occurs BEFORE any content
-    is produced: retries with a short backoff until _CONNECT_RETRY_WINDOW_SECONDS
-    elapses, then surfaces the error (annotated that it retried). Never retries
-    once any content/tool/done event has been seen (that could duplicate
-    already-streamed output) or once a tool dispatch has started; a mid-stream or
-    non-retryable error passes straight through. Every other event is yielded
-    unchanged.
-
-    first_reply_seconds bounds the wait for the first attempt's first event too;
-    past it the call ends as provider_slow, not retried. A surface with someone
-    waiting on a reply (Voice) sets it; the others keep only the silent-stream bound.
+    """Wrap provider.stream_turn with a bounded retry for a transient connection failure.
+    Retries only before any content, until _CONNECT_RETRY_WINDOW_SECONDS, then surfaces the
+    error; never once an event was seen or a tool dispatched. ``first_reply_seconds`` also
+    bounds the first attempt's first event, ending as provider_slow, not retried.
     """
     loop_time = asyncio.get_running_loop().time
     started = loop_time()
@@ -901,9 +856,9 @@ async def _stream_turn_resilient(
         # first event, during which this generator is awaiting the provider, never
         # suspended at a yield.
         first_reply = asyncio.timeout(None)
-        limit = AGENTCLI_RETRY_FIRST_REPLY_SECONDS if attempt > 1 else first_reply_seconds
+        limit = AGENT_CHAT_RETRY_FIRST_REPLY_SECONDS if attempt > 1 else first_reply_seconds
         if attempt > 1 and first_reply_seconds is not None:
-            limit = min(AGENTCLI_RETRY_FIRST_REPLY_SECONDS, first_reply_seconds)
+            limit = min(AGENT_CHAT_RETRY_FIRST_REPLY_SECONDS, first_reply_seconds)
         try:
             async with first_reply, aclosing(events):
                 if limit is not None:
@@ -961,11 +916,7 @@ def _failure_detail(ev: dict) -> str:
 
 
 def _failure_detail_code(ev: dict) -> str:
-    """The code behind _failure_detail when that detail is Phoenix's own English.
-
-    The panel translates the detail through this code; a provider's own sentence
-    has no code here, so it shows verbatim.
-    """
+    """Return the code behind _failure_detail when that detail is Phoenix's own English."""
     return "" if str(ev.get("provider_detail") or "").strip() else str(ev.get("code") or "")
 
 
@@ -986,10 +937,8 @@ def _retry_exhausted(ev: dict, seconds: int, first_detail: str) -> dict:
 class _CallStatus:
     """Agent Chat's status line for one model call, in place of a bare spinner.
 
-    Built only from facts the loop observes: the provider, the turn's step and
-    tools run so far, how long nothing has been shown, a model that is thinking,
-    and a retry with the provider's own sentence. While nothing is visible it is
-    refreshed every AGENTCLI_STATUS_INTERVAL_SECONDS.
+    Built only from observed facts: provider, step, tools run, idle time, thinking and
+    retries. Refreshed every AGENT_CHAT_STATUS_INTERVAL_SECONDS while nothing is visible.
     """
 
     def __init__(self, emit: Callable[[str, dict], Awaitable[None]], provider: Any, *, step: int, tools: int) -> None:
@@ -1033,7 +982,7 @@ class _CallStatus:
 
     async def _tick(self) -> None:
         while True:
-            await asyncio.sleep(AGENTCLI_STATUS_INTERVAL_SECONDS)
+            await asyncio.sleep(AGENT_CHAT_STATUS_INTERVAL_SECONDS)
             if not self._shown:
                 await self._send()
 
@@ -1153,11 +1102,8 @@ async def _consume_model_stream(
 ) -> _ModelCallResult:
     """Drain one model call's normalized event stream into a result.
 
-    Pure translation of provider events to SSE frames plus accumulation; it
-    makes no policy decisions and runs no tools. The usage totals are passed in
-    because EV_USAGE is cumulative-REPLACE per call, not additive, so the frame
-    the browser receives must add this call's latest report to the finished
-    calls' running sum.
+    Pure translation to SSE frames plus accumulation; no policy and no tools. Usage totals are
+    passed in as EV_USAGE replaces per call, so frames add it to the finished calls' sum.
     """
     tool_calls: list[dict] = []
     assistant_msg: dict | None = None
@@ -1308,17 +1254,9 @@ async def _run_tool_batch(
     cancel: asyncio.Event,
 ) -> _ToolBatchResult:
     """Dispatch one round's tool calls, honoring cancel and mid-turn authority loss.
-
-    EVERY tool_use id gets a result even when nothing was dispatched: Anthropic
-    requires each one answered in the next message, so a blocked call still
-    appends a synthetic error rather than being skipped. That is why this drains
-    the whole batch instead of returning early. An unknown outcome stops the
-    batch but still answers the uncertain call and every call after it, because
-    the returned conversation is what the browser sends on the next turn.
-
-    The access key is re-resolved per call (_current_dispatch_access_key), so a mid-turn
-    revoke, expiry, kill switch or cap narrowing is honored BEFORE any side
-    effect, not just at the start of the turn.
+    Every tool_use id gets a result, even a synthetic error, as Anthropic requires each one
+    answered. An unknown outcome stops dispatch but not the answers. The key is re-resolved
+    per call, so authority loss is honored before any side effect.
     """
 
     results: list[dict] = []
@@ -1410,7 +1348,7 @@ async def _run_tool_batch(
                     "diff": record.diff,
                 })
                 result = await _await_agent_approval(
-                    hass, data, pending["approval_id"], cancel, AGENTCLI_APPROVAL_WAIT_SECONDS,
+                    hass, data, pending["approval_id"], cancel, AGENT_CHAT_APPROVAL_WAIT_SECONDS,
                 )
             finally:
                 await _cancel_agent_approval(hass, data, pending["approval_id"])
@@ -1422,7 +1360,7 @@ async def _run_tool_batch(
             reason = failure = None
             if resolved_record is not None:
                 failure = execution_failure_text(resolved_record)
-                reason = failure or getattr(resolved_record, "rejected_reason", None)
+                reason = failure or getattr(resolved_record, "closure_reason", None)
             await emit("approval_resolved", {
                 "approval_id": pending["approval_id"],
                 "status": status,
@@ -1545,15 +1483,9 @@ headless_usage: ContextVar[HeadlessUsage | None] = ContextVar("phoenix_headless_
 class _HeadlessTurnResult:
     """What one headless turn produced, and how it ended.
 
-    `text` is the model's LAST text (reset at each tool round), so a partial
-    answer survives a failure and the caller can still say something useful.
-
-    `outcome` is one of the TURN_* codes, so a non-OK ending is never mistaken
-    for a normal one: running out of rounds would otherwise look like an empty
-    reply (AI Task would blame the model for JSON it never got to write), and
-    hitting the model's own output limit would look like a complete answer.
-
-    `detail` carries the provider's own error text for TURN_PROVIDER_ERROR only.
+    ``text`` is the model's last text, so a partial answer survives a failure. ``outcome`` is
+    a TURN_* code, so a non-OK ending is not mistaken for a reply. ``detail`` carries the
+    provider's error text for TURN_PROVIDER_ERROR only.
     """
 
     text: str
@@ -1588,24 +1520,10 @@ async def _run_headless_turn(
     response_only: bool = False,
     first_reply_seconds: float | None = None,
 ) -> _HeadlessTurnResult:
-    """Run one headless model/tool turn to completion.
-
-    The shared engine behind async_run_voice_turn and async_run_ai_task: what a
-    surface decides (error policy, audit sentinel, review URLs) lives in its
-    wrapper; what both must do identically lives here, so a fix to the
-    tool-dispatch path cannot land on one and miss the other.
-
-    HEADLESS means two things, both deliberate. There is no event emission, so
-    none of the interactive loop's SSE machinery applies. And a confirm gate is
-    never waited on: neither an Assist pipeline nor an ai_task.generate_data call
-    can hold a request open for an admin, so a pending approval is fed back as a
-    "queued_for_approval" tool result and the turn continues. That rules out
-    sharing _run_tool_batch, which blocks up to AGENTCLI_APPROVAL_WAIT_SECONDS on
-    a human.
-
-    The access key is re-resolved before every dispatch (_current_dispatch_access_key), so a
-    mid-turn revoke, expiry, kill switch or cap narrowing is honored before any
-    side effect.
+    """Run one headless model and tool turn to completion, for Voice and AI Task.
+    Emits no events and never waits on a confirm gate: a pending approval comes back as a
+    "queued_for_approval" tool result and the turn continues. The key is re-resolved before
+    every dispatch. Surface policy stays in the wrappers.
     """
 
     await data.agent_recovery.reconcile(data.store, access_key.id)
@@ -1678,7 +1596,7 @@ async def _run_headless_turn(
                 # remains for the corrected call. Home Companion keeps its own
                 # stricter budget and never corrects after a write.
                 companion = internal_turn(access_key)
-                limit = HOME_COMPANION_MAX_FORMAT_CORRECTIONS if companion else AGENTCLI_MAX_TOOL_CALL_CORRECTIONS
+                limit = HOME_COMPANION_MAX_FORMAT_CORRECTIONS if companion else AGENT_CHAT_MAX_TOOL_CALL_CORRECTIONS
                 if (not final_round and format_corrections < limit and iteration < max_iterations - 1
                         and not (companion and write_started)):
                     invalid = ev
@@ -1722,7 +1640,7 @@ async def _run_headless_turn(
         if invalid is not None:
             format_corrections += 1
             prospective = turn_output_bytes + len(json.dumps(invalid["assistant_msg"], default=str))
-            if prospective > AGENTCLI_MAX_TURN_OUTPUT_BYTES:
+            if prospective > AGENT_CHAT_MAX_TURN_OUTPUT_BYTES:
                 return _HeadlessTurnResult(
                     final_text, review_urls, outcome=TURN_OUTPUT_LIMIT, focus_declined=focus_declined,
                 )
@@ -1739,7 +1657,7 @@ async def _run_headless_turn(
         final_text += call_text
         if assistant_msg is not None:
             prospective = turn_output_bytes + len(json.dumps(assistant_msg, default=str))
-            if prospective > AGENTCLI_MAX_TURN_OUTPUT_BYTES:
+            if prospective > AGENT_CHAT_MAX_TURN_OUTPUT_BYTES:
                 return _HeadlessTurnResult(
                     final_text, review_urls, outcome=TURN_OUTPUT_LIMIT,
                     focus_declined=focus_declined,
@@ -1940,14 +1858,10 @@ def _kill_switch_on(data: PhoenixData) -> bool:
 
 
 def _current_dispatch_access_key(data: PhoenixData, access_key_id: str) -> AccessKeyRecord | None:
-    """Re-resolve the access key for one tool dispatch, or None if it may no longer act.
+    """Re-resolve the key for one tool dispatch, or None if it may no longer act.
 
-    A single Agent Chat turn can stay open a long time (a confirm gate blocks on
-    an approval wait), so authority must be re-checked before EVERY side effect,
-    not just at stream open, mirroring async_get_authenticated_access_key on the MCP path.
-    Returns None when Phoenix MCP is shutting down, the runtime kill switch is on, or the
-    access key has been revoked/expired or narrowed away since the turn started; the
-    fresh record is returned otherwise so cap changes take effect immediately.
+    None on shutdown, the kill switch, or a key revoked, expired or narrowed since the turn
+    started. The fresh record makes cap changes apply immediately.
     """
     if (
         getattr(data, "ready", True) is False

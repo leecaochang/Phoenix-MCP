@@ -10,8 +10,8 @@ import {
 import {
   getAgentCliOwner, flushSessionDraft, getDurable, patchDurable, getSessionTurns, setSessionTurns, getLogConversationId,
   getSessionDraft, setSessionDraft,
-  getSessionUsage, setSessionUsage, onSavedConversationChange, type SessionUsage,
-  AGENTCLI_TEXT_SIZE_MIN_PT, AGENTCLI_TEXT_SIZE_MAX_PT, AGENTCLI_TEXT_SIZE_STEP_PT,
+  getSessionUsage, setSessionUsage, onSavedConversationChange, announceRunningTurn, watchOtherTabTurn, type SessionUsage,
+  AGENT_CHAT_TEXT_SIZE_MIN_PT, AGENT_CHAT_TEXT_SIZE_MAX_PT, AGENT_CHAT_TEXT_SIZE_STEP_PT,
   normalizeAgentCliTextSize,
 } from "../utils/agentcli_state";
 import { approvalStatusLabel, copyToClipboard, effortLevelLabel } from "../utils";
@@ -788,6 +788,7 @@ export function AgentCliWindow({
   const [attachments, setAttachments] = useState<ChatAttachment[]>([]);
   const [attachError, setAttachError] = useState("");
   const [sending, setSending] = useState(false);
+  const [otherTabTurn, setOtherTabTurn] = useState(false);
   // The server's account of the current model call, shown in place of "Working…".
   const [liveStatus, setLiveStatus] = useState<string | null>(null);
   const turnGenerationRef = useRef(0);
@@ -1344,6 +1345,9 @@ export function AgentCliWindow({
   // the running turn depends on.
   useEffect(() => (sending ? keepPageAwakeWhileHidden() : undefined), [sending]);
 
+  useEffect(() => (sending ? announceRunningTurn(persistenceOwner) : undefined), [sending, persistenceOwner]);
+  useEffect(() => watchOtherTabTurn(setOtherTabTurn), [persistenceOwner]);
+
   // One turn: either a new user message (mode "user") or a resume of a turn
   // that paused at the round-cap checkpoint (mode "continue", no new user
   // message; the model continues from the existing conversation).
@@ -1830,7 +1834,7 @@ export function AgentCliWindow({
           updateApprovalEntry(id, (entry) => {
             return { ...entry, checking: false,
               status: record.in_progress ? t("agentchat.approving") : record.status,
-              reason: record.rejected_reason || undefined };
+              reason: record.closure_reason || undefined };
           });
           if (!pending) restoredApprovals.current.delete(id);
         } catch {
@@ -2149,8 +2153,8 @@ export function AgentCliWindow({
     { id: "footer", label: t("agentchat.showFooter"), hint: t("agentchat.showFooterHint"), toggle: true, checked: showFooter,
       onSelect: () => setShowFooter((on) => !on) },
     "separator",
-    { id: "smaller", label: t("agentchat.decreaseTextSize"), disabled: textSizePt <= AGENTCLI_TEXT_SIZE_MIN_PT, onSelect: () => adjustTextSize(-AGENTCLI_TEXT_SIZE_STEP_PT) },
-    { id: "larger", label: t("agentchat.increaseTextSize"), disabled: textSizePt >= AGENTCLI_TEXT_SIZE_MAX_PT, onSelect: () => adjustTextSize(AGENTCLI_TEXT_SIZE_STEP_PT) },
+    { id: "smaller", label: t("agentchat.decreaseTextSize"), disabled: textSizePt <= AGENT_CHAT_TEXT_SIZE_MIN_PT, onSelect: () => adjustTextSize(-AGENT_CHAT_TEXT_SIZE_STEP_PT) },
+    { id: "larger", label: t("agentchat.increaseTextSize"), disabled: textSizePt >= AGENT_CHAT_TEXT_SIZE_MAX_PT, onSelect: () => adjustTextSize(AGENT_CHAT_TEXT_SIZE_STEP_PT) },
     "separator",
     { id: "clear", label: t("agentchat.clearHistory"), onSelect: clearHistory },
     ...(dock ? ["separator" as const, dock.docked
@@ -2317,6 +2321,8 @@ export function AgentCliWindow({
             )}
           </div>
 
+          <StatusRegion>{otherTabTurn && <div className="agentcli-notice">{t("agentchat.otherTabTurn")}</div>}</StatusRegion>
+
           <StatusRegion>{pendingContinue !== null && !sending && (
             <div className="agentcli-continue" data-guide="window.agentChat#check-in">
               <span className="agentcli-continue-text">
@@ -2428,14 +2434,14 @@ export function AgentCliWindow({
               <div className="agentcli-text-size-controls" role="group" aria-label={t("agentchat.textSize")}>
                 <button type="button" className="agentcli-text-size-btn"
                         aria-label={t("agentchat.decreaseTextSize")} title={t("agentchat.decreaseTextSize")}
-                        disabled={textSizePt <= AGENTCLI_TEXT_SIZE_MIN_PT}
-                        onClick={() => adjustTextSize(-AGENTCLI_TEXT_SIZE_STEP_PT)}>
+                        disabled={textSizePt <= AGENT_CHAT_TEXT_SIZE_MIN_PT}
+                        onClick={() => adjustTextSize(-AGENT_CHAT_TEXT_SIZE_STEP_PT)}>
                   <span aria-hidden="true">−</span>
                 </button>
                 <button type="button" className="agentcli-text-size-btn"
                         aria-label={t("agentchat.increaseTextSize")} title={t("agentchat.increaseTextSize")}
-                        disabled={textSizePt >= AGENTCLI_TEXT_SIZE_MAX_PT}
-                        onClick={() => adjustTextSize(AGENTCLI_TEXT_SIZE_STEP_PT)}>
+                        disabled={textSizePt >= AGENT_CHAT_TEXT_SIZE_MAX_PT}
+                        onClick={() => adjustTextSize(AGENT_CHAT_TEXT_SIZE_STEP_PT)}>
                   <span aria-hidden="true">+</span>
                 </button>
               </div>

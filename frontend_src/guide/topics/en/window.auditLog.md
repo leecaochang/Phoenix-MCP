@@ -1,5 +1,5 @@
 ---
-{ "id": "window.auditLog", "title": "{{label:shell.tabAudit}}", "parent": "workspace.logs", "order": 1, "keywords": ["audit", "requests", "history"], "sectionKeywords": { "list": ["columns", "sort", "load more", "MESA advisory", "source"], "filters": ["outcome", "access key", "time", "method", "resource", "request ID", "search"], "updates": ["pause", "refresh", "live"], "attention": ["needs attention", "show in audit log"] }, "covers": ["frontend_src/views/AuditView.tsx", "frontend_src/components/AuditEntry.tsx", "frontend_src/utils/audit_source.ts", "frontend_src/ui/table/ConfigTable.tsx", "custom_components/phoenix_mcp/admin_view.py"] }
+{ "id": "window.auditLog", "title": "{{label:shell.tabAudit}}", "parent": "workspace.logs", "order": 1, "keywords": ["audit", "requests", "history"], "sectionKeywords": { "list": ["columns", "sort", "load more", "MESA advisory", "source"], "filters": ["outcome", "access key", "time", "method", "resource", "request ID", "search"], "updates": ["pause", "refresh", "live"], "attention": ["needs attention", "show in audit log"] }, "covers": ["frontend_src/views/AuditView.tsx", "frontend_src/components/AuditEntry.tsx", "frontend_src/utils/audit_source.ts", "frontend_src/ui/table/ConfigTable.tsx", "custom_components/phoenix_mcp/admin/logs.py"] }
 ---
 Each action agents and administrators took through Phoenix, newest first.
 

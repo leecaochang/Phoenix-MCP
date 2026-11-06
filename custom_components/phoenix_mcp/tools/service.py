@@ -22,11 +22,11 @@ from ..const import (
 )
 from ..data import PhoenixData
 from ..helpers import (
-    diff_summary_fields as _summary, effective_cap,
-    sanitize_service_data as _sanitize_service_data, service_capability,
-    service_not_found_hint as _service_not_found_hint, str_arg,
-    validation_error_message as _validation_error_message,
+    service_not_found_hint as _service_not_found_hint, validation_error_message as _validation_error_message,
 )
+from ..tool_input import sanitize_service_data as _sanitize_service_data, str_arg
+from ..catalog_text import diff_summary_fields as _summary
+from ..capability import effective_cap, service_capability
 from ..household_authority import household_service_kwargs
 from ..mesa import async_apply_mesa_to_call, fire_mesa_blocked_event
 from ..policy_engine import (
@@ -35,12 +35,12 @@ from ..policy_engine import (
     resolve_service_targets, service_target_binding_valid,
 )
 from ..request_authority import check_request_authority, mark_dispatch_started, RequestAuthority
-from ..routing.command_execution import service_plan_is_current, bind_service_plan
+from ..routing.plan_currency import service_plan_is_current, bind_service_plan
 from ..routing.command_verification import async_verify_command_state
 from ..routing.routing_tables import COMMAND_ROUTING_PLAN_KEY
 from ..service_targets import (
-    dedicated_tool_refusal, secondary_target_error, template_fields, template_fields_error,
-    unbound_service_targets, unbound_target_error, unsupported_secondary_targets,
+    dedicated_tool_refusal, entity_id_argument, secondary_target_error, template_fields, template_fields_error,
+    todo_items_in_review, unbound_service_targets, unbound_target_error, unsupported_secondary_targets,
 )
 from ..tool_common import (
     _add_mesa_advisory, _CAP_FORBIDDEN_MESSAGE, _gate, _mesa_confirm_annotation, _pending_or_inline, _tool_error, _tool_refused_before_write, _tool_success, MESA_DENIED_MESSAGE,
@@ -101,7 +101,7 @@ async def _tool_call_service(
         return _tool_error("Forbidden."), "denied", "call_service"
 
     if (dedicated := dedicated_tool_refusal(domain, service)) is not None:
-        if effective_cap(access_key, dedicated[0]) == CAP_DENY:
+        if dedicated[0] and effective_cap(access_key, dedicated[0]) == CAP_DENY:
             return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "call_service"
         return _tool_error(dedicated[1]), "invalid_request", "call_service"
 
@@ -188,19 +188,14 @@ async def _dispatch_no_target_tool_call(
     timeout_noun: str,
     surface_validation_errors: bool,
 ) -> tuple[dict, Outcome, str]:
-    """Call a service that takes NO entity target, and map the outcome.
+    """Call a service that takes no entity target, and map the outcome; it authorizes nothing.
 
-    Covers three families: the dual-gate services (no entities in hass.states),
-    the config-reload family (whose schemas reject an entity_id), and ESPHome
-    user-defined actions (schema built from only the arguments the device
-    declared).
-
-    Authorization has already happened by the time this runs; it decides nothing.
-
-    The caller chooses whether validation detail is safe to surface. For
-    NO_TARGET_SERVICES it is safe because the message describes the caller's
-    own reloadable config after the cap_yaml_edit authorization gate.
+    Covers dual-gate services, the config-reload family and ESPHome user-defined actions. The caller
+    chooses whether validation detail is safe to surface.
     """
+    # Those have no entities in hass.states, reject an entity_id, or take only device-declared
+    # arguments respectively. For NO_TARGET_SERVICES, detail is safe: it describes the caller's own
+    # reloadable config after the cap_yaml_edit gate.
     if domain in HIGH_RISK_DOMAINS:
         _LOGGER.info(
             "High-risk service call %s/%s by access key %s",
@@ -254,15 +249,12 @@ async def _execute_music_assistant_library_read(
 ) -> tuple[dict, Outcome, str]:
     """Run music_assistant.search or get_library, scoped by its config entry.
 
-    These name a Music Assistant entry instead of an entity target and only
-    return a response, so they need cap_service_response and Read on at least
-    one entity of that entry. An unknown, unloaded, foreign or unreadable entry
-    is refused alike, so the refusal reveals no entry. With one readable entry
-    the caller may leave config_entry_id out. MESA does not apply: nothing is
-    actuated, and for the same reason every refusal here is refused-before-write:
-    an agent turn may correct the call instead of stopping at an unknown outcome.
-    The response passes through the service-response redaction.
+    Needs cap_service_response and Read on an entity of that entry; a bad entry is refused alike,
+    revealing none. One readable entry may be left out. Output is service-response redacted.
     """
+    # These name an entry instead of an entity target and only return a response. MESA does not
+    # apply because nothing is actuated, and every refusal here is refused-before-write, so an agent
+    # turn may correct the call instead of stopping at an unknown outcome.
     if effective_cap(access_key, "cap_service_response") == CAP_DENY:
         return _tool_refused_before_write(_CAP_FORBIDDEN_MESSAGE), "denied", resource
     if any((args.get("entity_id"), args.get("device_id"), args.get("area_id"))):
@@ -321,7 +313,7 @@ async def _execute_call_service(
         return _tool_error(name_error), "invalid_request", "call_service"
 
     if (dedicated := dedicated_tool_refusal(domain, service)) is not None:
-        if effective_cap(access_key, dedicated[0]) == CAP_DENY:
+        if dedicated[0] and effective_cap(access_key, dedicated[0]) == CAP_DENY:
             return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "call_service"
         return _tool_error(dedicated[1]), "invalid_request", "call_service"
 
@@ -489,7 +481,7 @@ async def _execute_call_service(
         )
 
     call_data = dict(service_data)
-    call_data["entity_id"] = permitted_entities
+    call_data["entity_id"] = entity_id_argument(hass, domain, service, permitted_entities, service_data)
 
     use_return_response = False
     if effective_cap(access_key, "cap_service_response") != CAP_DENY:
@@ -599,9 +591,8 @@ async def _execute_call_service(
 def _service_call_targets(entity_ids: list[str], access_key: AccessKeyRecord, hass: HomeAssistant) -> dict[str, Any]:
     """Name what the call acted on and how each target reads right after it.
 
-    These are the entities the access key was already permitted to write, so
-    nothing hidden is revealed. Home Assistant skips an unavailable target
-    without failing the call, which is why those are listed separately.
+    All were already writable by this key, so nothing hidden is revealed. HA skips an unavailable
+    target without failing, so those are listed separately.
     """
     states: list[dict[str, Any]] = []
     unavailable: list[str] = []
@@ -625,14 +616,10 @@ def _service_call_targets(entity_ids: list[str], access_key: AccessKeyRecord, ha
 async def _execute_call_service_mesa_approved(
     args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData
 ) -> tuple[dict, str, str]:
-    """Re-run a MESA-gated service call after admin approval.
-
-    Registered under MESA_APPROVED_EXECUTOR but never dispatchable from the tool
-    router, so an access key cannot reach the confirm-approved path itself. Re-runs
-    Phoenix MCP scope resolution and MESA evaluation; only control_mode:confirm blocks
-    are treated as satisfied, so an entity that became prohibited or read_only
-    since the request is still rejected.
-    """
+    """Re-run a MESA-gated service call after admin approval."""
+    # Registered under MESA_APPROVED_EXECUTOR but never dispatchable from the tool router, so a key
+    # cannot reach this path itself. Scope and MESA re-run, and only control_mode:confirm blocks
+    # count as satisfied, so an entity since made prohibited or read_only is still rejected.
     return await _execute_call_service(args, access_key, hass, data, mesa_approved=True)
 
 
@@ -673,6 +660,8 @@ def _build_diff_call_service(args: dict, access_key: AccessKeyRecord, hass: Home
         area_id=args.get("area_id"), service_domain=domain,
         access_key=access_key, hass=hass,
     )
+    if todo_items := todo_items_in_review(hass, domain, service, service_data, resolved):
+        preview["todo_items"] = todo_items
     mesa_note = _mesa_confirm_annotation(access_key, hass, [(domain, service, resolved)])
     if mesa_note:
         preview["mesa"] = mesa_note

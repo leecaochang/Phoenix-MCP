@@ -956,7 +956,7 @@ async def test_revoking_a_access_key_releases_the_leases_it_held(env):
     from homeassistant.components.http.const import KEY_AUTHENTICATED, KEY_HASS_USER
 
     from custom_components.phoenix_mcp.access_key_store import AccessKeyStore
-    from custom_components.phoenix_mcp.admin_view import PhoenixAdminAccessKeyView
+    from custom_components.phoenix_mcp.admin.access_keys import PhoenixAdminAccessKeyView
     from custom_components.phoenix_mcp.const import DOMAIN
 
     runtime = await async_setup_mesa(env, "advisory")

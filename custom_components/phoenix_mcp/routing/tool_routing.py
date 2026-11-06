@@ -20,8 +20,12 @@ from .routing_tables import (
     TOOL_ROUTING_REASONS, TOOL_ROUTING_SETTINGS,
 )
 from .decision_history import pending_context_history, history_texts, without_thinking
-from .decision_provider import DecisionError, DecisionProvider, _evaluate_guarded
-from ..helpers import redact_inaccessible_entity_ids_in_text, redact_secrets_in_text
+from .decision_provider import DecisionProvider, _evaluate_guarded
+from .decision_types import DecisionError
+from ..redaction import redact_inaccessible_entity_ids_in_text, redact_secrets_in_text
+from ..home_companion import is_companion
+from ..llm.accounts import _get_secret_store, PROVIDER_DEFINITIONS
+from ..tool_catalog import build_agent_tool_list
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -49,7 +53,6 @@ def create_review_state(data: Any, access_key: Any, surface: str) -> ToolReviewS
 
     Companion access keys and the off mode get an empty state, which leaves the loop unchanged.
     """
-    from ..home_companion import is_companion
     if is_companion(access_key):
         return ToolReviewState()
     mode = getattr(data.store.get_settings(), TOOL_ROUTING_SETTINGS[surface], "off")
@@ -105,8 +108,6 @@ async def async_review_tools(hass: HomeAssistant, data: Any, turn: ToolReviewSta
                              remaining_rounds: int, cancel: asyncio.Event | None = None,
                              announced_tools: list[dict] | None = None) -> ToolReview:
     """Review before dispatch, sharing decision capacity and durable request accounting."""
-    from ..llm.accounts import _get_secret_store, PROVIDER_DEFINITIONS
-    from ..tool_catalog import build_agent_tool_list
 
     started = monotonic()
     authority = turn.authority

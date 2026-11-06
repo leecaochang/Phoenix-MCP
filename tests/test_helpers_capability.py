@@ -14,7 +14,7 @@ from custom_components.phoenix_mcp.const import (
     CAP_DENY,
     PASS_THROUGH_EXEMPT_CAPS,
 )
-from custom_components.phoenix_mcp.helpers import effective_cap, effective_caps
+from custom_components.phoenix_mcp.capability import effective_cap, effective_caps
 from custom_components.phoenix_mcp.access_key_store import PermissionTree, AccessKeyRecord
 
 

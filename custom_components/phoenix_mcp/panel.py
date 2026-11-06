@@ -45,13 +45,7 @@ _AGENTCHAT_REGISTERED_URL_KEY = "phoenix_mcp_agentchat_registered_url"
 
 
 def _js_url_with_cache_bust() -> str:
-    """Append the bundle's mtime as a query param so each rebuild busts the cache.
-
-    The panel JS is served without cache headers, so browsers otherwise keep a
-    stale copy across frontend builds. Reading the mtime ties the URL to the
-    actual file on disk; no version constant to keep in sync. Runs in the
-    executor (see caller) since it touches the filesystem.
-    """
+    """Append the bundle's mtime as a query param, in the executor; rebuilds bust the cache."""
     try:
         return f"{_JS_URL}?v={int(_JS_FILE.stat().st_mtime)}"
     except OSError:
@@ -96,11 +90,7 @@ async def async_register_phoenix_panel(hass: HomeAssistant) -> None:
 
 
 def remove_phoenix_panel(hass: HomeAssistant) -> None:
-    """Remove the panel if it was registered in this HA run.
-
-    Silently skips if the panel was never registered (e.g. unload before setup
-    completed, or HA restarted with the kill switch enabled).
-    """
+    """Remove the panel if it was registered in this HA run."""
     if hass.data.pop(_PANEL_REGISTERED_KEY, False):
         async_remove_panel(hass, _PANEL_KEY)
 
@@ -125,15 +115,10 @@ def _inject_url_with_cache_bust() -> str:
 
 
 def _inject_version_ok() -> bool:
-    """Whether the running HA is at or above the injector feature baseline.
+    """Return whether the running HA is at or above the injector feature baseline.
 
-    The version comes from the package constant, the only always-present source:
-    ``hass.config`` carries no ``version`` attribute.
-
-    Fail-open when the version cannot be PARSED: the in-page
-    feature-detection self-disables on a DOM it does not recognise, so the worst
-    case is a script that adds nothing. This gate only avoids loading it on
-    known-incompatible old HA; it is not a safety boundary.
+    Fails open when the version cannot be parsed: the in-page feature detection self-disables,
+    and this gate is no safety boundary.
     """
     try:
         # Local: ships with an optional component, not with this integration.
@@ -147,10 +132,8 @@ def _inject_version_ok() -> bool:
 async def async_sync_mesa_inject(hass: HomeAssistant) -> None:
     """Add or remove the in-context profile injector module to match settings.
 
-    Idempotent; safe to call at setup and after any settings change. Gated on the
-    mesa_inject_enabled setting and a soft HA-version baseline, never on the kill
-    switch (this is an admin convenience, like the panel). The module is served
-    from the panel's existing static path, so no extra path registration is needed.
+    Idempotent. Gated on mesa_inject_enabled and a soft HA-version baseline, never the kill
+    switch.
     """
     data = hass.data.get(DOMAIN)
     if data is None:
@@ -192,13 +175,10 @@ def _safe_remove_inject_url(hass: HomeAssistant, url: str) -> None:
 
 
 def _remove_all_inject_urls(hass: HomeAssistant) -> None:
-    """Remove every registered injector module URL, whatever its cache-bust value.
+    """Remove every registered injector URL, whatever its cache-bust value; never raises.
 
-    Keeps HA from holding two phoenix-mcp-inject modules at once, which a full page
-    load would run as two competing injector instances. Catches a stale URL
-    orphaned in HA's extra-module set when this module's own tracking got out of
-    sync (e.g. a prior removal raised). Best-effort; never raises. If the set cannot
-    be read, callers still remove their tracked URL.
+    Two modules would run as competing instances. If the set cannot be read, callers still
+    remove their tracked URL.
     """
     try:
         # Local: optional component, imported only when this path runs.
@@ -244,10 +224,7 @@ def _remove_all_agentchat_urls(hass: HomeAssistant) -> None:
 async def async_sync_agentchat_inject(hass: HomeAssistant) -> None:
     """Add or remove the global Agent Chat window module to match settings.
 
-    Idempotent; gated on the agentcli_global setting and the same soft HA-version
-    baseline as the profile injector. Independent of the kill switch (the panel
-    decides whether to actually show the window; when injection is off or
-    unsupported the window falls back to the panel only).
+    Idempotent. Gated on agentcli_global and the injector's HA baseline, not the kill switch.
     """
     data = hass.data.get(DOMAIN)
     if data is None:

@@ -996,6 +996,7 @@
       "verboseHint": "De toolaanroepen, toolresultaten en het nadenken van de agent weergeven. Antwoorden, afbeeldingen, voortgang, goedkeuringen en meldingen worden altijd getoond.",
       "workingOn": "Bezig: {name}",
       "workingSpinner": "Bezig…",
+      "otherTabTurn": "Een ander tabblad voert een antwoord uit in dit gesprek. Als dit tabblad er ook een uitvoert, blijft het antwoord bewaard dat als laatste klaar is.",
       "pausedAfter": {
         "one": "Gepauzeerd na {count} stap. Doorgaan?",
         "other": "Gepauzeerd na {count} stappen. Doorgaan?"

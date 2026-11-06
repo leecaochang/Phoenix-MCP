@@ -9,7 +9,7 @@ from typing import Any, AsyncIterator
 from aiohttp import ClientError, ClientSession, SocketTimeoutError
 
 from ..conversation_log import record_rejected_tool
-from ..helpers import LocalizedReason
+from ..catalog_text import LocalizedReason
 from .accounts import ProviderConfig
 from .base import (
     _apply_claude_options, _bounded_catalog, _cache_marked, _CHAT_TIMEOUT, _CLAUDE_NO_ADAPTIVE,
@@ -24,8 +24,8 @@ from .base import (
     EV_THINKING, EV_TOOL, EV_USAGE,
 )
 from ..provider_constants import (
-    AGENTCLI_ANTHROPIC_VERSION, AGENTCLI_EFFORT_LEVEL_ORDER, AGENTCLI_MINIMAX_MODELS,
-    AGENTCLI_PROBE_IMAGE_MAX_TOKENS,
+    AGENT_CHAT_ANTHROPIC_VERSION, AGENT_CHAT_EFFORT_LEVEL_ORDER, AGENT_CHAT_MINIMAX_MODELS,
+    AGENT_CHAT_PROBE_IMAGE_MAX_TOKENS,
 )
 
 
@@ -113,7 +113,7 @@ class ClaudeProvider:
             return False, LocalizedReason(f"Could not reach the provider: {exc}", "providerUnreachable", detail=str(exc))
 
     def _model_fallback(self) -> list[str]:
-        return (list(AGENTCLI_MINIMAX_MODELS) if self.kind == "minimax"
+        return (list(AGENT_CHAT_MINIMAX_MODELS) if self.kind == "minimax"
                 else [self.cfg.model] if self.cfg.model else [])
 
     @_bounded_catalog
@@ -151,18 +151,18 @@ class ClaudeProvider:
         if self.kind == "minimax":
             return {
                 "Authorization": f"Bearer {self.cfg.api_key or ''}",
-                "anthropic-version": AGENTCLI_ANTHROPIC_VERSION,
+                "anthropic-version": AGENT_CHAT_ANTHROPIC_VERSION,
                 "content-type": "application/json",
             }
         return {
             "x-api-key": self.cfg.api_key or "",
-            "anthropic-version": AGENTCLI_ANTHROPIC_VERSION,
+            "anthropic-version": AGENT_CHAT_ANTHROPIC_VERSION,
             "content-type": "application/json",
         }
 
     async def probe_image(self, session: ClientSession, image: str, question: str) -> tuple[int | None, str]:
         """Status and reply text for one question about an attached PNG (see async_probe_vision)."""
-        body = {"model": self.cfg.model, "max_tokens": AGENTCLI_PROBE_IMAGE_MAX_TOKENS,
+        body = {"model": self.cfg.model, "max_tokens": AGENT_CHAT_PROBE_IMAGE_MAX_TOKENS,
                 "messages": [self.user_message(question, [{"mime_type": "image/png", "data": image}])]}
         try:
             async with session.post(f"{self.cfg.base_url}/v1/messages", headers=self._headers(), json=body,
@@ -199,9 +199,8 @@ class ClaudeProvider:
     ) -> dict[str, dict]:
         """Per-model capabilities from the `capabilities` object on each model row.
 
-        Anthropic reports image input, thinking and the effort levels each model
-        accepts, so they are DECLARED rather than probed. MiniMax rows carry no
-        capabilities and yield nothing.
+        Anthropic declares image input, thinking and effort levels, so they are not probed. MiniMax
+        rows carry none and yield nothing.
         """
         out: dict[str, dict] = {}
         for model in models:
@@ -218,7 +217,7 @@ class ClaudeProvider:
             effort = declared.get("effort") or {}
             if isinstance(effort, dict) and effort.get("supported") is True:
                 caps["effort_levels"] = [
-                    level for level in AGENTCLI_EFFORT_LEVEL_ORDER
+                    level for level in AGENT_CHAT_EFFORT_LEVEL_ORDER
                     if (effort.get(level) or {}).get("supported") is True
                 ]
             if caps:

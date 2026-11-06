@@ -384,7 +384,7 @@ def test_selected_routing_languages_do_not_fall_back_to_english(tag, expected):
 
 @pytest.mark.parametrize("selection", [[], ["en"], ["zh-Hans", "es"]])
 async def test_routing_language_selection_round_trip_and_snapshot(hass, routing, selection):
-    from custom_components.phoenix_mcp.admin_view import _validated_settings_patch
+    from custom_components.phoenix_mcp.admin.settings import _validated_settings_patch
     from custom_components.phoenix_mcp.routing.command_routing import RoutingAuthority
     from custom_components.phoenix_mcp.access_key_store import GlobalSettings
     data, access_key = routing
@@ -404,7 +404,7 @@ async def test_routing_language_selection_round_trip_and_snapshot(hass, routing,
 
 @pytest.mark.parametrize("selection", [None, True, "es", [True], [["en"]], ["en", "en"], ["xx"], ["not-a-language"]])
 async def test_invalid_routing_language_selection_fails_closed(hass, routing, selection):
-    from custom_components.phoenix_mcp.admin_view import _validated_settings_patch
+    from custom_components.phoenix_mcp.admin.settings import _validated_settings_patch
     from custom_components.phoenix_mcp.access_key_store import GlobalSettings
     data, _ = routing
     _, error = await _validated_settings_patch({"command_routing_languages": selection}, data, hass, "test")

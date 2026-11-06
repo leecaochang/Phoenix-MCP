@@ -8,7 +8,9 @@ import json
 import re
 from typing import Any, TypeVar
 
-from .const import MAX_REQUEST_BODY_BYTES, TOOL_INPUT_MAX_DEPTH, TOOL_INPUT_MAX_NODES
+from .const import (
+    MAX_REQUEST_BODY_BYTES, TOOL_INPUT_MAX_DEPTH, TOOL_INPUT_MAX_NODES, TARGET_SELECTOR_KEYS,
+)
 from .tool_defs import _ENTITY_TOOL_DEFS, _NATIVE_TOOL_DEFS, _SYSTEM_TOOL_DEFS
 
 
@@ -62,13 +64,7 @@ def with_argument_notes(result: tuple[dict, _Outcome, str], notes: list[str]) ->
 
 
 def _reject_non_finite(_value: str) -> None:
-    """json.loads parse_constant hook: reject NaN / Infinity / -Infinity.
-
-    Python's json.loads accepts these by default, and they defeat range checks
-    (every comparison with NaN is False, so NaN passes a minimum and a maximum)
-    and can flow through to HA services and device integrations. Raising here
-    rejects them at ingestion; the caller's ValueError handler answers it.
-    """
+    """Reject NaN and Infinity as a json.loads parse_constant hook; they defeat range checks."""
     raise ValueError("Non-finite JSON numbers are not allowed.")
 
 
@@ -83,11 +79,8 @@ def _parse_finite_float(value: str) -> float:
 def decode_container_strings(tool: str, arguments: dict) -> dict:
     """Accept an object or array argument that a client sent as JSON text.
 
-    Some MCP clients serialize every argument as a string. The published schema
-    stays strictly object/array; a string is decoded only for a top-level
-    parameter that cannot itself be a string, and only when it parses to a
-    declared container type, so text meant as text is never reinterpreted.
-    The caller re-applies the admission bounds to the decoded arguments.
+    Only for a top-level parameter that cannot be a string, and only when it parses to a
+    declared container type. The caller re-applies the admission bounds to the result.
     """
     properties = _PUBLIC_SCHEMAS.get(tool, {}).get("properties", {})
     decoded_arguments: dict | None = None
@@ -121,13 +114,10 @@ def decode_container_strings(tool: str, arguments: dict) -> dict:
 
 
 def _list_text(name: str, schema: dict, value: str) -> list[str] | None:
-    """The list in text sent for a field that takes one string or a list of them.
+    """Return the list in text sent for a field taking one string or a list of them.
 
-    JSON array text of strings is the list it spells, and so is bracketed text
-    of bare identifiers such as "[door, window]", which no domain, device class
-    or ID can be; a state is free text, so only JSON reads as a list there. A
-    comma list is split only for entity IDs, which contain no comma; any other
-    value, such as a state of "1,234", stays as sent.
+    Takes JSON array text and bracketed bare identifiers; a state reads only JSON. Commas
+    split entity IDs alone, so a state of "1,234" stays as sent.
     """
     if not any(isinstance(choice, dict) and choice.get("type") == "array" for choice in schema.get("oneOf") or ()):
         return None
@@ -154,13 +144,9 @@ def _serialized_size(text: str) -> int:
 
 def tool_arguments_error(arguments: object) -> str | None:
     """Bound tool arguments, on every route, before internal calls and persisted executors.
-
-    Holds size, depth, JSON shape, finite numbers and valid Unicode. A lone
-    surrogate is refused because a value holding one cannot be serialized later:
-    in a state it fails Home Assistant's state API, in a registry it stops every
-    later save of that registry. Depth bounds also terminate cycles. Shared
-    references remain valid when their expanded JSON representation fits the same
-    traversal budget.
+    Holds size, depth, JSON shape, finite numbers and valid Unicode, returning the refusal or
+    None. A lone surrogate would break later serialization of a state or registry. Depth also
+    terminates cycles.
     """
     if not isinstance(arguments, dict):
         return "Tool arguments must be an object."
@@ -254,11 +240,9 @@ def _whole_integers(value: Any, schema: Any) -> Any:
 
 
 def _native_shape(value: Any, schema: dict) -> Any:
-    """Take the shapes Home Assistant's own native tools accept.
+    """Take the shapes HA's native tools accept: "light" for ["light"], "50" for 50.
 
-    HA's intent slots wrap one string in a list (cv.ensure_list) and coerce
-    numeric text (vol.Coerce(int) or vol.Coerce(float)), so a native tool takes
-    "light" for ["light"] and "50" for 50. A string is never read as absent.
+    Mirrors cv.ensure_list and vol.Coerce. A string is never read as absent.
     """
     if not isinstance(value, str):
         return value
@@ -271,11 +255,9 @@ def _native_shape(value: Any, schema: dict) -> Any:
 
 
 def _number_from_text(text: str, kinds: list[str]) -> int | float | None:
-    """The number `text` spells for a field of these kinds, or None.
+    """Return the number ``text`` spells for a field of these kinds, or None.
 
-    Python refuses an integer past its digit limit and reads an over-long decimal
-    as infinity. JSON admission refuses both magnitudes, so the text stays for
-    the type check, which names the field, rather than reaching a handler.
+    Magnitudes JSON admission refuses stay as text for the type check, which names the field.
     """
     try:
         if "integer" in kinds and _INTEGER_TEXT.fullmatch(text):
@@ -358,20 +340,10 @@ _CLAMPED = frozenset({"limit", "timeout"})
 
 
 def scalar_arguments(tool: str, arguments: dict, *, read_only: bool = False) -> tuple[dict, str | None]:
-    """Hold top-level arguments to the advertised schema, the one contract on every route.
-
-    Required arguments must be present and not null. A scalar the schema refuses
-    by type, bound, length or pattern is refused with the field named; enum
-    values and null stay with their handlers, whose messages explain the choice
-    and for whom null can be a refused value (a compare-and-swap expected_hash)
-    as well as absence. Whole-valued floats become ints wherever the schema
-    expects an integer, nested ones included, and native tools take HA's own
-    list and number shapes (_native_shape). On a read, canonical number and
-    boolean text is the value it spells, an optional argument that is only an
-    empty placeholder is absent, and a limit or timeout above its maximum is the
-    maximum; a write refuses all three. Each reading is noted on the result.
-    Union-typed fields are left to their handler. Call after the owning
-    capability's denial check.
+    """Hold top-level arguments to the advertised schema; return (arguments, refusal).
+    Refuses missing required values and bad scalars; enums, null and unions stay with
+    handlers. Writes stay strict, while reads accept canonical text, empty placeholders and
+    capped limits, noted.
     """
     schema = _PUBLIC_SCHEMAS.get(tool)
     if schema is None:
@@ -518,3 +490,35 @@ def nested_argument_error(tool: str, arguments: dict) -> str | None:
         if allowed_changes is not None and set(changes) - allowed_changes:
             return "changes contains fields incompatible with the operation."
     return None
+
+
+# Tool argument coercion
+def dict_arg(value: object) -> dict:
+    """Return value if it is a dict, else {}; never coerce."""
+    return value if isinstance(value, dict) else {}
+
+
+def sanitize_service_data(value: object) -> dict[str, Any]:
+    """Return a new dict of caller-supplied service data without HA target selectors.
+    The copy also snapshots the data, so a caller cannot swap the target across an await.
+    """
+    if not isinstance(value, dict):
+        return {}
+    return {k: v for k, v in value.items() if k not in TARGET_SELECTOR_KEYS}
+
+
+def str_arg(value: object, default: str = "") -> str:
+    """Return value if it is a string, else default; never coerce."""
+    return value if isinstance(value, str) else default
+
+
+def str_list_arg(value: object) -> list[str]:
+    """Return a string or list-of-strings argument as a list; never coerce or split.
+
+    Non-string members are dropped. Tools taking comma-joined text split it themselves.
+    """
+    if isinstance(value, str):
+        return [value]
+    if isinstance(value, (list, tuple)):
+        return [v for v in value if isinstance(v, str)]
+    return []

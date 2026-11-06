@@ -129,18 +129,18 @@ _PROVIDER_CONTRACT = os.path.join(
 
 
 def test_agentcli_provider_kinds_match_the_frontend_contract():
-    """The frontend provider-kind union covers both AGENTCLI_PROVIDERS and DECISION_PROVIDERS.
+    """The frontend provider-kind union covers both AGENT_CHAT_PROVIDERS and DECISION_PROVIDERS.
 
     Eligibility for conversation is enforced separately by the registry, account
     resolver and catalog filtering, not by this transport union.
     """
-    from custom_components.phoenix_mcp.provider_constants import AGENTCLI_PROVIDERS
+    from custom_components.phoenix_mcp.provider_constants import AGENT_CHAT_PROVIDERS
     from custom_components.phoenix_mcp.routing.routing_tables import DECISION_PROVIDERS
 
     with open(_PROVIDER_CONTRACT, encoding="utf-8") as f:
         expected = set(json.load(f)["agentcli_provider_kinds"])
-    assert set(AGENTCLI_PROVIDERS | DECISION_PROVIDERS) == expected, (
-        "provider_constants.AGENTCLI_PROVIDERS drifted from the frontend contract fixture. "
+    assert set(AGENT_CHAT_PROVIDERS | DECISION_PROVIDERS) == expected, (
+        "provider_constants.AGENT_CHAT_PROVIDERS drifted from the frontend contract fixture. "
         "Update tests/contract/agentcli_provider_kinds.json, the "
         "AgentCliProviderKind union and KINDS table in the frontend, and add the "
         "kind's endpoint defaults to llm.accounts._KINDS."
@@ -267,7 +267,7 @@ def test_every_mesa_scope_has_admin_endpoints():
     The panel reaches each level through its own routes, so a scope added to the
     canonical list without them ships as a dead entry in every picker.
     """
-    from custom_components.phoenix_mcp.admin_view import ALL_ADMIN_VIEWS
+    from custom_components.phoenix_mcp.admin.registry import ALL_ADMIN_VIEWS
     from custom_components.phoenix_mcp.const import MESA_SCOPES
 
     urls = {v.url for v in ALL_ADMIN_VIEWS}

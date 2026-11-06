@@ -11,7 +11,7 @@ from homeassistant.helpers import area_registry as ar, entity_registry as er
 from homeassistant.core import HomeAssistant
 
 from .command_operations import numeric_metadata, command_domain
-from .command_execution import _target_fingerprint, _digest
+from .command_target import _target_fingerprint, _digest
 from .routing_tables import (
     DECISION_CATALOG_PACK_THRESHOLD, DECISION_MAX_TARGETS, DECISION_MAX_TARGET_BYTES,
     DECISION_MAX_TARGET_TEXT, DECISION_MAX_TARGET_ALIASES, DECISION_TARGET_INTENTS,
@@ -19,9 +19,10 @@ from .routing_tables import (
     COMMAND_ROUTING_TEMPORAL_OPERATIONS, COMMAND_ROUTING_ENTITY_INTENTS,
     DECISION_BATCH_MAX_TARGETS, DECISION_SUMMARY_COMPONENTS,
 )
-from .decision_provider import DecisionError
+from .decision_types import DecisionError
 from ..device_semantics import DeviceRegistrySnapshot, device_registry_snapshot
-from ..helpers import redact_inaccessible_entity_ids_in_text, redact_secrets_in_text
+from ..entity_commands import entity_metadata
+from ..redaction import redact_inaccessible_entity_ids_in_text, redact_secrets_in_text
 
 
 class CatalogLimitError(DecisionError):
@@ -90,7 +91,6 @@ def capture_targets(hass: HomeAssistant, access_key: Any, category: str, *,
             "area": text(area.name) if area else "",
         }
         if intent in COMMAND_ROUTING_ENTITY_INTENTS:
-            from ..entity_commands import entity_metadata
             metadata = entity_metadata(state, intent)
             # Values are choices, so redacting one would silently change its meaning. Decline instead.
             if any(text(value) != value for value in metadata.get("options", [])):
@@ -244,7 +244,6 @@ def factor_summary_choices(payload: dict, scopes: dict) -> dict[str, dict[str, s
 
 def resolve_summary_choices(answers: dict, mappings: dict[str, dict[str, str]], scopes: dict) -> None:
     """Resolve only an existing exact tuple; retain evidence rather than invent a probability."""
-    from .decision_provider import DecisionError
 
     components = {question: answers.pop(question) for question in DECISION_SUMMARY_COMPONENTS}
     model = answers["route"]["model"]

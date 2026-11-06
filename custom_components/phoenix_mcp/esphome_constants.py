@@ -1,15 +1,11 @@
 """ESPHome Device Builder protocol targets, limits and timeouts."""
 
-# ESPHome Device Builder commands. Phoenix MCP speaks the add-on's multiplexed
-# WebSocket API at <dashboard url>/ws for validation, for the
-# board/component/automation reference data an authoring agent needs, and for
-# the firmware job model (compile, install, poll, cancel).
-# Version-sensitive surface: the frame shapes and command names are the add-on's,
-# with no stability promise, so re-verify them on add-on upgrades.
-# Source-qualified protocol targets. The compiler and Device Builder use
-# independent version families; ESPHome 2026.10.0 and 2026.10.1 both bundle Device
-# Builder 1.25.0. Used only to add context to failures, never as an upgrade
-# warning on success.
+# ESPHome Device Builder commands, over the add-on's multiplexed WebSocket at <dashboard
+# url>/ws. Frame shapes and command names carry no stability promise, so re-verify on add-on
+# upgrades.
+#
+# Source-qualified protocol target, used only to add context to failures. The compiler and
+# the Builder use independent version families.
 ESPHOME_BUILDER_VERIFIED_VERSION = "1.25.0"
 ESPHOME_COMPILER_VERIFIED_VERSION = "2026.10.1"
 ESPHOME_BUILDER_REQUEST_TIMEOUT_SECONDS = 10.0

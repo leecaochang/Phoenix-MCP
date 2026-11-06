@@ -1,23 +1,11 @@
 """Authoring tools: automation, script and scene CRUD over the YAML config store.
 
-The three domains share one shape and one module: each stores its configs in a
-top-level YAML file (automations.yaml, scripts.yaml, scenes.yaml) that a human may
-also edit by hand, and is written under its own asyncio.Lock keyed into hass.data.
-An edit may carry an expected_hash (a content_hash from the matching read tool),
-checked before gating and again at apply time; a delete captures the reviewed
-entry's hash and compares it again under that lock.
-
-`yaml_includes` does the reads and writes. Reads follow every !include, so an
-entry is found wherever it is defined. Writes reach only Home Assistant's own
-editor file for the domain and only entries its editor would change; an entry in
-a split file, an include directory, a package or inline in configuration.yaml is
-hand-written YAML and is refused before any approval exists.
-
-Scene writes add one check: a scene captures member entities' states, so
-`_unwritable_scene_members` refuses a scene naming an entity the access key cannot
-WRITE; otherwise an access key could snapshot and later restore entities outside its
-scope. tool_registration registers these tools and this module never imports the
-dispatcher.
+Each domain stores configs in a top-level YAML file a human may also edit, written under its own
+asyncio.Lock. An edit may carry an expected_hash, checked before gating and at apply time; a delete
+compares the reviewed entry's hash under that lock. `yaml_includes` reads through every !include but
+writes only HA's own editor file, refusing hand-written entries before any approval exists. A scene
+naming an entity the key cannot write is refused, or a key could snapshot and restore entities
+outside its scope. This module never imports the dispatcher.
 """
 
 from __future__ import annotations
@@ -49,10 +37,12 @@ from ..authoring_validation import async_validation_message, authoring_input_err
 from ..const import CAP_DENY, DOMAIN, TRACE_SCOPE_MAX_DEPTH
 from ..data import PhoenixData
 from ..entity_registration import async_observe_registration
-from ..helpers import (
-    content_hash, dict_arg, diff_summary_fields as _summary, effective_cap, str_arg, str_list_arg,
-    _strict_phoenix_log_text, redact_inaccessible_entity_ids_in_text,
-)
+from ..helpers import content_hash
+from ..tool_input import dict_arg, str_arg, str_list_arg
+from ..catalog_text import diff_summary_fields as _summary
+from ..capability import effective_cap
+from ..log_read import _strict_phoenix_log_text
+from ..redaction import redact_inaccessible_entity_ids_in_text
 from ..tool_common import (
     _CAP_FORBIDDEN_MESSAGE, _cas_conflict, _gate, _record_version, _tool_error, _tool_refused_before_write,
     _tool_success, _truncate, fitted_list, longest_fitting,
@@ -81,9 +71,8 @@ async def _finish_entity_write(
 ) -> tuple[dict, str, str]:
     """Reload a saved, versioned write and report observation separately.
 
-    Neither a failed reload nor a registration timeout undoes the committed
-    configuration. Keep cancellation and authority failures at the dispatch
-    boundary; never retry a write or reload here.
+    Neither a failed reload nor a registration timeout undoes the committed configuration. Never
+    retry a write or reload here; cancellation and authority failures stay at the dispatch boundary.
     """
     body: dict[str, Any] = {
         "write_success": True, f"{domain}_id": storage_id, "config": config,
@@ -214,12 +203,9 @@ _ENTRY_NOT_CAPTURED = object()
 
 
 async def _read_config_entry(hass: HomeAssistant, domain: str, entry_id: str) -> Any:
-    """Current stored config for one automation/script/scene entry, or None.
-
-    Tag-encoded (a !secret renders as the display string "!secret name"; the
-    value is never resolved), so the result is JSON-safe and hashable for the
-    compare-and-swap guard.
-    """
+    """Tag-encoded stored config for one automation/script/scene entry, or None."""
+    # A !secret renders as the display string "!secret name" and is never resolved, so the result is
+    # JSON-safe and hashable for the compare-and-swap guard.
     return await hass.async_add_executor_job(
         yaml_includes.read_entry, hass.config.config_dir, domain, entry_id,
     )
@@ -228,11 +214,7 @@ async def _read_config_entry(hass: HomeAssistant, domain: str, entry_id: str) ->
 def _config_read_response(
     id_key: str, entry_id: str, config: Any, resource: str
 ) -> tuple[dict, str, str]:
-    """Shared body for the config-read tools: config plus its content_hash.
-
-    The hash is over the same tag-encoded structure returned here, so an agent
-    can echo it straight back as expected_hash on the matching edit tool.
-    """
+    """Shared body for the config-read tools: config plus a content_hash usable as expected_hash."""
     return _tool_success(json.dumps({
         id_key: entry_id, "config": config, "content_hash": content_hash(config),
     }, indent=2, default=str)), "allowed", resource
@@ -243,9 +225,8 @@ async def _entry_cas_conflict(
 ) -> tuple[dict, str, str] | None:
     """CAS check for an automation/script/scene edit, against its stored config.
 
-    Runs before gating (so a stale edit never becomes a doomed pending approval)
-    and again inside the executor (to catch a change made during the approval
-    window). No expected_hash skips the check entirely.
+    Runs before gating and again in the executor, catching a stale edit and a change during
+    approval. No expected_hash skips it.
     """
     expected = args.get("expected_hash")
     if not expected:
@@ -326,11 +307,8 @@ async def _tool_list_automations(
 ) -> tuple[dict, str, str]:
     """MCP tool: list accessible automation.* entities with their editable id.
 
-    With trigger or query it reads every configuration once, so "which automations
-    run at a fixed time" or "which ones notify my phone" is one call instead of one
-    get_automation per automation, and needs the capability get_automation needs.
-    A blueprint automation's triggers live in its blueprint, so it is named rather
-    than silently left out of a trigger search.
+    With trigger or query it reads every configuration once, needing get_automation's capability. A
+    blueprint automation is named rather than silently left out of a trigger search.
     """
     tool = "list_automations"
     if effective_cap(access_key, "cap_registry_read") == CAP_DENY:
@@ -410,11 +388,8 @@ def _automation_not_found(
 ) -> str:
     """Why no stored configuration was found, said plainly for an automation the caller can see.
 
-    A YAML automation without an id: has no stored id, so its entity ID cannot
-    be resolved to an entry, and one defined outside the automation files
-    Phoenix edits (a package) has an id but no entry here; a bare "not found"
-    sent agents looking for an id that cannot exist. Only an entity this access
-    key can read is explained, so the text never confirms one it cannot.
+    A YAML automation without an id, or one defined in a package, has no entry here. Only an entity
+    this key can read is explained, so the text never confirms one it cannot.
     """
     if (requested.startswith("automation.") and hass.states.get(requested) is not None
             and resolve_read(requested, access_key, hass) in (Permission.READ, Permission.WRITE)):
@@ -462,13 +437,11 @@ async def _config_validation_error(
 ) -> tuple[dict, str, str] | None:
     """Run an HA config validator; return an error triple, or None when the config validates.
 
-    HA's automation and script validators raise vol.Invalid or HomeAssistantError
-    for a config the caller got wrong: the routine case, logged at debug and
-    answered with bounded field paths and value-free guidance. Any other exception is HA drift or a
-    Phoenix bug, so it is logged with a traceback and reported as an internal
-    error; calling it a validation failure would send the agent to rewrite a
-    config that was never the problem.
+    vol.Invalid and HomeAssistantError are the caller's error, answered with bounded value-free
+    guidance. Anything else is logged with a traceback and reported as internal.
     """
+    # Calling HA drift or a Phoenix bug a validation failure would send the agent to rewrite a
+    # config that was never the problem.
     domain = "automation" if "automation" in tool_name else "script"
     try:
         if await validator(hass, config_key, config) is None:
@@ -507,10 +480,7 @@ def _automation_argument_error(args: dict, *, create: bool) -> str | None:
 
 
 def _op_refusal(op: yaml_includes.OpResult) -> dict:
-    """Return a failed operation's tool error.
-
-    yaml_includes returns every conflict before it writes, so a conflict is a
-    refusal before any write.
+    """Return a failed operation's tool error; yaml_includes reports every conflict before writing.
     """
     if op.error_kind == "conflict":
         return _tool_refused_before_write(op.error_text)
@@ -545,9 +515,8 @@ async def _automation_write_precheck(
 ) -> tuple[dict, str, str] | None:
     """Pre-gate validation for automation writes; None means OK to proceed.
 
-    Checks automation_id presence and config schema so a doomed request is
-    rejected before a pending approval is created. The executor re-validates at
-    apply time.
+    Checks automation_id presence and config schema, so a doomed request gets no pending approval.
+    The executor re-validates at apply time.
     """
     error = _automation_argument_error(args, create=not require_id)
     if error:
@@ -761,10 +730,8 @@ async def _tool_delete_automation(
 
 
 def _remove_registry_entry(hass: HomeAssistant, domain: str, item_id: str) -> None:
-    """Drop a deleted automation's, script's or scene's registry entry, as HA's own delete does.
-
-    A reload alone leaves it behind as a restored, unavailable entity.
-    """
+    """Drop a deleted automation's, script's or scene's registry entry, as HA's own delete does."""
+    # A reload alone leaves it behind as a restored, unavailable entity.
     registry = er.async_get(hass)
     if entity_id := registry.async_get_entity_id(domain, "homeassistant" if domain == "scene" else domain, item_id):
         registry.async_remove(entity_id)
@@ -918,9 +885,8 @@ def _script_argument_error(args: dict) -> str | None:
 async def _script_write_precheck(args: dict, hass: HomeAssistant, tool_name: str) -> tuple[dict, str, str] | None:
     """Pre-gate validation for script writes; None means OK to proceed.
 
-    Checks script_id format and config schema so a doomed request is rejected
-    before a pending approval is created. The executor re-validates at apply
-    time.
+    Checks script_id format and config schema, so a doomed request gets no pending approval. The
+    executor re-validates at apply time.
     """
     if error := _script_argument_error(args):
         return _tool_error(error), "invalid_request", tool_name
@@ -1234,15 +1200,14 @@ def _trace_summary(short: dict) -> dict:
 def _scope_trace(value: Any, access_key: AccessKeyRecord, hass: HomeAssistant, depth: int = 0) -> Any:
     """Remove what a readable run recorded about entities this access key cannot read.
 
-    A trace holds live data, not just configuration: trigger variables carry
-    whole State objects, results echo service data, and errors and templates are
-    free text. A State, or a dict shaped like one, for an inaccessible entity is
-    replaced whole, since its attributes would still identify it; inaccessible
-    entity IDs elsewhere are redacted in place, entries keyed by them are
-    dropped, and sensitive keys keep no value.
+    A State-shaped value for an inaccessible entity is replaced whole; other inaccessible IDs are
+    redacted, entries keyed by them dropped, and sensitive keys keep no value.
     """
 
 
+    # A trace holds live data: trigger variables carry whole State objects, results echo service
+    # data, and errors and templates are free text. A State's attributes would still identify its
+    # entity.
     def readable(entity_id: str) -> bool:
         return resolve(entity_id, access_key, hass) in (Permission.READ, Permission.WRITE)
 
@@ -1302,9 +1267,8 @@ def _empty_trace_diagnosis(hass: HomeAssistant, entity_id: str) -> str:
 def _run_error(short: dict, trace: Any) -> str | None:
     """The error a run recorded, as Home Assistant's trace view shows it.
 
-    An exception is on the run itself. A stop with an error, or a check that could
-    not be evaluated, ends the run as aborted with the error on its last step; a
-    condition that was simply false ends it the same way without one.
+    An exception is on the run itself; a stop with an error or an unevaluable check aborts with it
+    on the last step. A false condition ends the same way without one.
     """
     if short.get("error") is not None:
         return str(short["error"])
@@ -1331,11 +1295,9 @@ def _trace_run(short: dict, error: str | None) -> dict:
 
 
 async def _restore_saved_traces(hass: HomeAssistant) -> None:
-    """Load the traces Home Assistant saved before its last restart.
+    """Load the traces Home Assistant saved before its last restart; idempotent.
 
-    The trace component restores them only when traces are first listed through
-    its own API; until then the runs before a restart look like no runs at all.
-    Restoring is idempotent, the same call the trace view makes.
+    The trace component restores them only when traces are first listed through its own API.
     """
     # Local: optional component, imported only when this path runs.
     from homeassistant.components.trace.const import DATA_TRACE_STORE
@@ -1350,11 +1312,8 @@ async def _restore_saved_traces(hass: HomeAssistant) -> None:
 def _trace_overview(access_key: AccessKeyRecord, hass: HomeAssistant) -> tuple[dict, str, str]:
     """Every readable automation and script with retained runs, in one call.
 
-    "Did any automation fail this week" otherwise takes one call per automation.
-    Each row counts the retained runs by how they ended and lists the runs that
-    recorded an error; rows with errors come first. Not-triggered evaluations are
-    counted apart, since they are not runs. Runs past what one result holds are
-    named in not_listed.
+    Each row counts retained runs by ending and lists erroring ones; rows with errors come first.
+    Not-triggered evaluations count apart. Runs past one result's limit are named in not_listed.
     """
     # Local: optional component, imported only when this path runs.
     from homeassistant.components.trace.const import DATA_TRACE
@@ -1485,9 +1444,8 @@ def _valid_scene_config(config: Any) -> bool:
 def _scene_schema_error(config: dict) -> str | None:
     """Home Assistant's own verdict on a scene entry, or None when it would load it.
 
-    Reload drops an entry this schema refuses, so it is checked before an
-    approval exists and again before the file is written. The stored id is
-    Phoenix's to set, so a caller's value is not judged here.
+    Reload drops an entry this schema refuses, so it is checked before approval and before writing.
+    The stored id is Phoenix's to set, so a caller's value is not judged.
     """
     entry = {key: value for key, value in config.items() if key != "id"}
     try:
@@ -1503,10 +1461,8 @@ async def _tool_list_scenes(
 ) -> tuple[dict, str, str]:
     """MCP tool: list accessible scene.* entities with their editable scene id.
 
-    entity_id keeps the scenes that include any of those entities, so "which
-    scenes use the studio lights" needs no get_scene per scene. Only members
-    this access key can read are matched or listed, so a hidden member answers
-    exactly like an entity no scene uses.
+    entity_id keeps scenes including any of those entities. Only readable members are matched or
+    listed, so a hidden member answers like an entity no scene uses.
     """
     if effective_cap(access_key, "cap_registry_read") == CAP_DENY:
         return _tool_error("Forbidden."), "denied", "list_scenes"
@@ -1537,9 +1493,8 @@ async def _tool_get_scene(
 ) -> tuple[dict, str, str]:
     """MCP tool: read one scene's current stored config, with a content_hash.
 
-    Applies edit_scene's member rule: a scene controlling entities this access key
-    cannot write is refused with the same message as a missing scene, so the
-    scene id is not an existence oracle.
+    A scene controlling entities this key cannot write is refused with the missing-scene message, so
+    the scene id is not an existence oracle.
     """
     if effective_cap(access_key, "cap_scene_write") == CAP_DENY:
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "get_scene"
@@ -1640,9 +1595,8 @@ async def _scene_write(
 def _scene_write_precheck(args: dict, tool_name: str, *, require_id: bool) -> tuple[dict, str, str] | None:
     """Pre-gate validation for scene writes; None means OK to proceed.
 
-    Checks scene_id presence and config shape so a doomed request is rejected
-    before a pending approval is created. The executor re-validates at apply
-    time.
+    Checks scene_id presence and config shape, so a doomed request gets no pending approval. The
+    executor re-validates at apply time.
     """
     if require_id and not str(args.get("scene_id") or "").strip():
         return _tool_error("scene_id is required."), "invalid_request", tool_name
@@ -1956,10 +1910,10 @@ async def _build_diff_delete_automation(
 def _yaml_entry(hass: HomeAssistant, domain: str, entry_id: str) -> dict | None:
     """Read one automation/script/scene entry's stored config, or None.
 
-    Fail-quiet on purpose: this only feeds a diff's `before` side, and an
-    unreadable entry must not stop the approval for the requested write. The
-    executor re-reads and re-validates at apply time.
+    Fail-quiet: an unreadable entry must not stop the approval for the requested write.
     """
+    # This only feeds a diff's `before` side, and the executor re-reads and re-validates at apply
+    # time.
     try:
         return yaml_includes.read_entry(hass.config.config_dir, domain, entry_id)
     except Exception:  # diagnostic only
@@ -1976,13 +1930,8 @@ async def _entry_before_json(
 ) -> str | None:
     """Truncated JSON of an entry's current config for a diff's `before`, or None.
 
-    wrap_key reproduces the shape each domain's `after` side uses, so both panes
-    stay comparable: scripts render as {script_id: config}, automations and scenes
-    bare. A passed `current` (the reviewed entry, for deletes) skips the read.
-
-    Fail-quiet end to end, including the executor dispatch and serialization: a
-    diff is advisory and nothing here may stop the write it describes from being
-    gated.
+    wrap_key reproduces each domain's `after` shape, and a passed `current` skips the read.
+    Fail-quiet throughout: a diff is advisory and must not stop the write being gated.
     """
     try:
         if current is _ENTRY_NOT_CAPTURED:

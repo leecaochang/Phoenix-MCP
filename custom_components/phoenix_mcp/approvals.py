@@ -12,7 +12,9 @@ from homeassistant.util.dt import parse_datetime, utcnow
 
 from .approval_targets import bind_targets, bound_preview
 from .conversation_log import redact_device_codes, approval_event
-from .helpers import notification_text, redact_structure, effective_cap
+from .catalog_text import notification_text
+from .capability import effective_cap
+from .redaction import redact_structure
 from .const import (
     APPROVAL_DEFAULT_TTL_SECONDS, CONFIG_RECOVERY_APPROVAL_ACCESS_KEY, DOMAIN,
     MAX_PENDING_APPROVALS_PER_ACCESS_KEY, APPROVAL_HISTORY_LIMIT, APPROVAL_HISTORY_DAYS,
@@ -56,7 +58,7 @@ REASON_WIPED = "phoenix_mcp_data_wiped"
 # See async_reconcile_interrupted_approvals for why that resolves as failed.
 REASON_EXECUTION_INTERRUPTED = "execution_interrupted"
 REASON_AGENT_CHAT_ENDED = "agent_chat_ended"
-# Agent Chat waited AGENTCLI_APPROVAL_WAIT_SECONDS with the chat still open and
+# Agent Chat waited AGENT_CHAT_APPROVAL_WAIT_SECONDS with the chat still open and
 # nobody decided, so it withdrew the request and told the model.
 REASON_AGENT_CHAT_WAIT_TIMED_OUT = "agent_chat_wait_timed_out"
 # The integration was removed; every key was archived with its queue.
@@ -99,7 +101,7 @@ class PendingApproval:
     resolved_at: datetime | None = None
     approved_by_user_id: str | None = None
     approved_at: datetime | None = None
-    rejected_reason: str | None = None
+    closure_reason: str | None = None
     result: Any = None
     # Set on disk immediately BEFORE the executor runs and cleared when its
     # outcome is persisted. It is the only durable trace that a side effect may
@@ -112,13 +114,9 @@ class PendingApproval:
     ha_user_id: str | None = None
 
     def to_dict(self, redact_args: bool = True) -> dict:
-        """Serialise the approval.
+        """Serialize the approval, redacting args unless ``redact_args`` is False.
 
-        Args are redacted by default so admin-API responses never echo secret
-        bearing content (file bodies, credentials); the
-        review surface is the already-redacted diff. The persistence path passes
-        redact_args=False to keep the raw args the approved-action executor
-        re-runs from. See helpers.redact_structure.
+        The persistence path alone keeps raw args, for the approved-action executor.
         """
 
         # Device codes too (a disarm code, a PIN), which the general redaction keeps.
@@ -146,7 +144,7 @@ class PendingApproval:
             "resolved_at": self.resolved_at.isoformat() if self.resolved_at else None,
             "approved_by_user_id": self.approved_by_user_id,
             "approved_at": self.approved_at.isoformat() if self.approved_at else None,
-            "rejected_reason": self.rejected_reason,
+            "closure_reason": self.closure_reason,
             "result": self.result,
             "request_id": self.request_id,
             "client_ip": self.client_ip,
@@ -176,7 +174,7 @@ class PendingApproval:
                 parse_datetime(data["approved_at"])
                 if data.get("approved_at") else None
             ),
-            rejected_reason=data.get("rejected_reason"),
+            closure_reason=data.get("closure_reason"),
             result=data.get("result"),
             request_id=data.get("request_id", ""),
             client_ip=data.get("client_ip"),
@@ -289,7 +287,7 @@ async def async_update_approval_status(
     *,
     status: str,
     approved_by_user_id: str | None = None,
-    rejected_reason: str | None = None,
+    closure_reason: str | None = None,
     result: Any = None,
 ) -> PendingApproval | None:
     """Transition a pending approval to a terminal state and persist.
@@ -307,8 +305,8 @@ async def async_update_approval_status(
         entry["resolved_at"] = utcnow().isoformat()
         if approved_by_user_id is not None:
             entry["approved_by_user_id"] = approved_by_user_id
-        if rejected_reason is not None:
-            entry["rejected_reason"] = rejected_reason
+        if closure_reason is not None:
+            entry["closure_reason"] = closure_reason
         if result is not None:
             entry["result"] = result
         # The record is terminal, so the "may be mid-execution" marker has done
@@ -326,23 +324,10 @@ async def async_mark_execution_started(
     *,
     approved_by_user_id: str,
 ) -> bool:
-    """Record on DISK that the admin approved and execution is about to run.
-
-    The in-memory claim in data.approvals_in_progress stops a double-click but dies
-    with the process. The executor runs outside the store lock and its outcome is
-    written afterwards, so a stop or crash in that window would leave an untouched
-    pending record whose side effect may already have applied and could be approved
-    again. async_reconcile_interrupted_approvals reads this marker at startup and
-    during periodic recovery.
-
-    Returns True when the marker is durable. A False return MUST stop the caller
-    from executing: this FAILS CLOSED. Executing anyway on an unwritable store buys
-    nothing, because the same store must persist the terminal status, so a disk that
-    cannot take the marker cannot record the outcome either. The action would run
-    with no trace and stay re-approvable, the exact replay this marker prevents,
-    made permanent. Refusing costs a retry.
-
-    Caller must hold store.async_lock.
+    """Record on disk that the admin approved and execution is about to run.
+    Returns True when durable; False must stop the caller, as a store that cannot take this
+    cannot record the outcome either. Recovery reads the marker, so a crash cannot leave a
+    side effect re-approvable. Caller holds store.async_lock.
     """
     raw = store.get_pending_approvals()
     for entry in raw:
@@ -379,14 +364,7 @@ async def async_clear_execution_marker(
 ) -> None:
     """Undo async_mark_execution_started for an attempt that provably never ran.
 
-    Only for failures that happen BEFORE the executor could apply anything (an
-    unregistered tool name, which the registry lookup raises on before doing any
-    work). Leaving the marker would make recovery resolve a good pending approval
-    as interrupted.
-
-    Never call this after a failure that might have applied something: that is the
-    case the marker exists for, and the caller resolves the record instead.
-
+    Only for failures before the executor could apply anything, such as an unregistered tool.
     Takes the store lock itself, so callers must not hold it.
     """
     async with store.async_lock:
@@ -414,20 +392,10 @@ async def async_reconcile_interrupted_approvals(
     *,
     skip_ids: set[str] | frozenset[str] | None = None,
 ) -> list[PendingApproval]:
-    """Resolve approvals whose execution claim has no recorded outcome.
+    """Resolve to FAILED approvals whose execution claim has no recorded outcome.
 
-    Called at startup and by the periodic approval sweep. A record still PENDING
-    while carrying execution_started_at has no live in-process executor, so
-    whether its side effect landed is unknown. Active executions are skipped by ID.
-
-    It resolves to FAILED rather than staying pending: a pending record offers the
-    admin a button that may apply a service call, restart or configuration write a
-    SECOND time, whereas failing it costs at worst a re-request and re-approval,
-    with the reason naming what is uncertain. Silently duplicating an unknown side
-    effect is the one outcome with no recovery.
-
-    Returns the changed records so the caller can dismiss their notifications and
-    fire the resolved event. Caller must hold store.async_lock.
+    Skips active executions by ID. Staying pending would offer a second apply. Returns the
+    changed records for the caller to announce. Caller holds store.async_lock.
     """
     skip_ids = skip_ids or frozenset()
     raw = store.get_pending_approvals()
@@ -441,7 +409,7 @@ async def async_reconcile_interrupted_approvals(
             continue
         entry["status"] = STATUS_FAILED
         entry["resolved_at"] = utcnow().isoformat()
-        entry["rejected_reason"] = REASON_EXECUTION_INTERRUPTED
+        entry["closure_reason"] = REASON_EXECUTION_INTERRUPTED
         entry.pop("execution_started_at", None)
         try:
             changed.append(PendingApproval.from_dict(entry))
@@ -465,15 +433,10 @@ async def async_cancel_approvals_for_access_key(
     *,
     skip_ids: set[str] | frozenset[str] | None = None,
 ) -> list[PendingApproval]:
-    """Close pending approvals for an access key and return the changed records.
+    """Close pending approvals for a revoked or expired key; return the changed records.
 
-    Called when an access key is revoked or expires, so its queued approvals do not
-    linger as approvable-looking entries until the expiry sweep. skip_ids
-    protects an approval whose saved action is mid-execution
-    (data.approvals_in_progress). A stale execution marker resolves as failed
-    and interrupted so access key cleanup cannot erase evidence of an uncertain side
-    effect. Caller must hold async_lock, and must dismiss each returned record's
-    notification and fire phoenix_mcp_approval_resolved outside the lock.
+    ``skip_ids`` protects a mid-execution approval; a stale marker resolves as failed. Caller
+    holds async_lock, then dismisses and fires phoenix_mcp_approval_resolved outside it.
     """
     skip_ids = skip_ids or frozenset()
     raw = store.get_pending_approvals()
@@ -489,7 +452,7 @@ async def async_cancel_approvals_for_access_key(
         interrupted = bool(entry.get("execution_started_at"))
         entry["status"] = STATUS_FAILED if interrupted else STATUS_CANCELLED
         entry["resolved_at"] = now_iso
-        entry["rejected_reason"] = REASON_EXECUTION_INTERRUPTED if interrupted else reason
+        entry["closure_reason"] = REASON_EXECUTION_INTERRUPTED if interrupted else reason
         entry.pop("execution_started_at", None)
         try:
             changed.append(PendingApproval.from_dict(entry))
@@ -505,16 +468,9 @@ async def async_cancel_queued_approvals_at_startup(
     store: AccessKeyStore,
 ) -> list[PendingApproval]:
     """Cancel every approval still queued when Home Assistant starts.
-
-    Runs after async_reconcile_interrupted_approvals, which has already failed
-    the records that carried an execution claim, so everything left here was
-    waiting for a decision and never ran. The conversation that asked for it
-    ended with the previous run: approving it now would apply a change whose
-    requester can never see the result, and the agent would retry its request
-    instead. Cancelling is the fail-closed outcome and keeps
-    the record in the queue with its reason, so the operator sees what was
-    dropped. Caller must hold store.async_lock, and must dismiss each returned
-    record's notification and fire phoenix_mcp_approval_resolved outside it.
+    Runs after interrupted records are failed, so these never ran, and their requester is
+    gone. Records stay with a reason. Caller holds store.async_lock, then dismisses and
+    announces outside it.
     """
     raw = store.get_pending_approvals()
     changed: list[PendingApproval] = []
@@ -524,7 +480,7 @@ async def async_cancel_queued_approvals_at_startup(
             continue
         entry["status"] = STATUS_CANCELLED
         entry["resolved_at"] = now_iso
-        entry["rejected_reason"] = REASON_RESTARTED
+        entry["closure_reason"] = REASON_RESTARTED
         entry.pop("execution_started_at", None)
         try:
             changed.append(PendingApproval.from_dict(entry))
@@ -539,14 +495,10 @@ async def async_cancel_queued_approvals_at_startup(
 def collect_pending_approvals_for_wipe(
     store: AccessKeyStore, reason: str,
 ) -> list[PendingApproval]:
-    """Return the currently-pending approvals as cancelled records, read-only.
+    """Return the pending approvals as cancelled records without touching the store.
 
-    Used by the admin wipe: AccessKeyStore.async_wipe clears the whole approval queue,
-    so this does NOT mutate or persist the store. It builds the terminal records
-    the caller needs to dismiss notifications and fire phoenix_mcp_approval_resolved
-    after the wipe. There is no skip_ids: the wipe deletes every record, so an
-    in-progress approval cannot be spared. Caller holds async_lock and must call
-    this before async_wipe.
+    The wipe clears the queue, and these let the caller dismiss and announce afterward. Caller
+    holds async_lock and calls this before async_wipe.
     """
     now_iso = utcnow().isoformat()
     out: list[PendingApproval] = []
@@ -556,7 +508,7 @@ def collect_pending_approvals_for_wipe(
         record = dict(entry)
         record["status"] = STATUS_CANCELLED
         record["resolved_at"] = now_iso
-        record["rejected_reason"] = reason
+        record["closure_reason"] = reason
         try:
             out.append(PendingApproval.from_dict(record))
         except (KeyError, TypeError, ValueError):
@@ -630,7 +582,7 @@ def fire_approval_resolved_event(hass: HomeAssistant, approval: PendingApproval)
             "access_key_name": approval.access_key_name,
             "tool_name": approval.tool_name,
             "status": approval.status,
-            "rejected_reason": approval.rejected_reason,
+            "closure_reason": approval.closure_reason,
             "approved_by_user_id": approval.approved_by_user_id,
             "timestamp": utcnow().isoformat(),
         },
@@ -640,20 +592,7 @@ def fire_approval_resolved_event(hass: HomeAssistant, approval: PendingApproval)
 def fire_approval_claim_event(hass: HomeAssistant, approval_id: str, *, claimed: bool) -> None:
     """Fire an HA event when an approval is claimed for execution, or released.
 
-    Approve runs the saved action INLINE in the admin's own request, so the
-    resolved event cannot fire until the tool has finished, which can take seconds
-    for a real write. Until then every surface showing the approval would stay
-    actionable (Approve in Agent Chat, Reject in the panel), although the
-    store-lock claim refuses the second action with a 409.
-
-    This fires the moment the claim is taken so every surface can go
-    non-actionable immediately. It fires again with claimed=False when execution
-    failed and left the approval pending and retryable: a released approval is
-    actionable again and must come back, which is why this is a claim/release pair
-    and not a second "resolved".
-
-    Reject needs no counterpart: it resolves inside the store lock with nothing to
-    execute, so its resolved event already fires promptly.
+    Lets surfaces go non-actionable before the inline run finishes.
     """
     hass.bus.async_fire(
         f"{DOMAIN}_approval_claimed",
@@ -721,7 +660,7 @@ async def async_prune_terminal_approvals(store: AccessKeyStore, *, skip_ids: set
             at = parse_datetime(row.get("resolved_at") or row.get("created_at") or "")
         except (TypeError, ValueError):
             at = None
-        if row.get("rejected_reason") == REASON_EXECUTION_INTERRUPTED:
+        if row.get("closure_reason") == REASON_EXECUTION_INTERRUPTED:
             # Kept as the record of an action whose outcome nobody saw, but its raw
             # arguments only for the history window: the operator has that long to
             # check the result, and nothing reads them afterwards.
@@ -779,13 +718,9 @@ DiffSource = dict | Callable[[], "dict | Awaitable[dict]"] | None
 
 
 async def _resolve_diff(diff: DiffSource) -> dict:
-    """Resolve a diff given either as a built dict or as a deferred builder.
+    """Resolve a diff given as a built dict or a deferred sync or async builder.
 
-    Expensive builders (config off disk, a lovelace config, the ESPHome add-on)
-    are passed as a zero-arg callable and invoked here, on the confirm path alone;
-    cheap builders may pass a plain dict. Awaitability is tested with
-    collections.abc.Awaitable rather than inspect, so sync and async builders can
-    be mixed at the call sites.
+    Builders run here, on the confirm path alone.
     """
     if diff is None:
         return {}
@@ -810,13 +745,10 @@ async def async_evaluate_capability(
     client_ip: str | None = None,
     target_entities: list[str] | None = None,
 ) -> CapabilityResult:
-    """Resolve a capability check into Allow / Deny / Pending(approval).
+    """Resolve a capability check into Allow, Deny or Pending(approval).
 
-    Reads the effective cap mode (after pass-through interaction) and either
-    permits, denies, or creates a pending approval and returns a Confirm result.
-    Diff is supplied by the caller; it appears in the admin review UI. It may be
-    a dict or a zero-arg builder, and a builder is invoked only on the Confirm
-    path, so an allowed or denied call never pays for a diff nobody reads.
+    Reads the effective cap mode after pass-through interaction. ``diff`` is a dict or a
+    zero-arg builder, invoked only on the Confirm path, for the admin review UI.
     """
 
     mode = effective_cap(access_key, cap_name)

@@ -672,7 +672,7 @@ export interface ApprovalRecord {
   approved_by_user_id: string | null;
   /** The durable approval decision time, written before execution starts. */
   approved_at?: string | null;
-  rejected_reason: string | null;
+  closure_reason: string | null;
   result: unknown | null;
   request_id: string;
   client_ip: string | null;

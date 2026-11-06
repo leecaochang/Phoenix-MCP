@@ -35,10 +35,10 @@ from .const import (
 )
 from .personas import detect_persona
 from .provider_constants import (
-    AGENTCLI_MAX_ITERATIONS, AGENTCLI_MAX_ITERATIONS_MAX, AGENTCLI_MAX_ITERATIONS_MIN,
-    AGENTCLI_SCROLLBACK_DEFAULT, PROVIDER_CATALOG_REFRESH_HOURS_DEFAULT,
-    PROVIDER_CATALOG_REFRESH_HOURS_MAX, PROVIDER_CATALOG_REFRESH_HOURS_MIN, AGENTCLI_SCROLLBACK_MAX,
-    AGENTCLI_SCROLLBACK_MIN,
+    AGENT_CHAT_MAX_ITERATIONS, AGENT_CHAT_MAX_ITERATIONS_MAX, AGENT_CHAT_MAX_ITERATIONS_MIN,
+    AGENT_CHAT_SCROLLBACK_DEFAULT, PROVIDER_CATALOG_REFRESH_HOURS_DEFAULT,
+    PROVIDER_CATALOG_REFRESH_HOURS_MAX, PROVIDER_CATALOG_REFRESH_HOURS_MIN, AGENT_CHAT_SCROLLBACK_MAX,
+    AGENT_CHAT_SCROLLBACK_MIN,
 )
 from .routing.routing_tables import (
     COMMAND_ROUTING_MODES, COMMAND_ROUTING_LANGUAGES, COMMAND_ROUTING_DEFAULT_LANGUAGES,
@@ -57,13 +57,7 @@ KEEP_HINT: Any = object()
 
 
 def _require_dt(value: str | None, field: str) -> datetime:
-    """Parse a REQUIRED stored datetime, raising ValueError if it does not parse.
-
-    created_at (and an archived record's revoked_at) are non-optional, so a None
-    from _parse_dt would crash later at an arbitrary comparison. Raising routes a
-    corrupt value into the load site's "skip the record, warn, never abort setup"
-    handler.
-    """
+    """Parse a required stored datetime, raising ValueError so the load skips the record."""
     parsed = _parse_dt(value)
     if parsed is None:
         raise ValueError(f"unparseable {field}: {value!r}")
@@ -85,10 +79,7 @@ def _parse_dt(value: str | None) -> datetime | None:
 def _clamp_inline_wait(value: Any) -> int:
     """Coerce confirm_inline_wait_seconds to 0 (off) or an int in [MIN, MAX].
 
-    A non-numeric or non-positive value means off (the unattended-agent mode); a
-    positive value is clamped into [MIN_CONFIRM_INLINE_WAIT_SECONDS,
-    MAX_CONFIRM_INLINE_WAIT_SECONDS], so a stored or patched value can never sit
-    below the useful floor or above the ceiling.
+    A non-numeric or non-positive value means off; a positive one is clamped.
     """
     try:
         seconds = int(value)
@@ -102,11 +93,8 @@ def _clamp_inline_wait(value: Any) -> int:
 def _load_rate(value: Any, default: int) -> int:
     """Coerce a stored rate-limit field to an int in [0, 100000].
 
-    A negative or non-numeric limit must never reach the rate limiter (a
-    negative limit fails every request with an IndexError). Out-of-range values
-    fall back to the default rather than clamping, because clamping a negative
-    to 0 would silently disable rate limiting. The bounds match the admin API's
-    create/patch validation.
+    Out-of-range values fall back to the default, since clamping a negative to 0 disables
+    limiting.
     """
     if isinstance(value, bool):
         return default
@@ -120,13 +108,7 @@ def _load_rate(value: Any, default: int) -> int:
 
 
 def _load_bool(value: object) -> bool:
-    """Load a stored access-widening flag fail-closed: only real True is True.
-
-    A corrupt record could store a truthy non-bool (the string "false" is truthy
-    under bool()), and a flag that widens access (pass_through,
-    use_assist_exposure) must never be enabled that way. Anything that is not
-    literally True loads as False.
-    """
+    """Load a stored access-widening flag fail-closed: only real True is True."""
     return value is True
 
 
@@ -182,12 +164,10 @@ class PermissionTree:
 
 
 def _stored_cap_mode(cap_name: str, value: Any) -> str:
-    """A stored capability mode, read leniently.
+    """Return a stored capability mode, read leniently.
 
-    An unknown value is deny. Confirm on a capability that no longer offers it
-    reads as allow: such a capability now gates reads only, and Confirm already
-    allowed reads, so the stored intent is kept without inventing an approval step.
-    Allow on a confirm-only capability reads as confirm, which only ever tightens it.
+    An unknown value is deny. Confirm on a capability that no longer offers it reads as allow,
+    and allow on a confirm-only capability reads as confirm.
     """
     if value not in CAP_MODES:
         return CAP_DENY
@@ -202,10 +182,9 @@ def _stored_cap_mode(cap_name: str, value: Any) -> str:
 class AccessKeyPreset:
     """A named snapshot of an access key's full settings (the workspace model).
 
-    Presets hold caps, persona, permission tree, rate limits, pass_through,
-    use_assist_exposure, announce_all_tools, and confirm_inline_wait_seconds.
-    Ordinary personas are display snapshots; applying a preset re-derives them
-    from the applied caps.
+    Holds caps, persona, permission tree, rate limits, pass_through, use_assist_exposure,
+    announce_all_tools and confirm_inline_wait_seconds. Applying a preset re-derives ordinary
+    personas from the caps.
     """
 
     id: str
@@ -395,11 +374,9 @@ class AccessKeyRecord:
         return {name: getattr(self, name) for name in CAPABILITY_NAMES}
 
     def accepts_policy_version(self, version: int) -> bool:
-        """Whether work admitted under policy `version` may still proceed.
+        """Return whether work admitted under policy ``version`` may still proceed.
 
-        True when the settings are unchanged, or when every change since was a
-        capability-only grant (tracked by capability_grant_base and
-        capability_grant_version); any other change invalidates it.
+        True when unchanged, or when every change since was a capability-only grant.
         """
         return version == self.settings_version or (
             self.capability_grant_base is not None
@@ -440,8 +417,7 @@ class AccessKeyRecord:
         # so scoped access keys do not accumulate a stale field over their lifetime.
         if self.pass_through:
             d["use_assist_exposure"] = self.use_assist_exposure
-        # Staleness counters are internal bookkeeping, kept out of the admin JSON
-        # (and therefore out of the frontend contract fixture).
+        # Staleness counters are internal bookkeeping, kept out of the admin JSON.
         d["settings_version"] = self.settings_version
         d["tools_list_version"] = self.tools_list_version
         d["tools_catalog_fingerprint"] = self.tools_catalog_fingerprint
@@ -615,9 +591,8 @@ def _hidden_character(char: str) -> bool:
 def normalize_notes(value: object) -> str | None:
     """Return administrator notes in stored form, or None when there are none.
 
-    Line endings become LF and surrounding whitespace is trimmed. Raises
-    NotesError for a non-string, a hidden character (see _hidden_character), or
-    more than ACCESS_KEY_NOTES_MAX_LENGTH characters after normalization.
+    Normalizes to LF and trims. Raises NotesError for a non-string, a hidden character, or
+    more than ACCESS_KEY_NOTES_MAX_LENGTH characters.
     """
     if value is None:
         return None
@@ -680,11 +655,11 @@ class GlobalSettings:
     # with a "Default preset" from its current state.
     access_key_presets_enabled: bool = False
     # agentCLI transcript scrollback / conversation-memory bound (lines).
-    # 0 = keep nothing once it scrolls off; capped at AGENTCLI_SCROLLBACK_MAX.
-    agentcli_scrollback_lines: int = AGENTCLI_SCROLLBACK_DEFAULT
+    # 0 = keep nothing once it scrolls off; capped at AGENT_CHAT_SCROLLBACK_MAX.
+    agentcli_scrollback_lines: int = AGENT_CHAT_SCROLLBACK_DEFAULT
     # agentCLI per-turn tool-round cap. In the chat this is the "continue?"
     # checkpoint cadence (not a hard stop); clamped to [MIN, MAX].
-    agentcli_max_iterations: int = AGENTCLI_MAX_ITERATIONS
+    agentcli_max_iterations: int = AGENT_CHAT_MAX_ITERATIONS
     # Agent Chat window visibility: True (default) = float over the whole HA UI
     # via the global inject module (still opened only from the Phoenix MCP panel button,
     # falling back to panel-only if injection is unsupported); False = Phoenix MCP panel only.
@@ -823,12 +798,12 @@ class GlobalSettings:
             mesa_inject_enabled=bool(data.get("mesa_inject_enabled", False)),
             access_key_presets_enabled=bool(data.get("access_key_presets_enabled", False)),
             agentcli_scrollback_lines=_clamp_range(
-                data.get("agentcli_scrollback_lines", AGENTCLI_SCROLLBACK_DEFAULT),
-                AGENTCLI_SCROLLBACK_MIN, AGENTCLI_SCROLLBACK_MAX, AGENTCLI_SCROLLBACK_DEFAULT,
+                data.get("agentcli_scrollback_lines", AGENT_CHAT_SCROLLBACK_DEFAULT),
+                AGENT_CHAT_SCROLLBACK_MIN, AGENT_CHAT_SCROLLBACK_MAX, AGENT_CHAT_SCROLLBACK_DEFAULT,
             ),
             agentcli_max_iterations=_clamp_range(
-                data.get("agentcli_max_iterations", AGENTCLI_MAX_ITERATIONS),
-                AGENTCLI_MAX_ITERATIONS_MIN, AGENTCLI_MAX_ITERATIONS_MAX, AGENTCLI_MAX_ITERATIONS,
+                data.get("agentcli_max_iterations", AGENT_CHAT_MAX_ITERATIONS),
+                AGENT_CHAT_MAX_ITERATIONS_MIN, AGENT_CHAT_MAX_ITERATIONS_MAX, AGENT_CHAT_MAX_ITERATIONS,
             ),
             agentcli_global=bool(data.get("agentcli_global", True)),
             agentcli_conversation_style=_closed_choice(
@@ -901,8 +876,8 @@ class GlobalSettings:
 class _PhoenixStore(DurableStore[dict]):
     """Migrate released storage without replaying pending actions.
 
-    Versions 2 and 3 cancel incompatible pending approvals that have not started.
-    Version 4 changes credential fields only and preserves pending authority.
+    Versions 2 and 3 cancel incompatible unstarted approvals, version 4 changes credential
+    fields only, and version 6 renames rejected_reason to closure_reason.
     """
 
     async def _async_migrate_func(
@@ -910,7 +885,7 @@ class _PhoenixStore(DurableStore[dict]):
     ) -> dict:
         if old_major_version == STORAGE_VERSION:
             return old_data
-        if old_major_version not in (2, 3, 4):
+        if old_major_version not in (2, 3, 4, 5):
             raise ValueError(f"Unsupported Phoenix storage version: {old_major_version}")
         raw, _ = _normalize_storage_root(old_data)
         for approval in raw.get("pending_approvals", []):
@@ -918,7 +893,7 @@ class _PhoenixStore(DurableStore[dict]):
                     and old_major_version in (2, 3) and not approval.get("execution_started_at")):
                 approval["status"] = "cancelled"
                 approval["resolved_at"] = utcnow().isoformat()
-                approval["rejected_reason"] = APPROVAL_REASON_FORMAT_INCOMPATIBLE
+                approval["closure_reason"] = APPROVAL_REASON_FORMAT_INCOMPATIBLE
         raw["version"] = STORAGE_VERSION
         return raw
 
@@ -1021,13 +996,10 @@ class AccessKeyStore:
         }
 
     async def async_save(self) -> None:
-        """Persist the current in-memory state to HA storage.
+        """Persist the in-memory state to HA storage, in submission order.
 
-        The state is copied when submitted and written by a task the store owns,
-        one write at a time in submission order. HA's executor finishes a write
-        whose waiter was cancelled, so a cancelled caller still waits for its
-        write to settle before the cancellation propagates: its lock keeps
-        covering the write, and an older write never lands after a newer one.
+        A store-owned task writes one copy at a time. A cancelled caller still waits for its
+        write to settle, so its lock keeps covering the write.
         """
         self._save_seq += 1
         write = asyncio.get_running_loop().create_task(self._async_write(
@@ -1047,12 +1019,9 @@ class AccessKeyStore:
 
     async def _async_write(self, payload: dict, seq: int, usage_version: int) -> None:
         """Write one submitted state and apply its outcome to memory.
-
-        Mutators change memory first, so when the newest submitted write fails,
-        memory returns to the last durable state before the error is raised: a
-        refused change, such as a broader permission tree, must not stay in force
-        while storage holds the old one. An older failed write leaves memory to
-        the newer write queued behind it, which carries the same changes.
+        When the newest write fails, memory returns to the last durable state before raising,
+        so a refused change is not left in force. An older failure defers to the queued newer
+        write.
         """
         async with self._write_lock:
             try:
@@ -1068,9 +1037,8 @@ class AccessKeyStore:
     def _restore(self, payload: dict) -> None:
         """Return memory to a durable payload, keeping live record objects.
 
-        Request authority and handlers hold record references, so a durable
-        record gets its last object back, updated in place, even when the failed
-        change had removed it.
+        Request authority holds record references, so a record regains its last object,
+        updated in place.
         """
         payload = copy.deepcopy(payload)  # records must not share the durable copy's containers
         saved = {r["id"]: AccessKeyRecord.from_dict(r) for r in payload["access_keys"]}
@@ -1203,16 +1171,10 @@ class AccessKeyStore:
         access_key_id: str,
         **kwargs,
     ) -> AccessKeyRecord | None:
-        """Update mutable capability and rate-limit fields on an access key and persist.
-
-        Callers must hold self.async_lock. A rate_limit_requests of 0 forces
-        rate_limit_burst to 0, and any capability change re-derives the persona.
-        settings_version advances for anything beyond a rename, inline-wait or
-        notes change; a notes change advances notes_version instead, which drives
-        the one-time notice to external clients. When every change was a
-        capability-only grant (see CAP_GRANT_TRANSITIONS) the grant run is
-        recorded so admitted requests stay valid (accepts_policy_version).
-        Returns None if the access key is not found.
+        """Update capability and rate-limit fields and persist; None if the key is absent.
+        Callers hold self.async_lock. Zero requests forces burst to 0; cap changes re-derive
+        the persona. settings_version moves except for rename, inline-wait or notes; notes
+        move notes_version.
         """
         access_key = self._access_keys.get(access_key_id)
         if access_key is None:
@@ -1307,10 +1269,8 @@ class AccessKeyStore:
     ) -> AccessKeyRecord | None:
         """Set or clear a single permission node and persist.
 
-        Omitting `hint` keeps the node's current one; None or "" clears it.
-        GREY is the default and is not stored, so a GREY node without a hint is
-        removed; one with a hint stays, since the hint still reaches agents
-        through the item's other grants.
+        Omitting ``hint`` keeps the node's hint; None or "" clears it. A GREY node stays
+        stored only while it holds a hint.
         """
         access_key = self._access_keys.get(access_key_id)
         if access_key is None:
@@ -1336,13 +1296,10 @@ class AccessKeyStore:
         return any(p.name.lower() == lowered for p in access_key.presets if p.id != exclude_id)
 
     async def async_add_preset(self, access_key_id: str, name: str) -> AccessKeyRecord | None:
-        """Snapshot the access key's CURRENT settings as a new preset and mark it active.
+        """Snapshot the key's current settings as a new active preset; None if the key is absent.
 
-        Callers must hold self.async_lock. The new preset equals the live state
-        by construction, so it becomes the active preset (workspace model: a
-        dirty outgoing preset keeps its last saved payload; the unsaved changes
-        move into the new preset). Raises ValueError on a duplicate name or
-        when the per-access-key cap is reached. Returns None if the access key is missing.
+        Callers hold self.async_lock. Unsaved changes move into the new preset. Raises
+        ValueError on a duplicate name or at the per-key cap.
         """
         access_key = self._access_keys.get(access_key_id)
         if access_key is None:
@@ -1378,11 +1335,9 @@ class AccessKeyStore:
         return access_key
 
     async def async_delete_preset(self, access_key_id: str, preset_id: str) -> AccessKeyRecord | None:
-        """Delete a preset. Callers must hold self.async_lock.
+        """Delete a preset; None if the key is absent. Callers hold self.async_lock.
 
-        The ACTIVE preset cannot be deleted (it is where the access key's unsaved
-        changes live; switch away first). Raises LookupError for an unknown
-        preset, ValueError for the active one. Returns None if the access key is missing.
+        Raises LookupError for an unknown preset and ValueError for the active one.
         """
         access_key = self._access_keys.get(access_key_id)
         if access_key is None:
@@ -1398,12 +1353,10 @@ class AccessKeyStore:
         return access_key
 
     async def async_sync_preset(self, access_key_id: str, preset_id: str) -> AccessKeyRecord | None:
-        """Overwrite a preset's payload from the access key's live settings (auto-save-back).
+        """Overwrite a preset's payload from the key's live settings; None if the key is absent.
 
-        Callers must hold self.async_lock. Keeps the preset's id, name, and
-        created_at. Raises LookupError for an unknown preset. Returns None if
-        the access key is missing. Does not bump settings_version (the live state
-        the agent sees is unchanged).
+        Callers hold self.async_lock. Keeps id, name and created_at, leaves settings_version
+        alone, and raises LookupError for an unknown preset.
         """
         access_key = self._access_keys.get(access_key_id)
         if access_key is None:
@@ -1418,11 +1371,9 @@ class AccessKeyStore:
         raise LookupError(f"No preset {preset_id!r} on this access key")
 
     async def async_seed_default_presets(self) -> int:
-        """Seed a "Default preset" on every access key that has none, marked active.
+        """Seed an active "Default preset" on every key with none; return how many.
 
-        Callers must hold self.async_lock. Runs when the access_key_presets_enabled
-        setting flips on; idempotent (access keys that already have presets are left
-        alone). Returns the number of access keys seeded.
+        Callers hold self.async_lock. Idempotent.
         """
         seeded = 0
         for access_key in self._access_keys.values():
@@ -1437,11 +1388,7 @@ class AccessKeyStore:
         return seeded
 
     def update_last_used(self, access_key_id: str, timestamp: datetime) -> None:
-        """Record a last-used timestamp in memory only.
-
-        Flushed periodically to storage by the interval registered in __init__.py
-        and immediately on HA shutdown.
-        """
+        """Record a last-used timestamp in memory only, for the periodic and shutdown flush."""
         access_key = self._access_keys.get(access_key_id)
         if access_key is not None and access_key.last_used_at != timestamp:
             access_key.last_used_at = timestamp
@@ -1450,9 +1397,8 @@ class AccessKeyStore:
     async def async_flush_last_used(self) -> None:
         """Persist changed telemetry without rewriting a clean access key store.
 
-        During shutdown the write barrier refuses every save, and usage needs no
-        barrier: it goes to HA's final write, which nothing newer can overtake
-        because the barrier also refuses every other save until then.
+        During shutdown the write barrier refuses every save, so usage goes to HA's final
+        write.
         """
         async with self.async_lock:
             if self._usage_version == self._saved_usage_version:
@@ -1473,11 +1419,9 @@ class AccessKeyStore:
         return True
 
     async def async_rotate_access_key(self, access_key_id: str) -> tuple[AccessKeyRecord, str] | None:
-        """Replace the access key hash with a freshly generated value and persist.
+        """Replace the key hash and persist; return (record, raw_key), or None if absent.
 
-        Returns (updated_record, raw_access_key) on success, or None if the access key is not found.
-        The raw access key is returned exactly once and never stored. Callers must pass it to
-        the client immediately and discard it.
+        The raw key is returned exactly once and never stored.
         """
         access_key = self._access_keys.get(access_key_id)
         if access_key is None:
@@ -1504,13 +1448,10 @@ class AccessKeyStore:
         await self.async_save()
 
     async def async_rename_entity(self, old_entity_id: str, new_entity_id: str) -> bool:
-        """Carry an entity's per-key permission nodes and global hint over a rename.
+        """Carry an entity's permission nodes and global hint over a rename; return if any moved.
 
-        The registry entry, and so the device, stays the same; only its ID
-        changed, so the grant keeps applying to the same entity. A node or hint
-        already at the new ID is kept and the old one is left to show as
-        missing, so a rename never widens or overwrites what the operator set.
-        Returns whether anything moved. Caller holds async_lock.
+        Caller holds async_lock. A node or hint already at the new ID is kept and the old one
+        shows as missing, so a rename never widens or overwrites what the operator set.
         """
         changed = False
         for access_key in self._access_keys.values():
@@ -1528,24 +1469,15 @@ class AccessKeyStore:
         return changed
 
     async def async_patch_settings(self, **kwargs) -> GlobalSettings:
-        """Update any GlobalSettings fields by name and persist.
-
-        Routes the merged result through GlobalSettings.from_dict so its
-        coercion/clamping applies to every write path, not just the admin
-        view's own validation; a bad internal write cannot persist an
-        out-of-range or mistyped value.
-        """
+        """Update GlobalSettings fields by name, through from_dict's coercion, and persist."""
         self._settings = GlobalSettings.from_dict({**self._settings.to_dict(), **kwargs})
         await self.async_save()
         return self._settings
 
     async def async_wipe(self) -> None:
-        """Clear all access keys, archived records, approvals, entity hints and settings, then persist.
+        """Clear keys, archives, approvals, hints and settings, then persist.
 
-        Pending approvals reference access key IDs that this call deletes, so they are
-        cleared too rather than persisted as orphaned, un-approvable records. The
-        admin wipe handler captures them first to dismiss their notifications and
-        fire phoenix_mcp_approval_resolved, mirroring revocation.
+        Pending approvals go too, as they would orphan. The admin handler captures them first.
         """
         self._access_keys.clear()
         self._archived.clear()
@@ -1580,10 +1512,8 @@ _STORAGE_COLLECTIONS: dict[str, type] = {
 def _normalize_storage_root(raw: object) -> tuple[dict, bool]:
     """Coerce the storage root and each top-level collection to its expected type.
 
-    Returns the normalized dict and whether anything had to be replaced (so the
-    caller can persist the cleaned form). A non-object root, or a collection of
-    the wrong type, becomes an empty container; a correctly-typed collection is
-    left alone, so individual bad entries inside it fall to the per-record loops.
+    Returns the normalized dict and whether anything was replaced. A wrong-typed root or
+    collection becomes empty; bad entries inside a correct one fall to the per-record loops.
     """
     if raw is None:
         # No stored file yet (fresh install); nothing to heal.

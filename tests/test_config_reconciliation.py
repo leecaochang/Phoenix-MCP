@@ -10,7 +10,7 @@ from homeassistant.components.http.const import KEY_HASS_USER
 from homeassistant.setup import async_setup_component
 from homeassistant.util.dt import utcnow
 
-from custom_components.phoenix_mcp.admin_view import _approve_approval, _resolve_approval
+from custom_components.phoenix_mcp.admin.approvals import _approve_approval, _resolve_approval
 from custom_components.phoenix_mcp.approvals import get_approval, async_update_approval_status
 from custom_components.phoenix_mcp.config_recovery import ConfigurationRecoveryError, runtime_identity
 from custom_components.phoenix_mcp.config_reconciliation import (

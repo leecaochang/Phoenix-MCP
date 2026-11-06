@@ -17,7 +17,9 @@ from ..const import (
     LOCAL_BACKUP_AGENT_IDS,
 )
 from ..data import PhoenixData
-from ..helpers import diff_summary_fields as _summary, effective_cap, log_internal_failure
+from ..helpers import log_internal_failure
+from ..catalog_text import diff_summary_fields as _summary
+from ..capability import effective_cap
 from ..request_authority import check_request_authority, mark_dispatch_started
 from ..tool_common import _gate, _tool_error, _tool_success
 from ..ws_dispatch import async_ws_command, WsDispatchError
@@ -34,9 +36,8 @@ _LOGGER = logging.getLogger(__name__)
 async def _backup_agent_ids(hass: HomeAssistant) -> list[str]:
     """Available backup agent ids (e.g. hassio.local on HAOS, backup.local on Core).
 
-    Raises WsDispatchError rather than degrading to []: an empty list means "this
-    install has no backup agents", which callers act on (create_backup refuses,
-    list_backups reports none), so a transport error must not masquerade as it.
+    Raises WsDispatchError rather than degrading to [], which means "no agents" and which callers
+    act on.
     """
     info = await async_ws_command(hass, "backup/agents/info", {})
     agents = info.get("agents") if isinstance(info, dict) else None
@@ -188,9 +189,8 @@ class _BackupPlan:
 def _backup_plan(manager: Any, args: dict) -> _BackupPlan:
     """Resolve the destination and contents, or raise _BackupRefused.
 
-    Without agent_ids the backup goes where the operator's backup settings send
-    automatic backups, minus single-slot agents, else to a local agent.
-    Contents and encryption always follow those settings.
+    Without agent_ids it follows the automatic backup settings minus single-slot agents, else a
+    local agent. Contents and encryption always follow those settings.
     """
     stored = manager.config.data.create_backup
     requested = args.get("agent_ids")

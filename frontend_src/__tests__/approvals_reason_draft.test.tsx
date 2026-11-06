@@ -29,7 +29,7 @@ function record(over: Partial<ApprovalRecord> = {}): ApprovalRecord {
     expires_at: "2099-01-01T01:00:00Z",
     resolved_at: null,
     approved_by_user_id: null,
-    rejected_reason: null,
+    closure_reason: null,
     result: null,
     request_id: "r1",
     client_ip: null,
@@ -75,7 +75,7 @@ describe("rejection reason draft sharing", () => {
   it("clears the draft once the approval is rejected here", async () => {
     setReasonDraft("appr_1", "wrong entity");
     vi.mocked(api.rejectApproval).mockResolvedValue(
-      record({ status: "rejected", rejected_reason: "wrong entity" }));
+      record({ status: "rejected", closure_reason: "wrong entity" }));
 
     const { findByRole } = await openDetail();
     fireEvent.click(await findByRole("button", { name: "Confirm Rejection" }));

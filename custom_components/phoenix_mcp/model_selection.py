@@ -1,20 +1,11 @@
 """Provider-neutral model selection: pick the newest model and map a retired id to its successor.
 
-Phoenix ships no model id as a default. A provider retires and replaces models on
-its own schedule, so a hardcoded id is a guess that rots. Instead each account keeps
-a cached copy of the provider's own live catalogue, and this module decides from
-that catalogue alone:
+Phoenix ships no model id as a default, as one would rot. Each account caches the provider's
+live catalogue, and from that alone ``best_model`` picks for automatic mode and ``successor``
+maps a dropped id to the newest of its family, else the best overall.
 
-- `best_model` chooses the preferred model of a catalogue (an account in
-  "automatic" mode).
-- `successor` maps an id the provider has dropped to the newest model of the same
-  family, falling back to the best model overall.
-
-Everything here is pure and works on ids plus an optional creation timestamp. It
-never calls a provider and never persists anything; callers own the catalogue.
-The ranking is a heuristic standing in for "the newest, most capable model", so it
-only ever decides automatic mode and replacement of a vanished id. An explicit
-operator choice that the provider still lists is never overridden.
+Pure over ids and optional creation timestamps. The ranking is a heuristic, so it decides only
+automatic mode and vanished ids; an explicit choice the provider lists is never overridden.
 """
 
 from __future__ import annotations
@@ -60,11 +51,10 @@ _SIZE_TOKEN_RE = re.compile(r"^\d+(?:\.\d+)?[bkmt]$")
 
 
 def family_key(model_id: str) -> str:
-    """The id with every version and date stripped, so a successor shares its key.
+    """Return the id with every version and date stripped, so a successor shares its key.
 
-    `claude-opus-4-8`, `claude-opus-5-5` and `claude-opus-5-5-20260101` all reduce
-    to `claude opus`; `gemini-2.5-flash` and `gemini-3.8-flash` to `gemini flash`.
-    Size tokens stay, so `llama-8b` is never mistaken for the family of `llama-70b`.
+    ``claude-opus-5-5-20260101`` becomes ``claude opus``. Size tokens stay, keeping
+    ``llama-8b`` apart from ``llama-70b``.
     """
     parts: list[str] = []
     for token in _SPLIT_RE.split(model_id.lower()):
@@ -140,18 +130,10 @@ def effective_model(
     created: Mapping[str, float] | None = None,
     eligible: Sequence[str] | None = None,
 ) -> tuple[str, str]:
-    """The model a request should use, and the id it replaced ("" if none).
-
-    `stored` empty means automatic: the best eligible model of the catalogue. A
-    stored id is kept whenever the catalogue lists it, and also whenever the
-    account has never seen the provider list it, because that is a custom
-    deployment or a model the listing cannot see. Only an id the provider DID list
-    and has since dropped is treated as retired and replaced. An empty catalogue
-    (provider not reachable yet) changes nothing.
-
-    `eligible` narrows the pool automatic mode and replacement choose from (for
-    example Ollama models that declare tool support) without changing which ids
-    count as listed.
+    """Return the model a request should use, and the id it replaced ("" if none).
+    Empty ``stored`` means the best eligible model. A stored id stays unless the provider
+    listed it and then dropped it; an empty catalogue changes nothing. ``eligible`` narrows
+    the pool only.
     """
     pool = eligible if eligible else catalogue
     if not stored:

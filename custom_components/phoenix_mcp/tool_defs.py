@@ -1,14 +1,11 @@
 """The published MCP tool catalog: schemas and annotations.
 
-Declarative data only, no behaviour: three def lists (entity, native HA and
-system tools) and the `_TOOL_ANNOTATIONS` map holding every tool's four MCP
-hints. tool_catalog stamps the annotations onto the defs at import, so a tool added without an entry raises KeyError there rather than
-shipping the spec's unsafe defaults. The conventions for each hint are in the
-comment above the map.
+Declarative data only: three def lists and the ``_TOOL_ANNOTATIONS`` map holding every tool's
+four MCP hints. tool_catalog stamps the annotations at import, so a tool without an entry
+raises KeyError rather than ship unsafe defaults.
 
-Nothing here imports the dispatcher. Adding a tool means adding a def here AND
-registering a handler in tool_registration; guard tests pin the two against each other,
-and against the annotations and executor registries, in both directions.
+Nothing here imports the dispatcher. A new tool needs a def here and a handler in
+tool_registration.
 """
 
 from __future__ import annotations
@@ -479,23 +476,25 @@ _ENTITY_TOOL_DEFS: list[dict] = [
     {
         "name": "set_todo_item",
         "description": (
-            "Add, update or remove one item on a todo list the access key can WRITE. add takes summary (the "
-            "item's text) and optional due and description. update renames (summary), completes or reopens (status), "
-            "or sets due or description of the item named by item: its uid from get_todo_items, or its exact "
-            "summary when only one item has it. remove deletes that item. Runs as the todo service through "
-            "call_service, with the same scope, MESA and approval checks, then reads the list back: the result "
-            "gives the item as the list now holds it and verified."
+            "Add, update or remove one item on a todo list the access key can WRITE, or clear its completed "
+            "items. add takes summary (the item's text) and optional due and description. update renames "
+            "(summary), completes or reopens (status), or sets due or description of the item named by item: its "
+            "uid from get_todo_items, or its exact summary when only one item has it; null clears due or "
+            "description. remove deletes that item. clear_completed takes only the list: it reads the completed "
+            "items and removes exactly those, by uid, up to 500 in one call; remaining_completed says what is "
+            "left. Runs as the todo service through call_service, with the same scope, MESA and approval checks, "
+            "then reads the list back: the result gives the item as the list now holds it and verified."
         ),
         "inputSchema": {
             "type": "object",
             "properties": {
                 "entity_id": {"type": "string", "description": "The todo.* entity ID of the list."},
-                "action": {"type": "string", "enum": ["add", "update", "remove"], "description": "What to do."},
+                "action": {"type": "string", "enum": ["add", "update", "remove", "clear_completed"], "description": "What to do."},
                 "item": {"type": "string", "description": "update and remove: the item's uid, or its exact summary."},
                 "summary": {"type": "string", "maxLength": 1000, "description": "add: the item's text. update: its new text."},
                 "status": {"type": "string", "enum": ["needs_action", "completed"], "description": "update: completed or needs_action."},
-                "due": {"type": "string", "description": "A date (2026-11-02) or a date and time (2026-11-02T18:00), in Home Assistant's local time when no offset is given."},
-                "description": {"type": "string", "maxLength": 4000, "description": "A longer note on the item, where the list supports one."},
+                "due": {"type": ["string", "null"], "description": "A date (2026-11-02) or a date and time (2026-11-02T18:00), in Home Assistant's local time when no offset is given. update: null clears it."},
+                "description": {"type": ["string", "null"], "maxLength": 4000, "description": "A longer note on the item, where the list supports one. update: null clears it."},
             },
             "required": ["entity_id", "action"],
         },
@@ -1067,7 +1066,7 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
                 "logger": {
                     "type": "string",
                     "maxLength": 512,
-                    "description": "Optional Phoenix logger namespace prefix, e.g. custom_components.phoenix_mcp.mcp_view.",
+                    "description": "Optional Phoenix logger namespace prefix, e.g. custom_components.phoenix_mcp.mcp_transport.",
                 },
                 "search": {
                     "type": "string",
@@ -1354,7 +1353,7 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
             "properties": {
                 "entity_id": {"type": "string", "description": "Entity registry ID to update."},
                 "changes": {"type": "object", "minProperties": 1, "description": "User-controlled metadata changes.", "additionalProperties": False, "properties": {
-                "name": {"type": ["string", "null"], "description": "Friendly-name override; null or an empty string restores the integration-provided name. Non-empty names cannot contain only quotes and whitespace."},
+                "name": {"type": ["string", "null"], "description": "The entity's own name, not its whole shown name: from Home Assistant 2026.11 an entity on a device shows as the device name followed by this, so send 'Temperature', not 'Kitchen Sensor Temperature'. Earlier releases show this alone. The approval preview and the result give composed_name, the name it produces. null or an empty string restores the integration-provided name. Non-empty names cannot contain only quotes and whitespace."},
                 "use_device_name": {"type": "boolean", "description": "true names the entity after its device, following renames (Home Assistant 2026.10+, named device); false restores the integration name. Not with name."},
                 "icon": {"type": ["string", "null"], "description": "New icon, or null to clear it."},
                 "area_id": {"type": ["string", "null"], "description": "Area assignment, or null to clear it."},
@@ -2072,7 +2071,8 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
             "entity's Assist aliases, or its area, floor, label, device name, manufacturer or model), and results are "
             "ranked by relevance so the best matches lead, name matches first; a row found through its area, floor, "
             "labels or device names them in matched. Filters combine "
-            "with AND. Returns a compact list (entity_id, state, friendly_name, domain, area); each "
+            "with AND. Returns a compact list (entity_id, state, friendly_name, domain, area), with composed_name, the "
+            "name Home Assistant now shows, when it differs from friendly_name; each "
             "result also carries control_mode when its MESA nature is non-default (read_only, confirm, prohibited), "
             "so you can spot restricted entities without a follow-up describe_entity call, entity_category "
             "(config or diagnostic) when the entity is a setup/health entity rather than a primary control, "
@@ -2827,6 +2827,7 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
         "description": (
             "A comprehensive summary of one accessible entity, including disabled and registry-only "
             "entries when access is inherited from their device or domain: its state when available, "
+            "composed_name when the name Home Assistant now shows differs from friendly_name, "
             "an allowlisted registry projection with name_source (custom, device, integration or none), area, "
             "domain services, references, MESA control_mode, and hint, the operator's note on what the "
             "entity is or how to use it, when one is set. "
@@ -3724,20 +3725,10 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
 
 # Descriptions for the targeting parameters the native Hass* tools share.
 #
-# These are Phoenix MCP's own text rather than a mirror of Home Assistant's: HA
-# builds each tool's schema from an intent slot schema, which carries a type per
-# field and no prose, so there is nothing upstream to copy. The tool-level
-# descriptions ARE HA's verbatim (a parity test pins that); the divergence is
-# confined to the parameters.
-#
-# The shape restatement ("as a string", "as an array of strings") is not
-# redundant with the declared type. A model that sends a list where a string was
-# declared has every selector coerced away, which resolves to no target at all
-# and comes back as a refusal that reads like a permission problem rather than a
-# malformed argument. Naming the shape in prose is what a model actually reads.
-#
-# Strings, not shared dicts: each schema below builds its own dict literal, so no
-# two tools can ever alias one mutable object.
+# Phoenix's own text, since HA's intent slot schemas carry no prose; tool-level descriptions
+# stay HA's verbatim. The shape wording is not redundant: a list sent for a string coerces
+# to no target and refuses like a permission problem, and prose is what a model reads.
+# Strings, not shared dicts, so no two tools alias one mutable object.
 _TARGET_NAME = (
     "One entity/device name shown in Home Assistant (string). For several, use area, "
     "floor or domain, or call per name. At least one targeting parameter is required."
@@ -4109,25 +4100,17 @@ def _annot(read_only: bool, destructive: bool, idempotent: bool, open_world: boo
     }
 
 
-# MCP tool annotations, one entry per tool in the three lists above. All four
-# hints are stated explicitly because the MCP spec DEFAULTS an omitted hint to the
-# unsafe reading (readOnlyHint false, destructiveHint true, openWorldHint true), so
-# silence tells a client every read is a destructive call into an untrusted world.
+# MCP tool annotations, one entry per tool in the three lists above. All four hints are
+# explicit because MCP defaults an omitted hint to the unsafe reading.
 #
-# The conventions, since several are judgment calls:
-#   readOnlyHint  false for anything with a side effect, which is every name in
-#                 _EXECUTOR_REGISTRY and _WRITE_GATED_TOOLS (a guard test pins it).
-#   destructiveHint  false only for genuinely ADDITIVE writes (create_*, card add,
-#                 backup create, permit-join). A whole-object replace (edit_*,
-#                 set_*) and physical actuation are destructive: they
-#                 overwrite or move something that was in another state.
-#   idempotentHint  true when repeating the identical call leaves the same end
-#                 state (set/replace/delete/turn on/off), false when each call adds
-#                 or advances something (create_*, media next, relative volume,
-#                 broadcast, restart).
-#   openWorldHint  true ONLY for the two blueprint tools, whose payload is
-#                 third-party authored content rather than this instance's own
-#                 state. Everything else is closed over the local HA instance.
+# Conventions:
+#   readOnlyHint     false for any side effect: every name in _EXECUTOR_REGISTRY and
+#                    _WRITE_GATED_TOOLS.
+#   destructiveHint  false only for additive writes (create_*, card add, backup create,
+#                    permit-join); replaces and physical actuation are destructive.
+#   idempotentHint   true when repeating leaves the same end state, false when each call
+#                    adds or advances something.
+#   openWorldHint    true only for the two blueprint tools, whose payload is third-party.
 _TOOL_ANNOTATIONS: dict[str, dict] = {
     # Entity reads and the approval/report tools.
     "get_state": _annot(True, False, True),

@@ -6,12 +6,12 @@ grammatical form, through a backend transport the panel cannot reformat.
 
 from __future__ import annotations
 
-from custom_components.phoenix_mcp import admin_view
+from custom_components.phoenix_mcp.admin import changes
 from custom_components.phoenix_mcp.tools import restore as restore_tools
 from custom_components.phoenix_mcp.routing.command_display import reading_text, state_label
 from custom_components.phoenix_mcp.routing.command_summary import summary_text
 from custom_components.phoenix_mcp.routing.decision_provider import decision_error_reason
-from custom_components.phoenix_mcp.helpers import LocalizedReason, spoken_list, spoken_sentences
+from custom_components.phoenix_mcp.catalog_text import LocalizedReason, spoken_list, spoken_sentences
 from custom_components.phoenix_mcp.tools.radio import _zigbee_group_summary_op
 
 _TRANSLATIONS = {
@@ -70,7 +70,7 @@ def test_decision_errors_become_operator_sentences() -> None:
 def test_restore_refusal_keys_match_the_restore_executor() -> None:
     """The admin view maps these exact sentences; a reworded executor would silently drop the key."""
     source = open(restore_tools.__file__, encoding="utf-8").read().replace('"\n            "', "")
-    for sentence in (admin_view._RESTORE_NO_CONFIG_SIDE, admin_view._RESTORE_YAML_TAGS):
+    for sentence in (changes._RESTORE_NO_CONFIG_SIDE, changes._RESTORE_YAML_TAGS):
         assert sentence in source, sentence
 
 

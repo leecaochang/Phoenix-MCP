@@ -13,10 +13,10 @@ from ..device_semantics import device_registry_snapshot
 def capture_voice_origin(hass: HomeAssistant, satellite_id: object, device_id: object = None) -> dict | None:
     """Accept a registered satellite with an unambiguous effective area.
 
-    A browser language, entity name or caller-provided area is never location
-    evidence. Device-only inputs are excluded: HA's recognition cache keys on
-    satellite_id, not device_id. Ordinary explicit commands remain available.
+    A browser language, entity name or caller-provided area is never location evidence. Device-only
+    inputs are excluded: HA's recognition cache keys on satellite_id.
     """
+    # Ordinary explicit commands remain available when no origin is accepted.
     if not isinstance(satellite_id, str) or not satellite_id.startswith('assist_satellite.'):
         return None
     entry = er.async_get(hass).async_get(satellite_id)

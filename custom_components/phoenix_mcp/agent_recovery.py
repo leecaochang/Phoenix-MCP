@@ -85,11 +85,7 @@ class AgentRecovery:
         ]
 
     def _reported(self, record: dict) -> bool:
-        """Whether a live turn has its tool's answer for this record.
-
-        Its outcome is known until that turn fails. Holding it against another
-        turn would refuse work over a record Needs Attention rightly does not list.
-        """
+        """Return whether a live turn has its tool's answer for this record."""
         turn = record.get("turn_id")
         return (record.get("dispatch_result") == "received" and turn is not None
                 and (turn == _turn_id.get() or turn in self._live_turns))
@@ -177,11 +173,9 @@ class AgentRecovery:
             self._active.add(rid)
 
     def hold_unknown(self, access_key_id: str, tool: str, rid: str) -> None:
-        """Take effect at once for a caller that cannot wait: retain_unknown persists it.
+        """Block the key's later writes at once; retain_unknown persists it.
 
-        The later writes of this access key are blocked from here on, whatever
-        the lock is doing. Storage serializes on the event loop, so adding a
-        record between its awaits cannot disturb a save in progress.
+        Safe between a save's awaits, as storage serializes on the event loop.
         """
         if rid not in self._records:
             self._records[rid] = {
@@ -234,15 +228,10 @@ class AgentRecovery:
                 break
 
     async def settle_known_outcomes(self, store: AccessKeyStore) -> int:
-        """Drop the claims whose outcome is on record, and return how many.
+        """Drop the claims whose outcome is on record at startup; return how many.
 
-        Run at startup. A claim is settled when Home Assistant answered the
-        agent (dispatch_result "received": the tool reported back, so whether it
-        ran is recorded in the audit log and the approval queue), or when the
-        approval queue holds a terminal record for the same request. What is
-        left is a write that reached Home Assistant with no outcome recorded
-        anywhere, which is the case Needs Attention exists for: it still blocks the access key until the operator reviews
-        it, because retrying could apply the same change a second time.
+        Settled means HA answered the agent or the queue holds a terminal record. What remains
+        blocks the key until the operator reviews it, as a retry could apply the change twice.
         """
         terminal = {
             approval.get("request_id")
@@ -304,12 +293,9 @@ class AgentRecovery:
 
 def recovery_turn(run: Callable) -> Callable:
     """Retain dispatch receipts until the entire provider turn succeeds.
-
-    A streamed turn has succeeded once its closing event (TURN_DELIVERED_EVENT)
-    was written while the turn was live. A client leaving after that, which Home
-    Assistant's server delivers as task cancellation, cannot make its effects
-    uncertain, so the receipts still complete, shielded from the cancellation
-    that is then re-raised. An interrupted delivery keeps them.
+    A turn succeeds once TURN_DELIVERED_EVENT was written live. A later client exit still
+    completes the receipts, shielded from the cancellation; an interrupted delivery keeps
+    them.
     """
     @functools.wraps(run)
     async def guarded(*args: Any, **kwargs: Any) -> Any:

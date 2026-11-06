@@ -10,6 +10,8 @@ from datetime import datetime, timedelta
 from collections.abc import Mapping
 from typing import Any, Literal, cast
 
+from awesomeversion import AwesomeVersion
+from homeassistant.const import __version__ as HA_VERSION
 from homeassistant.util import dt as dt_util
 from homeassistant.core import HomeAssistant
 
@@ -101,12 +103,9 @@ NEWEST_PAGE_MAX_PROBES = 40
 
 async def newest_page(fetch: Any, start: datetime, end: datetime, limit: int) -> tuple[list[Any], bool]:
     """Return the newest rows in (start, end), oldest first, without unbounded reads.
-
-    `fetch(lower, end, n)` returns at most n ascending rows strictly after lower.
-    Recorder can only bound a query from its oldest end, so this narrows the lower
-    bound by bisection until the window holds no more than `limit` rows. Every
-    probe is limited to limit + 1 rows. Returns (rows, has_more); has_more means
-    older rows remain before the returned ones.
+    ``fetch(lower, end, n)`` returns at most n ascending rows after lower. Narrows lower by
+    bisection, each probe capped at limit + 1. Returns (rows, has_more); more means older
+    rows.
     """
     rows = await fetch(start, end, limit + 1)
     if len(rows) <= limit:
@@ -140,12 +139,9 @@ def from_us(value: int) -> datetime:
 
 
 def ceil_us(timestamp: float) -> int:
-    """The smallest microsecond n with n / 1_000_000 >= a stored Recorder timestamp.
+    """Return the smallest microsecond n with n / 1_000_000 >= a stored Recorder timestamp.
 
-    Core stores float timestamps finer than a microsecond and keeps a row only
-    when it is strictly later than a lower bound's datetime.timestamp(), which for
-    from_us(n) equals n / 1_000_000. A lower bound of from_us(n) therefore
-    excludes exactly the rows whose ceil_us is n or less.
+    A lower bound of from_us(n) excludes exactly the rows whose ceil_us is n or less.
     """
     stamp = math.ceil(timestamp * 1_000_000)
     while (stamp - 1) / 1_000_000 >= timestamp:
@@ -179,12 +175,7 @@ def row_timestamp(state: Any) -> float | None:
 
 
 def forward_page_end(stamps: list[float], limit: int) -> int | None:
-    """How many rows an oldest-first page returns when later rows follow, or None.
-
-    stamps are ascending with at least one row past the page. The page ends
-    where the next row has a later ceil_us, so a cursor of the last returned
-    row's ceil_us excludes the page and nothing after it.
-    """
+    """Return how many rows an oldest-first page returns when later rows follow, or None."""
     for count in range(min(limit, len(stamps) - 1), 0, -1):
         if ceil_us(stamps[count - 1]) < ceil_us(stamps[count]):
             return count
@@ -192,13 +183,7 @@ def forward_page_end(stamps: list[float], limit: int) -> int | None:
 
 
 def backward_page_start(stamps: list[float], limit: int) -> int | None:
-    """The index of the oldest row a newest-first page returns when older rows remain, or None.
-
-    stamps are ascending and the rows before the returned index, plus any older
-    unread rows, belong to later pages. The page starts where the row has a later
-    floor_us than its predecessor, so a cursor of that floor_us keeps exactly the
-    older rows.
-    """
+    """Return the oldest row index of a newest-first page when older rows remain, or None."""
     for index in range(max(1, len(stamps) - limit), len(stamps)):
         if floor_us(stamps[index]) > floor_us(stamps[index - 1]):
             return index
@@ -273,10 +258,8 @@ def recorder_envelope(
 ) -> dict[str, Any]:
     """Build the common cursor-based Recorder response contract.
 
-    `covered_range` is the time this page read and `data_range` spans its rows,
-    earliest to latest whatever order they are listed in. With `has_more`,
-    `unread_range` names the side of the requested range that no page has read
-    yet, so a page's own bounds are never mistaken for where the data begins.
+    ``covered_range`` is what this page read and ``data_range`` spans its rows. With
+    ``has_more``, ``unread_range`` names the side of the range that no page has read.
     """
     timestamps = [stamp for row in rows if (stamp := timestamp_getter(row)) is not None]
     data_range = None
@@ -370,13 +353,10 @@ def statistic_page(window: RecorderWindow, period: str) -> tuple[datetime, datet
 def read_statistic_window(
     hass: HomeAssistant, start: datetime, end: datetime, statistic_id: str, types: set[Any],
 ) -> tuple[dict[str, Any], str | None] | None:
-    """Mean, min, max and change of one statistic over [start, end). Recorder executor only.
+    """Return mean, min, max and change of a statistic over [start, end). Recorder executor only.
 
-    Core combines hourly and five-minute statistics for an exact window and converts
-    the values to the display unit, which is the label; None when the entity has no
-    statistics. A type the statistic does not keep (a mean of a total) is absent:
-    it is never asked for, since Core's query fails outright when none of the
-    requested mean, min or max columns exists.
+    Values are in the display unit, the label; None with no statistics. A type the statistic
+    does not keep is absent and never asked for, as Core's query would fail.
     """
     # Local: optional component, imported only when this path runs.
     from homeassistant.components.recorder import statistics as recorder_stats
@@ -392,31 +372,38 @@ def read_statistic_window(
     return {key: value for key, value in values.items() if value is not None}, unit
 
 
+# The first Core release whose statistics reader leaves last_reset out of the unit conversion.
+LAST_RESET_UNCONVERTED_SINCE = "2026.11.0"
+
+
+def _core_converts_last_reset() -> bool:
+    """Whether the running Core passes last_reset through the unit converter; an unreadable version counts as yes."""
+    try:
+        return AwesomeVersion(HA_VERSION) < AwesomeVersion(LAST_RESET_UNCONVERTED_SINCE)
+    except Exception:  # the second read is only a cost, a converted timestamp is wrong data
+        return True
+
+
 def read_statistics_page(
     hass: HomeAssistant, start: datetime, end: datetime, statistic_id: str,
     period: Literal["5minute", "day", "hour", "week", "month", "year"], types: set[Any],
 ) -> tuple[list[dict[str, Any]], dict[str, Any] | None, list[str]]:
     """Read one statistics page with Core's unit label. Recorder executor only.
-
-    Returns (rows, units, warnings). Core converts values to the unit its own
-    get_display_unit reports, so that is the label; it comes from Recorder
-    metadata rather than the rows, so an empty page is labelled too, and None
-    means no metadata exists. Core 2026.7 to 2026.10 also passes last_reset
-    timestamps through that value converter. When a conversion happened, resets
-    are re-read with every unit class pinned to the stored unit, where Core
-    converts nothing; a reset that cannot be re-read is omitted, never returned
-    converted.
+    Returns (rows, units, warnings); the label comes from metadata, None meaning none exists.
+    Before LAST_RESET_UNCONVERTED_SINCE, converted last_reset values are re-read unconverted,
+    or omitted when that fails.
     """
     # Local: optional component, imported only when this path runs.
     from homeassistant.components.recorder import statistics as recorder_stats
 
     result = recorder_stats.statistics_during_period(hass, start, end, {statistic_id}, period, None, types)
     rows = [dict(row) for row in result.get(statistic_id, [])]
+    converts_resets = _core_converts_last_reset()
     try:
         metadata = recorder_stats.get_metadata(hass, statistic_ids={statistic_id}).get(statistic_id)
     except Exception:  # the values stay usable without their label
         _LOGGER.warning("Recorder metadata for %s could not be read", statistic_id, exc_info=True)
-        dropped = [row.pop("last_reset", None) for row in rows]
+        dropped = [row.pop("last_reset", None) for row in rows] if converts_resets else []
         dropped_any = any(value is not None for value in dropped)
         return rows, None, [
             "The unit could not be read from Recorder metadata, so these values are unlabelled."
@@ -432,7 +419,7 @@ def read_statistics_page(
         "statistics_unit_of_measurement": stored,
         "unit_class": unit_class,
     }
-    if display == stored or not any(row.get("last_reset") is not None for row in rows):
+    if not converts_resets or display == stored or not any(row.get("last_reset") is not None for row in rows):
         return rows, units, []
     # A unitless stored unit is None, which Core's converters accept as a unit.
     same_unit = cast(dict[str, str], {

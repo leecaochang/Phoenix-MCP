@@ -22,7 +22,7 @@ from custom_components.phoenix_mcp import agent_turn, ai_task
 from custom_components.phoenix_mcp.llm import base as llm_base
 from custom_components.phoenix_mcp.agent_chat import AiTaskError, async_run_ai_task
 from custom_components.phoenix_mcp.const import AI_TASK_CLIENT_IP, DOMAIN
-from custom_components.phoenix_mcp.provider_constants import AGENTCLI_MAX_TURN_OUTPUT_BYTES
+from custom_components.phoenix_mcp.provider_constants import AGENT_CHAT_MAX_TURN_OUTPUT_BYTES
 from custom_components.phoenix_mcp.access_key_store import GlobalSettings
 from homeassistant.exceptions import HomeAssistantError
 
@@ -477,13 +477,13 @@ async def test_ai_task_raises_when_the_provider_blows_the_output_budget():
 
     Voice degrades to a spoken sentence because someone is listening; an automation
     asked for data, so the only honest outcome is an error the caller turns into a
-    HomeAssistantError. Shares AGENTCLI_MAX_TURN_OUTPUT_BYTES with the interactive
+    HomeAssistantError. Shares AGENT_CHAT_MAX_TURN_OUTPUT_BYTES with the interactive
     loop.
     """
     access_key = _make_access_key()
     data = _make_data()
     provider = _MockProvider()
-    huge = {"role": "assistant", "content": "x" * (AGENTCLI_MAX_TURN_OUTPUT_BYTES + 1)}
+    huge = {"role": "assistant", "content": "x" * (AGENT_CHAT_MAX_TURN_OUTPUT_BYTES + 1)}
     stream = _staged_stream([{"type": llm_base.EV_DONE, "stop_reason": "tool_use",
                               "assistant_msg": huge}])
     with patch.object(agent_turn, "_stream_turn_resilient", stream), \

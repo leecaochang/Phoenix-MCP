@@ -48,6 +48,7 @@ export interface AgentCliDurable {
 }
 
 const LS_KEY = "phx-agentcli";
+const TURN_KEY = "phx-agentcli-turn";
 let ownerId: string | null = null;
 let draftTimer: ReturnType<typeof setTimeout> | null = null;
 /** Set once the stored data was purged: nothing may write it back in this page. */
@@ -80,21 +81,21 @@ function ownsSession(owner: string | null): boolean {
 }
 
 
-export const AGENTCLI_TEXT_SIZE_DEFAULT_PT = 9.75;
-export const AGENTCLI_TEXT_SIZE_MIN_PT = 8.25;
-export const AGENTCLI_TEXT_SIZE_MAX_PT = 19.75;
-export const AGENTCLI_TEXT_SIZE_STEP_PT = 0.5;
+export const AGENT_CHAT_TEXT_SIZE_DEFAULT_PT = 9.75;
+export const AGENT_CHAT_TEXT_SIZE_MIN_PT = 8.25;
+export const AGENT_CHAT_TEXT_SIZE_MAX_PT = 19.75;
+export const AGENT_CHAT_TEXT_SIZE_STEP_PT = 0.5;
 
 /** Keep persisted or user-adjusted text sizes on the supported half-point
  *  scale, anchored at 9.75pt so the 13px default sits on a step. */
 export function normalizeAgentCliTextSize(value: unknown): number {
   const candidate = typeof value === "number" && Number.isFinite(value)
     ? value
-    : AGENTCLI_TEXT_SIZE_DEFAULT_PT;
-  const stepped = AGENTCLI_TEXT_SIZE_DEFAULT_PT
-    + Math.round((candidate - AGENTCLI_TEXT_SIZE_DEFAULT_PT) / AGENTCLI_TEXT_SIZE_STEP_PT)
-      * AGENTCLI_TEXT_SIZE_STEP_PT;
-  return Math.min(AGENTCLI_TEXT_SIZE_MAX_PT, Math.max(AGENTCLI_TEXT_SIZE_MIN_PT, stepped));
+    : AGENT_CHAT_TEXT_SIZE_DEFAULT_PT;
+  const stepped = AGENT_CHAT_TEXT_SIZE_DEFAULT_PT
+    + Math.round((candidate - AGENT_CHAT_TEXT_SIZE_DEFAULT_PT) / AGENT_CHAT_TEXT_SIZE_STEP_PT)
+      * AGENT_CHAT_TEXT_SIZE_STEP_PT;
+  return Math.min(AGENT_CHAT_TEXT_SIZE_MAX_PT, Math.max(AGENT_CHAT_TEXT_SIZE_MIN_PT, stepped));
 }
 
 export function defaultDurable(): AgentCliDurable {
@@ -114,7 +115,7 @@ export function defaultDurable(): AgentCliDurable {
     freshConversation: false,
     showFooter: true,
     showTimestamps: false,
-    textSizePt: AGENTCLI_TEXT_SIZE_DEFAULT_PT,
+    textSizePt: AGENT_CHAT_TEXT_SIZE_DEFAULT_PT,
   };
 }
 
@@ -292,6 +293,66 @@ function adoptOtherTab(event: StorageEvent): void {
   for (const listener of [...conversationListeners]) listener();
 }
 
+// A conversation is saved whole, so of two turns running at once only the one
+// that finishes last is kept. A tab announces its running turn so the others can
+// say so. The record renews on a heartbeat, so a tab that dies stops counting.
+const TURN_HEARTBEAT_MS = 10_000;
+const TURN_STALE_MS = 30_000;
+const tabId = Math.random().toString(36).slice(2);
+
+/** When the record of a turn running in another tab goes stale, or 0 when there is none. */
+function otherTabTurnUntil(): number {
+  try {
+    const key = storageKey(TURN_KEY);
+    const record = key ? JSON.parse(localStorage.getItem(key) ?? "null") as { tab?: unknown; at?: unknown } | null : null;
+    if (!record || record.tab === tabId || typeof record.at !== "number") return 0;
+    return record.at + TURN_STALE_MS;
+  } catch {
+    return 0;
+  }
+}
+
+/** Tell other tabs this one is running a turn; the returned function ends that. */
+export function announceRunningTurn(owner = ownerId): () => void {
+  const key = ownsSession(owner) ? storageKey(TURN_KEY) : null;
+  if (!key) return () => {};
+  const beat = () => {
+    try { localStorage.setItem(key, JSON.stringify({ tab: tabId, at: Date.now() })); } catch { /* storage unavailable */ }
+  };
+  beat();
+  const heartbeat = setInterval(beat, TURN_HEARTBEAT_MS);
+  const stop = () => {
+    clearInterval(heartbeat);
+    window.removeEventListener("pagehide", stop);
+    try {
+      if ((JSON.parse(localStorage.getItem(key) ?? "null") as { tab?: unknown } | null)?.tab === tabId) localStorage.removeItem(key);
+    } catch { /* storage unavailable */ }
+  };
+  window.addEventListener("pagehide", stop);
+  return stop;
+}
+
+/** Report whether another tab is running a turn, now and on every change, until the returned function runs. */
+export function watchOtherTabTurn(listener: (running: boolean) => void): () => void {
+  let stale: ReturnType<typeof setTimeout> | null = null;
+  const check = () => {
+    if (stale !== null) clearTimeout(stale);
+    stale = null;
+    const left = otherTabTurnUntil() - Date.now();
+    listener(left > 0);
+    if (left > 0) stale = setTimeout(check, left);
+  };
+  const onStorage = (event: StorageEvent) => {
+    if (event.key === null || event.key === storageKey(TURN_KEY)) check();
+  };
+  window.addEventListener("storage", onStorage);
+  check();
+  return () => {
+    window.removeEventListener("storage", onStorage);
+    if (stale !== null) clearTimeout(stale);
+  };
+}
+
 /** Delete conversations past their age, and date any saved before they carried one. */
 function expireConversations(): void {
   try {
@@ -327,7 +388,7 @@ export function purgeAgentCliStorage(): void {
   closeStorage();
   try {
     for (const key of Object.keys(localStorage)) {
-      if (key === LS_KEY || key === CONV_KEY || key.startsWith(`${LS_KEY}:`) || key.startsWith(`${CONV_KEY}:`)) {
+      if (key === LS_KEY || key === CONV_KEY || [LS_KEY, CONV_KEY, TURN_KEY].some((base) => key.startsWith(`${base}:`))) {
         localStorage.removeItem(key);
       }
     }

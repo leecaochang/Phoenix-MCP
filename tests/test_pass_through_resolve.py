@@ -23,7 +23,7 @@ from homeassistant.util.dt import utcnow
 
 from custom_components.phoenix_mcp import policy_engine
 from custom_components.phoenix_mcp.access_key_store import AccessKeyRecord, AccessKeyStore, PermissionTree
-from custom_components.phoenix_mcp.admin_view import PhoenixAdminScopeView
+from custom_components.phoenix_mcp.admin.permissions import PhoenixAdminScopeView
 from custom_components.phoenix_mcp.const import ANNOUNCE_BIT, DOMAIN, MESA_MODE_OFF
 from custom_components.phoenix_mcp.data import PhoenixData
 from custom_components.phoenix_mcp.policy_engine import Permission

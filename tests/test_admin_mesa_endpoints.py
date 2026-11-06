@@ -1,4 +1,4 @@
-"""Tests for the MESA profile admin HTTP endpoints in admin_view.py."""
+"""Tests for the MESA profile admin HTTP endpoints."""
 
 from __future__ import annotations
 
@@ -8,25 +8,15 @@ from unittest.mock import MagicMock
 import pytest
 from homeassistant.core import HomeAssistant
 
-from custom_components.phoenix_mcp.admin_view import (
-    PhoenixAdminMesaAreasView,
-    PhoenixAdminMesaAreaView,
-    PhoenixAdminMesaDefaultsView,
-    PhoenixAdminMesaDevicesView,
-    PhoenixAdminMesaDeviceOptionsView,
-    PhoenixAdminMesaDeviceView,
-    PhoenixAdminMesaDomainsView,
-    PhoenixAdminMesaDomainView,
-    PhoenixAdminMesaIntegrationsView,
-    PhoenixAdminMesaIntegrationView,
-    PhoenixAdminMesaIntegrationOptionsView,
-    PhoenixAdminMesaIssuesView,
-    PhoenixAdminMesaOrphansClearView,
-    PhoenixAdminMesaProfilesView,
-    PhoenixAdminMesaProfileView,
+from custom_components.phoenix_mcp.admin.mesa import (
+    PhoenixAdminMesaAreasView, PhoenixAdminMesaAreaView, PhoenixAdminMesaDefaultsView,
+    PhoenixAdminMesaDevicesView, PhoenixAdminMesaDeviceOptionsView, PhoenixAdminMesaDeviceView,
+    PhoenixAdminMesaDomainsView, PhoenixAdminMesaDomainView, PhoenixAdminMesaIntegrationsView,
+    PhoenixAdminMesaIntegrationView, PhoenixAdminMesaIntegrationOptionsView, PhoenixAdminMesaIssuesView,
+    PhoenixAdminMesaOrphansClearView, PhoenixAdminMesaProfilesView, PhoenixAdminMesaProfileView,
     PhoenixAdminMesaVocabularyView,
-    _read_body,
 )
+from custom_components.phoenix_mcp.admin.common import _read_body
 from custom_components.phoenix_mcp.audit import AuditLog
 from custom_components.phoenix_mcp.const import DOMAIN
 from custom_components.phoenix_mcp.data import PhoenixData
@@ -549,9 +539,8 @@ async def test_issues_refresh_computes_suggestions(hass: HomeAssistant):
 
 @pytest.mark.asyncio
 async def test_dismiss_and_restore_suggestion(hass: HomeAssistant):
-    from custom_components.phoenix_mcp.admin_view import (
-        PhoenixAdminMesaSuggestionDismissView,
-        PhoenixAdminMesaSuggestionRestoreView,
+    from custom_components.phoenix_mcp.admin.mesa import (
+        PhoenixAdminMesaSuggestionDismissView, PhoenixAdminMesaSuggestionRestoreView,
     )
 
     data = await _setup(hass)
@@ -584,9 +573,8 @@ async def test_dismiss_and_restore_suggestion(hass: HomeAssistant):
 
 @pytest.mark.asyncio
 async def test_restore_all_clears_every_dismissal(hass: HomeAssistant):
-    from custom_components.phoenix_mcp.admin_view import (
-        PhoenixAdminMesaSuggestionDismissView,
-        PhoenixAdminMesaSuggestionRestoreView,
+    from custom_components.phoenix_mcp.admin.mesa import (
+        PhoenixAdminMesaSuggestionDismissView, PhoenixAdminMesaSuggestionRestoreView,
     )
 
     await _setup(hass)
@@ -609,7 +597,7 @@ async def test_restore_all_clears_every_dismissal(hass: HomeAssistant):
 
 @pytest.mark.asyncio
 async def test_dismiss_validation_errors(hass: HomeAssistant):
-    from custom_components.phoenix_mcp.admin_view import PhoenixAdminMesaSuggestionDismissView
+    from custom_components.phoenix_mcp.admin.mesa import PhoenixAdminMesaSuggestionDismissView
 
     await _setup(hass)
     view = PhoenixAdminMesaSuggestionDismissView()
@@ -624,7 +612,7 @@ async def test_dismiss_validation_errors(hass: HomeAssistant):
 
 @pytest.mark.asyncio
 async def test_restore_validation_errors(hass: HomeAssistant):
-    from custom_components.phoenix_mcp.admin_view import PhoenixAdminMesaSuggestionRestoreView
+    from custom_components.phoenix_mcp.admin.mesa import PhoenixAdminMesaSuggestionRestoreView
 
     await _setup(hass)
     view = PhoenixAdminMesaSuggestionRestoreView()
@@ -639,9 +627,8 @@ async def test_restore_validation_errors(hass: HomeAssistant):
 
 @pytest.mark.asyncio
 async def test_suggestion_endpoints_503_without_mesa(hass: HomeAssistant):
-    from custom_components.phoenix_mcp.admin_view import (
-        PhoenixAdminMesaSuggestionDismissView,
-        PhoenixAdminMesaSuggestionRestoreView,
+    from custom_components.phoenix_mcp.admin.mesa import (
+        PhoenixAdminMesaSuggestionDismissView, PhoenixAdminMesaSuggestionRestoreView,
     )
 
     data = await _setup(hass)
@@ -701,7 +688,7 @@ async def _seed_profiles(hass: HomeAssistant) -> None:
 
 @pytest.mark.asyncio
 async def test_export_returns_archive_of_stored_profiles(hass: HomeAssistant):
-    from custom_components.phoenix_mcp.admin_view import PhoenixAdminMesaExportView
+    from custom_components.phoenix_mcp.admin.mesa import PhoenixAdminMesaExportView
 
     await _setup(hass)
     await _seed_profiles(hass)
@@ -726,9 +713,8 @@ async def test_export_returns_archive_of_stored_profiles(hass: HomeAssistant):
 
 @pytest.mark.asyncio
 async def test_import_lands_new_profiles(hass: HomeAssistant):
-    from custom_components.phoenix_mcp.admin_view import (
-        PhoenixAdminMesaExportView,
-        PhoenixAdminMesaImportView,
+    from custom_components.phoenix_mcp.admin.mesa import (
+        PhoenixAdminMesaExportView, PhoenixAdminMesaImportView,
     )
 
     data = await _setup(hass)
@@ -757,9 +743,8 @@ async def test_import_lands_new_profiles(hass: HomeAssistant):
 
 @pytest.mark.asyncio
 async def test_import_skip_leaves_existing_untouched(hass: HomeAssistant):
-    from custom_components.phoenix_mcp.admin_view import (
-        PhoenixAdminMesaExportView,
-        PhoenixAdminMesaImportView,
+    from custom_components.phoenix_mcp.admin.mesa import (
+        PhoenixAdminMesaExportView, PhoenixAdminMesaImportView,
     )
 
     data = await _setup(hass)
@@ -789,9 +774,8 @@ async def test_import_skip_leaves_existing_untouched(hass: HomeAssistant):
 
 @pytest.mark.asyncio
 async def test_import_overwrite_replaces_existing(hass: HomeAssistant):
-    from custom_components.phoenix_mcp.admin_view import (
-        PhoenixAdminMesaExportView,
-        PhoenixAdminMesaImportView,
+    from custom_components.phoenix_mcp.admin.mesa import (
+        PhoenixAdminMesaExportView, PhoenixAdminMesaImportView,
     )
 
     data = await _setup(hass)
@@ -821,7 +805,7 @@ async def test_import_overwrite_replaces_existing(hass: HomeAssistant):
 
 @pytest.mark.asyncio
 async def test_import_validation_errors(hass: HomeAssistant):
-    from custom_components.phoenix_mcp.admin_view import PhoenixAdminMesaImportView
+    from custom_components.phoenix_mcp.admin.mesa import PhoenixAdminMesaImportView
 
     await _setup(hass)
     view = PhoenixAdminMesaImportView()
@@ -847,7 +831,7 @@ async def test_import_validation_errors(hass: HomeAssistant):
 
 @pytest.mark.asyncio
 async def test_import_quarantines_invalid_documents(hass: HomeAssistant):
-    from custom_components.phoenix_mcp.admin_view import PhoenixAdminMesaImportView
+    from custom_components.phoenix_mcp.admin.mesa import PhoenixAdminMesaImportView
 
     data = await _setup(hass)
     archive = {
@@ -874,9 +858,8 @@ async def test_import_quarantines_invalid_documents(hass: HomeAssistant):
 
 @pytest.mark.asyncio
 async def test_export_import_503_when_mesa_unavailable(hass: HomeAssistant):
-    from custom_components.phoenix_mcp.admin_view import (
-        PhoenixAdminMesaExportView,
-        PhoenixAdminMesaImportView,
+    from custom_components.phoenix_mcp.admin.mesa import (
+        PhoenixAdminMesaExportView, PhoenixAdminMesaImportView,
     )
 
     data = await _setup(hass)
@@ -897,7 +880,7 @@ async def test_import_succeeds_even_if_post_import_rescan_fails(hass: HomeAssist
     refresh_orphans/refresh_suggestions rescan runs, so a scan error must degrade
     rather than surface as a client-visible failure.
     """
-    from custom_components.phoenix_mcp.admin_view import PhoenixAdminMesaImportView
+    from custom_components.phoenix_mcp.admin.mesa import PhoenixAdminMesaImportView
 
     data = await _setup(hass)
 

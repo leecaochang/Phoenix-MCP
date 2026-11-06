@@ -19,13 +19,13 @@ from homeassistant.util.dt import utcnow
 from custom_components.phoenix_mcp import ai_task, assist_api, tool_dispatch, voice_agent
 from custom_components.phoenix_mcp.tools import logs as logs_tools
 from custom_components.phoenix_mcp.tools import service as service_tools
-from custom_components.phoenix_mcp.admin_view import _approve_approval
+from custom_components.phoenix_mcp.admin.approvals import _approve_approval
 from custom_components.phoenix_mcp.approvals import async_create_pending_approval, get_approval
 from custom_components.phoenix_mcp.approval_targets import bind_targets
 from custom_components.phoenix_mcp.audit import AuditLog
 from custom_components.phoenix_mcp.const import CAPABILITY_NAMES, CONFIRM_ONLY_CAPS, DOMAIN, HOUSEHOLD_CAPABILITIES
 from custom_components.phoenix_mcp.data import PhoenixData
-from custom_components.phoenix_mcp.helpers import effective_cap
+from custom_components.phoenix_mcp.capability import effective_cap
 from custom_components.phoenix_mcp.household_authority import household_authority, household_scope
 from custom_components.phoenix_mcp.policy_engine import Permission, resolve, resolve_registry_access
 from custom_components.phoenix_mcp.rate_limiter import RateLimiter
@@ -345,13 +345,13 @@ async def test_inactive_household_approval_is_a_known_refusal(hass, hass_admin_u
     request = make_mocked_request("POST", "/approve")
     request[KEY_HASS_USER] = hass_admin_user
     request["phoenix_mcp_rid"] = "accept"
-    with patch("custom_components.phoenix_mcp.admin_view.async_execute_approved_tool", AsyncMock()) as execute:
+    with patch("custom_components.phoenix_mcp.admin.approvals.async_execute_approved_tool", AsyncMock()) as execute:
         response = await _approve_approval(hass, request, record.id)
     execute.assert_not_awaited()
     assert response.status == 200
     saved = get_approval(data.store, record.id)
     assert saved.status == "failed"
-    assert saved.rejected_reason == "execution_failed"
+    assert saved.closure_reason == "execution_failed"
     assert saved.execution_started_at is None
     assert saved.result["refused_before_write"] is True  # an Agent Chat turn can continue
     assert "No action was dispatched" in response.text

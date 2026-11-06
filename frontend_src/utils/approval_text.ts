@@ -122,7 +122,7 @@ export function localizedExecutorError(text: string): string {
  *  execution_failed the underlying tool error (e.g. "Forbidden.", a validation
  *  message) instead of the bare slug. Free-text admin reasons pass through. */
 export function friendlyReason(record: ApprovalRecord): string {
-  const reason = record.rejected_reason;
+  const reason = record.closure_reason;
   if (!reason) return "";
   if (reason === "execution_failed") {
     const detail = localizedResultErrorText(record.result);
@@ -133,17 +133,17 @@ export function friendlyReason(record: ApprovalRecord): string {
 
 /** What became of a resolved request, as one sentence. */
 export function approvalOutcome(record: ApprovalRecord): string {
-  if (record.rejected_reason === "execution_interrupted") {
+  if (record.closure_reason === "execution_interrupted") {
     return t("approvalSummary.history.interrupted.body");
   }
-  if (record.rejected_reason === "execution_failed") {
+  if (record.closure_reason === "execution_failed") {
     return t("approvalSummary.history.failed.body", {
       error: localizedResultErrorText(record.result) || friendlyReason(record),
     });
   }
   if (record.status === "approved") return t("approvalSummary.history.approved.body");
   if (record.status === "rejected") {
-    return record.rejected_reason
+    return record.closure_reason
       ? t("approvalSummary.history.rejectedReason.body", { reason: boundedFriendlyDetail(friendlyReason(record)) })
       : t("approvalSummary.history.rejected.body");
   }
@@ -153,7 +153,7 @@ export function approvalOutcome(record: ApprovalRecord): string {
     });
   }
   if (record.status === "expired") return t("approvalSummary.history.expired.body");
-  return record.rejected_reason
+  return record.closure_reason
     ? t("approvalSummary.history.cancelledReason.body", { reason: boundedFriendlyDetail(friendlyReason(record)) })
     : t("approvalSummary.history.cancelled.body");
 }

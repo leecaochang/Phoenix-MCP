@@ -223,11 +223,11 @@ class TestUpdateStatus:
             await async_update_approval_status(store, record.id, status=STATUS_APPROVED)
             second = await async_update_approval_status(
                 store, record.id, status=STATUS_REJECTED,
-                rejected_reason="too_late",
+                closure_reason="too_late",
             )
         # Second call observes the existing terminal state without overwriting.
         assert second.status == STATUS_APPROVED
-        assert second.rejected_reason is None
+        assert second.closure_reason is None
 
     @pytest.mark.asyncio
     async def test_returns_none_for_missing(self, store):
@@ -264,7 +264,7 @@ class TestCancelQueuedAtStartup:
         for approval_id in (queued.id, other.id):
             record = get_approval(store, approval_id)
             assert record.status == STATUS_CANCELLED
-            assert record.rejected_reason == REASON_RESTARTED
+            assert record.closure_reason == REASON_RESTARTED
             assert record.resolved_at is not None
         assert get_approval(store, decided.id).status == STATUS_APPROVED
 
@@ -286,7 +286,7 @@ class TestCancelQueuedAtStartup:
             await async_cancel_queued_approvals_at_startup(store)
         record = get_approval(store, running.id)
         assert record.status == STATUS_FAILED
-        assert record.rejected_reason == REASON_EXECUTION_INTERRUPTED
+        assert record.closure_reason == REASON_EXECUTION_INTERRUPTED
 
 
 # --- async_cancel_approvals_for_access_key ----------------------------------------------
@@ -356,7 +356,7 @@ class TestCancelForAccessKey:
 
         assert [item.id for item in changed] == [record.id]
         assert changed[0].status == STATUS_FAILED
-        assert changed[0].rejected_reason == REASON_EXECUTION_INTERRUPTED
+        assert changed[0].closure_reason == REASON_EXECUTION_INTERRUPTED
         assert "execution_started_at" not in store.get_pending_approvals()[0]
 
 
@@ -382,7 +382,7 @@ class TestCollectForWipe:
         # Only the still-pending record; spans all access keys (no per-access-key filter).
         assert [c.id for c in collected] == [a.id]
         assert collected[0].status == STATUS_CANCELLED
-        assert collected[0].rejected_reason == "phoenix_mcp_data_wiped"
+        assert collected[0].closure_reason == "phoenix_mcp_data_wiped"
 
     def test_read_only_does_not_mutate_store(self, store):
         # It must not persist or flip statuses: async_wipe clears the queue.
@@ -554,7 +554,7 @@ class TestExpiredAccessKeyCancelsApprovals:
             await async_archive_expired_access_key(hass, data, access_key)
 
         assert get_approval(store, record.id).status == STATUS_CANCELLED
-        assert get_approval(store, record.id).rejected_reason == "access_key_expired"
+        assert get_approval(store, record.id).closure_reason == "access_key_expired"
         dismiss.assert_called_once_with(hass, record.id)
         resolved = [
             c.args[1] for c in hass.bus.async_fire.call_args_list
@@ -877,7 +877,7 @@ class TestInterruptedExecution:
         assert [a.id for a in changed] == [approval_id]
         entry = store.get_pending_approvals()[0]
         assert entry["status"] == STATUS_FAILED
-        assert entry["rejected_reason"] == REASON_EXECUTION_INTERRUPTED
+        assert entry["closure_reason"] == REASON_EXECUTION_INTERRUPTED
         # Approving it again is the one unrecoverable outcome, so the record must
         # not be pending any more.
         assert get_approval(store, approval_id).status != STATUS_PENDING
@@ -992,7 +992,7 @@ async def test_terminal_retention_bounds_history_but_preserves_uncertain_and_pen
             for i in range(APPROVAL_HISTORY_LIMIT + 30)]
     protected = [
         {"id": "pending", "status": STATUS_PENDING, "args": {"content": "retain"}},
-        {"id": "interrupted", "status": STATUS_FAILED, "rejected_reason": REASON_EXECUTION_INTERRUPTED, "args": {"content": "retain"}},
+        {"id": "interrupted", "status": STATUS_FAILED, "closure_reason": REASON_EXECUTION_INTERRUPTED, "args": {"content": "retain"}},
         {"id": "marker", "status": STATUS_APPROVED, "execution_started_at": old},
         {"id": "claimed", "status": STATUS_APPROVED, "resolved_at": old},
         {"id": "corrupt-time", "status": STATUS_APPROVED, "resolved_at": 123},
@@ -1021,15 +1021,15 @@ async def test_interrupted_approvals_stay_but_drop_their_payload_after_the_histo
     from custom_components.phoenix_mcp.const import APPROVAL_HISTORY_DAYS
     now = utcnow()
     payload = {"args": {"code": "private"}, "diff": {"before": "private"}, "result": "private"}
-    recent = {"id": "recent", "status": STATUS_FAILED, "rejected_reason": REASON_EXECUTION_INTERRUPTED,
+    recent = {"id": "recent", "status": STATUS_FAILED, "closure_reason": REASON_EXECUTION_INTERRUPTED,
               "resolved_at": (now - timedelta(days=APPROVAL_HISTORY_DAYS - 1)).isoformat(), **payload}
-    old = {"id": "old", "status": STATUS_FAILED, "rejected_reason": REASON_EXECUTION_INTERRUPTED,
+    old = {"id": "old", "status": STATUS_FAILED, "closure_reason": REASON_EXECUTION_INTERRUPTED,
            "resolved_at": (now - timedelta(days=APPROVAL_HISTORY_DAYS + 1)).isoformat(), **payload}
     store.set_pending_approvals([recent, old])
     await async_prune_terminal_approvals(store)
     kept = {row["id"]: row for row in store.get_pending_approvals()}
     assert kept["recent"] == recent
-    assert kept["old"]["status"] == STATUS_FAILED and kept["old"]["rejected_reason"] == REASON_EXECUTION_INTERRUPTED
+    assert kept["old"]["status"] == STATUS_FAILED and kept["old"]["closure_reason"] == REASON_EXECUTION_INTERRUPTED
     assert kept["old"]["args"] == {} and kept["old"]["diff"] == {} and kept["old"]["result"] is None
 
 

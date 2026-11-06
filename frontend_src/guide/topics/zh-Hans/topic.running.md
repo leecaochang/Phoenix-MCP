@@ -45,7 +45,7 @@ Phoenix 会在 Home Assistant 的事件总线上触发这些事件。把它们�
 ### 审批和更改 {#approval-events}
 
 - `phoenix_mcp_approval_requested`：有请求正在等待审批。数据：`approval_id`、`access_key_id`、`access_key_name`、`tool_name`、`cap_name`、`review_url`、`expires_at`、`timestamp`。
-- `phoenix_mcp_approval_resolved`：请求达到最终状态。数据：`approval_id`、`access_key_id`、`access_key_name`、`tool_name`、`status`、`rejected_reason`、`approved_by_user_id`、`timestamp`。
+- `phoenix_mcp_approval_resolved`：请求达到最终状态。数据：`approval_id`、`access_key_id`、`access_key_name`、`tool_name`、`status`、`closure_reason`、`approved_by_user_id`、`timestamp`。
 - `phoenix_mcp_approval_claimed`：已批准的请求开始运行（`claimed` 为 true），或在启动失败后被释放（`claimed` 为 false）。数据：`approval_id`、`claimed`、`timestamp`。
 - `phoenix_mcp_config_changed`：变更中记录了一次更改。数据：`resource_type`、`resource_id`、`action`。
 

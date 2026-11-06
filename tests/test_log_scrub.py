@@ -17,15 +17,10 @@ import pytest
 from homeassistant.components import network
 from homeassistant.components.network.models import Adapter, IPv4ConfiguredAddress, IPv6ConfiguredAddress
 
-from custom_components.phoenix_mcp import helpers
+from custom_components.phoenix_mcp import helpers, redaction
 from custom_components.phoenix_mcp.const import DOMAIN, ACCESS_KEY_PREFIX
-from custom_components.phoenix_mcp.helpers import (
-    _PHOENIX_LOGGER_PREFIXES,
-    _scrub_log_text,
-    _strict_diagnostic_text,
-    redact_diagnostics,
-    redact_secrets_in_text,
-)
+from custom_components.phoenix_mcp.log_read import _PHOENIX_LOGGER_PREFIXES, _strict_diagnostic_text
+from custom_components.phoenix_mcp.redaction import _scrub_log_text, redact_diagnostics, redact_secrets_in_text
 
 
 def test_scrubs_phx_access_key():
@@ -263,7 +258,7 @@ async def test_a_failed_identifier_read_never_fails_the_scrub(instance, monkeypa
     def broken(*_args, **_kwargs):
         raise RuntimeError("read failed")
 
-    monkeypatch.setattr(helpers, "get_url", broken)
+    monkeypatch.setattr(redaction, "get_url", broken)
     monkeypatch.setattr(network, "async_get_loaded_adapters", broken)
     assert redact_diagnostics("myhome.duckdns.org and nas.home.lan") == "myhome.duckdns.org and <redacted-host>"
 

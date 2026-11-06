@@ -9,7 +9,7 @@
 
 [English](README.md) | [Español](README.es.md) | [Français](README.fr.md) | [Italiano](README.it.md) | [Deutsch](README.de.md) | [Nederlands](README.nl.md) | [Polski](README.pl.md) | [简体中文](README.zh-CN.md) | [繁體中文](README.zh-Hant.md) | **日本語** | [한국어](README.ko.md) | [Русский](README.ru.md) | [Svenska](README.sv.md) | [Dansk](README.da.md) | [Norsk Bokmål](README.nb.md) | [Suomi](README.fi.md)
 
-Phoenix MCP は、MCP（Model Context Protocol、AI アプリをツールやデータに接続するためのオープン標準）を通じて、AI エージェントに安全で限定された Home Assistant へのアクセスを提供します。AI を使ううえで安全性は非常に重要であり、Phoenix MCP は長期間の開発と度重なるセキュリティレビューを経ています。エージェントごとに専用のアクセスキーがあり、許可したエンティティと機能だけに制限されます。追加の安全レイヤー（MESA）により、アクセスキーに付与された権限にかかわらず、選択したエンティティを確認必須または操作禁止にできます。
+Phoenix MCP は、MCP（Model Context Protocol、AI アプリをツールやデータに接続するためのオープン標準）を通じて、AI エージェントに安全で限定された Home Assistant へのアクセスを提供します。AI を使ううえで安全性は非常に重要であり、Phoenix MCP は長期間の開発とセキュリティレビューを経ています。エージェントごとに専用のアクセスキーがあり、許可したエンティティと機能だけに制限されます。追加の安全レイヤー（MESA）により、アクセスキーに付与された権限にかかわらず、選択したエンティティを確認必須または操作禁止にできます。
 
 Phoenix MCP は Home Assistant の中だけで動作し、別途サービスを導入する必要はありません。Claude Code、Cursor、ChatGPT、Gemini など、お使いのアプリを利用できるほか、選択した AI プロバイダーを使って Home Assistant の中で直接チャットすることもできます。プロバイダーはクラウドでも、Ollama によるローカルでも構いません。
 

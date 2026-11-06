@@ -11,10 +11,12 @@ from homeassistant.util.dt import utcnow
 from custom_components.phoenix_mcp.access_key_schema import normalize_access_key_fields
 from custom_components.phoenix_mcp.access_key_store import AccessKeyStore
 from custom_components.phoenix_mcp.agent_recovery import AgentRecovery, RecoveryRequired
-from custom_components.phoenix_mcp.approvals import async_cancel_approvals_for_access_key, REASON_REVOKED
+from custom_components.phoenix_mcp.approvals import PendingApproval, async_cancel_approvals_for_access_key, REASON_REVOKED
 from custom_components.phoenix_mcp.audit import AuditLog
 from custom_components.phoenix_mcp.config_recovery import ConfigurationRecovery, ConfigurationRecoveryError
-from custom_components.phoenix_mcp.const import STORAGE_KEY, STORAGE_VERSION, AUDIT_STORAGE_VERSION, VERSION_STORAGE_VERSION
+from custom_components.phoenix_mcp.const import (
+    APPROVAL_REASON_FORMAT_INCOMPATIBLE, STORAGE_KEY, STORAGE_VERSION, AUDIT_STORAGE_VERSION, VERSION_STORAGE_VERSION,
+)
 from custom_components.phoenix_mcp.version_store import VersionStore
 
 
@@ -59,11 +61,42 @@ async def test_v4_upgrade_preserves_secret_bindings_scope_and_pending_authority(
     # Retiring the same key still closes its review; an execution claim retains uncertainty.
     async with store.async_lock:
         closed = await async_cancel_approvals_for_access_key(store, key.id, REASON_REVOKED)
-    assert {r.id: r.rejected_reason for r in closed} == {
+    assert {r.id: r.closure_reason for r in closed} == {
         "pending": "access_key_revoked", "executing": "execution_interrupted"}
     reloaded = await AccessKeyStore.async_create(hass)
     assert reloaded.get_access_key_by_hash(digest).id == key.id
     assert reloaded.get_pending_approvals()[0]["args"] == approval["args"]
+
+
+async def test_a_stored_closure_reason_moves_to_its_new_field_on_load(hass, hass_storage):
+    stamp = utcnow().isoformat()
+    closed = {"id": "closed", "access_key_id": "key", "tool_name": "set_entity", "cap_name": "cap_registry_write",
+              "status": "failed", "created_at": stamp, "expires_at": stamp, "resolved_at": stamp, "args": {},
+              "rejected_reason": "execution_failed"}
+    hass_storage[STORAGE_KEY] = {"version": 5, "minor_version": 1, "key": STORAGE_KEY, "data": {
+        "version": 5, "access_keys": [], "archived_access_keys": [], "settings": {},
+        "pending_approvals": [closed, {**closed, "id": "expired", "rejected_reason": "token_expired"}],
+    }}
+    store = await AccessKeyStore.async_create(hass)
+    assert [row["closure_reason"] for row in store.get_pending_approvals()] == ["execution_failed", "access_key_expired"]
+    assert PendingApproval.from_dict(store.get_pending_approvals()[0]).closure_reason == "execution_failed"
+    await store.async_save()
+    await hass.async_block_till_done()
+    saved = hass_storage[STORAGE_KEY]
+    assert saved["version"] == STORAGE_VERSION == 6
+    assert all("rejected_reason" not in row for row in saved["data"]["pending_approvals"])
+
+
+async def test_an_older_store_cancels_its_unstarted_approval_under_the_new_field(hass, hass_storage):
+    stamp = utcnow().isoformat()
+    pending = {"id": "pending", "access_key_id": "key", "tool_name": "set_entity", "cap_name": "cap_registry_write",
+               "status": "pending", "created_at": stamp, "expires_at": stamp, "args": {}}
+    hass_storage[STORAGE_KEY] = {"version": 3, "minor_version": 1, "key": STORAGE_KEY, "data": {
+        "version": 3, "tokens": [], "archived_tokens": [], "settings": {}, "pending_approvals": [pending],
+    }}
+    store = await AccessKeyStore.async_create(hass)
+    row = store.get_pending_approvals()[0]
+    assert row["status"] == "cancelled" and row["closure_reason"] == APPROVAL_REASON_FORMAT_INCOMPATIBLE
 
 
 async def test_released_audit_and_version_attribution_survives_load_and_save():
@@ -123,7 +156,7 @@ def test_canonical_fields_win_and_normalization_does_not_traverse_authored_paylo
     args = {"token_id": "authored", "token_name": "authored-name"}
     old = {"token_id": "old", "access_key_id": "current", "rejected_reason": "token_expired", "args": args}
     row = normalize_access_key_fields(old)
-    assert row == {"access_key_id": "current", "rejected_reason": "access_key_expired", "args": args}
+    assert row == {"access_key_id": "current", "closure_reason": "access_key_expired", "args": args}
     assert old["token_id"] == "old" and old["rejected_reason"] == "token_expired"
 
 

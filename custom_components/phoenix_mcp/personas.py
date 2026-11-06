@@ -383,11 +383,9 @@ def matches_persona(access_key_caps: dict[str, str], persona: str) -> bool:
 
 
 def detect_persona(access_key_caps: dict[str, str]) -> str:
-    """Identify which persona (if any) an access key's current caps match.
+    """Identify which persona an access key's current caps match.
 
-    Returns PERSONA_CUSTOM when the cap values do not exactly match any preset.
-    PERSONA_HOME_COMPANION is never inferred from caps: it is assigned explicitly
-    and additionally enforces delegated access.
+    Returns PERSONA_CUSTOM without an exact match. PERSONA_HOME_COMPANION is never inferred.
     """
     for name in (
         PERSONA_NEW_USER,

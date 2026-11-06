@@ -13,7 +13,7 @@ from homeassistant.core import HomeAssistant
 from .access_key_store import AccessKeyRecord
 from .agent_recovery import recovery_turn
 from .agent_turn import (
-    _after_dispatch_failure, _AGENTCLI_ADDENDUM, _agentcli_time_context,
+    _after_dispatch_failure, _AGENT_CHAT_ADDENDUM, _agentcli_time_context,
     _agentcli_time_guidance, _clip_display, _consume_model_stream,
     _conversation_behavior_prompt, _DETAIL_INSTRUCTIONS, _home_focus_output_contract,
     _kill_switch_on, _review_stop_error, _run_headless_turn, _run_tool_batch,
@@ -27,7 +27,7 @@ from .const import (
 )
 from .conversation_log import flush_assistant, recorded_chat
 from .data import PhoenixData
-from .helpers import voice_text
+from .catalog_text import voice_text
 from .home_companion import is_companion, internal_turn
 from .home_companion_turn import async_delegate
 from .llm.base import (
@@ -37,7 +37,7 @@ from .llm.base import (
 from .llm.provider_claude import ClaudeProvider
 from .llm.provider_openai import OpenAICompatProvider
 from .provider_constants import (
-    AGENTCLI_MAX_ITERATIONS, AGENTCLI_MAX_TOOL_CALL_CORRECTIONS, AGENTCLI_MAX_TURN_OUTPUT_BYTES,
+    AGENT_CHAT_MAX_ITERATIONS, AGENT_CHAT_MAX_TOOL_CALL_CORRECTIONS, AGENT_CHAT_MAX_TURN_OUTPUT_BYTES,
 )
 from .routing.chat_routing import async_route_chat_command
 from .routing.command_routing import RoutingAuthority
@@ -59,7 +59,7 @@ async def async_run_agent_turn(
     client_ip: str, base_url: str,
     emit: Callable[[str, dict], Awaitable[None]],
     cancel: asyncio.Event,
-    max_iterations: int = AGENTCLI_MAX_ITERATIONS,
+    max_iterations: int = AGENT_CHAT_MAX_ITERATIONS,
     conversation_style: str = CONVERSATION_STYLE_DIRECT,
     detail_level: str = DETAIL_LEVEL_CONCISE,
     home_focused: bool = False,
@@ -67,15 +67,9 @@ async def async_run_agent_turn(
     account: tuple[str, str | None] | None = None,
 ) -> list[dict]:
     """Run one user turn to completion, streaming SSE events. Returns updated messages.
-
-    account is the chat's provider account and model, which a Home Companion
-    request runs on in place of the Voice settings.
-
-    The loop body is three phases: drain one model call (_consume_model_stream),
-    decide whether to keep the assistant message against the turn output budget,
-    and run whatever tool calls it asked for (_run_tool_batch). What stays here
-    is the turn-level policy the phases must not own: the runaway-iteration cap
-    and its human-in-the-loop reset, the output budget, and how the turn ends.
+    ``account`` is the chat's provider account and model for a Home Companion request. Phases
+    live in _consume_model_stream and _run_tool_batch; the iteration cap, output budget and
+    turn ending stay here.
     """
     await data.agent_recovery.reconcile(data.store, access_key.id)
     if data.agent_recovery.needs_attention(access_key.id):
@@ -143,7 +137,7 @@ async def async_run_agent_turn(
         + _conversation_behavior_prompt(
             conversation_style, detail_level, home_focused=home_focused,
         )
-        + _AGENTCLI_ADDENDUM
+        + _AGENT_CHAT_ADDENDUM
         + _home_focus_output_contract(home_focused)
         + (loader.directory() if loader is not None else "")
         + _agentcli_time_guidance()
@@ -256,7 +250,7 @@ async def async_run_agent_turn(
         if invalid is not None:
             # Nothing from this response ran. Hand the JSON error back as tool
             # results so the model can resend the call, within a small budget.
-            if corrections >= AGENTCLI_MAX_TOOL_CALL_CORRECTIONS:
+            if corrections >= AGENT_CHAT_MAX_TOOL_CALL_CORRECTIONS:
                 failure = _invalid_tools_error()
                 if dispatch_started:
                     failure = _after_dispatch_failure(failure, write_started)
@@ -277,7 +271,7 @@ async def async_run_agent_turn(
             # retained in messages (which is returned/re-sent). The transcript thus
             # stays within the budget rather than budget + one whole response.
             prospective = turn_output_bytes + len(json.dumps(assistant_msg, default=str))
-            if prospective > AGENTCLI_MAX_TURN_OUTPUT_BYTES:
+            if prospective > AGENT_CHAT_MAX_TURN_OUTPUT_BYTES:
                 await emit("error", {"code": "output_limit", "message": (
                     "The provider produced too much output this turn; stopped.")})
                 turn_errored = True
@@ -352,13 +346,8 @@ async def async_run_agent_turn(
                                      "message": "This access key is no longer authorized."})
             break
         if stop_turn:
-            # Defence in depth with no observable effect today, so no test can
-            # meaningfully pin it: every path that sets stop_turn is already
-            # handled. Authority loss breaks above; a cancel is caught by the
-            # loop-top check BEFORE the next model call, which emits the same
-            # "cancelled" error. It stays because it makes the turn's exit
-            # explicit at the point the batch decided to stop, rather than
-            # depending on an ordering argument two screens away.
+            # Defence in depth: every path setting stop_turn is already handled, and this
+            # keeps the turn's exit explicit where the batch decided to stop.
             if cancel.is_set():
                 await emit("error", {"code": "cancelled", "message": "Cancelled."})
             break
@@ -410,27 +399,14 @@ async def async_run_voice_turn(
     base_url: str,
     user_text: str,
     *,
-    max_iterations: int = AGENTCLI_MAX_ITERATIONS,
+    max_iterations: int = AGENT_CHAT_MAX_ITERATIONS,
     include_review_hint: bool = False,
     language: object = None,
 ) -> str:
     """Run one conversation-agent turn to completion; return the spoken answer.
-
-    A headless sibling of async_run_agent_turn for HA's Assist/voice pipeline
-    (engine: _run_headless_turn): no SSE, no interactive approval wait. A confirm
-    gate is fed back to the model as a "queued_for_approval" tool result, so a
-    voice turn never blocks.
-
-    include_review_hint says where to approve anything queued this turn. It is a
-    sentence rather than a link: one string is both displayed and spoken, and
-    nothing separates typed Assist from Companion-app voice, so a URL would be
-    read aloud. Pass False for a voice satellite, whose model reply already says
-    that the action is waiting.
-
-    language is the CONVERSATION's language: a spoken reply goes to whoever is
-    talking, not to the server. Every sentence that is not the model's own words
-    comes from catalog_templates.VOICE_TEMPLATES, so a failure is never spoken in English to a
-    non-English pipeline. None falls back to English.
+    Headless through _run_headless_turn. ``include_review_hint`` adds where to approve, as a
+    sentence since one string is both shown and spoken; pass False for a satellite.
+    ``language`` is the conversation's, for VOICE_TEMPLATES; None means English.
     """
     if is_companion(access_key) and not internal_turn(access_key):
         report = await async_delegate(hass, data, access_key, user_text, language, base_url)
@@ -547,19 +523,12 @@ async def async_run_ai_task(
     instructions: str,
     *,
     structure_json: dict | None = None,
-    max_iterations: int = AGENTCLI_MAX_ITERATIONS,
+    max_iterations: int = AGENT_CHAT_MAX_ITERATIONS,
 ) -> str:
     """Run one AI Task (ai_task.generate_data) to completion; return the final text.
-
-    A headless sibling of async_run_voice_turn for HA's AI Task platform: same gated tool
-    loop (per-access-key scope, MESA, approvals, audit via _dispatch_mcp with sentinel
-    client_ip "ai_task"), no SSE, no interactive wait. A confirm gate returns pending,
-    fed back as a "queued_for_approval" tool result so a task never blocks. The access key
-    is re-resolved before every dispatch, so a mid-task revoke/kill-switch is honored.
-
-    When structure_json is given (the caller's JSON schema derived from the task's
-    structure), the model is instructed to emit only matching JSON; the caller parses
-    the returned text.
+    Headless, with the same gated loop as Voice; a confirm gate is fed back as
+    "queued_for_approval". With ``structure_json`` the model is told to emit matching JSON,
+    which the caller parses.
     """
     companion_authority = None
     if is_companion(access_key):

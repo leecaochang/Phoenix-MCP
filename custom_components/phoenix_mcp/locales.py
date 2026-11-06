@@ -5,9 +5,8 @@ from __future__ import annotations
 _SIMPLIFIED_CHINESE_REGIONS = frozenset({"CN", "MY", "SG"})
 _TRADITIONAL_CHINESE_REGIONS = frozenset({"HK", "MO", "TW"})
 
-# Keep this list in step with catalogs/*.json. The public-language contract test
-# checks that adding a catalog also updates this mapping without touching the
-# request path or scanning the filesystem.
+# Keep this list in step with catalogs/*.json, without scanning the filesystem on the
+# request path.
 SHIPPED_LOCALES = frozenset({
     "da", "de", "en", "es", "fi", "fr", "it", "ja", "ko", "nb", "nl", "pl", "ru", "sv",
     "zh-Hans", "zh-Hant",
@@ -29,11 +28,8 @@ def _normalize(language: object) -> tuple[str, list[str]] | None:
 def canonical_language(language: object) -> str:
     """Return the closest shipped Phoenix locale, with English as last resort.
 
-    Home Assistant normally uses the same script-aware codes as Phoenix, but
-    browsers, OS settings and voice pipelines can provide regional BCP 47 tags.
-    Exact matches win, then Chinese script or regional equivalents, then the base
-    language. Uses only in-memory constants: this runs on the event loop, where
-    filesystem discovery would raise a blocking scandir warning.
+    Exact matches win, then Chinese script or regional equivalents, then the base language.
+    Uses only in-memory constants, as this runs on the event loop.
     """
     normalized = _normalize(language)
     if normalized is None:

@@ -27,10 +27,12 @@ from ..const import (
 from ..data import PhoenixData
 from ..debug_capture import DEBUG_CAPTURE_RUNTIME_KEY, integration_domain
 from ..fault_log import async_fault_log_query
-from ..helpers import (
-    _strict_phoenix_log_text, collect_log_entries as _collect_log_entries,
-    diff_summary_fields as _summary, effective_cap, parse_time_param as _parse_time_param,
-    str_arg, SystemLogDegradedError, SystemLogUnavailableError,
+from ..helpers import parse_time_param as _parse_time_param
+from ..tool_input import str_arg
+from ..catalog_text import diff_summary_fields as _summary
+from ..capability import effective_cap
+from ..log_read import (
+    _strict_phoenix_log_text, collect_log_entries as _collect_log_entries, SystemLogDegradedError, SystemLogUnavailableError,
 )
 from ..logger_control import (
     IntegrationOverride, LoggerControlUnavailable, VALID_LEVELS as LOGGER_CONTROL_LEVELS,
@@ -365,9 +367,8 @@ def _logbook_entry_visible(
 def _logbook_context_scoped(entry: dict, access_key: AccessKeyRecord, hass: HomeAssistant) -> dict:
     """Keep what caused a logbook row only when the access key may see the cause.
 
-    HA describes a row's cause in several context fields, so a hidden cause loses
-    all of them: naming its state or friendly name would disclose the entity, and
-    a redaction marker would confirm it exists. A user ID is never returned.
+    A hidden cause loses all its context fields: a name would disclose it and a redaction marker
+    would confirm it. A user ID is never returned.
     """
     cause = entry.get("context_entity_id")
     hidden = cause is not None and resolve_read(cause, access_key, hass) not in (Permission.READ, Permission.WRITE)

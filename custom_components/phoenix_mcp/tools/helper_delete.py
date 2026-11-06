@@ -7,7 +7,8 @@ from homeassistant.core import HomeAssistant
 from ..access_key_store import AccessKeyRecord
 from ..const import CAP_DENY, TEMPLATE_RECOVERY_TYPES
 from ..data import PhoenixData
-from ..helpers import diff_summary_fields as _summary, effective_cap
+from ..catalog_text import diff_summary_fields as _summary
+from ..capability import effective_cap
 from ..tool_common import _CAP_FORBIDDEN_MESSAGE, _tool_error
 from .discovery import _registry_relationship_preview
 from .helper import (

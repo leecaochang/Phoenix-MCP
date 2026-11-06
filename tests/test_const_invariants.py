@@ -30,7 +30,7 @@ from custom_components.phoenix_mcp.const import (
     PASS_THROUGH_EXEMPT_CAPS,
     PHYSICAL_GATE_DOMAINS,
 )
-from custom_components.phoenix_mcp.helpers import _LOG_LEVEL_RANK
+from custom_components.phoenix_mcp.log_read import _LOG_LEVEL_RANK
 
 
 def test_physical_gate_domains_are_exactly_the_safety_relevant_ones():

@@ -24,7 +24,8 @@ from custom_components.phoenix_mcp.routing.routing_tables import DECISION_CONTEX
 from custom_components.phoenix_mcp.data import PhoenixData
 from custom_components.phoenix_mcp.routing.decision_batch import async_preview_batch
 from custom_components.phoenix_mcp.routing.decision_context import async_preview_context
-from custom_components.phoenix_mcp.routing.decision_provider import DecisionError, DecisionProvider
+from custom_components.phoenix_mcp.routing.decision_types import DecisionError
+from custom_components.phoenix_mcp.routing.decision_provider import DecisionProvider
 from custom_components.phoenix_mcp.routing.decision_reference import async_preview_reference
 from custom_components.phoenix_mcp.routing.decision_shadow import async_preview_decision
 from custom_components.phoenix_mcp.routing.decision_batch import async_prepare_temporal

@@ -58,25 +58,13 @@ MESA_SUGGESTION_PHRASES: Mapping[str, str] = MappingProxyType({
 
 # Approval diff summaries, as format templates keyed by a stable slug.
 #
-# The summary an admin reads before approving is the confirm gate's whole safety
-# property, so it has to be translatable. It is also PERSISTED on the approval
-# record (it doubles as the audit trail), which means translating it server-side
-# would freeze the language at creation time and make History mixed after a
-# language switch. So the record carries the English `summary` plus
-# `summary_key` and `summary_params` for the panel to render in the operator's
-# own language, falling back to the stored English for any record without a key.
+# The record stores the English `summary` plus `summary_key` and `summary_params`, so the
+# panel renders the operator's language and History never freezes the language at creation.
+# scripts/gen_diff_catalog.py generates the catalog's `diff.*` entries from this dict.
 #
-# The template lives HERE and nowhere else. Python formats it to produce the
-# stored English, and scripts/gen_diff_catalog.py generates the panel's
-# translations/en.json `diff.*` entries FROM this dict, so the two cannot drift.
-# A contract test pins that generation and checks every builder's emitted key
-# and params against it.
-#
-# Placeholders are `{name}` only: that is what both str.format and the panel's
-# interpolation understand, and what HA's own translation loader validates a
-# translated string against. A variant suffix (.mesa, .section, .device) is a
-# SEPARATE key rather than a runtime concatenation, because a translator has to
-# be able to move the clause.
+# Placeholders are `{name}` only, which str.format, the panel and HA's translation loader
+# all understand. A variant suffix (.mesa, .section, .device) is a separate key, so a
+# translator can move the clause.
 DIFF_SUMMARY_TEMPLATES: Mapping[str, str] = MappingProxyType({
     "create_calendar_event": "Create calendar event",
     "update_calendar_event": "Update calendar event",
@@ -373,16 +361,9 @@ APPROVAL_SUMMARY_UI: Mapping[str, str] = MappingProxyType({
 
 # Version-record summaries, the Changes tab's one-line "what changed" text.
 #
-# Same contract as DIFF_SUMMARY_TEMPLATES above and generated into the same
-# catalog by the same script, but a separate surface: an approval diff describes
-# a change being PROPOSED, a version record describes one already APPLIED, and
-# only some resource types get one at all (an automation's alias already tells
-# the story, so those stay None).
-#
-# The card-op location is assembled from the three loc* parts joined with the
-# panel's list separator, rather than one key per combination of view/section/
-# card: it is a coordinate list, not prose, so the order is fixed and only the
-# nouns need translating.
+# Same contract and generator as DIFF_SUMMARY_TEMPLATES, for a change already applied. Types
+# whose alias tells the story stay None. The card-op location joins the loc* parts with the
+# panel's list separator: a coordinate list, not prose.
 VERSION_SUMMARY_TEMPLATES: Mapping[str, str] = MappingProxyType({
     "cards": "cards: {count}",
     "cards.was": "cards: {count} (was {before})",

@@ -1,19 +1,10 @@
 """Helper authoring and settings over Home Assistant's own helper machinery.
 
-The storage-based helper domains only, listed in HELPER_TYPES: each publishes a
-uniform {type}/create|update|delete WS command whose item id key is
-"{type}_id", which is what lets one set of handlers cover them all.
-Config-flow helpers use HA's config-entry flow manager instead. create_helper
-can replay their cumulative form steps, returning the next real schema until a
-last step is supplied; only that last step is approval-gated and submitted.
-
-The precheck hoists only the cheap structural checks (type known, id present,
-config a mapping). A helper write validates by way of the WS command that IS the
-write, so there is no side-effect-free validator to run before the gate; the
-rest happens at execution time.
-
-tool_registration registers these tools and this module never imports the
-dispatcher. Shared primitives come from ..tool_common.
+The storage-based domains in HELPER_TYPES each publish a uniform {type}/create|update|delete WS
+command, which lets one set of handlers cover them. Config-flow helpers use HA's flow manager:
+create_helper replays cumulative form steps, and only a supplied last step is approval-gated and
+submitted. The precheck hoists only cheap structural checks, because the WS command that validates a
+helper is also the write. This module never imports the dispatcher.
 """
 
 from __future__ import annotations
@@ -57,10 +48,13 @@ from ..request_authority import AuthorityChangedError, check_request_authority
 from ..template_snapshots import template_snapshot, protect_template
 from ..ws_dispatch import WsCommandNotDispatchedError, WsDispatchError, async_ws_command, ws_commands_unsettled
 from ..mesa_audit import note_mesa_advisory
-from ..helpers import (
-    content_hash, dict_arg, diff_summary_fields as _summary, effective_cap,
-    redact_inaccessible_entity_ids_in_text, version_summary_fields as _version_summary,
+from ..helpers import content_hash
+from ..tool_input import dict_arg
+from ..catalog_text import (
+    diff_summary_fields as _summary, version_summary_fields as _version_summary,
 )
+from ..capability import effective_cap
+from ..redaction import redact_inaccessible_entity_ids_in_text
 from ..tool_common import (
     _CAP_FORBIDDEN_MESSAGE, _cas_conflict, _gate, _pending_or_inline, _record_version, _restore_ctx, fitted_list, redaction_sentinel_path, _tool_error, _tool_success, _truncate, serialize_ha_schema,
 )
@@ -387,12 +381,12 @@ def _enforce_helper_mesa_context(
 def _predict_tag_entity_id(hass: HomeAssistant, tag_id: str, name: str | None) -> str:
     """The entity ID Home Assistant will give a tag created with this id and name.
 
-    An existing registry entry keeps its ID, and a recently deleted one gets its ID
-    back while that is free. Otherwise the slugified name, or the tag_id when
-    unnamed, takes the next free ID. A deleted entry whose ID is now taken renames
-    from its old name and area, which is not predicted here; the post-create MESA
-    check then removes the tag and refuses, as it does for any wrong prediction.
+    An existing or freely restorable ID is kept; otherwise the slugified name or tag_id takes the
+    next free ID.
     """
+    # A deleted entry whose ID is now taken renames from its old name and area, which is not
+    # predicted; the post-create MESA check then removes the tag and refuses, as for any wrong
+    # prediction.
     registry = er.async_get(hass)
     if existing := registry.async_get_entity_id("tag", "tag", tag_id):
         return existing
@@ -406,9 +400,8 @@ def _predict_tag_entity_id(hass: HomeAssistant, tag_id: str, name: str | None) -
 def _restored_helper_entity_id(hass: HomeAssistant, helper_type: str, storage_id: str) -> str:
     """The entity ID a storage helper recreated under storage_id receives.
 
-    Home Assistant reuses its deleted registry entry's entity ID while that ID is
-    free, together with the entity's registry customizations, and otherwise
-    derives one from the storage ID.
+    HA reuses the deleted registry entry's ID and customizations while that ID is free, else derives
+    one from the storage ID.
     """
     registry = er.async_get(hass)
     deleted = registry.deleted_entities.get((helper_type, helper_type, storage_id))
@@ -638,10 +631,8 @@ async def _with_field_help(
 ) -> str | None:
     """Add HA's own English help to each field and return the step's description.
 
-    A field gets its data_description, else its label; section fields read the
-    step's sections.<name> strings. Static integration strings, read with HA's
-    translation helper, so no scope or privacy boundary moves; a missing
-    translation leaves the field as it was.
+    A field gets its data_description, else its label; section fields read sections.<name>. Static
+    integration strings, so no scope or privacy boundary moves.
     """
     # Local: not part of the recorded Home Assistant import floor.
     from homeassistant.helpers.translation import async_get_translations
@@ -700,9 +691,8 @@ async def _prepare_config_flow_helper(
 ) -> tuple[str, Any]:
     """Replay a helper flow without ever submitting its final form.
 
-    Returns ("form", body) when more input is needed, ("ready", None) when the
-    supplied final form is schema-valid and may go to approval, or ("error",
-    message) on refusal. Every flow opened here is aborted in the finally block.
+    Returns ("form", body), ("ready", None) for a schema-valid final form, or ("error", message).
+    Every flow opened here is aborted in the finally block.
     """
     flow_id = None
 
@@ -796,24 +786,19 @@ async def _prepare_config_flow_helper(
 def _resolve_helper_entity_id(
     hass: HomeAssistant, helper_type: str, helper_id: str, *, platform: str | None = None,
 ) -> str | None:
-    """Map a helper id back to its entity_id via the registry, or None.
-
-    list_helpers exposes entry.unique_id as the editable helper_id. A unique_id
-    is unique only per (domain, platform), so the lookup names the owner: the
-    helper type itself for storage helpers, whose collections register under
-    their own domain, or "template" for Template helpers. Another integration's
-    entity with the same unique_id never resolves. Edit and delete use this as
-    the existence check: the helper must resolve to a real entity.
-    """
+    """Map a helper id back to its entity_id via the registry, or None; the existence check."""
+    # list_helpers exposes entry.unique_id as the helper_id, which is unique only per (domain,
+    # platform). The lookup names the owner (the helper type for storage helpers, whose collections
+    # register under their own domain, or "template"), so another integration's entity with the same
+    # unique_id never resolves.
     return er.async_get(hass).async_get_entity_id(helper_type, platform or helper_type, helper_id)
 
 
 def _template_helper_entry(hass: HomeAssistant, helper_type: str, helper_id: str) -> Any | None:
     """The Template config entry behind a Template helper id, or None.
 
-    Edit and delete route to config-entry settings and removal only when both
-    the entity's platform and its owning config entry are Template, so another
-    integration's entity can never select that integration's entry.
+    Both the entity's platform and its owning entry must be Template, so another integration's
+    entity can never select its entry.
     """
     entity_id = _resolve_helper_entity_id(hass, helper_type, helper_id, platform="template")
     registry_entry = er.async_get(hass).async_get(entity_id) if entity_id else None
@@ -914,9 +899,8 @@ async def _tool_list_helpers(
 def _helper_icon_error(helper_type: str, icon: Any, *, editing: bool) -> str | None:
     """Refuse an icon value Home Assistant would reject, before any approval.
 
-    Null removes a stored icon from the helpers HA rebuilds on update. A zone
-    merges updates and its schema has no way to remove an icon, so it can only
-    be replaced; creation has nothing to remove.
+    Null removes a stored icon from helpers HA rebuilds on update. A zone merges updates, so its
+    icon can only be replaced; creation has nothing to remove.
     """
     if icon is None:
         if not editing:
@@ -940,11 +924,8 @@ def _helper_icon_error(helper_type: str, icon: Any, *, editing: bool) -> str | N
 def _helper_write_precheck(args: dict, tool_name: str, *, require_id: bool) -> tuple[dict, str, str] | None:
     """Pre-gate validation for helper writes; None means OK to proceed.
 
-    Checks helper_type/helper_id/config shape so a doomed request is rejected
-    before a pending approval is created. HA's create/update WS command is the
-    only place that validates the per-type schema, and that call is itself the
-    write, so it cannot be pre-checked further here. The executor re-validates
-    at apply time.
+    Checks helper_type, helper_id and config shape. HA's per-type validation is the write itself, so
+    the executor re-validates at apply time.
     """
     if not _valid_helper_type(args.get("helper_type")):
         return _tool_error(f"helper_type must be one of: {', '.join(sorted(HELPER_TYPES))}."), "invalid_request", tool_name
@@ -1078,14 +1059,13 @@ def _helper_write_precheck(args: dict, tool_name: str, *, require_id: bool) -> t
 def _scoped_helper_create_scope_error(
     helper_type: str, access_key: AccessKeyRecord
 ) -> str | None:
-    """Require inherited WRITE scope before creating a scoped helper entity.
+    """Require inherited write scope before creating a scoped helper entity.
 
-    A new entity cannot already have an entity-specific grant. Requiring a
-    GREEN domain grant (or pass-through scope) ensures the entity will be
-    visible and manageable after it materializes. The executor still verifies
-    the concrete entity because an entity-specific RED rule may override the
-    inherited grant once the final entity_id is known.
+    A new entity has no entity-specific grant, so a green domain grant or pass-through scope keeps
+    it manageable once it exists.
     """
+    # The executor still verifies the concrete entity, because an entity-specific red rule may
+    # override the inherited grant once the final entity_id is known.
     if access_key.pass_through:
         return None
     domain = access_key.permissions.domains.get(helper_type)
@@ -1176,12 +1156,11 @@ async def _stored_helper_item(
 ) -> tuple[dict[str, Any] | None, tuple[dict, str, str] | None]:
     """Return a registered helper's stored item, or the refusal that explains its absence.
 
-    The storage list proves the item belongs to the editable collection rather
-    than merely sharing its entity domain. A list failure is unavailable, never
-    an authoritative absence. YAML and storage items share one id space, so a
-    registered entity missing from storage that HA marks not editable is a YAML
-    helper; only a key that can read the entity is told so.
+    The storage list proves membership in the editable collection; a list failure is unavailable,
+    never absence. Only a key that can read the entity is told it is YAML.
     """
+    # YAML and storage items share one id space, so a registered entity missing from storage that HA
+    # marks not editable is a YAML helper.
     rows = await _storage_helper_rows(hass, helper_type)
     if rows is None:
         return None, (
@@ -1287,10 +1266,8 @@ async def _duplicate_helper_name_error(
 ) -> str | None:
     """Refuse a second helper with the same name, which HA would quietly suffix.
 
-    A retried create otherwise leaves two helpers. Only a match this access key
-    can read refuses, so a name cannot probe for a helper outside its scope; a
-    hidden match is created as before. Scoped types (zone, tag, person) skip the
-    check entirely.
+    Only a match this key can read refuses, so a name cannot probe outside its scope. Scoped types
+    (zone, tag, person) skip the check.
     """
     name = config.get("name")
     if helper_type in _SCOPED_STORAGE_HELPER_TYPES or not isinstance(name, str) or not name.strip():
@@ -1422,12 +1399,11 @@ async def _tool_create_helper(
 def _edit_helper_update(helper_type: str, before: Any, config: dict, *, replace: bool = False) -> dict:
     """Return the update HA needs so that only the fields the caller named change.
 
-    Most storage collections rebuild the item from the update payload alone, so
-    the stored fields are resent beneath the caller's changes; an explicit null
-    clears an optional field. Zone, tag and person merge in HA itself and receive
-    the caller's fields unchanged. A restore (`replace`) sends its version alone,
-    so a field added since that version is removed rather than carried over.
+    Stored fields are resent beneath the changes; null clears an optional field. Zone, tag and
+    person merge in HA and get the caller's fields. `replace` sends its version alone.
     """
+    # Most storage collections rebuild the item from the update payload alone. A restore's version
+    # alone removes a field added since that version rather than carrying it over.
     if helper_type in STORAGE_HELPER_MERGING_TYPES or not isinstance(before, dict):
         return dict(config)
     if replace:
@@ -1438,11 +1414,10 @@ def _edit_helper_update(helper_type: str, before: Any, config: dict, *, replace:
 
 
 async def _read_helper_config(hass: HomeAssistant, helper_type: str, helper_id: str) -> dict | None:
-    """Return a helper's current stored config, or None when absent or unreadable.
-
-    Only restore's readback uses this, where either None leaves the result
-    unverified. Edit and delete need the distinction and use _stored_helper_item.
+    """Return a helper's stored config, or None when absent or unreadable; for restore's readback.
     """
+    # Either None leaves the restore unverified. Edit and delete need the distinction and use
+    # _stored_helper_item.
     rows = await _storage_helper_rows(hass, helper_type)
     return next((row for row in rows or [] if row.get("id") == helper_id), None)
 
@@ -2014,11 +1989,8 @@ def _uncertain_helper_result(exc: _UncertainHelperWrite, tool_name: str) -> tupl
 def _helper_edit_landed(payload: dict, target_field: str, observed: Any, result: Any) -> bool:
     """Whether the stored row carries every field of an edit.
 
-    Home Assistant normalizes what it accepts (a timer duration of 00:10:00 is
-    stored as 0:10:00, a numeric string as a number), so a field also matches
-    when the row holds the value the update itself returned for that field. A
-    row holding neither the sent nor the returned value means the edit did not
-    land as Home Assistant reported.
+    HA normalizes what it accepts, so a field also matches the value the update returned. A row
+    holding neither means the edit did not land as reported.
     """
     if not isinstance(observed, dict):
         return False
@@ -2032,12 +2004,12 @@ def _helper_edit_landed(payload: dict, target_field: str, observed: Any, result:
 async def _protected_storage_helper_write(args, access_key, hass: HomeAssistant, data, before, payload, *, deleting=False):
     """Retain a durable safety copy and verify storage readback after one dispatch.
 
-    Raises ConfigurationRecoveryError when nothing changed: a refusal before
-    dispatch, or a Home Assistant refusal whose settled readback still equals
-    the safety copy. Raises _UncertainHelperWrite once a dispatch may have taken
-    effect. An authority change propagates after its recovery phase is saved.
+    Raises ConfigurationRecoveryError when nothing changed and _UncertainHelperWrite once a dispatch
+    may have taken effect. An authority change propagates after recovery is saved.
     """
 
+    # Nothing changed means a refusal before dispatch, or a Home Assistant refusal whose settled
+    # readback still equals the safety copy.
     helper_type = args["helper_type"]
     helper_id = str(args["helper_id"]).strip()
     target_field = f"{helper_type}_id"
@@ -2368,19 +2340,14 @@ def _build_diff_edit_helper(
 
 
 async def _helper_config_entry(hass: HomeAssistant, entry_id: Any) -> Any | None:
-    """A config entry that is a HELPER, or None. The gate for both settings tools.
+    """A config entry that is a helper, or None. The gate for both settings tools.
 
-    "Is this a helper" is HA's OWN classification (`integration_type: helper` in
-    the manifest), not a domain list kept here, so a third-party helper is covered
-    and cannot be mistaken for an integration.
-
-    That carries the security argument: a helper's options are entity references
-    and numbers, so every entity in a write can be checked against the access key's
-    tree, while an arbitrary integration's options flow can carry a HOSTNAME AND
-    CREDENTIALS, and repointing one at a server the operator does not control is a
-    data-exfiltration primitive no scope check catches. Widening past helpers
-    needs its own capability, not a relaxed predicate here.
+    Classification is HA's own (`integration_type: helper`), so a third-party helper is covered.
+    Widening past helpers needs its own capability, not a relaxed predicate.
     """
+    # A helper's options are entity references and numbers, so each entity can be checked against
+    # the key's tree. An arbitrary integration's options flow can carry a hostname and credentials,
+    # and repointing one at a foreign server is an exfiltration primitive no scope check catches.
     if not isinstance(entry_id, str) or not entry_id.strip():
         return None
     entry = hass.config_entries.async_get_entry(entry_id.strip())
@@ -2500,10 +2467,8 @@ def _settings_clear_by_omission(marker: Any) -> bool:
 def _settings_form_payload(result: Any, settings: dict[str, Any]) -> dict[str, Any]:
     """Build an edit-flow payload without resetting omitted stored values.
 
-    Home Assistant's edit forms arrive with current values as suggested values.
-    The frontend submits those values back. Phoenix must do the same for fields
-    the caller did not name, but must not submit a field's static schema default
-    as though it were the current value.
+    HA's edit forms carry current values as suggested values, and unnamed fields are resubmitted
+    from those, never from a field's static schema default.
     """
     schema = result.get("data_schema")
     if not isinstance(schema, vol.Schema) or not isinstance(schema.schema, dict):
@@ -2595,16 +2560,11 @@ async def _configure_settings_flow(
 
 
 def _settings_applied(mechanism: str, result: Any) -> bool:
-    """Whether the flow actually wrote the settings.
-
-    THE ASYMMETRY IS THE POINT. An options flow signals success with
-    CREATE_ENTRY. A reconfigure flow signals it with ABORT + reason
-    "reconfigure_successful", since HA's async_update_reload_and_abort updates
-    the entry and then aborts the flow, so a single "type != CREATE_ENTRY means
-    nothing happened" test reports every successful reconfigure as a failure.
-    An abort with any OTHER reason (already_configured, and whatever an
-    integration raises) is a real refusal and must keep reading as one.
-    """
+    """Whether the flow actually wrote the settings."""
+    # An options flow signals success with CREATE_ENTRY. A reconfigure flow signals it with ABORT
+    # and reason "reconfigure_successful", because async_update_reload_and_abort updates the entry
+    # and then aborts. An abort with any other reason is a real refusal and must keep reading as
+    # one.
     if mechanism == _RECONFIGURE:
         return (result.get("type") == FlowResultType.ABORT
                 and result.get("reason") == _RECONFIGURE_OK)
@@ -2614,11 +2574,8 @@ def _settings_applied(mechanism: str, result: Any) -> bool:
 def _options_schema_json(result: Any) -> list | None:
     """Serialize a flow step's data_schema the way HA's own frontend receives it.
 
-    serialize_ha_schema with HA's custom_serializer is exactly what
-    helpers/data_entry_flow._prepare_result_json uses, so an agent reads the same
-    field names, defaults and selectors the UI does; an entity field even carries
-    the domains it accepts. Reimplementing this would drift from what the flow
-    actually validates against.
+    Uses serialize_ha_schema with HA's custom_serializer, as _prepare_result_json does, so an agent
+    reads what the UI does. Reimplementing it would drift.
     """
     schema = result.get("data_schema")
     if schema is None:
@@ -2643,11 +2600,8 @@ def _options_schema_json(result: Any) -> list | None:
 async def _abort_flow(hass: HomeAssistant, mechanism: str | None, flow_id: str | None) -> None:
     """Abort a settings flow that was opened but will not be finished.
 
-    Every early return between async_init and a successful configure has to come
-    through here: the flow lives in HA's own manager, so an abandoned one leaks
-    into config_entries/flow/progress and shows in the operator's UI as a
-    half-finished dialog. The two mechanisms have separate managers, so aborting
-    on the wrong one silently leaves the flow open.
+    Every early return after async_init comes through here, or the flow lingers as a half-finished
+    dialog. Aborting on the wrong manager silently leaves it open.
     """
     if not flow_id:
         return
@@ -2663,10 +2617,8 @@ async def _tool_get_helper_settings(
 ) -> tuple[dict, str, str]:
     """MCP tool: read one helper config entry's options and the schema for them.
 
-    A read, so never approval-gated even when cap_helper_write is confirm. It
-    opens the settings flow to obtain the schema, which the flow declares rather
-    than stores, and aborts it immediately so no dialog is left open in the
-    operator's UI.
+    A read, never approval-gated. It opens the settings flow for the schema, which the flow declares
+    rather than stores, and aborts it at once.
     """
     tool = "get_helper_settings"
     if effective_cap(access_key, "cap_helper_write") == CAP_DENY:
@@ -2746,17 +2698,11 @@ async def _tool_get_helper_settings(
 def _entities_in_options(options: Any, registry: er.EntityRegistry) -> set[str]:
     """Entity references and statically established template dependencies.
 
-    Matched by VALUE, never by key name: each helper names its source differently
-    (`entity_id` on threshold, `source` on derivative, `entity_ids` on min_max,
-    whatever a third-party helper chose), so a key list would go stale silently
-    and let an unchecked entity through. Over-matching a coincidental string only
-    costs a scope check.
-
-    Strings are read the way HA's validators read them, since those decide what
-    the helper binds to: an entity ID in any letter case, a comma-separated list,
-    or an entity registry ID, which the entity selector accepts and resolve()
-    maps to its entity.
+    Matched by value, never key name, and read as HA's validators read strings: any letter case,
+    comma-separated lists, or an entity registry ID that resolve() maps.
     """
+    # Each helper names its source differently, so a key list would go stale and let an unchecked
+    # entity through; over-matching a coincidental string only costs a scope check.
     found: set[str] = set()
 
     def _string(value: str) -> None:
@@ -2797,15 +2743,15 @@ def _template_options_after_form(options: dict, payload: dict, schema: vol.Schem
 def _unwritable_option_entities(
     options: Any, access_key: AccessKeyRecord, hass: HomeAssistant, *, template_type: str | None = None,
 ) -> list[str]:
-    """Entities in an options payload the access key may not WRITE.
+    """Entities in an options payload the access key may not write.
 
-    WRITE rather than READ, matching _unwritable_scene_members. A helper both
-    EXPOSES its source (an access key that cannot read sensor.secret could otherwise
-    point a helper at it and read the helper's own in-scope entity instead) and
-    can ACTUATE it (switch_as_x wraps a switch so the new entity turns the old one
-    on), and nothing in the serialized schema says which a given field does. The
-    failure direction is refusing a legitimate edit, not handing over a scope escape.
+    Write rather than read, matching _unwritable_scene_members: a helper both exposes and can
+    actuate its source.
     """
+    # An access key that cannot read sensor.secret could otherwise point a helper at it and read the
+    # helper's entity, and switch_as_x lets the new entity actuate the old one. Nothing in the
+    # serialized schema says which a field does; the failure direction is refusing a legitimate
+    # edit, not a scope escape.
     if template_type is not None:
         validate_template_selectors(options, template_type)
     return sorted(
@@ -2908,16 +2854,11 @@ async def _tool_set_helper_settings(
 ) -> tuple[dict, str, str]:
     """MCP tool: change one helper config entry's settings (Confirm-gated).
 
-    Lets an agent repoint a helper whose source entity went away; nothing else on
-    this surface can, and the helper otherwise keeps existing and quietly produces
-    nothing.
-
-    `settings` goes through the entry's own flow, so a key the flow does not
-    declare is REJECTED by its schema. Fields the caller omits are submitted with
-    their current values, taken from the form's suggested values, and an explicit
-    null clears an optional field that has no default. The set to send is
-    `editable_settings` from get_helper_settings with the change applied.
+    `settings` goes through the entry's own flow, whose schema rejects undeclared keys. Omitted
+    fields keep current values; null clears an optional field with no default.
     """
+    # This lets an agent repoint a helper whose source entity went away, which nothing else here
+    # can. The set to send is `editable_settings` from get_helper_settings with the change applied.
     tool = "set_helper_settings"
     if effective_cap(access_key, "cap_helper_write") == CAP_DENY:
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", tool

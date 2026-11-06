@@ -1,9 +1,11 @@
 {
   "custom_components/phoenix_mcp/access_key_schema.py": "Storage normalization with no operator-visible behavior.",
+  "custom_components/phoenix_mcp/admin/__init__.py": "Package marker with no code.",
   "custom_components/phoenix_mcp/dashboard_resource_ownership.py": "Internal record of the resources Phoenix created; the limit it enforces is described with the capability.",
   "custom_components/phoenix_mcp/data.py": "Runtime data container.",
   "custom_components/phoenix_mcp/durable_storage.py": "Storage write barriers; failures surface through the features that write.",
   "custom_components/phoenix_mcp/locales.py": "Maps Home Assistant language tags to catalogs; the language setting is documented where it is chosen.",
+  "custom_components/phoenix_mcp/log_scrub.py": "Log handling with no operator setting; tracebacks read as before, minus secrets.",
   "custom_components/phoenix_mcp/routing/__init__.py": "Package marker with no code.",
   "custom_components/phoenix_mcp/schema_compat.py": "Chooses a validation engine; no behavior of its own.",
   "custom_components/phoenix_mcp/tool_input.py": "Input admission shared by every tool; limits are documented per tool group.",

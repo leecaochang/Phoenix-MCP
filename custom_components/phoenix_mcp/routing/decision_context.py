@@ -11,48 +11,34 @@ from typing import Any
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.core import HomeAssistant
 
-from .command_execution import _target_fingerprint, plan_is_current, _digest
+from .command_plan import _capture_plan
+from .command_summary import summary_current
+from .decision_batch import async_preview_batch
+from .decision_reference import async_prepare_chat_reference, reference_execution_eligible
+from .decision_shadow import async_preview_decision
+from .numeric_evidence import has_percentage_unit
+from .plan_currency import plan_is_current
+from .command_target import _target_fingerprint, _digest
 from .command_operations import numeric_operation, service_arguments
 from .command_routing import RoutingAuthority, effective_routing_mode, routing_language
 from ..const import MAX_SEARCH_QUERY_LEN
 from .routing_tables import (
     COMMAND_ROUTING_READ_INTENTS, COMMAND_ROUTING_INTENTS, COMMAND_ROUTING_VALUE_INTENTS,
     COMMAND_ROUTING_TEMPORAL_OPERATIONS, COMMAND_ROUTING_LANGUAGES, DECISION_CONTEXT_MAX_BYTES,
-    DECISION_CONTEXT_MAX_MESSAGES, DECISION_CONTEXT_REQUIRED_CHOICES,
-    DECISION_CONTEXT_EXECUTION_MODELS, DECISION_CONTEXT_EXECUTION_LANGUAGES,
-    DECISION_FOLLOWUP_EXECUTION_MODELS,
+    DECISION_CONTEXT_REQUIRED_CHOICES, DECISION_CONTEXT_EXECUTION_MODELS,
+    DECISION_CONTEXT_EXECUTION_LANGUAGES, DECISION_FOLLOWUP_EXECUTION_MODELS,
 )
-from .decision_history import history_texts, structured_context_history
-from .decision_provider import DecisionError, DecisionProvider, _evaluate_guarded, confident_choice, revision_admitted
-from ..helpers import redact_inaccessible_entity_ids_in_text, redact_secrets_in_text
+from .decision_history import history_texts
+from .decision_provider import DecisionProvider, _evaluate_guarded, revision_admitted
+from .decision_types import DecisionError, confident_choice
+from ..conversation_log import record_current
+from ..redaction import redact_inaccessible_entity_ids_in_text, redact_secrets_in_text
+from .decision_history import context_history
+from ..llm.accounts import (
+    _get_secret_store, decision_account_fingerprint, PROVIDER_DEFINITIONS, loaded_decision_account,
+)
 
 _LOGGER = logging.getLogger(__name__)
-
-
-def context_history(messages: Any, *, structured: bool = False) -> list[dict] | None:
-    """Validate plain pairs or complete provider exchanges without shortening history."""
-    if structured:
-        return structured_context_history(messages)
-    if (not isinstance(messages, list) or not messages or len(messages) % 2
-            or len(messages) > DECISION_CONTEXT_MAX_MESSAGES):
-        return None
-    copied = []
-    size = 0
-    for index, message in enumerate(messages):
-        if (not isinstance(message, dict) or set(message) != {"role", "content"}
-                or message.get("role") != ("assistant" if index % 2 else "user")
-                or not isinstance(message.get("content"), str) or not message["content"].strip()):
-            return None
-        size += len(message["content"])
-        if size > DECISION_CONTEXT_MAX_BYTES:
-            return None
-        copied.append(dict(message))
-    try:
-        if len(json.dumps(copied, ensure_ascii=False).encode()) > DECISION_CONTEXT_MAX_BYTES:
-            return None
-    except UnicodeError:
-        return None
-    return copied
 
 
 def _state(hass: HomeAssistant, access_key: Any, sentence: str, language: str,
@@ -75,7 +61,6 @@ def _state(hass: HomeAssistant, access_key: Any, sentence: str, language: str,
         return None
     fingerprint: str | None
     if summary:
-        from .command_summary import summary_current
         if not summary_current(hass, access_key, proposal):
             return None
         fingerprint = _digest({eid: _target_fingerprint(hass, access_key, eid, intent) for eid in ids})
@@ -107,7 +92,6 @@ def _state(hass: HomeAssistant, access_key: Any, sentence: str, language: str,
 
 def context_execution_eligible(hass: HomeAssistant, data: Any, language: object) -> bool:
     """Skip history sharing for providers or languages outside the evaluated rollout."""
-    from ..llm.accounts import loaded_decision_account
     settings = data.store.get_settings()
     account = settings.decision_provider_id
     cfg = loaded_decision_account(hass, account) if account else None
@@ -134,7 +118,6 @@ async def async_prepare_chat_context(hass: HomeAssistant, data: Any, access_key:
     else:
         result = await _async_review_context(hass, data, access_key, sentence, language, messages, local,
                                              prepare=True, cancel=cancel)
-    from ..conversation_log import record_current
     record_current("routing", {"route": "decision_result", "stage": "context",
                                "reason": "plan_ready" if result.get("_plan") else result["reason"],
                                "executed": False})
@@ -179,7 +162,6 @@ async def _async_review_context(hass: HomeAssistant, data: Any, access_key: Any,
             and plan_is_current(source_plan, hass, data, current))
 
     async def evaluate() -> dict:
-        from ..llm.accounts import _get_secret_store, PROVIDER_DEFINITIONS
 
         async def guarded() -> dict:
             current = authority.current(hass)
@@ -244,8 +226,6 @@ async def _async_review_context(hass: HomeAssistant, data: Any, access_key: Any,
             ) else ("compatible" if all(confident_choice(check) for check in checks.values()) else "low_probability")
             reviewed = result(reason, answer)
             if prepare and reason == "compatible":
-                from ..llm.accounts import decision_account_fingerprint
-                from .command_execution import _capture_plan
                 if (not context_execution_eligible(hass, data, lang)
                         or not revision_admitted(DECISION_CONTEXT_EXECUTION_MODELS, cfg, answer["model"])):
                     return result("context_unverified", answer)
@@ -299,10 +279,6 @@ async def _async_review_decision_context(hass: HomeAssistant, data: Any, access_
                                          language: str, messages: Any, local: dict, *, prepare: bool = False,
                                          cancel: asyncio.Event | None = None) -> dict:
     """Resolve an explicit latest request, then review it against intact history before effects."""
-    from ..llm.accounts import _get_secret_store
-    from .decision_batch import async_preview_batch
-    from .decision_shadow import async_preview_decision
-    from .numeric_evidence import has_percentage_unit
 
     started = monotonic()
     def result(reason: str) -> dict:
@@ -367,7 +343,6 @@ async def _async_review_decision_context(hass: HomeAssistant, data: Any, access_
             if not proposal:
                 reason = candidate.get("target_selection", {}).get("reason", candidate["reason"])
                 if prepare and reason in ("provider_fallback", "target_declined"):
-                    from .decision_reference import async_prepare_chat_reference, reference_execution_eligible
                     if reference_execution_eligible(hass, data, lang):
                         assert cancel is not None
                         # A separate history-based reference check, never a retry after an error or low probability.

@@ -333,13 +333,13 @@ class TestGlobalSettings:
         )
 
     def test_agentcli_max_iterations_default_and_clamp(self):
-        from custom_components.phoenix_mcp.provider_constants import AGENTCLI_MAX_ITERATIONS
-        assert GlobalSettings().agentcli_max_iterations == AGENTCLI_MAX_ITERATIONS
+        from custom_components.phoenix_mcp.provider_constants import AGENT_CHAT_MAX_ITERATIONS
+        assert GlobalSettings().agentcli_max_iterations == AGENT_CHAT_MAX_ITERATIONS
         assert GlobalSettings(agentcli_max_iterations=40).to_dict()["agentcli_max_iterations"] == 40
         # Load-side clamp: out-of-range and non-numeric fall to the bounds/default.
         assert GlobalSettings.from_dict({"agentcli_max_iterations": 9999}).agentcli_max_iterations == 100
         assert GlobalSettings.from_dict({"agentcli_max_iterations": 1}).agentcli_max_iterations == 3
-        assert GlobalSettings.from_dict({"agentcli_max_iterations": "x"}).agentcli_max_iterations == AGENTCLI_MAX_ITERATIONS
+        assert GlobalSettings.from_dict({"agentcli_max_iterations": "x"}).agentcli_max_iterations == AGENT_CHAT_MAX_ITERATIONS
 
     def test_mesa_inject_default_off(self):
         assert GlobalSettings().mesa_inject_enabled is False

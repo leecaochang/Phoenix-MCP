@@ -1952,6 +1952,7 @@
         "result_withheld": "A {length}-byte result did not fit the request's context and was withheld from the model."
       },
       "options": "Options",
+      "otherTabTurn": "Another tab is running a reply in this conversation. If this tab runs one too, the reply that finishes last is the one kept.",
       "pausedAfter": {
         "one": "Paused after {count} step. Continue?",
         "other": "Paused after {count} steps. Continue?"

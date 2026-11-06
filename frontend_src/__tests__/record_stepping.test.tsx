@@ -38,7 +38,7 @@ function approval(id: string, summary: string, minute: number): ApprovalRecord {
   return {
     id, access_key_id: "t1", access_key_name: "key", tool_name: "restart_ha", cap_name: "cap_restart", args: {},
     diff: { kind: "system_action", summary }, status: "pending", created_at: `2026-08-13T04:${String(minute).padStart(2, "0")}:00Z`,
-    expires_at: "2026-08-13T05:00:00Z", resolved_at: null, approved_by_user_id: null, rejected_reason: null, result: null, request_id: id, client_ip: null,
+    expires_at: "2026-08-13T05:00:00Z", resolved_at: null, approved_by_user_id: null, closure_reason: null, result: null, request_id: id, client_ip: null,
   };
 }
 

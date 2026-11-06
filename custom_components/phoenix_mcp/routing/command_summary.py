@@ -8,20 +8,22 @@ from typing import Any
 from homeassistant.helpers import area_registry as ar, entity_registry as er
 from homeassistant.core import HomeAssistant
 
+from .command_target import _target_fingerprint, _digest
+from .decision_targets import TargetSnapshot, CatalogLimitError
+from .decision_types import DecisionError
 from .routing_tables import (
     COMMAND_SUMMARY_STATES, COMMAND_SUMMARY_UNKNOWN_STATES, COMMAND_SUMMARY_MAX_STATES,
     DECISION_CATALOG_PACK_THRESHOLD, DECISION_BATCH_MAX_TARGETS, DECISION_MAX_TARGET_BYTES,
 )
 from ..device_semantics import device_registry_snapshot
 from .command_display import state_label
-from ..helpers import spoken_list, voice_text, redact_secrets_in_text, redact_inaccessible_entity_ids_in_text
+from ..catalog_text import spoken_list, voice_text
+from ..redaction import redact_secrets_in_text, redact_inaccessible_entity_ids_in_text
 
 
 def summary_catalog(hass: HomeAssistant, access_key: Any, *, devices: Any = None,
                     max_targets: int = DECISION_BATCH_MAX_TARGETS, max_bytes: int = DECISION_MAX_TARGET_BYTES) -> Any:
     """No state values leave Phoenix; unavailable members remain in the denominator."""
-    from .command_execution import _target_fingerprint, _digest
-    from .decision_targets import TargetSnapshot, CatalogLimitError
     devices = devices if devices is not None else device_registry_snapshot(hass)
     registry, areas = er.async_get(hass), ar.async_get(hass)
     groups: dict[str, dict] = {}
@@ -53,14 +55,12 @@ def summary_catalog(hass: HomeAssistant, access_key: Any, *, devices: Any = None
     if len(encoded.encode()) > max_bytes:
         raise CatalogLimitError('state_summary', 'metadata_bytes', len(encoded.encode()), max_bytes)
     if redact_inaccessible_entity_ids_in_text(redact_secrets_in_text(encoded) or '', access_key, hass) != encoded:
-        from .decision_provider import DecisionError
         raise DecisionError('context_unavailable')
     return TargetSnapshot(targets, fingerprints)
 
 
 def summary_members(hass: HomeAssistant, access_key: Any, scope: dict) -> list[str]:
     """Resolve an exact server-owned collection, never a generated selector."""
-    from .command_execution import _target_fingerprint
     devices = device_registry_snapshot(hass)
     registry = er.async_get(hass)
     ids = []

@@ -28,7 +28,7 @@ function record(over: Partial<ApprovalRecord> = {}): ApprovalRecord {
     expires_at: "2099-08-13T05:00:00Z",
     resolved_at: null,
     approved_by_user_id: null,
-    rejected_reason: null,
+    closure_reason: null,
     result: null,
     request_id: "r1",
     client_ip: null,
@@ -232,7 +232,7 @@ describe("Review and Request Details", () => {
     ["failed", "execution_failed", { tool_result: { content: [{ type: "text", text: "Forbidden." }] } }, "The request was approved but did not complete. Error: The action could not be completed. Request Details shows the full error under Result."],
     ["failed", "execution_interrupted", null, "Execution was interrupted and the change may have been applied. Verify the current state before requesting it again."],
   ] as const)("shows a friendly %s outcome", async (status, rejectedReason, result, expected) => {
-    const resolved = record({ status, rejected_reason: rejectedReason, result, resolved_at: "2026-08-13T04:05:00Z" });
+    const resolved = record({ status, closure_reason: rejectedReason, result, resolved_at: "2026-08-13T04:05:00Z" });
     await open(resolved, "history");
     expect(await within(reviewWindow()).findByText(expected)).toBeTruthy();
     expect(within(reviewWindow()).queryByRole("button", { name: "Approve" })).toBeNull();

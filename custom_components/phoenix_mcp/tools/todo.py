@@ -13,7 +13,7 @@ import asyncio
 import json
 from typing import Any, cast
 
-from homeassistant.const import STATE_UNAVAILABLE
+from homeassistant.const import ATTR_SUPPORTED_FEATURES, STATE_UNAVAILABLE
 from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
 
@@ -33,10 +33,8 @@ _UNAVAILABLE = "The list is unavailable, so Home Assistant skips it and returns 
 
 
 def _unavailable(entity_id: str, hass: HomeAssistant) -> bool:
-    """Whether the list reads unavailable: Core's entity services then skip it and still answer success.
-
-    A placeholder restored while its integration loads reads unavailable too.
-    """
+    """Whether the list reads unavailable, which Core's entity services skip yet answer success."""
+    # A placeholder restored while its integration loads reads unavailable too.
     state = hass.states.get(entity_id)
     return state is not None and state.state == STATE_UNAVAILABLE
 
@@ -136,6 +134,24 @@ def _due_fields(due: Any) -> dict[str, str] | str:
     return {"due_datetime" if "T" in due or " " in due.strip() else "due_date": due.strip()}
 
 
+def _clear_due_field(entity_id: str, hass: HomeAssistant) -> dict[str, None] | str:
+    """The field that clears a due value, or why this list has none.
+
+    Core checks each due field against its own supported feature, and a None in
+    either one clears the item's due, so the field is the one this list supports.
+    """
+    # Local: optional component, imported only when this path runs.
+    from homeassistant.components.todo import TodoListEntityFeature
+
+    state = hass.states.get(entity_id)
+    features = state.attributes.get(ATTR_SUPPORTED_FEATURES, 0) if state is not None else 0
+    if features & TodoListEntityFeature.SET_DUE_DATE_ON_ITEM:
+        return {"due_date": None}
+    if features & TodoListEntityFeature.SET_DUE_DATETIME_ON_ITEM:
+        return {"due_datetime": None}
+    return "This list does not support due dates, so there is none to clear."
+
+
 def _ref(item: dict) -> str:
     """How todo's services name an item: its uid, or its text on a list whose integration gives none."""
     return str(item.get("uid") or item.get("summary") or "")
@@ -168,8 +184,8 @@ async def _tool_set_todo_item(
     tool = "set_todo_item"
     entity_id = str(args.get("entity_id") or "").strip()
     action = args.get("action")
-    if action not in ("add", "update", "remove"):
-        return _tool_error("action must be add, update or remove."), "invalid_request", tool
+    if action not in ("add", "update", "remove", "clear_completed"):
+        return _tool_error("action must be add, update, remove or clear_completed."), "invalid_request", tool
     if not _readable(entity_id, access_key, hass):
         return _tool_error(_NOT_FOUND), "not_found", tool
     if _unavailable(entity_id, hass):
@@ -178,11 +194,15 @@ async def _tool_set_todo_item(
             "This todo list is unavailable, so Home Assistant would skip it and change nothing. Check the "
             "list's integration, then try again once the list is available."
         ), "invalid_request", tool
+    if action == "clear_completed":
+        return await _clear_completed(args, entity_id, access_key, hass, data, request_id, client_ip)
     due = _due_fields(args.get("due"))
     if isinstance(due, str):
         return _tool_error(due), "invalid_request", tool
     summary = args.get("summary")
     description = args.get("description")
+    if description is not None and not isinstance(description, str):
+        return _tool_error("description must be text, or null to clear it."), "invalid_request", tool
     status = args.get("status")
     if status is not None and status not in STATUSES:
         return _tool_error("status must be needs_action or completed."), "invalid_request", tool
@@ -221,12 +241,18 @@ async def _tool_set_todo_item(
         else:
             changes = {**({"rename": summary.strip()} if isinstance(summary, str) and summary.strip() else {}),
                        **({"status": status} if status else {}), **due}
-            if description is not None:
-                changes["description"] = description
+            if "due" in args and args["due"] is None:
+                cleared = _clear_due_field(entity_id, hass)
+                if isinstance(cleared, str):
+                    return _tool_error(cleared), "invalid_request", tool
+                changes.update(cleared)
+            # Core clears a field on None and would store an empty string as a value.
+            if "description" in args:
+                changes["description"] = description or None
             if not changes:
                 return _tool_error("update needs at least one of summary, status, due or description."), "invalid_request", tool
             service, service_data = "update_item", {"item": _ref(matched), **changes}
-    if action == "add" and description is not None:
+    if action == "add" and description:
         service_data["description"] = description
     # What the item should now hold, compared field by field once it is read back.
     expected = {key: value for key, value in service_data.items()
@@ -243,12 +269,61 @@ async def _tool_set_todo_item(
     return await _verified(hass, access_key, entity_id, action, target, summary, expected, before)
 
 
+async def _clear_completed(
+    args: dict, entity_id: str, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData,
+    request_id: str, client_ip: str | None,
+) -> tuple[dict, str, str]:
+    """Remove the completed items as they read now, by uid.
+
+    A remove_item call names each one, so what was reviewed is what goes, and Core refuses the whole
+    call if any has gone.
+    """
+    # todo.remove_completed_items chooses its items when it runs, which can be long after an
+    # approval.
+    tool = "set_todo_item"
+    if any(args.get(field) not in (None, "") for field in ("item", "summary", "status", "due", "description")):
+        return _tool_error("clear_completed takes only the list."), "invalid_request", tool
+    try:
+        completed = await _items(hass, entity_id, ["completed"])
+    except TimeoutError:
+        return _tool_error("The list did not answer in time."), "invalid_request", tool
+    if not completed:
+        return _tool_success(_dumps({"list": entity_id, "action": "clear_completed", "applied": False,
+                                     "verified": True, "removed": [], "remaining_completed": 0})), "allowed", entity_id
+    chosen = completed[:TODO_ITEMS_MAX_LIMIT]
+    if not all(item.get("uid") for item in chosen):
+        return _tool_error(
+            "This list gives its items no uid, and Home Assistant removes items only by uid, so its completed "
+            "items cannot be cleared here; remove them in the list's own app."
+        ), "invalid_request", tool
+    result = await _tool_call_service(
+        {"service": {"domain": "todo", "name": "remove_item", "data": {"item": [item["uid"] for item in chosen]}},
+         "targets": [{"kind": "entity", "ids": [entity_id]}]},
+        access_key, hass, data, request_id, client_ip,
+    )
+    content, outcome, _resource = result
+    if outcome != "allowed" or content.get("isError"):
+        return result
+    body: dict[str, Any] = {"list": entity_id, "action": "clear_completed", "applied": True, "removed": chosen,
+                            "truncated": len(chosen) < len(completed)}
+    try:
+        items = await _items(hass, entity_id, list(STATUSES)) if not _unavailable(entity_id, hass) else None
+    except Exception:  # the change was applied; only its confirmation failed
+        items = None
+    if items is None:
+        body.update(verified=False, note="The list could not be read back to confirm the removal.")
+        return _tool_uncertain(_safe_calendar_data(body, access_key, hass)), "invalid_request", entity_id
+    gone = {item["uid"] for item in chosen}
+    body.update(verified=not any(item.get("uid") in gone for item in items),
+                remaining_completed=sum(item.get("status") == "completed" for item in items))
+    return _tool_success(_dumps(_safe_calendar_data(body, access_key, hass))), "allowed", entity_id
+
+
 def _added(before: list[dict], after: list[dict], summary: Any) -> dict | None:
     """The one item the add created, or None when it cannot be singled out.
 
-    Lists may insert at the top or the bottom, so the new item is the one uid
-    that was not there before, never the first or last with the same text. A
-    list that gives no uids is matched by text only while that text is unique.
+    It is the one new uid, since lists may insert at either end. A list without uids matches by text
+    only while that text is unique.
     """
     folded = str(summary).strip().casefold()
     if any(item.get("uid") for item in after):
@@ -278,7 +353,7 @@ def _unapplied(item: dict, expected: dict) -> list[str]:
         if key == "rename":
             held = str(item.get("summary") or "").strip() == value
         elif key in ("due_date", "due_datetime"):
-            held = _same_due(item.get("due"), value)
+            held = not item.get("due") if value is None else _same_due(item.get("due"), value)
         else:
             held = (item.get(key) or None) == (value or None)
         if not held:

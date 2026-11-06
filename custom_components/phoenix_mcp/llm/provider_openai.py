@@ -10,7 +10,7 @@ from typing import Any, AsyncIterator
 from aiohttp import ClientError, ClientSession, SocketTimeoutError
 
 from ..conversation_log import record_rejected_tool
-from ..helpers import LocalizedReason
+from ..catalog_text import LocalizedReason
 from .accounts import PROVIDER_DEFINITIONS, ProviderConfig
 from .base import (
     _bounded_catalog, _CHAT_TIMEOUT, _created_map, _error_body, _FINISH_FAILURES,
@@ -26,9 +26,9 @@ from .base import (
     EV_TEXT, EV_THINKING, EV_TOOL, EV_USAGE,
 )
 from ..provider_constants import (
-    AGENTCLI_DEEPSEEK_MAX_TOKENS, AGENTCLI_NVIDIA_MAX_TOKENS, AGENTCLI_OPENCODE_CHAT_MODELS,
-    AGENTCLI_OPENCODE_CONSOLE_BASE_URL, AGENTCLI_OPENCODE_LEGACY_CHAT_EXCEPTIONS,
-    AGENTCLI_PROBE_IMAGE_MAX_TOKENS, AGENTCLI_PROMPT_CHARS_PER_TOKEN,
+    AGENT_CHAT_DEEPSEEK_MAX_TOKENS, AGENT_CHAT_NVIDIA_MAX_TOKENS, AGENT_CHAT_OPENCODE_CHAT_MODELS,
+    AGENT_CHAT_OPENCODE_CONSOLE_BASE_URL, AGENT_CHAT_OPENCODE_LEGACY_CHAT_EXCEPTIONS,
+    AGENT_CHAT_PROBE_IMAGE_MAX_TOKENS, AGENT_CHAT_PROMPT_CHARS_PER_TOKEN,
 )
 
 
@@ -116,10 +116,8 @@ def _filter_openrouter_models(data: list[dict]) -> list[str]:
 def _filter_mistral_models(data: list[dict]) -> list[str]:
     """Keep active Mistral models declared fit for tool-driven chat.
 
-    Mistral publishes completion_chat and function_calling booleans per model.
-    When that schema is present it is authoritative, so a model must declare
-    both. If the schema disappears entirely, fall back to active ids rather than
-    turning a provider response change into an empty account.
+    A model must declare completion_chat and function_calling. If that schema disappears entirely,
+    fall back to active ids rather than an empty account.
     """
     # A model with a published deprecation date is on its way out, and the
     # superseded native reasoning line and Labs models are not offered for tool
@@ -179,8 +177,8 @@ _OPENCODE_FREE_RE = re.compile(r"^big-pickle$|-free$")
 
 def _filter_opencode_models(models: list[str], *, verified_only: bool = False) -> list[str]:
     """Require Console endpoint evidence and preserve qualified legacy exceptions."""
-    known_chat = (AGENTCLI_OPENCODE_CHAT_MODELS if verified_only
-                  else AGENTCLI_OPENCODE_LEGACY_CHAT_EXCEPTIONS)
+    known_chat = (AGENT_CHAT_OPENCODE_CHAT_MODELS if verified_only
+                  else AGENT_CHAT_OPENCODE_LEGACY_CHAT_EXCEPTIONS)
     return sorted(
         m for m in models
         if not _OPENCODE_FREE_RE.search(m)
@@ -191,25 +189,21 @@ def _filter_opencode_models(models: list[str], *, verified_only: bool = False) -
 
 def _filter_meta_models(models: list[str]) -> list[str]:
     """Keep Meta's chat models: the Muse Wonder and Spark text lines, without the data-sharing tier.
-
-    Meta serves image, voice and segmentation models under the same key, and a
-    `-contributor` model trains on the prompts it receives, which must be an
-    explicit operator choice rather than something a listing offers.
     """
+    # Meta serves image, voice and segmentation models under the same key, and a `-contributor`
+    # model trains on the prompts it receives, which must be an explicit operator choice.
     chat = sorted(m for m in models if m.lower().startswith(("muse-spark", "muse-wonder"))
                   and "contributor" not in m.lower())
     return chat or sorted(models)
 
 
 def _filter_nvidia_models(models: list[str]) -> list[str]:
-    """Drop NVIDIA's non-chat models (embedding/reranking) from the dropdown.
+    """Drop NVIDIA's embedding and reranking models from the dropdown, sorted.
 
-    Unlike OpenRouter, NVIDIA's catalog does not advertise per-model parameters,
-    so tool-calling support (which varies by model there) cannot be detected and
-    is left to the operator. This only removes ids that provably cannot chat at
-    all. Sorted for a stable dropdown; falls back to every id if the name
-    convention ever changes enough to filter everything out.
+    Falls back to every id if the naming convention changes enough to filter everything out.
     """
+    # NVIDIA's catalog advertises no per-model parameters, so tool support cannot be detected and is
+    # left to the operator; only ids that provably cannot chat are removed.
     chat = sorted(
         m for m in models
         if not _NON_CHAT_MODEL_RE.search(m) and not re.search(
@@ -222,15 +216,11 @@ def _filter_nvidia_models(models: list[str]) -> list[str]:
 class OpenAICompatProvider:
     """OpenAI-compatible chat/completions, streaming.
 
-    Backs every conversation provider whose definition does not use the
-    Anthropic adapter (ClaudeProvider serves Anthropic and MiniMax).
-
-    Ollama uses a slightly different shape (the OpenAI path lives under /v1 and
-    models come from /api/tags). Its current OpenAI-compatible endpoint accepts
-    reasoning_effort; older endpoints retain a boolean UI fallback until a probe
-    proves level support. Local Ollama is keyless with a user-supplied base URL
-    and is the fragile tool backend (see _parse); Ollama Cloud is the same shape
-    hosted at a fixed URL with a Bearer API key.
+    Backs every conversation provider whose definition does not use the Anthropic adapter. Ollama
+    differs slightly: the OpenAI path lives under /v1, models come from /api/tags, and older
+    endpoints keep a boolean UI fallback until a probe proves reasoning_effort levels. Local Ollama
+    is keyless with a user-supplied base URL and is the fragile tool backend (see _parse); Ollama
+    Cloud is the same shape at a fixed URL with a Bearer API key.
     """
 
     def __init__(self, cfg: ProviderConfig) -> None:
@@ -266,19 +256,15 @@ class OpenAICompatProvider:
 
     @property
     def _is_opencode_console(self) -> bool:
-        return self.kind == "opencode" and self.cfg.base_url == AGENTCLI_OPENCODE_CONSOLE_BASE_URL
+        return self.kind == "opencode" and self.cfg.base_url == AGENT_CHAT_OPENCODE_CONSOLE_BASE_URL
 
     @property
     def _unsupported_model_api(self) -> bool:
-        return self._is_opencode_console and self.cfg.model not in AGENTCLI_OPENCODE_CHAT_MODELS
+        return self._is_opencode_console and self.cfg.model not in AGENT_CHAT_OPENCODE_CHAT_MODELS
 
     @property
     def _mistral_content(self) -> bool:
-        """Whether replies use Mistral's typed content parts, which carry its reasoning.
-
-        OpenCode forwards a Mistral model's replies in Mistral's own shape, so the
-        model family decides it there, not the provider kind.
-        """
+        """Whether replies use Mistral's typed content parts; OpenCode's model family decides it."""
         return self.definition.model_filter == "mistral" or (
             self.kind == "opencode" and bool(_MISTRAL_FAMILY_RE.match(self.cfg.model)))
 
@@ -475,7 +461,7 @@ class OpenAICompatProvider:
             return 400, ""
         token_limit = ("max_completion_tokens" if self.kind in ("mimo", "chatgpt", "meta")
                        else "max_tokens")
-        body: dict = {"model": self.cfg.model, token_limit: AGENTCLI_PROBE_IMAGE_MAX_TOKENS, "stream": False,
+        body: dict = {"model": self.cfg.model, token_limit: AGENT_CHAT_PROBE_IMAGE_MAX_TOKENS, "stream": False,
                       "messages": [self.user_message(question, [{"mime_type": "image/png", "data": image}])]}
         if self.definition.reasoning == "deepseek":
             # A DeepSeek reasoning model can spend the whole allowance thinking
@@ -522,18 +508,14 @@ class OpenAICompatProvider:
     async def list_model_capabilities(
         self, session: ClientSession, models: list[str],
     ) -> dict[str, dict]:
-        """What each model DECLARES it accepts; empty when the provider says nothing.
+        """What each model declares it accepts; empty when the provider says nothing.
 
-        OpenRouter, Mistral, and Ollama report this; Z.ai, Qwen and MiMo are
-        credited with thinking support from their reasoning style. Every other
-        backend's models endpoint returns only an id and an owner, so the shipped
-        capability table cannot be replaced by discovery, and probing the knobs is
-        a separate step rather than part of this one.
-
-        Empty means "the provider declared nothing", never "the model supports
-        nothing": a caller reading it the second way would strip a working
-        model's controls the moment a lookup failed.
+        Empty means "declared nothing", never "supports nothing", or a failed lookup would strip a
+        working model's controls.
         """
+        # OpenRouter, Mistral and Ollama report this; Z.ai, Qwen and MiMo are credited with thinking
+        # from their reasoning style. Other backends list only an id and an owner, so the shipped
+        # capability table stays and probing is a separate step.
         try:
             if self._is_ollama:
                 return await _ollama_capabilities(
@@ -614,7 +596,7 @@ class OpenAICompatProvider:
             # call mid-JSON; with thinking on (its default) the defaults are
             # larger than any cap Phoenix would set. See provider_constants.py.
             if thinking is False:
-                body["max_tokens"] = AGENTCLI_DEEPSEEK_MAX_TOKENS
+                body["max_tokens"] = AGENT_CHAT_DEEPSEEK_MAX_TOKENS
         elif self.definition.reasoning == "effort":
             # xAI (and OpenAI's Chat Completions, which Phoenix now uses only for
             # probes; turns go through OpenAIResponsesProvider) take a top-level
@@ -721,7 +703,7 @@ class OpenAICompatProvider:
             if self._mistral_content and body.get("temperature") == 0:
                 body["top_p"] = 1
         if self.kind == "nvidia":
-            body["max_tokens"] = AGENTCLI_NVIDIA_MAX_TOKENS
+            body["max_tokens"] = AGENT_CHAT_NVIDIA_MAX_TOKENS
         show_thinking = bool(options.get("show_thinking"))
         # A local Ollama server silently drops the start of a prompt longer than the
         # context it loaded the model with: the system prompt and tool rules first.
@@ -977,7 +959,6 @@ class OpenAICompatProvider:
                 yield _norm(EV_TEXT, text=seg)
             elif show_thinking:
                 yield _norm(EV_THINKING, text=seg)
-        # Assemble.
         assistant_tool_calls = []
         parsed_tools = []
         bad = False
@@ -1104,15 +1085,12 @@ class OpenAICompatProvider:
 
 
 def _estimated_prompt_tokens(body: dict) -> int:
-    """A conservative token estimate for the messages and tools of one request.
-
-    Calibrated on a local Ollama against Phoenix's real requests (see
-    AGENTCLI_PROMPT_CHARS_PER_TOKEN): the estimate errs low, so one above the
-    context means the prompt really does not fit.
-    """
+    """A conservative, low-erring token estimate for the messages and tools of one request."""
+    # Calibrated on a local Ollama (see AGENT_CHAT_PROMPT_CHARS_PER_TOKEN): erring low means an
+    # estimate above the context really does not fit.
     size = len(json.dumps(body.get("messages") or [], ensure_ascii=False))
     size += len(json.dumps(body.get("tools") or [], ensure_ascii=False))
-    return int(size / AGENTCLI_PROMPT_CHARS_PER_TOKEN)
+    return int(size / AGENT_CHAT_PROMPT_CHARS_PER_TOKEN)
 
 
 def _ollama_context_problem(prompt_tokens: int, context: int | None) -> dict | None:

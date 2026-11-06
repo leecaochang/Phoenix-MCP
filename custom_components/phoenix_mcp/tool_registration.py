@@ -191,13 +191,8 @@ _register_executor("HassTurnOff", _execute_hass_turn_off)
 # dispatchable from _call_tool, so only the admin approve path can reach it.
 _register_executor(MESA_APPROVED_EXECUTOR, _execute_call_service_mesa_approved)
 # ---------------------------------------------------------------------------
-# Tool dispatch registry.
-#
-# Maps each published tool name to its handler; a catalog test checks the
-# registry against the published tool catalog. Handlers differ in which pieces of
-# request context they need, so _register_tool reads each one's parameter names
-# once at import (from the code object, not inspect.signature) and _call_tool
-# passes exactly those by keyword.
+# Tool dispatch registry: each published tool name to its handler. _register_tool reads each
+# handler's parameter names once at import, and _call_tool passes exactly those by keyword.
 # ---------------------------------------------------------------------------
 
 _register_tool("get_state", _tool_get_state)

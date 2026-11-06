@@ -1,23 +1,12 @@
 """Minimal client for the ESPHome Device Builder WebSocket API.
 
-The Device Builder add-on exposes the WebSocket API its own frontend speaks.
-Phoenix MCP uses a bounded slice: config validation and migration checks, board /
-component / automation reference data, version history reads, the firmware job
-model (compile, install, poll, cancel, memory analysis), device logs, connectivity
-checks and backtrace decoding. It targets the host and port HA's
-ESPHome dashboard coordinator uses, over HA's shared aiohttp session, with no credentials.
+Uses a bounded slice of the add-on's frontend API: validation, reference data, version
+history, the firmware job model, device logs, connectivity checks and backtrace decoding. Each
+call is one connection, and firmware jobs survive it in the add-on.
 
-SECURITY: the Device Builder has no permission model. An authenticated client can
-run arbitrary Python at config time and arbitrary shell through ESPHome
-subprocesses, so a session is equivalent to shell access on the add-on's host.
-The command allowlist below is the ONLY bound on what this client can reach. It
-is checked before any session or socket work, so no caller can turn input into an
-arbitrary command, and a guard test pins the deliberately excluded commands off.
-Widening the set is a security decision that must go through review.
-
-Each call is one connection: connect, read the handshake, send one command,
-close. Firmware jobs live server-side in the add-on and survive disconnects, so
-a build outlives the request that started it and no job store is needed here.
+SECURITY: a Builder session is equivalent to shell access on the add-on's host, and the
+command allowlist below is the only bound on what this client reaches. It is checked before
+any socket work; widening it is a security decision.
 """
 
 from __future__ import annotations
@@ -50,7 +39,7 @@ _LOGGER = logging.getLogger(__name__)
 # job is polled afterwards through get_job / get_jobs / follow_job, and stopped
 # with cancel. The jobs themselves are the add-on's, and survive its restart.
 #
-# Deliberately absent, and pinned absent by a guard test:
+# Deliberately absent:
 #   config/set_secret, config/set_wifi_credentials  write secrets.yaml
 #   devices/delete, devices/archive                 destroy, bypassing versioning
 #   firmware/reset_build_env                        cancels EVERY job, then wipes
@@ -158,12 +147,8 @@ class BuilderCommandError(BuilderError):
 class BuilderResult:
     """One command's outcome.
 
-    Request/response commands populate `result`. Streaming commands populate
-    `output` plus the `success`/`exit_code` the final frame carried.
-
-    `server_version` and `esphome_version` are what the add-on announced in this
-    connection's handshake, so a caller that cannot make sense of a reply can
-    name the version that produced it.
+    Request commands populate ``result``; streaming ones populate ``output`` with the final
+    frame's ``success`` and ``exit_code``. The versions are from this connection's handshake.
     """
 
     result: Any = None
@@ -180,9 +165,7 @@ def version_mismatch_note(
 ) -> str | None:
     """Explain a failure in terms of an unverified add-on version, or None.
 
-    Returns None when the versions agree, so a genuine command failure is not
-    blamed on the version. Only appended to an ERROR; a version difference on
-    its own is not reported.
+    None when versions agree. Appended only to an error.
     """
     differences = []
     if server_version and server_version != ESPHOME_BUILDER_VERIFIED_VERSION:
@@ -241,11 +224,7 @@ class _OutputCollector:
 
 
 def _max_chars(override: int | None) -> int:
-    """Resolve an output budget, reading the constant at call time.
-
-    Not a default argument value: that would snapshot the constant at import and
-    ignore a later adjustment.
-    """
+    """Resolve an output budget, reading the constant at call time."""
     return ESPHOME_BUILDER_OUTPUT_MAX_CHARS if override is None else override
 
 
@@ -273,13 +252,8 @@ def _raise_for_error(frame: dict[str, Any]) -> None:
 async def _await_handshake(ws: aiohttp.ClientWebSocketResponse) -> tuple[str, str]:
     """Consume frames until the server's opening ServerInfoMessage.
 
-    Returns the independent Builder and compiler versions, with empty strings
-    for absent or malformed values.
-
-    The server speaks first, so nothing may be sent before this returns. A
-    Device Builder configured with credentials is refused here, before the
-    command is sent, because Phoenix MCP holds none and sending anyway would
-    only produce a less clear error.
+    Returns the Builder and compiler versions, "" when absent or malformed. Nothing may be
+    sent first. A Builder configured with credentials is refused here, as Phoenix holds none.
     """
     async for msg in ws:
         if msg.type is not aiohttp.WSMsgType.TEXT:
@@ -366,13 +340,9 @@ async def async_builder_command(
     head_ratio: float = 0.75,
 ) -> BuilderResult:
     """Run one allowlisted Device Builder command and return its outcome.
-
-    `url` is the dashboard coordinator's base URL; the caller resolves the
-    coordinator, which keeps this module free of any import back into the view
-    layer. head_ratio is the share of a bounded output kept from its start.
-
-    Raises BuilderUnavailable when the add-on cannot be reached, BuilderAuthRequired
-    when it wants credentials, and BuilderCommandError when it refuses the command.
+    ``url`` is the dashboard coordinator's base URL; ``head_ratio`` is the share of bounded
+    output kept from its start. Raises BuilderUnavailable, BuilderAuthRequired or
+    BuilderCommandError.
     """
     if command not in ESPHOME_BUILDER_ALLOWED_COMMANDS:
         # Before any network work: this is the allowlist boundary, not a hint.
@@ -420,13 +390,7 @@ async def async_builder_command(
 def collect_output_lines(
     lines: Any, max_chars: int | None = None, *, head_ratio: float = 0.75
 ) -> tuple[str, bool]:
-    """Normalize output that was delivered as a list rather than as frames.
-
-    A running job's log arrives from firmware/get_job as an in-memory list, not
-    as `output` events, but it is the same text: it carries the add-on's literal
-    ANSI escapes and its own line terminators. It goes through the same collector
-    so escapes are stripped and lines are not double-terminated.
-    """
+    """Normalize output delivered as a list, through the same collector as frames."""
     collector = _OutputCollector(_max_chars(max_chars), head_ratio)
     for line in lines if isinstance(lines, list) else []:
         collector.add(str(line))
@@ -440,13 +404,8 @@ async def _collect_until(
 ) -> None:
     """Read output frames until the capture window closes.
 
-    Reaching the deadline is the normal, successful end of a capture rather than
-    a failure, so that TimeoutError is swallowed here. An error frame still
-    raises: a stream the add-on refused outright is not the same as a quiet
-    device with nothing to say.
-
-    Streams are registered under the originating request's message_id in the
-    Device Builder, including captures that never produce an output frame.
+    Reaching the deadline is the normal end, so that TimeoutError is swallowed; an error frame
+    raises. Streams are registered under the originating message_id.
     """
     try:
         async with asyncio.timeout(seconds):
@@ -466,13 +425,7 @@ async def _collect_until(
 
 
 async def _stop_stream(ws: aiohttp.ClientWebSocketResponse) -> None:
-    """End the stream server-side before the socket goes away.
-
-    Closing the socket alone ends it, but the add-on then tears the subprocess
-    down hard and the DEVICE logs a CONNECTION_CLOSED warning on every capture.
-    Best-effort throughout: the capture already succeeded by this point, so
-    nothing here may turn it into a failure.
-    """
+    """End the stream server-side first, or the device logs CONNECTION_CLOSED; best-effort."""
     try:
         await ws.send_str(
             json.dumps({
@@ -496,13 +449,8 @@ async def async_builder_capture(
 ) -> BuilderResult:
     """Collect a bounded window of an open-ended stream, then close.
 
-    devices/logs runs until it is killed and never sends a `result` frame, so
-    there is nothing to wait for and async_builder_command would hang: the capture
-    window IS the request. The window is ended with devices/stop_stream using
-    the originating message id before closing the socket.
-
-    Returns whatever arrived before the deadline. An empty capture is a normal
-    outcome (a device with nothing to log), not an error.
+    devices/logs never sends a ``result`` frame, so the window is the request; it ends with
+    devices/stop_stream. Returns what arrived before the deadline; empty is a normal outcome.
     """
     if command not in ESPHOME_BUILDER_ALLOWED_COMMANDS:
         # Before any network work, exactly as in async_builder_command.

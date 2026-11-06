@@ -24,7 +24,8 @@ from custom_components.phoenix_mcp.access_key_store import (
 from custom_components.phoenix_mcp.const import DOMAIN
 from custom_components.phoenix_mcp.conversation_log import sensitive_key
 from custom_components.phoenix_mcp.data import PhoenixData
-from custom_components.phoenix_mcp.helpers import build_permitted_states, content_hash
+from custom_components.phoenix_mcp.template_sandbox import build_permitted_states
+from custom_components.phoenix_mcp.helpers import content_hash
 from custom_components.phoenix_mcp.tool_dispatch import _call_tool
 from custom_components.phoenix_mcp.policy_engine import is_sensitive_key
 

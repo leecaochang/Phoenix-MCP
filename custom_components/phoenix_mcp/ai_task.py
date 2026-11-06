@@ -1,22 +1,12 @@
 """Phoenix MCP as a Home Assistant AI Task entity.
 
-`ai_task.generate_data` runs through Phoenix MCP's own model loop on a chosen access key's
-scope, so per-access-key permissions, MESA, approvals and audit apply with no separate LLM
-integration. Sibling of voice_agent.py and the llm.API bridge (assist_api.py).
+``ai_task.generate_data`` runs through Phoenix's model loop on a chosen access key's scope, so
+permissions, MESA, approvals and audit apply. A confirm-gated action degrades to queued and
+the task never blocks. A ``structure`` is converted to JSON, requested from the model, and
+validated.
 
-The model side is reused from llm/ and agent_chat.py: provider accounts and keys, provider
-construction, and the gated tool loop (async_run_ai_task dispatches every tool through
-tool_dispatch._dispatch_mcp with the sentinel client_ip "ai_task"). A confirm-gated action
-degrades to "queued, approve in the Phoenix MCP panel"; the task never blocks. A task
-`structure` is honored by converting its schema to JSON, instructing the model to emit
-matching JSON, and parsing the result.
-
-The file name is the platform registration: HA forwards the AI_TASK platform by importing
-`<integration>/ai_task.py` (voice_agent.py avoids that name to dodge conversation-entity
-auto-discovery). The `homeassistant.components.ai_task` import is guarded so setup never
-hard-crashes where its dependency chain is unavailable; the generation core
-(async_generate_ai_task_data) is module-level and does not touch the base class.
-HA-COUPLING POINT with ws_dispatch / assist_api / voice_agent: re-verify on HA upgrades.
+The file name is the platform registration. The ``homeassistant.components.ai_task`` import is
+guarded, and async_generate_ai_task_data does not touch the base class.
 """
 from __future__ import annotations
 
@@ -32,7 +22,8 @@ from homeassistant.util.json import json_loads
 from .agent_chat import AiTaskError, async_run_ai_task
 from .agent_turn import _current_dispatch_access_key
 from .const import DOMAIN
-from .helpers import LocalizedReason, _scrub_log_text
+from .catalog_text import LocalizedReason
+from .redaction import _scrub_log_text
 from .helpers import instance_base_url as _base_url
 from .household_authority import household_scope
 from .llm.accounts import _get_secret_store
@@ -95,12 +86,10 @@ def _ai_task_preferences(hass: HomeAssistant) -> Any:
 
 
 def ai_task_preferred_status(hass: HomeAssistant, entry) -> dict:
-    """Current 'Data generation tasks' default vs Phoenix MCP's entity, for the panel.
+    """Return the 'Data generation tasks' default versus Phoenix's entity, for the panel.
 
-    supported: HA exposes both the entity platform and the preferences store.
-    entity_id: Phoenix MCP's loaded AI Task entity (null until fully configured).
-    gen_data_entity_id/gen_data_name: the current default, so the panel can warn before
-    overwriting it. is_preferred: Phoenix MCP is that default.
+    Keys: supported, entity_id (null until configured), gen_data_entity_id, gen_data_name and
+    is_preferred.
     """
     entity_id = _loaded_ai_task_entity_id(hass, entry.entry_id)
     prefs = _ai_task_preferences(hass)
@@ -338,11 +327,8 @@ def _structure_to_json(structure: Any) -> dict | None:
 def _parse_structured(text: str, structure: Any) -> Any:
     """Parse the model's final text as JSON and hold it to the requested structure.
 
-    Tolerates markdown code fences. The structure only reaches the model as a
-    prompt, so its answer is validated here: a missing field, a wrong type or a
-    non-finite number fails the task instead of reaching the automation. Returns
-    the parsed value as the model wrote it, as Home Assistant's own AI Task
-    providers do: the structure's coercions would turn a count of 95 into 95.0.
+    Tolerates code fences. A missing field, wrong type or non-finite number fails the task.
+    Returns the value as written, as coercion would turn 95 into 95.0.
     """
     body = text.strip()
     if body.startswith("```"):
@@ -375,12 +361,7 @@ from .conversation_log import recorded_turn, record_identity
 
 
 def _task_user_id() -> str | None:
-    """The user this task runs for, or None when HA names none.
-
-    Read from the chat session HA opens for the call, which is local to that call.
-    The entity's own context is one slot that overlapping tasks share. Releases
-    whose session carries no owner, and automations, name no user.
-    """
+    """Return the user this task runs for, from its chat session, or None."""
     user_id = getattr(chat_session.current_session.get(), "user_id", None)
     return user_id if isinstance(user_id, str) else None
 
@@ -402,11 +383,9 @@ async def async_generate_ai_task_data(
 async def _async_generate_ai_task_data(
     hass: HomeAssistant, data: Any, instructions: str, structure: Any
 ) -> Any:
-    """Resolve config, access key and provider, run the gated AI Task loop, return the data.
+    """Run the gated AI Task loop and return a string or parsed JSON value.
 
-    Returns a string (no structure) or a parsed JSON value (with a structure). Raises
-    HomeAssistantError for any not-ready or generation failure, so the service call
-    surfaces a clean error rather than a Phoenix MCP internal.
+    Raises HomeAssistantError for any not-ready or generation failure.
     """
 
     settings = data.store.get_settings()
@@ -457,11 +436,10 @@ if _AI_TASK_AVAILABLE:
 
         @property
         def available(self) -> bool:
-            """Available once ready, fully configured, and not kill-switched.
+            """Return True once ready, fully configured and not kill-switched.
 
-            The entity exists only when fully configured (async_sync_ai_task adds and
-            removes it), so a kill switch leaves it present but unavailable and it
-            recovers when the switch clears, rather than churning in and out.
+            The kill switch leaves the entity present but unavailable, so it recovers without
+            churn.
             """
             data = self.hass.data.get(DOMAIN)
             if data is None or not data.ready or data.shutting_down:
@@ -489,9 +467,8 @@ else:  # pragma: no cover - camera requirement not installed
 async def async_setup_entry(hass: HomeAssistant, config_entry, async_add_entities) -> None:
     """Set up the Phoenix MCP AI Task platform.
 
-    The entity exists only while the AI Task config is complete, so it never shows in
-    HA's AI Task picker as an unconfigured or disabled option. A sync closure (stored on
-    PhoenixData) adds or removes it live when settings change, no restart needed.
+    The entity exists only while the config is complete; a sync closure on PhoenixData adds or
+    removes it live.
     """
     if not _AI_TASK_AVAILABLE:
         return
@@ -509,11 +486,10 @@ async def async_setup_entry(hass: HomeAssistant, config_entry, async_add_entitie
 
 @callback
 def async_sync_ai_task(hass: HomeAssistant, entry, data, async_add_entities) -> None:
-    """Add or remove the Phoenix MCP AI Task entity to match current settings.
+    """Add or remove the AI Task entity to match current settings.
 
-    Present only when fully configured (enabled, access key, provider and model); the kill
-    switch does NOT remove it (it stays present but unavailable). Removal drops the
-    entity-registry entry, which removes the live entity from HA and the AI Task picker.
+    Present when enabled with key, provider and model; the kill switch does not remove it.
+    Removal drops the registry entry, and with it the live entity and picker choice.
     """
     if not _AI_TASK_AVAILABLE:
         return

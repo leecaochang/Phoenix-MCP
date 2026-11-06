@@ -12,12 +12,13 @@ from homeassistant.setup import async_setup_component
 from custom_components.phoenix_mcp import mesa, tool_dispatch, voice_agent
 from custom_components.phoenix_mcp.llm import accounts as llm_accounts
 from custom_components.phoenix_mcp.tools import service as service_tools
-from custom_components.phoenix_mcp.admin_view import _validated_settings_patch
+from custom_components.phoenix_mcp.admin.settings import _validated_settings_patch
 from custom_components.phoenix_mcp.audit import AuditLog
 from custom_components.phoenix_mcp.const import DOMAIN
 from custom_components.phoenix_mcp.routing.routing_tables import COMMAND_ROUTING_PLAN_KEY
 from custom_components.phoenix_mcp.data import PhoenixData
-from custom_components.phoenix_mcp.routing.decision_provider import DecisionError, DecisionProvider
+from custom_components.phoenix_mcp.routing.decision_types import DecisionError
+from custom_components.phoenix_mcp.routing.decision_provider import DecisionProvider
 from custom_components.phoenix_mcp.mesa import async_setup_mesa
 from custom_components.phoenix_mcp.mesa_core import MetadataOrigin, SemanticProfile
 from custom_components.phoenix_mcp.rate_limiter import RateLimiter
@@ -445,7 +446,8 @@ async def test_recognized_numeric_voice_uses_ha_value_without_either_provider(ha
 @pytest.mark.parametrize("value_check", [None, {"status": "match", "source_value": 50}])
 async def test_preexisting_numeric_decision_approval_cannot_execute(hass, hybrid_home, ingress, percent, value_check):
     from custom_components.phoenix_mcp.approval_targets import bind_targets
-    from custom_components.phoenix_mcp.routing.command_execution import _capture_plan, plan_is_current
+    from custom_components.phoenix_mcp.routing.command_plan import _capture_plan
+    from custom_components.phoenix_mcp.routing.plan_currency import plan_is_current
     from custom_components.phoenix_mcp.routing.decision_targets import capture_targets
     data, access_key, _, account, entity_id = hybrid_home
     await data.store.async_patch_settings(agentcli_routing_mode="hybrid")
@@ -1316,7 +1318,7 @@ async def test_timer_recognition_wait_rechecks_account_before_disclosing_to_prov
         assert value == {'kind': 'duration', 'value': '00:05:00'}
         await store.update(account, {'api_key': 'replacement-secret'})
         return value
-    with (patch('custom_components.phoenix_mcp.routing.temporal_values.async_read_temporal_value', side_effect=recognize),
+    with (patch('custom_components.phoenix_mcp.routing.decision_batch.async_read_temporal_value', side_effect=recognize),
           patch.object(type(hass.services), 'async_call', new_callable=AsyncMock) as call):
         _, remote, _ = await run_voice(hass, home, sentence='Start timer named Test for five minutes')
     remote.assert_not_called()
@@ -1452,7 +1454,7 @@ async def test_generic_large_catalog_dispatch_and_approval_revalidation(hass, hy
         call.assert_not_called()
         approval = data.store.get_pending_approvals()[0]
         plan = approval['args'][COMMAND_ROUTING_PLAN_KEY]
-        from custom_components.phoenix_mcp.routing.command_execution import _decision_plan_current
+        from custom_components.phoenix_mcp.routing.plan_currency import _decision_plan_current
         assert _decision_plan_current(plan, hass, data, access_key)
         registry.async_update_entity(other.entity_id, aliases={'Desk lamp'})
         assert not _decision_plan_current(plan, hass, data, access_key)
@@ -1515,7 +1517,8 @@ async def test_timer_duration_preserves_real_ha_runtime_semantics(hass, jev_hybr
 
 
 async def test_saved_zero_duration_plan_is_rejected_at_execution(hass, jev_hybrid_home):
-    from custom_components.phoenix_mcp.routing.command_execution import _capture_plan, plan_is_current
+    from custom_components.phoenix_mcp.routing.command_plan import _capture_plan
+    from custom_components.phoenix_mcp.routing.plan_currency import plan_is_current
     data, access_key, *_ = jev_hybrid_home
     access_key.permissions.domains['timer'] = PermissionNode(state='GREEN')
     entry = er.async_get(hass).async_get_or_create('timer', 'test', 'test_timer', original_name='Test timer')
@@ -1534,7 +1537,7 @@ async def test_saved_zero_duration_plan_is_rejected_at_execution(hass, jev_hybri
 async def test_confident_missing_name_cannot_prepare_a_color_write(hass, jev_hybrid_home, ingress):
     """A catalog-valid winner still needs identity evidence in the current request."""
     from custom_components.phoenix_mcp.routing.decision_shadow import async_preview_decision
-    from custom_components.phoenix_mcp.routing.command_execution import _capture_plan
+    from custom_components.phoenix_mcp.routing.command_plan import _capture_plan
     data, access_key, _, _, entity_id = jev_hybrid_home
     await data.store.async_patch_settings(agentcli_routing_mode='auto')
     hass.services.async_register('light', 'turn_on', AsyncMock())
@@ -1549,7 +1552,7 @@ async def test_confident_missing_name_cannot_prepare_a_color_write(hass, jev_hyb
             answer['probabilities']['provider' if question == 'route' else 'none'] = 1 - probability
         return body
     with (patch.object(DecisionProvider, '_request', AsyncMock(side_effect=respond)) as remote,
-          patch_readers('custom_components.phoenix_mcp.routing.command_execution._capture_plan', wraps=_capture_plan) as capture):
+          patch_readers('custom_components.phoenix_mcp.routing.command_plan._capture_plan', wraps=_capture_plan) as capture):
         result = await async_preview_decision(hass, data, access_key, 'Set Audit Missing Lamp to blue.', 'en',
             {'reason': 'no_match', 'proposal': None}, targets=True, prepare=True, ingress=ingress)
     remote.assert_awaited_once()

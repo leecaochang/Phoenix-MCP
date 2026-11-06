@@ -10,7 +10,7 @@ from homeassistant.setup import async_setup_component
 
 from custom_components.phoenix_mcp.routing import command_verification as verification
 from custom_components.phoenix_mcp.audit import AuditLog
-from custom_components.phoenix_mcp.routing.command_execution import _capture_plan
+from custom_components.phoenix_mcp.routing.command_plan import _capture_plan
 from custom_components.phoenix_mcp.const import DOMAIN
 from custom_components.phoenix_mcp.data import PhoenixData
 from custom_components.phoenix_mcp.rate_limiter import RateLimiter

@@ -71,7 +71,7 @@ describe.each(COMPOSING)("a key press during composition, flagged by %s", (_name
       id: "appr_1", access_key_id: "t1", access_key_name: "my_access_key", tool_name: "create_automation",
       cap_name: "cap_automation_write", args: {}, diff: { kind: "config_diff", summary: "Create automation 'x'", after: "{}" },
       status: "pending", created_at: "2026-01-01T00:00:00Z", expires_at: "2099-01-01T01:00:00Z", resolved_at: null,
-      approved_by_user_id: null, rejected_reason: null, result: null, request_id: "r1", client_ip: null,
+      approved_by_user_id: null, closure_reason: null, result: null, request_id: "r1", client_ip: null,
     } as ApprovalRecord;
     vi.mocked(api.rejectApproval).mockClear();
     vi.mocked(api.listApprovals).mockResolvedValue({ approvals: [record], total: 1 } as never);

@@ -22,7 +22,7 @@ function rec(over: Partial<ApprovalRecord>): ApprovalRecord {
     expires_at: "",
     resolved_at: null,
     approved_by_user_id: null,
-    rejected_reason: null,
+    closure_reason: null,
     result: null,
     request_id: "r1",
     client_ip: null,
@@ -71,30 +71,30 @@ describe("extractResultErrorText", () => {
 describe("friendlyReason", () => {
   it("replaces the execution_failed slug with the underlying tool error", () => {
     const r = rec({
-      rejected_reason: "execution_failed",
+      closure_reason: "execution_failed",
       result: { tool_result: { content: [{ type: "text", text: "Forbidden." }], isError: true } },
     });
     expect(friendlyReason(r)).toBe("Execution failed: The action could not be completed. Request Details shows the full error under Result.");
   });
 
   it("falls back to a readable label when execution_failed has no result text", () => {
-    const r = rec({ rejected_reason: "execution_failed", result: null });
+    const r = rec({ closure_reason: "execution_failed", result: null });
     expect(friendlyReason(r)).toBe("Execution failed");
   });
 
   it("maps known reason slugs to readable labels", () => {
-    expect(friendlyReason(rec({ rejected_reason: "capability_denied" }))).toBe("Capability was denied");
-    expect(friendlyReason(rec({ rejected_reason: "kill_switch" }))).toBe("Kill switch engaged");
-    expect(friendlyReason(rec({ rejected_reason: "agent_chat_ended" }))).toBe("Agent Chat stopped waiting for approval");
-    expect(friendlyReason(rec({ rejected_reason: "approval_format_incompatible" }))).toBe("Cancelled after upgrade because the approval format is incompatible");
+    expect(friendlyReason(rec({ closure_reason: "capability_denied" }))).toBe("Capability was denied");
+    expect(friendlyReason(rec({ closure_reason: "kill_switch" }))).toBe("Kill switch engaged");
+    expect(friendlyReason(rec({ closure_reason: "agent_chat_ended" }))).toBe("Agent Chat stopped waiting for approval");
+    expect(friendlyReason(rec({ closure_reason: "approval_format_incompatible" }))).toBe("Cancelled after upgrade because the approval format is incompatible");
   });
 
   it("passes a free-text admin reason through verbatim", () => {
-    expect(friendlyReason(rec({ rejected_reason: "you can't do this!" }))).toBe("you can't do this!");
+    expect(friendlyReason(rec({ closure_reason: "you can't do this!" }))).toBe("you can't do this!");
   });
 
   it("returns an empty string when there is no reason", () => {
-    expect(friendlyReason(rec({ rejected_reason: null }))).toBe("");
+    expect(friendlyReason(rec({ closure_reason: null }))).toBe("");
   });
 });
 
@@ -119,7 +119,7 @@ describe("localizedResultErrorText", () => {
     };
     primeTranslations(ja.panel);
     expect(localizedResultErrorText(result)).toBe("インテグレーションが無効になっているため、再読み込みできません。");
-    expect(friendlyReason(rec({ rejected_reason: "execution_failed", result }))).toBe(
+    expect(friendlyReason(rec({ closure_reason: "execution_failed", result }))).toBe(
       "実行に失敗しました: インテグレーションが無効になっているため、再読み込みできません。",
     );
     primeTranslations(zh.panel);
@@ -148,7 +148,7 @@ describe("localizedResultErrorText", () => {
     expect(localizedResultErrorText(result)).toBe(
       "操作を完了できませんでした。エラーの全文は「リクエストの詳細」の「結果」に表示されます。",
     );
-    expect(friendlyReason(rec({ rejected_reason: "execution_failed", result }))).not.toContain(diagnostic);
+    expect(friendlyReason(rec({ closure_reason: "execution_failed", result }))).not.toContain(diagnostic);
   });
 
   it("localizes a dynamic non-reloadable integration state", () => {

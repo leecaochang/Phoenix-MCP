@@ -19,7 +19,8 @@ from custom_components.phoenix_mcp.tools import service as service_tools
 from custom_components.phoenix_mcp.audit import AuditLog
 from custom_components.phoenix_mcp.rate_limiter import RateLimiter
 from custom_components.phoenix_mcp.routing.command_routing import async_evaluate_command
-from custom_components.phoenix_mcp.routing.command_execution import _capture_plan, plan_is_current
+from custom_components.phoenix_mcp.routing.command_plan import _capture_plan
+from custom_components.phoenix_mcp.routing.plan_currency import plan_is_current
 from custom_components.phoenix_mcp.routing.command_operations import service_arguments
 from custom_components.phoenix_mcp.const import DOMAIN
 from custom_components.phoenix_mcp.data import PhoenixData

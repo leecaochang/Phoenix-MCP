@@ -515,7 +515,13 @@ mode: single
 
 - `set_entity` can clear name, icon, area, and device-class overrides with an
   explicit null; omitting a field leaves it unchanged. Use `changes.name: null`
-  to restore the integration-provided name. To name an entity after its device,
+  to restore the integration-provided name. `changes.name` is the entity's own
+  name, not its whole shown name: from Home Assistant 2026.11 an entity on a
+  device shows as the device name followed by it, so sending a full name doubles
+  the device name. The approval preview and the result give `composed_name`,
+  the name the change produces; `search_entities` and `describe_entity` return
+  `composed_name` when it differs from `friendly_name`, and it is the name the
+  operator sees. To name an entity after its device,
   so it also follows device renames, send `changes.use_device_name: true`
   instead of a name; it needs Home Assistant 2026.10 or later and a named
   device. `describe_entity` reports the current state as

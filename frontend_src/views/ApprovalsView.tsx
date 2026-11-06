@@ -377,7 +377,7 @@ export function RequestDetailsWindow() {
               {r.resolved_at && <><span className="stat-label">{t("approvals.statusResolved")}</span><span>{formatDateTime(r.resolved_at)}</span></>}
               <span className="stat-label">{t("approvals.metaStatus")}</span><span><ApprovalStatusLabel record={r} claimed={a.isClaimed(r)} /></span>
             </div>
-            {!pending && r.rejected_reason && (
+            {!pending && r.closure_reason && (
               <div className="banner banner-error">
                 <strong>{t(r.status === "rejected" ? "approvals.resolvedRejected" : r.status === "cancelled" ? "approvals.resolvedCancelled" : "approvals.resolvedReason")}:</strong>{" "}
                 {friendlyReason(r)}
@@ -392,7 +392,7 @@ export function RequestDetailsWindow() {
       {!pending && (
         <Section id="result" label={t("approvals.detailTabResult")} guide="window.requestDetails#result" help="help.resultSection" defaultOpen>
           {() => (r.result == null
-            ? <p className="approvals-empty">{r.rejected_reason
+            ? <p className="approvals-empty">{r.closure_reason
               ? t("approvals.noResult", { status: approvalStatusLabel(r.status), reason: friendlyReason(r) })
               : t("approvals.noResultRecorded", { status: approvalStatusLabel(r.status) })}</p>
             : <YamlView value={toYaml(r.result as Record<string, unknown>)} label={t("approvals.detailTabResult")} />)}

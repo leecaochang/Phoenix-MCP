@@ -24,7 +24,7 @@ if importlib.util.find_spec("pytest_homeassistant") is None:
 @pytest.fixture(autouse=True, scope="session")
 def loaded_catalogs():
     """Entry setup loads the string catalogs; tests that render text without setup need them too."""
-    from custom_components.phoenix_mcp.helpers import load_catalogs
+    from custom_components.phoenix_mcp.catalog_text import load_catalogs
 
     load_catalogs()
 

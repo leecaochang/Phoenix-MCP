@@ -257,7 +257,7 @@ export function ApprovalsProvider({ scope, onScopeChange, onCountChange, refresh
   }, [search, hasMore, loading, loadingMore, error, loadMore]);
 
   const shown = useMemo(() => records.filter((r) => matchesListSearch(
-    `${r.access_key_name} ${r.tool_name} ${friendlyToolName(r.tool_name)} ${friendlyApprovalSummary(r.diff).title} ${diffSummary(r.diff)} ${r.rejected_reason ?? ""}`, search)), [records, search]);
+    `${r.access_key_name} ${r.tool_name} ${friendlyToolName(r.tool_name)} ${friendlyApprovalSummary(r.diff).title} ${diffSummary(r.diff)} ${r.closure_reason ?? ""}`, search)), [records, search]);
 
   // ---- Review -------------------------------------------------------------
 

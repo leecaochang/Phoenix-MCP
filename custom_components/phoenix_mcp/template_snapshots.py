@@ -63,9 +63,8 @@ def template_snapshot(hass: HomeAssistant, entry) -> dict:
 def validate_snapshot(snapshot: dict) -> None:
     """Raise ConfigurationRecoveryError unless the snapshot is restorable as it stands.
 
-    It must match the installed HA and Template flow versions and map to exactly
-    one enabled `template` entity of the adapter's domain. A legacy (adapter 0)
-    snapshot is accepted only for a sensor or binary_sensor.
+    It must match the installed versions and one enabled ``template`` entity of the adapter's
+    domain. Legacy (adapter 0) snapshots qualify only for a sensor or binary_sensor.
     """
     safe_snapshot(snapshot)
     # Local: optional component, imported only when this path runs.

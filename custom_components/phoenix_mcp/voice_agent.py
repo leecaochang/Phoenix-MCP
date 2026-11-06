@@ -1,22 +1,12 @@
 """Phoenix MCP as a Home Assistant conversation agent.
 
-Registers Phoenix MCP via conversation.async_set_agent so it appears in Settings >
-Voice assistants and drives HA's Assist pipeline with Phoenix MCP's OWN model loop,
-the self-contained counterpart to the llm.API bridge (assist_api.py), which hands
-Phoenix MCP's tools to a model from another integration. The module is NOT named
-conversation.py so HA does not treat it as a conversation ENTITY platform.
+Registers through conversation.async_set_agent and drives Assist with Phoenix's own model
+loop, the counterpart to the llm.API bridge in assist_api.py. Not named conversation.py, so HA
+does not treat it as an entity platform.
 
-Model-side work is reused from llm/ and agent_chat.py: provider accounts and keys,
-provider construction, and the gated tool loop (async_run_voice_turn), which dispatches
-every tool through tool_dispatch._dispatch_mcp so per-access-key scope, MESA, approvals and
-audit apply identically. A confirm-gated action degrades to "queued, approve in the
-Phoenix MCP panel" (voice has no inline Approve button), so a turn never blocks.
-The bound access key, provider and model are GlobalSettings.voice_agent_*, set in the
-panel rather than a config-entry options flow.
-
-HA-COUPLING POINT alongside ws_dispatch / assist_api: the conversation agent API
-(AbstractConversationAgent / ConversationResult / IntentResponse) can shift across
-HA versions; re-verify on upgrades.
+Every tool dispatches through tool_dispatch._dispatch_mcp, so scope, MESA, approvals and audit
+apply. A confirm-gated action degrades to queued and a turn never blocks. The key, provider
+and model are GlobalSettings.voice_agent_*.
 """
 from __future__ import annotations
 
@@ -32,7 +22,7 @@ from uuid import uuid4
 
 from .agent_chat import async_run_voice_turn
 from .agent_turn import _current_dispatch_access_key
-from .helpers import LocalizedReason, voice_text
+from .catalog_text import LocalizedReason, voice_text
 from .helpers import instance_base_url as _base_url
 from .home_companion import is_companion
 from .household_authority import household_scope
@@ -142,14 +132,10 @@ async def _async_voice_answer(
     device_id: object = None,
     conversation_id: object = None,
 ) -> str:
-    """Resolve config, access key and provider, then route or run the gated voice loop.
+    """Resolve config, key and provider, then route or run the gated voice loop.
 
-    Independent of the conversation base class. A provider or loop failure degrades
-    to a spoken sentence instead of raising. include_review_hint is passed through
-    to the model loop (True only when no satellite_id is set; see async_process). A
-    local command needs no hint, since its own sentence names the panel.
-    Decline sentences are rendered in the CONVERSATION's language
-    (helpers.voice_text), not the server's; language=None falls back to English.
+    A failure degrades to a spoken sentence, in the conversation's language or English.
+    ``include_review_hint`` passes through to the model loop; local commands need no hint.
     """
 
     settings = data.store.get_settings()
@@ -331,17 +317,8 @@ def async_unregister_voice_agent(hass: HomeAssistant, entry: Any) -> None:
 def async_sync_voice_agent(hass: HomeAssistant, entry: Any, data: Any) -> None:
     """Register or unregister the agent to match current settings.
 
-    Registered only when fully configured (enabled + access key + provider + model) and
-    not shutting down, so Phoenix MCP never appears as an agent that answers "not
-    configured"; a deleted provider or revoked access key clears its field and
-    unregisters it.
-
-    The kill switch is deliberately NOT part of this gate. With it on, the agent
-    stays registered but async_voice_answer declines every turn before resolving
-    the access key or dispatching any tool, so nothing runs. An Assist pipeline pointed
-    at Phoenix MCP then degrades to a spoken "unavailable" instead of a hard "agent
-    not found" error, and recovers when the kill switch is turned off. The kill
-    switch gates the network route surface, not in-process helpers.
+    Registered only when fully configured and not shutting down. The kill switch is not part
+    of this gate: async_voice_answer declines each turn, so a pipeline speaks "unavailable".
     """
     s = data.store.get_settings()
     fully_configured = bool(
@@ -439,12 +416,10 @@ def _resolve_pipeline_settings(hass: HomeAssistant, entry_id: str) -> dict:
 async def async_create_assist_pipeline(
     hass: HomeAssistant, entry: Any, data: Any, *, preferred: bool
 ) -> dict:
-    """Create (or return the existing) Phoenix MCP Assist pipeline; optionally set preferred.
+    """Create or return the Phoenix MCP Assist pipeline; optionally set it preferred.
 
-    Requires the voice agent to be fully configured so its conversation agent is
-    registered and the pipeline resolves to a live agent. The created pipeline id is
-    persisted on settings so teardown can remove it. Raises VoicePipelineError on
-    any problem the caller should surface.
+    Needs a fully configured voice agent. The id is persisted for teardown. Raises
+    VoicePipelineError on any problem the caller should surface.
     """
     store = _pipeline_store(hass)
     if store is None:
@@ -487,13 +462,10 @@ async def async_create_assist_pipeline(
 
 
 async def async_remove_assist_pipeline(hass: HomeAssistant, data: Any) -> bool:
-    """Delete the Phoenix-created Assist pipeline if one is tracked. Best-effort.
+    """Delete the Phoenix-created Assist pipeline if tracked, best-effort.
 
-    Clears the tracked id even if the pipeline is already gone. A preferred pipeline
-    cannot be deleted directly, so preference is first moved to any other pipeline;
-    if Phoenix MCP's is the only one it is left in place (HA keeps at least one pipeline).
-    Returns True when the pipeline is still in Home Assistant afterwards, so the panel
-    does not report it removed.
+    Moves preference away first and clears the tracked id. HA keeps at least one pipeline, so
+    a sole pipeline stays. Returns True when the pipeline still exists afterwards.
     """
     s = data.store.get_settings()
     pipeline_id = s.voice_agent_pipeline_id
@@ -531,12 +503,10 @@ def assist_pipeline_preferred(hass: HomeAssistant, pipeline_id: str | None) -> b
 
 
 async def async_set_assist_pipeline_preferred(hass: HomeAssistant, data: Any, *, preferred: bool) -> dict:
-    """Make Phoenix MCP's Assist pipeline the preferred one, or stop it being preferred.
+    """Make Phoenix MCP's Assist pipeline preferred, or stop it being preferred.
 
-    The pipeline stays either way. Home Assistant always has one preferred
-    pipeline, so clearing hands the preference to the first other pipeline, the
-    same choice removal makes; with no other pipeline it cannot be cleared.
-    Raises VoicePipelineError when there is no tracked pipeline or the change fails.
+    The pipeline stays. Clearing hands preference to the first other one, and needs one to
+    exist. Raises VoicePipelineError with no tracked pipeline or on a failed change.
     """
     store = _pipeline_store(hass)
     if store is None:

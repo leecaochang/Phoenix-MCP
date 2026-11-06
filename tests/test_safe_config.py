@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from custom_components.phoenix_mcp.helpers import build_safe_config
+from custom_components.phoenix_mcp.redaction import build_safe_config
 
 
 def _hass_with_config(d: dict) -> SimpleNamespace:

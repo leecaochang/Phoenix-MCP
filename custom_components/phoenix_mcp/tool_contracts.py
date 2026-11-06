@@ -154,13 +154,7 @@ _CANONICAL_SERVICE_PART = re.compile(r"[a-z0-9_]*")
 
 
 def service_name_error(domain: str, service: str) -> str | None:
-    """Refuse a spelling Home Assistant would fold into a different service.
-
-    HA lowercases both parts when it dispatches, so every gate that compares
-    these strings would otherwise decide about a name other than the one that
-    runs. Refused rather than folded, so the audit row and the approval show what
-    executes. A missing part is the caller's own required-argument error.
-    """
+    """Refuse a spelling Home Assistant would fold into a different service."""
     if _CANONICAL_SERVICE_PART.fullmatch(domain) and _CANONICAL_SERVICE_PART.fullmatch(service):
         return None
     return "Service domain and name must be lowercase letters, digits and underscores, as Home Assistant lists them."
@@ -181,14 +175,10 @@ def _target_groups(selectors: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def _service_call_shape(args: dict[str, Any]) -> tuple[dict[str, Any], str | None]:
-    """call_service and dry_run_service in the current shape, from Home Assistant's own or a retired one.
+    """Read call_service and dry_run_service from HA's shape or the retired flat one.
 
-    Home Assistant's call shape (service "light.turn_on", target, data) and the
-    retired flat one (domain, service, service_data, entity_id) each name one call
-    exactly, so they are read as service and targets, which then go through every
-    check the current shape does. Sending both shapes for one part is refused,
-    with the arguments as far as they were read, so the handler can still let a
-    denied capability answer first.
+    Returns (args, error). Each shape names one call exactly and goes through every current
+    check. Both shapes for one part are refused, with the arguments as far as read.
     """
     out = dict(args)
     read: list[str] = []
@@ -308,12 +298,8 @@ def _near_parameter(name: str, candidate: str) -> bool:
 def adopt_near_misses(tool: str, args: dict[str, Any]) -> dict[str, Any]:
     """Read an undeclared argument as the one parameter it plainly means.
 
-    On a read-only tool, a synonym or one-edit near miss with exactly one
-    candidate that was not also sent is renamed, and an undeclared argument
-    holding only an empty placeholder is dropped. A write keeps refusing both,
-    since a guess there could act on something unintended or let an undeclared
-    key through. Each reading is noted on the result; anything else stays for
-    unknown_argument_error to refuse. Retired forms keep their own handling.
+    Read-only tools rename a synonym or one-edit near miss with one unsent candidate, and drop
+    an undeclared empty placeholder, noting each; writes refuse both.
     """
     schema = _PUBLIC_SCHEMAS.get(tool)
     if schema is None:
@@ -344,15 +330,9 @@ def adopt_near_misses(tool: str, args: dict[str, Any]) -> dict[str, Any]:
 
 def unknown_argument_error(tool: str, args: dict[str, Any]) -> str | None:
     """Refuse undeclared top-level arguments, naming the intended one when it is a near miss.
-
-    Every tool root is closed (additionalProperties false), as HA's Assist engine
-    already enforces, so an unknown argument is refused rather than silently
-    ignored. Tools with a curated field list get alias-aware suggestions for those
-    fields; every other tool gets the one-edit near-miss check against all of its
-    declared parameters. Retired public forms are left to their migration
-    guidance. Callers run it after the capability-deny check (so a denied access
-    key learns nothing about its arguments) and before an approval is created.
-    It is deliberately not a validator for arbitrary nested configuration.
+    Tool roots are closed, as in HA's Assist engine. Retired forms keep their migration
+    guidance. Callers run this after the capability-deny check and before an approval is
+    created.
     """
     schema = _PUBLIC_SCHEMAS.get(tool)
     if schema is None:
@@ -402,10 +382,8 @@ def unknown_argument_error(tool: str, args: dict[str, Any]) -> str | None:
 def _implied_kind(tool: str, args: dict[str, Any]) -> dict[str, Any]:
     """Add a selector's missing kind when its other keys decide it, and say so.
 
-    A logbook target holding entity_ids or device_ids names resources, an
-    ESPHome lookup whose id is a YAML file name is a file and any other id a job,
-    and a relationships scope whose ids are all entity IDs is an entity scope.
-    Anything still ambiguous is left for the shape check to refuse.
+    Covers logbook targets, ESPHome lookups and relationships scopes; anything still ambiguous
+    is left for the shape check.
     """
     field = {"get_logbook": "target", "get_esphome_job": "lookup", "get_relationships": "scope"}.get(tool)
     kind: str | None = None
@@ -471,13 +449,7 @@ _HANDLER_CHECKED = frozenset(UNKNOWN_ARGUMENT_PROTECTED_FIELDS) - {"call_service
 
 
 def handler_arguments(tool: str, args: dict[str, Any]) -> tuple[dict[str, Any], str | None]:
-    """Unknown names, then the central scalar contract, for a tool that checks its own arguments.
-
-    Such a tool runs this after its capability check, so a denied access key
-    still learns nothing about its arguments; its scalars are then held to the
-    contract every other tool's are (_call_tool_checked): view_index 0.0 is 0
-    and a missing required argument is named the same way. Writes stay strict.
-    """
+    """Apply unknown-name and scalar checks for a tool checking its own arguments."""
     if error := unknown_argument_error(tool, args):
         return args, error
     return scalar_arguments(tool, args)
@@ -486,9 +458,7 @@ def handler_arguments(tool: str, args: dict[str, Any]) -> tuple[dict[str, Any], 
 def normalize_tool_args(tool: str, args: dict[str, Any]) -> tuple[dict[str, Any], str | None]:
     """Translate a Catalog v2 request to the flat shape the executors take.
 
-    Returns (args, error). Unrelated unknown keys pass through untouched; retired
-    fields get migration guidance and targeted selector mistakes get correction
-    errors.
+    Returns (args, error). Unknown keys pass through; retired fields get migration guidance.
     """
     shape_error = None
     if tool in {"call_service", "dry_run_service"}:

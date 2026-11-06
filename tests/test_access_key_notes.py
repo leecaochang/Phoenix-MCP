@@ -20,13 +20,13 @@ from custom_components.phoenix_mcp.access_key_store import (
     normalize_notes,
     snapshot_preset,
 )
-from custom_components.phoenix_mcp.admin_view import PhoenixAdminAccessKeyView
+from custom_components.phoenix_mcp.admin.access_keys import PhoenixAdminAccessKeyView
 from custom_components.phoenix_mcp.agent_recovery import AgentRecovery
 from custom_components.phoenix_mcp.assist_api import PhoenixAssistAPI
 from custom_components.phoenix_mcp.const import ACCESS_KEY_NOTES_MAX_LENGTH, DOMAIN
-from custom_components.phoenix_mcp.provider_constants import AGENTCLI_CLIENT_IP
+from custom_components.phoenix_mcp.provider_constants import AGENT_CHAT_CLIENT_IP
 from custom_components.phoenix_mcp.data import PhoenixData
-from custom_components.phoenix_mcp.helpers import ACCESS_KEY_NOTES_FRAMING
+from custom_components.phoenix_mcp.redaction import ACCESS_KEY_NOTES_FRAMING
 from custom_components.phoenix_mcp.personas import get_persona_caps
 from tests.runtime_fixtures import patch_readers
 
@@ -312,7 +312,7 @@ async def test_phoenix_agent_surfaces_put_the_notes_in_their_system_prompt(home,
                 return None
             await agent_chat.async_run_agent_turn(
                 hass=home, data=data, access_key=key, provider=_Provider(), session=MagicMock(),
-                messages=[{"role": "user", "content": "hello"}], options={}, client_ip=AGENTCLI_CLIENT_IP,
+                messages=[{"role": "user", "content": "hello"}], options={}, client_ip=AGENT_CHAT_CLIENT_IP,
                 base_url=BASE, emit=emit, cancel=asyncio.Event(),
             )
         elif surface == "voice":
@@ -382,7 +382,7 @@ async def test_a_changed_note_reaches_a_connected_client_once(home, mcp_env):
 
     await data.store.async_patch_access_key(key.id, notes="The guest room is the study.")
     # Phoenix's own surfaces rebuild their prompt every turn: no notice, nothing consumed.
-    assert "administrator notes" not in await _call(home, data, key, AGENTCLI_CLIENT_IP)
+    assert "administrator notes" not in await _call(home, data, key, AGENT_CHAT_CLIENT_IP)
     assert key.notes_delivered_version < key.notes_version
 
     changed = await _call(home, data, key)

@@ -1,10 +1,7 @@
 name: Compatibility
 
+# Run by hand from the Actions tab.
 on:
-  schedule:
-    # Weekly, so a new Home Assistant release or a development advisory is seen
-    # even with no commits.
-    - cron: "37 6 * * 1"
   workflow_dispatch:
 
 # Least privilege: these jobs only read the checkout and report a result.

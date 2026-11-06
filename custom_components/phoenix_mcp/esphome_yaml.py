@@ -1,17 +1,11 @@
-"""Credential masking for ESPHome device YAML.
+"""Credential masking for ESPHome device YAML, whose files often hold them inline.
 
-Device files routinely carry credentials inline rather than behind `!secret`.
-Phoenix MCP reads them without exposing the values to an agent or a stored record.
+Masking is span-surgical: ``yaml.compose`` gives each scalar's source span, so a placeholder
+is spliced into the raw text and formatting survives. Three layers feed one span set: curated
+paths, credential-looking keys at any depth, and whole values matching secrets.yaml.
 
-Masking is span-surgical: `yaml.compose` gives each scalar's exact source span,
-so a placeholder is spliced into the RAW text and comments, ordering and
-formatting survive byte-for-byte (a parse-and-re-dump would destroy them). Three
-layers feed one span set: curated paths (api.encryption.key, ...); any scalar
-whose KEY looks like a credential, at any depth; any scalar whose whole value
-matches a secrets.yaml value.
-
-Over-redaction is the accepted failure direction. `secrets.yaml` is never
-readable through any tool; it is parsed here only to know what NOT to emit.
+Over-redaction is the accepted failure direction. ``secrets.yaml`` is parsed here only to know
+what not to emit; no tool can read it.
 """
 
 from __future__ import annotations
@@ -71,22 +65,15 @@ _ALLOWED_SUFFIXES = (".yaml", ".yml")
 _ARCHIVE_DIR = "archive"
 
 def placeholder_for(path: str) -> str:
-    """The placeholder that stands in for the value at a dotted path.
-
-    Path-based, never value-derived: a hash of the real value would be an
-    offline-guessing oracle for a weak password, and would change whenever the
-    credential rotated.
-    """
+    """Return the path-based placeholder for a dotted path, never value-derived."""
     return f"{_PLACEHOLDER_PREFIX}{path}{_PLACEHOLDER_SUFFIX}"
 
 
 def esphome_rel_path_ok(rel: str) -> bool:
-    """Whether a config-relative path may be read as device YAML.
+    """Return whether a config-relative path may be read as device YAML.
 
-    Same hidden-path, extension and secrets.yaml rules as the generic YAML reader
-    (_yaml_read_path_ok), except that `archive/` (the Device Builder's trash) is
-    refused and the `esphome/` directory is admitted. secrets.yaml is never
-    reachable.
+    Follows _yaml_read_path_ok, except that ``archive/`` is refused and ``esphome/`` admitted.
+    secrets.yaml is never reachable.
     """
     if not isinstance(rel, str) or not rel.strip():
         return False
@@ -141,11 +128,7 @@ def _walk(node: Any, path: tuple[str, ...]) -> Iterator[tuple[str, tuple[str, ..
 
 
 def _compose(text: str) -> Any:
-    """Parse to a node tree, keeping unknown tags intact.
-
-    Composition stops at the parser level, so no constructor runs: !lambda,
-    !secret, and any third-party tag survive without needing to be understood.
-    """
+    """Parse to a node tree, keeping unknown tags; no constructor runs."""
     try:
         return yaml.compose(text, Loader=PhoenixLenientLoader)
     except (yaml.YAMLError, RecursionError) as err:
@@ -158,11 +141,7 @@ def _normalized_path(path: tuple[str, ...]) -> tuple[str, ...]:
 
 
 def _is_tagged(node: yaml.ScalarNode) -> bool:
-    """Whether a scalar carries a custom tag (!secret, !lambda, ...).
-
-    A tagged scalar is a reference or an expression, not a literal value, so
-    there is nothing to hide.
-    """
+    """Return whether a scalar carries a custom tag, a reference with nothing to hide."""
     return isinstance(node.tag, str) and node.tag.startswith("!")
 
 
@@ -230,9 +209,7 @@ def redact_esphome_text(
 ) -> tuple[str, list[str]]:
     """Return (redacted_text, sorted redacted paths).
 
-    Raises YamlParseError when the document does not parse. Reads FAIL CLOSED:
-    a file whose credentials cannot be located must not be returned at all,
-    because inline credentials are the normal case rather than the exception.
+    Raises YamlParseError, failing closed: an unparsed file's credentials cannot be located.
     """
     spans = _secret_spans(text, secret_values or set())
     out = text
@@ -257,14 +234,10 @@ def _line_offsets(text: str, first_line: int, last_line: int) -> tuple[int, int]
 def redact_esphome_slice(
     text: str, secret_values: set[str] | None, first_line: int, last_line: int
 ) -> str:
-    """Lines first..last of a device file, with every credential in them masked.
+    """Return lines first..last of a device file with every credential masked.
 
-    Spans are found over the WHOLE document, so a credential's path and the
-    layer-3 cross-check read the same as in a full masked read. Every span that
-    touches the slice is replaced by its placeholder, clipped to the slice: a
-    block-scalar credential that begins above the first line still leaves none of
-    its characters behind. Raises YamlParseError (fail closed) and ValueError for
-    a range outside the file.
+    Spans come from the whole document, and any touching the slice are clipped to it. Raises
+    YamlParseError (fail closed) and ValueError for a range outside the file.
     """
     start, end = _line_offsets(text, first_line, last_line)
     spans = _secret_spans(text, secret_values or set())
@@ -313,12 +286,10 @@ def _platform_names(node: Any) -> list[str]:
 
 
 def declared_components(text: str) -> dict[str, Any]:
-    """The components and platforms a device file declares itself, by name only.
+    """Return the components and platforms a device file declares itself, by name only.
 
-    Read from the file's own top level, so what `packages:` or an `!include`
-    brings in is not seen; uses_includes says when that is the case. Composition
-    only: no constructor runs and no value is ever returned. Raises
-    YamlParseError for a file that does not parse.
+    Top level only, so ``uses_includes`` flags what packages or includes hide. No constructor
+    runs. Raises YamlParseError for a file that does not parse.
     """
     root = _compose(text)
     components: list[str] = []
@@ -340,13 +311,10 @@ def declared_components(text: str) -> dict[str, Any]:
 
 
 def apply_line_splice(text: str, from_line: int, to_line: int, replacement: str) -> str:
-    """Apply a Device Builder YamlDiff to `text`.
+    """Apply a Device Builder YamlDiff to ``text``, by the add-on's apply_yaml_diff rules.
 
-    Same rules as the add-on's own apply_yaml_diff: lines are 1-indexed and
-    inclusive in the OLD text, `to_line == from_line - 1` is a pure insert before
-    `from_line`, and the replacement's final terminator is implied, so a splice
-    reaching an unterminated last line leaves the text unterminated. Raises
-    ValueError for a range outside the text.
+    Lines are 1-indexed and inclusive in the old text; ``to_line == from_line - 1`` is an
+    insert. Raises ValueError for a range outside the text.
     """
     lines = text.splitlines(keepends=True)
     if to_line < from_line - 1:
@@ -392,16 +360,10 @@ def masked_unified_diff(
 
 
 def inline_secret_values(text: str, secret_values: set[str] | None = None) -> set[str]:
-    """The credential VALUES a device file carries inline, for scrubbing free text.
+    """Return the credential values a device file carries inline, for scrubbing free text.
 
-    Same three-layer detection as the masking path, but returning the values
-    rather than their spans: the Device Builder's validation output quotes the
-    offending lines back, so a file with an inline password can print it into an
-    error message that has no YAML structure to splice.
-
-    Short values are dropped (the MIN_CROSS_CHECK_LENGTH floor) because a scrub
-    is a blind substring replace over arbitrary output, where a two-character
-    "value" would corrupt unrelated text.
+    Same three layers as masking; validation output can quote them. Values under
+    MIN_CROSS_CHECK_LENGTH are dropped, as the scrub is a blind substring replace.
     """
     values: set[str] = set()
     for start, end, _dotted in _secret_spans(text, secret_values or set()):
@@ -412,12 +374,7 @@ def inline_secret_values(text: str, secret_values: set[str] | None = None) -> se
 
 
 def scrub_secret_values(text: str, values: set[str]) -> str:
-    """Replace every occurrence of every known credential in free text.
-
-    Longest first, so a value that contains another leaves no readable remainder
-    behind. The placeholder is fixed rather than path-derived, because this is
-    unstructured output rather than a position in a file.
-    """
+    """Replace every occurrence of every known credential in free text, longest first."""
     out = text
     for value in sorted(values, key=len, reverse=True):
         if value:

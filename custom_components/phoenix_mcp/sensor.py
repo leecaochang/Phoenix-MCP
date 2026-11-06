@@ -104,13 +104,7 @@ class PhoenixAccessKeySensor(SensorEntity):
 
     @callback
     def async_follow_access_key_update(self, access_key: AccessKeyRecord) -> None:
-        """Point this sensor at the access key's current record, in place.
-
-        A rename produces a NEW AccessKeyRecord, and every reading is taken off the
-        one held in _access_key, so without this the status and expiry sensors would
-        keep reporting the pre-rename record. Updating in place, rather than
-        rebuilding the sensor, preserves entity identity.
-        """
+        """Point this sensor at the key's current record in place, keeping entity identity."""
         self._access_key = access_key
         self._device_info = self._build_device_info()
         if self.hass is not None:
@@ -228,12 +222,9 @@ async def async_rename_access_key_sensors(
     old_name: str,
     access_key: AccessKeyRecord,
 ) -> None:
-    """Follow an access key rename WITHOUT touching entity identity.
+    """Follow an access key rename without touching entity identity.
 
-    Only the device's display name (inherited through has_entity_name) and the
-    AccessKeyRecord each sensor reads from change. The entity registry is untouched,
-    and unique_id derives from the access key ID, so entity_ids, and any dashboard
-    card or automation naming them, survive the rename.
+    Only the device's display name and each sensor's record change, so entity_ids survive.
     """
 
     data: PhoenixData = hass.data[DOMAIN]

@@ -21,7 +21,8 @@ from .const import (CONFIG_RECOVERY_LAYOUT_MAX_DEPTH, CONFIG_RECOVERY_MAX_BYTES,
                     CONFIG_RECOVERY_MAX_DEPTH, CONFIG_RECOVERY_MAX_RECORDS,
                     CONFIG_RECOVERY_RETENTION_DAYS, CONFIG_RECOVERY_PER_RESOURCE,
                     CONFIG_RECOVERY_UNRESOLVED, REDACTION_SENTINEL)
-from .helpers import is_sensitive_key, redact_secrets_in_text
+from .policy_engine import is_sensitive_key
+from .redaction import redact_secrets_in_text
 from .recovery_storage import RecoveryStorage
 from .ws_dispatch import ws_commands_unsettled
 
@@ -91,12 +92,9 @@ _SCRUB_MARKERS = ("<phoenix-access-key>", "<phoenix-token>")
 
 
 def _credential_key(key: Any, value: Any, layout: bool) -> bool:
-    """Whether a key marks its value as a credential a snapshot must not hold.
+    """Return whether a key marks its value as a credential a snapshot must not hold.
 
-    A dashboard layout already sits in Home Assistant's storage and has its own
-    scrubbed reads, so a layout is refused for what can really be a credential:
-    no flag, blank or count is one (a card's max_tokens: 5). Every other snapshot
-    keeps the plain key-name rule.
+    A dashboard layout has scrubbed reads, so a flag, blank or count passes there.
     """
     if not is_sensitive_key(key):
         return False
@@ -111,11 +109,7 @@ def _credential_key(key: Any, value: Any, layout: bool) -> bool:
 
 
 def _holds_placeholder(text: str, layout: bool) -> bool:
-    """Whether a string stands in for a scrubbed value.
-
-    A layout's text may mention the redaction placeholder, as Markdown can. Only
-    a value that is nothing but the placeholder reads as a lost value there.
-    """
+    """Return whether a string stands in for a scrubbed value."""
     if any(marker in text for marker in _SCRUB_MARKERS):
         return True
     return text == REDACTION_SENTINEL if layout else REDACTION_SENTINEL in text
@@ -159,9 +153,8 @@ def _path_label(path: tuple) -> str:
 def safe_snapshot(value: dict | None) -> dict | None:
     """Admit only bounded JSON that survives scrubbing without losing information.
 
-    Redaction is not a reversible encoding. Refuse rather than persist raw values
-    or advertise an incomplete payload as a usable safety copy, and name the
-    location so the refusal can be acted on.
+    Redaction is not reversible, so this refuses, naming the location, rather than persist raw
+    values or advertise an incomplete safety copy.
     """
     try:
         encoded = json.dumps(value, allow_nan=False)

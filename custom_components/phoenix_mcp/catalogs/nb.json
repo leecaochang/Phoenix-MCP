@@ -563,6 +563,7 @@
       "verboseHint": "Vis agentens verktøykall, verktøyresultater og tenkning. Svar, bilder, fremdrift, godkjenninger og meldinger vises uansett.",
       "workingOn": "Arbeider: {name}",
       "workingSpinner": "Arbeider…",
+      "otherTabTurn": "En annen fane kjører et svar i denne samtalen. Hvis denne fanen også kjører ett, beholdes svaret som blir ferdig sist.",
       "pausedAfter": {
         "one": "Satt på pause etter {count} trinn. Fortsette?",
         "other": "Satt på pause etter {count} trinn. Fortsette?"

@@ -1,22 +1,12 @@
 """MESA profile suggestions: scan for under-protected entities, admin-confirmed.
 
-Two signals, with a pluggable engine:
-- blast_radius: automation, script and scene entities with no operator-authored
-  MESA coverage whose referenced entities touch a risky domain, or whose fan-out
-  exceeds a threshold. The profile goes ON the orchestrator entity: an
-  automation's ACTIONS run natively in HA and are never re-gated per entity, so
-  covering the referenced lock does not stop the automation.
-- naked_risky: entities in a curated risky-domain list with no operator-authored
-  coverage at any inheritance level. lock and alarm_control_panel suggest
-  "prohibited" (mesa-core's zero-profile baseline, so applying is never a
-  relaxation under enforced mode); the rest suggest "confirm".
+blast_radius flags automations, scripts and scenes without authored coverage that touch a
+risky domain or fan out widely; the profile goes on the orchestrator, as its actions are never
+re-gated. naked_risky flags uncovered risky-domain entities: lock and alarm_control_panel
+suggest "prohibited", the rest "confirm".
 
-Suggestions are computed admin-side (startup priming, automation reload, explicit
-refresh), cached on the MesaRuntime like the orphan lists, and NEVER auto-applied:
-profiles are operator-authored intent, so the admin applies, reviews or dismisses
-each in the panel. Blast radii come from HA's public entities_in_automation /
-entities_in_script callbacks, an HA-coupling point wrapped so a moved API skips
-the signal. Extraction is a LOWER BOUND: templated targets are invisible.
+Computed admin-side and cached on MesaRuntime, never auto-applied. Blast radii use HA's public
+callbacks and are a lower bound, since templated targets are invisible.
 """
 
 from __future__ import annotations
@@ -60,11 +50,9 @@ class MesaSuggestion:
 
 
 def _reason(key: str, **params: Any) -> tuple[str, str, dict[str, Any]]:
-    """The English sentence plus the key/params that reproduce it elsewhere.
+    """Return the English sentence plus the key and params that reproduce it elsewhere.
 
-    Params ending in _key name a sub-phrase the panel re-resolves in its own
-    language; they are carried through but never interpolated here, since the
-    English sentence already holds the English clause.
+    Params ending in _key name sub-phrases the panel resolves; they are never interpolated.
     """
     text = MESA_SUGGESTION_TEMPLATES[key].format(
         **{k: v for k, v in params.items() if not k.endswith("_key")}
@@ -79,12 +67,9 @@ def _reason_fields(key: str, **params: Any) -> dict[str, Any]:
 
 
 def _automation_refs(hass: HomeAssistant, entity_id: str) -> list[str] | None:
-    """Entities referenced by an automation, or None when unavailable.
+    """Return the entities referenced by an automation, or None when unavailable.
 
-    entities_in_automation is a public HA callback (used by HA's own frontend)
-    resolving trigger/condition/action targets including device/area/label
-    references. Import inside the function and swallow everything: a missing
-    component or a moved API skips the signal, it never breaks the scan.
+    Any failure, such as a moved API, skips the signal and never breaks the scan.
     """
     try:
         # Local: optional component, imported only when this path runs.
@@ -284,11 +269,8 @@ def _subject_exists(hass: HomeAssistant, scope: str, subject_id: str) -> bool:
 def refresh_suggestions(hass: HomeAssistant, runtime: MesaRuntime) -> None:
     """Recompute profile suggestions and cache them on the runtime.
 
-    Mirrors refresh_orphans: synchronous, admin-initiated (startup priming,
-    automation reload, explicit refresh), never on an agent request path.
-    Dismissed keys are filtered out, and those whose subject is gone are pruned in
-    memory (persisted by the next save). Computed regardless of mesa_mode: the
-    MESA tab is where profiles are authored.
+    Synchronous and admin-initiated, never on an agent path; computed whatever the mesa_mode.
+    Dismissed keys are filtered, and those whose subject is gone are pruned in memory.
     """
     defaults = runtime.store.get_deployment_defaults()
     computed = _suggest_blast_radius(hass, runtime, defaults) + _suggest_naked_risky(

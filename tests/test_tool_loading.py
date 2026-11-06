@@ -17,7 +17,7 @@ import pytest
 from custom_components.phoenix_mcp import agent_chat, agent_turn
 from custom_components.phoenix_mcp.llm import base as llm_base
 from custom_components.phoenix_mcp.agent_recovery import AgentRecovery
-from custom_components.phoenix_mcp.provider_constants import AGENTCLI_LOAD_TOOLS_NAME
+from custom_components.phoenix_mcp.provider_constants import AGENT_CHAT_LOAD_TOOLS_NAME
 from custom_components.phoenix_mcp.access_key_store import GlobalSettings
 from custom_components.phoenix_mcp.tool_loading import ToolLoader
 from tests.runtime_fixtures import patch_readers
@@ -50,7 +50,7 @@ def test_no_loader_within_the_cap_or_without_deferrable_tools():
 def test_the_first_round_declares_the_starting_set_and_the_loader():
     loader = ToolLoader.plan(_catalog(), 14)
     names = [tool["name"] for tool in loader.round_tools()]
-    assert names[0] == AGENTCLI_LOAD_TOOLS_NAME and len(names) == 11 and loader.capacity == 3
+    assert names[0] == AGENT_CHAT_LOAD_TOOLS_NAME and len(names) == 11 and loader.capacity == 3
     assert loader.groups == {"esphome": [f"esphome_tool_{i}" for i in range(4)],
                              "dashboards": [f"dashboard_tool_{i}" for i in range(3)]}
     directory = loader.directory()
@@ -144,7 +144,7 @@ def _script() -> list[list[dict]]:
     # Round 1 loads a tool and, in the same response, calls a deferred tool it
     # never declared. Round 2 calls the loaded tool. Round 3 answers.
     return [
-        [_call("a", AGENTCLI_LOAD_TOOLS_NAME, {"names": ["esphome_tool_0"]}),
+        [_call("a", AGENT_CHAT_LOAD_TOOLS_NAME, {"names": ["esphome_tool_0"]}),
          _call("b", "esphome_tool_1", {"file": "x.yaml"}), _done("tool_use")],
         [_call("c", "esphome_tool_0", {"file": "x.yaml"}), _done("tool_use")],
         [{"type": llm_base.EV_TEXT, "text": "Done."}, _done("end_turn")],
@@ -164,8 +164,8 @@ def _data() -> MagicMock:
 
 def _assert_loading_turn(provider: _Scripted, dispatch: AsyncMock, results: list[dict]) -> None:
     starting = [f"plain_{i}" for i in range(120)]
-    assert provider.declared[0] == [AGENTCLI_LOAD_TOOLS_NAME, *starting]
-    assert provider.declared[1] == [AGENTCLI_LOAD_TOOLS_NAME, *starting, "esphome_tool_0"]
+    assert provider.declared[0] == [AGENT_CHAT_LOAD_TOOLS_NAME, *starting]
+    assert provider.declared[1] == [AGENT_CHAT_LOAD_TOOLS_NAME, *starting, "esphome_tool_0"]
     assert all(len(names) <= 128 for names in provider.declared)
     assert "[esphome]" in provider.system_prompts[0] and "- esphome_tool_1:" in provider.system_prompts[0]
     # Only the declared, loaded tool reached the dispatcher.
@@ -194,7 +194,7 @@ async def test_agent_chat_declares_in_parts_and_never_dispatches_an_undeclared_c
 
     _assert_loading_turn(provider, dispatch, [m["tool_results"] for m in messages if "tool_results" in m])
     shown = [payload["name"] for name, payload in events if name == "tool_result"]
-    assert shown == [AGENTCLI_LOAD_TOOLS_NAME, "esphome_tool_1", "esphome_tool_0"]
+    assert shown == [AGENT_CHAT_LOAD_TOOLS_NAME, "esphome_tool_1", "esphome_tool_0"]
     assert not [payload for name, payload in events if name == "error"]
 
 
@@ -229,5 +229,5 @@ async def test_a_provider_without_a_cap_keeps_the_complete_catalog(hass):
     with patch_readers("custom_components.phoenix_mcp.tool_catalog.build_mcp_tool_list", return_value=_catalog(120, 20, 3)):
         await agent_turn._run_headless_turn(hass, data, data.store.get_access_key_by_id.return_value, provider, None,
                                           "http://h", system="s", seed="hi", client_ip="voice", max_iterations=2)
-    assert len(provider.declared[0]) == 143 and AGENTCLI_LOAD_TOOLS_NAME not in provider.declared[0]
+    assert len(provider.declared[0]) == 143 and AGENT_CHAT_LOAD_TOOLS_NAME not in provider.declared[0]
     assert "Deferred tools" not in provider.system_prompts[0]

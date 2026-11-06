@@ -72,9 +72,8 @@ class _ServiceContextKwargs(TypedDict, total=False):
 def household_service_kwargs(hass: HomeAssistant, domain: str, service: str) -> _ServiceContextKwargs:
     """Preserve HA caller identity and refuse native admin services for households.
 
-    HA's admin-service wrapper exempts a context without a user ID. Inspect its
-    registered job for unidentified callers too; sending an empty Context would
-    silently grant system authority. HA exposes no public admin-service flag.
+    HA's admin wrapper exempts a context without a user, so its registered job is inspected
+    for unidentified callers too; an empty Context would grant system authority.
     """
     authority = household_authority.get()
     if authority is None:

@@ -323,7 +323,7 @@ async def test_delayed_approval_survives_restart_but_not_clear(conversation_data
     data, _ = conversation_data
     log = history.recorder(data)
     handle = log.begin("voice", prompt="change")
-    approval = SimpleNamespace(id="approval-one", tool_name="set_state", status="pending", diff={"password": "canary"}, result=None, rejected_reason=None)
+    approval = SimpleNamespace(id="approval-one", tool_name="set_state", status="pending", diff={"password": "canary"}, result=None, closure_reason=None)
     context = history._current.set(handle)
     try:
         log.approval(approval)
@@ -379,7 +379,7 @@ def test_approval_does_not_resume_capture_after_disable(conversation_data):
     data, _ = conversation_data
     log = history.recorder(data)
     handle = log.begin("mcp")
-    approval = SimpleNamespace(id="old", tool_name="set_state", status="pending", diff=None, result=None, rejected_reason=None)
+    approval = SimpleNamespace(id="old", tool_name="set_state", status="pending", diff=None, result=None, closure_reason=None)
     ctx = history._current.set(handle)
     try:
         log.approval(approval)
@@ -417,7 +417,7 @@ def test_inline_resolution_is_not_overwritten_by_pending_receipt(conversation_da
     handle = log.begin("voice")
     ctx = history._current.set(handle)
     tool = history._tool.set("operation")
-    approval = SimpleNamespace(id="inline", tool_name="set_state", status="pending", diff=None, result=None, rejected_reason=None)
+    approval = SimpleNamespace(id="inline", tool_name="set_state", status="pending", diff=None, result=None, closure_reason=None)
     try:
         log.event(handle, "tool_call", {"name": "set_state"})
         log.approval(approval)
@@ -600,7 +600,7 @@ async def test_event_limit_preserves_late_approval_after_reload(conversation_dat
     data, _ = conversation_data
     log = history.recorder(data)
     handle = log.begin("agentcli", prompt="Change something")
-    approval = SimpleNamespace(id="retained-approval", tool_name="set_state", status="pending", diff=None, result=None, rejected_reason=None)
+    approval = SimpleNamespace(id="retained-approval", tool_name="set_state", status="pending", diff=None, result=None, closure_reason=None)
     context = history._current.set(handle)
     tool = history._tool.set("pending-call")
     try:

@@ -15,12 +15,8 @@ BURST_WINDOW_SECONDS = 1.0
 class RateLimitResult:
     """Result of a rate limit check.
 
-    When allowed is True and rate_limiting_enabled is True, the view should
-    include X-RateLimit-Limit, X-RateLimit-Remaining, and X-RateLimit-Reset
-    response headers.
-
-    When allowed is False, the view should return HTTP 429 with a Retry-After
-    header set to retry_after. The X-RateLimit-* headers are omitted on 429.
+    When allowed with limiting enabled, send the X-RateLimit-* headers. When refused, send
+    HTTP 429 with Retry-After set to ``retry_after``, without the X-RateLimit-* headers.
     """
 
     allowed: bool
@@ -34,15 +30,9 @@ class RateLimitResult:
 class RateLimiter:
     """Sliding window rate limiter keyed by access key ID.
 
-    State is in-memory only and is lost on HA restart. Destroy an access key's state
-    immediately on revocation or archival by calling destroy(access_key_id).
-
-    Algorithm per request (when rate limiting is enabled):
-      1. Evict timestamps older than WINDOW_SECONDS from the per-access-key deque.
-      2. If len(window) >= rate_limit_requests, return denied. Do not record.
-      3. Count timestamps within the last BURST_WINDOW_SECONDS. If that count
-         is >= rate_limit_burst (and burst > 0), return denied. Do not record.
-      4. Record the current timestamp and return allowed.
+    In-memory only; call destroy() on revocation or archival. Per request, it evicts old
+    timestamps, denies at rate_limit_requests in the window or rate_limit_burst in the burst
+    window without recording, else records and allows.
     """
 
     def __init__(self) -> None:
@@ -129,24 +119,10 @@ class RateLimiter:
         rate_limit_burst: int,
         extra: int,
     ) -> RateLimitResult:
-        """Charge `extra` further units, or refuse the whole batch.
-
-        A JSON-RPC batch is ONE HTTP request carrying up to MAX_BATCH_ITEMS
-        calls, so `check` alone would charge it once and batching would
-        multiply the configured ceiling (60/min times 50 items is 3,000 calls a
-        minute). `check` still charges the request itself, so `extra` is the
-        remainder (items minus one).
-
-        This is a PREFLIGHT, run before any item is dispatched, and the refusal
-        is the point: charging without refusing lets every item execute and only
-        then throttles, running a 50-item batch 40 operations past a 10/min
-        ceiling. A refusal leaves no half-applied batch. BOTH ceilings are
-        checked: a batch lands in one instant, so the minute limit alone would
-        let it exceed the per-second burst setting many times over.
-
-        Returns an allowed result (limiting disabled, or both budgets cover the
-        batch) or a denied one carrying `retry_after`. The caller must send the
-        returned result's headers: the one from `check` understates the spend.
+        """Charge ``extra`` further units, or refuse the whole batch.
+        A preflight before any item runs, checking both ceilings; ``extra`` is items minus
+        one, as ``check`` charged the request. Returns an allowed or denied result whose
+        headers the caller must send.
         """
         if rate_limit_requests == 0:
             return RateLimitResult(allowed=True, rate_limiting_enabled=False)

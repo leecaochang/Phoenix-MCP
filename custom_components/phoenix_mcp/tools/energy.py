@@ -1,22 +1,13 @@
 """Energy dashboard tools: get_energy_config, get_solar_forecast, edit_energy_config.
 
-Reads need cap_config_read; edit_energy_config needs cap_energy_write. The Energy
-preferences (statistics mapped to roles: grid, solar, battery, gas, water, or an
-individual device) live in .storage/energy and are reachable ONLY through the
-energy/get_prefs WebSocket command, so this module is the single path to them.
-That command runs under the resolved admin user and names every statistic, so
-results pass through filter_service_response, which replaces an entity the access key
-cannot resolve with the redaction sentinel and drops entity-keyed entries.
+Reads need cap_config_read; edit_energy_config needs cap_energy_write. The preferences are reachable
+only through energy/get_prefs, which runs as the resolved admin and names every statistic, so
+results pass through filter_service_response.
 
-THE WRITE IS ADDRESSED, NEVER WHOLESALE. energy/save_prefs full-replaces each
-top-level key it receives, so a caller composing "device_consumption" from a
-redacted read would delete every device the read hid. edit_energy_config takes
-ONE addressed operation, re-reads the preferences UNREDACTED inside the executor,
-applies it, checks the result differs only as intended (`_verify_structure`), and
-sends only the top-level keys that changed. The redacted view is never a write
-input, so a placeholder is never written back as configuration; a literal one in
-the caller's arguments is refused. A version restore is the one wholesale write:
-reproducing the snapshot IS the operation. tool_registration registers these tools.
+The write is addressed, never wholesale. energy/save_prefs full-replaces each top-level key, so
+composing one from a redacted read would delete what the read hid. edit_energy_config takes one
+operation, re-reads the preferences unredacted in the executor, applies it, checks the result, and
+sends only changed top-level keys.
 """
 
 from __future__ import annotations
@@ -34,14 +25,13 @@ from homeassistant.util.dt import utcnow
 from ..const import CAP_DENY, REDACTION_SENTINEL
 from ..data import PhoenixData
 from ..tool_contracts import normalize_tool_args
-from ..helpers import (
-    content_hash,
-    diff_summary_fields as _summary,
-    effective_cap,
-    redact_inaccessible_entity_ids_in_text,
-    str_arg,
-    version_summary_fields as _version_summary,
+from ..helpers import content_hash
+from ..tool_input import str_arg
+from ..catalog_text import (
+    diff_summary_fields as _summary, version_summary_fields as _version_summary,
 )
+from ..capability import effective_cap
+from ..redaction import redact_inaccessible_entity_ids_in_text
 from ..policy_engine import Permission, filter_service_response, resolve, resolve_read
 from ..access_key_store import AccessKeyRecord
 from ..tool_common import (
@@ -88,26 +78,20 @@ _NO_CONFIG_ERRORS = ("not_found", "not available")
 
 
 def _default_prefs() -> dict[str, Any]:
-    """Return the empty preferences structure for a never-configured instance.
-
-    Mirrors EnergyManager.default_preferences() in HA's energy/data.py. Callers
-    pair it with configured=False so "never set up" is distinguishable from "set
-    up, then everything removed", which would both read as empty lists.
-    """
+    """Return the empty preferences of a never-configured instance, as HA's EnergyManager does."""
+    # Callers pair it with configured=False, so "never set up" differs from "set up, then everything
+    # removed".
     return {key: [] for key in _PREFS_KEYS}
 
 
 def _referenced_entities(prefs: Any, _depth: int = 0) -> list[str]:
     """Collect every entity id the preferences reference, sorted and deduplicated.
 
-    Walks the whole structure instead of a fixed list of key names, because the
-    keys differ per source type and HA adds to them; a name list would go stale
-    silently and report no dependency where one exists.
-
-    Call this on the REDACTED preferences, never the raw ones: the sentinel is
-    skipped, so an entity the access key cannot resolve is absent rather than named.
-    External statistics ("domain:name") are not entity ids and are not collected.
+    Call on redacted preferences only: the sentinel is skipped, so an unresolvable entity is absent.
+    External statistics ("domain:name") are not collected.
     """
+    # The walk covers the whole structure because keys differ per source type and HA adds to them; a
+    # name list would go stale and report no dependency where one exists.
     if _depth > 10:
         return []
     if isinstance(prefs, str):
@@ -188,12 +172,8 @@ async def _energy_usage(
 ) -> dict[str, Any]:
     """How much each configured source and device measured over [start, end).
 
-    "How much energy did the house use yesterday" is then this one read rather
-    than a statistics call per meter. Only statistics of entities the key can
-    read are read, as get_statistics would; the rest are named in not_read. The
-    home's electricity use is the Energy dashboard's sum, imported plus produced
-    plus discharged minus exported and charged, given only when every meter it
-    needs was read in one unit.
+    Only entities the key can read are read; the rest are named in not_read. Home use is imported,
+    produced and discharged minus exported and charged, when all read in one unit.
     """
     # Local: optional component, imported only when this path runs.
     from homeassistant.components.recorder import get_instance
@@ -259,11 +239,8 @@ async def _tool_get_solar_forecast(
 ) -> tuple[dict, str, str]:
     """MCP tool: read solar production forecasts (cap_config_read).
 
-    Empty when no solar source names a forecast config entry, which is the normal
-    state without a forecast integration installed; that is an answer, not an
-    error. Forecast values are per config entry and name no entities, so there is
-    nothing here to scope, but the result is filtered anyway rather than trusted to
-    stay that shape.
+    Empty without a solar source naming a forecast config entry, which is an answer, not an error.
+    Values name no entities, but the result is filtered rather than trusted.
     """
     if effective_cap(access_key, "cap_config_read") == CAP_DENY:
         return _tool_error("Forbidden."), "denied", "get_solar_forecast"
@@ -301,10 +278,8 @@ def _scoped_body(prefs: dict, configured: bool, access_key: AccessKeyRecord, has
 def _plain(value: Any) -> Any:
     """Recursively turn sets and tuples into lists.
 
-    HA's ValidationIssue carries `affected_entities` as a set of TUPLES.
-    json.dumps cannot serialize a set, and filter_service_response walks dicts,
-    lists and strings only, so a tuple would fall through it and return entity ids
-    the access key cannot see. Normalising first puts them where the redactor looks.
+    HA's ValidationIssue holds `affected_entities` as a set of tuples, and filter_service_response
+    walks only dicts, lists and strings, so a tuple would leak hidden entity ids.
     """
     if isinstance(value, dict):
         return {k: _plain(v) for k, v in value.items()}
@@ -318,9 +293,8 @@ def _plain(value: Any) -> Any:
 def _entry_label(key: str, index: int, prefs: dict) -> str:
     """Name the configuration entry an issue is about, in the operator's terms.
 
-    HA reports issues as three arrays positionally parallel to the preferences
-    lists, which is unreadable on its own; this pairs each back with the thing the
-    operator recognises (a device's own label, or the source's type).
+    HA reports issues in arrays parallel to the preferences lists; this pairs each with a device's
+    label or the source's type.
     """
     entries = prefs.get(key) or []
     entry = entries[index] if index < len(entries) else None
@@ -336,13 +310,8 @@ async def _energy_issues(
 ) -> list[dict] | None:
     """Flatten energy/validate into one scoped, labelled list of problems.
 
-    Returns None when validation could not run, which is reported as a null field
-    rather than an empty list: "nothing is wrong" and "nobody checked" must not
-    look the same to a caller deciding whether it is safe to delete something.
-
-    Best-effort by design. This rides on a plain config READ, so a validation
-    failure degrades the extra field instead of failing the read the caller
-    actually asked for.
+    None means validation could not run, so "nothing is wrong" and "nobody checked" differ.
+    Best-effort: a validation failure degrades this field, not the config read.
     """
     try:
         report = await async_ws_command(hass, "energy/validate", {})
@@ -419,11 +388,9 @@ class _OpError(Exception):
 
 
 def _is_external_statistic(value: str) -> bool:
-    """Whether a statistic id belongs to an external source ("domain:name").
-
-    External statistics are not entities, so they never resolve through the
-    permission tree and must not be rejected for failing to.
-    """
+    """Whether a statistic id belongs to an external source ("domain:name")."""
+    # External statistics are not entities, so they must not be refused for failing the permission
+    # tree.
     return ":" in value
 
 
@@ -434,13 +401,10 @@ _DEVICE_KEYS = ("device_consumption", "device_consumption_water")
 
 
 def _find_device(prefs: dict, statistic: str, device_name: str) -> tuple[str, int]:
-    """Locate one device entry by statistic id or by its display name.
+    """Locate one device entry by statistic id or display name.
 
-    Addressing by NAME is not a convenience: a device whose statistic the access key
-    cannot resolve comes back as the redaction sentinel, so its id is genuinely
-    unavailable to the caller and the name is the only handle left. That is the
-    common case for a dead entry, which is exactly what an operator wants to fix.
-    Raises _OpError when nothing or more than one thing matches.
+    Raises _OpError when nothing or several match. The name is the only handle for a device whose
+    redacted id the caller cannot see, the common case for a dead entry.
     """
     hits = [
         (key, index)
@@ -466,12 +430,8 @@ def _find_device(prefs: dict, statistic: str, device_name: str) -> tuple[str, in
 def _replace_everywhere(prefs: dict, old: str, new: str) -> int:
     """Point every occurrence of one statistic id at another. Returns the count.
 
-    Walks the whole structure, as _referenced_entities does, because a statistic
-    can legitimately appear in several places (a battery's charge meter, its
-    state of charge, a nested power_config, a device entry for the same
-    appliance), the keys differ per source type and HA adds to them, and a
-    migration that fixed only some would leave the rest pointing at an integration
-    that is about to be removed. Labels are never statistics.
+    Walks the whole structure: a statistic can appear in several places, and a partial migration
+    leaves the rest on a departing integration. Labels are never statistics.
     """
     changed = 0
 
@@ -497,11 +457,9 @@ def _replace_everywhere(prefs: dict, old: str, new: str) -> int:
 
 
 def _new_source(source_type: str) -> dict:
-    """A minimal valid source of one type, ready for the caller's fields.
-
-    cost_adjustment_day is HA's only vol.Required field on a grid source and has
-    no sensible caller-facing meaning, so it is supplied rather than asked for.
-    """
+    """A minimal valid source of one type, ready for the caller's fields."""
+    # cost_adjustment_day is HA's only required field on a grid source and means nothing to a
+    # caller, so it is supplied rather than asked for.
     source: dict[str, Any] = {"type": source_type}
     if source_type == "grid":
         source["cost_adjustment_day"] = 0.0
@@ -509,12 +467,10 @@ def _new_source(source_type: str) -> dict:
 
 
 def _check_writable_statistic(value: Any, field: str, access_key: AccessKeyRecord, hass: HomeAssistant) -> str:
-    """Validate one statistic id the caller wants WRITTEN into the preferences.
+    """Validate one statistic id the caller wants written into the preferences.
 
-    Applied only to values being written, never to the ones used to ADDRESS an
-    existing entry: a dead entry is addressed by the very id that no longer
-    resolves, and refusing that would make the broken entries unfixable, which is
-    half the reason this tool exists.
+    Never applied to a value that addresses an existing entry: a dead entry is addressed by the id
+    that no longer resolves, and refusing it would make it unfixable.
     """
     statistic = str_arg(value).strip()
     if not statistic:
@@ -536,9 +492,7 @@ def _check_writable_statistic(value: Any, field: str, access_key: AccessKeyRecor
 def _source_fields_arg(args: dict, source_type: str, access_key: AccessKeyRecord, hass: HomeAssistant) -> dict:
     """The caller's source fields, validated against the type's own schema.
 
-    An explicit null is kept rather than skipped: clearing a price or a cost
-    statistic is a real edit, and dropping it would silently turn "unset this" into
-    a no-op the caller has no way to notice.
+    An explicit null is kept: clearing a price or cost statistic is a real edit, not a no-op.
     """
     supplied = {field: args[field] for field in _SOURCE_FIELDS[source_type] if field in args}
     unknown = [f for f in _ALL_SOURCE_FIELDS if f in args and f not in _SOURCE_FIELDS[source_type]]
@@ -572,11 +526,10 @@ def _source_fields_arg(args: dict, source_type: str, access_key: AccessKeyRecord
 
 
 def _apply_op(prefs: dict, args: dict, access_key: AccessKeyRecord, hass: HomeAssistant) -> tuple[dict, dict]:
-    """Apply ONE addressed operation to a copy of prefs.
+    """Apply one addressed operation to a copy of prefs.
 
-    Returns (new_prefs, summary), where summary carries the fields the diff and
-    version templates render. Raises _OpError with a caller-facing message for
-    anything that cannot be applied; the caller maps that to invalid_request.
+    Returns (new_prefs, summary), with the fields the diff and version templates render. Raises
+    _OpError with a caller-facing message; the caller maps it to invalid_request.
     """
     op = str_arg(args.get("op")).strip().lower()
     if op not in _OPS:
@@ -700,10 +653,8 @@ def _apply_op(prefs: dict, args: dict, access_key: AccessKeyRecord, hass: HomeAs
 def _verify_structure(before: dict, after: dict, op: str) -> None:
     """Refuse a result that changed more than the operation is allowed to change.
 
-    The backstop for HA's full-replace write semantics: this is what would catch a
-    bug in _apply_op before it reaches the wire, rather than after the operator's
-    other entries are already gone. Counts only, because every op here has an
-    exact, knowable effect on the list lengths.
+    The backstop for HA's full-replace semantics, catching an _apply_op bug before it reaches the
+    wire. Counts suffice: every op has an exact effect on list lengths.
     """
     def counts(prefs: dict) -> tuple[int, int, int]:
         return tuple(len(prefs.get(key) or []) for key in _PREFS_KEYS)  # type: ignore[return-value]
@@ -742,14 +693,13 @@ def _core_refusal(err: Exception, access_key: AccessKeyRecord, hass: HomeAssista
 def _plan_save(
     before: dict, args: dict, access_key: AccessKeyRecord, hass: HomeAssistant,
 ) -> tuple[dict, dict, dict]:
-    """Apply one operation and check it against Core's own save schema.
+    """Apply one operation and check it against Core's own save schema. Raises _OpError.
 
-    Returns (summary, payload, expected): the changed top-level keys to send, and
-    the preferences Core will hold after the save, as its registered
-    energy/save_prefs schema normalizes them (grid defaults filled, numbers
-    coerced). Core's schema is the only validator of field combinations, so an
-    approval is never created for a save Core would refuse. Raises _OpError.
+    Returns (summary, payload, expected): the changed top-level keys and the preferences Core will
+    hold once its schema normalizes them.
     """
+    # Core's schema is the only validator of field combinations, so no approval exists for a save
+    # Core would refuse.
     after, summary = _apply_op(before, args, access_key, hass)
     _verify_structure(before, after, summary["op"])
     payload = {key: after[key] for key in _PREFS_KEYS if key in after and after.get(key) != before.get(key)}
@@ -764,11 +714,10 @@ def _plan_save(
 
 
 async def _read_prefs_raw(hass: HomeAssistant) -> dict:
-    """The current preferences, UNREDACTED, defaulting when nothing is configured.
+    """The current preferences, unredacted, defaulting when nothing is configured.
 
-    Unredacted is the point: this is the base a write is applied to, so an entry
-    the calling access key cannot resolve must survive as its real statistic id rather
-    than being rewritten to the redaction sentinel.
+    This is a write's base, so an entry the key cannot resolve survives as its real id, never the
+    sentinel.
     """
     try:
         prefs = await async_ws_command(hass, "energy/get_prefs", {})
@@ -782,9 +731,8 @@ async def _read_prefs_raw(hass: HomeAssistant) -> dict:
 def _sentinel_refusal(args: dict) -> str | None:
     """Refuse a caller-supplied value carrying the redaction placeholder.
 
-    A redacted placeholder is never written back as configuration. Only the
-    caller's own arguments can introduce one, because no part of the stored
-    configuration is resent through this tool.
+    Only the caller's arguments can introduce one, because no stored configuration is resent through
+    this tool.
     """
     for field in ("statistic", "new_statistic", "name", "device_name", "stat_energy_from", "stat_energy_to"):
         if field in args and redaction_sentinel_path(args[field]) is not None:
@@ -799,13 +747,8 @@ def _sentinel_refusal(args: dict) -> str | None:
 def _preview_rows(prefs: dict, access_key: AccessKeyRecord, hass: HomeAssistant) -> dict:
     """A compact, scoped view of the preferences for the panel's visual preview.
 
-    Structured rows rather than a JSON string: diff.before/after go through
-    _truncate, and a truncated JSON string does not parse. These rows are small
-    enough never to be truncated.
-
-    Scoped through filter_service_response, so a statistic the access key cannot
-    resolve previews as the sentinel rather than being disclosed to whoever opens
-    the approval.
+    Structured rows, since a truncated JSON string does not parse. Scoped through
+    filter_service_response, so an unresolvable statistic previews as the sentinel.
     """
     scoped = filter_service_response(prefs, access_key, hass)
     sources = []
@@ -869,13 +812,10 @@ async def _tool_edit_energy_config(
     args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData,
     request_id: str = "", client_ip: str | None = None,
 ) -> tuple[dict, str, str]:
-    """MCP tool: change ONE addressed part of the Energy dashboard (Confirm-gated).
+    """MCP tool: change one addressed part of the Energy dashboard (Confirm-gated).
 
-    Never takes a preferences blob (see the module docstring). Validated against
-    the CURRENT preferences before the approval is created, after the cap-deny
-    check so a denied access key learns nothing about its payload, so an invalid
-    request never becomes a pending approval. Re-validated at apply time so a
-    change during the approval window is caught.
+    Never takes a preferences blob. Validated against current preferences after the cap-deny check
+    and before any approval, and again at apply time.
     """
     tool = "edit_energy_config"
     if effective_cap(access_key, "cap_energy_write") == CAP_DENY:
@@ -1032,9 +972,8 @@ def validate_energy_recovery_scope(
 ) -> None:
     """Refuse restores whose entity references exceed the access key's current scope.
 
-    A dead statistic exists for no key, so it is outside nobody's scope, and
-    undoing a repair is exactly when a snapshot names one. Only an entity that
-    exists can be out of scope.
+    Only an existing entity can be out of scope: a dead statistic, which undoing a repair often
+    names, exists for no key.
     """
     prefs = validate_energy_recovery_snapshot(snapshot)
     for entity_id in _referenced_entities(prefs):
@@ -1141,10 +1080,8 @@ async def async_restore_energy_prefs(
 ) -> tuple[dict, str, str]:
     """Restore a whole Energy preferences snapshot (admin version rollback only).
 
-    The one wholesale write: reproducing the chosen snapshot IS the operation, so
-    the addressed-write rule the rest of this module enforces does not apply (a
-    YAML version restore is exempt from its removal check for the same reason).
-    Reached only from async_restore_version, never from a tool.
+    The one wholesale write, since reproducing the snapshot is the operation; a YAML version restore
+    is likewise exempt. Reached only from async_restore_version, never from a tool.
     """
     tool = "edit_energy_config"
     if not isinstance(snapshot, dict):

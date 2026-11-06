@@ -1,5 +1,5 @@
 ---
-{ "id": "topic.passThrough", "title": "What Pass-Through Opens", "parent": "window.accessKeys", "order": 2, "keywords": ["pass-through", "unrestricted", "full access", "scoped"], "covers": ["custom_components/phoenix_mcp/helpers.py", "custom_components/phoenix_mcp/const.py", "custom_components/phoenix_mcp/policy_engine.py"] }
+{ "id": "topic.passThrough", "title": "What Pass-Through Opens", "parent": "window.accessKeys", "order": 2, "keywords": ["pass-through", "unrestricted", "full access", "scoped"], "covers": ["custom_components/phoenix_mcp/capability.py", "custom_components/phoenix_mcp/const.py", "custom_components/phoenix_mcp/policy_engine.py"] }
 ---
 A pass-through key skips the Permissions Tree: it can read and control every entity, except Phoenix's own. Use it only for an agent you trust with your whole home.
 

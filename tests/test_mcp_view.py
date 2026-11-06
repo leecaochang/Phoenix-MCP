@@ -1437,7 +1437,7 @@ async def test_get_calendar_events_returns_events_for_accessible_calendar():
     hass.data[DATA_COMPONENT] = MagicMock()
     hass.data[DATA_COMPONENT].get_entity.return_value = entity
     from custom_components.phoenix_mcp.policy_engine import Permission
-    with patch("custom_components.phoenix_mcp.tools.calendar.resolve_read", return_value=Permission.READ), patch("custom_components.phoenix_mcp.helpers.resolve", return_value=Permission.READ):
+    with patch("custom_components.phoenix_mcp.tools.calendar.resolve_read", return_value=Permission.READ), patch("custom_components.phoenix_mcp.redaction.resolve", return_value=Permission.READ):
         res, _m, _r, outcome = await _dispatch_mcp(
             "tools/call", 3,
             {"name": "get_calendar_events", "arguments": {"entity_id": "calendar.fam"}},
@@ -1455,7 +1455,7 @@ async def test_get_calendar_events_rejects_non_calendar_entity():
     data = _make_data(access_key)
     hass = _make_hass(data)
     from custom_components.phoenix_mcp.policy_engine import Permission
-    with patch("custom_components.phoenix_mcp.tools.calendar.resolve_read", return_value=Permission.READ), patch("custom_components.phoenix_mcp.helpers.resolve", return_value=Permission.READ):
+    with patch("custom_components.phoenix_mcp.tools.calendar.resolve_read", return_value=Permission.READ), patch("custom_components.phoenix_mcp.redaction.resolve", return_value=Permission.READ):
         res, _m, _r, outcome = await _dispatch_mcp(
             "tools/call", 3,
             {"name": "get_calendar_events", "arguments": {"entity_id": "light.kitchen"}},
@@ -2886,7 +2886,7 @@ def _inline_wait_data(pending_records: list) -> PhoenixData:
     return PhoenixData(store=store, rate_limiter=MagicMock(), audit=MagicMock(), mesa=None)
 
 
-def _approval_record(status: str, *, result=None, rejected_reason=None) -> dict:
+def _approval_record(status: str, *, result=None, closure_reason=None) -> dict:
     from homeassistant.util.dt import utcnow
     from datetime import timedelta
     return {
@@ -2895,7 +2895,7 @@ def _approval_record(status: str, *, result=None, rejected_reason=None) -> dict:
         "args": {}, "diff": {}, "status": status,
         "created_at": utcnow().isoformat(),
         "expires_at": (utcnow() + timedelta(hours=1)).isoformat(),
-        "request_id": "rid", "result": result, "rejected_reason": rejected_reason,
+        "request_id": "rid", "result": result, "closure_reason": closure_reason,
     }
 
 
@@ -2941,7 +2941,7 @@ async def test_inline_confirm_reports_rejection_without_retry(hass):
     from types import SimpleNamespace
     from custom_components.phoenix_mcp.tool_common import _await_inline_confirm
 
-    data = _inline_wait_data([_approval_record("rejected", rejected_reason="admin_cancelled")])
+    data = _inline_wait_data([_approval_record("rejected", closure_reason="admin_cancelled")])
     access_key = _make_physical_access_key("confirm")
     access_key.confirm_inline_wait_seconds = 60
     approval = SimpleNamespace(id="appr-1", tool_name="create_scene", expires_at=None)
@@ -3050,7 +3050,7 @@ def _resolved_approval(status, *, tool_result=None):
         id="appr-7", status=status, tool_name="call_service", access_key_id="key-7",
         created_at=None, expires_at=None, resolved_at=None,
         result={"tool_result": tool_result} if tool_result is not None else None,
-        rejected_reason=None,
+        closure_reason=None,
     )
 
 
@@ -3308,7 +3308,7 @@ def test_the_fingerprint_tracks_arguments_and_ignores_descriptions():
 async def test_stale_advisory_suppressed_for_agentcli():
     """agentCLI rebuilds the tool list every turn, so it never gets the advisory,
     and its call does not consume the staleness epoch for a real client."""
-    from custom_components.phoenix_mcp.provider_constants import AGENTCLI_CLIENT_IP
+    from custom_components.phoenix_mcp.provider_constants import AGENT_CHAT_CLIENT_IP
 
     access_key, _ = _make_access_key()
     data = _make_data(access_key)
@@ -3319,7 +3319,7 @@ async def test_stale_advisory_suppressed_for_agentcli():
     # An agentCLI-sentinel call gets no advisory and does not mark the epoch.
     res_ac, _m, _r, _o = await _dispatch_mcp(
         "tools/call", 1, {"name": "llm__GetDateTime", "arguments": {}},
-        access_key, hass, data, AGENTCLI_CLIENT_IP, base_url="http://homeassistant.local",
+        access_key, hass, data, AGENT_CHAT_CLIENT_IP, base_url="http://homeassistant.local",
     )
     assert not _has_advisory(res_ac["result"]["content"])
     assert access_key.id not in data.stale_tools_advised
@@ -3747,7 +3747,7 @@ def test_inline_resolved_reports_execution_failure_with_executor_error():
     from custom_components.phoenix_mcp.tool_common import _tool_inline_resolved
 
     approval = SimpleNamespace(
-        id="appr-1", status="failed", rejected_reason="execution_failed",
+        id="appr-1", status="failed", closure_reason="execution_failed",
         result={"tool_result": {"isError": True, "content": [{"type": "text", "text": (
             "This configuration changed since you last read it (expected_hash no "
             "longer matches). Re-read it and reapply your change."
@@ -3761,7 +3761,7 @@ def test_inline_resolved_reports_execution_failure_with_executor_error():
     assert "expected_hash no longer matches" in body["message"]
 
     # A real admin rejection (no stored result) keeps the plain rejected shape.
-    plain = SimpleNamespace(id="appr-2", status="rejected", rejected_reason="not now", result=None)
+    plain = SimpleNamespace(id="appr-2", status="rejected", closure_reason="not now", result=None)
     body2 = json.loads(_tool_inline_resolved(plain)["content"][0]["text"])
     assert body2["status"] == "rejected"
     assert "not now" in body2["message"]
@@ -3948,7 +3948,7 @@ async def test_wait_for_many_returns_at_once_when_all_already_resolved(hass):
 
     a = _approval_record("approved", result={"tool_result": {"content": []}})
     a["id"] = "appr-1"
-    b = _approval_record("rejected", rejected_reason="nope")
+    b = _approval_record("rejected", closure_reason="nope")
     b["id"] = "appr-2"
     data = _inline_wait_data([a, b])
     access_key = _make_physical_access_key("confirm")
@@ -4103,7 +4103,7 @@ async def test_wait_for_many_keeps_a_failed_execution_readable(hass):
     reason = "Content hash mismatch: automations.yaml changed since you read it. Re-read and retry."
     bad = _approval_record(
         "failed", result={"tool_result": _authoring_result(is_error=True, text=reason)},
-        rejected_reason="execution_failed")
+        closure_reason="execution_failed")
     bad["id"] = "appr-1"
     good = _approval_record("approved", result={"tool_result": _authoring_result()})
     good["id"] = "appr-2"
@@ -4118,7 +4118,7 @@ async def test_wait_for_many_keeps_a_failed_execution_readable(hass):
     assert first["result_is_error"] is True
     assert first["result_text"] == reason  # whole message, not a clipped head
     assert first["result_truncated"] is False
-    assert first["rejected_reason"] == "execution_failed"
+    assert first["closure_reason"] == "execution_failed"
     assert second["result_is_error"] is False
 
 

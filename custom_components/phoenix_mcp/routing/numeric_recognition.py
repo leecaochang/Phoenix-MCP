@@ -21,10 +21,10 @@ class NumericIdMatch:
 def recognize_numeric_ids(sentence: str, language: str, targets: tuple[str, ...]) -> NumericIdMatch | None:
     """Run in the owning recognition worker with no HA state or service access.
 
-    Use installed built-in templates only. Target values are literal IDs, never
-    wildcard names or model-selected aliases. Original text spans are mandatory:
-    older parsers without them retain ordinary-provider fallback.
+    Use installed built-in templates only. Target values are literal IDs, never wildcards or
+    model-selected aliases; parsers without original text spans keep the ordinary-provider fallback.
     """
+    # Local: ships with an optional component, not with this integration.
     from hassil import Intents, recognize_all
     from hassil.intents import SlotList, TextSlotList
     from home_assistant_intents import get_intents

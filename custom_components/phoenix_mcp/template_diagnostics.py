@@ -76,9 +76,8 @@ def describe_template_failure(exc: Exception) -> dict:
 def format_template_failure(payload: bytes, template: str) -> str:
     """Turn a worker diagnostic payload into a user-facing message.
 
-    The payload is untrusted: anything oversized, malformed or carrying unknown
-    keys collapses to the generic worker message, and the quoted source line is
-    taken from the caller's own template, never from the payload.
+    The payload is untrusted: anything malformed gives the generic message, and the quoted
+    source line comes from the caller's own template.
     """
     fallback = TEMPLATE_FAILURE_MESSAGES["worker"]
     if len(payload) > TEMPLATE_DIAGNOSTIC_BYTES:

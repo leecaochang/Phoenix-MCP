@@ -269,6 +269,7 @@
       "verboseHint": "Die Tool-Aufrufe, Tool-Ergebnisse und Denkprozesse des Agenten anzeigen. Antworten, Bilder, Fortschritt, Genehmigungen und Hinweise werden immer angezeigt.",
       "workingOn": "Arbeitet: {name}",
       "workingSpinner": "Arbeitet…",
+      "otherTabTurn": "Ein anderer Tab führt gerade eine Antwort in dieser Unterhaltung aus. Läuft hier ebenfalls eine, bleibt die Antwort erhalten, die zuletzt fertig wird.",
       "pausedAfter": {
         "one": "Nach {count} Schritt pausiert. Fortfahren?",
         "other": "Nach {count} Schritten pausiert. Fortfahren?"

@@ -19,13 +19,13 @@ from custom_components.phoenix_mcp.tool_catalog import _COMPANION_TURN, _EXECUTO
 
 PACKAGE = Path(__file__).parents[1] / "custom_components" / "phoenix_mcp"
 # The package entry keeps its imports inside setup so that a Home Assistant release
-# too old for them still reaches the version refusal; routing has its own pass.
-LOCAL_IMPORT_EXEMPT_DIRS = {"mesa_core", "routing"}
+# too old for them still reaches the version refusal.
+LOCAL_IMPORT_EXEMPT_DIRS = {"mesa_core"}
 LOCAL_REASON = "# Local:"
 ABOVE_TOOLS = {"tool_dispatch", "tool_registration", "mcp_transport", "agent_turn", "agent_chat",
-               "agentcli_views", "home_companion_turn"}
+               "agent_chat_views", "home_companion_turn"}
 ABOVE_PROVIDERS = {"tool_dispatch", "tool_registration", "mcp_transport", "agent_turn", "agent_chat",
-                   "agentcli_views", "voice_agent", "ai_task", "assist_api"}
+                   "agent_chat_views", "voice_agent", "ai_task", "assist_api"}
 
 
 def _modules() -> dict[str, Path]:

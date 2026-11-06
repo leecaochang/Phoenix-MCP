@@ -336,7 +336,7 @@ class TestRestoreEndpoint:
         return next(a for a in items if a.get("id") == aid)["alias"]
 
     async def test_post_restore_happy_path(self, hass, env):
-        from custom_components.phoenix_mcp.admin_view import PhoenixAdminVersionRestoreView
+        from custom_components.phoenix_mcp.admin.changes import PhoenixAdminVersionRestoreView
 
         data, versions, aid = await self._seed(hass)
         create_ver = versions.list_for("automation", aid)[-1]
@@ -351,7 +351,7 @@ class TestRestoreEndpoint:
         assert versions.list_for("automation", aid)[0].approved_by_user_id == "admin-7"
 
     async def test_post_restore_side_from_body_is_honored(self, hass, env):
-        from custom_components.phoenix_mcp.admin_view import PhoenixAdminVersionRestoreView
+        from custom_components.phoenix_mcp.admin.changes import PhoenixAdminVersionRestoreView
 
         data, versions, aid = await self._seed(hass)
         edit_ver = versions.list_for("automation", aid)[0]  # before=A, after=B
@@ -368,7 +368,7 @@ class TestRestoreEndpoint:
     async def test_post_restore_malformed_json_is_400_and_does_not_restore(self, hass, env):
         # A malformed body must not be treated as "no body", which would silently
         # restore the default side, the opposite of what the admin asked for.
-        from custom_components.phoenix_mcp.admin_view import PhoenixAdminVersionRestoreView
+        from custom_components.phoenix_mcp.admin.changes import PhoenixAdminVersionRestoreView
 
         data, versions, aid = await self._seed(hass)
         create_ver = versions.list_for("automation", aid)[-1]
@@ -384,7 +384,7 @@ class TestRestoreEndpoint:
         assert self._alias(hass, aid) == "B"
 
     async def test_post_restore_oversized_body_is_413(self, hass, env):
-        from custom_components.phoenix_mcp.admin_view import PhoenixAdminVersionRestoreView
+        from custom_components.phoenix_mcp.admin.changes import PhoenixAdminVersionRestoreView
 
         data, versions, aid = await self._seed(hass)
         create_ver = versions.list_for("automation", aid)[-1]

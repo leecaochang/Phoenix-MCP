@@ -11,11 +11,9 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from custom_components.phoenix_mcp.admin_view import (
-    PhoenixAdminSettingsView,
-    PhoenixAdminAccessKeyPresetApplyView,
-    PhoenixAdminAccessKeyPresetsView,
-    PhoenixAdminAccessKeyPresetView,
+from custom_components.phoenix_mcp.admin.settings import PhoenixAdminSettingsView
+from custom_components.phoenix_mcp.admin.access_keys import (
+    PhoenixAdminAccessKeyPresetApplyView, PhoenixAdminAccessKeyPresetsView, PhoenixAdminAccessKeyPresetView,
 )
 from custom_components.phoenix_mcp.audit import AuditLog
 from custom_components.phoenix_mcp.const import CAP_ALLOW, CAP_DENY, DOMAIN

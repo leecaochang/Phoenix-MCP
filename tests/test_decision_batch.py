@@ -20,7 +20,8 @@ from custom_components.phoenix_mcp.routing.routing_tables import (
 )
 from custom_components.phoenix_mcp.data import PhoenixData
 from custom_components.phoenix_mcp.routing.decision_batch import async_preview_batch, capture_batch_targets
-from custom_components.phoenix_mcp.routing.decision_provider import DecisionProvider, DecisionError
+from custom_components.phoenix_mcp.routing.decision_provider import DecisionProvider
+from custom_components.phoenix_mcp.routing.decision_types import DecisionError
 from custom_components.phoenix_mcp.routing.decision_targets import capture_targets, catalog_state
 from custom_components.phoenix_mcp.access_key_store import PermissionTree, PermissionNode
 from tests.runtime_fixtures import patch_readers
@@ -319,7 +320,7 @@ async def test_joint_percentage_preview_uses_one_request_and_never_prepares_exec
             assert expected in descriptor['eligible_categories']
         return percentage_response(payload, category, entity_id, str(percent))
     with (patch.object(DecisionProvider, '_request', side_effect=response) as request,
-          patch_readers('custom_components.phoenix_mcp.routing.command_execution._capture_plan') as plan,
+          patch_readers('custom_components.phoenix_mcp.routing.command_plan._capture_plan') as plan,
           patch_readers('custom_components.phoenix_mcp.tool_dispatch._dispatch_mcp') as dispatch):
         result = await percentage_preview(hass, home, entities[category])
     request.assert_awaited_once(); plan.assert_not_called(); dispatch.assert_not_called()
@@ -519,7 +520,7 @@ async def test_numeric_preview_reports_independent_value_evidence_without_execut
     async def response(*args):
         return percentage_response(args[4], category, entities[category], model_value)
     with (patch.object(DecisionProvider, '_request', side_effect=response),
-          patch_readers('custom_components.phoenix_mcp.routing.command_execution._capture_plan') as prepare):
+          patch_readers('custom_components.phoenix_mcp.routing.command_plan._capture_plan') as prepare):
         result = await percentage_preview(hass, home, entities[category])
     assert result['value_check'] == {'status': status, 'source_value': 37}
     assert result['reason'] == 'target_selected' and result['executed'] is False
@@ -803,7 +804,7 @@ async def test_low_confidence_scope_component_cannot_prepare_execution(hass, bat
     with (patch.object(provider, 'route_and_target', AsyncMock(return_value={
               'route': answer('state_summary'), 'target': answer('none'),
               'summary_scope': scope, 'summary': answer('on')})),
-          patch_readers('custom_components.phoenix_mcp.routing.command_execution._capture_plan') as prepare):
+          patch_readers('custom_components.phoenix_mcp.routing.command_plan._capture_plan') as prepare):
         _, result = await async_prepare_batch(
             hass, RoutingAuthority.capture(data, access_key), provider, None,
             'Count all the lights that are currently on', 'en', 'chat')

@@ -47,12 +47,8 @@ def scope_refusal(construct: str) -> str:
 def template_entities(source: str) -> set[str]:
     """Return the literal entity IDs a helper template depends on, without evaluating it.
 
-    Only direct literal state lookups and explicit pure operations are accepted.
-    Aliases, computed lookups, domain iteration, includes, macros and unknown
-    functions or filters raise HelperScopeError naming the construct, so no
-    unreviewed dependency can slip in. Names the template assigns itself with
-    set or for are allowed; their values are checked like any other expression.
-    A source with no template markers has none.
+    Accepts only literal state lookups and explicit pure operations; anything else raises
+    HelperScopeError naming it. Self-assigned set and for names are allowed.
     """
     if not any(marker in source for marker in ("{{", "{%", "{#")):
         return set()

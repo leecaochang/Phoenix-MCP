@@ -2,7 +2,7 @@
 
 Phoenix serves these strings itself from catalogs/: hassfest validates
 translations/en.json against a CLOSED set of Home Assistant categories, so only HA's own
-sections may live in translations/. helpers.panel_catalog therefore reimplements two
+sections may live in translations/. catalog_text.panel_catalog therefore reimplements two
 behaviours HA's translation loader would otherwise provide, and this file pins both
 because both fail SILENTLY:
 
@@ -24,8 +24,8 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from custom_components.phoenix_mcp import helpers
-from custom_components.phoenix_mcp.admin_view import PhoenixAdminCatalogView
+from custom_components.phoenix_mcp import catalog_text
+from custom_components.phoenix_mcp.admin.settings import PhoenixAdminCatalogView
 from custom_components.phoenix_mcp.const import CATALOGS_DIR
 
 
@@ -39,18 +39,18 @@ def _reload_shipped_catalogs(monkeypatch):
     """
     yield
     monkeypatch.undo()
-    helpers.load_catalogs()
+    catalog_text.load_catalogs()
 
 
 def _fake_catalogs(tmp_path, monkeypatch, **languages: dict) -> None:
     for language, doc in languages.items():
         (tmp_path / f"{language}.json").write_text(json.dumps(doc), encoding="utf-8")
-    monkeypatch.setattr(helpers, "CATALOGS_DIR", tmp_path)
-    helpers.load_catalogs()
+    monkeypatch.setattr(catalog_text, "CATALOGS_DIR", tmp_path)
+    catalog_text.load_catalogs()
 
 
 def test_english_is_flattened_to_dotted_keys() -> None:
-    catalog = helpers.panel_catalog("en")
+    catalog = catalog_text.panel_catalog("en")
     assert catalog, "the shipped English catalog is empty"
     assert catalog["common.loading"]
     assert all("." in key for key in catalog), "keys must be dotted, not nested"
@@ -59,8 +59,8 @@ def test_english_is_flattened_to_dotted_keys() -> None:
 @pytest.mark.parametrize("language", ["zh-Hans", "ko"])
 def test_shipped_locale_is_backed_by_english(language: str) -> None:
     """Every English key resolves in a translated locale, translated or not."""
-    english = helpers.panel_catalog("en")
-    translated_catalog = helpers.panel_catalog(language)
+    english = catalog_text.panel_catalog("en")
+    translated_catalog = catalog_text.panel_catalog(language)
     assert set(english) <= set(translated_catalog)
     translated = [k for k in english if translated_catalog[k] != english[k]]
     # Not vacuous: each selected locale is a real translation, so most keys must differ.
@@ -74,7 +74,7 @@ def test_missing_key_falls_back_to_english(tmp_path, monkeypatch) -> None:
         en={"panel": {"a": "Alpha", "b": "Beta"}},
         de={"panel": {"a": "translated"}},
     )
-    assert helpers.panel_catalog("de-DE") == {"a": "translated", "b": "Beta"}
+    assert catalog_text.panel_catalog("de-DE") == {"a": "translated", "b": "Beta"}
 
 
 @pytest.mark.parametrize(
@@ -92,7 +92,7 @@ def test_placeholder_mismatch_keeps_the_english(tmp_path, monkeypatch, translate
         en={"panel": {"greet": "Hello {name}"}},
         de={"panel": {"greet": translated}},
     )
-    assert helpers.panel_catalog("de-DE")["greet"] == "Hello {name}"
+    assert catalog_text.panel_catalog("de-DE")["greet"] == "Hello {name}"
 
 
 def test_matching_placeholders_are_kept(tmp_path, monkeypatch) -> None:
@@ -103,13 +103,13 @@ def test_matching_placeholders_are_kept(tmp_path, monkeypatch) -> None:
         en={"panel": {"greet": "Hello {name}"}},
         de={"panel": {"greet": "你好 {name}"}},
     )
-    assert helpers.panel_catalog("de-DE")["greet"] == "你好 {name}"
+    assert catalog_text.panel_catalog("de-DE")["greet"] == "你好 {name}"
 
 
 def test_unknown_language_is_english(tmp_path, monkeypatch) -> None:
     """A language with no file at all is not an error; it is English."""
     _fake_catalogs(tmp_path, monkeypatch, en={"panel": {"a": "Alpha"}})
-    assert helpers.panel_catalog("kl") == {"a": "Alpha"}
+    assert catalog_text.panel_catalog("kl") == {"a": "Alpha"}
 
 
 def test_regional_language_variants_use_the_closest_catalog(tmp_path, monkeypatch) -> None:
@@ -123,11 +123,11 @@ def test_regional_language_variants_use_the_closest_catalog(tmp_path, monkeypatc
             "zh-Hant": {"panel": {"label": "繁體中文"}},
         },
     )
-    assert helpers.panel_catalog("zh-TW")["label"] == "繁體中文"
-    assert helpers.panel_catalog("zh-HK")["label"] == "繁體中文"
-    assert helpers.panel_catalog("zh-MO")["label"] == "繁體中文"
-    assert helpers.panel_catalog("zh-CN")["label"] == "简体中文"
-    assert helpers.panel_catalog("de-DE")["label"] == "Deutsch"
+    assert catalog_text.panel_catalog("zh-TW")["label"] == "繁體中文"
+    assert catalog_text.panel_catalog("zh-HK")["label"] == "繁體中文"
+    assert catalog_text.panel_catalog("zh-MO")["label"] == "繁體中文"
+    assert catalog_text.panel_catalog("zh-CN")["label"] == "简体中文"
+    assert catalog_text.panel_catalog("de-DE")["label"] == "Deutsch"
 
 
 def test_backend_rendered_strings_use_the_same_locale_mapping(tmp_path, monkeypatch) -> None:
@@ -148,8 +148,8 @@ def test_backend_rendered_strings_use_the_same_locale_mapping(tmp_path, monkeypa
     class _Hass:
         config = _Config()
 
-    assert helpers.notification_text(_Hass(), "rate_limit.title") == "Nederlandse melding"
-    assert helpers.voice_text("zh-HK", "unavailable") == "繁體中文語音"
+    assert catalog_text.notification_text(_Hass(), "rate_limit.title") == "Nederlandse melding"
+    assert catalog_text.voice_text("zh-HK", "unavailable") == "繁體中文語音"
 
 
 class _GermanConfig:
@@ -184,10 +184,10 @@ def test_backend_rendered_mismatch_keeps_the_english(tmp_path, monkeypatch, tran
             "voice": {"local_state": translated.replace("access_key", "state")},
         },
     )
-    assert helpers.notification_text(_GermanHass(), "rate_limit.message", access_key="k1") == (
+    assert catalog_text.notification_text(_GermanHass(), "rate_limit.message", access_key="k1") == (
         "Phoenix MCP: access key 'k1' has hit its rate limit."
     )
-    assert helpers.voice_text("de", "local_state", state="an") == "The state is an."
+    assert catalog_text.voice_text("de", "local_state", state="an") == "The state is an."
 
 
 def test_backend_rendered_matching_translation_is_used(tmp_path, monkeypatch) -> None:
@@ -200,10 +200,10 @@ def test_backend_rendered_matching_translation_is_used(tmp_path, monkeypatch) ->
             "voice": {"local_state": "Der Zustand ist {state}."},
         },
     )
-    assert helpers.notification_text(_GermanHass(), "rate_limit.message", access_key="k1") == (
+    assert catalog_text.notification_text(_GermanHass(), "rate_limit.message", access_key="k1") == (
         "Schlüssel 'k1' am Limit."
     )
-    assert helpers.voice_text("de", "local_state", state="an") == "Der Zustand ist an."
+    assert catalog_text.voice_text("de", "local_state", state="an") == "Der Zustand ist an."
 
 
 def test_unparseable_panel_translation_keeps_the_english(tmp_path, monkeypatch) -> None:
@@ -214,12 +214,12 @@ def test_unparseable_panel_translation_keeps_the_english(tmp_path, monkeypatch) 
         en={"panel": {"greet": "Hello {name}", "other": "Other"}},
         de={"panel": {"greet": "Hallo {name", "other": "Andere"}},
     )
-    assert helpers.panel_catalog("de-DE") == {"greet": "Hello {name}", "other": "Andere"}
+    assert catalog_text.panel_catalog("de-DE") == {"greet": "Hello {name}", "other": "Andere"}
 
 
 def test_only_the_panel_section_is_served() -> None:
     """notification and voice are backend-rendered and never reach the browser."""
-    catalog = helpers.panel_catalog("en")
+    catalog = catalog_text.panel_catalog("en")
     assert not any(key.startswith(("notification.", "voice.")) for key in catalog)
 
 
@@ -268,7 +268,7 @@ async def _get(language: str):
 
 async def test_endpoint_serves_the_catalog() -> None:
     # Another test may have loaded an empty catalog folder; use the shipped one.
-    helpers.load_catalogs()
+    catalog_text.load_catalogs()
     resp = await _get("en")
     assert resp.status == 200
     body = json.loads(resp.text)
@@ -285,20 +285,20 @@ async def test_endpoint_is_admin_only() -> None:
 
 async def test_endpoint_404s_when_the_catalog_cannot_be_read(tmp_path, monkeypatch) -> None:
     """An empty catalog is a broken install, not a language the panel should render."""
-    monkeypatch.setattr(helpers, "CATALOGS_DIR", tmp_path)
-    helpers.load_catalogs()
+    monkeypatch.setattr(catalog_text, "CATALOGS_DIR", tmp_path)
+    catalog_text.load_catalogs()
     resp = await _get("en")
     assert resp.status == 404
 
 
 async def test_endpoint_serves_the_catalog_while_setup_is_incomplete() -> None:
     """The panel needs its strings to say setup is incomplete; other admin views refuse."""
-    from custom_components.phoenix_mcp.admin_view import PhoenixAdminSettingsView
+    from custom_components.phoenix_mcp.admin.settings import PhoenixAdminSettingsView
     from custom_components.phoenix_mcp.const import RUNTIME_READY_KEY
 
     # The previous test points CATALOGS_DIR at an empty folder; this one needs
     # the shipped catalogs whatever order the file runs in.
-    helpers.load_catalogs()
+    catalog_text.load_catalogs()
     view = PhoenixAdminCatalogView()
     view.hass = MagicMock()
     view.hass.data = {RUNTIME_READY_KEY: False}

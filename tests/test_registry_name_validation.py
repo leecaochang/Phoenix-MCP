@@ -2,9 +2,12 @@
 
 import json
 import uuid
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import attr
 import pytest
+from homeassistant.helpers import area_registry as ar
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 from homeassistant.util.dt import utcnow
@@ -13,8 +16,13 @@ from pytest_homeassistant.common import MockConfigEntry
 from tests.runtime_fixtures import mesa_off_store
 
 from custom_components.phoenix_mcp.data import PhoenixData
-from custom_components.phoenix_mcp.device_semantics import entity_name_source
-from custom_components.phoenix_mcp.tools.registry import _build_diff_set_entity
+from custom_components.phoenix_mcp.device_semantics import (
+    composed_name_fields,
+    entity_follows_device_name,
+    entity_full_name,
+    entity_name_source,
+)
+from custom_components.phoenix_mcp.tools.registry import _build_diff_delete_entity, _build_diff_set_entity
 from custom_components.phoenix_mcp.tool_dispatch import _call_tool, async_execute_approved_tool
 from custom_components.phoenix_mcp.tools.restore import async_restore_version
 from custom_components.phoenix_mcp.access_key_store import (
@@ -285,3 +293,188 @@ async def test_device_name_approval_preview_shows_the_mode_change(hass, device_n
     diff = await _build_diff_set_entity({"entity_id": entity_id, "use_device_name": True}, access_key, hass)
     assert diff["preview"]["use_device_name"] == {"before": False, "after": True}
     assert "use_device_name" in diff["summary"]
+
+
+@pytest.fixture
+def naming_key():
+    return AccessKeyRecord(
+        id=str(uuid.uuid4()), name="naming", access_key_hash="x", created_at=utcnow(), created_by="test",
+        cap_registry_write="allow", cap_search="allow",
+        permissions=PermissionTree(entities={
+            "sensor.named_battery": PermissionNode(state="GREEN"),
+            "sensor.deviceless": PermissionNode(state="GREEN"),
+            "sensor.no_registry": PermissionNode(state="GREEN"),
+        }),
+    )
+
+
+@pytest.fixture
+def naming_env(hass):
+    """An entity on a named device, one without a device and one with no registry entry."""
+    owner = MockConfigEntry(domain="test_integration")
+    owner.add_to_hass(hass)
+    device = dr.async_get(hass).async_get_or_create(
+        config_entry_id=owner.entry_id, identifiers={("test_integration", "named")}, name="Porch sensor",
+    )
+    registry = er.async_get(hass)
+    named = registry.async_get_or_create(
+        "sensor", "test_integration", "named", config_entry=owner, device_id=device.id,
+        has_entity_name=True, original_name="Battery", suggested_object_id="named_battery",
+    )
+    deviceless = registry.async_get_or_create(
+        "sensor", "test_integration", "deviceless", config_entry=owner,
+        original_name="Alone", suggested_object_id="deviceless",
+    )
+    hass.states.async_set(named.entity_id, "1", {"friendly_name": "Porch sensor Battery"})
+    hass.states.async_set(deviceless.entity_id, "1", {"friendly_name": "Alone"})
+    hass.states.async_set("sensor.no_registry", "1", {"friendly_name": "Unregistered"})
+    data = PhoenixData(store=mesa_off_store(), rate_limiter=MagicMock(), audit=MagicMock())
+    return registry, named, deviceless, data
+
+
+def _with_compat_name(registry, entity_id, compat_name):
+    """Give an entry a migrated legacy name without a registry write that would clear it."""
+    entry = registry.async_get(entity_id)
+    registry.entities[entity_id] = attr.evolve(entry, compat_name=compat_name)
+    return registry.entities[entity_id]
+
+
+COMPAT_NAME = "compat_name" in attr.fields_dict(er.RegistryEntry)
+
+
+@pytest.mark.skipif(not COMPAT_NAME, reason="this release has no compat_name")
+async def test_a_migrated_entity_can_still_follow_its_device(hass, naming_env, naming_key):
+    registry, named, _, data = naming_env
+    entry = _with_compat_name(registry, named.entity_id, "Battery")
+    assert entity_follows_device_name(hass, entry)
+    assert entity_name_source(hass, attr.evolve(entry, name="")) == "device"
+    content, outcome, _ = await _call_tool(
+        "set_entity", {"entity_id": named.entity_id, "changes": {"use_device_name": True}}, naming_key, hass, data,
+    )
+    assert outcome == "allowed", content
+    assert json.loads(content["content"][0]["text"])["updated"]["name_source"] == "device"
+
+
+def test_following_the_device_needs_no_compat_name_field(hass, naming_env, monkeypatch):
+    """A release without the field gets no compat_name passed to evolve, which would raise."""
+    _, named, _, _ = naming_env
+    seen: dict = {}
+
+    def legacy_helper(_hass, entry):
+        seen["entry"] = entry
+        return "Porch sensor"
+
+    monkeypatch.setattr(er, "async_get_legacy_friendly_name", legacy_helper, raising=False)
+    no_field = SimpleNamespace(device_id=named.device_id)
+    with patch("custom_components.phoenix_mcp.device_semantics.attr.evolve",
+               side_effect=lambda entry, **changes: changes) as evolve:
+        assert entity_follows_device_name(hass, no_field)
+    evolve.assert_called_once_with(no_field, name="")
+    assert seen["entry"] == {"name": ""}
+
+
+async def test_the_composed_name_is_shown_before_and_after_a_rename(hass, naming_env, naming_key):
+    registry, named, _, data = naming_env
+    args = {"entity_id": named.entity_id, "name": "Charge"}
+    diff = await _build_diff_set_entity(args, naming_key, hass)
+    full = er.async_get_full_entity_name
+    assert diff["preview"]["composed_name"] == {"before": full(hass, named), "after": full(hass, attr.evolve(named, name="Charge"))}
+    assert diff["target"]["label"] == full(hass, named)
+    content, outcome, _ = await _call_tool(
+        "set_entity", {"entity_id": named.entity_id, "changes": {"name": "Charge"}}, naming_key, hass, data,
+    )
+    assert outcome == "allowed", content
+    updated = json.loads(content["content"][0]["text"])["updated"]
+    assert updated["name"] == "Charge"
+    assert updated["composed_name"] == full(hass, registry.async_get(named.entity_id))
+    assert updated["composed_name"] == diff["preview"]["composed_name"]["after"]
+
+
+async def test_the_preview_follows_the_values_the_executor_stores(hass, naming_env, naming_key):
+    _, named, _, _ = naming_env
+    full = er.async_get_full_entity_name
+    cases = [({"name": ""}, None), ({"name": None}, None), ({"use_device_name": False}, None), ({"use_device_name": True}, "")]
+    for change, stored in cases:
+        diff = await _build_diff_set_entity({"entity_id": named.entity_id, **change}, naming_key, hass)
+        assert diff["preview"]["composed_name"]["after"] == (full(hass, attr.evolve(named, name=stored)) or None)
+    unrelated = await _build_diff_set_entity({"entity_id": named.entity_id, "icon": "mdi:home"}, naming_key, hass)
+    assert "composed_name" not in unrelated["preview"]
+
+
+async def test_an_area_change_previews_the_name_it_produces(hass, naming_env, naming_key):
+    _, named, _, _ = naming_env
+    area = ar.async_get(hass).async_create("Porch")
+    diff = await _build_diff_set_entity({"entity_id": named.entity_id, "area_id": area.id}, naming_key, hass)
+    assert diff["preview"]["composed_name"]["after"] == er.async_get_full_entity_name(
+        hass, attr.evolve(named, area_id=area.id))
+
+
+async def test_an_approval_label_names_the_whole_entity(hass, naming_env, naming_key):
+    registry, named, deviceless, _ = naming_env
+    registry.async_update_entity(named.entity_id, name="Charge")
+    entry = registry.async_get(named.entity_id)
+    full = er.async_get_full_entity_name(hass, entry)
+    diff = await _build_diff_set_entity({"entity_id": named.entity_id, "icon": "mdi:home"}, naming_key, hass)
+    assert diff["target"]["label"] == full
+    diff = await _build_diff_delete_entity({"entity_id": named.entity_id}, naming_key, hass)
+    assert diff["target"]["label"] == full
+    diff = await _build_diff_set_entity({"entity_id": "sensor.no_such", "icon": "mdi:home"}, naming_key, hass)
+    assert diff["target"]["label"] == "sensor.no_such"
+
+
+def _search_row(body, entity_id):
+    return next(row for row in body["entities"] if row["entity_id"] == entity_id)
+
+
+@pytest.mark.skipif(not COMPAT_NAME, reason="this release has no compat_name")
+async def test_reads_show_the_composed_name_of_a_migrated_entity(hass, naming_env, naming_key):
+    registry, named, _, data = naming_env
+    _with_compat_name(registry, named.entity_id, "Old name")
+    hass.states.async_set(named.entity_id, "1", {"friendly_name": "Old name"})
+    composed = er.async_get_full_entity_name(hass, registry.async_get(named.entity_id))
+    assert composed == "Porch sensor Battery"
+    content, _, _ = await _call_tool("search_entities", {}, naming_key, hass, data)
+    row = _search_row(json.loads(content["content"][0]["text"]), named.entity_id)
+    assert row["friendly_name"] == "Old name" and row["composed_name"] == composed
+    content, _, _ = await _call_tool("describe_entity", {"entity_id": named.entity_id}, naming_key, hass, data)
+    body = json.loads(content["content"][0]["text"])
+    assert body["composed_name"] == composed
+    assert body["attributes"]["friendly_name"] == "Old name"
+
+
+async def test_a_composed_name_is_searched_like_another_name(hass, naming_env, naming_key):
+    registry, named, _, data = naming_env
+    hass.states.async_set(named.entity_id, "1", {"friendly_name": "Old name"})
+    content, _, _ = await _call_tool("search_entities", {"query": "porch sensor battery"}, naming_key, hass, data)
+    body = json.loads(content["content"][0]["text"])
+    row = _search_row(body, named.entity_id)
+    assert row["composed_name"] == er.async_get_full_entity_name(hass, registry.async_get(named.entity_id))
+    # The words were found in a name, so the row names no context field.
+    assert "matched" not in row
+    assert "_aliases" not in row
+
+
+async def test_a_device_prefixed_name_equal_to_friendly_name_adds_nothing(hass, naming_env, naming_key):
+    _, named, _, data = naming_env
+    content, _, _ = await _call_tool("search_entities", {}, naming_key, hass, data)
+    assert "composed_name" not in _search_row(json.loads(content["content"][0]["text"]), named.entity_id)
+    content, _, _ = await _call_tool("describe_entity", {"entity_id": named.entity_id}, naming_key, hass, data)
+    assert "composed_name" not in json.loads(content["content"][0]["text"])
+
+
+@pytest.mark.parametrize("entity_id", ["sensor.deviceless", "sensor.no_registry"])
+async def test_entities_without_a_device_or_registry_entry_keep_friendly_name(hass, naming_env, naming_key, entity_id):
+    _, _, _, data = naming_env
+    content, _, _ = await _call_tool("search_entities", {}, naming_key, hass, data)
+    assert "composed_name" not in _search_row(json.loads(content["content"][0]["text"]), entity_id)
+    content, _, _ = await _call_tool("describe_entity", {"entity_id": entity_id}, naming_key, hass, data)
+    assert "composed_name" not in json.loads(content["content"][0]["text"])
+
+
+def test_the_name_falls_back_to_friendly_name(hass, naming_env):
+    registry, _, deviceless, _ = naming_env
+    assert entity_full_name(hass, None, "Unregistered") == "Unregistered"
+    assert entity_full_name(hass, None) is None
+    nameless = attr.evolve(deviceless, original_name=None)
+    assert entity_full_name(hass, nameless, "Shown") == "Shown"
+    assert composed_name_fields(hass, nameless, "Shown") == {}

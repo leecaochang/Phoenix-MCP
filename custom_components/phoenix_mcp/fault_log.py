@@ -19,8 +19,8 @@ from .const import (
     FAULT_LOG_FILENAME, FAULT_LOG_MAX_BYTES, FAULT_LOG_MAX_LINES,
     FAULT_LOG_MAX_BLOCK_BYTES, FAULT_LOG_MAX_PAGE_BYTES,
 )
-from .helpers import _safe_log_path, _strict_diagnostic_text, _strict_phoenix_log_text
-from .helpers import effective_cap
+from .log_read import _safe_log_path, _strict_diagnostic_text, _strict_phoenix_log_text
+from .capability import effective_cap
 from .request_authority import check_request_authority, request_authority
 from .tool_common import _tool_error, _tool_success
 
@@ -44,9 +44,7 @@ class FaultSnapshot:
 def read_fault_snapshot(config_dir: str) -> FaultSnapshot:
     """Open only the fixed regular file, without following a final symlink.
 
-    The directory descriptor pins the config root. Nonblocking open prevents a
-    special file from hanging the executor; the descriptor is checked before
-    reading. Hard links are refused because they can alias another config file.
+    Pins the config root, opens nonblocking, and refuses a special file or hard link.
     """
     directory = None
     descriptor = None

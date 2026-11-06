@@ -44,14 +44,12 @@ from .registry import _execute_set_device, _execute_set_entity
 def _restore_access_key(user_id: str) -> AccessKeyRecord:
     """Synthetic pass-through access key for re-applying a config under admin authority.
 
-    pass_through makes policy_engine.resolve() return WRITE for every entity, so the
-    per-entity scope checks inside the scene/helper executors pass for an admin who
-    has full authority. Every capability is set to allow explicitly: pass_through
-    only promotes deny for non-exempt caps, and the blueprint executors check the
-    pass-through-EXEMPT domain caps (cap_automation_write / cap_script_write)
-    inside the executor, which would refuse an admin restore on the defaults.
-    It is never persisted and never authenticates a request.
+    Never persisted and never authenticates a request. Every capability is set to allow.
     """
+    # pass_through makes policy_engine.resolve() return write for every entity, so the executors'
+    # entity checks pass. It only promotes deny for non-exempt caps, and the blueprint executors
+    # check the exempt cap_automation_write and cap_script_write, which would refuse an admin
+    # restore on the defaults.
     return AccessKeyRecord(
         id=f"__restore__:{user_id}",
         name="(admin restore)",
@@ -103,10 +101,8 @@ async def async_restore_configuration(
 def restore_refusal(record, side: str, hass: HomeAssistant) -> str | None:
     """Why async_restore_version would refuse this side whatever the item holds now, or None.
 
-    Returns a reason slug: yaml_tags, audit_only, template_incompatible or
-    entity_missing. These are the refusals that do not depend on the item's
-    current content, so Changes can say why before Restore is chosen. A missing
-    side returns None; the panel explains that itself.
+    A reason slug: yaml_tags, audit_only, template_incompatible or entity_missing. A missing side
+    returns None; the panel explains that itself.
     """
     target = record.before if side == "before" else record.after
     if not isinstance(target, dict):

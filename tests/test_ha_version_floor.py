@@ -134,6 +134,7 @@ KNOWN_IMPORTS: dict[str, dict[str, str]] = {
         "support_entry_unload": "0.0.0",
     },
     "homeassistant.const": {
+        "ATTR_SUPPORTED_FEATURES": "0.0.0",
         "EntityCategory": "0.0.0",
         "EVENT_HOMEASSISTANT_STARTED": "0.0.0",
         "EVENT_HOMEASSISTANT_STOP": "0.0.0",

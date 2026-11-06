@@ -11,10 +11,10 @@ ROOT = Path(__file__).parents[1]
 AGENT_FILES = (
     ROOT / "custom_components/phoenix_mcp/agent_chat.py",
     ROOT / "custom_components/phoenix_mcp/agent_turn.py",
-    ROOT / "custom_components/phoenix_mcp/agentcli_views.py",
+    ROOT / "custom_components/phoenix_mcp/agent_chat_views.py",
     *sorted((ROOT / "custom_components/phoenix_mcp/llm").glob("*.py")),
 )
-BACKEND_FILES = (ROOT / "custom_components/phoenix_mcp/admin_view.py", *AGENT_FILES)
+BACKEND_FILES = (*sorted((ROOT / "custom_components/phoenix_mcp/admin").glob("*.py")), *AGENT_FILES)
 CATALOG_FILES = tuple(sorted((ROOT / "custom_components/phoenix_mcp/catalogs").glob("*.json")))
 
 
@@ -125,7 +125,7 @@ def test_localized_reasons_have_catalog_keys() -> None:
     catalogs = [_panel_catalog(path)["adminError"] for path in CATALOG_FILES]
     found = 0
     package = ROOT / "custom_components/phoenix_mcp"
-    for path in sorted([*package.glob("*.py"), *package.glob("routing/*.py")]):
+    for path in sorted([*package.glob("*.py"), *package.glob("admin/*.py"), *package.glob("routing/*.py")]):
         for call in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
             if not (isinstance(call, ast.Call) and isinstance(call.func, ast.Name)
                     and call.func.id == "LocalizedReason"):

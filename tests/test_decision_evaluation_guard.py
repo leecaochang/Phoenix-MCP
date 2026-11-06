@@ -19,9 +19,8 @@ from custom_components.phoenix_mcp.routing import tool_routing
 from custom_components.phoenix_mcp.routing.command_routing import async_evaluate_command
 from custom_components.phoenix_mcp.routing.decision_batch import async_preview_batch
 from custom_components.phoenix_mcp.routing.decision_context import async_preview_context
-from custom_components.phoenix_mcp.routing.decision_provider import (
-    DecisionError, DecisionValidationError, _evaluate_guarded,
-)
+from custom_components.phoenix_mcp.routing.decision_types import DecisionError
+from custom_components.phoenix_mcp.routing.decision_provider import DecisionValidationError, _evaluate_guarded
 from custom_components.phoenix_mcp.routing.decision_reference import async_preview_reference
 from custom_components.phoenix_mcp.routing.decision_shadow import async_preview_decision
 from custom_components.phoenix_mcp.routing.decision_targets import CatalogLimitError

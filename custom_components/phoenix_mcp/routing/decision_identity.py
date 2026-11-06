@@ -17,10 +17,10 @@ def _normalized(text: str) -> str:
 def explicit_write_target(sentence: str, targets: dict, proposal: dict, language: str) -> bool:
     """Require a unique literal identity; this is not complete intent recognition.
 
-    The model must still reject negation, modifiers and multiple operations. Reads
-    and independently reviewed conversation references have separate contracts.
-    Do not fuzzy-match, translate names, or turn area metadata into entity names.
+    The model must still reject negation, modifiers and multiple operations. Never fuzzy-match,
+    translate names, or turn area metadata into entity names.
     """
+    # Reads and independently reviewed conversation references have separate contracts.
     if proposal['intent'] in COMMAND_ROUTING_READ_INTENTS:
         return True
     ids = proposal.get('entity_ids', [])

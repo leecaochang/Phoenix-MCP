@@ -53,7 +53,7 @@ def test_text_metadata_excludes_secret_and_unvalidated_fields(domain, attrs):
 
 
 def test_choices_are_complete_and_bound_to_known_values():
-    from custom_components.phoenix_mcp.routing.decision_provider import DecisionError
+    from custom_components.phoenix_mcp.routing.decision_types import DecisionError
     targets = {'t0': {'entity_operations': {'select_option': {'kind': 'option', 'options': ['Away', 'Home']},
                                           'input_text_value': {'kind': 'text'}}}}
     assert set(value_choices('Set the label to "Visitor"', targets).values()) == {'Away', 'Home', 'Visitor'}

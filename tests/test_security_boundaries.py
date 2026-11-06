@@ -18,7 +18,8 @@ from pytest_homeassistant.common import MockConfigEntry
 from custom_components.phoenix_mcp.audit import AuditLog
 from custom_components.phoenix_mcp.const import DOMAIN, REDACTION_SENTINEL, STORAGE_KEY, STORAGE_VERSION
 from custom_components.phoenix_mcp.data import PhoenixData
-from custom_components.phoenix_mcp.helpers import ScrubbedState, redact_secrets_in_text
+from custom_components.phoenix_mcp.template_sandbox import ScrubbedState
+from custom_components.phoenix_mcp.redaction import redact_secrets_in_text
 from custom_components.phoenix_mcp.tools.service import (
     _execute_call_service,
     _execute_call_service_mesa_approved,

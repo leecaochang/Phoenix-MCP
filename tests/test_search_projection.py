@@ -201,14 +201,20 @@ async def _ranked(hass, query):
 
 
 @pytest.mark.parametrize(("query", "field"), [
-    ("upstairs", "floor"), ("holiday", "label"), ("acme", "manufacturer"), ("widget", "model"), ("hub", "device"),
+    ("upstairs", "floor"), ("holiday", "label"), ("acme", "manufacturer"), ("widget", "model"),
 ])
 async def test_a_query_finds_entities_by_their_floor_label_and_device(hass, context_home, query, field):
     rows = await _ranked(hass, query)
     assert rows and all(field in row["matched"] for row in rows)
     expected = {"upstairs": {context_home.direct, context_home.by_device}, "holiday": {context_home.orphan},
-                "acme": {context_home.orphan}, "widget": {context_home.orphan}, "hub": {context_home.by_device}}[query]
+                "acme": {context_home.orphan}, "widget": {context_home.orphan}}[query]
     assert {row["entity_id"] for row in rows} == expected
+
+
+async def test_a_device_word_in_the_composed_name_is_a_name_match(hass, context_home):
+    rows = await _ranked(hass, "hub")
+    assert [row["entity_id"] for row in rows] == [context_home.by_device]
+    assert "hub" in rows[0]["composed_name"].lower() and "matched" not in rows[0]
 
 
 async def test_a_name_match_leads_and_an_area_match_says_so(hass, context_home):

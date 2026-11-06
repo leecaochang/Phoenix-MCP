@@ -1,20 +1,12 @@
 """In-process dispatch of Home Assistant WebSocket API commands.
 
-Some HA capabilities (notably helper CRUD such as input_boolean/create) are only
-exposed through the WebSocket command API: there is no public host-side function
-and the storage collections are not reachable. This module invokes HA's
-already-registered WS command handlers directly, with no socket and no long-lived
-access token: it looks up the handler in ``hass.data["websocket_api"]``,
-validates the message against the registered schema, and runs the handler against
-a synthetic ``ActiveConnection`` that captures the result instead of writing to a
-socket.
+Some capabilities, notably helper CRUD, exist only as WS commands. This looks up the
+registered handler in ``hass.data["websocket_api"]``, validates against its schema, and runs
+it on a synthetic ``ActiveConnection`` that captures the result, with no socket or token.
 
-This is the one place that leans on HA internals (`ActiveConnection`, the
-`async_response` result flow), isolated here with a startup compatibility probe
-so an HA change breaks this module loudly rather than its callers. The
-create/update/delete commands are `@require_admin`, so dispatch runs under a real
-admin user resolved from `hass.auth`; Phoenix MCP's own capability gate (e.g.
-cap_helper_write + Confirm + audit) decides whether a call runs at all.
+It is the one place leaning on those HA internals, guarded by a startup probe. Handlers
+needing admin run under a real admin user from ``hass.auth``; Phoenix's capability gate
+decides whether a call runs at all.
 """
 
 from __future__ import annotations
@@ -58,26 +50,16 @@ def _track_unsettled(future: asyncio.Future) -> None:
     _UNSETTLED.add(future)
     future.add_done_callback(settled)
 
-# The only WS commands Phoenix MCP is permitted to dispatch in-process. async_ws_command
-# refuses anything outside this set, so a future caller cannot turn user input
-# into an arbitrary privileged command run as admin. Adding a command here is a
-# deliberate act. Keep in sync with the command strings the in-tree callers pass
-# (helper, lovelace, blueprint, energy, discovery, logs, restore and backup tools,
-# logger_control, radio.py). restore_backup is deliberately absent (too destructive). The helper
-# "list" read captures the pre-change config for version history.
-# Most ZHA write-side commands (zha/devices/permit, zha/devices/reconfigure,
-# zha/topology/update) are deliberately absent: their handlers enable
-# process-wide ZHA debug logging and/or park cleanup callbacks in
-# connection.subscriptions, which a synthetic capturing connection never
-# releases, and reconfigure/topology never call send_result (guaranteed
-# timeout). The scoped topology tool therefore awaits zigpy's scanner directly
-# in radio.py. Permit and remove go through the zha.permit / zha.remove admin
-# services instead; reconfigure goes through async_zha_reconfigure_device below.
-# zha/devices/bind, zha/devices/unbind, and the group CRUD commands are the
-# narrow exceptions: they await ZHA's own operation and then call send_result
-# without registering a subscription. Phoenix resolves every IEEE and numeric
-# group id from scoped registry entities; callers never provide either kind of
-# radio identifier.
+# The only WS commands Phoenix MCP may dispatch in-process, so a caller cannot turn input
+# into an arbitrary privileged command run as admin. Keep in step with the in-tree callers.
+# restore_backup is absent as too destructive.
+#
+# Most ZHA write commands are absent: their handlers enable process-wide debug logging or
+# park callbacks in connection.subscriptions, which a synthetic connection never releases,
+# and reconfigure and topology never call send_result. topology goes through zigpy in
+# radio.py, permit and remove through the zha services, reconfigure through
+# async_zha_reconfigure_device. zha/devices/bind, unbind and the group commands are safe
+# exceptions, and Phoenix resolves every IEEE and group id from scoped registry entities.
 _HELPER_DOMAINS = tuple(sorted(STORAGE_HELPER_TYPES))
 ALLOWED_WS_COMMANDS: frozenset[str] = frozenset(
     [f"{domain}/{op}" for domain in _HELPER_DOMAINS for op in ("create", "update", "delete", "list")]
@@ -118,29 +100,17 @@ ALLOWED_WS_COMMANDS: frozenset[str] = frozenset(
         # Read-only: renders a blueprint with caller-supplied inputs into the
         # standalone config it would produce, without saving anything.
         "blueprint/substitute",
-        # Energy dashboard preferences. energy/get_prefs is the only route to the
-        # mapping between a statistic and its Energy role (grid / solar / battery /
-        # gas / water / individual device): it lives in .storage/energy, which no
-        # filesystem tool can reach (FILESYSTEM_ALLOWED_DIRS is www/themes/
-        # custom_templates), and no state or registry read exposes it. Without it a
-        # caller removing an integration cannot see that it is about to orphan an
-        # Energy source.
-        # energy/save_prefs is @require_admin and each of its three top-level keys
-        # is a FULL REPLACE: sending "device_consumption" with a partial list
-        # silently deletes every other device the operator configured. So NOTHING
-        # here composes a payload from what an agent sent. tools/energy.py owns the
-        # only caller: it re-reads the current preferences UNREDACTED, applies one
-        # addressed mutation, verifies the result differs from the original in
-        # exactly the intended way, and sends ONLY the top-level keys that changed
-        # (HA's EnergyManager.async_update copies through any key the update omits).
-        # The one exception is an admin version restore, which reproduces a snapshot.
-        # energy/validate is a READ despite the name: it validates what is already
-        # persisted, not a submitted payload, so it cannot pre-flight a write
-        # (validate_ws_payload runs save_prefs's own schema for that). It
-        # answers "is the Energy dashboard actually working", naming entries whose
-        # entity no longer exists or that record no statistics.
-        # energy/solar_forecast returns production forecasts for the config entries
-        # a solar source names, and {} when none does.
+        # Energy preferences. energy/get_prefs is the only route to the statistic-to-role
+        # mapping in .storage/energy, which a caller needs to see before orphaning a source.
+        #
+        # energy/save_prefs is admin-only and each top-level key is a full replace, so
+        # nothing composes a payload from agent input: tools/energy.py re-reads unredacted,
+        # applies one addressed mutation, verifies the difference and sends only the changed
+        # keys. An admin version restore is the one exception.
+        #
+        # energy/validate checks what is persisted, so it cannot pre-flight a write;
+        # validate_ws_payload does that with save_prefs's schema. energy/solar_forecast
+        # returns {} when no solar source names an entry.
         "energy/get_prefs", "energy/save_prefs", "energy/validate", "energy/solar_forecast",
     ]
 )
@@ -170,10 +140,8 @@ class WsCommandRefusedError(WsDispatchError):
 class WsDashboardNotFoundError(WsCommandNotDispatchedError):
     """A named Lovelace dashboard does not exist.
 
-    Distinct from the generic error so callers can tell "this dashboard is not
-    there" (a legitimate absence, which the CAS paths treat as before=None) from
-    "lovelace could not be read" (a failure that must surface, not be mistaken for
-    absence and silently overwritten).
+    A legitimate absence, which CAS paths treat as before=None, unlike "lovelace could not be
+    read".
     """
 
 
@@ -192,10 +160,7 @@ class WsYamlDashboardError(WsCommandNotDispatchedError):
 class _CapturingConnection(ActiveConnection):
     """An ActiveConnection that captures the command result in a Future.
 
-    Overrides the three result sinks the storage-collection handlers use
-    (send_result on success, send_error on validation failure, and
-    async_handle_exception on an unexpected error) so the dispatched command's
-    outcome can be awaited instead of serialized onto a socket.
+    Overrides send_result, send_error and async_handle_exception, the sinks handlers use.
     """
 
     def __init__(self, hass: HomeAssistant, user: Any) -> None:
@@ -219,12 +184,9 @@ class _CapturingConnection(ActiveConnection):
 
     @callback
     def _capture_send(self, message: Any) -> None:
-        """Capture a result delivered via send_message.
+        """Capture a pre-built result message that bypassed send_result.
 
-        Some handlers bypass send_result and send a pre-built result message
-        directly (the logbook get_events handler sends already-serialized JSON
-        bytes this way). Parse it, and on a success result message resolve the
-        future; non-result messages (events, pings) are ignored.
+        Parses it and resolves the future on a success result; events and pings are ignored.
         """
         if self.result_future.done():
             return
@@ -291,13 +253,7 @@ def _validated_message(hass: HomeAssistant, command: str, payload: dict[str, Any
 
 
 def validate_ws_payload(hass: HomeAssistant, command: str, payload: dict[str, Any]) -> dict[str, Any]:
-    """Validate a payload with the command's registered schema without running its handler.
-
-    Returns the payload as the schema normalizes it (defaults filled, values
-    coerced), which is what the handler would receive. Raises
-    WsCommandNotDispatchedError wherever async_ws_command would refuse before
-    dispatch. Nothing runs, so no admin identity is resolved. Event loop only.
-    """
+    """Validate a payload with the command's schema; return it normalized, without running."""
     _, msg = _validated_message(hass, command, copy.deepcopy(payload))
     return {key: value for key, value in msg.items() if key not in ("id", "type")}
 
@@ -311,9 +267,8 @@ async def async_ws_command(
 ) -> Any:
     """Invoke a registered HA WebSocket command in-process and return its result.
 
-    Raises WsDispatchError if the command is not on the ALLOWED_WS_COMMANDS
-    allowlist, is not registered, the payload fails the command's schema, no
-    admin user is available, or the handler reports an error / times out.
+    Raises WsDispatchError off the ALLOWED_WS_COMMANDS allowlist, when unregistered, on a
+    schema failure, with no admin user, or on a handler error or timeout.
     """
     handler, msg = _validated_message(hass, command, payload)
     user = await _resolve_admin_user(hass)
@@ -370,12 +325,10 @@ _HANDLER_ARGCOUNT = 3
 
 
 def _handler_contract_error(registry: dict) -> str | None:
-    """Check a registered allowlisted command against the call in async_ws_command.
+    """Check one registered allowlisted command against the call in async_ws_command.
 
-    Returns None when compatible OR when nothing to sample is registered yet
-    (websocket_api can register after Phoenix MCP sets up, which is not drift).
-    Samples rather than sweeps: every entry is registered by the same HA
-    machinery, so one is representative and the probe stays cheap.
+    Returns None when compatible or when nothing is registered yet; samples, as all entries
+    share HA's machinery.
     """
     sample = next((c for c in sorted(ALLOWED_WS_COMMANDS) if c in registry), None)
     if sample is None:
@@ -408,16 +361,9 @@ def _handler_contract_error(registry: dict) -> str | None:
 
 def check_ws_dispatch_compat(hass: HomeAssistant) -> str | None:
     """Best-effort check that the HA internals this module relies on are intact.
-
-    Returns None when compatible, or a short human-readable reason when HA appears
-    to have changed shape (in which case helper CRUD will still fail per-call with
-    a clean WsDispatchError; this just surfaces it once at startup). Detects the
-    realistic break scenarios: a new required ActiveConnection constructor param
-    Phoenix MCP cannot supply, a missing result-sink method, a registry that is no
-    longer a dict, and (via _handler_contract_error) a registry entry that no
-    longer unpacks as (handler, schema) or a handler that no longer takes
-    (hass, connection, msg). The last two are the call async_ws_command actually
-    makes, and nothing about the connection object reveals them.
+    Returns None when compatible, else a short reason, surfaced once at startup. Detects a new
+    required ActiveConnection parameter, a missing result sink, a non-dict registry, and a
+    changed handler contract.
     """
     try:
         registry = hass.data.get(ws_const.DOMAIN)
@@ -470,14 +416,9 @@ def check_ws_dispatch_compat(hass: HomeAssistant) -> str | None:
 
 def _lovelace_dashboard(hass: HomeAssistant, url_path: str | None) -> Any:
     """Return the LovelaceConfig for a url_path (None = default dashboard), or None.
-
-    Mirrors HA's lovelace/config handler: for the default, prefer the 'lovelace'
-    dashboard (YAML mode) then the storage-mode default keyed None.
-
-    None means ONLY that no dashboard is registered under that url_path. Lovelace
-    being absent raises instead: returning None for both would make an unreadable
-    lovelace look like a missing dashboard, and the write paths treat a missing
-    dashboard as "nothing to preserve".
+    Mirrors HA's lovelace/config handler. None means only that no dashboard is registered
+    there; lovelace being absent raises, as writes read a missing dashboard as nothing to
+    preserve.
     """
     try:
         # Local: optional component, imported only when this path runs.
@@ -500,10 +441,8 @@ def _lovelace_dashboard(hass: HomeAssistant, url_path: str | None) -> Any:
 class LovelaceResources:
     """The registered dashboard resources and where Home Assistant keeps them.
 
-    `mode` is "storage" (managed through Settings and the resource commands) or
-    "yaml" (the lovelace: resources list, loaded with its !secret values
-    resolved). Each item is HA's own dictionary: url and type, plus id in storage
-    mode.
+    ``mode`` is "storage" or "yaml" (with !secret values resolved). Each item is HA's own
+    dictionary: url and type, plus id in storage mode.
     """
 
     mode: str
@@ -513,10 +452,8 @@ class LovelaceResources:
 async def async_lovelace_resources(hass: HomeAssistant) -> LovelaceResources | None:
     """Return the registered dashboard resources, or None if they cannot be read.
 
-    Mirrors HA's lovelace/resources handler, including its empty answer in safe
-    mode, through the collection's own loading method. None covers an unavailable
-    lovelace, safe mode and a failed read: an unknown answer must stay unknown
-    rather than look like an instance with no resources.
+    Mirrors HA's lovelace/resources handler. None covers an unavailable lovelace, safe mode
+    and a failed read: an unknown answer must not look like no resources.
     """
     try:
         # Local: optional component, imported only when this path runs.
@@ -542,14 +479,10 @@ async def async_lovelace_resources(hass: HomeAssistant) -> LovelaceResources | N
 async def async_get_lovelace_config(
     hass: HomeAssistant, url_path: str | None, *, storage_only: bool = False,
 ) -> dict[str, Any] | None:
-    """Return a dashboard's stored view/card config, or None if it has none.
-
-    None means the dashboard exists but is auto-generated (no stored config).
-    Raises WsDashboardNotFoundError for an unknown dashboard, WsDispatchError when
-    lovelace itself is unavailable or the read fails. With storage_only, a
-    YAML-mode dashboard raises WsYamlDashboardError before it is loaded: HA's
-    YAML loader resolves !secret, so its layout must not reach a caller that
-    discloses it.
+    """Return a dashboard's stored view and card config, or None if auto-generated.
+    Raises WsDashboardNotFoundError for an unknown dashboard and WsDispatchError when lovelace
+    fails. With ``storage_only`` a YAML dashboard raises WsYamlDashboardError unloaded, as
+    HA's loader resolves !secret.
     """
     config = _lovelace_dashboard(hass, url_path)
     if config is None:
@@ -577,12 +510,10 @@ async def async_get_lovelace_config(
 async def async_save_lovelace_config(
     hass: HomeAssistant, url_path: str | None, config_data: dict[str, Any]
 ) -> None:
-    """Save a dashboard's view/card config. Storage-mode dashboards only.
+    """Save a dashboard's view and card config. Storage-mode dashboards only.
 
-    Raises WsDashboardNotFoundError for an unknown dashboard, and WsDispatchError
-    (WsCommandNotDispatchedError for a file-backed YAML-mode dashboard) when the
-    save is refused or fails, rather than HA's opaque 'Not supported'. Current
-    authority failures propagate unchanged before dispatch.
+    Raises WsDashboardNotFoundError for an unknown dashboard and WsDispatchError when refused,
+    with WsCommandNotDispatchedError for YAML mode. Authority failures propagate first.
     """
     config = _lovelace_dashboard(hass, url_path)
     if config is None:
@@ -600,27 +531,17 @@ async def async_save_lovelace_config(
 
 
 # ---------------------------------------------------------------------------
-# ZHA device reconfigure (re-interview).
-#
-# The zha/devices/reconfigure WS command cannot be dispatched through
-# async_ws_command: its handler parks a dispatcher-cleanup callback in
-# connection.subscriptions (never released on a synthetic connection) and
-# never calls send_result (progress arrives as subscription events), so the
-# dispatch would leak a listener and then time out. This mirrors the handler
-# body minus the subscription: validate the device exists, then start the
-# reinterview task exactly like HA's own handler does.
+# ZHA device reconfigure (re-interview), outside async_ws_command: the WS handler parks a
+# callback in connection.subscriptions and never calls send_result, so dispatch would leak a
+# listener and time out. This mirrors the handler body minus the subscription.
 # ---------------------------------------------------------------------------
 
 
 async def async_zha_reconfigure_device(hass: HomeAssistant, ieee: str) -> None:
-    """Start a ZHA device reinterview (fire-and-forget, like HA's own handler).
+    """Start a ZHA device reinterview, fire-and-forget, like HA's own handler.
 
-    The reinterview runs as a background task and completes out-of-band
-    (5-60s+, longer for sleepy battery devices); there is no completion
-    signal to await. Raises WsDispatchError when ZHA is unavailable or the
-    device is not on the network. HA-coupling point: get_zha_gateway and the
-    gateway API are ZHA internals; if they move, this degrades to a clean
-    per-call error.
+    There is no completion signal. Raises WsDispatchError when ZHA is unavailable or the
+    device is absent; ZHA internals moving degrades to the same per-call error.
     """
     try:
         # Local: optional component, imported only when this path runs.

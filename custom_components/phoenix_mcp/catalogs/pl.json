@@ -1012,6 +1012,7 @@
       "verboseHint": "Pokaż wywołania narzędzi, wyniki narzędzi i myślenie agenta. Odpowiedzi, obrazy, postęp, zatwierdzenia i powiadomienia są widoczne zawsze.",
       "workingOn": "Praca: {name}",
       "workingSpinner": "Praca…",
+      "otherTabTurn": "Inna karta generuje odpowiedź w tej rozmowie. Jeśli ta karta też ją wygeneruje, zachowana zostanie odpowiedź ukończona jako ostatnia.",
       "pausedAfter": {
         "one": "Wstrzymano po {count} kroku. Kontynuować?",
         "other": "Wstrzymano po {count} krokach. Kontynuować?",

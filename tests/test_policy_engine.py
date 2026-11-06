@@ -1812,7 +1812,8 @@ async def test_restored_composite_device_keeps_every_owner(hass: HomeAssistant):
         config_entry_id="b-owner",
         composite_subentries={"b-owner": {None}, "a-owner": {None}, "phoenix-owner": {None}},
     )
-    assert device.is_composite_device is True
+    # 2026.9 has composite devices but no is_composite_device yet.
+    assert getattr(device, "is_composite_device", True) is True
     assert device_config_entry_ids(device) == ["a-owner", "b-owner", "phoenix-owner"]
     assert _phoenix_owned_device(device, hass) is True
 

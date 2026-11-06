@@ -1,5 +1,5 @@
 ---
-{ "id": "topic.adminApiApprovals", "title": "核准與變更端點", "parent": "topic.adminApi", "order": 20, "keywords": ["核准 API", "核准", "拒絕", "取消", "版本", "回滾", "復原", "需要關注", "卡片目錄"], "sectionKeywords": { "approvals": ["待處理", "approval_id", "PendingApproval"], "list-approvals": ["in_progress", "狀態篩選", "access_key_id"], "approve": ["approvalExecutionInterrupted", "approvalProcessing", "killSwitchEngaged", "approvalCapabilityDenied", "approvalAccessKeyInactive", "execution_failed", "refused_before_write"], "batch-approve": ["approval_ids", "批次", "applied", "remaining", "全部核准"], "reject": ["原因", "rejected_reason"], "cancel": ["DELETE", "admin_cancelled"], "claims": ["phoenix_mcp_approval_claimed", "phoenix_mcp_approval_resolved", "claim", "認領", "事件"], "history": ["版本", "resource_type", "resource_id", "truncated"], "read-version": ["restore_refusals", "yaml_tags", "audit_only", "template_incompatible", "entity_missing"], "restore-version": ["expected_latest_id", "stale_version", "restore_unverified", "rollback", "side"], "attention": ["attention", "未知結果", "checked_outcome", "行事曆"], "recovery": ["config-recovery", "安全副本", "快照", "phase"], "recovery-action": ["inspect", "reviewed", "delete", "recoveryBlocked"], "recovery-restore": ["isError", "recoveryManualOnly", "zigbee"], "card-catalog": ["自訂卡片", "收集", "resource_fingerprint", "stub_config"] } }
+{ "id": "topic.adminApiApprovals", "title": "核准與變更端點", "parent": "topic.adminApi", "order": 20, "keywords": ["核准 API", "核准", "拒絕", "取消", "版本", "回滾", "復原", "需要關注", "卡片目錄"], "sectionKeywords": { "approvals": ["待處理", "approval_id", "PendingApproval"], "list-approvals": ["in_progress", "狀態篩選", "access_key_id"], "approve": ["approvalExecutionInterrupted", "approvalProcessing", "killSwitchEngaged", "approvalCapabilityDenied", "approvalAccessKeyInactive", "execution_failed", "refused_before_write"], "batch-approve": ["approval_ids", "批次", "applied", "remaining", "全部核准"], "reject": ["原因", "closure_reason"], "cancel": ["DELETE", "admin_cancelled"], "claims": ["phoenix_mcp_approval_claimed", "phoenix_mcp_approval_resolved", "claim", "認領", "事件"], "history": ["版本", "resource_type", "resource_id", "truncated"], "read-version": ["restore_refusals", "yaml_tags", "audit_only", "template_incompatible", "entity_missing"], "restore-version": ["expected_latest_id", "stale_version", "restore_unverified", "rollback", "side"], "attention": ["attention", "未知結果", "checked_outcome", "行事曆"], "recovery": ["config-recovery", "安全副本", "快照", "phase"], "recovery-action": ["inspect", "reviewed", "delete", "recoveryBlocked"], "recovery-restore": ["isError", "recoveryManualOnly", "zigbee"], "card-catalog": ["自訂卡片", "收集", "resource_fingerprint", "stub_config"] } }
 ---
 這些端點處理智慧體請求你核准的事項，以及它們所做的變更：核准、設定歷史、復原記錄、需要關注和儀表板卡片目錄。登入、錯誤本文和請求體如[管理 API](guide:topic.adminApi)所述。
 
@@ -28,13 +28,13 @@ POST   /api/phoenix-mcp/admin/approvals/{approval_id}/reject
 | `status` | `pending`、`approved`、`rejected`、`failed`、`expired` 或 `cancelled`。 |
 | `created_at`、`expires_at`、`resolved_at` | 請求時間、過期時間和結束時間。 |
 | `approved_by_user_id`、`approved_at` | 誰核准了它，以及何時。 |
-| `rejected_reason` | 為什麼它未執行就結束，或為什麼執行失敗。取值見下文。 |
+| `closure_reason` | 為什麼它未執行就結束，或為什麼執行失敗。取值見下文。 |
 | `result` | 核准後工具的結果。 |
 | `request_id`、`client_ip` | 發起請求的智慧體請求。 |
 | `household_request`、`ha_user_id` | 家庭請求標誌，以及請求背後的 Home Assistant 使用者。 |
 | `execution_started_at` | 核准開始執行操作的時間。 |
 
-`rejected_reason` 是你自己的拒絕原因，或以下值之一：
+`closure_reason` 是你自己的拒絕原因，或以下值之一：
 
 ```text
 access_key_inactive        capability_denied
@@ -82,8 +82,8 @@ MESA 為確認而暫緩的核准，以及復原審核，會跳過能力檢查。
 回應為 `200`，包含更新後的記錄：
 
 - 操作執行時 `status: "approved"`。
-- 工具傳回錯誤時 `status: "failed"`，且 `rejected_reason: "execution_failed"`。這仍是 `200`。
-- 工具已傳送變更但無法確認是否生效時 `status: "failed"`，且 `rejected_reason: "execution_interrupted"`。重試前請先檢查結果。這仍是 `200`。
+- 工具傳回錯誤時 `status: "failed"`，且 `closure_reason: "execution_failed"`。這仍是 `200`。
+- 工具已傳送變更但無法確認是否生效時 `status: "failed"`，且 `closure_reason: "execution_interrupted"`。重試前請先檢查結果。這仍是 `200`。
 - `result` 為 `{ tool_result, outcome }`。當工具在寫入任何內容之前拒絕時，它會新增 `refused_before_write: true`。
 - 已經結束的核准會原樣傳回。
 
@@ -130,7 +130,7 @@ MESA 為確認而暫緩的核准，以及復原審核，會跳過能力檢查。
 ```
 
 - `applied` 列出已執行的核准。已經核准的核准也算作已套用。
-- 當每個核准都執行時，`failed` 為 `null`。其 `status` 是該項目的 HTTP 狀態。其 `error` 是該項目的錯誤代碼，否則是其 `rejected_reason`，否則為 `"failed"`。
+- 當每個核准都執行時，`failed` 為 `null`。其 `status` 是該項目的 HTTP 狀態。其 `error` 是該項目的錯誤代碼，否則是其 `closure_reason`，否則為 `"failed"`。
 - 當項目的錯誤帶有 `message_key` 和 `message_params` 時，`failed` 也會攜帶它們。
 - `remaining` 列出批次未嘗試的 ID。
 
@@ -148,7 +148,7 @@ MESA 為確認而暫緩的核准，以及復原審核，會跳過能力檢查。
 
 | 欄位 | 類型 | 說明 |
 |---|---|---|
-| `reason` | string | 選填。儲存在 `rejected_reason` 中。 |
+| `reason` | string | 選填。儲存在 `closure_reason` 中。 |
 
 回應為更新後的記錄，`status: "rejected"`。已經結束的核准會以 `200` 原樣傳回。超過 `expires_at` 的待處理核准會改為以 `expired` 關閉。
 
@@ -163,7 +163,7 @@ MESA 為確認而暫緩的核准，以及復原審核，會跳過能力檢查。
 
 ### 取消 {#cancel}
 
-取消待處理的核准。它的運作方式與拒絕相同，`status: "cancelled"`，`rejected_reason: "admin_cancelled"`。不傳送本文。
+取消待處理的核准。它的運作方式與拒絕相同，`status: "cancelled"`，`closure_reason: "admin_cancelled"`。不傳送本文。
 
 回應以及已結束和逾期核准的處理與[拒絕](guide:#reject)相同。錯誤相同，但 `approvalReasonString` 除外。
 
@@ -173,7 +173,7 @@ Phoenix 在 Home Assistant 的事件匯流排上觸發兩個事件，以便腳�
 
 - 當一次核准取得該記錄時，在操作執行前觸發 `phoenix_mcp_approval_claimed`，`claimed: true`。資料：`approval_id`、`claimed`、`timestamp`。
 - 如果執行前的失敗使核准保持待處理，它會再次以 `claimed: false` 觸發。
-- 核准達到最終狀態時觸發 `phoenix_mcp_approval_resolved`。資料：`approval_id`、`access_key_id`、`access_key_name`、`tool_name`、`status`、`rejected_reason`、`approved_by_user_id`、`timestamp`。
+- 核准達到最終狀態時觸發 `phoenix_mcp_approval_resolved`。資料：`approval_id`、`access_key_id`、`access_key_name`、`tool_name`、`status`、`closure_reason`、`approved_by_user_id`、`timestamp`。
 
 執行期間載入的頁面會在[列出核准](guide:#list-approvals)的列上看到 `in_progress: true`。
 

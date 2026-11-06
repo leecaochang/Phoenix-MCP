@@ -573,3 +573,48 @@ async def test_response_services_keep_returning_data(hass):
         hass, data, _key({entity_id: "GREEN"}, cap_service_response="allow"), "todo", "get_items", entity_id)
     assert outcome == "allowed", result
     assert json.loads(result["content"][0]["text"])["service_response"] == {"ok": True}
+
+
+@pytest.mark.parametrize(("schema", "sent"), [
+    pytest.param(vol.Schema({vol.Required("entity_id"): cv.entity_id}), "sensor.x", id="one entity"),
+    pytest.param(vol.Schema({vol.Required("entity_id"): cv.string}), "sensor.x", id="one string"),
+    pytest.param(vol.Schema({vol.Required("entity_id"): cv.entity_ids}), ["sensor.x"], id="list"),
+    pytest.param(cv.make_entity_service_schema({}), ["sensor.x"], id="entity service"),
+])
+async def test_a_custom_service_receives_its_target_in_the_shape_it_declares(hass, schema, sent):
+    seen = []
+
+    async def handler(call: ServiceCall) -> None:
+        seen.append(call.data["entity_id"])
+
+    hass.services.async_register("custom", "act", handler, schema=schema)
+    entity_id = _entity(hass, "sensor")
+    data, _ = _environment(hass)
+    result, outcome, _ = await _call_service(hass, data, _key({entity_id: "GREEN"}), "custom", "act", entity_id)
+    assert outcome == "allowed", result
+    assert seen == [sent]
+
+
+async def test_several_targets_stay_a_list_for_home_assistant_to_refuse(hass):
+    async def handler(call: ServiceCall) -> None:
+        raise AssertionError("a single-entity service must not run for several targets")
+
+    hass.services.async_register(
+        "custom", "act", handler, schema=vol.Schema({vol.Required("entity_id"): cv.entity_id}))
+    first = _entity(hass, "sensor", object_id="a")
+    second = _entity(hass, "sensor", object_id="b")
+    data, _ = _environment(hass)
+    args = {"service": {"domain": "custom", "name": "act"}, "targets": [{"kind": "entity", "ids": [first, second]}]}
+    result, outcome, _ = await _call_tool("call_service", args, _key({first: "GREEN", second: "GREEN"}), hass, data)
+    assert outcome == "invalid_request", result
+
+
+async def test_clearing_completed_todo_items_goes_through_the_tool_that_shows_them(hass):
+    calls = async_mock_service(hass, "todo", "remove_completed_items")
+    entity_id = _entity(hass, "todo")
+    data, _ = _environment(hass)
+    result, outcome, _ = await _call_service(
+        hass, data, _key({entity_id: "GREEN"}), "todo", "remove_completed_items", entity_id)
+    assert outcome == "invalid_request"
+    assert "clear_completed" in result["content"][0]["text"]
+    assert calls == []

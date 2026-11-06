@@ -11,24 +11,29 @@ from typing import Any
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.core import HomeAssistant
 
+from .command_plan import _capture_plan
 from .command_routing import RoutingAuthority, async_evaluate_command, effective_routing_mode, routing_language
 from ..const import MAX_SEARCH_QUERY_LEN
+from .command_target import _digest
 from .routing_tables import (
     DECISION_CONTEXT_MAX_BYTES, DECISION_REFERENCE_LANGUAGES, DECISION_REFERENCE_EXECUTION_MODELS,
     DECISION_TARGET_INTENTS,
 )
 from .decision_batch import batch_catalog_digest, batch_execution_eligible, capture_batch_targets
-from .decision_context import context_history
+from .decision_history import context_history
 from .decision_history import history_texts
-from .decision_provider import DecisionError, DecisionProvider, _evaluate_guarded, confident_choice, revision_admitted
-from ..helpers import redact_inaccessible_entity_ids_in_text, redact_secrets_in_text
+from .decision_provider import DecisionProvider, _evaluate_guarded, revision_admitted
+from .decision_types import DecisionError, confident_choice
+from ..redaction import redact_inaccessible_entity_ids_in_text, redact_secrets_in_text
+from ..llm.accounts import (
+    _get_secret_store, PROVIDER_DEFINITIONS, decision_account_fingerprint, loaded_decision_account,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
 
 def reference_execution_eligible(hass: HomeAssistant, data: Any, language: object) -> bool:
     """Only qualified Chat accounts may produce internal reference plans."""
-    from ..llm.accounts import loaded_decision_account
     settings = data.store.get_settings()
     account = settings.decision_provider_id
     cfg = loaded_decision_account(hass, account) if account else None
@@ -81,9 +86,6 @@ async def _async_review_reference(hass: HomeAssistant, data: Any, access_key: An
         return result("busy")
 
     async def evaluate() -> dict:
-        from ..llm.accounts import (
-            _get_secret_store, PROVIDER_DEFINITIONS, decision_account_fingerprint,
-        )
 
         async def guarded() -> dict:
             async with asyncio.timeout(authority.settings.decision_timeout_ms / 1000):
@@ -157,7 +159,6 @@ async def _async_review_reference(hass: HomeAssistant, data: Any, access_key: An
                 selected = {"intent": DECISION_TARGET_INTENTS[category], "entity_ids": list(ids)}
                 reviewed = result("target_selected", decision=answer, proposal=selected)
                 if prepare:
-                    from .command_execution import _capture_plan, _digest
                     if (not reference_execution_eligible(hass, data, lang)
                             or not revision_admitted(DECISION_REFERENCE_EXECUTION_MODELS, cfg, answer["model"])):
                         return result("context_unverified")

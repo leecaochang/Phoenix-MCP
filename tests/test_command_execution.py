@@ -469,7 +469,8 @@ async def test_attribute_read_uses_existing_scrubbed_read_dispatch_and_no_write_
 
 
 async def test_attribute_read_plan_rejects_removed_attribute_before_dispatch(hass, local_home):
-    from custom_components.phoenix_mcp.routing.command_execution import _capture_plan, plan_is_current
+    from custom_components.phoenix_mcp.routing.command_plan import _capture_plan
+    from custom_components.phoenix_mcp.routing.plan_currency import plan_is_current
     from custom_components.phoenix_mcp.routing.routing_tables import DECISION_ENTITY_CATEGORIES
     data, access_key, entity_id = local_home
     hass.states.async_set(entity_id, 'on', {'brightness': 94})
@@ -486,7 +487,8 @@ async def test_attribute_read_plan_rejects_removed_attribute_before_dispatch(has
     ('invalid', 'Phoenix MCP could not read the state.'),
 ])
 async def test_attribute_read_distinguishes_absent_value_from_zero_and_invalid(hass, local_home, value, expected):
-    from custom_components.phoenix_mcp.routing.command_execution import _capture_plan, _run_local_command
+    from custom_components.phoenix_mcp.routing.command_plan import _capture_plan
+    from custom_components.phoenix_mcp.routing.command_execution import _run_local_command
     from custom_components.phoenix_mcp.routing.routing_tables import DECISION_ENTITY_CATEGORIES
     data, access_key, entity_id = local_home
     access_key.cap_physical_control = 'deny'
@@ -516,7 +518,7 @@ async def test_localized_read_rechecks_authority_after_translation_wait(hass, lo
         else:
             er.async_get(hass).async_update_entity(entity_id, name='Changed identity')
         return 'private translated state'
-    with patch('custom_components.phoenix_mcp.routing.command_display.async_display_state', side_effect=display):
+    with patch('custom_components.phoenix_mcp.routing.command_execution.async_display_state', side_effect=display):
         answer, build, provider = await run_voice(hass, data, 'what is the state of the desk lamp', language='en')
     assert 'private translated state' not in answer
     build.assert_not_called()

@@ -11,36 +11,27 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from custom_components.phoenix_mcp.admin_view import (
-    PhoenixAdminCommandPreviewView,
-    PhoenixAdminAuditView,
-    PhoenixAdminEntityTreeView,
-    PhoenixAdminPermissionDomainView,
-    PhoenixAdminPermissionBulkSelectView,
-    PhoenixAdminPermissionIntegrationOptionsView,
-    PhoenixAdminPermissionsView,
-    PhoenixAdminSettingsView,
-    PhoenixAdminAccessKeyAuditView,
-    PhoenixAdminAccessKeyStatsView,
-    PhoenixAdminAccessKeysView,
-    PhoenixAdminAccessKeyView,
-    PhoenixAdminVoiceAgentPipelineView,
-    PhoenixAdminVoiceAgentPreferredView,
-    PhoenixAdminAiTaskPreferredView,
-    PhoenixAdminWipeView,
-    ALL_ADMIN_VIEWS,
-    _build_entity_tree,
-    _build_resolution_path,
-    _bulk_permission_selection,
-    _wipe_flag,
+from custom_components.phoenix_mcp.admin.settings import (
+    PhoenixAdminCommandPreviewView, PhoenixAdminSettingsView, PhoenixAdminVoiceAgentPipelineView,
+    PhoenixAdminVoiceAgentPreferredView, PhoenixAdminAiTaskPreferredView, PhoenixAdminWipeView, _wipe_flag,
 )
+from custom_components.phoenix_mcp.admin.logs import PhoenixAdminAuditView, PhoenixAdminAccessKeyAuditView
+from custom_components.phoenix_mcp.admin.permissions import (
+    PhoenixAdminEntityTreeView, PhoenixAdminPermissionDomainView, PhoenixAdminPermissionBulkSelectView,
+    PhoenixAdminPermissionIntegrationOptionsView, PhoenixAdminPermissionsView, _build_entity_tree,
+    _build_resolution_path, _bulk_permission_selection,
+)
+from custom_components.phoenix_mcp.admin.access_keys import (
+    PhoenixAdminAccessKeyStatsView, PhoenixAdminAccessKeysView, PhoenixAdminAccessKeyView,
+)
+from custom_components.phoenix_mcp.admin.registry import ALL_ADMIN_VIEWS
 from custom_components.phoenix_mcp.durable_storage import DurableStorageError
 from custom_components.phoenix_mcp.const import (
     DOMAIN, MAX_CONFIRM_INLINE_WAIT_SECONDS, MIN_CONFIRM_INLINE_WAIT_SECONDS,
 )
 from custom_components.phoenix_mcp.provider_constants import (
-    AGENTCLI_MAX_ITERATIONS_MAX, AGENTCLI_MAX_ITERATIONS_MIN, AGENTCLI_SCROLLBACK_MAX,
-    AGENTCLI_SCROLLBACK_MIN,
+    AGENT_CHAT_MAX_ITERATIONS_MAX, AGENT_CHAT_MAX_ITERATIONS_MIN, AGENT_CHAT_SCROLLBACK_MAX,
+    AGENT_CHAT_SCROLLBACK_MIN,
 )
 from custom_components.phoenix_mcp.data import PhoenixData
 from custom_components.phoenix_mcp.access_key_store import (
@@ -414,7 +405,7 @@ async def test_patch_access_key_rename_must_match_whole_pattern(name, status):
 @pytest.mark.asyncio
 async def test_create_access_key_without_rate_fields_takes_the_shared_defaults():
     """A create that names no rate limits stores the shared default request and burst limits."""
-    from custom_components.phoenix_mcp import admin_view
+    from custom_components.phoenix_mcp.admin import access_keys
 
     data = _make_data()
     data.store.name_slug_exists.return_value = False
@@ -423,8 +414,8 @@ async def test_create_access_key_without_rate_fields_takes_the_shared_defaults()
     view.hass = _make_hass(data)
 
     # Values unlike any literal, so the limits provably come from the defaults.
-    with patch.object(admin_view, "DEFAULT_RATE_LIMIT_REQUESTS", 41), \
-            patch.object(admin_view, "DEFAULT_RATE_LIMIT_BURST", 7):
+    with patch.object(access_keys, "DEFAULT_RATE_LIMIT_REQUESTS", 41), \
+            patch.object(access_keys, "DEFAULT_RATE_LIMIT_BURST", 7):
         resp = await view.post(_make_admin_request(body=json.dumps({"name": "my-access-key"}).encode()))
 
     assert resp.status == 201, resp.text
@@ -435,7 +426,7 @@ async def test_create_access_key_without_rate_fields_takes_the_shared_defaults()
 @pytest.mark.parametrize("node_type,node_id", [("domains", "light\n"), ("entities", "light.kitchen\n")])
 def test_node_id_with_a_trailing_newline_is_refused(node_type, node_id):
     """A domain or entity ID followed by a newline fails the format check; without it, it passes."""
-    from custom_components.phoenix_mcp.admin_view import _validate_node_id
+    from custom_components.phoenix_mcp.admin.common import _validate_node_id
 
     refused = _validate_node_id(node_type, node_id, "rid")
     assert refused is not None and refused.status == 400
@@ -694,14 +685,14 @@ async def test_delete_access_key_cancels_pending_approvals():
     view.hass = hass
 
     with patch(
-        "custom_components.phoenix_mcp.admin_view.dismiss_approval_notification"
+        "custom_components.phoenix_mcp.admin.access_keys.dismiss_approval_notification"
     ) as dismiss:
         resp = await view.delete(_make_admin_request(), access_key_id=access_key.id)
 
     assert resp.status == 204
     by_id = {e["id"]: e for e in pending}
     assert by_id["appr_mine"]["status"] == "cancelled"
-    assert by_id["appr_mine"]["rejected_reason"] == "access_key_revoked"
+    assert by_id["appr_mine"]["closure_reason"] == "access_key_revoked"
     assert by_id["appr_other"]["status"] == "pending"
     assert by_id["appr_running"]["status"] == "pending"
     dismiss.assert_called_once_with(hass, "appr_mine")
@@ -710,7 +701,7 @@ async def test_delete_access_key_cancels_pending_approvals():
         if c.args[0] == "phoenix_mcp_approval_resolved"
     ]
     assert [p["approval_id"] for p in resolved] == ["appr_mine"]
-    assert resolved[0]["rejected_reason"] == "access_key_revoked"
+    assert resolved[0]["closure_reason"] == "access_key_revoked"
 
 
 @pytest.mark.asyncio
@@ -1119,7 +1110,7 @@ async def test_settings_patch_serializes_persistence_with_live_reconciliation():
             await release_first_effect.wait()
 
     with patch(
-        "custom_components.phoenix_mcp.admin_view._apply_settings_side_effects",
+        "custom_components.phoenix_mcp.admin.settings._apply_settings_side_effects",
         side_effect=reconcile,
     ):
         first = asyncio.create_task(view.patch(_make_admin_request(
@@ -1234,7 +1225,7 @@ async def test_settings_bind_before_access_key_revoke_finishes_cleared():
 
 @pytest.mark.asyncio
 async def test_provider_delete_before_settings_validation_rejects_dead_reference():
-    from custom_components.phoenix_mcp.agentcli_views import PhoenixAgentCliProviderView
+    from custom_components.phoenix_mcp.agent_chat_views import PhoenixAgentCliProviderView
 
     data = _make_data()
     current = GlobalSettings()
@@ -1283,7 +1274,7 @@ async def test_provider_delete_before_settings_validation_rejects_dead_reference
 
 @pytest.mark.asyncio
 async def test_settings_bind_before_provider_delete_finishes_cleared():
-    from custom_components.phoenix_mcp.agentcli_views import PhoenixAgentCliProviderView
+    from custom_components.phoenix_mcp.agent_chat_views import PhoenixAgentCliProviderView
 
     data = _make_data()
     current = GlobalSettings()
@@ -1508,7 +1499,7 @@ async def test_settings_patch_mesa_inject_enables_and_syncs():
     view.hass = hass
 
     body = json.dumps({"mesa_inject_enabled": True}).encode()
-    with patch("custom_components.phoenix_mcp.admin_view.async_sync_mesa_inject", new=AsyncMock()) as sync:
+    with patch("custom_components.phoenix_mcp.admin.settings.async_sync_mesa_inject", new=AsyncMock()) as sync:
         resp = await view.patch(_make_admin_request(body=body))
 
     assert resp.status == 200
@@ -1563,7 +1554,7 @@ async def test_access_key_stats_returns_zero_counters_for_new_access_key():
     hass = _make_hass(data)
 
     view = PhoenixAdminAccessKeyStatsView()
-    from custom_components.phoenix_mcp.admin_view import PhoenixAdminAccessKeyStatsView as V
+    from custom_components.phoenix_mcp.admin.access_keys import PhoenixAdminAccessKeyStatsView as V
     view = V()
     view.hass = hass
 
@@ -1585,7 +1576,7 @@ async def test_access_key_stats_reflects_live_counters():
     data.access_key_counters[access_key.id] = {"request_count": 42, "denied_count": 5, "rate_limit_hits": 2}
     hass = _make_hass(data)
 
-    from custom_components.phoenix_mcp.admin_view import PhoenixAdminAccessKeyStatsView
+    from custom_components.phoenix_mcp.admin.access_keys import PhoenixAdminAccessKeyStatsView
     view = PhoenixAdminAccessKeyStatsView()
     view.hass = hass
 
@@ -1599,7 +1590,7 @@ async def test_access_key_stats_reflects_live_counters():
 
 
 def _connection_view():
-    from custom_components.phoenix_mcp.admin_view import PhoenixAdminAccessKeyConnectionView
+    from custom_components.phoenix_mcp.admin.access_keys import PhoenixAdminAccessKeyConnectionView
     return PhoenixAdminAccessKeyConnectionView()
 
 
@@ -1835,7 +1826,7 @@ async def test_entity_tree_uses_cache():
     request = _make_admin_request()
     request.query = {}
 
-    with patch("custom_components.phoenix_mcp.admin_view._build_entity_tree") as mock_build:
+    with patch("custom_components.phoenix_mcp.admin.permissions._build_entity_tree") as mock_build:
         resp = await view.get(request)
 
     mock_build.assert_not_called()
@@ -1858,7 +1849,7 @@ async def test_entity_tree_rebuilds_when_invalid():
     request = _make_admin_request()
     request.query = {}
 
-    with patch("custom_components.phoenix_mcp.admin_view._build_entity_tree", new=MagicMock(return_value=fresh_tree)):
+    with patch("custom_components.phoenix_mcp.admin.permissions._build_entity_tree", new=MagicMock(return_value=fresh_tree)):
         resp = await view.get(request)
 
     assert resp.status == 200
@@ -1879,7 +1870,7 @@ async def test_entity_tree_force_reload_bypasses_cache():
     request = _make_admin_request()
     request.query = {"force_reload": "1"}
 
-    with patch("custom_components.phoenix_mcp.admin_view._build_entity_tree", new=MagicMock(return_value=fresh)):
+    with patch("custom_components.phoenix_mcp.admin.permissions._build_entity_tree", new=MagicMock(return_value=fresh)):
         resp = await view.get(request)
 
     assert resp.status == 200
@@ -1892,10 +1883,8 @@ def test_all_admin_views_exported():
 
 
 def test_archived_views_before_access_key_view():
-    from custom_components.phoenix_mcp.admin_view import (
-        PhoenixAdminArchivedAccessKeysView,
-        PhoenixAdminArchivedAccessKeyView,
-        PhoenixAdminAccessKeyView,
+    from custom_components.phoenix_mcp.admin.access_keys import (
+        PhoenixAdminArchivedAccessKeysView, PhoenixAdminArchivedAccessKeyView, PhoenixAdminAccessKeyView,
     )
     archived_idx = ALL_ADMIN_VIEWS.index(PhoenixAdminArchivedAccessKeysView)
     archived_single_idx = ALL_ADMIN_VIEWS.index(PhoenixAdminArchivedAccessKeyView)
@@ -1907,12 +1896,12 @@ def test_archived_views_before_access_key_view():
 # --- global entity hints ---
 
 def _entity_hints_view():
-    from custom_components.phoenix_mcp.admin_view import PhoenixAdminEntityHintsView
+    from custom_components.phoenix_mcp.admin.permissions import PhoenixAdminEntityHintsView
     return PhoenixAdminEntityHintsView()
 
 
 def _entity_hint_view():
-    from custom_components.phoenix_mcp.admin_view import PhoenixAdminEntityHintView
+    from custom_components.phoenix_mcp.admin.permissions import PhoenixAdminEntityHintView
     return PhoenixAdminEntityHintView()
 
 
@@ -1984,11 +1973,11 @@ def _admin_view_handlers() -> list[tuple[type, str]]:
     before the wrapped method (and its path kwargs) ever run.
     """
     handlers = []
-    from custom_components.phoenix_mcp.agentcli_views import (
-        ALL_AGENTCLI_ADMIN_VIEWS,
-        ALL_AGENTCLI_CHAT_VIEWS,
+    from custom_components.phoenix_mcp.agent_chat_views import (
+        ALL_AGENT_CHAT_ADMIN_VIEWS,
+        ALL_AGENT_CHAT_CHAT_VIEWS,
     )
-    for view_cls in ALL_ADMIN_VIEWS + ALL_AGENTCLI_ADMIN_VIEWS + ALL_AGENTCLI_CHAT_VIEWS:
+    for view_cls in ALL_ADMIN_VIEWS + ALL_AGENT_CHAT_ADMIN_VIEWS + ALL_AGENT_CHAT_CHAT_VIEWS:
         for name in _ADMIN_HTTP_METHODS:
             fn = getattr(view_cls, name, None)
             if fn is not None and inspect.iscoroutinefunction(fn):
@@ -2080,7 +2069,7 @@ async def test_wipe_defaults_hit_core_and_providers_but_not_mesa():
     view.hass = hass
 
     with patch(
-        "custom_components.phoenix_mcp.admin_view.async_wipe_agentcli_secrets",
+        "custom_components.phoenix_mcp.admin.settings.async_wipe_agentcli_secrets",
         new=AsyncMock(),
     ) as wipe_secrets:
         resp = await view.delete(_make_admin_request(body=_wipe_body()))
@@ -2118,9 +2107,9 @@ async def test_wipe_core_applies_every_reset_setting_live():
     view = PhoenixAdminWipeView()
     view.hass = hass
 
-    with patch("custom_components.phoenix_mcp.admin_view.async_sync_mesa_inject", new=AsyncMock()) as inject, \
-            patch("custom_components.phoenix_mcp.admin_view.async_sync_agentchat_inject", new=AsyncMock()) as chat, \
-            patch("custom_components.phoenix_mcp.admin_view.async_register_assist_api") as assist:
+    with patch("custom_components.phoenix_mcp.admin.settings.async_sync_mesa_inject", new=AsyncMock()) as inject, \
+            patch("custom_components.phoenix_mcp.admin.settings.async_sync_agentchat_inject", new=AsyncMock()) as chat, \
+            patch("custom_components.phoenix_mcp.admin.settings.async_register_assist_api") as assist:
         resp = await view.delete(_make_admin_request(body=_wipe_body(wipe_providers=False)))
 
     assert resp.status == 204
@@ -2175,9 +2164,9 @@ async def test_wipe_core_tears_down_pending_approvals():
     view = PhoenixAdminWipeView()
     view.hass = hass
 
-    with patch("custom_components.phoenix_mcp.admin_view.dismiss_approval_notification") as dismiss, \
-         patch("custom_components.phoenix_mcp.admin_view.fire_approval_resolved_event") as fire, \
-         patch("custom_components.phoenix_mcp.admin_view.async_wipe_agentcli_secrets", new=AsyncMock()):
+    with patch("custom_components.phoenix_mcp.admin.settings.dismiss_approval_notification") as dismiss, \
+         patch("custom_components.phoenix_mcp.admin.settings.fire_approval_resolved_event") as fire, \
+         patch("custom_components.phoenix_mcp.admin.settings.async_wipe_agentcli_secrets", new=AsyncMock()):
         resp = await view.delete(_make_admin_request(body=_wipe_body()))
 
     assert resp.status == 204
@@ -2239,7 +2228,7 @@ async def test_wipe_providers_only_leaves_approvals_untouched():
     view = PhoenixAdminWipeView()
     view.hass = hass
 
-    with patch("custom_components.phoenix_mcp.admin_view.dismiss_approval_notification") as dismiss, \
+    with patch("custom_components.phoenix_mcp.admin.settings.dismiss_approval_notification") as dismiss, \
          patch("custom_components.phoenix_mcp.llm.accounts.async_wipe_agentcli_secrets", new=AsyncMock()):
         resp = await view.delete(
             _make_admin_request(body=_wipe_body(wipe_core=False, wipe_providers=True))
@@ -2258,7 +2247,7 @@ async def test_wipe_providers_only_skips_core_store():
     view.hass = hass
 
     with patch(
-        "custom_components.phoenix_mcp.admin_view.async_wipe_agentcli_secrets",
+        "custom_components.phoenix_mcp.admin.settings.async_wipe_agentcli_secrets",
         new=AsyncMock(),
     ) as wipe_secrets:
         resp = await view.delete(
@@ -2289,10 +2278,10 @@ async def test_wipe_providers_only_clears_dependent_settings():
     view.hass = hass
 
     with patch(
-        "custom_components.phoenix_mcp.admin_view.async_wipe_agentcli_secrets",
+        "custom_components.phoenix_mcp.admin.settings.async_wipe_agentcli_secrets",
         new=AsyncMock(),
     ), patch(
-        "custom_components.phoenix_mcp.admin_view.async_remove_assist_pipeline",
+        "custom_components.phoenix_mcp.admin.settings.async_remove_assist_pipeline",
         new=AsyncMock(),
     ) as remove_pipeline:
         resp = await view.delete(
@@ -2357,7 +2346,7 @@ async def test_wipe_mesa_without_runtime_clears_store_directly():
         async def async_save(self, payload):
             saved.update(payload)
 
-    with patch("custom_components.phoenix_mcp.admin_view.DurableStore", _FakeStore):
+    with patch("custom_components.phoenix_mcp.admin.settings.DurableStore", _FakeStore):
         resp = await view.delete(
             _make_admin_request(body=_wipe_body(wipe_core=False, wipe_providers=False, wipe_mesa=True))
         )
@@ -2380,7 +2369,7 @@ async def test_wipe_mesa_without_runtime_reports_a_failed_write():
         async def async_save(self, payload):
             raise DurableStorageError("full")
 
-    with patch("custom_components.phoenix_mcp.admin_view.DurableStore", _FailingStore):
+    with patch("custom_components.phoenix_mcp.admin.settings.DurableStore", _FailingStore):
         resp = await view.delete(
             _make_admin_request(body=_wipe_body(wipe_core=False, wipe_providers=False, wipe_mesa=True))
         )
@@ -2567,7 +2556,7 @@ async def test_voice_pipeline_post_creates_and_defaults_preferred_true():
     view = PhoenixAdminVoiceAgentPipelineView()
     view.hass = _make_hass(data)
     created = AsyncMock(return_value={"pipeline_id": "pl1", "name": "Phoenix MCP", "preferred": True})
-    with patch("custom_components.phoenix_mcp.admin_view.async_create_assist_pipeline", created):
+    with patch("custom_components.phoenix_mcp.admin.settings.async_create_assist_pipeline", created):
         resp = await view.post(_make_admin_request(body=b"{}"))
     assert resp.status == 200
     assert json.loads(resp.text)["pipeline_id"] == "pl1"
@@ -2583,7 +2572,7 @@ async def test_voice_pipeline_post_surfaces_config_error():
     view = PhoenixAdminVoiceAgentPipelineView()
     view.hass = _make_hass(data)
     boom = AsyncMock(side_effect=VoicePipelineError("Configure the Phoenix MCP voice agent first."))
-    with patch("custom_components.phoenix_mcp.admin_view.async_create_assist_pipeline", boom):
+    with patch("custom_components.phoenix_mcp.admin.settings.async_create_assist_pipeline", boom):
         resp = await view.post(_make_admin_request(body=b"{}"))
     assert resp.status == 400
     assert "Configure" in json.loads(resp.text)["message"]
@@ -2605,7 +2594,7 @@ async def test_voice_pipeline_delete_removes():
     view = PhoenixAdminVoiceAgentPipelineView()
     view.hass = _make_hass(data)
     remove = AsyncMock(return_value=False)
-    with patch("custom_components.phoenix_mcp.admin_view.async_remove_assist_pipeline", remove):
+    with patch("custom_components.phoenix_mcp.admin.settings.async_remove_assist_pipeline", remove):
         resp = await view.delete(_make_admin_request())
     assert resp.status == 200
     assert json.loads(resp.text)["kept"] is False
@@ -2619,7 +2608,7 @@ async def test_voice_pipeline_delete_reports_kept_pipeline():
     view = PhoenixAdminVoiceAgentPipelineView()
     view.hass = _make_hass(data)
     remove = AsyncMock(return_value=True)
-    with patch("custom_components.phoenix_mcp.admin_view.async_remove_assist_pipeline", remove):
+    with patch("custom_components.phoenix_mcp.admin.settings.async_remove_assist_pipeline", remove):
         resp = await view.delete(_make_admin_request())
     assert resp.status == 200
     assert json.loads(resp.text)["kept"] is True
@@ -2639,7 +2628,7 @@ async def test_disabling_voice_reports_a_kept_assistant_in_the_save(kept):
     view = PhoenixAdminSettingsView()
     view.hass = _make_hass(data)
     remove = AsyncMock(return_value=kept)
-    with patch("custom_components.phoenix_mcp.admin_view.async_remove_assist_pipeline", remove):
+    with patch("custom_components.phoenix_mcp.admin.settings.async_remove_assist_pipeline", remove):
         resp = await view.patch(_make_admin_request(body=json.dumps({"voice_agent_enabled": False}).encode()))
     assert resp.status == 200
     remove.assert_awaited_once()
@@ -2679,10 +2668,10 @@ async def test_voice_pipeline_create_serializes_with_disable_cleanup():
     settings_view.hass = hass
 
     with patch(
-        "custom_components.phoenix_mcp.admin_view.async_create_assist_pipeline",
+        "custom_components.phoenix_mcp.admin.settings.async_create_assist_pipeline",
         side_effect=create_pipeline,
     ), patch(
-        "custom_components.phoenix_mcp.admin_view.async_remove_assist_pipeline",
+        "custom_components.phoenix_mcp.admin.settings.async_remove_assist_pipeline",
         side_effect=remove_pipeline,
     ):
         create_task = asyncio.create_task(
@@ -2768,13 +2757,13 @@ async def test_voice_pipeline_create_serializes_with_wipe_cleanup(wipe_flags):
     wipe_view.hass = hass
 
     with patch(
-        "custom_components.phoenix_mcp.admin_view.async_create_assist_pipeline",
+        "custom_components.phoenix_mcp.admin.settings.async_create_assist_pipeline",
         side_effect=create_pipeline,
     ), patch(
-        "custom_components.phoenix_mcp.admin_view.async_remove_assist_pipeline",
+        "custom_components.phoenix_mcp.admin.settings.async_remove_assist_pipeline",
         side_effect=remove_pipeline,
     ), patch(
-        "custom_components.phoenix_mcp.admin_view.async_wipe_agentcli_secrets",
+        "custom_components.phoenix_mcp.admin.settings.async_wipe_agentcli_secrets",
         new=AsyncMock(),
     ):
         create_task = asyncio.create_task(
@@ -2821,7 +2810,7 @@ async def test_concurrent_voice_pipeline_posts_create_once():
         return {"pipeline_id": existing, "name": "Phoenix MCP", "preferred": True}
 
     with patch(
-        "custom_components.phoenix_mcp.admin_view.async_create_assist_pipeline",
+        "custom_components.phoenix_mcp.admin.settings.async_create_assist_pipeline",
         side_effect=create_pipeline,
     ):
         first, second = await asyncio.gather(
@@ -2848,7 +2837,7 @@ async def test_disabling_voice_agent_removes_tracked_pipeline():
     view.hass = _make_hass(data)
     remove = AsyncMock()
     body = json.dumps({"voice_agent_enabled": False}).encode()
-    with patch("custom_components.phoenix_mcp.admin_view.async_remove_assist_pipeline", remove):
+    with patch("custom_components.phoenix_mcp.admin.settings.async_remove_assist_pipeline", remove):
         resp = await view.patch(_make_admin_request(body=body))
     assert resp.status == 200
     remove.assert_awaited_once()
@@ -2953,7 +2942,7 @@ async def test_ai_task_preferred_post_sets_default():
     view.hass = _make_hass(data)
     status = {"supported": True, "entity_id": "ai_task.phoenix_mcp_ai_task", "is_preferred": True,
               "gen_data_entity_id": "ai_task.phoenix_mcp_ai_task", "gen_data_name": "Phoenix MCP AI Task"}
-    with patch("custom_components.phoenix_mcp.admin_view.set_ai_task_preferred", return_value=status):
+    with patch("custom_components.phoenix_mcp.admin.settings.set_ai_task_preferred", return_value=status):
         resp = await view.post(_make_admin_request())
     assert resp.status == 200
     assert json.loads(resp.text)["is_preferred"] is True
@@ -2966,7 +2955,7 @@ async def test_ai_task_preferred_post_surfaces_setup_error():
     data = _make_data([])
     view = PhoenixAdminAiTaskPreferredView()
     view.hass = _make_hass(data)
-    with patch("custom_components.phoenix_mcp.admin_view.set_ai_task_preferred",
+    with patch("custom_components.phoenix_mcp.admin.settings.set_ai_task_preferred",
                side_effect=AiTaskSetupError("Configure the Phoenix MCP AI Task first.")):
         resp = await view.post(_make_admin_request())
     assert resp.status == 400
@@ -2980,7 +2969,7 @@ async def test_ai_task_preferred_delete_clears():
     view.hass = _make_hass(data)
     status = {"supported": True, "entity_id": None, "is_preferred": False,
               "gen_data_entity_id": None, "gen_data_name": None}
-    with patch("custom_components.phoenix_mcp.admin_view.clear_ai_task_preferred", return_value=status):
+    with patch("custom_components.phoenix_mcp.admin.settings.clear_ai_task_preferred", return_value=status):
         resp = await view.delete(_make_admin_request())
     assert resp.status == 200
     assert json.loads(resp.text)["is_preferred"] is False
@@ -3056,10 +3045,10 @@ async def test_settings_patch_blank_string_clears_to_none(key, blank):
 @pytest.mark.parametrize(
     ("key", "sent", "stored"),
     [
-        ("agentcli_scrollback_lines", 999999, AGENTCLI_SCROLLBACK_MAX),
-        ("agentcli_scrollback_lines", -5, AGENTCLI_SCROLLBACK_MIN),
-        ("agentcli_max_iterations", 999999, AGENTCLI_MAX_ITERATIONS_MAX),
-        ("agentcli_max_iterations", 0, AGENTCLI_MAX_ITERATIONS_MIN),
+        ("agentcli_scrollback_lines", 999999, AGENT_CHAT_SCROLLBACK_MAX),
+        ("agentcli_scrollback_lines", -5, AGENT_CHAT_SCROLLBACK_MIN),
+        ("agentcli_max_iterations", 999999, AGENT_CHAT_MAX_ITERATIONS_MAX),
+        ("agentcli_max_iterations", 0, AGENT_CHAT_MAX_ITERATIONS_MIN),
     ],
 )
 async def test_settings_patch_clamps_rather_than_rejecting(key, sent, stored):
@@ -3333,7 +3322,7 @@ async def test_access_key_patch_rename_sensor_rebuild_failure_never_fails_the_pa
     data.async_on_access_key_created = AsyncMock()
 
     with patch(
-        "custom_components.phoenix_mcp.admin_view.async_rename_access_key_sensors",
+        "custom_components.phoenix_mcp.admin.access_keys.async_rename_access_key_sensors",
         AsyncMock(side_effect=RuntimeError("registry boom")),
     ) as rename:
         resp = await _access_key_patch(data, access_key.id, {"name": "new-name"})
@@ -3428,10 +3417,10 @@ async def test_command_preview_context_opt_in_and_stale_disclosure(hass, access_
             access_key.revoked = True
         return {"reason": change or "compatible", "decision": None, "executed": False}
 
-    with (patch("custom_components.phoenix_mcp.admin_view.async_evaluate_command", AsyncMock(return_value=local)),
-          patch("custom_components.phoenix_mcp.admin_view." + ("async_preview_reference" if references else
+    with (patch("custom_components.phoenix_mcp.admin.settings.async_evaluate_command", AsyncMock(return_value=local)),
+          patch("custom_components.phoenix_mcp.admin.settings." + ("async_preview_reference" if references else
                 "async_preview_context"), side_effect=context) as review,
-          patch("custom_components.phoenix_mcp.admin_view.async_preview_decision") as old_review):
+          patch("custom_components.phoenix_mcp.admin.settings.async_preview_decision") as old_review):
         response = await view.post(_make_admin_request(body=json.dumps({
             "access_key_id": access_key.id, "sentence": "turn on Desk lamp", "decision": True, "messages": history, "references": references,
         }).encode()))
@@ -3465,9 +3454,9 @@ async def test_command_preview_batch_is_explicit_inert_and_discards_stale_local_
         assert numeric_preview is numeric
         if change == "authority_changed": access_key.revoked = True
         return {"reason": change or "target_selected", "executed": False}
-    with (patch("custom_components.phoenix_mcp.admin_view.async_evaluate_command", AsyncMock(return_value=local)),
-          patch("custom_components.phoenix_mcp.admin_view.async_preview_batch", side_effect=batch) as review,
-          patch("custom_components.phoenix_mcp.admin_view.async_preview_decision") as old_review,
+    with (patch("custom_components.phoenix_mcp.admin.settings.async_evaluate_command", AsyncMock(return_value=local)),
+          patch("custom_components.phoenix_mcp.admin.settings.async_preview_batch", side_effect=batch) as review,
+          patch("custom_components.phoenix_mcp.admin.settings.async_preview_decision") as old_review,
           patch_readers("custom_components.phoenix_mcp.tool_dispatch._dispatch_mcp") as dispatch):
         response = await view.post(_make_admin_request(body=json.dumps({
             "access_key_id": access_key.id, "sentence": "turn on Desk lamp", "decision": True, "targets": True, "batch": True,
@@ -3495,7 +3484,7 @@ async def test_command_preview_batch_is_explicit_inert_and_discards_stale_local_
     ({"command_routing_timeout_ms": 50.5}, False),
 ])
 async def test_routing_settings_validation(patch_body, accepted):
-    from custom_components.phoenix_mcp.admin_view import _validated_settings_patch
+    from custom_components.phoenix_mcp.admin.settings import _validated_settings_patch
     data = _make_data()
     patchable, error = await _validated_settings_patch(patch_body, data, _make_hass(data), "rid")
     assert (error is None) == accepted
@@ -3518,7 +3507,7 @@ async def test_command_preview_target_opt_in_and_authority_recheck(hass, access_
         access_key.revoked = True
         return {"reason": "observed", "target_selection": {"entity_id": "light.private"}}
     with (patch("custom_components.phoenix_mcp.routing.command_routing.async_recognize", AsyncMock(return_value=None)),
-          patch("custom_components.phoenix_mcp.admin_view.async_preview_decision", side_effect=decision) as compare):
+          patch("custom_components.phoenix_mcp.admin.settings.async_preview_decision", side_effect=decision) as compare):
         response = await view.post(_make_admin_request(body=json.dumps({
             "access_key_id": access_key.id, "sentence": "light up my desk", "decision": True, "targets": targets,
         }).encode()))
@@ -3537,7 +3526,7 @@ async def test_command_preview_passes_explicit_language_without_plan_authority(h
     view = PhoenixAdminCommandPreviewView()
     view.hass = hass
     with (patch("custom_components.phoenix_mcp.routing.command_routing.async_recognize", AsyncMock(return_value=None)) as recognize,
-          patch("custom_components.phoenix_mcp.admin_view.async_preview_decision", AsyncMock(return_value={"reason": "observed"})) as decision):
+          patch("custom_components.phoenix_mcp.admin.settings.async_preview_decision", AsyncMock(return_value={"reason": "observed"})) as decision):
         response = await view.post(_make_admin_request(body=json.dumps({
             "access_key_id": access_key.id, "sentence": "打开台灯", "language": language, "decision": True, "targets": True,
         }).encode()))
@@ -3557,8 +3546,8 @@ async def test_command_preview_accepts_complete_provider_history_only_with_opt_i
     body = {'access_key_id': access_key.id, 'sentence': 'turn on Desk lamp', 'messages': provider_context_history}
     local = {'reason': 'supported', 'proposal': {'intent': 'HassTurnOn', 'entity_ids': ['light.test']},
              'executed': False, 'elapsed_ms': 1}
-    with (patch('custom_components.phoenix_mcp.admin_view.async_evaluate_command', AsyncMock(return_value=local)),
-          patch('custom_components.phoenix_mcp.admin_view.async_preview_context',
+    with (patch('custom_components.phoenix_mcp.admin.settings.async_evaluate_command', AsyncMock(return_value=local)),
+          patch('custom_components.phoenix_mcp.admin.settings.async_preview_context',
                 AsyncMock(return_value={'reason': 'compatible', 'executed': False, 'decision': None})) as review):
         refused = await view.post(_make_admin_request(body=json.dumps(body).encode()))
         assert refused.status == 400
@@ -3575,7 +3564,7 @@ async def test_command_preview_accepts_complete_provider_history_only_with_opt_i
 @pytest.mark.parametrize('method', ['get', 'delete'])
 @pytest.mark.parametrize('authenticated,admin,status', [(False, True, 401), (True, False, 403)])
 async def test_routing_statistics_requires_admin(method, authenticated, admin, status):
-    from custom_components.phoenix_mcp.admin_view import PhoenixAdminRoutingStatisticsView
+    from custom_components.phoenix_mcp.admin.settings import PhoenixAdminRoutingStatisticsView
     view = PhoenixAdminRoutingStatisticsView()
     view.hass = _make_hass(_make_data())
     response = await getattr(view, method)(_make_admin_request(is_admin=admin, authenticated=authenticated))
@@ -3585,7 +3574,7 @@ async def test_routing_statistics_requires_admin(method, authenticated, admin, s
 @pytest.mark.parametrize('body,status', [({},400), ({'surface':'chat','confirm':False},400),
     ({'surface':'external','confirm':True},400), ({'surface':'chat','confirm':True},200)])
 async def test_routing_statistics_reset_is_explicit_and_surface_scoped(body,status):
-    from custom_components.phoenix_mcp.admin_view import PhoenixAdminRoutingStatisticsView
+    from custom_components.phoenix_mcp.admin.settings import PhoenixAdminRoutingStatisticsView
     d = _make_data()
     d.routing_statistics.surfaces['voice']['outcomes']['local'] = 3
     d.routing_statistics.surfaces['chat']['outcomes']['local'] = 5
@@ -3615,7 +3604,9 @@ async def test_missing_integration_setup_returns_not_found(view_type, method):
 @pytest.mark.asyncio
 @pytest.mark.parametrize("admin,authenticated,status", [(False, True, 403), (True, False, 401)])
 async def test_conversation_endpoints_require_ha_admin(admin, authenticated, status):
-    from custom_components.phoenix_mcp.admin_view import PhoenixAdminConversationsView, PhoenixAdminConversationView
+    from custom_components.phoenix_mcp.admin.logs import (
+        PhoenixAdminConversationsView, PhoenixAdminConversationView,
+    )
     data = _make_data()
     for cls, method, kwargs in (
         (PhoenixAdminConversationsView, "get", {}),
@@ -3630,7 +3621,9 @@ async def test_conversation_endpoints_require_ha_admin(admin, authenticated, sta
 
 @pytest.mark.asyncio
 async def test_conversation_admin_list_detail_clear():
-    from custom_components.phoenix_mcp.admin_view import PhoenixAdminConversationsView, PhoenixAdminConversationView
+    from custom_components.phoenix_mcp.admin.logs import (
+        PhoenixAdminConversationsView, PhoenixAdminConversationView,
+    )
     from custom_components.phoenix_mcp.conversation_log import recorder
     data = _make_data()
     data.store.get_settings.return_value.conversation_log_enabled = True
@@ -3670,7 +3663,7 @@ async def test_voice_preferred_post_sets_and_delete_clears():
     view = PhoenixAdminVoiceAgentPreferredView()
     view.hass = _make_hass(data)
     change = AsyncMock(side_effect=lambda hass, data, preferred: {"pipeline_id": "pl1", "preferred": preferred})
-    with patch("custom_components.phoenix_mcp.admin_view.async_set_assist_pipeline_preferred", change):
+    with patch("custom_components.phoenix_mcp.admin.settings.async_set_assist_pipeline_preferred", change):
         on = await view.post(_make_admin_request(body=b"{}"))
         off = await view.delete(_make_admin_request())
     assert (on.status, json.loads(on.text)["preferred"]) == (200, True)
@@ -3686,7 +3679,7 @@ async def test_voice_preferred_surfaces_why_it_could_not_change():
     view = PhoenixAdminVoiceAgentPreferredView()
     view.hass = _make_hass(data)
     boom = AsyncMock(side_effect=VoicePipelineError("The Phoenix MCP assistant is the only one."))
-    with patch("custom_components.phoenix_mcp.admin_view.async_set_assist_pipeline_preferred", boom):
+    with patch("custom_components.phoenix_mcp.admin.settings.async_set_assist_pipeline_preferred", boom):
         resp = await view.delete(_make_admin_request())
     body = json.loads(resp.text)
     assert resp.status == 400
@@ -3755,7 +3748,7 @@ async def test_voice_routes_plain_pipeline_error_falls_back_to_route_key(view_cl
     view = view_cls()
     view.hass = _make_hass(data)
     boom = AsyncMock(side_effect=VoicePipelineError("Something unexpected."))
-    with patch(f"custom_components.phoenix_mcp.admin_view.{target}", boom):
+    with patch(f"custom_components.phoenix_mcp.admin.settings.{target}", boom):
         resp = await view.post(_make_admin_request(body=b"{}"))
     body = json.loads(resp.text)
     assert resp.status == 400
@@ -3788,7 +3781,7 @@ async def test_ai_task_preferred_post_plain_setup_error_falls_back():
     data = _make_data([])
     view = PhoenixAdminAiTaskPreferredView()
     view.hass = _make_hass(data)
-    with patch("custom_components.phoenix_mcp.admin_view.set_ai_task_preferred",
+    with patch("custom_components.phoenix_mcp.admin.settings.set_ai_task_preferred",
                side_effect=AiTaskSetupError("Something unexpected.")):
         resp = await view.post(_make_admin_request())
     body = json.loads(resp.text)

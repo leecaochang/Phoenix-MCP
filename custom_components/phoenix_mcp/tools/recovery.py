@@ -9,7 +9,9 @@ from homeassistant.helpers import entity_registry as er
 from homeassistant.core import HomeAssistant
 
 from ..config_recovery import ConfigurationRecoveryError, recovery_resolution
-from ..helpers import content_hash, diff_summary_fields as _summary, effective_cap
+from ..helpers import content_hash
+from ..catalog_text import diff_summary_fields as _summary
+from ..capability import effective_cap
 from ..policy_engine import filter_service_response
 from ..request_authority import check_request_authority
 from ..template_recovery import restore_template, validate_restore_scope
@@ -139,9 +141,8 @@ async def _tool_restore_configuration(
 ) -> tuple[dict, str, str]:
     """Restore a recovery record in two steps, dispatching on its snapshot type.
 
-    Without `snapshot_digest` and `target_fingerprint` it returns a receipt (both
-    values plus a diff). A call echoing both is gated through Phoenix approval; the
-    execute step then revalidates both against the live target before writing.
+    Without `snapshot_digest` and `target_fingerprint` it returns a receipt. A call echoing both is
+    approval-gated, and execution revalidates both against the live target.
     """
     tool = "restore_configuration"
     if all(effective_cap(access_key, cap) == "deny" for cap in (

@@ -1,20 +1,11 @@
 """Blueprint tools: list, read, and the create/edit/delete authoring surface.
 
-Reads gate on cap_config_read; writes carry a DUAL gate. cap_blueprint_write
-authorizes authoring blueprints and the domain cap (cap_automation_write or
-cap_script_write) authorizes affecting that domain's configs. Both must permit,
-because a blueprint edit reloads every automation or script built from it while
-those configs stay byte-identical: without the domain key an access key could rewire
-scripts through a script blueprint with cap_script_write set to deny. For the
-same reason the approval diff names the consumer entities, not just the YAML.
-
-Writes go through HA's own blueprint/save and blueprint/delete WS commands, which
-re-validate and refuse a delete while the blueprint is in use. Phoenix validates
-first, with the same generic BLUEPRINT_SCHEMA HA's save handler uses, so a doomed
-write is refused before an approval is created.
-
-tool_registration registers these tools and this module never imports the
-dispatcher. Shared primitives come from ..tool_common.
+Reads gate on cap_config_read. Writes need both cap_blueprint_write and the domain cap, because a
+blueprint edit reloads every automation or script built from it while those configs stay
+byte-identical; for the same reason the approval diff names the consumer entities. Writes use HA's
+blueprint/save and blueprint/delete commands, which refuse deleting a blueprint in use. Phoenix
+validates first with the same BLUEPRINT_SCHEMA, so a doomed write gets no approval. This module
+never imports the dispatcher.
 """
 
 from __future__ import annotations
@@ -36,8 +27,10 @@ from ..const import (
     MAX_PREVIEW_ENTITY_IDS,
 )
 from ..data import PhoenixData
-from ..helpers import diff_summary_fields as _summary, effective_cap
-from ..helpers import content_hash, redact_secrets_in_text
+from ..catalog_text import diff_summary_fields as _summary
+from ..capability import effective_cap
+from ..helpers import content_hash
+from ..redaction import redact_secrets_in_text
 from ..config_recovery import ConfigurationRecoveryError, safe_snapshot
 from ..request_authority import check_request_authority
 from ..access_key_store import AccessKeyRecord
@@ -60,11 +53,10 @@ _LOGGER = logging.getLogger(__name__)
 
 
 async def _domain_blueprints(hass: HomeAssistant, domain: str) -> dict:
-    """Return {path: Blueprint | Exception} for a blueprint domain.
+    """Return {path: Blueprint | Exception} for a blueprint domain; raises if it cannot be read.
 
-    A blueprint that failed to parse is stored as its own exception by HA, so the
-    mapping is not uniformly Blueprint; callers must check. Raises on a domain that
-    cannot be read at all.
+    HA stores a blueprint that failed to parse as its own exception, so callers must check each
+    value.
     """
     if domain == "automation":
         # Local: optional component, imported only when this path runs.
@@ -128,13 +120,11 @@ _BLUEPRINT_PATH_REFUSED = (
 def _resolve_blueprint_path(hass: HomeAssistant, domain: str, path: Any) -> tuple[str, str] | None:
     """Resolve a blueprint path to (realpath, config-relative path), or None.
 
-    get_blueprint only accepts paths HA already enumerated, but a create names a
-    file that does not exist yet, so this is a real jail: relative only,
-    .yaml/.yml, no dot-segments, and the realpath must land under
-    <config>/blueprints/<domain>/. A file name without an extension gets .yaml,
-    as HA's own blueprint save adds it, and a leading blueprints/<domain>/ (the
-    config-relative spelling) names the same folder.
+    A real jail, since a create names a file that does not exist yet: relative only, .yaml/.yml, no
+    dot-segments, realpath under <config>/blueprints/<domain>/.
     """
+    # A name without an extension gets .yaml, as HA's own save adds it, and a leading
+    # blueprints/<domain>/ names the same folder.
     if _usable_path_arg(path) is None:
         return None
     rel = path.strip().replace(os.sep, "/")
@@ -182,10 +172,8 @@ def _blueprint_consumers(hass: HomeAssistant, domain: str, path: str) -> list[st
 def _validate_blueprint_source(domain: str, content: str) -> str | None:
     """Validate blueprint YAML the way HA's own save path will. Error text or None.
 
-    Side-effect-free, so it runs pre-gate. Mirrors HA's blueprint/save handler,
-    including its use of the GENERIC BLUEPRINT_SCHEMA for every domain: the
-    Blueprint constructor checks the schema, that the declared domain matches the
-    target, and that every !input the body uses has an input definition.
+    Side-effect-free, so it runs pre-gate. Mirrors blueprint/save, including the generic
+    BLUEPRINT_SCHEMA for every domain, the declared-domain check and !input definitions.
     """
     # Local: not part of the recorded Home Assistant import floor.
     from homeassistant.util import yaml as yaml_util
@@ -276,14 +264,12 @@ async def _tool_get_blueprint(
 async def _blueprint_write_precheck(
     args: dict, hass: HomeAssistant, tool_name: str, *, needs_content: bool
 ) -> tuple[tuple[dict, str, str] | None, str, str]:
-    """Pre-gate validation for a blueprint write.
+    """Pre-gate validation for a blueprint write, run after the cap-deny checks.
 
-    Returns (refusal_response | None, realpath, config-relative path). The first
-    element is a COMPLETE tool response tuple so callers can `return pre` directly.
-
-    Runs after the cap-deny checks, so a denied access key learns nothing about its
-    own payload.
+    Returns (refusal_response | None, realpath, config-relative path); the first is a complete tool
+    response, so callers can `return pre`.
     """
+    # Running after the deny checks means a denied access key learns nothing about its own payload.
     def _refuse(message: str) -> tuple[tuple[dict, str, str], str, str]:
         return (_tool_error(message), "invalid_request", tool_name), "", ""
 
@@ -320,9 +306,8 @@ def _blueprint_denied(access_key: AccessKeyRecord, args: dict, tool_name: str) -
 def _blueprint_gate_cap(access_key: AccessKeyRecord, domain: Any) -> str:
     """The capability whose mode gates a blueprint write: Confirm on either key wins.
 
-    A blueprint edit changes the behaviour of every automation or script built on
-    it, so Confirm on the domain's own write capability applies to it too. Deny on
-    either key is refused earlier by _blueprint_denied.
+    A blueprint edit changes every config built on it, so the domain's Confirm applies too.
+    _blueprint_denied handles Deny earlier.
     """
     domain_cap = _BLUEPRINT_DOMAIN_CAPS.get(str(domain or "").strip().lower())
     if (effective_cap(access_key, "cap_blueprint_write") != CAP_CONFIRM

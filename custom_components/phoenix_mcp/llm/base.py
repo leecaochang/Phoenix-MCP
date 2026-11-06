@@ -21,12 +21,12 @@ from ..conversation_log import record_event, record_rejected_tool, sanitized
 from ..data import PhoenixData
 from .accounts import PROVIDER_DEFINITIONS
 from ..provider_constants import (
-    AGENTCLI_CAPABILITY_CONCURRENCY, AGENTCLI_DEFAULT_EFFORT, AGENTCLI_DEFAULT_MAX_TOKENS,
-    AGENTCLI_EFFORT_LEVEL_ORDER, AGENTCLI_EFFORT_LEVELS, AGENTCLI_LEARNABLE_OPTIONS,
-    AGENTCLI_LOAD_TOOLS_NAME, AGENTCLI_MAX_CATALOG_MODELS, AGENTCLI_MAX_JSON_BYTES,
-    AGENTCLI_MAX_MODEL_ID_LENGTH, AGENTCLI_MAX_SSE_BUFFER_BYTES, AGENTCLI_MAX_STREAM_BYTES,
-    AGENTCLI_PROVIDER_DETAIL_CHARS, AGENTCLI_PROVIDER_ERROR_BYTES,
-    AGENTCLI_STREAM_READ_TIMEOUT_SECONDS,
+    AGENT_CHAT_CAPABILITY_CONCURRENCY, AGENT_CHAT_DEFAULT_EFFORT, AGENT_CHAT_DEFAULT_MAX_TOKENS,
+    AGENT_CHAT_EFFORT_LEVEL_ORDER, AGENT_CHAT_EFFORT_LEVELS, AGENT_CHAT_LEARNABLE_OPTIONS,
+    AGENT_CHAT_LOAD_TOOLS_NAME, AGENT_CHAT_MAX_CATALOG_MODELS, AGENT_CHAT_MAX_JSON_BYTES,
+    AGENT_CHAT_MAX_MODEL_ID_LENGTH, AGENT_CHAT_MAX_SSE_BUFFER_BYTES, AGENT_CHAT_MAX_STREAM_BYTES,
+    AGENT_CHAT_PROVIDER_DETAIL_CHARS, AGENT_CHAT_PROVIDER_ERROR_BYTES,
+    AGENT_CHAT_STREAM_READ_TIMEOUT_SECONDS,
 )
 from ..tool_loading import ToolLoader
 
@@ -52,15 +52,14 @@ _MODEL_LIST_MAX_PAGES = 10
 async def _read_json(resp: Any) -> Any:
     """Parse one non-streaming provider reply under the byte cap.
 
-    A provider is untrusted input and aiohttp's own reader buffers whatever it is
-    sent. An oversized or malformed body raises ValueError, which every caller
-    already treats as no answer. The content type is not checked because some
-    Ollama builds omit it.
+    An oversized or malformed body raises ValueError, which callers treat as no answer. The content
+    type is not checked because some Ollama builds omit it.
     """
+    # A provider is untrusted input, and aiohttp's own reader buffers whatever it is sent.
     raw = bytearray()
     async for chunk in resp.content.iter_chunked(65536):
         raw.extend(chunk)
-        if len(raw) > AGENTCLI_MAX_JSON_BYTES:
+        if len(raw) > AGENT_CHAT_MAX_JSON_BYTES:
             raise ValueError("Provider reply exceeds the size limit")
     if not raw.strip():
         return None
@@ -82,8 +81,8 @@ def _bounded_catalog(list_models: Any) -> Any:
             models = await list_models(self, session)
         except (AttributeError, KeyError, TypeError):
             models = self._model_fallback()
-        usable = (m for m in models if isinstance(m, str) and len(m) <= AGENTCLI_MAX_MODEL_ID_LENGTH)
-        return list(dict.fromkeys(usable))[:AGENTCLI_MAX_CATALOG_MODELS]
+        usable = (m for m in models if isinstance(m, str) and len(m) <= AGENT_CHAT_MAX_MODEL_ID_LENGTH)
+        return list(dict.fromkeys(usable))[:AGENT_CHAT_MAX_CATALOG_MODELS]
     return bounded
 
 
@@ -133,7 +132,7 @@ def _created_map(rows: Any) -> dict[str, float]:
 # DNS/connect failure fails fast enough to be retried within the retry window.
 _CHAT_TIMEOUT = ClientTimeout(
     total=None, connect=8, sock_connect=8,
-    sock_read=AGENTCLI_STREAM_READ_TIMEOUT_SECONDS,
+    sock_read=AGENT_CHAT_STREAM_READ_TIMEOUT_SECONDS,
 )
 # A transient connection failure (e.g. a DNS blip) before any content is streamed
 # is retried with this backoff until the total window elapses, then surfaced.
@@ -148,7 +147,7 @@ _VALIDATE_ATTEMPTS = 3
 _VALIDATE_RETRY_BACKOFF_SECONDS = 0.6
 # Idle keepalive cadence for the SSE stream, so an intermediary does not drop the
 # connection during a quiet stretch (model thinking, a pending approval).
-AGENTCLI_HEARTBEAT_SECONDS = 15.0
+AGENT_CHAT_HEARTBEAT_SECONDS = 15.0
 
 # Normalized streaming-event types yielded by every provider, so the loop is
 # provider-agnostic.
@@ -261,8 +260,7 @@ def _envelope_message(obj: dict | None) -> str:
 def _provider_error_codes(obj: dict | None) -> list[str]:
     """Every machine code an error envelope carries, lowercased, primary first.
 
-    The primary is error.code, else error.type, as before. The rest are where
-    some providers put the deciding code: Anthropic's details.error_code,
+    The primary is error.code, else error.type. The rest are Anthropic's details.error_code,
     OpenRouter's metadata.limit_source and error_type, and top-level fields.
     """
     if obj is None:
@@ -291,21 +289,20 @@ def _parse_provider_error(text: str) -> tuple[str, str | None]:
 def _provider_error_detail(text: str, api_key: str | None = None) -> str:
     """The provider's own error sentence for an administrator, or "".
 
-    Only the message inside a JSON error envelope qualifies; a proxy's HTML page
-    or another unstructured body is not shown. The configured key is removed
-    verbatim first, since key formats differ by provider, then the sentence is
-    clipped and scrubbed like conversation-log text, so a key, bearer token or
-    address a provider echoes is redacted. It reaches the admin panel, the
-    conversation log and the Home Assistant log, never a model, Voice or AI Task.
+    Only a JSON error envelope's message qualifies. It reaches the admin panel, the conversation log
+    and the Home Assistant log, never a model, Voice or AI Task.
     """
+    # Key formats differ by provider, so the configured key is removed verbatim first. Clipping and
+    # scrubbing as conversation-log text then redacts a key, bearer token or address a provider
+    # echoes.
     message = _envelope_message(_error_envelope(text))
     if not message:
         return ""
     if api_key:
         message = message.replace(api_key, "<redacted>")
-    clipped = " ".join(message.split())[:AGENTCLI_PROVIDER_DETAIL_CHARS]
+    clipped = " ".join(message.split())[:AGENT_CHAT_PROVIDER_DETAIL_CHARS]
     try:
-        return str(sanitized(clipped, max_bytes=8 * AGENTCLI_PROVIDER_DETAIL_CHARS, hide_ip=True))
+        return str(sanitized(clipped, max_bytes=8 * AGENT_CHAT_PROVIDER_DETAIL_CHARS, hide_ip=True))
     except ValueError:
         return ""
 
@@ -418,9 +415,8 @@ def _http_failure(
 ) -> dict:
     """One EV_ERROR for a non-200 provider answer, with the administrator-only detail.
 
-    Billing refusals override the status classification (_billing_refusal). The
-    primary machine code is kept as provider_code when identifier-shaped, so the
-    log shows how a refusal was classified without carrying provider prose.
+    Billing refusals override the status classification. An identifier-shaped primary code stays as
+    provider_code, so the log shows the classification without provider prose.
     """
     envelope = _error_envelope(text)
     codes = _provider_error_codes(envelope)
@@ -525,13 +521,11 @@ _CLAUDE_NO_ADAPTIVE: set[tuple[str, str]] = set()
 async def _retry_transient(attempt: Callable[[], Awaitable[Any]]) -> Any:
     """Await attempt() with a bounded retry for a transient connection failure.
 
-    A status-based result (whatever attempt() returns) is passed straight back, so
-    an auth rejection or a real HTTP error is never retried; only a
-    ClientError/TimeoutError is retried, briefly, and the last one is re-raised
-    after the final try for the caller to turn into a friendly message. Used by the
-    provider validate() probes so a one-off DNS/connect blip does not reject a good
-    credential during the Settings Validate step.
+    Whatever attempt() returns passes straight back, so a status is never retried; the last
+    ClientError or TimeoutError is re-raised.
     """
+    # The validate() probes use this so a one-off DNS or connect blip does not reject a good
+    # credential during the Settings Validate step.
     last: Exception | None = None
     for i in range(_VALIDATE_ATTEMPTS):
         try:
@@ -549,32 +543,30 @@ async def _error_body(resp: Any) -> str:
     raw = bytearray()
     async for chunk in resp.content.iter_chunked(4096):
         raw.extend(chunk)
-        if len(raw) >= AGENTCLI_PROVIDER_ERROR_BYTES:
+        if len(raw) >= AGENT_CHAT_PROVIDER_ERROR_BYTES:
             break
-    return bytes(raw[:AGENTCLI_PROVIDER_ERROR_BYTES]).decode("utf-8", errors="replace")
+    return bytes(raw[:AGENT_CHAT_PROVIDER_ERROR_BYTES]).decode("utf-8", errors="replace")
 
 
 async def _sse_lines(resp: Any) -> AsyncIterator[str]:
     """Yield decoded lines from a streaming HTTP response, buffering split frames.
 
-    Two byte bounds guard against a faulty or hostile provider (memory
-    exhaustion). The between-newline buffer is capped so a stream that never
-    sends a newline cannot grow unbounded; the CUMULATIVE bytes for the whole
-    response are also capped, so a stream of unlimited small newline-delimited
-    frames (which downstream parsers append into text blocks and tool JSON) is
-    bounded too. A real response is well under both. Exceeding either raises
-    ClientError, which each provider's stream_turn turns into a clean chat error.
-    The per-response cap bounds a turn at cap x AGENTCLI_MAX_ITERATIONS.
+    Exceeding the between-newline or the whole-response byte cap raises ClientError, which each
+    provider's stream_turn turns into a clean chat error.
     """
+    # Both caps guard memory against a faulty or hostile provider. One stops a stream that never
+    # sends a newline; the other stops unlimited small frames that parsers append into text blocks
+    # and tool JSON. A real response is well under both, and a turn is bounded at cap x
+    # AGENT_CHAT_MAX_ITERATIONS.
     buffer = ""
     total = 0
     decoder = codecs.getincrementaldecoder("utf-8")(errors="strict")
     async for chunk in resp.content.iter_chunked(2048):
         total += len(chunk)
-        if total > AGENTCLI_MAX_STREAM_BYTES:
+        if total > AGENT_CHAT_MAX_STREAM_BYTES:
             raise ClientError("Provider stream exceeded the maximum total size.")
         buffer += decoder.decode(chunk)
-        if len(buffer) > AGENTCLI_MAX_SSE_BUFFER_BYTES:
+        if len(buffer) > AGENT_CHAT_MAX_SSE_BUFFER_BYTES:
             raise ClientError("Provider stream frame exceeded the maximum size.")
         while "\n" in buffer:
             line, buffer = buffer.split("\n", 1)
@@ -693,11 +685,8 @@ def _tool_call_problem(call_id: Any, name: Any) -> str:
 def _json_error_hint(raw: str, error: json.JSONDecodeError) -> str:
     """Tell the model where its tool arguments stopped parsing and what is likely missing.
 
-    The received text is scanned up to the error position, string-aware, so the
-    objects and arrays still open there are known: the innermost one names the
-    closer the parser was waiting for, and the key it is the value of. No string
-    VALUE is quoted: the text returns to the model and the browser transcript,
-    and a value can hold a secret the model wrote.
+    The innermost object or array open at the error names the awaited closer and its key. No string
+    value is quoted: this text reaches the transcript, and a value can hold a secret.
     """
     pos = max(0, min(error.pos, len(raw)))
     # (opener, index, key it is the value of), outermost first.
@@ -761,12 +750,11 @@ def _invalid_tool_calls(
 ) -> dict | None:
     """Build the EV_INVALID_TOOLS event for one response, or None when it cannot be paired.
 
-    `calls` holds (id, name, parsed arguments or None, model-facing error or
-    None) in response order. Every call gets a tool error, the valid ones
-    included, because no call from a response with a malformed sibling runs. A
-    call whose ID or name is unusable cannot carry a tool result, so the response
-    stays a terminal error rather than a correction.
+    `calls` holds (id, name, parsed arguments or None, model-facing error or None) in response
+    order. Every call gets a tool error, since none runs beside a malformed sibling.
     """
+    # A call whose ID or name is unusable cannot carry a tool result, so that response stays a
+    # terminal error rather than a correction.
     ids = [call_id for call_id, _name, _args, _error in calls]
     if not calls or len(set(ids)) != len(ids) or not all(
             _valid_tool_call(call_id, name, {}) for call_id, name, _args, _error in calls):
@@ -782,13 +770,11 @@ def _invalid_tool_calls(
 def _merged_whole_arguments(current: str, fragment: str) -> str:
     """Merge one Gemini tool-call arguments fragment into what the call has so far.
 
-    Gemini's OpenAI-compatible stream sends a call's arguments as COMPLETE JSON,
-    more than once: `{}` first, then the full object, for the same call. The
-    OpenAI rule of concatenating fragments turns that into `{}{...}`. A fragment
-    that is a complete object replaces a complete object, except that `{}` never
-    replaces real arguments; anything else is appended, so genuine deltas still
-    concatenate.
+    A complete object replaces a complete object, except that `{}` never replaces real arguments;
+    anything else is appended, so genuine deltas still concatenate.
     """
+    # Gemini's OpenAI-compatible stream resends a call's arguments as complete JSON, `{}` and then
+    # the full object, which plain concatenation would turn into `{}{...}`.
     if not current:
         return fragment
     try:
@@ -822,9 +808,8 @@ def _gemini_tool_slot(calls: dict[int, dict], fragment: dict) -> int:
 def _tool_limit_problem(provider: Any, tools: list) -> dict | None:
     """The refusal for a catalog larger than this provider accepts, or None.
 
-    Checked before the first model call: past a documented tools-array cap the
-    provider answers HTTP 400 to every request, and trimming the catalog would
-    hide capabilities without saying so.
+    Past a documented tools-array cap the provider answers 400 to every request, and trimming the
+    catalog would hide capabilities without saying so.
     """
     definition = PROVIDER_DEFINITIONS.get(str(getattr(provider, "kind", "")))
     limit = definition.max_tools if definition is not None else None
@@ -850,9 +835,8 @@ def _local_tool_results(
 ) -> tuple[list[dict | None], list[dict]]:
     """Answer load_tools and calls to undeclared deferred tools without dispatching them.
 
-    Returns one slot per call, holding its local result or None, and the calls
-    left for review and dispatch. Neither kind reaches the dispatcher, so
-    neither can start a write.
+    Returns one slot per call, holding its local result or None, and the calls left for review and
+    dispatch. Neither kind can start a write.
     """
     if loader is None:
         return [None] * len(tool_calls), tool_calls
@@ -861,7 +845,7 @@ def _local_tool_results(
     for tc in tool_calls:
         name = str(tc.get("name") or "")[:MAX_TOOL_NAME_LENGTH]
         args = tc.get("input") or {}
-        if name == AGENTCLI_LOAD_TOOLS_NAME:
+        if name == AGENT_CHAT_LOAD_TOOLS_NAME:
             text, is_error = loader.load(args)
             record_event(data, "tool_call", {"name": name, "arguments": args})
             record_event(data, "tool_result", {"result": {"content": [{"type": "text", "text": text}], "isError": is_error}},
@@ -886,7 +870,7 @@ def _merged_results(slots: list[dict | None], dispatched: list[dict]) -> list[di
 
 def _silent_stream_error() -> dict:
     """The provider connected but sent nothing within the read bound: stalled, not unreachable."""
-    seconds = AGENTCLI_STREAM_READ_TIMEOUT_SECONDS
+    seconds = AGENT_CHAT_STREAM_READ_TIMEOUT_SECONDS
     return _norm(EV_ERROR, status=0, code="provider_silent", retryable=True,
                  message=f"The provider sent nothing for {seconds}s, so the request was stopped.",
                  message_params={"seconds": seconds})
@@ -945,12 +929,10 @@ class _ThinkSplitter:
 def _apply_claude_options(body: dict, options: dict, kind: str = "claude") -> None:
     """Map the panel's generation options into an Anthropic-format request body.
 
-    Claude takes the full surface (adaptive thinking with a display mode plus an
-    output_config effort). MiniMax's Anthropic-compatible API turns thinking on
-    via `{type: adaptive}` and takes `output_config.effort` only on
-    MiniMax-M3.1-Flash, which is sent when the panel chose a level.
+    Claude takes adaptive thinking with a display mode plus an output_config effort. MiniMax takes
+    `{type: adaptive}`, and `output_config.effort` only on MiniMax-M3.1-Flash.
     """
-    body["max_tokens"] = int(options.get("max_tokens") or AGENTCLI_DEFAULT_MAX_TOKENS)
+    body["max_tokens"] = int(options.get("max_tokens") or AGENT_CHAT_DEFAULT_MAX_TOKENS)
     thinking = options.get("thinking", True)
     if thinking:
         if kind == "minimax":
@@ -962,10 +944,10 @@ def _apply_claude_options(body: dict, options: dict, kind: str = "claude") -> No
             display = "summarized" if options.get("show_thinking") else "omitted"
             body["thinking"] = {"type": "adaptive", "display": display}
     if kind == "claude":
-        effort = options.get("effort", AGENTCLI_DEFAULT_EFFORT)
-        if effort in AGENTCLI_EFFORT_LEVELS:
+        effort = options.get("effort", AGENT_CHAT_DEFAULT_EFFORT)
+        if effort in AGENT_CHAT_EFFORT_LEVELS:
             body["output_config"] = {"effort": effort}
-    elif (kind == "minimax" and thinking and options.get("effort") in AGENTCLI_EFFORT_LEVELS
+    elif (kind == "minimax" and thinking and options.get("effort") in AGENT_CHAT_EFFORT_LEVELS
           and re.match(r"minimax-m3\.1", str(body.get("model") or ""), re.I)):
         # Only MiniMax-M3.1-Flash takes an effort (default max); the panel offers
         # the control for that model alone, and Voice sends none.
@@ -973,7 +955,7 @@ def _apply_claude_options(body: dict, options: dict, kind: str = "claude") -> No
 
 
 # The output cap every Anthropic-format model has accepted; the fallback for a
-# model that refuses AGENTCLI_DEFAULT_MAX_TOKENS.
+# model that refuses AGENT_CHAT_DEFAULT_MAX_TOKENS.
 _LEGACY_MAX_TOKENS = 8192
 
 
@@ -993,11 +975,10 @@ def _thinking_type(body: dict) -> str:
 
 
 def _use_enabled_thinking(body: dict) -> None:
-    """Switch a request from adaptive thinking to a fixed enabled budget.
+    """Switch a request from adaptive thinking to a fixed enabled budget, dropping effort.
 
-    For models that do not accept adaptive thinking. The budget must stay below
-    max_tokens and at least 1024; a request too small to hold one runs without
-    thinking rather than failing. Effort is dropped: those models do not take it.
+    For models without adaptive thinking or effort. The budget stays below max_tokens and at least
+    1024; a request too small for one runs without thinking rather than failing.
     """
     thinking = body.get("thinking")
     if not isinstance(thinking, dict) or thinking.get("type") != "adaptive":
@@ -1032,19 +1013,15 @@ def _cache_marked_message(message: dict) -> dict | None:
 
 
 def _cache_marked(system_prompt: str, messages: list[dict]) -> tuple[Any, list[dict]]:
-    """Add Anthropic prompt-cache breakpoints (Claude only, never MiniMax).
+    """Add Anthropic prompt-cache breakpoints on copies (Claude only, never MiniMax).
 
-    Up to three ephemeral markers: one closing the system block, which caches the
-    tools array plus the system prompt (large, and unchanged across turns unless
-    the access key's caps change); one on the message before the operator's
-    latest message, which ends the history the next turn sends again unchanged;
-    and one on the last message block, so each agentic-loop iteration reuses the
-    prior message history instead of re-billing it. The middle marker exists
-    because the latest operator message carries the turn's time note
-    (_with_time_context), so no later prefix of this turn recurs in the next one.
-    Markers go on copies only; the stored transcript round-trips through the
-    browser and must stay clean.
+    Markers close the system block, the message before the operator's latest, and the last block.
+    The stored transcript round-trips through the browser and must stay clean.
     """
+    # The system marker caches the tools array plus the system prompt, which change only with the
+    # access key's caps. The middle marker ends the history the next turn resends: the latest
+    # operator message carries the turn's time note (_with_time_context), so no later prefix recurs.
+    # The last marker lets each loop iteration reuse prior history instead of re-billing it.
     system = [{"type": "text", "text": system_prompt, **_CACHE_MARKER}]
     if not messages:
         return system, messages
@@ -1079,14 +1056,12 @@ def _requirement_sentence(keyword: str, branches: list) -> str:
 def _lowered_input_schema(schema: Any) -> tuple[Any, list[str]]:
     """Lower the top-level combinators that several provider APIs refuse.
 
-    Anthropic, and OpenAI even without strict mode, answer HTTP 400 to any
-    request whose tool schema has anyOf, oneOf or allOf at the top level, so
-    one such tool fails every request; gateways forward the schema unchanged.
-    allOf members merge into the object (properties and required lists); each
-    anyOf or oneOf becomes a sentence for the tool description. Nested
-    combinators stay. Each tool's handler enforces these rules at dispatch, so
-    no check is relaxed.
+    allOf members merge into the object; each anyOf or oneOf becomes a sentence for the tool
+    description. Nested combinators stay.
     """
+    # Anthropic, and OpenAI even without strict mode, answer 400 to a tool schema with top-level
+    # anyOf, oneOf or allOf, so one such tool fails every request; gateways forward the schema
+    # unchanged. Each tool's handler enforces these rules at dispatch, so no check is relaxed.
     if not isinstance(schema, dict) or not any(key in schema for key in _SCHEMA_COMBINATORS):
         return schema, []
     lowered = {key: value for key, value in schema.items() if key not in _SCHEMA_COMBINATORS}
@@ -1117,14 +1092,12 @@ def _lowered_input_schema(schema: Any) -> tuple[Any, list[str]]:
 def _explicitly_open(schema: Any, *, nested: bool = False) -> Any:
     """Copy a schema with every nested object that leaves extra keys open marked so.
 
-    JSON Schema leaves an object without additionalProperties open, but xAI
-    applies strict rules that close it, and Kimi's default strict dialect may,
-    which would leave a model able to send only `{}` for service data or an
-    automation config. The explicit `true` keeps the meaning everywhere. Type
-    lists are left alone: Kimi refuses any keyword beside one. The root is
-    never touched (every tool root is closed). Unchanged schemas are returned
-    as the same object.
+    Type lists are left alone, since Kimi refuses any keyword beside one, and so is the closed root.
+    Unchanged schemas return as the same object.
     """
+    # JSON Schema leaves an object without additionalProperties open, but xAI's strict rules close
+    # it and Kimi's default strict dialect may, leaving a model able to send only `{}` for service
+    # data or an automation config.
     if not isinstance(schema, dict):
         return schema
     changed = False
@@ -1183,13 +1156,12 @@ _REFUSAL_STATUSES = frozenset({400, 422})
 def _refused_option(status: int, message: str, sent: dict) -> str | None:
     """The request key a provider just refused, when it named one of ours.
 
-    Bounded three ways, because a wrong answer here disables a control the
-    operator was using. It must be a 400 or 422 (a refusal, not an outage or a quota);
-    the key must be one whose refusal has a single unambiguous consequence; and
-    Phoenix must have ACTUALLY SENT it in this request. That last guard is what
-    stops an error mentioning "temperature" for some unrelated reason from
-    teaching Phoenix that temperature is unsupported.
+    It needs a 400 or 422, a key whose refusal has one unambiguous consequence, and one Phoenix
+    actually sent in this request.
     """
+    # A wrong answer here disables a control the operator was using. The last guard stops an
+    # unrelated error mentioning "temperature" from teaching Phoenix that temperature is
+    # unsupported.
     if status not in _REFUSAL_STATUSES or not message:
         return None
     low = message.lower()
@@ -1207,7 +1179,7 @@ def _refused_option(status: int, message: str, sent: dict) -> str | None:
         # The model cannot take tools on this endpoint at all (OpenAI's newest
         # models require the Responses API for them).
         return "tools"
-    for key in AGENTCLI_LEARNABLE_OPTIONS:
+    for key in AGENT_CHAT_LEARNABLE_OPTIONS:
         if key == "tools":
             continue
         if key in sent and re.search(rf"\b{re.escape(key)}\b", low):
@@ -1218,12 +1190,8 @@ def _refused_option(status: int, message: str, sent: dict) -> str | None:
 def _openrouter_capabilities(data: list[dict]) -> dict[str, dict]:
     """Per-model declared capabilities from OpenRouter's `supported_parameters`.
 
-    The same field also filters the dropdown by tool support, so a model's
-    declared tool, reasoning, temperature and vision support come from one
-    response.
-
-    A key is emitted ONLY for something the provider actually declares. A missing
-    key means "not declared" and must never be read as False.
+    A key appears only for what the provider declares; a missing key means "not declared" and must
+    never be read as False.
     """
     out: dict[str, dict] = {}
     for m in data:
@@ -1247,7 +1215,7 @@ def _openrouter_capabilities(data: list[dict]) -> dict[str, dict]:
         reasoning = m.get("reasoning")
         efforts = reasoning.get("supported_efforts") if isinstance(reasoning, dict) else None
         if isinstance(reasoning, dict) and isinstance(efforts, list):
-            levels = [level for level in AGENTCLI_EFFORT_LEVEL_ORDER if level in efforts
+            levels = [level for level in AGENT_CHAT_EFFORT_LEVEL_ORDER if level in efforts
                       and not (level == "none" and reasoning.get("mandatory") is True)]
             if levels:
                 row["effort_levels"] = levels
@@ -1263,19 +1231,15 @@ def _openrouter_capabilities(data: list[dict]) -> dict[str, dict]:
 async def _ollama_capabilities(
     session: ClientSession, base_url: str, headers: dict, models: list[str],
 ) -> dict[str, dict]:
-    """Per-model declared capabilities from Ollama's /api/show.
+    """Per-model declared capabilities from Ollama's /api/show, one lookup per model.
 
-    Ollama is the one backend where a model that cannot call tools is an ordinary
-    thing to have installed: a local library is whatever the operator pulled, and
-    Agent Chat is useless without tool calling. `/api/tags` does not say, so this
-    costs one lookup per model, which is why it runs on an explicit refresh and
-    not on every card open.
-
-    `temperature` is deliberately NOT emitted: Ollama takes it for every model
-    through its options block and does not list it as a capability, so claiming
-    False would be inventing a limit the server does not have.
+    `temperature` is not emitted: Ollama takes it for every model and does not list it as a
+    capability, so False would invent a limit.
     """
-    sem = asyncio.Semaphore(AGENTCLI_CAPABILITY_CONCURRENCY)
+    # A local library is whatever the operator pulled, so a model that cannot call tools is ordinary
+    # here, and `/api/tags` does not say. The per-model cost is why this runs on an explicit refresh
+    # and not on every card open.
+    sem = asyncio.Semaphore(AGENT_CHAT_CAPABILITY_CONCURRENCY)
 
     async def _one(name: str) -> tuple[str, dict] | None:
         async with sem:
@@ -1303,7 +1267,7 @@ async def _ollama_capabilities(
         thinking = body.get("thinking")
         values = thinking.get("values") if isinstance(thinking, dict) else None
         if isinstance(values, list):
-            levels = [level for level in AGENTCLI_EFFORT_LEVEL_ORDER if level != "none" and level in values]
+            levels = [level for level in AGENT_CHAT_EFFORT_LEVEL_ORDER if level != "none" and level in values]
             if levels:
                 row["effort_levels"] = levels
         return name, row

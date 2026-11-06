@@ -1,23 +1,12 @@
 """Include-graph-aware YAML reading and surgical editing for the authoring tools.
 
-HA's YAML loader resolves !include eagerly and !secret to plaintext, so a
-load-then-dump edit of a split configuration flattens the includes and can leak
-secrets. This is the safe alternative for the automation/script/scene executors:
+HA's loader resolves !include eagerly and !secret to plaintext, so load-then-dump would
+flatten includes and can leak secrets. Phoenix's own loader and dumper keep such tags opaque,
+a resolver follows configuration.yaml with realpath containment, and edits splice only the
+located lines after verifying the result entry by entry.
 
-- A Phoenix-owned SafeLoader/SafeDumper pair keeps !include*, !secret, !env_var
-  and !input as opaque TaggedValue scalars; constructors and representers are
-  registered ONLY on these subclasses, never on HA's own classes.
-- A layout resolver follows configuration.yaml includes with realpath containment
-  checks against the config directory; a locator finds an entry's leaf and span.
-- Edit/delete splice ONLY those lines, after re-parsing and verifying the result
-  entry-by-entry, so a span bug is a refusal, never a corrupted file.
-- Writes reach only Home Assistant's own editor files (automations.yaml,
-  scripts.yaml, scenes.yaml) and only entries the editor itself would change.
-  An entry defined anywhere else is hand-written YAML and stays the operator's:
-  reads follow every include, writes refuse it.
-
-The perform_* / read_entry wrappers run in an executor job under the per-domain
-asyncio lock and report fallback=True when configuration.yaml cannot be read.
+Writes reach only HA's own editor files and entries that editor would change. The perform_*
+and read_entry wrappers run in an executor under the per-domain lock.
 """
 
 from __future__ import annotations
@@ -245,12 +234,9 @@ PhoenixSafeDumper.add_representer(
 class PhoenixLenientLoader(PhoenixSafeLoader):
     """PhoenixSafeLoader that also tolerates unknown local tags.
 
-    The strict loader knows only HA's own tag set, so a third-party custom tag
-    raises. That is right for the authoring paths (an unknown tag in an automation
-    body is a reason to refuse the edit) but wrong for whole-file reads and the
-    protected-key comparison: one unrecognized tag anywhere in configuration.yaml
-    would make it permanently unreadable and unwritable. Unknown tags become
-    TaggedValue like the known ones.
+    For whole-file reads and the protected-key comparison, where one custom tag must not make
+    configuration.yaml unreadable; authoring keeps the strict loader. Unknown tags become
+    TaggedValue.
     """
 
 
@@ -284,11 +270,7 @@ class YamlParseError(Exception):
 
 
 def load_tagged_lenient(text: str, *, allow_aliases: bool = True) -> Any:
-    """Parse YAML text keeping known AND unknown custom tags opaque.
-
-    Raises YamlParseError on a real syntax error, so callers can surface the
-    message without importing PyYAML themselves.
-    """
+    """Parse YAML keeping known and unknown tags opaque; raise YamlParseError on bad syntax."""
     try:
         return yaml.load(text, Loader=PhoenixLenientLoader if allow_aliases else PhoenixInputLoader)
     except (yaml.YAMLError, RecursionError) as err:
@@ -347,11 +329,9 @@ TAG_STRING_REFUSAL = (
 
 
 def contains_tag_strings(obj: Any) -> bool:
-    """Whether an encode_tags()-style tag string appears anywhere in the structure.
+    """Return whether an encode_tags()-style tag string appears in the structure.
 
-    Used by async_restore_version to refuse re-applying a stored config whose YAML
-    tags were flattened to display strings (writing them back as quoted strings
-    would silently break the config).
+    Lets async_restore_version refuse a config whose YAML tags were flattened to strings.
     """
     if isinstance(obj, str):
         return bool(_TAG_STRING_RE.match(obj))
@@ -406,10 +386,8 @@ def _resolve_include_path(containing_file: str, value: str, config_dir: str) -> 
 def resolve_domain_layout(config_dir: str, domain: str) -> DomainLayout | None:
     """Parse configuration.yaml and resolve the include branches for a domain.
 
-    Labeled keys such as "automation manual" count as the domain. Returns None when
-    configuration.yaml is missing or unparseable (the caller falls back to the
-    default file). A structurally unresolvable layout returns a DomainLayout with
-    error set.
+    Labeled keys such as "automation manual" count. Returns None when the file is missing or
+    unparseable, and a DomainLayout with error set when it cannot be resolved.
     """
     config_path = os.path.join(config_dir, CONFIGURATION_YAML)
     if not os.path.isfile(config_path):
@@ -467,9 +445,8 @@ def resolve_domain_layout(config_dir: str, domain: str) -> DomainLayout | None:
 def _iter_dir_files(directory: str) -> list[str]:
     """Enumerate a !include_dir_* directory as HA's loaders do.
 
-    Mirrors annotatedyaml._find_files plus its secrets.yaml skip: recursive
-    os.walk (topdown), dot-prefixed dirs pruned, files sorted per directory
-    (subdirectory order is filesystem order), *.yaml only, dot-files skipped.
+    Mirrors annotatedyaml._find_files: recursive, *.yaml only, dot entries and secrets.yaml
+    out.
     """
     found: list[str] = []
     for root_dir, dirs, files in os.walk(directory, topdown=True):
@@ -489,11 +466,8 @@ def _iter_dir_files(directory: str) -> list[str]:
 class DomainEntries:
     """Every entry a domain defines, and every branch that could not be read.
 
-    `unreadable` is the load-bearing half. Reading one hardcoded file per domain
-    would make an installation that routes a domain any other way read as EMPTY,
-    so callers would report that nothing references an entity: a confident wrong
-    answer indistinguishable from a genuinely unused entity. Anything that cannot
-    be read is named instead of silently contributing nothing.
+    ``unreadable`` names what could not be read, so a domain routed some other way is not
+    reported as holding no references.
     """
 
     entries: Any                # list for automation/scene, dict for script
@@ -504,11 +478,7 @@ _UNREADABLE = object()
 
 
 def _load_branch(path: str) -> Any:
-    """Parse one leaf file, or _UNREADABLE when it is missing or unparseable.
-
-    An empty file parses to None and contributes nothing: HA ships an empty
-    scenes.yaml, so it must not be reported as unreadable.
-    """
+    """Parse one leaf file; _UNREADABLE when missing or unparseable, None when empty."""
     try:
         return load_tagged(path)
     except (OSError, yaml.YAMLError):
@@ -517,17 +487,9 @@ def _load_branch(path: str) -> Any:
 
 def read_all_entries(config_dir: str, domain: str) -> DomainEntries:
     """Read every entry a domain defines, following configuration.yaml's includes.
-
-    The counterpart to locate_entry (ONE entry, with spans) for the
-    reverse-reference walks that ask what references an entity; it parses values
-    and tracks no source positions.
-
-    Falls back to the default leaf (automations.yaml / scripts.yaml / scenes.yaml)
-    when configuration.yaml is missing or unparseable, matching OpResult.fallback
-    on the write side. Packages are reported as unreadable rather than guessed at:
-    HA merges them into the domain and Phoenix cannot see which ones without
-    resolving the whole package tree, so the caller is told its answer is
-    incomplete instead of being handed one that looks whole.
+    For reverse-reference walks; no source positions. Falls back to the default leaf when
+    configuration.yaml is missing or unparseable. Packages are reported unreadable, so the
+    caller knows the answer is incomplete.
     """
     shape = _DOMAIN_SHAPES[domain]
     empty: Any = [] if shape == "list" else {}
@@ -611,11 +573,9 @@ class LocateError(Exception):
 class LocatedEntry:
     """A uniquely located entry.
 
-    ref_file/ref_kind/span describe where the entry is REFERENCED (the lines an
-    edit or delete splices). When the entry's body lives in a separate file
-    reached via a plain !include value (e.g. "foo: !include foo.yaml"),
-    content_file names it. Such an entry, like a whole-file one, is hand-written
-    YAML: reads report it and the write paths refuse it.
+    ref_file, ref_kind and span say where it is referenced, the lines an edit splices.
+    content_file names a body behind a plain !include; like a whole-file entry, writes refuse
+    it.
     """
 
     ref_file: str
@@ -1009,12 +969,7 @@ class OpResult:
 
     @property
     def error_text(self) -> str:
-        """The failure message, never None.
-
-        `message` is None on success and on a fallback result, but a failed op goes
-        straight into _tool_error(...) and an MCP content item whose text is None
-        is malformed. Callers use this instead.
-        """
+        """Return the failure message, never None, for MCP content items."""
         return self.message or "The change could not be applied."
 
 
@@ -1032,12 +987,7 @@ def _locate_error_result(exc: LocateError) -> OpResult:
 
 
 def _layout_or_result(config_dir: str, domain: str) -> DomainLayout | OpResult:
-    """Resolve the domain's include layout, or the OpResult that ends the call.
-
-    A single return value (callers narrow with isinstance) rather than a
-    (layout, early) pair, so a type checker sees a non-None layout; the same idiom
-    as `_read_body` in the view modules.
-    """
+    """Resolve the domain's include layout, or the OpResult that ends the call."""
     layout = resolve_domain_layout(config_dir, domain)
     if layout is None:
         return OpResult(ok=False, fallback=True)
@@ -1052,11 +1002,9 @@ def _editor_file(config_dir: str, domain: str) -> str:
 
 
 def _hand_written_refusal(located: LocatedEntry, domain: str, config_dir: str) -> OpResult | None:
-    """Refuse an entry Home Assistant's own editor would not change; None when it would.
+    """Refuse an entry HA's own editor would not change; None when it would.
 
-    The editor changes an entry written inline in its own file. An entry in any
-    other file, a file holding one entry whole, or a body behind a plain !include
-    is hand-written YAML.
+    Only an entry written inline in the editor's own file is changeable.
     """
     if (
         located.content_file is None
@@ -1082,11 +1030,10 @@ def _create_route(layout: DomainLayout, domain: str) -> str | OpResult:
 
 
 def write_target_refusal(config_dir: str, domain: str, entry_id: str, *, create: bool) -> OpResult | None:
-    """Whether Home Assistant's own editor could make this change; None when it could.
+    """Refuse a change HA's own editor could not make; None when it could.
 
-    Side-effect free, for the prechecks that run before an approval exists. The
-    write repeats the check, because files can change while an approval waits. A
-    missing or unlocatable entry is left to the callers' own existence checks.
+    Side-effect free, for prechecks; the write repeats it. Missing entries are left to the
+    callers.
     """
     try:
         layout = _layout_or_result(config_dir, domain)
@@ -1180,8 +1127,7 @@ def automation_write(
 ) -> OpResult:
     """Check and write an automation in one worker job under the domain lock.
 
-    External writers do not share that lock. A dry run is advisory only; the
-    committing call always locates and checks again.
+    A dry run is advisory; the committing call locates and checks again.
     """
     try:
         return _automation_write_checked(config_dir, entry_id, config, create, expected_hash, dry_run, generated_id)
@@ -1420,14 +1366,10 @@ def _create_append(path: str, shape: str, entry_id: str, config: dict) -> OpResu
 
 
 def read_entry(config_dir: str, domain: str, entry_id: str) -> Any:
-    """Best-effort read of an entry's current config, tag-encoded. None if absent.
+    """Read an entry's current config, tag-encoded, best-effort; None if absent.
 
-    Used by existence checks and the approval diff builders. Falls back to the
-    default file ONLY when configuration.yaml is missing or unparseable, matching
-    _layout_or_result. A layout error (e.g. an include routed outside the config
-    directory) is an authoritative refusal: the write paths refuse, so reading the
-    default file here would desync diffs and existence checks from what is
-    editable.
+    Falls back to the default file only when configuration.yaml is missing or unparseable. A
+    layout error is authoritative, keeping diffs in step with what is editable.
     """
     layout = resolve_domain_layout(config_dir, domain)
     if layout is not None and layout.error:

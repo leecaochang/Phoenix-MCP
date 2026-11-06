@@ -36,7 +36,7 @@ const APPROVAL = {
   id: "appr_a", access_key_id: "t1", access_key_name: "kitchen", tool_name: "restart_ha", cap_name: "cap_restart",
   args: {}, diff: { kind: "system_action", summary: "Restart Home Assistant", summary_key: "diff.restart_ha", summary_params: {} },
   status: "pending", created_at: "2026-08-13T04:00:00Z", expires_at: "2099-08-13T05:00:00Z",
-  resolved_at: null, approved_by_user_id: null, rejected_reason: null, result: null, request_id: "r", client_ip: null,
+  resolved_at: null, approved_by_user_id: null, closure_reason: null, result: null, request_id: "r", client_ip: null,
 } as unknown as ApprovalRecord;
 
 const AUDIT = {

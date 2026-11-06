@@ -1,5 +1,5 @@
 ---
-{ "id": "window.comparison", "title": "{{label:workspace.comparison}}", "parent": "workspace.changes", "order": 2, "keywords": ["diff", "before", "after"], "sectionKeywords": { "restore": ["undo", "rollback", "revert"], "views": ["code editor", "side by side", "stacked", "preview"] }, "covers": ["frontend_src/views/ChangesView.tsx", "frontend_src/shell/changes.tsx", "frontend_src/components/DiffView.tsx", "custom_components/phoenix_mcp/admin_view.py", "frontend_src/components/YamlView.tsx", "frontend_src/components/DashboardPreview.tsx"] }
+{ "id": "window.comparison", "title": "{{label:workspace.comparison}}", "parent": "workspace.changes", "order": 2, "keywords": ["diff", "before", "after"], "sectionKeywords": { "restore": ["undo", "rollback", "revert"], "views": ["code editor", "side by side", "stacked", "preview"] }, "covers": ["frontend_src/views/ChangesView.tsx", "frontend_src/shell/changes.tsx", "frontend_src/components/DiffView.tsx", "custom_components/phoenix_mcp/admin/changes.py", "frontend_src/components/YamlView.tsx", "frontend_src/components/DashboardPreview.tsx"] }
 ---
 The chosen change, as the item looked before and after it. The line under the title says what the change was, its type, who made it and when, followed by a short summary.
 

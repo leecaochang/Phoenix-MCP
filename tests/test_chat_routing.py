@@ -16,7 +16,7 @@ from custom_components.phoenix_mcp import agent_chat
 from custom_components.phoenix_mcp.llm import accounts as llm_accounts
 from custom_components.phoenix_mcp.llm import base as llm_base
 from custom_components.phoenix_mcp.routing import chat_routing
-from custom_components.phoenix_mcp.admin_view import _validated_settings_patch
+from custom_components.phoenix_mcp.admin.settings import _validated_settings_patch
 from custom_components.phoenix_mcp.audit import AuditLog
 from custom_components.phoenix_mcp.const import DOMAIN
 from custom_components.phoenix_mcp.data import PhoenixData
@@ -467,7 +467,7 @@ async def test_chat_approval_binds_ingress_and_revalidates_before_execution(hass
     from custom_components.phoenix_mcp import tool_dispatch
     from custom_components.phoenix_mcp.tools import service as service_tools
     from custom_components.phoenix_mcp.routing.routing_tables import COMMAND_ROUTING_PLAN_KEY
-    from custom_components.phoenix_mcp.routing.command_execution import plan_is_current
+    from custom_components.phoenix_mcp.routing.plan_currency import plan_is_current
     data, access_key = executing_chat
     from custom_components.phoenix_mcp.mesa import async_setup_mesa
     from custom_components.phoenix_mcp.mesa_core import MetadataOrigin, SemanticProfile
@@ -661,7 +661,7 @@ async def test_chat_hybrid_local_match_spends_no_decision_call(hass, hybrid_chat
     ('local_timeout', 0, 'local_unavailable'), ('trigger', 0, 'local_unavailable'), ('busy', 0, 'busy'),
 ])
 async def test_chat_hybrid_falls_back_only_before_dispatch(hass, hybrid_chat, case, calls, reason):
-    from custom_components.phoenix_mcp.routing.decision_provider import DecisionError
+    from custom_components.phoenix_mcp.routing.decision_types import DecisionError
     data, access_key = hybrid_chat
     async def respond(session, method, path, timeout, payload):
         if case in ('timeout', 'unavailable'): raise DecisionError(case)
@@ -1016,7 +1016,7 @@ async def test_verified_local_chain_still_skips_context_provider(hass, context_c
 @pytest.mark.parametrize('case', ['decline', 'uncertain', 'unknown_revision', 'malformed', 'timeout',
     'local_miss', 'secret', 'tool_history', 'oversized', 'language', 'account', 'endpoint', 'configured_revision', 'local_mode'])
 async def test_context_fallback_keeps_the_full_conversation(hass, context_chat, case):
-    from custom_components.phoenix_mcp.routing.decision_provider import DecisionError
+    from custom_components.phoenix_mcp.routing.decision_types import DecisionError
     data, _ = context_chat
     messages = context_messages()
     response = context_response()
@@ -1655,7 +1655,7 @@ async def test_chat_reference_uses_full_history_and_guarded_dispatch(hass, conte
 
 @pytest.mark.parametrize('failure', ['restriction', 'malformed', 'uncertain', 'timeout'])
 async def test_reference_not_attempted_after_errors_and_never_overrides_restrictions(hass, context_chat, failure):
-    from custom_components.phoenix_mcp.routing.decision_provider import DecisionError
+    from custom_components.phoenix_mcp.routing.decision_types import DecisionError
     data, _ = context_chat
     history = [{'role': 'user', 'content': 'what is the state of Desk lamp'}, {'role': 'assistant', 'content': 'The state is Off.'}]
     async def response(*args):
@@ -1681,7 +1681,7 @@ async def test_reference_approval_rechecks_bound_plan(hass, context_chat, change
     from custom_components.phoenix_mcp import tool_dispatch
     from custom_components.phoenix_mcp.tools import service as service_tools
     from custom_components.phoenix_mcp.routing.routing_tables import COMMAND_ROUTING_PLAN_KEY
-    from custom_components.phoenix_mcp.routing.command_execution import plan_is_current
+    from custom_components.phoenix_mcp.routing.plan_currency import plan_is_current
     from custom_components.phoenix_mcp.mesa import async_setup_mesa
     from custom_components.phoenix_mcp.mesa_core import MetadataOrigin, SemanticProfile
     data, access_key = context_chat

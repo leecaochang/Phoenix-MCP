@@ -17,19 +17,17 @@ import json
 import pytest
 from unittest.mock import AsyncMock, MagicMock
 
-from custom_components.phoenix_mcp.admin_view import (
-    PhoenixAdminApprovalsView,
-    PhoenixAdminAuditView,
-    PhoenixAdminPermissionBulkSelectView,
-    PhoenixAdminPermissionDomainView,
-    PhoenixAdminPermissionsView,
-    PhoenixAdminAccessKeysView,
-    PhoenixAdminAccessKeyView,
-    PhoenixAdminSettingsView,
-    _parse_pagination,
-    _request_time,
+from custom_components.phoenix_mcp.admin.approvals import PhoenixAdminApprovalsView
+from custom_components.phoenix_mcp.admin.logs import PhoenixAdminAuditView
+from custom_components.phoenix_mcp.admin.permissions import (
+    PhoenixAdminPermissionBulkSelectView, PhoenixAdminPermissionDomainView, PhoenixAdminPermissionsView,
     _validate_permission_tree_body,
 )
+from custom_components.phoenix_mcp.admin.access_keys import (
+    PhoenixAdminAccessKeysView, PhoenixAdminAccessKeyView,
+)
+from custom_components.phoenix_mcp.admin.settings import PhoenixAdminSettingsView
+from custom_components.phoenix_mcp.admin.common import _parse_pagination, _request_time
 from custom_components.phoenix_mcp.access_key_store import GlobalSettings
 
 from tests.runtime_fixtures import make_active_access_key as _make_active_access_key, make_admin_request as _make_admin_request, make_admin_data as _make_data, make_admin_hass as _make_hass

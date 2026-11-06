@@ -12,12 +12,12 @@ from tests.runtime_fixtures import patch_readers
 from homeassistant.setup import async_setup_component
 from homeassistant.helpers import entity_registry as er
 
-from custom_components.phoenix_mcp import agent_turn, agentcli_views, mcp_transport, service_targets, tool_catalog, tool_dispatch
+from custom_components.phoenix_mcp import agent_turn, agent_chat_views, mcp_transport, service_targets, tool_catalog, tool_dispatch
 from custom_components.phoenix_mcp.llm import accounts as llm_accounts
 from custom_components.phoenix_mcp.llm import base as llm_base
 from custom_components.phoenix_mcp.llm import provider_claude as llm_provider_claude
 from custom_components.phoenix_mcp.tools import service as service_tools
-from custom_components.phoenix_mcp.admin_view import PhoenixAdminApprovalApproveView
+from custom_components.phoenix_mcp.admin.approvals import PhoenixAdminApprovalApproveView
 from custom_components.phoenix_mcp.approvals import async_create_pending_approval, get_approval
 from custom_components.phoenix_mcp.audit import AuditLog
 from custom_components.phoenix_mcp.const import DOMAIN
@@ -61,7 +61,7 @@ async def test_actual_task_cancellation_resolves_only_unclaimed_review(hass, cla
 async def test_real_chat_disconnect_cancels_approval(hass, hass_access_token, socket_enabled, handler_cancellation):
     assert await async_setup_component(hass, "http", {})
     data, access_key, _ = await _environment(hass)
-    view = agentcli_views.PhoenixAgentCliChatView()
+    view = agent_chat_views.PhoenixAgentCliChatView()
     view.hass = hass
     hass.http.register_view(view)
     cfg = llm_accounts.ProviderConfig("claude", "fixture-model", "http://example.invalid", "fixture-key")
@@ -78,7 +78,7 @@ async def test_real_chat_disconnect_cancels_approval(hass, hass_access_token, so
     await client.start_server()
     with patch_readers("custom_components.phoenix_mcp.llm.accounts._get_secret_store", AsyncMock(return_value=store)), \
          patch_readers("custom_components.phoenix_mcp.llm.factory.build_provider", return_value=provider), \
-         patch("custom_components.phoenix_mcp.agentcli_views.AGENTCLI_HEARTBEAT_SECONDS", 0.02):
+         patch("custom_components.phoenix_mcp.agent_chat_views.AGENT_CHAT_HEARTBEAT_SECONDS", 0.02):
         try:
             response = await client.post(view.url, json={"access_key_id": access_key.id, "instance_id": "fixture", "user": "restart"})
             assert response.status == 200
@@ -108,7 +108,7 @@ async def test_interrupted_delivery_through_the_view_keeps_the_barrier(
 
     assert await async_setup_component(hass, "http", {})
     data, access_key, _ = await _environment(hass)
-    view = agentcli_views.PhoenixAgentCliChatView()
+    view = agent_chat_views.PhoenixAgentCliChatView()
     view.hass = hass
     hass.http.register_view(view)
     cfg = llm_accounts.ProviderConfig("claude", "fixture-model", "http://example.invalid", "fixture-key")
@@ -162,7 +162,7 @@ async def test_client_leaving_right_after_done_keeps_the_turn_finished(
     data, access_key, _ = await _environment(hass)
     data.store.get_settings().conversation_log_enabled = True
     data.conversations.configure(data.store.get_settings())
-    view = agentcli_views.PhoenixAgentCliChatView()
+    view = agent_chat_views.PhoenixAgentCliChatView()
     view.hass = hass
     hass.http.register_view(view)
     cfg = llm_accounts.ProviderConfig("claude", "fixture-model", "http://example.invalid", "fixture-key")

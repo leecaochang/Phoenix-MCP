@@ -598,7 +598,9 @@ async def test_private_atomic_store_uses_real_filesystem(hass, tmp_path):
 
 async def test_admin_recovery_requires_ha_admin_and_keeps_active_records(hass):
     from homeassistant.components.http.const import KEY_AUTHENTICATED, KEY_HASS_USER
-    from custom_components.phoenix_mcp.admin_view import PhoenixAdminConfigurationRecoveryView, PhoenixAdminConfigurationRecoveryRecordView
+    from custom_components.phoenix_mcp.admin.changes import (
+        PhoenixAdminConfigurationRecoveryView, PhoenixAdminConfigurationRecoveryRecordView,
+    )
     from custom_components.phoenix_mcp.const import DOMAIN
     runtime = data()
     hass.data[DOMAIN] = runtime
@@ -617,10 +619,10 @@ async def test_admin_recovery_requires_ha_admin_and_keeps_active_records(hass):
     assert json.loads(response.body)["records"][0]["id"] == rid
     action_view = PhoenixAdminConfigurationRecoveryRecordView()
     action_view.hass = hass
-    with patch("custom_components.phoenix_mcp.admin_view._read_body", new=AsyncMock(return_value={"action": "reviewed"})):
+    with patch("custom_components.phoenix_mcp.admin.changes._read_body", new=AsyncMock(return_value={"action": "reviewed"})):
         assert (await action_view.post(request, recovery_id=rid)).status == 409
     runtime.config_recovery.leave(rid)
-    with patch("custom_components.phoenix_mcp.admin_view._read_body", new=AsyncMock(return_value={"action": "reviewed"})):
+    with patch("custom_components.phoenix_mcp.admin.changes._read_body", new=AsyncMock(return_value={"action": "reviewed"})):
         assert (await action_view.post(request, recovery_id=rid)).status == 200
     assert runtime.config_recovery.get(rid)["reviewed_by"] == "admin"
 
@@ -632,7 +634,7 @@ async def test_admin_recovery_requires_ha_admin_and_keeps_active_records(hass):
 async def test_admin_restore_refusal_names_active_or_unreviewed_record(hass, hass_admin_user, active, key):
     """Restore of a still-active record answers recoveryOperationActive; an inactive unreviewed one, recoveryReviewBeforeRestoring."""
     from homeassistant.components.http.const import KEY_AUTHENTICATED, KEY_HASS_USER
-    from custom_components.phoenix_mcp.admin_view import PhoenixAdminConfigurationRecoveryRecordView
+    from custom_components.phoenix_mcp.admin.changes import PhoenixAdminConfigurationRecoveryRecordView
     from custom_components.phoenix_mcp.const import DOMAIN
     runtime = data()
     hass.data[DOMAIN] = runtime
@@ -648,9 +650,9 @@ async def test_admin_restore_refusal_names_active_or_unreviewed_record(hass, has
     request.__getitem__.side_effect = values.__getitem__
     view = PhoenixAdminConfigurationRecoveryRecordView()
     view.hass = hass
-    with patch("custom_components.phoenix_mcp.admin_view._read_body",
+    with patch("custom_components.phoenix_mcp.admin.changes._read_body",
                new=AsyncMock(return_value={"action": "restore", "side": "before"})), \
-         patch("custom_components.phoenix_mcp.admin_view.async_restore_version", new=AsyncMock()) as restore:
+         patch("custom_components.phoenix_mcp.admin.changes.async_restore_version", new=AsyncMock()) as restore:
         response = await view.post(request, recovery_id=rid)
     assert response.status == 409
     assert json.loads(response.text)["message_key"] == key
@@ -736,7 +738,7 @@ def test_recovery_refusals_name_their_own_operator_text():
 
     root = Path(config_recovery.__file__).parent
     raised = set()
-    for path in [*root.glob("*.py"), *root.glob("routing/*.py"), *root.glob("tools/*.py")]:
+    for path in [*root.glob("*.py"), *root.glob("admin/*.py"), *root.glob("routing/*.py"), *root.glob("tools/*.py")]:
         for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
             if (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
                     and node.func.id == "ConfigurationRecoveryError" and node.args
@@ -755,7 +757,7 @@ def test_recovery_refusals_name_their_own_operator_text():
 
 def test_template_refusal_reaches_the_panel_without_its_json():
     """A Template refusal that applied nothing is shown as its sentence, never the agent's JSON object."""
-    from custom_components.phoenix_mcp.admin_view import _recovery_refusal
+    from custom_components.phoenix_mcp.admin.changes import _recovery_refusal
 
     detail = json.dumps({"error": "Template references are outside current write authority.",
                          "recovery_id": "r1", "replacement_entry_id": None,

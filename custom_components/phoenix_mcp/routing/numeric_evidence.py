@@ -12,6 +12,7 @@ from .routing_tables import (
     DECISION_PERCENTAGE_LANGUAGE_UNITS, DECISION_PERCENTAGE_HYPHEN_LANGUAGES,
     DECISION_NUMBER_LANGUAGE_ALIASES,
 )
+from ..entity_commands import finite_number
 
 _TOKENS = re.compile(r"\w+|[^\w\s]", re.UNICODE)
 
@@ -41,6 +42,7 @@ def has_percentage_unit(sentence: str) -> bool:
 @lru_cache(maxsize=64)
 def _number_words(language: str) -> tuple[dict[str, int], frozenset[str]]:
     """Use the number spelling dependency already used by HA's Hassil recognizer."""
+    # Local: ships with an optional component, not with this integration.
     from unicode_rbnf import RbnfEngine
 
     values = {str(value): value for value in range(101)}
@@ -76,9 +78,8 @@ def _number_words(language: str) -> tuple[dict[str, int], frozenset[str]]:
 def read_explicit_percentage(sentence: str, language: str) -> int | None:
     """Read one whole percentage; ambiguity or unsupported notation has no evidence.
 
-    This does not decide whether the sentence is a command, whether it is negated,
-    or which operation/device owns the value. It must never authorize execution.
-    Run in the recognition executor: loading number spelling rules can perform I/O.
+    It never decides command, negation or owning device, and never authorizes execution. Run in the
+    recognition executor: loading number spelling rules can perform I/O.
     """
     if (language not in DECISION_PERCENTAGE_EVIDENCE_LANGUAGES or not isinstance(sentence, str)
             or not sentence or len(sentence) > MAX_SEARCH_QUERY_LEN):
@@ -170,7 +171,6 @@ def read_explicit_scalar(sentence: str, language: str) -> int | float | None:
     Spelled percentages retain their independent reader. Other spelled numbers
     can still use strict Assist matching; uncertain notation falls back.
     """
-    from .command_operations import finite_number
 
     if not isinstance(sentence, str) or not sentence or len(sentence) > MAX_SEARCH_QUERY_LEN:
         return None

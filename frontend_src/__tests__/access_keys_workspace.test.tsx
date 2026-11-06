@@ -381,3 +381,21 @@ describe("Access Keys workspace", () => {
     expect(onCloseCreate).toHaveBeenCalledOnce();
   });
 });
+
+describe("a selected key that cannot be read", () => {
+  it("clears the selection when the key no longer exists", async () => {
+    vi.mocked(api.getAccessKey).mockRejectedValue(Object.assign(new Error("Access key not found."), { status: 404 }));
+    const onDeselect = vi.fn();
+    render(<Workspace registry={new ToolRegistry()} initial="gone" onDeselect={onDeselect} />);
+    await waitFor(() => expect(onDeselect).toHaveBeenCalledOnce());
+    expect(screen.queryByText("Access key not found.")).toBeNull();
+  });
+
+  it("keeps the selection and shows why when the read fails another way", async () => {
+    vi.mocked(api.getAccessKey).mockRejectedValue(Object.assign(new Error("Server unavailable."), { status: 500 }));
+    const onDeselect = vi.fn();
+    render(<Workspace registry={new ToolRegistry()} initial="k1" onDeselect={onDeselect} />);
+    expect((await screen.findAllByText("Server unavailable.")).length).toBeGreaterThan(0);
+    expect(onDeselect).not.toHaveBeenCalled();
+  });
+});

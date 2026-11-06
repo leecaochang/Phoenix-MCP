@@ -18,13 +18,9 @@ async def async_observe_registration(
     hass: HomeAssistant, access_key: AccessKeyRecord, domain: Literal["automation", "scene", "script"], storage_id: str,
 ) -> dict[str, Any]:
     """Observe identity and state, without promising config freshness or availability.
-
-    Registry entries survive reloads. Only a present State completes the live
-    observation; disabled entries complete separately. Missing and inaccessible
-    entries have the same result. No guessed entity ID is ever returned. A scene
-    Home Assistant dropped on reload leaves a restored placeholder State, so a
-    scene's State counts only when it carries the scene's own id.
-    Cancellation propagates and there are no listeners or background tasks.
+    Only a present State completes the live observation, and a scene's must carry its own id;
+    disabled entries complete separately. Missing and inaccessible read alike, and no ID is
+    guessed.
     """
     deadline = asyncio.get_running_loop().time() + AUTHORING_REGISTRATION_TIMEOUT_SECONDS
     platform = "homeassistant" if domain == "scene" else domain

@@ -18,8 +18,8 @@ from types import MappingProxyType
 # deliberately NOT under translations/. hassfest validates translations/en.json
 # against a closed set of Home Assistant categories and errors on any other
 # top-level key, which fails the HACS submission; translations/ therefore holds
-# only HA's own config and entity sections. Read by helpers._catalog_section and
-# served to the panel by admin_view.PhoenixAdminCatalogView.
+# only HA's own config and entity sections. Read by catalog_text._catalog_section and
+# served to the panel by admin.settings.PhoenixAdminCatalogView.
 CATALOGS_DIR = pathlib.Path(__file__).parent / "catalogs"
 
 PHOENIX_VERSION = "2.0.0"
@@ -30,7 +30,7 @@ GITHUB_URL = "https://github.com/leecaochang/Phoenix-MCP"
 DOMAIN = "phoenix_mcp"
 RUNTIME_READY_KEY = "phoenix_mcp_runtime_ready"
 STORAGE_KEY = "phoenix_mcp"
-STORAGE_VERSION = 5
+STORAGE_VERSION = 6
 
 CALENDAR_MAX_WINDOW_DAYS = 31
 CALENDAR_MAX_EVENTS = 500
@@ -133,7 +133,7 @@ DASHBOARD_SCRUB_MAX_DEPTH = 100
 # A layout's recovery snapshot holds anything that read can show, one level down
 # inside the snapshot's own envelope.
 CONFIG_RECOVERY_LAYOUT_MAX_DEPTH = DASHBOARD_SCRUB_MAX_DEPTH + 1
-# Every other recovery snapshot, matching helpers.redact_structure.
+# Every other recovery snapshot, matching redaction.redact_structure.
 CONFIG_RECOVERY_MAX_DEPTH = 25
 # Typed objects under these keys are nested cards for get_dashboard_config search.
 DASHBOARD_CARD_CONTAINER_KEYS = frozenset({"card", "cards", "custom_fields", "states"})
@@ -284,14 +284,10 @@ HELPER_TEMPLATE_NODE_TYPES = frozenset({
 # Per-resource FIFO retention: the newest N versions per (resource_type,
 # resource_id) are kept; older ones are evicted on write.
 MAX_VERSIONS_PER_RESOURCE = 20
-# Resource types eligible for version history. VersionStore.record RAISES on
-# anything absent here, and _record_version swallows that (history must never
-# break a write), so a type missing from this set loses its whole rollback path
-# SILENTLY, with only a log line. Adding a _record_version call site means adding
-# the type here AND to the frontend contract fixture; a contract test pins this
-# set against that fixture in both directions, since a type present in the
-# fixture and the TS union but missing here silently fails to record every
-# version of that resource.
+# Resource types eligible for version history. VersionStore.record raises on anything absent
+# and _record_version swallows that, so a missing type silently loses its rollback path.
+# Adding a _record_version call site means adding the type here and to the frontend contract
+# list.
 VERSIONED_RESOURCE_TYPES = frozenset(
     {"automation", "script", "scene", "helper", "dashboard", "entity", "device",
      "blueprint", "energy", "config_entry", "area", "floor", "label", "category"}
@@ -314,8 +310,8 @@ MAX_CARD_STUB_CONFIG_BYTES = 2000
 MAX_CARD_CATALOG_FAILURES = 50
 # HA's own card types: the card picker's core cards plus the Energy cards. A bare
 # type in this set is a built-in card, available without any harvest.
-# tests/test_builtin_card_types.py checks it covers the installed HA frontend's
-# card picker; a type an older HA lacks only misses its built-in answer.
+# It follows the current HA card picker; a type an older HA lacks only misses its
+# built-in answer.
 BUILTIN_CARD_TYPES = frozenset({
     "alarm-panel", "alert", "area", "button", "calendar", "clock", "conditional", "date",
     "distribution", "entities", "entity", "entity-filter", "gauge", "glance", "grid", "heading",
@@ -361,7 +357,7 @@ DETAIL_LEVELS = frozenset({
 # Assist bridge (assist_api.py): a registered llm.API exposes the bound access key's
 # scoped tool surface to HA's native Assist/voice conversation agents.
 # Sentinel client_ip so Assist-driven tool calls are attributable in the audit
-# log without a core change to _dispatch_mcp (mirrors AGENTCLI_CLIENT_IP).
+# log without a core change to _dispatch_mcp (mirrors AGENT_CHAT_CLIENT_IP).
 ASSIST_CLIENT_IP = "assist"
 # Sentinel client_ip for the Phoenix MCP voice agent (voice_agent.py): Phoenix MCP registered as
 # HA's conversation agent, running its own model loop. Distinct from ASSIST_CLIENT_IP
@@ -381,8 +377,7 @@ AI_TASK_CLIENT_IP = "ai_task"
 #
 # Hand-mirrored into the panel (the scope union, the label maps, the editor's
 # API dispatch, the list table, and the in-context injector), where a missing
-# entry is mostly SILENT rather than a type error. A contract fixture pins this
-# list against the frontend in both directions.
+# entry is mostly SILENT rather than a type error.
 MESA_SCOPES: tuple[str, ...] = ("entity", "device", "area", "integration", "domain")
 
 MESA_STORAGE_KEY = "phoenix_mcp_mesa"
@@ -481,40 +476,21 @@ SENSITIVE_KEY_FINAL_WORDS = frozenset({"pin", "psk"})
 # access_key_name and access_key_id metadata as credential values.
 SENSITIVE_KEY_SUFFIXES = ("access_key", "accesskey", "access-key", "access key")
 
-# The placeholder every redacting reader substitutes for a value the access key may not
-# see. Named here so a WRITE path can refuse to persist it: a config read is lossy
-# (an out-of-scope or ghost entity comes back as this string), so a caller that
-# echoes a read back would silently store the placeholder as if it were real
-# configuration. `tool_common.redaction_sentinel_path` is that guard.
-#
-# The redacting PRODUCERS (policy_engine.filter_service_response, helpers.redact_structure,
-# helpers.redact_diagnostics, esphome_yaml's value scrub, among others) still spell
-# the literal inline; this constant is deliberately NOT a refactor of them, because
-# rewriting working redaction code carries more risk than the duplication does. A
-# guard test asserts this value is what filter_service_response actually emits, so a
-# producer that ever changes its placeholder fails there rather than silently
-# disarming the write guard.
+# The placeholder every redacting reader substitutes for a value the key may not see. Named
+# so a write path can refuse to persist it (`tool_common.redaction_sentinel_path`), as a
+# config read is lossy and an echo would store the placeholder as real configuration. The
+# redacting producers spell the literal inline, deliberately, and must keep emitting this
+# value.
 REDACTION_SENTINEL = "<redacted>"
 
-# Domain-aware "lean" view for get_state. When a caller passes no
-# explicit `fields` and does not set `detailed`, the state is narrowed to the base
-# fields (entity_id, state) plus LEAN_ALWAYS_ATTRS plus the domain's important
-# attributes below, to cut token cost on the common read path. Field selection
-# always runs AFTER sensitive-attribute scrubbing, so it can never reveal a
-# scrubbed value. Domains with no entry fall back to base + LEAN_ALWAYS_ATTRS only;
-# describe_entity remains the full-detail single-entity tool.
+# Domain-aware "lean" view for get_state: without `fields` or `detailed`, a state narrows to
+# entity_id, state, LEAN_ALWAYS_ATTRS and the domain's attributes below. Selection runs
+# after scrubbing, so it cannot reveal a scrubbed value.
 #
-# The attribute names are Home Assistant's own canonical primary-state attributes
-# per domain (each domain's ATTR_* constants / entity.state_attributes), curated to
-# what an agent needs to reason about or act on that domain's state, so a weak model
-# rarely has to escalate to detailed=. This is an allowlist by design (never a
-# denylist): an unlisted attribute or domain is omitted, and the fix for a
-# missing attribute is to add it here, not to strip junk. Deliberately excluded:
-# large/nested blobs (weather forecast, image/URL-class already scrubbed), long
-# free text (release_summary, calendar description), the big capability *_list attrs
-# (effect_list/source_list/fan_modes; the current *value* like effect/source stays),
-# and location coordinates. HA-coupling point: re-verify these names on HA upgrades
-# (e.g. counter uses minimum/maximum, not min/max like number).
+# An allowlist of HA's canonical attributes per domain: an unlisted attribute is omitted,
+# and the fix is to add it here. Excluded on purpose: large blobs, long free text, *_list
+# capability attributes and location coordinates. Names are HA's own (counter uses
+# minimum/maximum), so re-verify on upgrades.
 LEAN_ALWAYS_ATTRS = ("friendly_name",)
 
 DOMAIN_IMPORTANT_ATTRIBUTES: Mapping[str, tuple[str, ...]] = MappingProxyType({
@@ -611,18 +587,11 @@ RUNTIME_SERVICE_GUIDANCE = MappingProxyType({
     "scene/turn_on": "Activate the scene; later member effects run under Home Assistant.",
 })
 
-# Core HA services that take NO entity/device/area target: they re-read YAML
-# configuration domain-wide. Phoenix MCP's normal call_service path flattens every
-# call to an explicit entity_id list (device_id, area_id and "all" never reach HA),
-# which these services' schemas reject ("extra keys not allowed @
-# data['entity_id']"), so they are handled by a
-# dedicated no-target branch that calls them with bare service_data. They apply
-# configuration the operator edited by hand, so they gate on cap_yaml_edit, the
-# capability that reads that configuration. HA-version-sensitive: this is a curated list of stable core reload
-# services, deliberately conservative (integration-specific reloads like
-# mqtt/rest/command_line are omitted); re-verify and extend on HA upgrades.
-# homeassistant/reload_config_entry is excluded on purpose: it needs the config
-# entry's own scope, so only reload_integration runs it.
+# Core HA services that take no target: they re-read YAML configuration domain-wide, and
+# their schemas reject the explicit entity_id list Phoenix always sends. A dedicated
+# no-target branch calls them with bare service_data, gated on cap_yaml_edit. A conservative
+# list of stable core reloads, to re-verify on upgrades. homeassistant/reload_config_entry
+# is excluded, as it needs the entry's own scope and only reload_integration runs it.
 NO_TARGET_SERVICES = frozenset({
     "homeassistant/reload_all",
     "homeassistant/reload_core_config",
@@ -776,7 +745,7 @@ CONFIRM_ONLY_CAPS = frozenset({"cap_dashboard_resources"})
 # Capabilities ALWAYS evaluated regardless of pass_through state.
 # All other capabilities are bypassed (treated as "allow") when pass_through is True,
 # except that "confirm" is honored even for non-exempt caps under pass_through
-# (admin's intent to gate is preserved). See helpers.effective_cap.
+# (admin's intent to gate is preserved). See capability.effective_cap.
 PASS_THROUGH_EXEMPT_CAPS = frozenset({
     "cap_notify",
     "cap_camera_read",
@@ -848,7 +817,7 @@ APPROVAL_DEFAULT_TTL_SECONDS = 3600
 APPROVAL_SWEEP_INTERVAL = datetime.timedelta(minutes=5)
 
 # How many approvals one batch-approve request may carry. A REQUEST-DURATION
-# bound, not a review-policy one: admin_view._approve_approval runs each
+# bound, not a review-policy one: admin.approvals._approve_approval runs each
 # executor INLINE inside the admin's HTTP request (the same constraint that makes
 # ESPHome builds enqueue a job instead), so a batch's wall time is the sum of its
 # tools' and an unbounded one would hold a connection open for minutes and read
@@ -903,36 +872,19 @@ PERSONA_NAMES = frozenset({
 # gated whether it is actuated via valve/open_valve or via HassTurnOn.
 PHYSICAL_GATE_DOMAINS = frozenset({"lock", "alarm_control_panel", "cover", "valve"})
 
-# The keys Home Assistant reads out of a service call's DATA to decide which
-# entities the call reaches. Every one of them must be stripped from
-# caller-supplied service data before the call is made, because Phoenix MCP
-# resolves and flattens targets itself and then passes an explicit entity list:
-# a selector left in the data is unioned with that list by HA, reaching entities
-# the permission tree, the capability gates and MESA never saw.
+# The keys HA's TargetSelection reads out of a service call's data. Each must be stripped
+# from caller data, as HA unions a leftover selector with Phoenix's explicit entity list,
+# reaching entities the permission tree, the gates and MESA never saw.
 #
-# Not a stylistic strip. HA's helpers.target.TargetSelection reads exactly these
-# five off ServiceCall.data, and its entity-service schemas accept all five, so a
-# leftover floor_id or label_id actuates a whole floor for an access key scoped to one
-# entity.
+# Not in this set:
+#  - "target": a target block only at HA's WS/REST boundary, and a real data field for
+#    notify. unsupported_secondary_targets refuses the mapping form.
+#  - "config_entry_id": TargetSelection does not read it. MESA refuses it on an entity call.
 #
-# Deliberately NOT in this set:
-#  - "target", which is a target block only at HA's own WS/REST boundary (which
-#    merges it into data before the call). Reaching hass.services.async_call it
-#    selects nothing, and it is a REAL data field for the notify domain, whose
-#    target names a notification recipient. unsupported_secondary_targets refuses
-#    the mapping form with its own message, and MESA is not shown the data field.
-#  - "config_entry_id", which TargetSelection does not read and which is a
-#    legitimate argument to the config-entry services. On an entity call MESA's
-#    own enforcement refuses it, a stricter rule applied to what MESA is shown
-#    rather than to what Home Assistant is asked to do.
+# "exclude" only narrows, but after Phoenix resolved targets, so a call would reach fewer
+# entities than were reviewed; list the wanted entities instead.
 #
-# "exclude" (HA 2026.11) only narrows a selection, but HA applies it after Phoenix
-# resolved the targets, so the call would reach fewer entities than were reviewed,
-# audited and shown to MESA. List the entities wanted in the target instead.
-#
-# HA-VERSION-SENSITIVE: a const-invariant test pins this against HA's own
-# cv.TARGET_SERVICE_FIELDS, so a release that adds another selector fails loudly
-# here rather than silently widening what a call can reach.
+# Must match HA's cv.TARGET_SERVICE_FIELDS on every release, or a new selector widens reach.
 TARGET_SELECTOR_KEYS = frozenset({"entity_id", "device_id", "area_id", "floor_id", "label_id", "exclude"})
 
 # Server-owned exact control bindings, persisted with approval executor arguments.
@@ -982,27 +934,15 @@ SECONDARY_TARGET_SELECTOR_KEYS = frozenset({
     "vehicle",
 })
 
-# Actionable service-name hints for core actuator domains whose real service
-# verbs differ from the naive guess (e.g. valve.open_valve, not valve.open;
-# cover.open_cover, not cover.open). When a call_service call raises
-# ServiceNotFound on one of these domains, Phoenix MCP returns an invalid_request naming
-# these valid services instead of the opaque generic "Forbidden.", so an agent
-# that guessed the wrong verb can self-correct.
+# Service-name hints for core actuator domains whose real verbs differ from the naive guess
+# (valve.open_valve, cover.open_cover). On ServiceNotFound, Phoenix returns an
+# invalid_request naming these rather than the generic "Forbidden.".
 #
-# LEAK SAFETY: this map is consulted ONLY inside the ServiceNotFound catch, which
-# is strictly post-authorization (the access key has already cleared the cap gate,
-# entity-scope resolution proving WRITE on an entity in this domain, and MESA).
-# The values are a HARDCODED list of public HA-core service names, never a live
-# hass.services lookup, so the hint reveals nothing about custom/third-party
-# services or about domains/entities the access key cannot reach; it only names public
-# core verbs for a domain the access key already actuates. Domains absent from this
-# map keep the generic no-oracle "Forbidden." response.
-#
-# HA-VERSION-SENSITIVE: these are HA-core service names, verified against HA
-# 2026.7. Core rarely renames a service, but re-verify on HA upgrades (like the
-# other HA-coupling points). Extend the map when a new verb-mismatch domain
-# surfaces; only physical/actuator domains where the naive verb differs are
-# included (light/switch/siren use the obvious turn_on/turn_off and are omitted).
+# Leak safety: read only inside that post-authorization catch, after the cap gate, WRITE
+# scope and MESA. The values are hardcoded public core names, never a live lookup, so a hint
+# reveals nothing about custom services or unreachable domains. Absent domains keep
+# "Forbidden.". Re-verify names on HA upgrades; obvious turn_on/turn_off domains are
+# omitted.
 DOMAIN_SERVICE_HINTS: Mapping[str, tuple[str, ...]] = MappingProxyType({
     "valve": ("open_valve", "close_valve", "stop_valve", "set_valve_position"),
     "cover": (
@@ -1047,9 +987,7 @@ ANNOUNCE_BIT = 2
 # precedent. HA's own vacuum intents set required_features, so an entity that
 # cannot perform the operation is never targeted rather than being asked and
 # erroring, and the native tools mirror that.
-# HA-VERSION-SENSITIVE: a renumbered bit would silently target the wrong vacuums
-# while every other test still passed, so a guard test pins these against the
-# installed VacuumEntityFeature enum.
+# HA-VERSION-SENSITIVE: a renumbered bit would silently target the wrong vacuums.
 VACUUM_START_BIT = 8192
 VACUUM_RETURN_HOME_BIT = 16
 VACUUM_CLEAN_AREA_BIT = 16384
@@ -1080,18 +1018,13 @@ MAX_LOGBOOK_RESOURCE_IDS = 100
 MAX_LOGBOOK_HOME_DAYS = 7
 MAX_LOGBOOK_NARROWED_DAYS = 31
 
-# Levels get_logs and get_phoenix_diagnostics accept as `level`. INFO is absent
-# and must stay absent: Home Assistant attaches its system_log handler with
-# setLevel(logging.WARNING) (components/system_log/__init__.py), so an INFO
-# record never enters the store this reads and there is no config option to
-# lower it. Offering INFO would promise what the store cannot keep, and fail
-# silently: an agent asking for INFO would get warnings and errors back with
-# nothing saying INFO is never collected, so a quiet result would read as
-# "nothing was logged" rather than "that level is not available here". Distinct
-# from helpers._LOG_LEVEL_RANK, which ranks the level of a RECORD; this is the
-# narrower set a CALLER may ask for.
-# When to read get_capability_summary, said the same way on every surface that
-# steers it: models told to orient first spent a call on it before every read.
+# Levels get_logs and get_phoenix_diagnostics accept as `level`. INFO must stay absent: HA's
+# system_log handler is fixed at WARNING, so offering it would promise records the store
+# never keeps, and a quiet result would read as "nothing was logged". Distinct from
+# log_read._LOG_LEVEL_RANK, which ranks a record's level.
+#
+# When to read get_capability_summary, said the same way on every surface that steers it, so
+# models do not spend a call on it before every read.
 ORIENTATION_GUIDANCE = (
     "Call get_capability_summary before a write or after a permission refusal; "
     "a question that only reads needs no orientation call."
@@ -1207,28 +1140,14 @@ MCP_LEGACY_PROTOCOL_VERSION_PREFERRED = MCP_LEGACY_PROTOCOL_VERSIONS[0]
 # never about what it is allowed to DO.
 MCP_DISCOVER_TTL_MS = 300_000
 
-# An access key's inline wait (seconds) on a confirm gate: a confirm-gated call holds
-# the response open up to confirm_inline_wait_seconds for an admin decision
-# before falling back to the immediate pending_approval reply. 0 means off
-# (return immediately) and is both the default and the panel's first option. The
-# max is kept well within typical MCP client timeouts so the held response never
-# outlives one.
+# An access key's inline wait on a confirm gate, in seconds, before the pending_approval
+# reply. 0 means off and is the default; the maximum stays within typical MCP client
+# timeouts.
 #
-# THE DEFAULT IS OFF. Blocking is automatic behaviour decided by an ACCESS KEY
-# SETTING, but the party that knows whether the outcome is needed right now is
-# the AGENT: firing twenty writes it needs them queued, not resolved one at a
-# time; turning off one lock it does want the answer. Holding the request removes
-# that choice, and because the hold blocks a whole request while tool calls
-# arrive one at a time, approval N+1 cannot even be CREATED until approval N
-# stops waiting: at a 60 second wait, twenty writes would take twenty minutes
-# just to reach the operator's queue.
-#
-# The architecture answers this properly: return pending_approval at once and let
-# the agent call wait_for_approval (which accepts several ids) if and when it
-# wants the outcomes. Approvals then STAGE immediately and the operator clears
-# them however suits, individually or in one batch. The inline wait stays
-# available for an operator who prefers an external client to block on a single
-# action, but it is opt-in rather than the thing everyone silently pays for.
+# Off by default because only the agent knows whether it needs the outcome now. Holding
+# blocks a request, so approval N+1 cannot be created until approval N stops waiting: at 60
+# seconds, twenty writes take twenty minutes to reach the queue. Agents call
+# wait_for_approval, with several ids, when they want outcomes; the wait stays opt-in.
 MIN_CONFIRM_INLINE_WAIT_SECONDS = 30
 MAX_CONFIRM_INLINE_WAIT_SECONDS = 180
 DEFAULT_CONFIRM_INLINE_WAIT_SECONDS = 0

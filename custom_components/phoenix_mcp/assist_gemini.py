@@ -1,20 +1,11 @@
 """Gemini-safe advertised tool schemas for the Assist bridge.
 
-HA's Gemini formatter (google_generative_ai_conversation) represents one type per
-node plus nullable, enum, item counts, properties, required and items. It raises
-on a type list, drops anyOf/oneOf, keeps one allOf branch, and turns an object
-without properties into an unexplained {"json": string}. Phoenix keeps validating
-every call against the full original schema and only ADVERTISES a lowered copy:
-
-- a nullable type list becomes its one type with nullable;
-- a union keeps one branch, the array form when there is one;
-- a combinator of required-groups only is dropped, since validation still
-  enforces it and names the missing field;
-- an open object is shown as an object holding its JSON text in "json", which
-  unwrap_json_fields turns back into the object before dispatch.
-
-A field that accepts any JSON type has no honest single-type form, so its tool
-stays unavailable to Gemini rather than being advertised as something it is not.
+HA's Gemini formatter represents one type per node, raises on a type list, drops anyOf and
+oneOf, and turns a propertyless object into {"json": string}. Phoenix validates against the
+full schema and only advertises a lowered copy: nullable lists become nullable, unions keep
+one branch, required-only combinators go, and open objects travel as JSON text that
+unwrap_json_fields restores. A field accepting any JSON type keeps its tool unavailable to
+Gemini.
 """
 
 from __future__ import annotations

@@ -12,9 +12,10 @@ from homeassistant.setup import async_setup_component
 
 from custom_components.phoenix_mcp import agent_chat, tool_dispatch, voice_agent
 from custom_components.phoenix_mcp.tools import service as service_tools
-from custom_components.phoenix_mcp.routing import command_clarification as cc
+from custom_components.phoenix_mcp.routing import clarification_store, command_clarification as cc
 from custom_components.phoenix_mcp.audit import AuditLog
-from custom_components.phoenix_mcp.routing.command_execution import _capture_plan, plan_is_current
+from custom_components.phoenix_mcp.routing.command_plan import _capture_plan
+from custom_components.phoenix_mcp.routing.plan_currency import plan_is_current
 from custom_components.phoenix_mcp.routing.command_routing import async_evaluate_command
 from custom_components.phoenix_mcp.const import DOMAIN
 from custom_components.phoenix_mcp.routing.routing_tables import COMMAND_CLARIFICATION_LIMIT
@@ -45,9 +46,9 @@ async def ambiguous_home(hass, access_key_store, immediate_command_observation):
 
 
 def test_memory_is_one_use_bounded_expiring_and_binding_specific():
-    memory = cc.CommandClarifications()
+    memory = clarification_store.CommandClarifications()
     request = {'sentence': 'private utterance', 'choices': {}}
-    with patch.object(cc, 'monotonic', return_value=1):
+    with patch.object(clarification_store, 'monotonic', return_value=1):
         memory.remember('c', 'authority', request)
         request['sentence'] = 'changed'
         assert memory.consume('other', 'authority') is None
@@ -59,7 +60,7 @@ def test_memory_is_one_use_bounded_expiring_and_binding_specific():
             memory.remember(index, 'binding', request)
         assert len(memory._entries) == COMMAND_CLARIFICATION_LIMIT
         assert memory.consume(0, 'binding') is None
-    with patch.object(cc, 'monotonic', return_value=1000):
+    with patch.object(clarification_store, 'monotonic', return_value=1000):
         assert memory.consume(1, 'binding') == {'_expired': True}
     assert 'private utterance' not in repr(memory)
 

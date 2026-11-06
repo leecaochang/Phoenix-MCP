@@ -208,21 +208,21 @@ def test_catalog_payload_metrics_cover_representative_profiles_and_provider_wire
     assert metrics == {
         "read_only": {
             "tool_count": 54,
-            "canonical_bytes": 64293,
-            "claude_bytes": 58720,
-            "openai_bytes": 60286,
+            "canonical_bytes": 64470,
+            "claude_bytes": 58897,
+            "openai_bytes": 60463,
         },
         "write_capable": {
             "tool_count": 100,
-            "canonical_bytes": 127179,
-            "claude_bytes": 116253,
-            "openai_bytes": 119153,
+            "canonical_bytes": 127952,
+            "claude_bytes": 117026,
+            "openai_bytes": 119926,
         },
         "announce_all": {
             "tool_count": 168,
-            "canonical_bytes": 201321,
-            "claude_bytes": 183405,
-            "openai_bytes": 188277,
+            "canonical_bytes": 202094,
+            "claude_bytes": 184178,
+            "openai_bytes": 189050,
         },
     }
     assert metrics["announce_all"]["tool_count"] == len(_static_defs()) == 168
@@ -373,7 +373,7 @@ async def test_announcement_mirrors_agree_across_esphome_availability(integratio
 def test_esphome_persona_fits_the_provider_tool_cap():
     """An ESPHome persona key with write scope stays within the tools-array cap.
 
-    OpenAI, Groq, Mistral and Z.ai refuse a turn above AGENTCLI_MAX_TOOLS_PER_REQUEST,
+    OpenAI, Groq, Mistral and Z.ai refuse a turn above AGENT_CHAT_MAX_TOOLS_PER_REQUEST,
     and every ESPHome tool lands in this persona's list once the Device Builder is
     present. A new ESPHome tool that pushes it over would make the persona built
     for ESPHome work unusable on those providers.
@@ -395,7 +395,7 @@ def test_esphome_persona_fits_the_provider_tool_cap():
             patch.object(hass.config_entries, "async_entries", return_value=[]):
         names = {t["name"] for t in tool_catalog.build_mcp_tool_list(access_key, data)}
     assert {"get_esphome_history", "analyze_esphome_memory", "check_esphome_connectivity"} <= names
-    assert len(names) <= provider_constants.AGENTCLI_MAX_TOOLS_PER_REQUEST
+    assert len(names) <= provider_constants.AGENT_CHAT_MAX_TOOLS_PER_REQUEST
 
 
 @pytest.mark.parametrize("surface", ["chat", "voice"])
@@ -425,8 +425,8 @@ def test_the_largest_catalog_loads_within_every_capped_provider(surface):
     loader = ToolLoader(catalog, limit)
 
     assert len(catalog) > limit, "the worst case no longer needs loading; this bound is then vacuous"
-    assert {tool["name"] for tool in catalog}.isdisjoint({provider_constants.AGENTCLI_LOAD_TOOLS_NAME})
-    assert set(loader.groups) == set(provider_constants.AGENTCLI_DEFERRED_TOOL_GROUPS)
+    assert {tool["name"] for tool in catalog}.isdisjoint({provider_constants.AGENT_CHAT_LOAD_TOOLS_NAME})
+    assert set(loader.groups) == set(provider_constants.AGENT_CHAT_DEFERRED_TOOL_GROUPS)
     assert max(len(names) for names in loader.groups.values()) <= loader.capacity
 
 
@@ -747,7 +747,7 @@ def _announcement_key(*, tree: PermissionTree | None = None, pass_through: bool 
 
 def _announced(name: str, access_key: AccessKeyRecord) -> bool:
     """tools/list's decision for one tool, with write scope computed as tools/list computes it."""
-    from custom_components.phoenix_mcp.helpers import access_key_has_write_scope
+    from custom_components.phoenix_mcp.capability import access_key_has_write_scope
 
     return tool_catalog._tool_is_announced(_by_name()[name], access_key, access_key_has_write_scope(access_key), None)
 

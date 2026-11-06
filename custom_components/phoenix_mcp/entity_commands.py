@@ -2,8 +2,9 @@
 from __future__ import annotations
 
 import json
+import math
 import re
-from typing import Any
+from typing import Any, TypeGuard
 
 from homeassistant.components.alarm_control_panel import AlarmControlPanelEntityFeature
 from homeassistant.components.light import LightEntityFeature, color_supported
@@ -21,8 +22,7 @@ from homeassistant.components.vacuum import VacuumEntityFeature
 from homeassistant.components.valve import ValveEntityFeature
 from homeassistant.components.water_heater import WaterHeaterEntityFeature
 
-from .routing.command_operations import finite_number
-from .routing.decision_provider import confident_choice, DecisionError
+from .routing.decision_types import confident_choice, DecisionError
 from .routing.routing_tables import (
     COMMAND_ROUTING_ENTITY_INTENTS, COMMAND_ROUTING_ENTITY_VALUE_LIMIT,
     COMMAND_ROUTING_FIXED_INTENT_DATA, COMMAND_ROUTING_READ_INTENTS,
@@ -206,3 +206,9 @@ def attribute_display(field: str, value: Any, temperature_unit: str | None, doma
             return None
         return result if len(result) <= 1024 else None
     return None
+
+
+def finite_number(value: Any) -> TypeGuard[int | float]:
+    """Bound huge integers before float conversion; never coerce strings or booleans."""
+    return (isinstance(value, (int, float)) and not isinstance(value, bool)
+            and -1e100 < value < 1e100 and math.isfinite(value))

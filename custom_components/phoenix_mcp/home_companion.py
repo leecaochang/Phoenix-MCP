@@ -22,7 +22,7 @@ from .const import (
 )
 from .conversation_log import record_current
 from .device_semantics import device_registry_snapshot, effective_entity_area_id
-from .helpers import redact_inaccessible_entity_ids_in_text, redact_secrets_in_text
+from .redaction import redact_inaccessible_entity_ids_in_text, redact_secrets_in_text
 from .home_companion_response import ResponseEvidence
 from .policy_engine import resolve_intent_entities
 from .request_authority import check_request_authority
@@ -159,13 +159,10 @@ def check_turn_context(access_key: Any, system: str, messages: list[dict]) -> bo
 
 def append_fitting_results(access_key: Any, system: str, messages: list[dict], results: list[dict],
                            append: Any) -> None:
-    """Append a round's results, withholding the largest reads the request has no room for.
+    """Append a round's results, withholding the largest reads there is no room for.
 
-    One full-size result can fill this persona's whole context and end the
-    request. A withheld read comes back as an error naming its size, so the
-    model can ask again for less. A control result is never withheld: it is the
-    evidence of what ran. If the rest still does not fit, the next round's context
-    check ends the request as before.
+    A withheld read comes back as an error naming its size. A control result is never
+    withheld, being the evidence of what ran.
     """
     start = len(messages)
     append(messages, results)
@@ -336,11 +333,7 @@ def _read_only_answer(text: str) -> dict | None:
 
 
 def invalid_read_report(access_key: Any, text: str) -> bool:
-    """Let the bounded loop correct the final formatting of a read-only answer.
-
-    Models sometimes answer a history question in plain prose; one tools-free
-    round asks for the required object instead of discarding a good answer.
-    """
+    """Return whether a read-only answer needs its one tools-free formatting round."""
     turn = _turn.get()
     return bool(internal_turn(access_key) and turn and not turn.evidence.attempts
                 and _parse_final_answer(text, turn.evidence) is None)

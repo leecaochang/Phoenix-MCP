@@ -20,6 +20,7 @@ import json
 import logging
 import uuid
 from datetime import datetime, timedelta
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -31,6 +32,7 @@ from pytest_homeassistant.components.recorder.common import async_wait_recording
 
 from custom_components.phoenix_mcp.access_key_store import AccessKeyRecord, PermissionNode, PermissionTree
 from custom_components.phoenix_mcp.data import PhoenixData
+from custom_components.phoenix_mcp.recorder_queries import _core_converts_last_reset
 from custom_components.phoenix_mcp.tool_dispatch import _call_tool
 from custom_components.phoenix_mcp.tool_defs import _ENTITY_TOOL_DEFS
 from custom_components.phoenix_mcp.version_store import VersionStore
@@ -253,11 +255,63 @@ async def test_a_metadata_failure_keeps_values_and_omits_resets(recorder_mock, h
     start = _hour_ago(6)
     _import(hass, "sensor.meter", "MWh", "energy", start, reset=_hour_ago(30))
     await async_wait_recording_done(hass)
-    with patch("homeassistant.components.recorder.statistics.get_metadata", side_effect=RuntimeError("db")):
+    with (patch("custom_components.phoenix_mcp.recorder_queries.HA_VERSION", "2026.10.4"),
+          patch("homeassistant.components.recorder.statistics.get_metadata", side_effect=RuntimeError("db"))):
         body = await _statistics(hass, "sensor.meter", start)
     assert body["units"] is None
     assert body["statistics"][0]["state"] == 1000.0 and "last_reset" not in body["statistics"][0]
     assert any("unlabelled" in warning and "last_reset was omitted" in warning for warning in body["warnings"])
+
+
+async def _statistics_reads(hass: HomeAssistant, version: str) -> tuple[dict, list[Any]]:
+    """Read a converted meter as `version` of Core, recording each query's units argument."""
+    from homeassistant.components.recorder import statistics as recorder_stats
+
+    hass.states.async_set("sensor.meter", "5", {"unit_of_measurement": "kWh", "state_class": "total"})
+    start = _hour_ago(6)
+    _import(hass, "sensor.meter", "MWh", "energy", start, reset=_hour_ago(30))
+    await async_wait_recording_done(hass)
+    real = recorder_stats.statistics_during_period
+    units: list[Any] = []
+
+    def counted(*args: Any, **kwargs: Any) -> Any:
+        units.append(args[5])
+        return real(*args, **kwargs)
+
+    with (patch("custom_components.phoenix_mcp.recorder_queries.HA_VERSION", version),
+          patch.object(recorder_stats, "statistics_during_period", counted)):
+        return await _statistics(hass, "sensor.meter", start), units
+
+
+@pytest.mark.parametrize(("version", "queries"), [("2026.10.4", 2), ("2026.11.0b6", 2), ("2026.11.0", 1), ("2026.11.1", 1), ("2027.1.0", 1)])
+async def test_only_a_release_that_converts_resets_pays_the_second_read(
+    recorder_mock, hass: HomeAssistant, version: str, queries: int,
+) -> None:
+    if queries == 1 and _core_converts_last_reset():
+        pytest.skip("this Core converts resets, so skipping the second read returns a wrong timestamp")
+    body, units = await _statistics_reads(hass, version)
+    assert len(units) == queries
+    assert units[0] is None
+    assert body["statistics"][0]["last_reset"] == _hour_ago(30).isoformat()
+
+
+async def test_a_release_with_the_fix_keeps_resets_when_metadata_fails(recorder_mock, hass: HomeAssistant) -> None:
+    if _core_converts_last_reset():
+        pytest.skip("this Core converts resets")
+    hass.states.async_set("sensor.meter", "5", {"unit_of_measurement": "kWh", "state_class": "total"})
+    start = _hour_ago(6)
+    _import(hass, "sensor.meter", "MWh", "energy", start, reset=_hour_ago(30))
+    await async_wait_recording_done(hass)
+    with (patch("custom_components.phoenix_mcp.recorder_queries.HA_VERSION", "2026.11.0"),
+          patch("homeassistant.components.recorder.statistics.get_metadata", side_effect=RuntimeError("db"))):
+        body = await _statistics(hass, "sensor.meter", start)
+    assert body["statistics"][0]["last_reset"] == _hour_ago(30).isoformat()
+    assert body["warnings"] == ["The unit could not be read from Recorder metadata, so these values are unlabelled."]
+
+
+def test_an_unreadable_core_version_keeps_the_second_read() -> None:
+    with patch("custom_components.phoenix_mcp.recorder_queries.AwesomeVersion", side_effect=ValueError):
+        assert _core_converts_last_reset() is True
 
 
 def test_the_advertised_statistic_types_are_cores() -> None:
@@ -277,7 +331,7 @@ def test_the_advertised_statistic_types_are_cores() -> None:
 async def test_an_unverified_energy_version_restore_is_reported_as_unverified(hass: HomeAssistant, energy) -> None:
     """Through the admin endpoint: a differing readback answers 409, records no version, leaves recovery partial."""
     from homeassistant.components.http.const import KEY_AUTHENTICATED, KEY_HASS_USER
-    from custom_components.phoenix_mcp.admin_view import PhoenixAdminVersionRestoreView
+    from custom_components.phoenix_mcp.admin.changes import PhoenixAdminVersionRestoreView
     from custom_components.phoenix_mcp.const import DOMAIN
 
     data = _data()

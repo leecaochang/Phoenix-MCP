@@ -31,7 +31,9 @@ from .const import (
     CONVERSATION_LOG_OUTCOMES, CONVERSATION_LOG_FLUSH_SECONDS, CONVERSATION_LOG_STATUS_PRIORITY,
     TURN_DELIVERED_EVENT,
 )
-from .helpers import RepeatedFailureLog, is_sensitive_key, log_internal_failure, redact_secrets_in_text
+from .helpers import RepeatedFailureLog, log_internal_failure
+from .policy_engine import is_sensitive_key
+from .redaction import redact_secrets_in_text
 
 _LOGGER = logging.getLogger(__name__)
 _REDACTED = "<redacted>"
@@ -60,11 +62,7 @@ def sensitive_key(key: str, service: bool = False) -> bool:
 
 
 def service_context(obj: dict, inherited: bool = False) -> bool:
-    """Whether a mapping is part of a service call, or names an alarm or lock target.
-
-    Inside one, `code` is a credential (a disarm or unlock code); elsewhere it is
-    usually a protocol or error code worth keeping readable.
-    """
+    """Return whether a mapping is a service call or names an alarm or lock target."""
     return inherited or isinstance(obj.get("service"), (str, dict)) or (
         isinstance(obj.get("action"), str) and obj["action"].startswith(("alarm_control_panel.", "lock."))
     ) or _names_guarded_domain(obj.get("domain"))
@@ -91,11 +89,7 @@ def redact_device_codes(value: Any, _service: bool = False, _depth: int = 0) -> 
 
 
 def _names_guarded_domain(value: Any) -> bool:
-    """Whether a `domain` value names an alarm or lock domain, alone or in a list.
-
-    Tools accept a list of domains, and an unhashable value must not end
-    sanitization: that would drop the whole event from the log.
-    """
+    """Return whether a ``domain`` value names an alarm or lock domain."""
     names = value if isinstance(value, (list, tuple)) else [value]
     return any(isinstance(name, str) and name in {"alarm_control_panel", "lock"} for name in names)
 
@@ -119,11 +113,8 @@ def sanitized(
 ) -> Any:
     """Copy supported data through bounded redaction; never stringify unknown objects.
 
-    `service` treats all of `value` as service context, for a caller that clipped
-    it and so may have removed the words that would mark it as one. `text_chars`
-    cuts each longer string before scanning, on the same terms, and marks the cut.
-    A caller on the event loop that keeps only a bounded part sets it, so the size
-    of an argument cannot decide how long the loop stalls.
+    ``service`` treats all of ``value`` as service context, for clipped input. ``text_chars``
+    cuts each longer string before scanning, so size cannot decide how long the loop stalls.
     """
     remaining = max_bytes
     nodes = 0
@@ -620,7 +611,7 @@ class ConversationLog:
             return
         self.event(handle, "approval_resolved" if resolved else "approval_requested", {
             "approval_id": approval.id, "tool_name": approval.tool_name, "status": approval.status,
-            "diff": approval.diff, "result": approval.result, "reason": approval.rejected_reason,
+            "diff": approval.diff, "result": approval.result, "reason": approval.closure_reason,
         })
 
     @contextmanager

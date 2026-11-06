@@ -1,15 +1,8 @@
 """Access-key-scoped wrappers around the vendored mesa-core retrieval tools.
 
-mesa-core ships the four retrieval handlers (mesa_query_profiles,
-mesa_get_profile, mesa_explain_profile, mesa_get_caller_context). Phoenix MCP does not
-reimplement them; it builds a per-request ScopedProfileStore so the handlers
-only ever see entities the access key may read, then delegates to mesa-core. This
-keeps total_matched counts, pagination cursors, and the fingerprint all
-scope-relative so there is no entity-enumeration oracle.
-
-Out-of-scope and ghost entity lookups return the byte-identical mesa-core
-not_found envelope, so an inaccessible entity is indistinguishable from a
-nonexistent one.
+A per-request ScopedProfileStore shows the four handlers only entities the key may read, so
+counts, cursors and fingerprints stay scope-relative. Out-of-scope and ghost lookups return
+the identical not_found envelope.
 """
 
 from __future__ import annotations
@@ -25,7 +18,8 @@ from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
 from .const import CAP_DENY, MAX_PREVIEW_ENTITY_IDS
-from .helpers import effective_cap, redact_inaccessible_entity_ids_in_text
+from .capability import effective_cap
+from .redaction import redact_inaccessible_entity_ids_in_text
 from .mesa import async_semantic_moments, build_caller_context
 from .mesa_core import InheritanceResolver, ProfileQueryResult, ProfileStore
 from .mesa_core.mcp.schemas import TOOL_DESCRIPTIONS, TOOL_SCHEMAS
@@ -42,17 +36,10 @@ if TYPE_CHECKING:
 # Tools whose entity_id argument must be scope-checked before the handler runs.
 _ENTITY_TARGETED = frozenset({"mesa_get_profile", "mesa_explain_profile"})
 
-# The advisory-lease tools. The MCP transport is stateless (session_id is
-# normally the per-request id), which would make every lease call a different
-# session and release or refresh impossible, so these two run with
-# session_id = access_key.id: a lease belongs to the ACCESS KEY, stable across stateless
-# calls, and mesa-core's session matching isolates access keys from each other's leases.
-#
-# A lease therefore excludes OTHER ACCESS KEYS, not other callers of the same access key:
-# mesa-core treats same-session overlap as a REFRESH and grants it, so two agents
-# sharing one access key do not exclude each other. That matches the one-access-key-per-
-# connected-agent model, where the access key is the unit of work that can be
-# interrupted.
+# The advisory-lease tools. They run with session_id = access_key.id, as the stateless
+# transport's per-request id would make release or refresh impossible. A lease therefore
+# excludes other keys, not other callers of one key: mesa-core treats same-session overlap
+# as a refresh, matching the one-key-per-agent model.
 _LEASE_TOOLS = frozenset({"mesa_request_lease", "mesa_release_lease"})
 
 # All six mesa_* tools (four retrieval plus the two lease tools) are gated by
@@ -141,21 +128,9 @@ def _is_visible(entity_id: str, access_key: AccessKeyRecord, hass: HomeAssistant
 class ScopedProfileStore:
     """A read-only ProfileStore view filtered to one access key's permission scope.
 
-    Entity-level reads are hidden when the access key cannot read the entity, so the
-    delegated mesa-core handlers and resolver never observe out-of-scope entities.
-    The device, area, integration and domain layers and the deployment defaults pass
-    through UNFILTERED, and that is load-bearing: every inheritance layer only
-    tightens (loosening overrides are valid at entity scope only), so hiding a layer
-    could only yield a MORE permissive profile than the operator authored. Filter on
-    which ENTITIES a caller may address, never on which layers contribute to one.
-
-    Resolution discloses nothing new, since the caller already receives the merged
-    profile for entities it can see. The confidentiality surface is ENUMERATION:
-    device_keys / area_keys / integration_keys can name objects without a visible
-    entity, so none is exposed; if one is needed, filter it to keys with a visible
-    entity. Visibility is decided once, on the event loop, when the view is built:
-    mesa-core resolves in a worker thread, where HA's Assist exposure lookup cannot
-    run and the scope check would fail closed for an exposure-filtered access key.
+    Entity reads are hidden; inheritance layers pass through unfiltered, since they only
+    tighten and hiding one could loosen a profile. device_keys, area_keys and integration_keys
+    are not exposed, as they could enumerate. Visibility is decided once, on the event loop.
     """
 
     def __init__(self, inner, access_key: AccessKeyRecord, hass: HomeAssistant) -> None:
@@ -210,14 +185,7 @@ class ScopedProfileStore:
         return digest.hexdigest()[:16]
 
     def query(self, **kwargs: Any) -> ProfileQueryResult:
-        """Run mesa-core's profile query over this scoped view.
-
-        mesa-core's MesaToolHandlers delegates mesa_query_profiles to
-        store.query(); driving the real ProfileStore.query with this scoped
-        store as self keeps total_matched, the cursor, and the fingerprint all
-        scope-relative (no entity-enumeration oracle). The handler always passes
-        a scoped resolver; _default_resolver mirrors it for the no-resolver path.
-        """
+        """Run mesa-core's profile query over this view, keeping results scope-relative."""
         return ProfileStore.query(self, **kwargs)  # type: ignore[arg-type]  # ScopedProfileStore duck-types ProfileStore's read surface by design; mesa_core is read-only so it cannot declare a Protocol
 
     def _default_resolver(self) -> InheritanceResolver:
@@ -240,13 +208,9 @@ def authored_restrictions(
     *,
     limit: int = MAX_PREVIEW_ENTITY_IDS,
 ) -> dict[str, Any]:
-    """Scope-relative summary of ADMIN-AUTHORED entity profiles, for get_overview.
+    """Return a scope-relative summary of admin-authored entity profiles, for get_overview.
 
-    Iterates only entities with a stored (operator-authored) profile via the
-    scoped store, never baseline-derived modes, so the rollup reflects operator
-    intent rather than domain defaults (a plain control_mode count would be
-    dominated by them). ScopedProfileStore hides out-of-scope authored entities,
-    so this is not an enumeration oracle.
+    Reads only stored profiles through the scoped store, so domain defaults do not dominate.
     """
     scoped = ScopedProfileStore(runtime.store, access_key, hass)
     by_mode: dict[str, int] = {}
@@ -284,18 +248,8 @@ def authored_restrictions(
 def _build_validity_context(hass: HomeAssistant) -> Callable[[str], dict[str, Any]]:
     """Return the per-entity context that decides whether a profile is still valid.
 
-    A profile can declare what would invalidate it: an entity it depends on
-    disappearing, or the integration or Home Assistant version moving past what it
-    was authored against. Only the host can evaluate those, so without this
-    callback an invalidated profile keeps reporting itself current.
-
-    The callback is SYNCHRONOUS and runs once per entity, so the registry union is
-    computed once here and closed over; the per-entity lookup is one registry read.
-    ``known_entity_ids`` must be COMPLETE, because anything missing from it reads
-    as a removed entity and falsely invalidates: the registry omits entities with
-    no unique ID and the state machine omits disabled ones. It must also be
-    REUSABLE rather than a generator, since it is read once per entity and a
-    one-shot iterable would be drained by the first row.
+    Synchronous, once per entity, so the registry union is built here. ``known_entity_ids``
+    must be complete, as a missing id reads as removed, and reusable, not a generator.
     """
     registry = er_mod.async_get(hass)
     known = frozenset(registry.entities) | frozenset(hass.states.async_entity_ids())
@@ -316,14 +270,9 @@ def _build_validity_context(hass: HomeAssistant) -> Callable[[str], dict[str, An
 
 
 def _integration_version(hass: HomeAssistant, entity_id: str) -> str | None:
-    """The version of the integration that created this entity, when it has one.
+    """Return the version of the integration that created this entity, when it has one.
 
-    Home Assistant requires ``version`` in a manifest only for CUSTOM integrations,
-    so a core-integration entity has none and the key is omitted rather than
-    filled with a stand-in: an invented value would either never match
-    (invalidating every such profile) or always match (never invalidating one). A
-    profile for a core entity pins ha_version instead. Fails quiet: this only
-    decides whether one advisory field is present.
+    Core integrations declare none, so the key is omitted, never invented. Fails quiet.
     """
     try:
         entry = er_mod.async_get(hass).async_get(entity_id)
@@ -373,12 +322,10 @@ def _is_error_envelope(result: Any) -> bool:
 
 
 def _scope_lease_result(result: Any, access_key: AccessKeyRecord, hass: HomeAssistant) -> Any:
-    """Remove automations the access key cannot read from a lease response.
+    """Remove automations the key cannot read from a lease response.
 
-    mesa-core's own scrub walks the store it is handed, and the scoped store never
-    lists an out-of-scope automation, while the shared lease manager still checks
-    every protected one. The response therefore has to be scoped here, including
-    the copy a total refusal carries in its error details.
+    The shared lease manager checks every protected automation, while mesa-core's scrub sees
+    the scoped store, so this also covers the copy in a refusal's error details.
     """
     if not isinstance(result, dict):
         return result

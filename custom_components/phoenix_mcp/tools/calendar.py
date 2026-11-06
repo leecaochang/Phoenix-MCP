@@ -24,10 +24,10 @@ from ..const import (
 )
 from ..data import PhoenixData
 from ..durable_storage import DurableStore
-from ..helpers import (
-    content_hash, effective_cap, diff_summary_fields, parse_time_param as _parse_time_param,
-    redact_inaccessible_entity_ids_in_text, redact_structure,
-)
+from ..helpers import content_hash, parse_time_param as _parse_time_param
+from ..catalog_text import diff_summary_fields
+from ..capability import effective_cap
+from ..redaction import redact_inaccessible_entity_ids_in_text, redact_structure
 from ..mesa import async_apply_mesa_to_call
 from ..policy_engine import Permission, resolve, resolve_read
 from ..request_authority import AuthorityChangedError, check_request_authority, dispatch_request_id, mark_dispatch_started
@@ -582,11 +582,8 @@ async def _calendar_events_many(
 ) -> tuple[dict, str, str]:
     """Events from several calendars, or every readable one, merged in start order.
 
-    "What is on all my calendars this week" is then one call. Each event names
-    its calendar; its content_hash is the single-calendar one, so a write can use
-    it unchanged. A calendar that cannot be read is reported in unreadable rather
-    than failing the others, and a page that would not fit one result continues
-    at next_offset.
+    Each event names its calendar and keeps its single-calendar content_hash. An unreadable calendar
+    lands in unreadable; a page that does not fit continues at next_offset.
     """
     tool = "get_calendar_events"
     if raw is not None and (not raw or len(raw) > SEARCH_ENTITIES_MAX_LIMIT

@@ -22,6 +22,8 @@ from .routing_tables import (
     COMMAND_ROUTING_TEMPORAL_OPERATIONS, COMMAND_ROUTING_ENTITY_INTENTS,
     COMMAND_ROUTING_READ_INTENTS,
 )
+from ..entity_commands import finite_number, entity_arguments, supports_entity_command
+from .temporal_values import temporal_arguments, temporal_supports
 
 
 @dataclass(frozen=True)
@@ -67,10 +69,8 @@ def supports_command(state: State, intent: str) -> bool:
     if intent in ("HassGetState", "PhoenixStateSummary"):
         return True
     if intent in COMMAND_ROUTING_TEMPORAL_OPERATIONS:
-        from .temporal_values import temporal_supports
         return temporal_supports(state, intent)
     if intent in COMMAND_ROUTING_ENTITY_INTENTS:
-        from ..entity_commands import supports_entity_command
         return supports_entity_command(state, intent)
     if state.domain != command_domain(intent):
         return False
@@ -99,12 +99,6 @@ def supports_command(state: State, intent: str) -> bool:
                 and supported >= 0 and bool(supported & feature)):
             return False
     return numeric_limits(state, intent) is not None
-
-
-def finite_number(value: Any) -> TypeGuard[int | float]:
-    """Bound huge integers before float conversion; never coerce strings or booleans."""
-    return (isinstance(value, (int, float)) and not isinstance(value, bool)
-            and -1e100 < value < 1e100 and math.isfinite(value))
 
 
 def numeric_limits(state: State, intent: str) -> tuple[int | float, int | float, int | float | None] | None:
@@ -167,10 +161,8 @@ def service_arguments(proposal: dict) -> dict | None:
     if not isinstance(intent, str):
         return None
     if intent in COMMAND_ROUTING_ENTITY_INTENTS:
-        from ..entity_commands import entity_arguments
         return entity_arguments(proposal)
     if intent in COMMAND_ROUTING_TEMPORAL_OPERATIONS:
-        from .temporal_values import temporal_arguments
         return temporal_arguments(proposal)
     domain = command_domain(intent)
     ids = proposal.get("entity_ids")

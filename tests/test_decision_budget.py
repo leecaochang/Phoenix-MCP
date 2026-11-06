@@ -8,11 +8,12 @@ import pytest
 from aiohttp import ClientSession, web
 from aiohttp.test_utils import TestServer
 
-from custom_components.phoenix_mcp.admin_view import _validated_settings_patch
+from custom_components.phoenix_mcp.admin.settings import _validated_settings_patch
 from custom_components.phoenix_mcp.llm.accounts import ProviderConfig
 from custom_components.phoenix_mcp.routing.decision_budget import DecisionBudgetError, DecisionRequestBudget
 from custom_components.phoenix_mcp.routing.decision_metrics import DecisionMetrics
-from custom_components.phoenix_mcp.routing.decision_provider import DecisionError, DecisionProvider
+from custom_components.phoenix_mcp.routing.decision_types import DecisionError
+from custom_components.phoenix_mcp.routing.decision_provider import DecisionProvider
 
 
 class MemoryStore:

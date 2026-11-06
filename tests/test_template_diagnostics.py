@@ -16,7 +16,7 @@ from custom_components.phoenix_mcp.const import TEMPLATE_FAILURE_MESSAGES
 from custom_components.phoenix_mcp.template_limits import (
     TEMPLATE_DIAGNOSTIC_BYTES, TEMPLATE_DIAGNOSTIC_MESSAGE_CHARS, TEMPLATE_DIAGNOSTIC_SOURCE_CHARS,
 )
-from custom_components.phoenix_mcp.helpers import render_template_snapshot
+from custom_components.phoenix_mcp.template_sandbox import render_template_snapshot
 from custom_components.phoenix_mcp.template_diagnostics import (
     TemplateOutputLimitError,
     describe_template_failure,
@@ -55,7 +55,7 @@ def test_real_template_failures_have_original_source_locations(template, kind, l
 
 def test_runtime_diagnostic_does_not_echo_state_values():
     from homeassistant.core import State
-    from custom_components.phoenix_mcp.helpers import ScrubbedState
+    from custom_components.phoenix_mcp.template_sandbox import ScrubbedState
 
     state = ScrubbedState(State('sensor.allowed', 'private-value-never-return'))
     detail, text = _diagnose("{{ states('sensor.allowed') | int }}", {state.entity_id: state})

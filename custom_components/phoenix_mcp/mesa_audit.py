@@ -1,22 +1,12 @@
 """Tail mesa-core's audit events into Phoenix MCP's own audit log.
 
-mesa-core emits one event dict per decision on the ``mesa_core.audit`` logger
-(payload on the record's ``mesa_audit_event`` attribute). Phoenix MCP records its
-OWN outcome for a call, so without this the Audit tab never shows which entity
-MESA stopped or under which rule.
+mesa-core emits one event per decision on the ``mesa_core.audit`` logger, so the Audit tab can
+show which entity MESA stopped and under which rule.
 
-Two deliberate limits keep the tab worth reading. 1. DENIALS ONLY, and only those
-PHOENIX honored: allowed traffic would flood the ring buffer, and
-``control_mode:confirm_no_channel`` (``_NOT_A_DENIAL_RULES``) is labelled
-"blocked" because the enforcer runs with interactive=False, but Phoenix always
-reinterprets it host-side (advisory warns, enforced raises its own approval), so
-it is never a Phoenix denial. 2. THE LOGGER'S LEVEL IS UNCHANGED (mesa-core
-defaults it to INFO): an operator raising it can suppress rows, so an empty trail
-does not prove no denial occurred, and the operator Guide says so.
-
-Rows are attributed to the request that provoked them through a ContextVar set by
-the actuation gate, registry gate, MESA-tool adapter and camera privacy check; with
-no context set (a preview) an event is dropped.
+Only denials Phoenix honored are kept: ``control_mode:confirm_no_channel`` is reinterpreted
+host-side, so it is never one. The logger's level is left alone, so an empty trail proves
+nothing. A ContextVar set by each gate attributes rows to their request; with no context an
+event is dropped.
 """
 
 from __future__ import annotations
@@ -211,8 +201,7 @@ def attach_mesa_audit_bridge(data: PhoenixData) -> MesaAuditBridge:
 
 
 def detach_mesa_audit_bridge(bridge: MesaAuditBridge | None) -> None:
-    """Stop recording. Safe to call twice, so a config-entry reload cannot stack
-    handlers and multiply every future row."""
+    """Stop recording. Safe to call twice, so a reload cannot stack handlers."""
     if bridge is None:
         return
     audit_logger.removeHandler(bridge)

@@ -33,8 +33,8 @@ from homeassistant.util.dt import utcnow
 
 APPROVE = "/api/phoenix-mcp/admin/approvals/{}/approve"
 LIST = "/api/phoenix-mcp/admin/approvals"
-EXECUTOR = "custom_components.phoenix_mcp.admin_view.async_execute_approved_tool"
-CLAIM_EVENT = "custom_components.phoenix_mcp.admin_view.fire_approval_claim_event"
+EXECUTOR = "custom_components.phoenix_mcp.admin.approvals.async_execute_approved_tool"
+CLAIM_EVENT = "custom_components.phoenix_mcp.admin.approvals.fire_approval_claim_event"
 OK = ({"content": [{"type": "text", "text": "ok"}]}, "allowed", "restart_ha")
 
 
@@ -119,7 +119,7 @@ async def test_cancel_during_dispatch_resolves_failed_and_is_never_offered_again
     await hass.async_block_till_done()
     assert record.id not in data.approvals_in_progress
     closed = get_approval(data.store, record.id)
-    assert closed.status == STATUS_FAILED and closed.rejected_reason == "execution_interrupted"
+    assert closed.status == STATUS_FAILED and closed.closure_reason == "execution_interrupted"
     assert [event.data["approval_id"] for event in resolved] == [record.id]
 
     with patch(EXECUTOR, AsyncMock(return_value=OK)) as executor:

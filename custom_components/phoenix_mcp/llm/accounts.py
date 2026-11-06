@@ -19,22 +19,22 @@ from homeassistant.util.dt import parse_datetime, utcnow
 
 from ..model_selection import effective_model
 from ..provider_constants import (
-    AGENTCLI_CEREBRAS_BASE_URL, AGENTCLI_CLAUDE_BASE_URL, AGENTCLI_DEEPSEEK_BASE_URL,
-    AGENTCLI_FIREWORKS_BASE_URL, AGENTCLI_GEMINI_BASE_URL, AGENTCLI_GROK_BASE_URL,
-    AGENTCLI_GROK_US_BASE_URL, AGENTCLI_GROQ_BASE_URL, AGENTCLI_KIMI_BASE_URL,
-    AGENTCLI_KIMI_CHINA_BASE_URL, AGENTCLI_LEARNABLE_OPTIONS, AGENTCLI_LEARNED_REFUSAL_TTL_DAYS,
-    AGENTCLI_MAX_TOOLS_PER_REQUEST, AGENTCLI_META_BASE_URL, AGENTCLI_MIMO_BASE_URL,
-    AGENTCLI_MIMO_TOKEN_PLAN_AMS_BASE_URL, AGENTCLI_MIMO_TOKEN_PLAN_BASE_URL,
-    AGENTCLI_MIMO_TOKEN_PLAN_SGP_BASE_URL, AGENTCLI_MINIMAX_BASE_URL,
-    AGENTCLI_MINIMAX_CHINA_BASE_URL, AGENTCLI_MISTRAL_BASE_URL, AGENTCLI_MISTRAL_EU_BASE_URL,
-    AGENTCLI_MISTRAL_US_BASE_URL, AGENTCLI_NVIDIA_BASE_URL, AGENTCLI_OLLAMA_CLOUD_BASE_URL,
-    AGENTCLI_OPENAI_BASE_URL, AGENTCLI_OPENAI_EU_BASE_URL, AGENTCLI_OPENAI_REGION_PREFIXES,
-    AGENTCLI_OPENAI_US_BASE_URL, AGENTCLI_OPENCODE_BASE_URL, AGENTCLI_OPENCODE_CONSOLE_BASE_URL,
-    AGENTCLI_OPENCODE_CONSOLE_MODELS_URL, AGENTCLI_OPENROUTER_BASE_URL,
-    AGENTCLI_SECRETS_STORAGE_KEY, AGENTCLI_SECRETS_STORAGE_VERSION,
-    AGENTCLI_TENCENT_GUANGZHOU_BASE_URL, AGENTCLI_TENCENT_SINGAPORE_BASE_URL,
-    AGENTCLI_TENCENT_US_BASE_URL, AGENTCLI_TOGETHER_BASE_URL, AGENTCLI_ZAI_BASE_URL,
-    AGENTCLI_ZAI_CHINA_BASE_URL, AGENTCLI_ZAI_CODING_BASE_URL,
+    AGENT_CHAT_CEREBRAS_BASE_URL, AGENT_CHAT_CLAUDE_BASE_URL, AGENT_CHAT_DEEPSEEK_BASE_URL,
+    AGENT_CHAT_FIREWORKS_BASE_URL, AGENT_CHAT_GEMINI_BASE_URL, AGENT_CHAT_GROK_BASE_URL,
+    AGENT_CHAT_GROK_US_BASE_URL, AGENT_CHAT_GROQ_BASE_URL, AGENT_CHAT_KIMI_BASE_URL,
+    AGENT_CHAT_KIMI_CHINA_BASE_URL, AGENT_CHAT_LEARNABLE_OPTIONS, AGENT_CHAT_LEARNED_REFUSAL_TTL_DAYS,
+    AGENT_CHAT_MAX_TOOLS_PER_REQUEST, AGENT_CHAT_META_BASE_URL, AGENT_CHAT_MIMO_BASE_URL,
+    AGENT_CHAT_MIMO_TOKEN_PLAN_AMS_BASE_URL, AGENT_CHAT_MIMO_TOKEN_PLAN_BASE_URL,
+    AGENT_CHAT_MIMO_TOKEN_PLAN_SGP_BASE_URL, AGENT_CHAT_MINIMAX_BASE_URL,
+    AGENT_CHAT_MINIMAX_CHINA_BASE_URL, AGENT_CHAT_MISTRAL_BASE_URL, AGENT_CHAT_MISTRAL_EU_BASE_URL,
+    AGENT_CHAT_MISTRAL_US_BASE_URL, AGENT_CHAT_NVIDIA_BASE_URL, AGENT_CHAT_OLLAMA_CLOUD_BASE_URL,
+    AGENT_CHAT_OPENAI_BASE_URL, AGENT_CHAT_OPENAI_EU_BASE_URL, AGENT_CHAT_OPENAI_REGION_PREFIXES,
+    AGENT_CHAT_OPENAI_US_BASE_URL, AGENT_CHAT_OPENCODE_BASE_URL, AGENT_CHAT_OPENCODE_CONSOLE_BASE_URL,
+    AGENT_CHAT_OPENCODE_CONSOLE_MODELS_URL, AGENT_CHAT_OPENROUTER_BASE_URL,
+    AGENT_CHAT_SECRETS_STORAGE_KEY, AGENT_CHAT_SECRETS_STORAGE_VERSION,
+    AGENT_CHAT_TENCENT_GUANGZHOU_BASE_URL, AGENT_CHAT_TENCENT_SINGAPORE_BASE_URL,
+    AGENT_CHAT_TENCENT_US_BASE_URL, AGENT_CHAT_TOGETHER_BASE_URL, AGENT_CHAT_ZAI_BASE_URL,
+    AGENT_CHAT_ZAI_CHINA_BASE_URL, AGENT_CHAT_ZAI_CODING_BASE_URL,
 )
 from ..routing.routing_tables import DECISION_TYPESAFE_BASE_URL, DECISION_TYPESAFE_MODEL
 
@@ -157,15 +157,15 @@ _QWEN_URL_FIELD = ProviderField(
 _ZAI_ENDPOINTS = (
     ProviderChoice(
         "standard", "Standard API", "settings.agentcliZaiStandard",
-        AGENTCLI_ZAI_BASE_URL,
+        AGENT_CHAT_ZAI_BASE_URL,
     ),
     ProviderChoice(
         "coding", "Coding Plan", "settings.agentcliZaiCoding",
-        AGENTCLI_ZAI_CODING_BASE_URL,
+        AGENT_CHAT_ZAI_CODING_BASE_URL,
     ),
     ProviderChoice(
         "china", "China (BigModel)", "settings.agentcliZaiChina",
-        AGENTCLI_ZAI_CHINA_BASE_URL,
+        AGENT_CHAT_ZAI_CHINA_BASE_URL,
     ),
 )
 _ZAI_ENDPOINT_FIELD = ProviderField(
@@ -174,9 +174,9 @@ _ZAI_ENDPOINT_FIELD = ProviderField(
 )
 
 _TENCENT_ENDPOINTS = (
-    ProviderChoice("singapore", "Singapore", "settings.agentcliSingapore", AGENTCLI_TENCENT_SINGAPORE_BASE_URL),
-    ProviderChoice("guangzhou", "Guangzhou", "settings.agentcliGuangzhou", AGENTCLI_TENCENT_GUANGZHOU_BASE_URL),
-    ProviderChoice("silicon_valley", "Silicon Valley", "settings.agentcliSiliconValley", AGENTCLI_TENCENT_US_BASE_URL),
+    ProviderChoice("singapore", "Singapore", "settings.agentcliSingapore", AGENT_CHAT_TENCENT_SINGAPORE_BASE_URL),
+    ProviderChoice("guangzhou", "Guangzhou", "settings.agentcliGuangzhou", AGENT_CHAT_TENCENT_GUANGZHOU_BASE_URL),
+    ProviderChoice("silicon_valley", "Silicon Valley", "settings.agentcliSiliconValley", AGENT_CHAT_TENCENT_US_BASE_URL),
 )
 _TENCENT_ENDPOINT_FIELD = ProviderField(
     "endpoint_id", "choice", "settings.agentcliSite", choices=_TENCENT_ENDPOINTS,
@@ -188,13 +188,13 @@ def _region_field(choices: tuple[ProviderChoice, ...]) -> ProviderField:
 
 _GLOBAL = ("global", "Global", "settings.agentcliRegionGlobal")
 _KIMI_ENDPOINTS = (
-    ProviderChoice(*_GLOBAL, AGENTCLI_KIMI_BASE_URL),
-    ProviderChoice("china", "China", "settings.agentcliRegionChina", AGENTCLI_KIMI_CHINA_BASE_URL),
+    ProviderChoice(*_GLOBAL, AGENT_CHAT_KIMI_BASE_URL),
+    ProviderChoice("china", "China", "settings.agentcliRegionChina", AGENT_CHAT_KIMI_CHINA_BASE_URL),
 )
 _MISTRAL_ENDPOINTS = (
-    ProviderChoice(*_GLOBAL, AGENTCLI_MISTRAL_BASE_URL),
-    ProviderChoice("eu", "Europe", "settings.agentcliRegionEu", AGENTCLI_MISTRAL_EU_BASE_URL),
-    ProviderChoice("us", "United States", "settings.agentcliRegionUs", AGENTCLI_MISTRAL_US_BASE_URL),
+    ProviderChoice(*_GLOBAL, AGENT_CHAT_MISTRAL_BASE_URL),
+    ProviderChoice("eu", "Europe", "settings.agentcliRegionEu", AGENT_CHAT_MISTRAL_EU_BASE_URL),
+    ProviderChoice("us", "United States", "settings.agentcliRegionUs", AGENT_CHAT_MISTRAL_US_BASE_URL),
 )
 _OPENAI_REGION_NAMES = {
     "ae": ("United Arab Emirates", "settings.agentcliRegionAe"), "au": ("Australia", "settings.agentcliRegionAu"),
@@ -203,34 +203,34 @@ _OPENAI_REGION_NAMES = {
     "kr": ("South Korea", "settings.agentcliRegionKr"), "gb": ("United Kingdom", "settings.agentcliRegionGb"),
 }
 _OPENAI_ENDPOINTS = (
-    ProviderChoice(*_GLOBAL, AGENTCLI_OPENAI_BASE_URL),
-    ProviderChoice("us", "United States", "settings.agentcliRegionUs", AGENTCLI_OPENAI_US_BASE_URL),
-    ProviderChoice("eu", "Europe", "settings.agentcliRegionEu", AGENTCLI_OPENAI_EU_BASE_URL),
+    ProviderChoice(*_GLOBAL, AGENT_CHAT_OPENAI_BASE_URL),
+    ProviderChoice("us", "United States", "settings.agentcliRegionUs", AGENT_CHAT_OPENAI_US_BASE_URL),
+    ProviderChoice("eu", "Europe", "settings.agentcliRegionEu", AGENT_CHAT_OPENAI_EU_BASE_URL),
     *(ProviderChoice(prefix, *_OPENAI_REGION_NAMES[prefix], f"https://{prefix}.api.openai.com/v1")
-      for prefix in AGENTCLI_OPENAI_REGION_PREFIXES),
+      for prefix in AGENT_CHAT_OPENAI_REGION_PREFIXES),
 )
 _MINIMAX_ENDPOINTS = (
-    ProviderChoice(*_GLOBAL, AGENTCLI_MINIMAX_BASE_URL),
-    ProviderChoice("china", "China", "settings.agentcliRegionChina", AGENTCLI_MINIMAX_CHINA_BASE_URL),
+    ProviderChoice(*_GLOBAL, AGENT_CHAT_MINIMAX_BASE_URL),
+    ProviderChoice("china", "China", "settings.agentcliRegionChina", AGENT_CHAT_MINIMAX_CHINA_BASE_URL),
 )
 _GROK_ENDPOINTS = (
-    ProviderChoice(*_GLOBAL, AGENTCLI_GROK_BASE_URL),
-    ProviderChoice("us", "United States", "settings.agentcliRegionUs", AGENTCLI_GROK_US_BASE_URL),
+    ProviderChoice(*_GLOBAL, AGENT_CHAT_GROK_BASE_URL),
+    ProviderChoice("us", "United States", "settings.agentcliRegionUs", AGENT_CHAT_GROK_US_BASE_URL),
 )
 _MIMO_ENDPOINTS = (
-    ProviderChoice("payg", "Pay as you go", "settings.agentcliMimoPayg", AGENTCLI_MIMO_BASE_URL),
-    ProviderChoice("token_plan", "Token Plan (China)", "settings.agentcliMimoTokenPlan", AGENTCLI_MIMO_TOKEN_PLAN_BASE_URL),
+    ProviderChoice("payg", "Pay as you go", "settings.agentcliMimoPayg", AGENT_CHAT_MIMO_BASE_URL),
+    ProviderChoice("token_plan", "Token Plan (China)", "settings.agentcliMimoTokenPlan", AGENT_CHAT_MIMO_TOKEN_PLAN_BASE_URL),
     # A Token Plan key works only on the host its subscription page names.
     ProviderChoice("token_plan_sgp", "Token Plan (Singapore)", "settings.agentcliMimoTokenPlanSingapore",
-                   AGENTCLI_MIMO_TOKEN_PLAN_SGP_BASE_URL),
+                   AGENT_CHAT_MIMO_TOKEN_PLAN_SGP_BASE_URL),
     ProviderChoice("token_plan_ams", "Token Plan (Europe)", "settings.agentcliMimoTokenPlanEurope",
-                   AGENTCLI_MIMO_TOKEN_PLAN_AMS_BASE_URL),
+                   AGENT_CHAT_MIMO_TOKEN_PLAN_AMS_BASE_URL),
 )
 _OPENCODE_ENDPOINTS = (
-    ProviderChoice("zen", "Zen (legacy)", "settings.agentcliOpenCodeZen", AGENTCLI_OPENCODE_BASE_URL),
+    ProviderChoice("zen", "Zen (legacy)", "settings.agentcliOpenCodeZen", AGENT_CHAT_OPENCODE_BASE_URL),
     ProviderChoice(
         "console", "Console", "settings.agentcliOpenCodeConsole",
-        AGENTCLI_OPENCODE_CONSOLE_BASE_URL, AGENTCLI_OPENCODE_CONSOLE_MODELS_URL,
+        AGENT_CHAT_OPENCODE_CONSOLE_BASE_URL, AGENT_CHAT_OPENCODE_CONSOLE_MODELS_URL,
     ),
 )
 
@@ -279,64 +279,64 @@ def _definition(
 
 PROVIDER_DEFINITIONS: dict[str, ProviderDefinition] = {
     item.kind: item for item in (
-        _definition("claude", "Anthropic", AGENTCLI_CLAUDE_BASE_URL, adapter="anthropic"),
-        _definition("deepseek", "DeepSeek", AGENTCLI_DEEPSEEK_BASE_URL, include_usage=True, reasoning="deepseek"),
+        _definition("claude", "Anthropic", AGENT_CHAT_CLAUDE_BASE_URL, adapter="anthropic"),
+        _definition("deepseek", "DeepSeek", AGENT_CHAT_DEEPSEEK_BASE_URL, include_usage=True, reasoning="deepseek"),
         _definition(
-            "chatgpt", "OpenAI", AGENTCLI_OPENAI_BASE_URL, adapter="openai_responses", include_usage=True,
+            "chatgpt", "OpenAI", AGENT_CHAT_OPENAI_BASE_URL, adapter="openai_responses", include_usage=True,
             model_filter="openai",
             fields=(_region_field(_OPENAI_ENDPOINTS), _API_KEY_FIELD), endpoints=_OPENAI_ENDPOINTS,
-            max_tools=AGENTCLI_MAX_TOOLS_PER_REQUEST,
+            max_tools=AGENT_CHAT_MAX_TOOLS_PER_REQUEST,
         ),
-        _definition("gemini", "Gemini", AGENTCLI_GEMINI_BASE_URL, reasoning="gemini", model_filter="gemini",
-                    tool_stream="gemini", max_tools=AGENTCLI_MAX_TOOLS_PER_REQUEST),
+        _definition("gemini", "Gemini", AGENT_CHAT_GEMINI_BASE_URL, reasoning="gemini", model_filter="gemini",
+                    tool_stream="gemini", max_tools=AGENT_CHAT_MAX_TOOLS_PER_REQUEST),
         _definition(
-            "grok", "Grok", AGENTCLI_GROK_BASE_URL,
+            "grok", "Grok", AGENT_CHAT_GROK_BASE_URL,
             fields=(_region_field(_GROK_ENDPOINTS), _API_KEY_FIELD), endpoints=_GROK_ENDPOINTS,
         ),
-        _definition("groq", "Groq", AGENTCLI_GROQ_BASE_URL, include_usage=True,
-                    max_tools=AGENTCLI_MAX_TOOLS_PER_REQUEST),
+        _definition("groq", "Groq", AGENT_CHAT_GROQ_BASE_URL, include_usage=True,
+                    max_tools=AGENT_CHAT_MAX_TOOLS_PER_REQUEST),
         _definition(
-            "kimi", "Kimi", AGENTCLI_KIMI_BASE_URL, include_usage=True, reasoning="kimi",
+            "kimi", "Kimi", AGENT_CHAT_KIMI_BASE_URL, include_usage=True, reasoning="kimi",
             fields=(_region_field(_KIMI_ENDPOINTS), _API_KEY_FIELD), endpoints=_KIMI_ENDPOINTS,
-            max_tools=AGENTCLI_MAX_TOOLS_PER_REQUEST,
+            max_tools=AGENT_CHAT_MAX_TOOLS_PER_REQUEST,
         ),
-        _definition("meta", "Meta", AGENTCLI_META_BASE_URL, reasoning="meta", model_filter="meta"),
-        _definition("minimax", "MiniMax", AGENTCLI_MINIMAX_BASE_URL, adapter="anthropic",
+        _definition("meta", "Meta", AGENT_CHAT_META_BASE_URL, reasoning="meta", model_filter="meta"),
+        _definition("minimax", "MiniMax", AGENT_CHAT_MINIMAX_BASE_URL, adapter="anthropic",
                     fields=(_region_field(_MINIMAX_ENDPOINTS), _API_KEY_FIELD), endpoints=_MINIMAX_ENDPOINTS),
         _definition(
-            "mistral", "Mistral AI", AGENTCLI_MISTRAL_BASE_URL, reasoning="mistral", model_filter="mistral",
+            "mistral", "Mistral AI", AGENT_CHAT_MISTRAL_BASE_URL, reasoning="mistral", model_filter="mistral",
             fields=(_region_field(_MISTRAL_ENDPOINTS), _API_KEY_FIELD), endpoints=_MISTRAL_ENDPOINTS,
-            max_tools=AGENTCLI_MAX_TOOLS_PER_REQUEST,
+            max_tools=AGENT_CHAT_MAX_TOOLS_PER_REQUEST,
         ),
-        _definition("nvidia", "NVIDIA NIM", AGENTCLI_NVIDIA_BASE_URL, reasoning="probed_effort", model_filter="nvidia"),
+        _definition("nvidia", "NVIDIA NIM", AGENT_CHAT_NVIDIA_BASE_URL, reasoning="probed_effort", model_filter="nvidia"),
         _definition(
-            "mimo", "Xiaomi MiMo", AGENTCLI_MIMO_BASE_URL, reasoning="mimo", model_filter="mimo",
+            "mimo", "Xiaomi MiMo", AGENT_CHAT_MIMO_BASE_URL, reasoning="mimo", model_filter="mimo",
             fields=(_region_field(_MIMO_ENDPOINTS), _API_KEY_FIELD), endpoints=_MIMO_ENDPOINTS,
         ),
         _definition(
-            "tencent", "Tencent Cloud TokenHub", AGENTCLI_TENCENT_SINGAPORE_BASE_URL,
+            "tencent", "Tencent Cloud TokenHub", AGENT_CHAT_TENCENT_SINGAPORE_BASE_URL,
             fields=(_TENCENT_ENDPOINT_FIELD, _API_KEY_FIELD), endpoints=_TENCENT_ENDPOINTS,
             reasoning="probed_effort", model_filter="tencent",
         ),
         _definition(
-            "opencode", "OpenCode", AGENTCLI_OPENCODE_BASE_URL,
+            "opencode", "OpenCode", AGENT_CHAT_OPENCODE_BASE_URL,
             fields=(ProviderField("endpoint_id", "choice", "settings.agentcliOpenCodeRoute",
                                   choices=_OPENCODE_ENDPOINTS), _API_KEY_FIELD),
             endpoints=_OPENCODE_ENDPOINTS, reasoning="probed_effort", model_filter="opencode",
         ),
-        _definition("ollama_cloud", "Ollama (cloud)", AGENTCLI_OLLAMA_CLOUD_BASE_URL, include_usage=True, reasoning="ollama", ollama="cloud"),
+        _definition("ollama_cloud", "Ollama (cloud)", AGENT_CHAT_OLLAMA_CLOUD_BASE_URL, include_usage=True, reasoning="ollama", ollama="cloud"),
         _definition("ollama", "Ollama (local)", "", fields=(_OLLAMA_URL_FIELD,), include_usage=True, reasoning="ollama", ollama="local"),
         # OpenRouter forwards the tools array to the routed provider, and OpenAI's
         # models behind it refuse more than 128.
-        _definition("openrouter", "OpenRouter", AGENTCLI_OPENROUTER_BASE_URL, include_usage=True, reasoning="probed_effort",
-                    model_filter="openrouter", max_tools=AGENTCLI_MAX_TOOLS_PER_REQUEST),
+        _definition("openrouter", "OpenRouter", AGENT_CHAT_OPENROUTER_BASE_URL, include_usage=True, reasoning="probed_effort",
+                    model_filter="openrouter", max_tools=AGENT_CHAT_MAX_TOOLS_PER_REQUEST),
         _definition(
-            "together", "Together", AGENTCLI_TOGETHER_BASE_URL,
+            "together", "Together", AGENT_CHAT_TOGETHER_BASE_URL,
             model_filter="together", models_shape="list",
         ),
-        _definition("cerebras", "Cerebras", AGENTCLI_CEREBRAS_BASE_URL),
+        _definition("cerebras", "Cerebras", AGENT_CHAT_CEREBRAS_BASE_URL),
         _definition(
-            "fireworks", "Fireworks", AGENTCLI_FIREWORKS_BASE_URL,
+            "fireworks", "Fireworks", AGENT_CHAT_FIREWORKS_BASE_URL,
             validation_error="fireworks",
         ),
         _definition(
@@ -344,8 +344,8 @@ PROVIDER_DEFINITIONS: dict[str, ProviderDefinition] = {
             fields=(_API_KEY_FIELD, _QWEN_URL_FIELD), include_usage=True,
             reasoning="qwen", validation_error="qwen_openai",
         ),
-        _definition("zai", "Z.ai", AGENTCLI_ZAI_BASE_URL, fields=(_ZAI_ENDPOINT_FIELD, _API_KEY_FIELD), endpoints=_ZAI_ENDPOINTS, reasoning="zai",
-                    max_tools=AGENTCLI_MAX_TOOLS_PER_REQUEST),
+        _definition("zai", "Z.ai", AGENT_CHAT_ZAI_BASE_URL, fields=(_ZAI_ENDPOINT_FIELD, _API_KEY_FIELD), endpoints=_ZAI_ENDPOINTS, reasoning="zai",
+                    max_tools=AGENT_CHAT_MAX_TOOLS_PER_REQUEST),
     )
 }
 
@@ -362,7 +362,7 @@ def provider_purpose(kind: str) -> str:
     return definition.purpose if definition else "unsupported"
 
 
-# Compatibility projection of the typed registry for tests and internal callers;
+# Compatibility projection of the typed registry for internal callers;
 # it carries no independent provider facts.
 _KINDS: dict[str, dict[str, Any]] = {
     kind: {
@@ -435,23 +435,21 @@ def _instance_name(inst: dict, has_dupes: bool, instance_id: str) -> str:
 def _with_learned(inst: dict) -> dict:
     """Declared and probed capabilities, with unexpired learned refusals on top.
 
-    Expiry is applied HERE, on read, rather than by sweeping storage: a refusal
-    that has aged out stops being returned, so nothing has to run on a timer and
-    a clock change cannot leave a stale record behind. An unparseable timestamp
-    is treated as expired, which fails toward offering the control rather than
-    toward hiding it.
+    A refusal expires here, on read; an unparseable timestamp counts as expired, which offers the
+    control rather than hiding it.
     """
+    # Expiry on read needs no timer, and a clock change cannot leave a stale record behind.
     caps = {model: dict(vals) for model, vals in (inst.get("capabilities") or {}).items()
             if isinstance(vals, dict)}
     learned = inst.get("learned") or {}
     if not isinstance(learned, dict):
         return caps
-    cutoff = utcnow() - timedelta(days=AGENTCLI_LEARNED_REFUSAL_TTL_DAYS)
+    cutoff = utcnow() - timedelta(days=AGENT_CHAT_LEARNED_REFUSAL_TTL_DAYS)
     for model, options in learned.items():
         if not isinstance(options, dict):
             continue
         for option, at in options.items():
-            cap = AGENTCLI_LEARNABLE_OPTIONS.get(option)
+            cap = AGENT_CHAT_LEARNABLE_OPTIONS.get(option)
             when = parse_datetime(at) if isinstance(at, str) else None
             if cap is None or when is None or when < cutoff:
                 continue
@@ -490,12 +488,10 @@ def _normalized_provider_url(value: object) -> str:
 
 
 def _provider_identity(kind: str, cfg: dict) -> tuple[str, str]:
-    """Return the identity used to reject exact duplicate accounts.
+    """Return the in-memory identity rejecting duplicate accounts; never stored or returned.
 
-    The endpoint for Ollama, the credential for most kinds, and endpoint plus
-    credential for Qwen and providers with endpoint-bound keys. OpenCode keeps
-    its credential identity across Zen and Console. Compared in memory only;
-    never stored or returned.
+    The endpoint for Ollama, the credential for most kinds, both for Qwen and endpoint-bound keys.
+    OpenCode keeps its credential across Zen and Console.
     """
     if kind == "ollama":
         return kind, _normalized_provider_url(cfg.get("base_url"))
@@ -529,7 +525,7 @@ class AgentCliStore:
 
     @classmethod
     async def async_create(cls, hass: HomeAssistant) -> AgentCliStore:
-        store: Store[dict] = Store(hass, AGENTCLI_SECRETS_STORAGE_VERSION, AGENTCLI_SECRETS_STORAGE_KEY, private=True)
+        store: Store[dict] = Store(hass, AGENT_CHAT_SECRETS_STORAGE_VERSION, AGENT_CHAT_SECRETS_STORAGE_KEY, private=True)
         inst = cls(store)
         raw = await store.async_load() or {}
         if isinstance(raw, dict) and isinstance(raw.get("instances"), dict):
@@ -566,14 +562,12 @@ class AgentCliStore:
     async def set_model(self, instance_id: str, model: str) -> bool:
         """Change one account's default model. False if the account is unknown.
 
-        An empty model means AUTOMATIC: the account follows the newest model of
-        its provider's own catalogue and survives that model being replaced (see
-        `model_selection`). That is the default for every new account, because
-        a model id goes stale on the PROVIDER's schedule rather than the
-        operator's, and re-entering the API key is the wrong cost for that.
-        Only the model is patchable. The credential and base_url are what the
-        account IS, and re-validating them is what the add flow already does.
+        An empty model means automatic: the account follows its provider's newest model (see
+        `model_selection`). Only the model is patchable.
         """
+        # Automatic is the default because a model id goes stale on the provider's schedule, and
+        # re-entering the API key is the wrong cost for that. The credential and base_url are what
+        # the account is, and the add flow validates them.
         async with self._lock:
             cfg = self._data.get(instance_id)
             if not isinstance(cfg, dict):
@@ -587,15 +581,10 @@ class AgentCliStore:
     async def set_capabilities(
         self, instance_id: str, capabilities: dict, checked_at: str,
     ) -> bool:
-        """Record what this account's provider DECLARED, with when it was asked.
+        """Record what this account's provider declared, with when it was asked.
 
-        Stored per account rather than per kind because the same kind can differ
-        by endpoint: two Ollama servers hold different libraries, and one
-        operator's OpenRouter key is entitled to models another's is not.
-
-        The timestamp is half the value. Capabilities have no invalidation signal
-        of their own, so "last checked" is what turns a silently ageing answer
-        into one the operator can judge.
+        Stored per account because one kind can differ by endpoint or key entitlement. The timestamp
+        lets an operator judge an answer that has no invalidation signal.
         """
         async with self._lock:
             cfg = self._data.get(instance_id)
@@ -610,16 +599,14 @@ class AgentCliStore:
         self, instance_id: str, models: list[str], created: dict[str, float], checked_at: str,
         eligible: list[str] | None = None,
     ) -> bool:
-        """Cache what the provider currently lists for this account.
+        """Cache what the provider lists for this account; an empty listing is not recorded.
 
-        The catalogue is what lets a request pick the newest model, or replace a
-        retired one, without a network call. `seen` accumulates every id the
-        provider has ever listed for the account; it is what distinguishes a
-        retired model (listed before, gone now) from a custom deployment the
-        listing never contained, which must be left alone. An empty listing is
-        not recorded: it means the provider could not answer, not that every
-        model vanished.
+        `seen` accumulates every listed id, separating a retired model from a custom deployment the
+        listing never held, which must be left alone.
         """
+        # The catalogue lets a request pick the newest model, or replace a retired one, without a
+        # network call. An empty listing means the provider could not answer, not that every model
+        # vanished.
         if not models:
             return False
         async with self._lock:
@@ -656,11 +643,8 @@ class AgentCliStore:
     async def record_refusal(self, instance_id: str, model: str, option: str, at: str) -> bool:
         """Remember that a real turn had this option refused for this model.
 
-        Kept SEPARATE from `capabilities` rather than written into it, and that
-        separation is what makes expiry possible at all: declared and probed
-        facts are durable statements about the API, while this one is an
-        observation from a single moment that has to fade. Merged over the
-        durable facts at read time, so nothing here can corrupt them.
+        Kept apart from `capabilities` and merged at read time, so this single observation can fade
+        without corrupting durable declared and probed facts.
         """
         async with self._lock:
             cfg = self._data.get(instance_id)
@@ -791,11 +775,8 @@ def decision_account_fingerprint(hass: HomeAssistant, instance_id: str) -> str |
 
 
 async def async_wipe_agentcli_secrets(hass: HomeAssistant) -> None:
-    """Erase all stored provider accounts and API keys from disk.
-
-    Loads (or reuses the cached) store, so it wipes the on-disk file even when
-    Agent Chat was never opened since startup. The cached instance stays live but
-    empty, so any open chat window loses its accounts immediately.
+    """Erase stored provider accounts and API keys from disk, even if Agent Chat was never opened.
     """
+    # The cached instance stays live but empty, so an open chat window loses its accounts at once.
     store = await _get_secret_store(hass)
     await store.async_wipe()

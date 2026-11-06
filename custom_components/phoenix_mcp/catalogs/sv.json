@@ -563,6 +563,7 @@
       "verboseHint": "Visa agentens verktygsanrop, verktygsresultat och tänkande. Svar, bilder, förlopp, godkännanden och meddelanden visas oavsett.",
       "workingOn": "Arbetar: {name}",
       "workingSpinner": "Arbetar…",
+      "otherTabTurn": "En annan flik kör ett svar i den här konversationen. Om den här fliken också kör ett behålls det svar som blir klart sist.",
       "pausedAfter": {
         "one": "Pausad efter {count} steg. Fortsätta?",
         "other": "Pausad efter {count} steg. Fortsätta?"

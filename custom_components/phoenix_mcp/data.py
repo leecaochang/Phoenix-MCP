@@ -33,11 +33,8 @@ if TYPE_CHECKING:
 class DurableState:
     """The one owner of every Phoenix storage file for this process.
 
-    Each object below rewrites its whole file from memory, so two instances of
-    one store undo each other's saves. A config-entry reload therefore keeps this
-    state and rebuilds only the registrations around it: a handler still running
-    against the previous PhoenixData writes to these same objects, under the same
-    locks, and cannot put a revoked access key back on disk.
+    Each object rewrites its whole file from memory, so a reload keeps this state and rebuilds
+    only the registrations around it; a running handler cannot restore a revoked key.
     """
 
     store: AccessKeyStore
@@ -70,11 +67,11 @@ class PhoenixData:
     store: AccessKeyStore
     rate_limiter: RateLimiter
     audit: AuditLog
-    # The HomeAssistant instance, set in __init__. Optional so direct constructions
-    # (tests) need not supply it; fires bus events (e.g. phoenix_mcp_config_changed).
+    # The HomeAssistant instance, set in __init__. Optional for direct
+    # constructions; fires bus events (e.g. phoenix_mcp_config_changed).
     hass: HomeAssistant | None = None
     # Configuration version history. Always present: __init__ supplies a
-    # persistent store; direct constructions (tests) get an in-memory default.
+    # persistent store; direct constructions get an in-memory default.
     versions: VersionStore = field(default_factory=VersionStore)
     conversations: ConversationLog = field(default_factory=ConversationLog)
     home_companion_active: set[str] = field(default_factory=set)
@@ -88,7 +85,7 @@ class PhoenixData:
     calendar_writes: CalendarWriteJournal | None = None
     # Which Lovelace cards this instance can render, harvested by the panel
     # frontend. Always present: __init__ supplies a persistent store; direct
-    # constructions (tests) get an in-memory default that reads as never-harvested.
+    # constructions get an in-memory default that reads as never-harvested.
     card_catalog: CardCatalogStore = field(default_factory=CardCatalogStore)
     # MESA semantic-safety runtime (store, resolver, enforcer, validator).
     # None only if MESA setup failed; views guard accordingly.
@@ -172,7 +169,7 @@ class PhoenixData:
     shutting_down: bool = False
     # Platforms this entry forwarded, so unload can unload exactly those.
     forwarded_platforms: set[str] = field(default_factory=set)
-    # Direct constructions are ready by default for isolated tests. Real setup
+    # Direct constructions are ready by default. Real setup
     # passes False and publishes readiness only after every mandatory step has
     # completed. Permanent aiohttp routes refuse while this is false.
     ready: bool = True

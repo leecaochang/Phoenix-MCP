@@ -24,7 +24,8 @@ from ..const import (
 )
 from ..conversation_log import json_size
 from ..data import PhoenixData
-from ..helpers import effective_cap, str_arg, str_list_arg
+from ..tool_input import str_arg, str_list_arg
+from ..capability import effective_cap
 from ..history_summary import (
     attribute_page, compact_summary_row, read_attribute_changes, read_state_change_page,
     scan_state_changes, summary_body, SummaryUnavailableError,
@@ -125,9 +126,8 @@ async def _fit_recorder_page(
 ) -> tuple[dict, str, str]:
     """A Recorder page read again with a smaller limit until it fits TOOL_RESULT_MAX_BYTES.
 
-    Each page reader ends a page where its cursor continues exactly, even among
-    rows sharing a microsecond, so a smaller limit keeps the continuation exact
-    where cutting rows afterwards would not. The model is told the page shrank.
+    Each reader ends a page where its cursor continues exactly, so re-reading keeps continuation
+    exact where cutting rows would not. The model is told the page shrank.
     """
     result = await read(args)
     shortened = False
@@ -372,15 +372,12 @@ async def _resolve_select(
 ) -> tuple[list[str], dict[str, Any]] | tuple[dict, str, str]:
     """The entities a search_entities filter selects for a summary, and the fields describing them.
 
-    "Which Zigbee sensors did not trigger this week" is then one call with no
-    listing first. Diagnostic and configuration entities are left out unless
-    asked for, since a battery or link-quality sensor is not what such a question
-    means, and an approximate (typo-tolerant) name match selects nothing, because
-    summarizing a guessed entity would answer the wrong question. With `every`
-    (a summary that keeps only rows in a given state), a select with no filter
-    selects every accessible entity. Returns the sorted entity IDs and the
-    selection fields, or a tool error.
+    Returns the sorted entity IDs and selection fields, or a tool error. With `every`, a select with
+    no filter selects every accessible entity.
     """
+    # Diagnostic and configuration entities are left out unless asked for, since a battery or
+    # link-quality sensor is not what such a question means. An approximate name match selects
+    # nothing, because summarizing a guessed entity would answer the wrong question.
     allowed = (*_SUMMARY_SELECT_FILTERS, "include_diagnostic")
     if not isinstance(select, dict) or any(key not in allowed for key in select):
         return _tool_error(
@@ -461,17 +458,14 @@ async def _history_summary_many(
 ) -> tuple[dict, str, str]:
     """get_history summary mode for several entities: one compact row each.
 
-    "Which of these sensors did not trigger this week" then takes one call
-    instead of one per entity. Every entity is access-checked before any Recorder
-    read and again after the scans; inaccessible and missing ones share
-    not_found. One time budget bounds the scans and TOOL_RESULT_MAX_BYTES the
-    result, so the Conversation Log keeps it whole: rows are added in order while
-    they fit, counting every entity still to come as a name, and the entities past
-    either budget are named (unscanned, not_summarized), never dropped. An entity
-    whose own scan stops at its budget keeps a next_cursor to continue alone. A
-    selection resolved by select adds its own fields and warnings, and may
-    legitimately match nothing.
+    Access is checked before any Recorder read and after the scans; inaccessible and missing share
+    not_found. Entities past the time or size budget are named, never dropped.
     """
+    # One time budget bounds the scans and TOOL_RESULT_MAX_BYTES the result, so the Conversation Log
+    # keeps it whole: rows are added in order while they fit, counting every entity still to come as
+    # a name. The rest land in unscanned and not_summarized. An entity whose own scan stops at its
+    # budget keeps a next_cursor to continue alone. A selection adds its own fields and warnings,
+    # and may legitimately match nothing.
     tool = "get_history"
     if str(args.get("mode") or "").strip().lower() != "summary":
         return _tool_error(
@@ -647,15 +641,12 @@ async def _history_rows_many(
 ) -> tuple[dict, str, str]:
     """get_history state_changes for several entities: each entity's own page.
 
-    "When did each person last arrive" then takes one call instead of one per
-    entity. Each entity's rows are the page a single-entity call with the same
-    range, order and limit returns (_history_page reads it), so its next_cursor
-    continues that entity alone; a cursor is therefore refused here. Inaccessible
-    and missing entities share not_found, and access is checked again after the
-    reads. Pages are added in order while they fit TOOL_RESULT_MAX_BYTES and one
-    time budget; the entities past either are named (not_listed, unscanned),
-    never dropped.
+    Each page equals a single-entity call's, so next_cursor continues that entity alone and a cursor
+    is refused here. Access is rechecked after the reads.
     """
+    # Inaccessible and missing entities share not_found. Pages are added in order while they fit
+    # TOOL_RESULT_MAX_BYTES and one time budget; the entities past either are named (not_listed,
+    # unscanned), never dropped.
     tool = "get_history"
     if "cursor" in args:
         return _tool_error(
@@ -784,14 +775,11 @@ async def _history_summary(
 ) -> tuple[dict, str, str]:
     """get_history summary mode: one budgeted scan folded into per-state totals.
 
-    With attribute, the totals are per value of that attribute (how long a
-    thermostat's hvac_action was heating), named in the body's attribute field.
-
-    The scan stops at the current time, because a future end would attribute time
-    that has not happened. An entity Recorder excludes is refused: carrying its
-    last row forward would invent durations. Access is rechecked after the scan's
-    executor work and before anything is disclosed.
+    With attribute, totals are per value of that attribute. An entity Recorder excludes is refused;
+    access is rechecked after the scan and before disclosure.
     """
+    # The scan stops at the current time, because a future end would attribute time that has not
+    # happened. Carrying an excluded entity's last row forward would invent durations.
     now = utcnow()
     end = min(window.end, now)
     if window.page_start >= end:
@@ -843,13 +831,11 @@ async def _statistics_summary_many(
 ) -> tuple[dict, str, str]:
     """get_statistics over several entities: one row each for the whole window.
 
-    "Which room was warmest this week" or "which device used the most energy"
-    then takes one call instead of one page per entity: each row has the mean,
-    min and max of a measurement, or the change of a total, in its display unit.
-    Access is checked before any Recorder read and again before disclosure; the
-    shared time budget names the entities it did not reach, and rows past what one
-    result holds are named in not_summarized.
+    A row has a measurement's mean, min and max or a total's change, in its display unit. Access is
+    checked before any read and before disclosure.
     """
+    # The shared time budget names the entities it did not reach, and rows past what one result
+    # holds are named in not_summarized.
     tool = "get_statistics"
     if ((not raw_ids and selection is None) or len(raw_ids) > SEARCH_ENTITIES_MAX_LIMIT
             or not all(isinstance(item, str) and item.strip() for item in raw_ids)):

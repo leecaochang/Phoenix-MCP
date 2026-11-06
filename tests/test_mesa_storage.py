@@ -23,7 +23,7 @@ from custom_components.phoenix_mcp.access_key_store import (
     GlobalSettings,
     PermissionTree,
 )
-from custom_components.phoenix_mcp.admin_view import PhoenixAdminMesaProfileView
+from custom_components.phoenix_mcp.admin.mesa import PhoenixAdminMesaProfileView
 from custom_components.phoenix_mcp.const import DOMAIN, MESA_STORAGE_KEY
 from custom_components.phoenix_mcp.data import PhoenixData
 from custom_components.phoenix_mcp.durable_storage import MesaSaveError

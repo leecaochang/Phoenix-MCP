@@ -30,7 +30,7 @@ function record(id: string, over: Partial<ApprovalRecord> = {}): ApprovalRecord 
     expires_at: "2099-01-01T01:00:00Z",
     resolved_at: null,
     approved_by_user_id: null,
-    rejected_reason: null,
+    closure_reason: null,
     result: null,
     request_id: "r1",
     client_ip: null,

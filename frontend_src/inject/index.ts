@@ -274,13 +274,19 @@ function restorePeopleMeta(row: Element): void {
   row.removeAttribute("data-phx-meta");
 }
 
-/** HA's People page renders list items rather than entity data-table rows. */
+/**
+ * HA's People page renders list items rather than entity data-table rows: MWC
+ * `ha-list-item` rows, or `ha-list-item-button` (storage people) and
+ * `ha-list-item-base` (YAML people) rows on frontends after its list migration.
+ * The newer rows always render their `end` slot.
+ */
 function scanPeople(): void {
   for (const page of deepQueryAll("ha-config-person", pageRoot())) {
     const sr = page.shadowRoot;
     if (!sr) continue;
     observeRoot(sr);
-    for (const row of sr.querySelectorAll<HTMLElement>("ha-list-item")) {
+    for (const row of sr.querySelectorAll<HTMLElement>("ha-list-item-button, ha-list-item-base, ha-list-item")) {
+      const mwcRow = row.localName === "ha-list-item";
       const entityId = personEntityId(row, getHass()?.states ?? {});
       const existing = row.querySelector<HTMLButtonElement>(`.${BTN_CLASS}`);
       if (existing && existing.dataset.phxKey !== entityId) existing.remove();
@@ -290,7 +296,7 @@ function scanPeople(): void {
       }
       // MWC list items omit the meta slot entirely unless hasMeta is enabled.
       // Track only the injector's own change so disposal preserves HA's setting.
-      if (!(row as HTMLElement & { hasMeta?: boolean }).hasMeta && !row.hasAttribute("hasmeta")) {
+      if (mwcRow && !(row as HTMLElement & { hasMeta?: boolean }).hasMeta && !row.hasAttribute("hasmeta")) {
         row.setAttribute("data-phx-meta", "");
         row.setAttribute("hasmeta", "");
       }
@@ -299,7 +305,7 @@ function scanPeople(): void {
         continue;
       }
       const button = buildButton("entity", entityId);
-      button.slot = "meta";
+      button.slot = mwcRow ? "meta" : "end";
       row.appendChild(button);
     }
   }

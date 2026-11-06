@@ -1,15 +1,8 @@
 """Typed base class for Phoenix MCP's aiohttp views.
 
-`HomeAssistantView` does not declare `hass`, and HA's `register_view` never sets
-it (it only checks `url`/`name`, then calls `view.register(hass, ...)`). Phoenix
-assigns it at registration (`view = view_cls(); view.hass = hass;
-hass.http.register_view(view)`), which a type checker cannot see, so every
-`self.hass` in the view modules would read as an undeclared attribute.
-
-`hass: HomeAssistant` is an ANNOTATION only: no class attribute is created,
-`hasattr` is unchanged, and there is no runtime behaviour. Views inherit
-everything else from `HomeAssistantView`. Kept apart from `helpers.py` so every
-view module (admin_view, agentcli_views, mcp_transport, skill_view) can import it.
+HomeAssistantView declares no ``hass`` and Phoenix assigns it at registration, so the
+annotation here satisfies type checking and has no runtime effect. Kept apart from
+``helpers.py`` so every view module can import it.
 """
 
 from __future__ import annotations
@@ -42,12 +35,10 @@ def _err(
     *,
     passthrough: bool = False,
 ) -> web.Response:
-    """Return a JSON error response. Uses request_id if supplied, else generates one.
+    """Return a JSON error response, generating a request ID when none is supplied.
 
-    Phoenix-authored operator text must carry `key` and optional `params`.
-    `passthrough=True` is reserved for diagnostic text authored by an upstream
-    provider, tool, or mesa-core. Requiring one classification at runtime keeps
-    a newly added bare English message from silently bypassing localization.
+    Phoenix-authored text must carry ``key`` and optional ``params``; ``passthrough=True`` is
+    reserved for upstream diagnostic text.
     """
     if bool(key) == passthrough:
         raise ValueError("_err requires exactly one of key or passthrough=True")

@@ -380,6 +380,7 @@
       "verboseHint": "顯示智慧體的工具呼叫、工具結果和思考過程。回覆、影像、進度、核准和通知始終顯示。",
       "workingOn": "處理中：{name}",
       "workingSpinner": "處理中…",
+      "otherTabTurn": "另一個分頁正在此對話中執行回覆。如果此分頁也執行回覆，保留最後完成的那個。",
       "pausedAfter": {
         "one": "已在 {count} 步後暫停。要繼續嗎？",
         "other": "已在 {count} 步後暫停。要繼續嗎？"

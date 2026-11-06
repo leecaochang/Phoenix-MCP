@@ -29,7 +29,7 @@ from custom_components.phoenix_mcp.config_recovery import ConfigurationRecoveryE
 from custom_components.phoenix_mcp.const import DASHBOARD_RESOURCE_BINDING, REDACTION_SENTINEL
 from custom_components.phoenix_mcp.dashboard_resource_ownership import DashboardResourceOwnership
 from custom_components.phoenix_mcp.data import PhoenixData
-from custom_components.phoenix_mcp.helpers import effective_cap
+from custom_components.phoenix_mcp.capability import effective_cap
 from custom_components.phoenix_mcp.tool_dispatch import _call_tool
 from custom_components.phoenix_mcp.request_authority import (
     AuthorityChangedError, RequestAuthority, policy_version, request_authority,
@@ -730,7 +730,7 @@ async def test_restore_needs_the_capability(lovelace):
 
 async def test_admin_recovery_restores_a_resource(lovelace, hass_admin_user):
     from homeassistant.components.http.const import KEY_AUTHENTICATED, KEY_HASS_USER
-    from custom_components.phoenix_mcp.admin_view import PhoenixAdminConfigurationRecoveryRecordView
+    from custom_components.phoenix_mcp.admin.changes import PhoenixAdminConfigurationRecoveryRecordView
 
     data = _data()
     lovelace.data["phoenix_mcp"] = data
@@ -741,7 +741,7 @@ async def test_admin_recovery_restores_a_resource(lovelace, hass_admin_user):
     request.__getitem__.side_effect = values.__getitem__
     view = PhoenixAdminConfigurationRecoveryRecordView()
     view.hass = lovelace
-    with patch("custom_components.phoenix_mcp.admin_view._read_body",
+    with patch("custom_components.phoenix_mcp.admin.changes._read_body",
                AsyncMock(return_value={"action": "restore", "side": "before"})):
         response = await view.post(request, recovery_id=created["recovery_id"])
     assert response.status == 200, response.text

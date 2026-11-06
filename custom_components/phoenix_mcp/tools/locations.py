@@ -21,7 +21,8 @@ from ..const import (
 )
 from ..data import PhoenixData
 from ..device_semantics import device_registry_snapshot
-from ..helpers import effective_cap, diff_summary_fields
+from ..catalog_text import diff_summary_fields
+from ..capability import effective_cap
 from ..mesa import evaluate_registry_action, fire_mesa_blocked_event
 from ..policy_engine import (
     LocationRegistryContext, Permission, device_config_entry_ids,

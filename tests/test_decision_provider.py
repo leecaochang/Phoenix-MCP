@@ -10,15 +10,16 @@ from tests.runtime_fixtures import patch_readers
 from aiohttp import ClientSession, web
 from aiohttp.test_utils import TestServer
 
-from custom_components.phoenix_mcp import agentcli_views
+from custom_components.phoenix_mcp import agent_chat_views
 from custom_components.phoenix_mcp.llm import accounts as llm_accounts
 from custom_components.phoenix_mcp.llm import base as llm_base
 from custom_components.phoenix_mcp.llm import factory as llm_factory
-from custom_components.phoenix_mcp.admin_view import _validated_settings_patch
+from custom_components.phoenix_mcp.admin.settings import _validated_settings_patch
 from custom_components.phoenix_mcp.const import DOMAIN
 from custom_components.phoenix_mcp.routing.routing_tables import DECISION_ROUTE_CHOICES
 from custom_components.phoenix_mcp.data import PhoenixData
-from custom_components.phoenix_mcp.routing.decision_provider import DecisionError, DecisionProvider, parse_choice
+from custom_components.phoenix_mcp.routing.decision_types import DecisionError
+from custom_components.phoenix_mcp.routing.decision_provider import DecisionProvider, parse_choice
 from custom_components.phoenix_mcp.routing.decision_shadow import DecisionShadow, async_preview_decision
 
 
@@ -345,7 +346,7 @@ def test_validation_diagnostics_preserve_strict_checks_without_response_data(cha
 
 
 @pytest.mark.parametrize('view_class,method', [
-    (agentcli_views.PhoenixAgentCliModelsView, 'get'), (agentcli_views.PhoenixAgentCliRefreshView, 'post'),
+    (agent_chat_views.PhoenixAgentCliModelsView, 'get'), (agent_chat_views.PhoenixAgentCliRefreshView, 'post'),
 ])
 @pytest.mark.parametrize('reason', ['unavailable', 'timeout', 'authentication'])
 async def test_offline_decision_catalog_is_a_handled_error_without_account_changes(hass, decision_home, view_class, method, reason):
@@ -420,7 +421,7 @@ async def test_rounding_is_applied_only_to_known_typesafe_endpoint(kind, base_ur
 ])
 def test_typesafe_rounding_bounds_preserve_raw_probabilities_and_threshold(values, valid, confident):
     from custom_components.phoenix_mcp.routing.routing_tables import DECISION_TYPESAFE_BASE_URL
-    from custom_components.phoenix_mcp.routing.decision_provider import confident_choice
+    from custom_components.phoenix_mcp.routing.decision_types import confident_choice
     provider = DecisionProvider(llm_accounts.ProviderConfig('typesafe', 'jev-latest', DECISION_TYPESAFE_BASE_URL),
                                 'systemone')
     probabilities = {str(index): value for index, value in enumerate(values)}
@@ -694,7 +695,7 @@ async def test_unsupported_accounts_cannot_enter_any_provider_surface(hass, deci
     assert llm_accounts.decision_account_fingerprint(hass, legacy) is None
     _, error = await _validated_settings_patch({'decision_provider_id': legacy}, data, hass, 'rid')
     assert error is not None and error.status == 400
-    config = await agentcli_views._probe_config(kind, {'api_key': 'private-key', 'base_url': 'http://retired.test/v1'})
+    config = await agent_chat_views._probe_config(kind, {'api_key': 'private-key', 'base_url': 'http://retired.test/v1'})
     assert isinstance(config, llm_base.ProbeConfigError) and config.key == 'providerUnknown'
     with pytest.raises(ValueError):
         DecisionProvider(llm_accounts.ProviderConfig(kind, 'retired-model', 'http://retired.test/v1'), 'systemone')

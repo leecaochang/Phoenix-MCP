@@ -27,8 +27,7 @@ _FIELDS = frozenset("alias description id trigger triggers condition conditions 
 _ROOT_FIELDS = frozenset("alias description trigger triggers condition conditions action actions sequence mode max max_exceeded initial_state enabled variables trigger_variables fields trace icon use_blueprint".split())
 
 # Names Core resolves without registering them as keys: undotted legacy trigger
-# platforms it aliases, and condition platforms it handles itself. A test pins
-# both sets to Core's alias tables.
+# platforms it aliases, and condition platforms it handles itself. Both sets follow Core's alias tables.
 _LEGACY_TRIGGER_KEYS = frozenset({"device", "event", "numeric_state", "state", "time", "time_pattern"})
 _BUILTIN_CONDITION_KEYS = frozenset({"and", "device", "not", "numeric_state", "or", "state", "template", "time", "trigger"})
 
@@ -60,9 +59,8 @@ def validation_message(
 ) -> str:
     """Project error classes and paths, never validator text or input values.
 
-    ``extra`` carries findings built by Phoenix itself, such as unknown keys.
-    ``path_offset`` skips leading path parts of a schema wrapped around the
-    caller's config, so paths start at what the caller sent.
+    ``extra`` carries Phoenix's own findings; ``path_offset`` skips a wrapping schema's path
+    parts.
     """
     findings = []
     errors = error.errors if isinstance(error, vol.MultipleInvalid) else [error]
@@ -98,24 +96,15 @@ def validation_message(
 async def async_validation_message(
     hass: HomeAssistant, domain: str, config: Any, error: vol.Invalid | None = None
 ) -> str:
-    """Project a Core validation failure, naming trigger and condition keys Core has not registered.
-
-    Call only after Core rejected ``config``. Core stops at the first failure,
-    so every key is checked here, not only the one Core reported.
-    """
+    """Project a Core validation failure, naming every unregistered key."""
     return validation_message(domain, error, await async_unknown_key_findings(hass, config))
 
 
 async def async_unknown_key_findings(hass: HomeAssistant, config: Any) -> list[str]:
     """Name each trigger or condition key the running Core has not registered.
 
-    ``closest_matches`` comes from the instance-wide registered keys, searched
-    in the key's own domain first. A key is called unknown only when its domain
-    is loaded, so its keys are all registered, or no such integration exists;
-    an installed integration that is not loaded yet may still provide it.
-
-    HA-COUPLING POINT, as in ``mesa.async_semantic_moments``: any failure to
-    read the registered keys degrades to no findings.
+    ``closest_matches`` searches the key's own domain first. A key is unknown only when its
+    domain is loaded or no such integration exists. Failure to read keys gives no findings.
     """
     sites = _key_sites(config)
     if not sites:
@@ -183,10 +172,8 @@ def _closest_keys(key: str, registered: set[str]) -> list[str]:
 def _key_sites(config: Any) -> list[tuple[str, str, str]]:
     """List (path, kind, key) for every trigger and condition key in a raw config.
 
-    Covers triggers, conditions, condition actions, ``if``, ``choose``,
-    ``repeat``, ``parallel``, ``sequence`` and ``wait_for_trigger``, with
-    legacy ``platform`` triggers and the and/or/not shorthand. Paths use only
-    schema vocabulary and list indexes.
+    Walks every nesting action, with legacy ``platform`` and and/or/not shorthand. Paths use
+    only schema vocabulary and list indexes.
     """
     sites: list[tuple[str, str, str]] = []
 

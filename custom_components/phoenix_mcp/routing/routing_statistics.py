@@ -13,6 +13,7 @@ from homeassistant.util.dt import utcnow, parse_datetime
 
 from ..const import TURN_DELIVERED_EVENT
 from .routing_tables import ROUTING_STATISTICS_OUTCOMES, ROUTING_STATISTICS_SURFACES
+from ..conversation_log import routing_span, record_current
 
 
 def _empty() -> dict:
@@ -134,7 +135,6 @@ _current: ContextVar[TurnStatistics | None] = ContextVar("phoenix_routing_statis
 
 
 def local_result(reply: Any, route: str) -> None:
-    from ..conversation_log import record_current
     record_current("routing", {"route": route, "outcome": reply.outcome})
     turn = _current.get()
     if turn is not None:
@@ -146,7 +146,6 @@ def local_result(reply: Any, route: str) -> None:
 
 
 def voice_result(outcome: str, pending: bool, has_text: bool) -> None:
-    from ..conversation_log import record_current
     record_current("turn_outcome", {"outcome": outcome, "pending": pending})
     turn = _current.get()
     if turn is not None:
@@ -174,7 +173,6 @@ def decision_usage(scope: str, body: Any) -> None:
 
 async def provider_events(events, *, config=None, messages=None):
     """Replace cumulative usage within each actual request, then add requests once."""
-    from ..conversation_log import routing_span
     turn = _current.get()
     usage = None
     if turn is not None:

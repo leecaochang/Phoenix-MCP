@@ -11,7 +11,7 @@ from unittest.mock import AsyncMock
 import pytest
 from homeassistant.util.dt import utcnow
 
-from custom_components.phoenix_mcp import agentcli_views, provider_constants
+from custom_components.phoenix_mcp import agent_chat_views, provider_constants
 from custom_components.phoenix_mcp.llm import accounts as llm_accounts
 from custom_components.phoenix_mcp.llm import base as llm_base
 from custom_components.phoenix_mcp.llm.provider_claude import ClaudeProvider
@@ -328,28 +328,28 @@ def test_opencode_console_requires_per_model_endpoint_evidence():
 @pytest.mark.asyncio
 async def test_opencode_setup_routes_are_explicit_and_credentials_keep_their_identity(hass):
     from custom_components.phoenix_mcp.provider_constants import (
-        AGENTCLI_OPENCODE_BASE_URL, AGENTCLI_OPENCODE_CONSOLE_BASE_URL,
+        AGENT_CHAT_OPENCODE_BASE_URL, AGENT_CHAT_OPENCODE_CONSOLE_BASE_URL,
     )
 
-    legacy = await agentcli_views._probe_config("opencode", {"api_key": "secret"})
-    console = await agentcli_views._probe_config("opencode", {
+    legacy = await agent_chat_views._probe_config("opencode", {"api_key": "secret"})
+    console = await agent_chat_views._probe_config("opencode", {
         "api_key": "secret", "endpoint_id": "console", "base_url": "https://untrusted.example",
     })
     assert isinstance(legacy, ProviderConfig) and isinstance(console, ProviderConfig)
-    assert legacy.base_url == AGENTCLI_OPENCODE_BASE_URL
-    assert console.base_url == AGENTCLI_OPENCODE_CONSOLE_BASE_URL
-    assert "base_url" not in agentcli_views._stored_setup_config(console)
-    assert agentcli_views._stored_setup_config(console)["endpoint_id"] == "console"
-    assert isinstance(await agentcli_views._probe_config("opencode", {
+    assert legacy.base_url == AGENT_CHAT_OPENCODE_BASE_URL
+    assert console.base_url == AGENT_CHAT_OPENCODE_CONSOLE_BASE_URL
+    assert "base_url" not in agent_chat_views._stored_setup_config(console)
+    assert agent_chat_views._stored_setup_config(console)["endpoint_id"] == "console"
+    assert isinstance(await agent_chat_views._probe_config("opencode", {
         "api_key": "secret", "endpoint_id": "https://untrusted.example",
     }), llm_base.ProbeConfigError)
     old = {"api_key": "secret", "model": "kimi-k3"}
     store = llm_accounts.AgentCliStore(AsyncMock())
     iid = await store.add("opencode", old)
     snapshot = copy.deepcopy(store.get(iid))
-    assert store.resolve(iid).base_url == AGENTCLI_OPENCODE_BASE_URL
+    assert store.resolve(iid).base_url == AGENT_CHAT_OPENCODE_BASE_URL
     assert store.resolve(iid).model == "kimi-k3"
-    assert store.has_duplicate("opencode", agentcli_views._stored_setup_config(console))
+    assert store.has_duplicate("opencode", agent_chat_views._stored_setup_config(console))
     assert store.get(iid) == snapshot
     public = next(p for p in llm_accounts._provider_catalog() if p["kind"] == "opencode")
     assert "Bearer secret" not in json.dumps(public)
@@ -361,7 +361,7 @@ async def test_opencode_setup_routes_are_explicit_and_credentials_keep_their_ide
 @pytest.mark.parametrize("route", ["zen", "console"])
 @pytest.mark.parametrize("model", ["qwen3.8-max", "qwen3.5-plus"])
 async def test_opencode_catalog_and_all_inference_probes_use_their_own_urls(route, model):
-    cfg = await agentcli_views._probe_config("opencode", {
+    cfg = await agent_chat_views._probe_config("opencode", {
         "api_key": "secret", "endpoint_id": route, "model": model,
     })
     provider = OpenAICompatProvider(cfg)
@@ -389,7 +389,7 @@ def test_opencode_does_not_redirect_credentials_from_a_saved_custom_url():
 @pytest.mark.parametrize("data", [None, {}, [None, "bad", {"id": 12}, {"id": ""}, {"id": "qwen3.8-flash"}]])
 async def test_opencode_console_catalog_refuses_bad_rows_without_restoring_the_saved_model(data):
     provider = OpenAICompatProvider(ProviderConfig(
-        kind="opencode", model="qwen3.8-max", base_url=provider_constants.AGENTCLI_OPENCODE_CONSOLE_BASE_URL,
+        kind="opencode", model="qwen3.8-max", base_url=provider_constants.AGENT_CHAT_OPENCODE_CONSOLE_BASE_URL,
     ))
     assert await provider.list_models(_Session(_Resp(json_data={"data": data}))) == []
 
@@ -397,7 +397,7 @@ async def test_opencode_console_catalog_refuses_bad_rows_without_restoring_the_s
 @pytest.mark.asyncio
 async def test_opencode_console_refuses_other_api_families_before_any_network_call():
     provider = OpenAICompatProvider(ProviderConfig(
-        kind="opencode", model="qwen3.8-flash", base_url=provider_constants.AGENTCLI_OPENCODE_CONSOLE_BASE_URL,
+        kind="opencode", model="qwen3.8-flash", base_url=provider_constants.AGENT_CHAT_OPENCODE_CONSOLE_BASE_URL,
     ))
     session = _Session()
     events = await _collect(provider.stream_turn(session, system_prompt="", messages=[], tools=[], options={}))
@@ -411,7 +411,7 @@ async def test_opencode_console_refuses_other_api_families_before_any_network_ca
 @pytest.mark.asyncio
 async def test_opencode_replays_reasoning_and_complete_tool_calls_without_usage_flags():
     provider = OpenAICompatProvider(ProviderConfig(
-        kind="opencode", model="qwen3.8-max", base_url=provider_constants.AGENTCLI_OPENCODE_CONSOLE_BASE_URL,
+        kind="opencode", model="qwen3.8-max", base_url=provider_constants.AGENT_CHAT_OPENCODE_CONSOLE_BASE_URL,
     ))
     frame = {"choices": [{"delta": {"reasoning_content": "retained reasoning", "tool_calls": [{
         "index": 0, "id": "call_1", "function": {"name": "read", "arguments": '{"x":1}'},
@@ -446,7 +446,7 @@ async def test_opencode_replays_reasoning_and_complete_tool_calls_without_usage_
 ])
 async def test_opencode_console_keeps_billing_and_rate_limit_classifications(status, error, code, retryable):
     provider = OpenAICompatProvider(ProviderConfig(
-        kind="opencode", model="qwen3.8-max", base_url=provider_constants.AGENTCLI_OPENCODE_CONSOLE_BASE_URL,
+        kind="opencode", model="qwen3.8-max", base_url=provider_constants.AGENT_CHAT_OPENCODE_CONSOLE_BASE_URL,
     ))
     session = _Session(_Resp(status=status, text=json.dumps({"error": error})))
     events = await _collect(provider.stream_turn(session, system_prompt="", messages=[], tools=[], options={}))
@@ -473,7 +473,7 @@ async def test_opencode_stream_cancellation_closes_the_response_without_retrying
     response.content = WaitingContent()
     session = _Session(response)
     provider = OpenAICompatProvider(ProviderConfig(
-        kind="opencode", model="kimi-k3", base_url=provider_constants.AGENTCLI_OPENCODE_CONSOLE_BASE_URL,
+        kind="opencode", model="kimi-k3", base_url=provider_constants.AGENT_CHAT_OPENCODE_CONSOLE_BASE_URL,
     ))
     task = asyncio.create_task(_collect(provider.stream_turn(
         session, system_prompt="", messages=[], tools=[], options={},
@@ -535,13 +535,13 @@ async def test_a_malformed_catalogue_is_no_listing_rather_than_an_error(body):
 
 
 async def test_an_oversized_catalogue_is_refused_before_it_is_buffered(monkeypatch):
-    monkeypatch.setattr(llm_base, "AGENTCLI_MAX_JSON_BYTES", 64)
+    monkeypatch.setattr(llm_base, "AGENT_CHAT_MAX_JSON_BYTES", 64)
     provider, session = _ollama(json.dumps({"models": [{"name": "x" * 100}]}).encode())
     assert await provider.list_models(session) == ["fallback"]
 
 
 async def test_a_catalogue_is_capped_and_unusable_ids_are_dropped(monkeypatch):
-    monkeypatch.setattr(llm_base, "AGENTCLI_MAX_CATALOG_MODELS", 3)
+    monkeypatch.setattr(llm_base, "AGENT_CHAT_MAX_CATALOG_MODELS", 3)
     rows = [{"name": name} for name in ("a", "a", "x" * 201, "b", "c", "d")]
     provider, session = _ollama(json.dumps({"models": rows}).encode())
     assert await provider.list_models(session) == ["a", "b", "c"]

@@ -9,7 +9,7 @@ from __future__ import annotations
 import pytest
 from homeassistant.util.dt import utcnow
 
-from custom_components.phoenix_mcp.helpers import build_permitted_states, render_template_snapshot
+from custom_components.phoenix_mcp.template_sandbox import build_permitted_states, render_template_snapshot
 from custom_components.phoenix_mcp.access_key_store import (
     PermissionNode,
     PermissionTree,

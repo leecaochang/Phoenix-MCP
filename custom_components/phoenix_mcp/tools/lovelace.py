@@ -1,20 +1,10 @@
 """Lovelace tools: dashboard CRUD, whole-layout writes and card-level edits.
 
-The dashboard surface in one module. Everything here rides cap_lovelace_write,
-including the reads: a layout names entities and their placement, which is the
-same information the writes edit, so the read tools gate on the write
-capability rather than a separate read one.
-
-Three write shapes, deliberately: set_dashboard_config replaces a whole layout,
-while the card ops (add/edit/delete one card) and patch_dashboard (one
-path-addressed value) carry only the change, because a whole-layout replace
-forces the model to regurgitate the entire dashboard inside one tool call's
-arguments, which blows weaker providers' output limits. All guard with an
-optimistic-lock content_hash, checked pre-gate and again at apply time so a
-change made during the approval window is caught.
-
-tool_registration registers these tools and this module never imports the
-dispatcher. Shared primitives come from ..tool_common.
+Everything here rides cap_lovelace_write, including reads: a layout names entities and their
+placement, the same information the writes edit. set_dashboard_config replaces a whole layout, while
+card ops and patch_dashboard carry only the change, because resending a whole dashboard in one tool
+call blows weaker providers' output limits. All guard with an optimistic-lock content_hash, checked
+pre-gate and at apply time. This module never imports the dispatcher.
 """
 
 from __future__ import annotations
@@ -42,16 +32,13 @@ from ..const import (
 from ..data import PhoenixData
 from ..tool_contracts import handler_arguments, normalize_tool_args
 from ..tool_input import nested_argument_error
-from ..helpers import (
-    content_hash,
-    dict_arg,
-    diff_summary_fields as _summary,
-    effective_cap,
-    instance_entity_domains,
-    redact_inaccessible_entity_ids_in_text,
-    str_arg,
-    version_summary_fields as _version_summary,
+from ..helpers import content_hash
+from ..tool_input import dict_arg, str_arg
+from ..catalog_text import (
+    diff_summary_fields as _summary, version_summary_fields as _version_summary,
 )
+from ..capability import effective_cap
+from ..redaction import instance_entity_domains, redact_inaccessible_entity_ids_in_text
 from .dashboard_search import Criteria, parse_criteria, search_layout
 from ..policy_engine import Permission, filter_service_response, is_sensitive_key, resolve_registry_access
 from ..access_key_store import AccessKeyRecord
@@ -99,8 +86,7 @@ def _dashboard_layout_snapshot(url_path: str | None, config: dict | None) -> dic
 def _addressed_by_row_id(before: dict, dashboard_id: str) -> tuple[str, dict]:
     """Core addresses a dashboard by its row id alone, though readers also know its url_path.
 
-    Returns that id and the snapshot keyed by it, so one dashboard has one
-    recovery resource whichever name the caller used.
+    Returns that id and the snapshot keyed by it, giving one dashboard one recovery resource.
     """
     row_id = (before.get("dashboard") or {}).get("id")
     if not isinstance(row_id, str) or not row_id:
@@ -125,13 +111,9 @@ async def _dashboard_registry_snapshot(hass: HomeAssistant, dashboard_id: str) -
 
 
 def dashboard_registry_refused(exc: WsDispatchError) -> bool:
-    """Whether a dashboard registry command failed without changing anything.
-
-    Core's dashboard collection answers invalid_format only from the checks it
-    runs before storing (a url_path without a hyphen, a schema error) and
-    not_found only from its item lookup, so either refusal is proof nothing
-    changed; any other failure may have landed.
-    """
+    """Whether a dashboard registry command failed without changing anything."""
+    # Core answers invalid_format only from checks run before storing, and not_found only from its
+    # item lookup, so either is proof nothing changed; any other failure may have landed.
     return isinstance(exc, WsCommandNotDispatchedError) or (
         isinstance(exc, WsCommandRefusedError) and exc.code in ("invalid_format", "not_found"))
 
@@ -319,11 +301,8 @@ def _scope_card_example(config: dict, access_key: AccessKeyRecord, hass: HomeAss
 def _card_row(entry: CardEntry, *, detailed: bool, access_key: AccessKeyRecord, hass: HomeAssistant) -> dict:
     """Project one catalog entry. Lean by default, with the example only on request.
 
-    The lean row carries what picking a card needs (type, what it is, whether it
-    works); the stub config is what CONFIGURING one needs and is an order of
-    magnitude larger. A well-stocked instance carries dozens of cards, so
-    returning every example by default would spend most of a discovery call's
-    budget on cards the agent will not use.
+    The lean row serves picking a card; the far larger stub config serves configuring one, and
+    defaulting to it would spend a discovery call on unused cards.
     """
     row: dict[str, Any] = {
         "type": f"custom:{entry.type}",
@@ -375,10 +354,8 @@ async def _tool_list_dashboard_cards(
 ) -> tuple[dict, str, str]:
     """MCP tool: list the custom dashboard cards installed on this instance.
 
-    Answers "what can I build with" before an agent authors a card. The catalog
-    is harvested by the panel frontend (see card_catalog.py for why it cannot be
-    read off disk) and cached, so this tool is a pure read of that cache and
-    never blocks on a browser.
+    A pure read of the catalog the panel frontend harvests (see card_catalog.py), so it never blocks
+    on a browser.
     """
     tool = "list_dashboard_cards"
     if effective_cap(access_key, "cap_lovelace_write") == CAP_DENY:
@@ -494,20 +471,15 @@ def _collect_card_types(node: Any, out: set[str]) -> None:
 
 
 async def _card_warnings(payload: Any, data: PhoenixData, hass: HomeAssistant) -> list[str]:
-    """Advisory notes about custom cards this instance may not render.
+    """Advisory notes about custom cards this instance may not render; never a refusal.
 
-    ADVISORY, NEVER A REFUSAL. The catalog is a cache of what one browser could
-    see, so failing the write closed would block a legitimate card whenever the
-    cache is cold, stale, or harvested from a page that saw a partial registry,
-    with no way to override. The cost of the advisory direction is only a warning
-    next to a card that does render. Each warning states how complete the
-    harvest behind it was, so "not seen" never reads as "not installed" when
-    resources changed or failed to import.
-
-    Silent when the catalog has never been harvested: with nothing to compare
-    against, every custom card would be reported as unknown, which trains the
-    reader to ignore the field. An empty list is therefore not a validation.
+    Each warning states how complete the harvest was. Silent when no harvest exists, so an empty
+    list is not a validation.
     """
+    # The catalog is a cache of what one browser could see, so failing closed would block a
+    # legitimate card whenever it is cold, stale or partial, with no override. "Not seen" must not
+    # read as "not installed" when resources changed or failed to import. With no harvest every
+    # custom card would read as unknown, which trains the reader to ignore the field.
     catalog = data.card_catalog
     if not catalog.catalog.harvested:
         return []
@@ -721,9 +693,8 @@ async def _execute_delete_dashboard(
 def _no_stored_config_message(url_path: str | None) -> str:
     """Explain an auto-generated (no stored config) dashboard, naming the target.
 
-    Omitting url_path addresses the DEFAULT dashboard, which is commonly
-    auto-generated. Naming the target keeps an agent that dropped url_path from
-    reading "no stored config" as contradicting a named dashboard it just read.
+    Omitting url_path addresses the default dashboard, so naming it stops an agent reading this as
+    contradicting a dashboard it just read.
     """
     if url_path is None:
         return (
@@ -744,13 +715,12 @@ def _scrub_layout(
 ) -> tuple[Any, list[dict]]:
     """A layout scrubbed to this key's scope, plus a warning per truncated subtree.
 
-    Layouts nest far deeper than service responses, so the bound is the
-    dashboard one and a deeper subtree becomes the placeholder every write path
-    refuses, never a silently empty container. With entity_domains, hidden
-    entity IDs embedded in strings (Markdown, templates) are redacted too, so
-    they can neither be read nor matched; tokens outside those domains, such as
-    a button-card template's entity.state, are not IDs and stay.
+    A subtree past the dashboard depth bound becomes the placeholder every write path refuses. With
+    entity_domains, hidden IDs inside strings are redacted too.
     """
+    # Layouts nest far deeper than service responses, and a placeholder is never a silently empty
+    # container. Tokens outside entity_domains, such as a button-card template's entity.state, are
+    # not IDs and stay.
     truncated: list[list] = []
     scrubbed = filter_service_response(
         config, access_key, hass, max_depth=DASHBOARD_SCRUB_MAX_DEPTH, truncated=truncated,
@@ -938,9 +908,8 @@ def _url_path_refusal(args: dict, tool_name: str) -> tuple[dict, str, str] | Non
 def _dashboard_write_precheck(args: dict, tool_name: str) -> tuple[dict, str, str] | None:
     """Pre-gate validation for dashboard writes; None means OK to proceed.
 
-    Checks config is an object and refuses a lossy read's redaction placeholder
-    so a doomed or destructive request is rejected before a pending approval is
-    created. The executor re-validates both at apply time.
+    Checks config is an object and refuses a lossy read's redaction placeholder. The executor
+    re-validates both at apply time.
     """
     refusal = _url_path_refusal(args, tool_name)
     if refusal is not None:
@@ -1054,19 +1023,15 @@ async def _execute_set_dashboard_config(
 
 
 def _card_index_ok(value: Any) -> TypeGuard[int]:
-    """True for a real int index (bool subclasses int and must not pass).
-
-    A TypeGuard so the range comparisons after each call type-check.
-    """
+    """TypeGuard for a real int index (bool subclasses int and must not pass)."""
     return isinstance(value, int) and not isinstance(value, bool)
 
 
 def _layout_shape_reason(config: Any) -> str | None:
     """Refuse a layout the dashboard frontend could not render.
 
-    Home Assistant stores any shape here, but the frontend iterates views, cards,
-    sections and badges as lists, so an object in one of those places blanks
-    the dashboard for every viewer. Only the resulting layout is judged.
+    HA stores any shape, but the frontend iterates views, cards, sections and badges as lists, so an
+    object there blanks the dashboard. Only the resulting layout is judged.
     """
     def cards_reason(cards: Any, where: str, depth: int) -> str | None:
         if not isinstance(cards, list):
@@ -1107,12 +1072,9 @@ def _layout_shape_reason(config: Any) -> str | None:
 
 
 def _card_shape_reason(card: Any) -> str | None:
-    """Cheap structural check on an agent-supplied card config.
-
-    A card copied from a scrubbed read can carry the redaction placeholder;
-    writing it would replace real configuration, so it is refused like a
-    patched value.
-    """
+    """Cheap structural check on an agent's card config, refusing the redaction placeholder."""
+    # A card copied from a scrubbed read can carry the placeholder, and writing it would replace
+    # real configuration.
     if not isinstance(card, dict) or not isinstance(card.get("type"), str) or not card["type"]:
         return "card must be an object with a non-empty type."
     return _placeholder_reason("card", redaction_sentinel_path(card))
@@ -1137,10 +1099,8 @@ def _resolve_dashboard_cards(
 ) -> tuple[list | None, str | None]:
     """Locate the cards list addressed by view_index (+ section_index).
 
-    Callers pass a deep copy, never the live lovelace config object: the cards
-    list is created on the target view/section when absent (so an add can
-    target a view with no cards yet), which is a mutation. Returns
-    (cards, None) on success or (None, reason) for an unaddressable target.
+    Returns (cards, None) or (None, reason). Callers pass a deep copy, because an absent cards list
+    is created on the target, which is a mutation.
     """
     if "strategy" in config:
         return None, "This dashboard is strategy-generated; it has no editable card list."
@@ -1182,10 +1142,8 @@ def _apply_dashboard_card_op(
 ) -> tuple[dict | None, Any, str | None]:
     """Apply one card-level op ("add" | "edit" | "delete") to a copy of config.
 
-    Returns (new_config, prior_card, None) on success or (None, None, reason).
-    prior_card is the card an edit replaced or a delete removed (None for add).
-    Always deep-copies first: config may be the object the lovelace integration
-    holds live, which must never be mutated in place.
+    Returns (new_config, prior_card, None) or (None, None, reason); prior_card is what an edit or
+    delete displaced. Never mutates the live lovelace object.
     """
     new_config = copy.deepcopy(config)
     cards, reason = _resolve_dashboard_cards(new_config, args.get("view_index"), args.get("section_index"))
@@ -1230,11 +1188,8 @@ async def _dashboard_card_current(
 ) -> dict | tuple[dict, str, str]:
     """Read the target dashboard's current stored config for a card-level op.
 
-    Returns the config dict, or the tool error tuple to return (callers test for
-    a tuple). A card or patch op needs a stored base layout, so an auto-generated
-    dashboard is an invalid_request steering to set_dashboard_config; a CAS
-    mismatch (expected_hash supplied and stale) is refused here too. Used both
-    pre-gate and by the executors.
+    Returns the config dict, or the tool error tuple. An auto-generated dashboard steers to
+    set_dashboard_config, and a stale expected_hash is refused. Used pre-gate and by executors.
     """
     refusal = _url_path_refusal(args, tool_name)
     if refusal is not None:
@@ -1324,9 +1279,8 @@ async def _tool_dashboard_card(
 ) -> tuple[dict, str, str]:
     """MCP tool: add, edit or delete one dashboard card (Confirm-gated).
 
-    The full op is validated pre-gate against the current layout, so a
-    structurally doomed op never becomes a pending approval; the executor
-    re-reads and re-validates at apply time.
+    The full op is validated pre-gate against the current layout; the executor re-reads and
+    re-validates at apply time.
     """
     if effective_cap(access_key, "cap_lovelace_write") == CAP_DENY:
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", tool_name
@@ -1459,10 +1413,8 @@ def _patch_op_arg(args: dict) -> str:
 def _apply_one_patch(config: dict, change: dict) -> tuple[Any, str | None]:
     """Apply one path-addressed change in place; returns (prior_value, reason).
 
-    prior_value is what the path held before (None for an append, which keeps
-    its list identity, and for a set that adds a mapping key). Only set may name
-    a key its mapping lacks; remove and append need something there. Never
-    called on the live lovelace object.
+    prior_value is None for an append and for a set adding a mapping key. Only set may name a
+    missing key. Never called on the live lovelace object.
     """
     op = _patch_op_arg(change)
     path = change.get("path")
@@ -1498,13 +1450,13 @@ def _apply_one_patch(config: dict, change: dict) -> tuple[Any, str | None]:
 
 
 def _apply_dashboard_patch(config: dict, args: dict) -> tuple[dict | None, list[Any], str | None]:
-    """Apply every change, in order, to a COPY of config, or none of them.
+    """Apply every change, in order, to a copy of config, or none of them.
 
-    Each path addresses the layout as left by the changes before it. Returns
-    (new_config, priors, None) or (None, [], reason naming the failing change).
-    Deep-copies first for the same reason the card ops do:
-    async_get_lovelace_config can hand back the lovelace integration's live object.
+    Each path addresses the layout as left by the changes before it. Returns (new_config, priors,
+    None) or (None, [], reason naming the failing change).
     """
+    # Deep-copies first because async_get_lovelace_config can hand back the integration's live
+    # object.
     changes = args.get("changes")
     if not isinstance(changes, list) or not changes:
         return None, [], "changes must list at least one change."
@@ -1569,20 +1521,15 @@ async def _tool_patch_dashboard(
     args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData,
     request_id: str = "", client_ip: str | None = None,
 ) -> tuple[dict, str, str]:
-    """MCP tool: change ONE path-addressed value in a dashboard (Confirm-gated).
+    """MCP tool: change one path-addressed value in a dashboard (Confirm-gated).
 
-    The escape hatch for everything the card ops cannot address: view badges, view
-    options, a single field inside a card. It exists because set_dashboard_config
-    requires resending the WHOLE layout, and a read of that layout is lossy (it
-    redacts entities the access key cannot resolve, INCLUDING ghost entities that no
-    longer exist), so a dashboard carrying a few dead references cannot be written
-    back without persisting placeholders over them. Patching never resends the
-    untouched bytes, so redaction stops being a write barrier.
-
-    Validated against the current layout before the approval is created, so a bad
-    path never becomes a pending approval; the executor re-reads and re-validates
-    at apply time so a change during the approval window is caught.
+    Covers what card ops cannot address: view badges, view options, one card field. Validated before
+    approval and re-validated at apply time.
     """
+    # set_dashboard_config resends the whole layout, and a read of it redacts entities the key
+    # cannot resolve, including ghosts, so a dashboard with dead references cannot be written back
+    # without persisting placeholders. Patching never resends untouched bytes, so redaction stops
+    # being a write barrier.
     tool = "patch_dashboard"
     if effective_cap(access_key, "cap_lovelace_write") == CAP_DENY:
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", tool

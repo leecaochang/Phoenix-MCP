@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 import json
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
@@ -11,7 +12,7 @@ from homeassistant.components.system_log import DedupStore
 from homeassistant.helpers import entity_registry as er
 from homeassistant.util.dt import utcnow
 
-from custom_components.phoenix_mcp import helpers, tool_defs, tool_dispatch
+from custom_components.phoenix_mcp import log_read, tool_defs, tool_dispatch
 from custom_components.phoenix_mcp.tools import system as system_tools
 from custom_components.phoenix_mcp.audit import AuditLog
 from custom_components.phoenix_mcp.const import (
@@ -27,6 +28,14 @@ from custom_components.phoenix_mcp.policy_engine import Permission
 from custom_components.phoenix_mcp.rate_limiter import RateLimiter
 from tests.log_fixtures import attach_log_store, make_log_entry, make_log_store
 from tests.runtime_fixtures import make_mcp_data as _make_data, make_mcp_hass as _make_hass, make_mcp_access_key as _make_access_key
+
+
+@contextmanager
+def _log_scope(**kwargs):
+    """Decide entity visibility for both readers of it: the log reader and the redactor."""
+    with patch("custom_components.phoenix_mcp.log_read.resolve", **kwargs) as scope, \
+            patch("custom_components.phoenix_mcp.redaction.resolve", scope):
+        yield scope
 
 
 async def _call(tool: str, args: dict, *, access_key=None, hass=None, data=None):
@@ -467,7 +476,7 @@ async def test_phoenix_diagnostics_is_separate_and_strongly_redacted():
     def permission(entity_id, _access_key, _hass):
         return Permission.READ if entity_id == "sensor.allowed" else Permission.NO_ACCESS
 
-    with patch("custom_components.phoenix_mcp.helpers.resolve", side_effect=permission):
+    with _log_scope(side_effect=permission):
         general, _result, _outcome = await _call(
             "get_logs", {}, access_key=access_key, hass=hass, data=data
         )
@@ -501,10 +510,7 @@ async def test_phoenix_diagnostics_is_separate_and_strongly_redacted():
         "CRITICAL",
     ]
 
-    with patch(
-        "custom_components.phoenix_mcp.helpers.resolve",
-        side_effect=RuntimeError("registry drift"),
-    ):
+    with _log_scope(side_effect=RuntimeError("registry drift")):
         fail_closed, _result, fail_closed_outcome = await _call(
             "get_phoenix_diagnostics", {}, access_key=access_key, hass=hass, data=data
         )
@@ -521,10 +527,7 @@ async def test_phoenix_search_cannot_probe_pre_redaction_topology():
         message="connection from 192.168.1.55 failed",
     )
     hass, data = _hass_with_entries(access_key, [entry])
-    with patch(
-        "custom_components.phoenix_mcp.helpers.resolve",
-        return_value=Permission.NO_ACCESS,
-    ):
+    with _log_scope(return_value=Permission.NO_ACCESS):
         raw, _result, _outcome = await _call(
             "get_phoenix_diagnostics",
             {"search": "192.168.1.55"},
@@ -821,14 +824,14 @@ async def test_phoenix_detail_uses_current_strong_scrubbing_and_scope():
     hass, data = _hass_with_entries(access_key, [entry])
     def permission(entity_id, _access_key, _hass):
         return Permission.READ if entity_id == "sensor.allowed" else Permission.NO_ACCESS
-    with patch("custom_components.phoenix_mcp.helpers.resolve", side_effect=permission):
+    with _log_scope(side_effect=permission):
         body, _result, _outcome = await _call("get_phoenix_diagnostics", {}, access_key=access_key, hass=hass, data=data)
         args = {"detail_ref": body["entries"][0]["detail_ref"]}
         chunk, _result, outcome = await _call("get_log_detail", args, access_key=access_key, hass=hass, data=data)
     assert outcome == "allowed" and "sensor.allowed" in chunk["detail"]["text"]
     for hidden in ("sensor.hidden", "nas.local", "192.168.1.55", "/config", ACCESS_KEY_PREFIX + "a" * 64):
         assert hidden not in chunk["detail"]["text"]
-    with patch("custom_components.phoenix_mcp.helpers.resolve", return_value=Permission.NO_ACCESS):
+    with _log_scope(return_value=Permission.NO_ACCESS):
         error, result, outcome = await _call("get_log_detail", args, access_key=access_key, hass=hass, data=data)
     assert outcome == "invalid_request" and result["isError"] and "stale" in error
 
@@ -881,7 +884,7 @@ async def test_detail_authority_changes_during_collection_block_disclosure(chang
     entry = make_log_entry(message="must-not-disclose")
     attach_log_store(hass, make_log_store([entry]))
     body, _result, _outcome = await _call("get_logs", {}, access_key=access_key, hass=hass, data=data)
-    original = helpers.collect_log_entries
+    original = log_read.collect_log_entries
     def changed_collection(*args, **kwargs):
         page = original(*args, **kwargs)
         if change == "revoke":

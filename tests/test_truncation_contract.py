@@ -21,7 +21,7 @@ import json
 import pathlib
 import pytest
 
-from custom_components.phoenix_mcp.helpers import collect_log_entries
+from custom_components.phoenix_mcp.log_read import collect_log_entries
 from custom_components.phoenix_mcp.tool_dispatch import _dispatch_mcp
 from tests.log_fixtures import attach_log_store, make_log_entry, make_log_store
 from tests.runtime_fixtures import make_mcp_data as _make_data, make_mcp_hass as _make_hass, make_mcp_access_key as _make_access_key
@@ -258,7 +258,7 @@ class TestLimitSlicesReportTruncation:
             assert func_name in names, f"exempted function {entry} no longer exists"
 
     def test_the_walk_covers_the_module_that_regressed(self):
-        """The scan covers helpers.py (the log-page slice) and the dispatch and tool modules.
+        """The scan covers log_read.py (the log-page slice) and the dispatch and tool modules.
 
         A path-filter change cannot then quietly drop them.
         """
@@ -266,4 +266,4 @@ class TestLimitSlicesReportTruncation:
             str(p.relative_to(PACKAGE)) for p in PACKAGE.rglob("*.py")
             if not any(part in _SKIP_DIRS for part in p.relative_to(PACKAGE).parts)
         }
-        assert {"helpers.py", "mcp_transport.py", "tool_dispatch.py", "tools/history.py", "tools/logs.py"} <= scanned
+        assert {"log_read.py", "mcp_transport.py", "tool_dispatch.py", "tools/history.py", "tools/logs.py"} <= scanned

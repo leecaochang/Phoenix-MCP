@@ -374,6 +374,7 @@
       "verboseHint": "Mostra le chiamate agli strumenti dell'agente, i risultati degli strumenti e il pensiero. Risposte, immagini, avanzamento, approvazioni e avvisi vengono mostrati comunque.",
       "workingOn": "In corso: {name}",
       "workingSpinner": "In corso…",
+      "otherTabTurn": "Un'altra scheda sta eseguendo una risposta in questa conversazione. Se anche questa scheda ne esegue una, viene conservata quella che termina per ultima.",
       "pausedAfter": {
         "one": "In pausa dopo {count} passaggio. Continuare?",
         "other": "In pausa dopo {count} passaggi. Continuare?"

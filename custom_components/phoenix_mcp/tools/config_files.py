@@ -1,12 +1,10 @@
 """Config-file read tools: the scoped filesystem jail and YAML configuration reads.
 
-`cap_filesystem` covers only www/, themes/ and custom_templates/; `_resolve_fs_path`
-realpaths and requires containment (const.FILESYSTEM_ALLOWED_DIRS), so symlinks and
-traversal cannot escape and configuration.yaml is unreachable. `cap_yaml_edit` reads
-configuration.yaml and the YAML files inside the configuration directory, never
-secrets.yaml, hidden directories or ESPHome device files. Nothing here writes: YAML
-configuration belongs to the operator, and Phoenix changes configuration only
-through objects Home Assistant manages itself.
+`cap_filesystem` covers only www/, themes/ and custom_templates/; `_resolve_fs_path` realpaths and
+requires containment, so symlinks and traversal cannot escape. `cap_yaml_edit` reads
+configuration.yaml and YAML files inside the configuration directory, never secrets.yaml, hidden
+directories or ESPHome device files. Nothing here writes: YAML configuration belongs to the
+operator.
 """
 
 from __future__ import annotations
@@ -24,7 +22,10 @@ from homeassistant.core import HomeAssistant
 
 from ..const import CAP_DENY, FILESYSTEM_ALLOWED_DIRS, LIST_FILES_DEFAULT_LIMIT, LIST_FILES_MAX_LIMIT
 from ..tool_contracts import handler_arguments
-from ..helpers import content_hash, effective_cap, redact_secrets_in_text, str_arg
+from ..helpers import content_hash
+from ..tool_input import str_arg
+from ..capability import effective_cap
+from ..redaction import redact_secrets_in_text
 from ..policy_engine import is_sensitive_key
 from ..tool_common import _read_text_capped, _tool_error, _tool_success, _usable_path_arg, fitted_offset_page, offset_page
 from ..access_key_store import AccessKeyRecord
@@ -176,12 +177,9 @@ def _resolve_yaml_read_path(hass: HomeAssistant, file_arg: Any) -> tuple[str, st
 
 
 def _file_change_hash(text: str) -> str:
-    """A change detector over a file's raw text that cannot test a guess at a value.
-
-    The file may hold what the read redacts, and a plain hash would confirm a guessed
-    secret. Keyed for this process, so the value is comparable between two reads and
-    differs after a restart. No write takes it as an expected_hash.
-    """
+    """A per-process keyed change detector over a file's raw text, never an expected_hash."""
+    # The file may hold what the read redacts, and a plain hash would confirm a guessed secret. The
+    # value is comparable between two reads and differs after a restart.
     return hmac.new(_FILE_HASH_KEY, text.encode("utf-8"), hashlib.sha256).hexdigest()
 
 
@@ -209,11 +207,7 @@ def _redacted_yaml(text: str) -> str:
 
 
 def _fragment_text(fragment: Any) -> str:
-    """Dump one YAML fragment for display, without the document-end marker.
-
-    PyYAML appends "...\\n" after a bare scalar document; it is valid YAML but
-    noise in a one-key answer.
-    """
+    """Dump one YAML fragment for display, without the marker PyYAML adds after a bare scalar."""
     text = yaml_includes.dump_tagged(fragment)
     if text.endswith("\n...\n"):
         text = text[: -len("...\n")]

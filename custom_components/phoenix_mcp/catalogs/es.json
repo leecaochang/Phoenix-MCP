@@ -807,6 +807,7 @@
       "verboseHint": "Mostrar las llamadas a herramientas, los resultados de las herramientas y el pensamiento del agente. Las respuestas, las imágenes, el progreso, las aprobaciones y los avisos se muestran siempre.",
       "workingOn": "Trabajando: {name}",
       "workingSpinner": "Trabajando…",
+      "otherTabTurn": "Otra pestaña está generando una respuesta en esta conversación. Si esta pestaña también genera una, se conserva la que termine en último lugar.",
       "pausedAfter": {
         "one": "En pausa tras {count} paso. ¿Continuar?",
         "other": "En pausa tras {count} pasos. ¿Continuar?"

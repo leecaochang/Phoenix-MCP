@@ -97,9 +97,8 @@ def _step_owned_fallback(
 ) -> tuple[bool, Any]:
     """Return only a current value the edit step itself supplies.
 
-    A static voluptuous default is intentionally not returned here. Omitting
-    that field lets Home Assistant apply the same default it applies to the
-    frontend form, while submitting it would overwrite an existing value.
+    A static voluptuous default is never returned: omitting the field lets HA apply it as the
+    frontend does, while submitting it would overwrite an existing value.
     """
     description = _marker_description(marker)
     if "suggested_value" in description and description["suggested_value"] is not None:

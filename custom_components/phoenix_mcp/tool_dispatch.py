@@ -26,17 +26,16 @@ from .const import (
 )
 from .conversation_log import record_event, recorded_exchange
 from .data import PhoenixData
-from .helpers import (
-    access_key_has_write_scope, access_key_notes_block, access_key_notes_for_agent,
-    build_permitted_states as _build_permitted_states, effective_cap, effective_caps,
-    entity_hint_for_agent, log_internal_failure, log_request as _log,
-)
+from .helpers import log_internal_failure, log_request as _log
+from .capability import access_key_has_write_scope, effective_cap, effective_caps
+from .template_sandbox import build_permitted_states as _build_permitted_states
+from .redaction import access_key_notes_block, access_key_notes_for_agent, entity_hint_for_agent
 from .home_companion import is_companion, wrapper_tool, authorize_call, record_outcome
 from .household_authority import household_tool_access
 from .mesa_audit import mesa_advisory_ctx
 from .mesa_tools import mesa_tool_defs
 from .policy_engine import filter_entities_for_access_key, Permission, resolve
-from .provider_constants import AGENTCLI_CLIENT_IP
+from .provider_constants import AGENT_CHAT_CLIENT_IP
 from .request_authority import (
     AuthorityChangedError, check_request_authority, dispatch_progress, DispatchProgress,
     policy_version, PolicyChangedError, request_authority, RequestAuthority, dispatch_client_ip,
@@ -142,12 +141,8 @@ _NOTES_REMOVED_NOTICE = (
 class ExecutorNotRegistered(LookupError):
     """No executor is registered for a tool name.
 
-    Distinct from a bare KeyError because the approve path treats "nothing could
-    have run" as retryable and everything else as possibly applied. A KeyError
-    raised INSIDE an executor (a dict lookup on a service response, a missing
-    config key) would be indistinguishable from the lookup failing, and the
-    caller would clear the durable marker and re-offer an approval whose side
-    effect had already begun.
+    Distinct from KeyError because the approve path treats only this as "nothing could have
+    run"; a KeyError inside an executor may follow a side effect.
     """
 
 
@@ -159,11 +154,9 @@ async def async_execute_approved_tool(
     data: PhoenixData,
 ) -> tuple[dict, str, str]:
     """Run the executor for a tool call that was gated and then approved.
-
-    Refuses stored arguments that fail validation and an approval whose bound
-    entity targets changed (TARGETS_CHANGED), then runs under confirm-approved
-    MESA semantics. Raises ExecutorNotRegistered if no executor is registered
-    for the tool_name, the ONLY failure here that proves nothing was dispatched.
+    Refuses invalid stored arguments and changed bound targets (TARGETS_CHANGED), then runs
+    under confirm-approved MESA semantics. ExecutorNotRegistered is the only proof nothing
+    dispatched.
     """
     # The refusals below precede the executor, so nothing can have been written.
     if error := tool_arguments_error(args):
@@ -217,11 +210,8 @@ async def _call_tool(
 ) -> tuple[dict, Outcome, str]:
     """Route a tools/call request to the appropriate tool handler.
 
-    The middle element is the audit outcome, narrowed to audit.Outcome so the
-    _dispatch_mcp call site that feeds it straight into log_request type-checks.
-    This does NOT statically constrain the handlers (_TOOL_HANDLERS stores them
-    as Any, erasing their own returns); a sweep test over the whole tool surface
-    enforces a valid outcome per tool.
+    The middle element is the audit outcome, narrowed to audit.Outcome. _TOOL_HANDLERS stores
+    handlers as Any, so this does not statically constrain them.
     """
     try:
         check_request_authority()
@@ -336,13 +326,8 @@ async def _call_tool_checked(
 async def _get_ha_assist_api(hass: HomeAssistant) -> Any:
     """Return HA's Assist LLM APIInstance, or raise if unavailable.
 
-    HA-COUPLING POINT. LLMContext's fields differ across HA versions (older
-    ones declare `user_prompt`), and a TypeError from an unknown field would be
-    swallowed by BOTH callers (prompts/list and prompts/get, pass-through access keys
-    only) and silently reported as no prompts. So the kwargs are filtered to the
-    fields the live dataclass declares, the same "supply the intersection with the
-    live signature" approach ws_dispatch uses for ActiveConnection: a future
-    field removal degrades to omitting it rather than a silent empty result.
+    LLMContext's fields vary across HA versions, so kwargs are filtered to the live dataclass;
+    an unknown field would otherwise read as no prompts.
     """
 
 
@@ -522,14 +507,10 @@ def _build_context_json(access_key: AccessKeyRecord, hass: HomeAssistant) -> dic
 
 
 def _build_instructions(access_key: AccessKeyRecord, data: PhoenixData, base_url: str, hass: HomeAssistant) -> str:
-    """Access-key-aware MCP `instructions` primer, sent at every session start.
+    """Return the key-aware MCP ``instructions`` primer sent at every session start.
 
-    Short: the etiquette that prevents the common failure modes (treating
-    pending_approval as an error, retrying, ignoring the per-entity safety layer)
-    plus this access key's gated capabilities, its administrator notes and a link
-    to the full guide at /api/phoenix-mcp/skill. A Home Companion access key gets
-    its fixed wrapper primer: its notes go to the inner turn that does the work,
-    the same on every ingress.
+    Holds the etiquette, this key's gated capabilities and notes, and a link to the skill
+    guide. A Home Companion key gets its fixed wrapper primer; its notes go to the inner turn.
     """
     if is_companion(access_key):
         return ("This access key uses Phoenix Home Companion. Only home_request is exposed. "
@@ -598,14 +579,10 @@ def _build_instructions(access_key: AccessKeyRecord, data: PhoenixData, base_url
 
 
 def _announced_tools(access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData) -> list[dict]:
-    """The tools tools/list announces to this access key, as their client-facing definitions.
-
-    Only the tools this access key can use, unless announce_all_tools is set.
-    Cap-tied tools gate on their cap; write/action tools gate on write scope;
-    tools needing a system surface (ESPHome, the Device Builder) gate on it being
-    present; reads are always announced. announce_all_tools overrides all of it,
-    including "requires": it is a debugging affordance, and the call path still
-    refuses.
+    """Return the client-facing tools that tools/list announces to this key.
+    Only tools the key can use: cap-tied, write-scoped and system-surface tools gate; reads
+    are always announced. announce_all_tools overrides this as a debugging aid; calls still
+    refuse.
     """
     if is_companion(access_key):
         return [wrapper_tool()]
@@ -623,29 +600,13 @@ def _maybe_append_stale_advisory(
     tool_result: dict, access_key: AccessKeyRecord, data: PhoenixData, client_ip: str,
     hass: HomeAssistant,
 ) -> bool:
-    """Append the one-time stale-tools/catalog/notes notices to a result, in place.
-
-    Returns whether an advisory was added, which the caller records on the audit
-    row. This is the stateless transport's substitute for tools/list_changed: the
-    notice rides in-band on the next tools/call, once per staleness epoch (a fresh
-    tools/list resets it). The epoch spans two independent axes, so resolving one
-    does not re-fire the other: the OPERATOR changed this access key
-    (settings_version moved past the one echoed at the last tools/list), and the
-    BUILD changed under a client that already fetched its schemas (catalog
-    fingerprint differs; an empty stored fingerprint was never recorded, so never
-    stale). Changed administrator notes are a third axis with its own counter: the
-    notice carries the current notes and records them delivered, as instructions
-    also do at initialize and server/discover. A Home Companion access key never
-    gets it; its notes reach the inner turn on every request.
-
-    Skipped for Phoenix's own internal surfaces (the sentinel client IPs): they
-    rebuild tools and instructions from the live access key and have no MCP server
-    to reconnect, and Assist, which HA keeps for a conversation, tells its own model
-    (assist_api). Nothing is marked for them, so an external client sharing the
-    access key still gets advised.
+    """Append the one-time stale-tools, catalog or notes notices to a result, in place.
+    Returns whether one was added, for the audit row. Substitutes for tools/list_changed on
+    the stateless transport, once per epoch. Skipped for internal surfaces and Home Companion
+    notes.
     """
     internal = client_ip in (
-        AGENTCLI_CLIENT_IP, ASSIST_CLIENT_IP, VOICE_AGENT_CLIENT_IP, AI_TASK_CLIENT_IP, HOME_COMPANION_CLIENT_IP)
+        AGENT_CHAT_CLIENT_IP, ASSIST_CLIENT_IP, VOICE_AGENT_CLIENT_IP, AI_TASK_CLIENT_IP, HOME_COMPANION_CLIENT_IP)
     content = tool_result.get("content")
     notices: list[str] = []
     if not internal:
@@ -754,18 +715,10 @@ async def _dispatch_tools_call(
     return _jsonrpc_result(msg_id, tool_result), tool_name or "tools/call", resource, outcome
 
 
-# Every JSON-RPC method _dispatch_mcp answers. The transport reads it to choose
-# an unknown method's HTTP STATUS, which the spec makes meaningful: 404 with a
-# -32601 body says "this IS an MCP endpoint and it does not implement that
-# method", which is how a client distinguishes it from a 404 by a server that
-# hosts no MCP endpoint at all and decides whether to fall back. The status has
-# to be decided BEFORE the response framing is picked, because preparing an SSE
-# stream puts a 200 on the wire; an unknown method has nothing to stream anyway.
-#
-# This mirrors the dispatcher's own branches: a protocol test reads them back off
-# the AST and fails on any drift. A method added to one and not the other is the
-# failure that matters: answering a real method with 404, or streaming an
-# unknown one.
+# Every JSON-RPC method _dispatch_mcp answers, mirroring its branches. The transport reads
+# it to choose an unknown method's HTTP status before framing: 404 with -32601 tells a
+# client this is an MCP endpoint without that method, and preparing an SSE stream would put
+# a 200 on the wire.
 _MCP_METHODS: frozenset[str] = frozenset({
     "server/discover",
     "initialize",
@@ -800,18 +753,9 @@ def _record_interrupted_write(
     params: dict, request_id: str, client_ip: str,
 ) -> None:
     """Account for a write whose caller went away before it finished.
-
-    A disconnect cancels modern dispatch, and cancellation does not undo what
-    already ran, so the write may or may not have taken effect. Called in the
-    cancelled task, so everything that must happen happens here without an await:
-    the audit row and the barrier that stops the access key's next write. Saving
-    the barrier needs an await, so it runs as its own task, which the cancellation
-    does not reach.
-
-    A request held at an approval is not unknown: the approval queue owns that
-    outcome, so a client that gives up while the operator decides does not stop
-    the key's other writes. home_request is the Companion's own turn, whose writes
-    each hold their own claim.
+    Runs in the cancelled task, so the audit row and barrier happen without an await; saving
+    the barrier is its own task. A request held at an approval is not unknown, and
+    ``home_request`` turns hold their own claims.
     """
     name = params["name"]
     payload = {"name": name, "arguments": params.get("arguments"), "interrupted": True}

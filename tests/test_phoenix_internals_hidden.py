@@ -84,13 +84,13 @@ class TestResolve:
 
 
 # --------------------------------------------------------------------------
-# 2. admin_view._build_entity_tree - the permission UI
+# 2. admin.permissions._build_entity_tree - the permission UI
 # --------------------------------------------------------------------------
 
 
 class TestAdminEntityTree:
     def _tree(self, hass):
-        from custom_components.phoenix_mcp.admin_view import _build_entity_tree
+        from custom_components.phoenix_mcp.admin.permissions import _build_entity_tree
         return _build_entity_tree(hass)
 
     def _entity_ids(self, tree) -> set[str]:

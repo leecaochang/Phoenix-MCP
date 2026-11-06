@@ -215,7 +215,7 @@ async def prepare(hass, home, *, cancel=None):
 @pytest.mark.parametrize('change', ['none', 'proposal', 'target', 'reference', 'batch', 'removed', 'source_removed',
     'account', 'account_restored', 'scope', 'alias', 'competitor', 'voice', 'context', 'language', 'revision'])
 async def test_reference_plan_binds_proposal_account_and_complete_catalog(hass, reference_home, change):
-    from custom_components.phoenix_mcp.routing.command_execution import plan_is_current
+    from custom_components.phoenix_mcp.routing.plan_currency import plan_is_current
     data, access_key, store, account, entity_id = reference_home
     await data.store.async_patch_settings(agentcli_routing_mode='auto')
     with patch.object(DecisionProvider, '_request', AsyncMock(return_value=wire())):

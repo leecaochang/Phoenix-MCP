@@ -1,5 +1,5 @@
 ---
-{ "id": "topic.adminApiApprovals", "title": "Approval and Change Endpoints", "parent": "topic.adminApi", "order": 20, "keywords": ["approvals API", "approve", "reject", "cancel", "versions", "rollback", "undo", "recovery", "Needs Attention", "card catalog"], "sectionKeywords": { "approvals": ["pending", "approval_id", "PendingApproval"], "list-approvals": ["in_progress", "status filter", "access_key_id"], "approve": ["approvalExecutionInterrupted", "approvalProcessing", "killSwitchEngaged", "approvalCapabilityDenied", "approvalAccessKeyInactive", "execution_failed", "refused_before_write"], "batch-approve": ["approval_ids", "batch", "applied", "remaining", "approve all"], "reject": ["reason", "rejected_reason"], "cancel": ["DELETE", "admin_cancelled"], "claims": ["phoenix_mcp_approval_claimed", "phoenix_mcp_approval_resolved", "claim", "event"], "history": ["versions", "resource_type", "resource_id", "truncated"], "read-version": ["restore_refusals", "yaml_tags", "audit_only", "template_incompatible", "entity_missing"], "restore-version": ["expected_latest_id", "stale_version", "restore_unverified", "rollback", "side"], "attention": ["attention", "unknown outcome", "checked_outcome", "calendar"], "recovery": ["config-recovery", "safety copy", "snapshot", "phase"], "recovery-action": ["inspect", "reviewed", "delete", "recoveryBlocked"], "recovery-restore": ["isError", "recoveryManualOnly", "zigbee"], "card-catalog": ["custom cards", "harvest", "resource_fingerprint", "stub_config"] }, "covers": ["custom_components/phoenix_mcp/admin_view.py", "custom_components/phoenix_mcp/approvals.py", "custom_components/phoenix_mcp/config_recovery.py"] }
+{ "id": "topic.adminApiApprovals", "title": "Approval and Change Endpoints", "parent": "topic.adminApi", "order": 20, "keywords": ["approvals API", "approve", "reject", "cancel", "versions", "rollback", "undo", "recovery", "Needs Attention", "card catalog"], "sectionKeywords": { "approvals": ["pending", "approval_id", "PendingApproval"], "list-approvals": ["in_progress", "status filter", "access_key_id"], "approve": ["approvalExecutionInterrupted", "approvalProcessing", "killSwitchEngaged", "approvalCapabilityDenied", "approvalAccessKeyInactive", "execution_failed", "refused_before_write"], "batch-approve": ["approval_ids", "batch", "applied", "remaining", "approve all"], "reject": ["reason", "closure_reason"], "cancel": ["DELETE", "admin_cancelled"], "claims": ["phoenix_mcp_approval_claimed", "phoenix_mcp_approval_resolved", "claim", "event"], "history": ["versions", "resource_type", "resource_id", "truncated"], "read-version": ["restore_refusals", "yaml_tags", "audit_only", "template_incompatible", "entity_missing"], "restore-version": ["expected_latest_id", "stale_version", "restore_unverified", "rollback", "side"], "attention": ["attention", "unknown outcome", "checked_outcome", "calendar"], "recovery": ["config-recovery", "safety copy", "snapshot", "phase"], "recovery-action": ["inspect", "reviewed", "delete", "recoveryBlocked"], "recovery-restore": ["isError", "recoveryManualOnly", "zigbee"], "card-catalog": ["custom cards", "harvest", "resource_fingerprint", "stub_config"] }, "covers": ["custom_components/phoenix_mcp/admin/approvals.py", "custom_components/phoenix_mcp/approvals.py", "custom_components/phoenix_mcp/config_recovery.py"] }
 ---
 These endpoints handle what agents ask you to approve, and the changes they make: approvals, configuration history, recovery records, Needs Attention and the dashboard card catalog. Signing in, the error body and request bodies work as described in [Admin API](guide:topic.adminApi).
 
@@ -28,13 +28,13 @@ Use these to review, approve, reject or cancel the actions agents are waiting on
 | `status` | `pending`, `approved`, `rejected`, `failed`, `expired` or `cancelled`. |
 | `created_at`, `expires_at`, `resolved_at` | When it was asked, when it expires and when it ended. |
 | `approved_by_user_id`, `approved_at` | Who approved it, and when. |
-| `rejected_reason` | Why it ended without running, or why its run failed. Values below. |
+| `closure_reason` | Why it ended without running, or why its run failed. Values below. |
 | `result` | The tool's result after an approve. |
 | `request_id`, `client_ip` | The agent request that asked. |
 | `household_request`, `ha_user_id` | The household request flag, and the Home Assistant user behind the request. |
 | `execution_started_at` | When an approve started running the action. |
 
-`rejected_reason` is your own reason for a reject, or one of these values:
+`closure_reason` is your own reason for a reject, or one of these values:
 
 ```text
 access_key_inactive        capability_denied
@@ -82,8 +82,8 @@ Approvals that MESA held for confirmation, and recovery reviews, skip the capabi
 The response is `200` with the updated record:
 
 - `status: "approved"` when the action ran.
-- `status: "failed"` with `rejected_reason: "execution_failed"` when the tool returned an error. This is still a `200`.
-- `status: "failed"` with `rejected_reason: "execution_interrupted"` when the tool sent the change but couldn't confirm it landed. Check the result before you retry. This is still a `200`.
+- `status: "failed"` with `closure_reason: "execution_failed"` when the tool returned an error. This is still a `200`.
+- `status: "failed"` with `closure_reason: "execution_interrupted"` when the tool sent the change but couldn't confirm it landed. Check the result before you retry. This is still a `200`.
 - `result` is `{ tool_result, outcome }`. It adds `refused_before_write: true` when the tool refused before writing anything.
 - An approval that already ended comes back unchanged.
 
@@ -130,7 +130,7 @@ The response is always `200`:
 ```
 
 - `applied` lists the approvals that ran. An approval that was already approved counts as applied.
-- `failed` is `null` when every approval ran. Its `status` is that item's HTTP status. Its `error` is the item's error code, else its `rejected_reason`, else `"failed"`.
+- `failed` is `null` when every approval ran. Its `status` is that item's HTTP status. Its `error` is the item's error code, else its `closure_reason`, else `"failed"`.
 - `failed` carries `message_key` and `message_params` when the item's error had them.
 - `remaining` lists the IDs the batch didn't try.
 
@@ -148,7 +148,7 @@ Rejects a pending approval, so the action never runs.
 
 | Field | Type | Notes |
 |---|---|---|
-| `reason` | string | Optional. Stored in `rejected_reason`. |
+| `reason` | string | Optional. Stored in `closure_reason`. |
 
 The response is the updated record with `status: "rejected"`. An approval that already ended comes back unchanged with `200`. A pending approval past `expires_at` closes as `expired` instead.
 
@@ -163,7 +163,7 @@ Rejecting a recovery review also records that you checked it. If the recovery re
 
 ### Cancel {#cancel}
 
-Cancels a pending approval. It works like reject, with `status: "cancelled"` and `rejected_reason: "admin_cancelled"`. Send no body.
+Cancels a pending approval. It works like reject, with `status: "cancelled"` and `closure_reason: "admin_cancelled"`. Send no body.
 
 The response, and the handling of ended and overdue approvals, match [Reject](guide:#reject). The errors are the same except `approvalReasonString`.
 
@@ -173,7 +173,7 @@ Phoenix fires two events on Home Assistant's event bus, so a script can follow a
 
 - `phoenix_mcp_approval_claimed` fires with `claimed: true` when an approve takes the approval, before the action runs. Data: `approval_id`, `claimed`, `timestamp`.
 - It fires again with `claimed: false` if a failure before the run leaves the approval pending.
-- `phoenix_mcp_approval_resolved` fires whenever an approval reaches a final status. Data: `approval_id`, `access_key_id`, `access_key_name`, `tool_name`, `status`, `rejected_reason`, `approved_by_user_id`, `timestamp`.
+- `phoenix_mcp_approval_resolved` fires whenever an approval reaches a final status. Data: `approval_id`, `access_key_id`, `access_key_name`, `tool_name`, `status`, `closure_reason`, `approved_by_user_id`, `timestamp`.
 
 A page that loads while a run is under way sees `in_progress: true` on the row in [List approvals](guide:#list-approvals).
 

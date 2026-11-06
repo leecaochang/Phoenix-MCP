@@ -40,9 +40,8 @@ async def async_get_authenticated_access_key(
 ) -> tuple[AccessKeyRecord, RateLimitResult] | web.Response:
     """Validate the Phoenix MCP bearer access key and check rate limits.
 
-    Returns (access_key, rl_result) on success, or an aiohttp Response on failure.
-    Checks readiness, kill switch, query-param access key leakage, format
-    pre-validation, hash lookup, revocation, expiry, and rate limits in that order.
+    Returns (access_key, rl_result), or an aiohttp Response on failure. Checks readiness, kill
+    switch, query-param leakage, format, hash, revocation, expiry and rate limits, in order.
     """
     if not data.ready or data.shutting_down:
         return build_error_response("service_unavailable", "Service unavailable.", 503, request_id)
@@ -140,9 +139,8 @@ async def async_archive_expired_access_key(
 ) -> None:
     """Move an expired access key to the archive and perform full cleanup.
 
-    Archives the record to storage, closes its queued approvals, destroys rate
-    limiter and counter state, fires the phoenix_mcp_access_key_expired bus event, and
-    removes sensor entities.
+    Closes its queued approvals, destroys limiter and counter state, fires
+    phoenix_mcp_access_key_expired and removes its sensors.
     """
 
     cancel_expiry_timer(data, access_key.id)

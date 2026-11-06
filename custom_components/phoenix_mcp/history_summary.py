@@ -1,15 +1,10 @@
 """Per-state durations and transition counts for get_history's summary mode.
 
-The fold reads attribute-free Recorder state changes in bounded pages and returns
-no rows. Core has no bounded query for attribute values, so an attribute summary
-has a capped range, is read once per scan and is paged from memory. The state in effect at the window start is a baseline, never a
-transition. A row repeating the current state (a restart rewrite or a forced
-update) is not a transition, and rows sharing one timestamp count as the last of
-them in Recorder order. Time before the entity's first record is unrecorded,
-never attributed to a state. A scan that reaches its page or wall-clock budget
-ends on a cursor strictly between two recorded changes, so the continuation's own
-Recorder baseline is the carried state. Times are UTC epoch microseconds so
-durations add exactly.
+The fold reads attribute-free Recorder state changes in bounded pages. Core has no bounded
+attribute query, so an attribute summary has a capped range and is paged from memory. The
+state at the window start is a baseline, a repeated state is no transition, and rows sharing a
+timestamp count as the last of them. Time before the first record is unrecorded. A budget stop
+ends on a cursor strictly between two recorded changes. Times are UTC epoch microseconds.
 """
 
 from __future__ import annotations
@@ -40,12 +35,10 @@ class SummaryUnavailableError(Exception):
 def read_state_change_page(
     hass: HomeAssistant, entity_id: str, after_us: int, before_us: int, limit: int, include_start_state: bool,
 ) -> list[Row]:
-    """One ascending page of attribute-free state changes. Recorder executor only.
+    """Return one ascending page of attribute-free state changes. Recorder executor only.
 
-    Core's query drops attribute-only updates (last_changed differs from
-    last_updated) and reads rows strictly inside (after, before). With
-    include_start_state it adds the latest earlier row stamped at `after`, or
-    nothing when Recorder holds no state that old.
+    Reads rows strictly inside (after, before). ``include_start_state`` adds the latest
+    earlier row stamped at ``after``, if Recorder holds one.
     """
     # Local: optional component, imported only when this path runs.
     from homeassistant.components.recorder import history
@@ -59,14 +52,10 @@ def read_state_change_page(
 def read_attribute_changes(
     hass: HomeAssistant, entity_id: str, attribute: str, after_us: int, before_us: int, include_start_state: bool,
 ) -> list[Row]:
-    """Every ascending row of one attribute's values. Recorder executor only.
+    """Return every ascending row of one attribute's values. Recorder executor only.
 
-    An attribute-only update (a thermostat's hvac_action going from heating to
-    idle in the same heat mode) never reaches read_state_change_page, so this
-    reads every recorded update with its attributes, inside (after, before) and
-    with the same start row. Core's query takes no limit, so the caller caps the
-    range. A row without the attribute counts under the entity's state, such as
-    unavailable.
+    Reads every update inside (after, before) with the same start row. Core takes no limit, so
+    the caller caps the range. A row without the attribute counts under the entity's state.
     """
     # Local: optional component, imported only when this path runs.
     from homeassistant.components.recorder import history
@@ -87,21 +76,16 @@ def read_attribute_changes(
 
 
 def attribute_page(rows: list[Row], after_us: int, limit: int, include_start_state: bool) -> list[Row]:
-    """One page cut from a scan's rows, shaped as read_state_change_page's.
-
-    As in Core's change query, the rows are strictly after `after_us` and the
-    start row comes on top of the limit.
-    """
+    """Cut one page from a scan's rows, shaped as read_state_change_page's."""
     first = bisect_right(rows, after_us, key=lambda row: row[0])
     start = rows[max(first - 1, 0):first] if include_start_state else []
     return start + rows[first:first + limit]
 
 
 def group_cut(rows: list[Row]) -> int | None:
-    """The last index of a full page that ends a timestamp group, or None.
+    """Return the last index of a full page that ends a timestamp group, or None.
 
-    The page's final row may belong to a group that continues past the page, so
-    a page never ends on it; None means one timestamp fills the page.
+    None means one timestamp fills the page.
     """
     for index in range(len(rows) - 2, -1, -1):
         if rows[index + 1][0] > rows[index][0]:
@@ -110,12 +94,9 @@ def group_cut(rows: list[Row]) -> int | None:
 
 
 def cursor_cut(rows: list[Row]) -> int | None:
-    """The last index a scan may stop on and hand out a cursor, or None.
+    """Return the last index a scan may stop on and hand out a cursor, or None.
 
-    The row must be alone at its timestamp, so Recorder's own baseline query for
-    the continuation picks it unambiguously, and at least two microseconds before
-    the next row, so a cursor fits strictly between them. A page's first row is
-    never tied with folded rows, which all precede the page's lower bound.
+    The row must be alone at its timestamp and at least 2 us before the next row.
     """
     for index in range(len(rows) - 2, -1, -1):
         stamp = rows[index][0]
@@ -209,13 +190,9 @@ async def scan_state_changes(
     clock: Callable[[], float] = time.monotonic,
 ) -> StateSummary:
     """Fold [start_us, end_us) page by page within the row and time budgets.
-
-    Each query asks for page_rows + 1 rows; a page that is not full reaches
-    end_us. A full page is folded up to its group_cut and the next page starts
-    strictly after that row. Once a budget is spent the scan stops at the page's
-    cursor_cut, else just before the page when the last folded row was alone and
-    two microseconds earlier; failing both it folds on, at most to twice the page
-    budget. Raises SummaryUnavailableError when no cut remains.
+    A full page folds to its group_cut. A spent budget stops at a cursor_cut or just before
+    the page, else folds on to at most twice the page budget. Raises SummaryUnavailableError
+    when no cut remains.
     """
     summary = StateSummary(start_us=start_us)
     began = clock()
@@ -272,14 +249,10 @@ def _percent(duration: int, recorded: int) -> float | None:
 
 
 def compact_summary_row(body: dict[str, Any]) -> dict[str, Any]:
-    """One entity of a multi-entity summary: its totals without the shared ranges.
+    """Return one entity of a multi-entity summary: its totals without the shared ranges.
 
-    The ranges are the same for every entity in the call, so they are stated once
-    by the caller. Durations, entry counts and the last entry per state are what
-    "which of these did not do X" needs; an incomplete row keeps its reasons, a
-    row with nothing recorded before the range says when its record begins (so
-    "home since at least then" needs no further read), and a scan that hit its
-    budget keeps the cursor to continue that entity alone.
+    Keeps durations, entry counts, the last entry per state, an incomplete row's reasons,
+    where its record begins, and a budget-stopped scan's cursor.
     """
     row: dict[str, Any] = {"entity_id": body["entity_id"], "complete": body["complete"]}
     if body["incomplete_reasons"]:
@@ -305,11 +278,9 @@ def summary_body(
     entity_id: str, requested: tuple[datetime, datetime], summary: StateSummary, *,
     max_states: int, retention: dict[str, Any], warnings: list[str], continued: bool = False,
 ) -> dict[str, Any]:
-    """The summary response; durations and percentages cover recorded time only.
+    """Return the summary response; durations and percentages cover recorded time only.
 
-    A page continued from a cursor totals only its own covered_range, and a page
-    that stopped at its budget names the unread rest, so neither page's totals
-    can be read as the requested range's.
+    Continued and budget-stopped pages total only their own covered_range.
     """
     recorded_start = summary.recorded_start_us
     recorded = summary.end_us - recorded_start if recorded_start is not None else 0

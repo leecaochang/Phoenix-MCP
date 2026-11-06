@@ -1,16 +1,11 @@
 """Labels and categories: listing them, and guarded create, rename and delete.
 
-Labels and categories are not nodes in the permission tree; what a key may do to
-one follows from what carries it, as for areas and floors (tools/locations.py).
-A label is listed when something the access key can read carries it, and changed
-only when the key can write everything that carries it, since renaming or
-deleting it changes those things too. One that nothing carries, and creating a
-new one, need pass-through authority. Categories work the same within their
-scope (automation, script, scene, helpers), carried by entities.
-
-Every change is reviewed against a binding of the item and its holders, applied
-without an await between the final check and the registry write, read back, and
-recorded in version history so an update can be restored.
+Neither is a node in the permission tree; what a key may do follows from what carries it, as for
+areas and floors. A label is listed when something readable carries it and changed only when the key
+can write everything carrying it. One nothing carries, and creating one, need pass-through
+authority. Categories work the same within their scope, carried by entities. Every change is
+reviewed against a binding of the item and its holders, applied with no await after the final check,
+read back, and versioned so an update can be restored.
 """
 
 from __future__ import annotations
@@ -31,7 +26,8 @@ from ..access_key_store import AccessKeyRecord
 from ..const import CAP_CONFIRM, CAP_DENY, LOCATION_REGISTRY_TEXT_LIMIT
 from ..data import PhoenixData
 from ..device_semantics import device_registry_snapshot
-from ..helpers import diff_summary_fields, effective_cap
+from ..catalog_text import diff_summary_fields
+from ..capability import effective_cap
 from ..policy_engine import (
     Permission, resolve_device_registry_access, resolve_location_registry_write, resolve_registry_access,
 )

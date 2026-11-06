@@ -5,7 +5,8 @@ from __future__ import annotations
 import dataclasses
 from typing import Any
 
-from homeassistant.core import HomeAssistant
+from homeassistant.core import Context, HomeAssistant
+from .voice_context import voice_origin_current
 
 
 class RecognitionUnavailable(Exception):
@@ -25,7 +26,7 @@ async def async_recognize(
     Strict recognition is optional on older HA releases. Never silently use
     fuzzy recognition for a routing caller that requested strict recognition.
     """
-    from homeassistant.core import Context
+    # Local: optional component, imported only when this path runs.
     from homeassistant.components.conversation.agent_manager import async_get_agent
     from homeassistant.components.conversation.const import HOME_ASSISTANT_AGENT
     from homeassistant.components.conversation.models import ConversationInput
@@ -50,7 +51,6 @@ async def async_recognize(
         "agent_id": HOME_ASSISTANT_AGENT, "extra_system_prompt": None,
     }
     if voice_origin is not None:
-        from .voice_context import voice_origin_current
         if not voice_origin_current(hass, voice_origin):
             raise RecognitionUnavailable
         wanted.update(device_id=voice_origin['device_id'], satellite_id=voice_origin['satellite_id'])

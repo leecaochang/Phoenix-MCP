@@ -15,7 +15,7 @@ from .accounts import ProviderConfig
 from .base import _IMAGE_REFUSAL, _REFUSAL_STATUSES
 from .factory import build_provider
 from ..provider_constants import (
-    AGENTCLI_EFFORT_LEVEL_ORDER, AGENTCLI_PROBE_MAX_CALLS, AGENTCLI_PROBE_SENTINEL,
+    AGENT_CHAT_EFFORT_LEVEL_ORDER, AGENT_CHAT_PROBE_MAX_CALLS, AGENT_CHAT_PROBE_SENTINEL,
 )
 
 
@@ -23,18 +23,12 @@ _LOGGER = logging.getLogger(__name__)
 
 
 def _effort_probe_body(kind: str, level: str) -> dict | None:
-    """The request fragment that carries an effort level for this backend.
+    """The request fragment that carries an effort level for this backend, or None if it has none.
 
-    None for a backend with no effort control at all, which is then not probed.
-    The aggregators
-    (OpenRouter, NVIDIA NIM) ARE probed: what they pass through varies per model,
-    but a probe runs against the one selected model, so that variation is exactly
-    what it handles.
-
-    DeepSeek's and Z.ai's fragments carry the thinking toggle too, because they
-    only read the effort when thinking is enabled: probing the level alone would
-    test nothing and answer 200 for every value.
+    Aggregators are probed, since a probe covers the one selected model. DeepSeek's and Z.ai's
+    fragments carry the thinking toggle too, because they read effort only with thinking on.
     """
+    # Probing the level alone on those two would test nothing and answer 200 for every value.
     if kind == "claude":
         return {"output_config": {"effort": level}}
     if kind == "minimax":
@@ -88,17 +82,14 @@ def _stripe_png(stripes: list[str], width: int = 240, height: int = 80) -> str:
 async def async_probe_vision(session: ClientSession, cfg: ProviderConfig) -> bool | None:
     """Whether the selected model can read an image, established by showing it one.
 
-    Some providers accept image parts but drop them before the model, which then
-    answers as if none was sent; no status code reveals that. So the check asks
-    a question only sight can answer: three stripe colours in a random order,
-    which a text-only model guesses right about once in 120 tries.
-
-    True when all three are named in order. False when the model answers but
-    gets them wrong or cannot see them, or the provider refuses the image as
-    unsupported input. None when there is no usable answer (unreachable, a rate
-    limit, an outage, or an empty reply from a model that spent its output on
-    reasoning), which establishes nothing and must not be recorded.
+    True when the colours are named in order; False for a wrong answer or a refused image; None for
+    no usable answer, which establishes nothing and must not be recorded.
     """
+    # Some providers accept image parts but drop them before the model, and no status code reveals
+    # that. So the check asks what only sight can answer: three stripe colours in a random order,
+    # which a text-only model guesses right about once in 120 tries. No usable answer covers an
+    # unreachable host, a rate limit, an outage, or an empty reply from a model that spent its
+    # output on reasoning.
     stripes = _probe_stripes()
     status, text = await build_provider(cfg).probe_image(session, _stripe_png(stripes), _PROBE_IMAGE_QUESTION)
     _LOGGER.debug("Image check for %s %s answered %s with %d characters", cfg.kind, cfg.model, status, len(text))
@@ -117,29 +108,22 @@ async def async_probe_capabilities(
 ) -> tuple[dict, int, bool]:
     """What this model's API actually accepts, established by asking it.
 
-    Returns (capabilities, calls_made, answered). A value that could not be
-    established is omitted, never guessed, so a partial or failed probe narrows
-    nothing. `answered` is False when the control request did not answer 200: a
-    key with no credit, a revoked key, a refused model or an unreachable host
-    answers every question alike, and reporting that as "this provider does not
-    validate its options" would blame the provider for an account problem.
-
-    TWO STAGES, and the order is the whole method. Stage one sends a deliberately
-    INVALID effort: a 400 proves the server validates the field. Only then does
-    stage two walk the real levels, where a 200 is meaningful; a server that
-    ignores an unknown parameter answers 200 to every level. Both stages need a
-    CONTROL first, the same minimal request with no option answering 200: a model
-    the endpoint refuses outright (wrong id, wrong plan, an unrelated rule)
-    answers 400 to everything, and those 400s would read as refused options. A
-    refused control establishes nothing and reports the provider as not answering.
+    Returns (capabilities, calls_made, answered). A value not established is omitted, never guessed.
+    `answered` is False when the control request did not answer 200.
     """
+    # A key with no credit, a revoked key, a refused model or an unreachable host answers every
+    # question alike, which must not read as a provider that does not validate its options. The
+    # order is the whole method. A control with no option must answer 200 first, or a model refused
+    # outright would read as refused options. A deliberately invalid effort must then answer 400,
+    # proving the server validates the field. Only then does a 200 on a real level mean anything,
+    # since a server that ignores unknown parameters answers 200 to every level.
     provider = build_provider(cfg)
     caps: dict = {}
     calls = 1
     if await provider.probe_option(session, {}) != 200:
         return caps, calls, False
 
-    fragment = _effort_probe_body(cfg.kind, AGENTCLI_PROBE_SENTINEL)
+    fragment = _effort_probe_body(cfg.kind, AGENT_CHAT_PROBE_SENTINEL)
     if fragment is not None:
         status = await provider.probe_option(session, fragment)
         calls += 1
@@ -148,8 +132,8 @@ async def async_probe_capabilities(
         # which are indistinguishable and equally useless.
         if status in _REFUSAL_STATUSES:
             levels = []
-            for level in AGENTCLI_EFFORT_LEVEL_ORDER:
-                if calls >= AGENTCLI_PROBE_MAX_CALLS:
+            for level in AGENT_CHAT_EFFORT_LEVEL_ORDER:
+                if calls >= AGENT_CHAT_PROBE_MAX_CALLS:
                     break
                 body = _effort_probe_body(cfg.kind, level)
                 if body is None:
@@ -164,7 +148,7 @@ async def async_probe_capabilities(
             if levels:
                 caps["effort_levels"] = levels
 
-    if calls < AGENTCLI_PROBE_MAX_CALLS:
+    if calls < AGENT_CHAT_PROBE_MAX_CALLS:
         # Temperature is the mirror-image question: not "which values", but
         # "does this model refuse the field", which is what reasoning models do.
         # So here the 400 is the finding and a 200 records nothing, since an

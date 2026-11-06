@@ -1,22 +1,11 @@
 """Discovery and analysis tools: the read-only half of the tool surface.
 
-Everything here answers "what is there and what would happen", never "change
-it". Every enumeration is scoped to the access key's permission tree before it is
-returned, so a listing never becomes an oracle for entities the access key cannot see.
-
-  - Registry reads: areas, floors, zones, devices, and the entity search /
-    overview / describe family.
-  - Relationship analysis: which automations, scripts and scenes reference an
-    entity (`_references_for_entity_details`) and what it drives in turn
-    (`_forward_references_details`), both walked out of the stored YAML configs.
-  - Preview tools: whatif, dry_run_service, validate_automation_or_script,
-    find_available_actions. They run the same gates a real call would and report
-    the verdict without actuating, so dry_run_service and find_available_actions
-    mirror the physical-gate and no-target-service rules rather than
-    approximating them.
-
-`_tool_get_capability_summary` lives in tools/system.py: it reports on the published
-tool surface through _tool_gate_map.
+Everything here answers "what is there and what would happen", never "change it". Every enumeration
+is scoped to the access key's permission tree first, so a listing never becomes an oracle. Covers
+registry reads, relationship analysis walked out of stored YAML configs, and previews (whatif,
+dry_run_service, validate_automation_or_script, find_available_actions), which run a real call's
+gates and report the verdict without actuating. `_tool_get_capability_summary` lives in
+tools/system.py.
 """
 
 from __future__ import annotations
@@ -60,6 +49,7 @@ from ..device_semantics import (
     device_entry_value,
     device_registry_snapshot,
     effective_entity_area_id,
+    composed_name_fields,
     entity_name_source,
 )
 from ..routing.intent_recognition import RecognitionUnavailable, async_recognize
@@ -68,7 +58,12 @@ from ..tool_contracts import normalize_tool_args, state_projection
 from ..mesa import async_semantic_moments, build_expand_target, entity_control_mode, evaluate_service_call
 from ..mesa_core.trigger_validator import entities_by_role
 from ..mesa_tools import MESA_TOOLS_CAP, authored_restrictions
-from ..helpers import effective_cap, entity_hint_for_agent, parse_time_param as _parse_time_param, redact_diagnostics as _redact_diagnostics, redact_inaccessible_entity_ids_in_text, sanitize_service_data as _sanitize_service_data, service_capability, str_arg, str_list_arg
+from ..helpers import parse_time_param as _parse_time_param
+from ..tool_input import sanitize_service_data as _sanitize_service_data, str_arg, str_list_arg
+from ..capability import effective_cap, service_capability
+from ..redaction import (
+    entity_hint_for_agent, redact_diagnostics as _redact_diagnostics, redact_inaccessible_entity_ids_in_text,
+)
 from .esphome import _ESPHOME_DOMAIN, _esphome_action_signature, _esphome_actions_for_entity, esphome_availability
 from ..tool_common import _project_state, _resolve_area_id, _tool_error, _tool_success, fitted_offset_page, longest_fitting, offset_page
 from ..ws_dispatch import WsDispatchError, async_get_lovelace_config, async_ws_command
@@ -85,11 +80,10 @@ _LOGGER = logging.getLogger(__name__)
 
 
 def _collect_entity_id_values(node: Any, found: set[str]) -> None:
-    """Collect entity_id values from a config subtree.
+    """Collect entity_id values from a config subtree; for scripts, which mesa-core does not model.
 
-    For scripts, which mesa-core does not model. Automations go through mesa-core's
-    public entities_by_role, so the HA-format knowledge (singular/plural section
-    keys) stays single-sourced.
+    Automations go through mesa-core's public entities_by_role, keeping HA-format knowledge
+    single-sourced.
     """
     if isinstance(node, dict):
         for key, value in node.items():
@@ -106,14 +100,10 @@ def _collect_entity_id_values(node: Any, found: set[str]) -> None:
 
 
 def _domain_entries(hass: HomeAssistant, domain: str) -> tuple[Any, list[dict]]:
-    """Every entry a domain defines, plus the branches that could not be read.
-
-    Reads through the include layout rather than automations.yaml and its siblings:
-    a domain defined inline in configuration.yaml, or routed through
-    !include_dir_list, would read as EMPTY and look like an unused entity, the worst
-    answer this surface can give. Anything still unreadable (a package tree, a
-    broken leaf) is returned so a caller can say so rather than omit it.
-    """
+    """Every entry a domain defines through the include layout, plus the branches not read."""
+    # Reading automations.yaml and its siblings directly would show a domain defined inline or
+    # through !include_dir_list as empty and its entities as unused, the worst answer here. A
+    # package tree or broken leaf is returned so a caller can say so.
     found = yaml_includes.read_all_entries(hass.config.config_dir, domain)
     return found.entries, [{"kind": domain, "reason": r} for r in found.unreadable]
 
@@ -123,14 +113,8 @@ def _references_for_entity_details(
 ) -> tuple[list[dict], list[dict]]:
     """Scope-agnostic reverse index: automations/scripts/scenes referencing entity_id.
 
-    Automations use mesa-core's canonical entities_by_role (by trigger/condition/
-    action role), with the expand_target host callback so an automation that
-    targets this entity's device, area, floor, or label (device triggers,
-    purpose-specific trigger target blocks) is found too, not just direct
-    entity_id references. Scripts and scenes are extracted by Phoenix MCP (mesa-core
-    does not model them): scripts via entity_id collection, scenes via the
-    entity keys under their `entities` mapping. Callers apply their own access key
-    scoping.
+    Automations use entities_by_role with expand_target, finding indirect device, area, floor or
+    label targets. Scripts and scenes are extracted here. Callers apply key scoping.
     """
     refs: list[dict] = []
     not_searched: list[dict] = []
@@ -193,18 +177,14 @@ def _resolve_area(hass: HomeAssistant, query: str) -> Any | None:
 
 
 def _entity_id_strings(node: Any, path: list, out: list[tuple[list, str]]) -> None:
-    """Collect every entity-id-SHAPED string value in a structure, with its path.
+    """Collect every entity-id-shaped string value in a structure, with its path.
 
-    Matches the VALUE, never the key name, unlike _collect_entity_id_values: that
-    one runs on script configs, where HA defines the key names, but dashboard cards
-    and config-entry payloads use whatever key the author or integration chose
-    (`entity_id`, `source`, `entity_ids`, anything). A key-name list would go stale
-    silently and report NO dependency where one exists, which this tool exists to
-    prevent; over-reporting a coincidental string is the safe direction.
-
-    The path uses patch_dashboard's addressing form (mapping keys and list
-    indexes), so a dashboard hit is directly actionable.
+    Matches the value, never the key name. The path uses patch_dashboard's addressing form, so a
+    dashboard hit is directly actionable.
     """
+    # Dashboard cards and config-entry payloads use whatever key the author chose, so a key-name
+    # list would go stale and report no dependency where one exists. Over-reporting a coincidental
+    # string is the safe direction.
     if isinstance(node, dict):
         for key, value in node.items():
             _entity_id_strings(value, [*path, key], out)
@@ -233,8 +213,7 @@ _SCRIPT_SERVICES = frozenset({"script.turn_on", "script.turn_off", "script.toggl
 def _script_calls(config: Any) -> set[str]:
     """Scripts a configuration runs by name (`action: script.greet`).
 
-    Running a script IS its entity id, so an automation calling one uses it even
-    though no `entity_id:` names it; missing this would report the script unused.
+    Running a script is its entity id, so a call uses it though no `entity_id:` names it.
     """
     hits: list[tuple[list, str]] = []
     _entity_id_strings(config, [], hits)
@@ -245,25 +224,19 @@ def _script_calls(config: Any) -> set[str]:
 def _dangling_candidates(
     refs: dict[str, list[dict]], hass: HomeAssistant
 ) -> dict[str, list[dict]]:
-    """Narrow referenced ids to those that were meant to BE an entity id.
+    """Narrow referenced ids to those that were meant to be an entity id.
 
-    `dangling_references` is a list an operator acts on, so junk (a card's CSS
-    length, a version string, a filename) teaches them to ignore it. The filter
-    matches what the holder knew, and a value is kept if ANY holder vouches. A TYPED
-    holder (mesa-core's role walk, a script's `entity_id:` key, a scene's entity
-    keys) is trusted outright, with no domain check: a reference into a domain that
-    does not exist is MORE dangling. An untyped holder found the value by shape
-    alone (dashboard card, config-entry payload), so it must also name a domain this
-    instance has.
-
-    An untyped holder in a SERVICE-CALL POSITION is excluded unless the domain is
-    `script`: `perform_action: button.press` names a verb, but running a script IS
-    its entity id. Position, not service registration, is the signal, because HA
-    can keep a script's service registered after the script is gone.
-
-    Values with template syntax (`{{`, `}}`, `{%`, `|`) and HA's dotless `all`
-    wildcard are excluded.
+    A typed holder vouches outright; an untyped holder must name a known domain, and in a
+    service-call position only `script` counts. Template syntax and the `all` wildcard are excluded.
     """
+    # `dangling_references` is a list an operator acts on, so junk such as a CSS length, version
+    # string or filename teaches them to ignore it. A value is kept if any holder vouches. Typed
+    # holders are mesa-core's role walk, a script's `entity_id:` key and a scene's entity keys, with
+    # no domain check because a reference into a missing domain is more dangling. An untyped holder
+    # (dashboard card, config-entry payload) found the value by shape alone. `perform_action:
+    # button.press` names a verb, but running a script is its entity id; position is the signal
+    # rather than service registration, because HA can keep a script's service after the script is
+    # gone.
     domains = {state.entity_id.split(".", 1)[0] for state in hass.states.async_all()}
     domains |= {entry.entity_id.split(".", 1)[0] for entry in er.async_get(hass).entities.values()}
     domains |= set(hass.services.async_services())
@@ -287,13 +260,8 @@ def _dangling_candidates(
 def _dangling_report(value: str, holders: list[dict]) -> dict:
     """One dangling entry: the dead id and what still points at it.
 
-    Holders are GROUPED by consumer, not listed per hit: a deleted script called
-    from many buttons on one dashboard would otherwise repeat that dashboard's
-    identity in every entry. The operator's question is WHICH THING to open; the
-    paths say where to look inside it.
-
-    Paths are capped at const.MAX_DANGLING_PATHS with the true total alongside, so
-    a clipped list never reads as a complete one.
+    Holders are grouped by consumer, since the question is which thing to open. Paths are capped at
+    const.MAX_DANGLING_PATHS with the true total alongside.
     """
     grouped: dict[tuple[str, str], dict] = {}
     for holder in holders:
@@ -369,15 +337,11 @@ async def _relationship_graph_hits(
 ) -> tuple[set[tuple[str, str, str]], list[dict], bool]:
     """Ask HA's loaded reference graph what consumes each entity in scope.
 
-    Each hit is ``(consumer kind, consumer entity id, referenced entity id)``. HA's
-    graph sees loaded package and blueprint configurations and integration-managed
-    consumers that Phoenix's YAML walk cannot read, but its extractor skips
-    templated entity ids, so it complements the body walk rather than replacing it.
-
-    The boolean says whether at least one definitive graph response was read. A
-    missing command, changed payload shape or unknown related type is returned as
-    an explicit coverage gap, not collapsed into an empty graph.
+    Hits are ``(consumer kind, consumer entity id, referenced entity id)``; the boolean says a
+    definitive response was read. A missing command or changed shape is an explicit coverage gap.
     """
+    # HA's graph sees loaded package, blueprint and integration-managed consumers the YAML walk
+    # cannot read, but its extractor skips templated entity ids, so it complements that walk.
     hits: set[tuple[str, str, str]] = set()
     gaps: list[dict] = []
     graph_read = False
@@ -466,9 +430,8 @@ def _merge_graph_hits(
 ) -> None:
     """Merge graph-only consumers without weakening detailed YAML roles.
 
-    A UI helper's entity (a group helper, say) belongs to the config entry the
-    body scan already found, so its graph hit joins that consumer, which then
-    names the entity, rather than listing the same helper twice.
+    A UI helper's entity joins the config entry the body scan already found, which then names it,
+    rather than listing the helper twice.
     """
     by_key = {
         (consumer["kind"], str(consumer["id"])): consumer
@@ -524,19 +487,13 @@ def _scan_relationships(
 ) -> tuple[list[dict], dict[str, list[dict]], list[dict]]:
     """Every consumer touching an entity in `scope`, and every entity id seen.
 
-    ONE pass per source for the whole SET of entities, not one pass per entity.
-
-    The second return value maps every entity id referenced by any consumer, in
-    scope or not, to the consumers holding it; naming the holder is what makes a
-    dangling reference actionable. Each holder also records how much its source
-    knew (`typed` when HA defines the shape, e.g. a role walk or an `entity_id:`
-    key; `service` when the value sat where a service name goes), which is what
-    _dangling_candidates filters on. The third is the unreadable YAML branches.
-
-    Runs in an executor because it reads the YAML config files. Dashboards and
-    config entries are snapshotted by the caller on the event loop, which obtaining
-    them requires, and passed in.
+    The second value maps each referenced id to its holders, each marked `typed` or `service` for
+    _dangling_candidates; the third is the unreadable YAML branches.
     """
+    # One pass per source covers the whole set of entities. `typed` means HA defines the shape;
+    # `service` means the value sat where a service name goes. Naming the holder is what makes a
+    # dangling reference actionable. Runs in an executor because it reads YAML files; the caller
+    # snapshots dashboards and config entries on the event loop, which obtaining them requires.
     consumers: list[dict] = []
     refs: dict[str, list[dict]] = {}
     unreadable: list[dict] = []
@@ -668,12 +625,10 @@ def _scan_relationships(
 def _forward_references_details(
     hass: HomeAssistant, entity_id: str,
 ) -> tuple[list[str], list[dict]]:
-    """Entities referenced by entity_id when it is an automation or script, UNSCOPED.
+    """Entities referenced by entity_id when it is an automation or script, unscoped.
 
-    Runs in a worker thread, so it takes no scope decision: the caller filters
-    the result on the event loop, where the Assist-exposure lookup may run. The
-    second return value names unreadable configuration branches rather than
-    making an incomplete [] look like proof that there are no dependencies.
+    The caller filters on the event loop, where the Assist-exposure lookup may run. The second value
+    names unreadable branches, so an incomplete [] is not proof of no dependencies.
     """
     domain = entity_id.split(".")[0]
     found: set[str] = set()
@@ -702,22 +657,17 @@ def _forward_references_details(
 
 
 def _accessible_entity_ids(access_key: AccessKeyRecord, hass: HomeAssistant) -> set[str]:
-    """Return the set of entity IDs the access key can read.
-
-    Uses the same scoping/scrubbing path as listing tools so registry views never
-    reveal entities, areas, or devices outside the access key's permission tree.
-    """
+    """Return the entity IDs the access key can read, through the listing tools' scoping path."""
+    # Sharing that path means registry views never reveal entities, areas or devices outside the
+    # key's tree.
     accessible = filter_entities_for_access_key(hass.states.async_all(), access_key, hass)
     return {e["entity_id"] for e in accessible}
 
 
 def _intent_slot_value(entity: Any) -> Any:
-    """Return HA's public debug value without disclosing a canonical selector.
-
-    Target selectors prefer the text the caller supplied. The canonical value
-    can contain an area or entity name outside the access key's scope; the submitted
-    text cannot disclose anything the caller did not already know.
-    """
+    """Return HA's public debug value without disclosing a canonical selector."""
+    # Target selectors prefer the caller's text: the canonical value can name an area or entity
+    # outside the key's scope, while the submitted text discloses nothing new.
     text = getattr(entity, "text", None)
     return text if text not in (None, "") else getattr(entity, "value", None)
 
@@ -1232,16 +1182,13 @@ def _search_context(
 
 
 def _rank_search_matches(matches: list[dict], query: str) -> list[dict]:
-    """Token-AND filter + relevance rank for a search_entities query.
+    """Token-AND filter and relevance rank for a search_entities query.
 
-    Keeps only rows where every query token appears in the entity_id, friendly
-    name or aliases, or in the area, floor, label or device it belongs to (so
-    multi-word queries work, unlike a single substring test), and orders by an
-    IDF-weighted score so the most relevant rows lead and survive truncation.
-    Rarer query terms weigh more; exact and prefix/word-start matches get a bonus,
-    and a token found only in that context weighs less. A row matched through
-    context says where in matched.
+    Keeps rows where every token appears in the identity fields or the row's area, floor, label or
+    device, ordered by IDF-weighted score. A row matched through context says where in matched.
     """
+    # Rarer terms weigh more, exact and prefix or word-start matches get a bonus, and a context-only
+    # token weighs less, so the most relevant rows lead and survive truncation.
     access_keys = [t for t in query.split() if t]
     if not access_keys:
         return matches
@@ -1290,13 +1237,10 @@ def _search_score(m: dict, doc: str, access_keys: list[str], df: dict[str, int],
 
 
 def _fuzzy_search_matches(matches: list[dict], query: str) -> list[dict]:
-    """Typo-tolerant fallback rank, only run when exact matching found nothing.
+    """Typo-tolerant fallback rank, run only when exact matching found nothing.
 
-    Scores each candidate by the best difflib similarity ratio of the query
-    against its entity_id, object_id, or friendly_name, keeps those at or above
-    SEARCH_FUZZY_MATCH_CUTOFF, and orders best-first. Reached only after
-    _rank_search_matches returns empty, so it never alters a query that already
-    matches exactly ("kitchne" still surfaces light.kitchen).
+    Keeps candidates whose best difflib ratio against entity_id, object_id or friendly_name reaches
+    SEARCH_FUZZY_MATCH_CUTOFF, best first.
     """
     scored: list[tuple[float, str, dict]] = []
     for m in matches:
@@ -1358,14 +1302,14 @@ def _entity_radio_types(entry: Any, cache: dict[str, set[str]], hass: HomeAssist
 
 def _device_reports_battery(entry: Any, cache: dict[str, bool], access_key: AccessKeyRecord,
                             hass: HomeAssistant, expose: Any) -> bool:
-    """Whether an entity's device, or its main parent, runs on a battery the access key can read about.
+    """Whether an entity's device, or its main parent, runs on a battery this key can read about.
 
-    A battery level or low-battery entity is the only power evidence Home Assistant
-    records. Only a diagnostic one counts: integrations mark a battery that keeps
-    the device running as diagnostic, while a car's or a home storage system's
-    battery is the product's main reading. One the access key cannot read never
-    counts, so the filter cannot reveal it exists.
+    Only a diagnostic battery entity counts. One the key cannot read never counts, so the filter
+    cannot reveal it exists.
     """
+    # Battery entities are the only power evidence HA records. Integrations mark a battery that
+    # keeps the device running as diagnostic, while a car's or home storage system's battery is the
+    # product's main reading.
     device_id = getattr(entry, "device_id", None)
     if not device_id:
         return False
@@ -1460,10 +1404,8 @@ def _registry_value(value: Any) -> Any:
 def _registry_projection(entry: er.RegistryEntry) -> dict[str, Any]:
     """Agent-safe, explicit projection of one entity-registry entry.
 
-    Identity and integration-private fields (unique_id, config-entry ids,
-    options and capabilities) are deliberately absent.  Keep this allowlist
-    local to the read tool so adding a field to HA's RegistryEntry can never
-    expand the MCP response implicitly.
+    Identity and integration-private fields are deliberately absent. The allowlist stays local, so a
+    new RegistryEntry field can never expand the MCP response.
     """
     return {
         "platform": entry.platform,
@@ -1489,9 +1431,8 @@ def _search_candidate_ids(
 ) -> list[str]:
     """Return the candidate pool for one search registry-state selector.
 
-    enabled starts from live states. all adds every registry row, including
-    enabled entries whose integration is currently absent; disabled is based on
-    the registry flag even if a stale live State briefly remains during teardown.
+    enabled starts from live states; all adds every registry row; disabled follows the registry flag
+    even if a stale State lingers during teardown.
     """
     live_ids = [state.entity_id for state in hass.states.async_all()]
     if registry_state == "enabled":
@@ -1517,9 +1458,8 @@ def _annotate_search_rows(
 ) -> None:
     """Add MESA control_mode, entity_category and the operator hint to the returned rows, in place.
 
-    All run on the CAPPED result page rather than every match, to bound cost.
-    control_mode is omitted when autonomous (the default) so it does not bloat
-    every row; entity_category and hint are omitted when unset.
+    Runs on the capped page to bound cost. control_mode is omitted when autonomous, the others when
+    unset.
     """
     settings = data.store.get_settings()
     if data.mesa is not None and settings.mesa_mode != MESA_MODE_OFF:
@@ -1699,7 +1639,11 @@ async def _tool_search_entities(
             row["state_available"] = state is not None
         if entry is not None and entry.hidden_by is not None:
             row["hidden"] = True
+        composed = composed_name_fields(hass, entry, fname or None)
+        row.update(composed)
         aliases = [alias for alias in (getattr(entry, "aliases", None) or ()) if isinstance(alias, str)]
+        # The composed name is matched and ranked like another name for the entity.
+        aliases.extend(composed.values())
         if aliases:
             row["_aliases"] = aliases
         if context_registries is not None:
@@ -1937,9 +1881,8 @@ async def _tool_find_available_actions(
 ) -> tuple[dict, str, str]:
     """MCP tool: which services in an entity's domain this access key can currently invoke.
 
-    Availability reflects Phoenix MCP scope (write access + physical/dual gate caps).
-    MESA still enforces per-entity nature at call time; the entity's control_mode
-    is surfaced as an advisory hint when MESA is active.
+    Reflects Phoenix scope (write access plus physical and dual gate caps). MESA still enforces at
+    call time; control_mode is an advisory hint when MESA is active.
     """
     if effective_cap(access_key, "cap_search") == CAP_DENY:
         return _tool_error("Forbidden."), "denied", "find_available_actions"
@@ -2310,16 +2253,12 @@ def _relationship_scope(
 ) -> _Scope | tuple[dict, str, str]:
     """Resolve exactly one selector to the accessible entity ids it names.
 
-    Every branch ends in the same filter, so the scope never contains an entity the
-    access key cannot read, and a selector naming nothing accessible is byte-identical to
-    one naming nothing at all: a device, area, label or integration that does not
-    exist is indistinguishable from one whose entities are out of scope, so the
-    refusal is not an existence oracle.
-
-    device/area/label go through mesa.build_expand_target, the one definition of
-    which entities an indirect reference names. `integration` is not an HA target
-    selector, so it reads the registry's own platform field.
+    A selector naming nothing accessible is byte-identical to one naming nothing, so the refusal is
+    not an existence oracle.
     """
+    # device/area/label go through mesa.build_expand_target, the one definition of what an indirect
+    # reference names. `integration` is not an HA target selector, so it reads the registry's
+    # platform field.
     def given_value(raw: Any) -> bool:
         return bool(str_arg(raw).strip()) if not isinstance(raw, list) else bool(raw)
 
@@ -2376,15 +2315,14 @@ def _relationship_scope(
 async def _relationship_dashboards(
     hass: HomeAssistant,
 ) -> tuple[list[tuple[str, str | None, Any]], list[dict]]:
-    """(url_path, title, config) per readable dashboard, plus what was NOT read.
+    """(url_path, title, config) per readable dashboard, plus what was not read.
 
-    One unreadable dashboard must not cost the caller the whole answer, but it must
-    not be silent either: a YAML-mode dashboard is rejected by
-    async_get_lovelace_config and an auto-generated one has no stored config, so
-    skipping either while reporting "searched: dashboard" would be a confident wrong
-    answer. Every skip is returned and surfaces in `not_searched`. A failed LIST is
-    the worse case and is reported differently: no named dashboard was examined.
+    Every skip is returned for `not_searched`, and a failed list is reported separately: no named
+    dashboard was examined.
     """
+    # A YAML-mode dashboard is rejected by async_get_lovelace_config and an auto-generated one has
+    # no stored config, so skipping either while reporting "searched: dashboard" would be a
+    # confident wrong answer.
     out: list[tuple[str, str | None, Any]] = []
     skipped: list[dict] = []
     listed: list[dict] = []
@@ -2420,9 +2358,8 @@ async def _relationship_dashboards(
 def _relationship_config_entries(hass: HomeAssistant) -> list[dict]:
     """Snapshot config-entry payloads on the event loop for the executor to walk.
 
-    The entries hold credentials; only entity ids are ever read back out of
-    `payload`, and only ids already in the caller's scope reach a response. The
-    title becomes a consumer name, so it gets list_integrations' scrub.
+    Entries hold credentials: only in-scope entity ids leave `payload`. The title becomes a consumer
+    name, so it gets list_integrations' scrub.
     """
     return [
         {
@@ -2438,13 +2375,10 @@ def _relationship_config_entries(hass: HomeAssistant) -> list[dict]:
 async def _registry_relationship_preview(
     hass: HomeAssistant, entity_id: str
 ) -> dict[str, Any]:
-    """Full known-consumer preview for a registry rename or deletion.
-
-    Unlike the access-key-facing get_relationships response, an admin approval card is
-    not capability-narrowed: it always attempts dashboards and config entries as
-    well as YAML automations, scripts, scenes and groups. Only matching entity IDs
-    reach the preview; config-entry credentials stay in the snapshot.
-    """
+    """Full known-consumer preview for a registry rename or deletion, for an admin approval card."""
+    # An approval card is not capability-narrowed: it always attempts dashboards and config entries
+    # as well as YAML consumers. Only matching entity IDs reach it; config-entry credentials stay in
+    # the snapshot.
     return await _registry_relationships_preview(hass, [entity_id])
 
 
@@ -2489,15 +2423,10 @@ async def _registry_relationships_preview(
 async def _tool_get_relationships(
     args: dict, access_key: AccessKeyRecord, hass: HomeAssistant
 ) -> tuple[dict, str, str]:
-    """MCP tool: what consumes the entities a selector names.
+    """MCP tool: what consumes the entities a selector names, grouped by consumer.
 
-    Grouped by CONSUMER, not by entity: a consumer carrying the in-scope entities it
-    touches and their roles IS the edit work list.
-
-    Coverage is reported rather than assumed. Dashboards and config entries need
-    their own capabilities, so an access key without them gets a narrower answer and
-    `not_searched` says so. The one unacceptable reply to "is anything still using
-    these" is a confident wrong no.
+    A consumer with its in-scope entities and roles is the edit work list. `not_searched` names what
+    this key's capabilities left out, so a narrow answer is never a confident no.
     """
     args, error = normalize_tool_args("get_relationships", args)
     if error:
@@ -2660,6 +2589,7 @@ async def _tool_describe_entity(
         body["entity_category"] = entry.entity_category.value
 
     if entry is not None:
+        body.update(composed_name_fields(hass, entry, str_arg((scrubbed.get("attributes") or {}).get("friendly_name")) or None))
         body["registry"] = {
             **_registry_projection(entry),
             "name_source": entity_name_source(hass, entry),
@@ -2696,12 +2626,11 @@ async def _entity_definition(
 ) -> dict[str, Any] | None:
     """Where an entity is defined, and the tool that reads that definition.
 
-    A Template helper and a template written in YAML look alike from the
-    registry, so without this a caller searches YAML for a helper created in the
-    UI. A helper's entry id is shown only to a key that can list helpers, which
-    shows it too; a tool is named only when this key may call it. An entity with
-    no registry entry, such as the home zone, is left undescribed.
+    A helper's entry id goes only to a key that can list helpers, and a tool is named only when this
+    key may call it. An entity with no registry entry is left undescribed.
     """
+    # A Template helper and a YAML template look alike from the registry, so without this a caller
+    # searches YAML for a helper created in the UI.
     if entry is None:
         return None
 
@@ -2989,9 +2918,7 @@ _SCALAR_TYPES = (str, int, float, bool, type(None))
 def _scalar_list(value: Any) -> list | None:
     """The value as a list of scalars, or None when it is not one.
 
-    A list of mappings (a weather forecast, a media browse tree) has no useful
-    member-wise reading: differencing it yields two near-identical blobs that
-    would dominate the response, so those are reported by type instead.
+    A list of mappings is reported by type, since differencing yields two near-identical blobs.
     """
     if not isinstance(value, (list, tuple)):
         return None
@@ -3002,10 +2929,8 @@ def _scalar_list(value: Any) -> list | None:
 def _bounded_value(value: Any) -> Any:
     """One attribute value, bounded and JSON-safe.
 
-    Scalars and short scalar lists pass through, since the value itself is the
-    answer. A long string is clipped and a larger structure is replaced by a
-    marker naming its type, because the question this tool answers is whether
-    two entities are interchangeable, not what either one currently holds.
+    Scalars and short scalar lists pass through. A long string is clipped and a larger structure
+    becomes a type marker: the question is interchangeability, not content.
     """
     if isinstance(value, str) and len(value) > MAX_COMPARE_VALUE_CHARS:
         return value[:MAX_COMPARE_VALUE_CHARS] + f"... ({len(value) - MAX_COMPARE_VALUE_CHARS} more characters)"
@@ -3022,11 +2947,8 @@ def _bounded_value(value: Any) -> Any:
 def _changed_attribute(name: str, value: Any, other: Any) -> dict:
     """One entry in the `changed` array, differenced by value shape.
 
-    Two scalar LISTS are differenced member-wise: an option set renamed between two
-    integrations (preset_modes with boost on one side and speed on the other) reads
-    as a removal beside an addition, which is directly actionable. Everything else
-    reports both values, so a narrowed range (min_temp 7 against 16) is visible as
-    the pair it is.
+    Two scalar lists difference member-wise, so a renamed option reads as a removal beside an
+    addition. Everything else reports both values, so a narrowed range shows as a pair.
     """
     entry: dict[str, Any] = {"attribute": name}
     values = _scalar_list(value)
@@ -3060,16 +2982,11 @@ _UNPUBLISHED_WARNING = (
 
 
 def _publishes_nothing(state: dict) -> bool:
-    """Whether this entity's attribute set is too degraded to compare against.
-
-    An offline entity keeps its registry entry and answers every read, so the
-    comparison does not FAIL: the attributes the other side has are reported as
-    "missing", which describes the outage but reads like a description of the
-    replacement. `restored` is HA's own marker for a state it rebuilt from the
-    registry because the integration supplied none, and it is the precise signal;
-    `unknown` is deliberately NOT included, since an entity with no value yet still
-    publishes its attributes and the warning would fire on the ordinary case.
-    """
+    """Whether this entity's attribute set is too degraded to compare against."""
+    # An offline entity answers every read, so the comparison would report the other side's
+    # attributes as "missing", which reads like a description of the replacement. `restored` is HA's
+    # own marker for a state rebuilt from the registry because the integration supplied none.
+    # `unknown` is excluded: an entity with no value yet still publishes its attributes.
     return state.get("state") == "unavailable" or (state.get("attributes") or {}).get("restored") is True
 
 

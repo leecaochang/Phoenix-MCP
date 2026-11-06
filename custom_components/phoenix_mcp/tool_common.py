@@ -45,7 +45,8 @@ from .device_semantics import (
     effective_entity_area_id,
 )
 from .mesa import mesa_confirm_preview
-from .helpers import content_hash, version_summary_fields as _version_summary
+from .helpers import content_hash
+from .catalog_text import version_summary_fields as _version_summary
 from .approvals import DiffSource, async_evaluate_capability
 from .access_key_store import AccessKeyRecord
 from .request_authority import check_request_authority
@@ -58,15 +59,9 @@ _LOGGER = logging.getLogger(__name__)
 
 def serialize_ha_schema(schema: Any, custom_serializer: Any) -> Any:
     """Serialize an HA form schema with the engine that built it.
-
-    HA 2026.9 and later build every schema with probatio, aliasing `voluptuous`
-    to it. Earlier releases build genuine voluptuous schemas and ship
-    voluptuous_serialize as a core dependency, which is why Phoenix does not
-    declare it. Probatio being importable does not mean HA uses it, since another
-    package can install it on an older release, so the schema's type decides.
-
-    Serialization leaves out a field's `visible` condition (HA 2026.11). HA's own
-    frontend receives it from a second step, so an agent reads it the same way.
+    The schema's type picks probatio or voluptuous_serialize, not what is importable. A
+    field's ``visible`` condition is left out, as HA's own frontend gets it from a second
+    step.
     """
     # Local: not part of the recorded Home Assistant import floor.
     from homeassistant import data_entry_flow
@@ -112,11 +107,9 @@ def stored_result_bytes(value: Any) -> int:
 
 
 def longest_fitting(build: Callable[[int], dict], count: int) -> dict:
-    """The body built from the most leading rows whose result fits TOOL_RESULT_MAX_BYTES.
+    """Return the body built from the most leading rows that fits TOOL_RESULT_MAX_BYTES.
 
-    build(k) makes the body from the first k of count rows and says how the rest
-    continue (a next offset, a cursor, or their names). The Conversation Log keeps
-    a result of this size whole, so what a model saw stays auditable.
+    build(k) makes the body from the first k of count rows and says how the rest continue.
     """
     body = build(count)
     if count == 0 or stored_result_bytes(body) <= TOOL_RESULT_MAX_BYTES:
@@ -200,22 +193,16 @@ class UncertainOutcome(dict):
 
 
 def _tool_uncertain(body: dict) -> dict:
-    """A dispatched write whose outcome is not confirmed, with its details as JSON.
-
-    Always an error, audited as invalid_request: a caller branching on isError
-    must not read an unconfirmed write as success, and Phoenix's agent loops hold
-    the unknown-outcome barrier for it. The body says what is known.
-    """
+    """Return a dispatched write whose outcome is unconfirmed, always as an error."""
     return UncertainOutcome(_tool_error(json.dumps(body, default=str)))
 
 
 class RefusedBeforeWrite(dict):
     """A tool error returned before the call could write anything.
 
-    It serializes as the ordinary error dict, so clients see no difference, and
-    tool text cannot create one. Phoenix's agent loops hand it back to the model
-    instead of holding an unknown-outcome barrier. A copy that drops the type
-    keeps that barrier, so losing the marker fails closed.
+    Serializes as the ordinary error dict, and tool text cannot create one. Agent loops hand
+    it back to the model instead of holding the unknown-outcome barrier; a copy that drops the
+    type keeps that barrier, so losing the marker fails closed.
     """
 
 
@@ -225,27 +212,10 @@ def _tool_refused_before_write(message: str) -> dict:
 
 
 def _tool_pending(approval: Any, waited_seconds: int | None = None, *, notified: bool = False) -> dict:
-    """Return an MCP tool result for a pending admin approval.
+    """Return an MCP tool result for a pending admin approval; isError is False.
 
-    isError is False because pending is a valid outcome, not a failure.
-
-    THE WORDING IS LOAD-BEARING AND MUST MATCH THE STAGING MODEL. Approvals queue
-    and are cleared in one operator action, so after a gate the agent should KEEP
-    GOING and collect the outcomes together at the end. Keep the order: continue
-    first, wait ONCE second (wait_for_approval takes a LIST of approval_ids;
-    waiting on a single id serialises the agent, since no later approval can be
-    created until that wait ends), finish only if nothing depends on the outcome.
-    Wording that reads as "tell the user and finish now" makes an early return
-    look like success. The agent primer in tool_dispatch must say the same.
-
-    `waited_seconds` is set only on the inline-wait timeout path and states a FACT
-    rather than different advice: that hold already spent its budget, so blocking
-    again on the same id would likely spend it twice. The advice is otherwise
-    identical on every path that reaches here, because the agent cannot tell
-    which it is on (the inline wait is an access key setting).
-
-    `notified` says whether new approvals raise a Home Assistant notification
-    (`_approval_notifies`); the message claims one only then.
+    The wording follows the staging model and matches the agent primer in tool_dispatch.
+    ``waited_seconds`` states a spent wait; ``notified`` claims only a raised notification.
     """
     notice = (
         "the admin has been notified. "
@@ -297,28 +267,19 @@ def _stored_tool_text(approval: Any) -> str | None:
 
 
 def execution_failure_text(approval: Any) -> str | None:
-    """The executor's error text for an approved action whose execution failed, else None.
-
-    The approve path stores the error result and resolves the record as failed
-    with the "execution_failed" slug. Reporting that case as a bare "rejected"
-    would make an agent treat an approval as a refusal and loop retrying the same
-    doomed call instead of fixing the reported cause. None for a real admin
-    rejection or any other state.
-    """
-    if getattr(approval, "rejected_reason", None) != "execution_failed":
+    """Return the executor's error for an approved action that failed, else None."""
+    if getattr(approval, "closure_reason", None) != "execution_failed":
         return None
     return _stored_tool_text(approval)
 
 
 def approval_outcome(status: str, approval: Any) -> tuple[str, str]:
-    """The status and message an agent reads for an approval that did not apply cleanly.
+    """Return the status and message for an approval that did not apply cleanly.
 
-    Every surface that reports a resolved approval reads this, so none of them can
-    tell an agent "not applied" about an action that was approved and started.
-    An APPROVED action whose executor failed must read as a failure to fix, never
-    as a refusal, or the agent loops retrying the same doomed call.
+    The one reading for every reporting surface. An approved action whose executor failed
+    reads as a failure to fix, never as a refusal, or the agent retries the same call.
     """
-    reason = getattr(approval, "rejected_reason", None)
+    reason = getattr(approval, "closure_reason", None)
     failure = execution_failure_text(approval)
     if failure is not None:
         return "execution_failed", (
@@ -366,11 +327,7 @@ def approval_outcome(status: str, approval: Any) -> tuple[str, str]:
 
 
 def _tool_inline_resolved(approval: Any) -> dict:
-    """Result for an inline-waited confirm that resolved without applying; isError is True.
-
-    Tells the agent the outcome (with any reason) and not to retry, rather than
-    handing back a stale pending stub.
-    """
+    """Return the outcome of a confirm resolved inline without applying; isError."""
     status, message = approval_outcome(approval.status, approval)
     body = json.dumps({"status": status, "approval_id": approval.id, "message": message})
     return {"content": [{"type": "text", "text": body}], "isError": True}
@@ -385,13 +342,9 @@ def _approval_resource(approval: Any) -> str:
 class _ProgressBus:
     """What an in-flight SSE-framed request reports while it is still running.
 
-    Single-writer by design: only the response writer touches the stream, and
-    handler code deep in a tool only sets fields here, because two coroutines
-    writing to one StreamResponse would interleave frames.
-
-    `progress_token` is the client's MCP progressToken. It is None unless the client asked
-    for progress on THIS request, and no token means no progress notifications are
-    ever emitted (the spec forbids unsolicited ones).
+    Single-writer: only the response writer touches the stream, and tool code only sets fields
+    here. ``progress_token`` is the client's MCP progressToken; None means no notifications
+    are emitted, as the MCP spec forbids unsolicited ones.
     """
 
     progress_token: str | int | None = None
@@ -489,16 +442,10 @@ async def _gate(
     diff: DiffSource,
     target_entities: list[str] | None = None,
 ) -> tuple[dict, str, str] | None:
-    """Run capability gating. Returns a response tuple for deny/pending, or None for allow.
-
-    For deny, returns (error_dict, "denied", tool_name).
-    For pending, returns (pending_dict, "pending_approval", approval_resource).
-    For allow, returns None and the caller proceeds with the side effect.
-
-    diff should be passed as a zero-arg builder (`diff=lambda: _build_diff_x(...)`)
-    rather than an already-awaited dict. Only the Confirm path reads it, so a
-    builder keeps an allowed or denied call from paying for a config read, a
-    lovelace load, or an ESPHome add-on round trip whose result is discarded.
+    """Run capability gating. Returns a response tuple for deny or pending, None for allow.
+    Deny gives (error_dict, "denied", tool_name); pending gives (pending_dict,
+    "pending_approval", approval_resource). Pass ``diff`` as a zero-arg builder, as only the
+    Confirm path reads it.
     """
     result = await async_evaluate_capability(
         cap_name, access_key, hass, data,
@@ -516,16 +463,9 @@ async def _await_inline_confirm(
     hass: HomeAssistant, data: PhoenixData, access_key: AccessKeyRecord, approval: Any,
 ) -> tuple[dict, str, str]:
     """Optionally hold the response open for a confirm gate to resolve inline.
-
-    When the access key opts in (confirm_inline_wait_seconds > 0), block up to that
-    many seconds (capped at MAX_CONFIRM_INLINE_WAIT_SECONDS) on the same
-    phoenix_mcp_approval_resolved event wait_for_approval uses. On approval within the
-    window, return the executed tool result the agent would otherwise have to
-    poll for; on rejection, tell it the action did not apply; on timeout, fall
-    back to the normal immediate pending_approval reply. The original request's
-    audit outcome stays "pending_approval" in every case (the resolution is
-    audited separately by the approve/reject path), so enabling the wait changes
-    only what the agent receives, never how the request is logged.
+    With ``confirm_inline_wait_seconds`` set, waits on phoenix_mcp_approval_resolved and
+    returns the executed result, a rejection, or the normal pending reply on timeout. The
+    request stays audited as "pending_approval" either way.
     """
 
     wait = min(access_key.confirm_inline_wait_seconds, MAX_CONFIRM_INLINE_WAIT_SECONDS)
@@ -595,35 +535,16 @@ async def _pending_or_inline(
     access_key: AccessKeyRecord,
     approval: Any,
 ) -> tuple[dict, str, str]:
-    """Return a pending approval, held inline when the access key is configured to wait.
-
-    One definition for every confirm gate (capability, and the MESA gates of
-    call_service and the native tools), so they answer identically and all
-    deliver _OPERATOR_ACCEPTED_NOTE when an approval resolves inline.
-
-    The wait is SKIPPED when the access key already has another approval pending. The
-    hold blocks the request and tool calls arrive one at a time, so approval N+1
-    cannot be created until approval N finishes waiting; a batch of writes would
-    spend one full wait per approval just to fill the queue the operator reviews
-    in one go. An operator with an unresolved approval is not approving instantly,
-    so blocking buys the agent nothing. The first call still waits, and with
-    instant approval the queue is empty again by the next call.
-
-    The skip is inferred, not a per-call flag: a flag would have to land on dozens
-    of write tools (changing the catalog fingerprint for every client) or ride in
-    `params._meta`, which not every client can set.
-    """
+    """Return a pending approval, held inline when the key waits."""
     if access_key.confirm_inline_wait_seconds > 0 and not _access_key_has_other_pending(data, access_key, approval):
         return await _await_inline_confirm(hass, data, access_key, approval)
     return _tool_pending(approval, notified=_approval_notifies(data)), "pending_approval", _approval_resource(approval)
 
 
 def _access_key_has_other_pending(data: PhoenixData, access_key: AccessKeyRecord, approval: Any) -> bool:
-    """True when this access key has a pending approval OTHER than this one.
+    """Return True when this key has a pending approval other than this one.
 
-    The current approval is excluded because `async_evaluate_capability` has
-    already stored it, so counting it would make the queue never look empty and no
-    call would ever wait. Fail-quiet: an unreadable store cannot prove a backlog,
+    The current one is already stored, so it is excluded. An unreadable store returns False,
     so the default is to wait.
     """
 
@@ -635,7 +556,7 @@ def _access_key_has_other_pending(data: PhoenixData, access_key: AccessKeyRecord
     return any(entry.id != approval.id for entry in pending)
 
 
-# Set by an admin restore (admin_view) around a re-applied executor call, so the
+# Set by an admin restore (admin.changes) around a re-applied executor call, so the
 # executor's own capture is stamped as a "rollback" attributed to the admin rather
 # than a plain create/edit. asyncio-safe: the value is scoped to the restore task.
 _restore_ctx: ContextVar[dict | None] = ContextVar("phx_restore_ctx", default=None)
@@ -676,15 +597,10 @@ def _payload_size(payload: dict | None) -> int | None:
 def _version_change_summary(
     resource_type: str, before: dict | None, after: dict | None
 ) -> dict[str, Any] | None:
-    """A one-line description of what a version record changed.
+    """Return a one-line description of what a version record changed, or None.
 
-    Only for resource types whose alias/resource_id says nothing about the
-    change itself: dashboards (card-count movement), raw yaml/file writes
-    (size movement), and entity-registry edits (which fields changed).
-    Automations/scripts/scenes/helpers return None; their alias is the story.
-
-    Returns the summary/summary_key/summary_params triple to splat into the
-    version record, or None when this resource type has nothing to say.
+    Covers dashboards, raw yaml and file writes, and entity-registry edits, as a splat of
+    summary, summary_key and summary_params. None where the alias tells the story.
     """
     if resource_type == "dashboard":
         b, a = _dashboard_card_total(before), _dashboard_card_total(after)
@@ -734,16 +650,10 @@ async def _record_version(
     alias: str | None = None,
     summary: dict[str, Any] | None = None,
 ) -> None:
-    """Best-effort capture of a config change into the version history.
-
-    Called from each _execute_* at Phoenix MCP's single execution chokepoint, so
-    directly-allowed and Confirm-approved changes are each recorded exactly once.
-    Never raises: a version-store failure must not fail the user's write.
-    request_id is not threaded (versions correlate to the audit log by access key,
-    resource and timestamp); approved_by_user_id is set only on the admin restore
-    path. `summary` is a one-line what-changed description for the panel's Changes
-    list; callers with op context (the card tools) pass their own, and everything
-    else gets the computed default (None where the alias already tells the story).
+    """Capture a config change into the version history, best-effort; never raises.
+    Called from each _execute_*, so allowed and approved changes record once.
+    ``approved_by_user_id`` is set only on the admin restore path. ``summary`` overrides the
+    computed one-line description.
     """
     record_event(data, "change", {"resource_type": resource_type, "resource_id": resource_id,
                                   "action": action, "before": before, "after": after})
@@ -774,7 +684,7 @@ async def _record_version(
         )
         return
     # Let the admin panel's Changes tab refresh instantly instead of waiting for
-    # its poll. Best-effort: a missing hass (tests) just falls back to polling.
+    # its poll. Best-effort: without hass the panel falls back to polling.
     if data.hass is not None:
         data.hass.bus.async_fire(
             "phoenix_mcp_config_changed",
@@ -785,9 +695,8 @@ async def _record_version(
 def _version_content_payload(content: str | None, **extra: Any) -> dict | None:
     """Build a before/after payload for a raw-text version, such as a blueprint source.
 
-    Content within MAX_DIFF_INLINE_BYTES is stored verbatim, like other version
-    records; larger content is a non-restorable metadata marker, bounding
-    .storage growth. Returns None when there was no prior content (a fresh create).
+    Content within MAX_DIFF_INLINE_BYTES is verbatim, larger is a non-restorable marker.
+    Returns None on a fresh create.
     """
     if content is None:
         return None
@@ -801,13 +710,7 @@ def _version_content_payload(content: str | None, **extra: Any) -> dict | None:
 
 
 def _usable_path_arg(value: Any) -> str | None:
-    """A caller-supplied path argument, or None when it can never name a file.
-
-    The NUL check is why this exists rather than a bare isinstance at each jail:
-    os.path.realpath RAISES ValueError on an embedded NUL instead of returning
-    something the containment check could refuse, so the classic truncation probe
-    would escape every path jail as an unhandled error rather than a clean refusal.
-    """
+    """Return a caller-supplied path, or None when it cannot name a file, as with a NUL."""
     if not isinstance(value, str) or not value.strip() or "\x00" in value:
         return None
     return value
@@ -824,19 +727,9 @@ def _cas_conflict(
     expected: Any, current: str | dict | list | None, tool_name: str
 ) -> tuple[dict, str, str] | None:
     """Optimistic-concurrency check for a Confirm-gated whole-blob write.
-
-    When the caller supplied expected_hash (from the matching read tool), refuse
-    the write if the target's content hashes differently now, meaning an admin or
-    another agent changed it since the read. It runs both before gating (fail
-    fast, so a stale write never becomes a doomed pending approval) and inside the
-    executor (to catch drift during the approval window). A whole-blob replace
-    must be re-read and merged, so the new hash is deliberately not echoed back.
-    None (no expected_hash) skips the check.
-
-    `current` is the target's content normalized so an absent target hashes the
-    way its read tool reports it: "" for a missing raw file, None for an absent dashboard
-    (get_dashboard_config returns not_found with no hash, so any expected_hash for
-    it is a genuine conflict).
+    With ``expected_hash``, refuses when the target changed since the read; runs before gating
+    and in the executor, and never echoes the new hash. ``current`` hashes an absent target as
+    its read tool reports it: "" for a raw file, None for a dashboard.
     """
     if not expected:
         return None
@@ -880,18 +773,10 @@ def redaction_sentinel_path(value: Any, _prefix: tuple = ()) -> list | None:
 
 
 def resolve_json_path(root: Any, path: Any) -> tuple[Any, Any, str | None]:
-    """Walk `path` to the CONTAINER holding its last segment.
-
-    Returns (container, key, None) so the caller can read, assign or delete the
-    leaf itself, or (None, None, reason) when the path addresses nothing.
-    Surface-agnostic: the same addressing serves a Lovelace layout, a parsed YAML
-    mapping, or an automation body.
-
-    Segments are dict keys (str) or list indices (int). NEGATIVE INDICES ARE
-    REFUSED even though Python accepts them: a caller that computed -1 from a
-    stale read would silently edit the wrong end of a list. NOTHING IS CREATED: a
-    missing parent is a typo, not an instruction to build structure, and inventing
-    containers turns a wrong path into a mangled config instead of an error.
+    """Walk ``path`` to the container holding its last segment.
+    Returns (container, key, None), or (None, None, reason) when the path addresses nothing.
+    Segments are dict keys or list indices; negative indices are refused, and nothing is
+    created.
     """
     if not isinstance(path, list) or not path:
         return None, None, "path must be a non-empty array of keys and indices."
@@ -936,13 +821,7 @@ def _descend(node: Any, segment: Any, depth: int) -> tuple[Any, str | None]:
 
 
 def _truncate(text: str, max_chars: int = MAX_DIFF_INLINE_BYTES) -> str:
-    """Bound a diff string stored on an approval record.
-
-    The cap exists because approval diffs are persisted in .storage alongside the
-    pending queue. It matches the version store's inline cap so an admin sees the
-    SAME content before approving that the Changes tab shows afterwards; a smaller
-    cap would clip a real automation mid-config.
-    """
+    """Bound a diff string stored on an approval record to the version store's cap."""
     if len(text) <= max_chars:
         return text
     return text[:max_chars] + f"\n... ({len(text) - max_chars} more characters)"
@@ -959,15 +838,10 @@ def _mesa_confirm_annotation(
     hass: HomeAssistant,
     groups: list[tuple[str, str, list[str]]],
 ) -> dict | None:
-    """MESA context block for a capability-gate approval diff, or None.
+    """Return the MESA context block for a capability-gate approval diff, or None.
 
-    Approving a gated call also satisfies MESA's confirm for its targets
-    (async_execute_approved_tool runs confirm-approved), so the approval record itself
-    must say MESA was part of what the admin's click covered: the reviewing
-    admin sees it on the card, and History keeps a permanent marker. Shaped like
-    build_mesa_service_diff's mesa block so the panel's existing renderer picks
-    it up. Best-effort: None when MESA is off/absent, nothing is MESA-confirm,
-    or anything fails (the gate diff must always build).
+    Approving a gated call also satisfies MESA's confirm, so the record says so, shaped like
+    build_mesa_service_diff's block. None when nothing is MESA-confirm or on any failure.
     """
     try:
         data = hass.data.get(DOMAIN)
@@ -1056,10 +930,8 @@ def _normalize_fields(fields: Any) -> list[str]:
 def _select_state_fields(scrubbed: dict, fields: list[str]) -> dict:
     """Return only the requested fields from an already-scrubbed state dict.
 
-    Top-level keys (state, last_changed, last_updated, ...) are taken as-is;
-    'attr.<name>' selects one attribute; 'attributes' selects all (scrubbed)
-    attributes. entity_id is always included. Unknown fields are ignored. Runs
-    AFTER scrubbing, so a scrubbed attribute can never be selected back in.
+    Takes top-level keys, ``attr.<name>`` or ``attributes``. entity_id is always included and
+    unknown fields are ignored.
     """
     attrs = scrubbed.get("attributes", {})
     out: dict = {"entity_id": scrubbed.get("entity_id")}
@@ -1094,9 +966,8 @@ def _lean_state(scrubbed: dict) -> dict:
 def _project_state(scrubbed: dict, fields: Any, detailed: bool) -> dict:
     """Apply presentation-only field projection to a scrubbed state dict.
 
-    `detailed` returns the full dict, explicit fields the requested subset,
-    otherwise the domain-aware lean view. Never bypasses scrubbing (the input is
-    already scrubbed).
+    ``detailed`` gives the full dict, ``fields`` a subset, otherwise the domain-aware lean
+    view.
     """
     if detailed:
         return scrubbed

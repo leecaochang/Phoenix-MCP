@@ -1,15 +1,9 @@
 """Send notifications and read Home Assistant's persistent ones.
 
-Sending needs cap_notify, which Confirm can gate, because a message reaches a
-person's phone or screen. A notify entity also needs WRITE on it and passes MESA;
-a legacy notify service (one per phone or channel) has no entity, so the
-capability alone decides, as for other targetless actions. Mobile app command
-messages (request_location_update, command_*, TTS and the like) act on the phone
-rather than inform anyone and are refused.
-
-Reading needs cap_log_read. Phoenix's own operator notifications (approval
-requests and rate-limit notices, which can describe other access keys' activity)
-are never shown, and text is scrubbed of addresses and of entity IDs the access
+Sending needs cap_notify, which Confirm can gate. A notify entity also needs write and passes MESA;
+a legacy notify service has no entity, so the capability alone decides. Mobile app command messages
+act on the phone rather than inform anyone and are refused. Reading needs cap_log_read. Phoenix's
+own operator notifications are never shown, and text is scrubbed of addresses and of entity IDs the
 key cannot read.
 """
 
@@ -25,7 +19,8 @@ from homeassistant.core import HomeAssistant
 from ..access_key_store import AccessKeyRecord
 from ..const import DOMAIN
 from ..data import PhoenixData
-from ..helpers import diff_summary_fields, redact_diagnostics, redact_inaccessible_entity_ids_in_text
+from ..catalog_text import diff_summary_fields
+from ..redaction import redact_diagnostics, redact_inaccessible_entity_ids_in_text
 from ..household_authority import household_service_kwargs
 from ..mesa import async_apply_mesa_to_call, fire_mesa_blocked_event
 from ..policy_engine import Permission, resolve

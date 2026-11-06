@@ -20,18 +20,18 @@ import pytest
 
 from tests.runtime_fixtures import patch_readers
 
-from custom_components.phoenix_mcp import agent_turn, agentcli_views, const
+from custom_components.phoenix_mcp import agent_turn, agent_chat_views, const
 from custom_components.phoenix_mcp.agent_recovery import AgentRecovery
 from custom_components.phoenix_mcp.access_key_store import GlobalSettings
 from custom_components.phoenix_mcp.llm.accounts import AgentCliStore, ProviderConfig, _with_learned
 from custom_components.phoenix_mcp.llm.provider_claude import ClaudeProvider
 from custom_components.phoenix_mcp.llm.provider_openai import OpenAICompatProvider
-from custom_components.phoenix_mcp.agentcli_views import PhoenixAgentCliChatView
+from custom_components.phoenix_mcp.agent_chat_views import PhoenixAgentCliChatView
 from custom_components.phoenix_mcp.agent_turn import _chat_attachments, _image_kind_and_size
 from custom_components.phoenix_mcp.llm.base import _refused_option
 from custom_components.phoenix_mcp.const import MAX_REQUEST_BODY_BYTES
 from custom_components.phoenix_mcp.provider_constants import (
-    AGENTCLI_ATTACHMENT_MAX_BYTES, AGENTCLI_ATTACHMENT_MAX_COUNT, AGENTCLI_ATTACHMENT_MAX_EDGE_PX,
+    AGENT_CHAT_ATTACHMENT_MAX_BYTES, AGENT_CHAT_ATTACHMENT_MAX_COUNT, AGENT_CHAT_ATTACHMENT_MAX_EDGE_PX,
 )
 from custom_components.phoenix_mcp.conversation_log import prompt_attachments, prompt_excerpt, sanitized
 
@@ -97,15 +97,15 @@ _PNG = _encoded("PNG")
 
 @pytest.mark.parametrize("value, key", [
     ({"data": "x"}, "attachmentsInvalid"),
-    ([_attachment(_PNG, "image/png")] * (AGENTCLI_ATTACHMENT_MAX_COUNT + 1), "attachmentsTooMany"),
+    ([_attachment(_PNG, "image/png")] * (AGENT_CHAT_ATTACHMENT_MAX_COUNT + 1), "attachmentsTooMany"),
     (["not an object"], "attachmentsInvalid"),
     ([{"data": base64.b64encode(_PNG).decode()}], "attachmentsInvalid"),
     ([{"mime_type": "image/png", "data": "@@not base64@@"}], "attachmentsInvalid"),
     ([_attachment(_PNG, "image/jpeg")], "attachmentUnsupported"),
     ([_attachment(_encoded("WEBP"), "image/webp")], "attachmentUnsupported"),
     ([_attachment(b"%PDF-1.7 not an image", "image/png")], "attachmentUnsupported"),
-    ([_attachment(_png_header(10, 10, AGENTCLI_ATTACHMENT_MAX_BYTES), "image/png")], "attachmentTooLarge"),
-    ([_attachment(_png_header(AGENTCLI_ATTACHMENT_MAX_EDGE_PX + 1, 10), "image/png")], "attachmentDimensions"),
+    ([_attachment(_png_header(10, 10, AGENT_CHAT_ATTACHMENT_MAX_BYTES), "image/png")], "attachmentTooLarge"),
+    ([_attachment(_png_header(AGENT_CHAT_ATTACHMENT_MAX_EDGE_PX + 1, 10), "image/png")], "attachmentDimensions"),
     ([_attachment(_png_header(10, 0), "image/png")], "attachmentDimensions"),
     ([_attachment(_png_header(10, 10, 3 * 512 * 1024), "image/png")] * 3, "attachmentsTooLarge"),
 ])
@@ -241,8 +241,8 @@ async def _post(hass, body: dict, *, cfg: ProviderConfig | None = None, persona:
     hass.data[const.DOMAIN] = data
     with patch.object(agent_turn.web, "StreamResponse", _Stream), \
          patch_readers("custom_components.phoenix_mcp.llm.accounts._get_secret_store", AsyncMock(return_value=store)), \
-         patch.object(agentcli_views, "async_get_clientsession", return_value=MagicMock()), \
-         patch("custom_components.phoenix_mcp.agentcli_views.async_run_agent_turn", new=AsyncMock()) as turn:
+         patch.object(agent_chat_views, "async_get_clientsession", return_value=MagicMock()), \
+         patch("custom_components.phoenix_mcp.agent_chat_views.async_run_agent_turn", new=AsyncMock()) as turn:
         request = _request(json.dumps({"access_key_id": "t1", "instance_id": "i1", **body}).encode())
         if url is not None:
             request.url = url

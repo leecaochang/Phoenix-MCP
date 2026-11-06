@@ -22,7 +22,7 @@ function record(over: Partial<ApprovalRecord> = {}): ApprovalRecord {
     expires_at: "2099-01-01T01:00:00Z",
     resolved_at: null,
     approved_by_user_id: null,
-    rejected_reason: null,
+    closure_reason: null,
     result: null,
     request_id: "r1",
     client_ip: null,
@@ -136,7 +136,7 @@ describe("Approvals pending pagination", () => {
     // resolved event; the non-pending status must retire the decision buttons too.
     vi.mocked(api.getApproval).mockResolvedValue(
       record({ id: "appr_1", status: "rejected", resolved_at: "2026-01-01T00:30:00Z",
-               rejected_reason: "not now", diff: { summary: "Front door notify" } }),
+               closure_reason: "not now", diff: { summary: "Front door notify" } }),
     );
     vi.mocked(api.listApprovals).mockResolvedValue({ approvals: [], total: 0, limit: 50, offset: 0 });
     update({ refreshSignal: 1 });

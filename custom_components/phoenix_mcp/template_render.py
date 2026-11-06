@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING
 from .template_limits import (
     TEMPLATE_WORKER_DIAGNOSTIC_EXIT, TEMPLATE_WORKER_INPUT_BYTES, TEMPLATE_WORKER_TIMEOUT_SECONDS,
 )
-from .helpers import build_permitted_states
+from .template_sandbox import build_permitted_states
 from .request_authority import check_request_authority
 from .template_diagnostics import format_template_failure
 
@@ -36,13 +36,10 @@ _WORKER_ENV_KEYS = frozenset({"PATH", "HOME", "LANG", "TMPDIR", "TZ"})
 async def async_render_template_for_access_key(
     template: str, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData,
 ) -> str:
-    """Render a template in a disposable subprocess over this access key's permitted states.
-
-    Concurrency (`template_slots`), input size and wall time are bounded here;
-    the worker applies the memory and CPU limits itself, and is always killed and
-    reaped. Request authority is rechecked before the render, after the worker
-    returns, and on exit unless cancelled. Every failure is a TemplateRenderError
-    with a safe message.
+    """Render a template in a disposable subprocess over this key's permitted states.
+    Bounds concurrency, input and wall time here; the worker limits memory and CPU. Authority
+    is rechecked around the render. Every failure is a TemplateRenderError with a safe
+    message.
     """
     if not isinstance(template, str) or len(template.encode()) > TEMPLATE_WORKER_INPUT_BYTES:
         raise TemplateRenderError("Invalid template size.")

@@ -72,12 +72,7 @@ _ENTITY_ID_RE = re.compile(r"^[a-z0-9_]+\.[a-z0-9_]+$")
 
 
 def canonical_entity_id(entity_id: str, hass: HomeAssistant) -> str:
-    """Resolve an entity_id (or registry id) to its canonical entity_id.
-
-    Mirrors the alias canonicalization resolve() does internally, so callers that
-    fetch state after a permission check use the same id resolve() granted on
-    (avoids a false 404 when a registry id or alias was supplied).
-    """
+    """Resolve an entity_id or registry id to the id resolve() grants on."""
     entity_id = entity_id.lower()
     entry = er.async_get(hass).async_get(entity_id)
     return entry.entity_id if entry else entity_id
@@ -101,22 +96,10 @@ def resolve(entity_id: str, access_key: AccessKeyRecord, hass: HomeAssistant) ->
 
 
 def _resolve_access_key_access(entity_id: str, access_key: AccessKeyRecord, hass: HomeAssistant) -> Permission:
-    """Resolve effective permission for entity_id against an access key.
-
-    Return values:
-        Permission.WRITE      - write access (unrestricted for pass-through access keys)
-        Permission.READ       - read-only access
-        Permission.DENY       - explicitly denied; audit outcome: denied
-        Permission.NO_ACCESS  - no grant found; audit outcome: denied
-        Permission.NOT_FOUND  - ghost entity (not in states or registry); audit outcome: not_found
-
-    Pass-through access keys return WRITE for all entities (after the Phoenix MCP
-    blocklist check). Home Companion access keys are limited to the companion control
-    and read domains and sensor classes, and are never pass-through. The
-    DUAL_GATE_SERVICES check is NOT performed here; it is the caller's responsibility.
-
-    The ancestor chain is entity, device, the main parent of a child device, then
-    domain. A child device with malformed ancestry confers NO_ACCESS.
+    """Return WRITE, READ, DENY, NO_ACCESS or NOT_FOUND (a ghost) for entity_id and the key.
+    Pass-through gets WRITE after the blocklist; Home Companion stays within its domains and
+    sensor classes. The chain is entity, device, main parent, domain; bad ancestry is
+    NO_ACCESS.
     """
     # A non-string cannot name an entity, and a model does not always follow the
     # tool schema (for example a list where a string was declared). Treated as a
@@ -204,16 +187,9 @@ def resolve_registry_access(
     force_registry_only: bool = False,
 ) -> Permission:
     """Resolve access to an entity, requiring inherited scope when registry-only.
-
-    A disabled entry, or an entry whose integration currently publishes no State,
-    is manageable only through its owning device or domain. An explicit entity
-    grant may still *restrict* that inherited access (RED and YELLOW are preserved
-    by the ordinary resolver) but cannot create positive access once the entity
-    has left the live permission tree.
-
-    Live, enabled entities get plain resolve() semantics. Pass-through access keys keep
-    WRITE after the ordinary blocklist/ghost checks; Assist exposure remains the
-    caller's shared enumeration filter.
+    A disabled or stateless entry is manageable only through its device or domain; an entity
+    grant may restrict that but not create it. Live entities and pass-through keys follow
+    resolve(). Assist exposure stays the caller's filter.
     """
     ordinary = resolve(entity_id, access_key, hass)
     if ordinary not in (Permission.READ, Permission.WRITE):
@@ -265,12 +241,8 @@ def _single_owner(device: Any) -> list[str]:
 def device_config_entry_ids(device: Any) -> list[str]:
     """Return a device's owning config-entry ids across supported HA versions.
 
-    From HA 2026.9 a device has one owner in config_entry_id, and 2026.10 reports
-    every config_entries read as deprecated. Only a restored pre-migration
-    composite still holds several owners, which it reports through
-    config_entries without that warning. 2026.9 has no is_composite_device, so
-    there config_entries is the only way to see them. Releases before 2026.9 have
-    config_entries alone.
+    Reads config_entry_id unless the device is a restored composite, avoiding the deprecation
+    warning on config_entries; releases before 2026.9 have config_entries alone.
     """
     if hasattr(device, "config_entry_id") and getattr(device, "is_composite_device", None) is False:
         return _single_owner(device)
@@ -297,9 +269,7 @@ def device_cascade_entity_ids(
 ) -> list[str]:
     """Return a device's registry entities plus those of its child devices.
 
-    Core cascades deletion and disabling from a main device to its child
-    devices, and a child without its own area follows the parent's. A write to
-    the parent therefore reaches every entity listed here.
+    Core cascades deletion, disabling and area from a main device to its children.
     """
     snapshot = snapshot or device_registry_snapshot(hass)
     device_ids = {device_id, *snapshot.part_ids(device_id)}
@@ -332,12 +302,9 @@ def resolve_device_registry_access(
     snapshot: DeviceRegistrySnapshot | None = None,
 ) -> Permission:
     """Resolve read access to a device-registry entry.
-
-    An explicit device node, or the node of a child device's main parent,
-    authorizes the device even when it has no entities. Otherwise one attached
-    entity must pass the ordinary registry-aware entity
-    resolver. Pass-through access keys retain their Assist-exposure filter: a device
-    with no exposed attached entity is not an alternate enumeration path.
+    A device node, or a child's main-parent node, authorizes it even with no entities.
+    Otherwise one attached entity must pass the registry-aware resolver. Pass-through keeps
+    its Assist filter.
     """
     if not isinstance(device_id, str):
         return Permission.NOT_FOUND
@@ -399,11 +366,8 @@ def resolve_device_registry_write(
     snapshot: DeviceRegistrySnapshot | None = None,
 ) -> Permission:
     """Resolve the explicit device permission required for whole-device writes.
-
-    Attached entities may make a device readable, but they never authorize a
-    registry mutation that affects the whole device. Scoped callers therefore
-    need GREEN on the device node, or on the main parent of a child device whose
-    own node is Grey; a RED parent blocks its children. Pass-through remains
+    Attached entities never authorize this. Scoped callers need GREEN on the device node, or
+    on the main parent when the child node is Grey; a RED parent blocks. Pass-through is
     unrestricted.
     """
     if not isinstance(device_id, str):
@@ -448,10 +412,8 @@ def config_entry_registry_context(
 ) -> ConfigEntryRegistryContext | None:
     """Collect exact entity and device membership for a config entry.
 
-    Devices can have multiple owners.  Membership therefore comes from the
-    registry's owner set rather than from an entity sample, while entities use
-    their exact config_entry_id.  Phoenix MCP's own entry is deliberately
-    indistinguishable from an absent entry to callers.
+    Devices come from the registry's owner set, entities from their config_entry_id. Phoenix
+    MCP's own entry reads as absent.
     """
     if not isinstance(entry_id, str):
         return None
@@ -526,9 +488,8 @@ def resolve_config_entry_registry_write(
 ) -> Permission:
     """Require complete entity WRITE and explicit device WRITE coverage.
 
-    A scoped access key cannot manage a resource-less entry.  For disabling,
-    force_registry_only proves that authorization survives after live states
-    disappear instead of relying on a direct entity grant that will self-lock.
+    A scoped key cannot manage a resource-less entry. ``force_registry_only`` proves that a
+    disabling caller keeps authority once live states disappear.
     """
     context = config_entry_registry_context(entry_id, hass)
     if context is None:
@@ -563,12 +524,10 @@ def resolve_config_entry_registry_write(
 
 
 def is_sensitive_key(key: Any) -> bool:
-    """Whether an attribute/response key name marks its value as sensitive.
+    """Return whether a key name marks its value as sensitive, case-insensitively.
 
-    True when the key is in the fixed SENSITIVE_ATTRIBUTES list, contains any
-    SENSITIVE_KEY_SUBSTRINGS marker, ends in SENSITIVE_KEY_SUFFIXES, or has a
-    SENSITIVE_KEY_FINAL_WORDS word last (case-insensitive), catching credentials
-    surfaced under integration prefixes.
+    Matches SENSITIVE_ATTRIBUTES, SENSITIVE_KEY_SUBSTRINGS, SENSITIVE_KEY_SUFFIXES or a last
+    word in SENSITIVE_KEY_FINAL_WORDS.
     """
     if not isinstance(key, str):
         return False
@@ -583,12 +542,10 @@ def is_sensitive_key(key: Any) -> bool:
 def scrub_attributes(
     attributes: Mapping[str, Any], access_key: AccessKeyRecord, hass: HomeAssistant,
 ) -> dict[str, Any]:
-    """State attributes as this access key may read them. Event loop only.
+    """Return state attributes as this access key may read them. Event loop only.
 
-    A sensitive attribute is dropped, so its name is not disclosed. Below the top
-    level the service-response filter applies: nested sensitive values and hidden
-    entity IDs are redacted and entries keyed by a hidden entity are dropped.
-    Strings that only look like an entity ID, such as a host name, stay readable.
+    A sensitive attribute is dropped. Nested values get the service-response filter, except
+    that strings merely shaped like an entity ID stay readable.
     """
     return {
         key: filter_service_response(value, access_key, hass, keep_unknown=True)
@@ -608,11 +565,7 @@ def scrub_sensitive_attributes(state: State, access_key: AccessKeyRecord, hass: 
 
 
 def scrub_state_dict(d: dict, access_key: AccessKeyRecord, hass: HomeAssistant) -> dict:
-    """Return a copy of a raw state dict with its attributes scrubbed for this access key.
-
-    Use this when the input is already a dict (e.g. from state history results).
-    Use scrub_sensitive_attributes when working with State objects directly.
-    """
+    """Return a copy of a raw state dict with its attributes scrubbed for this key."""
     return {**d, "attributes": scrub_attributes(d.get("attributes", {}), access_key, hass)}
 
 
@@ -620,11 +573,10 @@ _off_loop_reported = False
 
 
 def _assist_exposed(hass: HomeAssistant, entity_id: str) -> bool:
-    """HA's conversation exposure for one canonical, existing entity ID.
+    """Return HA's conversation exposure for one canonical, existing entity ID.
 
-    HA's lookup writes its own records on first sight, so it runs on the event
-    loop only. Off the loop it fails closed and reports the caller once; a
-    worker thread must take its scope decisions from the loop instead.
+    HA's lookup writes records on first sight, so off the event loop this fails closed and
+    reports the caller once.
     """
     global _off_loop_reported
     if threading.get_ident() != hass.loop_thread_id:
@@ -641,14 +593,7 @@ def _assist_exposed(hass: HomeAssistant, entity_id: str) -> bool:
 
 
 def assist_expose_check(access_key: AccessKeyRecord, hass: HomeAssistant) -> Callable[[str], bool] | None:
-    """Return the Assist-exposure predicate for a pass-through access key, or None.
-
-    Non-None only for pass_through access keys with use_assist_exposure; scoped
-    access keys are filtered by their permission tree alone. resolve() applies the
-    same predicate itself, so every read, control path and redaction already
-    honors it; listing filters also call this to skip unexposed states early, and
-    callers use `is None` to ask whether a key is exposure-limited.
-    """
+    """Return the Assist predicate for a pass-through key using exposure, else None."""
     if not (access_key.pass_through and access_key.use_assist_exposure):
         return None
     return lambda entity_id: _assist_exposed(hass, entity_id)
@@ -657,12 +602,7 @@ def assist_expose_check(access_key: AccessKeyRecord, hass: HomeAssistant) -> Cal
 def resolve_read(
     entity_id: Any, access_key: AccessKeyRecord, hass: HomeAssistant, *, registry: bool = False
 ) -> Permission:
-    """Read permission for one named entity.
-
-    resolve() applies the Assist-exposure filter, so an unexposed entity answers
-    like a missing one. `registry=True` starts from resolve_registry_access for
-    tools that also describe registry-only entities. Must run on the event loop.
-    """
+    """Return read permission for one entity, unexposed reads as missing. Event loop only."""
     return (resolve_registry_access if registry else resolve)(entity_id, access_key, hass)
 
 
@@ -671,13 +611,10 @@ def filter_entities_for_access_key(
     access_key: AccessKeyRecord,
     hass: HomeAssistant,
 ) -> list[dict[str, Any]]:
-    """Filter a list of State objects to those accessible by access key, scrub sensitive attributes.
+    """Filter State objects to those accessible by the key, scrubbing sensitive attributes.
 
-    resolve() is the single filter predicate: it blocks the Phoenix MCP domain and Phoenix MCP's
-    own platform entities and grants pass-through access keys WRITE, so scoped and
-    pass-through access keys share one path here. The only pass-through-specific
-    extra is the use_assist_exposure check. Sensitive attributes are
-    always scrubbed.
+    resolve() is the single predicate for scoped and pass-through keys alike; pass-through
+    adds only the use_assist_exposure check.
     """
     expose = assist_expose_check(access_key, hass)
     return [
@@ -689,29 +626,15 @@ def filter_entities_for_access_key(
 
 
 def _eligible_for_indirect_expansion(entry: er.RegistryEntry) -> bool:
-    """Whether an entity may be reached by INDIRECT service-target expansion.
-
-    Mirrors HA's helpers.target primary_entities_only=True default: config and
-    diagnostic entities (entity_category set) and hidden entities are excluded
-    when a call targets a device, area, or floor, so a bulk action like "turn
-    off every switch in the bedroom" does not fan out to a same-domain config
-    entity (e.g. a child-lock switch) the operator never meant to actuate.
-
-    Not applied to explicit entity_id targets or the entity_id:"all"/whole-domain
-    paths: HA does not filter those either (an operator naming an entity directly
-    means it), so Phoenix MCP keeps them as the deliberate escape hatch.
-    """
+    """Return whether indirect target expansion may reach this entity."""
     return entry.entity_category is None and entry.hidden_by is None
 
 
 def _service_area_ids(hass: HomeAssistant, values: list[str]) -> list[str]:
-    """Area IDs for service area targets given as an ID, a name or an alias.
+    """Return area IDs for service targets given as an ID, a name or an alias.
 
-    The reads accept all three, so an agent that read "Kitchen" from them can
-    target it too. Each area still expands only to the entities the access key
-    may write, so an unknown name and a hidden area both expand to nothing; the
-    reading is not noted, since naming the area ID would confirm an area the key
-    cannot see.
+    Unknown and hidden areas both expand to nothing, and the reading is never noted, so naming
+    an area cannot confirm one the key cannot see.
     """
     registry = ar.async_get(hass)
     resolved: list[str] = []
@@ -736,12 +659,8 @@ def expand_service_targets(
 ) -> tuple[set[str], list[str]]:
     """Expand service call targets without permission filtering or registry checks.
 
-    Returns (device_area_candidates, explicit_entity_ids) where:
-    - device_area_candidates: entity IDs from device/area/'all' expansion (deduplicated set)
-    - explicit_entity_ids: entity IDs specified directly (not via 'all') that callers must
-      validate against the entity registry before use
-
-    Use resolve_service_targets for the full filtered result.
+    Returns (device_area_candidates, explicit_entity_ids); callers must validate the explicit
+    IDs against the registry. resolve_service_targets gives the filtered result.
     """
     entity_registry = er.async_get(hass)
     device_snapshot = device_registry_snapshot(hass)
@@ -839,18 +758,9 @@ def resolve_service_targets(
     hass: HomeAssistant,
 ) -> tuple[list[str], int]:
     """Resolve service call targets to a WRITE-permitted, deduplicated entity_id list.
-
-    Returns (permitted_entities, visible_count) where visible_count is the number
-    of candidates this access key can read or write. An explicit ID with no
-    registry entry is skipped, so it is never dispatched (HA could create it) and
-    counts exactly like an entity the key cannot see: neither a mixed target list
-    nor the count tells a missing entity from a hidden one.
-
-    Returns an empty list when no entities pass permission filtering; the caller must
-    return 403 in that case.
-
-    Phoenix MCP never passes device_id, area_id, or 'all' through to HA. This function
-    always returns an explicit entity list.
+    Returns (permitted_entities, visible_count). An unregistered explicit ID is skipped and
+    counts like a hidden entity. An empty list means the caller must return 403. device_id,
+    area_id and 'all' never pass through to HA.
     """
     entity_registry = er.async_get(hass)
 
@@ -896,12 +806,10 @@ def resolve_service_targets(
 
 
 def group_member_ids(entity_id: str, hass: HomeAssistant) -> frozenset[str] | None:
-    """Every member of a group helper, nested groups included.
+    """Return every member of a group helper, nested groups included.
 
-    Empty for anything else: a group helper's membership is static and readable,
-    while scenes, scripts and automations stay governed by their primary entity,
-    so publishing an entity_id attribute does not make something a group. None
-    when a group's membership cannot be read, which callers treat as a refusal.
+    Empty for anything else; scenes, scripts and automations stay governed by their primary
+    entity. None when membership cannot be read, which callers treat as a refusal.
     """
     registry = er.async_get(hass)
     members: set[str] = set()
@@ -935,10 +843,9 @@ def group_member_ids(entity_id: str, hass: HomeAssistant) -> frozenset[str] | No
 
 
 def group_member_denied(entity_id: str, access_key: AccessKeyRecord, hass: HomeAssistant) -> bool:
-    """Whether a target is a group that would reach a member RED for this access key.
+    """Return whether a target is a group reaching a member RED for this key.
 
-    Only RED counts: granting a group reaches its ungranted members on purpose,
-    while RED is the operator's explicit exclusion and outranks any grant.
+    Only RED counts: a grant on a group reaches ungranted members on purpose.
     """
     members = group_member_ids(entity_id, hass)
     if members is None:
@@ -951,10 +858,8 @@ def service_target_binding_valid(
 ) -> bool:
     """Bind named script services to the registry entity they actually execute.
 
-    HA's script.<stored_id> handler ignores target selectors and accepts them as
-    variables instead. Ordinary script controls select entities; named handlers
-    must match exactly one authorized, enabled script, including after renames.
-    Reload is handled separately through the no-target capability branch.
+    HA's script.<stored_id> handler ignores target selectors, so it must match exactly one
+    authorized, enabled script. Reload takes the no-target capability branch.
     """
     if domain != "script" or service in SCRIPT_ENTITY_SERVICES:
         return True
@@ -965,21 +870,10 @@ def service_target_binding_valid(
 
 
 def physical_gate_applies(domain: str, service: str, targets: list[str]) -> bool:
-    """The physical-gate predicate over an ALREADY-RESOLVED target list.
+    """Return whether the physical gate covers a call over a resolved target list.
 
-    The enforcing path (call_needs_physical_gate) and the PREVIEW path
-    (dry_run_service, which has already resolved its targets) share this one
-    definition, so a preview never disagrees with the verdict the real call
-    reaches.
-
-    Any service on a physical actuator domain (lock/alarm_control_panel/cover/
-    valve) qualifies: every service those domains expose is an actuation, so
-    gating the whole domain is safe and covers new services an exact service-name
-    list would miss (cover.toggle, the *_cover_tilt family, valve.toggle,
-    alarm_arm_custom_bypass). The generic homeassistant.toggle redispatches to the
-    target domain's own toggle, so it qualifies when a resolved WRITE-target is
-    physical; homeassistant.turn_on/off no-op on those domains and are excluded.
-    HA-version-sensitive: re-verify the redispatch behavior on HA upgrades.
+    The single rule for enforcement and preview. Every service on a physical actuator domain
+    qualifies, as does homeassistant.toggle when a target is physical.
     """
     if domain in PHYSICAL_GATE_DOMAINS:
         return True
@@ -998,11 +892,9 @@ def call_needs_physical_gate(
     access_key: AccessKeyRecord,
     hass: HomeAssistant,
 ) -> bool:
-    """True if a call_service must gate on cap_physical_control.
+    """Return True if a call_service must gate on cap_physical_control.
 
-    Resolves the target list, then applies physical_gate_applies. The rule
-    itself lives there; this is the enforcing path's entry point, which has to
-    do the resolution first.
+    Resolves the target list, then applies physical_gate_applies.
     """
     if domain in PHYSICAL_GATE_DOMAINS:
         return True
@@ -1040,25 +932,8 @@ def filter_service_response(
 ) -> Any:
     """Recursively redact secrets and inaccessible entity IDs from service response data.
 
-    Three redactions are applied: any string that is an entity ID the access key cannot
-    access becomes "<redacted>", any dict value whose key name is sensitive
-    (is_sensitive_key) becomes "<redacted>" without recursing into it, and any dict
-    ENTRY whose KEY is an inaccessible entity ID is dropped entirely.
-
-    Keys are dropped rather than replaced because dict keys must be unique: two
-    denied keys replaced by the same "<redacted>" string would silently collapse
-    into one entry, and a disambiguating suffix would disclose how many entities
-    were denied. Dropping also matches the no-oracle convention used elsewhere
-    (get_logbook drops out-of-scope entries rather than marking them). Services
-    that key their response by entity_id (weather.get_forecasts, calendar
-    .get_events) depend on this.
-
-    A container below max_depth is never returned raw. Passing `truncated` makes
-    it "<redacted>", which every write path refuses, and records its path there;
-    otherwise it is emptied, the long-standing service-response behavior.
-
-    `keep_unknown` leaves a string that names no entity at all, for sources where
-    free values such as host names are common. Tuples and sets come back as lists.
+    Such IDs and sensitive keys' values become "<redacted>"; entries keyed by a hidden ID
+    drop. Past max_depth a container is redacted and recorded in ``truncated``, else emptied.
     """
     if isinstance(response_data, (tuple, set, frozenset)):
         response_data = list(response_data)
@@ -1115,9 +990,7 @@ def get_effective_hint(
 ) -> str | None:
     """Return the most specific hint for an entity.
 
-    Checks the per-access-key entity, device, then domain nodes. If none is set, falls
-    back to the global entity_hints map (entity_id -> hint) when provided. The
-    per-access-key node hint always wins over the global hint.
+    Checks the key's entity, device, then domain nodes, then the global ``entity_hints`` map.
     """
     registry = er.async_get(hass)
     entry = registry.async_get(entity_id)
@@ -1143,19 +1016,10 @@ def get_effective_hint(
 
 
 def template_blocklist_vars() -> dict:
-    """Return a variables dict that shadows HA template globals to block entity enumeration.
-
-    Pass as **template_blocklist_vars() when building the variables dict for
-    Template.async_render(). Jinja2 local variables shadow globals of the same name,
-    so these stubs override HA's built-in functions that could bypass Phoenix MCP filtering.
-
-    Blocked here:
-    - 'secrets' removed entirely (shadowed with None; attribute access raises AttributeError)
-    - 'hass' replaced with None (safe subset is impractical to implement; None causes
-      AttributeError on any access, which HA's template engine surfaces as a template error)
-    - 'config_entry_attr()' blocked (returns None, preventing integration metadata leaks)
-    - 'device_attr()' blocked (returns None, preventing device metadata enumeration)
-    - Enumeration helpers blocked (return empty iterables)
+    """Return variables that shadow HA template globals to block entity enumeration.
+    Pass as ``**template_blocklist_vars()`` to Template.async_render(), since locals shadow
+    globals. ``secrets`` and ``hass`` become None, metadata helpers return None, and
+    enumeration helpers return empty iterables.
     """
     return {
         # Remove secrets and replace hass with a safe (non-functional) substitute.
@@ -1208,14 +1072,9 @@ class RelativeTimeError(ValueError):
 
 def parse_relative_time(value: str) -> datetime:
     """Parse a relative time string to a UTC datetime.
-
-    An amount and unit, case-insensitive, with or without a space: minutes
-    (30min), hours (24h, 24 hours), days (7d), weeks (2w) or 30-day months
-    (1mo). It means that long ago; a leading minus or a trailing "ago" says the
-    same, and a leading plus means that far ahead. 'now' is the current time.
-    A bare 'm' is refused as ambiguous, since models send it for minutes and
-    months alike. Raises RelativeTimeError for a refused relative time and
-    ValueError for anything that is not one.
+    Takes an amount and unit (30min, 24h, 7d, 2w, 1mo), meaning that long ago, or 'now'; a
+    leading plus means ahead. A bare 'm' is refused as ambiguous. Raises RelativeTimeError for
+    a refused time and ValueError for anything else.
     """
     if not isinstance(value, str):
         raise ValueError(f"Unrecognized relative time format: {value!r}")
@@ -1252,12 +1111,8 @@ def _selector_list(value: object) -> list[str] | None:
 class IntentSelectors(NamedTuple):
     """The five native targeting selectors, coerced to the shapes HA assumes.
 
-    A model does not always follow the tool schema, and HA's async_match_targets
-    assumes name/area/floor are plain strings and that domains/device_classes are
-    iterable. A wrong-shaped value is degraded to "not provided" rather than
-    stringified, for the reason in helpers.str_arg: str(["a"]) invents an
-    argument nobody sent, which then has to be refused with a message about a
-    value nobody typed.
+    async_match_targets assumes plain strings and iterables. A wrong-shaped value becomes "not
+    provided", never stringified, as str(["a"]) would invent an argument.
     """
 
     name: str | None
@@ -1272,15 +1127,7 @@ class IntentSelectors(NamedTuple):
 
     @property
     def none_usable(self) -> bool:
-        """True when nothing usable survived coercion.
-
-        A native action with zero constraints must match nothing rather than fan
-        out to the access key's whole writable scope, so resolve_intent_entities fails
-        closed on this. It is exposed as a property because the CALLER needs to
-        tell that case apart from "matched nothing" and "denied", which are the
-        same empty list: only this one is the caller's own doing and can be
-        reported as such without disclosing anything.
-        """
+        """Return True when nothing usable survived coercion, so nothing may match."""
         return not (self.name or self.area or self.floor or self.domains or self.device_classes)
 
 
@@ -1292,12 +1139,7 @@ def normalize_intent_selectors(
     domains: object = None,
     device_classes: object = None,
 ) -> IntentSelectors:
-    """Coerce the five targeting selectors. ONE definition, two callers.
-
-    resolve_intent_entities normalises through this, and the native tools that can
-    be left with no selector at all call it first to answer the caller properly,
-    so there is no second copy of the coercion to drift out of agreement.
-    """
+    """Coerce the five targeting selectors, for resolver and native tools alike."""
     selectors = IntentSelectors(
         name=name if isinstance(name, str) else None,
         area=area if isinstance(area, str) else None,
@@ -1325,13 +1167,10 @@ def resolve_intent_entities(
     read_only: bool = False,
     allow_duplicate_names: bool = False,
 ) -> list[str]:
-    """Resolve intent-based targeting (area/name/floor/domain/device_class) to entity_id list.
+    """Resolve intent targeting (area/name/floor/domain/device_class) to an entity_id list.
 
-    read_only includes readable entities for side-effect-free routing previews.
-
-    Uses HA's async_match_targets for name/area/floor resolution to match native HA
-    intent scoring behavior. Silently drops entities the access key cannot WRITE. Never
-    acknowledges blocked or inaccessible entities. Returns an empty list when nothing matches.
+    Matches through HA's async_match_targets. Silently drops entities the key cannot WRITE, or
+    read when ``read_only`` serves a preview. Returns an empty list when nothing matches.
     """
     # Local: not part of the recorded Home Assistant import floor.
     from homeassistant.helpers.intent import MatchTargetsConstraints
@@ -1420,20 +1259,12 @@ def resolve_intent_entities(
 
 # ---------------------------------------------------------------------------
 # ESPHome user-defined actions
+#
+# Firmware-declared actions are esphome.<device_name_with_underscores>_<action_name>. Their
+# schema holds only declared arguments, so they take no entity target and miss the
+# target-flattening path. Authorization is the owning device's write scope: an action can
+# act on nothing else.
 # ---------------------------------------------------------------------------
-#
-# A device's firmware can declare actions, which HA registers as
-# esphome.<device_name_with_underscores>_<action_name>. These are the only
-# services the esphome domain has (its services.yaml is deliberately empty
-# upstream) and their schema is built from ONLY the arguments the device
-# declared, so they take no entity target. That makes them unreachable through
-# the ordinary target-flattening path, which would both attach an entity_id the
-# schema rejects and resolve to an empty target list.
-#
-# Authorization is the owning DEVICE's write scope rather than a capability: the
-# action is defined by that device's own firmware and can act on nothing else, so
-# an access key that may already actuate the device's entities is exactly the access key
-# that may invoke its actions.
 
 
 def esphome_entry_for_entity(hass: HomeAssistant, entity_id: str) -> Any | None:
@@ -1448,27 +1279,16 @@ def esphome_entry_for_entity(hass: HomeAssistant, entity_id: str) -> Any | None:
 
 
 def _esphome_entry_loaded(entry: Any) -> bool:
-    """True when the entry is loaded, so reading runtime_data is safe.
-
-    HA deletes runtime_data on unload (object.__delattr__), so this guard is what
-    keeps every caller from reading a deleted attribute or, worse, reporting the
-    stale runtime a partially-failed setup left behind.
-    """
+    """Return True when the entry is loaded, so reading runtime_data is safe."""
 
     return entry.state is ConfigEntryState.LOADED
 
 
 def resolve_esphome_user_service(hass: HomeAssistant, service: str) -> Any | None:
-    """Find the LOADED ESPHome config entry that owns a user-defined action.
+    """Find the loaded ESPHome config entry that owns a user-defined action.
 
-    Matching keeps the LONGEST device-name prefix that also declares the
-    remaining action name, so a device whose name is a prefix of another's
-    cannot shadow it.
-
-    Returns None for any service no loaded entry claims, which deliberately
-    includes the stale registrations the esphome integration leaves behind in
-    hass.services: it does not remove them on disconnect or unload, so trusting
-    the service registry would dispatch at a device that is gone.
+    Keeps the longest device-name prefix that declares the action. Returns None for any
+    service no loaded entry claims, including stale registrations HA leaves in hass.services.
     """
     best: Any | None = None
     best_len = -1

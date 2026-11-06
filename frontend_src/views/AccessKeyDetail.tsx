@@ -735,11 +735,17 @@ const SelectedAccessKey = memo(function SelectedAccessKey({
       const data = await api.getAccessKey(accessKeyId);
       setAccessKey(data);
     } catch (e: unknown) {
+      // The remembered key is gone, deleted or purged elsewhere: nothing here can
+      // be shown or corrected for it, so the windows go back to asking for a key.
+      if ((e as { status?: number }).status === 404) {
+        onDeselect();
+        return;
+      }
       setError(e instanceof Error ? e.message : t("accessKeys.loadFailed"));
     } finally {
       setLoading(false);
     }
-  }, [accessKeyId]);
+  }, [accessKeyId, onDeselect]);
 
   useEffect(() => { load(); }, [load]);
 

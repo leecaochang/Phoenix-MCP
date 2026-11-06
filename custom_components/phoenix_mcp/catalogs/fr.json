@@ -1657,6 +1657,7 @@
       "verboseHint": "Afficher les appels d'outils, les résultats d'outils et la réflexion de l'agent. Les réponses, les images, la progression, les approbations et les avis s'affichent dans tous les cas.",
       "workingOn": "Traitement : {name}",
       "workingSpinner": "Traitement…",
+      "otherTabTurn": "Un autre onglet génère une réponse dans cette conversation. Si cet onglet en génère une aussi, celle qui se termine en dernier est conservée.",
       "pausedAfter": {
         "one": "En pause après {count} étape. Continuer ?",
         "other": "En pause après {count} étapes. Continuer ?"

@@ -1,18 +1,9 @@
 """Radio tools: the Zigbee network and device surface (cap_radio_write).
 
-The TOOL layer only. The backend adapter that talks to Zigbee2MQTT and ZHA is
-the package-level radio.py, imported here as `radio_backend` so the two are
-never confused inside a module that shares its name.
-
-Every tool resolves through the access key's permission tree before touching a
-radio: `_resolve_radio_device` returns a device only when the access key can see it,
-so a device lookup cannot become an oracle for the rest of the mesh. Every
-mutating tool is Confirm-eligible and builds a registry-scoped diff naming its
-specific devices or group, because radio topology changes are not reversible
-from here.
-
-tool_registration registers these tools and this module never imports the
-dispatcher. Shared primitives come from ..tool_common.
+The tool layer only; the adapter for Zigbee2MQTT and ZHA is the package-level radio.py, imported as
+`radio_backend`. Every tool resolves through the key's permission tree first, so a lookup cannot
+become an oracle for the mesh. Every mutating tool is Confirm-eligible with a registry-scoped diff,
+because topology changes are not reversible from here. This module never imports the dispatcher.
 """
 
 from __future__ import annotations
@@ -42,12 +33,11 @@ from ..mesa import (
 )
 from ..radio import RadioError
 from ..mesa_audit import note_mesa_advisory
-from ..helpers import (
-    _scrub_log_text,
-    diff_summary_fields as _summary,
-    effective_cap,
-    version_summary_fields as _version_summary,
+from ..catalog_text import (
+    diff_summary_fields as _summary, version_summary_fields as _version_summary,
 )
+from ..capability import effective_cap
+from ..redaction import _scrub_log_text
 from .discovery import _accessible_entity_ids
 from ..tool_common import (
     MESA_DENIED_MESSAGE, _CAP_FORBIDDEN_MESSAGE, _gate, _mesa_confirm_annotation, _pending_or_inline, _record_version, _set_progress_status, _tool_error, _tool_success, _truncate, _with_mesa_advisory,
@@ -341,18 +331,14 @@ def _resolve_radio_device(
 ) -> _ResolvedRadioDevice | tuple[dict, str, str]:
     """Resolve a device_id to a _ResolvedRadioDevice, or the tool error to return.
 
-    Callers narrow with `isinstance(result, tuple)`, which is why the success value
-    is a frozen dataclass rather than a NamedTuple. Visibility mirrors get_device:
-    the device must have at least one accessible entity, and a ghost device and an
-    out-of-scope device return identical not_found bodies (no existence oracle).
-    Write ops additionally require WRITE on at least one of the device's entities;
-    a visible but READ-only device gets a specific message, since the access key can
-    already see it. A device with no live entity, such as a repeater whose only
-    sensor is disabled, follows the registry resolvers instead, so its writes need
-    WRITE on the device itself rather than on an attached entity. A visible non-radio device (including the Z2M bridge itself,
-    which never detects as a radio device, protecting the coordinator) is
-    invalid_request.
+    Ghost and out-of-scope devices return identical not_found bodies. Write ops need write on an
+    entity, or on the device when it has no live entity. A non-radio device is invalid_request.
     """
+    # Callers narrow with `isinstance(result, tuple)`, so success is a frozen dataclass rather than
+    # a NamedTuple. Visibility mirrors get_device: at least one accessible entity. A visible
+    # read-only device gets a specific message, since the key can already see it. A device with no
+    # live entity, such as a repeater whose only sensor is disabled, follows the registry resolvers.
+    # The Z2M bridge never detects as a radio device, which protects the coordinator.
     device_id = str(args.get("device_id") or "").strip()
     if not device_id:
         return _tool_error("device_id is required."), "invalid_request", tool_name
@@ -632,16 +618,13 @@ async def _radio_device_mesa_gate(
 ) -> tuple[dict, str, str] | list[str]:
     """Apply MESA to an action on a whole Zigbee device.
 
-    Returns the refusal or pending approval to answer with, else the advisory
-    warnings for the result.
-
-    Called from the tool and again from its executor, where an approval satisfies
-    Confirm for this exact action and nothing stricter. The action reaches the
-    device rather than one of its entities, so every registry entity on it and its
-    child devices is evaluated, enabled or not and writable by this key or not, and
-    one refusal stops it. A device with no registry entity cannot be judged: it warns
-    in advisory mode and is refused where policy must be met.
+    Returns the refusal or pending approval, else advisory warnings. Every registry entity on it and
+    its child devices is evaluated, and one refusal stops it.
     """
+    # Called from the tool and again from its executor, where an approval satisfies Confirm for this
+    # exact action and nothing stricter. The action reaches the device, so neither enabled state nor
+    # this key's write scope narrows the set. A device with no registry entity cannot be judged: it
+    # warns in advisory mode and is refused where policy must be met.
     entities = device_cascade_entity_ids(hass, device.id)
     if (
         not entities
@@ -1054,12 +1037,9 @@ def _group_mesa_entities(
 
 
 def _zigbee_group_summary_op(change: _ResolvedZigbeeGroupChange) -> str:
-    """The summary variant for a group change.
-
-    One template per operation rather than an interpolated verb, so each
-    language can conjugate its own: membership edits and removing the whole
-    group are different sentences even though both carry operation "remove".
-    """
+    """The summary variant for a group change, one template per operation."""
+    # Separate templates let each language conjugate its own: membership edits and removing the
+    # whole group are different sentences though both carry operation "remove".
     if change.tool_name == "set_zigbee_group_members":
         return "add_members" if change.operation == "add" else "remove_members"
     return "create" if change.operation == "create" else "delete"
@@ -1461,11 +1441,8 @@ def _resolve_permit_join(
 ) -> _ResolvedPermitJoin | tuple[dict, str, str]:
     """Validate permit_zigbee_join args into a _ResolvedPermitJoin, or the tool error.
 
-    Shared by the pre-gate check, the diff builder, and the executor so all
-    three see the same resolution. The optional router device needs only READ
-    visibility (permitting via a router does not mutate the router, and the
-    no-router variant needs no device at all). With both backends present and
-    no router, the backend arg is required.
+    Shared by pre-gate, diff builder and executor. The optional router needs only read visibility,
+    and with both backends and no router, backend is required.
     """
     duration_raw = args.get("duration", 60)
     if isinstance(duration_raw, str) and duration_raw.strip().lstrip("-").isdigit():

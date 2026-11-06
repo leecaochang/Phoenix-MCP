@@ -166,10 +166,8 @@ def _transcript(messages: list[dict], pending_calls: dict[str, str] | None = Non
 def without_thinking(messages: Any) -> Any:
     """A copy without the reasoning a tool loop replays to its provider.
 
-    That is Anthropic thinking blocks and the Responses API output items
-    (`response_items`, encrypted reasoning). They hold the model's private
-    reasoning and are needed only until that loop ends, so finished history and
-    decision context never carry them.
+    Anthropic thinking blocks and Responses `response_items` hold private reasoning needed only
+    until that loop ends, so finished history and decision context never carry them.
     """
     if not isinstance(messages, list):
         return messages
@@ -224,3 +222,29 @@ def pending_context_history(messages: Any, calls: list[dict]) -> list[dict] | No
         return deepcopy(messages)
     except (KeyError, TypeError, ValueError, RecursionError):
         return None
+
+
+def context_history(messages: Any, *, structured: bool = False) -> list[dict] | None:
+    """Validate plain pairs or complete provider exchanges without shortening history."""
+    if structured:
+        return structured_context_history(messages)
+    if (not isinstance(messages, list) or not messages or len(messages) % 2
+            or len(messages) > DECISION_CONTEXT_MAX_MESSAGES):
+        return None
+    copied = []
+    size = 0
+    for index, message in enumerate(messages):
+        if (not isinstance(message, dict) or set(message) != {"role", "content"}
+                or message.get("role") != ("assistant" if index % 2 else "user")
+                or not isinstance(message.get("content"), str) or not message["content"].strip()):
+            return None
+        size += len(message["content"])
+        if size > DECISION_CONTEXT_MAX_BYTES:
+            return None
+        copied.append(dict(message))
+    try:
+        if len(json.dumps(copied, ensure_ascii=False).encode()) > DECISION_CONTEXT_MAX_BYTES:
+            return None
+    except UnicodeError:
+        return None
+    return copied

@@ -16,7 +16,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.util.dt import parse_datetime, utcnow
 
-from .admin_view import _audit_admin, _ok, _read_body, require_admin
+from .admin.common import _audit_admin, _ok, _read_body, require_admin
 from .view_base import _err
 from .agent_chat import async_run_agent_turn
 from .agent_turn import (
@@ -24,21 +24,23 @@ from .agent_turn import (
 )
 from .const import DOMAIN, MAX_REQUEST_BODY_BYTES
 from .data import PhoenixData
-from .helpers import get_client_ip, LocalizedReason
+from .helpers import get_client_ip
+from .catalog_text import LocalizedReason
 from .home_companion import is_companion
 from .llm.accounts import (
     _default_base_url, _default_model, _get_secret_store, _provider_catalog,
     DuplicateProviderError, PROVIDER_DEFINITIONS, provider_purpose, ProviderConfig,
 )
-from .llm.base import AGENTCLI_HEARTBEAT_SECONDS, ProbeConfigError
+from .llm.base import AGENT_CHAT_HEARTBEAT_SECONDS, ProbeConfigError
 from .llm.factory import build_provider
 from .llm.probes import _effort_probe_body, async_probe_capabilities, async_probe_vision
 from .provider_constants import (
-    AGENTCLI_CLIENT_IP, AGENTCLI_PROBE_SENTINEL, AGENTCLI_REQUEST_BODY_BYTES,
+    AGENT_CHAT_CLIENT_IP, AGENT_CHAT_PROBE_SENTINEL, AGENT_CHAT_REQUEST_BODY_BYTES,
     PROVIDER_API_KEY_MAX_LENGTH,
 )
 from .routing.decision_history import without_thinking
-from .routing.decision_provider import DecisionError, decision_error_reason, DecisionProvider
+from .routing.decision_provider import decision_error_reason, DecisionProvider
+from .routing.decision_types import DecisionError
 from .view_base import PhoenixView
 from .voice_agent import async_remove_assist_pipeline
 
@@ -61,7 +63,7 @@ class PhoenixAgentCliChatView(PhoenixView):
     async def post(self, request: web.Request) -> web.Response:
         rid = request.get("phoenix_mcp_rid", "")
         # Room for base64 images; everything else keeps the ordinary cap below.
-        body = await _read_body(request, rid, limit=AGENTCLI_REQUEST_BODY_BYTES)
+        body = await _read_body(request, rid, limit=AGENT_CHAT_REQUEST_BODY_BYTES)
         if isinstance(body, web.Response):
             return body
         attachments = body.pop("attachments", None)
@@ -170,7 +172,7 @@ class PhoenixAgentCliChatView(PhoenixView):
             base_url = str(request.url.origin())
         except ValueError:  # A Host header that does not form a URL.
             return _err("invalid_request", "Invalid Host header.", 400, rid, key="invalidHostHeader")
-        client_ip = AGENTCLI_CLIENT_IP or get_client_ip(request)
+        client_ip = AGENT_CHAT_CLIENT_IP or get_client_ip(request)
 
         resp = web.StreamResponse(
             status=200,
@@ -211,7 +213,7 @@ class PhoenixAgentCliChatView(PhoenixView):
             # panel's parser ignores them. A failed write means the client is gone.
             try:
                 while not cancel.is_set():
-                    await asyncio.sleep(AGENTCLI_HEARTBEAT_SECONDS)
+                    await asyncio.sleep(AGENT_CHAT_HEARTBEAT_SECONDS)
                     try:
                         await resp.write(b": keepalive\n\n")
                     except (ConnectionResetError, ClientError, RuntimeError):
@@ -256,11 +258,10 @@ _METADATA_ADDRESSES = frozenset(ipaddress.ip_address(address) for address in (
 def _ip_is_blocked(
     ip: ipaddress.IPv4Address | ipaddress.IPv6Address, *, allow_private: bool,
 ) -> bool:
-    """Return whether an operator-supplied endpoint may target this address.
+    """Return whether an operator-supplied endpoint may not target this address.
 
-    An IPv6 form that carries an IPv4 address is judged by what it carries. A
-    remote provider must be globally routable, which also rules out shared CGNAT
-    space; a local server may sit there, so only metadata addresses are refused.
+    IPv4-carrying IPv6 is judged by its IPv4. Remote providers must be globally routable; a
+    local server is refused only metadata addresses.
     """
     if isinstance(ip, ipaddress.IPv6Address) and (carried := ip.ipv4_mapped or ip.sixtofour):
         return _ip_is_blocked(carried, allow_private=allow_private)
@@ -276,10 +277,8 @@ async def _validate_base_url(
 ) -> ProbeConfigError | None:
     """Check URL shape and resolved addresses at setup time.
 
-    This administrator-only guard cannot pin future DNS resolution. Ollama may
-    use private HTTP endpoints; other providers require HTTPS. Redirect behavior
-    depends on the provider adapter, so this check is not a connection-time SSRF
-    guarantee.
+    Ollama may use private HTTP; others need HTTPS. Not a connection-time SSRF guarantee: it
+    cannot pin future DNS, and redirects are the provider adapter's.
     """
     try:
         parts = urlparse(url)
@@ -701,12 +700,10 @@ _CATALOG_REFRESH_MIN_GAP = timedelta(seconds=60)
 
 
 async def async_refresh_catalog(hass: HomeAssistant, instance_id: str, *, force: bool = False) -> bool:
-    """Re-read one conversation account's model catalogue and declared capabilities.
+    """Re-read one account's model catalogue and capabilities; True when one was recorded.
 
-    This is what keeps automatic mode current: it runs on a timer, when an account
-    is added or refreshed, and after a provider answers "model not found". A
-    per-account minimum gap stops a failing model from turning every turn into a
-    catalogue request. Returns True when a catalogue was recorded.
+    Runs on a timer, on account changes and after "model not found", with a per-account
+    minimum gap unless forced.
     """
     store = await _get_secret_store(hass)
     cfg = store.resolve(instance_id)
@@ -747,13 +744,10 @@ async def async_refresh_catalog(hass: HomeAssistant, instance_id: str, *, force:
 
 
 async def async_refresh_all_catalogs(hass: HomeAssistant) -> None:
-    """Re-read the catalogues that are due (the scheduled job, run hourly).
+    """Re-read the catalogues that are due, as the hourly job.
 
-    An account that has never had a catalogue is always read: automatic mode
-    cannot choose a model without one, so that is not an optional check. Every
-    other account is re-read only when the operator has periodic checks enabled
-    and its last read is older than the configured period. The last-read time is
-    stored with the catalogue, so a restart does not reset the schedule.
+    Never-read accounts always go, as automatic mode needs a catalogue. Others go only with
+    periodic checks on and past the period, measured from the stored read time.
     """
     data = hass.data.get(DOMAIN)
     settings = data.store.get_settings() if data is not None else None
@@ -773,15 +767,9 @@ async def async_refresh_all_catalogs(hass: HomeAssistant) -> None:
 class PhoenixAgentCliRefreshView(PhoenixView):
     """POST /api/phoenix-mcp/admin/agentcli/providers/{instance_id}/refresh.
 
-    Re-read one account's model list AND whatever capabilities its provider
-    declares, then store both with a timestamp. Separate from the GET models
-    endpoint because the two cost very different things: listing models is one
-    cheap request and runs whenever the settings card is opened, while Ollama's
-    capabilities cost one request PER MODEL, which is an explicit-button amount
-    of work rather than a page-load amount.
-
-    Nothing here spends completion tokens; probing the knobs that no provider
-    declares is a separate step the operator consents to (the probe endpoint).
+    Re-reads one account's models and declared capabilities, and stores both. Separate from
+    the GET endpoint, as Ollama's capabilities cost one request per model. Spends no
+    completion tokens.
     """
 
     url = "/api/phoenix-mcp/admin/agentcli/providers/{instance_id}/refresh"
@@ -834,17 +822,9 @@ class PhoenixAgentCliRefreshView(PhoenixView):
 class PhoenixAgentCliProbeCapsView(PhoenixView):
     """POST /api/phoenix-mcp/admin/agentcli/providers/{instance_id}/probe.
 
-    Ask the provider what its SELECTED model actually accepts, by sending a
-    handful of one-token completions and reading the status codes.
-
-    A SEPARATE endpoint from /refresh, and the separation is the consent
-    boundary rather than tidiness: /refresh reads catalogues and costs nothing,
-    while this spends the operator's own credit on real completion requests.
-    Anything that bills someone gets its own button and its own confirmation.
-
-    Only the selected model is probed. Probing a catalogue would multiply the
-    spend by models nobody has chosen, and the only model whose knobs are about
-    to be used is this one.
+    Sends one-token completions to learn what the selected model accepts. Separate from
+    /refresh because this spends the operator's credit, so it has its own consent. Only that
+    model is probed.
     """
 
     url = "/api/phoenix-mcp/admin/agentcli/providers/{instance_id}/probe"
@@ -902,7 +882,7 @@ class PhoenixAgentCliProbeCapsView(PhoenixView):
             # Without it the panel cannot tell "asked, and the provider ignores
             # unknown options" from "there was nothing here to ask" (a backend
             # whose thinking control is a boolean flag).
-            "effort_checkable": _effort_probe_body(cfg.kind, AGENTCLI_PROBE_SENTINEL) is not None,
+            "effort_checkable": _effort_probe_body(cfg.kind, AGENT_CHAT_PROBE_SENTINEL) is not None,
             # False when the provider declined every question (no credit, a bad
             # key, unreachable). Reporting that as a finding about the model
             # would blame the provider for an account problem.
@@ -976,7 +956,7 @@ class PhoenixAgentCliProbeView(PhoenixView):
 # Admin config/models views are kill-switch-immune (like the rest of the admin
 # API); the streaming chat view is agent activity and is registered through the
 # kill-switch-gated route set in __init__.py.
-ALL_AGENTCLI_ADMIN_VIEWS: list[type[PhoenixView]] = [
+ALL_AGENT_CHAT_ADMIN_VIEWS: list[type[PhoenixView]] = [
     PhoenixAgentCliProvidersView,
     PhoenixAgentCliProviderView,
     PhoenixAgentCliModelsView,
@@ -984,6 +964,6 @@ ALL_AGENTCLI_ADMIN_VIEWS: list[type[PhoenixView]] = [
     PhoenixAgentCliProbeCapsView,
     PhoenixAgentCliProbeView,
 ]
-ALL_AGENTCLI_CHAT_VIEWS: list[type[PhoenixView]] = [
+ALL_AGENT_CHAT_CHAT_VIEWS: list[type[PhoenixView]] = [
     PhoenixAgentCliChatView,
 ]

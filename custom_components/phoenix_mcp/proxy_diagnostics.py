@@ -1,14 +1,10 @@
 """Read-only proxy and radio diagnostics for existing tools.
 
-Radio-frequency transmitter capabilities, Bluetooth scanners and nearby devices,
-serial ports and discovered config flows, each read as a bounded snapshot of
-Core's in-process state through public component APIs. Nothing here transmits,
-pairs, opens a port, starts or continues a flow, or subscribes. Scoped
-projections answer only for resources the caller can already read; the
-pass-through projections add Bluetooth addresses and USB serial identifiers but
-withhold LAN identity (IP addresses, hostnames, network MACs and URL hosts), as
-every other Phoenix surface does.
-Every function runs on the event loop.
+RF transmitter capabilities, Bluetooth scanners and nearby devices, serial ports and
+discovered config flows, each a bounded snapshot of Core state through public APIs. Nothing
+transmits, pairs, opens a port, runs a flow or subscribes. Scoped projections answer only for
+readable resources; pass-through adds Bluetooth and USB identifiers but withholds LAN
+identity. Every function runs on the event loop.
 """
 
 from __future__ import annotations
@@ -30,7 +26,7 @@ from .const import (
     PROXY_SERIAL_MAX_PORTS,
     PROXY_TEXT_MAX_CHARS,
 )
-from .helpers import redact_diagnostics
+from .redaction import redact_diagnostics
 from .household_authority import household_admin_access
 from .policy_engine import Permission, assist_expose_check, device_config_entry_ids, resolve_device_registry_access
 
@@ -159,12 +155,9 @@ def _scanner_row(scanner: Any, allocations: Any) -> dict[str, Any]:
 def device_bluetooth_scanners(
     hass: HomeAssistant, device: Any, access_key: AccessKeyRecord,
 ) -> list[dict[str, Any]] | None:
-    """Scanners whose Bluetooth device is this device or names it as via_device.
+    """Return scanners whose Bluetooth device is this device or names it as via_device.
 
-    The link is structural: HA registers a scanner's device with a bluetooth
-    connection equal to the scanner's source, and a proxy's scanner device names
-    the proxy as its via_device. Connected devices the access key can read are
-    named; every other connection is only counted.
+    Connected devices the key can read are named; every other connection is only counted.
     """
     scanners = _bluetooth_scanners(hass)
     if not scanners:
@@ -369,10 +362,8 @@ def _usb_device_matcher(device: str) -> Any:
 
 
 def _discovery_identities(hass: HomeAssistant) -> dict[str, dict[str, Any]]:
-    """Bluetooth and USB identity per flow id, read from each flow's discovery data.
+    """Return Bluetooth and USB identity per flow id, from each flow's discovery data.
 
-    async_progress_by_init_data_type hands the matcher every flow's init data in
-    the order it returns them; with uninitialized flows included the two line up.
     Each backend is imported only when loaded, since its libraries may be absent.
     """
     # Local: not part of the recorded Home Assistant import floor.

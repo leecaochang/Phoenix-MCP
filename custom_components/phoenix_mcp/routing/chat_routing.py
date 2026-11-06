@@ -8,13 +8,20 @@ from copy import deepcopy
 from typing import Any
 from homeassistant.core import HomeAssistant
 
+from .command_clarification import (
+    async_clarification_reply, clarification_binding, clarification_prompt, is_clarification_cancel,
+)
 from .command_execution import LocalCommandReply, async_execute_chat_command, async_execute_chat_plan
 from .command_routing import (
     RoutingAuthority, async_evaluate_command, effective_routing_mode, routing_language, routing_languages,
 )
 from .decision_shadow import async_preview_decision
-from .decision_context import async_prepare_chat_context, context_execution_eligible, context_history
-from ..helpers import voice_text
+from .decision_context import async_prepare_chat_context, context_execution_eligible
+from .decision_history import context_history
+from ..catalog_text import voice_text
+from ..home_companion import is_companion
+from ..llm.accounts import decision_account_fingerprint
+from .routing_statistics import local_result
 
 
 async def async_route_chat_command(hass: HomeAssistant, data: Any, access_key: Any,
@@ -22,7 +29,6 @@ async def async_route_chat_command(hass: HomeAssistant, data: Any, access_key: A
                                    cancel: asyncio.Event, *, base_url: str, client_ip: str,
                                    emit: Callable[[str, dict], Awaitable[None]]) -> bool:
     """True continues the provider; False means this turn has already finished."""
-    from ..home_companion import is_companion
     if is_companion(access_key):
         return True
     settings = data.store.get_settings()
@@ -37,7 +43,6 @@ async def async_route_chat_command(hass: HomeAssistant, data: Any, access_key: A
     assert isinstance(language, str)
     authority = RoutingAuthority.capture(data, access_key)
     binding = [access_key.id, access_key.access_key_hash, access_key.settings_version, language, authority.settings_values]
-    from .command_clarification import (async_clarification_reply, clarification_binding, clarification_prompt, is_clarification_cancel)
     clarification_key = ['chat', messages[:-1]]
     clarification_scope = clarification_binding(hass, authority, language)
     pending = data.command_routing.clarifications.consume(clarification_key, clarification_scope) if execute else None
@@ -53,13 +58,11 @@ async def async_route_chat_command(hass: HomeAssistant, data: Any, access_key: A
     snapshot = deepcopy(messages) if followup else None
     context_account = None
     if contextual:
-        from ..llm.accounts import decision_account_fingerprint
         context_account = decision_account_fingerprint(hass, settings.decision_provider_id)
     sentence = messages[-1]["content"]
 
     async def finish(reply: LocalCommandReply, *, local: bool = False, subject: dict | None = None,
                      route: str | None = None) -> bool:
-        from .routing_statistics import local_result
         local_result(reply, route or ("local" if local else "decision"))
         if reply.outcome != "ok":
             await emit("error", {"code": reply.outcome, "message": reply.text, "retryable": False})
@@ -74,7 +77,6 @@ async def async_route_chat_command(hass: HomeAssistant, data: Any, access_key: A
                 and not cancel.is_set() and authority.current(hass) is not None):
             if local:
                 data.command_routing.chat_history.remember(messages, binding)
-            from ..llm.accounts import decision_account_fingerprint
             account = decision_account_fingerprint(hass, settings.decision_provider_id) if settings.decision_provider_id else None
             data.command_routing.chat_history.remember_subject(messages, [binding, account], subject)
         return False

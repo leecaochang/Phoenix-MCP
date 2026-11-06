@@ -28,7 +28,7 @@ from custom_components.phoenix_mcp.durable_storage import DurableStore, Reportin
 
 APPROVE = "/api/phoenix-mcp/admin/approvals/{}/approve"
 KEYS = "/api/phoenix-mcp/admin/access-keys"
-EXECUTOR = "custom_components.phoenix_mcp.admin_view.async_execute_approved_tool"
+EXECUTOR = "custom_components.phoenix_mcp.admin.approvals.async_execute_approved_tool"
 
 
 async def _setup(hass):
@@ -149,7 +149,7 @@ async def test_a_running_approval_is_not_declared_interrupted_by_a_reload(
         await hass.async_block_till_done()
     assert record.id not in new.approvals_in_progress
     saved = next(a for a in _disk(hass_storage)["pending_approvals"] if a["id"] == record.id)
-    assert saved["status"] == "approved" and not saved.get("rejected_reason")
+    assert saved["status"] == "approved" and not saved.get("closure_reason")
     await new.audit.async_save()
     methods = [row["method"] for row in hass_storage[AUDIT_STORAGE_KEY]["data"]["entries"]]
     assert "approval/executed" in methods and "approval/failed" not in methods
@@ -164,7 +164,7 @@ async def test_a_reload_keeps_queued_approvals_and_a_restart_does_not(
     assert await hass.config_entries.async_reload(entry.entry_id)
     await hass.async_block_till_done()
     queued = next(a for a in hass.data[DOMAIN].store.get_pending_approvals() if a["id"] == record.id)
-    assert queued["status"] == "pending" and not queued.get("rejected_reason")
+    assert queued["status"] == "pending" and not queued.get("closure_reason")
 
     # A new process has no durable state, whatever the entry did before.
     assert await hass.config_entries.async_unload(entry.entry_id)
@@ -172,7 +172,7 @@ async def test_a_reload_keeps_queued_approvals_and_a_restart_does_not(
     assert await hass.config_entries.async_setup(entry.entry_id)
     await hass.async_block_till_done()
     closed = next(a for a in hass.data[DOMAIN].store.get_pending_approvals() if a["id"] == record.id)
-    assert closed["status"] == "cancelled" and closed["rejected_reason"] == "phoenix_mcp_restarted"
+    assert closed["status"] == "cancelled" and closed["closure_reason"] == "phoenix_mcp_restarted"
 
 
 async def test_a_marker_with_no_claim_is_still_resolved_on_reload(hass, enable_custom_integrations, caplog):
@@ -185,7 +185,7 @@ async def test_a_marker_with_no_claim_is_still_resolved_on_reload(hass, enable_c
     assert await hass.config_entries.async_reload(entry.entry_id)
     await hass.async_block_till_done()
     row = next(a for a in hass.data[DOMAIN].store.get_pending_approvals() if a["id"] == record.id)
-    assert row["status"] == "failed" and row["rejected_reason"] == "execution_interrupted"
+    assert row["status"] == "failed" and row["closure_reason"] == "execution_interrupted"
     assert "when Home Assistant" not in caplog.text
 
 

@@ -21,7 +21,7 @@ from custom_components.phoenix_mcp.const import (
     ACCESS_KEY_PREFIX,
 )
 from custom_components.phoenix_mcp.data import PhoenixData
-from custom_components.phoenix_mcp.helpers import sanitize_service_data
+from custom_components.phoenix_mcp.tool_input import sanitize_service_data
 from custom_components.phoenix_mcp.rate_limiter import RateLimiter, RateLimitResult
 from custom_components.phoenix_mcp.service_targets import (
     secondary_target_error,

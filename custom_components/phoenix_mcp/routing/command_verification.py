@@ -10,7 +10,9 @@ from typing import Any, TypeGuard
 from homeassistant.core import HomeAssistant, State
 from homeassistant.util import dt as dt_util
 
-from .command_operations import numeric_operation, service_arguments, finite_number
+from .command_operations import numeric_operation, service_arguments
+from ..entity_commands import finite_number
+from .command_target import _target_fingerprint
 from .routing_tables import (
     COMMAND_VERIFICATION_POLL_SECONDS, COMMAND_VERIFICATION_WAIT_SECONDS,
     COMMAND_ROUTING_FIXED_OBSERVATIONS, COMMAND_VERIFICATION_TOLERANCES,
@@ -18,6 +20,7 @@ from .routing_tables import (
     COMMAND_ROUTING_TEMPORAL_OPERATIONS,
 )
 from ..request_authority import RequestAuthority
+from .temporal_values import temporal_state_matches
 
 
 def state_matches(proposal: dict, state: State | None, zone: tzinfo = UTC) -> bool:
@@ -40,7 +43,6 @@ def state_matches(proposal: dict, state: State | None, zone: tzinfo = UTC) -> bo
         # Momentary actions cannot be confirmed merely from an unchanged state.
         return bool(spec[5] and state.state == spec[5])
     if intent in COMMAND_ROUTING_TEMPORAL_OPERATIONS:
-        from .temporal_values import temporal_state_matches
         return temporal_state_matches(proposal, state, zone)
     operation = numeric_operation(intent) if isinstance(intent, str) else None
     if operation is None or not operation.valid_value(proposal.get(operation.proposal_field)):
@@ -91,7 +93,6 @@ async def async_verify_command_state(hass: HomeAssistant, data: Any, access_key:
 
     Never resends, polls a device, or clears recovery.
     """
-    from .command_execution import _target_fingerprint
 
     proposal = plan.get("proposal", {})
     if service_arguments(proposal) is None:

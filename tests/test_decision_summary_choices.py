@@ -7,7 +7,8 @@ from custom_components.phoenix_mcp.llm.accounts import ProviderConfig
 from custom_components.phoenix_mcp.routing.routing_tables import (
     DECISION_SUMMARY_COMPONENTS, DECISION_TYPESAFE_BASE_URL,
 )
-from custom_components.phoenix_mcp.routing.decision_provider import DecisionError, DecisionProvider, confident_choice
+from custom_components.phoenix_mcp.routing.decision_types import DecisionError, confident_choice
+from custom_components.phoenix_mcp.routing.decision_provider import DecisionProvider
 from custom_components.phoenix_mcp.routing.decision_targets import factor_summary_choices, resolve_summary_choices
 
 

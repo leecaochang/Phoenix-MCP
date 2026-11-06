@@ -1,16 +1,9 @@
 """Configuration version history store.
 
-Immutable before/after snapshots of agent-driven create/edit/delete of the
-resource types in `VERSIONED_RESOURCE_TYPES`, with admin-only rollback. Records
-are captured at the executor (Phoenix MCP's single execution chokepoint), so both
-directly-allowed and Confirm-approved changes are recorded exactly once.
-
-Storage is a separate HA Store from access keys (``phoenix_mcp_versions``) holding a
-flat list of records. Retention is per-resource FIFO: the newest
-``MAX_VERSIONS_PER_RESOURCE`` versions per ``(resource_type, resource_id)`` are
-kept; older ones are evicted on write. Records are stored raw (un-redacted)
-because a rollback must round-trip the exact config; the data is admin-only and
-no more sensitive than the YAML it mirrors.
+Immutable before and after snapshots of agent-driven changes to ``VERSIONED_RESOURCE_TYPES``,
+with admin-only rollback, captured once at the executor. Stored in ``phoenix_mcp_versions``,
+keeping the newest ``MAX_VERSIONS_PER_RESOURCE`` per resource. Records stay raw, as a rollback
+must round-trip the exact config.
 """
 
 from __future__ import annotations

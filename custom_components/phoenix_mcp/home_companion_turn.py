@@ -22,7 +22,10 @@ from .const import (
     HOME_COMPANION_MAX_REQUEST_BYTES, HOME_COMPANION_MAX_ROUNDS, HOME_COMPANION_REPORT_STATUSES,
     HOME_COMPANION_TIMEOUT_SECONDS, HOME_COMPANION_TOOLS,
 )
-from .helpers import access_key_notes_block, canonical_language, log_internal_failure, voice_text
+from .helpers import log_internal_failure
+from .locales import canonical_language
+from .catalog_text import voice_text
+from .redaction import access_key_notes_block
 from .home_companion_response import build_report, ResponseEvidence
 from .llm.accounts import _get_secret_store
 from .llm.factory import build_provider
@@ -224,9 +227,8 @@ async def async_delegate(hass: HomeAssistant, data: Any, access_key: Any, reques
                          usage: Any = None, account: tuple[str, str | None] | None = None) -> dict:
     """Delegate original ingress text once through normal MCP and recovery gates.
 
-    usage, a HeadlessUsage, collects the inner turn's provider-reported tokens for
-    a caller that shows them; it never enters the report. account is the provider
-    account and model the caller's user chose; None uses the Voice settings.
+    ``usage`` collects the inner turn's tokens, never entering the report. ``account`` is the
+    caller's chosen provider account and model; None uses the Voice settings.
     """
     check_request_authority()
     settings = data.store.get_settings()

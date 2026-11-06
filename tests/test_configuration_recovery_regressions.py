@@ -348,7 +348,7 @@ async def test_admin_restore_button_refuses_a_stored_file_record(hass, hass_admi
     The blueprint and other families restore through the same button.
     """
     from homeassistant.components.http.const import KEY_AUTHENTICATED, KEY_HASS_USER
-    from custom_components.phoenix_mcp.admin_view import PhoenixAdminConfigurationRecoveryRecordView
+    from custom_components.phoenix_mcp.admin.changes import PhoenixAdminConfigurationRecoveryRecordView
     from custom_components.phoenix_mcp.const import DOMAIN
     d = runtime()
     hass.data[DOMAIN] = d
@@ -366,7 +366,7 @@ async def test_admin_restore_button_refuses_a_stored_file_record(hass, hass_admi
     request.__getitem__.side_effect = values.__getitem__
     view = PhoenixAdminConfigurationRecoveryRecordView()
     view.hass = hass
-    with patch("custom_components.phoenix_mcp.admin_view._read_body", AsyncMock(return_value={"action": "restore", "side": "before"})):
+    with patch("custom_components.phoenix_mcp.admin.changes._read_body", AsyncMock(return_value={"action": "restore", "side": "before"})):
         result = await view.post(request, recovery_id=rid)
     assert result.status == 200
     response = json.loads(result.text)
@@ -449,7 +449,7 @@ async def test_template_recreation_refuses_revoked_entity_scope(hass, scope, exi
 @pytest.mark.parametrize("family", ["blueprint_source", "energy_preferences", "dashboard_layout", "dashboard_registry"])
 async def test_admin_recovery_restores_each_new_family(hass, hass_admin_user, family):
     from homeassistant.components.http.const import KEY_AUTHENTICATED, KEY_HASS_USER
-    from custom_components.phoenix_mcp.admin_view import PhoenixAdminConfigurationRecoveryRecordView
+    from custom_components.phoenix_mcp.admin.changes import PhoenixAdminConfigurationRecoveryRecordView
     from custom_components.phoenix_mcp.const import DOMAIN
     from custom_components.phoenix_mcp.tools.lovelace import _dashboard_layout_snapshot, _dashboard_registry_snapshot
     from custom_components.phoenix_mcp.tools.blueprint import _blueprint_recovery_snapshot
@@ -496,7 +496,7 @@ async def test_admin_recovery_restores_each_new_family(hass, hass_admin_user, fa
     request.__getitem__.side_effect = values.__getitem__
     view = PhoenixAdminConfigurationRecoveryRecordView()
     view.hass = hass
-    with patch("custom_components.phoenix_mcp.admin_view._read_body", AsyncMock(return_value={"action": "restore", "side": "before"})), patch("custom_components.phoenix_mcp.tools.energy.async_ws_command", side_effect=energy_ws):
+    with patch("custom_components.phoenix_mcp.admin.changes._read_body", AsyncMock(return_value={"action": "restore", "side": "before"})), patch("custom_components.phoenix_mcp.tools.energy.async_ws_command", side_effect=energy_ws):
         response = await view.post(request, recovery_id=rid)
     assert response.status == 200, response.text
     assert json.loads(response.text)["outcome"] == "allowed", response.text

@@ -1,17 +1,11 @@
 """Card search over scrubbed dashboard layouts, for get_dashboard_config.
 
-The tool scrubs each layout on the event loop first, so a hidden entity, an
-embedded hidden entity ID, a sensitive key or a subtree past the depth bound is
-already the redaction placeholder here: it can neither match nor appear in a
-result. Paths address that scrubbed copy, whose retained keys and list indexes
-are the stored layout's, so patch_dashboard accepts them unchanged.
-
-A typed object (a mapping with a string type) under a card container key, as its
-value, a list item or a mapping value, is a nested card matched on its own. Any
-other typed object, such as a tile feature or an entity row, is part of the card
-holding it. Cards inherit the heading of the nearest heading card at or before
-their top-level card in the same list, and every match names its view and,
-when nested, the types of the cards enclosing it, outermost first.
+The tool scrubs each layout on the event loop first, so anything hidden is already the redaction
+placeholder and can neither match nor appear. Paths address that copy, whose keys and list indexes
+are the stored layout's, so patch_dashboard accepts them. A typed object under a card container key
+is a nested card matched on its own; any other typed object belongs to its card. Cards inherit the
+nearest heading at or before their top-level card, and a match names its view and enclosing card
+types, outermost first.
 """
 
 from __future__ import annotations
@@ -27,7 +21,7 @@ from ..const import (
     DASHBOARD_SEARCH_VALUE_CHARS,
     REDACTION_SENTINEL,
 )
-from ..helpers import _ENTITY_ID_TEXT_RE
+from ..redaction import _ENTITY_ID_TEXT_RE
 from ..policy_engine import _ENTITY_ID_RE
 
 _CRITERIA = ("query", "entity_id", "card_type", "heading")

@@ -16,7 +16,8 @@ from custom_components.phoenix_mcp.const import DOMAIN
 from custom_components.phoenix_mcp.routing.routing_tables import TOOL_ROUTING_SETTINGS
 from custom_components.phoenix_mcp.data import PhoenixData
 from custom_components.phoenix_mcp.routing.decision_history import pending_context_history
-from custom_components.phoenix_mcp.routing.decision_provider import DecisionError, DecisionProvider
+from custom_components.phoenix_mcp.routing.decision_types import DecisionError
+from custom_components.phoenix_mcp.routing.decision_provider import DecisionProvider
 from custom_components.phoenix_mcp.access_key_store import GlobalSettings
 from tests.runtime_fixtures import patch_readers
 
@@ -329,7 +330,7 @@ async def test_returned_model_must_also_be_qualified(hass, home, monkeypatch):
 
 @pytest.mark.parametrize('surface', list(TOOL_ROUTING_SETTINGS))
 async def test_settings_validation_and_qualification(hass, home, surface):
-    from custom_components.phoenix_mcp.admin_view import _validated_settings_patch
+    from custom_components.phoenix_mcp.admin.settings import _validated_settings_patch
     key = TOOL_ROUTING_SETTINGS[surface]
     valid, error = await _validated_settings_patch({key: 'observe'}, home[0], hass, 'test')
     assert error is None and valid[key] == 'observe'

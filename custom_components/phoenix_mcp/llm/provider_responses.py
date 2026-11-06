@@ -73,10 +73,8 @@ def _responses_content(content: Any) -> Any:
 def _responses_input(messages: list[dict]) -> list[dict]:
     """Chat Completions history as Responses input items.
 
-    An assistant message that carries the response's own output items (a tool
-    loop still in progress) replays them unchanged and in order, as the API
-    requires for reasoning; only call arguments Phoenix replaced (an
-    unparseable call answered with "{}") are taken from the message.
+    An assistant message carrying its response's output items replays them unchanged and in order,
+    as reasoning requires; only call arguments Phoenix replaced come from the message.
     """
     items: list[dict] = []
     for message in messages:
@@ -114,15 +112,12 @@ def _responses_input(messages: list[dict]) -> list[dict]:
 class OpenAIResponsesProvider(OpenAICompatProvider):
     """OpenAI through the Responses API, which current models need for agent turns.
 
-    From GPT-5.4, Chat Completions combines tools only with reasoning effort
-    "none", and some models (GPT-6 Astra, GPT-6.1 Sol) take tools only here.
-    History stays in the Chat Completions shape the rest of Phoenix uses; this
-    adapter converts it per request and translates the event stream back into
-    Chat Completions chunks for the shared parser. Requests are stateless
-    (`store: false`), so a tool loop's reasoning returns as the encrypted output
-    items carried on the assistant message (`response_items`), which
-    decision_history.without_thinking removes once the turn is over. Probes,
-    validation and the model list keep using the inherited Chat Completions calls.
+    From GPT-5.4, Chat Completions combines tools only with reasoning effort "none", and some models
+    take tools only here. This adapter converts Chat Completions history per request and translates
+    events back for the shared parser. Requests are stateless (`store: false`), so a tool loop's
+    reasoning returns as encrypted `response_items` on the assistant message, which
+    decision_history.without_thinking removes after the turn. Probes, validation and the model list
+    keep the inherited calls.
     """
 
     async def stream_turn(

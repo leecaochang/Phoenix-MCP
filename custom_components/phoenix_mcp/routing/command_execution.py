@@ -2,340 +2,32 @@
 
 from __future__ import annotations
 
-import logging
-
-from homeassistant.util import dt as dt_util
-
-from ..helpers import log_internal_failure
-
 import asyncio
-from contextvars import ContextVar
 from dataclasses import dataclass, replace
-import hashlib
 import json
+import logging
 from typing import Any
+
 from homeassistant.core import HomeAssistant
 
-from ..agent_recovery import RecoveryRequired, recovery_turn
 from ..agent_dispatch import dispatch_agent_tool
+from ..agent_recovery import RecoveryRequired, recovery_turn
+from ..agent_turn import dispatch_tool_result, _parse_pending
 from ..audit import generate_request_id
-from .command_operations import service_arguments, supports_command, numeric_operation, valid_target_value, finite_number
-from .command_routing import RoutingAuthority, effective_routing_mode
 from ..const import VOICE_AGENT_CLIENT_IP
-from .routing_tables import (
-    COMMAND_ROUTING_READ_INTENTS, COMMAND_ROUTING_PLAN_KEY, COMMAND_ROUTING_UNKNOWN_ACTION_DOMAINS,
-    COMMAND_ROUTING_ENTITY_INTENTS, COMMAND_ROUTING_VALUE_INTENTS,
-    COMMAND_ROUTING_TEMPORAL_OPERATIONS, DECISION_TEMPORAL_CATEGORIES, DECISION_TARGET_INTENTS,
-    DECISION_EXECUTION_CATEGORIES, DECISION_CONTEXT_EXECUTION_MODELS,
-    DECISION_CONTEXT_EXECUTION_LANGUAGES, DECISION_FOLLOWUP_EXECUTION_MODELS,
-    DECISION_BATCH_EXECUTION_MODELS, DECISION_NUMERIC_CATEGORIES,
-    DECISION_PERCENTAGE_EXECUTION_MODELS, DECISION_REFERENCE_EXECUTION_MODELS,
-    DECISION_REFERENCE_LANGUAGES, DECISION_REFERENCE_INTENTS,
-)
-from .decision_provider import revision_admitted
-from ..device_semantics import DeviceRegistrySnapshot, device_registry_snapshot
-from ..helpers import voice_text
-from ..policy_engine import Permission, resolve
+from ..helpers import log_internal_failure
+from ..catalog_text import voice_text
+from ..tool_dispatch import _dispatch_mcp
+from .command_display import async_display_state, async_state_translations
+from .command_operations import service_arguments
+from .command_plan import _capture_plan
+from .command_routing import RoutingAuthority
+from .command_summary import summary_text
+from .plan_currency import _local_plan, plan_is_current
+from .routing_statistics import local_result
+from .routing_tables import COMMAND_ROUTING_READ_INTENTS
 
 _LOGGER = logging.getLogger(__name__)
-
-# Only a server-owned command turn can attach a plan to initial service dispatch.
-_local_plan: ContextVar[dict | None] = ContextVar("phoenix_local_command_plan", default=None)
-
-
-def _digest(value: Any) -> str:
-    return hashlib.sha256(json.dumps(value, sort_keys=True, default=str).encode()).hexdigest()
-
-
-def _target_fingerprint(hass: HomeAssistant, access_key: Any, entity_id: str, intent: str, *,
-                        devices: DeviceRegistrySnapshot | None = None) -> str | None:
-    """Return a digest of the target's identity and command state, or None if ineligible.
-
-    Device metadata may be shared via `devices` only within one synchronous capture.
-    """
-    from homeassistant.components.homeassistant.exposed_entities import async_should_expose
-    from homeassistant.helpers import entity_registry as er
-
-    state = hass.states.get(entity_id)
-    entry = er.async_get(hass).async_get(entity_id)
-    readable = intent in COMMAND_ROUTING_READ_INTENTS
-    permissions = (Permission.READ, Permission.WRITE) if readable else (Permission.WRITE,)
-    unknown_action = bool(state and state.domain in COMMAND_ROUTING_UNKNOWN_ACTION_DOMAINS
-                          and intent in COMMAND_ROUTING_ENTITY_INTENTS)
-    if (state is None or (intent != "PhoenixStateSummary" and (state.state == "unavailable" or (state.state == "unknown" and not unknown_action))) or entry is None
-            or entry.disabled_by or entry.hidden_by or entry.platform == "group"
-            or (intent == "PhoenixStateSummary" and entry.entity_category is not None)
-            or "entity_id" in state.attributes or resolve(entity_id, access_key, hass) not in permissions
-            or not async_should_expose(hass, "conversation", entity_id)):
-        return None
-    entity_command = COMMAND_ROUTING_ENTITY_INTENTS.get(intent)
-    if entity_command and not readable and not hass.services.has_service(entity_command[0], entity_command[1]):
-        return None
-    if not supports_command(state, intent):
-        return None
-    if devices is None:
-        devices = device_registry_snapshot(hass)
-    if entry.device_id and (devices.get(entry.device_id) is None
-                            or entry.device_id in devices.invalid_ancestry_ids):
-        return None
-    return _digest({
-        "registry_id": entry.id, "unique_id": entry.unique_id, "platform": entry.platform,
-        "config_entry_id": entry.config_entry_id, "device_id": entry.device_id,
-        "area_id": entry.area_id, "aliases": sorted(entry.aliases, key=str),
-        "resolved_aliases": er.async_get_entity_aliases(hass, entry),
-        "name": entry.name, "original_name": entry.original_name,
-        "device_area": devices.effective_area_id(entry.device_id),
-        "device_parent": devices.parent_id(entry.device_id),
-        "temperature_unit": hass.config.units.temperature_unit,
-        "timezone": hass.config.time_zone,
-        "entity_command_attributes": {key: state.attributes.get(key) for key in
-            ({spec[3] for spec in COMMAND_ROUTING_ENTITY_INTENTS.values() if spec[3]} | {"mode", "pattern", "code_format", "code_arm_required", "motion_detection"})},
-        "attributes": {key: state.attributes.get(key) for key in (
-            "friendly_name", "supported_color_modes", "supported_features", "device_class",
-            "min", "max", "minimum", "maximum", "initial", "step", "unit_of_measurement", "min_temp", "max_temp", "target_temp_step",
-            "min_humidity", "max_humidity", "min_color_temp_kelvin", "max_color_temp_kelvin", "has_date", "has_time",
-        )},
-    })
-
-
-def _temporal_current(hass: HomeAssistant, proposal: dict) -> bool:
-    if 'voice_origin' in proposal:
-        from .voice_context import voice_origin_current
-        if not voice_origin_current(hass, proposal['voice_origin']):
-            return False
-    if proposal.get("intent") in COMMAND_ROUTING_VALUE_INTENTS:
-        from ..entity_commands import valid_entity_value
-        return all(valid_entity_value(hass.states.get(eid), proposal["intent"], proposal.get("value"))
-                   for eid in proposal.get("entity_ids", []))
-    spec = COMMAND_ROUTING_TEMPORAL_OPERATIONS.get(proposal.get("intent", ""))
-    if spec is None:
-        return True
-    from .temporal_values import temporal_value_current
-    return all(temporal_value_current(proposal, hass.states.get(eid), dt_util.get_default_time_zone())
-               for eid in proposal.get("entity_ids", []))
-
-
-def _capture_plan(hass: HomeAssistant, data: Any, access_key: Any, proposal: dict, *, ingress: str = "voice") -> dict | None:
-    if 'clarification' in proposal:
-        from .command_clarification import clarification_current
-        if not clarification_current(hass, data, access_key, proposal):
-            return None
-    if proposal["intent"] not in COMMAND_ROUTING_READ_INTENTS and service_arguments(proposal) is None:
-        return None
-    operation = numeric_operation(proposal["intent"])
-    if operation and any(not valid_target_value(hass.states.get(eid), proposal["intent"],
-                                               proposal.get(operation.proposal_field)) for eid in proposal["entity_ids"]):
-        return None
-    if not _temporal_current(hass, proposal):
-        return None
-    if proposal['intent'] == 'PhoenixStateSummary':
-        from .command_summary import summary_current
-        if not summary_current(hass, access_key, proposal):
-            return None
-    fingerprints = {entity_id: _target_fingerprint(hass, access_key, entity_id, proposal["intent"])
-                    for entity_id in proposal["entity_ids"]}
-    if not fingerprints or any(value is None for value in fingerprints.values()):
-        return None
-    return {"proposal": proposal, "fingerprints": fingerprints, "access_key_id": access_key.id, "ingress": ingress,
-            "access_key_version": access_key.settings_version, "settings": _digest(data.store.get_settings().to_dict())}
-
-
-def _decision_plan_current(plan: dict, hass: HomeAssistant, data: Any, access_key: Any) -> bool:
-    if "decision_category" not in plan:
-        return "decision_batch" not in plan
-    from ..llm.accounts import decision_account_fingerprint, loaded_decision_account
-    from .decision_batch import batch_catalog_digest, batch_execution_eligible, capture_batch_targets, percentage_execution_eligible
-    from .decision_targets import capture_sequential_targets
-
-    settings = data.store.get_settings()
-    category = plan["decision_category"]
-    if (plan["proposal"]["intent"] not in COMMAND_ROUTING_READ_INTENTS and "reference_review" not in plan
-            and plan.get("decision_target_evidence") != _digest(plan["proposal"])):
-        return False
-    if category == 'state_summary' and 'decision_batch' not in plan:
-        return False
-    numeric = category in DECISION_NUMERIC_CATEGORIES
-    temporal = category in DECISION_TEMPORAL_CATEGORIES
-    typed = plan["proposal"].get("intent") in COMMAND_ROUTING_VALUE_INTENTS
-    if (numeric or temporal or plan["proposal"].get("intent") in COMMAND_ROUTING_ENTITY_INTENTS) and "decision_batch" not in plan:
-        return False
-    catalog_digest = None
-    mode = effective_routing_mode(settings, plan.get("ingress", "voice"))
-    if "decision_batch" in plan:
-        review = plan["decision_batch"]
-        if not isinstance(review, dict):
-            return False
-        account = settings.decision_provider_id
-        cfg = loaded_decision_account(hass, account) if account else None
-        keys = {"model", "language", "catalog"} | ({"percentage", "proposal"} if numeric else {"value", "proposal"} if temporal or typed else set())
-        if category == 'state_summary':
-            keys.add('proposal')
-            if review.get('proposal') != _digest(plan['proposal']):
-                return False
-        if "catalog_numeric" in review:
-            if numeric or temporal or review["catalog_numeric"] is not True:
-                return False
-            keys.add("catalog_numeric")
-        if "context_review" in plan:
-            keys.add("context")
-        if "reference_review" in plan:
-            keys.add("reference")
-        qualified = DECISION_PERCENTAGE_EXECUTION_MODELS if numeric else DECISION_BATCH_EXECUTION_MODELS
-        if (not isinstance(review, dict) or set(review) != keys
-                or not all(isinstance(review[key], str) for key in keys - {"percentage", "catalog_numeric"})
-                or cfg is None or not batch_execution_eligible(cfg, review["language"])
-                or not revision_admitted(qualified, cfg, review["model"])):
-            return False
-        if "context_review" in plan and review["context"] != _digest(plan["context_review"]):
-            return False
-        if "reference_review" in plan and (numeric or temporal or typed or "context_review" in plan
-                or review["reference"] != _digest(plan["reference_review"])):
-            return False
-        if numeric:
-            operation = numeric_operation(plan["proposal"]["intent"])
-            if (not percentage_execution_eligible(cfg, review["language"]) or operation is None
-                    or not finite_number(review["percentage"])
-                    or not operation.valid_value(plan["proposal"].get(operation.proposal_field))
-                    or plan["proposal"][operation.proposal_field] != review["percentage"]
-                    or _digest(plan["proposal"]) != review["proposal"]):
-                return False
-        if (temporal or typed) and (review["value"] != plan["proposal"].get("value")
-                         or review["proposal"] != _digest(plan["proposal"]) or not _temporal_current(hass, plan["proposal"])):
-            return False
-        snapshot = capture_batch_targets(hass, access_key, numeric_preview=numeric or review.get("catalog_numeric", False), extended=True, temporal=temporal)
-        if batch_catalog_digest(snapshot) != review["catalog"] or category not in snapshot[1]:
-            return False
-        catalog_digest = snapshot[1][category].digest()
-    return bool((category in DECISION_EXECUTION_CATEGORIES or category == "state_summary" or numeric or temporal)
-                and mode == "hybrid" and settings.decision_provider_id
-                and DECISION_TARGET_INTENTS.get(category) == plan["proposal"]["intent"]
-                and plan.get("decision_account") is not None
-                and decision_account_fingerprint(hass, settings.decision_provider_id) == plan["decision_account"]
-                and (catalog_digest or capture_sequential_targets(hass, access_key, category).digest()) == plan.get("decision_catalog"))
-
-
-def _context_plan_current(plan: dict, hass: HomeAssistant, data: Any) -> bool:
-    if "context_review" not in plan:
-        return True
-    from ..llm.accounts import loaded_decision_account, decision_account_fingerprint
-    review = plan["context_review"]
-    account = data.store.get_settings().decision_provider_id
-    cfg = loaded_decision_account(hass, account) if account else None
-    decision = "decision_category" in plan
-    keys = {"account", "kind", "model", "language"} | ({"proposal"} if decision else set())
-    qualified = DECISION_FOLLOWUP_EXECUTION_MODELS if decision else DECISION_CONTEXT_EXECUTION_MODELS
-    return bool(
-        plan.get("ingress") == "chat"
-        and effective_routing_mode(data.store.get_settings(), "chat") == "hybrid"
-        and isinstance(review, dict) and set(review) == keys
-        and all(isinstance(value, str) for value in review.values())
-        and review["language"] in DECISION_CONTEXT_EXECUTION_LANGUAGES
-        and cfg and account and cfg.kind == review["kind"]
-        and revision_admitted(qualified, cfg, review["model"])
-        and (not decision or (isinstance(plan.get("decision_batch"), dict) and plan["decision_batch"].get("model") == review["model"]
-                              and review["proposal"] == _digest(plan["proposal"])))
-        and review["account"] == decision_account_fingerprint(hass, account)
-    )
-
-
-def _reference_plan_current(plan: dict, hass: HomeAssistant, data: Any) -> bool:
-    if "reference_review" not in plan:
-        return True
-    from ..llm.accounts import loaded_decision_account, decision_account_fingerprint
-    review = plan["reference_review"]
-    account = data.store.get_settings().decision_provider_id
-    cfg = loaded_decision_account(hass, account) if account else None
-    proposal = plan["proposal"]
-    ids = proposal.get("entity_ids")
-    batch = plan.get("decision_batch")
-    return bool(
-        plan.get("ingress") == "chat" and "context_review" not in plan
-        and effective_routing_mode(data.store.get_settings(), "chat") == "hybrid"
-        and isinstance(review, dict) and set(review) == {"account", "model", "language", "proposal"}
-        and all(isinstance(value, str) for value in review.values())
-        and review["language"] in DECISION_REFERENCE_LANGUAGES
-        and cfg and account and revision_admitted(DECISION_REFERENCE_EXECUTION_MODELS, cfg, review["model"])
-        and isinstance(batch, dict) and batch.get("model") == review["model"]
-        and batch.get("language") == review["language"]
-        and review["account"] == decision_account_fingerprint(hass, account)
-        and set(proposal) == {"intent", "entity_ids"}
-        and proposal["intent"] in DECISION_REFERENCE_INTENTS
-        and isinstance(ids, list) and len(ids) == 1 and isinstance(ids[0], str) and ids[0].startswith("light.")
-        and review["proposal"] == _digest(proposal)
-    )
-
-
-def plan_is_current(plan: dict, hass: HomeAssistant, data: Any, access_key: Any) -> bool:
-    """Recheck identity, scope, availability, capabilities and configuration."""
-    try:
-        settings = data.store.get_settings()
-        proposal = plan["proposal"]
-        if 'clarification' in proposal:
-            from .command_clarification import clarification_current
-            if not clarification_current(hass, data, access_key, proposal):
-                return False
-        if proposal["intent"] not in COMMAND_ROUTING_READ_INTENTS and service_arguments(proposal) is None:
-            return False
-        operation = numeric_operation(proposal["intent"])
-        if operation and any(not valid_target_value(hass.states.get(eid), proposal["intent"],
-                                                   proposal.get(operation.proposal_field)) for eid in proposal["entity_ids"]):
-            return False
-        if proposal['intent'] == 'PhoenixStateSummary':
-            from .command_summary import summary_current
-            if not summary_current(hass, access_key, proposal):
-                return False
-        if not _temporal_current(hass, proposal):
-            return False
-        ingress = plan.get("ingress", "voice")
-        if ingress == "chat":
-            enabled = effective_routing_mode(settings, "chat") in ("local", "hybrid")
-        elif ingress == "voice":
-            enabled = (settings.voice_agent_enabled and effective_routing_mode(settings) in ("local", "hybrid")
-                       and settings.voice_agent_access_key_id == access_key.id)
-        else:
-            return False
-        return bool(
-            enabled and access_key.is_valid() and access_key.id == plan["access_key_id"]
-            and access_key.settings_version == plan["access_key_version"]
-            and _digest(settings.to_dict()) == plan["settings"]
-            and _decision_plan_current(plan, hass, data, access_key)
-            and _context_plan_current(plan, hass, data)
-            and _reference_plan_current(plan, hass, data)
-            and proposal["entity_ids"] and set(proposal["entity_ids"]) == set(plan["fingerprints"])
-            and all(plan["fingerprints"][eid] is not None and
-                    _target_fingerprint(hass, access_key, eid, proposal["intent"]) == plan["fingerprints"][eid]
-                    for eid in proposal["entity_ids"])
-        )
-    except (KeyError, TypeError, ValueError, AttributeError):
-        return False
-
-
-def bind_service_plan(args: dict, hass: HomeAssistant, data: Any, access_key: Any) -> dict | None:
-    """Attach constraints from trusted turn context; refuse caller-supplied plans."""
-    if COMMAND_ROUTING_PLAN_KEY in args:
-        return None
-    plan = _local_plan.get()
-    if plan is None:
-        return args
-    bound = {**args, COMMAND_ROUTING_PLAN_KEY: plan}
-    return bound if service_plan_is_current(bound, hass, data, access_key) else None
-
-
-def service_plan_is_current(args: dict, hass: HomeAssistant, data: Any, access_key: Any,
-                            entities: list[str] | None = None) -> bool:
-    """Saved approval constraints only restrict the ordinary service executor."""
-    if COMMAND_ROUTING_PLAN_KEY not in args:
-        return True
-    plan = args[COMMAND_ROUTING_PLAN_KEY]
-    if not isinstance(plan, dict) or not plan_is_current(plan, hass, data, access_key):
-        return False
-    proposal = plan["proposal"]
-    expected = service_arguments(proposal)
-    if expected is None:
-        return False
-    return (all(args.get(key, {} if key == "service_data" else None) == value for key, value in expected.items())
-            and not args.get("area_id") and not args.get("device_id")
-            and (entities is None or sorted(entities) == sorted(proposal["entity_ids"])))
 
 
 @dataclass
@@ -354,8 +46,6 @@ async def _dispatch_command(hass: HomeAssistant, data: Any, access_key: Any, pla
                             include_review_links: bool, *, client_ip: str = VOICE_AGENT_CLIENT_IP,
                             cancel: asyncio.Event | None = None, language: object = "en") -> LocalCommandReply:
     """Run inside the owning ingress's recovery turn, including response delivery."""
-    from ..agent_turn import dispatch_tool_result, _parse_pending
-    from ..tool_dispatch import _dispatch_mcp
 
     await data.agent_recovery.reconcile(data.store, access_key.id)
     current = authority.current(hass)
@@ -420,8 +110,6 @@ async def _dispatch_command(hass: HomeAssistant, data: Any, access_key: Any, pla
             except (ValueError, TypeError):
                 continue
     if proposal['intent'] == 'PhoenixStateSummary':
-        from .command_display import async_state_translations
-        from .command_summary import summary_text
         rows = payload.get('states') if isinstance(payload, dict) else None
         translations = await async_state_translations(hass, language)
         summary_reply = summary_text(proposal, rows, language, translations) if plan_is_current(plan, hass, data, access_key) else None
@@ -438,7 +126,6 @@ async def _dispatch_command(hass: HomeAssistant, data: Any, access_key: Any, pla
         if proposal["intent"] != "HassGetState":
             if state is None:
                 return LocalCommandReply(voice_text(language, "local_attribute_unavailable"), "failed")
-        from .command_display import async_display_state
         domain = proposal["entity_ids"][0].split(".", 1)[0]
         temperature_unit = (hass.config.units.temperature_unit if domain in ("climate", "water_heater")
                             else attributes.get("temperature_unit") if domain == "weather" else None)
@@ -517,7 +204,6 @@ async def async_execute_command_plan(hass: HomeAssistant, data: Any, access_key:
     """Consume the exact frozen plan; never replan or fall back after this boundary."""
     try:
         reply = await _run_local_command(hass, data, access_key, plan, authority, base_url, include_review_links, language=language)
-        from .routing_statistics import local_result
         local_result(reply, "decision" if plan.get("decision_category") else "local")
         return reply.text
     except Exception as exc:

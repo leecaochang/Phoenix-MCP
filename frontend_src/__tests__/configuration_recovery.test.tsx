@@ -19,7 +19,7 @@ const recovery: ApprovalRecord = {
     before: "unexpected current content", after: "saved content",
   },
   status: "pending", created_at: "2026-09-30T00:00:00Z", expires_at: "2099-09-30T01:00:00Z",
-  resolved_at: null, approved_by_user_id: null, rejected_reason: null,
+  resolved_at: null, approved_by_user_id: null, closure_reason: null,
   result: null, request_id: "recovery", client_ip: null,
 };
 

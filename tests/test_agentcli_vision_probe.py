@@ -14,12 +14,12 @@ import pytest
 
 from tests.runtime_fixtures import patch_readers
 
-from custom_components.phoenix_mcp import agent_turn, agentcli_views
+from custom_components.phoenix_mcp import agent_turn, agent_chat_views
 from custom_components.phoenix_mcp.llm import probes as llm_probes
 from custom_components.phoenix_mcp.llm.provider_claude import ClaudeProvider
 from custom_components.phoenix_mcp.llm.provider_openai import OpenAICompatProvider
 from custom_components.phoenix_mcp.llm.accounts import ProviderConfig
-from custom_components.phoenix_mcp.provider_constants import AGENTCLI_PROBE_IMAGE_MAX_TOKENS
+from custom_components.phoenix_mcp.provider_constants import AGENT_CHAT_PROBE_IMAGE_MAX_TOKENS
 
 STRIPES = ["blue", "white", "red"]
 
@@ -141,7 +141,7 @@ async def test_claude_sends_the_image_and_reads_the_text_blocks():
     assert (status, text) == (200, "blue, white, red")
     url, body = session.sent[0]
     assert url == "https://x/v1/messages"
-    assert body["max_tokens"] == AGENTCLI_PROBE_IMAGE_MAX_TOKENS
+    assert body["max_tokens"] == AGENT_CHAT_PROBE_IMAGE_MAX_TOKENS
     assert body["messages"] == [{"role": "user", "content": [
         {"type": "image", "source": {"type": "base64", "media_type": "image/png", "data": "QUJD"}},
         {"type": "text", "text": "question?"}]}]
@@ -156,7 +156,7 @@ async def test_openai_compatible_reads_string_or_part_content(content):
     assert await provider.probe_image(session, "QUJD", "question?") == (200, "blue, white, red")
     _url, body = session.sent[0]
     assert body["stream"] is False
-    assert body["max_completion_tokens"] == AGENTCLI_PROBE_IMAGE_MAX_TOKENS
+    assert body["max_completion_tokens"] == AGENT_CHAT_PROBE_IMAGE_MAX_TOKENS
     assert body["messages"][0]["content"][0] == {
         "type": "image_url", "image_url": {"url": "data:image/png;base64,QUJD"}}
 
@@ -201,12 +201,12 @@ async def _probe_endpoint(hass, *, vision, answered=True, found=None):
                                                 vision=vision)
     store.get.return_value = {"capabilities": {"m": {"tools": True}}}
     store.set_capabilities = AsyncMock(return_value=True)
-    view = agentcli_views.PhoenixAgentCliProbeCapsView()
+    view = agent_chat_views.PhoenixAgentCliProbeCapsView()
     view.hass = hass
     with patch_readers("custom_components.phoenix_mcp.llm.accounts._get_secret_store", AsyncMock(return_value=store)), \
-         patch.object(agentcli_views, "async_get_clientsession", return_value=MagicMock()), \
-         patch("custom_components.phoenix_mcp.agentcli_views.async_probe_capabilities", AsyncMock(return_value=({}, 3, answered))), \
-         patch("custom_components.phoenix_mcp.agentcli_views.async_probe_vision", AsyncMock(return_value=found)) as check:
+         patch.object(agent_chat_views, "async_get_clientsession", return_value=MagicMock()), \
+         patch("custom_components.phoenix_mcp.agent_chat_views.async_probe_capabilities", AsyncMock(return_value=({}, 3, answered))), \
+         patch("custom_components.phoenix_mcp.agent_chat_views.async_probe_vision", AsyncMock(return_value=found)) as check:
         response = await view.post(_request(), instance_id="i1")
     return json.loads(response.text), store, check
 

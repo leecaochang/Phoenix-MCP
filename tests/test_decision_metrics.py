@@ -9,7 +9,8 @@ from aiohttp.test_utils import TestServer
 from custom_components.phoenix_mcp.llm.accounts import ProviderConfig
 from custom_components.phoenix_mcp.routing.routing_tables import DECISION_METRIC_SAMPLES
 from custom_components.phoenix_mcp.routing.decision_metrics import DecisionMetrics
-from custom_components.phoenix_mcp.routing.decision_provider import DecisionProvider, DecisionError
+from custom_components.phoenix_mcp.routing.decision_provider import DecisionProvider
+from custom_components.phoenix_mcp.routing.decision_types import DecisionError
 
 
 def test_metrics_have_fixed_keys_and_bounded_samples():

@@ -20,10 +20,11 @@ from ..const import (
 )
 from ..data import PhoenixData
 from ..device_semantics import device_entry_value, device_registry_snapshot
-from ..helpers import (
-    _scrub_log_text, diff_summary_fields as _summary, effective_cap, redact_diagnostics,
-    redact_structure, version_summary_fields as _version_summary,
+from ..catalog_text import (
+    diff_summary_fields as _summary, version_summary_fields as _version_summary,
 )
+from ..capability import effective_cap
+from ..redaction import _scrub_log_text, redact_diagnostics, redact_structure
 from ..mesa import (
     evaluate_registry_action, fire_mesa_blocked_event, unresolved_context_refused,
     UNRESOLVED_CONTEXT_WARNING,
@@ -99,9 +100,8 @@ def _config_entry_private_identity(
 ) -> _ConfigEntryPrivateIdentity | None:
     """Capture private identity, registry membership and shared ownership.
 
-    No value from this document is returned through MCP or the admin API. The
-    approval stores only hashes; the human preview gets safe resource ids and
-    co-owner domains separately.
+    No value here is returned through MCP or the admin API. The approval stores only hashes; the
+    preview gets safe resource ids and co-owner domains separately.
     """
     context = config_entry_registry_context(entry.entry_id, hass)
     if context is None:

@@ -13,6 +13,7 @@ import {
   getSessionUsage, setSessionUsage,
   agentCliOpenPatch, getDurable, patchDurable,
   __resetAgentCliState, __reloadFromStorage, setAgentCliOwner, purgeAgentCliStorage, onSavedConversationChange,
+  announceRunningTurn, watchOtherTabTurn,
 } from "../utils/agentcli_state";
 import { getReasonDraft, setReasonDraft } from "../utils/approval_reason_draft";
 
@@ -356,5 +357,90 @@ describe("another tab saving", () => {
     window.dispatchEvent(new StorageEvent("storage", { key: "phx-theme", newValue: "dark" }));
     localStorage.removeItem(CONV_KEY);
     expect(getSessionTurns()).toEqual([{ text: "mine" }]);
+  });
+});
+
+describe("a turn running in another tab", () => {
+  const TURN_KEY = "phx-agentcli-turn:test-admin";
+  const otherTab = (at = Date.now()) => {
+    localStorage.setItem(TURN_KEY, JSON.stringify({ tab: "other", at }));
+    window.dispatchEvent(new StorageEvent("storage", { key: TURN_KEY }));
+  };
+
+  beforeEach(() => { vi.useFakeTimers(); });
+  afterEach(() => { vi.useRealTimers(); localStorage.removeItem(TURN_KEY); });
+
+  it("is reported when it starts and when it ends", () => {
+    const seen: boolean[] = [];
+    const stop = watchOtherTabTurn((running) => seen.push(running));
+    otherTab();
+    localStorage.removeItem(TURN_KEY);
+    window.dispatchEvent(new StorageEvent("storage", { key: TURN_KEY }));
+    expect(seen).toEqual([false, true, false]);
+    stop();
+  });
+
+  it("is seen by a tab opened while it runs", () => {
+    localStorage.setItem(TURN_KEY, JSON.stringify({ tab: "other", at: Date.now() }));
+    const seen: boolean[] = [];
+    watchOtherTabTurn((running) => seen.push(running))();
+    expect(seen).toEqual([true]);
+  });
+
+  it("stops counting once its heartbeat goes stale, as when that tab dies", () => {
+    const seen: boolean[] = [];
+    const stop = watchOtherTabTurn((running) => seen.push(running));
+    otherTab();
+    vi.advanceTimersByTime(29_000);
+    expect(seen[seen.length - 1]).toBe(true);
+    vi.advanceTimersByTime(1_000);
+    expect(seen[seen.length - 1]).toBe(false);
+    stop();
+  });
+
+  it("stays reported while its heartbeat renews", () => {
+    const seen: boolean[] = [];
+    const stop = watchOtherTabTurn((running) => seen.push(running));
+    otherTab();
+    vi.advanceTimersByTime(20_000);
+    otherTab();
+    vi.advanceTimersByTime(20_000);
+    expect(seen[seen.length - 1]).toBe(true);
+    stop();
+  });
+
+  it("is not reported for this tab's own turn, which renews until it ends", () => {
+    const seen: boolean[] = [];
+    const watching = watchOtherTabTurn((running) => seen.push(running));
+    const end = announceRunningTurn();
+    const first = localStorage.getItem(TURN_KEY);
+    window.dispatchEvent(new StorageEvent("storage", { key: TURN_KEY }));
+    expect(seen).toEqual([false, false]);
+    vi.advanceTimersByTime(10_000);
+    expect(localStorage.getItem(TURN_KEY)).not.toBe(first);
+    end();
+    expect(localStorage.getItem(TURN_KEY)).toBeNull();
+    watching();
+  });
+
+  it("ends with the page", () => {
+    announceRunningTurn();
+    window.dispatchEvent(new Event("pagehide"));
+    expect(localStorage.getItem(TURN_KEY)).toBeNull();
+  });
+
+  it("leaves another tab's record alone when this tab's turn ends", () => {
+    const end = announceRunningTurn();
+    localStorage.setItem(TURN_KEY, JSON.stringify({ tab: "other", at: Date.now() }));
+    end();
+    expect(localStorage.getItem(TURN_KEY)).not.toBeNull();
+  });
+
+  it("belongs to one user and goes with a purge", () => {
+    expect(announceRunningTurn("someone-else")).toBeTypeOf("function");
+    expect(localStorage.getItem(TURN_KEY)).toBeNull();
+    announceRunningTurn();
+    purgeAgentCliStorage();
+    expect(localStorage.getItem(TURN_KEY)).toBeNull();
   });
 });

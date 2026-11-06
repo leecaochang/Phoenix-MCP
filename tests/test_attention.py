@@ -6,7 +6,9 @@ import pytest
 from homeassistant.setup import async_setup_component
 from homeassistant.helpers import issue_registry as ir
 
-from custom_components.phoenix_mcp.admin_view import PhoenixAdminAttentionView, PhoenixAdminAttentionReviewView
+from custom_components.phoenix_mcp.admin.changes import (
+    PhoenixAdminAttentionView, PhoenixAdminAttentionReviewView,
+)
 from custom_components.phoenix_mcp.agent_recovery import AgentRecovery
 from custom_components.phoenix_mcp.audit import AuditLog
 from custom_components.phoenix_mcp.const import DOMAIN
@@ -162,14 +164,14 @@ async def test_concurrent_reviews_only_acknowledge_once():
 
 
 async def test_review_rechecks_admin_after_body_read(attention_env, hass_admin_user, monkeypatch):
-    from custom_components.phoenix_mcp import admin_view
+    from custom_components.phoenix_mcp.admin import changes
     client, data, access_key = attention_env
     await data.agent_recovery.begin(access_key.id, "call_service", "request")
     data.agent_recovery.interrupted("request")
     async def changed_authority(*args):
         hass_admin_user.is_admin = False
         return {"checked_outcome": True}
-    monkeypatch.setattr(admin_view, "_read_body", changed_authority)
+    monkeypatch.setattr(changes, "_read_body", changed_authority)
     response = await client.post("/api/phoenix-mcp/admin/attention/agent/request", json={"checked_outcome": True})
     assert response.status == 403
     assert data.agent_recovery.blocks(access_key.id)

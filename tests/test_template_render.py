@@ -129,7 +129,7 @@ def test_snapshot_preserves_all_template_metadata_without_user_identity(monkeypa
     from types import SimpleNamespace
     from homeassistant.core import Context, State
     from custom_components.phoenix_mcp import template_worker
-    from custom_components.phoenix_mcp.helpers import ScrubbedState, render_template_snapshot
+    from custom_components.phoenix_mcp.template_sandbox import ScrubbedState, render_template_snapshot
 
     original = ScrubbedState(State(
         entity_id='sensor.metadata', state='42',

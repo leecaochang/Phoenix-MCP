@@ -13,10 +13,8 @@ import sys
 def main() -> None:
     """Apply OS limits, then render the template read from stdin.
 
-    RLIMIT_CPU and RLIMIT_AS are set before importing HA or touching caller input.
-    Exit 70 means startup failed (one stderr line, no caller data); the
-    diagnostic exit code means the render failed, with a bounded JSON diagnostic
-    on stdout.
+    Limits precede HA imports and caller input. Exit 70 means startup failed; the diagnostic
+    exit code means the render failed, with a bounded JSON diagnostic on stdout.
     """
     phase = "resource_limits"
     try:
@@ -33,7 +31,7 @@ def main() -> None:
         phase = "imports"
         # Local: these run only after the resource limits above are in force.
         from homeassistant.util import dt as dt_util
-        from custom_components.phoenix_mcp.helpers import ScrubbedState, render_template_snapshot
+        from custom_components.phoenix_mcp.template_sandbox import ScrubbedState, render_template_snapshot
         from custom_components.phoenix_mcp.template_diagnostics import describe_template_failure
 
     except Exception as exc:

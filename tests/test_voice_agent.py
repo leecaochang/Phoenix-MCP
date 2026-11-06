@@ -22,10 +22,10 @@ from custom_components.phoenix_mcp import agent_chat, agent_turn, voice_agent
 from custom_components.phoenix_mcp.llm.base import EV_DONE, EV_ERROR, EV_TEXT, EV_TOOL
 from custom_components.phoenix_mcp.agent_chat import async_run_voice_turn
 from custom_components.phoenix_mcp.const import VOICE_AGENT_CLIENT_IP
-from custom_components.phoenix_mcp.provider_constants import AGENTCLI_MAX_TURN_OUTPUT_BYTES
+from custom_components.phoenix_mcp.provider_constants import AGENT_CHAT_MAX_TURN_OUTPUT_BYTES
 from custom_components.phoenix_mcp.catalog_templates import VOICE_TEMPLATES
 from custom_components.phoenix_mcp.access_key_store import GlobalSettings
-from custom_components.phoenix_mcp.helpers import voice_text
+from custom_components.phoenix_mcp.catalog_text import voice_text
 
 
 class _MockProvider:
@@ -267,7 +267,7 @@ async def test_voice_turn_appends_review_hint_only_when_requested():
          patch_readers("custom_components.phoenix_mcp.tool_catalog.build_mcp_tool_list", return_value=[]), \
          patch_readers("custom_components.phoenix_mcp.agent_turn._current_dispatch_access_key", return_value=access_key), \
          patch_readers("custom_components.phoenix_mcp.approvals.get_approval", return_value=record), \
-         patch_readers("custom_components.phoenix_mcp.helpers.voice_text", side_effect=lambda lang, key, **p: f"{lang}:{key}"), \
+         patch_readers("custom_components.phoenix_mcp.catalog_text.voice_text", side_effect=lambda lang, key, **p: f"{lang}:{key}"), \
          patch_readers("custom_components.phoenix_mcp.tool_dispatch._dispatch_mcp", side_effect=dispatch_pending), \
          patch_readers("custom_components.phoenix_mcp.tool_dispatch._build_instructions", return_value="SYS"):
         text = await async_run_voice_turn(
@@ -305,12 +305,12 @@ async def test_voice_turn_stops_when_the_provider_blows_the_output_budget():
 
     Voice and AI Task re-send the growing transcript on every round, so a faulty or
     hostile provider could otherwise accumulate several stream-sized responses in
-    memory with no operator watching. AGENTCLI_MAX_TURN_OUTPUT_BYTES bounds it.
+    memory with no operator watching. AGENT_CHAT_MAX_TURN_OUTPUT_BYTES bounds it.
     """
     access_key = _make_access_key()
     data = _make_data()
     provider = _MockProvider()
-    huge = {"role": "assistant", "content": "x" * (AGENTCLI_MAX_TURN_OUTPUT_BYTES + 1)}
+    huge = {"role": "assistant", "content": "x" * (AGENT_CHAT_MAX_TURN_OUTPUT_BYTES + 1)}
     stream = _staged_stream([
         {"type": EV_TEXT, "text": "partial"},
         {"type": EV_DONE, "stop_reason": "tool_use", "assistant_msg": huge},
@@ -334,7 +334,7 @@ async def test_voice_turn_output_budget_speaks_when_there_is_no_partial_text():
     access_key = _make_access_key()
     data = _make_data()
     provider = _MockProvider()
-    huge = {"role": "assistant", "content": "x" * (AGENTCLI_MAX_TURN_OUTPUT_BYTES + 1)}
+    huge = {"role": "assistant", "content": "x" * (AGENT_CHAT_MAX_TURN_OUTPUT_BYTES + 1)}
     stream = _staged_stream([{"type": EV_DONE, "stop_reason": "tool_use", "assistant_msg": huge}])
     with patch.object(agent_turn, "_stream_turn_resilient", stream), \
          patch_readers("custom_components.phoenix_mcp.tool_catalog.build_mcp_tool_list", return_value=[]), \

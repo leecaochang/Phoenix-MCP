@@ -25,9 +25,8 @@ async def _tool_get_approval_status(
 ) -> tuple[dict, str, str]:
     """MCP tool: poll one of the access key's own approvals, or list its pending ones.
 
-    With no approval_id it lists this access key's outstanding approvals. A record
-    owned by another access key answers exactly like a missing one ("Approval not
-    found."), so a refusal is not an existence oracle.
+    Another key's record answers exactly like a missing one ("Approval not found."), so a refusal is
+    not an existence oracle.
     """
 
     await data.agent_recovery.reconcile(data.store, access_key.id)
@@ -61,22 +60,14 @@ async def _tool_get_approval_status(
 def _approval_status_result(record: Any, *, resolved: bool) -> dict:
     """The status body, plus the operator-accepted note when the action ran.
 
-    The note tells an agent that the operator reviewed and accepted this exact
-    change, so it stops proposing variations of it. Polls must carry it as well
-    as the interactive paths (`_await_inline_confirm` and Agent Chat): an
-    approval that outlived the inline window is exactly the case where the
-    agent would otherwise keep revising an accepted change.
-
-    Only an APPROVED record with a stored `tool_result` qualifies. An
-    approved-but-execution-failed record transitions to failed with the
-    `execution_failed` slug, and a plain rejection has no stored result; neither
-    is something the operator accepted.
-
-    Never double-appends: the inline path builds its own copy from the stored
-    record and never writes the note back, so the record read here is always the
-    unannotated one.
+    Only an approved record with a stored `tool_result` qualifies; failed execution and rejection do
+    not.
     """
 
+    # The note stops an agent proposing variations of an accepted change. Polls need it most: an
+    # approval that outlived the inline window is where the agent would keep revising. The inline
+    # path never writes the note back, so the record read here is always unannotated and the note
+    # cannot double.
     payload = _approval_status_payload(record, resolved=resolved)
     result = _tool_success(json.dumps(payload, default=str))
     if record.status == STATUS_APPROVED and (record.result or {}).get("tool_result") is not None:
@@ -95,25 +86,19 @@ def _approval_status_payload(record: Any, *, resolved: bool) -> dict:
         "expires_at": record.expires_at.isoformat() if record.expires_at else None,
         "resolved_at": record.resolved_at.isoformat() if record.resolved_at else None,
         "result": record.result,
-        "rejected_reason": record.rejected_reason,
+        "closure_reason": record.closure_reason,
     }
 
 
 def _approval_batch_payload(record: Any, *, resolved: bool) -> dict:
-    """One approval's status in the PLURAL form, with its result summarized.
+    """One approval's status in the plural form, with its result summarized.
 
-    Built from `_approval_status_payload` and then narrowed, so the two forms
-    share ONE definition of the status fields and cannot drift into answering
-    the same question differently depending on how many ids were asked about.
-
-    The `result` a single-id call returns is the executor's whole
-    CallToolResult, which for an authoring tool is the config it just wrote.
-    That suits one record, but a batch of them can exceed a caller's output
-    limit and fail to report its own outcome. What survives is what a caller
-    acts on: whether each one errored, and the text if it did, because an agent
-    told only "rejected" with the executor's reason buried retries the same
-    doomed call.
+    Built from `_approval_status_payload`, so both forms share one definition of the status fields.
     """
+    # A single-id `result` is the executor's whole CallToolResult, which for an authoring tool is
+    # the written config; a batch of those can exceed a caller's output limit and fail to report its
+    # outcome. Error state and text survive, because an agent told only "rejected" retries the same
+    # doomed call.
     payload = _approval_status_payload(record, resolved=resolved)
     payload.pop("result", None)
     payload.update(_approval_result_digest(record))
@@ -141,16 +126,13 @@ async def _wait_for_many_approvals(
 ) -> tuple[dict, str, str]:
     """Block until every named approval resolves, or the timeout expires.
 
-    ONE listener for the whole set rather than a wait per id: the ids resolve in
-    whatever order the operator works through them (and a batch approve resolves
-    several inside one request), so waiting on them in sequence would block on
-    #1 while #2 and #3 were already done.
-
-    Returns a per-approval list plus the ids still outstanding, so a timeout is
-    partial information rather than a failure: the caller learns exactly which
-    ones landed and can wait again for the rest.
+    Returns a per-approval list plus the ids still outstanding, so a timeout is partial information
+    rather than a failure.
     """
 
+    # One listener covers the set: ids resolve in any order and a batch approve resolves several
+    # inside one request, so waiting in sequence would block on the first while later ones were
+    # done.
     raw = args.get("approval_ids")
     if not isinstance(raw, list) or not raw or not all(isinstance(i, str) and i for i in raw):
         return (
@@ -241,18 +223,13 @@ async def _tool_wait_for_approval(
 ) -> tuple[dict, str, str]:
     """MCP tool: block until the access key's own approval(s) resolve, or until timeout.
 
-    A bounded server-side wait (not a stream): returns immediately if already
-    resolved, else waits on the phoenix_mcp_approval_resolved event filtered to
-    the requested approval ids. Own-data only (another access key's id answers like a
-    missing one, as in get_approval_status); no capability required.
-
-    Accepts `approval_ids` (a list), including a one-item list for a single
-    approval. Confirm-gated calls return pending_approval immediately by default
-    (see DEFAULT_CONFIRM_INLINE_WAIT_SECONDS), so an agent making a run of writes
-    holds N approval ids and needs ONE place to block until the operator has dealt
-    with them, one at a time or in a batch. Waiting on each id in turn would
-    serialise it back into the stall the staged model exists to remove.
+    A bounded wait on `approval_ids`, immediate if already resolved. Another key's id answers like a
+    missing one; no capability required.
     """
+    # Confirm-gated calls return pending_approval at once by default (see
+    # DEFAULT_CONFIRM_INLINE_WAIT_SECONDS), so an agent making a run of writes needs one place to
+    # block on all its ids. Waiting on each in turn would serialise it back into the stall the
+    # staged model removes.
     args, error = normalize_tool_args("wait_for_approval", args)
     if error:
         return _tool_error(error), "invalid_request", "wait_for_approval"

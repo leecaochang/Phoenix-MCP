@@ -7,6 +7,7 @@ from functools import partial
 from inspect import unwrap
 from typing import Any
 
+import voluptuous as vol
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er, service as ha_service
 from homeassistant.helpers.service import async_get_all_descriptions
@@ -22,7 +23,7 @@ from .const import (
 _TARGET_SELECTOR_TYPES = frozenset({"area", "device", "entity", "target", "config_entry"})
 
 
-def dedicated_tool_refusal(domain: str, service: str) -> tuple[str, str] | None:
+def dedicated_tool_refusal(domain: str, service: str) -> tuple[str | None, str] | None:
     """Return (capability, message) for a service only a dedicated tool may run.
 
     The dedicated tool applies authority call_service cannot: calendar writes
@@ -32,7 +33,35 @@ def dedicated_tool_refusal(domain: str, service: str) -> tuple[str, str] | None:
         return "cap_calendar_write", "Use the dedicated calendar event authoring tools for calendar writes."
     if domain == "homeassistant" and service == "reload_config_entry":
         return "cap_integration_write", "Use reload_integration to reload an integration."
+    if domain == "todo" and service == "remove_completed_items":
+        return None, "Use set_todo_item with action clear_completed, which removes the items it read."
     return None
+
+
+def todo_items_in_review(
+    hass: HomeAssistant, domain: str, service: str, service_data: Mapping[str, Any], entity_ids: list[str],
+) -> list[dict[str, Any]]:
+    """Return the items a todo.remove_item call names, as an approver should read them.
+
+    Read synchronously here, for the diff, only for already-resolved targets; best effort.
+    """
+    if domain != "todo" or service != "remove_item":
+        return []
+    # Local: optional component, imported only when this path runs.
+    from homeassistant.components.todo.const import DATA_COMPONENT
+
+    named = service_data.get("item")
+    wanted = {named} if isinstance(named, str) else set(named) if isinstance(named, list) else set()
+    component = hass.data.get(DATA_COMPONENT)
+    if component is None or not wanted:
+        return []
+    return [
+        {"list": entity_id, "uid": item.uid, "summary": item.summary}
+        for entity_id in entity_ids
+        if (entity := component.get_entity(entity_id)) is not None
+        for item in getattr(entity, "todo_items", None) or ()
+        if item.uid in wanted or item.summary in wanted
+    ]
 
 
 def _as_filters(value: object) -> list[Mapping]:
@@ -41,11 +70,10 @@ def _as_filters(value: object) -> list[Mapping]:
 
 
 def _declared_target_filters(description: object) -> list[Mapping] | None:
-    """Entity filters a service description declares, [] for any entity, None for no target.
+    """Return a description's entity filters: [] for any entity, None for no target.
 
-    A target comes from the description's `target`, or from an `entity_id` field,
-    the older way to declare one. Only the domain and integration of each filter
-    decide binding; HA itself applies device classes and supported features.
+    Read from ``target`` or an ``entity_id`` field. Only domain and integration decide
+    binding.
     """
     if not isinstance(description, Mapping):
         return None
@@ -87,11 +115,9 @@ def _is_entity_service(hass: HomeAssistant, domain: str, service: str) -> bool:
 
 
 def _schema_names_entity_id(schema: object, depth: int = 4) -> bool:
-    """Whether a registered schema declares entity_id as a field of its own.
+    """Return whether a registered schema declares entity_id as a field of its own.
 
-    Extra keys a schema merely tolerates do not count. Reads the attributes
-    voluptuous and probatio share through a few levels of wrapping, and anything
-    else answers False, which refuses.
+    Tolerated extra keys do not count; an unreadable schema answers False, which refuses.
     """
     fields = getattr(schema, "schema", None)
     if isinstance(fields, Mapping):
@@ -102,6 +128,28 @@ def _schema_names_entity_id(schema: object, depth: int = 4) -> bool:
     return (fields is not None and _schema_names_entity_id(fields, depth - 1)) or (
         isinstance(nested, (list, tuple)) and any(_schema_names_entity_id(item, depth - 1) for item in nested)
     )
+
+
+def entity_id_argument(
+    hass: HomeAssistant, domain: str, service: str, targets: list[str], service_data: Mapping[str, Any],
+) -> str | list[str]:
+    """Return the shape a service's schema takes for its one target.
+
+    A list, or the bare string when the schema refuses the list and takes it. No side effect.
+    """
+    registered = hass.services.async_services().get(domain, {}).get(service)
+    if len(targets) != 1 or registered is None or registered.schema is None:
+        return targets
+    try:
+        registered.schema({**service_data, "entity_id": targets})
+        return targets
+    except vol.Invalid:
+        pass
+    try:
+        registered.schema({**service_data, "entity_id": targets[0]})
+    except vol.Invalid:
+        return targets
+    return targets[0]
 
 
 def _fits_filters(hass: HomeAssistant, entity_id: str, filters: list[Mapping]) -> bool:
@@ -126,16 +174,9 @@ async def unbound_service_targets(
     hass: HomeAssistant, targets: list[str], *, domain: str, service: str
 ) -> tuple[str, ...]:
     """Return the resolved targets this service does not act on.
-
-    WRITE on an entity authorizes acting on that entity, and MESA governs that
-    entity, so both mean something only when the service acts on it. A service
-    with no declared target ignores whatever entity is named, which would turn any
-    write grant into a decoy for the service, so it takes no target. A registered
-    schema naming entity_id declares one, like the field in a description. Three
-    cases keep the own-domain rule: a script's named service, which
-    service_target_binding_valid ties to its exact entity; a name no one registered,
-    which Home Assistant refuses with a usable hint; and unreadable descriptions,
-    where a declared target cannot be told from none.
+    WRITE and MESA mean something only for an entity the service acts on, so a service with no
+    declared target takes none. A script's named service, an unregistered name and unreadable
+    descriptions keep the own-domain rule.
     """
     if f"{domain}/{service}" in CROSS_DOMAIN_SERVICES:
         return ()
@@ -185,9 +226,7 @@ def _contains_target_selector(value: object) -> bool:
 def secondary_target_fields(descriptions: object) -> frozenset[str]:
     """Collect non-primary target field names from HA service descriptions.
 
-    Scan every registered service to retain a conservative fallback when the
-    requested description is missing or late-loaded. The caller may disambiguate
-    a discovered name only with explicit text metadata on the requested service.
+    Scans every service, as a conservative fallback for a missing or late description.
     """
     found = set(SECONDARY_TARGET_SELECTOR_KEYS)
     if not isinstance(descriptions, Mapping):
@@ -216,9 +255,8 @@ async def unsupported_secondary_targets(
 ) -> tuple[str, ...]:
     """Return caller fields that could select targets Phoenix did not resolve.
 
-    HA caches the description load and refreshes it when registered services
-    change. If that compatibility seam fails, the static fallback still blocks
-    every target field known at build time rather than disabling the guard.
+    If HA's cached description load fails, the static fallback still blocks known target
+    fields.
     """
     if f"{domain}/{service}" in MUSIC_ASSISTANT_LIBRARY_SERVICES and isinstance(service_data, dict):
         # Its config entry is authorized by the Music Assistant library check.
@@ -277,11 +315,8 @@ def secondary_target_error(fields: tuple[str, ...]) -> str:
 def template_fields(service_data: object) -> tuple[str, ...]:
     """Return caller fields whose value carries Home Assistant template syntax.
 
-    A service may render a field as a template (camera.snapshot's filename, a
-    custom integration's own fields) over every entity's state, outside this
-    access key's scope, so the rendered value or the call's success can disclose
-    what the key cannot read. Service descriptions do not say which fields are
-    rendered, so template syntax is refused in every field, keys included.
+    A service may render any field over every entity's state, outside the key's scope, and
+    descriptions do not say which, so the syntax is refused everywhere, keys included.
     """
     if not isinstance(service_data, Mapping):
         return ()

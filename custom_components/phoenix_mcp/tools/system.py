@@ -17,10 +17,10 @@ from ..const import (
     CAP_ALLOW, CAP_CONFIRM, CAP_DENY, MAX_SUBSCRIPTION_SECONDS, PROXY_TIMEOUT_SECONDS,
 )
 from ..data import PhoenixData
-from ..helpers import (
-    access_key_has_write_scope, build_safe_config, diff_summary_fields as _summary,
-    effective_cap, effective_caps, str_arg,
-)
+from ..tool_input import str_arg
+from ..catalog_text import diff_summary_fields as _summary
+from ..capability import access_key_has_write_scope, effective_cap, effective_caps
+from ..redaction import build_safe_config
 from ..home_companion import is_companion
 from ..household_authority import household_tool_access
 from ..mesa_audit import request_context
@@ -45,24 +45,17 @@ def _tool_gate_map(
 ) -> dict[str, Any]:
     """Classify every tool for this access key at the tool level (no entity oracle).
 
-    Buckets: usable (announced, executes directly); needs_approval (a cap-tied
-    tool whose cap is Confirm and which actually gates, so returns
-    pending_approval); unavailable (cap denied, a write/action tool without write
-    scope, a household-restricted tool, or a missing system surface).
-
-    The `_EXECUTOR_REGISTRY` check is load-bearing: a cap-tied read checks for
-    CAP_DENY and never calls `_gate`, so bucketing by cap mode alone would report
-    reads as queued for approval and mis-plan an agent that orients with
-    get_capability_summary. A registered executor is the right proxy because the
-    Confirm flow applies an approved call through `_EXECUTOR_REGISTRY`; a catalog
-    test pins the registry against the handlers that really call `_gate`.
-
-    A tool missing its system surface (no ESPHome, no Device Builder) also gets an
-    unavailable_reasons entry: an operator can grant a denied capability but not
-    a missing add-on. The view is static, so call_service and the native Hass*
-    action tools show as usable with write scope even though a target may still
-    hit a physical/dual gate or MESA confirm. Mirrors _tool_is_announced.
+    Buckets: usable, needs_approval (a cap at Confirm on a tool that actually gates), unavailable. A
+    static view, mirroring _tool_is_announced.
     """
+    # `_EXECUTOR_REGISTRY` is load-bearing: a cap-tied read checks CAP_DENY and never calls `_gate`,
+    # so bucketing by cap mode alone would report reads as queued and mis-plan an agent. A
+    # registered executor is the right proxy because the Confirm flow applies an approved call
+    # through it. Unavailable covers a denied cap, a write tool without write scope, a
+    # household-restricted tool, or a missing system surface; the last also gets an
+    # unavailable_reasons entry, since an operator can grant a capability but not a missing add-on.
+    # call_service and Hass* tools show usable with write scope though a target may still hit a
+    # physical or dual gate or MESA confirm.
     if is_companion(access_key):
         return {"usable": [tool["name"] for tool in build_mcp_tool_list(access_key, data)],
                 "needs_approval": [], "unavailable": []}

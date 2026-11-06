@@ -1,19 +1,11 @@
 """Dashboard resources: the JavaScript and CSS files every dashboard loads.
 
-Registering a JavaScript file makes every browser that opens a dashboard run it
-with the viewer's Home Assistant session, so both tools sit behind their own
-capability, cap_dashboard_resources, rather than cap_lovelace_write.
-
-Only storage-mode resources are changed, through Home Assistant's own collection
-commands and validators. YAML-mode resources are loaded with their !secret values
-resolved, so they are counted but never listed, and the YAML tools refuse the
-lovelace: resources subtree, so an administrator edits them by hand.
-
-Every change is a recoverable write: the target resource is snapshotted before
-dispatch, read back afterwards, and the single "dashboard_resources" recovery key
-serializes Phoenix writes to the list. A created resource is identified by its URL
-until Home Assistant has assigned it an ID, which is why a URL that is already
-registered cannot be added again.
+A registered JavaScript file runs in every dashboard viewer's Home Assistant session, so both tools
+sit behind cap_dashboard_resources rather than cap_lovelace_write. Only storage-mode resources
+change, through HA's collection commands; YAML-mode ones load with !secret values resolved, so they
+are counted, never listed, and edited by hand. Every change is a recoverable write serialized by the
+"dashboard_resources" recovery key. A created resource is identified by URL until HA assigns an ID,
+so a registered URL cannot be added again.
 """
 
 from __future__ import annotations
@@ -37,7 +29,10 @@ from ..const import (
     REDACTION_SENTINEL,
 )
 from ..data import PhoenixData
-from ..helpers import content_hash, diff_summary_fields, effective_cap, redact_structure
+from ..helpers import content_hash
+from ..catalog_text import diff_summary_fields
+from ..capability import effective_cap
+from ..redaction import redact_structure
 from ..request_authority import AuthorityChangedError, check_request_authority
 from ..tool_common import (
     _CAP_FORBIDDEN_MESSAGE, _gate, _restore_ctx, _tool_error, _tool_success, _tool_uncertain,

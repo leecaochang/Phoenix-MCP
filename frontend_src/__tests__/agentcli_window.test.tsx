@@ -34,8 +34,9 @@ import {
   type Turn,
 } from "../components/AgentCliWindow";
 import {
-  AGENTCLI_TEXT_SIZE_MAX_PT,
-  AGENTCLI_TEXT_SIZE_MIN_PT,
+  getAgentCliOwner,
+  AGENT_CHAT_TEXT_SIZE_MAX_PT,
+  AGENT_CHAT_TEXT_SIZE_MIN_PT,
   getDurable,
   getSessionTurns,
   getSessionUsage,
@@ -78,8 +79,8 @@ function pickChatMenu(name: string) {
 
 describe("Agent Chat text size bounds", () => {
   it("clamps storage values and keeps the half-point scale anchored to the 13px default", () => {
-    expect(normalizeAgentCliTextSize(-100)).toBe(AGENTCLI_TEXT_SIZE_MIN_PT);
-    expect(normalizeAgentCliTextSize(100)).toBe(AGENTCLI_TEXT_SIZE_MAX_PT);
+    expect(normalizeAgentCliTextSize(-100)).toBe(AGENT_CHAT_TEXT_SIZE_MIN_PT);
+    expect(normalizeAgentCliTextSize(100)).toBe(AGENT_CHAT_TEXT_SIZE_MAX_PT);
     expect(normalizeAgentCliTextSize(10.3)).toBe(10.25);
     expect(normalizeAgentCliTextSize("invalid")).toBe(9.75);
   });
@@ -136,6 +137,22 @@ describe("restorableTurns", () => {
                            initialAccessKeyId="t1" onClose={() => {}} />);
     expect(screen.getByText("kept prompt")).toBeInTheDocument();
     setSessionTurns([]);
+  });
+});
+
+describe("a turn running in another tab", () => {
+  it("is shown while it runs and clears when it ends", () => {
+    getAgentCliModels.mockResolvedValue({ models: ["claude-opus-4-8"] });
+    render(<AgentCliWindow accessKeys={ACCESS_KEYS} instances={INSTANCES} scrollbackLines={500}
+                           initialAccessKeyId="t1" onClose={() => {}} />);
+    const key = `phx-agentcli-turn:${encodeURIComponent(getAgentCliOwner()!)}`;
+    expect(screen.queryByText(/^Another tab is running/)).toBeNull();
+    localStorage.setItem(key, JSON.stringify({ tab: "other", at: Date.now() }));
+    act(() => { window.dispatchEvent(new StorageEvent("storage", { key })); });
+    expect(screen.getByText(/^Another tab is running/)).toBeInTheDocument();
+    localStorage.removeItem(key);
+    act(() => { window.dispatchEvent(new StorageEvent("storage", { key })); });
+    expect(screen.queryByText(/^Another tab is running/)).toBeNull();
   });
 });
 
@@ -983,7 +1000,7 @@ describe("AgentCliWindow streaming", () => {
     for (const name of ["Review", "Approve", "Reject"]) {
       expect(screen.queryByRole("button", { name: new RegExp(`^${name}`) })).toBeNull();
     }
-    await act(async () => resolve({ id: "old-chat", status: "cancelled", rejected_reason: "agent_chat_ended" }));
+    await act(async () => resolve({ id: "old-chat", status: "cancelled", closure_reason: "agent_chat_ended" }));
     expect(screen.getByText("Chat ended.")).toBeVisible();
     expect(document.querySelector(".agentcli-approval")).toBeNull();
     expect(getSessionTurns()).toEqual(expect.arrayContaining([
@@ -995,8 +1012,8 @@ describe("AgentCliWindow streaming", () => {
     vi.useFakeTimers();
     try {
       setSessionTurns([{ entries: [{ kind: "approval", approvalId: "pending-chat", toolName: "create_helper", status: "pending" }], messages: [], lines: 1 }]);
-      getApproval.mockResolvedValueOnce({ id: "pending-chat", status: "pending", rejected_reason: null });
-      getApproval.mockResolvedValueOnce({ id: "pending-chat", status: "cancelled", rejected_reason: "agent_chat_ended" });
+      getApproval.mockResolvedValueOnce({ id: "pending-chat", status: "pending", closure_reason: null });
+      getApproval.mockResolvedValueOnce({ id: "pending-chat", status: "cancelled", closure_reason: "agent_chat_ended" });
       const view = render(<AgentCliWindow accessKeys={ACCESS_KEYS} instances={INSTANCES} scrollbackLines={500}
                                          initialAccessKeyId="t1" onClose={() => {}} />);
       await act(async () => {});
@@ -1028,7 +1045,7 @@ describe("AgentCliWindow streaming", () => {
       const view = render(<AgentCliWindow accessKeys={ACCESS_KEYS} instances={INSTANCES} scrollbackLines={500}
                                          initialAccessKeyId="t1" onClose={() => {}} />);
       act(() => handlers.phoenix_mcp_approval_claimed({ data: { approval_id: "claimed-chat", claimed: true } }));
-      await act(async () => resolve({ id: "claimed-chat", status: "pending", rejected_reason: null }));
+      await act(async () => resolve({ id: "claimed-chat", status: "pending", closure_reason: null }));
       expect(screen.queryByRole("button", { name: "Approve" })).toBeNull();
       view.unmount();
     } finally {

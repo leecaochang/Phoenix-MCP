@@ -20,10 +20,7 @@ import string
 from custom_components.phoenix_mcp.catalog_templates import (
     APPROVAL_SUMMARY_TEMPLATES, DIFF_SUMMARY_TEMPLATES, VERSION_SUMMARY_TEMPLATES,
 )
-from custom_components.phoenix_mcp.helpers import (
-    diff_summary_fields,
-    version_summary_fields,
-)
+from custom_components.phoenix_mcp.catalog_text import diff_summary_fields, version_summary_fields
 from custom_components.phoenix_mcp.tools.lovelace import _CARD_OP_VERSION_KEYS
 
 # Both summary surfaces share one contract; only the namespace differs.
@@ -202,8 +199,8 @@ def test_admin_error_keys_exist_in_the_catalog() -> None:
     _err is lenient (no key means the panel shows the English), so a typo'd key
     would not raise anywhere and would silently stop localizing.
     """
-    admin = REPO / "custom_components" / "phoenix_mcp" / "admin_view.py"
-    named = set(re.findall(r'_err\([^\n]*?key="(\w+)"', admin.read_text()))
+    admin = sorted((REPO / "custom_components" / "phoenix_mcp" / "admin").glob("*.py"))
+    named = {key for path in admin for key in re.findall(r'_err\([^\n]*?key="(\w+)"', path.read_text())}
     catalog = json.loads(CATALOG.read_text())["panel"]["adminError"]
     assert named, "no _err call names a key; the migration was reverted?"
     assert sorted(named - set(catalog)) == []
@@ -219,7 +216,7 @@ def test_notification_templates_match_the_catalog() -> None:
 
 def test_notification_text_falls_back_to_english() -> None:
     """An unknown language, or a missing key, still produces the English."""
-    from custom_components.phoenix_mcp.helpers import notification_text
+    from custom_components.phoenix_mcp.catalog_text import notification_text
 
     class _Config:
         language = "xx-NOPE"

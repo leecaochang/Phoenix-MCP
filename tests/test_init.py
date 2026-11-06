@@ -200,7 +200,7 @@ async def test_setup_registers_routes_when_kill_switch_off(hass: HomeAssistant):
     data = hass.data[DOMAIN]
     assert data.routes_registered is True
     # Admin views plus the client views were all registered.
-    from custom_components.phoenix_mcp.admin_view import ALL_ADMIN_VIEWS
+    from custom_components.phoenix_mcp.admin.registry import ALL_ADMIN_VIEWS
     assert view_count > len(ALL_ADMIN_VIEWS)
 
 
@@ -229,9 +229,9 @@ async def test_setup_skips_client_routes_when_kill_switch_on(hass: HomeAssistant
     # Admin views are still registered (kill switch never hides the admin surface).
     # This includes the agentCLI provider-config admin views, which are also
     # kill-switch-immune; only the agentCLI streaming chat view is gated.
-    from custom_components.phoenix_mcp.admin_view import ALL_ADMIN_VIEWS
-    from custom_components.phoenix_mcp.agentcli_views import ALL_AGENTCLI_ADMIN_VIEWS
-    assert view_count == len(ALL_ADMIN_VIEWS) + len(ALL_AGENTCLI_ADMIN_VIEWS)
+    from custom_components.phoenix_mcp.admin.registry import ALL_ADMIN_VIEWS
+    from custom_components.phoenix_mcp.agent_chat_views import ALL_AGENT_CHAT_ADMIN_VIEWS
+    assert view_count == len(ALL_ADMIN_VIEWS) + len(ALL_AGENT_CHAT_ADMIN_VIEWS)
 
 
 async def test_setup_degrades_when_mesa_fails(hass: HomeAssistant):
@@ -613,21 +613,21 @@ async def test_a_failed_unload_leaves_the_integration_usable(hass: HomeAssistant
 def test_system_log_probe_skips_when_absent(hass: HomeAssistant):
     # Absent = not loaded / not enabled / loads after Phoenix MCP. None of those are
     # drift, so the probe must stay silent rather than false-positive on order.
-    from custom_components.phoenix_mcp.helpers import check_system_log_compat
+    from custom_components.phoenix_mcp.log_read import check_system_log_compat
 
     hass.data.pop("system_log", None)
     assert check_system_log_compat(hass) is None
 
 
 def test_system_log_probe_passes_on_current_shape(hass: HomeAssistant):
-    from custom_components.phoenix_mcp.helpers import check_system_log_compat
+    from custom_components.phoenix_mcp.log_read import check_system_log_compat
 
     hass.data["system_log"] = SimpleNamespace(records={})
     assert check_system_log_compat(hass) is None
 
 
 def test_system_log_probe_reports_shape_drift(hass: HomeAssistant):
-    from custom_components.phoenix_mcp.helpers import check_system_log_compat
+    from custom_components.phoenix_mcp.log_read import check_system_log_compat
 
     hass.data["system_log"] = SimpleNamespace(handler=object())  # no .records
     reason = check_system_log_compat(hass)
@@ -641,9 +641,9 @@ def test_system_log_probe_reports_shape_drift(hass: HomeAssistant):
 def test_template_sandbox_audit_warns_when_env_construction_fails(caplog, monkeypatch):
     # If HA's TemplateEnvironment changes shape, every render_template call will
     # fail; the audit must surface that once at startup as a warning, not debug.
-    import custom_components.phoenix_mcp.helpers as helpers_mod
+    import custom_components.phoenix_mcp.template_sandbox as sandbox
 
-    monkeypatch.setattr(helpers_mod, "safe_template_env", MagicMock(side_effect=TypeError("shape")))
+    monkeypatch.setattr(sandbox, "safe_template_env", MagicMock(side_effect=TypeError("shape")))
     phoenix_init._audit_template_sandbox()
     assert any(
         "template sandbox environment failed to construct" in r.message

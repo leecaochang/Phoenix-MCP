@@ -13,8 +13,11 @@ from homeassistant.core import HomeAssistant
 
 from .routing_tables import (
     COMMAND_ROUTING_NUMERIC_READ_DOMAINS, COMMAND_ROUTING_TRANSLATION_TIMEOUT_SECONDS,
+    COMMAND_ROUTING_READ_PERCENT_SCALES,
 )
-from ..helpers import canonical_language, voice_text
+from ..entity_commands import attribute_display
+from ..locales import canonical_language
+from ..catalog_text import voice_text
 
 
 def display_number(value: Any, language: str) -> str | None:
@@ -39,8 +42,6 @@ def display_number(value: Any, language: str) -> str | None:
 def _display_value(value: Any, attributes: dict, domain: str, field: str | None,
                    language: str, temperature_unit: str | None) -> str | None:
     """Formatting may load CLDR data, so callers run this outside the event loop."""
-    from .routing_tables import COMMAND_ROUTING_READ_PERCENT_SCALES
-    from ..entity_commands import attribute_display
 
     if field is not None:
         raw = attribute_display(field, value, temperature_unit, domain)

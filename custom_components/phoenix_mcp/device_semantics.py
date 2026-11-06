@@ -58,9 +58,7 @@ class DeviceRegistrySnapshot:
     def part_ids(self, device_id: str | None) -> tuple[str, ...]:
         """Return the 2026.9 child devices that are parts of one main device.
 
-        Unlike child_ids, via-device dependents are excluded: they are separate
-        products reached through this device, not parts of it. A device that is
-        itself a child has no parts, since Core allows one level only.
+        Via-device dependents are separate products and excluded; a child has no parts.
         """
         if not isinstance(device_id, str) or device_id in self.child_parent_by_id:
             return ()
@@ -75,12 +73,9 @@ def device_authority_chain(
     hass: HomeAssistant, device_id: str | None
 ) -> tuple[str, ...] | None:
     """Return a device and, for a child device, its main parent.
-
-    A 2026.9 child device is a part of its parent product, so a permission node
-    on the parent governs the child as an ancestor, between the child device and
-    the domain. via_device describes connectivity and is not followed. Returns an
-    empty tuple without a device and None when a child's parent is missing or is
-    itself a child: Core forbids both, and callers fail closed on them.
+    A parent's node governs a child as an ancestor; via_device is not followed. Returns an
+    empty tuple without a device and None for malformed ancestry, on which callers fail
+    closed.
     """
     if not isinstance(device_id, str) or not device_id:
         return ()
@@ -272,18 +267,32 @@ def entity_device_name(hass: HomeAssistant, entry: Any) -> str | None:
 
 
 def entity_follows_device_name(hass: HomeAssistant, entry: Any) -> bool:
-    """Whether Home Assistant shows this entity under its device's name when its name override is empty.
+    """Return whether HA shows this entity under its device name when its override is empty.
 
-    Home Assistant 2026.10 reads an empty override as "Use device name"; earlier
-    releases leave such an entity with no friendly name at all. Rather than compare
-    versions, ask Home Assistant's own friendly-name helper what the empty override
-    would produce for this entity.
+    Asks HA's friendly-name helper rather than comparing versions, about an entry without
+    ``compat_name``, which that helper reads first.
     """
     friendly_name = getattr(er, "async_get_legacy_friendly_name", None)
     device_name = entity_device_name(hass, entry)
     if friendly_name is None or device_name is None:
         return False
-    return bool(friendly_name(hass, attr.evolve(entry, name="")) == device_name)
+    cleared: dict[str, Any] = {"name": ""}
+    if hasattr(entry, "compat_name"):
+        cleared["compat_name"] = None
+    return bool(friendly_name(hass, attr.evolve(entry, **cleared)) == device_name)
+
+
+def entity_full_name(hass: HomeAssistant, entry: Any, friendly_name: str | None = None) -> str | None:
+    """Return HA's composed name for an entity, else ``friendly_name``."""
+    if entry is None:
+        return friendly_name
+    return er.async_get_full_entity_name(hass, entry) or friendly_name
+
+
+def composed_name_fields(hass: HomeAssistant, entry: Any, friendly_name: str | None) -> dict[str, str]:
+    """`composed_name` for a read, present only when it says more than `friendly_name` does."""
+    composed = entity_full_name(hass, entry, friendly_name)
+    return {"composed_name": composed} if composed and composed != friendly_name else {}
 
 
 def entity_name_source(hass: HomeAssistant, entry: Any) -> str:
