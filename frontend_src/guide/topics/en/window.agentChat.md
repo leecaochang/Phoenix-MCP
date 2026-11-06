@@ -84,9 +84,13 @@ If two tabs run a reply at the same moment, the one that finishes last is the on
 
 A very long conversation stays on screen, but its oldest messages stop being sent, and a notice tells you once.
 
-Phoenix deletes a conversation after 30 days without use. It also deletes it when someone who isn't an administrator signs in on this browser, and when you delete core data in this browser. Other browsers keep theirs.
+Phoenix deletes a conversation after 30 days without use, and when you delete core data in this browser. Other browsers keep theirs.
+
+It also deletes it when someone who isn't an administrator signs in on this browser, but only while **{{label:settings.agentcliGlobalLabel}}** or **{{label:settings.injectLabel}}** is on. With both off, Phoenix doesn't load for that person, so the conversation stays.
 
 While a reply runs, Phoenix sets aside Home Assistant's profile option that closes the connection on a hidden page, so the reply isn't cut off. The option comes back when the reply ends, and your profile page shows it off until then. If the page crashes, the next Home Assistant page you open puts it back a few minutes later.
+
+A reply can still be cut off if the main Home Assistant page was already hidden when you sent the message, such as behind a popped-out Agent Chat. Keep that page in view for long replies.
 
 Related: [What leaves your home](guide:topic.security#leaves-home)
 

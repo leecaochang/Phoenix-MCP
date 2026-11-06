@@ -54,6 +54,12 @@ _NOT_PAGINATION = {
     # Bounds one diagnostic message or source excerpt, with an explicit ellipsis.
     # This is caller-visible string clipping, not pagination over result rows.
     "template_diagnostics.py:_bounded_text",
+    # Cuts one string before redaction, dropping the word at the cut. The caller records
+    # the omission; this is the length of one value, not a page of rows.
+    "conversation_log.py:clip_text",
+    # Takes the items one write removes. _cleared reports truncated and remaining_completed
+    # for the batch it was handed.
+    "tools/todo.py:_clear_completed",
 }
 
 

@@ -3437,10 +3437,11 @@ async def test_call_service_surfaces_schema_rejection_as_invalid_request(hass):
     HomeAssistantError). A service whose schema does not accept entity_id at all
     would otherwise fall through the ServiceValidationError/HomeAssistantError
     catches to the dispatch-level safety net as a bare 'Internal error', losing the
-    actionable voluptuous detail. The typical trigger is a model calling a service
-    that does not target entities, with a resolved entity attached anyway.
+    actionable voluptuous detail. The typical trigger is a model leaving out a field
+    the service requires.
     """
     import voluptuous as vol
+    from homeassistant.helpers import config_validation as cv
     from homeassistant.helpers import entity_registry as er
 
     from custom_components.phoenix_mcp.data import PhoenixData
@@ -3457,7 +3458,7 @@ async def test_call_service_surfaces_schema_rejection_as_invalid_request(hass):
 
     hass.services.async_register(
         "light", "strict_effect", _handler,
-        schema=vol.Schema({vol.Required("message"): str}),
+        schema=vol.Schema({vol.Required("message"): str, vol.Required("entity_id"): cv.entity_ids}),
     )
 
     access_key, _ = _make_access_key(pass_through=True)
@@ -3470,7 +3471,7 @@ async def test_call_service_surfaces_schema_rejection_as_invalid_request(hass):
             "domain": "light",
             "service": "strict_effect",
             "entity_id": entry.entity_id,
-            "service_data": {"message": "hi"},
+            "service_data": {},
         },
         access_key,
         hass,
@@ -3480,7 +3481,7 @@ async def test_call_service_surfaces_schema_rejection_as_invalid_request(hass):
     assert result.get("isError") is True
     text = result["content"][0]["text"]
     assert text.startswith("Invalid request:")
-    assert "entity_id" in text
+    assert "message" in text
 
 
 @pytest.mark.asyncio
@@ -3523,6 +3524,7 @@ async def test_call_service_service_not_found_stays_generic_forbidden(hass):
     for a domain NOT in DOMAIN_SERVICE_HINTS (light is deliberately excluded)."""
     from homeassistant.exceptions import ServiceNotFound
     from homeassistant.helpers import entity_registry as er
+    from homeassistant.helpers.service import async_set_service_schema
 
     from custom_components.phoenix_mcp.data import PhoenixData
     from custom_components.phoenix_mcp.tools.service import _execute_call_service
@@ -3537,6 +3539,7 @@ async def test_call_service_service_not_found_stays_generic_forbidden(hass):
         raise ServiceNotFound("light", "make_bright")
 
     hass.services.async_register("light", "make_bright", _raise)
+    async_set_service_schema(hass, "light", "make_bright", {"target": {"entity": {"domain": "light"}}})
 
     access_key, _ = _make_access_key(pass_through=True)
     store = MagicMock()

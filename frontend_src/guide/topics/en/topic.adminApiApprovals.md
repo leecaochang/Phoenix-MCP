@@ -101,6 +101,7 @@ The response is `200` with the updated record:
 | 503 | `service_unavailable` | `adminError.approvalRecordFailed` | Phoenix couldn't save the execution marker. Nothing ran and the approval is still pending. |
 | 400 | `invalid_request` | `adminError.approvalExecutorMissing` | Phoenix has no way to run this tool. Nothing ran. |
 | 500 | `internal_error` | `adminError.approvalExecutionUncertain` | The run raised an error. Phoenix closes the approval as `failed`, reason `execution_interrupted`, and won't offer it again. |
+| 500 | `internal_error` | `adminError.approvalOutcomeNotSaved` | The action finished, but Phoenix couldn't save its result. Phoenix won't offer the approval again and later closes it as `failed`, reason `execution_interrupted`. Its `approval/executed` or `approval/failed` audit row, with `finalization: "not_saved"`, says what happened. |
 
 Three of those errors sound temporary but close the approval for good: `approvalAccessKeyInactive`, `approvalCapabilityDenied` and `killSwitchEngaged`. Fixing the condition afterwards doesn't bring it back.
 
@@ -291,6 +292,7 @@ The response is `{ items }`. Each item is one of these:
 - `{ "id": "calendar_storage", "kind": "calendar_storage" }` when Phoenix can't read its calendar records.
 - `{ "id": "audit_storage", "kind": "audit_storage" }` when Phoenix's last audit log save failed.
 - `{ "id": "mesa", "kind": "mesa" }` when MESA failed to start.
+- `{ "id": "mesa_rename", "kind": "mesa_rename" }` when a renamed entity's profile is in force but its save failed.
 
 When a request wrote to a calendar, its calendar item replaces the agent item for the same request.
 

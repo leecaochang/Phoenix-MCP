@@ -33,7 +33,9 @@
 
 智慧體可以開啟和關閉裝置，設定燈、風扇、溫控、捲簾和音量，控制媒體播放器和吸塵器，並取消計時器。這些命令與 Home Assistant 自帶助理使用的命令相同。每個目標都需要權限樹中的 W。
 
-門鎖、警報、捲簾和閥門還需要物理控制。設為確認時，包含其中一項的命令會等待你的核准。設為拒絕存取時，智慧體無法控制它們。
+門鎖、警報、捲簾和閥門還需要物理控制。任何會作用到它們的其他操作也需要，例如整合自帶的開鎖操作；`zwave_js.set_value` 這類原始裝置命令無論指向哪個實體都需要。
+
+設為確認時，包含其中一項的命令會等待你的核准。設為拒絕存取時，智慧體無法控制它們。
 
 透過 Assist 衛星裝置廣播訊息或在其上發起對話需要廣播。MESA 會在能力和權限樹之後最後檢查每個命令。
 
@@ -48,8 +50,9 @@
 - 重新啟動或停止 Home Assistant 需要重新啟動能力。
 - 重新載入自動化、腳本、場景、輔助項目或核心設定需要 YAML 設定。
 - 操作傳回的資料需要服務回應資料。沒有它，操作仍會執行。
-- 傳送訊息的通知操作需要通知能力。
-- 公告播放需要廣播能力：`assist_satellite.announce`、`start_conversation` 和 `ask_question`，`music_assistant.play_announcement`，以及帶 `announce` 的 `media_player.play_media`。一般播放只需要 W。
+- 傳送訊息的通知操作需要通知能力。整合自帶的、透過通知實體傳送訊息的操作也需要。
+- 公告播放需要廣播能力：`assist_satellite.announce`、`start_conversation`、`ask_question`、`music_assistant.play_announcement`、帶 `announce` 的 `media_player.play_media` 和 `tts.speak`。
+- `tts.speak` 還需要對其指定的每個喇叭有 W。一般播放只需要 W。
 - ESPHome 裝置操作只需要裝置上的 W。MESA 不檢查它們，也不檢查重新載入或重新啟動。
 - 搜尋或列出 Music Assistant 音樂庫需要服務回應資料，以及某個 Music Assistant 實體（例如喇叭）上的 R。這些操作不會播放任何內容，所以 MESA 也不檢查它們。
 
@@ -63,7 +66,11 @@
 
 ## 清單和行事曆 {#lists}
 
-智慧體可以新增、變更和移除待辦事項，這只需要清單上的 W。它們可以建立、變更和刪除行事曆事件，這還需要行事曆寫入。MESA 會檢查兩者。每次行事曆變更都會留下回執，智慧體之後可以查看。
+智慧體可以新增、變更和移除待辦事項，也可以清除已完成的事項，這只需要清單上的 W。移除事項是永久性的：Phoenix 不保留副本，因此[無法還原](guide:topic.configurationHistory#not-recorded)。結果會列出移除了哪些事項。
+
+如果你核准移除，Phoenix 會先重新讀取清單。在請求等待期間發生變化的事項會保留，結果會說明是哪些。
+
+智慧體可以建立、變更和刪除行事曆事件，這還需要行事曆寫入。MESA 會檢查待辦和行事曆變更。每次行事曆變更都會留下回執，智慧體之後可以查看。
 
 允許它的能力：[{{label:caps.cap_calendar_write.label}}](guide:window.capabilities#calendar-write)
 
@@ -174,13 +181,17 @@
 
 讀取檔案讓智慧體讀取 www、themes 和 custom_templates 資料夾中的文字檔案，每個最大 1 MiB。資料夾清單分頁傳回，預設每頁 500 項，最多 1000 項。它不能寫入這些檔案。
 
-YAML 設定讓智慧體讀取你的 YAML 檔案，名稱中含有 secret 的檔案、esphome 資料夾和隱藏檔案除外。名稱暗示機密的值會顯示為 `<redacted>`，但使用普通名稱的密碼可見。沒有工具會寫入 YAML 設定。
+YAML 設定讓智慧體讀取你的 YAML 檔案，名稱中含有 secret 的檔案、esphome 資料夾和隱藏檔案除外。
+
+名稱暗示機密的值以及提到機密的註解會顯示為 `<redacted>`，但使用普通名稱的密碼可見。有 YAML 錯誤的檔案不會顯示，智慧體只會得到需要修復的行號。沒有工具會寫入 YAML 設定。
 
 允許它的能力：[{{label:caps.cap_filesystem.label}}](guide:window.capabilities#filesystem)、[{{label:caps.cap_yaml_edit.label}}](guide:window.capabilities#yaml-edit)
 
 ## ESPHome {#esphome}
 
-智慧體可以讀取和搜尋 ESPHome 裝置設定，密碼、金鑰和所有請求標頭的值都會被遮蔽。使用 ESPHome Device Builder 附加元件時，它們還可以校驗、編譯、讀取裝置日誌、分析記憶體並檢查連線。沒有該附加元件時，只能讀取和搜尋。
+智慧體可以讀取和搜尋 ESPHome 裝置設定，密碼、金鑰、所有請求標頭的值、網址中的憑證以及提到它們的註解都會被遮蔽。
+
+使用 ESPHome Device Builder 附加元件時，它們還可以校驗、編譯、讀取裝置日誌、分析記憶體並檢查連線。沒有該附加元件時，只能讀取和搜尋。
 
 編譯、清理和記憶體分析需要裝置上的 W。安裝韌體需要 ESPHome 韌體刷寫、ESPHome 裝置 YAML 和裝置上的 W，並且 MESA 會檢查它。
 
@@ -211,4 +222,4 @@ YAML 設定讓智慧體讀取你的 YAML 檔案，名稱中含有 secret 的檔�
 
 核准和稽核工具也會被隱藏，Home Assistant 僅限管理員的操作會被拒絕。Home Assistant 無法辨識的說話者也會被同樣對待。AI 任務始終如此執行。
 
-相關：[語音智慧體、AI 任務或 Assist 工具提供方](guide:topic.homeAssistantFeatures)、[Assist 和語音智慧體](guide:topic.permissionResolution#household)
+相關：[語音智慧體、AI 任務或 Assist 工具提供者](guide:topic.homeAssistantFeatures)、[Assist 和語音智慧體](guide:topic.permissionResolution#household)

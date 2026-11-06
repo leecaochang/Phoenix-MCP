@@ -405,7 +405,9 @@
       "rowPayload": "Payload",
       "rowRequestId": "Verzoek-ID",
       "rowResource": "Resource",
-      "rowTime": "Tijd"
+      "rowTime": "Tijd",
+      "outcomeCancelled": "Geannuleerd",
+      "outcomeUnknown": "Uitkomst onbekend"
     },
     "caps": {
       "cap_automation_write": {
@@ -525,7 +527,7 @@
         "label": "Automatiseringstraces"
       },
       "cap_yaml_edit": {
-        "description": "Je YAML-configuratiebestanden lezen en YAML-domeinen herladen. Wachtwoorden die in deze bestanden staan, zijn zichtbaar; gebruik secrets.yaml.",
+        "description": "Je YAML-configuratiebestanden lezen en YAML-domeinen herladen. Waarden onder namen die op een geheim wijzen, worden verborgen, maar een wachtwoord onder een gewone naam is zichtbaar; gebruik secrets.yaml.",
         "label": "YAML-configuratie"
       },
       "confirmUnavailable": "Deze mogelijkheid kan geen goedkeuring vereisen.",
@@ -830,7 +832,11 @@
         "one": "{count} geselecteerd",
         "other": "{count} geselecteerd"
       },
-      "rowPicked": "geselecteerd voor batchgoedkeuring"
+      "rowPicked": "geselecteerd voor batchgoedkeuring",
+      "todoItems": "Te verwijderen items",
+      "todoRemovalWarning": "Het verwijderen van takenlijstitems is definitief. Phoenix bewaart geen kopie, dus ze kunnen niet worden hersteld.",
+      "todoStatusCompleted": "Voltooid",
+      "todoStatusNeedsAction": "Niet voltooid"
     },
     "agentchat": {
       "accessKey": "Toegangssleutel",
@@ -1214,7 +1220,9 @@
       "restoreToolReported": "Het herstel kon niet worden toegepast. De tool meldde: {detail}",
       "capabilityAllowUnsupported": "{capability} ondersteunt de Toestaan-modus niet.",
       "recoverySnapshotUnsafeAt": "Er is geen volledige kopie van dit item zonder geheimen beschikbaar, dus er is niets gewijzigd. Phoenix heeft het geweigerd bij {location}.",
-      "invalidHostHeader": "De Host-header van het verzoek is geen geldig adres."
+      "invalidHostHeader": "De Host-header van het verzoek is geen geldig adres.",
+      "approvalOutcomeNotSaved": "De actie is voltooid, maar het resultaat kon niet worden opgeslagen. Controleer het effect in Home Assistant; deze goedkeuring wordt niet opnieuw aangeboden.",
+      "providerRemoteUrlResolutionFailed": "De provider-URL kon niet worden opgelost, dus het adres kon niet worden gecontroleerd."
     },
     "wizard": {
       "accessSub": "Selecteer het driehoekje naast <code>light</code> om de lichtgroep te openen. Daarin staan je lichtapparaten; selecteer het driehoekje naast een apparaat om de entiteiten te zien. Of typ de naam van je licht in het filterveld. Selecteer daarna <strong>W</strong> bij een licht dat je kunt controleren, zodat de agent het kan lezen en bedienen. Je kunt later meer machtigingen toevoegen.",
@@ -2676,7 +2684,9 @@
       "title": "Aandacht nodig",
       "unknown": "Het gesprek eindigde voordat Phoenix vastlegde of deze actie is uitgevoerd, dus hij kan zijn uitgevoerd. Tonen in auditlogboek, waar aangeboden, laat zien wat Phoenix heeft vastgelegd; een actie die op goedkeuring wachtte, heeft haar status onder Goedkeuringen. Controleer Home Assistant zelf voordat je het opnieuw probeert.",
       "audit_storageTitle": "Het auditlogboek bereikt de opslag niet",
-      "audit_storageHelp": "Recente auditregels staan alleen in het geheugen, dus een herstart zou ze kwijtraken. Controleer de Home Assistant-logboeken. Dit verdwijnt zodra de volgende opslag lukt."
+      "audit_storageHelp": "Recente auditregels staan alleen in het geheugen, dus een herstart zou ze kwijtraken. Controleer de Home Assistant-logboeken. Dit verdwijnt zodra de volgende opslag lukt.",
+      "mesa_renameTitle": "Het profiel van een hernoemde entiteit staat niet in de opslag",
+      "mesa_renameHelp": "Het profiel is de entiteit gevolgd en geldt, maar de opgeslagen kopie heeft nog de oude ID. Controleer de Home Assistant-logboeken en herlaad Phoenix MCP via Instellingen > Apparaten en services om het opnieuw op te slaan. Dit verdwijnt zodra de volgende opslag lukt."
     },
     "workspace": {
       "addToMy": "Toevoegen aan Mijn werkruimte",

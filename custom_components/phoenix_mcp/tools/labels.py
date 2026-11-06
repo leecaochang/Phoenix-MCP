@@ -32,7 +32,7 @@ from ..policy_engine import (
     Permission, resolve_device_registry_access, resolve_location_registry_write, resolve_registry_access,
 )
 from ..request_authority import check_request_authority
-from ..tool_common import _gate, _record_version, _restore_ctx, _tool_error, _tool_success
+from ..tool_common import _gate, _record_version, _restore_ctx, _tool_error, _tool_success, _tool_uncertain
 from ..request_authority import _approved_exec_ctx
 
 _LOGGER = logging.getLogger(__name__)
@@ -303,10 +303,10 @@ async def _execute_set_label_or_category(
                 raise RuntimeError("readback mismatch")
     except Exception:
         _LOGGER.exception("Label or category write failed after dispatch")
-        return _tool_error(json.dumps({
+        return _tool_uncertain({
             "status": "unknown", "id": item_id,
             "message": "The write may have applied. Inspect list_labels before any retry; nothing was replayed or rolled back.",
-        })), "invalid_request", _TOOL
+        }), "invalid_request", _TOOL
     receipt = _tool_success(json.dumps({
         "kind": plan.kind, "operation": plan.operation, "id": item_id, "scope": plan.scope,
         "write_success": True, "verified": True, "updated": after, "restorable": plan.operation != "delete",

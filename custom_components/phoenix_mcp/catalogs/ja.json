@@ -130,7 +130,11 @@
         "one": "{count} 件を選択",
         "other": "{count} 件を選択"
       },
-      "rowPicked": "一括承認の対象に選択済み"
+      "rowPicked": "一括承認の対象に選択済み",
+      "todoItems": "削除する項目",
+      "todoRemovalWarning": "To-do 項目の削除は取り消せません。Phoenix はコピーを保持しないため、復元できません。",
+      "todoStatusCompleted": "完了",
+      "todoStatusNeedsAction": "未完了"
     },
     "caps": {
       "cap_config_read": {
@@ -251,7 +255,7 @@
       },
       "cap_yaml_edit": {
         "label": "YAML 設定",
-        "description": "YAML 設定ファイルを読み取り、YAML のドメインを再読み込みします。これらのファイルに直接書いたパスワードは見えてしまうため、secrets.yaml を使ってください。"
+        "description": "YAML 設定ファイルを読み取り、YAML のドメインを再読み込みします。機密を示す名前の値は隠されますが、普通の名前のパスワードは見えてしまうため、secrets.yaml を使ってください。"
       },
       "noBuilder": "Device Builder アドオンが検出されませんでした",
       "noEsphome": "ESPHome が検出されませんでした",
@@ -552,7 +556,9 @@
       "rowPayload": "ペイロード",
       "rowRequestId": "リクエスト ID",
       "rowResource": "リソース",
-      "rowTime": "時刻"
+      "rowTime": "時刻",
+      "outcomeCancelled": "キャンセル済み",
+      "outcomeUnknown": "結果不明"
     },
     "inject": {
       "profileSet": "{key} に MESA プロファイルが設定されています。クリックして編集",
@@ -1140,7 +1146,9 @@
       "restoreToolReported": "復元を適用できませんでした。ツールの報告: {detail}",
       "capabilityAllowUnsupported": "{capability} は許可モードに対応していません。",
       "recoverySnapshotUnsafeAt": "シークレットを含まないこの項目の完全なコピーがないため、何も変更されませんでした。Phoenix は {location} で拒否しました。",
-      "invalidHostHeader": "リクエストの Host ヘッダーが有効なアドレスではありません。"
+      "invalidHostHeader": "リクエストの Host ヘッダーが有効なアドレスではありません。",
+      "approvalOutcomeNotSaved": "アクションは完了しましたが、結果を保存できませんでした。Home Assistant で影響を確認してください。この承認は再度提示されません。",
+      "providerRemoteUrlResolutionFailed": "プロバイダー URL を解決できなかったため、そのアドレスを確認できませんでした。"
     },
     "agentchat": {
       "accessKey": "アクセスキー",
@@ -2595,7 +2603,9 @@
       "title": "確認が必要",
       "unknown": "この操作が実行されたかどうかを Phoenix が記録する前に会話が終了したため、実行された可能性があります。「監査ログで表示」がある場合は、Phoenix が記録した内容を確認できます。承認待ちだった操作の状態は「承認」にあります。再試行する前に Home Assistant 自体も確認してください。",
       "audit_storageTitle": "監査ログがストレージに保存されていません",
-      "audit_storageHelp": "最近の監査エントリはメモリ上にしかなく、再起動すると失われます。Home Assistant のログを確認してください。次の保存が成功すると、この項目は消えます。"
+      "audit_storageHelp": "最近の監査エントリはメモリ上にしかなく、再起動すると失われます。Home Assistant のログを確認してください。次の保存が成功すると、この項目は消えます。",
+      "mesa_renameTitle": "名前を変更したエンティティのプロファイルがストレージに保存されていません",
+      "mesa_renameHelp": "プロファイルはエンティティに引き継がれて有効ですが、保存されたコピーには古い ID が残っています。Home Assistant のログを確認し、設定 > デバイスとサービス から Phoenix MCP を再読み込みして保存し直してください。次の保存が成功すると、この項目は消えます。"
     },
     "workspace": {
       "addToMy": "マイワークスペースに追加",

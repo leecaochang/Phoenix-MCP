@@ -233,7 +233,7 @@ PATCH 拒绝不在此表中的任何字段，且 `expires_at` 根本无法更改
 |---|---|
 | `limit` | 最多 500（默认 100）。 |
 | `offset` | 要跳过的行数。 |
-| `outcome` | 以下之一：`allowed`、`denied`、`not_found`、`rate_limited`、`not_implemented`、`invalid_request`、`pending_approval`。 |
+| `outcome` | 以下之一：`allowed`、`denied`、`not_found`、`rate_limited`、`not_implemented`、`invalid_request`、`pending_approval`、`cancelled`、`unknown`。 |
 | `ip` | 匹配客户端 IP 包含此文本的行。 |
 
 每行有 `request_id`、`timestamp`、`access_key_id`、`access_key_name`、`method`、`resource`、`outcome`、`client_ip` 和 `pass_through`。设置后，行还会包含 `payload`、`mesa_advisory`、`preset`、`stale_tools_advisory`、`ha_user_id` 和 `originating_access_key_id`。

@@ -7,7 +7,9 @@ export type Outcome =
   | "rate_limited"
   | "not_implemented"
   | "invalid_request"
-  | "pending_approval";
+  | "pending_approval"
+  | "cancelled"
+  | "unknown";
 
 export type CapMode = "deny" | "allow" | "confirm";
 export type Persona =
@@ -905,7 +907,7 @@ export interface ConversationListResponse {
 /** Administrator-visible dispatch metadata, never action payloads. */
 export interface AttentionItem {
   id: string;
-  kind: "agent" | "calendar" | "mesa" | "calendar_storage" | "audit_storage";
+  kind: "agent" | "calendar" | "mesa" | "mesa_rename" | "calendar_storage" | "audit_storage";
   tool?: string;
   access_key_name?: string;
   started_at?: string;

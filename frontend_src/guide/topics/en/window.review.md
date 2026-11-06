@@ -28,6 +28,7 @@ How the change is shown depends on what the request does:
 - Configuration and YAML: **{{label:common.before}}** and **{{label:common.after}}** side by side. Switch between **{{label:changes.lineViewShort}}** and **{{label:changes.codeEditorShort}}**, or stack the two sides.
 - Dashboards, cards and the Energy dashboard: **{{label:common.diff}}** or **{{label:common.preview}}**, which draws the result.
 - Actions on devices: the action, its targets, and what MESA allows, holds or blocks.
+- Removing to-do items: each item with its status, and a warning that removal is permanent.
 
 These view choices are kept in this browser, and Changes uses them too.
 

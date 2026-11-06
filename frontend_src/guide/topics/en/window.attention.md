@@ -20,6 +20,7 @@ Then select **{{label:attention.continue}}**, tick **{{label:attention.checked}}
 ## Problems that need a fix {#problems}
 
 - **{{label:attention.mesaTitle}}**: MESA failed to start, so protected changes are paused. Check the Home Assistant log. If it says the profile storage is corrupt, [follow its steps](guide:topic.mesaRules#storage). Then reload Phoenix.
+- **{{label:attention.mesa_renameTitle}}**: a renamed entity's profile followed it and is in force, but Phoenix couldn't save it. Look for a storage error in the Home Assistant log, then reload Phoenix. The item goes away after the next save works.
 - **{{label:attention.calendar_storageTitle}}**: calendar changes are paused until Phoenix can read its saved calendar history again.
 - **{{label:attention.audit_storageTitle}}**: Phoenix can't write the audit log to disk, so a restart would lose recent entries. Look for a disk or storage error in the Home Assistant log. The item goes away after the next save works.
 

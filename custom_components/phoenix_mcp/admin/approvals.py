@@ -27,6 +27,7 @@ from ..config_reconciliation import (
 from ..config_recovery import ConfigurationRecoveryError, recovery_error_key, recovery_error_params
 from ..const import DOMAIN, MAX_BATCH_APPROVALS, MESA_CONFIRM_CAP
 from ..data import PhoenixData
+from ..durable_storage import DurableStorageError
 from ..household_authority import household_scope
 from ..request_authority import (
     AuthorityChangedError, RequestAuthority, check_request_authority, policy_version,
@@ -63,15 +64,14 @@ class PhoenixAdminApprovalsView(PhoenixView):
         records = list_approvals(data.store, status=status, access_key_id=access_key_id)
         total = len(records)
         records = records[offset:offset + limit]
+        # Redaction reads every queued argument a key chose, for a whole page of rows.
+        rows = await hass.async_add_executor_job(lambda: [r.to_dict() for r in records])
         # in_progress rides the row rather than only the claim EVENT, so a panel
         # that was loaded (or reloaded) while an approve was already executing
         # still renders it as non-actionable. The event gives the instant update;
         # this is what makes a fresh page correct.
         return _ok({
-            "approvals": [
-                {**r.to_dict(), "in_progress": r.id in data.approvals_in_progress}
-                for r in records
-            ],
+            "approvals": [{**row, "in_progress": row["id"] in data.approvals_in_progress} for row in rows],
             "total": total,
             "limit": limit,
             "offset": offset,
@@ -623,13 +623,27 @@ async def _approve_approval(hass: HomeAssistant, request: web.Request, approval_
                 ha_user_id=record.ha_user_id,
             )
 
-        async with data.store.async_lock:
-            updated = await async_update_approval_status(
-                data.store, approval_id,
-                status=final_status,
-                approved_by_user_id=user.id,
-                closure_reason=auto_reason,
-                result=saved_result,
+        try:
+            async with data.store.async_lock:
+                updated = await async_update_approval_status(
+                    data.store, approval_id,
+                    status=final_status,
+                    approved_by_user_id=user.id,
+                    closure_reason=auto_reason,
+                    result=saved_result,
+                )
+        except DurableStorageError:
+            # The executor returned, so the outcome is known and only its write failed. The
+            # store returned to its marked record, which recovery closes; the surfaces keep
+            # their claim, as Approve is refused until then and the audit row holds the result.
+            _LOGGER.exception("Could not save the outcome of approval %s", approval_id)
+            _record_execution_audit({"finalization": "not_saved", "executor_outcome": outcome})
+            resolved = True
+            return _err(
+                "internal_error",
+                "The action finished, but its result could not be saved. Check its effect in "
+                "Home Assistant; this approval will not be offered again.",
+                500, rid, key="approvalOutcomeNotSaved",
             )
         if updated is None:
             _record_execution_audit({

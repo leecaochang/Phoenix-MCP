@@ -28,6 +28,7 @@
 - 配置和 YAML：**{{label:common.before}}** 和 **{{label:common.after}}** 并排显示。在 **{{label:changes.lineViewShort}}** 和 **{{label:changes.codeEditorShort}}** 之间切换，或把两侧上下堆叠。
 - 仪表盘、卡片和能源仪表盘：**{{label:common.diff}}** 或 **{{label:common.preview}}**，后者会绘制结果。
 - 对设备的操作：操作、其目标，以及 MESA 允许、暂缓或阻止的内容。
+- 删除待办事项：每个事项及其状态，并提示删除后无法恢复。
 
 这些视图选择会保存在此浏览器中，变更也会使用它们。
 

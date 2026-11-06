@@ -212,7 +212,7 @@ _ENTITY_TOOL_DEFS: list[dict] = [
                 },
                 "attribute": {
                     "type": "string", "maxLength": 255,
-                    "description": "summary only: total this attribute's values (e.g. hvac_action) instead of the state, over at most 7 days.",
+                    "description": "summary only: total this attribute's values (e.g. hvac_action) instead of the state, over at most 7 days. Values read as in significant_states; a sensitive attribute reads as absent, so its rows count under the state.",
                 },
                 "limit": {
                     "type": "integer",
@@ -480,10 +480,15 @@ _ENTITY_TOOL_DEFS: list[dict] = [
             "items. add takes summary (the item's text) and optional due and description. update renames "
             "(summary), completes or reopens (status), or sets due or description of the item named by item: its "
             "uid from get_todo_items, or its exact summary when only one item has it; null clears due or "
-            "description. remove deletes that item. clear_completed takes only the list: it reads the completed "
-            "items and removes exactly those, by uid, up to 500 in one call; remaining_completed says what is "
-            "left. Runs as the todo service through call_service, with the same scope, MESA and approval checks, "
-            "then reads the list back: the result gives the item as the list now holds it and verified."
+            "description, and cleared gives the old values. A null in summary or status marks a padded call: its "
+            "other nulls are ignored and listed in ignored_null. remove deletes that item. clear_completed takes "
+            "only the list: it reads the completed items and removes exactly those, by uid, up to 500 in one call "
+            "and only as many as the result can name; removed gives each uid and summary, remaining_completed "
+            "what is left. Removal is permanent: nothing can restore an item. Runs as the todo service through "
+            "call_service, with the same scope, MESA and approval checks, then reads the list back: the result "
+            "gives the item as the list now holds it and verified; a change that does not read back is an error. "
+            "An approved remove or clear leaves any item changed since the review, listed in not_removed; an "
+            "approved add or update answers as call_service does."
         ),
         "inputSchema": {
             "type": "object",
@@ -631,7 +636,7 @@ _ENTITY_TOOL_DEFS: list[dict] = [
                 "limit": {"type": "integer", "minimum": 1, "maximum": 200, "default": 50, "description": "Maximum recent audit entries to return."},
                 "outcome": {
                     "type": "string",
-                    "description": "Optional filter: allowed, denied, not_found, rate_limited, invalid_request, pending_approval.",
+                    "description": "Optional filter: allowed, denied, not_found, rate_limited, invalid_request, pending_approval, cancelled, unknown.",
                 },
             },
         },
@@ -2072,7 +2077,8 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
             "ranked by relevance so the best matches lead, name matches first; a row found through its area, floor, "
             "labels or device names them in matched. Filters combine "
             "with AND. Returns a compact list (entity_id, state, friendly_name, domain, area), with composed_name, the "
-            "name Home Assistant now shows, when it differs from friendly_name; each "
+            "name Home Assistant now shows, when it differs from friendly_name and names no parent device the key "
+            "cannot read; each "
             "result also carries control_mode when its MESA nature is non-default (read_only, confirm, prohibited), "
             "so you can spot restricted entities without a follow-up describe_entity call, entity_category "
             "(config or diagnostic) when the entity is a setup/health entity rather than a primary control, "
@@ -2302,8 +2308,11 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
         "requires": "esphome",
         "description": (
             "List the ESPHome device YAML files this access key can see, or read one. Credentials "
-            "(API encryption keys, wifi/OTA/MQTT passwords, and anything matching the ESPHome "
-            "secrets.yaml) are replaced with __PHOENIX_REDACTED__<path>__ placeholders. Read-only: "
+            "(values under credential-named keys, including every list or mapping below one, and "
+            "anything matching the ESPHome secrets.yaml) are replaced with "
+            "__PHOENIX_REDACTED__<path>__ placeholders. Credentials inside a URL, lambda or other "
+            "value show as <redacted>, and so does a comment that names one. A file that does not "
+            "parse is refused, as its credentials cannot be located. Read-only: "
             "the operator edits device YAML in the ESPHome dashboard. content_hash changes "
             "whenever the visible content does. defined_secrets lists the secret NAMES available "
             "for !secret references."
@@ -2827,7 +2836,8 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
         "description": (
             "A comprehensive summary of one accessible entity, including disabled and registry-only "
             "entries when access is inherited from their device or domain: its state when available, "
-            "composed_name when the name Home Assistant now shows differs from friendly_name, "
+            "composed_name when the name Home Assistant now shows differs from friendly_name and names no parent "
+            "device the key cannot read, "
             "an allowlisted registry projection with name_source (custom, device, integration or none), area, "
             "domain services, references, MESA control_mode, and hint, the operator's note on what the "
             "entity is or how to use it, when one is set. "
@@ -3207,14 +3217,17 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
         "name": "get_yaml_config",
         "description": (
             "Read a YAML configuration file, or one key inside it. With no arguments this returns "
-            "configuration.yaml verbatim. Pass file to read another YAML file in the configuration "
-            "directory (an !include target such as automations.yaml or packages/kitchen.yaml), and "
-            "key to return just that top-level or nested mapping key instead of the whole file. "
-            "!include and !secret lines are returned as written, never resolved, so any INLINE "
-            "secret is visible; keep secrets in secrets.yaml and reference them with !secret. "
-            "secrets.yaml, hidden directories, and the esphome directory cannot be read. Use "
-            "get_esphome_yaml for ESPHome device files so credentials are masked and entity scope "
-            "is enforced. content_hash covers the WHOLE file, even when key is given, and is "
+            "configuration.yaml. Pass file to read another YAML file in the configuration directory "
+            "(an !include target such as automations.yaml or packages/kitchen.yaml), and key to "
+            "return just that top-level or nested mapping key instead of the whole file. The text "
+            "is as written except that a value under a credential-named key, a credential inside a "
+            "URL or other value, and a comment naming one show as <redacted>, so that is not the "
+            "file's real value. Masking works by name, so a secret under an ordinary name stays "
+            "visible. !include and !secret are returned as written, never resolved. A file that does "
+            "not parse is refused, as its credentials cannot be located; the error gives the line. "
+            "Files with secret in their name, hidden directories, and the esphome directory cannot "
+            "be read. Use get_esphome_yaml for ESPHome device files, where entity scope is enforced. "
+            "content_hash covers the WHOLE file, even when key is given, and is "
             "only comparable between reads. This tool only reads: YAML configuration is edited by the operator, and "
             "automations, scripts and scenes are changed with their own tools."
         ),
@@ -4299,6 +4312,18 @@ _TOOL_ANNOTATIONS: dict[str, dict] = {
     _NATIVE_TOOL_NAMES["HassVacuumReturnToBase"]: _annot(False, True, True),
     _NATIVE_TOOL_NAMES["HassVacuumCleanArea"]: _annot(False, True, True),
 }
+
+
+# Not read-only, but none of these can change a device, an entity, a configuration file
+# or Phoenix's own state: each spends build or radio time and reports. A request for one
+# that stops early leaves nothing to reconcile, so it takes no unknown-outcome claim. An
+# annotated destructive tool never qualifies, whatever else is true of it.
+_NO_HOME_EFFECT_TOOLS: frozenset[str] = frozenset({
+    "analyze_esphome_memory",
+    "check_esphome_connectivity",
+    "compile_esphome_firmware",
+    "scan_zigbee_topology",
+})
 
 
 # One argument contract on every route: an undeclared top-level argument is

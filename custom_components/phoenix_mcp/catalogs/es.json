@@ -119,7 +119,7 @@
       },
       "cap_yaml_edit": {
         "label": "Configuración YAML",
-        "description": "Lee sus archivos de configuración YAML y recarga dominios YAML. Las contraseñas escritas en estos archivos son visibles; use secrets.yaml."
+        "description": "Lee sus archivos de configuración YAML y recarga dominios YAML. Los valores con nombres que sugieren un secreto se ocultan, pero una contraseña con un nombre corriente es visible; use secrets.yaml."
       },
       "noBuilder": "Complemento Device Builder no detectado",
       "noEsphome": "ESPHome no detectado",
@@ -429,7 +429,9 @@
       "rowPayload": "Carga útil",
       "rowRequestId": "ID de solicitud",
       "rowResource": "Recurso",
-      "rowTime": "Hora"
+      "rowTime": "Hora",
+      "outcomeCancelled": "Cancelado",
+      "outcomeUnknown": "Resultado desconocido"
     },
     "approvals": {
       "approve": "Aprobar",
@@ -527,7 +529,11 @@
         "one": "{count} seleccionada",
         "other": "{count} seleccionadas"
       },
-      "rowPicked": "seleccionada para la aprobación por lotes"
+      "rowPicked": "seleccionada para la aprobación por lotes",
+      "todoItems": "Elementos que se eliminarán",
+      "todoRemovalWarning": "La eliminación de tareas pendientes es permanente. Phoenix no guarda ninguna copia, por lo que no se pueden restaurar.",
+      "todoStatusCompleted": "Completado",
+      "todoStatusNeedsAction": "Sin completar"
     },
     "wizard": {
       "accessSub": "Seleccione el triángulo junto a <code>light</code> para abrir el grupo de luces. Muestra sus dispositivos de luz; seleccione el triángulo junto a un dispositivo para ver sus entidades. O escriba el nombre de su luz en el cuadro de filtro. Después seleccione <strong>W</strong> en una luz que pueda comprobar, para que el agente pueda leerla y controlarla. Puede añadir más permisos más adelante.",
@@ -1141,7 +1147,9 @@
       "restoreToolReported": "No se pudo aplicar la restauración. La herramienta informó: {detail}",
       "capabilityAllowUnsupported": "{capability} no admite el modo Permitir.",
       "recoverySnapshotUnsafeAt": "No hay una copia completa de este elemento sin secretos, así que no se cambió nada. Phoenix lo rechazó en {location}.",
-      "invalidHostHeader": "El encabezado Host de la solicitud no es una dirección válida."
+      "invalidHostHeader": "El encabezado Host de la solicitud no es una dirección válida.",
+      "approvalOutcomeNotSaved": "La acción terminó, pero no se pudo guardar su resultado. Compruebe su efecto en Home Assistant; esta aprobación no se volverá a ofrecer.",
+      "providerRemoteUrlResolutionFailed": "No se pudo resolver la URL del proveedor, por lo que no se pudo comprobar su dirección."
     },
     "accessKeys": {
       "announceAllHelp": "Ofrezca a los agentes de esta clave todas las herramientas, incluso las que no puede usar. Solo para solucionar problemas; consume más tokens.",
@@ -2595,7 +2603,9 @@
       "title": "Requiere atención",
       "unknown": "La conversación terminó antes de que Phoenix registrara si esta acción se ejecutó, así que puede haberse ejecutado. Ver en el registro de auditoría, donde se ofrece, muestra lo que registró Phoenix; una acción que esperaba aprobación tiene su estado en Aprobaciones. Comprueba Home Assistant antes de volver a intentarlo.",
       "audit_storageTitle": "El registro de auditoría no llega al almacenamiento",
-      "audit_storageHelp": "Las entradas de auditoría recientes solo están en memoria, así que un reinicio las perdería. Revisa los registros de Home Assistant. Esto desaparece cuando el siguiente guardado funcione."
+      "audit_storageHelp": "Las entradas de auditoría recientes solo están en memoria, así que un reinicio las perdería. Revisa los registros de Home Assistant. Esto desaparece cuando el siguiente guardado funcione.",
+      "mesa_renameTitle": "El perfil de una entidad renombrada no está en el almacenamiento",
+      "mesa_renameHelp": "El perfil ha seguido a la entidad y está en vigor, pero la copia guardada aún tiene el ID antiguo. Revisa los registros de Home Assistant y vuelve a cargar Phoenix MCP desde Ajustes > Dispositivos y servicios para guardarlo de nuevo. Esto desaparece cuando el siguiente guardado funcione."
     },
     "workspace": {
       "addToMy": "Añadir a Mi espacio de trabajo",

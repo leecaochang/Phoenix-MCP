@@ -477,4 +477,4 @@ def test_the_name_falls_back_to_friendly_name(hass, naming_env):
     assert entity_full_name(hass, None) is None
     nameless = attr.evolve(deviceless, original_name=None)
     assert entity_full_name(hass, nameless, "Shown") == "Shown"
-    assert composed_name_fields(hass, nameless, "Shown") == {}
+    assert composed_name_fields(hass, nameless, "Shown", lambda _device_id: True) == {}

@@ -5,22 +5,51 @@ from __future__ import annotations
 from collections.abc import Mapping
 from functools import partial
 from inspect import unwrap
+import logging
 from typing import Any
 
 import voluptuous as vol
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, valid_entity_id
 from homeassistant.helpers import entity_registry as er, service as ha_service
 from homeassistant.helpers.service import async_get_all_descriptions
 from homeassistant.helpers.template import is_template_string
 
 from .const import (
     CROSS_DOMAIN_SERVICES,
+    DOMAIN,
     MUSIC_ASSISTANT_LIBRARY_SERVICES,
+    SCRIPT_ENTITY_SERVICES,
     SECONDARY_TARGET_SELECTOR_KEYS,
     TARGET_SELECTOR_KEYS,
+    TTS_SPEAK_ENGINE_DOMAIN,
+    TTS_SPEAK_PLAYER_DOMAIN,
+    TTS_SPEAK_PLAYER_FIELD,
+    TTS_SPEAK_SERVICE,
 )
 
-_TARGET_SELECTOR_TYPES = frozenset({"area", "device", "entity", "target", "config_entry"})
+_LOGGER = logging.getLogger(__name__)
+
+_TARGET_SELECTOR_TYPES = frozenset({"area", "device", "entity", "floor", "label", "target", "config_entry"})
+# Also ordinary keys: a select option has a string label, and an object selector may have
+# a field of that name, which carries its own selector.
+_AMBIGUOUS_SELECTOR_TYPES = frozenset({"floor", "label"})
+_DESCRIPTIONS_FAILED = f"{DOMAIN}_service_descriptions_failed"
+
+
+async def _service_descriptions(hass: HomeAssistant) -> Mapping[str, Any] | None:
+    """Return HA's service descriptions, or None when they cannot be read, logged once."""
+    try:
+        descriptions: Any = await async_get_all_descriptions(hass)
+    except Exception as err:  # each caller has a safe degradation
+        if not hass.data.get(_DESCRIPTIONS_FAILED):
+            hass.data[_DESCRIPTIONS_FAILED] = True
+            _LOGGER.warning(
+                "Home Assistant's service descriptions could not be read (%s); call_service falls "
+                "back to own-domain targets and the built-in list of target fields.",
+                type(err).__name__,
+            )
+        return None
+    return descriptions if isinstance(descriptions, Mapping) else None
 
 
 def dedicated_tool_refusal(domain: str, service: str) -> tuple[str | None, str] | None:
@@ -36,6 +65,19 @@ def dedicated_tool_refusal(domain: str, service: str) -> tuple[str | None, str] 
     if domain == "todo" and service == "remove_completed_items":
         return None, "Use set_todo_item with action clear_completed, which removes the items it read."
     return None
+
+
+TODO_REMOVAL_WARNING = "Removing to-do items is permanent. Phoenix keeps no copy, so they cannot be restored."
+
+
+def todo_removal_review(
+    hass: HomeAssistant, domain: str, service: str, service_data: Mapping[str, Any], entity_ids: list[str],
+) -> dict[str, Any]:
+    """Return the preview fields of a todo.remove_item call: its warning, and the items it names."""
+    if domain != "todo" or service != "remove_item":
+        return {}
+    items = todo_items_in_review(hass, domain, service, service_data, entity_ids)
+    return {"warning": TODO_REMOVAL_WARNING, **({"todo_items": items} if items else {})}
 
 
 def todo_items_in_review(
@@ -56,12 +98,28 @@ def todo_items_in_review(
     if component is None or not wanted:
         return []
     return [
-        {"list": entity_id, "uid": item.uid, "summary": item.summary}
+        {"list": entity_id, "uid": item.uid, "summary": item.summary,
+         "status": getattr(item.status, "value", item.status)}
         for entity_id in entity_ids
         if (entity := component.get_entity(entity_id)) is not None
         for item in getattr(entity, "todo_items", None) or ()
         if item.uid in wanted or item.summary in wanted
     ]
+
+
+def _flat_fields(description: object) -> Mapping[str, Any]:
+    """A description's fields with sections opened, as HA flattens them into service data."""
+    fields = description.get("fields") if isinstance(description, Mapping) else None
+    if not isinstance(fields, Mapping):
+        return {}
+    flat: dict[str, Any] = {}
+    for name, field in fields.items():
+        nested = field.get("fields") if isinstance(field, Mapping) else None
+        if isinstance(nested, Mapping):
+            flat.update(nested)
+        else:
+            flat[name] = field
+    return flat
 
 
 def _as_filters(value: object) -> list[Mapping]:
@@ -82,8 +140,7 @@ def _declared_target_filters(description: object) -> list[Mapping] | None:
         if not isinstance(target, Mapping):
             return []
         return _as_filters(target["entity"] if target.get("entity") is not None else target.get("device"))
-    fields = description.get("fields")
-    field = fields.get("entity_id") if isinstance(fields, Mapping) else None
+    field = _flat_fields(description).get("entity_id")
     if field is None:
         return None
     selector = field.get("selector") if isinstance(field, Mapping) else None
@@ -119,7 +176,7 @@ def _schema_names_entity_id(schema: object, depth: int = 4) -> bool:
 
     Tolerated extra keys do not count; an unreadable schema answers False, which refuses.
     """
-    fields = getattr(schema, "schema", None)
+    fields = schema if isinstance(schema, Mapping) else getattr(schema, "schema", None)
     if isinstance(fields, Mapping):
         return any(str(key) == "entity_id" for key in fields)
     if depth == 0:
@@ -176,30 +233,51 @@ async def unbound_service_targets(
     """Return the resolved targets this service does not act on.
     WRITE and MESA mean something only for an entity the service acts on, so a service with no
     declared target takes none. A script's named service, an unregistered name and unreadable
-    descriptions keep the own-domain rule.
+    descriptions keep the own-domain rule. tts.speak's named players are its own to judge.
     """
     if f"{domain}/{service}" in CROSS_DOMAIN_SERVICES:
         return ()
-    readable = True
-    try:
-        descriptions: Any = await async_get_all_descriptions(hass)
-    except Exception:  # the own-domain rule is the safe degradation
-        descriptions = {}
-        readable = False
-    services = descriptions.get(domain) if isinstance(descriptions, Mapping) else None
-    filters = _declared_target_filters(services.get(service) if isinstance(services, Mapping) else None)
+    if f"{domain}/{service}" == TTS_SPEAK_SERVICE:
+        targets = speech_engines(targets)
+    descriptions = await _service_descriptions(hass)
+    named_script = domain == "script" and service not in SCRIPT_ENTITY_SERVICES
+    services = descriptions.get(domain) if descriptions is not None else None
+    # A script's fields are its inputs: an entity_id among them declares no target.
+    filters = None if named_script else _declared_target_filters(
+        services.get(service) if isinstance(services, Mapping) else None
+    )
     registered = hass.services.async_services().get(domain, {}).get(service)
-    if filters is None and registered is not None and (
+    if filters is None and not named_script and registered is not None and (
         _is_entity_service(hass, domain, service) or _schema_names_entity_id(registered.schema)
     ):
         filters = []
-    own_domain = domain == "script" or registered is None or not readable
+    own_domain = domain == "script" or registered is None or descriptions is None
     return tuple(
         entity_id for entity_id in targets
         if not (
             own_domain and entity_id.split(".", 1)[0] == domain if filters is None
             else _fits_filters(hass, entity_id, filters)
         )
+    )
+
+
+async def named_script_refusal(hass: HomeAssistant, domain: str, service: str) -> str | None:
+    """Refuse a script run by name whose input is called entity_id, explaining the way that works.
+
+    Its own ID fills that field to identify the call, and a caller value cannot be told from a
+    target selector, so the script would act on itself.
+    """
+    if domain != "script" or service in SCRIPT_ENTITY_SERVICES:
+        return None
+    descriptions = await _service_descriptions(hass)
+    services = descriptions.get(domain) if descriptions is not None else None
+    description = services.get(service) if isinstance(services, Mapping) else None
+    if "entity_id" not in _flat_fields(description):
+        return None
+    return (
+        f"script.{service} takes an input named entity_id, which cannot be filled when it is run "
+        "by name. Call script.turn_on with this script as the target and pass the input in "
+        "variables. No action was dispatched."
     )
 
 
@@ -212,10 +290,24 @@ def unbound_target_error(domain: str, service: str, targets: tuple[str, ...]) ->
     )
 
 
+def unreadable_group_error(groups: list[str]) -> str:
+    """Explain a refusal using only groups the caller may write."""
+    return (
+        f"The members of {', '.join(groups[:3])} cannot be read right now, and a group is only "
+        "controlled once its members can be checked. No action was dispatched."
+    )
+
+
 def _contains_target_selector(value: object) -> bool:
     """Whether a selector document can name HA registry targets."""
     if isinstance(value, Mapping):
-        if _TARGET_SELECTOR_TYPES.intersection(str(key) for key in value):
+        if any(
+            str(key) in _TARGET_SELECTOR_TYPES and (
+                str(key) not in _AMBIGUOUS_SELECTOR_TYPES
+                or item is None or (isinstance(item, Mapping) and "selector" not in item)
+            )
+            for key, item in value.items()
+        ):
             return True
         return any(_contains_target_selector(item) for item in value.values())
     if isinstance(value, list):
@@ -235,12 +327,7 @@ def secondary_target_fields(descriptions: object) -> frozenset[str]:
         if not isinstance(services, Mapping):
             continue
         for description in services.values():
-            if not isinstance(description, Mapping):
-                continue
-            fields = description.get("fields")
-            if not isinstance(fields, Mapping):
-                continue
-            for name, field in fields.items():
+            for name, field in _flat_fields(description).items():
                 if (
                     isinstance(field, Mapping)
                     and _contains_target_selector(field.get("selector"))
@@ -270,30 +357,96 @@ async def unsupported_secondary_targets(
         primary = tuple(sorted((*primary, "target")))
     if primary:
         return primary
-    try:
-        descriptions: Any = await async_get_all_descriptions(hass)
-    except Exception:  # the static fallback is the safe degradation
-        descriptions = {}
+    descriptions = await _service_descriptions(hass)
     unsafe = set(secondary_target_fields(descriptions))
     # Only an explicit text selector on this service can disambiguate a name
     # discovered on another service. Keep build-time refusals and missing or
     # malformed metadata conservative, and never admit structured text values.
-    services = descriptions.get(domain) if isinstance(descriptions, Mapping) else None
+    services = descriptions.get(domain) if descriptions is not None else None
     description = services.get(service) if isinstance(services, Mapping) else None
-    fields = description.get("fields") if isinstance(description, Mapping) else None
-    if isinstance(fields, Mapping):
-        for name, field in fields.items():
-            selector = field.get("selector") if isinstance(field, Mapping) else None
-            if (
-                name not in SECONDARY_TARGET_SELECTOR_KEYS
-                and isinstance(service_data.get(name), str)
-                and isinstance(selector, Mapping)
-                and set(selector) == {"text"}
-                and (selector["text"] is None or isinstance(selector["text"], Mapping))
-                and not _contains_target_selector(selector)
-            ):
-                unsafe.discard(name)
+    for name, field in _flat_fields(description).items():
+        selector = field.get("selector") if isinstance(field, Mapping) else None
+        if (
+            name not in SECONDARY_TARGET_SELECTOR_KEYS
+            and isinstance(service_data.get(name), str)
+            and isinstance(selector, Mapping)
+            and set(selector) == {"text"}
+            and (selector["text"] is None or isinstance(selector["text"], Mapping))
+            and not _contains_target_selector(selector)
+        ):
+            unsafe.discard(name)
     return tuple(sorted(str(key) for key in service_data if str(key) in unsafe))
+
+
+async def required_secondary_targets(hass: HomeAssistant, domain: str, service: str) -> tuple[str, ...]:
+    """Return the required fields of a service that the secondary-target guard always refuses.
+
+    Such a service cannot run through call_service. tts.speak's field has its own adapter.
+    """
+    descriptions = await _service_descriptions(hass)
+    services = descriptions.get(domain) if descriptions is not None else None
+    description = services.get(service) if isinstance(services, Mapping) else None
+    required = {
+        str(name): "" for name, field in _flat_fields(description).items()
+        if isinstance(field, Mapping) and field.get("required") and name not in TARGET_SELECTOR_KEYS
+    }
+    if f"{domain}/{service}" == TTS_SPEAK_SERVICE:
+        required.pop(TTS_SPEAK_PLAYER_FIELD, None)
+    return await unsupported_secondary_targets(hass, required, domain=domain, service=service) if required else ()
+
+
+def speech_engines(targets: list[str]) -> list[str]:
+    """Return a tts.speak target list without its players: what HA's entity target takes."""
+    return [entity_id for entity_id in targets if entity_id.split(".", 1)[0] != TTS_SPEAK_PLAYER_DOMAIN]
+
+
+def speech_players(targets: list[str]) -> list[str]:
+    """Return the players in a tts.speak target list: what its data field takes."""
+    return [entity_id for entity_id in targets if entity_id.split(".", 1)[0] == TTS_SPEAK_PLAYER_DOMAIN]
+
+
+def merge_speech_players(args: dict, domain: str, service: str) -> tuple[dict, str | None]:
+    """Move tts.speak's named players into the call's targets, where every gate judges them.
+
+    Returns the arguments and an error for a value that does not name players one by one;
+    "all" and registry IDs have no reviewed meaning in this field. Any other call is unchanged.
+    """
+    service_data = args.get("service_data")
+    if (f"{domain}/{service}" != TTS_SPEAK_SERVICE or not isinstance(service_data, dict)
+            or TTS_SPEAK_PLAYER_FIELD not in service_data):
+        return args, None
+    players = service_data[TTS_SPEAK_PLAYER_FIELD]
+    players = [players] if isinstance(players, str) else players
+    if not isinstance(players, list) or not players or not all(
+        isinstance(player, str) and valid_entity_id(player) and speech_players([player]) for player in players
+    ):
+        return args, f"{TTS_SPEAK_PLAYER_FIELD} must list media player entity IDs. No action was dispatched."
+    primary = args.get("entity_id")
+    primary = [primary] if isinstance(primary, str) else primary if isinstance(primary, list) else []
+    return {
+        **args,
+        "entity_id": [*primary, *players],
+        "service_data": {key: value for key, value in service_data.items() if key != TTS_SPEAK_PLAYER_FIELD},
+    }, None
+
+
+def speech_target_refusal(domain: str, service: str, entity_id: object, targets: list[str]) -> str | None:
+    """Refuse tts.speak unless an engine and every named player survived resolution.
+
+    Reads the same for a hidden player and a missing one. A smaller audience is not the
+    announcement that was asked for, so this call never runs on a permitted subset.
+    """
+    if f"{domain}/{service}" != TTS_SPEAK_SERVICE:
+        return None
+    named = speech_players([item for item in entity_id if isinstance(item, str)]) if isinstance(entity_id, list) else []
+    if named and set(named) <= set(targets) and any(
+        target.split(".", 1)[0] == TTS_SPEAK_ENGINE_DOMAIN for target in targets
+    ):
+        return None
+    return (
+        "tts.speak needs a tts entity target and write access to every media player in "
+        f"{TTS_SPEAK_PLAYER_FIELD}. No action was dispatched."
+    )
 
 
 def secondary_target_error(fields: tuple[str, ...]) -> str:

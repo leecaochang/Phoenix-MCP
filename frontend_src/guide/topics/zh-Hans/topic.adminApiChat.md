@@ -104,7 +104,7 @@ POST   /api/phoenix-mcp/admin/agentcli/probe
 | 400 | `invalid_request` | `adminError.providerApiKeyRequired` | 缺少 `api_key`。 |
 | 400 | `invalid_request` | `adminError.providerEndpointInvalid` | `endpoint_id` 不是该类型的值之一。 |
 | 400 | `invalid_request` | `adminError.ollamaUrlRequired`、`adminError.providerBaseUrlRequired` | 缺少必需的 `base_url`。 |
-| 400 | `invalid_request` | `adminError.providerUrlInvalid`、`adminError.providerUrlScheme`、`adminError.providerRemoteUrlScheme`、`adminError.providerUrlHostRequired`、`adminError.providerUrlCredentialsForbidden`、`adminError.providerUrlFragmentForbidden`、`adminError.providerUrlAddressForbidden`、`adminError.providerUrlResolutionForbidden` | `base_url` 不是可接受的 URL。 |
+| 400 | `invalid_request` | `adminError.providerUrlInvalid`、`adminError.providerUrlScheme`、`adminError.providerRemoteUrlScheme`、`adminError.providerUrlHostRequired`、`adminError.providerUrlCredentialsForbidden`、`adminError.providerUrlFragmentForbidden`、`adminError.providerUrlAddressForbidden`、`adminError.providerUrlResolutionForbidden`、`adminError.providerRemoteUrlAddressForbidden`、`adminError.providerRemoteUrlResolutionForbidden`、`adminError.providerRemoteUrlResolutionFailed` | `base_url` 不是可接受的 URL。 |
 | 400 | `invalid_request` | `adminError.providerConnectionFailed`，或提供商自身失败的键 | 凭据检查失败。`adminError.providerConnectionFailed` 会带有 `detail`。 |
 | 400 | `invalid_request` | `adminError.providerModelRequired` | 决策类型没有 `model`。 |
 | 400 | `invalid_request` | `adminError.providerModelNotListed` | 模型不在提供商的列表中。 |

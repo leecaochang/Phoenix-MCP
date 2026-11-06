@@ -22,7 +22,8 @@ from ..const import CAP_DENY, DOMAIN, MAX_ENTITY_ALIAS_LENGTH, MAX_ENTITY_ALIASE
 from ..data import PhoenixData
 from ..device_semantics import (
     device_effective_area_id, device_entry_value, device_registry_snapshot,
-    entity_follows_device_name, entity_full_name, entity_name_source, update_device_registry_entry,
+    entity_follows_device_name, entity_full_name, entity_name_source, readable_entity_aliases, readable_full_name,
+    update_device_registry_entry,
 )
 from ..catalog_text import diff_summary_fields as _summary
 from ..capability import effective_cap
@@ -32,7 +33,7 @@ from ..mesa import (
     unresolved_context_refused, UNRESOLVED_CONTEXT_WARNING,
 )
 from ..policy_engine import (
-    device_cascade_entity_ids, device_config_entry_ids, Permission,
+    device_cascade_entity_ids, device_config_entry_ids, device_read_check, Permission,
     resolve_device_registry_access, resolve_device_registry_write, resolve_registry_access,
 )
 from ..request_authority import AuthorityChangedError, check_request_authority
@@ -515,7 +516,7 @@ def _mesa_preview(decision: RegistryMesaDecision) -> dict[str, Any]:
         "decision": decision.decision,
         "rule": decision.rule,
         "reason": decision.reason,
-        "effective_rule": decision.effective_rule,
+        "effective_rule": decision.admin_rule,
         "warnings": decision.warnings,
     }
 
@@ -972,6 +973,7 @@ def _device_mesa_decision(
                     "reason": decision.reason,
                     "warnings": decision.warnings,
                     "effective_rule": decision.effective_rule,
+                    "admin_rule": decision.admin_rule,
                     "profile_fingerprint": decision.profile_fingerprint,
                 })
                 for warning in decision.warnings:
@@ -1010,12 +1012,16 @@ def _device_mesa_decision(
     )
 
 
-def _device_mesa_preview(decision: _DeviceMesaDecision) -> dict[str, Any]:
+def _device_mesa_preview(decision: _DeviceMesaDecision, *, admin: bool = False) -> dict[str, Any]:
+    """The decision for an agent's refusal, or with ``admin`` for an approval diff."""
     return {
         "decision": decision.decision,
         "actions": decision.actions,
         "entities": [
-            {key: value for key, value in item.items() if key != "profile_fingerprint"}
+            {
+                **{key: value for key, value in item.items() if key not in ("profile_fingerprint", "admin_rule")},
+                **({"effective_rule": item["admin_rule"]} if admin else {}),
+            }
             for item in decision.entities
         ],
         "warnings": decision.warnings,
@@ -1151,7 +1157,7 @@ async def _build_diff_set_device(
             ),
         }
     if mesa_decision is not None:
-        preview["mesa"] = _device_mesa_preview(mesa_decision)
+        preview["mesa"] = _device_mesa_preview(mesa_decision, admin=True)
     label = (
         device.name_by_user or device.name or device_id
         if device is not None
@@ -1779,7 +1785,7 @@ async def _build_diff_remove_device(
             if stored_device_profile is not None
             else None
         ),
-        "mesa": _device_mesa_preview(mesa_decision),
+        "mesa": _device_mesa_preview(mesa_decision, admin=True),
         "warning": (
             "The owning integration will decide whether removal is accepted. "
             "Known consumers are not rewritten, and this operation cannot be restored."
@@ -2499,11 +2505,14 @@ def _commit_set_entity(
         return _tool_error("Failed to read updated entity."), "denied", entity_id
     after = _entity_meta_snapshot(updated_entry)
 
+    updated_state = hass.states.get(updated_id)
+    shown_name = updated_state.attributes.get("friendly_name") if updated_state is not None else None
+    parent_readable = device_read_check(access_key, hass)
     public_after = {
         **after,
-        "composed_name": entity_full_name(hass, updated_entry),
+        "composed_name": readable_full_name(hass, updated_entry, shown_name, parent_readable),
         "name_source": entity_name_source(hass, updated_entry),
-        "aliases": er.async_get_entity_aliases(hass, updated_entry),
+        "aliases": readable_entity_aliases(hass, updated_entry, shown_name, parent_readable),
     }
     body: dict = {"entity_id": updated_id, "updated": public_after}
     if updated_id != entity_id:
@@ -2516,7 +2525,7 @@ def _commit_set_entity(
         body["aliases_removed"] = removed
         updated = reg.async_get(updated_id)
         if updated is not None:
-            body["aliases"] = er.async_get_entity_aliases(hass, updated)
+            body["aliases"] = readable_entity_aliases(hass, updated, shown_name, parent_readable)
     if label_add or label_remove:
         body["labels_added"] = labels_added
         body["labels_removed"] = labels_removed

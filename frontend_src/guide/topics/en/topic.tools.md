@@ -33,7 +33,7 @@ Allowed by: [{{label:caps.cap_camera_read.label}}](guide:window.capabilities#cam
 
 Agents turn things on and off, set lights, fans, climate, covers and volume, control media and vacuums, and cancel timers. These are the same commands Home Assistant's own assistant uses. Every target needs Write in the tree.
 
-Locks, alarms, covers and valves also need Physical control. On Confirm, a command that includes one waits for your approval. On Deny, the agent can't control them.
+Locks, alarms, covers and valves also need Physical control. So does any other action that reaches one, such as an integration's own unlock action, and a raw device command such as `zwave_js.set_value`, whichever entity it names. On Confirm, a command that includes one waits for your approval. On Deny, the agent can't control them.
 
 Announcing a message through Assist satellites, or starting a conversation on one, needs Broadcast. MESA checks every command last, after the capability and the tree.
 
@@ -48,8 +48,8 @@ Agents can also run Home Assistant actions on targets they can write, and previe
 - Restarting or stopping Home Assistant needs Restart.
 - Reloading automations, scripts, scenes, helpers or the core configuration needs YAML configuration.
 - An action's returned data needs Service response data. Without it, the action still runs.
-- Notify actions, which send messages, need Notifications.
-- Announcements need Broadcast: `assist_satellite.announce`, `start_conversation` and `ask_question`, `music_assistant.play_announcement`, and `media_player.play_media` with `announce`. Ordinary playback needs only Write.
+- Notify actions, which send messages, need Notifications. So does an integration's own action that sends through a notify entity.
+- Announcements need Broadcast: `assist_satellite.announce`, `start_conversation` and `ask_question`, `music_assistant.play_announcement`, `media_player.play_media` with `announce`, and `tts.speak`. `tts.speak` also needs Write on every speaker it names. Ordinary playback needs only Write.
 - ESPHome device actions need only Write on the device. MESA doesn't check them, and doesn't check reloads or restarts either.
 - Searching or listing the Music Assistant library needs Service response data and Read on a Music Assistant entity, such as a speaker. Nothing plays, so MESA doesn't check these either.
 
@@ -63,7 +63,11 @@ Allowed by: [{{label:caps.cap_restart.label}}](guide:window.capabilities#restart
 
 ## Lists and calendars {#lists}
 
-Agents add, change and remove to-do items, which needs only Write on the list. They create, change and delete calendar events, which also needs Calendar write. MESA checks both. Each calendar change leaves a receipt the agent can check later.
+Agents add, change and remove to-do items and clear completed ones, which needs only Write on the list. Removing an item is permanent: Phoenix keeps no copy, so you [can't restore it](guide:topic.configurationHistory#not-recorded). The result names what went.
+
+If you approve a removal, Phoenix reads the list again first. An item that changed while the request waited stays, and the result says which.
+
+Agents create, change and delete calendar events, which also needs Calendar write. MESA checks both to-do and calendar changes. Each calendar change leaves a receipt the agent can check later.
 
 Allowed by: [{{label:caps.cap_calendar_write.label}}](guide:window.capabilities#calendar-write)
 
@@ -174,13 +178,15 @@ Allowed by: [{{label:caps.cap_search.label}}](guide:window.capabilities#search),
 
 Read files lets an agent read text files in the www, themes and custom_templates folders, up to 1 MiB each. Folder lists come in pages, 500 entries by default and up to 1,000. It can't write these files.
 
-YAML configuration lets an agent read your YAML files, apart from any file with secret in its name, the esphome folder and hidden files. Values under names that suggest a secret show as `<redacted>`, but a password under an ordinary name is visible. No tool writes YAML configuration.
+YAML configuration lets an agent read your YAML files, apart from any file with secret in its name, the esphome folder and hidden files.
+
+Values under names that suggest a secret show as `<redacted>`, and so do comments that mention one, but a password under an ordinary name is visible. A file with a YAML mistake isn't shown; the agent gets the line to fix instead. No tool writes YAML configuration.
 
 Allowed by: [{{label:caps.cap_filesystem.label}}](guide:window.capabilities#filesystem), [{{label:caps.cap_yaml_edit.label}}](guide:window.capabilities#yaml-edit)
 
 ## ESPHome {#esphome}
 
-Agents read and search ESPHome device configuration, with passwords, keys and every request header value masked. With the ESPHome Device Builder add-on, they can also validate, compile, read device logs, analyse memory and check connections. Without the add-on, only reading and searching remain.
+Agents read and search ESPHome device configuration, with passwords, keys, every request header value, credentials in web addresses and comments that mention them masked. With the ESPHome Device Builder add-on, they can also validate, compile, read device logs, analyse memory and check connections. Without the add-on, only reading and searching remain.
 
 Compiling, cleaning and memory analysis need Write on the device. Installing firmware needs ESPHome firmware flashing, ESPHome device YAML and Write on the device, and MESA checks it.
 

@@ -1024,6 +1024,36 @@ class TestPermissions:
         entities = access_key_store.get_access_key_by_id(record.id).permissions.entities
         assert entities["light.new"].state == "RED" and entities["light.old"].state == "GREEN"
 
+    @pytest.mark.parametrize(("old", "leftover", "kept"), [
+        pytest.param("RED", "GREEN", "RED", id="red over a stale grant"),
+        pytest.param("RED", "YELLOW", "RED", id="red over a stale read"),
+        pytest.param("YELLOW", "GREEN", "YELLOW", id="read over a stale grant"),
+        pytest.param("GREEN", "YELLOW", "YELLOW", id="a stale read stays"),
+        pytest.param("YELLOW", "RED", "RED", id="a stale red stays"),
+    ])
+    async def test_on_a_collision_the_stricter_node_survives(self, access_key_store, old, leftover, kept):
+        record, _ = await access_key_store.async_create_access_key("t1", "u")
+        await access_key_store.async_patch_permission_node(record.id, "entities", "lock.front", old)
+        await access_key_store.async_patch_permission_node(record.id, "entities", "lock.front_door", leftover)
+        before = access_key_store.get_access_key_by_id(record.id).settings_version
+        await access_key_store.async_rename_entity("lock.front", "lock.front_door")
+        access_key = access_key_store.get_access_key_by_id(record.id)
+        assert access_key.permissions.entities["lock.front_door"].state == kept
+        assert (access_key.settings_version > before) == (kept == old)
+
+    async def test_a_leftover_grant_does_not_fall_to_an_entity_with_no_node(self, access_key_store):
+        """The entity inherited before the rename, and a node it never held cannot raise that."""
+        record, _ = await access_key_store.async_create_access_key("t1", "u")
+        await access_key_store.async_patch_permission_node(record.id, "entities", "lock.front_door", "GREEN")
+        assert await access_key_store.async_rename_entity("lock.front", "lock.front_door") is True
+        assert "lock.front_door" not in access_key_store.get_access_key_by_id(record.id).permissions.entities
+
+    async def test_a_leftover_red_stays_for_an_entity_with_no_node(self, access_key_store):
+        record, _ = await access_key_store.async_create_access_key("t1", "u")
+        await access_key_store.async_patch_permission_node(record.id, "entities", "lock.front_door", "RED")
+        assert await access_key_store.async_rename_entity("lock.front", "lock.front_door") is False
+        assert access_key_store.get_access_key_by_id(record.id).permissions.entities["lock.front_door"].state == "RED"
+
     async def test_patch_permission_node_invalid_type_returns_none(self, access_key_store):
         record, _ = await access_key_store.async_create_access_key("t1", "u")
         result = await access_key_store.async_patch_permission_node(

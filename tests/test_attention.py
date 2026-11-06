@@ -13,6 +13,7 @@ from custom_components.phoenix_mcp.agent_recovery import AgentRecovery
 from custom_components.phoenix_mcp.audit import AuditLog
 from custom_components.phoenix_mcp.const import DOMAIN
 from custom_components.phoenix_mcp.data import PhoenixData
+from custom_components.phoenix_mcp.mesa import async_setup_mesa
 from custom_components.phoenix_mcp.rate_limiter import RateLimiter
 from custom_components.phoenix_mcp.access_key_store import AccessKeyStore
 from custom_components.phoenix_mcp.tools.calendar import CalendarWriteJournal
@@ -63,6 +64,20 @@ async def test_failed_review_preserves_barrier_and_hides_exception(attention_env
     assert response.status == 503
     assert "private credential" not in await response.text()
     assert data.agent_recovery.blocks(access_key.id)
+
+
+async def test_a_renamed_profile_that_failed_to_save_needs_attention(attention_env, hass):
+    client, data, _access_key = attention_env
+    data.mesa = await async_setup_mesa(hass, "advisory")
+    assert await (await client.get("/api/phoenix-mcp/admin/attention")).json() == {"items": []}
+    data.mesa.storage.rename_save_failed = True
+    item = {"id": "mesa_rename", "kind": "mesa_rename"}
+    assert await (await client.get("/api/phoenix-mcp/admin/attention")).json() == {"items": [item]}
+    assert (await client.post("/api/phoenix-mcp/admin/attention/mesa_rename/mesa_rename",
+                              json={"checked_outcome": True})).status == 404
+    async with data.mesa.lock:
+        await data.mesa.async_save()
+    assert await (await client.get("/api/phoenix-mcp/admin/attention")).json() == {"items": []}
 
 
 async def test_calendar_and_mesa_items_do_not_expose_payloads(attention_env, hass):

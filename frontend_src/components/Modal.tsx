@@ -55,6 +55,11 @@ function tabbable(root: HTMLElement): HTMLElement[] {
   });
 }
 
+/** Put focus in a dialog: on its first control, or on the dialog itself when it has none. */
+export function focusDialog(dialog: HTMLElement): void {
+  (tabbable(dialog)[0] ?? dialog).focus();
+}
+
 function activeElement(): HTMLElement | null {
   let active = document.activeElement;
   while (active?.shadowRoot?.activeElement) active = active.shadowRoot.activeElement;
@@ -107,10 +112,9 @@ export function Modal({ titleId, onClose, onNavigatePrevious, onNavigateNext, re
   recordNavigationRef.current = recordNavigation;
 
   useEffect(() => {
-    const first = modalRef.current ? tabbable(modalRef.current)[0] : undefined;
-    // Fall back to the dialog itself (tabIndex={-1}) so focus never stays
+    // Falls back to the dialog itself (tabIndex={-1}) so focus never stays
     // behind the backdrop when a modal has no focusable child (e.g. loading).
-    if (!modalRef.current?.contains(activeElement())) (first ?? modalRef.current)?.focus();
+    if (modalRef.current && !modalRef.current.contains(activeElement())) focusDialog(modalRef.current);
     return () => { if (previousFocus?.isConnected) previousFocus.focus(); };
   }, [previousFocus]);
 

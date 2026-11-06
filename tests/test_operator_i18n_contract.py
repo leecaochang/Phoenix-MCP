@@ -125,7 +125,7 @@ def test_localized_reasons_have_catalog_keys() -> None:
     catalogs = [_panel_catalog(path)["adminError"] for path in CATALOG_FILES]
     found = 0
     package = ROOT / "custom_components/phoenix_mcp"
-    for path in sorted([*package.glob("*.py"), *package.glob("admin/*.py"), *package.glob("routing/*.py")]):
+    for path in sorted(path for path in package.rglob("*.py") if "mesa_core" not in path.parts):
         for call in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
             if not (isinstance(call, ast.Call) and isinstance(call.func, ast.Name)
                     and call.func.id == "LocalizedReason"):

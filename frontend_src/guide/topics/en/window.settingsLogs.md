@@ -23,7 +23,7 @@ Records requests that were carried out. On by default.
 
 Records requests that were refused, malformed, not supported, or named something that doesn't exist. MESA blocks count here too. On by default.
 
-Requests waiting for approval, and your approval decisions, are always recorded.
+Requests waiting for approval, your approval decisions, and requests cut short because an app left or lost its permission are always recorded.
 
 ### {{label:settings.logRateLimitedLabel}} {#log-rate-limited}
 

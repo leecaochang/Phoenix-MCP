@@ -3,7 +3,8 @@
 `cap_filesystem` covers only www/, themes/ and custom_templates/; `_resolve_fs_path` realpaths and
 requires containment, so symlinks and traversal cannot escape. `cap_yaml_edit` reads
 configuration.yaml and YAML files inside the configuration directory, never secrets.yaml, hidden
-directories or ESPHome device files. Nothing here writes: YAML configuration belongs to the
+directories or ESPHome device files. A YAML read walks the composed file to mask credentials, and
+a file that does not parse is refused. Nothing here writes: YAML configuration belongs to the
 operator.
 """
 
@@ -15,7 +16,6 @@ import logging
 import hashlib
 import hmac
 import os
-import re
 import secrets
 
 from homeassistant.core import HomeAssistant
@@ -25,7 +25,7 @@ from ..tool_contracts import handler_arguments
 from ..helpers import content_hash
 from ..tool_input import str_arg
 from ..capability import effective_cap
-from ..redaction import redact_secrets_in_text
+from ..esphome_yaml import mask_yaml_text, masked_yaml_data
 from ..policy_engine import is_sensitive_key
 from ..tool_common import _read_text_capped, _tool_error, _tool_success, _usable_path_arg, fitted_offset_page, offset_page
 from ..access_key_store import AccessKeyRecord
@@ -125,7 +125,6 @@ async def _tool_read_file(
 # ---------------------------------------------------------------------------
 
 
-_BLOCK_VALUE_KEY_RE = re.compile(r"^\s*(?:-\s+)?([\w.\-]+)\s*:\s*(?:#.*)?$")
 _YAML_READ_REFUSED = (
     "Only .yaml and .yml files inside the Home Assistant configuration directory can "
     "be read; files named like secrets, the esphome directory, and hidden directories are excluded. "
@@ -183,29 +182,6 @@ def _file_change_hash(text: str) -> str:
     return hmac.new(_FILE_HASH_KEY, text.encode("utf-8"), hashlib.sha256).hexdigest()
 
 
-def _redacted_yaml(text: str) -> str:
-    """YAML text with credentials removed, including a value on the lines under its key.
-
-    Files here need not follow HA's !secret convention: other software keeps its
-    configuration beside HA's, with a key's list or mapping on the following lines.
-    """
-    lines: list[str] = []
-    under_indent: int | None = None
-    for line in text.split("\n"):
-        indent = len(line) - len(line.lstrip())
-        if under_indent is not None:
-            if not line.strip() or indent > under_indent or (indent == under_indent and line.lstrip().startswith("- ")):
-                continue
-            under_indent = None
-        match = _BLOCK_VALUE_KEY_RE.match(line)
-        if match is not None and is_sensitive_key(match.group(1)):
-            lines.append(f"{line.rstrip()} <redacted>")
-            under_indent = indent
-        else:
-            lines.append(line)
-    return redact_secrets_in_text("\n".join(lines)) or ""
-
-
 def _fragment_text(fragment: Any) -> str:
     """Dump one YAML fragment for display, without the marker PyYAML adds after a bare scalar."""
     text = yaml_includes.dump_tagged(fragment)
@@ -215,11 +191,11 @@ def _fragment_text(fragment: Any) -> str:
 
 
 def _yaml_fragment(text: str, key: str) -> tuple[bool, Any]:
-    """Walk a dotted key path through mappings. Returns (found, value).
+    """Walk a dotted key path through the masked document. Returns (found, value).
 
     Raises yaml_includes.YamlParseError when the document does not parse.
     """
-    node = yaml_includes.load_tagged_lenient(text)
+    node = masked_yaml_data(text)
     for part in key.split("."):
         if not isinstance(node, dict) or part not in node:
             return False, None
@@ -263,19 +239,24 @@ async def _tool_get_yaml_config(
         return _tool_error(f"Failed to read {rel}."), "invalid_request", "get_yaml_config"
     # The hash covers the WHOLE file even when a fragment is returned, so it tells a
     # caller whether the file changed between two reads.
-    body = {"path": rel, "exists": True, "content": _redacted_yaml(content), "content_hash": _file_change_hash(content)}
+    body = {"path": rel, "exists": True, "content": "", "content_hash": _file_change_hash(content)}
+    try:
+        if key is None:
+            body["content"] = await hass.async_add_executor_job(mask_yaml_text, content)
+        else:
+            found, fragment = await hass.async_add_executor_job(_yaml_fragment, content, key.strip())
+    except yaml_includes.YamlParseError as err:
+        return (
+            _tool_error(f"{rel} is not valid YAML, so its credentials cannot be masked: {err}"),
+            "invalid_request", "get_yaml_config",
+        )
     if key is not None:
-        try:
-            found, fragment = await hass.async_add_executor_job(
-                _yaml_fragment, content, key.strip())
-        except yaml_includes.YamlParseError as err:
-            return _tool_error(f"{rel} is not valid YAML: {err}"), "invalid_request", "get_yaml_config"
         body["key_found"] = found
         if any(is_sensitive_key(part) for part in key.strip().split(".")):
             # The fragment is the bare value, with no key left for the text to reveal it by.
             body["content"] = "<redacted>" if found else ""
         else:
-            body["content"] = _redacted_yaml(_fragment_text(fragment)) if found else ""
+            body["content"] = _fragment_text(fragment) if found else ""
         if (
             isinstance(fragment, yaml_includes.TaggedValue)
             and fragment.tag in yaml_includes.INCLUDE_TAGS

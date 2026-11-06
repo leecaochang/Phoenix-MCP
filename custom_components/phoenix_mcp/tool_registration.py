@@ -120,7 +120,7 @@ from .tools.system import (
     _tool_get_phoenix_diagnostics, _tool_mesa, _tool_render_template, _tool_restart_ha,
     _tool_watch_entity,
 )
-from .tools.todo import _tool_get_todo_items, _tool_set_todo_item
+from .tools.todo import _execute_set_todo_item, _tool_get_todo_items, _tool_set_todo_item
 
 
 # Register executors for tools that support the admin-approval gate.
@@ -130,6 +130,7 @@ from .tools.todo import _tool_get_todo_items, _tool_set_todo_item
 _register_executor("restart_ha", _execute_restart_ha)
 _register_executor("send_notification", _execute_send_notification)
 _register_executor("call_service", _execute_call_service)
+_register_executor("set_todo_item", _execute_set_todo_item)
 _register_executor("create_automation", _execute_create_automation)
 _register_executor("edit_automation", _execute_edit_automation)
 _register_executor("delete_automation", _execute_delete_automation)

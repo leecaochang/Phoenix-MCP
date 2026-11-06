@@ -285,6 +285,45 @@ describe("what is left in the browser", () => {
     setAgentCliOwner("test-admin");
   });
 
+  it("tells other tabs with a new value each time, holding no conversation", () => {
+    const events: (string | null)[] = [];
+    setSessionTurns([{ text: "alarm code 1234" }]);
+    purgeAgentCliStorage();
+    events.push(localStorage.getItem("phx-purged-agentcli"));
+    setAgentCliOwner("next-user");
+    vi.spyOn(Date, "now").mockReturnValue(Date.now() + 1);
+    purgeAgentCliStorage();
+    events.push(localStorage.getItem("phx-purged-agentcli"));
+    setAgentCliOwner("test-admin");
+    expect(events[0]).toBeTruthy();
+    expect(events[1]).not.toBe(events[0]);
+    expect(events.join()).not.toContain("1234");
+  });
+
+  it("empties a window whose turns were never stored", () => {
+    const listener = vi.fn();
+    const stop = onSavedConversationChange(listener);
+    window.dispatchEvent(new StorageEvent("storage", { key: "phx-purged-agentcli", newValue: "1" }));
+    expect(listener).toHaveBeenCalledOnce();
+    stop();
+    setAgentCliOwner(null);
+    setAgentCliOwner("test-admin");
+  });
+
+  it("stops a running turn's heartbeat in a tab told of a purge", () => {
+    vi.useFakeTimers();
+    const TURN_KEY = "phx-agentcli-turn:test-admin";
+    const end = announceRunningTurn();
+    localStorage.removeItem(TURN_KEY);
+    window.dispatchEvent(new StorageEvent("storage", { key: "phx-purged-agentcli", newValue: "1" }));
+    vi.advanceTimersByTime(30_000);
+    expect(localStorage.getItem(TURN_KEY)).toBeNull();
+    end();
+    vi.useRealTimers();
+    setAgentCliOwner(null);
+    setAgentCliOwner("test-admin");
+  });
+
   it("closes the other bundles in the page", () => {
     setSessionTurns([{ text: "before" }]);
     window.dispatchEvent(new Event("phx-agentcli-purged"));
@@ -442,5 +481,116 @@ describe("a turn running in another tab", () => {
     announceRunningTurn();
     purgeAgentCliStorage();
     expect(localStorage.getItem(TURN_KEY)).toBeNull();
+  });
+});
+
+describe("the cost of saving a conversation past the size cap", () => {
+  const TURN_CHARS = 30_000;
+  /** Turns of known size that count how often a save reads each of them. */
+  const countedTurns = (count: number) => {
+    const reads = new Array<number>(count).fill(0);
+    const turns = reads.map((_, index) => ({
+      id: index,
+      get messages() {
+        reads[index] += 1;
+        return [{ role: "tool", content: "x".repeat(TURN_CHARS) }];
+      },
+    }));
+    return { turns, reads };
+  };
+  const storedIds = () => (JSON.parse(localStorage.getItem(CONV_KEY)!) as { turns: { id: number }[] }).turns.map((turn) => turn.id);
+
+  it("reads each kept turn once, and past the cut no turn at all", () => {
+    const { turns, reads } = countedTurns(300);
+    setSessionTurns(turns);
+    const ids = storedIds();
+    expect(ids.length).toBeGreaterThan(0);
+    expect(ids.length).toBeLessThan(300);
+    expect(ids[ids.length - 1]).toBe(299);
+    expect(Math.max(...reads)).toBe(1);
+    expect(reads.reduce((total, count) => total + count, 0)).toBeLessThanOrEqual(ids.length + 1);
+  });
+
+  it("costs a draft or usage save no more than a turn save", () => {
+    const { turns, reads } = countedTurns(300);
+    setSessionTurns(turns);
+    reads.fill(0);
+    setSessionUsage({ input: 1, output: 2, context: 3, noData: false });
+    expect(Math.max(...reads)).toBe(1);
+    expect(reads.reduce((total, count) => total + count, 0)).toBeLessThanOrEqual(storedIds().length + 1);
+  });
+
+  it("keeps the longest run of newest turns that fits, as dropping the oldest one by one did", () => {
+    const sized = (id: number, chars: number) => ({ id, messages: [{ content: "x".repeat(chars) }] });
+    setSessionTurns([sized(0, 100), sized(1, 1_500_000), sized(2, 100), sized(3, 1_000_000), sized(4, 100)]);
+    expect(storedIds()).toEqual([2, 3, 4]);
+    const raw = localStorage.getItem(CONV_KEY)!;
+    expect(raw.length).toBeLessThanOrEqual(2_000_000);
+  });
+
+  it("stops at exactly the cap", () => {
+    // The revision is random, and its length would move the cut.
+    vi.spyOn(Math, "random").mockReturnValue(0.5);
+    const fit = (chars: number) => { setSessionTurns([{ id: 1, pad: "x".repeat(chars) }]); return storedIds().length; };
+    fit(1);
+    const margin = 2_000_000 - localStorage.getItem(CONV_KEY)!.length + 1;
+    expect(fit(margin)).toBe(1);
+    expect(localStorage.getItem(CONV_KEY)!.length).toBe(2_000_000);
+    expect(fit(margin + 1)).toBe(0);
+  });
+
+  it("keeps the draft and usage when not even the newest turn fits", () => {
+    setSessionTurns([{ id: 1, pad: "x".repeat(2_100_000) }]);
+    setSessionDraft("typing");
+    flushAll();
+    __reloadFromStorage();
+    expect(getSessionTurns()).toEqual([]);
+    expect(getSessionDraft()).toBe("typing");
+  });
+});
+
+describe("window state read from storage", () => {
+  const KEY = "phx-agentcli:test-admin";
+  const read = (value: unknown) => {
+    localStorage.setItem(KEY, JSON.stringify(value));
+    return getDurable();
+  };
+
+  it("keeps every well-formed field", () => {
+    const saved = {
+      open: true, minimized: true, maximized: false, pos: { x: 1, y: 2 }, pillPos: { x: 3, y: 4 }, mobilePillPos: { x: 5, y: 6 },
+      size: { w: 500, h: 600 }, accessKeyId: "k", instanceId: "i", model: "m",
+      options: { thinking: false, effort: "low", temperature: "0.5", verbose: true },
+      prefill: "hello", freshConversation: true, showFooter: false, showTimestamps: true, textSizePt: 12.25,
+    };
+    expect(read(saved)).toEqual(saved);
+    expect(read({ maximized: null }).maximized).toBeNull();
+  });
+
+  it("falls back field by field on a wrong type", () => {
+    const fallback = getDurable();
+    for (const bad of [5, null, [], { a: 1 }]) {
+      const shaped = {
+        open: bad, minimized: bad, maximized: bad ?? fallback.maximized, pos: bad, pillPos: bad, mobilePillPos: bad, size: bad,
+        accessKeyId: bad, instanceId: bad, model: bad, options: bad, prefill: bad, freshConversation: bad, showFooter: bad, showTimestamps: bad,
+        textSizePt: typeof bad === "number" ? fallback.textSizePt : bad,
+      };
+      expect(read(shaped)).toEqual(fallback);
+    }
+    const text = { open: "x", minimized: "x", maximized: "x", pos: "x", pillPos: "x", mobilePillPos: "x", size: "x", options: "x", freshConversation: "x", showFooter: "x", showTimestamps: "x", textSizePt: "x" };
+    expect(read(text)).toEqual(fallback);
+    expect(read({ accessKeyId: true, instanceId: true, model: true, prefill: true })).toEqual(fallback);
+  });
+
+  it("checks the parts of a point, a size and the options", () => {
+    const durable = read({
+      pos: { x: "a", y: 3 }, pillPos: { x: null, y: 4 }, mobilePillPos: { x: 5 }, size: { w: "a", h: null },
+      options: { thinking: "yes", effort: 5, temperature: 7, verbose: 1 },
+    });
+    expect(durable.pos).toEqual({ x: -1, y: 3 });
+    expect(durable.pillPos).toEqual({ x: -1, y: 4 });
+    expect(durable.mobilePillPos).toEqual({ x: 5, y: -1 });
+    expect(durable.size).toEqual({ w: 440, h: 560 });
+    expect(durable.options).toEqual({ thinking: true, effort: "high", temperature: "", verbose: false });
   });
 });

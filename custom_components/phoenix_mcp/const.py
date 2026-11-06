@@ -468,13 +468,14 @@ SENSITIVE_KEY_SUBSTRINGS = frozenset({
     "wifi_key", "wifikey", "wpa_key", "wpakey", "encryption_key", "encryptionkey",
     "network_key", "networkkey", "pre_shared_key", "preshared_key", "presharedkey",
     "shared_key", "signing_key", "ssh_key", "license_key", "licensekey",
+    "passwd", "pwd", "bearer",
 })
-# Too short to match as substrings ("ping", "shipping", "upskill"), so these mark
-# a secret only as the final word of a key name, as in wpa_psk or door-pin.
-SENSITIVE_KEY_FINAL_WORDS = frozenset({"pin", "psk"})
+# Too short to match as substrings ("ping", "shipping", "upskill", "bypass"), so these
+# mark a secret only as the final word of a key name, as in wpa_psk, door-pin or mqtt_pass.
+SENSITIVE_KEY_FINAL_WORDS = frozenset({"pin", "psk", "pass"})
 # Credential suffixes also catch integration-prefixed secrets without treating
 # access_key_name and access_key_id metadata as credential values.
-SENSITIVE_KEY_SUFFIXES = ("access_key", "accesskey", "access-key", "access key")
+SENSITIVE_KEY_SUFFIXES = ("access_key", "accesskey")
 
 # The placeholder every redacting reader substitutes for a value the key may not see. Named
 # so a write path can refuse to persist it (`tool_common.redaction_sentinel_path`), as a
@@ -555,13 +556,22 @@ MUSIC_ASSISTANT_LIBRARY_SERVICES = frozenset({
     "music_assistant/get_library",
 })
 # Services that interrupt a speaker with an announcement. Write on the speaker is
-# not enough; they also need cap_broadcast, as HassBroadcast does.
+# not enough; they also need cap_broadcast, as HassBroadcast does. tts.speak and the
+# legacy tts.<engine>_say services play through media_player.play_media with announce.
 ANNOUNCEMENT_SERVICES = frozenset({
     "assist_satellite/announce",
     "assist_satellite/ask_question",
     "assist_satellite/start_conversation",
     "music_assistant/play_announcement",
+    "tts/speak",
 })
+# tts.speak targets a tts entity and names its speakers in a data field, the one secondary
+# target field Phoenix models: each named player joins the resolved target list, so WRITE,
+# group, MESA and approval binding all judge it, and dispatch hands it back to this field.
+TTS_SPEAK_SERVICE = "tts/speak"
+TTS_SPEAK_ENGINE_DOMAIN = "tts"
+TTS_SPEAK_PLAYER_DOMAIN = "media_player"
+TTS_SPEAK_PLAYER_FIELD = "media_player_entity_id"
 # Home Assistant's generic services act on an entity of any domain. Listed so they
 # stay available when service descriptions cannot be read; every other service is
 # bound to its targets by what its own description declares.
@@ -576,6 +586,9 @@ CROSS_DOMAIN_SERVICES = frozenset({
 CALL_SERVICE_NO_TARGET_CAPS = ("cap_restart", "cap_yaml_edit")
 
 SCRIPT_ENTITY_SERVICES = frozenset({"turn_on", "turn_off", "toggle"})
+# Governed by the entity itself, never looked through as a group, though a scene publishes
+# its members in the attribute a group uses.
+PRIMARY_ENTITY_DOMAINS = frozenset({"automation", "scene", "script"})
 RUNTIME_SERVICE_GUIDANCE = MappingProxyType({
     "automation/trigger": "Run actions now; skip_condition defaults to true. Does not enable future triggers.",
     "automation/turn_on": "Enable future triggers without running actions now.",
@@ -585,6 +598,7 @@ RUNTIME_SERVICE_GUIDANCE = MappingProxyType({
     "script/turn_off": "Stop all running executions. The script remains available to run again.",
     "script/toggle": "Start an idle script or stop its running executions.",
     "scene/turn_on": "Activate the scene; later member effects run under Home Assistant.",
+    "tts/speak": "Speak on the media players named in media_player_entity_id; every one needs write access, and the call needs the broadcast capability.",
 })
 
 # Core HA services that take no target: they re-read YAML configuration domain-wide, and
@@ -871,6 +885,35 @@ PERSONA_NAMES = frozenset({
 # the same way call_service gates the underlying domain services, so a valve is
 # gated whether it is actuated via valve/open_valve or via HassTurnOn.
 PHYSICAL_GATE_DOMAINS = frozenset({"lock", "alarm_control_panel", "cover", "valve"})
+# A service outside those domains is gated when a resolved target lies in one, so
+# nuki.lock_n_go needs the capability on a lock. These raw command services filter on the
+# integration, not the entity: any entity of a device reaches its lock, so they are physical
+# whatever the target. Read from every core services.yaml; re-verify on HA upgrades.
+PHYSICAL_COMMAND_SERVICES = frozenset({
+    "isy994/send_node_command",
+    "isy994/send_raw_node_command",
+    "isy994/set_zwave_parameter",
+    "zwave_js/bulk_set_partial_config_parameters",
+    "zwave_js/invoke_cc_api",
+    "zwave_js/multicast_set_value",
+    "zwave_js/set_config_parameter",
+    "zwave_js/set_value",
+})
+# Services that take an entity and cannot actuate it, or do nothing on physical and notify
+# domains, so such a target adds no capability. A deliberate list: an unknown service on a
+# lock stays gated, and readers that return door codes (schlage.get_codes,
+# zwave_js.get_lock_usercode) stay out of it. homeassistant.turn_on and turn_off call the
+# target domain's own turn_on or turn_off, which none of these domains has; toggle is not
+# here because cover and valve have one.
+NON_ACTUATING_SERVICES = frozenset({
+    "homeassistant/turn_off",
+    "homeassistant/turn_on",
+    "homeassistant/update_entity",
+    "logbook/log",
+    "zwave_js/ping",
+    "zwave_js/refresh_notifications",
+    "zwave_js/refresh_value",
+})
 
 # The keys HA's TargetSelection reads out of a service call's data. Each must be stripped
 # from caller data, as HA unions a leftover selector with Phoenix's explicit entity list,

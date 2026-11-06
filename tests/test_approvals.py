@@ -586,7 +586,7 @@ class TestExpiredAccessKeyCancelsApprovals:
         access_key.expires_at = utcnow() - timedelta(seconds=1)
         store.get_access_key_by_id = MagicMock(return_value=access_key)
 
-        with patch("custom_components.phoenix_mcp.approvals.dismiss_approval_notification"):
+        with patch("custom_components.phoenix_mcp.access_key_auth.dismiss_approval_notification"):
             await async_archive_expired_access_key(hass, data, access_key)
 
         assert store.get_settings().assist_bound_access_key_id is None

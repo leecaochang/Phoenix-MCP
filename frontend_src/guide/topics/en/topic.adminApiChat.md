@@ -104,7 +104,7 @@ The response is `201` with `{"instance": {...}}`, holding the account fields abo
 | 400 | `invalid_request` | `adminError.providerApiKeyRequired` | `api_key` is missing. |
 | 400 | `invalid_request` | `adminError.providerEndpointInvalid` | `endpoint_id` isn't one of the kind's values. |
 | 400 | `invalid_request` | `adminError.ollamaUrlRequired`, `adminError.providerBaseUrlRequired` | A required `base_url` is missing. |
-| 400 | `invalid_request` | `adminError.providerUrlInvalid`, `adminError.providerUrlScheme`, `adminError.providerRemoteUrlScheme`, `adminError.providerUrlHostRequired`, `adminError.providerUrlCredentialsForbidden`, `adminError.providerUrlFragmentForbidden`, `adminError.providerUrlAddressForbidden`, `adminError.providerUrlResolutionForbidden` | `base_url` isn't an acceptable URL. |
+| 400 | `invalid_request` | `adminError.providerUrlInvalid`, `adminError.providerUrlScheme`, `adminError.providerRemoteUrlScheme`, `adminError.providerUrlHostRequired`, `adminError.providerUrlCredentialsForbidden`, `adminError.providerUrlFragmentForbidden`, `adminError.providerUrlAddressForbidden`, `adminError.providerUrlResolutionForbidden`, `adminError.providerRemoteUrlAddressForbidden`, `adminError.providerRemoteUrlResolutionForbidden`, `adminError.providerRemoteUrlResolutionFailed` | `base_url` isn't an acceptable URL. |
 | 400 | `invalid_request` | `adminError.providerConnectionFailed`, or a key for the provider's own failure | The credential check failed. `adminError.providerConnectionFailed` comes with a `detail`. |
 | 400 | `invalid_request` | `adminError.providerModelRequired` | A decision kind has no `model`. |
 | 400 | `invalid_request` | `adminError.providerModelNotListed` | The model isn't in the provider's list. |

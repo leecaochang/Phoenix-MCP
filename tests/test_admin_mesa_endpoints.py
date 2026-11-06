@@ -84,6 +84,37 @@ async def test_admin_json_body_reader_drains_partial_stream() -> None:
     assert await _read_body(request, "rid") == payload
 
 
+@pytest.mark.parametrize("raw", [
+    b'{"notes": "x\\ud800"}',
+    b'{"x\\ud800": 1}',
+    b'{"list": [{"deep": "\\udc00"}]}',
+    b'\xef\xbb\xbf{"notes": "bom"}',
+    '{"notes": "hello"}'.encode("utf-16"),
+    '{"notes": "hello"}'.encode("utf-16-le"),
+    b'{"notes": "\xff"}',
+    b'{"number": NaN}',
+    b'{"number": 1e999}',
+])
+async def test_a_body_outside_strict_json_is_the_ordinary_bad_json_refusal(raw):
+    request = MagicMock()
+    request.content_length = len(raw)
+    request.content = _ChunkedContent([raw])
+
+    response = await _read_body(request, "rid")
+
+    assert response.status == 400
+    assert json.loads(response.text)["message_key"] == "adminError.badJson"
+
+
+async def test_a_paired_surrogate_escape_is_one_character():
+    raw = b'{"notes": "\\ud83d\\ude00 caf\xc3\xa9"}'
+    request = MagicMock()
+    request.content_length = len(raw)
+    request.content = _ChunkedContent([raw])
+
+    assert await _read_body(request, "rid") == {"notes": "\U0001f600 caf\u00e9"}
+
+
 @pytest.mark.asyncio
 async def test_put_then_get_profile(hass: HomeAssistant):
     await _setup(hass)
@@ -884,10 +915,8 @@ async def test_import_succeeds_even_if_post_import_rescan_fails(hass: HomeAssist
 
     data = await _setup(hass)
 
-    def _boom(hass, runtime):
-        raise RuntimeError("simulated scan failure")
-
-    monkeypatch.setattr("custom_components.phoenix_mcp.mesa_suggestions.refresh_suggestions", _boom)
+    scan = MagicMock(side_effect=RuntimeError("simulated scan failure"))
+    monkeypatch.setattr("custom_components.phoenix_mcp.admin.mesa.refresh_suggestions", scan)
 
     archive = {
         "mesa_export": {
@@ -903,6 +932,7 @@ async def test_import_succeeds_even_if_post_import_rescan_fails(hass: HomeAssist
     assert resp.status == 200
     out = _body(resp)
     assert out["imported"] == 1
+    scan.assert_called_once()
 
     runtime = data.mesa
     assert runtime.store.get("light.good") is not None

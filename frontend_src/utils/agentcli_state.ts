@@ -119,6 +119,25 @@ export function defaultDurable(): AgentCliDurable {
   };
 }
 
+/** A stored value of the expected type, else the fallback: stored data is not trusted to have the shape it was saved in. */
+function ofType<T extends string | boolean>(type: "string" | "boolean", value: unknown, fallback: T): T {
+  return typeof value === type ? value as T : fallback;
+}
+
+function finiteOr(value: unknown, fallback: number): number {
+  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
+}
+
+function durablePoint(value: unknown, fallback: { x: number; y: number }): { x: number; y: number } {
+  const point = (value && typeof value === "object" ? value : {}) as { x?: unknown; y?: unknown };
+  return { x: finiteOr(point.x, fallback.x), y: finiteOr(point.y, fallback.y) };
+}
+
+function durableSize(value: unknown, fallback: { w: number; h: number }): { w: number; h: number } {
+  const size = (value && typeof value === "object" ? value : {}) as { w?: unknown; h?: unknown };
+  return { w: finiteOr(size.w, fallback.w), h: finiteOr(size.h, fallback.h) };
+}
+
 export function getDurable(): AgentCliDurable {
   try {
     const key = storageKey(LS_KEY);
@@ -128,21 +147,30 @@ export function getDurable(): AgentCliDurable {
     // A legacy `showUsage` key (it hid only the token count) is honored as
     // showFooter when the new key is absent, and dropped from the next
     // persisted object.
-    const { showUsage: legacyShowUsage, tokenId: legacyAccessKeyId, ...persisted } = p;
+    const { showUsage: legacyShowUsage, tokenId: legacyAccessKeyId } = p;
     const d = defaultDurable();
-    const showFooter = typeof p.showFooter === "boolean"
-      ? p.showFooter
-      : typeof legacyShowUsage === "boolean" ? legacyShowUsage : d.showFooter;
+    const options = (p.options && typeof p.options === "object" ? p.options : {}) as Partial<AgentCliOptions>;
     return {
-      ...d, ...persisted,
-      accessKeyId: typeof p.accessKeyId === "string" ? p.accessKeyId
-        : typeof legacyAccessKeyId === "string" ? legacyAccessKeyId : d.accessKeyId,
-      pos: { ...d.pos, ...(p.pos || {}) },
-      pillPos: { ...d.pillPos, ...(p.pillPos || {}) },
-      mobilePillPos: { ...d.mobilePillPos, ...(p.mobilePillPos || {}) },
-      size: { ...d.size, ...(p.size || {}) },
-      options: { ...d.options, ...(p.options || {}) },
-      showFooter,
+      open: ofType("boolean", p.open, d.open),
+      minimized: ofType("boolean", p.minimized, d.minimized),
+      maximized: typeof p.maximized === "boolean" ? p.maximized : d.maximized,
+      pos: durablePoint(p.pos, d.pos),
+      pillPos: durablePoint(p.pillPos, d.pillPos),
+      mobilePillPos: durablePoint(p.mobilePillPos, d.mobilePillPos),
+      size: durableSize(p.size, d.size),
+      accessKeyId: ofType("string", p.accessKeyId, ofType("string", legacyAccessKeyId, d.accessKeyId)),
+      instanceId: ofType("string", p.instanceId, d.instanceId),
+      model: ofType("string", p.model, d.model),
+      options: {
+        thinking: ofType("boolean", options.thinking, d.options.thinking),
+        effort: ofType("string", options.effort, d.options.effort),
+        temperature: ofType("string", options.temperature, d.options.temperature),
+        verbose: ofType("boolean", options.verbose, d.options.verbose),
+      },
+      prefill: ofType("string", p.prefill, d.prefill),
+      freshConversation: ofType("boolean", p.freshConversation, d.freshConversation),
+      showFooter: ofType("boolean", p.showFooter, ofType("boolean", legacyShowUsage, d.showFooter)),
+      showTimestamps: ofType("boolean", p.showTimestamps, d.showTimestamps),
       textSizePt: normalizeAgentCliTextSize(p.textSizePt),
     };
   } catch {
@@ -205,6 +233,10 @@ export function patchDurable(patch: Partial<AgentCliDurable>, owner = ownerId): 
 
 const CONV_KEY = "phx-agentcli-conversation";
 const PURGE_EVENT = "phx-agentcli-purged";
+// PURGE_EVENT stays inside its page. This key reaches the other tabs: a storage
+// event fires there only when the value changes, so each purge writes a new one.
+// It holds nothing but that value.
+const PURGE_MARKER_KEY = "phx-purged-agentcli";
 
 // localStorage is ~5MB per origin and shared with the window state and every
 // other Phoenix MCP key. Cap the conversation well under that: on overflow the
@@ -274,23 +306,32 @@ let loaded = false;
 let seenRevision = 0;
 const conversationListeners = new Set<() => void>();
 
-/** Called when another tab replaced the saved turns of this conversation. */
+/** Called when another tab replaced the saved turns of this conversation, or purged them. */
 export function onSavedConversationChange(listener: () => void): () => void {
   conversationListeners.add(listener);
   return () => { conversationListeners.delete(listener); };
+}
+
+function notifyConversationChange(): void {
+  for (const listener of [...conversationListeners]) listener();
 }
 
 // The module cache is per tab and a save writes the whole conversation, so a
 // tab must drop its cache when another one saves, or its next save would bring
 // the older conversation back.
 function adoptOtherTab(event: StorageEvent): void {
+  if (event.key === PURGE_MARKER_KEY && event.newValue !== null) {
+    closeStorage();
+    notifyConversationChange();
+    return;
+  }
   const key = storageKey(CONV_KEY);
   if (!key || (event.key !== null && event.key !== key)) return;
   const seen = seenRevision;
   conversation = defaultConversation();
   loaded = false;
   if (!conversationListeners.size || load().turnsRevision === seen) return;
-  for (const listener of [...conversationListeners]) listener();
+  notifyConversationChange();
 }
 
 // A conversation is saved whole, so of two turns running at once only the one
@@ -317,6 +358,7 @@ export function announceRunningTurn(owner = ownerId): () => void {
   const key = ownsSession(owner) ? storageKey(TURN_KEY) : null;
   if (!key) return () => {};
   const beat = () => {
+    if (!ownsSession(owner)) return;
     try { localStorage.setItem(key, JSON.stringify({ tab: tabId, at: Date.now() })); } catch { /* storage unavailable */ }
   };
   beat();
@@ -380,9 +422,10 @@ function closeStorage(): void {
 
 /**
  * Remove every Agent Chat conversation and window state in this browser, for
- * every user, along with unsent rejection reasons, and keep this page from
- * writing them back. For a wipe and for a session that may not read them. The
- * page's other bundles have their own module state, so they are told too.
+ * every user, along with unsent rejection reasons, and keep this page and the
+ * other tabs from writing them back. For a wipe and for a session that may not
+ * read them. The page's other bundles have their own module state, so they are
+ * told too.
  */
 export function purgeAgentCliStorage(): void {
   closeStorage();
@@ -392,6 +435,7 @@ export function purgeAgentCliStorage(): void {
         localStorage.removeItem(key);
       }
     }
+    localStorage.setItem(PURGE_MARKER_KEY, `${Date.now()}.${tabId}`);
   } catch { /* storage unavailable */ }
   clearAllReasonDrafts();
   window.dispatchEvent(new Event(PURGE_EVENT));
@@ -426,27 +470,21 @@ function save(): void {
   const key = storageKey(CONV_KEY);
   if (!key) return;
   try {
-    // Drop oldest turns until the payload fits. A single turn can be large on
-    // its own (a tool result with many entities), so give up rather than loop
-    // forever if even one turn will not fit.
-    let turns = conversation.turns;
-    const stamped = { ...conversation, savedAt: Date.now() };
-    for (;;) {
-      const payload = JSON.stringify({
-        ...stamped,
-        turns: sanitizeForPersistence(turns),
-      });
-      if (payload.length <= MAX_CONV_BYTES) {
-        localStorage.setItem(key, payload);
-        return;
-      }
-      if (turns.length === 0) {
-        // Keep the draft and usage even when no transcript fits.
-        localStorage.setItem(key, JSON.stringify({ ...stamped, turns: [] }));
-        return;
-      }
-      turns = turns.slice(1);
+    // Keep the newest turns that fit, walking back from the latest, so a save
+    // costs at most MAX_CONV_BYTES of serializing however long the conversation
+    // grew. A single turn can be large on its own (a tool result with many
+    // entities). When not even the newest fits, the draft and usage are still kept.
+    const { turns, ...rest } = conversation;
+    const head = JSON.stringify({ ...rest, savedAt: Date.now() });
+    const kept: string[] = [];
+    let length = head.length + ',"turns":[]'.length;
+    for (let i = turns.length - 1; i >= 0; i -= 1) {
+      const turn = JSON.stringify(sanitizeForPersistence(turns[i])) ?? "null";
+      length += turn.length + 1;
+      if (length > MAX_CONV_BYTES + 1) break;
+      kept.push(turn);
     }
+    localStorage.setItem(key, `${head.slice(0, -1)},"turns":[${kept.reverse().join(",")}]}`);
   } catch {
     /* storage blocked or quota exceeded: the conversation stays in memory only */
   }

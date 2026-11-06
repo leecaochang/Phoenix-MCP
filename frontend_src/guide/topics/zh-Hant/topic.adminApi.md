@@ -44,7 +44,7 @@
 | 代碼 | 通常狀態 | 含義 |
 |---|---|---|
 | `invalid_request` | 400 | 請求格式錯誤，或某個值超出範圍。 |
-| `unauthorized` | 401 | 未登入。 |
+| `unauthorized` | 401 | 未登入。通常由 Home Assistant 先傳回，如上所述。如果由 Phoenix 傳回，`message_key` 為 `adminError.authRequired`。 |
 | `forbidden` | 403 | 已登入，但不是管理員。 |
 | `not_found` | 404 | 項目不存在。 |
 | `conflict` | 409 | 項目的目前狀態不允許此操作，例如名稱已被使用。 |

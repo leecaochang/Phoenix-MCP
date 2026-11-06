@@ -57,7 +57,8 @@ export function InlineConfirm({
   const described = (children ? bodyId : spoken ? helpId : undefined);
   useClickAway(root, onCancel, !busy, opener);
   // When the box closes with focus inside it, focus goes back to what opened it, while the box
-  // is still in the page; otherwise focus would fall to the page with the box.
+  // is still in the page; otherwise focus would fall to the page with the box. A control that
+  // left when the box opened cannot take it back, and inside a dialog focus must not leave it.
   useLayoutEffect(() => {
     const box = root.current;
     const scope = box?.getRootNode() as Document | ShadowRoot | undefined;
@@ -66,6 +67,7 @@ export function InlineConfirm({
       const active = scope?.activeElement;
       if (!box || !active || !box.contains(active)) return;
       if (back instanceof HTMLElement && back.isConnected && !box.contains(back)) back.focus({ preventScroll: true });
+      if (box.contains(scope?.activeElement ?? null)) box.closest<HTMLElement>('[role="dialog"]')?.focus({ preventScroll: true });
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {

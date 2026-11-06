@@ -63,7 +63,9 @@ from .tool_common import (
     _progress_ctx,
 )
 from .tool_defs import _NATIVE_TOOL_PUBLIC_TO_INTERNAL
+from .tool_input import tool_arguments_error
 from .tool_dispatch import _dispatch_mcp
+from .time_text import parse_datetime
 
 
 def _clip_display(text: str) -> str:
@@ -287,7 +289,7 @@ def _agentcli_local_time(value: Any, local_tz: tzinfo) -> str | None:
         except (OverflowError, OSError, ValueError):
             return None
     elif isinstance(value, str):
-        parsed = dt_util.parse_datetime(value)
+        parsed = parse_datetime(value)
         if parsed is None or parsed.tzinfo is None or parsed.utcoffset() is None:
             return None
     else:
@@ -395,7 +397,7 @@ def _agentcli_time_arg_error(
     """
     for field in _AGENT_CHAT_LOCAL_QUERY_FIELDS.get(tool_name, ()):
         value = args.get(field)
-        parsed = dt_util.parse_datetime(value) if isinstance(value, str) else None
+        parsed = parse_datetime(value) if isinstance(value, str) else None
         if parsed is None or parsed.tzinfo is None or parsed.utcoffset() is None:
             continue
         if parsed.astimezone(local_tz).utcoffset() != parsed.utcoffset():
@@ -1293,9 +1295,10 @@ async def _run_tool_batch(
                             "result_text": "Cancelled by the operator; not run.",
                             "is_error": True})
             continue
+        # Only arguments the dispatcher would admit are read; it refuses the others itself.
         time_error = _agentcli_time_arg_error(
             name, args, dt_util.now().tzinfo or dt_util.UTC,
-        ) if isinstance(args, dict) else None
+        ) if tool_arguments_error(args) is None else None
         if time_error is not None:
             await emit("tool_result", {
                 "id": tc.get("id"), "name": name,

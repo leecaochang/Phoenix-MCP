@@ -19,7 +19,7 @@ import re
 from typing import Any
 from uuid import UUID, uuid4
 
-from homeassistant.util.dt import utcnow, parse_datetime
+from homeassistant.util.dt import utcnow
 from homeassistant.core import HomeAssistant
 
 from .const import (
@@ -34,6 +34,7 @@ from .const import (
 from .helpers import RepeatedFailureLog, log_internal_failure
 from .policy_engine import is_sensitive_key
 from .redaction import redact_secrets_in_text
+from .time_text import parse_datetime
 
 _LOGGER = logging.getLogger(__name__)
 _REDACTED = "<redacted>"
@@ -41,9 +42,13 @@ _SECRET = re.compile(
     r"(?i)(\b(?:bearer|basic)\s+)\S+|"
     r"\b(?:sk-(?:proj-|ant-)?[A-Za-z0-9_-]{12,}|gh[pousr]_[A-Za-z0-9_]{16,}|AKIA[A-Z0-9]{16}|"
     r"AIza[A-Za-z0-9_-]{30,}|(?:gsk_|xai-|nvapi-)[A-Za-z0-9_-]{20,})\b|"
-    r"((?<![\w])(?:[\"']?)(?:api[_ -]?key|password|passwd|secret|access[_ -]?key|access[_ -]?token|refresh[_ -]?token|authorization|private[_ -]?key|pin|psk|encryption[_ -]?key)(?:[\"']?)\s*(?::|=|\bis\b)\s*)(?:\"[^\"]*\"|'[^']*'|[^\s,;}]+)"
+    r"((?<![\w])(?:[\"']?)(?:api[_ -]?key|password|passwd|secret|access[_ -]?key|access[_ -]?token|refresh[_ -]?token|authorization|private[_ -]?key|pin|psk|encryption[_ -]?key)(?:[\"']?)\s*(?::|=|\bis\b)\s*)(?:\"[^\"]*(?:\"|\Z)|'[^']*(?:'|\Z)|[^\s,;}]+)"
 )
 _SHORTENED = "\n<text shortened>"
+# Ends every word a credential can be part of, read backwards from a cut.
+_CUT_WORD = re.compile(r"""[^\s"'<>,;(){}\[\]]*+""")
+# A block scalar's opening line. Possessive, since a line can be nearly all white space.
+_BLOCK_KEY = re.compile(r"^\s*+(?:-\s*+)?([\w.-]++)\s*+:(?:\s*+[|>][-+0-9]*+)?\s*+$")
 _PRIVATE_KEY = re.compile(r"-----BEGIN [^-]*PRIVATE KEY-----.*?(?:-----END [^-]*PRIVATE KEY-----|\Z)", re.S)
 _DATA_URI = re.compile(r"data:[^\s\"')<>]+", re.I)
 _IP = re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}\b|(?<!\w)(?:[0-9a-f]{0,4}:){2,}[0-9a-f:]{0,39}(?!\w)", re.I)
@@ -108,25 +113,47 @@ _assistant_flush: ContextVar[Callable | None] = ContextVar("phoenix_assistant_fl
 _tool: ContextVar[str | None] = ContextVar("phoenix_conversation_tool", default=None)
 
 
+def clip_text(raw: str, limit: int) -> str:
+    """The text up to `limit`, less the word the cut falls in.
+
+    Credential patterns need the whole credential, so a cut one would pass as plain text.
+    """
+    if len(raw) <= limit:
+        return raw
+    kept = raw[:limit]
+    word = _CUT_WORD.match(kept[::-1])
+    return kept[:limit - word.end()] if word else kept
+
+
 def sanitized(
-    value: Any, *, max_bytes: int, hide_ip: bool = False, service: bool = False, text_chars: int | None = None,
+    value: Any, *, max_bytes: int, hide_ip: bool = False, text_chars: int | None = None,
+    scan_chars: int | None = None,
 ) -> Any:
     """Copy supported data through bounded redaction; never stringify unknown objects.
 
-    ``service`` treats all of ``value`` as service context, for clipped input. ``text_chars``
-    cuts each longer string before scanning, so size cannot decide how long the loop stalls.
+    ``text_chars`` cuts each longer string before scanning, so size cannot decide how long the
+    loop stalls. ``scan_chars`` bounds all of ``value`` the same way and keeps what fits: every
+    node and character costs one, a hidden value costs nothing, and a key that does not fit
+    leaves with its value.
     """
     remaining = max_bytes
     nodes = 0
+    budget = scan_chars
 
     def text(raw: str, service: bool = False) -> str:
-        nonlocal remaining
+        nonlocal remaining, budget
+        whole = True
+        if budget is not None:
+            whole = len(raw) <= budget
+            raw = clip_text(raw, budget)
+            budget = budget - len(raw) if whole else 0
         remaining -= len(raw.encode("utf-8"))
         if remaining < 0:
             raise ValueError("payload budget")
         if text_chars is not None and len(raw) > text_chars:
-            return scanned(raw[:text_chars], True) + _SHORTENED
-        return scanned(raw, service)
+            whole = False
+            raw = clip_text(raw, text_chars)
+        return scanned(raw, service) if whole else scanned(raw, True) + _SHORTENED
 
     def scanned(raw: str, service: bool) -> str:
         clean = _PRIVATE_KEY.sub(_REDACTED, raw)
@@ -142,7 +169,7 @@ def sanitized(
                     lines[index] = " " * indent + _REDACTED
                     continue
                 block_indent = None
-            match = re.match(r"^\s*(?:-\s*)?([\w.-]+)\s*:\s*([|>][-+0-9]*|)\s*$", line)
+            match = _BLOCK_KEY.match(line)
             if match and sensitive_key(match.group(1), code_is_secret):
                 block_indent = indent
         clean = redact_secrets_in_text("\n".join(lines)) or ""
@@ -157,9 +184,13 @@ def sanitized(
         return _IP.sub(hide_address, clean) if hide_ip else clean
 
     def visit(obj: Any, depth: int = 0, service: bool = False) -> Any:
-        nonlocal nodes, remaining
+        nonlocal nodes, remaining, budget
         nodes += 1
         remaining -= 8
+        if budget is not None:
+            budget -= 1
+            if depth > CONVERSATION_LOG_MAX_DEPTH:
+                return _REDACTED
         if nodes > CONVERSATION_LOG_MAX_NODES or depth > CONVERSATION_LOG_MAX_DEPTH or remaining < 0:
             raise ValueError("payload budget")
         if isinstance(obj, str):
@@ -173,7 +204,14 @@ def sanitized(
         if isinstance(obj, (bytes, bytearray)):
             return {"attachment": True, "bytes": len(obj), "omitted": "media"}
         if isinstance(obj, (list, tuple, set)):
-            return [visit(item, depth + 1, service) for item in obj]
+            if budget is None:
+                return [visit(item, depth + 1, service) for item in obj]
+            items = []
+            for item in obj:
+                if budget <= 0:
+                    break
+                items.append(visit(item, depth + 1, service))
+            return items
         if isinstance(obj, dict):
             service = service_context(obj, service)
             kind = obj.get("type")
@@ -183,6 +221,9 @@ def sanitized(
             for key, item in obj.items():
                 if not isinstance(key, str):
                     raise ValueError("unsupported key")
+                if budget is not None and len(key) >= budget:
+                    budget = 0
+                    break
                 safe_key = text(key)
                 if key.startswith("_") or sensitive_key(key, service):
                     result[safe_key] = _REDACTED
@@ -193,7 +234,7 @@ def sanitized(
             return result
         raise ValueError("unsupported data")
 
-    result = visit(value, service=service)
+    result = visit(value)
     if len(json.dumps(result, ensure_ascii=False).encode("utf-8")) > max_bytes:
         raise ValueError("payload budget")
     return result
@@ -436,6 +477,8 @@ class ConversationLog:
                                    text_chars=CONVERSATION_LOG_TEXT_SCAN_CHARS)
                 if json_size(result) > limit:
                     result = clipped(result, limit)
+                    reason = "size_limit"
+                elif any(item.endswith(_SHORTENED) for item in text_values(result)):
                     reason = "size_limit"
             except ValueError as error:
                 result, reason = None, "size_limit" if str(error) == "payload budget" else "sanitization"
@@ -996,7 +1039,8 @@ def recorded_chat(run: Callable) -> Callable:
             if log.entry(handle) is None:
                 chunks.clear()
             if log.entry(handle) is not None and name == "assistant_delta" and isinstance(payload.get("text"), str):
-                size += len(payload["text"].encode("utf-8"))
+                # A provider can split a character across two events, leaving lone surrogates.
+                size += len(payload["text"].encode("utf-8", "backslashreplace"))
                 if size <= CONVERSATION_LOG_SCAN_BYTES:
                     chunks.append(payload["text"])
                 else:
@@ -1120,6 +1164,7 @@ def _scrub_argument_text(raw: str, *, hide_ip: bool) -> str:
     """Scrub JSON string tokens even when the surrounding arguments are invalid."""
     if len(raw.encode("utf-8")) > CONVERSATION_LOG_SCAN_BYTES:
         raise ValueError("payload budget")
+    raw = clip_text(raw, CONVERSATION_LOG_TEXT_SCAN_CHARS)
     decoder = json.JSONDecoder()
     pieces: list[str] = []
     cursor = 0
@@ -1147,11 +1192,13 @@ def _scrub_argument_text(raw: str, *, hide_ip: bool) -> str:
                 end = len(raw)
             pieces.extend((raw[cursor:match.start()], access_key, raw[match.end():start], '"<redacted>"'))
         else:
-            clean = sanitized(decoded, max_bytes=CONVERSATION_LOG_SCAN_BYTES, hide_ip=hide_ip)
+            clean = sanitized(decoded, max_bytes=CONVERSATION_LOG_SCAN_BYTES, hide_ip=hide_ip,
+                              text_chars=CONVERSATION_LOG_TEXT_SCAN_CHARS)
             pieces.extend((raw[cursor:match.start()], access_key if clean == decoded else json.dumps(clean, ensure_ascii=False)))
         cursor = end
     pieces.append(raw[cursor:])
-    return sanitized("".join(pieces), max_bytes=CONVERSATION_LOG_SCAN_BYTES, hide_ip=hide_ip)
+    return sanitized("".join(pieces), max_bytes=CONVERSATION_LOG_SCAN_BYTES, hide_ip=hide_ip,
+                     text_chars=CONVERSATION_LOG_TEXT_SCAN_CHARS)
 
 
 def record_rejected_tool(call_id: Any, name: Any, arguments: Any, *, reason: str,
@@ -1177,7 +1224,8 @@ def record_rejected_tool(call_id: Any, name: Any, arguments: Any, *, reason: str
                     arguments = _scrub_argument_text(arguments, hide_ip=not log._settings.log_client_ip)
                 else:
                     arguments = sanitized({"service_data": arguments}, max_bytes=CONVERSATION_LOG_SCAN_BYTES,
-                                          hide_ip=not log._settings.log_client_ip)["service_data"]
+                                          hide_ip=not log._settings.log_client_ip,
+                                          text_chars=CONVERSATION_LOG_TEXT_SCAN_CHARS)["service_data"]
             except Exception:
                 arguments = None
                 payload["arguments_omission"] = "Arguments could not be safely sanitized within recording limits."

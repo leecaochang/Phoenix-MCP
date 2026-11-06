@@ -100,11 +100,12 @@ it("keeps a failed review visible with a clear retry path", async () => {
 
 it("shows infrastructure help without offering acknowledgement", async () => {
   vi.mocked(api.listAttention).mockResolvedValue({ items: [
-    { kind: "mesa", id: "mesa" }, { kind: "calendar_storage", id: "calendar_storage" }, { kind: "audit_storage", id: "audit_storage" },
+    { kind: "mesa", id: "mesa" }, { kind: "mesa_rename", id: "mesa_rename" }, { kind: "calendar_storage", id: "calendar_storage" }, { kind: "audit_storage", id: "audit_storage" },
   ] });
   const view = render(<AttentionPanel />);
   await view.findByText(/Check a previous action|MESA could not start|Could not load/);
   expect(view.getByText("MESA could not start")).toBeVisible();
+  expect(view.getByText("A renamed entity's profile is not in storage")).toBeVisible();
   expect(view.getByText("The audit log is not reaching storage")).toBeVisible();
   expect(view.queryByRole("checkbox")).toBeNull();
   expect(view.queryByRole("group", { name: "Mark Reviewed" })).toBeNull();

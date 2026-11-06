@@ -270,6 +270,8 @@ export function AuditView({ accessKeys }: Props) {
             <option value="not_implemented">{t("audit.outcomeNotImplemented")}</option>
             <option value="invalid_request">{t("audit.outcomeInvalidRequest")}</option>
             <option value="pending_approval">{t("audit.outcomePendingApproval")}</option>
+            <option value="cancelled">{t("audit.outcomeCancelled")}</option>
+            <option value="unknown">{t("audit.outcomeUnknown")}</option>
           </select>
           <select
             aria-label={t("audit.filterAccessKeyAria")}

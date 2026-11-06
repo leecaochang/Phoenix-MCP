@@ -208,7 +208,9 @@
       "restoreToolReported": "Impossibile applicare il ripristino. Lo strumento ha segnalato: {detail}",
       "capabilityAllowUnsupported": "{capability} non supporta la modalità Consenti.",
       "recoverySnapshotUnsafeAt": "Non è disponibile una copia completa di questo elemento senza segreti, quindi non è stato modificato nulla. Phoenix l'ha rifiutato in {location}.",
-      "invalidHostHeader": "L'intestazione Host della richiesta non è un indirizzo valido."
+      "invalidHostHeader": "L'intestazione Host della richiesta non è un indirizzo valido.",
+      "approvalOutcomeNotSaved": "L'azione è terminata, ma non è stato possibile salvarne il risultato. Controlla il suo effetto in Home Assistant; questa approvazione non verrà riproposta.",
+      "providerRemoteUrlResolutionFailed": "Non è stato possibile risolvere l'URL del provider, quindi il suo indirizzo non è stato verificato."
     },
     "agentchat": {
       "accessKey": "Chiave di accesso",
@@ -428,7 +430,9 @@
       "rowPayload": "Carico utile",
       "rowRequestId": "ID richiesta",
       "rowResource": "Risorsa",
-      "rowTime": "Ora"
+      "rowTime": "Ora",
+      "outcomeCancelled": "Annullato",
+      "outcomeUnknown": "Esito sconosciuto"
     },
     "approvalSummary": {
       "action.optionalReason": "Motivo facoltativo",
@@ -832,7 +836,11 @@
         "one": "{count} selezionata",
         "other": "{count} selezionate"
       },
-      "rowPicked": "selezionata per l'approvazione in blocco"
+      "rowPicked": "selezionata per l'approvazione in blocco",
+      "todoItems": "Elementi da rimuovere",
+      "todoRemovalWarning": "La rimozione degli elementi delle liste di cose da fare è definitiva. Phoenix non ne conserva alcuna copia, quindi non possono essere ripristinati.",
+      "todoStatusCompleted": "Completato",
+      "todoStatusNeedsAction": "Non completato"
     },
     "caps": {
       "cap_automation_write": {
@@ -952,7 +960,7 @@
         "label": "Tracce delle automazioni"
       },
       "cap_yaml_edit": {
-        "description": "Legge i file di configurazione YAML e ricarica i domini YAML. Le password scritte in questi file sono visibili; usa secrets.yaml.",
+        "description": "Legge i file di configurazione YAML e ricarica i domini YAML. I valori con nomi che fanno pensare a un segreto sono nascosti, ma una password con un nome comune è visibile; usa secrets.yaml.",
         "label": "Configurazione YAML"
       },
       "confirmUnavailable": "Questa capacità non può richiedere l'approvazione.",
@@ -2595,7 +2603,9 @@
       "title": "Richiede attenzione",
       "unknown": "La conversazione è terminata prima che Phoenix registrasse se questa azione è stata eseguita, quindi potrebbe essere stata eseguita. Mostra nel registro di audit, dove disponibile, mostra cosa ha registrato Phoenix; un'azione in attesa di approvazione ha il suo stato in Approvazioni. Controlla Home Assistant prima di riprovare.",
       "audit_storageTitle": "Il registro di audit non raggiunge l'archiviazione",
-      "audit_storageHelp": "Le voci di audit recenti sono solo in memoria, quindi un riavvio le perderebbe. Controlla i registri di Home Assistant. Questo avviso scompare al prossimo salvataggio riuscito."
+      "audit_storageHelp": "Le voci di audit recenti sono solo in memoria, quindi un riavvio le perderebbe. Controlla i registri di Home Assistant. Questo avviso scompare al prossimo salvataggio riuscito.",
+      "mesa_renameTitle": "Il profilo di un'entità rinominata non è nell'archiviazione",
+      "mesa_renameHelp": "Il profilo ha seguito l'entità ed è in vigore, ma la copia salvata ha ancora il vecchio ID. Controlla i registri di Home Assistant, quindi ricarica Phoenix MCP da Impostazioni > Dispositivi e servizi per salvarlo di nuovo. Questo avviso scompare al prossimo salvataggio riuscito."
     },
     "workspace": {
       "addToMy": "Aggiungi alla Mia area di lavoro",

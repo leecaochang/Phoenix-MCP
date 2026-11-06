@@ -80,6 +80,18 @@ def test_redact_secrets_in_text_yaml_keys():
     assert "latitude: 51.5" in out  # benign key preserved
 
 
+@pytest.mark.parametrize("line", [
+    "- password: hunter2", "  - - token: hunter2", "\"password\": hunter2", "'api_key': hunter2", "x-api-key: hunter2",
+])
+def test_redact_secrets_in_text_reads_list_and_quoted_keys(line):
+    assert "hunter2" not in redact_secrets_in_text(line)
+
+
+def test_a_line_of_dashes_is_left_alone():
+    line = "- " * 50_000 + "\n" + "-" * 100_000
+    assert redact_secrets_in_text(line) == line
+
+
 def test_redact_secrets_in_text_none_passthrough():
     assert redact_secrets_in_text(None) is None
     assert redact_secrets_in_text("") == ""

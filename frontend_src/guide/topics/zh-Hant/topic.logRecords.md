@@ -1,5 +1,5 @@
 ---
-{ "id": "topic.logRecords", "title": "日誌記錄的內容", "parent": "workspace.logs", "order": 10, "keywords": ["稽核", "歷史", "保留", "隱私", "遮蔽"], "sectionKeywords": { "audit-entries": ["工具呼叫", "管理", "核准", "MESA"], "not-audited": ["缺少", "401", "未授權"], "outcomes": ["已允許", "已拒絕存取", "速率受限", "待核准", "無效請求", "未找到", "未實現"], "audit-keeping": ["保留", "儲存", "磁碟", "清除"], "conversation-sources": ["agent chat", "語音", "AI 任務", "Assist", "MCP 用戶端", "Home Companion"], "conversation-contents": ["工具結果", "提供者", "模型", "機密", "代碼"], "conversation-keeping": ["保留", "儲存", "限制"], "linked": ["請求 ID", "核准 ID"] } }
+{ "id": "topic.logRecords", "title": "日誌記錄的內容", "parent": "workspace.logs", "order": 10, "keywords": ["稽核", "歷史", "保留", "隱私", "遮蔽"], "sectionKeywords": { "audit-entries": ["工具呼叫", "管理", "核准", "MESA"], "not-audited": ["缺少", "401", "未授權"], "outcomes": ["已允許", "已拒絕存取", "速率受限", "待核准", "無效請求", "未找到", "未實現", "已取消", "結果未知"], "audit-keeping": ["保留", "儲存", "磁碟", "清除"], "conversation-sources": ["agent chat", "語音", "AI 任務", "Assist", "MCP 用戶端", "Home Companion"], "conversation-contents": ["工具結果", "提供者", "模型", "機密", "代碼"], "conversation-keeping": ["保留", "儲存", "限制"], "linked": ["請求 ID", "核准 ID"] } }
 ---
 Phoenix 保留兩種日誌。稽核日誌是每個操作及其結果的簡短記錄。對話記錄在開啟後會完整保留智慧體說過和做過的事情。
 
@@ -24,6 +24,7 @@ Phoenix 保留兩種日誌。稽核日誌是每個操作及其結果的簡短記
 - **{{label:audit.outcomePendingApproval}}**：等待你的核准。
 - **{{label:audit.outcomeRateLimited}}**：金鑰傳送過多請求。
 - **{{label:audit.outcomeInvalidRequest}}**、**{{label:audit.outcomeNotFound}}** 和 **{{label:audit.outcomeNotImplemented}}**：請求格式錯誤、指向不存在的對象，或要求 Phoenix 不支援的操作。Phoenix 無法確認的變更也記為{{label:audit.outcomeInvalidRequest}}，儘管它可能已經生效。
+- **{{label:audit.outcomeCancelled}}** 和 **{{label:audit.outcomeUnknown}}**：請求完成之前，應用程式已離開或失去權限。{{label:audit.outcomeCancelled}}表示沒有任何操作到達你的家。{{label:audit.outcomeUnknown}}表示變更可能已執行，請在 Home Assistant 中檢查。
 
 記錄哪些結果由[稽核日誌設定](guide:window.settingsLogs#audit-log)決定。
 

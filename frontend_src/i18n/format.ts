@@ -80,7 +80,7 @@ export function setFormatLocale(hass: unknown, language?: string, catalogLanguag
   const inputSignature = JSON.stringify([language, catalogLanguage, h.language, locale.language, locale.number_format, locale.time_format, locale.date_format, locale.time_zone, h.config?.time_zone]);
   if (inputSignature === preferenceSignature) return false;
   preferenceSignature = inputSignature;
-  const before = signature();
+  const before = formatSignature();
   dateLocale = validFormatLocale(language) ?? validFormatLocale(locale.language) ?? validFormatLocale(h.language);
   pluralLocale = validFormatLocale(catalogLanguage) ?? dateLocale;
   numberLocale = resolveNumberLocale(locale.number_format, dateLocale);
@@ -93,7 +93,7 @@ export function setFormatLocale(hass: unknown, language?: string, catalogLanguag
   timeZone = locale.time_zone === "server"
     ? serverZone ?? localZone ?? "UTC"
     : localZone ?? serverZone ?? "UTC";
-  if (signature() === before) return false;
+  if (formatSignature() === before) return false;
   compactFormatter = null;
   collator = null;
   pluralRules = null;
@@ -102,7 +102,7 @@ export function setFormatLocale(hass: unknown, language?: string, catalogLanguag
 }
 
 // A format-only change must repaint without fetching another catalog.
-function signature(): string {
+export function formatSignature(): string {
   return JSON.stringify([dateLocale, pluralLocale, numberLocale, numberGrouping, hour12, dateFormat, timeZone]);
 }
 

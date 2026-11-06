@@ -230,7 +230,7 @@ export function AccessKeyListView({
           rowHelp="help.accessKeyRow"
           // Choosing an active key hides the archived ones.
           onSelect={(k) => { setShowArchived(false); onOpenDetail(k.id); }}
-          rowLabel={(k) => `${k.name}, ${k.pass_through ? t("accessKeys.passThrough") : t("accessKeys.scoped")}, ${accessKeyStatusLabel(accessKeyStatus(k))}`}
+          rowLabel={(k) => [k.name, k.pass_through ? t("accessKeys.passThrough") : t("accessKeys.scoped"), accessKeyStatusLabel(accessKeyStatus(k))].join(t("common.listSeparator"))}
           // A refused new name reads under the row being renamed, not squeezed into it.
           detail={(k) => (k.id === renamingId && renameError
             ? <div id="access-key-rename-error" className="banner banner-error access-key-rename-error" role="alert">{renameError}</div> : null)}

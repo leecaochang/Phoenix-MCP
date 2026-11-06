@@ -208,21 +208,21 @@ def test_catalog_payload_metrics_cover_representative_profiles_and_provider_wire
     assert metrics == {
         "read_only": {
             "tool_count": 54,
-            "canonical_bytes": 64470,
-            "claude_bytes": 58897,
-            "openai_bytes": 60463,
+            "canonical_bytes": 64696,
+            "claude_bytes": 59123,
+            "openai_bytes": 60689,
         },
         "write_capable": {
             "tool_count": 100,
-            "canonical_bytes": 127952,
-            "claude_bytes": 117026,
-            "openai_bytes": 119926,
+            "canonical_bytes": 128634,
+            "claude_bytes": 117708,
+            "openai_bytes": 120608,
         },
         "announce_all": {
             "tool_count": 168,
-            "canonical_bytes": 202094,
-            "claude_bytes": 184178,
-            "openai_bytes": 189050,
+            "canonical_bytes": 203252,
+            "claude_bytes": 185336,
+            "openai_bytes": 190208,
         },
     }
     assert metrics["announce_all"]["tool_count"] == len(_static_defs()) == 168
@@ -272,6 +272,22 @@ def test_descriptions_name_only_tools_that_exist():
         for word in set(shaped.findall(text)) - tools - fields - _DESCRIBED_NON_TOOLS:
             unknown.setdefault(word, set()).add(source)
     assert not unknown, unknown
+
+
+def test_arguments_the_skill_names_on_a_tool_exist_in_its_schema():
+    """`dry_run: true` on `call_service` or `get_history` `mode: "summary"` is a call a model will try."""
+    import re
+
+    from custom_components.phoenix_mcp import skill_view
+
+    schemas = {definition["name"]: definition["inputSchema"].get("properties") or {} for definition in _all_defs()}
+    text = re.sub(r"\s+", " ", skill_view.PHOENIX_SKILL_MARKDOWN)
+    named = re.findall(r"`([a-z_]+)(?:: [^`]*)?` on `([a-z_]+)`", text)
+    named += [(argument, tool) for tool, argument in re.findall(r"`([a-z_]+)` `([a-z_]+): [^`]*`", text)]
+    documented = [(argument, tool) for argument, tool in named if tool in schemas]
+    assert documented
+    missing = [(argument, tool) for argument, tool in documented if argument not in schemas[tool]]
+    assert not missing, missing
 
 
 def test_edit_helper_promises_a_recovery_id_only_for_template_helpers():

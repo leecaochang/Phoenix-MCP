@@ -43,12 +43,21 @@ class TestPredicate:
         assert physical_gate_applies("homeassistant", "toggle", ["lock.front"]) is True
         assert physical_gate_applies("homeassistant", "toggle", ["light.k", "cover.blind"]) is True
 
+    def test_any_service_on_a_physical_target_gates(self):
+        """Target domains decide, so an integration's own service cannot go around the gate."""
+        assert physical_gate_applies("nuki", "lock_n_go", ["lock.front"]) is True
+        assert physical_gate_applies("custom", "act", ["light.k", "valve.main"]) is True
+
+    def test_a_service_with_no_physical_target_does_not_gate(self):
+        assert physical_gate_applies("nuki", "lock_n_go", []) is False
+        assert physical_gate_applies("custom", "act", ["light.k"]) is False
+
     def test_generic_toggle_does_not_gate_a_non_physical_target(self):
         """Generic toggle on a non-physical target does not gate, or the gate would mean nothing."""
         assert physical_gate_applies("homeassistant", "toggle", ["light.kitchen"]) is False
         assert physical_gate_applies("homeassistant", "toggle", []) is False
 
-    @pytest.mark.parametrize("service", ["turn_on", "turn_off"])
+    @pytest.mark.parametrize("service", ["turn_on", "turn_off", "update_entity"])
     def test_generic_turn_on_off_are_excluded(self, service):
         """Generic turn_on/turn_off no-op on physical domains, so gating them would refuse a harmless call.
 
@@ -97,6 +106,10 @@ class TestNoSecondDefinition:
         assert "physical_gate_applies(" in body, (
             "call_needs_physical_gate must delegate to the shared predicate"
         )
+        body = ast.unparse(self._func("policy_engine.py", "required_service_cap"))
+        assert "physical_gate_applies(" in body, (
+            "required_service_cap must delegate to the shared predicate"
+        )
 
     def test_this_check_would_notice_a_second_definition(self):
         """The scan flags a re-derived gate, so its clean result is not vacuous.
@@ -115,19 +128,26 @@ class TestNoSecondDefinition:
 
 
 class TestFindAvailableActionsScope:
-    """find_available_actions is deliberately NOT routed through the predicate.
+    """find_available_actions asks the same predicate, over the entity it describes.
 
-    It enumerates services in the ENTITY's own domain, so `homeassistant.toggle`
-    never appears in its list and the toggle-redispatch case cannot arise; its
-    plain domain membership test is complete for what it enumerates.
+    It enumerates services in the ENTITY's own domain, so a cross-domain service
+    never appears in its list, and a service of that domain is judged as a call.
     """
 
-    def test_it_enumerates_only_the_entitys_own_domain(self):
+    def _body(self) -> str:
         tree = ast.parse((PKG / "tools" / "discovery.py").read_text())
         node = next(n for n in ast.walk(tree)
                     if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))
                     and n.name == "_tool_find_available_actions")
-        body = ast.unparse(node)
+        return ast.unparse(node)
+
+    def test_it_does_not_restate_the_rule(self):
+        body = self._body()
+        assert "physical_gate_applies(" in body and "service_capability(" in body
+        assert "PHYSICAL_GATE_DOMAINS" not in body and 'domain == "notify"' not in body
+
+    def test_it_enumerates_only_the_entitys_own_domain(self):
+        body = self._body()
         assert "async_services().get(domain" in body, (
             "find_available_actions no longer enumerates a single domain; if it can "
             "now surface homeassistant.toggle it must use physical_gate_applies"

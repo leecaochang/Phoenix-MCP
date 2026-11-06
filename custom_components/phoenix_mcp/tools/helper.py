@@ -56,7 +56,7 @@ from ..catalog_text import (
 from ..capability import effective_cap
 from ..redaction import redact_inaccessible_entity_ids_in_text
 from ..tool_common import (
-    _CAP_FORBIDDEN_MESSAGE, _cas_conflict, _gate, _pending_or_inline, _record_version, _restore_ctx, fitted_list, redaction_sentinel_path, _tool_error, _tool_success, _truncate, serialize_ha_schema,
+    _CAP_FORBIDDEN_MESSAGE, _cas_conflict, _gate, _pending_or_inline, _record_version, _restore_ctx, fitted_list, redaction_sentinel_path, _tool_error, _tool_success, _tool_uncertain, _truncate, serialize_ha_schema,
 )
 from ..request_authority import _approved_exec_ctx
 from ..policy_engine import (
@@ -208,7 +208,8 @@ def _helper_mesa_context(
     )
 
 
-def _helper_mesa_preview(context: _HelperMesaContext) -> dict[str, Any]:
+def _helper_mesa_preview(context: _HelperMesaContext, *, admin: bool = False) -> dict[str, Any]:
+    """The decision for an agent's refusal, or with ``admin`` for an approval diff."""
     return {
         "decision": context.decision,
         "action": f"helper.{context.action}",
@@ -233,7 +234,7 @@ def _helper_mesa_preview(context: _HelperMesaContext) -> dict[str, Any]:
                 "decision": decision.decision,
                 "rule": decision.rule,
                 "reason": decision.reason,
-                "effective_rule": decision.effective_rule,
+                "effective_rule": decision.admin_rule if admin else decision.effective_rule,
             }
             for entity_id, decision in context.decisions
         ],
@@ -279,7 +280,7 @@ def _fire_helper_mesa_blocks(
 def _helper_mesa_diff(diff: dict, context: _HelperMesaContext) -> dict:
     preview = diff.setdefault("preview", {})
     if isinstance(preview, dict):
-        preview["mesa"] = _helper_mesa_preview(context)
+        preview["mesa"] = _helper_mesa_preview(context, admin=True)
     return diff
 
 
@@ -1979,11 +1980,11 @@ class _UncertainHelperWrite(Exception):
 
 def _uncertain_helper_result(exc: _UncertainHelperWrite, tool_name: str) -> tuple[dict, str, str]:
     """Report a dispatched but unverified helper write without inviting a retry."""
-    return _tool_error(json.dumps({
+    return _tool_uncertain({
         "status": exc.status, "recovery_id": exc.recovery_id, "retry_safe": False,
         "error": "Home Assistant received the helper change, but its result was not verified. "
                  "Inspect configuration recovery and the helper's current state; do not retry automatically.",
-    })), "invalid_request", tool_name
+    }), "invalid_request", tool_name
 
 
 def _helper_edit_landed(payload: dict, target_field: str, observed: Any, result: Any) -> bool:
@@ -2198,7 +2199,7 @@ async def _execute_edit_helper(
     except ConfigurationRecoveryError as exc:
         return _tool_error(str(exc)), "invalid_request", "edit_helper"
     except Exception:
-        return _tool_error("Helper edit was not verified. Inspect configuration recovery and current Home Assistant state before retrying."), "invalid_request", "edit_helper"
+        return _tool_uncertain({"status": "unknown", "retry_safe": False, "error": "Helper edit was not verified. Inspect configuration recovery and current Home Assistant state before retrying."}), "invalid_request", "edit_helper"
     public_before = (
         _public_helper_config(str(helper_type), before_cfg)
         if helper_type == "person" and isinstance(before_cfg, dict)
@@ -2268,7 +2269,7 @@ async def _execute_delete_helper(
     except ConfigurationRecoveryError as exc:
         return _tool_error(str(exc)), "invalid_request", "delete_helper"
     except Exception:
-        return _tool_error("Helper deletion was not verified. Inspect configuration recovery and current Home Assistant state before retrying."), "invalid_request", "delete_helper"
+        return _tool_uncertain({"status": "unknown", "retry_safe": False, "error": "Helper deletion was not verified. Inspect configuration recovery and current Home Assistant state before retrying."}), "invalid_request", "delete_helper"
     public_before = (
         _public_helper_config(str(helper_type), before_cfg)
         if helper_type == "person" and isinstance(before_cfg, dict)
@@ -2945,8 +2946,8 @@ async def _execute_set_config_entry_options(
                 return result
             if result[0].get("isError") or current is not entry:
                 await data.config_recovery.mark(rid, "unknown")
-                return _tool_error(json.dumps({"status": "unknown", "recovery_id": rid,
-                    "retry_safe": False, "error": "Helper settings were not verified; inspect Home Assistant before retrying."})), "invalid_request", tool
+                return _tool_uncertain({"status": "unknown", "recovery_id": rid,
+                    "retry_safe": False, "error": "Helper settings were not verified; inspect Home Assistant before retrying."}), "invalid_request", tool
             template_snapshot(hass, current)
             await data.config_recovery.mark(rid, "verified", entry_id=current.entry_id)
             # Include the exact operation receipt so restore can retain a
@@ -2956,8 +2957,8 @@ async def _execute_set_config_entry_options(
             return _tool_success(json.dumps(body, default=str)), result[1], result[2]
     except Exception as exc:
         message = str(exc) if isinstance(exc, ConfigurationRecoveryError) else "Configuration recovery storage failed. Inspect the recovery record before retrying."
-        return _tool_error(json.dumps({"error": message, "recovery_id": rid,
-            "status": "unknown" if rid else "not_applied", "retry_safe": False})), "invalid_request", tool
+        body = {"error": message, "recovery_id": rid, "status": "unknown" if rid else "not_applied", "retry_safe": False}
+        return _tool_uncertain(body) if rid else _tool_error(json.dumps(body)), "invalid_request", tool
 
 
 async def _apply_config_entry_options(

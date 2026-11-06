@@ -59,7 +59,7 @@ Reads files in the www, themes and custom_templates folders. Pass-through doesn'
 
 ### {{label:caps.cap_broadcast.label}} {#broadcast}
 
-Broadcasts a message through Assist satellites, starts conversations on them and plays announcements on speakers, on top of Write on the speaker. Ordinary playback needs only Write. Pass-through allows it.
+Broadcasts a message through Assist satellites, starts conversations on them and plays announcements and spoken text on speakers, on top of Write on the speaker. Ordinary playback needs only Write. Pass-through allows it.
 
 ### {{label:caps.cap_service_response.label}} {#service-response}
 
@@ -101,11 +101,11 @@ Creates, changes and deletes calendar events.
 
 ### {{label:caps.cap_physical_control.label}} {#physical-control}
 
-Controls locks, alarm panels, covers and valves. The agent also needs W on them in the {{label:accessKeys.permissionsTree}}. Radio tools that change Zigbee devices need it too.
+Controls locks, alarm panels, covers and valves, through their own actions or any other action that reaches them. Raw device commands such as `zwave_js.set_value` always need it, and so do ESPHome actions on a device with one of these. The agent also needs W on them in the {{label:accessKeys.permissionsTree}}. Radio tools that change Zigbee devices need it too.
 
 ### {{label:caps.cap_notify.label}} {#notify}
 
-Sends notifications, through its own tool or by running a notify action.
+Sends notifications, through its own tool, a notify action or any other action that sends through a notify entity.
 
 ### {{label:caps.cap_restart.label}} {#restart}
 

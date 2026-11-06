@@ -16,7 +16,7 @@ from homeassistant.core import ServiceCall, SupportsResponse
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers import service as ha_service
-from homeassistant.helpers.service import async_set_service_schema
+from homeassistant.helpers.service import async_get_all_descriptions, async_set_service_schema
 from homeassistant.setup import async_setup_component
 from homeassistant.util.dt import utcnow
 from pytest_homeassistant.common import MockConfigEntry, async_mock_service
@@ -35,6 +35,13 @@ from custom_components.phoenix_mcp.household_authority import household_service_
 from custom_components.phoenix_mcp.tool_dispatch import _call_tool, async_execute_approved_tool
 from custom_components.phoenix_mcp.service_targets import unbound_service_targets
 from custom_components.phoenix_mcp.tool_contracts import service_name_error
+
+
+@pytest.fixture(autouse=True)
+def _real_descriptions_loaded(caplog):
+    """A run on the own-domain fallback would prove nothing about the filters read here."""
+    yield
+    assert "service descriptions could not be read" not in caplog.text
 
 
 def _environment(hass) -> tuple[PhoenixData, list]:
@@ -225,6 +232,14 @@ async def test_real_services_refuse_a_target_they_do_not_declare(hass, domain, s
     assert await unbound_service_targets(hass, [entity_id], domain=domain, service=service) == (entity_id,)
 
 
+async def test_this_environment_reads_the_real_descriptions(hass):
+    """Home Assistant validates feature filters against component constants as it loads them."""
+    assert await async_setup_component(hass, "homeassistant", {})
+    assert await async_setup_component(hass, "light", {})
+    descriptions = await async_get_all_descriptions(hass)
+    assert descriptions["light"]["turn_on"]["target"]["entity"][0]["domain"] == ["light"]
+
+
 async def test_real_integration_filter_binds_to_the_owning_integration(hass):
     async_mock_service(hass, "music_assistant", "play_media")
     ours = _entity(hass, "media_player", "music_assistant", "a")
@@ -342,6 +357,136 @@ async def test_a_schema_that_only_tolerates_entity_id_declares_nothing(hass, sch
     assert await unbound_service_targets(hass, [entity_id], domain="custom", service="act") == (entity_id,)
 
 
+@pytest.mark.parametrize("schema", [
+    pytest.param(vol.All({vol.Required("entity_id"): cv.entity_ids}), id="all over a dict"),
+    pytest.param(vol.Schema(vol.All({vol.Required("entity_id"): cv.entity_ids})), id="schema of all"),
+    pytest.param(vol.All(cv.deprecated("x"), {vol.Required("entity_id"): cv.entity_ids, vol.Optional("x"): str}),
+                 id="deprecated"),
+])
+async def test_a_field_map_inside_a_validator_chain_declares_a_target(hass, schema):
+    """The form zwave_js writes: vol.All keeps a plain dict among its validators."""
+    async def handler(call: ServiceCall) -> None:
+        return None
+
+    hass.services.async_register("custom", "act", handler, schema=schema)
+    entity_id = _entity(hass, "light")
+    assert await unbound_service_targets(hass, [entity_id], domain="custom", service="act") == ()
+
+
+async def test_a_field_map_without_entity_id_declares_nothing(hass):
+    async def handler(call: ServiceCall) -> None:
+        return None
+
+    hass.services.async_register("custom", "act", handler, schema=vol.All({vol.Required("x"): str}))
+    entity_id = _entity(hass, "light")
+    assert await unbound_service_targets(hass, [entity_id], domain="custom", service="act") == (entity_id,)
+
+
+async def _script_with_input(hass, selector: dict) -> tuple[list, str]:
+    """A script run by name, described by its fields as HA's script integration describes it."""
+    ran: list = []
+
+    async def handler(call: ServiceCall) -> None:
+        ran.append(dict(call.data))
+
+    hass.services.async_register("script", "fields", handler)
+    async_set_service_schema(hass, "script", "fields", {
+        "name": "x", "fields": {"entity_id": {"selector": selector}},
+    })
+    entity_id = er.async_get(hass).async_get_or_create(
+        "script", "script", "fields", suggested_object_id="fields").entity_id
+    hass.states.async_set(entity_id, "off")
+    return ran, entity_id
+
+
+@pytest.mark.parametrize("selector", [
+    pytest.param({"entity": {"domain": "light"}}, id="filtered"),
+    pytest.param({"entity": {}}, id="unfiltered"),
+    pytest.param({"text": None}, id="text"),
+])
+async def test_a_script_input_named_entity_id_is_explained_not_misread(hass, selector):
+    """Its field declares an input, not a target: the refusal says how to run it."""
+    assert await async_setup_component(hass, "homeassistant", {})
+    ran, script = await _script_with_input(hass, selector)
+    assert await unbound_service_targets(hass, [script], domain="script", service="fields") == ()
+    data, _ = _environment(hass)
+    key = _key({script: "GREEN"}, cap_search="allow")
+    result, outcome, _ = await _call_tool("call_service", _call("script", "fields", script), key, hass, data)
+    assert outcome == "invalid_request"
+    assert "script.turn_on" in result["content"][0]["text"]
+    assert "does not act on" not in result["content"][0]["text"]
+    assert ran == []
+    preview = await _call_tool("dry_run_service", _call("script", "fields", script), key, hass, data)
+    assert preview[1] == "invalid_request"
+
+
+async def test_a_saved_approval_cannot_run_a_script_input_named_entity_id(hass):
+    assert await async_setup_component(hass, "homeassistant", {})
+    ran, script = await _script_with_input(hass, {"entity": {}})
+    data, _ = _environment(hass)
+    saved = bind_targets({"domain": "script", "service": "fields", "entity_id": [script]}, [script], hass)
+    result = await async_execute_approved_tool("call_service", saved, _key({script: "GREEN"}), hass, data)
+    assert result[1] == "invalid_request"
+    assert "script.turn_on" in result[0]["content"][0]["text"]
+    assert ran == []
+
+
+async def test_a_script_with_an_entity_id_input_stays_listed_with_the_reason(hass):
+    assert await async_setup_component(hass, "homeassistant", {})
+    _, script = await _script_with_input(hass, {"entity": {"domain": "light"}})
+    data, _ = _environment(hass)
+    result, _, _ = await _call_tool("find_available_actions", {"entity_id": script}, _key({script: "GREEN"}, cap_search="allow"), hass, data)
+    row = next(item for item in json.loads(result["content"][0]["text"])["actions"]
+               if item["service"] == "script.fields")
+    assert row["available"] is False and "script.turn_on" in row["reason"]
+
+
+async def _listing(hass, entity_id: str, **caps) -> dict[str, dict]:
+    data, _ = _environment(hass)
+    key = _key({entity_id: "GREEN"}, cap_search="allow", **caps)
+    result, _, _ = await _call_tool("find_available_actions", {"entity_id": entity_id}, key, hass, data)
+    return {row["service"]: row for row in json.loads(result["content"][0]["text"])["actions"]}
+
+
+async def test_the_listing_leaves_out_a_service_the_binding_refuses(hass):
+    async def handler(call: ServiceCall) -> None:
+        return None
+
+    assert await async_setup_component(hass, "light", {})
+    hass.services.async_register("light", "custom_effect", handler)
+    entity_id = _entity(hass, "light")
+    rows = await _listing(hass, entity_id)
+    assert "light.custom_effect" not in rows
+    assert rows["light.turn_on"]["available"] is True
+
+
+async def test_the_listing_gives_the_dedicated_tool_for_a_service_only_it_runs(hass):
+    assert await async_setup_component(hass, "todo", {})
+    entity_id = _entity(hass, "todo")
+    rows = await _listing(hass, entity_id)
+    row = rows["todo.remove_completed_items"]
+    assert row["available"] is False
+    assert "set_todo_item" in row["reason"]
+
+
+async def test_the_listing_says_when_a_required_field_cannot_be_authorized(hass):
+    assert await async_setup_component(hass, "media_player", {})
+    entity_id = _entity(hass, "media_player")
+    rows = await _listing(hass, entity_id)
+    row = rows["media_player.join"]
+    assert row["available"] is False and "group_members" in row["reason"]
+    assert rows["media_player.media_play"]["available"] is True
+
+
+async def test_unreadable_descriptions_are_logged_once(hass, caplog):
+    entity_id = _entity(hass, "light")
+    with patch("custom_components.phoenix_mcp.service_targets.async_get_all_descriptions", side_effect=RuntimeError):
+        await unbound_service_targets(hass, [entity_id], domain="light", service="turn_on")
+        await unbound_service_targets(hass, [entity_id], domain="light", service="turn_off")
+    assert caplog.text.count("service descriptions could not be read") == 1
+    caplog.clear()
+
+
 async def test_a_rest_command_keeps_refusing_a_decoy(hass):
     assert await async_setup_component(
         hass, "rest_command", {"rest_command": {"ping": {"url": "http://example.invalid/", "method": "post"}}})
@@ -374,7 +519,7 @@ async def test_a_purge_cannot_widen_past_its_resolved_targets(hass, selector):
     assert calls == []
 
 
-async def test_unreadable_descriptions_fall_back_to_the_own_domain_and_the_generic_services(hass):
+async def test_unreadable_descriptions_fall_back_to_the_own_domain_and_the_generic_services(hass, caplog):
     async_mock_service(hass, "music_assistant", "play_media")
     player = _entity(hass, "media_player", "music_assistant")
     with patch("custom_components.phoenix_mcp.service_targets.async_get_all_descriptions", side_effect=RuntimeError):

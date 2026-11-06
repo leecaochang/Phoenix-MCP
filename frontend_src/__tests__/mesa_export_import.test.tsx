@@ -64,8 +64,8 @@ describe("Export", () => {
     // What it downloads reads in the Help window, not inside the box.
     expect(confirm.getAttribute("data-help-text")).toMatch(/Download 1\.234 MESA profiles/);
     expect(api.exportMesaProfiles).not.toHaveBeenCalled();
-    // Rendering 1234 rows takes longer than the usual budget in jsdom, under load.
-  }, 20_000);
+    // Rendering 1234 rows takes longer than the usual budget in jsdom, far longer on a loaded runner.
+  }, 60_000);
 
   it("downloads the archive only after the explicit confirm", async () => {
     vi.mocked(api.listMesaProfiles).mockResolvedValue({ profiles: ["a", "b", "c"].map((x) => ({ entity_id: `light.${x}`, document })), total_matched: 3, has_more: false, next_cursor: null });

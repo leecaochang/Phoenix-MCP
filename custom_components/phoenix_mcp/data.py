@@ -24,7 +24,7 @@ from .version_store import VersionStore
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
 
-    from .mesa import MesaRuntime
+    from .mesa import MesaRuntime, MesaStorage
     from .logger_control import LoggerOverrideManager
     from .tools.calendar import CalendarWriteJournal
 
@@ -48,6 +48,9 @@ class DurableState:
     routing_statistics: RoutingStatistics
     decision_budget: DecisionRequestBudget
     calendar_writes: CalendarWriteJournal
+    # Set by the first load that succeeds. A load that failed leaves nothing here, so the
+    # next reload reads the file again, which is how a repaired store comes back.
+    mesa: MesaStorage | None = None
     # Claims stay valid across a reload because the handlers that hold them keep
     # running: an execution marker with a claim here has not been interrupted.
     approvals_in_progress: set[str] = field(default_factory=set)

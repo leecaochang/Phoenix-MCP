@@ -18,7 +18,7 @@ from typing import Any
 
 from homeassistant.core import CoreState, HomeAssistant
 from homeassistant.helpers.storage import Store
-from homeassistant.util.dt import parse_datetime, utcnow
+from homeassistant.util.dt import utcnow
 
 from .access_key_schema import normalize_access_key_root
 from .durable_storage import DurableStorageError, DurableStore
@@ -47,6 +47,7 @@ from .routing.routing_tables import (
     DECISION_REQUEST_BUDGET_MAX, COMMAND_ROUTING_TIMEOUT_MIN_MS, COMMAND_ROUTING_TIMEOUT_MAX_MS,
 )
 from .const import APPROVAL_REASON_FORMAT_INCOMPATIBLE
+from .time_text import parse_datetime
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -132,6 +133,17 @@ class PermissionNode:
         if state not in VALID_NODE_STATES:
             raise ValueError(f"Invalid permission node state: {state!r}")
         return cls(state=state, hint=data.get("hint"))
+
+
+def _grants_no_more(node: PermissionNode | None, than: PermissionNode | None) -> bool:
+    """Whether a node is sure to grant no more than another; no node inherits, like GREY.
+
+    What GREY inherits is unknown here, so of the rest only RED is below it for certain.
+    """
+    if node is None:
+        return False
+    other = than.state if than is not None else "GREY"
+    return node.state in ("RED", other) or other == "GREEN"
 
 
 @dataclass
@@ -1448,19 +1460,26 @@ class AccessKeyStore:
         await self.async_save()
 
     async def async_rename_entity(self, old_entity_id: str, new_entity_id: str) -> bool:
-        """Carry an entity's permission nodes and global hint over a rename; return if any moved.
+        """Carry an entity's permission nodes and global hint over a rename; return if any changed.
 
-        Caller holds async_lock. A node or hint already at the new ID is kept and the old one
-        shows as missing, so a rename never widens or overwrites what the operator set.
+        Caller holds async_lock. A rename never widens: the entity keeps the node it had unless
+        one already at the new ID grants no more, which then stays and the old one shows as
+        missing. With no node to carry, a leftover grant at the new ID goes, as it was never
+        given to this entity. A hint already at the new ID is kept.
         """
         changed = False
         for access_key in self._access_keys.values():
             nodes = access_key.permissions.entities
-            if old_entity_id in nodes and new_entity_id not in nodes:
+            carried, leftover = nodes.get(old_entity_id), nodes.get(new_entity_id)
+            if (carried is None and leftover is None) or _grants_no_more(leftover, carried):
+                continue
+            if carried is None:
+                del nodes[new_entity_id]
+            else:
                 nodes[new_entity_id] = nodes.pop(old_entity_id)
-                access_key.settings_version += 1
-                access_key.updated_at = utcnow()
-                changed = True
+            access_key.settings_version += 1
+            access_key.updated_at = utcnow()
+            changed = True
         if old_entity_id in self._entity_hints and new_entity_id not in self._entity_hints:
             self._entity_hints[new_entity_id] = self._entity_hints.pop(old_entity_id)
             changed = True

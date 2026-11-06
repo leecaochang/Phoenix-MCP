@@ -4,6 +4,9 @@ asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 # Home Assistant installs its httpx alias before respx is imported.
 addopts = "-p no:respx --strict-markers --strict-config"
+# Per test, fixtures included. A hang fails with every thread's stack instead of
+# holding the job until its limit. Far above the slowest test, so load cannot reach it.
+timeout = 120
 
 [tool.coverage.run]
 source = ["custom_components/phoenix_mcp"]

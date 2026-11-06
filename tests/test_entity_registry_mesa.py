@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import uuid
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -17,12 +18,17 @@ from pytest_homeassistant.common import MockConfigEntry
 
 from custom_components.phoenix_mcp.const import DOMAIN
 from custom_components.phoenix_mcp.data import PhoenixData
+from custom_components.phoenix_mcp.tools.helper import _helper_mesa_preview
+from custom_components.phoenix_mcp.tools.integrations import _config_entry_mesa_preview
 from custom_components.phoenix_mcp.tools.registry import (
     _REGISTRY_MESA_FINGERPRINT,
+    _device_mesa_preview,
     _entity_identity_references,
 )
+from custom_components.phoenix_mcp.tool_common import _tool_success
 from custom_components.phoenix_mcp.tool_dispatch import _call_tool, async_execute_approved_tool
 from custom_components.phoenix_mcp.mesa import (
+    RegistryMesaDecision,
     async_setup_mesa,
     evaluate_registry_action,
 )
@@ -247,6 +253,77 @@ async def test_enforced_confirm_uses_one_normal_registry_approval(
     assert mesa_preview["effective_rule"]["provided_by_level"] == "domain"
     assert mesa_preview["effective_rule"]["control_reason"].startswith("Operator")
     assert er.async_get(hass).async_get(entity_id) is not None
+
+
+async def test_a_denial_names_no_entity_the_key_cannot_read(hass: HomeAssistant, registry_entity):
+    entity_id, _device_id = registry_entity
+    hass.states.async_set("person.alice", "home")
+    data = await _data(hass, "enforced")
+    data.mesa.store.set(entity_id, _profile(entity_id, "prohibited", "guards person.alice at home"))
+    content, outcome, _ = await _call_tool(
+        "delete_entity", {"entity_id": entity_id}, _access_key(), hass, data, request_id="rid",
+    )
+    assert outcome == "denied"
+    text = content["content"][0]["text"]
+    assert "person.alice" not in text
+    assert "guards <redacted-entity> at home" in _body(content)["mesa"]["effective_rule"]["control_reason"]
+
+
+@pytest.mark.parametrize("mode", ["confirm", "autonomous", "prohibited"])
+async def test_every_decision_is_redacted_and_only_the_admin_rule_keeps_the_reason(hass: HomeAssistant, registry_entity, mode):
+    entity_id, _device_id = registry_entity
+    hass.states.async_set("person.alice", "home")
+    data = await _data(hass, "enforced")
+    data.mesa.store.set(entity_id, _profile(entity_id, mode, "guards person.alice at home"))
+    decision = evaluate_registry_action(data, _access_key(), entity_id, action="delete")
+    assert "person.alice" not in json.dumps([decision.reason, decision.effective_rule, decision.warnings])
+    assert decision.admin_rule["control_reason"] == "guards person.alice at home"
+
+
+async def test_the_approval_diff_keeps_the_reason_as_the_operator_wrote_it(hass: HomeAssistant, registry_entity):
+    entity_id, _device_id = registry_entity
+    hass.states.async_set("person.alice", "home")
+    data = await _data(hass, "enforced")
+    data.mesa.store.set(entity_id, _profile(entity_id, "confirm", "guards person.alice at home"))
+    create = AsyncMock(return_value=(_tool_success("pending"), "pending_approval", entity_id))
+    with patch("custom_components.phoenix_mcp.tools.registry._create_registry_mesa_approval", create):
+        await _call_tool("delete_entity", {"entity_id": entity_id}, _access_key(), hass, data, request_id="rid")
+    preview = create.await_args.kwargs["diff"]["preview"]["mesa"]
+    assert preview["effective_rule"]["control_reason"] == "guards person.alice at home"
+
+
+_ENTITY_ROW = {
+    "entity_id": "light.a", "effective_rule": {"control_reason": "guards <redacted-entity>"},
+    "admin_rule": {"control_reason": "guards person.alice"}, "profile_fingerprint": "f" * 64,
+}
+
+
+@pytest.mark.parametrize("preview", [
+    lambda admin: _device_mesa_preview(
+        SimpleNamespace(decision="deny", actions=[], entities=[_ENTITY_ROW], warnings=[], profile_fingerprint="f" * 64),
+        admin=admin,
+    ),
+    lambda admin: _config_entry_mesa_preview(
+        SimpleNamespace(
+            decision="deny", actions=[], warnings=[], fingerprint="f" * 64,
+            entities=[{**_ENTITY_ROW, "explanation": {"reason": "guards person.alice"}}],
+        ),
+        admin=admin,
+    ),
+    lambda admin: _helper_mesa_preview(
+        SimpleNamespace(
+            action="delete", decision="deny", warnings=(), fingerprint="f" * 64,
+            decisions=(("light.a", RegistryMesaDecision(
+                decision="deny", rule="r", reason="redacted", effective_rule={"control_reason": "guards <redacted-entity>"},
+                raw_control_reason="guards person.alice",
+            )),),
+        ),
+        admin=admin,
+    ),
+], ids=["device", "config_entry", "helper"])
+def test_only_the_approval_diff_of_a_shared_preview_holds_the_raw_reason(preview):
+    assert "person.alice" not in json.dumps(preview(False))
+    assert "person.alice" in json.dumps(preview(True))
 
 
 async def test_capability_confirmation_already_satisfies_mesa_confirmation(

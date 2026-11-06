@@ -17,7 +17,7 @@ from ..data import PhoenixData
 from ..helpers import content_hash
 from ..template_recovery import restore_template
 from ..template_snapshots import validate_snapshot
-from ..tool_common import _restore_ctx, _tool_error, _tool_success
+from ..tool_common import _restore_ctx, _tool_error, _tool_success, _tool_uncertain
 from ..ws_dispatch import async_ws_command
 from .authoring import (
     _execute_create_automation, _execute_create_scene, _execute_create_script,
@@ -248,13 +248,17 @@ async def async_restore_version(
                         )
                         await data.config_recovery.mark(rid, "verified" if verified else "partial", replacement_helper_id=new_id)
                         if not verified:
-                            return _tool_error(json.dumps({"status": "partial", "recovery_id": rid,
-                                "replacement_helper_id": new_id, "retry_safe": False})), "invalid_request", "async_restore_version"
+                            return _tool_uncertain({"status": "partial", "recovery_id": rid,
+                                "replacement_helper_id": new_id, "retry_safe": False}), "invalid_request", "async_restore_version"
                         body.update(recovery_id=rid, status="verified", retry_safe=False)
                         restored = (_tool_success(json.dumps(body)), restored[1], restored[2])
                     return restored
             except Exception:
-                return _tool_error("Helper restoration was not verified. Inspect configuration recovery before retrying."), "invalid_request", "async_restore_version"
+                message = "Helper restoration was not verified. Inspect configuration recovery before retrying."
+                if rid is None:
+                    return _tool_error(message), "invalid_request", "async_restore_version"
+                return _tool_uncertain({"status": "unknown", "recovery_id": rid, "retry_safe": False,
+                                        "error": message}), "invalid_request", "async_restore_version"
             finally:
                 if rid is not None:
                     data.config_recovery.leave(rid)

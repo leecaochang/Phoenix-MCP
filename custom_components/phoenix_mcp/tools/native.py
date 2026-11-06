@@ -42,6 +42,7 @@ from ..catalog_text import diff_summary_fields as _summary
 from ..capability import effective_cap
 from ..tool_common import (
     _gate, _mesa_confirm_annotation, _pending_or_inline, _tool_error, _tool_refused_before_write, _tool_success,
+    _tool_uncertain,
 )
 from ..request_authority import _approved_exec_ctx
 from ..policy_engine import Permission, group_member_denied, normalize_intent_selectors, resolve, resolve_intent_entities
@@ -711,11 +712,11 @@ async def _merge_action_calls(
             if exact:
                 if not any_ok:
                     return resp, outcome, resource
-                return _tool_error(json.dumps({
+                return _tool_uncertain({
                     "speech": {}, "response_type": "action_done",
                     "data": {"success": success, "failed": []}, "partial": True,
                     "message": "Reviewed targets changed or an action failed. Remaining actions were not dispatched; inspect prior effects before retrying.",
-                })), outcome, resource
+                }), outcome, resource
             continue
         any_ok = True
         payload = json.loads(resp["content"][0]["text"])

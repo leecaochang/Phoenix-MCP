@@ -130,7 +130,11 @@
         "one": "{count} selected",
         "other": "{count} selected"
       },
-      "rowPicked": "selected for batch approval"
+      "rowPicked": "selected for batch approval",
+      "todoItems": "Items to remove",
+      "todoRemovalWarning": "Removing to-do items is permanent. Phoenix keeps no copy, so they can't be restored.",
+      "todoStatusCompleted": "Completed",
+      "todoStatusNeedsAction": "Not completed"
     },
     "caps": {
       "cap_config_read": {
@@ -255,7 +259,7 @@
       },
       "cap_yaml_edit": {
         "label": "YAML configuration",
-        "description": "Read your YAML configuration files and reload YAML domains. Passwords typed into these files are visible; use secrets.yaml."
+        "description": "Read your YAML files and reload YAML domains. Values named like secrets are hidden; keep passwords in secrets.yaml."
       },
       "noBuilder": "Device Builder add-on not detected",
       "noEsphome": "ESPHome not detected",
@@ -1099,7 +1103,9 @@
       "rowPayload": "Payload",
       "rowRequestId": "Request ID",
       "rowResource": "Resource",
-      "rowTime": "Time"
+      "rowTime": "Time",
+      "outcomeCancelled": "Cancelled",
+      "outcomeUnknown": "Outcome Unknown"
     },
     "wizard": {
       "accessSub": "Select the triangle beside <code>light</code> to open the light group. It lists your light devices; select the triangle beside a device to see its entities. Or type your light's name in the filter box. Then select <strong>W</strong> on a light you can check, so the agent can read and control it. You can add more permissions later.",
@@ -2388,7 +2394,9 @@
       "restoreYamlTags": "This version contains YAML tags such as !secret or !include and cannot be restored automatically. Re-create it manually.",
       "restoreToolReported": "The restore could not be applied. The tool reported: {detail}",
       "recoverySnapshotUnsafeAt": "No complete copy of this item without secrets is available, so nothing was changed. Phoenix refused it at {location}.",
-      "invalidHostHeader": "The request's Host header is not a valid address."
+      "invalidHostHeader": "The request's Host header is not a valid address.",
+      "approvalOutcomeNotSaved": "The action finished, but its result could not be saved. Check its effect in Home Assistant; this approval will not be offered again.",
+      "providerRemoteUrlResolutionFailed": "The provider URL could not be resolved, so its address could not be checked."
     },
     "mesaSuggestion": {
       "baseline_note": " Prohibited matches the built-in baseline for this domain, so the profile makes that intent explicit. To allow agent control behind admin approval instead, choose Confirm in Profile Editor before saving; approval applies while MESA is enforced.",
@@ -2960,7 +2968,9 @@
       "title": "Needs Attention",
       "unknown": "The conversation ended before Phoenix recorded whether this action ran, so it may have run. Show in Audit Log, where offered, shows what Phoenix recorded; an action that waited for approval has its status in Approvals. Check Home Assistant itself before trying it again.",
       "audit_storageTitle": "The audit log is not reaching storage",
-      "audit_storageHelp": "Recent audit entries are held in memory only, so a restart would lose them. Check Home Assistant logs. This clears after the next save succeeds."
+      "audit_storageHelp": "Recent audit entries are held in memory only, so a restart would lose them. Check Home Assistant logs. This clears after the next save succeeds.",
+      "mesa_renameTitle": "A renamed entity's profile is not in storage",
+      "mesa_renameHelp": "The profile followed the entity and is in force, but the saved copy still has the old ID. Check Home Assistant logs, then reload Phoenix MCP from Settings > Devices & services to save it again. This clears after the next save succeeds."
     }
   },
   "notification": {

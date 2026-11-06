@@ -352,7 +352,7 @@ async def test_unknown_write_retains_barrier_and_refuses_repeat(lifecycle_http, 
         assert "earlier agent action" in json.dumps(await second.json())
     assert effects == ["effect"]
     assert data.agent_recovery.blocks(access_key.id)
-    assert any(row.method == "authority/changed" and row.outcome == "invalid_request" for row in data.audit.query())
+    assert any(row.method == "authority/changed" and row.outcome == "unknown" for row in data.audit.query())
 
 
 @pytest.mark.parametrize("service_error", ["authority", "integration"])

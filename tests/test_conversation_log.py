@@ -1224,9 +1224,10 @@ def test_a_marker_anywhere_in_the_text_still_makes_a_code_block_a_secret(marker)
     assert "canary-block" not in history.sanitized(text, max_bytes=100000)
 
 
-def test_a_caller_can_declare_service_context():
-    assert "canary-block" not in history.sanitized("code: |\n  canary-block\n", max_bytes=100000, service=True)
-    assert "canary-block" in history.sanitized("code: |\n  canary-block\n", max_bytes=100000)
+def test_a_cut_string_is_scanned_as_service_context():
+    block = "code: |\n  canary-block\n"
+    assert "canary-block" not in history.sanitized(block + "x " * 200, max_bytes=100000, text_chars=200)
+    assert "canary-block" in history.sanitized(block, max_bytes=100000)
 
 
 async def test_loading_sanitizes_off_the_event_loop_and_publishes_on_it(conversation_data):
@@ -1330,6 +1331,62 @@ def test_a_long_string_is_scanned_as_a_service_call_and_marked():
     assert "abcd" not in value
     assert value.endswith("<text shortened>")
     assert len(value) < 260
+
+
+@pytest.mark.parametrize("secret, probe", [
+    ("phx_" + "ab12" * 16, "ab12ab12"),
+    ("eyJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJhYmMifQ." + "S" * 40, "eyJpc3M"),
+    ("sk-ant-api03-ABCDEFGHIJKLMNOPQRSTUVWXYZ", "ABCDEFGH"),
+    ("https://user:pass-word-secret@example.test/", "pass-word"),
+])
+def test_a_token_across_the_scan_limit_does_not_survive_as_a_prefix(secret, probe):
+    for pad in range(120, 200):
+        value = history.sanitized("y " * (pad // 2) + secret + " tail", max_bytes=10_000, text_chars=200)
+        assert probe not in value
+
+
+def test_a_quoted_secret_across_the_scan_limit_is_hidden_to_the_cut():
+    value = history.sanitized('{"password": "correct horse battery staple ' + "filler " * 100 + '"}',
+                              max_bytes=10_000, text_chars=100)
+    assert "horse" not in value and "filler" not in value
+
+
+def test_a_cut_keeps_the_text_before_the_word_it_falls_in():
+    assert history.clip_text("one two three", 9) == "one two "
+    assert history.clip_text("one two three", 7) == "one "
+    assert history.clip_text("short", 9) == "short"
+    assert history.clip_text("opaque-word", 4) == ""
+
+
+def test_a_shortened_string_counts_as_an_omission(conversation_data):
+    data, _ = conversation_data
+    log = history.recorder(data)
+    handle = log.begin("voice", prompt="hello")
+    log.event(handle, "tool_result", "x" * 200_000, outcome="allowed")
+    log.finish(handle, response="done")
+    assert "size_limit" in only(log)["omissions"]
+
+
+async def test_a_lone_surrogate_in_a_streamed_reply_does_not_end_the_turn(conversation_data):
+    data, _ = conversation_data
+    access_key = SimpleNamespace(id="key", name="key")
+    seen = []
+
+    async def emit(name, payload):
+        seen.append(payload.get("text"))
+
+    @history.recorded_chat
+    async def run(**kwargs):
+        await kwargs["emit"]("assistant_delta", {"text": "ok "})
+        await kwargs["emit"]("assistant_delta", {"text": "half \ud83d"})
+        await kwargs["emit"]("assistant_delta", {"text": "\ude00 after"})
+        return "done"
+
+    result = await run(data=data, messages=[{"role": "user", "content": "hi"}], access_key=access_key,
+                       emit=emit, provider=None)
+    assert result == "done"
+    assert seen == ["ok ", "half \ud83d", "\ude00 after"]
+    assert only(history.recorder(data))["status"] == "completed"
 
 
 def test_a_private_key_cut_by_the_scan_limit_stays_hidden():

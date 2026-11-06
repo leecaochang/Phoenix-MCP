@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Collection, Mapping
+from collections.abc import Callable, Collection, Mapping
 from dataclasses import dataclass
 from typing import Any
 
@@ -289,10 +289,39 @@ def entity_full_name(hass: HomeAssistant, entry: Any, friendly_name: str | None 
     return er.async_get_full_entity_name(hass, entry) or friendly_name
 
 
-def composed_name_fields(hass: HomeAssistant, entry: Any, friendly_name: str | None) -> dict[str, str]:
+def _names_hidden_parent(hass: HomeAssistant, entry: Any, parent_readable: Callable[[str], bool]) -> bool:
+    """Whether HA's composed name of an entity can start with a main parent the caller cannot read."""
+    device_id = getattr(entry, "device_id", None)
+    device = dr.async_get(hass).async_get(device_id) if isinstance(device_id, str) else None
+    parent_id = _valid_id(_entry_document(device).get("parent_device_id")) if device is not None else None
+    return parent_id is not None and not parent_readable(parent_id)
+
+
+def readable_full_name(
+    hass: HomeAssistant, entry: Any, friendly_name: str | None, parent_readable: Callable[[str], bool],
+) -> str | None:
+    """HA's composed name, or `friendly_name` when the composed one could name a hidden parent."""
+    if _names_hidden_parent(hass, entry, parent_readable):
+        return friendly_name
+    return entity_full_name(hass, entry, friendly_name)
+
+
+def composed_name_fields(
+    hass: HomeAssistant, entry: Any, friendly_name: str | None, parent_readable: Callable[[str], bool],
+) -> dict[str, str]:
     """`composed_name` for a read, present only when it says more than `friendly_name` does."""
-    composed = entity_full_name(hass, entry, friendly_name)
+    composed = readable_full_name(hass, entry, friendly_name, parent_readable)
     return {"composed_name": composed} if composed and composed != friendly_name else {}
+
+
+def readable_entity_aliases(
+    hass: HomeAssistant, entry: Any, friendly_name: str | None, parent_readable: Callable[[str], bool],
+) -> list[str]:
+    """HA's resolved aliases; the entry for the computed name follows `readable_full_name`."""
+    if not _names_hidden_parent(hass, entry, parent_readable):
+        return er.async_get_entity_aliases(hass, entry)
+    aliases = [alias.strip() if isinstance(alias, str) else friendly_name for alias in entry.aliases or ()]
+    return [alias for alias in aliases if alias]
 
 
 def entity_name_source(hass: HomeAssistant, entry: Any) -> str:

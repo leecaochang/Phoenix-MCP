@@ -239,7 +239,7 @@ Pages through the log of agent requests, newest first.
 | `limit` | integer | Default 100, at most 500. |
 | `offset` | integer | See [Request bodies](guide:topic.adminApi#bodies). |
 | `access_key_id` | string | Exact match. |
-| `outcome` | string | Exact match: `allowed`, `denied`, `not_found`, `rate_limited`, `not_implemented`, `invalid_request` or `pending_approval`. |
+| `outcome` | string | Exact match: `allowed`, `denied`, `not_found`, `rate_limited`, `not_implemented`, `invalid_request`, `pending_approval`, `cancelled` or `unknown`. |
 | `ip` | string | Part of the client address. |
 | `method` | string | Part of the method, any case. |
 | `resource` | string | Part of the resource, any case. |

@@ -1,7 +1,8 @@
 """Per-state durations and transition counts for get_history's summary mode.
 
 The fold reads attribute-free Recorder state changes in bounded pages. Core has no bounded
-attribute query, so an attribute summary has a capped range and is paged from memory. The
+attribute query, so an attribute summary has a capped range and is paged from memory, with each
+label built from what the access key may read of the attribute. The
 state at the window start is a baseline, a repeated state is no transition, and rows sharing a
 timestamp count as the last of them. Time before the first record is unrecorded. A budget stop
 ends on a cursor strictly between two recorded changes. Times are UTC epoch microseconds.
@@ -24,6 +25,9 @@ if TYPE_CHECKING:
     from homeassistant.core import State
 
 Row = tuple[int, str]
+# (timestamp, state, {attribute: raw value} or {} where the row lacks it). The raw value is
+# for attribute_rows alone: nothing reaches a caller unscrubbed.
+AttributeChange = tuple[int, str, dict[str, Any]]
 # fetch(after_us, before_us, limit, include_start_state) -> ascending rows.
 Fetch = Callable[[int, int, int, bool], Awaitable[list[Row]]]
 
@@ -51,11 +55,11 @@ def read_state_change_page(
 
 def read_attribute_changes(
     hass: HomeAssistant, entity_id: str, attribute: str, after_us: int, before_us: int, include_start_state: bool,
-) -> list[Row]:
-    """Return every ascending row of one attribute's values. Recorder executor only.
+) -> list[AttributeChange]:
+    """Return every ascending change of one attribute. Recorder executor only.
 
     Reads every update inside (after, before) with the same start row. Core takes no limit, so
-    the caller caps the range. A row without the attribute counts under the entity's state.
+    the caller caps the range.
     """
     # Local: optional component, imported only when this path runs.
     from homeassistant.components.recorder import history
@@ -67,11 +71,31 @@ def read_attribute_changes(
         include_start_time_state=include_start_state, significant_changes_only=False,
         minimal_response=False, no_attributes=False,
     ).get(entity_id, []))
+    return [
+        (ceil_us(state.last_updated_timestamp), state.state,
+         {attribute: state.attributes[attribute]} if attribute in state.attributes else {})
+        for state in states
+    ]
+
+
+def attribute_rows(
+    changes: list[AttributeChange], scrub: Callable[[dict[str, Any]], dict[str, Any]],
+) -> list[Row]:
+    """Label each change with its attribute as ``scrub`` leaves it, or else with the state.
+
+    An attribute scrub drops reads as absent, as on any other row without it, so a filter on
+    the labels cannot test a hidden value. A value recurring across rows is scrubbed once.
+    """
+    labels: dict[str, str | None] = {}
     rows: list[Row] = []
-    for state in states:
-        value = state.attributes.get(attribute, state.state)
-        rows.append((ceil_us(state.last_updated_timestamp),
-                     value if isinstance(value, str) else json.dumps(value, sort_keys=True, default=str)))
+    for stamp, state, attribute in changes:
+        raw = json.dumps(attribute, sort_keys=True, default=str)
+        if raw not in labels:
+            kept = list(scrub(attribute).values())
+            labels[raw] = None if not kept else (
+                kept[0] if isinstance(kept[0], str) else json.dumps(kept[0], sort_keys=True, default=str))
+        label = labels[raw]
+        rows.append((stamp, state if label is None else label))
     return rows
 
 

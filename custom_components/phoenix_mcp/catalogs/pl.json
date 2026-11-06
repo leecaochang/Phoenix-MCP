@@ -415,7 +415,9 @@
       "rowPayload": "Zawartość",
       "rowRequestId": "ID żądania",
       "rowResource": "Zasób",
-      "rowTime": "Czas"
+      "rowTime": "Czas",
+      "outcomeCancelled": "Anulowano",
+      "outcomeUnknown": "Wynik nieznany"
     },
     "caps": {
       "cap_automation_write": {
@@ -535,7 +537,7 @@
         "label": "Ślady automatyzacji"
       },
       "cap_yaml_edit": {
-        "description": "Odczytuj pliki konfiguracji YAML i przeładowuj domeny YAML. Hasła wpisane w tych plikach są widoczne; używaj secrets.yaml.",
+        "description": "Odczytuj pliki konfiguracji YAML i przeładowuj domeny YAML. Wartości pod nazwami wskazującymi na sekret są ukrywane, ale hasło pod zwykłą nazwą jest widoczne; używaj secrets.yaml.",
         "label": "Konfiguracja YAML"
       },
       "confirmUnavailable": "Ta możliwość nie może wymagać zatwierdzenia.",
@@ -842,7 +844,11 @@
         "few": "Wybrano: {count}",
         "many": "Wybrano: {count}"
       },
-      "rowPicked": "wybrane do zatwierdzenia zbiorczego"
+      "rowPicked": "wybrane do zatwierdzenia zbiorczego",
+      "todoItems": "Elementy do usunięcia",
+      "todoRemovalWarning": "Usunięcie elementów listy zadań jest trwałe. Phoenix nie zachowuje ich kopii, więc nie można ich przywrócić.",
+      "todoStatusCompleted": "Ukończone",
+      "todoStatusNeedsAction": "Nieukończone"
     },
     "agentchat": {
       "accessKey": "Klucz dostępu",
@@ -949,7 +955,7 @@
         "esphomeFlashing": "Wgrywanie oprogramowania do {file}{progress}",
         "esphomeLogs": "Przechwytywanie logów urządzenia {file}",
         "waitingApproval": "Oczekiwanie na zatwierdzenie: {name}",
-        "waitingApprovals": "Oczekiwanie na zatwierdzenie: {count} oczekujących"
+        "waitingApprovals": "Oczekiwanie na zatwierdzenie (oczekujące: {count})"
       },
       "provider": "Konto dostawcy",
       "providerDetail": "Szczegóły dostawcy: {detail}",
@@ -1232,7 +1238,9 @@
       "restoreToolReported": "Nie można było zastosować przywrócenia. Narzędzie zgłosiło: {detail}",
       "capabilityAllowUnsupported": "{capability} nie obsługuje trybu Zezwól.",
       "recoverySnapshotUnsafeAt": "Brak pełnej kopii tego elementu bez sekretów, więc nic nie zostało zmienione. Phoenix odrzucił go w miejscu {location}.",
-      "invalidHostHeader": "Nagłówek Host żądania nie jest prawidłowym adresem."
+      "invalidHostHeader": "Nagłówek Host żądania nie jest prawidłowym adresem.",
+      "approvalOutcomeNotSaved": "Działanie zakończyło się, ale nie udało się zapisać jego wyniku. Sprawdź jego efekt w Home Assistant; to zatwierdzenie nie zostanie zaproponowane ponownie.",
+      "providerRemoteUrlResolutionFailed": "Nie udało się rozwiązać adresu URL dostawcy, więc nie można było sprawdzić jego adresu."
     },
     "wizard": {
       "accessSub": "Wybierz trójkąt obok <code>light</code>, aby otworzyć grupę świateł. Zawiera ona Twoje urządzenia oświetleniowe; wybierz trójkąt obok urządzenia, aby zobaczyć jego encje. Możesz też wpisać nazwę światła w polu filtra. Następnie wybierz <strong>W</strong> przy świetle, które możesz sprawdzić, aby agent mógł je odczytywać i nim sterować. Więcej uprawnień możesz dodać później.",
@@ -2736,7 +2744,9 @@
       "title": "Wymaga uwagi",
       "unknown": "Rozmowa zakończyła się, zanim Phoenix zapisał, czy ta akcja została wykonana, więc mogła zostać wykonana. Pokaż w dzienniku audytu, jeśli jest dostępne, pokazuje, co zapisał Phoenix; akcja, która czekała na zatwierdzenie, ma swój status w Zatwierdzeniach. Sprawdź samego Home Assistant przed ponowną próbą.",
       "audit_storageTitle": "Dziennik audytu nie trafia do magazynu",
-      "audit_storageHelp": "Najnowsze wpisy audytu są tylko w pamięci, więc restart by je usunął. Sprawdź dzienniki Home Assistant. Ten wpis zniknie po następnym udanym zapisie."
+      "audit_storageHelp": "Najnowsze wpisy audytu są tylko w pamięci, więc restart by je usunął. Sprawdź dzienniki Home Assistant. Ten wpis zniknie po następnym udanym zapisie.",
+      "mesa_renameTitle": "Profil encji o zmienionej nazwie nie trafił do magazynu",
+      "mesa_renameHelp": "Profil podążył za encją i obowiązuje, ale zapisana kopia ma nadal stary identyfikator. Sprawdź dzienniki Home Assistant, a następnie przeładuj Phoenix MCP w Ustawienia > Urządzenia i usługi, aby zapisać go ponownie. Ten wpis zniknie po następnym udanym zapisie."
     },
     "workspace": {
       "addToMy": "Dodaj do Mojego obszaru roboczego",

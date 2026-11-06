@@ -31,7 +31,8 @@ from ..policy_engine import (
 from ..request_authority import check_request_authority
 from ..access_key_store import AccessKeyRecord
 from ..tool_common import (
-    _create_registry_mesa_approval, _gate, _record_version, _restore_ctx, _tool_error, _tool_success, unknown_label_message,
+    _create_registry_mesa_approval, _gate, _record_version, _restore_ctx, _tool_error, _tool_success, _tool_uncertain,
+    unknown_label_message,
 )
 from ..request_authority import _approved_exec_ctx
 
@@ -324,10 +325,10 @@ async def _execute_set_area_or_floor(
             raise RuntimeError("Location readback mismatch")
     except Exception:
         _LOGGER.exception("Location registry write failed after dispatch")
-        return _tool_error(json.dumps({
+        return _tool_uncertain({
             "status": "unknown", "location_id": location_id,
             "message": "The write may have applied partially. Inspect current registry state before any retry; no automatic replay or rollback was attempted.",
-        })), "invalid_request", _TOOL
+        }), "invalid_request", _TOOL
     # Capture the receipt before history persistence lets other writers run.
     receipt = _tool_success(json.dumps({
         "kind": plan.kind, "operation": plan.operation, "location_id": location_id,

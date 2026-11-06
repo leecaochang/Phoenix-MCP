@@ -478,6 +478,7 @@ class TestDeviceYamlRead:
             "get_esphome_yaml", {"file": "broken.yaml"}, _yaml_access_key(), hass)
         assert outcome == "invalid_request"
         assert "could not be parsed" in content["content"][0]["text"]
+        assert "unclosed" not in content["content"][0]["text"]
 
     async def test_missing_file_and_out_of_scope_are_identical(self, hass, esphome_dir, esphome_entries):
         missing, _, _ = await _call(
@@ -717,12 +718,12 @@ class TestScopedEsphomeInventory:
         assert _json(content)["count"] == 1
 
     async def test_search_scope_text_and_jail_before_matching(self, hass, esphome_dir, tmp_path):
-        (esphome_dir / "a.yaml").write_text("# light.secret_hidden\n")
+        (esphome_dir / "a.yaml").write_text("# light.attic_hidden\n")
         outside = tmp_path / "outside.yaml"
         outside.write_text("# hiddenneedle\n")
         (esphome_dir / "alias.yaml").symlink_to(outside)
         (esphome_dir / "secret-alias.yaml").symlink_to(esphome_dir / "secrets.yaml")
-        for query in ("secret_hidden", "hiddenneedle", "housepassword1"):
+        for query in ("attic_hidden", "hiddenneedle", "housepassword1"):
             content, _, _ = await _call("search_esphome_yaml", {"query": query}, _yaml_access_key(), hass)
             assert _json(content)["count"] == 0
 

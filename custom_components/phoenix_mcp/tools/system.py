@@ -32,7 +32,7 @@ from ..tool_catalog import (
     _EXECUTOR_REGISTRY, _tool_any_caps, _tool_required_caps, _write_gate_open,
     _WRITE_GATED_TOOLS,
 )
-from ..tool_common import _CAP_FORBIDDEN_MESSAGE, _gate, _tool_error, _tool_success
+from ..tool_common import _CAP_FORBIDDEN_MESSAGE, _gate, _tool_error, _tool_success, _tool_uncertain
 from ..tool_defs import (
     _ENTITY_TOOL_DEFS, _NATIVE_TOOL_DEFS, _NATIVE_TOOL_PUBLIC_TO_INTERNAL, _SYSTEM_TOOL_DEFS,
 )
@@ -203,7 +203,8 @@ async def _execute_restart_ha(
             })), "allowed", "restart_ha"
     except Exception as exc:
         message = str(exc) if isinstance(exc, ConfigurationRecoveryError) else "Restart outcome is uncertain. Reconnect and inspect current Home Assistant state before retrying."
-        return _tool_error(json.dumps({"error": message, "recovery_id": rid, "retry_safe": False})), "invalid_request", "restart_ha"
+        body = {"error": message, "recovery_id": rid, "status": "unknown" if rid else "not_applied", "retry_safe": False}
+        return _tool_uncertain(body) if rid else _tool_error(json.dumps(body)), "invalid_request", "restart_ha"
     finally:
         if rid is not None:
             recovery.leave(rid)

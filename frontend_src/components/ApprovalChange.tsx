@@ -146,10 +146,13 @@ export function ApprovalChange({ record }: {
 }
 
 // Render a preview value for the review UI. Nested objects (e.g. service_data)
-// are flattened to "key: value" pairs so they never show as "[object Object]".
+// are flattened to "key: value" pairs so they never show as "[object Object]",
+// including an object that is an element of an array.
 function renderPreviewValue(v: unknown): string {
   if (v == null) return t("common.none");
-  if (Array.isArray(v)) return v.length ? v.join(t("common.listSeparator")) : t("common.none");
+  if (Array.isArray(v)) {
+    return v.length ? v.map((item) => (item !== null && typeof item === "object" ? renderPreviewValue(item) : String(item))).join(t("common.listSeparator")) : t("common.none");
+  }
   if (typeof v === "object") {
     const entries = Object.entries(v as Record<string, unknown>);
     if (entries.length === 0) return t("common.none");
@@ -160,18 +163,59 @@ function renderPreviewValue(v: unknown): string {
   return String(v);
 }
 
+type TodoReviewItem = { list?: string; uid?: string; summary?: string; status?: string };
+
+const TODO_STATUS_LABEL_KEYS: Record<string, string> = {
+  completed: "approvals.todoStatusCompleted",
+  needs_action: "approvals.todoStatusNeedsAction",
+};
+
+function isTodoRemoval(preview: Record<string, unknown>): boolean {
+  return preview.domain === "todo" && preview.service === "remove_item";
+}
+
+// The items a removal names, as the approver should read them. The stored English
+// warning is left to agents and logs; this one follows the reader's language.
+function TodoRemovalBlock({ items }: { items: TodoReviewItem[] }) {
+  const lists = new Set(items.map((item) => item.list));
+  return (
+    <div className="mesa-preview-block">
+      <p className="approval-summary-line"><strong>{t("approvals.todoRemovalWarning")}</strong></p>
+      {items.length > 0 && (
+        <div className="approval-detail-meta" role="group" aria-label={t("approvals.todoItems")}>
+          {items.map((item, index) => {
+            const statusKey = TODO_STATUS_LABEL_KEYS[item.status ?? ""];
+            return (
+              <React.Fragment key={`${item.list ?? ""}/${item.uid ?? index}`}>
+                <span className="stat-label">{statusKey ? t(statusKey) : item.status ?? ""}</span>
+                <span>
+                  <code>{item.summary || item.uid || t("common.none")}</code>
+                  {lists.size > 1 && item.list ? <> ({item.list})</> : null}
+                </span>
+              </React.Fragment>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ServicePreview({ preview }: { preview: Record<string, unknown> }) {
   const mesa = preview.mesa as Record<string, unknown> | undefined;
+  const todoRemoval = isTodoRemoval(preview);
+  const hidden = todoRemoval ? ["mesa", "todo_items", "warning"] : ["mesa"];
   return (
     <div>
       <div className="approval-detail-meta">
-        {Object.entries(preview).filter(([k]) => k !== "mesa").map(([k, v]) => (
+        {Object.entries(preview).filter(([k]) => !hidden.includes(k)).map(([k, v]) => (
           <React.Fragment key={k}>
             <span className="stat-label">{k}</span>
             <span><code>{renderPreviewValue(v)}</code></span>
           </React.Fragment>
         ))}
       </div>
+      {todoRemoval && <TodoRemovalBlock items={Array.isArray(preview.todo_items) ? preview.todo_items as TodoReviewItem[] : []} />}
       {mesa && <MesaPreviewBlock mesa={mesa} />}
     </div>
   );

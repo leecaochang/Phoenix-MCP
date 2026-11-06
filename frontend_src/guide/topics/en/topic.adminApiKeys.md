@@ -233,7 +233,7 @@ Related: [{{label:accessKeys.rotate}}](guide:window.accessKeys#rotate)
 |---|---|
 | `limit` | Up to 500 (default 100). |
 | `offset` | Rows to skip. |
-| `outcome` | One of `allowed`, `denied`, `not_found`, `rate_limited`, `not_implemented`, `invalid_request`, `pending_approval`. |
+| `outcome` | One of `allowed`, `denied`, `not_found`, `rate_limited`, `not_implemented`, `invalid_request`, `pending_approval`, `cancelled`, `unknown`. |
 | `ip` | Matches rows whose client IP contains this text. |
 
 Each row has `request_id`, `timestamp`, `access_key_id`, `access_key_name`, `method`, `resource`, `outcome`, `client_ip` and `pass_through`. When set, a row also has `payload`, `mesa_advisory`, `preset`, `stale_tools_advisory`, `ha_user_id` and `originating_access_key_id`.

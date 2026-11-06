@@ -1333,6 +1333,22 @@ async def test_deepseek_gets_explicit_max_tokens_other_kinds_do_not():
 
 
 @pytest.mark.asyncio
+async def test_a_model_id_that_cannot_be_stored_never_enters_the_catalogue(hass, hass_storage):
+    tags = b'{"models": [{"name": "good"}, {"name": "m\\ud800"}, {"model": "\\udc00"}]}'
+    provider = OpenAICompatProvider(ProviderConfig(kind="ollama", model="", base_url="http://h:11434", api_key=None))
+    models = await provider.list_models(_FakeSession(_FakeResp(200, body=tags)))
+    assert models == ["good"]
+
+    store = await llm_accounts.AgentCliStore.async_create(hass)
+    first = await store.add("ollama", {"base_url": "http://h:11434"})
+    await store.set_catalog(first, models, {}, "t1")
+    second = await store.add("ollama", {"base_url": "http://other:11434"})
+    await store._store.async_save({"instances": store._data})
+    saved = hass_storage[store._store.key]["data"]["instances"]
+    assert set(saved) == {first, second}
+    assert saved[first]["seen"] == ["good"]
+
+
 async def test_ollama_list_models_parses_api_tags():
     tags = {"models": [
         {"name": "llama3:latest", "model": "llama3:latest"},
@@ -2709,10 +2725,77 @@ async def test_validate_base_url_rejects_hostname_resolving_to_metadata():
         grl.return_value.getaddrinfo = AsyncMock(
             return_value=[(2, 1, 6, "", ("169.254.169.254", 0))])
         assert await _validate_base_url("http://metadata.google.internal") is not None
-    # An unresolvable host is allowed (the actual request just fails cleanly).
+    # A local server may answer only to Home Assistant's own mDNS resolver.
     with patch("asyncio.get_running_loop") as grl:
         grl.return_value.getaddrinfo = AsyncMock(side_effect=OSError("no such host"))
         assert await _validate_base_url("http://does-not-resolve.invalid") is None
+
+
+@pytest.mark.asyncio
+async def test_a_remote_url_that_cannot_be_resolved_is_refused():
+    from custom_components.phoenix_mcp.agent_chat_views import _validate_base_url
+    with patch("asyncio.get_running_loop") as grl:
+        grl.return_value.getaddrinfo = AsyncMock(side_effect=OSError("no such host"))
+        error = await _validate_base_url("https://does-not-resolve.invalid", allow_private=False)
+    assert error.key == "providerRemoteUrlResolutionFailed"
+
+
+def _answers(*addresses):
+    return [(10 if ":" in str(item[0] if isinstance(item, tuple) else item) else 2, 1, 6, "",
+             item if isinstance(item, tuple) else (item, 0)) for item in addresses]
+
+
+@pytest.mark.parametrize("url", ["http://127.0.0.1:11434", "http://[::1]:11434", "http://[::ffff:127.0.0.1]:11434"])
+async def test_loopback_is_a_local_server_and_never_a_remote_provider(url):
+    from custom_components.phoenix_mcp.agent_chat_views import _validate_base_url
+    assert await _validate_base_url(url, allow_private=True) is None
+    assert await _validate_base_url(url.replace("http:", "https:"), allow_private=False) is not None
+
+
+@pytest.mark.parametrize("answers", [
+    ["127.0.0.1", "::1"],
+    ["::1"],
+    ["192.168.1.20", "fe80::1%en0"],
+    ["192.168.1.20", ("fe80::1", 0, 0, 7)],
+    ["fe80::1%en0", "fd12:3456::20"],
+])
+async def test_a_local_server_name_with_a_usable_answer_is_allowed(answers):
+    from custom_components.phoenix_mcp.agent_chat_views import _validate_base_url
+    with patch("asyncio.get_running_loop") as grl:
+        grl.return_value.getaddrinfo = AsyncMock(return_value=_answers(*answers))
+        assert await _validate_base_url("http://ollama.local:11434", allow_private=True) is None
+
+
+@pytest.mark.parametrize("answers, allow_private", [
+    (["fe80::1%en0"], True),
+    (["fe80::1"], True),
+    (["192.168.1.20", "fe80::1"], True),
+    (["192.168.1.20", "169.254.169.254"], True),
+    (["192.168.1.20", "fe80::1%en0", "fd00:ec2::254%en0"], True),
+    (["fd00:ec2::254%en0"], True),
+    (["192.168.1.20", "100.100.100.200"], True),
+    (["1.1.1.1", "::1"], False),
+    (["1.1.1.1", "fe80::1%en0"], False),
+    (["127.0.0.1"], False),
+])
+async def test_a_name_with_a_blocked_answer_is_refused(answers, allow_private):
+    from custom_components.phoenix_mcp.agent_chat_views import _validate_base_url
+    with patch("asyncio.get_running_loop") as grl:
+        grl.return_value.getaddrinfo = AsyncMock(return_value=_answers(*answers))
+        assert await _validate_base_url("https://name.example", allow_private=allow_private) is not None
+
+
+@pytest.mark.parametrize("address, allow_private, refused", [
+    ("2001:0:102:304::5601:5601", True, True),  # client 169.254.169.254
+    ("2001:0:102:304::5601:5601", False, True),
+    ("2001:0:102:304::3f57:fefe", True, False),  # client 192.168.1.1
+    ("2001:0:102:304::3f57:fefe", False, True),
+    ("2001:0:102:304::f7f7:f7f7", False, True),  # client 8.8.8.8, still not global itself
+])
+async def test_a_teredo_address_is_judged_by_its_client_and_itself(address, allow_private, refused):
+    from custom_components.phoenix_mcp.agent_chat_views import _validate_base_url
+    error = await _validate_base_url(f"https://[{address}]/", allow_private=allow_private)
+    assert (error is not None) is refused
 
 
 @pytest.mark.asyncio

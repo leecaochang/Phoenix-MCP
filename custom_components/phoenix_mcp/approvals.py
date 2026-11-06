@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import TYPE_CHECKING, Any
 
-from homeassistant.util.dt import parse_datetime, utcnow
+from homeassistant.util.dt import utcnow
 
 from .approval_targets import bind_targets, bound_preview
 from .conversation_log import redact_device_codes, approval_event
@@ -21,6 +21,7 @@ from .const import (
     APPROVAL_PAYLOAD_RETENTION_SECONDS, CAP_ALLOW, CAP_CONFIRM, CAP_DENY,
 )
 from .request_authority import household_authority, check_request_authority
+from .time_text import parse_datetime
 from collections.abc import Awaitable, Callable
 
 if TYPE_CHECKING:
@@ -118,25 +119,13 @@ class PendingApproval:
 
         The persistence path alone keeps raw args, for the approved-action executor.
         """
-
-        # Device codes too (a disarm code, a PIN), which the general redaction keeps.
-        public_args = redact_device_codes(redact_structure(self.args))
-        if isinstance(public_args, dict):
-            # Leading-underscore arguments are executor-only approval bindings
-            # (MESA/context/private identity hashes), not operator input. Keep
-            # them durably for replay but never project them through the admin
-            # API or Details view.
-            public_args = {
-                key: "<redacted>" if isinstance(key, str) and key.startswith("_") else value
-                for key, value in public_args.items()
-            }
         return {
             "id": self.id,
             "access_key_id": self.access_key_id,
             "access_key_name": self.access_key_name,
             "tool_name": self.tool_name,
             "cap_name": self.cap_name,
-            "args": self.args if not redact_args else public_args,
+            "args": self._public_args() if redact_args else self.args,
             "diff": self.diff,
             "status": self.status,
             "created_at": self.created_at.isoformat() if self.created_at else None,
@@ -154,6 +143,21 @@ class PendingApproval:
                 self.execution_started_at.isoformat() if self.execution_started_at else None
             ),
         }
+
+    def _public_args(self) -> Any:
+        """The arguments as an admin may see them."""
+        # Device codes too (a disarm code, a PIN), which the general redaction keeps.
+        public_args = redact_device_codes(redact_structure(self.args))
+        if isinstance(public_args, dict):
+            # Leading-underscore arguments are executor-only approval bindings
+            # (MESA/context/private identity hashes), not operator input. Keep
+            # them durably for replay but never project them through the admin
+            # API or Details view.
+            public_args = {
+                key: "<redacted>" if isinstance(key, str) and key.startswith("_") else value
+                for key, value in public_args.items()
+            }
+        return public_args
 
     @classmethod
     def from_dict(cls, data: dict) -> PendingApproval:

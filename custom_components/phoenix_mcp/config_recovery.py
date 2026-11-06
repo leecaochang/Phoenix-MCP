@@ -14,7 +14,7 @@ import uuid
 
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.storage import Store
-from homeassistant.util.dt import parse_datetime, utcnow
+from homeassistant.util.dt import utcnow
 
 from .access_key_schema import normalize_access_key_fields
 from .const import (CONFIG_RECOVERY_LAYOUT_MAX_DEPTH, CONFIG_RECOVERY_MAX_BYTES,
@@ -25,6 +25,7 @@ from .policy_engine import is_sensitive_key
 from .redaction import redact_secrets_in_text
 from .recovery_storage import RecoveryStorage
 from .ws_dispatch import ws_commands_unsettled
+from .time_text import parse_datetime
 
 
 recovery_source: ContextVar[dict | None] = ContextVar("phoenix_recovery_source", default=None)

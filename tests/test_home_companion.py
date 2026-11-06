@@ -588,10 +588,9 @@ async def test_companion_uses_wrapper_under_auto_routing_without_announcing_gues
     data,access_key,_,_=companion
     await data.store.async_patch_settings(voice_agent_enabled=True,voice_agent_access_key_id=access_key.id,
         voice_agent_routing_mode='auto',agentcli_routing_mode='auto')
-    monkeypatch.setattr('custom_components.phoenix_mcp.routing.command_routing.async_evaluate_command',
-                        AsyncMock(side_effect=AssertionError('Wrapper persona must not use direct dispatch')))
-    monkeypatch.setattr('custom_components.phoenix_mcp.routing.chat_routing.async_evaluate_command',
-                        AsyncMock(side_effect=AssertionError('Wrapper persona must not use direct dispatch')))
+    direct=AsyncMock(side_effect=AssertionError('Wrapper persona must not use direct dispatch'))
+    monkeypatch.setattr('custom_components.phoenix_mcp.voice_agent.async_evaluate_command',direct)
+    monkeypatch.setattr('custom_components.phoenix_mcp.routing.chat_routing.async_evaluate_command',direct)
     catalogs=scripted(monkeypatch,[[('get_state',{'entity_id':'sensor.temperature','projection':{'kind':'compact'}})],
         json.dumps({'status':'completed','message':'23 degrees.'})])
     if surface=='voice':
@@ -605,6 +604,7 @@ async def test_companion_uses_wrapper_under_auto_routing_without_announcing_gues
             emit=emit,cancel=asyncio.Event(),routing_language='en')
         assert '23' in messages[-1]['content']
     assert len(catalogs)==2
+    direct.assert_not_called()
 
 
 async def test_house_count_uses_scoped_total_without_enumerating_states(hass, companion, monkeypatch):

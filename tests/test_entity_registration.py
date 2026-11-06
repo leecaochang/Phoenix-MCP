@@ -52,14 +52,32 @@ def short_budget(monkeypatch):
 
 
 @pytest.mark.parametrize("domain", ["scene", "script"])
-async def test_waits_for_registry_then_state(hass, short_budget, domain):
+async def test_waits_for_registry_then_state(hass, monkeypatch, domain):
+    """Waits on the observer's own passes: a clock budget expires under a stalled loop."""
+    monkeypatch.setattr(observation, "AUTHORING_REGISTRATION_TIMEOUT_SECONDS", 600)
+    monkeypatch.setattr(observation, "AUTHORING_REGISTRATION_POLL_SECONDS", 0.001)
+    passes = 0
+    check_authority = observation.check_request_authority
+
+    def counted_pass():
+        nonlocal passes
+        passes += 1
+        check_authority()
+
+    monkeypatch.setattr(observation, "check_request_authority", counted_pass)
+
+    async def full_pass_after(count):
+        # A pass has finished once the next one starts, and only an unfinished wait starts one.
+        while passes < count + 2 and not task.done():
+            await asyncio.sleep(0.001)
+
     access_key = _access_key()
     task = asyncio.create_task(observation.async_observe_registration(hass, access_key, domain, "stored"))
     try:
-        await asyncio.sleep(0)
+        await full_pass_after(0)
         assert not task.done()
         entry = _entry(hass, domain)
-        await asyncio.sleep(0.005)
+        await full_pass_after(passes)
         assert not task.done(), "Registry presence alone must not finish the wait"
         hass.states.async_set(entry.entity_id, "unavailable", {"id": "stored"})
         result = await task

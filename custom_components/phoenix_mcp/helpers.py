@@ -13,12 +13,13 @@ from typing import TYPE_CHECKING, Any
 from aiohttp import web
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.event import async_call_later
-from homeassistant.util.dt import get_default_time_zone, parse_datetime, utcnow
+from homeassistant.util.dt import get_default_time_zone, utcnow
 
 from .catalog_text import notification_text
 from .const import DOMAIN_SERVICE_HINTS, SENSOR_WRITE_DEBOUNCE_SECONDS
 from .policy_engine import RelativeTimeError, parse_relative_time
 from .request_authority import dispatch_request_id
+from .time_text import parse_datetime
 
 if TYPE_CHECKING:
     import voluptuous as vol
@@ -237,7 +238,8 @@ def update_access_key_counter(data: PhoenixData, access_key_id: str, outcome: st
         # Without a hass there is no loop to schedule on; write immediately.
         flush_sensor_writes(data)
         return
-    if data.sensor_flush_cancel is None:
+    # A retired runtime's sensors are gone and nothing would cancel its timer.
+    if data.sensor_flush_cancel is None and not data.shutting_down:
         data.sensor_flush_cancel = async_call_later(
             data.hass,
             SENSOR_WRITE_DEBOUNCE_SECONDS,

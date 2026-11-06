@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from typing import TYPE_CHECKING
 
 from .const import (
     ANNOUNCEMENT_SERVICES, CAPABILITY_NAMES, CAP_ALLOW, CAP_CONFIRM, CAP_DENY, CONFIRM_ONLY_CAPS,
-    DUAL_GATE_SERVICES, HOUSEHOLD_CAPABILITIES, NO_TARGET_SERVICES, PASS_THROUGH_EXEMPT_CAPS,
+    DUAL_GATE_SERVICES, HOUSEHOLD_CAPABILITIES, NON_ACTUATING_SERVICES, NO_TARGET_SERVICES,
+    PASS_THROUGH_EXEMPT_CAPS,
 )
 from .request_authority import household_authority
 
@@ -21,21 +23,24 @@ if TYPE_CHECKING:
 
 def is_announcement(domain: str, service: str, service_data: object) -> bool:
     """Whether a service call interrupts a speaker with an announcement."""
-    if f"{domain}/{service}" in ANNOUNCEMENT_SERVICES:
+    if f"{domain}/{service}" in ANNOUNCEMENT_SERVICES or (domain == "tts" and service.endswith("_say")):
         return True
     return (domain, service) == ("media_player", "play_media") and isinstance(service_data, dict) and bool(service_data.get("announce"))
 
 
-def service_capability(domain: str, service: str, service_data: object) -> str | None:
+def service_capability(domain: str, service: str, service_data: object, targets: Iterable[str]) -> str | None:
     """Return the capability a service needs beyond Write, physical control aside.
 
-    One definition for admission, execution and preview; the executor is the authority.
+    One definition for admission, execution and preview; the executor is the authority. A
+    service in any domain that acts on a notify entity needs cap_notify.
     """
 
     service_key = f"{domain}/{service}"
     if service_key in DUAL_GATE_SERVICES:
         return "cap_restart"
-    if domain == "notify":
+    if domain == "notify" or (
+        service_key not in NON_ACTUATING_SERVICES and any(target.split(".", 1)[0] == "notify" for target in targets)
+    ):
         return "cap_notify"
     if is_announcement(domain, service, service_data):
         return "cap_broadcast"
@@ -68,6 +73,21 @@ def effective_cap(access_key: AccessKeyRecord, cap_name: str) -> str:
             return CAP_CONFIRM
         return CAP_ALLOW
     return raw
+
+
+def strictest_capability(access_key: AccessKeyRecord, *cap_names: str | None) -> str | None:
+    """Return the named capability that binds this key hardest, Deny before Confirm before Allow.
+
+    A call needing several passes only if each does, and one gate decides it.
+    """
+    order = (CAP_DENY, CAP_CONFIRM)
+    needed = [name for name in cap_names if name is not None]
+
+    def rank(name: str) -> int:
+        mode = effective_cap(access_key, name)
+        return order.index(mode) if mode in order else len(order)
+
+    return min(needed, key=rank, default=None)
 
 
 def access_key_has_write_scope(access_key: AccessKeyRecord) -> bool:

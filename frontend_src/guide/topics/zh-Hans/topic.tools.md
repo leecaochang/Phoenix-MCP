@@ -33,7 +33,9 @@
 
 智能体可以打开和关闭设备，设置灯、风扇、温控、卷帘和音量，控制媒体播放器和吸尘器，并取消定时器。这些命令与 Home Assistant 自带助手使用的命令相同。每个目标都需要权限树中的 W。
 
-锁、警报、卷帘和阀门还需要物理控制。设为确认时，包含其中一项的命令会等待你的审批。设为拒绝访问时，智能体无法控制它们。
+锁、警报、卷帘和阀门还需要物理控制。任何会作用到它们的其他操作也需要，例如集成自带的开锁操作；`zwave_js.set_value` 这类原始设备命令无论指向哪个实体都需要。
+
+设为确认时，包含其中一项的命令会等待你的审批。设为拒绝访问时，智能体无法控制它们。
 
 通过 Assist 卫星设备播报消息或在其上发起对话需要广播。MESA 在能力和权限树之后最后检查每个命令。
 
@@ -48,8 +50,9 @@
 - 重启或停止 Home Assistant 需要重启能力。
 - 重新加载自动化、脚本、场景、辅助元素或核心配置需要 YAML 配置。
 - 操作返回的数据需要服务响应数据。没有它，操作仍会运行。
-- 发送消息的通知操作需要通知能力。
-- 通知播放需要广播能力：`assist_satellite.announce`、`start_conversation` 和 `ask_question`，`music_assistant.play_announcement`，以及带 `announce` 的 `media_player.play_media`。普通播放只需要 W。
+- 发送消息的通知操作需要通知能力。集成自带的、通过通知实体发送消息的操作也需要。
+- 通知播放需要广播能力：`assist_satellite.announce`、`start_conversation`、`ask_question`、`music_assistant.play_announcement`、带 `announce` 的 `media_player.play_media` 和 `tts.speak`。
+- `tts.speak` 还需要对其指定的每个音箱有 W。普通播放只需要 W。
 - ESPHome 设备操作只需要设备上的 W。MESA 不检查它们，也不检查重新加载或重启。
 - 搜索或列出 Music Assistant 音乐库需要服务响应数据，以及某个 Music Assistant 实体（例如音箱）上的 R。这些操作不会播放任何内容，所以 MESA 也不检查它们。
 
@@ -63,7 +66,11 @@
 
 ## 列表和日历 {#lists}
 
-智能体可以添加、更改和移除待办事项，这只需要列表上的 W。它们可以创建、更改和删除日历事件，这还需要日历写入。MESA 会检查两者。每次日历更改都会留下回执，智能体之后可以查看。
+智能体可以添加、更改和移除待办事项，也可以清除已完成的事项，这只需要列表上的 W。移除事项是永久性的：Phoenix 不保留副本，因此[无法还原](guide:topic.configurationHistory#not-recorded)。结果会列出移除了哪些事项。
+
+如果你批准移除，Phoenix 会先重新读取列表。在请求等待期间发生变化的事项会保留，结果会说明是哪些。
+
+智能体可以创建、更改和删除日历事件，这还需要日历写入。MESA 会检查待办和日历更改。每次日历更改都会留下回执，智能体之后可以查看。
 
 允许它的能力：[{{label:caps.cap_calendar_write.label}}](guide:window.capabilities#calendar-write)
 
@@ -174,13 +181,17 @@
 
 读取文件让智能体读取 www、themes 和 custom_templates 文件夹中的文本文件，每个最大 1 MiB。文件夹列表分页返回，默认每页 500 项，最多 1000 项。它不能写入这些文件。
 
-YAML 配置让智能体读取你的 YAML 文件，名称中含有 secret 的文件、esphome 文件夹和隐藏文件除外。名称暗示机密的值显示为 `<redacted>`，但使用普通名称的密码可见。没有工具会写入 YAML 配置。
+YAML 配置让智能体读取你的 YAML 文件，名称中含有 secret 的文件、esphome 文件夹和隐藏文件除外。
+
+名称暗示机密的值以及提到机密的注释显示为 `<redacted>`，但使用普通名称的密码可见。有 YAML 错误的文件不会显示，智能体只会得到需要修复的行号。没有工具会写入 YAML 配置。
 
 允许它的能力：[{{label:caps.cap_filesystem.label}}](guide:window.capabilities#filesystem)、[{{label:caps.cap_yaml_edit.label}}](guide:window.capabilities#yaml-edit)
 
 ## ESPHome {#esphome}
 
-智能体可以读取和搜索 ESPHome 设备配置，密码、密钥和所有请求头的值都会被遮蔽。使用 ESPHome Device Builder 加载项时，它们还可以校验、编译、读取设备日志、分析内存并检查连接。没有该加载项时，只能读取和搜索。
+智能体可以读取和搜索 ESPHome 设备配置，密码、密钥、所有请求头的值、网址中的凭据以及提到它们的注释都会被遮蔽。
+
+使用 ESPHome Device Builder 加载项时，它们还可以校验、编译、读取设备日志、分析内存并检查连接。没有该加载项时，只能读取和搜索。
 
 编译、清理和内存分析需要设备上的 W。安装固件需要 ESPHome 固件刷写、ESPHome 设备 YAML 和设备上的 W，并且 MESA 会检查它。
 

@@ -82,12 +82,42 @@ function emphasize(s: string): string {
 // eslint-disable-next-line no-control-regex
 const HELD_RE = /\x01(\d+)\x02/g;
 
-// A link's text and address both stop at "[", which bounds the work from each
-// opening bracket by the next one: a line of brackets stays linear. The only
-// "[" an address may hold is the one around an IPv6 host. An address cannot hold
-// a held marker either: that markup would land inside the href attribute.
+// What ends a link's address: its closing parenthesis, or something an address
+// cannot hold. A held marker is one of those, because that markup would land
+// inside the href attribute.
 // eslint-disable-next-line no-control-regex
-const LINK_RE = /\[([^[\]]+)\]\(((?:[^)\s[\x01]|\[[0-9A-Fa-f:.]*\])+)\)/g;
+const ADDRESS_END_RE = /[)\s\x01]/g;
+
+/**
+ * Replace each `[text](address)`, scanning by hand because no regular expression
+ * here stays linear: text holds no bracket, and an address may hold any, as an
+ * IPv6 host or a query does. Each step back stops at the nearest bracket, so the
+ * steps never overlap. A step forward either consumes the link or finds where an
+ * address cannot go on, and every "](" before that place is skipped unread.
+ */
+function replaceLinks(s: string, link: (text: string, url: string) => string): string {
+  let out = "";
+  let copied = 0;
+  let dead = -1;
+  for (let mid = s.indexOf("]("); mid >= 0; mid = s.indexOf("](", mid + 1)) {
+    if (mid + 2 <= dead) continue;
+    let open = mid - 1;
+    while (open >= copied && s[open] !== "[" && s[open] !== "]") open -= 1;
+    if (open < copied || s[open] !== "[" || open === mid - 1) continue;
+    ADDRESS_END_RE.lastIndex = mid + 2;
+    const stop = ADDRESS_END_RE.exec(s);
+    const end = stop ? stop.index : s.length;
+    if (!stop || stop[0] !== ")") {
+      dead = end;
+      continue;
+    }
+    if (end === mid + 2) continue;
+    out += s.slice(copied, open) + link(s.slice(open + 1, mid), s.slice(mid + 2, end));
+    copied = end + 1;
+    mid = end;
+  }
+  return out + s.slice(copied);
+}
 
 // A bare address, to keep its markers literal. It is left as text, not made a link.
 const BARE_URL_RE = /https?:\/\/\S+/g;
@@ -97,7 +127,7 @@ function inline(s: string, opts: MarkdownOptions = {}): string {
   const held: string[] = [];
   const hold = (html: string): string => `\x01${held.push(html) - 1}\x02`;
   s = s.replace(/`([^`]+)`/g, (_m, c: string) => hold(`<code>${c}</code>`));
-  s = s.replace(LINK_RE, (_m, text: string, url: string) => {
+  s = replaceLinks(s, (text, url) => {
     // Absolute http(s), or a root-relative path that is NOT scheme-relative:
     // "//evil.example" starts with "/" but browsers resolve it as an external
     // https:// host, so a bare "/" allow-rule would let it through. Require a

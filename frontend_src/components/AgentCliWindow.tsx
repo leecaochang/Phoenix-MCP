@@ -34,7 +34,8 @@ import type {
   DeclaredModelCaps,
   AccessKeyRecord,
 } from "../types";
-import { hasMessage, localeClock, localeCompactNumber, localeNumber, resolveLanguage, t, tn } from "../i18n";
+import { displayedLanguage, hasMessage, localeClock, localeCompactNumber, localeNumber, resolveLanguage, t, tn } from "../i18n";
+import { formatSignature } from "../i18n/format";
 import { tRich } from "../i18n/rich";
 import { registerAgentChatShortcut } from "../utils/agentchat_shortcut";
 import { openPopupWindow } from "../ui/popup";
@@ -818,12 +819,14 @@ export function AgentCliWindow({
   // approvals, errors). Deliberately NOT the streaming transcript itself:
   // a live region over token-by-token deltas would announce every chunk.
   const [announcement, setAnnouncement] = useState("");
-  // A finished reply is said as the text it renders to, not its Markdown, and only its start: a
-  // long answer read in full would hold the screen reader. Cleared first, so a repeated reply is said again.
-  const announceReply = useCallback((markdown: string) => {
+  // Cleared first, so a repeated message is said again.
+  const announce = useCallback((text: string) => {
     setAnnouncement("");
-    window.requestAnimationFrame(() => setAnnouncement(replyAnnouncement(markdown)));
+    window.requestAnimationFrame(() => setAnnouncement(text));
   }, []);
+  // A finished reply is said as the text it renders to, not its Markdown, and only its start: a
+  // long answer read in full would hold the screen reader.
+  const announceReply = useCallback((markdown: string) => announce(replyAnnouncement(markdown)), [announce]);
   const [popupMount, setPopupMount] = useState<HTMLElement | null>(null);
   const [popOutError, setPopOutError] = useState("");
   const poppedOut = popupMount !== null;
@@ -831,6 +834,7 @@ export function AgentCliWindow({
   const docked = dockMount !== null && !poppedOut;
   const [narrowViewport, setNarrowViewport] = useState(isNarrowViewport);
   const agentChatTitle = t("agentchat.title");
+  const presentation = `${displayedLanguage()} ${formatSignature()}`;
   // Home Assistant away: the chat floats over every page and pops out into a window of its
   // own, where the panel's notice cannot reach it, so it says so and takes no work.
   const away = useHomeAssistantAway(() => api.getSettings());
@@ -1388,9 +1392,18 @@ export function AgentCliWindow({
     // Said once: the cut moves forward with every later message while the transcript keeps them all.
     if (!stateless && scrollbackLines > 0 && memoryStart(turns, memoryBudget) > 0
         && !turns.some((turn) => turn.entries.some((e) => e.kind === "notice" && e.code === MEMORY_TRIMMED))) {
-      updateLive((prev) => [...prev, { kind: "notice", code: MEMORY_TRIMMED, message: t(`agentchat.notice.${MEMORY_TRIMMED}`) }]);
+      const trimmed = t(`agentchat.notice.${MEMORY_TRIMMED}`);
+      updateLive((prev) => [...prev, { kind: "notice", code: MEMORY_TRIMMED, message: trimmed }]);
+      announce(trimmed);
     }
     let newMessages: unknown[] = [];
+    // A turn that ended early was already said; its earlier text must not replace that.
+    let endAnnounced = false;
+    const announceEnd = (text: string) => {
+      endAnnounced = true;
+      announce(text);
+    };
+    const announceFailure = (message: string) => announceEnd(t("agentchat.announceError", { message }));
     const ac = new AbortController();
     abortRef.current = ac;
 
@@ -1555,9 +1568,7 @@ export function AgentCliWindow({
                 const providerDetail = typeof p.provider_detail === "string" && p.provider_detail
                   ? p.provider_detail : undefined;
                 push({ kind: "error", code, message, messageParams, rateLimit, providerDetail });
-                setAnnouncement(t("agentchat.announceError", {
-                  message: serverText(code, message, messageParams, rateLimit, providerDetail),
-                }));
+                announceFailure(serverText(code, message, messageParams, rateLimit, providerDetail));
               }
               break;
             case "messages":
@@ -1586,19 +1597,25 @@ export function AgentCliWindow({
           // Once anything came back the model may have acted on the message, so sending
           // it again is the reader's call and it stays out of the composer.
           const answered = liveRef.current.some((e) => e.kind !== "user" && e.kind !== "notice" && !isActivity(e));
-          push({ kind: "notice", message: t("agentchat.connectionLost") });
+          const lost = t("agentchat.connectionLost");
+          push({ kind: "notice", message: lost });
+          announceEnd(lost);
           if (!answered) restorePrompt();
         } else if (err instanceof Error && typeof (err as { status?: unknown }).status === "number") {
           // Phoenix answered and refused before any reply streamed (the kill switch, a key or
           // account no longer usable, an attachment over its limit): its own message says why,
           // so it is shown as is, never replaced by the provider-unavailable text. Nothing
           // reached the model, so what was typed comes back.
-          const tooLarge = (err as { status?: unknown }).status === 413;
-          push({ kind: "error", code: tooLarge ? "request_too_large" : "", message: err.message });
+          const code = (err as { status?: unknown }).status === 413 ? "request_too_large" : "";
+          push({ kind: "error", code, message: err.message });
+          announceFailure(serverText(code, err.message));
           restorePrompt();
         } else if (homeAssistantReachable()) {
-          push({ kind: "error", code: "network", message: err instanceof Error ? err.message : t("agentchat.requestFailed") });
+          const message = err instanceof Error ? err.message : t("agentchat.requestFailed");
+          push({ kind: "error", code: "network", message });
+          announceFailure(serverText("network", message));
         } else {
+          announceEnd(t("shell.offlineBody"));
           restorePrompt();
         }
       }
@@ -1625,10 +1642,10 @@ export function AgentCliWindow({
         // Announce the completed reply now that streaming is over.
         const finals = entries.filter((e) => e.kind === "assistant" && e.text.trim());
         const finalText = finals.length ? (finals[finals.length - 1] as Extract<ChatEntry, { kind: "assistant" }>).text : "";
-        if (finalText) announceReply(finalText);
+        if (finalText && !endAnnounced) announceReply(finalText);
       }
     }
-  }, [sending, accessKeys, turns, scrollbackLines, accessKeyId, persistenceOwner, resetUsage, instanceId, model, kind, options, caps, updateLive, streamLive, announceReply]);
+  }, [sending, accessKeys, turns, scrollbackLines, accessKeyId, persistenceOwner, resetUsage, instanceId, model, kind, options, caps, updateLive, streamLive, announce, announceReply]);
 
   // Why images cannot go with the next message, when they cannot. Unknown model
   // support is allowed: the composer says so, and a provider refusal is learned.
@@ -2309,7 +2326,7 @@ export function AgentCliWindow({
               <div className="agentcli-empty">{t("agentchat.noProvider")}</div>
             )}
             {displayed.map((e, i) => (
-              <ChatItem key={i} entry={e} verbose={options.verbose} showTs={showTimestamps} away={away}
+              <ChatItem key={i} entry={e} verbose={options.verbose} showTs={showTimestamps} away={away} presentation={presentation}
                         onResolve={resolveApproval} onReview={reviewFromItem}
                       />
             ))}
@@ -2606,6 +2623,8 @@ const MarkdownText = React.memo(function MarkdownText({ text, className }: { tex
 const ChatItem = React.memo(function ChatItem({
   entry, verbose, showTs, away = false, onResolve, onReview,
 }: {
+  /** The language and formats on display. Unread here: text comes from module-level helpers, so a change must arrive as a prop. */
+  presentation: string;
   entry: ChatEntry;
   verbose: boolean;
   showTs: boolean;

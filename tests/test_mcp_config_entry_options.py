@@ -70,12 +70,19 @@ def _json(content: dict) -> dict:
     return json.loads(content["content"][0]["text"])
 
 
+def _flow_data() -> MagicMock:
+    """Runtime data for tests about the flow: MESA's profile holds no reason text."""
+    data = MagicMock()
+    data.mesa.resolver.explain.return_value.effective_profile.operational_boundaries.control_reason = None
+    return data
+
+
 async def _call(name, args, access_key, hass, data=None):
     name = {
         "get_config_entry_options": "get_helper_settings",
         "set_config_entry_options": "set_helper_settings",
     }.get(name, name)
-    return await _call_tool(name, args, access_key, hass, data or MagicMock())
+    return await _call_tool(name, args, access_key, hass, data or _flow_data())
 
 
 @pytest.fixture
@@ -303,7 +310,7 @@ class TestWrite:
 
     async def test_a_doomed_write_never_becomes_an_approval(self, hass, helper_entry, as_helper):
         """A write that cannot succeed is refused before any approval is created."""
-        data = MagicMock()
+        data = _flow_data()
         data.store.get_pending_approvals.return_value = []
         _, outcome, _ = await _call(
             "set_config_entry_options", {"entry_id": "helper1", "settings": {}},
@@ -359,7 +366,7 @@ class TestWrite:
         init, configure, created = _flow(hass)
         with init, configure:
             _c, outcome, _ = await _execute_set_config_entry_options(
-                args, _access_key(), hass, MagicMock())
+                args, _access_key(), hass, _flow_data())
         assert outcome == "denied"
         assert created == {}  # the flow was never driven
 

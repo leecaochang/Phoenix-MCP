@@ -101,6 +101,7 @@ MESA 為確認而暫緩的核准，以及復原審核，會跳過能力檢查。
 | 503 | `service_unavailable` | `adminError.approvalRecordFailed` | Phoenix 無法儲存執行標記。沒有執行任何內容，核准仍為待處理。 |
 | 400 | `invalid_request` | `adminError.approvalExecutorMissing` | Phoenix 沒有執行此工具的方式。沒有執行任何內容。 |
 | 500 | `internal_error` | `adminError.approvalExecutionUncertain` | 執行引發錯誤。Phoenix 以 `failed` 關閉核准，原因為 `execution_interrupted`，並且不會再提供它。 |
+| 500 | `internal_error` | `adminError.approvalOutcomeNotSaved` | 操作已完成，但 Phoenix 無法儲存其結果。Phoenix 不會再提供此核准，之後以 `failed` 關閉它，原因為 `execution_interrupted`。它的 `approval/executed` 或 `approval/failed` 稽核條目帶有 `finalization: "not_saved"`，記錄了實際發生的情況。 |
 
 其中三個錯誤聽起來是暫時的，但會永久關閉核准：`approvalAccessKeyInactive`、`approvalCapabilityDenied` 和 `killSwitchEngaged`。之後修復條件也不會讓它恢復。
 
@@ -291,6 +292,7 @@ POST   /api/phoenix-mcp/admin/attention/{kind}/{record_id}
 - 當 Phoenix 無法讀取其行事曆記錄時：`{ "id": "calendar_storage", "kind": "calendar_storage" }`。
 - 當 Phoenix 上一次儲存稽核記錄失敗時：`{ "id": "audit_storage", "kind": "audit_storage" }`。
 - 當 MESA 啟動失敗時：`{ "id": "mesa", "kind": "mesa" }`。
+- 當重新命名實體的策略已生效但儲存失敗時：`{ "id": "mesa_rename", "kind": "mesa_rename" }`。
 
 請求寫入行事曆時，其行事曆項目會替換同一請求的智慧體項目。
 

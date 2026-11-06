@@ -37,7 +37,7 @@ from ..policy_engine import (
 from ..proxy_diagnostics import discovered_flows, full_pass_through, integration_serial_ports
 from ..template_snapshots import template_snapshot, protect_template
 from ..tool_common import (
-    _add_mesa_advisory, _CAP_FORBIDDEN_MESSAGE, _create_registry_mesa_approval, _gate, _record_version, _restore_ctx, _tool_error, _tool_success, fitted_offset_page, offset_page,
+    _add_mesa_advisory, _CAP_FORBIDDEN_MESSAGE, _create_registry_mesa_approval, _gate, _record_version, _restore_ctx, _tool_error, _tool_success, _tool_uncertain, fitted_offset_page, offset_page,
 )
 from ..request_authority import _approved_exec_ctx
 from ..tool_contracts import normalize_tool_args
@@ -316,7 +316,7 @@ def _config_entry_action_decision(
                         session_id=session_id,
                     )
                     explanation = None
-                    if mesa_active and data.mesa is not None:
+                    if mesa_active and data.mesa is not None and decision.effective_rule is not None:
                         explanation = data.mesa.resolver.explain(entity_id).to_dict()
                     entities.append({
                         "entity_id": entity_id,
@@ -326,6 +326,7 @@ def _config_entry_action_decision(
                         "reason": decision.reason,
                         "warnings": decision.warnings,
                         "effective_rule": decision.effective_rule,
+                        "admin_rule": decision.admin_rule,
                         "explanation": explanation,
                     })
                     for warning in decision.warnings:
@@ -377,12 +378,24 @@ def _config_entry_action_decision(
 
 
 def _config_entry_mesa_preview(
-    decision: _ConfigEntryActionDecision,
+    decision: _ConfigEntryActionDecision, *, admin: bool = False
 ) -> dict[str, Any]:
+    """The decision for an agent's refusal, or with ``admin`` for an approval diff.
+
+    The explanation repeats the stored reasons as written, so only the diff carries it.
+    """
     return {
         "decision": decision.decision,
         "actions": decision.actions,
-        "entities": decision.entities,
+        "entities": [
+            (
+                {**{key: value for key, value in item.items() if key != "admin_rule"},
+                 "effective_rule": item["admin_rule"]}
+                if admin else
+                {key: value for key, value in item.items() if key not in ("admin_rule", "explanation")}
+            )
+            for item in decision.entities
+        ],
         "warnings": decision.warnings,
         "fingerprint": decision.fingerprint[:16],
     }
@@ -692,7 +705,7 @@ async def _build_diff_reconfigure_integration(
         preview["cross_domain_coowners"] = identity.cross_domain_coowners
         preview["identity_binding"] = "private_identity_and_registry_context_pinned"
     if mesa_decision is not None:
-        preview["mesa"] = _config_entry_mesa_preview(mesa_decision)
+        preview["mesa"] = _config_entry_mesa_preview(mesa_decision, admin=True)
     return {
         "kind": "system_action",
         **_summary("integration.reconfigure", label=label),
@@ -1534,7 +1547,7 @@ async def _build_diff_remove_integration(
         ),
     }
     if mesa_decision is not None:
-        preview["mesa"] = _config_entry_mesa_preview(mesa_decision)
+        preview["mesa"] = _config_entry_mesa_preview(mesa_decision, admin=True)
     label = (
         f"{entry.domain} ({redact_diagnostics(entry.title)})"
         if entry is not None
@@ -1686,8 +1699,8 @@ async def _execute_remove_integration(
             return result
     except Exception as exc:
         message = str(exc) if isinstance(exc, ConfigurationRecoveryError) else "Configuration recovery failed; inspect Home Assistant before retrying."
-        return _tool_error(json.dumps({"error": message, "recovery_id": rid,
-            "status": "unknown" if rid else "not_applied", "retry_safe": False})), "invalid_request", "remove_integration"
+        body = {"error": message, "recovery_id": rid, "status": "unknown" if rid else "not_applied", "retry_safe": False}
+        return _tool_uncertain(body) if rid else _tool_error(json.dumps(body)), "invalid_request", "remove_integration"
 
 
 async def _apply_remove_integration(
@@ -1811,7 +1824,7 @@ async def _build_diff_set_integration_enabled(
         "warning": None if enabled else "Disabling unloads the integration and its entities.",
     }
     if mesa_decision is not None:
-        preview["mesa"] = _config_entry_mesa_preview(mesa_decision)
+        preview["mesa"] = _config_entry_mesa_preview(mesa_decision, admin=True)
     return {
         "kind": "system_action",
         **_summary("integration.enable" if enabled else "integration.disable", label=label),
@@ -1843,7 +1856,7 @@ async def _build_diff_set_integration(
                     "after": redact_diagnostics(args[field]) if field == "title" else args[field],
                 }
     if mesa_decision is not None:
-        preview["mesa"] = _config_entry_mesa_preview(mesa_decision)
+        preview["mesa"] = _config_entry_mesa_preview(mesa_decision, admin=True)
     return {
         "kind": "system_action",
         **_summary("integration.update", label=label),
@@ -1871,7 +1884,7 @@ async def _build_diff_reload_integration(
         "warning": "Reload temporarily unloads and sets up the integration again.",
     }
     if mesa_decision is not None:
-        preview["mesa"] = _config_entry_mesa_preview(mesa_decision)
+        preview["mesa"] = _config_entry_mesa_preview(mesa_decision, admin=True)
     return {
         "kind": "system_action",
         **_summary("integration.reload", label=label),

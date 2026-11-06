@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import secrets
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -29,6 +30,7 @@ from custom_components.phoenix_mcp.service_targets import (
     unsupported_secondary_targets,
 )
 from custom_components.phoenix_mcp.access_key_store import AccessKeyRecord, AccessKeyStore
+from tests.runtime_fixtures import patch_readers
 
 # A body carrying every selector Home Assistant honours, alongside real service
 # data. The real data must survive; every selector must not.
@@ -100,6 +102,18 @@ def _hass_with(data: PhoenixData) -> MagicMock:
     return hass
 
 
+@pytest.fixture
+def named_gate_targets():
+    """Mock-hass tests of selectors: the capability gates see the targets the call names."""
+
+    def _named(**kwargs: Any) -> list[str]:
+        named = kwargs.get("entity_id")
+        return [named] if isinstance(named, str) else list(named or [])
+
+    with patch_readers("custom_components.phoenix_mcp.policy_engine.service_gate_targets", side_effect=_named):
+        yield
+
+
 def _call_data(hass: MagicMock) -> dict:
     """The service data Phoenix MCP actually handed Home Assistant."""
     assert hass.services.async_call.called, "the service was never called"
@@ -158,6 +172,53 @@ def test_static_secondary_selector_fallback_covers_installed_home_assistant():
 
     discovered = secondary_target_fields(descriptions) - TARGET_SELECTOR_KEYS
     assert discovered <= SECONDARY_TARGET_SELECTOR_KEYS
+
+
+def test_a_target_selector_inside_a_section_is_discovered():
+    """Home Assistant flattens a section into service data, so its fields are top-level there."""
+    descriptions = {"custom": {"act": {"fields": {"advanced": {"collapsed": True, "fields": {
+        "other_lock": {"selector": {"entity": {"domain": "lock"}}},
+        "note": {"selector": {"text": None}},
+    }}}}}}
+    assert "other_lock" in secondary_target_fields(descriptions)
+    assert "note" not in secondary_target_fields(descriptions)
+
+
+@pytest.mark.parametrize("selector", [{"floor": {}}, {"label": None}, {"label": {"multiple": True}}])
+def test_floor_and_label_selectors_are_target_selectors(selector):
+    assert "where" in secondary_target_fields({"custom": {"act": {"fields": {"where": {"selector": selector}}}}})
+
+
+@pytest.mark.parametrize("selector", [
+    pytest.param({"select": {"options": [{"label": "One", "value": "1"}]}}, id="option"),
+    pytest.param({"object": {"fields": {"label": {"selector": {"text": None}}}}}, id="object field"),
+])
+def test_a_display_label_is_not_a_target_selector(selector):
+    assert "mode" not in secondary_target_fields({"custom": {"act": {"fields": {"mode": {"selector": selector}}}}})
+
+
+@pytest.mark.asyncio
+async def test_a_sectioned_target_field_is_refused_at_the_boundary(hass):
+    descriptions = {"custom": {"act": {"target": {"entity": {"domain": "light"}}, "fields": {
+        "advanced": {"fields": {"other_lock": {"selector": {"entity": {"domain": "lock"}}}}},
+    }}}}
+    with patch("custom_components.phoenix_mcp.service_targets.async_get_all_descriptions",
+               AsyncMock(return_value=descriptions)):
+        assert await unsupported_secondary_targets(
+            hass, {"other_lock": "lock.secret"}, domain="custom", service="act"
+        ) == ("other_lock",)
+
+
+@pytest.mark.asyncio
+async def test_a_sectioned_text_field_keeps_its_exemption(hass):
+    """The text exception follows the field into a section, or a section would refuse plain text."""
+    descriptions = {
+        "custom": {"act": {"fields": {"advanced": {"fields": {"device": {"selector": {"text": None}}}}}}},
+        "other": {"route": {"fields": {"device": {"selector": {"device": {}}}}}},
+    }
+    with patch("custom_components.phoenix_mcp.service_targets.async_get_all_descriptions",
+               AsyncMock(return_value=descriptions)):
+        assert await unsupported_secondary_targets(hass, {"device": "group"}, domain="custom", service="act") == ()
 
 
 def test_nested_target_selector_is_discovered_for_custom_integrations():
@@ -239,6 +300,7 @@ def test_sanitizer_strips_an_exclude_block_on_its_own():
 
 
 @pytest.mark.asyncio
+@pytest.mark.usefixtures("named_gate_targets")
 async def test_mcp_call_service_refuses_misplaced_selectors(hass, access_key_store):
     """A target selector inside service_data is refused, not forwarded to HA."""
     from custom_components.phoenix_mcp.tools.service import _execute_call_service
@@ -265,11 +327,12 @@ async def test_mcp_call_service_refuses_misplaced_selectors(hass, access_key_sto
 
 
 @pytest.mark.asyncio
+@pytest.mark.usefixtures("named_gate_targets")
 async def test_mcp_call_service_refuses_tts_secondary_target(hass, access_key_store):
-    """A permitted TTS entity cannot be used to speak on a denied media player."""
+    """A saved call cannot carry the speaker field past the executor: admission moves it to targets."""
     from custom_components.phoenix_mcp.tools.service import _execute_call_service
 
-    access_key, _ = _make_access_key()
+    access_key, _ = _make_access_key(cap_broadcast="allow")
     data = _make_data(access_key)
     hass = _hass_with(data)
     args = {
@@ -394,6 +457,7 @@ async def test_dry_run_refuses_misplaced_selectors(hass, access_key_store):
 
 
 @pytest.mark.asyncio
+@pytest.mark.usefixtures("named_gate_targets")
 async def test_mesa_evaluates_exactly_the_parameters_that_execute(hass, access_key_store):
     """MESA judges the call that runs, not a filtered view of it.
 
@@ -499,6 +563,7 @@ def remote_service_descriptions():
 @pytest.mark.asyncio
 @pytest.mark.parametrize('service', ['send_command', 'learn_command', 'delete_command'])
 @pytest.mark.parametrize('surface', ['preview', 'request', 'executor'])
+@pytest.mark.usefixtures('named_gate_targets')
 async def test_remote_text_device_reaches_scoped_boundary(
     service, surface, remote_service_descriptions
 ):
@@ -586,6 +651,7 @@ async def test_missing_requested_description_keeps_dynamic_fallback(hass, remote
 
 
 @pytest.mark.asyncio
+@pytest.mark.usefixtures('named_gate_targets')
 async def test_description_change_is_rechecked_by_executor(remote_service_descriptions):
     """Approval cannot preserve a text exception after metadata becomes a target."""
     from custom_components.phoenix_mcp.tools import service as service_tools

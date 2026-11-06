@@ -397,7 +397,9 @@
       "restoreToolReported": "Gjenopprettingen kunne ikke utføres. Verktøyet meldte: {detail}",
       "capabilityAllowUnsupported": "{capability} støtter ikke Tillat-modus.",
       "recoverySnapshotUnsafeAt": "Det finnes ingen fullstendig kopi av dette elementet uten hemmeligheter, så ingenting ble endret. Phoenix avviste det ved {location}.",
-      "invalidHostHeader": "Host-hodet i forespørselen er ikke en gyldig adresse."
+      "invalidHostHeader": "Host-hodet i forespørselen er ikke en gyldig adresse.",
+      "approvalOutcomeNotSaved": "Handlingen ble fullført, men resultatet kunne ikke lagres. Sjekk virkningen i Home Assistant; denne godkjenningen tilbys ikke på nytt.",
+      "providerRemoteUrlResolutionFailed": "Leverandørens URL kunne ikke slås opp, så adressen kunne ikke kontrolleres."
     },
     "agentchat": {
       "accessKey": "Tilgangsnøkkel",
@@ -956,7 +958,11 @@
         "one": "{count} valgt",
         "other": "{count} valgt"
       },
-      "rowPicked": "valgt for å godkjenne flere samtidig"
+      "rowPicked": "valgt for å godkjenne flere samtidig",
+      "todoItems": "Elementer som fjernes",
+      "todoRemovalWarning": "Fjerning av gjøremål er permanent. Phoenix beholder ingen kopi, så de kan ikke gjenopprettes.",
+      "todoStatusCompleted": "Fullført",
+      "todoStatusNeedsAction": "Ikke fullført"
     },
     "attention": {
       "actionTitle": "Sjekk en tidligere handling",
@@ -978,7 +984,9 @@
       "title": "Trenger oppmerksomhet",
       "unknown": "Samtalen ble avsluttet før Phoenix registrerte om handlingen kjørte, så den kan ha kjørt. Vis i revisjonsloggen viser, der den tilbys, hva Phoenix registrerte; en handling som ventet på godkjenning, har statusen sin i Godkjenninger. Sjekk Home Assistant før du prøver igjen.",
       "audit_storageTitle": "Revisjonsloggen når ikke frem til lagringen",
-      "audit_storageHelp": "Nye revisjonsoppføringer ligger bare i minnet, så en omstart ville miste dem. Sjekk Home Assistant-loggene. Dette forsvinner når neste lagring lykkes."
+      "audit_storageHelp": "Nye revisjonsoppføringer ligger bare i minnet, så en omstart ville miste dem. Sjekk Home Assistant-loggene. Dette forsvinner når neste lagring lykkes.",
+      "mesa_renameTitle": "Profilen til en omdøpt entitet er ikke i lagringen",
+      "mesa_renameHelp": "Profilen fulgte med entiteten og gjelder, men den lagrede kopien har fortsatt den gamle ID-en. Sjekk Home Assistant-loggene, og last deretter inn Phoenix MCP på nytt fra Innstillinger > Enheter og tjenester for å lagre igjen. Dette forsvinner når neste lagring lykkes."
     },
     "audit": {
       "accessPassThrough": "Gjennomkobling",
@@ -1024,7 +1032,9 @@
       "rowPayload": "Nyttelast",
       "rowRequestId": "Forespørsels-ID",
       "rowResource": "Ressurs",
-      "rowTime": "Tid"
+      "rowTime": "Tid",
+      "outcomeCancelled": "Avbrutt",
+      "outcomeUnknown": "Utfall ukjent"
     },
     "caps": {
       "cap_automation_write": {
@@ -1148,7 +1158,7 @@
         "label": "Automasjonsspor"
       },
       "cap_yaml_edit": {
-        "description": "Les YAML-konfigurasjonsfilene dine og last inn YAML-domener på nytt. Passord skrevet i disse filene er synlige; bruk secrets.yaml.",
+        "description": "Les YAML-konfigurasjonsfilene dine og last inn YAML-domener på nytt. Verdier under navn som tyder på en hemmelighet, skjules, men et passord under et vanlig navn er synlig; bruk secrets.yaml.",
         "label": "YAML-konfigurasjon"
       },
       "confirmUnavailable": "Denne kapabiliteten kan ikke kreve godkjenning.",

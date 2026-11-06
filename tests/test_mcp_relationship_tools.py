@@ -671,9 +671,9 @@ class TestRelationshipCoverage:
         assert dash["paths"] == [["views", 0, "cards", 0, "entity"]]
 
     async def test_an_unreadable_dashboard_is_reported_not_skipped(self, hass, rel_env, monkeypatch):
-        """A YAML-mode dashboard cannot be searched. Skipping it while still
-        claiming "searched: dashboard" is the confident-wrong-answer this whole
-        tool exists to avoid, so the skip has to be visible."""
+        """Skipping a dashboard that failed to load while still claiming "searched:
+        dashboard" is the confident-wrong-answer this whole tool exists to avoid, so
+        the skip has to be visible."""
         import custom_components.phoenix_mcp.tools.discovery as disc
         from custom_components.phoenix_mcp.ws_dispatch import WsDispatchError
 
@@ -690,7 +690,7 @@ class TestRelationshipCoverage:
             _access_key(cap_lovelace_write="allow"), hass)
         body = _json(content)
         skipped = [n for n in body["not_searched"] if n.get("id") == "yamlmode"]
-        assert skipped and "YAML-mode" in skipped[0]["reason"]
+        assert skipped and "not readable" in skipped[0]["reason"]
 
     async def test_a_failed_dashboard_list_says_none_were_searched(self, hass, rel_env, monkeypatch):
         import custom_components.phoenix_mcp.tools.discovery as disc

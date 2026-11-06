@@ -5,11 +5,16 @@ todo.get_items, so a shopping list needs no service-response capability. Item
 changes run as the matching todo service through call_service, so scope, MESA,
 approvals and the audit trail are exactly that tool's, and the item is read back
 afterwards so the result says what the list now holds.
+
+Removal is permanent, so an approval binds the items as they were reviewed and its
+own executor re-reads the list: whatever changed meanwhile stays, and the result
+says so. The removal still runs through call_service's executor, with every gate.
 """
 
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 from typing import Any, cast
 
@@ -18,18 +23,28 @@ from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
 
 from ..access_key_store import AccessKeyRecord
-from ..const import TODO_ITEMS_DEFAULT_LIMIT, TODO_ITEMS_MAX_LIMIT, TODO_TIMEOUT_SECONDS
+from ..const import APPROVAL_TARGETS_KEY, TODO_ITEMS_DEFAULT_LIMIT, TODO_ITEMS_MAX_LIMIT, TODO_TIMEOUT_SECONDS
 from ..data import PhoenixData
 from ..household_authority import household_service_kwargs
 from ..policy_engine import Permission, resolve_read
 from ..request_authority import AuthorityChangedError, check_request_authority
-from ..tool_common import _tool_error, _tool_success, _tool_uncertain, fitted_offset_page, offset_page
+from ..tool_common import (
+    _tool_error, _tool_refused_before_write, _tool_success, _tool_uncertain, fitted_offset_page, longest_fitting,
+    offset_page,
+)
+from ..time_text import parse_datetime
 from .calendar import _safe_calendar_data
-from .service import _tool_call_service
+from .service import _execute_call_service, _tool_call_service
 
 STATUSES = ("needs_action", "completed")
+_TOOL = "set_todo_item"
 _NOT_FOUND = "Todo list not found."
 _UNAVAILABLE = "The list is unavailable, so Home Assistant skips it and returns no items."
+# The schema's limit on an item's text. A list may hold longer; a receipt shows this much of it.
+_SUMMARY_CHARS = 1000
+# These fields have no null form, so a null in one shows a client filling every optional field.
+_NEVER_NULL = ("summary", "status")
+_CLEAR_LEFT_ITEMS = "The list still holds the items in not_removed, though Home Assistant accepted their removal."
 
 
 def _unavailable(entity_id: str, hass: HomeAssistant) -> bool:
@@ -181,7 +196,7 @@ async def _tool_set_todo_item(
 ) -> tuple[dict, str, str]:
     """MCP tool: add, update or remove one item on a todo list the access key can write."""
 
-    tool = "set_todo_item"
+    tool = _TOOL
     entity_id = str(args.get("entity_id") or "").strip()
     action = args.get("action")
     if action not in ("add", "update", "remove", "clear_completed"):
@@ -208,6 +223,9 @@ async def _tool_set_todo_item(
         return _tool_error("status must be needs_action or completed."), "invalid_request", tool
     target: dict | None = None
     before: list[dict] = []
+    approve_as: tuple[str, dict] | None = None
+    cleared: dict[str, Any] = {}
+    ignored_null: list[str] = []
     service_data: dict[str, Any]
     if action == "add":
         if not isinstance(summary, str) or not summary.strip():
@@ -238,19 +256,30 @@ async def _tool_set_todo_item(
             ), "invalid_request", tool
         if action == "remove":
             service, service_data = "remove_item", {"item": [_ref(matched)]}
+            approve_as = (tool, {"entity_id": entity_id, "action": action, "reviewed": [_reviewed(matched)]})
         else:
             changes = {**({"rename": summary.strip()} if isinstance(summary, str) and summary.strip() else {}),
                        **({"status": status} if status else {}), **due}
-            if "due" in args and args["due"] is None:
-                cleared = _clear_due_field(entity_id, hass)
-                if isinstance(cleared, str):
-                    return _tool_error(cleared), "invalid_request", tool
-                changes.update(cleared)
+            padded = any(field in args and args[field] is None for field in _NEVER_NULL)
+            ignored_null = [field for field in ("due", "description")
+                            if padded and field in args and args[field] is None]
+            if "due" not in ignored_null and "due" in args and args["due"] is None:
+                clear_due = _clear_due_field(entity_id, hass)
+                if isinstance(clear_due, str):
+                    return _tool_error(clear_due), "invalid_request", tool
+                changes.update(clear_due)
+                cleared["due"] = matched.get("due")
             # Core clears a field on None and would store an empty string as a value.
-            if "description" in args:
+            if "description" not in ignored_null and "description" in args:
                 changes["description"] = description or None
+                if not description:
+                    cleared["description"] = matched.get("description")
             if not changes:
-                return _tool_error("update needs at least one of summary, status, due or description."), "invalid_request", tool
+                padding = (" A null in summary or status reads as a client padding every field, so the null due and "
+                           "description here change nothing; omit summary and status to clear them."
+                           if ignored_null else "")
+                return (_tool_error(f"update needs at least one of summary, status, due or description.{padding}"),
+                        "invalid_request", tool)
             service, service_data = "update_item", {"item": _ref(matched), **changes}
     if action == "add" and description:
         service_data["description"] = description
@@ -260,27 +289,58 @@ async def _tool_set_todo_item(
     result = await _tool_call_service(
         {"service": {"domain": "todo", "name": service, "data": service_data},
          "targets": [{"kind": "entity", "ids": [entity_id]}]},
-        access_key, hass, data, request_id, client_ip,
+        access_key, hass, data, request_id, client_ip, approve_as=approve_as,
     )
     content, outcome, _resource = result
     if outcome != "allowed" or content.get("isError"):
         # A refusal, a failure or a pending approval answers as call_service did.
         return result
-    return await _verified(hass, access_key, entity_id, action, target, summary, expected, before)
+    return await _verified(hass, access_key, entity_id, action, target, summary, expected, before,
+                           cleared={field: value for field, value in cleared.items() if value},
+                           ignored_null=ignored_null)
+
+
+def _reviewed(item: dict) -> dict:
+    """What an approval binds of an item: what its receipt names, and a digest of all the item holds."""
+    digest = hashlib.sha256(json.dumps(item, sort_keys=True, default=str).encode()).hexdigest()
+    return {"uid": item["uid"], "summary": str(item.get("summary") or "")[:_SUMMARY_CHARS],
+            "status": item.get("status"), "digest": digest}
+
+
+def _named(row: dict, reason: str | None = None) -> dict:
+    """A reviewed item as a result names it."""
+    return {"uid": row["uid"], "summary": row["summary"], **({"reason": reason} if reason else {})}
+
+
+def _receipt_batch(entity_id: str, rows: list[dict]) -> list[dict]:
+    """The leading rows a clear's result can name in full.
+
+    Removal is permanent and the result is the only trail of an unreviewed clear, so an item
+    the result could not name waits for the next call. Each row is measured with its reason,
+    the longest form it can take.
+    """
+    def body(count: int) -> dict:
+        return {"list": entity_id, "action": "clear_completed", "applied": False, "verified": False,
+                "status": "partial", "retry_safe": False, "truncated": True, "removed_count": count,
+                "remaining_completed": TODO_ITEMS_MAX_LIMIT, "note": _CLEAR_LEFT_ITEMS,
+                "removed": [_named(row, "already_gone") for row in rows[:count]]}
+
+    return rows[:len(longest_fitting(body, len(rows))["removed"])]
+
 
 
 async def _clear_completed(
     args: dict, entity_id: str, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData,
     request_id: str, client_ip: str | None,
 ) -> tuple[dict, str, str]:
-    """Remove the completed items as they read now, by uid.
+    """Remove the completed items as they read now, by uid, as many as the result can name.
 
-    A remove_item call names each one, so what was reviewed is what goes, and Core refuses the whole
-    call if any has gone.
+    A remove_item call names each one, so what was reviewed is what goes; an approval runs as
+    _execute_set_todo_item.
     """
     # todo.remove_completed_items chooses its items when it runs, which can be long after an
     # approval.
-    tool = "set_todo_item"
+    tool = _TOOL
     if any(args.get(field) not in (None, "") for field in ("item", "summary", "status", "due", "description")):
         return _tool_error("clear_completed takes only the list."), "invalid_request", tool
     try:
@@ -288,35 +348,109 @@ async def _clear_completed(
     except TimeoutError:
         return _tool_error("The list did not answer in time."), "invalid_request", tool
     if not completed:
-        return _tool_success(_dumps({"list": entity_id, "action": "clear_completed", "applied": False,
-                                     "verified": True, "removed": [], "remaining_completed": 0})), "allowed", entity_id
+        return _tool_success(_dumps({"list": entity_id, "action": "clear_completed", "applied": False, "verified": True,
+                                     "removed_count": 0, "removed": [], "remaining_completed": 0})), "allowed", entity_id
     chosen = completed[:TODO_ITEMS_MAX_LIMIT]
     if not all(item.get("uid") for item in chosen):
         return _tool_error(
             "This list gives its items no uid, and Home Assistant removes items only by uid, so its completed "
             "items cannot be cleared here; remove them in the list's own app."
         ), "invalid_request", tool
+    batch = _receipt_batch(entity_id, [_reviewed(item) for item in chosen])
     result = await _tool_call_service(
-        {"service": {"domain": "todo", "name": "remove_item", "data": {"item": [item["uid"] for item in chosen]}},
+        {"service": {"domain": "todo", "name": "remove_item", "data": {"item": [row["uid"] for row in batch]}},
          "targets": [{"kind": "entity", "ids": [entity_id]}]},
         access_key, hass, data, request_id, client_ip,
+        approve_as=(tool, {"entity_id": entity_id, "action": "clear_completed", "reviewed": batch}),
     )
     content, outcome, _resource = result
     if outcome != "allowed" or content.get("isError"):
         return result
-    body: dict[str, Any] = {"list": entity_id, "action": "clear_completed", "applied": True, "removed": chosen,
-                            "truncated": len(chosen) < len(completed)}
+    return await _cleared(hass, access_key, entity_id, batch)
+
+
+async def _cleared(
+    hass: HomeAssistant, access_key: AccessKeyRecord, entity_id: str, removing: list[dict],
+    stayed: list[dict] | None = None,
+) -> tuple[dict, str, str]:
+    """Read the list back after a clear, naming what went and what stayed."""
+    stayed = list(stayed or ())
+    body: dict[str, Any] = {"list": entity_id, "action": "clear_completed", "applied": True,
+                            "removed_count": len(removing), "removed": [_named(row) for row in removing]}
     try:
         items = await _items(hass, entity_id, list(STATUSES)) if not _unavailable(entity_id, hass) else None
     except Exception:  # the change was applied; only its confirmation failed
         items = None
     if items is None:
-        body.update(verified=False, note="The list could not be read back to confirm the removal.")
+        body.update(verified=False, status="unknown", retry_safe=False,
+                    note="The list could not be read back to confirm the removal.")
         return _tool_uncertain(_safe_calendar_data(body, access_key, hass)), "invalid_request", entity_id
-    gone = {item["uid"] for item in chosen}
-    body.update(verified=not any(item.get("uid") in gone for item in items),
-                remaining_completed=sum(item.get("status") == "completed" for item in items))
+    held = {item.get("uid") for item in items}
+    gone = [row for row in removing if row["uid"] not in held]
+    stayed += [_named(row, "still_listed") for row in removing if row["uid"] in held]
+    remaining = sum(item.get("status") == "completed" for item in items)
+    body.update(removed_count=len(gone), removed=[_named(row) for row in gone], verified=len(gone) == len(removing),
+                remaining_completed=remaining, truncated=remaining > 0)
+    if stayed:
+        body["not_removed"] = stayed
+    if len(gone) < len(removing):
+        body.update(status="partial", retry_safe=False, note=_CLEAR_LEFT_ITEMS)
+        return _tool_uncertain(_safe_calendar_data(body, access_key, hass)), "invalid_request", entity_id
     return _tool_success(_dumps(_safe_calendar_data(body, access_key, hass))), "allowed", entity_id
+
+
+def _why_kept(row: dict, item: dict | None) -> str | None:
+    """Why a reviewed item must not go now, or None while it reads as it was reviewed."""
+    if item is None:
+        return "already_gone"
+    if _reviewed(item)["digest"] == row.get("digest"):
+        return None
+    return "reopened" if row.get("status") == "completed" and item.get("status") != "completed" else "changed"
+
+
+async def _execute_set_todo_item(
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData,
+) -> tuple[dict, str, str]:
+    """Run an approved removal on the reviewed items that still read as they did.
+
+    Core's remove_item takes any uid in any state and refuses the whole call for a missing one,
+    so the check is here. Refuses before any write when none is left; scope, target binding and
+    MESA are call_service's executor's.
+    """
+    entity_id, action, reviewed = args.get("entity_id"), args.get("action"), args.get("reviewed")
+    if (not isinstance(entity_id, str) or action not in ("remove", "clear_completed")
+            or not isinstance(reviewed, list) or not reviewed
+            or not all(isinstance(row, dict) and row.get("uid") for row in reviewed)):
+        return _tool_refused_before_write("The saved request is not a reviewed todo removal."), "invalid_request", _TOOL
+    if not _readable(entity_id, access_key, hass):
+        return _tool_refused_before_write(_NOT_FOUND), "not_found", _TOOL
+    if _unavailable(entity_id, hass):
+        return _tool_refused_before_write("This todo list is unavailable, so nothing was removed."), "invalid_request", _TOOL
+    try:
+        current = {item.get("uid"): item for item in await _items(hass, entity_id, list(STATUSES))}
+    except AuthorityChangedError:
+        raise
+    except Exception:  # nothing can be checked, so nothing is removed
+        return _tool_refused_before_write("The list could not be read, so nothing was removed."), "invalid_request", _TOOL
+    reasons = [(row, _why_kept(row, current.get(row["uid"]))) for row in reviewed]
+    going = [row for row, reason in reasons if reason is None]
+    stayed = [_named(row, reason) for row, reason in reasons if reason is not None]
+    if not going:
+        body = {"list": entity_id, "action": action, "applied": False, "removed_count": 0, "removed": [],
+                "not_removed": stayed, "note": "No item still reads as it was reviewed, so nothing was removed."}
+        return (_tool_refused_before_write(_dumps(_safe_calendar_data(body, access_key, hass))),
+                "invalid_request", entity_id)
+    call: dict[str, Any] = {"domain": "todo", "service": "remove_item", "entity_id": [entity_id],
+                            "service_data": {"item": [row["uid"] for row in going]}}
+    if APPROVAL_TARGETS_KEY in args:
+        call[APPROVAL_TARGETS_KEY] = args[APPROVAL_TARGETS_KEY]
+    result = await _execute_call_service(call, access_key, hass, data)
+    content, outcome, _resource = result
+    if outcome != "allowed" or content.get("isError"):
+        return result
+    if action == "remove":
+        return await _verified(hass, access_key, entity_id, action, current[going[0]["uid"]], None)
+    return await _cleared(hass, access_key, entity_id, going, stayed)
 
 
 def _added(before: list[dict], after: list[dict], summary: Any) -> dict | None:
@@ -340,7 +474,7 @@ def _same_due(read: Any, sent: str) -> bool:
         return False
     if "T" not in sent and " " not in sent.strip():
         return read == sent
-    left, right = dt_util.parse_datetime(read), dt_util.parse_datetime(sent.replace(" ", "T"))
+    left, right = parse_datetime(read), parse_datetime(sent.replace(" ", "T"))
     if left is None or right is None:
         return False
     return dt_util.as_local(left) == (right if right.tzinfo else right.replace(tzinfo=dt_util.get_default_time_zone()))
@@ -364,18 +498,22 @@ def _unapplied(item: dict, expected: dict) -> list[str]:
 async def _verified(
     hass: HomeAssistant, access_key: AccessKeyRecord, entity_id: str, action: str, target: dict | None, summary: Any,
     expected: dict | None = None, before: list[dict] | None = None,
+    *, cleared: dict | None = None, ignored_null: list[str] | None = None,
 ) -> tuple[dict, str, str]:
-    """Read the list back, so the result says what it now holds rather than what was asked."""
+    """Read the list back, so the result says what it now holds rather than what was asked.
+
+    A change the read-back cannot confirm is an uncertain write, whatever the service answered.
+    """
     body: dict[str, Any] = {"list": entity_id, "action": action}
     if _unavailable(entity_id, hass):
         # Home Assistant answers no items for an unavailable list, which would read as a lost change.
-        body.update(applied=None, verified=False,
+        body.update(applied=None, verified=False, status="unknown", retry_safe=False,
                     note="The list became unavailable, so whether the change took cannot be confirmed.")
         return _tool_uncertain(body), "invalid_request", entity_id
     try:
         items = await _items(hass, entity_id, list(STATUSES))
     except Exception:  # the change was applied; only its confirmation failed
-        body.update(applied=True, verified=False,
+        body.update(applied=True, verified=False, status="unknown", retry_safe=False,
                     note="The change was applied, but the list could not be read back to confirm it.")
         return _tool_uncertain(body), "invalid_request", entity_id
     def named(text: Any) -> list[dict]:
@@ -405,4 +543,11 @@ async def _verified(
     if action != "remove" and body["verified"] and expected and (wrong := _unapplied(body["item"], expected)):
         body.update(verified=False, not_applied=wrong,
                     note="The list accepted the change, but these fields do not read back as requested.")
+    if cleared:
+        body["cleared"] = cleared
+    if ignored_null:
+        body["ignored_null"] = ignored_null
+    if not body["verified"]:
+        body.update(status="partial", retry_safe=False)
+        return _tool_uncertain(_safe_calendar_data(body, access_key, hass)), "invalid_request", entity_id
     return _tool_success(_dumps(_safe_calendar_data(body, access_key, hass))), "allowed", entity_id

@@ -35,6 +35,8 @@ const OUTCOME_LABEL_KEYS: Record<Outcome, string> = {
   not_implemented: "audit.outcomeNotImplemented",
   invalid_request: "audit.outcomeInvalidRequest",
   pending_approval: "audit.outcomePendingApproval",
+  cancelled: "audit.outcomeCancelled",
+  unknown: "audit.outcomeUnknown",
 };
 
 /** Outcome label, with context for a session DELETE whose target is already gone. */

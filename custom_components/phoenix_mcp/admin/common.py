@@ -14,13 +14,14 @@ import uuid
 from aiohttp import web
 from homeassistant.components.http.const import KEY_AUTHENTICATED, KEY_HASS_USER
 from homeassistant.core import HomeAssistant
-from homeassistant.util.dt import as_utc, parse_datetime
+from homeassistant.util.dt import as_utc
 
 from ..const import DOMAIN, MAX_REQUEST_BODY_BYTES, RUNTIME_READY_KEY
 from ..data import PhoenixData
 from ..durable_storage import MesaSaveError
-from ..tool_input import _parse_finite_float, _reject_non_finite
+from ..tool_input import parse_json_body
 from ..view_base import _err
+from ..time_text import parse_datetime
 
 
 _LOGGER = logging.getLogger(__name__)
@@ -121,7 +122,7 @@ async def _read_body(
         return {}
 
     try:
-        parsed = json.loads(body_bytes, parse_constant=_reject_non_finite, parse_float=_parse_finite_float)
+        parsed = parse_json_body(body_bytes)
     except (ValueError, RecursionError):  # Invalid JSON or text, numeric overflow, or excessive nesting.
         # Diagnostic only (never logs the body content itself). The loop above
         # reads to EOF, so a byte count short of Content-Length points at

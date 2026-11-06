@@ -19,6 +19,7 @@ from ..audit import Outcome
 from ..const import (
     CAP_DENY, DUAL_GATE_SERVICES, HIGH_RISK_DOMAINS, MUSIC_ASSISTANT_LIBRARY_SERVICES,
     NO_TARGET_SERVICES, PROXY_TIMEOUT_SECONDS, SERVICE_RESULT_STATES_MAX, APPROVAL_TARGETS_KEY,
+    TTS_SPEAK_PLAYER_FIELD, TTS_SPEAK_SERVICE,
 )
 from ..data import PhoenixData
 from ..helpers import (
@@ -26,21 +27,24 @@ from ..helpers import (
 )
 from ..tool_input import sanitize_service_data as _sanitize_service_data, str_arg
 from ..catalog_text import diff_summary_fields as _summary
-from ..capability import effective_cap, service_capability
+from ..capability import effective_cap
 from ..household_authority import household_service_kwargs
 from ..mesa import async_apply_mesa_to_call, fire_mesa_blocked_event
 from ..policy_engine import (
     call_needs_physical_gate, esphome_entry_writable, filter_service_response,
-    music_assistant_readable_entries, Permission, resolve, resolve_esphome_user_service,
-    resolve_service_targets, service_target_binding_valid,
+    music_assistant_readable_entries, Permission, required_service_cap, resolve,
+    resolve_esphome_user_service, resolve_service_targets, service_target_binding_valid,
+    unreadable_group_targets,
 )
 from ..request_authority import check_request_authority, mark_dispatch_started, RequestAuthority
 from ..routing.plan_currency import service_plan_is_current, bind_service_plan
 from ..routing.command_verification import async_verify_command_state
 from ..routing.routing_tables import COMMAND_ROUTING_PLAN_KEY
 from ..service_targets import (
-    dedicated_tool_refusal, entity_id_argument, secondary_target_error, template_fields, template_fields_error,
-    todo_items_in_review, unbound_service_targets, unbound_target_error, unsupported_secondary_targets,
+    dedicated_tool_refusal, entity_id_argument, merge_speech_players, named_script_refusal, secondary_target_error,
+    speech_engines, speech_players, speech_target_refusal, template_fields, template_fields_error,
+    todo_removal_review, unbound_service_targets, unbound_target_error, unreadable_group_error,
+    unsupported_secondary_targets,
 )
 from ..tool_common import (
     _add_mesa_advisory, _CAP_FORBIDDEN_MESSAGE, _gate, _mesa_confirm_annotation, _pending_or_inline, _tool_error, _tool_refused_before_write, _tool_success, MESA_DENIED_MESSAGE,
@@ -61,8 +65,13 @@ async def _tool_call_service(
     data: PhoenixData,
     request_id: str = "",
     client_ip: str | None = None,
+    *,
+    approve_as: tuple[str, dict] | None = None,
 ) -> tuple[dict, str, str]:
-    """MCP tool: call a HA service with entity targets filtered to WRITE-permitted entities."""
+    """MCP tool: call a HA service with entity targets filtered to WRITE-permitted entities.
+
+    ``approve_as`` names the (tool, saved arguments) a bounded tool's MESA approval runs as.
+    """
     args, error = normalize_tool_args("call_service", args)
     if error:
         # Diagnostics must not override a capability denial. Inspect only the
@@ -70,20 +79,8 @@ async def _tool_call_service(
         service_arg = args.get("service")
         domain = str_arg(service_arg.get("domain")) if isinstance(service_arg, dict) else str_arg(args.get("domain"))
         service = str_arg(service_arg.get("name")) if isinstance(service_arg, dict) else str_arg(service_arg)
-        service_key = f"{domain}/{service}"
-        cap = None
-        if (dedicated := dedicated_tool_refusal(domain, service)) is not None:
-            cap = dedicated[0]
-        elif service_key in DUAL_GATE_SERVICES:
-            cap = "cap_restart"
-        elif call_needs_physical_gate(
-            domain=domain, service=service,
-            entity_id=args.get("entity_id"), device_id=args.get("device_id"),
-            area_id=args.get("area_id"), access_key=access_key, hass=hass,
-        ):
-            cap = "cap_physical_control"
-        elif service_key in NO_TARGET_SERVICES:
-            cap = "cap_yaml_edit"
+        dedicated = dedicated_tool_refusal(domain, service)
+        cap = dedicated[0] if dedicated is not None else _service_required_cap(args, domain, service, access_key, hass)
         if cap is not None and effective_cap(access_key, cap) == CAP_DENY:
             return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "call_service"
         return _tool_error(error), "invalid_request", "call_service"
@@ -106,6 +103,9 @@ async def _tool_call_service(
         return _tool_error(dedicated[1]), "invalid_request", "call_service"
 
     service_key = f"{domain}/{service}"
+    args, speech_error = merge_speech_players(args, domain, service)
+    if speech_error:
+        return _tool_error(speech_error), "invalid_request", "call_service"
     secondary_targets = await unsupported_secondary_targets(
         hass, args.get("service_data"), domain=domain, service=service
     )
@@ -117,6 +117,8 @@ async def _tool_call_service(
         )
     if templated := template_fields(args.get("service_data")):
         return _tool_error(template_fields_error(templated)), "invalid_request", "call_service"
+    if refusal := await named_script_refusal(hass, domain, service):
+        return _tool_refused_before_write(refusal), "invalid_request", "call_service"
 
 
     targetless = (service_key in DUAL_GATE_SERVICES | NO_TARGET_SERVICES | MUSIC_ASSISTANT_LIBRARY_SERVICES
@@ -138,6 +140,8 @@ async def _tool_call_service(
         )
         if unbound := await unbound_service_targets(hass, targets, domain=domain, service=service):
             return _tool_refused_before_write(unbound_target_error(domain, service, unbound)), "denied", "call_service"
+        if refusal := speech_target_refusal(domain, service, args.get("entity_id"), targets):
+            return _tool_refused_before_write(refusal), "denied", "call_service"
 
     bound_args = bind_service_plan(args, hass, data, access_key)
     if bound_args is None:
@@ -160,7 +164,7 @@ async def _tool_call_service(
         if blocked is not None:
             return blocked
     return await _execute_call_service(
-        args, access_key, hass, data, request_id=request_id, client_ip=client_ip,
+        args, access_key, hass, data, request_id=request_id, client_ip=client_ip, approve_as=approve_as,
     )
 
 
@@ -168,13 +172,11 @@ def _service_required_cap(
     args: dict, domain: str, service: str, access_key: AccessKeyRecord, hass: HomeAssistant,
 ) -> str | None:
     """The capability this call needs at admission and again at execution."""
-    if f"{domain}/{service}" not in DUAL_GATE_SERVICES and call_needs_physical_gate(
-        domain=domain, service=service,
+    return required_service_cap(
+        domain=domain, service=service, service_data=args.get("service_data"),
         entity_id=args.get("entity_id"), device_id=args.get("device_id"),
         area_id=args.get("area_id"), access_key=access_key, hass=hass,
-    ):
-        return "cap_physical_control"
-    return service_capability(domain, service, args.get("service_data"))
+    )
 
 
 async def _dispatch_no_target_tool_call(
@@ -300,6 +302,7 @@ async def _execute_call_service(
     request_id: str = "",
     client_ip: str | None = None,
     mesa_approved: bool = False,
+    approve_as: tuple[str, dict] | None = None,
 ) -> tuple[dict, str, str]:
     # Coerced before anything gates on them: service_key and the physical-gate
     # domain check are set-membership tests, so a list-valued domain raises
@@ -339,6 +342,8 @@ async def _execute_call_service(
         )
     if templated := template_fields(args.get("service_data")):
         return _tool_error(template_fields_error(templated)), "invalid_request", resource
+    if refusal := await named_script_refusal(hass, domain, service):
+        return _tool_refused_before_write(refusal), "invalid_request", resource
 
     check_request_authority()
     entity_id = args.get("entity_id")
@@ -390,10 +395,11 @@ async def _execute_call_service(
     # so attaching the flattened entity_id list makes voluptuous reject the call
     # outright, and routing them through resolve_service_targets yields
     # an empty list and a spurious 403. Authorization is the owning DEVICE's write
-    # scope rather than a capability: the action is defined by that device's own
-    # firmware and can only act on it, so an access key that may already actuate the
-    # device's entities is exactly the access key that may invoke its actions. MESA
-    # does not apply (no entity target to govern). A service no LOADED entry
+    # scope: the action is defined by that device's own firmware and can only act on
+    # it, so an access key that may already actuate the device's entities is exactly
+    # the access key that may invoke its actions, with the capability checked above
+    # when the device has a physical entity. MESA does not apply (no entity target to
+    # govern). A service no LOADED entry
     # claims falls through to the normal path and refuses uniformly, so a stale
     # registration left behind by an unload reveals nothing.
     if domain == _ESPHOME_DOMAIN:
@@ -425,6 +431,8 @@ async def _execute_call_service(
         hass=hass,
     )
 
+    if not permitted_entities and (unreadable := unreadable_group_targets(entity_id, access_key, hass)):
+        return _tool_refused_before_write(unreadable_group_error(unreadable)), "denied", resource
     if not permitted_entities or not service_target_binding_valid(domain, service, permitted_entities, hass):
         return _tool_error("Forbidden."), "denied", resource
 
@@ -432,6 +440,8 @@ async def _execute_call_service(
     # description can change while an approval is pending.
     if unbound := await unbound_service_targets(hass, permitted_entities, domain=domain, service=service):
         return _tool_refused_before_write(unbound_target_error(domain, service, unbound)), "denied", resource
+    if refusal := speech_target_refusal(domain, service, entity_id, permitted_entities):
+        return _tool_refused_before_write(refusal), "denied", resource
 
     if not service_plan_is_current(args, hass, data, access_key, permitted_entities):
         return _tool_error("Command targets or configuration changed."), "denied", resource
@@ -445,9 +455,12 @@ async def _execute_call_service(
     # denied; it can drop entities, gate the whole call for confirmation, or
     # block outright.
     exact_approval = APPROVAL_TARGETS_KEY in args or _approved_exec_ctx.get()
-    local_constraints: dict[str, Any] = {"require_all": True} if local_plan or exact_approval else {}
+    every_target = local_plan or exact_approval or service_key == TTS_SPEAK_SERVICE
+    local_constraints: dict[str, Any] = {"require_all": True} if every_target else {}
     if local_plan:
         local_constraints["approval_args"] = args
+    if approve_as is not None:
+        local_constraints.update(approval_tool_name=approve_as[0], approval_args=approve_as[1])
     mesa_outcome = await async_apply_mesa_to_call(
         hass, data, access_key,
         domain=domain, service=service, service_data=service_data,
@@ -481,7 +494,11 @@ async def _execute_call_service(
         )
 
     call_data = dict(service_data)
-    call_data["entity_id"] = entity_id_argument(hass, domain, service, permitted_entities, service_data)
+    dispatched = permitted_entities
+    if service_key == TTS_SPEAK_SERVICE:
+        call_data[TTS_SPEAK_PLAYER_FIELD] = speech_players(permitted_entities)
+        dispatched = speech_engines(permitted_entities)
+    call_data["entity_id"] = entity_id_argument(hass, domain, service, dispatched, service_data)
 
     use_return_response = False
     if effective_cap(access_key, "cap_service_response") != CAP_DENY:
@@ -660,8 +677,7 @@ def _build_diff_call_service(args: dict, access_key: AccessKeyRecord, hass: Home
         area_id=args.get("area_id"), service_domain=domain,
         access_key=access_key, hass=hass,
     )
-    if todo_items := todo_items_in_review(hass, domain, service, service_data, resolved):
-        preview["todo_items"] = todo_items
+    preview.update(todo_removal_review(hass, domain, service, service_data, resolved))
     mesa_note = _mesa_confirm_annotation(access_key, hass, [(domain, service, resolved)])
     if mesa_note:
         preview["mesa"] = mesa_note

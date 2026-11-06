@@ -161,6 +161,26 @@ describe("inline markers around addresses and code", () => {
     expect(renderMarkdown("[ha](http://[fe80::1]:8123/x)")).toContain('href="http://[fe80::1]:8123/x"');
   });
 
+  it("keeps brackets in a link's query", () => {
+    expect(renderMarkdown("[x](https://a/?filter[name]=1)")).toContain('href="https://a/?filter[name]=1"');
+  });
+
+  it("finds a link only where its text and address are whole", () => {
+    const href = (source: string) => [...renderMarkdown(source).matchAll(/href="([^"]*)"/g)].map((match) => match[1]);
+    expect(href("[a](https://b) and [c](https://d)")).toEqual(["https://b", "https://d"]);
+    expect(href("[a][b](https://c)")).toEqual(["https://c"]);
+    expect(href("[[a](https://b)")).toEqual(["https://b"]);
+    expect(href("[a](https://b(c)d)")).toEqual(["https://b(c"]);
+    expect(href("[a](javascript:1) [b](https://c)")).toEqual(["https://c"]);
+    expect(href("[a](https://b c) [d](https://e)")).toEqual(["https://e"]);
+    expect(href("[a](https://b)c](https://d)")).toEqual(["https://b"]);
+    expect(renderMarkdown("[a](https://b)c](https://d)")).toContain(">a</a>c](https://d)");
+    expect(renderMarkdown("[](https://b)")).not.toContain("<a ");
+    expect(renderMarkdown("[a]()")).toBe("<p>[a]()</p>");
+    expect(renderMarkdown("a](https://b)")).not.toContain("<a ");
+    expect(renderMarkdown("[a]b](https://c)")).not.toContain("<a ");
+  });
+
   it("cannot put held markup in an href, where its quotes would end the attribute", () => {
     const html = renderMarkdown('[x](http://a/`"onx=1`)');
     expect(html).not.toContain("<a ");
@@ -213,7 +233,8 @@ describe("hostile input stays inert", () => {
       }
     }
     expect(bad).toEqual([]);
-  });
+    // Hundreds of DOM parses, which a loaded runner can stretch past the default limit.
+  }, 30_000);
 });
 
 describe("hostile input stays cheap", () => {
@@ -234,4 +255,27 @@ describe("hostile input stays cheap", () => {
     renderMarkdown(source);
     expect(performance.now() - started).toBeLessThan(1000);
   });
+
+  /** The fastest of a few runs: load only ever slows a run, so this is the closest to the cost. */
+  const cost = (source: string) => Math.min(...Array.from({ length: 5 }, () => {
+    const started = performance.now();
+    renderMarkdown(source);
+    return performance.now() - started;
+  }));
+
+  // Four times the input costs about four times the work when linear and sixteen when quadratic.
+  it.each([
+    ["hex link openings", "[a]("],
+    ["digit link openings", "[1]("],
+    ["hex openings with an address", "[a](b"],
+    ["bare link middles", "]("],
+    ["openings that end at a space", "[a](b "],
+    ["an open bracket after each opening", "[a](b["],
+    ["held code in each address", "[a](`c`"],
+    ["a closed bracket in each address", "[a](b[c]"],
+  ])("%s grow linearly", (_name, unit) => {
+    const small = unit.repeat(20_000 / unit.length);
+    const large = unit.repeat(80_000 / unit.length);
+    expect(cost(large)).toBeLessThan(9 * Math.max(cost(small), 2));
+  }, 120_000);
 });

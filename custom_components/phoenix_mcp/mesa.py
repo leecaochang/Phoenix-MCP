@@ -12,6 +12,7 @@ HA's Store. The enforcer is non-interactive, so a Confirm entity is blocked with
 from __future__ import annotations
 
 import asyncio
+import copy
 import glob
 import hashlib
 import inspect
@@ -62,6 +63,7 @@ from .mesa_core import (
     LeaseManager,
     MesaEnforcer,
     ProfileStore,
+    SemanticProfile,
     TriggerValidator,
     import_from_integration,
 )
@@ -69,12 +71,12 @@ from .mesa_core.backends import StorageBackend
 from .mesa_core.exceptions import MesaError
 from .mesa_core.profile import CONTROL_MODE_RANK
 from .request_authority import dispatch_client_ip, dispatch_request_id, check_request_authority
-from .service_targets import todo_items_in_review
+from .service_targets import todo_removal_review
 
 if TYPE_CHECKING:
     from .approvals import PendingApproval
-    from .data import PhoenixData
-    from .mesa_core import SemanticProfile, ValidationIssue
+    from .data import DurableState, PhoenixData
+    from .mesa_core import ValidationIssue
     from .access_key_store import AccessKeyRecord
 
 _LOGGER = logging.getLogger(__name__)
@@ -84,6 +86,9 @@ _LOGGER = logging.getLogger(__name__)
 # that is a target selector to MESA but plain data to Home Assistant, such as
 # config_entry_id, so it describes the request and never a Phoenix fault.
 _RULE_CONTRADICTORY_TARGET = "contradictory_target"
+
+# A Confirm entity under a non-interactive enforcer. Phoenix's approval is the channel.
+_RULE_CONFIRM_NO_CHANNEL = "control_mode:confirm_no_channel"
 
 # Home Assistant's generic turn services forward their data unchanged to the
 # same service on each target's own domain.
@@ -101,12 +106,49 @@ class MesaStorageCorruptError(MesaError):
     """The stored profile set cannot be trusted, so MESA must not start from it."""
 
 
-def _exchange_documents(documents: dict[str, dict[str, Any]], first: str, second: str) -> None:
-    moved_first, moved_second = documents.pop(first, None), documents.pop(second, None)
-    if moved_first is not None:
-        documents[second] = moved_first
-    if moved_second is not None:
-        documents[first] = moved_second
+# Storage keys of the levels above an entity; an entity profile's key is its entity id.
+_RESERVED_KEY_PREFIX = "__"
+
+# What resolving a damaged stored document raises, as the enforcer catches it.
+_POLICY_READ_ERRORS = (MesaError, ValueError, OSError, RecursionError)
+
+
+def _carry_documents(
+    documents: dict[str, dict[str, Any]], old: str, new: str, replacement: dict[str, Any] | None
+) -> None:
+    """Move a profile to a new id; what stood there takes the old id, ``replacement`` the new one."""
+    moved, resident = documents.pop(old, None), documents.pop(new, None)
+    if moved is not None:
+        documents[new] = moved
+    if resident is not None:
+        documents[old] = resident
+    if replacement is not None:
+        documents[new] = replacement
+
+
+def _carry_registry_id(registry_ids: dict[str, str], old: str, new: str) -> None:
+    if (registry_id := registry_ids.pop(old, None)) is not None:
+        registry_ids[new] = registry_id
+
+
+def _profile_registry_ids(
+    hass: HomeAssistant, profile_keys: list[str], known: Mapping[str, str]
+) -> dict[str, str]:
+    """Map each entity profile to its registry entry's stable id.
+
+    A profile whose entity id left the registry keeps the id it had, which is how a rename
+    nothing saw is found again.
+    """
+    registry = er_mod.async_get(hass)
+    ids: dict[str, str] = {}
+    for key in profile_keys:
+        if key.startswith(_RESERVED_KEY_PREFIX):
+            continue
+        entry = registry.async_get(key)
+        registry_id = entry.id if entry is not None else known.get(key)
+        if registry_id is not None:
+            ids[key] = registry_id
+    return ids
 
 
 class PhoenixMesaBackend(StorageBackend):
@@ -144,41 +186,35 @@ class PhoenixMesaBackend(StorageBackend):
         """Replace the whole in-memory set with a saved snapshot."""
         self._data = {k: dict(v) for k, v in documents.items()}
 
-    def exchange(self, first: str, second: str) -> None:
-        """Swap the documents under two keys, either of which may be empty."""
-        _exchange_documents(self._data, first, second)
+    def carry(self, old: str, new: str, replacement: dict[str, Any] | None) -> None:
+        """Apply one rename to the in-memory set."""
+        _carry_documents(self._data, old, new, replacement)
 
 
 @dataclass
-class MesaRuntime:
-    """Holds the constructed mesa-core objects and Phoenix-side caches."""
+class MesaStorage:
+    """The MESA storage file and everything it is rewritten from, one per process.
+
+    Held by DurableState, so a reload builds a new enforcer around this state and a runtime the
+    reload retired saves the same set under the same lock. A load that failed leaves no owner, so
+    the next reload reads the file again.
+    """
 
     hass: HomeAssistant
-    backend: PhoenixMesaBackend
-    store: ProfileStore
-    resolver: InheritanceResolver
-    enforcer: MesaEnforcer
-    validator: TriggerValidator
     ha_store: Store
-    # Advisory coordination leases. In-memory only by design: they cap at 30
-    # seconds and never survive a restart. Exposed to agents through the
-    # mesa_request_lease/mesa_release_lease tools (mesa_tools.py); there is no
-    # admin UI or HA sensor.
-    lease_manager: LeaseManager
+    backend: PhoenixMesaBackend
     lock: asyncio.Lock = field(default_factory=asyncio.Lock)
-    trigger_issues: list[ValidationIssue] = field(default_factory=list)
-    orphans: list[str] = field(default_factory=list)
-    orphan_areas: list[str] = field(default_factory=list)
-    orphan_integrations: list[str] = field(default_factory=list)
-    orphan_devices: list[str] = field(default_factory=list)
-    # Profile suggestions (mesa_suggestions.py): cached like the orphan lists.
-    # dismissed_suggestions persists in the phoenix_mcp_mesa store (Phoenix-owned sibling
-    # key next to "profiles"; mesa-core never sees it).
-    suggestions: list = field(default_factory=list)
+    # Phoenix-owned sibling keys next to "profiles"; mesa-core never sees them.
     dismissed_suggestions: set[str] = field(default_factory=set)
+    # Entity profile key to registry entry id, which survives a rename the listener missed.
+    registry_ids: dict[str, str] = field(default_factory=dict)
     # What storage holds, which a failed save returns memory to.
     durable_profiles: dict[str, dict[str, Any]] = field(default_factory=dict)
     durable_dismissed: list[str] = field(default_factory=list)
+    # A carried profile is in force but not on disk, which Needs Attention reports.
+    rename_save_failed: bool = False
+    # Renames that arrive while a save is writing, replayed on the set it makes durable.
+    carried_during_save: list[tuple[str, str, dict[str, Any] | None]] | None = None
 
     async def async_save(self) -> None:
         """Persist the profile set; callers hold ``self.lock``.
@@ -187,14 +223,87 @@ class MesaRuntime:
         """
         profiles = self.backend.snapshot()
         dismissed = sorted(self.dismissed_suggestions)
+        registry_ids = _profile_registry_ids(self.hass, list(profiles), self.registry_ids)
+        self.carried_during_save = []
         try:
-            await self.ha_store.async_save({"profiles": profiles, "dismissed_suggestions": dismissed})
+            await self.ha_store.async_save({
+                "profiles": profiles, "dismissed_suggestions": dismissed, "registry_ids": registry_ids,
+            })
         except DurableStorageError as err:
             self.backend.restore(self.durable_profiles)
             self.dismissed_suggestions = set(self.durable_dismissed)
             raise MesaSaveError("MESA profiles could not be saved.") from err
+        finally:
+            carried, self.carried_during_save = self.carried_during_save, None
+        for old, new, replacement in carried:
+            _carry_documents(profiles, old, new, replacement)
+            _carry_registry_id(registry_ids, old, new)
         self.durable_profiles = profiles
         self.durable_dismissed = dismissed
+        self.registry_ids = registry_ids
+        self.rename_save_failed = False
+
+    def carry(self, old: str, new: str, replacement: dict[str, Any] | None) -> None:
+        """Move a profile to its entity's new id, in memory and in what a failed save returns to."""
+        self.backend.carry(old, new, replacement)
+        _carry_documents(self.durable_profiles, old, new, replacement)
+        _carry_registry_id(self.registry_ids, old, new)
+        if self.carried_during_save is not None:
+            self.carried_during_save.append((old, new, replacement))
+
+    def needs_save(self) -> bool:
+        """Whether the file lags memory: a failed save, or profiles it holds no registry id for."""
+        return self.rename_save_failed or self.registry_ids != _profile_registry_ids(
+            self.hass, self.backend.list_keys(), self.registry_ids
+        )
+
+
+@dataclass
+class MesaRuntime:
+    """Holds the constructed mesa-core objects and Phoenix-side caches."""
+
+    hass: HomeAssistant
+    storage: MesaStorage
+    store: ProfileStore
+    resolver: InheritanceResolver
+    enforcer: MesaEnforcer
+    validator: TriggerValidator
+    # Advisory coordination leases. In-memory only by design: they cap at 30
+    # seconds and never survive a restart. Exposed to agents through the
+    # mesa_request_lease/mesa_release_lease tools (mesa_tools.py); there is no
+    # admin UI or HA sensor.
+    lease_manager: LeaseManager
+    trigger_issues: list[ValidationIssue] = field(default_factory=list)
+    orphans: list[str] = field(default_factory=list)
+    orphan_areas: list[str] = field(default_factory=list)
+    orphan_integrations: list[str] = field(default_factory=list)
+    orphan_devices: list[str] = field(default_factory=list)
+    # Profile suggestions (mesa_suggestions.py): cached like the orphan lists.
+    suggestions: list = field(default_factory=list)
+
+    @property
+    def backend(self) -> PhoenixMesaBackend:
+        return self.storage.backend
+
+    @property
+    def ha_store(self) -> Store:
+        return self.storage.ha_store
+
+    @property
+    def lock(self) -> asyncio.Lock:
+        return self.storage.lock
+
+    @property
+    def dismissed_suggestions(self) -> set[str]:
+        return self.storage.dismissed_suggestions
+
+    @dismissed_suggestions.setter
+    def dismissed_suggestions(self, value: set[str]) -> None:
+        self.storage.dismissed_suggestions = value
+
+    async def async_save(self) -> None:
+        """Persist the profile set; callers hold ``self.lock``."""
+        await self.storage.async_save()
 
     async def async_wipe(self) -> None:
         """Delete every profile and reset all Phoenix-side MESA caches, then persist.
@@ -594,11 +703,11 @@ def _corrupt_copies(path: str) -> list[str]:
     return glob.glob(f"{glob.escape(path)}.corrupt.*")
 
 
-async def async_setup_mesa(hass: HomeAssistant, mesa_mode: str) -> MesaRuntime:
-    """Construct the MESA runtime, loading any persisted profiles.
-    Built even with the kill switch on, for the admin profile API. Raises
-    MesaStorageCorruptError rather than starting without the stored policy; the gates then
-    fail closed through the setup-failure path.
+async def _async_load_mesa_storage(hass: HomeAssistant) -> MesaStorage:
+    """Read the storage file. Raises MesaStorageCorruptError for anything but a saved set or no file.
+
+    Phoenix always writes "profiles", so a file without it was not written by Phoenix, and no
+    profiles is a conclusion only an absent file supports.
     """
     ha_store: Store[dict] = DurableStore(hass, MESA_STORAGE_VERSION, MESA_STORAGE_KEY, atomic_writes=True)
     raw = await ha_store.async_load()
@@ -609,15 +718,48 @@ async def async_setup_mesa(hass: HomeAssistant, mesa_mode: str) -> MesaRuntime:
                 f"MESA profile storage is corrupt. Copy {sorted(corrupt)[-1]} back to {ha_store.path}, "
                 "or delete it to start with no profiles, then reload Phoenix MCP."
             )
-        raw = {}
-    profiles = raw.get("profiles", {}) if isinstance(raw, dict) else None
-    if not isinstance(profiles, dict) or not all(isinstance(doc, dict) for doc in profiles.values()):
+        # A document Home Assistant reads as empty also arrives here.
+        raw = None if await hass.async_add_executor_job(os.path.exists, ha_store.path) else {"profiles": {}}
+    stored: Mapping[str, Any] = raw if isinstance(raw, dict) else {}
+    profiles = stored.get("profiles")
+    registry_ids = stored.get("registry_ids", {})
+    if (
+        not isinstance(profiles, dict)
+        or not all(isinstance(doc, dict) for doc in profiles.values())
+        or not isinstance(registry_ids, dict)
+    ):
         raise MesaStorageCorruptError(
             f"MESA profile storage at {ha_store.path} has an invalid shape. "
-            "Restore it from a backup, then reload Phoenix MCP."
+            "Restore it from a backup, or delete it to start with no profiles, then reload Phoenix MCP."
         )
     backend = PhoenixMesaBackend(profiles)
-    dismissed = {k for k in (raw.get("dismissed_suggestions") or []) if isinstance(k, str)}
+    dismissed = {k for k in (stored.get("dismissed_suggestions") or []) if isinstance(k, str)}
+    return MesaStorage(
+        hass=hass,
+        ha_store=ha_store,
+        backend=backend,
+        dismissed_suggestions=dismissed,
+        registry_ids={k: v for k, v in registry_ids.items() if isinstance(k, str) and isinstance(v, str)},
+        durable_profiles=backend.snapshot(),
+        durable_dismissed=sorted(dismissed),
+    )
+
+
+async def async_setup_mesa(
+    hass: HomeAssistant, mesa_mode: str, durable: DurableState | None = None
+) -> MesaRuntime:
+    """Construct the MESA runtime around this process's stored policy.
+    Built even with the kill switch on, for the admin profile API. ``durable`` keeps the policy
+    across a reload; a load that failed is retried by the next one. Raises
+    MesaStorageCorruptError rather than starting without the stored policy; the gates then
+    fail closed through the setup-failure path.
+    """
+    storage = durable.mesa if durable is not None else None
+    if storage is None:
+        storage = await _async_load_mesa_storage(hass)
+        if durable is not None:
+            durable.mesa = storage
+    backend = storage.backend
 
     get_entity_area = _build_get_entity_area(hass)
     get_entity_integration = _build_get_entity_integration(hass)
@@ -662,16 +804,12 @@ async def async_setup_mesa(hass: HomeAssistant, mesa_mode: str) -> MesaRuntime:
 
     return MesaRuntime(
         hass=hass,
-        backend=backend,
+        storage=storage,
         store=store,
         resolver=resolver,
         enforcer=enforcer,
         validator=validator,
-        ha_store=ha_store,
         lease_manager=lease_manager,
-        dismissed_suggestions=dismissed,
-        durable_profiles=backend.snapshot(),
-        durable_dismissed=sorted(dismissed),
     )
 
 
@@ -754,45 +892,106 @@ def refresh_orphans(hass: HomeAssistant, runtime: MesaRuntime) -> None:
     ]
 
 
-def _stored_control_rank(runtime: MesaRuntime, entity_id: str) -> int | None:
-    """Restrictiveness of a stored entity profile's own mode, or None if unreadable."""
+def _boundaries_at(runtime: MesaRuntime, entity_id: str, document: dict[str, Any]) -> Any | None:
+    """What a stored document amounts to on an entity, or None if it cannot be read.
+
+    Resolved as the enforcer would, so a mode left unset reads as the baseline it stands for.
+    """
     try:
-        profile = runtime.store.get(entity_id)
-    except (MesaError, ValueError):
+        profile = SemanticProfile.from_dict(entity_id, document)
+        explained = runtime.resolver.explain(entity_id, entity_profile=profile)
+    except _POLICY_READ_ERRORS:
         return None
-    mode = profile.operational_boundaries.control_mode if profile is not None else None
-    return CONTROL_MODE_RANK[mode] if isinstance(mode, ControlMode) else -1
+    boundaries = explained.effective_profile.operational_boundaries
+    return boundaries if isinstance(boundaries.control_mode, ControlMode) else None
+
+
+def _control_strictness(boundaries: Any) -> tuple[int, bool]:
+    """Order control modes by what Phoenix does: read-only is vetoed even in advisory mode."""
+    mode = boundaries.control_mode
+    return CONTROL_MODE_RANK[mode], mode is ControlMode.READ_ONLY
+
+
+def _tightened_document(carried: dict[str, Any], own: Any, other: Any) -> dict[str, Any]:
+    """The carried document, raised to the other's control mode, enforcement and limits."""
+    document = copy.deepcopy(carried)
+    boundaries = document.setdefault("semantic_profile", {}).setdefault("operational_boundaries", {})
+    if _control_strictness(other) > _control_strictness(own):
+        boundaries["control_mode"] = other.control_mode.value
+        if other.control_reason:
+            boundaries["control_reason"] = other.control_reason
+    if other.enforcement_mode == "enforced":
+        boundaries["enforcement_mode"] = "enforced"
+    for name in ("declared_limits", "temporal_constraints"):
+        held = list(boundaries.get(name) or [])
+        taken = {item.get("id") for item in held}
+        for item in getattr(other, name):
+            if item in getattr(own, name):
+                continue
+            identifier = item.get("id")
+            while identifier in taken:
+                identifier = f"{identifier}_carried"
+            taken.add(identifier)
+            held.append({**item, "id": identifier} if identifier is not None else item)
+        if held:
+            boundaries[name] = held
+    return document
 
 
 def carry_renamed_profile(runtime: MesaRuntime, old_entity_id: str, new_entity_id: str) -> bool:
     """Move an entity profile to the entity's new id. Returns whether it had one.
     Synchronous, so it wins over any later call; on True the caller persists and refreshes
-    orphans. A profile already at the new id is kept: the stricter of the two governs and the
-    other stays under the old id as an orphan.
+    orphans. A profile already at the new id stays under the old id as an orphan, and the new
+    id keeps the stricter of the two on control mode, enforcement and limits, so a collision
+    never loosens either. A document that cannot be read keeps the new id, where it refuses.
     """
-    if runtime.backend.read(old_entity_id) is None:
+    carried = runtime.backend.read(old_entity_id)
+    if carried is None:
         return False
-    if runtime.backend.read(new_entity_id) is not None:
-        ranks = [_stored_control_rank(runtime, eid) for eid in (old_entity_id, new_entity_id)]
+    resident = runtime.backend.read(new_entity_id)
+    replacement = None
+    if resident is not None:
         _LOGGER.warning(
             "MESA: %s was renamed to %s, which already has a profile. Both are kept; "
-            "the stricter applies to %s and the other is now an orphan to review.",
+            "%s takes the stricter of each and the other is now an orphan to review.",
             old_entity_id, new_entity_id, new_entity_id,
         )
-        if ranks[1] is None or (ranks[0] is not None and ranks[0] <= ranks[1]):
+        own = _boundaries_at(runtime, new_entity_id, carried)
+        other = _boundaries_at(runtime, new_entity_id, resident)
+        if other is None:
+            runtime.storage.registry_ids.pop(old_entity_id, None)
             return True
-    runtime.backend.exchange(old_entity_id, new_entity_id)
-    _exchange_documents(runtime.durable_profiles, old_entity_id, new_entity_id)
+        if own is not None:
+            replacement = _tightened_document(carried, own, other)
+    runtime.storage.carry(old_entity_id, new_entity_id, replacement)
     return True
 
 
+def reconcile_renamed_profiles(runtime: MesaRuntime) -> bool:
+    """Carry every profile whose entity was renamed while nothing listened.
+
+    Returns whether the storage file now lags memory, so the caller persists it.
+    """
+    registry = er_mod.async_get(runtime.hass)
+    carried = False
+    for profile_key, registry_id in list(runtime.storage.registry_ids.items()):
+        entry = registry.async_get(registry_id)
+        if entry is not None and entry.entity_id != profile_key:
+            carried = carry_renamed_profile(runtime, profile_key, entry.entity_id) or carried
+    return carried or runtime.storage.needs_save()
+
+
 async def async_persist_renamed_profile(hass: HomeAssistant, runtime: MesaRuntime) -> None:
-    """Save a carried profile. A failed write leaves the carried set in force."""
+    """Save a carried profile. A failed write keeps it in force and raises Needs Attention."""
     async with runtime.lock:
         try:
             await runtime.async_save()
         except MesaSaveError:
-            _LOGGER.error("MESA: a renamed entity's profile could not be saved; it holds until the next restart")
+            runtime.storage.rename_save_failed = True
+            _LOGGER.error(
+                "MESA: a renamed entity's profile could not be saved; it stays in force, and the "
+                "next save or reload tries again"
+            )
         refresh_orphans(hass, runtime)
 
 
@@ -848,6 +1047,14 @@ class RegistryMesaDecision:
     warnings: list[str] = field(default_factory=list)
     effective_rule: dict[str, Any] | None = None
     profile_fingerprint: str | None = None
+    raw_control_reason: str | None = None
+
+    @property
+    def admin_rule(self) -> dict[str, Any] | None:
+        """``effective_rule`` for an approval diff, with the reason as the operator wrote it."""
+        if self.effective_rule is None:
+            return None
+        return {**self.effective_rule, "control_reason": self.raw_control_reason}
 
 
 def evaluate_registry_action(
@@ -863,7 +1070,9 @@ def evaluate_registry_action(
     """Evaluate rename or delete through the normal inheritance resolver and enforcer.
     The service name defaults to ``entity_registry.<action>``. The returned fingerprint covers
     the whole resolved explanation, so an approval satisfies only the state it previewed.
-    Refusals reach the MESA audit trail, under a fresh request id on an approval resume.
+    Refusals reach the MESA audit trail, under a fresh request id on an approval resume, and
+    a profile that cannot be resolved is such a refusal. Reasons name only entities the key
+    can read; ``admin_rule`` keeps the operator's text for an approval diff.
     """
     runtime = data.mesa
     settings = data.store.get_settings()
@@ -880,7 +1089,27 @@ def evaluate_registry_action(
             reason="MESA is configured but unavailable. Reload Phoenix MCP after checking Needs Attention in the Phoenix panel.",
         )
 
-    explanation = runtime.resolver.explain(entity_id)
+    with mesa_audit.request_context(
+        access_key, dispatch_request_id.get() or generate_request_id(), dispatch_client_ip.get()
+    ):
+        verdict = evaluate_service_entities(
+            runtime,
+            settings.mesa_mode,
+            access_key,
+            [entity_id],
+            domain=registry_domain,
+            service=action,
+            service_data=dict(service_data or {}),
+            session_id=session_id,
+        )
+    try:
+        explanation = runtime.resolver.explain(entity_id)
+    except _POLICY_READ_ERRORS:
+        _entity, rule, blocked_reason = (
+            verdict.blocked[0] if verdict.blocked
+            else (entity_id, "policy_unavailable", "entity policy could not be evaluated")
+        )
+        return RegistryMesaDecision(decision="deny", rule=rule, reason=blocked_reason, warnings=list(verdict.warnings))
     explanation_doc = explanation.to_dict()
     fingerprint = hashlib.sha256(
         json.dumps(
@@ -900,10 +1129,13 @@ def evaluate_registry_action(
     )
     boundaries = explanation.effective_profile.operational_boundaries
     control_mode = getattr(boundaries.control_mode, "value", boundaries.control_mode)
+    raw_control_reason = boundaries.control_reason
+    control_reason = raw_control_reason and redact_inaccessible_entity_ids_in_text(
+        raw_control_reason, access_key, runtime.hass)
     effective_rule = {
         "action": f"{registry_domain}.{action}",
         "control_mode": control_mode,
-        "control_reason": boundaries.control_reason,
+        "control_reason": control_reason,
         "enforcement_mode": (
             MESA_MODE_ENFORCED
             if settings.mesa_mode == MESA_MODE_ENFORCED
@@ -913,20 +1145,7 @@ def evaluate_registry_action(
         "provided_by_origin": control.provided_by_origin if control is not None else None,
         "profile_fingerprint": fingerprint[:16],
     }
-    with mesa_audit.request_context(
-        access_key, dispatch_request_id.get() or generate_request_id(), dispatch_client_ip.get()
-    ):
-        verdict = evaluate_service_entities(
-            runtime,
-            settings.mesa_mode,
-            access_key,
-            [entity_id],
-            domain=registry_domain,
-            service=action,
-            service_data=dict(service_data or {}),
-            session_id=session_id,
-        )
-    reason = boundaries.control_reason or entity_id
+    reason = control_reason or entity_id
     if verdict.confirm:
         return RegistryMesaDecision(
             decision="confirm",
@@ -935,6 +1154,7 @@ def evaluate_registry_action(
             warnings=list(verdict.warnings),
             effective_rule=effective_rule,
             profile_fingerprint=fingerprint,
+            raw_control_reason=raw_control_reason,
         )
     if verdict.blocked:
         _blocked_entity, rule, blocked_reason = verdict.blocked[0]
@@ -945,6 +1165,7 @@ def evaluate_registry_action(
             warnings=list(verdict.warnings),
             effective_rule=effective_rule,
             profile_fingerprint=fingerprint,
+            raw_control_reason=raw_control_reason,
         )
     return RegistryMesaDecision(
         decision="allow",
@@ -953,6 +1174,7 @@ def evaluate_registry_action(
         warnings=list(verdict.warnings),
         effective_rule=effective_rule,
         profile_fingerprint=fingerprint,
+        raw_control_reason=raw_control_reason,
     )
 
 
@@ -998,9 +1220,11 @@ def evaluate_service_call(
         )
         if member_verdict is None or member_verdict.blocked:
             rule = member_verdict.blocked[0][1] if member_verdict is not None else "control_mode:blocked"
+            reason = (f"A member of {group} is blocked by policy." if member_verdict is not None
+                      else f"The members of {group} cannot be read, so it is refused.")
             verdict.allowed = [entity_id for entity_id in verdict.allowed if entity_id != group]
             verdict.confirm = [entity_id for entity_id in verdict.confirm if entity_id != group]
-            verdict.blocked.append((group, rule, f"A member of {group} is blocked by policy."))
+            verdict.blocked.append((group, rule, reason))
         elif member_verdict.confirm and group in verdict.allowed:
             verdict.allowed.remove(group)
             verdict.confirm.append(group)
@@ -1035,11 +1259,21 @@ def _light_default_brightness(hass: HomeAssistant, entity_id: str, params: dict[
     return _finite_number(applied.get("brightness"))
 
 
+def _light_white_brightness(hass: HomeAssistant, entity_id: str, white: Any) -> float | None:
+    """The level a white value sets. True keeps the light's brightness, unknown while it is off."""
+    if white is not True:
+        return _finite_number(white)
+    state = hass.states.get(entity_id)
+    return _finite_number(state.attributes.get("brightness")) if state and state.state == "on" else None
+
+
 def _light_limit_params(hass: HomeAssistant, entity_id: str, params: dict[str, Any]) -> dict[str, Any]:
     """Add the absolute brightness a light.turn_on call amounts to.
     Adds both brightness and brightness_pct, leaving the caller's parameters as sent. An
     uncomputable value is added as None, which mesa-core refuses for a limit on it. A call
-    naming no brightness measures the default light profile, if any.
+    naming no brightness measures the default light profile, if any, and then white, which
+    carries the brightness on a white-mode light and which Home Assistant overrides with
+    any brightness the call comes to.
     """
     scale = _LIGHT_FULL_BRIGHTNESS / 100
     if "brightness_step" in params or "brightness_step_pct" in params:
@@ -1058,7 +1292,9 @@ def _light_limit_params(hass: HomeAssistant, entity_id: str, params: dict[str, A
     elif "profile" in params:
         brightness = None
     elif (brightness := _light_default_brightness(hass, entity_id, params)) is None:
-        return params
+        if "white" not in params:
+            return params
+        brightness = _light_white_brightness(hass, entity_id, params["white"])
     return {
         "brightness": brightness,
         "brightness_pct": None if brightness is None else brightness / scale,
@@ -1155,10 +1391,15 @@ def _limit_equivalents(
     return forms
 
 
-def _carries_limits(result: Any) -> bool:
-    """Whether a resolved profile holds a limit, directly or in a temporal constraint."""
+def _measures_equivalents(result: Any) -> bool:
+    """Whether equivalent forms can still change this result: only a limit can, on a call not yet refused.
+
+    A Confirm entity's refusal is the no-channel rule alone, which Phoenix turns into an approval.
+    """
     boundaries = result.effective_profile.operational_boundaries
-    return bool(boundaries.declared_limits or boundaries.temporal_constraints)
+    return bool(boundaries.declared_limits or boundaries.temporal_constraints) and (
+        result.allowed or result.rule_applied == _RULE_CONFIRM_NO_CHANNEL
+    )
 
 
 def evaluate_service_entities(
@@ -1210,7 +1451,7 @@ def evaluate_service_entities(
         for equivalent_service, equivalent_params in _limit_equivalents(
             runtime, entity_id, domain, service, service_params
         ):
-            if not result.allowed or not _carries_limits(result):
+            if not _measures_equivalents(result):
                 break
             equivalent = runtime.enforcer.evaluate(
                 entity_id=entity_id,
@@ -1226,7 +1467,7 @@ def evaluate_service_entities(
         mode = result.evaluated_control_mode
         rule = result.rule_applied or "control_mode:blocked"
         confirmation = mode is ControlMode.CONFIRM and (
-            result.allowed or rule == "control_mode:confirm_no_channel"
+            result.allowed or rule == _RULE_CONFIRM_NO_CHANNEL
         )
         # Phoenix supplies the human approval channel. Replace only the core's
         # no-channel explanation, retaining independent policy/limit warnings.
@@ -1336,7 +1577,7 @@ def build_mesa_service_diff(
     service_data: dict[str, Any],
     verdict: MesaVerdict,
     service_data_by_entity: dict[str, dict[str, Any]] | None = None,
-    todo_items: list[dict[str, Any]] | None = None,
+    todo_review: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Build a service_preview diff for a MESA-gated approval (admin review UI)."""
     preview: dict[str, Any] = {
@@ -1359,8 +1600,7 @@ def build_mesa_service_diff(
             entity_id: dict(service_data_by_entity[entity_id])
             for entity_id in verdict.confirm + verdict.allowed
         }
-    if todo_items:
-        preview["todo_items"] = todo_items
+    preview.update(todo_review or {})
     return {
         "kind": "service_preview",
         **diff_summary_fields("mesa_service", domain=domain, service=service),
@@ -1481,7 +1721,7 @@ async def async_apply_mesa_to_call(
             service_data,
             verdict,
             service_data_by_entity=service_data_by_entity,
-            todo_items=todo_items_in_review(
+            todo_review=todo_removal_review(
                 hass, domain, service, service_data, verdict.confirm + verdict.allowed),
         )
         supplied_diff: Any = approval_diff() if callable(approval_diff) else approval_diff
@@ -1496,7 +1736,7 @@ async def async_apply_mesa_to_call(
             diff["preview"] = preview
         saved_args = (dict(approval_args) if approval_args is not None else _mesa_call_args(
             domain, service, service_data, verdict.confirm + verdict.allowed))
-        if approval_tool_name in (MESA_APPROVED_EXECUTOR, "HassSetVolumeRelative"):
+        if approval_tool_name in (MESA_APPROVED_EXECUTOR, "HassSetVolumeRelative", "set_todo_item"):
             if APPROVAL_TARGETS_KEY not in saved_args:
                 saved_args = bind_targets(saved_args, verdict.confirm + verdict.allowed, hass)
             diff = bound_preview(diff, saved_args)

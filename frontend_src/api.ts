@@ -505,6 +505,14 @@ export interface AgentCliChatBody {
   options?: Record<string, any>;
 }
 
+/**
+ * A provider can send half a surrogate pair. The chat history keeps it, and the
+ * server refuses a body that holds one, so every later turn would fail.
+ */
+function wellFormedText(_key: string, value: unknown): unknown {
+  return typeof value === "string" ? value.replace(/\p{Cs}/gu, "\ufffd") : value;
+}
+
 export async function agentCliChat(
   body: AgentCliChatBody,
   onEvent: (name: string, payload: unknown) => void,
@@ -521,7 +529,7 @@ export async function agentCliChat(
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ ...body, language: resolveLanguage(hass) }),
+      body: JSON.stringify({ ...body, language: resolveLanguage(hass) }, wellFormedText),
       signal,
     });
   } catch (e: unknown) {

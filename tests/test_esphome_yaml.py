@@ -7,6 +7,7 @@ import pytest
 from custom_components.phoenix_mcp.esphome_yaml import (
     esphome_rel_path_ok,
     inline_secret_values,
+    redact_esphome_slice,
     redact_esphome_text,
     scrub_secret_values,
     secret_keys_from_text,
@@ -140,6 +141,133 @@ class TestLayer2KeyNameHeuristic:
         red, paths = redact_esphome_text(text)
         assert paths == []
         assert red == text
+
+
+# Each document carries credentials spelled SECRETVAL<n> in a shape device files use.
+LEAK_SHAPES = {
+    "list_under_key": "wifi:\n  ssid: x\n  passwords:\n    - SECRETVAL1\n    - SECRETVAL2\n",
+    "flow_list_under_key": "my_component:\n  api_tokens: [SECRETVAL3, SECRETVAL4]\n",
+    "mapping_under_key": "foo:\n  password:\n    value: SECRETVAL5\n",
+    "url_userinfo": "http_request:\nsomething:\n  url: https://user:SECRETVAL6@example.com/path\n",
+    "url_behind_an_escape": 'x:\n  url: "https://user:SECRETVAL6\\x40example.com/path"\n',
+    "url_query": "on_boot:\n  - http_request.get:\n      url: https://x.example/api?token=SECRETVAL7\n",
+    "package_token": "packages:\n  remote:\n    url: https://ghp_SECRETVAL8@github.com/me/repo\n    ref: main\n",
+    "external_component": (
+        "external_components:\n  - source:\n      type: git\n      url: https://oauth2:SECRETVAL9@gitlab.com/x/y\n"),
+    "external_shorthand": "external_components:\n  - source: github://user:SECRETVAL10@me/repo\n",
+    "certificate_key": (
+        "mqtt:\n  broker: x\n  client_certificate_key: |\n    -----BEGIN PRIVATE KEY-----\n"
+        "    SECRETVAL11\n    -----END PRIVATE KEY-----\n"),
+    "eap_key": (
+        "wifi:\n  eap:\n    username: u\n    key: |\n      -----BEGIN PRIVATE KEY-----\n      SECRETVAL12\n"
+        "    certificate: c\n"),
+    "decryption_key": "dsmr:\n  decryption_key: SECRETVAL13\n",
+    "bare_key": "wmbus:\n  meters:\n    - key: SECRETVAL14\n",
+    "encryption_scalar": "packet_transport:\n  - platform: udp\n    encryption: SECRETVAL15\n",
+    "encryption_nested": (
+        "packet_transport:\n  - platform: udp\n    encryption:\n      key: SECRETVAL16\n    providers:\n"
+        "      - name: a\n        encryption: SECRETVAL17\n"),
+    "json_body": (
+        "on_boot:\n  - http_request.post:\n      url: https://x\n      json:\n        pwd: SECRETVAL18\n"
+        "        apiKey: SECRETVAL19\n        access-key: SECRETVAL20\n        client_secret: SECRETVAL21\n"),
+    "lambda_bearer": "on_boot:\n  - lambda: |-\n      const char* k = \"Bearer SECRETVAL22\";\n",
+    "lambda_assignment": "on_boot:\n  - lambda: |-\n      std::string password = \"SECRETVAL22\";\n",
+    "substitutions": (
+        "substitutions:\n  wifi_pw: SECRETVAL23\n  mqttpass: SECRETVAL24\n  admin_pass: SECRETVAL25\n  pw2: SECRETVAL26\n"
+        "  wifipassword: SECRETVAL27\n  auth_key: SECRETVAL28\n  key: SECRETVAL29\n  ha_llat: SECRETVAL30\n"
+        "  wg_key: SECRETVAL31\n"),
+    "wireguard": (
+        "wireguard:\n  address: 10.0.0.1\n  private_key: SECRETVAL32\n  peer_public_key: pub\n"
+        "  peer_preshared_key: SECRETVAL33\n"),
+    "espnow": "espnow:\n  peers:\n    - AA:BB\n  encryption_key: SECRETVAL34\n",
+    "other_names": (
+        "somedev:\n  aes_key: SECRETVAL35\n  psk_key: SECRETVAL36\n  wep: SECRETVAL37\n  pre_shared: SECRETVAL38\n"
+        "  sas: SECRETVAL39\n  credentials: SECRETVAL40\n"),
+    "anchor": "wifi:\n  password: &p SECRETVAL41\n  ap:\n    password: *p\n",
+    "anchor_elsewhere": "common: &p SECRETVAL42\nwifi:\n  password: *p\n",
+    "merge": "base: &b\n  password: SECRETVAL43\nwifi:\n  <<: *b\n",
+    "quoted_key": "\"wifi\":\n  \"password\": 'SECRETVAL44'\n",
+    "complex_key": "? password\n: SECRETVAL45\n",
+    "mapping_as_key": "? {a: SECRETVAL45}\n: SECRETVAL45\n",
+    "request_headers": "http_request.post:\n  request_headers:\n    Authorization: Bearer SECRETVAL46\n",
+    "headers_capitalized": "x:\n  Headers:\n    X-Thing: SECRETVAL47\n",
+    "collect_headers": "x:\n  collect_headers:\n    - SECRETVAL48\n",
+    "lambda_tag_on_password": "wifi:\n  password: !lambda 'return \"SECRETVAL49\";'\n",
+    "carriage_returns": "wifi:\r\n  password: SECRETVAL50\r\n",
+    "folded": "wifi:\n  password: >-\n    SECRETVAL51\n    SECRETVAL52\n",
+    "commented_out": "wifi:\n  ssid: a\n  # old password: SECRETVAL53\n  password: x\n",
+    "commented_out_block": "wifi:\n  ssid: a\n  # password:\n  #   SECRETVAL53\n",
+    "comment_beside_value": "wifi:\n  password: x # was SECRETVAL53\n",
+    "block_header_comment": "x:\n  note: |  # token SECRETVAL53\n    fine\n",
+    "flow_mapping": "wifi: {ssid: a, password: SECRETVAL54}\n",
+    "explicit_str_tag": "x:\n  password: !!str SECRETVAL55\n",
+}
+
+
+class TestLeakShapes:
+    @pytest.mark.parametrize("name", LEAK_SHAPES)
+    def test_no_shape_returns_a_credential(self, name):
+        masked, _ = redact_esphome_text(LEAK_SHAPES[name])
+        assert "SECRETVAL" not in masked
+
+    @pytest.mark.parametrize("name", LEAK_SHAPES)
+    def test_a_slice_of_the_whole_file_matches_the_whole_read(self, name):
+        text = LEAK_SHAPES[name]
+        assert redact_esphome_slice(text, set(), 1, len(text.splitlines())) == redact_esphome_text(text)[0]
+
+    def test_a_slice_through_a_partly_masked_scalar_masks_all_of_it(self):
+        text = 'on_boot:\n  - lambda: |-\n      a();\n      url = "https://u:p@host";\nnext: 1\n'
+        assert "u:p@host" in text and "a();" not in redact_esphome_slice(text, set(), 1, 3)
+        assert "u:p@host" not in redact_esphome_slice(text, set(), 4, 4)
+
+    def test_an_aliased_scalar_is_replaced_once(self):
+        text = "wifi:\n  password: &p " + "x" * 80 + "\n  ap:\n    password: *p\nnext: 1\n"
+        masked, paths = redact_esphome_text(text)
+        assert masked == "wifi:\n  password: __PHOENIX_REDACTED__wifi.password__\n  ap:\n    password: *p\nnext: 1\n"
+        assert paths == ["wifi.ap.password", "wifi.password"]
+
+    def test_a_block_scalar_leaves_the_next_key_on_its_own_line(self):
+        masked, _ = redact_esphome_text("wifi:\n  password: |\n    abc\n  ssid: home\n")
+        assert masked == "wifi:\n  password: __PHOENIX_REDACTED__wifi.password__\n  ssid: home\n"
+
+    def test_only_the_credential_in_a_url_is_replaced(self):
+        masked, _ = redact_esphome_text("x:\n  url: https://user:hunter2@example.com/path\n")
+        assert masked == "x:\n  url: https://<redacted>@example.com/path\n"
+
+    def test_the_credential_in_a_url_is_scrubbed_from_free_text_too(self):
+        url = "https://user:hunter2@example.com/path"
+        assert url in inline_secret_values(f"x:\n  url: {url}\n")
+
+    @pytest.mark.parametrize("key", ["public_key", "peer_public_key", "bypass", "compass", "keys", "tx_pin"])
+    def test_public_names_stay_readable(self, key):
+        text = f"x:\n  {key}: visible\n"
+        assert redact_esphome_text(text) == (text, [])
+
+    def test_a_flag_below_a_credential_key_stays_readable(self):
+        text = "ota:\n  - platform: esphome\n    encryption:\n      allow_plaintext_upload: true\n"
+        assert redact_esphome_text(text) == (text, [])
+
+    def test_a_gpio_mapping_stays_readable(self):
+        text = "output:\n  - platform: gpio\n    pin:\n      number: GPIO5\n      inverted: true\n"
+        assert redact_esphome_text(text) == (text, [])
+
+    def test_ordinary_comments_stay_and_no_path_is_reported_for_a_blanked_one(self):
+        text = "# Relay on GPIO5\nwifi:\n  # password: old\n  ssid: a # upstairs\n"
+        assert redact_esphome_text(text) == ("# Relay on GPIO5\nwifi:\n  # <redacted>\n  ssid: a # upstairs\n", [])
+
+    def test_adjacent_comment_lines_go_together_but_a_blank_line_ends_them(self):
+        text = "a: 1\n# token:\n#   abc\n\n# unrelated\n"
+        assert redact_esphome_text(text)[0] == "a: 1\n# <redacted>\n# <redacted>\n\n# unrelated\n"
+
+    @pytest.mark.parametrize("key", ["community", "pincode", "signing_key", "session_id"])
+    def test_the_shared_markers_apply_to_device_files(self, key):
+        masked, paths = redact_esphome_text(f"x:\n  {key}: hunter2\n")
+        assert "hunter2" not in masked and paths == [f"x.{key}"]
+
+    def test_a_parse_error_does_not_quote_the_file(self):
+        with pytest.raises(YamlParseError) as caught:
+            redact_esphome_text("password: [hunter2\nother: 1\n")
+        assert "hunter2" not in str(caught.value) and "line 2" in str(caught.value)
 
 
 class TestLayer3SecretsCrossCheck:

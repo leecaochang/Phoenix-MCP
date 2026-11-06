@@ -27,11 +27,11 @@ from ..data import PhoenixData
 from ..tool_input import str_arg, str_list_arg
 from ..capability import effective_cap
 from ..history_summary import (
-    attribute_page, compact_summary_row, read_attribute_changes, read_state_change_page,
+    attribute_page, attribute_rows, compact_summary_row, read_attribute_changes, read_state_change_page,
     scan_state_changes, summary_body, SummaryUnavailableError,
 )
 from ..policy_engine import (
-    filter_entities_for_access_key, Permission, resolve_read, scrub_sensitive_attributes,
+    filter_entities_for_access_key, Permission, resolve_read, scrub_attributes, scrub_sensitive_attributes,
     scrub_state_dict as _scrub_state_dict,
 )
 from ..recorder_queries import (
@@ -317,23 +317,25 @@ _ATTRIBUTE_SUMMARY_RANGE_ERROR = (
 
 
 async def _scan_summary(
-    instance: Any, hass: HomeAssistant, entity_id: str, start_us: int, end_us: int, max_seconds: float,
-    attribute: str | None = None,
+    instance: Any, hass: HomeAssistant, entity_id: str, access_key: AccessKeyRecord, start_us: int, end_us: int,
+    max_seconds: float, attribute: str | None = None,
 ) -> Any:
     """Fold one entity's Recorder changes over [start_us, end_us) within the summary budgets.
 
-    With attribute, the fold runs over that attribute's values instead of the
-    state, reading them once and paging in memory because Core's query takes no limit.
+    With attribute, the fold runs over that attribute's values instead of the state, reading them
+    once and paging in memory because Core's query takes no limit. The labels are scrubbed as
+    significant_states scrubs a row, before the fold and so before any state filter sees them.
     """
-    attribute_rows: list[tuple[int, str]] | None = None
+    rows: list[tuple[int, str]] | None = None
 
     async def fetch(after_us: int, before_us: int, limit: int, include_start: bool) -> list[tuple[int, str]]:
-        nonlocal attribute_rows
+        nonlocal rows
         if attribute is not None:
-            if attribute_rows is None:
-                attribute_rows = cast(list[tuple[int, str]], await instance.async_add_executor_job(
-                    read_attribute_changes, hass, entity_id, attribute, after_us, before_us, include_start))
-            return attribute_page(attribute_rows, after_us, limit, include_start)
+            if rows is None:
+                changes = await instance.async_add_executor_job(
+                    read_attribute_changes, hass, entity_id, attribute, after_us, before_us, include_start)
+                rows = attribute_rows(changes, lambda found: scrub_attributes(found, access_key, hass))
+            return attribute_page(rows, after_us, limit, include_start)
         return cast(list[tuple[int, str]], await instance.async_add_executor_job(
             read_state_change_page, hass, entity_id, after_us, before_us, limit, include_start))
 
@@ -591,7 +593,7 @@ async def _history_summary_many(
             else:
                 try:
                     summary = await _scan_summary(
-                        instance, hass, entity_id, to_us(window.start), to_us(end),
+                        instance, hass, entity_id, access_key, to_us(window.start), to_us(end),
                         min(HISTORY_SUMMARY_MAX_SECONDS, remaining), attribute)
                 except SummaryUnavailableError:
                     unavailable.append(entity_id)
@@ -795,7 +797,8 @@ async def _history_summary(
             ), "invalid_request", entity_id
         keep_days = instance.keep_days
         summary = await _scan_summary(
-            instance, hass, entity_id, to_us(window.page_start), to_us(end), HISTORY_SUMMARY_MAX_SECONDS, attribute)
+            instance, hass, entity_id, access_key, to_us(window.page_start), to_us(end),
+            HISTORY_SUMMARY_MAX_SECONDS, attribute)
     except SummaryUnavailableError:
         return _tool_error(
             "Recorder holds too many changes for this entity within a few microseconds to summarize this range."

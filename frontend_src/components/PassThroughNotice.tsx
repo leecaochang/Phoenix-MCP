@@ -3,7 +3,7 @@
  * tree. The panel shows at once, without a first press to open it, and what
  * pass-through allows and what switching does read in the Help window.
  */
-import React, { useState } from "react";
+import { useState } from "react";
 import type { AccessKeyRecord, PatchAccessKeyBody } from "../types";
 import { api } from "../api";
 import { t } from "../i18n";
@@ -15,7 +15,7 @@ interface Props {
   onUpdate: (updated: AccessKeyRecord) => void;
 }
 
-export const PassThroughNotice = React.memo(function PassThroughNotice({ accessKey, onUpdate }: Props) {
+export function PassThroughNotice({ accessKey, onUpdate }: Props) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -45,4 +45,4 @@ export const PassThroughNotice = React.memo(function PassThroughNotice({ accessK
       </div>
     </div>
   );
-});
+}

@@ -214,7 +214,9 @@
       "restoreToolReported": "無法套用還原。工具回報：{detail}",
       "capabilityAllowUnsupported": "{capability} 不支援「允許」模式。",
       "recoverySnapshotUnsafeAt": "此項目沒有不含機密的完整副本，因此未進行任何變更。Phoenix 在 {location} 處拒絕了它。",
-      "invalidHostHeader": "請求的 Host 標頭不是有效位址。"
+      "invalidHostHeader": "請求的 Host 標頭不是有效位址。",
+      "approvalOutcomeNotSaved": "操作已完成，但無法儲存其結果。請在 Home Assistant 中檢查其效果；此核准不會再次提供。",
+      "providerRemoteUrlResolutionFailed": "無法解析提供者 URL，因此無法檢查其位址。"
     },
     "agentchat": {
       "accessKey": "存取金鑰",
@@ -272,7 +274,7 @@
       "noModels": "（沒有可用的模型）",
       "noProvider": "尚未設定提供者帳戶。請在「設定」中新增一個才能使用 Agent Chat。",
       "notice": {
-        "auth": "提供方封鎖了此回應，不會重試。",
+        "auth": "提供者封鎖了此回應，不會重試。",
         "bad_tool_call": "模型生成了無效的工具呼叫。",
         "bad_tool_call_retry": "模型送出的工具呼叫參數不是有效的 JSON。該回應中的任何內容都未執行；已將錯誤傳回給模型，以便其重新發送該呼叫。",
         "cancelled": "已取消。",
@@ -281,23 +283,23 @@
         "max_tokens_stop": "模型因達到輸出長度上限而停止。可以讓它繼續，或調高模型的輸出 Token 上限（Ollama 請調整 num_predict/context 設定）。",
         "memory_trimmed": "對話已超出單次請求可容納的大小，因此模型不再記得最早的訊息。這些訊息仍保留在畫面上。",
         "model_api_unsupported": "此模型尚未通過 OpenCode Chat Completions 相容性驗證。請選擇受支援的模型。",
-        "network": "提供方暫時無法使用。",
-        "ollama_backend": "提供方暫時無法使用。",
+        "network": "提供者暫時無法使用。",
+        "ollama_backend": "提供者暫時無法使用。",
         "ollama_context_too_small": "Phoenix 的提示詞約有 {needed} 個 Token，但您的 Ollama 伺服器以 {context} 個 Token 的上下文載入了此模型，提示詞開頭會被靜默捨棄。未執行任何操作。請將 OLLAMA_CONTEXT_LENGTH（或模型的 num_ctx）設為至少 {suggested}，然後重新啟動 Ollama。",
         "outcome_unknown": "此操作可能已執行。再次嘗試前，請核對 Home Assistant 及其核准歷史。",
         "output_limit": "提供者本輪生成的內容過多，已停止。",
         "provider_after_dispatch": "此操作可能已執行。再次嘗試前，請核對 Home Assistant 及其核准歷史。",
-        "provider_blocked": "提供方封鎖了此回應，不會重試。",
+        "provider_blocked": "提供者封鎖了此回應，不會重試。",
         "provider_context_limit": "對話過長，超出了此模型的上下文視窗。此回應中的工具均未執行。請清除歷史記錄，或選擇上下文視窗更大的模型。",
-        "provider_incomplete": "提供方的回應提前結束。此回應中的工具均未執行。",
-        "provider_malformed": "提供方傳回了格式錯誤的回應。此回應中的工具均未執行。",
+        "provider_incomplete": "提供者的回應提前結束。此回應中的工具均未執行。",
+        "provider_malformed": "提供者傳回了格式錯誤的回應。此回應中的工具均未執行。",
         "provider_rate_limit_exhausted": "重試約 {seconds} 秒後，仍然超出提供者的速率限制。提供者詳情：{detail}",
         "provider_rejected": "提供者拒絕了此請求，不會重試。",
         "provider_retry_exhausted": "重試約 {seconds} 秒後提供者仍未回覆。{detail}",
         "provider_silent": "提供者在 {seconds} 秒內沒有傳送任何內容，因此已停止請求。",
-        "provider_transient": "提供方暫時無法使用。",
+        "provider_transient": "提供者暫時無法使用。",
         "quota": "提供者帳戶餘額不足或已達到支出上限，不會重試。",
-        "rate_limit": "提供方暫時無法使用。",
+        "rate_limit": "提供者暫時無法使用。",
         "request_too_large": "此訊息太大，無法傳送。請縮短內容、移除圖片，或使用 /clear 開始新對話。",
         "too_many_tools": "此存取金鑰提供 {count} 個工具，但 {provider} 每個請求最多只接受 {limit} 個。請縮減該存取金鑰的能力，或選擇其他提供者。",
         "tool_call_cut": "與模型的連線在工具呼叫中途中斷，因此該操作未執行。沒有任何改動被套用，問題也不在請求本身；請重新發送。",
@@ -306,8 +308,8 @@
         "review_changed": "審查工具呼叫期間，存取金鑰的工具或對話發生了變化，因此未執行任何操作。請重新傳送請求。",
         "kill_switch": "緊急停止開關已開啟，因此代理已停止。沒有再執行任何操作。",
         "unreachable": "無法連線 Home Assistant，因此未能完成。等待你核准的項目已取消。",
-        "upstream": "提供方暫時無法使用。",
-        "provider_slow": "提供方在 {seconds} 秒內沒有回覆。",
+        "upstream": "提供者暫時無法使用。",
+        "provider_slow": "提供者在 {seconds} 秒內沒有回覆。",
         "result_withheld": "{length} 位元組的結果超出了請求的上下文容量，未提供給模型。"
       },
       "options": "選項",
@@ -773,7 +775,11 @@
         "one": "已選 {count} 項",
         "other": "已選 {count} 項"
       },
-      "rowPicked": "已選取以批次核准"
+      "rowPicked": "已選取以批次核准",
+      "todoItems": "將移除的事項",
+      "todoRemovalWarning": "移除待辦事項是永久性的。Phoenix 不保留副本，因此無法還原。",
+      "todoStatusCompleted": "已完成",
+      "todoStatusNeedsAction": "未完成"
     },
     "audit": {
       "accessPassThrough": "直通",
@@ -819,7 +825,9 @@
       "rowPayload": "負載",
       "rowRequestId": "請求 ID",
       "rowResource": "資源",
-      "rowTime": "時間"
+      "rowTime": "時間",
+      "outcomeCancelled": "已取消",
+      "outcomeUnknown": "結果未知"
     },
     "caps": {
       "cap_automation_write": {
@@ -939,7 +947,7 @@
         "label": "自動化追蹤"
       },
       "cap_yaml_edit": {
-        "description": "讀取您的 YAML 設定檔並重新載入 YAML 網域。寫在這些檔案中的密碼會暴露；請使用 secrets.yaml。",
+        "description": "讀取您的 YAML 設定檔並重新載入 YAML 網域。名稱暗示機密的值會被隱藏，但使用普通名稱的密碼會暴露；請使用 secrets.yaml。",
         "label": "YAML 設定"
       },
       "confirmUnavailable": "此能力不支援要求核准。",
@@ -1740,7 +1748,7 @@
       "assistBoundHelp": "您的 LLM 整合使用的存取金鑰。在該整合中，選擇 Phoenix MCP (scoped) 來控制 Home Assistant。",
       "assistBoundAccessKey": "已繫結的存取金鑰",
       "assistBoundAccessKeyAria": "繫結到 Assist 的存取金鑰",
-      "assistCard": "Assist 工具提供方",
+      "assistCard": "Assist 工具提供者",
       "conversationStyle": "對話風格",
       "conversationStyleAria": "{surface} 對話風格",
       "detailBalanced": "均衡",
@@ -2006,7 +2014,7 @@
       "tabChanges": "變更",
       "tabSettings": "設定",
       "killSwitchHelp": "緊急停止開關已開啟，因此智慧體會被拒絕。選擇即可開啟「安全」並將其關閉。",
-      "chatListsFailed": "Agent Chat 無法載入存取金鑰或 AI 供應商。開啟它或 Home Assistant 重新連線時會再次嘗試。"
+      "chatListsFailed": "Agent Chat 無法載入存取金鑰或 AI 提供者。開啟它或 Home Assistant 重新連線時會再次嘗試。"
     },
     "accessKeys": {
       "announceAllHelp": "向此金鑰的智慧體提供所有工具，包括它無法使用的工具。僅用於排查問題；會消耗更多 token。",
@@ -2444,7 +2452,7 @@
         "agentcli": "Agent Chat",
         "voice": "語音智慧體",
         "ai_task": "AI 任務",
-        "assist": "Assist 工具提供方",
+        "assist": "Assist 工具提供者",
         "mcp": "外部 MCP 用戶端",
         "home_companion": "Home Companion"
       },
@@ -2601,7 +2609,9 @@
       "title": "需要關注",
       "unknown": "在 Phoenix 記錄此操作是否已執行之前，對話就已結束，因此它可能已經執行。如有「在稽核記錄中檢視」，可查看 Phoenix 記錄的內容；等待核准的操作，其狀態在「核准」中。重試前請檢查 Home Assistant 本身。",
       "audit_storageTitle": "稽核記錄未寫入儲存空間",
-      "audit_storageHelp": "最近的稽核項目只保存在記憶體中，重新啟動後會遺失。請查看 Home Assistant 記錄。下一次儲存成功後，此項目會消失。"
+      "audit_storageHelp": "最近的稽核項目只保存在記憶體中，重新啟動後會遺失。請查看 Home Assistant 記錄。下一次儲存成功後，此項目會消失。",
+      "mesa_renameTitle": "重新命名實體的策略未寫入儲存空間",
+      "mesa_renameHelp": "策略已跟隨實體並正在生效，但已儲存的副本仍是舊 ID。請查看 Home Assistant 記錄，然後從「設定 > 裝置與服務」重新載入 Phoenix MCP 以再次儲存。下一次儲存成功後，此項目會消失。"
     },
     "workspace": {
       "addToMy": "新增到我的工作區",

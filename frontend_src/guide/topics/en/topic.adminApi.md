@@ -44,7 +44,7 @@ An error answers with a status code and this body:
 | Code | Usual status | Meaning |
 |---|---|---|
 | `invalid_request` | 400 | The request is malformed or a value is out of range. |
-| `unauthorized` | 401 | Not signed in. |
+| `unauthorized` | 401 | Not signed in. Home Assistant normally answers first, as above. If Phoenix answers, `message_key` is `adminError.authRequired`. |
 | `forbidden` | 403 | Signed in, but not an administrator. |
 | `not_found` | 404 | The item doesn't exist. |
 | `conflict` | 409 | The item's current state doesn't allow this, such as a name already taken. |

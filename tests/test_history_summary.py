@@ -258,6 +258,87 @@ async def test_attribute_summary_range_is_capped(recorder_mock, hass: HomeAssist
     read.assert_not_called()
 
 
+def _scoped_key(entities: dict[str, str]) -> AccessKeyRecord:
+    grants = {entity_id: PermissionNode(state=state) for entity_id, state in entities.items()}
+    return AccessKeyRecord(id=str(uuid.uuid4()), name="t", access_key_hash="x", created_at=dt_util.utcnow(),
+                           created_by="u", cap_search="allow", permissions=PermissionTree(entities=grants))
+
+
+async def _as(hass: HomeAssistant, key: AccessKeyRecord, entity_id, **extra):
+    args = {"entity_id": entity_id, "start_time": _at(0).isoformat(), "end_time": _at(3600).isoformat(), **extra}
+    result = await _call_tool("get_history", args, key, hass, MagicMock(), "r", None)
+    assert result[1] == "allowed", result
+    return json.loads(result[0]["content"][0]["text"])
+
+
+def _labels(body: dict) -> set[str]:
+    rows = body["states"] if "states" in body else body["entities"][0]["states"]
+    return {row["state"] for row in rows}
+
+
+@pytest.fixture
+def scoped_group(hass: HomeAssistant) -> AccessKeyRecord:
+    """A group whose attributes hold credentials and a member the key may not read."""
+    _anchor(hass)
+    _set(hass, "light.hidden_room", "on", 0)
+    for seconds, secret in ((10, "tok-OLD"), (20, "tok-NEW")):
+        _set(hass, "light.all", "on", seconds, {
+            "entity_id": ["light.hidden_room", "light.visible"], "access_token": secret, "password": "hunter2",
+            "nested": {"password": "hunter2", "keep": 1}, "first": "light.hidden_room", "name_text": "plain",
+        })
+    return _scoped_key({"light.all": "YELLOW", "light.visible": "YELLOW", "light.hidden_room": "RED"})
+
+
+@pytest.mark.parametrize("shape", [str, lambda entity_id: [entity_id]], ids=["single", "several"])
+@pytest.mark.parametrize("attribute", ["access_token", "password", "api-key"])
+async def test_a_sensitive_attribute_reads_as_absent(recorder_mock, hass, scoped_group, shape, attribute) -> None:
+    await async_wait_recording_done(hass)
+    body = await _as(hass, scoped_group, shape("light.all"), mode="summary", attribute=attribute)
+    assert _labels(body) == {"on"}
+
+
+@pytest.mark.parametrize("shape", [str, lambda entity_id: [entity_id]], ids=["single", "several"])
+@pytest.mark.parametrize("attribute,leaked", [
+    ("entity_id", "light.hidden_room"), ("first", "light.hidden_room"), ("nested", "hunter2"),
+])
+async def test_an_attribute_label_is_built_from_what_the_key_may_read(
+        recorder_mock, hass, scoped_group, shape, attribute, leaked) -> None:
+    await async_wait_recording_done(hass)
+    body = await _as(hass, scoped_group, shape("light.all"), mode="summary", attribute=attribute)
+    assert leaked not in json.dumps(body) and "<redacted>" in json.dumps(body)
+
+
+async def test_attribute_labels_match_significant_states(recorder_mock, hass, scoped_group) -> None:
+    await async_wait_recording_done(hass)
+    rows = (await _as(hass, scoped_group, "light.all", mode="significant_states"))["history"]
+    attributes = rows[-1]["attributes"]
+    assert "access_token" not in attributes and "password" not in attributes
+    for name in ("entity_id", "first", "nested", "name_text"):
+        expected = attributes[name] if isinstance(attributes[name], str) else json.dumps(attributes[name], sort_keys=True)
+        assert expected in _labels(await _as(hass, scoped_group, "light.all", mode="summary", attribute=name))
+
+
+@pytest.mark.parametrize("attribute,guess", [("password", "hunter2"), ("entity_id", '["light.hidden_room", "light.visible"]')])
+async def test_a_state_filter_cannot_test_a_hidden_value(recorder_mock, hass, scoped_group, attribute, guess) -> None:
+    await async_wait_recording_done(hass)
+    body = await _as(hass, scoped_group, ["light.all"], mode="summary", attribute=attribute, in_state=guess)
+    assert body["entities"] == []
+
+
+async def test_an_attribute_value_recurring_across_rows_is_scrubbed_once() -> None:
+    from custom_components.phoenix_mcp.history_summary import attribute_rows
+
+    seen: list[dict] = []
+
+    def scrub(found: dict) -> dict:
+        seen.append(found)
+        return found
+
+    changes = [(1, "on", {"a": "x"}), (2, "on", {"a": "x"}), (3, "off", {})]
+    assert attribute_rows(changes, scrub) == [(1, "x"), (2, "x"), (3, "off")]
+    assert seen == [{"a": "x"}, {}]
+
+
 def test_attribute_page_matches_the_state_change_page_shape() -> None:
     from custom_components.phoenix_mcp.history_summary import attribute_page
 

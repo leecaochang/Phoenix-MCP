@@ -26,8 +26,13 @@ _PHOENIX_ACCESS_KEY_SCRUB_RE = re.compile(r"phx_[0-9a-f]{64}", re.IGNORECASE)
 
 # Home Assistant long-lived access tokens (and other JWTs) are three base64url
 # segments whose header always begins "eyJ". Redact so a leaked LLAT in a log
-# line is not handed back to an access key holding cap_log_read.
-_JWT_SCRUB_RE = re.compile(r"eyJ[A-Za-z0-9_-]{6,}\.[A-Za-z0-9_-]{6,}\.[A-Za-z0-9_-]{6,}")
+# line is not handed back to an access key holding cap_log_read. A token can start
+# anywhere in a run of its alphabet, and only the run's first "eyJ" needs trying, so
+# one match attempt per run keeps a run of "eyJ" linear; group 1 is the text before it.
+_JWT_SCRUB_RE = re.compile(
+    r"(?<![A-Za-z0-9_-])((?:(?!eyJ)[A-Za-z0-9_-])*+)"
+    r"eyJ[A-Za-z0-9_-]{6,}+\.[A-Za-z0-9_-]{6,}+\.[A-Za-z0-9_-]{6,}+"
+)
 
 # Credentials embedded in URLs/log text: query params (token=..., api_password=...)
 # and userinfo (https://user:pass@host). Over-redaction in logs is acceptable.
@@ -41,7 +46,7 @@ _URL_CRED_USERINFO_RE = re.compile(r"://[^/\s:@]+:[^/\s:@]+@")
 def _scrub_log_text(text: str) -> str:
     """Redact Phoenix MCP access keys, JWTs/LLATs, and URL-embedded credentials from a log line."""
     text = _PHOENIX_ACCESS_KEY_SCRUB_RE.sub("<phoenix-access-key>", text)
-    text = _JWT_SCRUB_RE.sub("<token>", text)
+    text = _JWT_SCRUB_RE.sub(r"\1<token>", text)
     text = _URL_CRED_QUERY_RE.sub(r"\1=<redacted>", text)
     text = _URL_CRED_USERINFO_RE.sub("://<redacted>@", text)
     return text
@@ -49,7 +54,7 @@ def _scrub_log_text(text: str) -> str:
 
 # A "key: value" or "key = value" line in a YAML/config diff, capturing the
 # leading key so its value can be redacted when the key name looks sensitive.
-_CONFIG_SECRET_LINE_RE = re.compile(r"^(\s*)([\w.\-]+)(\s*[:=]\s*)(\S.*)$")
+_CONFIG_SECRET_LINE_RE = re.compile(r"^(\s*(?:-\s+)*[\"']?)([\w.\-]+)([\"']?\s*[:=]\s*)(\S.*)$")
 
 _SECRET_REFERENCE_RE = re.compile(
     r"!(?:secret|env_var)\s+[A-Za-z_][A-Za-z0-9_.\-/]*\s*(?:#.*)?"
@@ -58,7 +63,7 @@ _SECRET_REFERENCE_RE = re.compile(
 _CODE_INITIALIZER_RE = re.compile(
     r"\s*(?:(?:const|let|var)\s+)?"
     r"(?P<key>[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*)\s*=\s*"
-    r"(?P<value>null|undefined|true|false|\{\s*\}|\[\s*\]|\"\"|''|0)\s*;?\s*"
+    r"(?P<value>null|undefined|true|false|\{\s*\}|\[\s*\]|\"\"|''|0)\s*(?:;\s*)?"
 )
 
 
@@ -85,10 +90,10 @@ def _non_secret_code_initializer(line: str) -> bool:
 
 
 def redact_secrets_in_text(text: str | None) -> str | None:
-    """Redact secret-valued config lines and embedded credentials from diff text.
+    """Redact secret-valued config lines and embedded credentials from free text.
 
-    For approval diffs, before they persist to .storage. Replaces values of sensitive keys
-    plus JWTs and URL credentials anywhere; the structure of the change stays visible.
+    Replaces values of sensitive keys plus JWTs and URL credentials anywhere. It reads one line
+    at a time, so a whole YAML file goes through esphome_yaml.mask_yaml_text, which walks it.
     """
     if not text:
         return text

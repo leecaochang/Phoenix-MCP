@@ -449,7 +449,7 @@ async def test_an_entity_rename_carries_its_mesa_profile(hass, enable_custom_int
 
 @pytest.mark.parametrize(("old_mode", "new_mode", "governs", "orphan"), [
     ("prohibited", "autonomous", "prohibited", "autonomous"),
-    ("autonomous", "prohibited", "prohibited", "autonomous"),
+    ("autonomous", "prohibited", "prohibited", "prohibited"),
     ("confirm", "confirm", "confirm", "confirm"),
 ])
 async def test_a_rename_onto_a_profiled_id_keeps_both_and_never_loosens(

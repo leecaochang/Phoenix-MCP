@@ -8,6 +8,7 @@
   "custom_components/phoenix_mcp/log_scrub.py": "Log handling with no operator setting; tracebacks read as before, minus secrets.",
   "custom_components/phoenix_mcp/routing/__init__.py": "Package marker with no code.",
   "custom_components/phoenix_mcp/schema_compat.py": "Chooses a validation engine; no behavior of its own.",
+  "custom_components/phoenix_mcp/time_text.py": "Input guard in front of the date parser with no operator-visible behavior.",
   "custom_components/phoenix_mcp/tool_input.py": "Input admission shared by every tool; limits are documented per tool group.",
   "custom_components/phoenix_mcp/view_base.py": "Base class for HTTP views.",
   "custom_components/phoenix_mcp/ws_dispatch.py": "In-process dispatch helper used by tools.",

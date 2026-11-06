@@ -490,6 +490,21 @@ class TestRegistryGate:
         [row] = data.audit.query()
         assert row.resource == "light.bad" and "policy_unavailable" in (row.payload or "")
 
+    async def test_a_registry_refusal_on_a_damaged_profile_has_a_row_and_no_traceback(
+        self, hass: HomeAssistant, bridge_data, caplog,
+    ):
+        from custom_components.phoenix_mcp.mesa import evaluate_registry_action
+
+        data, _ = bridge_data
+        data.store = _Store(GlobalSettings(mesa_mode="enforced"))
+        data.mesa = await async_setup_mesa(hass, "enforced")
+        data.mesa.backend.write("light.bad", {"semantic_profile": {"operational_boundaries": {"control_mode": "bogus"}}})
+        decision = evaluate_registry_action(data, _access_key(), "light.bad", action="delete", session_id="gate")
+        assert (decision.decision, decision.rule) == ("deny", "policy_unavailable")
+        [row] = data.audit.query()
+        assert row.resource == "light.bad" and "policy_unavailable" in (row.payload or "")
+        assert not [record for record in caplog.records if record.exc_info]
+
     async def test_a_preview_of_the_same_failure_leaves_no_row(self, hass: HomeAssistant, bridge_data):
         from custom_components.phoenix_mcp.mesa import evaluate_service_entities
 

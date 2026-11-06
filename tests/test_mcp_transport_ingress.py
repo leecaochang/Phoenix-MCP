@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import fields
+from functools import partial
 import json
 import logging
 import time
@@ -35,7 +36,9 @@ from custom_components.phoenix_mcp.const import (
 from custom_components.phoenix_mcp.data import PhoenixData
 from custom_components.phoenix_mcp.access_key_auth import async_get_authenticated_access_key
 from custom_components.phoenix_mcp.mcp_transport import ALL_MCP_VIEWS
-from custom_components.phoenix_mcp.tool_dispatch import _dispatch_mcp
+from custom_components.phoenix_mcp.request_authority import AuthorityChangedError
+from custom_components.phoenix_mcp.tool_defs import _NO_HOME_EFFECT_TOOLS, _TOOL_ANNOTATIONS
+from custom_components.phoenix_mcp.tool_dispatch import _TOOL_DEFS_BY_NAME, _dispatch_mcp
 from custom_components.phoenix_mcp.rate_limiter import RateLimiter
 from custom_components.phoenix_mcp.version_store import VersionStore
 
@@ -142,7 +145,7 @@ async def test_a_message_that_is_not_utf8_is_a_parse_error(env, body):
     client, data = env
     _, _, headers = await _session(client, data)
     response = await client.post(ROUTE, headers=headers, data=body)
-    assert response.status == 200
+    assert response.status == 400
     assert (await response.json())["error"]["code"] == -32700
 
 
@@ -169,11 +172,11 @@ async def test_a_valid_surrogate_pair_is_ordinary_text(env):
 
 
 @pytest.mark.parametrize("body,status,code", [
-    (b'{"jsonrpc":"2.0","id":NaN,"method":"ping"}', 200, -32700),
-    (b'{"jsonrpc":"2.0","id":1e999,"method":"ping"}', 200, -32700),
-    (b'{"jsonrpc":"2.0","id":' + b"9" * 5000 + b',"method":"ping"}', 200, -32700),
+    (b'{"jsonrpc":"2.0","id":NaN,"method":"ping"}', 400, -32700),
+    (b'{"jsonrpc":"2.0","id":1e999,"method":"ping"}', 400, -32700),
+    (b'{"jsonrpc":"2.0","id":' + b"9" * 5000 + b',"method":"ping"}', 400, -32700),
     (b'{"jsonrpc":"2.0","id":1.5,"method":"ping"}', 200, -32600),
-    (b"[" * 500000 + b"]" * 500000, 200, -32700),
+    (b"[" * 500000 + b"]" * 500000, 400, -32700),
 ], ids=["nan", "exponent-overflow", "digit-limit", "float-id", "depth"])
 async def test_the_number_and_depth_rules_survive_strict_decoding(env, body, status, code):
     client, data = env
@@ -280,7 +283,12 @@ async def test_one_hostile_request_cannot_stop_the_audit_reaching_disk(env, hass
     b"{",
     b"",
     b"1",
-], ids=["request", "response", "bad-params", "notification", "not-jsonrpc", "invalid-json", "empty", "scalar"])
+    b"[]",
+    json.dumps([INITIALIZE]).encode(),
+    json.dumps([PING]).encode(),
+    b'[{"jsonrpc":"2.0","method":5}]',
+], ids=["request", "response", "bad-params", "notification", "not-jsonrpc", "invalid-json", "empty", "scalar",
+        "empty-batch", "initialize-batch", "request-batch", "refused-notification-batch"])
 async def test_a_terminated_session_is_404_for_every_message_shape(env, body):
     client, data = env
     _, _, headers = await _session(client, data)
@@ -308,6 +316,73 @@ async def test_a_refused_message_with_no_id_gets_an_http_error(env, body, code):
     response = await client.post(ROUTE, headers=headers, json=body)
     assert response.status == 400
     assert (await response.json())["error"]["code"] == code
+
+
+@pytest.mark.parametrize("accept", ["application/json", "application/json, text/event-stream"])
+@pytest.mark.parametrize("body,code", [
+    ([], -32600),
+    ([{"jsonrpc": "2.0", "method": 5}], -32600),
+    ([{"jsonrpc": "2.0", "method": "x", "params": 3}], -32602),
+    ([{"method": "x"}, 7], -32600),
+    ([{"jsonrpc": "2.0", "id": 1, "result": {}}, {"jsonrpc": "2.0", "method": 5}], -32600),
+    ([{"jsonrpc": "2.0", "method": "notifications/initialized"}, {"jsonrpc": "2.0", "method": 5}], -32600),
+], ids=["empty", "bad-method", "bad-params", "not-messages", "with-a-response", "with-an-accepted-notification"])
+async def test_a_batch_with_no_request_that_was_refused_gets_an_http_error(env, body, code, accept):
+    client, data = env
+    _, _, headers = await _session(client, data)
+    response = await client.post(ROUTE, headers={**headers, "Accept": accept}, json=body)
+    assert response.status == 400
+    assert response.content_type == "application/json"
+    answer = await response.json()
+    assert (answer[0] if isinstance(answer, list) else answer)["error"]["code"] == code
+
+
+async def test_a_batch_with_a_request_keeps_its_results_status(env):
+    client, data = env
+    _, _, headers = await _session(client, data)
+    response = await client.post(ROUTE, headers=headers, json=[PING, {"jsonrpc": "2.0", "method": 5}])
+    assert response.status == 200
+    assert [row.get("id") for row in await response.json()] == [1, None]
+
+
+async def test_a_batch_of_accepted_notifications_is_still_202(env):
+    client, data = env
+    _, _, headers = await _session(client, data)
+    response = await client.post(ROUTE, headers=headers, json=[
+        {"jsonrpc": "2.0", "method": "notifications/initialized"}, {"jsonrpc": "2.0", "id": 1, "result": {}}])
+    assert response.status == 202
+
+
+async def test_initialize_in_a_batch_on_a_live_session_is_still_refused_as_such(env):
+    client, data = env
+    _, _, headers = await _session(client, data)
+    response = await client.post(ROUTE, headers=headers, json=[INITIALIZE])
+    assert response.status == 400
+    assert "must not be sent in a batch" in (await response.json())["error"]["message"]
+
+
+@pytest.mark.parametrize("modern", [False, True], ids=["legacy", "modern"])
+@pytest.mark.parametrize("body,code", [
+    (b"", -32700),
+    (b"\xef\xbb\xbf{}", -32700),
+    (b"{", -32700),
+    (b'{"x":NaN}', -32700),
+    (b"1", -32600),
+    (b'"text"', -32600),
+    (b"null", -32600),
+], ids=["empty", "bom", "invalid-json", "nan", "scalar", "string", "null"])
+async def test_a_body_that_is_no_message_gets_an_http_error_and_its_json_rpc_body(env, body, code, modern):
+    client, data = env
+    if modern:
+        _, raw = await _key(data)
+        headers = _modern_headers(raw, "tools/list")
+    else:
+        _, _, headers = await _session(client, data)
+    response = await client.post(ROUTE, headers=headers, data=body)
+    assert response.status == 400
+    answer = await response.json()
+    assert answer["error"]["code"] == code
+    assert ("id" in answer) is not modern
 
 
 async def test_a_malformed_request_with_an_id_keeps_its_json_rpc_status(env):
@@ -414,7 +489,7 @@ async def test_a_modern_disconnect_during_a_write_leaves_its_record(env, hass, s
     await hass.async_block_till_done()
 
     row = next(row for row in data.audit.query() if row.method == "request/cancelled")
-    assert row.resource == "call_service" and row.outcome == "invalid_request"
+    assert row.resource == "call_service" and row.outcome == "unknown"
     assert json.loads(row.payload)["arguments"]["targets"][0]["ids"] == [entity_id]
     key = data.store.get_access_key_by_hash(row.access_key_id) or data.store.get_access_key_by_id(row.access_key_id)
     assert [record["status"] for record in data.agent_recovery.records(key.id)] == ["outcome_unknown"]
@@ -531,6 +606,121 @@ async def test_a_failed_barrier_save_keeps_the_barrier(env, hass, caplog):
             await task
         await hass.async_block_till_done()
     assert data.agent_recovery.blocks(key.id)
+
+
+def _cancelled_rows(data: PhoenixData) -> list[str]:
+    return [row.outcome for row in data.audit.query() if row.method == "request/cancelled"]
+
+
+def _required_arguments(name: str) -> dict:
+    schema = _TOOL_DEFS_BY_NAME[name]["inputSchema"]
+    return {field: "x.yaml" for field in schema.get("required", [])}
+
+
+async def _held_handler(started: asyncio.Event, *_args, **_kwargs) -> None:
+    started.set()
+    await asyncio.sleep(30)
+
+
+async def _cancel_stub_tool(hass, data, key, name: str) -> None:
+    """Enter a real dispatch of ``name`` on a held handler, then cancel the task."""
+    started = asyncio.Event()
+    entry = (partial(_held_handler, started), (), {})
+    with patch.dict(tool_dispatch._TOOL_HANDLERS, {name: entry}):
+        task = asyncio.create_task(_dispatch_mcp(
+            "tools/call", 1, {"name": name, "arguments": _required_arguments(name)}, key, hass, data, "10.0.0.5", "http://x"))
+        async with asyncio.timeout(3):
+            await started.wait()
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+    await hass.async_block_till_done()
+
+
+@pytest.mark.parametrize("log_denied", [True, False])
+async def test_a_disconnect_before_the_service_ran_claims_nothing(env, hass, log_denied):
+    """The tracked handler proves nothing ran, so the key stays free and the row says so."""
+    client, data = env
+    data.store.get_settings().log_denied = log_denied
+    key, raw = await _key(data, allow_all=True)
+    started = asyncio.Event()
+    calls: list = []
+
+    async def service(call):
+        calls.append(call)
+
+    entity_id = await _light(hass, service)
+    arguments = _service_call(entity_id)
+    with (patch("custom_components.phoenix_mcp.tools.service.async_apply_mesa_to_call", partial(_held_handler, started)),
+          patch.object(tool_dispatch, "record_event") as record):
+        await _disconnect_mid_call(client, _modern_headers(raw, "tools/call", "call_service"),
+                                   _modern("tools/call", name="call_service", arguments=arguments), started)
+        async with asyncio.timeout(3):
+            while not _cancelled_rows(data):
+                await asyncio.sleep(0.01)
+    await hass.async_block_till_done()
+    assert calls == []
+    assert _cancelled_rows(data) == ["cancelled"]
+    assert data.agent_recovery.records(key.id) == []
+    assert not any(call.args[1] == "notice" for call in record.call_args_list)
+
+    response = await client.post(ROUTE, headers=_modern_headers(raw, "tools/call", "call_service"),
+                                 json=_modern("tools/call", name="call_service", arguments=arguments))
+    assert "unresolved outcome" not in json.dumps(await response.json())
+    assert len(calls) == 1
+
+
+@pytest.mark.parametrize("name", sorted(_NO_HOME_EFFECT_TOOLS))
+async def test_a_tool_that_cannot_change_the_home_leaves_no_claim(env, hass, name):
+    _, data = env
+    key, _ = await _key(data, allow_all=True)
+    await _cancel_stub_tool(hass, data, key, name)
+    assert _cancelled_rows(data) == ["cancelled"]
+    assert data.agent_recovery.records(key.id) == []
+
+
+@pytest.mark.parametrize("name", ["create_script", "clean_esphome_build", "send_notification"])
+@pytest.mark.parametrize("log_denied", [True, False])
+async def test_a_write_with_no_evidence_keeps_its_claim(env, hass, name, log_denied):
+    """An uninstrumented handler counts as started once entered, whatever it did."""
+    _, data = env
+    data.store.get_settings().log_denied = log_denied
+    key, _ = await _key(data, allow_all=True)
+    with patch.object(tool_dispatch, "record_event") as record:
+        await _cancel_stub_tool(hass, data, key, name)
+    assert _cancelled_rows(data) == ["unknown"]
+    assert [row["status"] for row in data.agent_recovery.records(key.id)] == ["outcome_unknown"]
+    assert data.agent_recovery.blocks(key.id)
+    notices = [call for call in record.call_args_list if call.args[1] == "notice"]
+    assert [(call.args[2], call.kwargs) for call in notices] == [({"reason": "execution_unknown"}, {"outcome": "unknown"})]
+
+
+def test_a_tool_listed_as_having_no_home_effect_is_a_real_non_destructive_write():
+    for name in _NO_HOME_EFFECT_TOOLS:
+        assert _TOOL_ANNOTATIONS[name]["readOnlyHint"] is False
+        assert _TOOL_ANNOTATIONS[name]["destructiveHint"] is False
+
+
+@pytest.mark.parametrize("name,claims,outcome", [
+    ("create_script", True, "unknown"),
+    ("analyze_esphome_memory", False, "denied"),
+])
+async def test_authority_lost_during_a_tool_answers_by_what_the_tool_can_do(env, hass, name, claims, outcome):
+    _, data = env
+    data.store.get_settings().log_denied = False
+    data.store.get_settings().log_allowed = False
+    key, _ = await _key(data, allow_all=True)
+
+    async def lost(*_args, **_kwargs):
+        raise AuthorityChangedError("gone")
+
+    with patch.dict(tool_dispatch._TOOL_HANDLERS, {name: (lost, (), {})}):
+        response, _method, _resource, _outcome = await _dispatch_mcp(
+            "tools/call", 1, {"name": name, "arguments": _required_arguments(name)}, key, hass, data, "10.0.0.5", "http://x")
+    assert data.agent_recovery.blocks(key.id) is claims
+    rows = [row.outcome for row in data.audit.query() if row.method == "authority/changed"]
+    assert rows == (["unknown"] if claims else [])
+    assert ("may already have executed" in json.dumps(response)) is claims
 
 
 async def test_a_legacy_cancellation_notification_is_accepted_and_changes_nothing(env, hass):

@@ -16,6 +16,7 @@ from homeassistant.util import dt as dt_util
 from homeassistant.core import HomeAssistant
 
 from .helpers import parse_time_param
+from .time_text import parse_datetime
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -81,7 +82,7 @@ def parse_recorder_window(
     if args.get("cursor"):
         try:
             raw_cursor = args["cursor"]
-            parsed_cursor = dt_util.parse_datetime(raw_cursor) if isinstance(raw_cursor, str) else None
+            parsed_cursor = parse_datetime(raw_cursor) if isinstance(raw_cursor, str) else None
             if parsed_cursor is None:
                 raise ValueError
             page_start = _as_utc(parsed_cursor)

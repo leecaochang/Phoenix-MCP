@@ -1310,7 +1310,7 @@ async def test_settings_bind_before_provider_delete_finishes_cleared():
             "custom_components.phoenix_mcp.llm.accounts._get_secret_store",
             AsyncMock(return_value=secret_store),
         ),
-        patch(
+        patch_readers(
             "custom_components.phoenix_mcp.voice_agent.async_remove_assist_pipeline",
             new_callable=AsyncMock,
         ),
@@ -2135,7 +2135,7 @@ async def test_wipe_core_leaves_unchanged_settings_alone():
     view = PhoenixAdminWipeView()
     view.hass = hass
 
-    with patch("custom_components.phoenix_mcp.panel.async_sync_mesa_inject", new=AsyncMock()) as inject:
+    with patch("custom_components.phoenix_mcp.admin.settings.async_sync_mesa_inject", new=AsyncMock()) as inject:
         resp = await view.delete(_make_admin_request(body=_wipe_body(wipe_providers=False)))
 
     assert resp.status == 204
@@ -2229,7 +2229,7 @@ async def test_wipe_providers_only_leaves_approvals_untouched():
     view.hass = hass
 
     with patch("custom_components.phoenix_mcp.admin.settings.dismiss_approval_notification") as dismiss, \
-         patch("custom_components.phoenix_mcp.llm.accounts.async_wipe_agentcli_secrets", new=AsyncMock()):
+         patch("custom_components.phoenix_mcp.admin.settings.async_wipe_agentcli_secrets", new=AsyncMock()):
         resp = await view.delete(
             _make_admin_request(body=_wipe_body(wipe_core=False, wipe_providers=True))
         )
@@ -2314,7 +2314,7 @@ async def test_wipe_mesa_flag_wipes_mesa_and_can_spare_others():
     view.hass = hass
 
     with patch(
-        "custom_components.phoenix_mcp.llm.accounts.async_wipe_agentcli_secrets",
+        "custom_components.phoenix_mcp.admin.settings.async_wipe_agentcli_secrets",
         new=AsyncMock(),
     ) as wipe_secrets:
         resp = await view.delete(

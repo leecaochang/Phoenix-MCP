@@ -397,7 +397,9 @@
       "restoreToolReported": "Palautusta ei voitu toteuttaa. Työkalu ilmoitti: {detail}",
       "capabilityAllowUnsupported": "{capability} ei tue Salli-tilaa.",
       "recoverySnapshotUnsafeAt": "Tästä kohteesta ei ole täydellistä kopiota ilman salaisuuksia, joten mitään ei muutettu. Phoenix hylkäsi sen kohdassa {location}.",
-      "invalidHostHeader": "Pyynnön Host-otsake ei ole kelvollinen osoite."
+      "invalidHostHeader": "Pyynnön Host-otsake ei ole kelvollinen osoite.",
+      "approvalOutcomeNotSaved": "Toiminto päättyi, mutta sen tulosta ei voitu tallentaa. Tarkista sen vaikutus Home Assistantissa; tätä hyväksyntää ei tarjota uudelleen.",
+      "providerRemoteUrlResolutionFailed": "Palveluntarjoajan URL-osoitetta ei voitu ratkaista, joten sen osoitetta ei voitu tarkistaa."
     },
     "agentchat": {
       "accessKey": "Käyttöavain",
@@ -956,7 +958,11 @@
         "one": "{count} valittu",
         "other": "{count} valittu"
       },
-      "rowPicked": "valittu erähyväksyntään"
+      "rowPicked": "valittu erähyväksyntään",
+      "todoItems": "Poistettavat kohteet",
+      "todoRemovalWarning": "Tehtävien poistaminen on pysyvää. Phoenix ei säilytä niistä kopiota, joten niitä ei voi palauttaa.",
+      "todoStatusCompleted": "Valmis",
+      "todoStatusNeedsAction": "Ei valmis"
     },
     "attention": {
       "actionTitle": "Tarkista aiempi toiminto",
@@ -978,7 +984,9 @@
       "title": "Tarvitsee huomiotasi",
       "unknown": "Keskustelu päättyi ennen kuin Phoenix kirjasi, suoritettiinko toiminto, joten se on voinut suorittua. Näytä valvontalokissa näyttää, missä se on tarjolla, mitä Phoenix kirjasi; hyväksyntää odottaneen toiminnon tila näkyy kohdassa Hyväksynnät. Tarkista Home Assistant ennen uutta yritystä.",
       "audit_storageTitle": "Tarkastusloki ei päädy tallennustilaan",
-      "audit_storageHelp": "Uusimmat tarkastuslokin merkinnät ovat vain muistissa, joten uudelleenkäynnistys hävittäisi ne. Tarkista Home Assistant -lokit. Tämä poistuu, kun seuraava tallennus onnistuu."
+      "audit_storageHelp": "Uusimmat tarkastuslokin merkinnät ovat vain muistissa, joten uudelleenkäynnistys hävittäisi ne. Tarkista Home Assistant -lokit. Tämä poistuu, kun seuraava tallennus onnistuu.",
+      "mesa_renameTitle": "Uudelleennimetyn entiteetin profiili ei ole tallennustilassa",
+      "mesa_renameHelp": "Profiili seurasi entiteettiä ja on voimassa, mutta tallennetussa kopiossa on yhä vanha tunnus. Tarkista Home Assistant -lokit ja lataa sitten Phoenix MCP uudelleen kohdasta Asetukset > Laitteet ja palvelut, jotta se tallennetaan uudelleen. Tämä poistuu, kun seuraava tallennus onnistuu."
     },
     "audit": {
       "accessPassThrough": "Läpivienti",
@@ -1024,7 +1032,9 @@
       "rowPayload": "Sisältö",
       "rowRequestId": "Pyynnön tunnus",
       "rowResource": "Resurssi",
-      "rowTime": "Aika"
+      "rowTime": "Aika",
+      "outcomeCancelled": "Peruutettu",
+      "outcomeUnknown": "Tulos tuntematon"
     },
     "caps": {
       "cap_automation_write": {
@@ -1148,7 +1158,7 @@
         "label": "Automaatioiden jäljitykset"
       },
       "cap_yaml_edit": {
-        "description": "Lue YAML-kokoonpanotiedostojasi ja lataa YAML-verkkotunnukset uudelleen. Näihin tiedostoihin kirjoitetut salasanat näkyvät; käytä secrets.yaml-tiedostoa.",
+        "description": "Lue YAML-kokoonpanotiedostojasi ja lataa YAML-verkkotunnukset uudelleen. Salaisuuteen viittaavien nimien arvot piilotetaan, mutta tavallisella nimellä oleva salasana näkyy; käytä secrets.yaml-tiedostoa.",
         "label": "YAML-kokoonpano"
       },
       "confirmUnavailable": "Tämä ominaisuus ei voi vaatia hyväksyntää.",

@@ -287,12 +287,13 @@ class TestGetYamlConfigKeyArg:
         assert outcome == "invalid_request"
         assert "not valid YAML" in content["content"][0]["text"]
 
-    async def test_invalid_yaml_without_key_still_returns_raw_text(self, hass):
-        # No key means no parse, so a broken file is still readable for repair.
+    async def test_invalid_yaml_without_key_is_refused(self, hass):
+        # Credentials cannot be located in a file that does not parse.
         self._write(hass, "http:\n  - [unclosed\n")
         content, outcome, _ = await _call("get_yaml_config", {}, _access_key(), hass)
-        assert outcome == "allowed"
-        assert "unclosed" in _json(content)["content"]
+        assert outcome == "invalid_request"
+        assert "not valid YAML" in content["content"][0]["text"]
+        assert "unclosed" not in content["content"][0]["text"]
 
     async def test_content_hash_is_the_whole_file_even_with_key(self, hass):
         text = "http:\n  server_port: 8123\nfrontend:\n"

@@ -37,6 +37,15 @@ jsonschema==4.26.0
 # Native camera service-schema checks; matches the pinned HA camera manifest.
 PyTurboJPEG==1.8.3
 
+# Home Assistant's service descriptions load the component constants named in their
+# feature filters, which import tts, ffmpeg and assist_pipeline. Without these the
+# descriptions fail and service binding is tested on its fallback. Match the pinned
+# tts, ffmpeg and assist_pipeline manifests.
+ha-ffmpeg==3.2.2
+mutagen==1.48.1
+pymicro-vad==1.0.1
+pyspeex-noise==1.0.2
+
 # Real integration setup/reload tests; matches the pinned HA frontend manifest.
 home-assistant-frontend==20261028.4
 
@@ -64,3 +73,5 @@ Babel==2.18.0
 coverage==7.16.2
 # Coverage in pytest; the test package does not pull it in.
 pytest-cov==7.1.0
+# The per-test timeout in pyproject.toml; the test package does not pull it in.
+pytest-timeout==2.4.0

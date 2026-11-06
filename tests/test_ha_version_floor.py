@@ -136,6 +136,7 @@ KNOWN_IMPORTS: dict[str, dict[str, str]] = {
     "homeassistant.const": {
         "ATTR_SUPPORTED_FEATURES": "0.0.0",
         "EntityCategory": "0.0.0",
+        "EVENT_HOMEASSISTANT_FINAL_WRITE": "0.0.0",
         "EVENT_HOMEASSISTANT_STARTED": "0.0.0",
         "EVENT_HOMEASSISTANT_STOP": "0.0.0",
         "MATCH_ALL": "0.0.0",
@@ -197,6 +198,7 @@ KNOWN_IMPORTS: dict[str, dict[str, str]] = {
     "homeassistant.helpers.aiohttp_client": {
         "async_get_clientsession": "0.0.0",
     },
+    "homeassistant.helpers.entity_component": {"DATA_INSTANCES": "2026.7.0"},
     "homeassistant.helpers.entity": {
         "DeviceInfo": "0.0.0",
     },

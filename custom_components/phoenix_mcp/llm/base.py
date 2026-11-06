@@ -14,7 +14,7 @@ from typing import Any, AsyncIterator, Awaitable, Callable
 
 from aiohttp import ClientError, ClientSession, ClientTimeout
 from homeassistant.util import dt as dt_util
-from homeassistant.util.dt import parse_datetime, utcnow
+from homeassistant.util.dt import utcnow
 
 from ..const import MAX_TOOL_NAME_LENGTH
 from ..conversation_log import record_event, record_rejected_tool, sanitized
@@ -29,6 +29,7 @@ from ..provider_constants import (
     AGENT_CHAT_STREAM_READ_TIMEOUT_SECONDS,
 )
 from ..tool_loading import ToolLoader
+from ..time_text import parse_date, parse_datetime
 
 
 _LOGGER = logging.getLogger(__name__)
@@ -81,7 +82,9 @@ def _bounded_catalog(list_models: Any) -> Any:
             models = await list_models(self, session)
         except (AttributeError, KeyError, TypeError):
             models = self._model_fallback()
-        usable = (m for m in models if isinstance(m, str) and len(m) <= AGENT_CHAT_MAX_MODEL_ID_LENGTH)
+        # isprintable also refuses a lone surrogate, which would fail every later Store save.
+        usable = (m for m in models
+                  if isinstance(m, str) and len(m) <= AGENT_CHAT_MAX_MODEL_ID_LENGTH and m.isprintable())
         return list(dict.fromkeys(usable))[:AGENT_CHAT_MAX_CATALOG_MODELS]
     return bounded
 
@@ -105,7 +108,7 @@ def _is_expired(row: Any) -> bool:
     for key in ("shutdown_date", "expiration_date", "deprecation"):
         value = row.get(key)
         stamp = parse_datetime(value) if isinstance(value, str) and "T" in value else (
-            dt_util.parse_date(value) if isinstance(value, str) and value else None)
+            parse_date(value) if isinstance(value, str) and value else None)
         if stamp is None:
             continue
         when = stamp if isinstance(stamp, datetime) else datetime.combine(stamp, datetime.min.time(), tzinfo=dt_util.UTC)

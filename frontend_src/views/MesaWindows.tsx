@@ -268,7 +268,7 @@ export function MesaProfilesWindow() {
         rowKey={(r) => r.id}
         selectedKey={editing}
         onSelect={(r) => { m.open({ scope: r.scope, key: r.key, isNew: false }); ensureOpen("mesaEditor"); }}
-        rowLabel={(r) => `${r.key}, ${r.name || ""}, ${controlText(r)}, ${scopeLabel(r.scope)}`}
+        rowLabel={(r) => [r.key, r.name, controlText(r), scopeLabel(r.scope)].filter(Boolean).join(t("common.listSeparator"))}
         rowHelp="mesa.profileRowHelp"
         empty={!m.loaded ? null : <p className="audit-empty">{m.rows.length ? t("mesa.noMatch") : t("mesa.emptyState")}</p>}
       />
@@ -357,7 +357,7 @@ export function SuggestedProfilesWindow() {
         selectedKey={m.selectedSuggestion}
         onSelect={(s) => { m.selectSuggestion(s.key); review(s); }}
         // Why it was suggested reads in Help while the row is under the pointer.
-        rowLabel={(s) => `${s.subject_id}, ${mode(s)}. ${suggestionReason(s)}`}
+        rowLabel={(s) => [s.subject_id, mode(s), suggestionReason(s)].join(t("common.listSeparator"))}
         empty={m.findingsLoaded ? <NothingHere window="mesaSuggestions" text={t("mesa.noSuggestionsNow")} /> : <FindingsPending error={m.error} />}
       />
       </div>

@@ -1395,7 +1395,7 @@ describe("AgentCliWindow streaming", () => {
     const localized = "The provider did not answer after retrying for about 12 s. raw upstream detail";
     expect(await screen.findByText(localized)).toBeInTheDocument();
     const announcer = document.querySelector(".agentcli-window .sr-only[role='status']");
-    expect(announcer?.textContent).toBe(`Error: ${localized}`);
+    await waitFor(() => expect(announcer?.textContent).toBe(`Error: ${localized}`));
   });
 
   it("replaces Working with the server's status line and drops it once the reply shows", async () => {

@@ -7,17 +7,20 @@ import uuid
 from datetime import datetime, timezone
 from unittest.mock import patch
 
+import pytest
 from homeassistant.util.dt import parse_datetime, utcnow
 
 from custom_components.phoenix_mcp.audit import (
     AUDIT_PAYLOAD_SCAN_CHARS,
     MAX_AUDIT_FIELD_LEN,
+    MAX_AUDIT_PAYLOAD_BYTES,
     MAX_QUERY_LIMIT,
     AuditEntry,
     AuditLog,
     generate_request_id,
 )
 from custom_components.phoenix_mcp.const import AUDIT_LOG_MAXLEN
+from custom_components.phoenix_mcp.conversation_log import sanitized
 from custom_components.phoenix_mcp.access_key_store import GlobalSettings
 
 
@@ -874,15 +877,23 @@ class TestPayloadScanLimit:
     def test_only_a_bounded_part_of_a_payload_is_sanitized(self):
         seen = []
         import custom_components.phoenix_mcp.conversation_log as conversation_log
-        real = conversation_log.sanitized
+        real = conversation_log.redact_secrets_in_text
 
-        def measure(value, **kwargs):
-            seen.append(len(json.dumps(value)))
-            return real(value, **kwargs)
+        def measure(text):
+            seen.append(len(text))
+            return real(text)
 
-        with patch("custom_components.phoenix_mcp.audit.sanitized", measure):
-            self._stored({"arguments": {"a": "x" * 500_000, "b": ["y"] * 50_000}})
-        assert seen and max(seen) < 2 * AUDIT_PAYLOAD_SCAN_CHARS
+        with patch("custom_components.phoenix_mcp.conversation_log.redact_secrets_in_text", measure):
+            for payload in ({"arguments": {"a": "y " * 250_000, "b": ["y"] * 50_000}},
+                            {"arguments": {"b": ["y"] * 50_000, "a": "y " * 250_000}},
+                            "plain text, " * 50_000):
+                seen.clear()
+                self._stored(payload)
+                assert seen and sum(seen) <= AUDIT_PAYLOAD_SCAN_CHARS
+
+    def test_a_long_text_payload_is_cut_before_the_sanitizer(self):
+        stored = self._stored("plain text, " * 50_000)
+        assert stored.endswith("...[truncated]") and len(stored) < 2 * MAX_AUDIT_PAYLOAD_BYTES
 
     def test_a_short_payload_is_not_clipped_and_keeps_every_field(self):
         payload = {"name": "t", "arguments": {"a": 1, "b": [True, None, 1.5], "c": {"d": "e"}}}
@@ -890,13 +901,69 @@ class TestPayloadScanLimit:
 
     def test_a_secret_stays_hidden_in_what_the_row_keeps(self):
         stored = self._stored({"arguments": {"text": "password: hunter2\n" + "x" * 500_000}})
-        assert "hunter2" not in stored and "truncated" in stored
+        assert "hunter2" not in stored and "shortened" in stored
 
     def test_a_code_stays_hidden_when_what_marked_it_as_a_service_call_is_cut(self):
         """The keys and words that make `code` a credential can sit past the limit."""
         stored = self._stored({"code": "ab12", "pad": "x" * 500_000, "service": "lock.unlock"})
         assert "ab12" not in stored
         stored = self._stored({"text": "code: ab12\n" + "x" * 500_000 + " alarm_control_panel"})
+        assert "ab12" not in stored
+
+    def test_a_sanitizer_defect_leaves_the_payload_out_and_never_keeps_it_raw(self):
+        with patch("custom_components.phoenix_mcp.audit.sanitized", side_effect=RuntimeError("defect")):
+            assert self._stored({"arguments": {"note": "visible"}}) is None
+            assert self._stored("plain text") is None
+
+    @pytest.mark.parametrize("arguments, hidden", [
+        ({"password": "hunter2-" * 3000}, "hunter2"),
+        ({"service_data": {"private_key": "hunter2-" * 3000}}, "hunter2"),
+        ({"tokens": ["hunter2-" * 3000]}, "hunter2"),
+        ({"_authority": "hunter2-" * 3000}, "hunter2"),
+        ({"blob": "QUJD" * 6000}, "QUJD"),
+        ({"base64": "QUJD" * 6000}, "QUJD"),
+        ({"file": {"data": "QUJD" * 6000, "type": "image"}}, "QUJD"),
+        ({"domain": "lock", "service": "unlock", "service_data": {"code": "4821" + " " * 20_000}}, "4821"),
+    ])
+    def test_a_hidden_value_past_the_limit_stays_hidden_under_its_own_key(self, arguments, hidden):
+        stored = self._stored({"name": "t", "arguments": arguments})
+        assert hidden not in stored
+        assert "[redacted]" not in stored
+        assert next(iter(arguments)) in stored
+
+    def test_a_hidden_value_costs_nothing(self):
+        stored = json.loads(self._stored({"name": "t", "arguments": {"password": "x" * 100_000, "note": "kept"}}))
+        assert stored == {"name": "t", "arguments": {"password": "<redacted>", "note": "kept"}}
+
+    def test_a_key_past_the_limit_leaves_with_its_value(self):
+        for pad in range(AUDIT_PAYLOAD_SCAN_CHARS - 80, AUDIT_PAYLOAD_SCAN_CHARS + 2):
+            stored = self._stored({"name": "t", "arguments": {"pad": "y " * (pad // 2), "api_key": "hunter2hunter2"}})
+            assert "hunter2" not in stored and "[redacted]" not in stored
+
+    def test_a_short_secret_at_the_limit_is_never_kept(self):
+        token = "phx_" + "ab12" * 16
+        jwt = "eyJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJhYmMifQ." + "S" * 40
+        for pad in range(AUDIT_PAYLOAD_SCAN_CHARS - 120, AUDIT_PAYLOAD_SCAN_CHARS + 2):
+            for key, secret, probe in (("password", "hunter2hunter2", "hunter2"), ("wifi_token", "hunter2hunter2", "hunter2"),
+                                       ("note", token, "ab12ab12"), ("note", jwt, "eyJpc3M"),
+                                       ("note", "sk-ant-api03-ABCDEFGHIJKLMNOPQRSTUVWXYZ", "ABCDEFGH")):
+                stored = self._stored({"name": "t", "arguments": {"password": "y" * pad, key: secret}})
+                assert probe not in stored
+                # The same secret after ordinary text, which charges the limit.
+                stored = self._stored({"name": "t", "arguments": {"pad": "y " * (pad // 2), key: secret}})
+                assert probe not in stored
+
+    def test_keys_that_do_not_fit_cannot_overwrite_each_other(self):
+        kept = sanitized({"a": "y " * 200, "b": 1, "c": 2}, max_bytes=10_000, scan_chars=100)
+        assert list(kept) == ["a"]
+
+    def test_a_benign_payload_past_the_limit_keeps_its_key_names(self):
+        stored = self._stored({"name": "set_dashboard", "arguments": {"title": "x", "views": ["v " * 20_000], "z": 1}})
+        assert stored.startswith('{"name": "set_dashboard", "arguments": {"title": "x", "views": ["v v')
+        assert "[redacted]" not in stored
+
+    def test_a_service_key_past_the_limit_still_marks_a_code(self):
+        stored = self._stored({"arguments": {"code": "ab12", "pad": "y " * 20_000, "service": "lock.unlock"}})
         assert "ab12" not in stored
 
     def test_a_payload_nested_past_the_sanitizer_limit_is_not_kept_raw(self):

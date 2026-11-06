@@ -20,6 +20,7 @@ Phoenix 自己无法解决的事情。有内容需要检查时，窗口会出现
 ## 需要修复的问题 {#problems}
 
 - **{{label:attention.mesaTitle}}**：MESA 启动失败，因此受保护的更改被暂停。请检查 Home Assistant 日志。如果日志提示策略存储已损坏，请[按其中的步骤操作](guide:topic.mesaRules#storage)。然后重新加载 Phoenix。
+- **{{label:attention.mesa_renameTitle}}**：重命名实体的策略已跟随实体并正在生效，但 Phoenix 无法保存它。请在 Home Assistant 日志中查找存储错误，然后重新加载 Phoenix。下一次保存成功后，此项会消失。
 - **{{label:attention.calendar_storageTitle}}**：日历更改会暂停，直到 Phoenix 能再次读取其保存的日历历史。
 - **{{label:attention.audit_storageTitle}}**：Phoenix 无法将审计日志写入磁盘，重启后最近的条目会丢失。请在 Home Assistant 日志中查找磁盘或存储错误。下一次保存成功后，此项会消失。
 

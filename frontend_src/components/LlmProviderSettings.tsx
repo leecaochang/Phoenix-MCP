@@ -580,7 +580,7 @@ export function LlmProviderSettings({ settings, onChange, saving, adding, onAddi
         rowKey={(inst) => inst.id}
         selectedKey={selected?.id ?? null}
         onSelect={(inst) => pick(inst.id)}
-        rowLabel={(inst) => `${inst.name}, ${typeLabel(inst.kind)}`}
+        rowLabel={(inst) => [inst.name, typeLabel(inst.kind)].join(t("common.listSeparator"))}
         rowHelp="settings.accountRowHelp"
         empty={instances ? <p className="audit-empty">{t("settings.agentcliNoAccounts")}</p> : null}
         detail={options}

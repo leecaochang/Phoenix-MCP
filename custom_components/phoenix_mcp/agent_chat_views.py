@@ -14,7 +14,7 @@ from urllib.parse import urlparse
 from aiohttp import ClientError, web
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
-from homeassistant.util.dt import parse_datetime, utcnow
+from homeassistant.util.dt import utcnow
 
 from .admin.common import _audit_admin, _ok, _read_body, require_admin
 from .view_base import _err
@@ -43,6 +43,7 @@ from .routing.decision_provider import decision_error_reason, DecisionProvider
 from .routing.decision_types import DecisionError
 from .view_base import PhoenixView
 from .voice_agent import async_remove_assist_pipeline
+from .time_text import parse_datetime
 
 
 _LOGGER = logging.getLogger(__name__)
@@ -260,11 +261,17 @@ def _ip_is_blocked(
 ) -> bool:
     """Return whether an operator-supplied endpoint may not target this address.
 
-    IPv4-carrying IPv6 is judged by its IPv4. Remote providers must be globally routable; a
-    local server is refused only metadata addresses.
+    IPv4-carrying IPv6 is judged by its IPv4, and Teredo by its client as well as itself.
+    Remote providers must be globally routable; a local server is refused only metadata
+    addresses. Loopback comes first: ::1 counts as reserved.
     """
-    if isinstance(ip, ipaddress.IPv6Address) and (carried := ip.ipv4_mapped or ip.sixtofour):
-        return _ip_is_blocked(carried, allow_private=allow_private)
+    if isinstance(ip, ipaddress.IPv6Address):
+        if carried := ip.ipv4_mapped or ip.sixtofour:
+            return _ip_is_blocked(carried, allow_private=allow_private)
+        if ip.teredo and _ip_is_blocked(ip.teredo[1], allow_private=allow_private):
+            return True
+    if ip.is_loopback:
+        return not allow_private
     return (
         ip in _METADATA_ADDRESSES
         or ip.is_link_local or ip.is_multicast or ip.is_reserved or ip.is_unspecified
@@ -330,12 +337,28 @@ async def _validate_base_url(
     try:
         infos = await asyncio.get_running_loop().getaddrinfo(parts.hostname, None)
     except (OSError, ValueError):
-        return None  # unresolvable at setup time; the actual request fails cleanly
+        # Home Assistant's client answers .local names over mDNS itself, so a local server
+        # can be reachable under a name the system resolver does not know.
+        if allow_private:
+            return None
+        return ProbeConfigError(
+            "The provider URL could not be resolved, so its address could not be checked.",
+            "providerRemoteUrlResolutionFailed",
+        )
+    usable = False
+    scoped = False
     for info in infos:
         try:
-            ip = ipaddress.ip_address(info[4][0])
+            address = str(info[4][0])
+            ip = ipaddress.ip_address(address.split("%", 1)[0])
+            scope = info[4][3] if len(info[4]) > 3 else 0
         except (ValueError, IndexError):
             continue
+        # A scoped link-local answer is how mDNS names a host's interface, not its endpoint.
+        if allow_private and ip.version == 6 and ip.is_link_local and ("%" in address or scope):
+            scoped = True
+            continue
+        usable = True
         if _ip_is_blocked(ip, allow_private=allow_private):
             if allow_private:
                 return ProbeConfigError(
@@ -347,6 +370,11 @@ async def _validate_base_url(
                 "multicast, or reserved address.",
                 "providerRemoteUrlResolutionForbidden",
             )
+    if scoped and not usable:
+        return ProbeConfigError(
+            "The server URL resolves to a link-local or metadata address.",
+            "providerUrlResolutionForbidden",
+        )
     return None
 
 

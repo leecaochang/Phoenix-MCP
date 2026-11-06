@@ -36,6 +36,9 @@ class DecisionRequestBudget:
         try:
             raw = await self._store.async_load()
             if raw is None:
+                # No ledger is a healthy one with nothing spent yet. What memory holds stays,
+                # as a reservation whose first save failed is still not refunded.
+                self._unavailable = False
                 return
             if (not isinstance(raw, dict) or set(raw) != {'window', 'used'}
                     or type(raw['window']) is not int or raw['window'] < 0
@@ -85,7 +88,11 @@ class DecisionRequestBudget:
                 raise DecisionBudgetError('budget_unavailable') from error
 
     async def async_wipe(self) -> None:
-        """Serialize explicit core-data removal against durable reservations."""
+        """Serialize explicit core-data removal against durable reservations.
+
+        A remove that raises leaves requests refused, as what the file now holds is unknown;
+        another wipe or a reload settles it.
+        """
         async with self._lock:
             self._unavailable = True
             if self._store is not None:

@@ -67,7 +67,7 @@ Phoenix 會詢問你將如何使用新金鑰：
 
 ### {{label:accessKeys.revoke}} {#revoke}
 
-永久結束金鑰。它的請求會被拒絕，等待中的核准會被取消。Phoenix 還會將它從語音智慧體、AI 任務和 Assist 工具提供方中移除，並移到 {{label:accessKeys.archivedTitle}}。此操作無法復原。
+永久結束金鑰。它的請求會被拒絕，等待中的核准會被取消。Phoenix 還會將它從語音智慧體、AI 任務和 Assist 工具提供者中移除，並移到 {{label:accessKeys.archivedTitle}}。此操作無法復原。
 
 ## 重新連線智慧體 {#reconnect}
 

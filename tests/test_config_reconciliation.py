@@ -73,7 +73,7 @@ async def interrupted(hass, runtime, current=UNEXPECTED, *, expected=True, phase
 
 async def test_matching_state_clears_without_command_or_notification(hass, runtime):
     rid, path = await interrupted(hass, runtime, INTENDED)
-    with patch("custom_components.phoenix_mcp.approvals.create_approval_notification") as notify:
+    with patch("custom_components.phoenix_mcp.config_reconciliation.create_approval_notification") as notify:
         await reconcile_configurations(hass, runtime)
     assert runtime.config_recovery.get(rid)["phase"] == "verified"
     assert runtime.config_recovery.get(rid)["observations"]["execution_attribution"] == "unproven"

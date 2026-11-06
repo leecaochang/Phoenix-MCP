@@ -78,7 +78,7 @@ export function ArchivedAccessKeyTable({ accessKeys, onDeleted }: Props) {
         rowKey={(k) => k.id}
         selectedKey={chosen}
         onSelect={(k) => setChosen(k.id)}
-        rowLabel={(k) => `${k.name}, ${accessKeyStatusLabel(statusOf(k))}`}
+        rowLabel={(k) => [k.name, accessKeyStatusLabel(statusOf(k))].join(t("common.listSeparator"))}
       />
     </div>
   );

@@ -129,6 +129,8 @@ async def test_pass_through_keeps_real_references_and_still_scrubs_secrets(hass)
     "wifi_key", "wpa_key", "encryption_key", "network_key", "pre_shared_key", "signing_key", "ssh_key", "license_key",
     "psk", "wpa_psk", "passphrase", "passcode", "pin", "door_pin", "Door-PIN", "pin_code", "pincode", "wifiKey",
     "password", "api_key", "access_key", "private_key", "auth_token", "secret_x", "session_id",
+    "x-api-key", "X-Api-Key", "wifi key", "Wifi-Key", "pre-shared-key", "private key", "access-key", "access key",
+    "passwd", "db_passwd", "pwd", "wifi_pwd", "pass", "mqtt_pass", "admin-pass", "bearer", "oauth_bearer",
 ])
 def test_credential_names_are_sensitive(name):
     assert is_sensitive_key(name)
@@ -137,6 +139,7 @@ def test_credential_names_are_sensitive(name):
 @pytest.mark.parametrize("name", [
     "ping", "pinned", "spinning", "shipping", "mapping", "opinion", "pin_count", "upskill", "keyboard", "key_count",
     "translation_key", "unique_key", "sort_key", "monkey", "code", "friendly_name", "access_key_name", "access_key_id",
+    "access-key-id", "bypass", "compass", "passage", "pass_through", "pass_count", "passed", "tested_pass_rate",
 ])
 def test_ordinary_names_stay_readable(name):
     assert not is_sensitive_key(name)
@@ -258,6 +261,89 @@ async def test_credentials_in_a_readable_file_are_redacted(hass):
     assert "- 1" not in content
     assert "pan_id: 6754" in content and "ssid: home" in content
     assert "api_key: !secret api" in content
+
+
+@pytest.mark.parametrize("text", [
+    'rest_command:\n  a:\n    headers: {Authorization: "Bearer hunter2", x-api-key: hunter2}\n',
+    "- password: hunter2\n",
+    "accounts:\n  - token: hunter2\n    name: a\n",
+    '"password": hunter2\n',
+    "'api_key': hunter2\n",
+    'x: {"password": "hunter2"}\n',
+    "auth: {username: u, password: hunter2}\n",
+    "password: |\n  hunter2\n  second\nnext: 1\n",
+    "token: >-\n  hunter2\nnext: 1\n",
+    "private_key: |\n  -----BEGIN PRIVATE KEY-----\n  hunter2\n  -----END PRIVATE KEY-----\n",
+    "password:\n  hunter2\nnext: 1\n",
+    "password: &p\n  hunter2\nnext: 1\n",
+    "shared: &p hunter2\nmqtt:\n  password: *p\n",
+    "password: hun\n  ter2 hunter2\nnext: 1\n",
+    "x-api-key: hunter2\n",
+    "wifi key: hunter2\n",
+    "? password\n: hunter2\n",
+    "? [a, b]\n: hunter2\n",
+    "password: !env_var DB_PW hunter2\n",
+    "password: !!str hunter2\n",
+    "passwords:\n  - hunter2\n  - {old: hunter2}\n",
+    "passwd: hunter2\npwd: hunter2\npass: hunter2\nbearer: hunter2\n",
+    "# password: hunter2\nnext: 1\n",
+    "next: 1\n# password:\n#   hunter2\n",
+    "next: 1 # token hunter2\n",
+    "password: x # was hunter2\n",
+    "url: mqtt://user:hunter2@host:1883\n",
+    "url: https://hunter2@example.com/x\n",
+    "resource: https://example.com/a?key=hunter2&b=1\n",
+    'payload: \'{"password": "hunter2"}\'\n',
+    "template: |\n  const char* password = \"hunter2\";\n",
+    "note: Bearer hunter2hunter2\n",
+], ids=lambda text: text.split("\n")[0][:30])
+async def test_every_yaml_form_of_a_credential_is_masked(hass, text):
+    _config_file(hass, "extra.yaml", text)
+    result, outcome, _ = await _call_tool(
+        "get_yaml_config", {"file": "extra.yaml"}, _key({}, cap_yaml_edit="allow"), hass, _data(hass))
+    assert outcome == "allowed", result
+    assert "hunter2" not in _body(result)["content"]
+    assert "<redacted>" in _body(result)["content"]
+
+
+async def test_masking_keeps_the_rest_of_the_file_as_written(hass):
+    text = (
+        "# Living room\nhttp:\n  server_port: 8123  # default\nlight: !include lights.yaml\n"
+        "mqtt:\n  password: !secret mqtt_pw\n  use_password: true\n  broker: 'host'\n\n"
+        "sensor:\n  - platform: rest\n    name: Bypass valve\n"
+    )
+    _config_file(hass, "extra.yaml", text)
+    result, outcome, _ = await _call_tool(
+        "get_yaml_config", {"file": "extra.yaml"}, _key({}, cap_yaml_edit="allow"), hass, _data(hass))
+    assert outcome == "allowed", result
+    assert _body(result)["content"] == text
+
+
+@pytest.mark.parametrize("args", [{"file": "extra.yaml"}, {"file": "extra.yaml", "key": "mqtt"}])
+async def test_a_file_that_does_not_parse_is_refused_without_quoting_it(hass, args):
+    _config_file(hass, "extra.yaml", "mqtt:\n  password: [hunter2\n  other: 1\n")
+    result, outcome, _ = await _call_tool("get_yaml_config", args, _key({}, cap_yaml_edit="allow"), hass, _data(hass))
+    assert outcome == "invalid_request"
+    text = result["content"][0]["text"]
+    assert "hunter2" not in text and "line 3" in text
+
+
+async def test_an_alias_cannot_read_a_masked_value_through_a_harmless_key(hass):
+    _config_file(hass, "extra.yaml", "shared: &p hunter2\nmqtt:\n  password: *p\nother:\n  value: *p\n")
+    key = _key({}, cap_yaml_edit="allow")
+    for name in ("shared", "other"):
+        result, outcome, _ = await _call_tool(
+            "get_yaml_config", {"file": "extra.yaml", "key": name}, key, hass, _data(hass))
+        assert outcome == "allowed", result
+        assert "hunter2" not in _body(result)["content"]
+
+
+async def test_a_fragment_read_scrubs_text_inside_a_value(hass):
+    _config_file(hass, "extra.yaml", "mqtt:\n  url: mqtt://user:hunter2@host\n  broker: host\n")
+    result, _, _ = await _call_tool(
+        "get_yaml_config", {"file": "extra.yaml", "key": "mqtt"}, _key({}, cap_yaml_edit="allow"), hass, _data(hass))
+    content = _body(result)["content"]
+    assert "hunter2" not in content and "broker: host" in content
 
 
 async def test_a_fragment_read_cannot_return_a_bare_secret(hass):

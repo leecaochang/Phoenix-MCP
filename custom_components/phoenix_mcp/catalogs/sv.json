@@ -397,7 +397,9 @@
       "restoreToolReported": "Återställningen kunde inte tillämpas. Verktyget rapporterade: {detail}",
       "capabilityAllowUnsupported": "{capability} stöder inte läget Tillåt.",
       "recoverySnapshotUnsafeAt": "Det finns ingen fullständig kopia av det här objektet utan hemligheter, så inget ändrades. Phoenix avvisade det vid {location}.",
-      "invalidHostHeader": "Begärans Host-rubrik är inte en giltig adress."
+      "invalidHostHeader": "Begärans Host-rubrik är inte en giltig adress.",
+      "approvalOutcomeNotSaved": "Åtgärden slutfördes, men resultatet kunde inte sparas. Kontrollera effekten i Home Assistant. Godkännandet erbjuds inte igen.",
+      "providerRemoteUrlResolutionFailed": "Leverantörens URL kunde inte slås upp, så dess adress kunde inte kontrolleras."
     },
     "agentchat": {
       "accessKey": "Åtkomstnyckel",
@@ -956,7 +958,11 @@
         "one": "{count} vald",
         "other": "{count} valda"
       },
-      "rowPicked": "vald för batchgodkännande"
+      "rowPicked": "vald för batchgodkännande",
+      "todoItems": "Objekt som tas bort",
+      "todoRemovalWarning": "Att ta bort objekt från att göra-listor är permanent. Phoenix sparar ingen kopia, så de kan inte återställas.",
+      "todoStatusCompleted": "Slutförd",
+      "todoStatusNeedsAction": "Ej slutförd"
     },
     "attention": {
       "actionTitle": "Kontrollera en tidigare åtgärd",
@@ -978,7 +984,9 @@
       "title": "Behöver uppmärksamhet",
       "unknown": "Konversationen avslutades innan Phoenix registrerade om åtgärden kördes, så den kan ha körts. Visa i granskningsloggen visar, där den finns, vad Phoenix registrerade; en åtgärd som väntade på godkännande har sin status under Godkännanden. Kontrollera Home Assistant innan du försöker igen.",
       "audit_storageTitle": "Granskningsloggen når inte lagringen",
-      "audit_storageHelp": "Nya granskningsposter finns bara i minnet, så en omstart skulle tappa dem. Kontrollera Home Assistants loggar. Det här försvinner när nästa sparning lyckas."
+      "audit_storageHelp": "Nya granskningsposter finns bara i minnet, så en omstart skulle tappa dem. Kontrollera Home Assistants loggar. Det här försvinner när nästa sparning lyckas.",
+      "mesa_renameTitle": "Profilen för en omdöpt entitet finns inte i lagringen",
+      "mesa_renameHelp": "Profilen följde med entiteten och gäller, men den sparade kopian har fortfarande det gamla ID:t. Kontrollera Home Assistants loggar och ladda sedan om Phoenix MCP från Inställningar > Enheter och tjänster för att spara igen. Det här försvinner när nästa sparning lyckas."
     },
     "audit": {
       "accessPassThrough": "Pass-through",
@@ -1024,7 +1032,9 @@
       "rowPayload": "Nyttolast",
       "rowRequestId": "ID för begäran",
       "rowResource": "Resurs",
-      "rowTime": "Tid"
+      "rowTime": "Tid",
+      "outcomeCancelled": "Avbruten",
+      "outcomeUnknown": "Utfallet okänt"
     },
     "caps": {
       "cap_automation_write": {
@@ -1148,7 +1158,7 @@
         "label": "Automatiseringsspår"
       },
       "cap_yaml_edit": {
-        "description": "Läs dina YAML-konfigurationsfiler och läs in YAML-domäner på nytt. Lösenord som skrivits i filerna syns; använd secrets.yaml.",
+        "description": "Läs dina YAML-konfigurationsfiler och läs in YAML-domäner på nytt. Värden under namn som tyder på en hemlighet döljs, men ett lösenord under ett vanligt namn syns; använd secrets.yaml.",
         "label": "YAML-konfiguration"
       },
       "confirmUnavailable": "Den här funktionen kan inte kräva godkännande.",

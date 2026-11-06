@@ -269,12 +269,26 @@ class YamlParseError(Exception):
     """Raised when text handed to load_tagged_lenient is not valid YAML."""
 
 
+def yaml_error_detail(err: BaseException) -> str:
+    """Name a YAML failure and its position, without the source lines PyYAML quotes.
+
+    A quoted line of a configuration file can hold the credential a refusal is protecting.
+    """
+    if isinstance(err, yaml.MarkedYAMLError):
+        mark = err.problem_mark or err.context_mark
+        where = f" at line {mark.line + 1}, column {mark.column + 1}" if mark else ""
+        return f"{err.problem or err.context or 'invalid YAML'}{where}"
+    if isinstance(err, yaml.reader.ReaderError):
+        return "the text holds a character YAML does not allow"
+    return str(err)
+
+
 def load_tagged_lenient(text: str, *, allow_aliases: bool = True) -> Any:
     """Parse YAML keeping known and unknown tags opaque; raise YamlParseError on bad syntax."""
     try:
         return yaml.load(text, Loader=PhoenixLenientLoader if allow_aliases else PhoenixInputLoader)
     except (yaml.YAMLError, RecursionError) as err:
-        raise YamlParseError(str(err)) from err
+        raise YamlParseError(yaml_error_detail(err)) from err
 
 
 def dump_tagged(data: Any) -> str:
@@ -629,7 +643,7 @@ class _FileScan:
         except yaml.YAMLError as exc:
             raise LocateError(
                 "parse_error",
-                f"{os.path.basename(path)} could not be parsed: {exc}",
+                f"{os.path.basename(path)} could not be parsed: {yaml_error_detail(exc)}",
             ) from exc
         self.lines = self.text.splitlines(keepends=True)
 
@@ -1313,7 +1327,7 @@ def _create_append(path: str, shape: str, entry_id: str, config: dict) -> OpResu
         except (OSError, yaml.YAMLError) as exc:
             return OpResult(
                 ok=False, error_kind="io_error",
-                message=f"{os.path.basename(path)} could not be parsed: {exc}",
+                message=f"{os.path.basename(path)} could not be parsed: {yaml_error_detail(exc)}",
             )
         if isinstance(doc, TaggedValue):
             return OpResult(

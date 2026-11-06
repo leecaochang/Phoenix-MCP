@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import asyncio
 from datetime import datetime, timedelta
+from types import MappingProxyType
 from typing import Any
 import dataclasses
 import difflib
@@ -32,14 +33,14 @@ from homeassistant.helpers import floor_registry as fr
 from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers import label_registry as lr
 from homeassistant.core import HomeAssistant, valid_entity_id
-from homeassistant.util.dt import as_utc, parse_datetime, utcnow
+from homeassistant.util.dt import as_utc, utcnow
 
 import voluptuous as vol
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.const import __version__ as ha_version
 
 from ..authoring_validation import async_validation_message, authoring_input_error
-from ..const import ANNOUNCEMENT_SERVICES, CAP_ALLOW, CAP_CONFIRM, CAP_DENY, DEVICE_LIST_DEFAULT_LIMIT, DEVICE_LIST_MAX_LIMIT, DUAL_GATE_SERVICES, MAX_COMPARE_LIST_VALUES, MAX_COMPARE_VALUE_CHARS, MAX_DANGLING_PATHS, MAX_CONFIG_CHECK_MESSAGES, MAX_SEARCH_QUERY_LEN, MAX_SEARCH_MEMBERS, MAX_SEARCH_MEMBER_CHECKS, MAX_SEARCH_MEMBER_ID_LEN, MESA_MODE_OFF, MUSIC_ASSISTANT_LIBRARY_SERVICES, STORAGE_HELPER_TYPES, NO_TARGET_SERVICES, PHYSICAL_GATE_DOMAINS, RUNTIME_SERVICE_GUIDANCE, SCRIPT_ENTITY_SERVICES, SEARCH_ENTITIES_MAX_LIMIT, SEARCH_FUZZY_MATCH_CUTOFF, SEARCH_POWER_TYPES, SEARCH_RADIO_TYPES, SERVICE_FIELDS_MAX, SERVICE_FIELD_MAX_DESCRIPTION, SERVICE_FIELD_MAX_OPTIONS, REFERENCE_WARNING_MAX
+from ..const import CAP_ALLOW, CAP_CONFIRM, CAP_DENY, DEVICE_LIST_DEFAULT_LIMIT, DEVICE_LIST_MAX_LIMIT, DUAL_GATE_SERVICES, MAX_COMPARE_LIST_VALUES, MAX_COMPARE_VALUE_CHARS, MAX_DANGLING_PATHS, MAX_CONFIG_CHECK_MESSAGES, MAX_SEARCH_QUERY_LEN, MAX_SEARCH_MEMBERS, MAX_SEARCH_MEMBER_CHECKS, MAX_SEARCH_MEMBER_ID_LEN, MESA_MODE_OFF, MUSIC_ASSISTANT_LIBRARY_SERVICES, STORAGE_HELPER_TYPES, NO_TARGET_SERVICES, RUNTIME_SERVICE_GUIDANCE, SCRIPT_ENTITY_SERVICES, SEARCH_ENTITIES_MAX_LIMIT, SEARCH_FUZZY_MATCH_CUTOFF, SEARCH_POWER_TYPES, SEARCH_RADIO_TYPES, SERVICE_FIELDS_MAX, SERVICE_FIELD_MAX_DESCRIPTION, SERVICE_FIELD_MAX_OPTIONS, REFERENCE_WARNING_MAX
 from ..consumer_identity import ConsumerIdentityIndex, IDENTITY_COVERAGE
 from ..household_authority import household_admin_access
 from ..data import PhoenixData
@@ -51,9 +52,10 @@ from ..device_semantics import (
     effective_entity_area_id,
     composed_name_fields,
     entity_name_source,
+    readable_entity_aliases,
 )
 from ..routing.intent_recognition import RecognitionUnavailable, async_recognize
-from ..service_targets import dedicated_tool_refusal, secondary_target_error, template_fields, template_fields_error, unbound_service_targets, unbound_target_error, unsupported_secondary_targets
+from ..service_targets import dedicated_tool_refusal, merge_speech_players, named_script_refusal, required_secondary_targets, secondary_target_error, speech_target_refusal, unreadable_group_error, template_fields, template_fields_error, unbound_service_targets, unbound_target_error, unsupported_secondary_targets
 from ..tool_contracts import normalize_tool_args, state_projection
 from ..mesa import async_semantic_moments, build_expand_target, entity_control_mode, evaluate_service_call
 from ..mesa_core.trigger_validator import entities_by_role
@@ -67,13 +69,14 @@ from ..redaction import (
 from .esphome import _ESPHOME_DOMAIN, _esphome_action_signature, _esphome_actions_for_entity, esphome_availability
 from ..tool_common import _project_state, _resolve_area_id, _tool_error, _tool_success, fitted_offset_page, longest_fitting, offset_page
 from ..ws_dispatch import WsDispatchError, async_get_lovelace_config, async_ws_command
-from ..policy_engine import _ENTITY_ID_RE, Permission, assist_expose_check, device_config_entry_ids, device_registry_entity_ids, esphome_entry_writable, filter_entities_for_access_key, filter_service_response, music_assistant_readable_entries, physical_gate_applies, resolve_config_entry_registry_access, resolve_device_registry_access, resolve_esphome_user_service, resolve_read, resolve_registry_access, resolve_service_targets, service_target_binding_valid, scrub_sensitive_attributes
+from ..policy_engine import _ENTITY_ID_RE, Permission, assist_expose_check, device_config_entry_ids, device_read_check, device_registry_entity_ids, esphome_entry_writable, filter_entities_for_access_key, filter_service_response, group_member_denied, music_assistant_readable_entries, physical_gate_applies, required_service_cap, resolve_config_entry_registry_access, resolve_device_registry_access, resolve_esphome_user_service, resolve_read, resolve_registry_access, resolve_service_targets, service_gate_targets, service_target_binding_valid, scrub_sensitive_attributes, unreadable_group_targets
 from ..proxy_diagnostics import device_bluetooth_scanners, rf_capabilities
 from ..radio import device_radio_types
 from ..recorder_queries import iso_utc, state_timestamp
 from ..request_authority import check_request_authority
 from ..access_key_store import AccessKeyRecord
 from .. import yaml_includes
+from ..time_text import parse_datetime
 from .helper import _helper_config_entry
 
 _LOGGER = logging.getLogger(__name__)
@@ -1570,6 +1573,7 @@ async def _tool_search_entities(
     oldest_change: datetime | None = None
     radio_cache: dict[str, set[str]] = {}
     battery_cache: dict[str, bool] = {}
+    parent_readable = device_read_check(access_key, hass)
     for eid in _search_candidate_ids(f.registry_state, hass, registry):
         perm = resolve_registry_access(eid, access_key, hass)
         if perm not in (Permission.READ, Permission.WRITE):
@@ -1639,7 +1643,7 @@ async def _tool_search_entities(
             row["state_available"] = state is not None
         if entry is not None and entry.hidden_by is not None:
             row["hidden"] = True
-        composed = composed_name_fields(hass, entry, fname or None)
+        composed = composed_name_fields(hass, entry, fname or None, parent_readable)
         row.update(composed)
         aliases = [alias for alias in (getattr(entry, "aliases", None) or ()) if isinstance(alias, str)]
         # The composed name is matched and ranked like another name for the entity.
@@ -1876,6 +1880,15 @@ def _service_fields(description: Any, state: Any) -> list[dict]:
     return fields
 
 
+# find_available_actions' reason for each capability a target-bound service can need.
+_CAPABILITY_REASONS = MappingProxyType({
+    "cap_restart": "requires restart capability",
+    "cap_notify": "requires notifications capability",
+    "cap_broadcast": "requires broadcast capability",
+    "cap_scene_write": "requires scene write capability",
+})
+
+
 async def _tool_find_available_actions(
     args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData
 ) -> tuple[dict, str, str]:
@@ -1914,10 +1927,8 @@ async def _tool_find_available_actions(
     domain = entity_id.split(".")[0]
     writable = access_key.pass_through or perm == Permission.WRITE
     physical_ok = effective_cap(access_key, "cap_physical_control") != CAP_DENY
-    restart_ok = effective_cap(access_key, "cap_restart") != CAP_DENY
     yaml_edit_ok = effective_cap(access_key, "cap_yaml_edit") != CAP_DENY
-    notify_ok = effective_cap(access_key, "cap_notify") != CAP_DENY
-    broadcast_ok = effective_cap(access_key, "cap_broadcast") != CAP_DENY
+    group_refused = writable and group_member_denied(entity_id, access_key, hass)
 
     actions: list[dict] = []
     for svc in sorted(hass.services.async_services().get(domain, {}).keys()):
@@ -1928,25 +1939,27 @@ async def _tool_find_available_actions(
             continue
         available = writable
         reason: str | None = None
+        needed = service_capability(domain, svc, None, [entity_id])
+        dedicated = dedicated_tool_refusal(domain, svc)
         # No-target reload services gate on cap_yaml_edit, not the entity's WRITE
         # permission, so they are annotated before the writable-based branches.
         if key in NO_TARGET_SERVICES:
             available = yaml_edit_ok
             reason = None if yaml_edit_ok else "requires yaml edit capability"
-        elif domain == "calendar" and svc != "get_events":
-            available, reason = False, "use dedicated calendar event authoring tools"
+        elif dedicated is not None:
+            available, reason = False, dedicated[1]
         elif not writable:
             reason = "read-only access to this entity"
-        elif domain in PHYSICAL_GATE_DOMAINS and not physical_ok:
+        elif physical_gate_applies(domain, svc, [entity_id]) and not physical_ok:
             available, reason = False, "requires physical control capability"
-        elif key in DUAL_GATE_SERVICES and not restart_ok:
-            available, reason = False, "requires restart capability"
-        elif domain == "notify" and not notify_ok:
-            available, reason = False, "requires notifications capability"
-        elif key in ANNOUNCEMENT_SERVICES and not broadcast_ok:
-            available, reason = False, "requires broadcast capability"
-        elif key == "scene/delete" and effective_cap(access_key, "cap_scene_write") == CAP_DENY:
-            available, reason = False, "requires scene write capability"
+        elif needed is not None and needed in _CAPABILITY_REASONS and effective_cap(access_key, needed) == CAP_DENY:
+            available, reason = False, _CAPABILITY_REASONS[needed]
+        elif refusal := await named_script_refusal(hass, domain, svc):
+            available, reason = False, refusal
+        elif blocked_fields := await required_secondary_targets(hass, domain, svc):
+            available, reason = False, f"requires {', '.join(blocked_fields)}, which call_service cannot authorize"
+        elif group_refused:
+            available, reason = False, "a member of this group is blocked or cannot be read"
         entry = {"service": f"{domain}.{svc}", "available": available}
         if guidance := RUNTIME_SERVICE_GUIDANCE.get(key):
             entry["description"] = guidance
@@ -2320,9 +2333,9 @@ async def _relationship_dashboards(
     Every skip is returned for `not_searched`, and a failed list is reported separately: no named
     dashboard was examined.
     """
-    # A YAML-mode dashboard is rejected by async_get_lovelace_config and an auto-generated one has
-    # no stored config, so skipping either while reporting "searched: dashboard" would be a
-    # confident wrong answer.
+    # An auto-generated dashboard has no stored config, so skipping one while reporting "searched:
+    # dashboard" would be a confident wrong answer. A YAML-mode dashboard is read like any other;
+    # only the entity ids walked out of it reach a result.
     out: list[tuple[str, str | None, Any]] = []
     skipped: list[dict] = []
     listed: list[dict] = []
@@ -2345,7 +2358,7 @@ async def _relationship_dashboards(
         except WsDispatchError as exc:
             if url_path is not None:
                 skipped.append({"kind": "dashboard", "id": url_path,
-                                "reason": f"not readable (YAML-mode dashboards cannot be searched): {exc}"})
+                                "reason": f"not readable: {exc}"})
             continue
         if isinstance(config, dict):
             out.append((url_path or "lovelace", title, config))
@@ -2588,8 +2601,10 @@ async def _tool_describe_entity(
     if entry is not None and entry.entity_category is not None:
         body["entity_category"] = entry.entity_category.value
 
+    friendly_name = str_arg((scrubbed.get("attributes") or {}).get("friendly_name")) or None
+    parent_readable = device_read_check(access_key, hass)
     if entry is not None:
-        body.update(composed_name_fields(hass, entry, str_arg((scrubbed.get("attributes") or {}).get("friendly_name")) or None))
+        body.update(composed_name_fields(hass, entry, friendly_name, parent_readable))
         body["registry"] = {
             **_registry_projection(entry),
             "name_source": entity_name_source(hass, entry),
@@ -2604,7 +2619,7 @@ async def _tool_describe_entity(
     # set_entity's add_aliases / remove_aliases edit the same list. An empty list
     # is meaningful: an entity with no names is not addressable by voice.
     if entry is not None:
-        body["aliases"] = er.async_get_entity_aliases(hass, entry)
+        body["aliases"] = readable_entity_aliases(hass, entry, friendly_name, parent_readable)
 
     if hint := entity_hint_for_agent(access_key, entity_id, hass, data.store.get_entity_hints()):
         body["hint"] = hint
@@ -3154,6 +3169,9 @@ async def _tool_dry_run_service(
         return _tool_error("Missing required arguments: domain and service"), "invalid_request", "dry_run_service"
     if (dedicated := dedicated_tool_refusal(domain, service)) is not None:
         return _tool_error(dedicated[1]), "invalid_request", "dry_run_service"
+    args, speech_error = merge_speech_players(args, domain, service)
+    if speech_error:
+        return _tool_error(speech_error), "invalid_request", "dry_run_service"
     secondary_targets = await unsupported_secondary_targets(
         hass, args.get("service_data"), domain=domain, service=service
     )
@@ -3165,6 +3183,8 @@ async def _tool_dry_run_service(
         )
     if templated := template_fields(args.get("service_data")):
         return _tool_error(template_fields_error(templated)), "invalid_request", "dry_run_service"
+    if refusal := await named_script_refusal(hass, domain, service):
+        return _tool_error(refusal), "invalid_request", "dry_run_service"
     # Sanitised exactly as the real call sanitises it, so the preview predicts
     # the call that would actually run rather than the one the caller wrote.
     service_data = _sanitize_service_data(args.get("service_data"))
@@ -3216,7 +3236,14 @@ async def _tool_dry_run_service(
     if domain == _ESPHOME_DOMAIN:
         esphome_entry = resolve_esphome_user_service(hass, service)
         if esphome_entry is not None:
-            allowed = esphome_entry_writable(hass, esphome_entry, access_key)
+            writable = esphome_entry_writable(hass, esphome_entry, access_key)
+            required_cap = required_service_cap(
+                domain=domain, service=service, service_data=service_data, access_key=access_key, hass=hass,
+            )
+            predicted_action = "denied" if not writable else (
+                "allowed" if required_cap is None else _cap_outcome(effective_cap(access_key, required_cap))
+            )
+            allowed = predicted_action == "allowed"
             signature = _esphome_action_signature(esphome_entry, service)
             declared = {a["name"] for a in signature}
             body = {
@@ -3225,7 +3252,7 @@ async def _tool_dry_run_service(
                 "declared_args": signature,
                 "unknown_args": sorted(k for k in service_data if k not in declared),
                 "missing_args": sorted(declared - set(service_data)),
-                "predicted_outcome": "allowed" if allowed else "denied",
+                "predicted_outcome": predicted_action,
                 "would_execute": allowed,
             }
             return _tool_success(json.dumps(body, default=str)), "allowed", "dry_run_service"
@@ -3242,25 +3269,33 @@ async def _tool_dry_run_service(
         area_id=args.get("area_id"), service_domain=domain, access_key=access_key, hass=hass,
     )
 
+    target_args: dict[str, Any] = {
+        "entity_id": args.get("entity_id"), "device_id": args.get("device_id"), "area_id": args.get("area_id"),
+    }
+    # Taken before a refusal below empties the list, as the call gates on what was asked.
+    physical_gate = physical_gate_applies(domain, service, service_gate_targets(
+        domain=domain, service=service, access_key=access_key, hass=hass, **target_args,
+    ))
+    required_cap = required_service_cap(
+        domain=domain, service=service, service_data=service_data, access_key=access_key, hass=hass, **target_args,
+    )
+    unreadable = unreadable_group_targets(args.get("entity_id"), access_key, hass) if not permitted else []
     if not service_target_binding_valid(domain, service, permitted, hass):
         permitted = []
     unbound = await unbound_service_targets(hass, permitted, domain=domain, service=service)
-    if unbound:
+    speech_refusal = speech_target_refusal(domain, service, args.get("entity_id"), permitted)
+    if unbound or speech_refusal:
         permitted = []
 
     # Predict the outcome in the same order call_service applies its gates: the
-    # physical-control cap gate first (before target resolution and MESA), then an
-    # empty resolution denies, then MESA (a confirm becomes pending, nothing
-    # allowed becomes a deny, else allow). A confirm at any layer surfaces as
-    # pending. The predicate is the enforcing path's own, not a copy, so the
-    # preview cannot drift from the call it predicts.
-    physical_gate = physical_gate_applies(domain, service, permitted)
-    required_cap = service_capability(domain, service, service_data)
+    # capability gate first (before MESA), then an empty resolution denies, then
+    # MESA (a confirm becomes pending, nothing allowed becomes a deny, else
+    # allow). A confirm at any layer surfaces as pending. The predicate is the
+    # enforcing path's own, not a copy, so the preview cannot drift from the call
+    # it predicts.
     predicted: str
-    if unbound:
+    if unbound or speech_refusal:
         predicted = "denied"
-    elif physical_gate and effective_cap(access_key, "cap_physical_control") != CAP_ALLOW:
-        predicted = _cap_outcome(effective_cap(access_key, "cap_physical_control"))
     elif required_cap is not None and effective_cap(access_key, required_cap) != CAP_ALLOW:
         predicted = _cap_outcome(effective_cap(access_key, required_cap))
     elif not permitted:
@@ -3302,6 +3337,10 @@ async def _tool_dry_run_service(
     if unbound:
         body["unbound_targets"] = list(unbound)
         body["unbound_reason"] = unbound_target_error(domain, service, unbound)
+    if speech_refusal:
+        body["refusal_reason"] = speech_refusal
+    elif unreadable:
+        body["refusal_reason"] = unreadable_group_error(unreadable)
     return _tool_success(json.dumps(body, default=str)), "allowed", "dry_run_service"
 
 

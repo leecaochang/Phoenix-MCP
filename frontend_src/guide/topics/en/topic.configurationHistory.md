@@ -17,6 +17,8 @@ Phoenix records a change after an agent's write has succeeded, with the item bef
 
 Changes made outside Phoenix, in Home Assistant itself, aren't recorded. Neither are actions on devices, calendar events, to-do items, the dashboard list or dashboard resources.
 
+Nothing can bring back a removed to-do item, so check the items when you approve a removal.
+
 Some records exist only as evidence and can't be restored, such as removing an integration or a device.
 
 ## How long it's kept {#retention}

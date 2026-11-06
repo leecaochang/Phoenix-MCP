@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import TYPE_CHECKING, Any, Literal
 
-from homeassistant.util.dt import parse_datetime, utcnow
+from homeassistant.util.dt import utcnow
 
 from .access_key_schema import normalize_access_key_fields
 from .const import (
@@ -24,6 +24,7 @@ from .helpers import log_internal_failure
 from .request_authority import household_authority
 from .provider_constants import AGENT_CHAT_CLIENT_IP
 from .access_key_store import GlobalSettings
+from .time_text import parse_datetime
 
 if TYPE_CHECKING:
     from homeassistant.helpers.storage import Store
@@ -40,9 +41,13 @@ _LOGGER = logging.getLogger(__name__)
 #   pending_approval - a cap_* mode of "confirm" queued the action for admin review.
 #                       Always recorded regardless of the log_allowed/log_denied toggles
 #                       (see record()); the approval trail should not be suppressible.
+#   cancelled      - the caller left a write that had not reached the home, or that
+#                    cannot change it. A statement of fact, so no toggle hides it.
+#   unknown        - the caller or its authority went away while a write may have
+#                    been running. Not a refusal, so no toggle hides it.
 Outcome = Literal[
     "allowed", "denied", "not_found", "rate_limited",
-    "not_implemented", "invalid_request", "pending_approval",
+    "not_implemented", "invalid_request", "pending_approval", "cancelled", "unknown",
 ]
 
 _REDACTED = "[redacted]"
@@ -106,53 +111,12 @@ AUDIT_PAYLOAD_SCAN_CHARS = 8 * MAX_AUDIT_PAYLOAD_BYTES
 MAX_AUDIT_FIELD_LEN = 256
 
 
-def _clipped(value: Any, limit: int = AUDIT_PAYLOAD_SCAN_CHARS) -> tuple[Any, bool]:
-    """A JSON value cut to about `limit` characters, and whether anything was cut.
-
-    Structure before the cut stays. Every node costs at least one character, so
-    a payload of many small values is bounded like one long string.
-    """
-    remaining = limit
-    cut = False
-
-    def visit(item: Any, depth: int = 0) -> Any:
-        nonlocal remaining, cut
-        remaining -= 1
-        if remaining < 0 or depth > CONVERSATION_LOG_MAX_DEPTH:
-            cut = True
-            return _REDACTED
-        if isinstance(item, str):
-            if len(item) > remaining:
-                cut = True
-                item = item[:remaining]
-            remaining -= len(item)
-            return item
-        if isinstance(item, list):
-            kept = []
-            for entry in item:
-                if remaining <= 0:
-                    cut = True
-                    break
-                kept.append(visit(entry, depth + 1))
-            return kept
-        if isinstance(item, dict):
-            result = {}
-            for key, entry in item.items():
-                if remaining <= 0:
-                    cut = True
-                    break
-                result[visit(key, depth + 1)] = visit(entry, depth + 1)
-            return result
-        return item
-
-    return visit(value), cut
-
-
 def _logged_payload(payload: Any) -> str | None:
     """Return a payload as the audit log keeps it: redacted, then capped, or None.
-    Uses the Conversation Log's sanitizer, which also hides device codes. Text past the scan
-    limit is cut first, and a clipped or legacy string is cleaned as text. A payload that
-    cannot be sanitized is left out, never kept raw.
+    Uses the Conversation Log's sanitizer, which also hides device codes and bounds the scan,
+    so a hidden value costs nothing and what does not fit leaves with its key. A clipped or
+    legacy string is cleaned as text. A payload that cannot be sanitized is left out, never
+    kept raw.
     """
 
     try:
@@ -162,12 +126,12 @@ def _logged_payload(payload: Any) -> str | None:
             except ValueError:
                 value = None
             text_form = value is None
-            value, clipped = _clipped(payload if text_form else value)
+            value = payload if text_form else value
         else:
             # Values that are not JSON (a datetime in a MESA event) keep their text form.
             text_form = False
-            value, clipped = _clipped(json.loads(json.dumps(payload, default=str)))
-        clean = sanitized(value, max_bytes=CONVERSATION_LOG_SCAN_BYTES, service=clipped)
+            value = json.loads(json.dumps(payload, default=str))
+        clean = sanitized(value, max_bytes=CONVERSATION_LOG_SCAN_BYTES, scan_chars=AUDIT_PAYLOAD_SCAN_CHARS)
         if not text_form:
             clean = json.dumps(clean)
     except ValueError:
@@ -326,7 +290,10 @@ class AuditLog:
             originating_access_key_id=_storable_text(originating_access_key_id),
         ))
 
-    _VALID_OUTCOMES = frozenset({"allowed", "denied", "not_found", "rate_limited", "not_implemented", "invalid_request", "pending_approval"})
+    _VALID_OUTCOMES = frozenset({
+        "allowed", "denied", "not_found", "rate_limited", "not_implemented", "invalid_request",
+        "pending_approval", "cancelled", "unknown",
+    })
 
     def _filtered(
         self,

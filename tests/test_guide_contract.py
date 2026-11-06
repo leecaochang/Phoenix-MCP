@@ -80,6 +80,17 @@ def test_admin_api_documents_every_emitted_error_code() -> None:
     pages = _admin_api_pages()
     missing = sorted(c for c in codes if f"`{c}`" not in pages)
     assert missing == [], f"Admin API pages missing error codes: {missing}"
+    # A key computed at the call site has no literal here, so only literal keys are checked.
+    keys = {
+        constant.value for call in ast.walk(ast.parse(src))
+        if isinstance(call, ast.Call) and isinstance(call.func, ast.Name) and call.func.id == "_err"
+        for keyword in call.keywords if keyword.arg == "key"
+        for constant in ast.walk(keyword.value)
+        if isinstance(constant, ast.Constant) and isinstance(constant.value, str)
+    }
+    assert len(keys) >= 100, f"message-key extraction broke: {sorted(keys)}"
+    missing = sorted(k for k in keys if f"`adminError.{k}`" not in pages)
+    assert missing == [], f"Admin API pages missing message keys: {missing}"
 
 
 def test_admin_api_documents_every_sse_frame() -> None:

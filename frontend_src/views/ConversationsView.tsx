@@ -194,7 +194,7 @@ export function ConversationsView({ accessKeys = NO_KEYS }: { accessKeys?: Acces
         selectedKey={logSelection?.selectedKey("conversation")}
         onOrder={(ordered) => logSelection?.reorder("conversation", ordered)}
         onSelect={(entry, ordered) => logSelection?.set({ kind: "conversation", entry, ordered, accessKeyNames })}
-        rowLabel={(e) => `${conversationTitle(e)}, ${label("outcome", rowStatus(e))}`}
+        rowLabel={(e) => [conversationTitle(e), label("outcome", rowStatus(e))].join(t("common.listSeparator"))}
         rowHelp="help.conversationRow"
         empty={!loading && <div className="conversation-empty"><h3>{t("conversations.empty")}</h3><p>{t("conversations.emptyHelp")}</p></div>}
       />

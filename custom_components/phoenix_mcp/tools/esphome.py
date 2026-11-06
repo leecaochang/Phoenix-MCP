@@ -20,6 +20,7 @@ import textwrap
 from typing import Any, NamedTuple
 
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 from homeassistant.config_entries import ConfigEntryState
 
@@ -49,7 +50,14 @@ from ..esphome_constants import (
 )
 from ..data import PhoenixData
 from ..tool_contracts import normalize_tool_args
-from ..mesa import async_apply_mesa_to_call, entity_control_mode, fire_mesa_blocked_event
+from ..mesa import (
+    UNRESOLVED_CONTEXT_WARNING,
+    async_apply_mesa_to_call,
+    entity_control_mode,
+    fire_mesa_blocked_event,
+    unresolved_context_refused,
+)
+from ..mesa_audit import note_mesa_advisory
 from ..helpers import content_hash
 from ..catalog_text import diff_summary_fields as _summary
 from ..capability import effective_cap
@@ -58,7 +66,7 @@ from ..redaction import (
 )
 from ..request_authority import check_request_authority
 from ..policy_engine import (
-    Permission, esphome_entry_for_entity, esphome_entry_writable, resolve,
+    Permission, esphome_entry_for_entity, esphome_entry_writable, physical_gate_applies, resolve,
     resolve_registry_access,
 )
 from ..access_key_store import AccessKeyRecord
@@ -74,6 +82,7 @@ from ..esphome_builder import (
 from ..esphome_yaml import (
     apply_line_splice,
     declared_components,
+    declared_device_name,
     esphome_rel_path_ok,
     inline_secret_values,
     masked_unified_diff,
@@ -181,7 +190,7 @@ def _esphome_actions_for_entity(
 ) -> list[dict]:
     """The owning ESPHome device's user-defined actions, as find_available_actions rows.
 
-    Availability follows the device's write scope, as _execute_call_service does. `args` is included
+    Availability follows the device's write scope and physical gate, as call_service does. `args` is included
     because these schemas are device-defined.
     """
     entry = esphome_entry_for_entity(hass, entity_id)
@@ -195,6 +204,9 @@ def _esphome_actions_for_entity(
 
     available = writable or esphome_entry_writable(hass, entry, access_key)
     prefix = name.replace("-", "_")
+    gated = physical_gate_applies(_ESPHOME_DOMAIN, "", [
+        reg_entry.entity_id for reg_entry in er.async_entries_for_config_entry(er.async_get(hass), entry.entry_id)
+    ]) and effective_cap(access_key, "cap_physical_control") == CAP_DENY
     rows: list[dict] = []
     for svc in (getattr(runtime, "services", None) or {}).values():
         action = getattr(svc, "name", None)
@@ -202,7 +214,7 @@ def _esphome_actions_for_entity(
             continue
         row: dict = {
             "service": f"{_ESPHOME_DOMAIN}.{prefix}_{action}",
-            "available": available,
+            "available": available and not gated,
             "args": [
                 {"name": getattr(arg, "name", None), "type": _esphome_arg_type(arg),
                  **_esphome_action_metadata(arg, hass, access_key)}
@@ -212,6 +224,8 @@ def _esphome_actions_for_entity(
         }
         if not available:
             row["reason"] = "read-only access to this device"
+        elif gated:
+            row["reason"] = "requires physical control capability"
         rows.append(row)
     rows.sort(key=lambda r: r["service"])
     return rows
@@ -478,11 +492,34 @@ def _read_esphome_secrets(hass: HomeAssistant) -> tuple[set[str], set[str] | Non
     return secret_values_from_text(text), secret_keys_from_text(text)
 
 
-def _esphome_entries_for_file(hass: HomeAssistant, rel: str) -> list[Any]:
+def _read_declared_device_name(hass: HomeAssistant, rel: str) -> tuple[str, bool] | None:
+    """The device a file declares. Blocking: executor only. An unreadable file declares nothing."""
+    resolved = _resolve_esphome_path(hass, rel)
+    if resolved is None:
+        return None
+    try:
+        return declared_device_name(_read_text_capped(resolved[0]))
+    except (OSError, ValueError, yaml_includes.YamlParseError):
+        _LOGGER.debug("ESPHome device name could not be read from %s", rel, exc_info=True)
+        return None
+
+
+def _names_declared_device(name: str, declared: tuple[str, bool] | None) -> bool:
+    """Whether a reported device name is the one a file declares, MAC suffix included."""
+    if declared is None:
+        return False
+    stated, mac_suffix = declared
+    return name == stated or (mac_suffix and re.fullmatch(rf"{re.escape(stated)}-[0-9a-f]{{6}}", name) is not None)
+
+
+def _esphome_entries_for_file(
+    hass: HomeAssistant, rel: str, declared: tuple[str, bool] | None = None
+) -> list[Any]:
     """Find adopted owners, including entries without live runtime data.
 
     HA persists device_name through disconnects, so unloading never turns an adopted configuration
-    into an orphan governed by the capability alone.
+    into an orphan governed by the capability alone. ``declared`` adds the name the file itself
+    states, for callers that read it.
     """
     dashboard = _esphome_dashboard(hass)
     dash_data = getattr(dashboard, "data", None) or {} if dashboard is not None else {}
@@ -495,6 +532,7 @@ def _esphome_entries_for_file(hass: HomeAssistant, rel: str) -> list[Any]:
         if any(
             isinstance(name, str) and name and (
                 (dash_data.get(name) or {}).get("configuration") == rel or name == stem
+                or _names_declared_device(name, declared)
             )
             for name in names
         ):
@@ -514,7 +552,13 @@ def _esphome_file_in_scope(hass: HomeAssistant, access_key: AccessKeyRecord, rel
     Every adopted owner must be in scope, even when unloaded. Orphan files
     follow the capability alone.
     """
-    entries = _esphome_entries_for_file(hass, rel)
+    return _esphome_entries_in_scope(hass, access_key, _esphome_entries_for_file(hass, rel), write=write)
+
+
+def _esphome_entries_in_scope(
+    hass: HomeAssistant, access_key: AccessKeyRecord, entries: list[Any], *, write: bool
+) -> bool:
+    """Whether the access key reaches each entry through at least one of its entities."""
     registry = er.async_get(hass)
     required = (Permission.WRITE,) if write else (Permission.READ, Permission.WRITE)
     return all(
@@ -2015,6 +2059,15 @@ async def _install_esphome_precheck(
     return None, url, rel
 
 
+def _esphome_file_is_orphan(hass: HomeAssistant, rel: str) -> bool:
+    """Whether a file with no matched owner provably has none."""
+    if not hass.config_entries.async_entries(_ESPHOME_DOMAIN):
+        return True
+    dashboard = _esphome_dashboard(hass)
+    dash_data = getattr(dashboard, "data", None) or {} if dashboard is not None else {}
+    return any((row or {}).get("configuration") == rel for row in dash_data.values())
+
+
 async def _install_esphome_mesa_gate(
     hass: HomeAssistant,
     data: PhoenixData,
@@ -2030,17 +2083,32 @@ async def _install_esphome_mesa_gate(
     Returns the refusal or pending approval, else advisory warnings. Every registry entity of every
     owner is evaluated, and one refusal stops the install.
     """
-    # Flashing replaces what the whole device runs. An orphan file has no device in Home Assistant
-    # yet, so no profile can cover it and a new device's install proceeds. An approval satisfies
-    # Confirm for this exact action only.
+    # Flashing replaces what the whole device runs, so owners are matched on the name the file
+    # states too, which also binds the key's scope to them. An orphan file has no device in Home
+    # Assistant yet, so no profile can cover it and a new device's install proceeds. That needs
+    # proof: no adopted device at all, or the Builder reporting the file under a name none has.
+    # Otherwise the owner is unknown, which warns in advisory mode and is refused where policy must
+    # be met, a failed runtime included. An approval satisfies Confirm for this exact action only.
+    declared = await hass.async_add_executor_job(_read_declared_device_name, hass, rel)
+    owners = _esphome_entries_for_file(hass, rel, declared)
+    if not _esphome_entries_in_scope(hass, access_key, owners, write=True):
+        return _tool_error(_ESPHOME_NOT_FOUND), "denied", f"esphome:{rel}"
     registry = er.async_get(hass)
     entities = sorted({
         reg_entry.entity_id
-        for entry in _esphome_entries_for_file(hass, rel)
+        for entry in owners
         for reg_entry in er.async_entries_for_config_entry(registry, entry.entry_id)
     })
-    if not entities:
-        return []
+    if not entities and data.mesa is not None:
+        if not owners and _esphome_file_is_orphan(hass, rel):
+            return []
+        devices = dr.async_get(hass)
+        device_ids = [
+            device.id for entry in owners for device in dr.async_entries_for_config_entry(devices, entry.entry_id)
+        ]
+        if not any(unresolved_context_refused(data, device_id) for device_id in (None, *device_ids)):
+            note_mesa_advisory([UNRESOLVED_CONTEXT_WARNING])
+            return [UNRESOLVED_CONTEXT_WARNING]
     outcome = await async_apply_mesa_to_call(
         hass,
         data,

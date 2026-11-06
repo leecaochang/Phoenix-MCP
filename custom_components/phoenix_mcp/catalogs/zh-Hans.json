@@ -176,7 +176,7 @@
       },
       "cap_yaml_edit": {
         "label": "YAML 配置",
-        "description": "读取您的 YAML 配置文件并重新加载 YAML 域。写在这些文件中的密码会暴露；请使用 secrets.yaml。"
+        "description": "读取您的 YAML 配置文件并重新加载 YAML 域。名称暗示机密的值会被隐藏，但使用普通名称的密码会暴露；请使用 secrets.yaml。"
       },
       "confirmUnavailable": "此能力不支持要求审批。",
       "esphomeBadgeTitle": "没有 Device Builder 加载项时，用于校验、编译、刷写或检查设备的 ESPHome 工具对此访问密钥保持隐藏。有 ESPHome 集成时，仍可读取和搜索设备 YAML。现在仍可先设置该能力。",
@@ -788,7 +788,9 @@
       "restoreToolReported": "无法应用还原。工具报告：{detail}",
       "capabilityAllowUnsupported": "{capability} 不支持“允许”模式。",
       "recoverySnapshotUnsafeAt": "此项目没有不含机密的完整副本，因此未进行任何更改。Phoenix 在 {location} 处拒绝了它。",
-      "invalidHostHeader": "请求的 Host 标头不是有效地址。"
+      "invalidHostHeader": "请求的 Host 标头不是有效地址。",
+      "approvalOutcomeNotSaved": "操作已完成，但无法保存其结果。请在 Home Assistant 中检查其效果；此审批不会再次提供。",
+      "providerRemoteUrlResolutionFailed": "无法解析提供商 URL，因此无法检查其地址。"
     },
     "audit": {
       "accessPassThrough": "直通",
@@ -834,7 +836,9 @@
       "rowPayload": "负载",
       "rowRequestId": "请求 ID",
       "rowResource": "资源",
-      "rowTime": "时间"
+      "rowTime": "时间",
+      "outcomeCancelled": "已取消",
+      "outcomeUnknown": "结果未知"
     },
     "changes": {
       "added": "已添加",
@@ -1236,7 +1240,11 @@
         "one": "已选 {count} 项",
         "other": "已选 {count} 项"
       },
-      "rowPicked": "已选中以批量批准"
+      "rowPicked": "已选中以批量批准",
+      "todoItems": "将移除的事项",
+      "todoRemovalWarning": "移除待办事项是永久性的。Phoenix 不保留副本，因此无法还原。",
+      "todoStatusCompleted": "已完成",
+      "todoStatusNeedsAction": "未完成"
     },
     "accessKeys": {
       "announceAllHelp": "向此密钥的智能体提供所有工具，包括它无法使用的工具。仅用于排查问题；会消耗更多 token。",
@@ -2595,7 +2603,9 @@
       "title": "需要关注",
       "unknown": "在 Phoenix 记录此操作是否已执行之前，对话就已结束，因此它可能已经执行。如有“在审计日志中查看”，可查看 Phoenix 记录的内容；等待审批的操作，其状态在“审批”中。重试前请检查 Home Assistant 本身。",
       "audit_storageTitle": "审计日志未写入存储",
-      "audit_storageHelp": "最近的审计条目只保存在内存中，重启后会丢失。请查看 Home Assistant 日志。下一次保存成功后，此项会消失。"
+      "audit_storageHelp": "最近的审计条目只保存在内存中，重启后会丢失。请查看 Home Assistant 日志。下一次保存成功后，此项会消失。",
+      "mesa_renameTitle": "重命名实体的策略未写入存储",
+      "mesa_renameHelp": "策略已跟随实体并正在生效，但已保存的副本仍是旧 ID。请查看 Home Assistant 日志，然后从“设置 > 设备与服务”重新加载 Phoenix MCP 以再次保存。下一次保存成功后，此项会消失。"
     },
     "workspace": {
       "addToMy": "添加到我的工作区",

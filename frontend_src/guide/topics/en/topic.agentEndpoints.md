@@ -61,11 +61,11 @@ Desktop and command-line apps send no `Origin`, so this doesn't affect them. The
 |---|---|---|
 | 200 | JSON-RPC result | A request succeeded. |
 | 202 | None | The message was a notification. |
-| 200 | JSON-RPC error `-32700` | The body is empty or isn't valid JSON. |
-| 200 | JSON-RPC error `-32600` | The body isn't a JSON object or batch. |
+| 400 | JSON-RPC error `-32700` | The body is empty or isn't valid JSON. |
+| 400 | JSON-RPC error `-32600` | The body isn't a JSON object or batch. |
 | 200 | JSON-RPC error `-32601` | Legacy: the method doesn't exist. |
 | 404 | Error | `2026-07-28`: the method doesn't exist. |
-| 400 | JSON-RPC error `-32600` | A batch under `2026-07-28`, or a legacy batch that's too big. |
+| 400 | JSON-RPC error `-32600` | A batch under `2026-07-28`, a legacy batch that's too big or empty, or a legacy batch with no request where a message was refused. |
 | 413 | `request_too_large` | The body is over 1 MiB. |
 | 403 | `forbidden` | The `Origin` isn't allowed. |
 | 503 | `service_unavailable` | Phoenix isn't ready yet. |

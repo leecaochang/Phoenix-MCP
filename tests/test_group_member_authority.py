@@ -15,6 +15,7 @@ from homeassistant.const import EVENT_CALL_SERVICE
 from homeassistant.helpers import entity_registry as er
 from homeassistant.setup import async_setup_component
 from homeassistant.util.dt import utcnow
+from pytest_homeassistant.common import async_mock_service
 
 from custom_components.phoenix_mcp.access_key_store import (
     AccessKeyRecord,
@@ -26,7 +27,7 @@ from custom_components.phoenix_mcp.access_key_store import (
 from custom_components.phoenix_mcp.const import DOMAIN
 from custom_components.phoenix_mcp.data import PhoenixData
 from custom_components.phoenix_mcp.tool_dispatch import _call_tool, async_execute_approved_tool
-from custom_components.phoenix_mcp.mesa import async_setup_mesa, evaluate_service_entities
+from custom_components.phoenix_mcp.mesa import async_setup_mesa, evaluate_service_call, evaluate_service_entities
 from custom_components.phoenix_mcp.mesa_core import MetadataOrigin, SemanticProfile
 from custom_components.phoenix_mcp.policy_engine import group_member_denied, group_member_ids
 from custom_components.phoenix_mcp.tools.native import _tool_intent_action
@@ -235,9 +236,196 @@ async def test_scripts_and_automations_are_never_groups(hass, domain):
     assert group_member_ids(entity_id, hass) == frozenset()
 
 
-async def test_a_plain_entity_has_no_members(hass):
-    hass.states.async_set("light.solo", "on", {"entity_id": ["light.other"]})
+@pytest.mark.parametrize("attributes", [{}, {"entity_id": "light.other"}])
+async def test_a_plain_entity_has_no_members(hass, attributes):
+    hass.states.async_set("light.solo", "on", attributes)
     assert group_member_ids("light.solo", hass) == frozenset()
+
+
+async def test_a_state_listing_members_is_a_group_whatever_the_registry_says(hass):
+    hass.states.async_set("light.yaml_group", "on", {"entity_id": ["light.leaf"]})
+    hass.states.async_set("light.leaf", "on")
+    assert group_member_ids("light.yaml_group", hass) == frozenset({"light.leaf"})
+
+
+async def _yaml_group(hass) -> list:
+    """A real YAML group with no unique_id: members in the state, nothing in the registry."""
+    assert await async_setup_component(hass, "homeassistant", {})
+    assert await async_setup_component(hass, "light", {"light": [{
+        "platform": "group", "name": "All lamps", "entities": ["light.vault", "light.desk"],
+    }]})
+    await hass.async_block_till_done()
+    registry = er.async_get(hass)
+    for object_id in ("vault", "desk"):
+        entity_id = registry.async_get_or_create("light", "test", object_id, suggested_object_id=object_id).entity_id
+        hass.states.async_set(entity_id, "on", {"supported_color_modes": ["onoff"], "color_mode": "onoff"})
+    await hass.async_block_till_done()
+    assert registry.async_get("light.all_lamps") is None
+    seen: list = []
+    hass.bus.async_listen(EVENT_CALL_SERVICE, lambda event: seen.append(event.data))
+    return seen
+
+
+async def test_a_yaml_group_is_refused_to_native_tools_on_a_red_member(hass):
+    seen = await _yaml_group(hass)
+    _data(hass)
+    key = _key({"light.all_lamps": "GREEN", "light.vault": "RED", "light.desk": "GREEN"})
+    result, outcome, _ = await _tool_intent_action("HassTurnOff", "light", "turn_off", {}, ["light.all_lamps"], hass, key)
+    await hass.async_block_till_done()
+    assert outcome == "denied", result
+    assert seen == []
+
+
+async def test_a_yaml_group_is_refused_to_native_tools_on_a_prohibited_member(hass):
+    seen = await _yaml_group(hass)
+    data, _ = _data(hass, "enforced")
+    data.mesa = await async_setup_mesa(hass, "enforced")
+    _set_profile(data, "light.vault", "prohibited")
+    key = _key(domains={"light": "GREEN"})
+    result, outcome, _ = await _tool_intent_action("HassLightSet", "light", "turn_on", {"brightness": 10}, ["light.all_lamps"], hass, key)
+    await hass.async_block_till_done()
+    assert outcome == "denied", result
+    assert seen == []
+
+
+@pytest.mark.parametrize("tool,arguments", [
+    pytest.param("HassTurnOff", {"name": "All lamps"}, id="by name"),
+    pytest.param("HassTurnOff", {"domain": ["light"]}, id="by domain"),
+    pytest.param("HassLightSet", {"name": "All lamps", "brightness": 10}, id="by name with data"),
+])
+@pytest.mark.parametrize("member", ["RED", "prohibited"])
+async def test_a_yaml_group_is_refused_through_the_named_native_tools(hass, tool, arguments, member):
+    """Resolution finds the group by its state, so the refusal must not need a registry entry."""
+    await _yaml_group(hass)
+    turn_off = async_mock_service(hass, "light", "turn_off")
+    turn_on = async_mock_service(hass, "light", "turn_on")
+    data, _ = _data(hass, "enforced")
+    data.mesa = await async_setup_mesa(hass, "enforced")
+    if member == "prohibited":
+        _set_profile(data, "light.vault", member)
+        key = _key(domains={"light": "GREEN"})
+    else:
+        key = _key({"light.vault": "RED"}, domains={"light": "GREEN"})
+    await _call_tool(tool, arguments, key, hass, data)
+    await hass.async_block_till_done()
+    reached = [call.data.get("entity_id") for call in [*turn_off, *turn_on]]
+    assert not any("light.all_lamps" in (ids if isinstance(ids, list) else [ids]) for ids in reached)
+    assert not any("light.vault" in (ids if isinstance(ids, list) else [ids]) for ids in reached)
+
+
+async def test_a_yaml_group_stays_out_of_call_service(hass):
+    """An unregistered ID is skipped there, so its members never come into it."""
+    seen = await _yaml_group(hass)
+    data, _ = _data(hass)
+    key = _key(domains={"light": "GREEN"})
+    result, outcome, _ = await _call_tool("call_service", _turn_on("light.all_lamps"), key, hass, data)
+    await hass.async_block_till_done()
+    assert outcome == "denied", result
+    assert seen == []
+
+
+async def _unavailable_group(hass) -> list:
+    """The registered group of real members, every one of them gone unavailable."""
+    seen = await _light_group(hass)
+    for entity_id in ("light.bedroom", "light.kitchen"):
+        hass.states.async_set(entity_id, "unavailable")
+    await hass.async_block_till_done()
+    assert hass.states.get("light.all").state == "unavailable"
+    assert "entity_id" not in hass.states.get("light.all").attributes
+    return seen
+
+
+async def test_an_unavailable_group_still_answers_with_its_members(hass):
+    await _unavailable_group(hass)
+    assert group_member_ids("light.all", hass) == frozenset({"light.bedroom", "light.kitchen"})
+
+
+async def test_an_unavailable_yaml_group_still_answers_with_its_members(hass):
+    await _yaml_group(hass)
+    for entity_id in ("light.vault", "light.desk"):
+        hass.states.async_set(entity_id, "unavailable")
+    await hass.async_block_till_done()
+    assert group_member_ids("light.all_lamps", hass) == frozenset({"light.vault", "light.desk"})
+
+
+async def test_an_unavailable_group_runs_for_a_key_that_may_control_it(hass):
+    seen = await _unavailable_group(hass)
+    data, _ = _data(hass)
+    key = _key(domains={"light": "GREEN"}, cap_search="allow")
+    result, outcome, _ = await _call_tool("call_service", _turn_on("light.all"), key, hass, data)
+    await hass.async_block_till_done()
+    assert outcome == "allowed", result
+    assert json.loads(result["content"][0]["text"])["targets"]["unavailable"] == ["light.all"]
+    assert [event["domain"] for event in seen if event["service_data"].get("entity_id") == ["light.all"]] == ["light"]
+    preview, _, _ = await _call_tool("dry_run_service", _turn_on("light.all"), key, hass, data)
+    assert json.loads(preview["content"][0]["text"])["predicted_outcome"] == "allowed"
+
+
+async def test_a_refresh_of_an_unavailable_group_runs(hass):
+    await _unavailable_group(hass)
+    data, _ = _data(hass)
+    result, outcome, _ = await _call_tool(
+        "call_service",
+        {"service": {"domain": "homeassistant", "name": "update_entity"},
+         "targets": [{"kind": "entity", "ids": ["light.all"]}]},
+        _key(domains={"light": "GREEN"}), hass, data,
+    )
+    assert outcome == "allowed", result
+
+
+async def test_an_unavailable_group_keeps_its_red_member_rule(hass):
+    seen = await _unavailable_group(hass)
+    data, _ = _data(hass)
+    key = _key({"light.all": "GREEN", "light.bedroom": "RED"})
+    result, outcome, _ = await _call_tool("call_service", _turn_on("light.all"), key, hass, data)
+    await hass.async_block_till_done()
+    assert outcome == "denied", result
+    assert seen == []
+
+
+async def test_an_unavailable_group_keeps_its_mesa_member_rule(hass):
+    seen = await _unavailable_group(hass)
+    data, _ = _data(hass, "enforced")
+    data.mesa = await async_setup_mesa(hass, "enforced")
+    _set_profile(data, "light.bedroom", "prohibited")
+    result, outcome, _ = await _call_tool("call_service", _turn_on("light.all"), _key(domains={"light": "GREEN"}), hass, data)
+    await hass.async_block_till_done()
+    assert outcome == "denied", result
+    assert seen == []
+
+
+async def test_members_truly_unknown_refuse_and_say_so_on_every_surface(hass):
+    """Nothing to read anywhere: the rule stays a refusal, and it names the group."""
+    assert await async_setup_component(hass, "homeassistant", {})
+    entity_id = er.async_get(hass).async_get_or_create("light", "group", "g", suggested_object_id="ghost").entity_id
+    hass.states.async_set(entity_id, "unavailable")
+    data, _ = _data(hass)
+    key = _key({entity_id: "GREEN"}, cap_search="allow")
+    result, outcome, _ = await _call_tool("call_service", _turn_on(entity_id), key, hass, data)
+    assert outcome == "denied"
+    assert entity_id in result["content"][0]["text"] and result["content"][0]["text"] != "Forbidden."
+    preview, _, _ = await _call_tool("dry_run_service", _turn_on(entity_id), key, hass, data)
+    body = json.loads(preview["content"][0]["text"])
+    assert body["predicted_outcome"] == "denied" and entity_id in body["refusal_reason"]
+    assert await async_setup_component(hass, "light", {})
+    listing, _, _ = await _call_tool("find_available_actions", {"entity_id": entity_id}, key, hass, data)
+    row = next(item for item in json.loads(listing["content"][0]["text"])["actions"]
+               if item["service"] == "light.turn_on")
+    assert row["available"] is False and "cannot be read" in row["reason"]
+
+
+async def test_mesa_refuses_members_truly_unknown_and_says_so(hass):
+    assert await async_setup_component(hass, "homeassistant", {})
+    entity_id = er.async_get(hass).async_get_or_create("light", "group", "g", suggested_object_id="ghost").entity_id
+    hass.states.async_set(entity_id, "unavailable")
+    data, _ = _data(hass, "enforced")
+    data.mesa = await async_setup_mesa(hass, "enforced")
+    verdict = evaluate_service_call(
+        data.mesa, "enforced", _key({entity_id: "GREEN"}), [entity_id],
+        domain="light", service="turn_on", service_data={}, session_id="s",
+    )
+    assert [row[0] for row in verdict.blocked] == [entity_id]
+    assert "cannot be read" in verdict.blocked[0][2]
 
 
 async def test_nested_groups_are_walked_and_a_cycle_ends(hass):

@@ -11,6 +11,7 @@ import { AgentCliWindow, memoryMessages, memoryStart, type Turn } from "../compo
 import { agentCliChat, setHass } from "../api";
 import { ConnectionLostError, homeAssistantReachable, __resetConnectionState } from "../utils/connection";
 import { __resetAgentCliState, setSessionTurns } from "../utils/agentcli_state";
+import en from "../../custom_components/phoenix_mcp/catalogs/en.json";
 
 const encoder = new TextEncoder();
 const frame = (name: string, data: unknown) => encoder.encode(`event: ${name}\ndata: ${JSON.stringify(data)}\n\n`);
@@ -85,7 +86,7 @@ describe("a stream dropped mid-turn", () => {
     serve(() => droppingStream(frame("ready", {})));
     const box = await sendInWindow("restart home assistant");
     expect(document.querySelector(".agentcli-error")).toBeNull();
-    expect(screen.getByText("The connection to Home Assistant dropped before this reply finished.")).toBeTruthy();
+    expect(screen.getByText("The connection to Home Assistant dropped before this reply finished.", { selector: ".agentcli-notice" })).toBeTruthy();
     expect(box.value).toBe("restart home assistant");
   });
 
@@ -94,7 +95,7 @@ describe("a stream dropped mid-turn", () => {
     const box = await sendInWindow("restart home assistant");
     expect(document.querySelector(".agentcli-msg-assistant")?.textContent).toContain("Restarting now");
     expect(document.querySelector(".agentcli-error")).toBeNull();
-    expect(screen.getByText("The connection to Home Assistant dropped before this reply finished.")).toBeTruthy();
+    expect(screen.getByText("The connection to Home Assistant dropped before this reply finished.", { selector: ".agentcli-notice" })).toBeTruthy();
     expect(box.value).toBe("");
   });
 });
@@ -192,5 +193,89 @@ describe("model memory within the request limit", () => {
     expect(document.querySelectorAll(".agentcli-notice")).toHaveLength(1);
     await send("and again");
     expect(document.querySelectorAll(".agentcli-notice")).toHaveLength(1);
+  });
+});
+
+describe("what a screen reader hears when a turn ends early", () => {
+  const announced = () => [...document.querySelectorAll('.sr-only[role="status"]')].map((el) => el.textContent).join("|");
+
+  it("says the connection dropped", async () => {
+    serve(() => droppingStream(frame("ready", {})));
+    await sendInWindow("x");
+    expect(announced()).toBe("The connection to Home Assistant dropped before this reply finished.");
+  });
+
+  it("says the connection dropped, not the partial reply it overtook", async () => {
+    serve(() => droppingStream(frame("assistant_delta", { text: "half a reply" })));
+    await sendInWindow("x");
+    expect(screen.getByText("The connection to Home Assistant dropped before this reply finished.", { selector: ".agentcli-notice" })).toBeTruthy();
+    expect(announced()).toBe("The connection to Home Assistant dropped before this reply finished.");
+  });
+
+  it("says a message was too large", async () => {
+    serve(() => new Response(JSON.stringify({ error: "request_too_large", message: "Request body too large." }), { status: 413, headers: { "content-type": "application/json" } }));
+    await sendInWindow("x");
+    expect(announced()).toContain("/clear");
+  });
+
+  it("says why Phoenix refused a request", async () => {
+    serve(() => new Response(JSON.stringify({ error: "forbidden", message: "Kill switch on." }), { status: 403, headers: { "content-type": "application/json" } }));
+    await sendInWindow("x");
+    expect(announced()).toContain("Kill switch on.");
+  });
+
+  it("says a request failed while Home Assistant still answers", async () => {
+    serve(() => ({ ok: true, body: { getReader: () => { throw new Error("no reader"); } } }) as unknown as Response);
+    await sendInWindow("x");
+    expect(document.querySelector(".agentcli-error")?.textContent).toContain("The provider is temporarily unavailable.");
+    expect(announced()).toBe("Error: The provider is temporarily unavailable.");
+  });
+
+  it("says Home Assistant is not answering when the request never left", async () => {
+    setHass({
+      user: { id: "test-admin" },
+      fetchWithAuth: async (url: string) => {
+        if (String(url).includes("/models")) return new Response(JSON.stringify({ models: ["m"] }), { status: 200 });
+        throw new TypeError("offline");
+      },
+    });
+    await sendInWindow("x");
+    expect(announced()).toBe(en.panel.shell.offlineBody);
+  });
+
+  it("says a streamed error, not the earlier text of that turn", async () => {
+    serve(() => new Response(new ReadableStream({
+      start(controller) {
+        controller.enqueue(frame("assistant_delta", { text: "first round" }));
+        controller.enqueue(frame("error", { code: "network", message: "boom", retryable: false }));
+        controller.close();
+      },
+    }), { status: 200, headers: { "content-type": "text/event-stream" } }));
+    await sendInWindow("x");
+    expect(announced()).toBe("Error: The provider is temporarily unavailable.");
+  });
+
+  it("says a repeated failure again", async () => {
+    serve(() => new Response(JSON.stringify({ error: "request_too_large", message: "Request body too large." }), { status: 413, headers: { "content-type": "application/json" } }));
+    const box = await sendInWindow("x");
+    const first = announced();
+    const frames: FrameRequestCallback[] = [];
+    vi.spyOn(window, "requestAnimationFrame").mockImplementation((frameCallback) => frames.push(frameCallback));
+    fireEvent.change(box, { target: { value: "again" } });
+    fireEvent.keyDown(box, { key: "Enter" });
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 40)); });
+    expect(announced()).toBe("");
+    act(() => { for (const frameCallback of frames) frameCallback(0); });
+    expect(announced()).toBe(first);
+  });
+
+  it("says the model no longer remembers the oldest messages", async () => {
+    const big = "x".repeat(1_100_000);
+    setSessionTurns([{ entries: [{ kind: "user", text: "old" }], messages: [{ role: "user", content: big }], lines: 1 }, { entries: [{ kind: "user", text: "newer" }], messages: [{ role: "user", content: "b" }], lines: 1 }]);
+    let release: () => void = () => {};
+    serve(() => new Response(new ReadableStream({ start(controller) { release = () => controller.close(); } }), { status: 200, headers: { "content-type": "text/event-stream" } }));
+    await sendInWindow("x");
+    expect(announced()).toContain("no longer remembers");
+    await act(async () => { release(); });
   });
 });

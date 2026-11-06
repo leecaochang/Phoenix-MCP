@@ -7,6 +7,7 @@
  */
 
 import { useEffect, useRef, type RefObject } from "react";
+import { focusDialog } from "../components/Modal";
 
 /** One area F6 can reach: the element that holds it and the element that takes focus first. */
 export interface FocusArea {
@@ -63,9 +64,10 @@ export function focusAreas(root: ParentNode): FocusArea[] {
   return areas;
 }
 
-/** An open dialog, unless it belongs to a workspace not on show. Keys stay inside it. */
-function openModal(root: ParentNode): boolean {
-  return [...root.querySelectorAll('.modal[aria-modal="true"]')].some((modal) => !modal.closest("[hidden]"));
+/** The top open dialog, unless it belongs to a workspace not on show. Keys and focus stay inside it. */
+function openModal(root: ParentNode): HTMLElement | null {
+  const open = [...root.querySelectorAll<HTMLElement>('.modal[aria-modal="true"]')].filter((modal) => !modal.closest("[hidden]"));
+  return open[open.length - 1] ?? null;
 }
 
 /** The area after (or before) the one holding `active`; from outside every area, the first (or last). */
@@ -131,7 +133,10 @@ export function useAreaKeys(root: RefObject<HTMLElement | null>): void {
       const lost = last;
       last = null;
       if ((page && page !== document.body) || !gone(lost.el)) return;
-      rescueFocus(scope, lost, remembered.current);
+      // Everything behind an open dialog is out of reach, so its areas cannot take focus.
+      const dialog = openModal(scope);
+      if (dialog) focusDialog(dialog);
+      else rescueFocus(scope, lost, remembered.current);
     };
     const observer = new MutationObserver(check);
     observer.observe(el, { childList: true, subtree: true, attributes: true, attributeFilter: ["hidden", "disabled", "inert"] });

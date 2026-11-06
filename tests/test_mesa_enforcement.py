@@ -756,10 +756,154 @@ async def test_an_unresolvable_profile_writes_one_audit_row(hass, caplog):
     from custom_components.phoenix_mcp import mesa_audit
 
     runtime = await async_setup_mesa(hass, "enforced")
-    rows = []
-    with (patch.object(runtime.enforcer.resolver, "explain", side_effect=ValueError("damaged")),
-          patch.object(mesa_audit, "emit_audit_event", side_effect=rows.append),
-          mesa_audit.request_context(_access_key(), "rid", None)):
-        verdict = _call(runtime, "light.dim", "light", "turn_on", {})
-    assert verdict.blocked
-    assert not [row for row in rows if row.details.get("enforcement_source") == "phoenix_policy_failure"]
+    data = MagicMock()
+    bridge = mesa_audit.attach_mesa_audit_bridge(data)
+    try:
+        with (patch.object(runtime.enforcer.resolver, "explain", side_effect=ValueError("damaged")),
+              mesa_audit.request_context(_access_key(), "rid", None)):
+            verdict = _call(runtime, "light.dim", "light", "turn_on", {})
+    finally:
+        mesa_audit.detach_mesa_audit_bridge(bridge)
+    assert verdict.blocked[0][1] == "policy_unavailable"
+    data.audit.record.assert_called_once()
+    assert data.audit.record.call_args.kwargs["method"] == "mesa:enforcement_decision"
+    assert data.audit.record.call_args.kwargs["request_id"] == "rid"
+
+
+def _confirm_limited(runtime, entity_id, **limit):
+    _limited(runtime, entity_id, **limit)
+    document = runtime.backend.read(entity_id)
+    document["semantic_profile"]["operational_boundaries"]["control_mode"] = "confirm"
+    runtime.backend.write(entity_id, document)
+
+
+@pytest.mark.parametrize(("domain", "service", "data", "rule"), [
+    ("light", "turn_on", {"brightness": 200}, "declared_limit:cap"),
+    ("homeassistant", "turn_on", {"brightness": 200}, "declared_limit:cap"),
+    ("homeassistant", "toggle", {"brightness": 200}, "declared_limit:cap"),
+    ("light", "toggle", {"brightness": 200}, "declared_limit:cap"),
+    ("light", "turn_on", {"brightness_pct": 90}, "declared_limit:cap"),
+    ("light", "turn_on", {"brightness_step": 180}, "declared_limit:cap"),
+    ("light", "turn_on", {"white": 200}, "declared_limit:cap"),
+])
+@pytest.mark.asyncio
+async def test_a_confirm_entity_refuses_every_form_of_a_breached_limit(hass, domain, service, data, rule):
+    """An approver must not be asked about a value the limit refuses outright."""
+    runtime = await async_setup_mesa(hass, "advisory")
+    hass.states.async_set("light.dim", "on", {"brightness": 10})
+    _confirm_limited(runtime, "light.dim", max_value=128)
+    verdict = _call(runtime, "light.dim", domain, service, data)
+    assert verdict.confirm == [] and verdict.allowed == []
+    assert verdict.blocked[0][1] == rule
+
+
+@pytest.mark.parametrize(("domain", "data"), [
+    ("light", {"brightness": 100}),
+    ("homeassistant", {"brightness": 100}),
+    ("light", {"brightness_pct": 20}),
+    ("light", {"white": 100}),
+])
+@pytest.mark.asyncio
+async def test_a_confirm_entity_within_its_limit_still_asks(hass, domain, data):
+    runtime = await async_setup_mesa(hass, "advisory")
+    hass.states.async_set("light.dim", "on", {"brightness": 10})
+    _confirm_limited(runtime, "light.dim", max_value=128)
+    verdict = _call(runtime, "light.dim", domain, "turn_on", data)
+    assert verdict.confirm == ["light.dim"] and verdict.blocked == []
+
+
+@pytest.mark.asyncio
+async def test_a_climate_limit_only_profile_refuses_a_range_on_its_confirm_baseline(hass):
+    """Leaving the mode unset keeps the baseline, which is Confirm for most domains."""
+    runtime = await async_setup_mesa(hass, "advisory")
+    _limited(runtime, "climate.hall", service="climate.set_temperature", parameter="temperature", max_value=25)
+    document = runtime.backend.read("climate.hall")
+    del document["semantic_profile"]["operational_boundaries"]["control_mode"]
+    runtime.backend.write("climate.hall", document)
+    verdict = _call(runtime, "climate.hall", "climate", "set_temperature", {"target_temp_high": 30, "target_temp_low": 18})
+    assert verdict.confirm == [] and verdict.blocked[0][1] == "declared_limit:cap"
+
+
+@pytest.mark.asyncio
+async def test_an_approval_does_not_pass_a_limit_on_an_equivalent_form(hass):
+    runtime = await async_setup_mesa(hass, "advisory")
+    hass.states.async_set("light.dim", "on", {"brightness": 10})
+    _confirm_limited(runtime, "light.dim", max_value=128)
+    verdict = evaluate_service_entities(
+        runtime, "advisory", _access_key(), ["light.dim"], domain="homeassistant", service="turn_on",
+        service_data={"brightness": 200}, session_id="s", confirm_approved=True,
+    )
+    assert verdict.allowed == [] and verdict.blocked[0][1] == "declared_limit:cap"
+
+
+@pytest.mark.asyncio
+async def test_an_advisory_confirm_entity_warns_of_a_breached_limit_on_any_form(hass):
+    runtime = await async_setup_mesa(hass, "advisory")
+    hass.states.async_set("light.dim", "on", {"brightness": 10})
+    _confirm_limited(runtime, "light.dim", max_value=128, enforcement="advisory")
+    verdict = _call(runtime, "light.dim", "homeassistant", "turn_on", {"brightness": 200})
+    assert verdict.allowed == ["light.dim"]
+    assert any("exceeds" in warning for warning in verdict.warnings)
+
+
+@pytest.mark.parametrize(("state", "attributes", "white", "blocked"), [
+    ("on", {}, 200, True),
+    ("on", {}, 100, False),
+    ("on", {}, "200", True),
+    ("on", {"brightness": 200}, True, True),
+    ("on", {"brightness": 100}, True, False),
+    ("off", {}, True, True),
+    ("on", {}, float("nan"), True),
+])
+@pytest.mark.asyncio
+async def test_white_is_measured_as_the_brightness_it_carries(hass, state, attributes, white, blocked):
+    runtime = await async_setup_mesa(hass, "advisory")
+    hass.states.async_set("light.dim", state, attributes)
+    _limited(runtime, "light.dim", max_value=128)
+    assert bool(_call(runtime, "light.dim", "light", "turn_on", {"white": white}).blocked) is blocked
+
+
+@pytest.mark.parametrize(("data", "blocked"), [
+    ({"white": 200, "brightness": 100}, False),
+    ({"white": 100, "brightness": 200}, True),
+    ({"white": 100, "brightness_pct": 90}, True),
+])
+@pytest.mark.asyncio
+async def test_brightness_overrides_white_as_it_does_in_home_assistant(hass, data, blocked):
+    runtime = await async_setup_mesa(hass, "advisory")
+    hass.states.async_set("light.dim", "on")
+    _limited(runtime, "light.dim", max_value=128)
+    assert bool(_call(runtime, "light.dim", "light", "turn_on", data).blocked) is blocked
+
+
+@pytest.mark.parametrize(("profile_brightness", "white", "blocked"), [(200, 100, True), (100, 200, False)])
+@pytest.mark.asyncio
+async def test_a_default_profile_overrides_white_as_it_does_in_home_assistant(hass, profile_brightness, white, blocked):
+    profile = Profile("light.dim.default", 0.5, 0.5, profile_brightness)
+    profiles = Profiles(hass)
+    profiles.data[profile.name] = profile
+    hass.data[DATA_PROFILES] = profiles
+    runtime = await async_setup_mesa(hass, "advisory")
+    hass.states.async_set("light.dim", "off")
+    _limited(runtime, "light.dim", max_value=128)
+    assert bool(_call(runtime, "light.dim", "light", "turn_on", {"white": white}).blocked) is blocked
+
+
+@pytest.mark.parametrize("white", [200, 40, True])
+@pytest.mark.asyncio
+async def test_a_limit_refusing_an_absent_brightness_refuses_white(hass, white):
+    """The call names no brightness, which is what such a limit asks for."""
+    runtime = await async_setup_mesa(hass, "advisory")
+    hass.states.async_set("light.dim", "on", {"brightness": 10})
+    _limited(runtime, "light.dim", max_value=128, when_absent="refuse")
+    assert _call(runtime, "light.dim", "light", "turn_on", {"white": white}).blocked
+
+
+@pytest.mark.parametrize("white", [200, 40])
+@pytest.mark.asyncio
+async def test_a_limit_refusing_an_absent_brightness_refuses_white_through_a_generic_call(hass, white):
+    runtime = await async_setup_mesa(hass, "advisory")
+    hass.states.async_set("light.dim", "on", {"brightness": 10})
+    _limited(runtime, "light.dim", max_value=128, when_absent="refuse")
+    verdict = _call(runtime, "light.dim", "homeassistant", "turn_on", {"white": white})
+    assert bool(verdict.blocked) is (white == 200)

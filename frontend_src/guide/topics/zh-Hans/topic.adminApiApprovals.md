@@ -101,6 +101,7 @@ MESA 为确认而暂缓的审批，以及恢复审核，会跳过能力检查。
 | 503 | `service_unavailable` | `adminError.approvalRecordFailed` | Phoenix 无法保存执行标记。没有运行任何内容，审批仍为待处理。 |
 | 400 | `invalid_request` | `adminError.approvalExecutorMissing` | Phoenix 没有运行此工具的方式。没有运行任何内容。 |
 | 500 | `internal_error` | `adminError.approvalExecutionUncertain` | 运行引发错误。Phoenix 以 `failed` 关闭审批，原因为 `execution_interrupted`，并且不会再提供它。 |
+| 500 | `internal_error` | `adminError.approvalOutcomeNotSaved` | 操作已完成，但 Phoenix 无法保存其结果。Phoenix 不会再提供此审批，之后以 `failed` 关闭它，原因为 `execution_interrupted`。它的 `approval/executed` 或 `approval/failed` 审计条目带有 `finalization: "not_saved"`，记录了实际发生的情况。 |
 
 其中三个错误听起来是临时的，但会永久关闭审批：`approvalAccessKeyInactive`、`approvalCapabilityDenied` 和 `killSwitchEngaged`。之后修复条件也不会让它恢复。
 
@@ -291,6 +292,7 @@ POST   /api/phoenix-mcp/admin/attention/{kind}/{record_id}
 - 当 Phoenix 无法读取其日历记录时：`{ "id": "calendar_storage", "kind": "calendar_storage" }`。
 - 当 Phoenix 上一次保存审计日志失败时：`{ "id": "audit_storage", "kind": "audit_storage" }`。
 - 当 MESA 启动失败时：`{ "id": "mesa", "kind": "mesa" }`。
+- 当重命名实体的策略已生效但保存失败时：`{ "id": "mesa_rename", "kind": "mesa_rename" }`。
 
 请求写入日历时，其日历项目会替换同一请求的智能体项目。
 

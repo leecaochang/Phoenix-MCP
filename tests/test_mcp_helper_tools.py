@@ -395,6 +395,7 @@ class TestConfigFlowHelperCreation:
         ):
             hass.states.async_set(entity_id, value)
         data = MagicMock()
+        data.mesa.resolver.explain.return_value.effective_profile.operational_boundaries.control_reason = None
         data.store.get_pending_approvals.return_value = []
         data.store.async_save = AsyncMock()
         before = {entry.entry_id for entry in hass.config_entries.async_entries("mold_indicator")}

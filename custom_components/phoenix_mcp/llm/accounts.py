@@ -15,7 +15,7 @@ import uuid
 
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.storage import Store
-from homeassistant.util.dt import parse_datetime, utcnow
+from homeassistant.util.dt import utcnow
 
 from ..model_selection import effective_model
 from ..provider_constants import (
@@ -37,6 +37,7 @@ from ..provider_constants import (
     AGENT_CHAT_ZAI_CHINA_BASE_URL, AGENT_CHAT_ZAI_CODING_BASE_URL,
 )
 from ..routing.routing_tables import DECISION_TYPESAFE_BASE_URL, DECISION_TYPESAFE_MODEL
+from ..time_text import parse_datetime
 
 
 # How many distinct model ids an account remembers having seen listed.

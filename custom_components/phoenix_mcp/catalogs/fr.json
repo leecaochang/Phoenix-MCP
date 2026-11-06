@@ -130,7 +130,11 @@
         "one": "{count} sélectionné",
         "other": "{count} sélectionnés"
       },
-      "rowPicked": "sélectionnée pour l'approbation groupée"
+      "rowPicked": "sélectionnée pour l'approbation groupée",
+      "todoItems": "Éléments à supprimer",
+      "todoRemovalWarning": "La suppression d’éléments de liste de tâches est définitive. Phoenix n’en conserve aucune copie, ils ne peuvent donc pas être restaurés.",
+      "todoStatusCompleted": "Terminé",
+      "todoStatusNeedsAction": "Non terminé"
     },
     "caps": {
       "cap_config_read": {
@@ -251,7 +255,7 @@
       },
       "cap_yaml_edit": {
         "label": "Configuration YAML",
-        "description": "Lire vos fichiers de configuration YAML et recharger les domaines YAML. Les mots de passe saisis dans ces fichiers sont visibles ; utilisez secrets.yaml."
+        "description": "Lire vos fichiers de configuration YAML et recharger les domaines YAML. Les valeurs dont le nom évoque un secret sont masquées, mais un mot de passe sous un nom ordinaire reste visible ; utilisez secrets.yaml."
       },
       "noBuilder": "Module complémentaire Device Builder non détecté",
       "noEsphome": "ESPHome non détecté",
@@ -735,7 +739,9 @@
       "rowPayload": "Charge utile",
       "rowRequestId": "ID de requête",
       "rowResource": "Ressource",
-      "rowTime": "Heure"
+      "rowTime": "Heure",
+      "outcomeCancelled": "Annulé",
+      "outcomeUnknown": "Résultat inconnu"
     },
     "wizard": {
       "accessSub": "Sélectionnez le triangle à côté de <code>light</code> pour ouvrir le groupe des lumières. Il liste vos appareils d'éclairage ; sélectionnez le triangle à côté d'un appareil pour voir ses entités. Ou saisissez le nom de votre lumière dans le champ de filtre. Sélectionnez ensuite <strong>W</strong> sur une lumière que vous pouvez vérifier, pour que l'agent puisse la lire et la commander. Vous pourrez ajouter d'autres autorisations plus tard.",
@@ -2023,7 +2029,9 @@
       "restoreToolReported": "La restauration n'a pas pu être appliquée. L'outil a signalé : {detail}",
       "capabilityAllowUnsupported": "{capability} ne prend pas en charge le mode Autoriser.",
       "recoverySnapshotUnsafeAt": "Aucune copie complète de cet élément sans secrets n’est disponible, donc rien n’a été modifié. Phoenix l’a refusé à {location}.",
-      "invalidHostHeader": "L’en-tête Host de la requête n’est pas une adresse valide."
+      "invalidHostHeader": "L’en-tête Host de la requête n’est pas une adresse valide.",
+      "approvalOutcomeNotSaved": "L'action est terminée, mais son résultat n'a pas pu être enregistré. Vérifiez son effet dans Home Assistant ; cette approbation ne sera plus proposée.",
+      "providerRemoteUrlResolutionFailed": "L'URL du fournisseur n'a pas pu être résolue, son adresse n'a donc pas pu être vérifiée."
     },
     "mesaSuggestion": {
       "baseline_note": " Interdit correspond à la ligne de base intégrée pour ce domaine, le profil rend donc cette intention explicite. Pour autoriser plutôt le contrôle de l'agent soumis à l'approbation de l'administrateur, choisissez Confirmer dans l'Éditeur de profil avant d'enregistrer ; l'approbation s'applique lorsque MESA est appliqué.",
@@ -2595,7 +2603,9 @@
       "title": "À vérifier",
       "unknown": "La conversation s'est terminée avant que Phoenix n'enregistre si cette action s'est exécutée ; elle a donc pu s'exécuter. Afficher dans le journal d'audit, lorsqu'il est proposé, montre ce que Phoenix a enregistré ; une action qui attendait une approbation a son statut dans Approbations. Vérifiez Home Assistant avant de réessayer.",
       "audit_storageTitle": "Le journal d’audit n’atteint pas le stockage",
-      "audit_storageHelp": "Les entrées d’audit récentes ne sont qu’en mémoire : un redémarrage les ferait perdre. Consultez les journaux Home Assistant. Ce message disparaît après le prochain enregistrement réussi."
+      "audit_storageHelp": "Les entrées d’audit récentes ne sont qu’en mémoire : un redémarrage les ferait perdre. Consultez les journaux Home Assistant. Ce message disparaît après le prochain enregistrement réussi.",
+      "mesa_renameTitle": "Le profil d’une entité renommée n’est pas dans le stockage",
+      "mesa_renameHelp": "Le profil a suivi l’entité et s’applique, mais la copie enregistrée porte encore l’ancien ID. Consultez les journaux Home Assistant, puis rechargez Phoenix MCP depuis Paramètres > Appareils et services pour l’enregistrer à nouveau. Ce message disparaît après le prochain enregistrement réussi."
     },
     "workspace": {
       "addToMy": "Ajouter à Mon espace de travail",

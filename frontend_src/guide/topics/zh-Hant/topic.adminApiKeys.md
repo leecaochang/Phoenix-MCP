@@ -233,7 +233,7 @@ PATCH 拒絕不在此表中的任何欄位，且 `expires_at` 根本無法變更
 |---|---|
 | `limit` | 最多 500（預設 100）。 |
 | `offset` | 要跳過的列數。 |
-| `outcome` | 以下之一：`allowed`、`denied`、`not_found`、`rate_limited`、`not_implemented`、`invalid_request`、`pending_approval`。 |
+| `outcome` | 以下之一：`allowed`、`denied`、`not_found`、`rate_limited`、`not_implemented`、`invalid_request`、`pending_approval`、`cancelled`、`unknown`。 |
 | `ip` | 符合用戶端 IP 包含此文字的列。 |
 
 每一列有 `request_id`、`timestamp`、`access_key_id`、`access_key_name`、`method`、`resource`、`outcome`、`client_ip` 和 `pass_through`。設定後，列還會包含 `payload`、`mesa_advisory`、`preset`、`stale_tools_advisory`、`ha_user_id` 和 `originating_access_key_id`。

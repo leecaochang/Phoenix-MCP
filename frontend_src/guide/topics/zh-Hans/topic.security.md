@@ -21,7 +21,7 @@ Phoenix 让 AI 智能体在你家中工作，因此它的设计目标是只给�
 
 - Phoenix 自己的实体，以及它为每个密钥创建的传感器。
 - 摄像头流和图片地址，以及访问令牌。
-- 任何名称暗示机密的属性：名称包含 password、token、secret、session、passphrase、api_key、wifi_key、encryption_key 或 license_key，或以 pin 或 psk 结尾。
+- 任何名称暗示机密的属性。这包括名称含有 password、pwd、token、secret、session、passphrase、api_key、wifi_key、encryption_key 或 license_key 的属性。也包括名称以 pin、psk 或 pass 结尾的属性。
 
 密钥范围之外的实体看起来就像不存在。在操作结果、属性、日志和仪表盘中，它们显示为 `<redacted>`。
 
@@ -29,7 +29,7 @@ Phoenix 让 AI 智能体在你家中工作，因此它的设计目标是只给�
 
 移除机密是按名称进行的，因此使用普通名称的机密会被放过，即使它就叫 `key`。请把密码和密钥放在 secrets.yaml 中，任何智能体都无法读取它。
 
-- YAML 配置会隐藏名称暗示机密的值。使用普通名称的密码对智能体可见。
+- YAML 配置会隐藏名称暗示机密的值（无论它们在文件中的什么位置），以及提到机密的注释。使用普通名称的密码对智能体可见。
 - 日志是自由文本。Phoenix 会移除网址中的访问密钥、令牌和密码，但日志行中的其他机密仍可能漏过。
 
 只把这些能力授予需要它们的智能体。

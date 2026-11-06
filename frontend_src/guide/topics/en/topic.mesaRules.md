@@ -72,11 +72,12 @@ It checks:
 - Renaming, enabling, disabling and removing entities and devices, and moving them out of a profiled area.
 - Integration and helper changes, areas and floors.
 - Calendar and to-do changes, and notifications.
-- Zigbee device changes and ESPHome firmware installs.
+- Zigbee device changes and ESPHome firmware installs. These must pass on every entity of the device and its child devices.
+- An ESPHome file whose device Phoenix can't work out. This only warns in {{label:settings.mesaModeAdvisory}}, and is refused in {{label:settings.mesaModeEnforced}} once any ESPHome device is set up.
 
 It doesn't check:
 
-- Changes to automations, scripts, blueprints, scenes, dashboards, dashboard resources or the Energy setup.
+- Changes to automations, scripts, blueprints, scenes, dashboards, dashboard resources, labels, categories or the Energy setup.
 - Backups, restarts, YAML reloads and log levels.
 - ESPHome device actions and builds, and opening a Zigbee network to new devices.
 
@@ -84,7 +85,9 @@ Reading a state isn't checked, except camera images. Automations and scripts run
 
 ## Renaming and moving {#renames}
 
-When you rename an entity in Home Assistant, its profile follows it straight away. If the new ID already has a profile, Phoenix keeps both. The stricter one applies, and the other shows as an orphan for you to review. An agent's rename works the same way, after MESA has checked the rename itself.
+When you rename an entity in Home Assistant, its profile follows it straight away. If Phoenix wasn't running at that moment, the profile follows the next time Phoenix starts or reloads.
+
+If the new ID already has a profile, Phoenix keeps both. The new ID takes the stricter control mode and enforcement of the two and the limits of both, and the other profile shows as an orphan for you to review. An agent's rename works the same way, after MESA has checked the rename itself.
 
 Moving something out of an area with a profile counts as a change, because it could lift a rule. Moving into one doesn't, because a new area only makes rules stricter.
 
@@ -94,7 +97,7 @@ If the saved profiles are damaged, MESA doesn't start with an empty list. It sta
 
 The Home Assistant log says what to do: put the named copy back, or delete it to start with no profiles. Then reload Phoenix.
 
-If Phoenix can't save a profile change, it undoes the change and shows an error, so the rules in force are always the saved ones.
+If Phoenix can't save a profile change, it undoes the change and shows an error, so the rules in force are always the saved ones. A rename is the exception: the profile stays with the renamed entity, and {{label:attention.title}} tells you until a save works.
 
 ## What Profile Editor can't set {#not-in-editor}
 

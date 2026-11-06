@@ -1734,6 +1734,7 @@ class TestCallNeedsPhysicalGate:
         ("alarm_control_panel", "alarm_disarm"),
     ])
     def test_every_actuator_domain_service_is_gated(self, domain, service):
+        """Such a service is gated before anything resolves, so no hass is ever touched."""
         access_key = _make_access_key()
         assert call_needs_physical_gate(
             domain=domain, service=service, entity_id=f"{domain}.x",
@@ -1746,14 +1747,18 @@ class TestCallNeedsPhysicalGate:
         ("climate", "set_temperature"),
         ("media_player", "play_media"),
     ])
-    def test_non_physical_domains_are_not_gated(self, domain, service):
+    async def test_non_physical_domains_are_not_gated(self, hass, domain, service):
         access_key = _make_access_key()
-        assert call_needs_physical_gate(
-            domain=domain, service=service, entity_id=f"{domain}.x",
-            access_key=access_key, hass=object(),
-        ) is False
+        with patch(
+            "custom_components.phoenix_mcp.policy_engine.resolve_service_targets",
+            return_value=([f"{domain}.x"], 1),
+        ):
+            assert call_needs_physical_gate(
+                domain=domain, service=service, entity_id=f"{domain}.x",
+                access_key=access_key, hass=hass,
+            ) is False
 
-    def test_homeassistant_toggle_targeting_a_cover_is_gated(self):
+    async def test_homeassistant_toggle_targeting_a_cover_is_gated(self, hass):
         access_key = _make_access_key()
         with patch(
             "custom_components.phoenix_mcp.policy_engine.resolve_service_targets",
@@ -1761,10 +1766,10 @@ class TestCallNeedsPhysicalGate:
         ):
             assert call_needs_physical_gate(
                 domain="homeassistant", service="toggle",
-                entity_id="cover.garage", access_key=access_key, hass=object(),
+                entity_id="cover.garage", access_key=access_key, hass=hass,
             ) is True
 
-    def test_homeassistant_toggle_targeting_only_a_light_is_not_gated(self):
+    async def test_homeassistant_toggle_targeting_only_a_light_is_not_gated(self, hass):
         access_key = _make_access_key()
         with patch(
             "custom_components.phoenix_mcp.policy_engine.resolve_service_targets",
@@ -1772,17 +1777,21 @@ class TestCallNeedsPhysicalGate:
         ):
             assert call_needs_physical_gate(
                 domain="homeassistant", service="toggle",
-                entity_id="light.x", access_key=access_key, hass=object(),
+                entity_id="light.x", access_key=access_key, hass=hass,
             ) is False
 
-    def test_homeassistant_turn_on_is_not_gated_even_for_a_cover(self):
+    async def test_homeassistant_turn_on_is_not_gated_even_for_a_cover(self, hass):
         # turn_on/off verifiably no-op on physical domains, so they are excluded
         # to avoid spurious approvals; only toggle redispatches to cover.toggle.
         access_key = _make_access_key()
-        assert call_needs_physical_gate(
-            domain="homeassistant", service="turn_on",
-            entity_id="cover.garage", access_key=access_key, hass=object(),
-        ) is False
+        with patch(
+            "custom_components.phoenix_mcp.policy_engine.resolve_service_targets",
+            return_value=(["cover.garage"], 1),
+        ):
+            assert call_needs_physical_gate(
+                domain="homeassistant", service="turn_on",
+                entity_id="cover.garage", access_key=access_key, hass=hass,
+            ) is False
 
 
 # ---------------------------------------------------------------------------

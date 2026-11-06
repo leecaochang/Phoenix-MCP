@@ -8,6 +8,7 @@ because topology changes are not reversible from here. This module never imports
 
 from __future__ import annotations
 
+from collections.abc import Iterable, Sequence
 from typing import Any
 import asyncio
 import dataclasses
@@ -100,7 +101,6 @@ class _ResolvedZ2MPropertyChange:
     before: Any
     after: Any
     before_hash: str
-    mesa_entities: tuple[str, ...]
 
 
 @dataclasses.dataclass(frozen=True)
@@ -120,7 +120,6 @@ class _ResolvedZigbeeBindingChange:
     target_before: dict[str, Any] | None
     source_hash: str | None
     target_hash: str | None
-    mesa_entities: tuple[str, ...]
 
 
 @dataclasses.dataclass(frozen=True)
@@ -160,7 +159,6 @@ class _ResolvedZigbeeGroupChange:
     members: tuple[_ResolvedRadioDevice, ...]
     endpoints: tuple[int, ...]
     before_hash: str | None
-    mesa_entities: tuple[str, ...]
 
 
 @dataclasses.dataclass(frozen=True)
@@ -553,17 +551,6 @@ async def _resolve_z2m_property_change(
             "invalid_request",
             resolved.device.id,
         )
-    mesa_entities = tuple(
-        sorted(
-            registry_entry.entity_id
-            for registry_entry in er.async_entries_for_device(
-                er.async_get(hass),
-                resolved.device.id,
-                include_disabled_entities=True,
-            )
-            if resolve(registry_entry.entity_id, access_key, hass) == Permission.WRITE
-        )
-    )
     return _ResolvedZ2MPropertyChange(
         device=resolved.device,
         ieee=resolved.ieee,
@@ -573,7 +560,6 @@ async def _resolve_z2m_property_change(
         before=before,
         after=after,
         before_hash=before_hash,
-        mesa_entities=mesa_entities,
     )
 
 
@@ -586,27 +572,24 @@ def _valid_content_hash(value: Any) -> bool:
 
 
 def _radio_mesa_entities(
-    access_key: AccessKeyRecord, hass: HomeAssistant, device_ids: set[str]
-) -> tuple[str, ...]:
-    """All registry entities on selected devices that the access key may write."""
-    registry = er.async_get(hass)
-    return tuple(
-        sorted(
-            entry.entity_id
-            for device_id in device_ids
-            for entry in er.async_entries_for_device(
-                registry, device_id, include_disabled_entities=True
-            )
-            if resolve(entry.entity_id, access_key, hass) == Permission.WRITE
-        )
-    )
+    hass: HomeAssistant, device_ids: Iterable[str], extra: Iterable[str] = ()
+) -> list[str]:
+    """Every entity an action on these devices must satisfy, children and disabled ones included.
+
+    The action reaches the whole device, so neither enabled state nor a key's write scope narrows
+    the set.
+    """
+    return sorted({
+        *extra,
+        *(entity_id for device_id in device_ids for entity_id in device_cascade_entity_ids(hass, device_id)),
+    })
 
 
 async def _radio_device_mesa_gate(
     hass: HomeAssistant,
     data: PhoenixData,
     access_key: AccessKeyRecord,
-    device: Any,
+    devices: Sequence[Any],
     *,
     tool_name: str,
     service: str,
@@ -615,24 +598,29 @@ async def _radio_device_mesa_gate(
     diff: Any,
     request_id: str,
     client_ip: str | None,
+    extra_entities: Iterable[str] = (),
+    resource: str | None = None,
 ) -> tuple[dict, str, str] | list[str]:
-    """Apply MESA to an action on a whole Zigbee device.
+    """Apply MESA to an action on whole Zigbee devices; the only gate of a radio tool.
 
-    Returns the refusal or pending approval, else advisory warnings. Every registry entity on it and
-    its child devices is evaluated, and one refusal stops it.
+    Returns the refusal or pending approval, else advisory warnings. Every entity of
+    _radio_mesa_entities is evaluated, and one refusal stops the action.
     """
     # Called from the tool and again from its executor, where an approval satisfies Confirm for this
-    # exact action and nothing stricter. The action reaches the device, so neither enabled state nor
-    # this key's write scope narrows the set. A device with no registry entity cannot be judged: it
-    # warns in advisory mode and is refused where policy must be met.
-    entities = device_cascade_entity_ids(hass, device.id)
-    if (
-        not entities
-        and data.store.get_settings().mesa_mode != MESA_MODE_OFF
-        and not unresolved_context_refused(data, device.id)
-    ):
+    # exact action and nothing stricter. A device with no registry entity cannot be judged: it warns
+    # in advisory mode and is refused where policy must be met.
+    device_ids = [device.id for device in devices]
+    resource = resource or device_ids[0]
+    entities = _radio_mesa_entities(hass, device_ids, extra_entities)
+    unjudged = [device_id for device_id in device_ids if not device_cascade_entity_ids(hass, device_id)]
+    warnings: list[str] = []
+    if unjudged and data.store.get_settings().mesa_mode != MESA_MODE_OFF:
+        if any(unresolved_context_refused(data, device_id) for device_id in unjudged):
+            return _tool_error(MESA_DENIED_MESSAGE), "denied", resource
         note_mesa_advisory([UNRESOLVED_CONTEXT_WARNING])
-        return [UNRESOLVED_CONTEXT_WARNING]
+        warnings = [UNRESOLVED_CONTEXT_WARNING]
+        if not entities:
+            return warnings
     outcome = await async_apply_mesa_to_call(
         hass,
         data,
@@ -655,8 +643,8 @@ async def _radio_device_mesa_gate(
     if outcome.decision == "pending":
         return await _pending_or_inline(hass, data, access_key, outcome.approval)
     if outcome.decision == "deny":
-        return _tool_error(MESA_DENIED_MESSAGE), "denied", device.id
-    return outcome.warnings
+        return _tool_error(MESA_DENIED_MESSAGE), "denied", resource
+    return [*warnings, *outcome.warnings]
 
 
 def _same_radio_network(
@@ -1022,18 +1010,10 @@ async def _resolve_group_members(
     return _ResolvedGroupMembers(tuple(devices), tuple(endpoints))
 
 
-def _group_mesa_entities(
-    access_key: AccessKeyRecord,
-    hass: HomeAssistant,
-    group_entity_id: str | None,
-    devices: tuple[_ResolvedRadioDevice, ...],
-) -> tuple[str, ...]:
-    anchors = set(
-        _radio_mesa_entities(access_key, hass, {device.device.id for device in devices})
-    )
-    if group_entity_id is not None:
-        anchors.add(group_entity_id)
-    return tuple(sorted(anchors))
+def _group_change_entities(change: _ResolvedZigbeeGroupChange) -> tuple[list[Any], tuple[str, ...]]:
+    """The devices a group change reaches, and the group entity when one exists yet."""
+    devices = [member.device for member in change.members]
+    return devices, (change.group.entity_id,) if change.group is not None else ()
 
 
 def _zigbee_group_summary_op(change: _ResolvedZigbeeGroupChange) -> str:
@@ -1079,7 +1059,6 @@ async def _resolve_create_zigbee_group(
         members=devices,
         endpoints=endpoints,
         before_hash=None,
-        mesa_entities=_group_mesa_entities(access_key, hass, None, devices),
     )
 
 
@@ -1141,7 +1120,6 @@ async def _resolve_set_zigbee_group_members(
         members=devices,
         endpoints=endpoints,
         before_hash=group.content_hash,
-        mesa_entities=_group_mesa_entities(access_key, hass, group.entity_id, devices),
     )
 
 
@@ -1185,9 +1163,6 @@ async def _resolve_remove_zigbee_group(
         members=device_tuple,
         endpoints=tuple(endpoints),
         before_hash=group.content_hash,
-        mesa_entities=_group_mesa_entities(
-            access_key, hass, group.entity_id, device_tuple
-        ),
     )
 
 
@@ -1223,9 +1198,6 @@ async def _resolve_zigbee_binding_change(
             "invalid_request",
             source.device.id,
         )
-    mesa_entities = _radio_mesa_entities(
-        access_key, hass, {source.device.id, target.device.id}
-    )
     if source.backend == radio_backend.BACKEND_ZHA:
         z2m_only = (
             "source_endpoint",
@@ -1256,7 +1228,6 @@ async def _resolve_zigbee_binding_change(
             target_before=None,
             source_hash=None,
             target_hash=None,
-            mesa_entities=mesa_entities,
         )
 
     expected_source_hash = args.get("expected_source_hash")
@@ -1322,7 +1293,6 @@ async def _resolve_zigbee_binding_change(
         target_before=target_before,
         source_hash=source_hash,
         target_hash=target_hash,
-        mesa_entities=mesa_entities,
     )
 
 
@@ -1642,7 +1612,7 @@ async def _build_diff_set_zigbee_device_property(
     mesa_note = _mesa_confirm_annotation(
         access_key,
         hass,
-        [("zigbee", "set_property", list(change.mesa_entities))],
+        [("zigbee", "set_property", _radio_mesa_entities(hass, [change.device.id]))],
     )
     if mesa_note:
         preview["mesa"] = mesa_note
@@ -1730,7 +1700,7 @@ async def _build_diff_set_zigbee_binding(
     mesa_note = _mesa_confirm_annotation(
         access_key,
         hass,
-        [("zigbee", "set_binding", list(change.mesa_entities))],
+        [("zigbee", "set_binding", _radio_mesa_entities(hass, [change.source.device.id, change.target.device.id]))],
     )
     if mesa_note:
         preview["mesa"] = mesa_note
@@ -1821,10 +1791,11 @@ async def _build_diff_zigbee_group(
     }
     if change.before_hash:
         preview["content_hash"] = change.before_hash
+    devices, group_entity = _group_change_entities(change)
     mesa_note = _mesa_confirm_annotation(
         access_key,
         hass,
-        [("zigbee", f"group_{change.operation}", list(change.mesa_entities))],
+        [("zigbee", f"group_{change.operation}", _radio_mesa_entities(hass, [d.id for d in devices], group_entity))],
     )
     if mesa_note:
         preview["mesa"] = mesa_note
@@ -2271,7 +2242,7 @@ async def _tool_reconfigure_zigbee_device(
         return pre
     diff = lambda: _build_diff_reconfigure_zigbee_device(args, access_key, hass)
     refused = await _radio_device_mesa_gate(
-        hass, data, access_key, pre.device,
+        hass, data, access_key, (pre.device,),
         tool_name="reconfigure_zigbee_device", service="reconfigure", service_data={},
         args=args, diff=diff, request_id=request_id, client_ip=client_ip,
     )
@@ -2303,7 +2274,7 @@ async def _execute_reconfigure_zigbee_device(
         return resolved
     device, backend, ieee = resolved.device, resolved.backend, resolved.ieee
     advisory = await _radio_device_mesa_gate(
-        hass, data, access_key, device,
+        hass, data, access_key, (device,),
         tool_name="reconfigure_zigbee_device", service="reconfigure", service_data={},
         args=args, diff=lambda: _build_diff_reconfigure_zigbee_device(args, access_key, hass),
         request_id=request_id, client_ip=client_ip,
@@ -2361,7 +2332,7 @@ async def _tool_set_zigbee_device_options(
         args, access_key, hass, change=pre
     )
     refused = await _radio_device_mesa_gate(
-        hass, data, access_key, pre.device,
+        hass, data, access_key, (pre.device,),
         tool_name="set_zigbee_device_options", service="set_options",
         service_data={"changes": pre.changes},
         args=args, diff=diff, request_id=request_id, client_ip=client_ip,
@@ -2397,7 +2368,7 @@ async def _execute_set_zigbee_device_options(
     if isinstance(change, tuple):
         return change
     advisory = await _radio_device_mesa_gate(
-        hass, data, access_key, change.device,
+        hass, data, access_key, (change.device,),
         tool_name="set_zigbee_device_options", service="set_options",
         service_data={"changes": change.changes},
         args=args,
@@ -2554,29 +2525,14 @@ async def _tool_set_zigbee_device_property(
     pre_diff = await _build_diff_set_zigbee_device_property(
         args, access_key, hass, change=pre
     )
-    mesa_outcome = await async_apply_mesa_to_call(
-        hass,
-        data,
-        access_key,
-        domain="zigbee",
-        service="set_property",
+    refused = await _radio_device_mesa_gate(
+        hass, data, access_key, (pre.device,),
+        tool_name="set_zigbee_device_property", service="set_property",
         service_data={"property": pre.property_name, "value": pre.after},
-        entities=list(pre.mesa_entities),
-        request_id=request_id or "zigbee_property",
-        client_ip=client_ip,
-        session_id=request_id or "zigbee_property",
-        confirm_approved=False,
-        approval_tool_name="set_zigbee_device_property",
-        approval_args=args,
-        approval_diff=pre_diff,
-        require_all=True,
+        args=args, diff=pre_diff, request_id=request_id, client_ip=client_ip,
     )
-    if mesa_outcome.blocked:
-        fire_mesa_blocked_event(hass, access_key, mesa_outcome.blocked)
-    if mesa_outcome.decision == "pending":
-        return await _pending_or_inline(hass, data, access_key, mesa_outcome.approval)
-    if mesa_outcome.decision == "deny":
-        return _tool_error(MESA_DENIED_MESSAGE), "denied", pre.device.id
+    if isinstance(refused, tuple):
+        return refused
     if not _approved_exec_ctx.get():
         for cap in caps:
             if effective_cap(access_key, cap) != CAP_CONFIRM:
@@ -2620,34 +2576,14 @@ async def _execute_set_zigbee_device_property(
     diff = await _build_diff_set_zigbee_device_property(
         args, access_key, hass, change=change
     )
-    mesa_outcome = await async_apply_mesa_to_call(
-        hass,
-        data,
-        access_key,
-        domain="zigbee",
-        service="set_property",
-        service_data={
-            "property": change.property_name,
-            "value": change.after,
-        },
-        entities=list(change.mesa_entities),
-        request_id=request_id or "zigbee_property",
-        client_ip=client_ip,
-        session_id=request_id or "zigbee_property",
-        confirm_approved=_approved_exec_ctx.get(),
-        approval_tool_name="set_zigbee_device_property",
-        approval_args=args,
-        approval_diff=diff,
-        require_all=True,
+    advisory = await _radio_device_mesa_gate(
+        hass, data, access_key, (change.device,),
+        tool_name="set_zigbee_device_property", service="set_property",
+        service_data={"property": change.property_name, "value": change.after},
+        args=args, diff=diff, request_id=request_id, client_ip=client_ip,
     )
-    if mesa_outcome.blocked:
-        fire_mesa_blocked_event(hass, access_key, mesa_outcome.blocked)
-    if mesa_outcome.decision == "pending":
-        return await _pending_or_inline(
-            hass, data, access_key, mesa_outcome.approval
-        )
-    if mesa_outcome.decision == "deny":
-        return _tool_error(MESA_DENIED_MESSAGE), "denied", change.device.id
+    if isinstance(advisory, tuple):
+        return advisory
 
     try:
         confirmed = await radio_backend.async_set_z2m_exposed_property(
@@ -2698,8 +2634,8 @@ async def _execute_set_zigbee_device_property(
         "confirmation": "device_state",
         "message": "Property changed and confirmed by Zigbee2MQTT device state.",
     }
-    if mesa_outcome.warnings:
-        body["mesa_advisory"] = mesa_outcome.warnings
+    if advisory:
+        body["mesa_advisory"] = advisory
     return _tool_success(json.dumps(body)), "allowed", change.device.id
 
 
@@ -2724,34 +2660,19 @@ async def _tool_set_zigbee_binding(
     pre_diff = await _build_diff_set_zigbee_binding(
         args, access_key, hass, change=pre
     )
-    mesa_outcome = await async_apply_mesa_to_call(
-        hass,
-        data,
-        access_key,
-        domain="zigbee",
-        service="set_binding",
+    refused = await _radio_device_mesa_gate(
+        hass, data, access_key, (pre.source.device, pre.target.device),
+        tool_name="set_zigbee_binding", service="set_binding",
         service_data={
             "operation": pre.operation,
             "source_device_id": pre.source.device.id,
             "target_device_id": pre.target.device.id,
             "clusters": list(pre.clusters),
         },
-        entities=list(pre.mesa_entities),
-        request_id=request_id or "zigbee_binding",
-        client_ip=client_ip,
-        session_id=request_id or "zigbee_binding",
-        confirm_approved=False,
-        approval_tool_name="set_zigbee_binding",
-        approval_args=args,
-        approval_diff=pre_diff,
-        require_all=True,
+        args=args, diff=pre_diff, request_id=request_id, client_ip=client_ip,
     )
-    if mesa_outcome.blocked:
-        fire_mesa_blocked_event(hass, access_key, mesa_outcome.blocked)
-    if mesa_outcome.decision == "pending":
-        return await _pending_or_inline(hass, data, access_key, mesa_outcome.approval)
-    if mesa_outcome.decision == "deny":
-        return _tool_error(MESA_DENIED_MESSAGE), "denied", pre.source.device.id
+    if isinstance(refused, tuple):
+        return refused
     if not _approved_exec_ctx.get():
         for cap in caps:
             if effective_cap(access_key, cap) != CAP_CONFIRM:
@@ -2794,34 +2715,19 @@ async def _execute_set_zigbee_binding(
     diff = await _build_diff_set_zigbee_binding(
         args, access_key, hass, change=change
     )
-    mesa_outcome = await async_apply_mesa_to_call(
-        hass,
-        data,
-        access_key,
-        domain="zigbee",
-        service="set_binding",
+    advisory = await _radio_device_mesa_gate(
+        hass, data, access_key, (change.source.device, change.target.device),
+        tool_name="set_zigbee_binding", service="set_binding",
         service_data={
             "operation": change.operation,
             "source_device_id": change.source.device.id,
             "target_device_id": change.target.device.id,
             "clusters": list(change.clusters),
         },
-        entities=list(change.mesa_entities),
-        request_id=request_id or "zigbee_binding",
-        client_ip=client_ip,
-        session_id=request_id or "zigbee_binding",
-        confirm_approved=_approved_exec_ctx.get(),
-        approval_tool_name="set_zigbee_binding",
-        approval_args=args,
-        approval_diff=diff,
-        require_all=True,
+        args=args, diff=diff, request_id=request_id, client_ip=client_ip,
     )
-    if mesa_outcome.blocked:
-        fire_mesa_blocked_event(hass, access_key, mesa_outcome.blocked)
-    if mesa_outcome.decision == "pending":
-        return await _pending_or_inline(hass, data, access_key, mesa_outcome.approval)
-    if mesa_outcome.decision == "deny":
-        return _tool_error(MESA_DENIED_MESSAGE), "denied", change.source.device.id
+    if isinstance(advisory, tuple):
+        return advisory
 
     source_after_hash: str | None = None
     target_after_hash: str | None = None
@@ -2926,8 +2832,8 @@ async def _execute_set_zigbee_binding(
     }
     if change.backend == radio_backend.BACKEND_ZHA:
         body["selection"] = "all_zha_compatible_clusters"
-    if mesa_outcome.warnings:
-        body["mesa_advisory"] = mesa_outcome.warnings
+    if advisory:
+        body["mesa_advisory"] = advisory
     return _tool_success(json.dumps(body)), "allowed", change.source.device.id
 
 
@@ -2949,7 +2855,7 @@ async def _tool_configure_zigbee_reporting(
         args, access_key, hass, change=pre
     )
     refused = await _radio_device_mesa_gate(
-        hass, data, access_key, pre.device,
+        hass, data, access_key, (pre.device,),
         tool_name="configure_zigbee_reporting", service="configure_reporting",
         service_data=dict(pre.desired),
         args=args, diff=diff, request_id=request_id, client_ip=client_ip,
@@ -2989,7 +2895,7 @@ async def _execute_configure_zigbee_reporting(
     if isinstance(change, tuple):
         return change
     advisory = await _radio_device_mesa_gate(
-        hass, data, access_key, change.device,
+        hass, data, access_key, (change.device,),
         tool_name="configure_zigbee_reporting", service="configure_reporting",
         service_data=dict(change.desired),
         args=args,
@@ -3106,12 +3012,10 @@ async def _tool_zigbee_group_change(
     pre_diff = await _build_diff_zigbee_group(
         args, access_key, hass, tool_name=tool_name, change=pre
     )
-    mesa_outcome = await async_apply_mesa_to_call(
-        hass,
-        data,
-        access_key,
-        domain="zigbee",
-        service=f"group_{pre.operation}",
+    devices, group_entity = _group_change_entities(pre)
+    refused = await _radio_device_mesa_gate(
+        hass, data, access_key, devices,
+        tool_name=tool_name, service=f"group_{pre.operation}",
         service_data={
             "operation": pre.operation,
             "name": pre.name,
@@ -3120,22 +3024,11 @@ async def _tool_zigbee_group_change(
                 for device, endpoint in zip(pre.members, pre.endpoints, strict=True)
             ],
         },
-        entities=list(pre.mesa_entities),
-        request_id=request_id or tool_name,
-        client_ip=client_ip,
-        session_id=request_id or tool_name,
-        confirm_approved=False,
-        approval_tool_name=tool_name,
-        approval_args=args,
-        approval_diff=pre_diff,
-        require_all=True,
+        args=args, diff=pre_diff, request_id=request_id, client_ip=client_ip,
+        extra_entities=group_entity, resource=tool_name,
     )
-    if mesa_outcome.blocked:
-        fire_mesa_blocked_event(hass, access_key, mesa_outcome.blocked)
-    if mesa_outcome.decision == "pending":
-        return await _pending_or_inline(hass, data, access_key, mesa_outcome.approval)
-    if mesa_outcome.decision == "deny":
-        return _tool_error(MESA_DENIED_MESSAGE), "denied", tool_name
+    if isinstance(refused, tuple):
+        return refused
     if not _approved_exec_ctx.get():
         for cap in caps:
             if effective_cap(access_key, cap) != CAP_CONFIRM:
@@ -3186,12 +3079,10 @@ async def _execute_zigbee_group_change(
     diff = await _build_diff_zigbee_group(
         args, access_key, hass, tool_name=tool_name, change=change
     )
-    mesa_outcome = await async_apply_mesa_to_call(
-        hass,
-        data,
-        access_key,
-        domain="zigbee",
-        service=f"group_{change.operation}",
+    devices, group_entity = _group_change_entities(change)
+    advisory = await _radio_device_mesa_gate(
+        hass, data, access_key, devices,
+        tool_name=tool_name, service=f"group_{change.operation}",
         service_data={
             "operation": change.operation,
             "name": change.name,
@@ -3200,22 +3091,11 @@ async def _execute_zigbee_group_change(
                 for device, endpoint in zip(change.members, change.endpoints, strict=True)
             ],
         },
-        entities=list(change.mesa_entities),
-        request_id=request_id or tool_name,
-        client_ip=client_ip,
-        session_id=request_id or tool_name,
-        confirm_approved=_approved_exec_ctx.get(),
-        approval_tool_name=tool_name,
-        approval_args=args,
-        approval_diff=diff,
-        require_all=True,
+        args=args, diff=diff, request_id=request_id, client_ip=client_ip,
+        extra_entities=group_entity, resource=tool_name,
     )
-    if mesa_outcome.blocked:
-        fire_mesa_blocked_event(hass, access_key, mesa_outcome.blocked)
-    if mesa_outcome.decision == "pending":
-        return await _pending_or_inline(hass, data, access_key, mesa_outcome.approval)
-    if mesa_outcome.decision == "deny":
-        return _tool_error(MESA_DENIED_MESSAGE), "denied", tool_name
+    if isinstance(advisory, tuple):
+        return advisory
 
     try:
         if change.operation == "create":
@@ -3305,8 +3185,8 @@ async def _execute_zigbee_group_change(
     }
     if change.group is not None:
         body["group_entity_id"] = change.group.entity_id
-    if mesa_outcome.warnings:
-        body["mesa_advisory"] = mesa_outcome.warnings
+    if advisory:
+        body["mesa_advisory"] = advisory
     return _tool_success(json.dumps(body)), "allowed", target_id
 
 
@@ -3354,7 +3234,7 @@ async def _tool_remove_zigbee_device(
         return pre
     diff = lambda: _build_diff_remove_zigbee_device(args, access_key, hass, data)
     refused = await _radio_device_mesa_gate(
-        hass, data, access_key, pre.device,
+        hass, data, access_key, (pre.device,),
         tool_name="remove_zigbee_device", service="remove", service_data={},
         args=args, diff=diff, request_id=request_id, client_ip=client_ip,
     )
@@ -3385,7 +3265,7 @@ async def _execute_remove_zigbee_device(
         return resolved
     device, backend, ieee = resolved.device, resolved.backend, resolved.ieee
     advisory = await _radio_device_mesa_gate(
-        hass, data, access_key, device,
+        hass, data, access_key, (device,),
         tool_name="remove_zigbee_device", service="remove", service_data={},
         args=args, diff=lambda: _build_diff_remove_zigbee_device(args, access_key, hass, data),
         request_id=request_id, client_ip=client_ip,

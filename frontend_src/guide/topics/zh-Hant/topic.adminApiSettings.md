@@ -37,7 +37,7 @@ Phoenix 在寫入任何內容之前檢查每個值。第一個問題會拒絕整
 - 它會取消正在進行的決策工作，並使進行中的路由結果和命令核准失效。
 - 開啟 `access_key_presets_enabled` 會給每個金鑰一個名為 Default 的預設。
 - 關閉 `kill_switch` 會重新開啟智慧體路由。
-- Phoenix 會立即套用 `mesa_mode`，並更新語音智慧體、AI 任務和 Assist 工具提供方。
+- Phoenix 會立即套用 `mesa_mode`，並更新語音智慧體、AI 任務和 Assist 工具提供者。
 - `mesa_inject_enabled` 和 `agentcli_global` 會在頁面下次完整載入時生效。
 
 稽核日誌會記錄變更，包含已變更設定的名稱，而不是其值。回應與讀取相同。當語音智慧體不再完全設定好，但 Home Assistant 保留 Phoenix 的助理作為其唯一助理時，它會新增 `voice_agent_pipeline_kept: true`。
@@ -239,7 +239,7 @@ GET    /api/phoenix-mcp/admin/audit
 | `limit` | integer | 預設 100，最多 500。 |
 | `offset` | integer | 參見[請求體](guide:topic.adminApi#bodies)。 |
 | `access_key_id` | string | 精確符合。 |
-| `outcome` | string | 精確符合：`allowed`、`denied`、`not_found`、`rate_limited`、`not_implemented`、`invalid_request` 或 `pending_approval`。 |
+| `outcome` | string | 精確符合：`allowed`、`denied`、`not_found`、`rate_limited`、`not_implemented`、`invalid_request`、`pending_approval`、`cancelled` 或 `unknown`。 |
 | `ip` | string | 用戶端位址的一部分。 |
 | `method` | string | 方法的一部分，不區分大小寫。 |
 | `resource` | string | 資源的一部分，不區分大小寫。 |

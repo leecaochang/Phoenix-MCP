@@ -16,7 +16,7 @@ from .config_recovery import ConfigurationRecoveryError
 from .policy_engine import Permission, resolve_registry_access
 from .request_authority import check_request_authority
 from .template_snapshots import protect_template, template_snapshot, validate_snapshot
-from .tool_common import _record_version, _tool_error, _tool_success
+from .tool_common import _record_version, _tool_error, _tool_success, _tool_uncertain
 from .tools.helper import (
     _HELPER_MESA_FINGERPRINT, _apply_config_entry_options, _helper_mesa_context, _helper_mesa_error,
     _settings_form_payload, _unwritable_option_entities, _scoped_helper_create_scope_error,
@@ -171,10 +171,12 @@ async def restore_template(
         return _tool_error("Forbidden."), "denied", tool
     except Exception as exc:
         message = str(exc) if isinstance(exc, ConfigurationRecoveryError) else "Template recovery failed; inspect the recovery record before retrying."
-        return _tool_error(json.dumps({"error": message, "recovery_id": rid,
-            "replacement_entry_id": entry.entry_id if entry is not None else None,
-            "status": "partial" if entry is not None else "unknown" if rid else "not_applied",
-            "retry_safe": False})), "invalid_request", tool
+        body = {"error": message, "recovery_id": rid,
+                "replacement_entry_id": entry.entry_id if entry is not None else None,
+                "status": "partial" if entry is not None else "unknown" if rid else "not_applied",
+                "retry_safe": False}
+        return (_tool_uncertain(body) if body["status"] != "not_applied" else _tool_error(json.dumps(body)),
+                "invalid_request", tool)
     finally:
         if rid:
             recovery.leave(rid)

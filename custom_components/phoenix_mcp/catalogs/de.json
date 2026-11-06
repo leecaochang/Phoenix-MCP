@@ -96,14 +96,18 @@
         "one": "{count} ausgewählt",
         "other": "{count} ausgewählt"
       },
-      "rowPicked": "für die Stapelgenehmigung ausgewählt"
+      "rowPicked": "für die Stapelgenehmigung ausgewählt",
+      "todoItems": "Zu entfernende Einträge",
+      "todoRemovalWarning": "Das Entfernen von To-do-Einträgen ist endgültig. Phoenix behält keine Kopie, daher können sie nicht wiederhergestellt werden.",
+      "todoStatusCompleted": "Erledigt",
+      "todoStatusNeedsAction": "Unerledigt"
     },
     "inject": {
       "profileSet": "MESA-Profil für {key} festgelegt - zum Bearbeiten klicken",
       "profileCreate": "MESA-Profil für {key} erstellen",
       "registryLoadFailed": "Entitätsregister konnte nicht geladen werden.",
       "mesaProfile": "MESA-Profil",
-      "openFailed": "Der MESA-Profileditor konnte nicht geöffnet werden. Lade die Seite neu und versuche es noch einmal."
+      "openFailed": "Der MESA-Profileditor konnte nicht geöffnet werden. Laden Sie die Seite neu und versuchen Sie es noch einmal."
     },
     "agentchat": {
       "accessKey": "Zugriffsschlüssel",
@@ -237,8 +241,8 @@
       "showTimestamps": "Zeitstempel anzeigen",
       "showTimestampsHint": "Die Uhrzeit bei jeder Nachricht im Protokoll anzeigen.",
       "status": {
-        "waiting": "Warte auf {provider}",
-        "noReply": "Warte auf {provider}: noch keine Antwort ({seconds} s)",
+        "waiting": "Warten auf {provider}",
+        "noReply": "Warten auf {provider}: noch keine Antwort ({seconds} s)",
         "thinking": "{provider} denkt nach ({seconds} s)",
         "retrying": "{provider} meldete: {detail} Erneuter Versuch (Versuch {attempt})",
         "retryWait": "{provider} meldete: {detail} Versuch {attempt}: noch keine Antwort ({seconds} s)",
@@ -398,7 +402,7 @@
       },
       "cap_yaml_edit": {
         "label": "YAML-Konfiguration",
-        "description": "Ihre YAML-Konfigurationsdateien lesen und YAML-Domänen neu laden. In diese Dateien eingetippte Passwörter sind sichtbar; verwenden Sie secrets.yaml."
+        "description": "Ihre YAML-Konfigurationsdateien lesen und YAML-Domänen neu laden. Werte unter Namen, die auf ein Geheimnis hindeuten, werden ausgeblendet, ein Passwort unter einem gewöhnlichen Namen ist aber sichtbar; verwenden Sie secrets.yaml."
       },
       "noBuilder": "Add-on Device Builder nicht erkannt",
       "noEsphome": "ESPHome nicht erkannt",
@@ -1570,7 +1574,7 @@
       "killSwitchEngaged": "Der Not-Aus-Schalter ist aktiv, daher wurde die Anfrage abgebrochen, ohne ausgeführt zu werden.",
       "maximumRequired": "{field} darf {max} nicht überschreiten.",
       "mesaArchiveRequired": "archive ist erforderlich.",
-      "mesaProfileExists": "Ein Profil ist bereits vorhanden. Öffne es im Bearbeitungsmodus.",
+      "mesaProfileExists": "Ein Profil ist bereits vorhanden. Öffnen Sie es im Bearbeitungsmodus.",
       "mesaConflictModeInvalid": "on_conflict muss skip oder overwrite sein.",
       "mesaSaveFailed": "Die MESA-Änderung konnte nicht gespeichert werden, daher gelten weiterhin die bisherigen Einstellungen.",
       "mesaUnavailable": "MESA ist nicht verfügbar.",
@@ -1646,7 +1650,7 @@
       "versionNotFound": "Version nicht gefunden.",
       "versionResourcePairRequired": "Geben Sie entweder resource_type und resource_id zusammen an, oder keines von beiden für den aktuellen Feed.",
       "wipeConfirmationRequired": "confirm muss WIPE sein.",
-      "routingPreviewInvalid": "Prüfe den Zugriffsschlüssel, die Befehlssprache und die Routing-Einstellungen.",
+      "routingPreviewInvalid": "Prüfen Sie den Zugriffsschlüssel, die Befehlssprache und die Routing-Einstellungen.",
       "routingLanguagesInvalid": "Wählen Sie die Sprachen für die Befehlsweiterleitung aus den installierten Assist-Sprachen.",
       "providerModelNotListed": "Wählen Sie ein vom Anbieter zurückgegebenes Modell.",
       "providerAccountChanged": "Das Anbieterkonto wurde geändert. Laden Sie neu und versuchen Sie es erneut.",
@@ -1709,7 +1713,9 @@
       "restoreToolReported": "Die Wiederherstellung konnte nicht angewendet werden. Das Werkzeug meldete: {detail}",
       "capabilityAllowUnsupported": "{capability} unterstützt den Modus Erlauben nicht.",
       "recoverySnapshotUnsafeAt": "Es gibt keine vollständige Kopie dieses Elements ohne Geheimnisse, daher wurde nichts geändert. Phoenix hat es bei {location} abgelehnt.",
-      "invalidHostHeader": "Der Host-Header der Anfrage ist keine gültige Adresse."
+      "invalidHostHeader": "Der Host-Header der Anfrage ist keine gültige Adresse.",
+      "approvalOutcomeNotSaved": "Die Aktion wurde beendet, ihr Ergebnis konnte aber nicht gespeichert werden. Prüfen Sie die Auswirkung in Home Assistant; diese Genehmigung wird nicht erneut angeboten.",
+      "providerRemoteUrlResolutionFailed": "Die Anbieter-URL ließ sich nicht auflösen, daher konnte ihre Adresse nicht geprüft werden."
     },
     "approvalSummary": {
       "action.optionalReason": "Optionaler Grund",
@@ -2010,7 +2016,7 @@
       "diff": "Diff",
       "empty": "(leer)",
       "httpStatus": "Der Server hat mit HTTP {status} geantwortet. Laden Sie die Seite neu und versuchen Sie es erneut.",
-      "invalidResponse": "Der Server hat eine ungültige Antwort zurückgegeben. Aktualisiere die Seite und versuche es erneut.",
+      "invalidResponse": "Der Server hat eine ungültige Antwort zurückgegeben. Aktualisieren Sie die Seite und versuchen Sie es erneut.",
       "labelValue": "{label}: {value}",
       "listSeparator": ", ",
       "loadMore": "Mehr laden",
@@ -2043,7 +2049,7 @@
       "loadSettingsFailed": "Einstellungen konnten nicht geladen werden.",
       "offlineBody": "Home Assistant antwortet nicht, meist weil es gerade neu startet. Erneuter Versuch, bitte warten...",
       "offlineTitle": "Phoenix ist nicht erreichbar",
-      "renderFailed": "Diese Ansicht konnte nicht angezeigt werden. Aktualisiere sie oder wähle einen anderen Bereich.",
+      "renderFailed": "Diese Ansicht konnte nicht angezeigt werden. Aktualisieren Sie sie oder wählen Sie einen anderen Bereich.",
       "retrySettingsHelp": "Die Einstellungen erneut aus Home Assistant lesen.",
       "sectionsAria": "Phoenix MCP-Abschnitte",
       "srTitle": "Phoenix MCP Zugriffsschlüssel-Verwaltung",
@@ -2053,7 +2059,7 @@
       "tabChanges": "Änderungen",
       "tabSettings": "Einstellungen",
       "killSwitchHelp": "Der Not-Aus-Schalter ist aktiv, Agenten werden abgewiesen. Auswählen, um Sicherheit zu öffnen und ihn auszuschalten.",
-      "chatListsFailed": "Agent Chat konnte seine Zugriffsschlüssel oder KI-Anbieter nicht laden. Es versucht es erneut, wenn du es öffnest oder Home Assistant wieder verbunden ist."
+      "chatListsFailed": "Agent Chat konnte seine Zugriffsschlüssel oder KI-Anbieter nicht laden. Es versucht es erneut, wenn Sie es öffnen oder Home Assistant wieder verbunden ist."
     },
     "perms": {
       "addHint": "Hinweis hinzufügen",
@@ -2255,7 +2261,9 @@
       "rowPayload": "Nutzdaten",
       "rowRequestId": "Anfrage-ID",
       "rowResource": "Ressource",
-      "rowTime": "Zeit"
+      "rowTime": "Zeit",
+      "outcomeCancelled": "Abgebrochen",
+      "outcomeUnknown": "Ergebnis unbekannt"
     },
     "selectBy": {
       "area": "Bereich",
@@ -2406,7 +2414,7 @@
       "technical": "Technische Details",
       "loadFailed": "Der Verlauf konnte nicht geladen werden. Das Protokoll versucht es alle 5 Sekunden erneut; während Aktualisierungen pausiert sind, klicken Sie auf Aktualisieren.",
       "clearFailed": "Der Verlauf konnte nicht aus dem Speicher gelöscht werden. Versuchen Sie es erneut.",
-      "disabledHelp": "Die Aufzeichnung ist aus. Aktiviere sie in den Einstellungen für neue Gespräche. Bestehende Einträge unterliegen weiterhin den Aufbewahrungsgrenzen.",
+      "disabledHelp": "Die Aufzeichnung ist aus. Aktivieren Sie sie in den Einstellungen für neue Gespräche. Bestehende Einträge unterliegen weiterhin den Aufbewahrungsgrenzen.",
       "storageUnavailable": "Der Verlaufsspeicher ist nicht verfügbar. Neue Aktivitäten gehen bei einem Neustart möglicherweise verloren.",
       "search": "Aufgezeichneten Text durchsuchen",
       "sourceFilter": "Nach Quelle filtern",
@@ -2514,7 +2522,7 @@
       "clientPromptUnavailable": "Dieser Client hat Phoenix die Nachricht des Benutzers nicht übermittelt.",
       "routeLocal": "Lokal verarbeitet",
       "routeProvider": "An LLM-Anbieter gesendet",
-      "executionUnknown": "Ergebnis unbestätigt: Die Aktion wurde möglicherweise ausgeführt. Prüfe Home Assistant vor einem erneuten Versuch.",
+      "executionUnknown": "Ergebnis unbestätigt: Die Aktion wurde möglicherweise ausgeführt. Prüfen Sie Home Assistant vor einem erneuten Versuch.",
       "loggingDisabled": "Die Aufzeichnung ist nicht verfügbar, solange die Protokollierung deaktiviert ist.",
       "storage": "<strong>Speicher:</strong> {used} von {limit} MB",
       "toolCount": {
@@ -2577,14 +2585,14 @@
     },
     "attention": {
       "actionTitle": "Eine frühere Aktion prüfen",
-      "calendar_storageHelp": "Kalenderschreibvorgänge sind pausiert, bis der gespeicherte Verlauf gelesen werden kann. Prüfe die Home Assistant-Protokolle; die Liste prüft alle 15 Sekunden erneut.",
+      "calendar_storageHelp": "Kalenderschreibvorgänge sind pausiert, bis der gespeicherte Verlauf gelesen werden kann. Prüfen Sie die Home Assistant-Protokolle; die Liste prüft alle 15 Sekunden erneut.",
       "calendar_storageTitle": "Kalenderverlauf konnte nicht gelesen werden",
       "checked": "Ich habe das Ergebnis der Aktion geprüft",
       "continue": "Als geprüft markieren",
       "empty": "Kein Handlungsbedarf.",
       "intro": "Prüfen Sie jeden Eintrag unten. Bevor Sie eine unterbrochene Aktion erneut versuchen, prüfen Sie, ob sie bereits ausgeführt wurde.",
       "loadFailed": "Einträge konnten nicht geladen werden. Die Liste versucht es alle 15 Sekunden erneut.",
-      "mesaHelp": "Bei aktiviertem MESA sind geschützte Änderungen pausiert. Prüfe die Home Assistant-Protokolle und lade Phoenix MCP unter Einstellungen > Geräte & Dienste neu.",
+      "mesaHelp": "Bei aktiviertem MESA sind geschützte Änderungen pausiert. Prüfen Sie die Home Assistant-Protokolle und laden Sie Phoenix MCP unter Einstellungen > Geräte & Dienste neu.",
       "mesaTitle": "MESA konnte nicht starten",
       "noReplay": "Die Aktion wird weder wiederholt noch rückgängig gemacht. Andere Aktionen müssen möglicherweise noch geprüft werden.",
       "received": "Home Assistant hat geantwortet, aber die Unterhaltung endete, bevor der Agent dies bestätigt hat. Öffnen Sie den Audit-Eintrag, um zu sehen, was Phoenix aufgezeichnet hat.",
@@ -2595,7 +2603,9 @@
       "title": "Handlungsbedarf",
       "unknown": "Die Unterhaltung endete, bevor Phoenix aufzeichnete, ob diese Aktion ausgeführt wurde. Sie kann also ausgeführt worden sein. „Im Audit-Protokoll anzeigen“ zeigt, wo angeboten, was Phoenix aufgezeichnet hat; eine Aktion, die auf Genehmigung wartete, hat ihren Status unter Genehmigungen. Prüfen Sie Home Assistant selbst, bevor Sie es erneut versuchen.",
       "audit_storageTitle": "Das Audit-Protokoll erreicht den Speicher nicht",
-      "audit_storageHelp": "Neue Audit-Einträge liegen nur im Arbeitsspeicher, ein Neustart würde sie verlieren. Prüfe die Home Assistant-Protokolle. Der Hinweis verschwindet, sobald das nächste Speichern gelingt."
+      "audit_storageHelp": "Neue Audit-Einträge liegen nur im Arbeitsspeicher, ein Neustart würde sie verlieren. Prüfen Sie die Home Assistant-Protokolle. Der Hinweis verschwindet, sobald das nächste Speichern gelingt.",
+      "mesa_renameTitle": "Das Profil einer umbenannten Entität ist nicht gespeichert",
+      "mesa_renameHelp": "Das Profil ist der Entität gefolgt und gilt, aber die gespeicherte Fassung trägt noch die alte ID. Prüfen Sie die Home Assistant-Protokolle und laden Sie Phoenix MCP unter Einstellungen > Geräte & Dienste neu, um erneut zu speichern. Der Hinweis verschwindet, sobald das nächste Speichern gelingt."
     },
     "workspace": {
       "addToMy": "Zu Meinem Arbeitsbereich hinzufügen",
@@ -2970,10 +2980,10 @@
     "not_configured": "Der Phoenix-MCP-Sprachassistent ist nicht vollständig konfiguriert.",
     "out_of_steps": "Entschuldigung, mir sind die Schritte ausgegangen, bevor ich fertig war.",
     "output_limit": "Entschuldigung, das Modell hat zu viel Ausgabe erzeugt, daher habe ich aufgehört.",
-    "prior_action_unresolved": "Diese Anfrage wurde nicht ausgeführt, weil eine frühere Aktion geprüft werden muss. Öffne Handlungsbedarf in Phoenix MCP.",
+    "prior_action_unresolved": "Diese Anfrage wurde nicht ausgeführt, weil eine frühere Aktion geprüft werden muss. Öffnen Sie Handlungsbedarf in Phoenix MCP.",
     "access_key_unavailable": "Der Zugriffsschlüssel des Phoenix-MCP-Sprachassistenten ist nicht mehr verfügbar.",
     "unavailable": "Der Phoenix-MCP-Sprachassistent ist derzeit nicht verfügbar.",
-    "outcome_unknown": "Diese Aktion wurde möglicherweise ausgeführt. Prüfe Home Assistant und den Genehmigungsverlauf, bevor du sie erneut versuchst. Öffne Handlungsbedarf in Phoenix MCP.",
+    "outcome_unknown": "Diese Aktion wurde möglicherweise ausgeführt. Prüfen Sie Home Assistant und den Genehmigungsverlauf, bevor Sie sie erneut versuchen. Öffnen Sie Handlungsbedarf in Phoenix MCP.",
     "local_pending": "Dieser Befehl benötigt eine Genehmigung im Phoenix MCP-Panel.",
     "local_review": "Befehl prüfen",
     "local_failed": "Phoenix MCP konnte diesen Befehl nicht abschließen.",
@@ -2989,7 +2999,7 @@
     "local_attribute_unavailable": "Home Assistant meldet derzeit keinen Wert für die angefragte Eigenschaft.",
     "local_state_unknown": "Unbekannt",
     "local_state_unavailable": "Nicht verfügbar",
-    "local_clarification": "Welches Ziel meinst du? {choices}. Antworte mit der Nummer oder der genauen Entitäts-ID, oder sage Abbrechen. Diese Auswahl läuft nach zwei Minuten ab.",
+    "local_clarification": "Welches Ziel meinen Sie? {choices}. Antworten Sie mit der Nummer oder der genauen Entitäts-ID, oder sagen Sie Abbrechen. Diese Auswahl läuft nach zwei Minuten ab.",
     "local_clarification_expired": "Diese Auswahl ist nicht mehr aktuell. Bitte wiederhole den vollständigen Befehl.",
     "companion_clarify": "Bitte senden Sie die vollständige Anfrage erneut: was geschehen soll, welches Gerät oder welcher Raum gemeint ist und welche Einschränkungen gelten. Antworten Sie nicht nur mit einem Gerätenamen.",
     "companion_candidates": "Zu den Treffern gehören: {names}.",
@@ -3034,6 +3044,6 @@
     "companion_verification_progress": "Ziele, für die Home Assistant die gewünschten Einstellungen meldet: {count} von {total}.",
     "model_api_unsupported": "Dieses Modell ist nicht für OpenCode Chat Completions freigegeben. Wählen Sie ein unterstütztes Modell.",
     "provider_unavailable": "Entschuldigung, das Sprachmodell konnte gerade nicht antworten.",
-    "provider_slow": "Entschuldigung, das Sprachmodell braucht zu lange für eine Antwort. Versuche es gleich noch einmal."
+    "provider_slow": "Entschuldigung, das Sprachmodell braucht zu lange für eine Antwort. Versuchen Sie es gleich noch einmal."
   }
 }

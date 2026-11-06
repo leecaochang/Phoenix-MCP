@@ -10,7 +10,9 @@ from dataclasses import dataclass
 from datetime import timedelta
 
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import EVENT_HOMEASSISTANT_STARTED, EVENT_HOMEASSISTANT_STOP
+from homeassistant.const import (
+    EVENT_HOMEASSISTANT_FINAL_WRITE, EVENT_HOMEASSISTANT_STARTED, EVENT_HOMEASSISTANT_STOP,
+)
 from homeassistant.core import CoreState, HomeAssistant, Event, EventType, callback
 from homeassistant.helpers import area_registry as ar_mod
 from homeassistant.helpers import device_registry as dr_mod
@@ -424,6 +426,16 @@ async def _async_durable_state(hass: HomeAssistant) -> DurableState:
         calendar_writes=calendar_writes,
     )
     hass.data[_DURABLE_STATE_KEY] = state
+
+    async def _flush_audit_at_final_write(_event: Event) -> None:
+        # An entry's timers and stop listener end with it, but a handler that outlives an
+        # unload still adds rows, so the last save belongs to the state, not the entry.
+        try:
+            await audit.async_save()
+        except Exception:  # shutdown must not depend on a writable disk
+            _LOGGER.exception("Phoenix MCP: could not persist the audit log at the final write")
+
+    hass.bus.async_listen_once(EVENT_HOMEASSISTANT_FINAL_WRITE, _flush_audit_at_final_write)
     return state
 
 
@@ -472,7 +484,9 @@ async def _async_attach_diagnostics(hass: HomeAssistant, data: PhoenixData) -> N
     async_attach_debug_capture(hass)
 
 
-async def _async_start_mesa(hass: HomeAssistant, entry: ConfigEntry, data: PhoenixData) -> None:
+async def _async_start_mesa(
+    hass: HomeAssistant, entry: ConfigEntry, data: PhoenixData, state: DurableState
+) -> None:
     """Build the MESA runtime and bridge its denials into the audit log."""
     store = data.store
     # Build the MESA runtime unconditionally (even under the kill switch): the
@@ -483,7 +497,7 @@ async def _async_start_mesa(hass: HomeAssistant, entry: ConfigEntry, data: Phoen
     # operator explicitly selected off mode.
     from .mesa import async_setup_mesa
     try:
-        data.mesa = await async_setup_mesa(hass, store.get_settings().mesa_mode)
+        data.mesa = await async_setup_mesa(hass, store.get_settings().mesa_mode, state)
         data.mesa_setup_failed = False
         ir.async_delete_issue(hass, DOMAIN, "mesa_runtime_unavailable")
     except Exception:  # MESA must never block Phoenix MCP startup
@@ -974,8 +988,10 @@ def _listen_for_registry_changes(hass: HomeAssistant, entry: ConfigEntry, data: 
             if data.mesa is not None:
                 from .mesa import carry_renamed_profile
                 mesa_carried = carry_renamed_profile(data.mesa, old_entity_id, new_entity_id)
-            entry.async_create_background_task(
-                hass, _carry_renamed_entity(old_entity_id, new_entity_id, mesa_carried),
+            # Not an entry task: every object it writes outlives a reload, and an unload
+            # must not drop the move halfway.
+            hass.async_create_background_task(
+                _carry_renamed_entity(old_entity_id, new_entity_id, mesa_carried),
                 "phoenix_mcp_carry_renamed_entity",
             )
 
@@ -993,6 +1009,13 @@ def _listen_for_registry_changes(hass: HomeAssistant, entry: ConfigEntry, data: 
         entry.async_on_unload(
             hass.bus.async_listen(_registry_event, _invalidate_entity_tree)  # type: ignore[misc]  # loop var erases the event's typed payload
         )
+    # After the listener, so no rename falls between the two.
+    if data.mesa is not None:
+        from .mesa import async_persist_renamed_profile, reconcile_renamed_profiles
+        if reconcile_renamed_profiles(data.mesa):
+            hass.async_create_background_task(
+                async_persist_renamed_profile(hass, data.mesa), "phoenix_mcp_persist_renamed_profiles",
+            )
 
 
 def _start_mesa_background_work(hass: HomeAssistant, entry: ConfigEntry, data: PhoenixData) -> None:
@@ -1069,7 +1092,7 @@ async def _async_setup_entry_impl(hass: HomeAssistant, entry: ConfigEntry) -> bo
     """
     data, state = await _async_build_runtime(hass)
     await _async_attach_diagnostics(hass, data)
-    await _async_start_mesa(hass, entry, data)
+    await _async_start_mesa(hass, entry, data, state)
     _warn_on_incompatible_internals(hass)
     await _async_register_surfaces(hass, data)
     await _async_register_conversation_agents(hass, entry, data)

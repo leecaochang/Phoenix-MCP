@@ -146,3 +146,21 @@ describe("a new entity profile seeded after the user started editing", () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("deleting from the editor dialog", () => {
+  it("returns focus to Delete when the confirmation is cancelled", async () => {
+    vi.mocked(api.getMesaDomain).mockResolvedValue({ domain: "lock", stored: PROHIBITED } as never);
+    render(<ProfileEditor scope="domain" profileKey="lock" isNew={false} entityTree={{}}
+      canonicalTags={[]} onClose={() => {}} onSaved={() => {}} />);
+    const del = await screen.findByRole("button", { name: "Delete" });
+    await waitFor(() => expect(saveButton()).toBeEnabled());
+
+    del.focus();
+    fireEvent.click(del);
+    const cancels = await screen.findAllByRole("button", { name: "Cancel" });
+    fireEvent.click(cancels[0]);
+
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("button", { name: "Delete" })));
+    expect(screen.getByRole("button", { name: "Delete" })).toBe(del);
+  });
+});

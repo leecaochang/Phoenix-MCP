@@ -18,7 +18,7 @@ export function validApiResponse(path: string, method: string, value: unknown): 
   if (route.startsWith("/attention/") && method === "POST") return value.reviewed === true;
   if (route === "/attention" && method === "GET") {
     return records(value.items) && value.items.every(row => typeof row.id === "string"
-      && ["agent", "calendar", "mesa", "calendar_storage", "audit_storage"].includes(row.kind as string)
+      && ["agent", "calendar", "mesa", "mesa_rename", "calendar_storage", "audit_storage"].includes(row.kind as string)
       && (row.kind !== "agent" && row.kind !== "calendar" ||
         typeof row.tool === "string" && typeof row.access_key_name === "string"
         && typeof row.started_at === "string" && typeof row.dispatch_result === "string"));

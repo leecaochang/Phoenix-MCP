@@ -3,6 +3,10 @@
 The repository is public. A comment that cites a person or a date reads as authority
 long after the behaviour has moved on, so this holds the frontend, stylesheets and
 Python to the same rule. Dates that belong to a protocol or a fixture stay allowed.
+
+The patterns recognise the usual ways of writing these, not every phrasing, and the
+scan covers comments and docstrings of those sources only: Guide pages and workflow
+files are outside it.
 """
 
 from __future__ import annotations
@@ -20,8 +24,20 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 FRONTEND = ROOT / "frontend_src"
 PYTHON_ROOTS = ("custom_components/phoenix_mcp", "tests", "scripts")
 
-ATTRIBUTION = re.compile(r"\(user,|\buser,?\s+20\d\d-\d\d", re.IGNORECASE)
+ATTRIBUTION = re.compile(r"\(user,|\buser,?\s+20\d\d-\d\d|\buser\s+(?:asked|requested|wanted|decided|insisted)\b",
+                         re.IGNORECASE)
 DATE = re.compile(r"(?<![\w-])20\d\d-\d\d-\d\d(?![\dT])")
+WRITTEN_DATE = re.compile(
+    r"(?<![\w/-])20\d\d/\d\d/\d\d(?![\d/])"
+    r"|\b(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|June?|July?|Aug(?:ust)?|Sep(?:t(?:ember)?)?"
+    r"|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\.?\s+\d{1,2}(?:st|nd|rd|th)?\b"
+)
+# Review records and commits stay out of the source: neither says why the code is right.
+RECORD_REFERENCE = re.compile(
+    r"\badversarial audit\b|\b(?:AUTHZ|ADMIN|MESA|MCP|DOC|TOOL|TEST|HEALTH|LIFE|DEP|FE|A11Y|I18N)-\d+\b"
+    r"|\bcommit\s+[0-9a-f]{7,40}\b",
+    re.IGNORECASE,
+)
 # The MCP protocol names its revisions by date.
 PROTOCOL_REVISIONS = {"2025-03-26", "2026-07-28"}
 
@@ -94,7 +110,7 @@ def _problems(comments: list[tuple[int, str]]) -> list[tuple[int, str]]:
     found = []
     for line, text in comments:
         dates = set(DATE.findall(text)) - PROTOCOL_REVISIONS
-        if ATTRIBUTION.search(text) or dates:
+        if ATTRIBUTION.search(text) or dates or WRITTEN_DATE.search(text) or RECORD_REFERENCE.search(text):
             found.append((line, text.strip()))
     return found
 
@@ -164,6 +180,16 @@ def test_no_test_title_carries_an_attribution() -> None:
     ("const stamp = `2026-01-01\n// 2026-01-01\n`;\n", 0),
     ("// revision 2026-07-28 of the protocol\n", 0),
     ("<p>don't 2026-01-01</p>\n// (user, 2026-01-01)\n", 1),
+    ("// because the user asked for it\n", 1),
+    ("// the height the user chose stays\n", 0),
+    ("// dated 2026/11/05\n", 1),
+    ("// see /logs/2026/11/05/entry\n", 0),
+    ("// settled on November 5, 2026\n", 1),
+    ("// changed on Nov 5\n", 1),
+    ("// may 5 entries wait in November\n", 0),
+    ("// fixes AUTHZ-1 from the adversarial audit\n", 1),
+    ("// see commit b04defeb\n", 1),
+    ("// commit the transaction first\n", 0),
 ])
 def test_the_script_scanner_finds_comments_and_skips_strings(source: str, count: int) -> None:
     assert len(_problems(_script_comments(source))) == count

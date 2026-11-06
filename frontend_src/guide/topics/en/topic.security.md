@@ -21,7 +21,7 @@ Phoenix removes some data before an agent sees it, whatever the key allows, pass
 
 - Phoenix's own entities and the sensors it creates for each key.
 - Camera stream and picture addresses, and access tokens.
-- Any attribute whose name suggests a secret: one containing password, token, secret, session, passphrase, api_key, wifi_key, encryption_key or license_key, or ending in pin or psk.
+- Any attribute whose name suggests a secret. That means a name containing password, pwd, token, secret, session, passphrase, api_key, wifi_key, encryption_key or license_key. It also means a name ending in pin, psk or pass.
 
 Entities outside the key's scope look as if they don't exist. In action results, attributes, logs and dashboards they show as `<redacted>`.
 
@@ -29,7 +29,7 @@ Entities outside the key's scope look as if they don't exist. In action results,
 
 Removing secrets works by name, so a secret under an ordinary name gets through, even one called just `key`. Keep passwords and keys in secrets.yaml, which no agent can read.
 
-- YAML configuration hides values under names that suggest a secret. A password under an ordinary name is visible to the agent.
+- YAML configuration hides values under names that suggest a secret, wherever they sit in the file, and comments that mention one. A password under an ordinary name is visible to the agent.
 - Logs are free text. Phoenix removes access keys, tokens and passwords in web addresses, but other secrets in a log line can slip through.
 
 Give these capabilities only to agents that need them.

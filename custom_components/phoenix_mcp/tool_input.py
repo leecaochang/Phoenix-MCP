@@ -76,6 +76,17 @@ def _parse_finite_float(value: str) -> float:
     return result
 
 
+def parse_json_body(body: bytes) -> Any:
+    """Parse one HTTP body: strict UTF-8 without a BOM, finite numbers, no lone surrogate.
+
+    Raises ValueError or RecursionError. A surrogate escape parses, then fails the encode,
+    since every later serialization of the value would.
+    """
+    parsed = json.loads(body.decode("utf-8"), parse_constant=_reject_non_finite, parse_float=_parse_finite_float)
+    json.dumps(parsed, ensure_ascii=False).encode("utf-8")
+    return parsed
+
+
 def decode_container_strings(tool: str, arguments: dict) -> dict:
     """Accept an object or array argument that a client sent as JSON text.
 

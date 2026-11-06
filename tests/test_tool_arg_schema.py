@@ -40,6 +40,7 @@ PACKAGE = pathlib.Path(__file__).resolve().parent.parent / "custom_components" /
 
 # (module filename, argument) maps to why it is read but not published.
 UNPUBLISHED_ARGS = {
+    ("todo.py", "reviewed"): "INTERNAL server-created review of the items an approval binds; only the approved executor reads it, and the public schema refuses it.",
     ("calendar.py", "_calendar_plan"): "INTERNAL server-created calendar identity, exact event fields and snapshot binding; public inputs are rebuilt before gating.",
     ("registry.py", "aliases"): (
         "INTERNAL, not an alias. set_entity edits aliases by add/remove and has "

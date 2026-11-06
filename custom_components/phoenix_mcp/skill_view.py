@@ -140,9 +140,10 @@ grain of the model gives the smoothest results and avoids dead ends.
 - Call `get_esphome_yaml` with no arguments to list the device files you can
   see, then with `file` to read one. `search_esphome_yaml` finds text across
   them.
-- Credentials come back as `__PHOENIX_REDACTED__<path>__` placeholders, and
-  `defined_secrets` lists the names in the ESPHome `secrets.yaml`, never their
-  values. Never ask for a credential's value and never invent one.
+- Credentials come back as `__PHOENIX_REDACTED__<path>__` placeholders, or
+  `<redacted>` inside a URL, lambda or comment, and `defined_secrets` lists the
+  names in the ESPHome `secrets.yaml`, never their values. Never ask for a
+  credential's value and never invent one.
 - These tools only read. Device YAML is the operator's own configuration and is
   edited in the ESPHome dashboard. When a change is needed, show the operator
   the exact lines to add or change, then validate, compile and install from the
@@ -235,8 +236,8 @@ config is good on the strength of validation alone if you can compile it.
   `decode_esphome_backtrace` for a real stack trace instead of guessing.
 
 ### 3. Preview before you commit
-- `dry_run_service` (or `dry_run: true` on `call_service`): resolves and flattens
-  the targets and returns the per-entity MESA verdict without changing anything.
+- `dry_run_service`: resolves and flattens the targets and returns the per-entity
+  MESA verdict without changing anything.
   Use it before any bulk or risky call.
 - `whatif`: predicts which automations would fire if an entity became a given
   state, so you can reason about side effects first.
@@ -633,8 +634,12 @@ mode: single
 - `get_yaml_config` reads `configuration.yaml` and the other YAML files in the
   configuration directory, such as `templates.yaml` or a packages file. Pass
   `file` with the path relative to the configuration directory and `key` for one
-  dotted mapping key; omit both for `configuration.yaml`. `secrets.yaml`, hidden
-  directories and ESPHome device files are not readable here.
+  dotted mapping key; omit both for `configuration.yaml`. Files named like
+  secrets, hidden directories and ESPHome device files are not readable here.
+- Values under names that suggest a credential, and comments naming one, come
+  back as `<redacted>`, which is not the file's real value. A secret under an
+  ordinary name stays visible. A file that does not parse is refused, with the
+  line of the error, because its credentials cannot be located.
 - YAML configuration is the operator's to edit, so there is no tool that writes
   it. Automations, scripts and scenes that Home Assistant's own editor manages
   are changed with their own tools; anything defined in hand-written YAML is

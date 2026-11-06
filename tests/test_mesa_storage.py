@@ -120,9 +120,26 @@ async def test_an_invalid_shape_refuses(hass: HomeAssistant, hass_storage, profi
         await async_setup_mesa(hass, "enforced")
 
 
-async def test_a_store_without_profiles_key_is_empty(hass: HomeAssistant, hass_storage):
-    hass_storage[MESA_STORAGE_KEY] = {"version": 1, "minor_version": 1, "key": MESA_STORAGE_KEY,
-                                      "data": {"dismissed_suggestions": []}}
+def _document(data) -> str:
+    return json.dumps({"version": 1, "minor_version": 1, "key": MESA_STORAGE_KEY, "data": data})
+
+
+@pytest.mark.parametrize("text", [
+    "{}",
+    _document(None),
+    _document({}),
+    _document({"dismissed_suggestions": []}),
+    _document({"profiles": {}, "registry_ids": []}),
+], ids=["empty_object", "null_data", "empty_data", "no_profiles_key", "bad_registry_ids"])
+async def test_a_valid_file_that_holds_no_profile_set_refuses(hass: HomeAssistant, real_store_files, text):
+    """Phoenix always writes the set, so no profiles is a conclusion only an absent file supports."""
+    _storage_file(hass).write_text(text)
+    with pytest.raises(MesaStorageCorruptError):
+        await async_setup_mesa(hass, "enforced")
+
+
+async def test_a_saved_empty_set_is_not_a_damaged_file(hass: HomeAssistant, real_store_files):
+    _storage_file(hass).write_text(_document({"profiles": {}, "dismissed_suggestions": []}))
     assert (await async_setup_mesa(hass, "enforced")).backend.list_keys() == []
 
 

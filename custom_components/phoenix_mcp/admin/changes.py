@@ -138,6 +138,8 @@ class PhoenixAdminAttentionView(PhoenixView):
         items[:0] = [item for item in agent_items if item["id"] not in calendar_requests]
         if data.mesa_setup_failed:
             items.append({"id": "mesa", "kind": "mesa"})
+        if data.mesa is not None and data.mesa.storage.rename_save_failed is True:
+            items.append({"id": "mesa_rename", "kind": "mesa_rename"})
         if data.audit.save_failed is True:
             items.append({"id": "audit_storage", "kind": "audit_storage"})
         return _ok({"items": items}, request_id=rid)

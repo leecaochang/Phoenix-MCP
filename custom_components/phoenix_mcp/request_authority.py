@@ -29,7 +29,11 @@ class PolicyChangedError(AuthorityChangedError):
 
 @dataclass
 class DispatchProgress:
-    """Evidence only for handlers with every execution boundary instrumented."""
+    """Evidence only for handlers with every execution boundary instrumented.
+
+    ``_dispatch_mcp`` holds one for the whole request; it starts untracked, so a request
+    that never reached ``_call_tool_checked`` is no evidence of anything.
+    """
 
     tracked: bool
     started: bool = False

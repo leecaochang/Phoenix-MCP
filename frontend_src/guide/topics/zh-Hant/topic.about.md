@@ -9,15 +9,15 @@ Phoenix MCP 讓 AI 智慧體安全地在你的 Home Assistant 中工作。每個
 - **外部應用程式**：用存取金鑰連接 MCP 用戶端，例如桌面助理或程式開發工具。應用程式自己的模型負責思考。
 - **Home Assistant 自帶的助理**：Phoenix 可以作為語音智慧體回答、執行 AI 任務操作，或把自己的工具借給其他助理。
 
-無論使用哪種方式，每個操作都會經過相同的檢查，稽核日誌也會記錄它。
+無論使用哪種方式，檢查都相同，稽核日誌會記錄每個操作。
 
-相關：[{{label:agentchat.title}}](guide:window.agentChat)、[連線外部應用程式](guide:topic.connecting)、[語音智慧體、AI 任務或 Assist 工具提供方](guide:topic.homeAssistantFeatures)
+相關：[{{label:agentchat.title}}](guide:window.agentChat)、[連線外部應用程式](guide:topic.connecting)、[語音智慧體、AI 任務或 Assist 工具提供者](guide:topic.homeAssistantFeatures)
 
-## 每個操作要經過什麼 {#checks}
+## 這些檢查 {#checks}
 
 1. **能力**：金鑰整體上可以做哪類事情，例如控制裝置或編輯自動化。每項能力可設為拒絕存取、允許或確認。
 2. **權限**：金鑰可以檢視和變更哪些分區、裝置和實體。
-3. **MESA**：無論金鑰允許什麼，對每個裝置要有多謹慎：讓智慧體操作、先詢問你，還是不讓它碰。
+3. **MESA**：對每個裝置要有多謹慎：讓智慧體操作、先詢問你，還是不讓它碰。預設情況下它大多只發出警告。[{{label:settings.mesaModeEnforced}}](guide:window.settingsSafety#mesa-mode) 會讓規則生效。它[並未涵蓋所有操作](guide:topic.mesaRules#coverage)。
 4. **核准**：設為確認的操作會等待你核准。
 
 相關：[智慧體可以做什麼](guide:topic.tools)、[安全](guide:topic.security)、[執行 Phoenix](guide:topic.running)、[管理 API](guide:topic.adminApi)、[{{label:accessKeys.cardCapabilities}}](guide:window.capabilities)、[權限如何判定](guide:topic.permissionResolution)、[MESA 如何決定](guide:topic.mesaRules)、[核准如何運作](guide:topic.approvalLifecycle)

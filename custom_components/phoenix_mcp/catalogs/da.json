@@ -397,7 +397,9 @@
       "restoreToolReported": "Gendannelsen kunne ikke anvendes. Værktøjet rapporterede: {detail}",
       "capabilityAllowUnsupported": "{capability} understøtter ikke Tillad-tilstand.",
       "recoverySnapshotUnsafeAt": "Der findes ingen komplet kopi af dette element uden hemmeligheder, så intet blev ændret. Phoenix afviste det ved {location}.",
-      "invalidHostHeader": "Anmodningens Host-header er ikke en gyldig adresse."
+      "invalidHostHeader": "Anmodningens Host-header er ikke en gyldig adresse.",
+      "approvalOutcomeNotSaved": "Handlingen blev afsluttet, men resultatet kunne ikke gemmes. Kontrollér virkningen i Home Assistant; denne godkendelse tilbydes ikke igen.",
+      "providerRemoteUrlResolutionFailed": "Udbyderens webadresse kunne ikke opløses, så dens adresse kunne ikke kontrolleres."
     },
     "agentchat": {
       "accessKey": "Adgangsnøgle",
@@ -956,7 +958,11 @@
         "one": "{count} valgt",
         "other": "{count} valgt"
       },
-      "rowPicked": "valgt til samlet godkendelse"
+      "rowPicked": "valgt til samlet godkendelse",
+      "todoItems": "Elementer, der fjernes",
+      "todoRemovalWarning": "Fjernelse af opgaveelementer er permanent. Phoenix gemmer ingen kopi, så de kan ikke gendannes.",
+      "todoStatusCompleted": "Afsluttet",
+      "todoStatusNeedsAction": "Ikke afsluttet"
     },
     "attention": {
       "actionTitle": "Kontrollér en tidligere handling",
@@ -978,7 +984,9 @@
       "title": "Kræver opmærksomhed",
       "unknown": "Samtalen sluttede, før Phoenix registrerede, om handlingen kørte, så den kan være kørt. Vis i revisionsloggen viser, hvor den tilbydes, hvad Phoenix registrerede; en handling, der ventede på godkendelse, har sin status i Godkendelser. Kontrollér Home Assistant, før du prøver igen.",
       "audit_storageTitle": "Revisionsloggen når ikke frem til lageret",
-      "audit_storageHelp": "Nye revisionsposter findes kun i hukommelsen, så en genstart ville miste dem. Kontrollér Home Assistant-loggen. Dette forsvinder, når næste gemning lykkes."
+      "audit_storageHelp": "Nye revisionsposter findes kun i hukommelsen, så en genstart ville miste dem. Kontrollér Home Assistant-loggen. Dette forsvinder, når næste gemning lykkes.",
+      "mesa_renameTitle": "Profilen for en omdøbt entitet er ikke på lageret",
+      "mesa_renameHelp": "Profilen fulgte med entiteten og gælder, men den gemte kopi har stadig det gamle id. Kontrollér Home Assistant-loggen, og genindlæs derefter Phoenix MCP fra Indstillinger > Enheder og tjenester for at gemme igen. Dette forsvinder, når næste gemning lykkes."
     },
     "audit": {
       "accessPassThrough": "Pass-through",
@@ -1024,7 +1032,9 @@
       "rowPayload": "Nyttelast",
       "rowRequestId": "Anmodnings-ID",
       "rowResource": "Ressource",
-      "rowTime": "Tid"
+      "rowTime": "Tid",
+      "outcomeCancelled": "Annulleret",
+      "outcomeUnknown": "Ukendt udfald"
     },
     "caps": {
       "cap_automation_write": {
@@ -1148,7 +1158,7 @@
         "label": "Automatiseringsspor"
       },
       "cap_yaml_edit": {
-        "description": "Læs dine YAML-konfigurationsfiler, og genindlæs YAML-domæner. Adgangskoder skrevet i disse filer er synlige; brug secrets.yaml.",
+        "description": "Læs dine YAML-konfigurationsfiler, og genindlæs YAML-domæner. Værdier under navne, der tyder på en hemmelighed, skjules, men en adgangskode under et almindeligt navn er synlig; brug secrets.yaml.",
         "label": "YAML-konfiguration"
       },
       "confirmUnavailable": "Denne funktion kan ikke kræve godkendelse.",

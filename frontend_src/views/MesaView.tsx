@@ -1035,8 +1035,8 @@ export function ProfileEditor({
       <h3 className="modal-title" id="mesa-editor-title">{titleVerb}</h3>
       {body}
       <div className="modal-actions">
-        {!isNew && !confirmDelete && (
-          <ActionButton icon="delete" label={t("mesa.delete")} className="btn btn-outline btn-sm" onClick={() => setConfirmDelete(true)} busy={saving} />
+        {!isNew && (
+          <ActionButton icon="delete" label={t("mesa.delete")} className="btn btn-outline btn-sm" inactive={confirmDelete} onClick={() => setConfirmDelete(true)} busy={saving} />
         )}
         <ActionButton icon="undo" label={t("mesa.cancel")} className="btn btn-outline btn-sm" onClick={attemptClose} busy={saving} />
         <ActionButton icon="save" label={saving ? t("mesa.saving") : t("mesa.save")} className="btn btn-primary btn-sm" onClick={() => void save()} disabled={!canSave} />

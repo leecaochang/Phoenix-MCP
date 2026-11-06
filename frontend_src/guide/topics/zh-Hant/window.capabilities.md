@@ -59,7 +59,7 @@
 
 ### {{label:caps.cap_broadcast.label}} {#broadcast}
 
-透過 Assist 衛星裝置廣播訊息、在其上發起對話，並在喇叭上播放公告，這需要在喇叭的 W 之外另行授予。一般播放只需要 W。直通模式允許它。
+透過 Assist 衛星裝置廣播訊息、在其上發起對話，並在喇叭上播放公告和語音文字，這需要在喇叭的 W 之外另行授予。一般播放只需要 W。直通模式允許它。
 
 ### {{label:caps.cap_service_response.label}} {#service-response}
 
@@ -101,11 +101,13 @@
 
 ### {{label:caps.cap_physical_control.label}} {#physical-control}
 
-控制門鎖、警報控制面板、捲簾和閥門。智慧體還需要在{{label:accessKeys.permissionsTree}}中對它們有 W。變更 Zigbee 裝置的無線電工具也需要它。
+控制門鎖、警報控制面板、捲簾和閥門，無論透過它們自身的操作，還是其他會作用到它們的操作。`zwave_js.set_value` 這類原始裝置命令始終需要它，裝置上有這些實體時，其 ESPHome 操作也需要。
+
+智慧體還需要在{{label:accessKeys.permissionsTree}}中對它們有 W。變更 Zigbee 裝置的無線電工具也需要它。
 
 ### {{label:caps.cap_notify.label}} {#notify}
 
-透過自己的工具或執行通知操作傳送通知。
+透過自己的工具、通知操作或其他透過通知實體傳送訊息的操作傳送通知。
 
 ### {{label:caps.cap_restart.label}} {#restart}
 

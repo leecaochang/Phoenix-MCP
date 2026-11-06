@@ -196,7 +196,7 @@ export function ChangesListWindow() {
         rowKey={(v) => v.id}
         selectedKey={c.selectedId}
         onSelect={(v, ordered) => { c.select(v.id, ordered.map((o) => o.id)); ensureOpen("comparison"); }}
-        rowLabel={(v) => `${changeLabel(v)}, ${actionLabel(v.action)}, ${formatDateTime(v.timestamp)}`}
+        rowLabel={(v) => [changeLabel(v), actionLabel(v.action), formatDateTime(v.timestamp)].join(t("common.listSeparator"))}
         rowHelp="help.changesRow"
         empty={c.loading || reading ? null : <p className="audit-empty">{c.feed.length ? t("changes.emptySearch") : t("changes.empty")}</p>}
       />
@@ -407,7 +407,7 @@ export function ItemHistoryWindow() {
         rowKey={(v) => v.id}
         selectedKey={c.selectedId}
         onSelect={(v, ordered) => { c.select(v.id, ordered.map((o) => o.id)); ensureOpen("comparison"); }}
-        rowLabel={(v) => `${actionLabel(v.action)}, ${formatDateTime(v.timestamp)}`}
+        rowLabel={(v) => [actionLabel(v.action), formatDateTime(v.timestamp)].join(t("common.listSeparator"))}
       />
     </div>
   );

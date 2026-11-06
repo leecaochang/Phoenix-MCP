@@ -13,7 +13,7 @@ from homeassistant.components.http.const import KEY_HASS_USER
 from homeassistant.core import Context
 from homeassistant.helpers import llm
 from homeassistant.helpers import entity_registry as er
-from homeassistant.helpers.service import async_register_admin_service
+from homeassistant.helpers.service import async_register_admin_service, async_set_service_schema
 from homeassistant.util.dt import utcnow
 
 from custom_components.phoenix_mcp import ai_task, assist_api, tool_dispatch, voice_agent
@@ -238,6 +238,7 @@ async def test_service_authority_uses_native_admin_registration(
         register(hass, "light", "household_effect", service, schema=None)
     else:
         register("light", "household_effect", service)
+    async_set_service_schema(hass, "light", "household_effect", {"target": {"entity": {"domain": "light"}}})
     user = hass_admin_user if identity == "admin" else await hass.auth.async_create_user("member", group_ids=[GROUP_ID_USER])
     args = {"service": {"domain": "light", "name": "household_effect"},
             "targets": [{"kind": "entity", "ids": [entity.entity_id]}]}

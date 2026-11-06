@@ -9,11 +9,12 @@ from functools import wraps
 from typing import Any
 from uuid import uuid4
 
-from homeassistant.util.dt import utcnow, parse_datetime
+from homeassistant.util.dt import utcnow
 
 from ..const import TURN_DELIVERED_EVENT
 from .routing_tables import ROUTING_STATISTICS_OUTCOMES, ROUTING_STATISTICS_SURFACES
 from ..conversation_log import routing_span, record_current
+from ..time_text import parse_datetime
 
 
 def _empty() -> dict:

@@ -9,8 +9,9 @@ happened" assertion still passes (for example `assert_not_called()` against a de
 mock).
 
 The same silent failure exists for any first-party module: a patch of the module
-a name was imported from misses every module that copied it at import time, so
-find_dead_patches looks across all of them.
+a name was imported from misses every module that copied it at import time, even
+when some other module still reads the name through its source. So find_dead_patches
+looks across all of them and reports a copy the test itself runs.
 
 The checker lives in this file rather than a helper script, so it cannot go
 missing: a guard that silently disappears leaves a green suite claiming a property
@@ -22,6 +23,8 @@ from __future__ import annotations
 import ast
 import pathlib
 import re
+
+import pytest
 
 REPO = pathlib.Path(__file__).resolve().parent.parent
 PKG = REPO / "custom_components" / "phoenix_mcp"
@@ -64,8 +67,10 @@ def _reads(tree: ast.AST) -> set[str]:
 # binding alone: never a binding of the same name in a tool the test also runs.
 PATCHED_MODULES = ("tool_catalog", "tool_dispatch", "mcp_transport", "tools/approvals", "tools/backup",
                    "tools/history", "tools/integrations", "tools/logs", "tools/registry", "tools/restore",
-                   "tools/service", "tools/system")
-module_binds = {stem.rpartition("/")[2]: _bound(ast.parse((PKG / f"{stem}.py").read_text()))
+                   "tools/service", "tools/system",
+                   *(f"{package}/{p.stem}" for package in ("admin", "llm", "routing")
+                     for p in sorted((PKG / package).glob("*.py")) if p.stem != "__init__"))
+module_binds = {stem.replace("/", "."): _bound(ast.parse((PKG / f"{stem}.py").read_text()))
                 for stem in PATCHED_MODULES}
 registration_src = (PKG / "tool_registration.py").read_text()
 
@@ -96,36 +101,40 @@ def patch_targets(tree: ast.AST):
         f = n.func
         is_obj = isinstance(f, ast.Attribute) and f.attr in ("object", "setattr")
         is_str = (isinstance(f, ast.Name) and f.id == "patch") or (
-            isinstance(f, ast.Attribute) and f.attr == "patch")
-        if is_obj and len(n.args) >= 2 and isinstance(n.args[1], ast.Constant) \
-                and isinstance(n.args[1].value, str):
-            yield ast.unparse(n.args[0]), n.args[1].value, n.lineno
-        elif is_str and n.args and isinstance(n.args[0], ast.Constant) \
+            isinstance(f, ast.Attribute) and f.attr in ("patch", "setattr"))
+        if is_str and n.args and isinstance(n.args[0], ast.Constant) \
                 and isinstance(n.args[0].value, str) and "." in n.args[0].value:
             path, _, attr = n.args[0].value.rpartition(".")
             yield path, attr, n.lineno
+        elif is_obj and len(n.args) >= 2 and isinstance(n.args[1], ast.Constant) \
+                and isinstance(n.args[1].value, str):
+            yield ast.unparse(n.args[0]), n.args[1].value, n.lineno
 
 
 def find_stale_sites(test_root: pathlib.Path | None = None) -> tuple[list[str], int]:
     """Return (findings, sites_examined). A finding is a human-readable line."""
     findings: list[str] = []
     checked = 0
+    modules = _first_party_modules()
     for path in sorted((test_root or REPO / "tests").rglob("*.py")):
         tree = ast.parse(path.read_text())
+        aliases, _ = _imported_names(tree, modules)
         funcs = sorted(
             (n.lineno, n.end_lineno, n) for n in ast.walk(tree)
             if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))
         )
         for mod, attr, ln in patch_targets(tree):
-            stem = mod.rpartition(".")[2]
-            if stem not in module_binds or attr not in module_binds[stem]:
+            module = _patched_module(mod, aliases)
+            if module not in module_binds or attr not in module_binds[module]:
                 continue
+            stem = module.removeprefix("tools.")
             checked += 1
             owner = next((n for s, e, n in funcs if s <= ln <= e), None)
             if owner is None:
                 continue
             names = _reads(owner)
-            patched_here = {(m.rpartition(".")[2], a) for m, a, _ in patch_targets(owner)}
+            patched_here = {((_patched_module(m, aliases) or "").removeprefix("tools."), a)
+                            for m, a, _ in patch_targets(owner)}
             strings = {c.value for c in ast.walk(owner)
                        if isinstance(c, ast.Constant) and isinstance(c.value, str)}
             reachable = {handler_module[s] for s in strings if s in handler_module}
@@ -154,51 +163,126 @@ def _first_party_modules() -> dict[str, ast.Module]:
     return {_module_name(p): ast.parse(p.read_text()) for p in sorted(PKG.rglob("*.py")) if "mesa_core" not in p.parts}
 
 
-def _importers(modules: dict[str, ast.Module]) -> tuple[set[tuple[str, str]], set[tuple[str, str]]]:
-    """(source module, name) pairs imported at module level, and those imported inside a function.
+def _importers(modules: dict[str, ast.Module]) -> tuple[dict[tuple[str, str], set[tuple[str, str]]], set[tuple[str, str]]]:
+    """Who imports each (source module, name) at module level, and which pairs are imported inside a function.
 
     A module-level import copies the binding once, so a later patch of the source
-    never reaches that importer. A function-level import reads the source at call
-    time, so the patch does.
+    never reaches that importer: the first result maps the pair to each
+    (importing module, local name). A function-level import reads the source at
+    call time, so the patch does reach it.
     """
-    top: set[tuple[str, str]] = set()
+    top: dict[tuple[str, str], set[tuple[str, str]]] = {}
     deferred: set[tuple[str, str]] = set()
+    packages = {name.rpartition(".")[0] for name in modules}
     for name, tree in modules.items():
-        package = name.split(".")[:-1]
+        parent = name if name in packages else name.rpartition(".")[0]
+        package = parent.split(".") if parent else []
         top_nodes = {id(node) for node in tree.body}
         for node in ast.walk(tree):
             if isinstance(node, ast.ImportFrom) and node.level:
                 base = package[:len(package) - (node.level - 1)]
                 source = ".".join(base + ([node.module] if node.module else []))
-                (top if id(node) in top_nodes else deferred).update((source, alias.name) for alias in node.names)
+                for alias in node.names:
+                    if id(node) in top_nodes:
+                        top.setdefault((source, alias.name), set()).add((name, alias.asname or alias.name))
+                    else:
+                        deferred.add((source, alias.name))
     return top, deferred
 
 
-def _test_patch_sites(path: pathlib.Path, modules: dict[str, ast.Module]):
-    """(module, attribute, line) for each patch of a first-party module in one test file."""
-    tree = ast.parse(path.read_text())
+def _imported_names(tree: ast.AST, modules: dict[str, ast.Module]) -> tuple[dict[str, str], dict[str, str]]:
+    """Local names a test file imported: those that are first-party modules, and symbols with their module."""
     aliases: dict[str, str] = {}
+    symbols: dict[str, str] = {}
     for node in ast.walk(tree):
-        if isinstance(node, ast.ImportFrom) and node.module and node.module.startswith(BASE):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                full = alias.name.removeprefix(BASE).removeprefix(".")
+                if alias.asname and alias.name.startswith(BASE) and full in modules:
+                    aliases[alias.asname] = full
+        elif isinstance(node, ast.ImportFrom) and node.module and node.module.startswith(BASE):
             package = node.module.removeprefix(BASE).removeprefix(".")
             for alias in node.names:
                 full = f"{package}.{alias.name}".strip(".")
                 if full in modules:
                     aliases[alias.asname or alias.name] = full
+                elif package in modules:
+                    symbols[alias.asname or alias.name] = package
+    return aliases, symbols
+
+
+def _patched_module(target: str, aliases: dict[str, str]) -> str | None:
+    """The first-party module a patch target names, or None when it is not one."""
+    if target == BASE:
+        return ""
+    if target.startswith(f"{BASE}."):
+        return target.removeprefix(f"{BASE}.")
+    return aliases.get(target)
+
+
+def _reached_functions(owner: ast.AST, functions: dict[str, ast.AST]) -> list[ast.AST]:
+    """The test plus the helpers of its file that it names, transitively."""
+    reached = [owner]
+    seen = {id(owner)}
+    for fn in reached:
+        names = {n.id for n in ast.walk(fn) if isinstance(n, ast.Name)}
+        for name in sorted(names & functions.keys()):
+            if id(functions[name]) not in seen:
+                seen.add(id(functions[name]))
+                reached.append(functions[name])
+    return reached
+
+
+def _test_patch_sites(path: pathlib.Path, modules: dict[str, ast.Module]):
+    """(module, attribute, line, modules the test runs, bindings it patches) per first-party patch in a file.
+
+    A test runs a module when it, or a helper of its file, uses a symbol imported
+    from that module or the module itself as more than a patch target. Fixtures
+    do not count: they arrange state, and what they touch is not the code on trial.
+    """
+    tree = ast.parse(path.read_text())
+    aliases, symbols = _imported_names(tree, modules)
+    functions: dict[str, ast.AST] = {}
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) \
+                and not any("fixture" in ast.unparse(d) for d in node.decorator_list):
+            functions.setdefault(node.name, node)
+    spans = sorted((n.lineno, n.end_lineno, id(n), n) for n in ast.walk(tree)
+                   if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)))
+    context: dict[int, tuple[set[str], set[tuple[str, str]]]] = {}
     for target, attr, line in patch_targets(tree):
-        if target.startswith(f"{BASE}."):
-            module = target.removeprefix(f"{BASE}.")
-        else:
-            module = aliases.get(target, "")
-        if module in modules:
-            yield module, attr, line
+        module = _patched_module(target, aliases)
+        if module not in modules:
+            continue
+        owner = next((n for start, end, _, n in spans if start <= line <= end), None)
+        if owner is None:
+            yield module, attr, line, set(), set()
+            continue
+        if id(owner) not in context:
+            runs: set[str] = set()
+            patched: set[tuple[str, str]] = set()
+            for fn in _reached_functions(owner, functions):
+                targets = {id(n.args[0]) for n in ast.walk(fn) if isinstance(n, ast.Call) and n.args
+                           and isinstance(n.func, ast.Attribute) and n.func.attr in ("object", "setattr")}
+                for n in ast.walk(fn):
+                    if isinstance(n, ast.Name) and id(n) not in targets:
+                        if n.id in aliases:
+                            runs.add(aliases[n.id])
+                        elif n.id in symbols:
+                            runs.add(symbols[n.id])
+                patched |= {(_patched_module(t, aliases) or "", a) for t, a, _ in patch_targets(fn)}
+            context[id(owner)] = (runs, patched)
+        yield (module, attr, line, *context[id(owner)])
 
 
 def find_dead_patches(test_root: pathlib.Path, modules: dict[str, ast.Module] | None = None) -> tuple[list[str], int]:
-    """Return (findings, sites_examined) for patches of a name nothing can read through.
+    """Return (findings, sites_examined) for patches that miss a reader of the name.
 
-    The module binds the name but never reads it, and everything importing it from
-    there imported it at module level, so the mock is unreachable from any module.
+    Two shapes qualify. The module binds the name but never reads it, and everything
+    importing it from there imported it at module level, so the mock is unreachable
+    from any module. Or a module the test runs copied the name at import time and
+    reads its copy, while the test patched only the source: a function-level importer
+    elsewhere keeps the source alive without bringing the patch to the code under test.
     """
     modules = modules or _first_party_modules()
     top, deferred = _importers(modules)
@@ -207,9 +291,16 @@ def find_dead_patches(test_root: pathlib.Path, modules: dict[str, ast.Module] | 
     findings: list[str] = []
     checked = 0
     for path in sorted(test_root.rglob("*.py")):
-        for module, attr, line in _test_patch_sites(path, modules):
+        for module, attr, line, runs, patched in _test_patch_sites(path, modules):
             checked += 1
-            if (attr not in reads[module] and (module, attr) in top and (module, attr) not in deferred
+            copies = [(module, attr)]
+            for binding in copies:
+                copies.extend(sorted(top.get(binding, set()) - set(copies)))
+            missed = sorted(importer for importer, local in copies[1:]
+                            if importer in runs and local in reads[importer] and (importer, local) not in patched)
+            if missed:
+                findings.append(f"{path}:{line}: patch {module}.{attr} misses the copy read by {', '.join(missed)}")
+            elif (attr not in reads[module] and (module, attr) in top and (module, attr) not in deferred
                     and attr in _bound(modules[module])):
                 findings.append(f"{path}:{line}: patch {module}.{attr} reaches nothing; patch the importing module")
     return findings, checked
@@ -239,6 +330,74 @@ def test_dead_patch_checker_reports_a_planted_patch(tmp_path: pathlib.Path) -> N
     findings, checked = find_dead_patches(tmp_path, modules)
     assert checked == 2
     assert len(findings) == 1 and "source.used" in findings[0]
+
+
+def _planted_copy_findings(tmp_path: pathlib.Path, test_body: str) -> list[str]:
+    """Findings for a test of a module-level copy whose source a function-level importer still reads."""
+    modules = {
+        "origin": ast.parse("def wipe():\n    pass\n"),
+        "view": ast.parse("from .origin import wipe\ndef handler():\n    wipe()\n"),
+        "lifecycle": ast.parse("def teardown():\n    from .origin import wipe\n    wipe()\n"),
+    }
+    (tmp_path / "test_fixture.py").write_text(
+        "from unittest.mock import patch\n"
+        "import pytest\n"
+        "from custom_components.phoenix_mcp.view import handler\n"
+        "from custom_components.phoenix_mcp.lifecycle import teardown\n"
+        "from custom_components.phoenix_mcp import view as view_module\n"
+        "def call_handler():\n"
+        "    handler()\n"
+        "@pytest.fixture\n"
+        "def arranged():\n"
+        "    handler()\n"
+        f"{test_body}"
+    )
+    findings, checked = find_dead_patches(tmp_path, modules)
+    assert checked >= 1
+    return findings
+
+
+def test_dead_patch_checker_reports_a_copy_the_test_runs(tmp_path: pathlib.Path) -> None:
+    """A function-level importer of the source does not excuse the copy under test."""
+    findings = _planted_copy_findings(tmp_path, (
+        "def test_x():\n"
+        '    with patch("custom_components.phoenix_mcp.origin.wipe") as wipe:\n'
+        "        handler()\n"
+        "    wipe.assert_not_called()\n"
+    ))
+    assert len(findings) == 1 and "origin.wipe misses the copy read by view" in findings[0]
+
+
+def test_dead_patch_checker_follows_helpers_and_monkeypatch_strings(tmp_path: pathlib.Path) -> None:
+    findings = _planted_copy_findings(tmp_path, (
+        "def test_x(monkeypatch):\n"
+        '    monkeypatch.setattr("custom_components.phoenix_mcp.origin.wipe", print)\n'
+        "    call_handler()\n"
+    ))
+    assert len(findings) == 1 and "copy read by view" in findings[0]
+
+
+@pytest.mark.parametrize("test_body", [
+    # The function-level importer reads through the source, so the patch reaches it.
+    'def test_x():\n    with patch("custom_components.phoenix_mcp.origin.wipe"):\n        teardown()\n',
+    # The copy is patched as well.
+    'def test_x():\n    with patch("custom_components.phoenix_mcp.origin.wipe"), '
+    'patch("custom_components.phoenix_mcp.view.wipe"):\n        handler()\n',
+    # The test names the module only to patch it, and a fixture does not put it on trial.
+    'def test_x(arranged):\n    _ = arranged\n    with patch("custom_components.phoenix_mcp.origin.wipe"):\n'
+    '        teardown()\n',
+    'def test_x(monkeypatch):\n    monkeypatch.setattr(view_module, "wipe", print)\n'
+    '    with patch("custom_components.phoenix_mcp.origin.wipe"):\n        teardown()\n',
+])
+def test_dead_patch_checker_leaves_a_reachable_patch_alone(tmp_path: pathlib.Path, test_body: str) -> None:
+    assert _planted_copy_findings(tmp_path, test_body) == []
+
+
+def test_every_patched_area_is_examined() -> None:
+    """Modules split into packages stay in scope, under names that cannot collide."""
+    for package in ("admin", "llm", "routing"):
+        assert any(name.startswith(f"{package}.") for name in module_binds), package
+    assert "tools.approvals" in module_binds and "admin.approvals" in module_binds
 
 
 def test_no_stale_patch_targets() -> None:

@@ -39,7 +39,7 @@ from .tool_dispatch import (
     _build_context_json, _build_context_plain, _dispatch_mcp, _jsonrpc_error, _jsonrpc_result,
     _MCP_LEGACY_METHODS, _MCP_METHODS, _MCP_MODERN_METHODS,
 )
-from .tool_input import _parse_finite_float, _reject_non_finite
+from .tool_input import parse_json_body
 from .view_base import PhoenixView
 
 
@@ -295,14 +295,15 @@ async def _handle_streamable_batch(
     """Dispatch a JSON-RPC batch array per MCP 2025-03-26.
 
     Items fail individually and notifications produce no entry. Returns 202 when all items are
-    notifications, otherwise 200 with a results array.
+    accepted notifications or responses, 400 when any of those was refused, otherwise 200 with
+    a results array.
     """
     if not items:
         _audit_mcp_transport(
             data, access_key, request_id, client_ip, body=items, resource="mcp:batch"
         )
         return web.Response(
-            status=200,
+            status=400,
             content_type="application/json",
             text=json.dumps(_jsonrpc_error(None, -32600, "Empty batch.")),
             headers={"X-Phoenix-Request-ID": request_id},
@@ -335,13 +336,23 @@ async def _handle_streamable_batch(
         return web.Response(status=202, headers={"X-Phoenix-Request-ID": request_id})
 
     resp = web.Response(
-        status=200,
+        # With no request in the batch, every entry reports a refused message with no id.
+        status=200 if _batch_has_request(items) else 400,
         content_type="application/json",
         text=json.dumps(responses, default=str),
         headers={"X-Phoenix-Request-ID": request_id},
     )
     resp.headers.update(_rate_limit_headers(access_key, rl_result))
     return resp
+
+
+def _batch_has_request(items: list) -> bool:
+    """Return whether any item carries an id and is not a JSON-RPC response."""
+    return any(
+        isinstance(item, dict) and "id" in item
+        and not (item.get("jsonrpc") == "2.0" and _classify_jsonrpc_message(item)[0] == "accepted")
+        for item in items
+    )
 
 
 def _batch_expects_response(items: list) -> bool:
@@ -679,13 +690,6 @@ def _log_dispatch_task_error(task: asyncio.Task) -> None:
         log_internal_failure(_LOGGER, "mcp_dispatch_task", exc)
 
 
-def _parse_mcp_body(body_bytes: bytes) -> Any:
-    """Parse one HTTP body under MCP's JSON rules; raise ValueError or RecursionError."""
-    parsed = json.loads(body_bytes.decode("utf-8"), parse_constant=_reject_non_finite, parse_float=_parse_finite_float)
-    json.dumps(parsed, ensure_ascii=False).encode("utf-8")
-    return parsed
-
-
 def _origin_rejected(hass: HomeAssistant, request: web.Request, request_id: str) -> web.Response | None:
     """Refuse a browser cross-origin (DNS-rebinding) request per the MCP transport spec.
     An absent Origin is allowed, as only browsers send one. A present Origin must match HA's
@@ -984,7 +988,7 @@ class PhoenixMcpView(PhoenixView):
             if dead_session is not None:
                 return dead_session
             return audited_transport_response(web.Response(
-                status=200,
+                status=400,
                 content_type="application/json",
                 text=json.dumps(_jsonrpc_error(None, -32700, "Parse error.", modern=_modern_headers(request))),
                 headers={"X-Phoenix-Request-ID": request_id},
@@ -1033,7 +1037,7 @@ class PhoenixMcpView(PhoenixView):
         if not body_bytes:
             return parse_error_response()
         try:
-            parsed = _parse_mcp_body(body_bytes)
+            parsed = parse_json_body(body_bytes)
         except (ValueError, RecursionError):  # Invalid JSON or text, numeric overflow, or excessive nesting.
             _LOGGER.warning(
                 "MCP POST: invalid JSON body (%d bytes read, Content-Length %s) rid=%s",
@@ -1080,7 +1084,9 @@ class PhoenixMcpView(PhoenixView):
                     data={"supported": list(MCP_PROTOCOL_VERSIONS), "requested": header_version},
                     modern=True,
                 ), body=parsed, resource="mcp:batch")
-            if any(
+            session = _legacy_session(data, request, access_key)
+            # A dead session answers first, as for every other body shape.
+            if (session is not None or not request.headers.get("Mcp-Session-Id")) and any(
                 isinstance(item, dict) and item.get("method") == "initialize"
                 for item in parsed
             ):
@@ -1090,7 +1096,6 @@ class PhoenixMcpView(PhoenixView):
                     "Invalid Request: initialize must not be sent in a batch.",
                     request_id,
                 ), body=parsed, resource="mcp:batch")
-            session = _legacy_session(data, request, access_key)
             if session is None:
                 session_outcome: Outcome = (
                     "not_found"
@@ -1148,7 +1153,9 @@ class PhoenixMcpView(PhoenixView):
             # batch_rl directly.
             if batch_rl.rate_limiting_enabled:
                 rl_headers = _rate_limit_headers(access_key, batch_rl)
-            if wants_sse and _batch_expects_response(parsed) and 0 < len(parsed) <= MAX_BATCH_ITEMS:
+            # A batch with no request may need an error status, which a stream cannot carry.
+            if (wants_sse and _batch_expects_response(parsed) and _batch_has_request(parsed)
+                    and 0 < len(parsed) <= MAX_BATCH_ITEMS):
                 bus = _ProgressBus()
                 _progress_ctx.set(bus)
                 return cast(web.Response, await _mcp_sse_response(
@@ -1170,7 +1177,7 @@ class PhoenixMcpView(PhoenixView):
 
         if not isinstance(parsed, dict):
             return audited_transport_response(web.Response(
-                status=200,
+                status=400,
                 content_type="application/json",
                 text=json.dumps(_jsonrpc_error(None, -32600, "Invalid Request.", modern=_modern_headers(request))),
                 headers={"X-Phoenix-Request-ID": request_id},

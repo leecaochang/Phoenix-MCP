@@ -14,6 +14,8 @@ from unittest.mock import AsyncMock, patch
 
 from homeassistant.components.calendar import DATA_COMPONENT as CALENDAR_COMPONENT
 from homeassistant.components.calendar import CalendarEntity, CalendarEntityFeature
+from homeassistant.components.todo import TodoItem, TodoItemStatus, TodoListEntity, TodoListEntityFeature
+from homeassistant.components.todo.const import DATA_COMPONENT as TODO_COMPONENT
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 from homeassistant.setup import async_setup_component
@@ -22,8 +24,11 @@ import pytest
 import yaml
 
 from custom_components.phoenix_mcp import mesa_tools, tool_catalog, tool_defs, tool_dispatch
+from custom_components.phoenix_mcp.approval_targets import bind_targets
 from custom_components.phoenix_mcp.approvals import async_create_pending_approval
 from custom_components.phoenix_mcp.const import CAPABILITY_NAMES, DOMAIN, MESA_APPROVED_EXECUTOR, MESA_CONFIRM_CAP
+from custom_components.phoenix_mcp.tool_common import UncertainOutcome
+from custom_components.phoenix_mcp.tools.todo import _items, _reviewed
 from custom_components.phoenix_mcp.ws_dispatch import async_save_lovelace_config, async_ws_command
 from tests.runtime_fixtures import schema_baseline
 
@@ -71,6 +76,7 @@ GATE_EXEMPT: dict[str, str] = {
     "restore_configuration": "Needs a recorded configuration recovery point.",
     "scan_zigbee_topology": ZIGBEE,
     "set_helper_settings": "Needs an entry of an integration classified as a helper.",
+    "set_todo_item": "No capability gates it, so only MESA Confirm queues it.",
     "set_zigbee_binding": ZIGBEE,
     "set_zigbee_device_options": ZIGBEE,
     "set_zigbee_device_property": ZIGBEE,
@@ -283,3 +289,34 @@ async def test_a_saved_approval_reaches_every_registered_executor(sweep, name):
             diff={"kind": "system_action", "summary": name}, request_id=f"r-{name}",
         )
     await _reaches_executor(sweep, name, record.id)
+
+
+class _StubbornList(TodoListEntity):
+    """A list that accepts a removal and keeps its items."""
+
+    _attr_name = "Sweep list"
+    _attr_unique_id = "sweep_list"
+    _attr_supported_features = TodoListEntityFeature.DELETE_TODO_ITEM
+    _attr_todo_items = [TodoItem(uid="eggs", summary="Eggs", status=TodoItemStatus.COMPLETED)]
+
+    async def async_delete_todo_items(self, uids: list[str]) -> None:
+        """Keep everything."""
+
+
+async def test_an_approved_clear_that_leaves_items_closes_as_interrupted(sweep):
+    assert await async_setup_component(sweep.hass, "todo", {})
+    await sweep.hass.data[TODO_COMPONENT].async_add_entities([_StubbornList()])
+    await sweep.hass.async_block_till_done()
+    entity_id = "todo.sweep_list"
+    rows = [_reviewed(item) for item in await _items(sweep.hass, entity_id, ["completed"])]
+    args = bind_targets({"entity_id": entity_id, "action": "clear_completed", "reviewed": rows}, [entity_id], sweep.hass)
+    async with sweep.data.store.async_lock:
+        record = await async_create_pending_approval(
+            sweep.data.store, access_key_id=sweep.access_key.id, access_key_name=sweep.access_key.name,
+            tool_name="set_todo_item", cap_name=MESA_CONFIRM_CAP, args=args,
+            diff={"kind": "service_preview", "summary": "clear"}, request_id="r-clear",
+        )
+    status, calls = await sweep.approve("set_todo_item", record.id)
+    assert status == 200 and isinstance(calls[0][0], UncertainOutcome)
+    stored = next(row for row in sweep.data.store.get_pending_approvals() if row["id"] == record.id)
+    assert (stored["status"], stored["closure_reason"]) == ("failed", "execution_interrupted")

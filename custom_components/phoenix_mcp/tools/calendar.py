@@ -37,6 +37,7 @@ from ..tool_common import (
 )
 from ..request_authority import _approved_exec_ctx
 from ..tool_contracts import normalize_tool_args
+from ..time_text import parse_date, parse_datetime
 
 _LOGGER = logging.getLogger(__name__)
 _FIELDS = frozenset({"summary", "start", "end", "description", "location", "rrule"})
@@ -172,9 +173,9 @@ def _calendar_time(value: Any) -> datetime:
     """An ISO date or timestamp in HA's zone; one without an offset is local time."""
     if not isinstance(value, str) or not value:
         raise ValueError("Times must be ISO dates or timestamps.")
-    if len(value) == 10 and (day := dt_util.parse_date(value)) is not None:
+    if len(value) == 10 and (day := parse_date(value)) is not None:
         return dt_util.start_of_local_day(datetime.combine(day, datetime.min.time()))
-    parsed = dt_util.parse_datetime(value)
+    parsed = parse_datetime(value)
     if parsed is None:
         raise ValueError("Times must be ISO dates or timestamps.")
     return dt_util.as_local(parsed)
@@ -569,7 +570,7 @@ async def _tool_get_calendar_write(args: dict, access_key: AccessKeyRecord, hass
 def _calendar_event_start(event: dict) -> datetime:
     """When an event starts, comparable across calendars: an all-day date is local midnight."""
     value = event.get("start")
-    parsed = dt_util.parse_datetime(value) if isinstance(value, str) else None
+    parsed = parse_datetime(value) if isinstance(value, str) else None
     if parsed is None:
         return datetime.max.replace(tzinfo=dt_util.UTC)
     if parsed.tzinfo is None:

@@ -51,7 +51,7 @@ from .tool_common import (
 from .request_authority import _approved_exec_ctx
 from .tool_contracts import _RETIRED_REPLACEMENTS, adopt_near_misses, unknown_argument_error
 from .tool_defs import (
-    _ENTITY_TOOL_DEFS, _NATIVE_TOOL_DEFS, _NATIVE_TOOL_PUBLIC_TO_INTERNAL, _SYSTEM_TOOL_DEFS,
+    _ENTITY_TOOL_DEFS, _NATIVE_TOOL_DEFS, _NATIVE_TOOL_PUBLIC_TO_INTERNAL, _NO_HOME_EFFECT_TOOLS, _SYSTEM_TOOL_DEFS,
 )
 from .tool_input import (
     _argument_notes, decode_container_strings, scalar_arguments, tool_arguments_error,
@@ -285,6 +285,8 @@ async def _call_tool_checked(
     client_context = dispatch_client_ip.set(client_ip)
     progress = DispatchProgress(tracked=handler in (_tool_call_service, _tool_calendar_write))
     parent_progress = dispatch_progress.get()
+    if parent_progress is not None:
+        parent_progress.tracked = progress.tracked
     progress_context = dispatch_progress.set(progress)
     try:
         result = await handler(
@@ -748,15 +750,26 @@ async def _retain_unknown_outcome(data: PhoenixData, access_key_id: str, name: s
         log_internal_failure(_LOGGER, "retain_unknown", error)
 
 
+def _may_have_changed_the_home(name: str, progress: DispatchProgress) -> bool:
+    """Whether a request that stopped early can have reached the home.
+
+    Only evidence says no: a tracked handler that never reached its boundary, or a tool with
+    nothing to change. Every other handler counts as started once entered.
+    """
+    return name not in _NO_HOME_EFFECT_TOOLS and not (progress.tracked and not progress.started)
+
+
 def _record_interrupted_write(
     hass: HomeAssistant, data: PhoenixData, access_key: AccessKeyRecord,
-    params: dict, request_id: str, client_ip: str,
+    params: dict, request_id: str, client_ip: str, progress: DispatchProgress,
 ) -> None:
     """Account for a write whose caller went away before it finished.
     Runs in the cancelled task, so the audit row and barrier happen without an await; saving
     the barrier is its own task. A request held at an approval is not unknown, and
-    ``home_request`` turns hold their own claims.
+    ``home_request`` turns hold their own claims. A request that cannot have reached the home
+    gets its row and nothing else. A reload may have replaced the admitting runtime.
     """
+    data = hass.data.get(DOMAIN) or data
     name = params["name"]
     payload = {"name": name, "arguments": params.get("arguments"), "interrupted": True}
     try:
@@ -764,8 +777,12 @@ def _record_interrupted_write(
             _log(data, access_key, request_id=request_id, method=name, resource=name,
                  outcome="pending_approval", client_ip=client_ip, payload=payload)
             return
+        if not _may_have_changed_the_home(name, progress):
+            _log(data, access_key, request_id=request_id, method="request/cancelled", resource=name,
+                 outcome="cancelled", client_ip=client_ip, payload=payload)
+            return
         _log(data, access_key, request_id=request_id, method="request/cancelled", resource=name,
-             outcome="invalid_request", client_ip=client_ip, payload=payload)
+             outcome="unknown", client_ip=client_ip, payload=payload)
         record_event(data, "notice", {"reason": "execution_unknown"}, outcome="unknown")
         if name != "home_request":
             data.agent_recovery.hold_unknown(access_key.id, name, request_id)
@@ -801,6 +818,8 @@ async def _dispatch_mcp(
         authority = RequestAuthority(hass, data, access_key.id, access_key.access_key_hash)
         admitted_context = request_authority.set(authority)
     context = None
+    progress = DispatchProgress(tracked=False)
+    progress_context = dispatch_progress.set(progress)
     write_entered = False
     dispatch_entered = False
     result = None
@@ -830,14 +849,19 @@ async def _dispatch_mcp(
         return result
     except AuthorityChangedError as exc:
         if write_entered:
+            data = hass.data.get(DOMAIN) or data
             completed = (result is not None and result[3] == "allowed") or (exc.receipt is not None and exc.receipt[0] == "allowed")
             name = params["name"]
             if exc.not_dispatched and not completed:
                 _log(data, access_key, request_id=request_id, method="authority/changed", resource=name,
                      outcome="denied", client_ip=client_ip)
                 return _jsonrpc_result(msg_id, _tool_error("Request authority changed before dispatch. No action was executed.")), method, name, "denied"
+            if name in _NO_HOME_EFFECT_TOOLS and not completed:
+                _log(data, access_key, request_id=request_id, method="authority/changed", resource=name,
+                     outcome="denied", client_ip=client_ip)
+                return _jsonrpc_result(msg_id, _tool_error("Request authority changed while this tool was running. It changes nothing in the home, so there is nothing to check.")), method, name, "denied"
             _log(data, access_key, request_id=request_id, method="authority/changed", resource=name,
-                 outcome="invalid_request", client_ip=client_ip)
+                 outcome="invalid_request" if completed else "unknown", client_ip=client_ip)
             if completed:
                 receipt = _tool_success("Action dispatch completed, but authority changed before its response could be delivered. Response details were withheld. Do not repeat the action; verify its outcome in Home Assistant.")
                 return _jsonrpc_result(msg_id, receipt), method, name, "allowed"
@@ -853,7 +877,7 @@ async def _dispatch_mcp(
         return _jsonrpc_error(msg_id, -32000, "Request authority changed. Check earlier actions before resubmitting with current permissions."), method, "/api/phoenix-mcp", "denied"
     except asyncio.CancelledError:
         if write_entered:
-            _record_interrupted_write(hass, data, access_key, params, request_id, client_ip)
+            _record_interrupted_write(hass, data, access_key, params, request_id, client_ip, progress)
         raise
     except Exception as exc:
         log_internal_failure(_LOGGER, "mcp_dispatch", exc)
@@ -863,6 +887,7 @@ async def _dispatch_mcp(
              outcome="invalid_request", client_ip=client_ip)
         return _jsonrpc_error(msg_id, -32603, "Internal error."), method, "/api/phoenix-mcp", "invalid_request"
     finally:
+        dispatch_progress.reset(progress_context)
         if context is not None:
             policy_version.reset(context)
         if admitted_context is not None:

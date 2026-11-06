@@ -33,6 +33,29 @@ async def test_core_wipe_clears_durable_allowance_and_failed_removal_stays_close
     store.async_remove = AsyncMock(side_effect=OSError('unavailable'))
     with pytest.raises(OSError): await budget.async_wipe()
     with pytest.raises(DecisionBudgetError, match='budget_unavailable'): await budget.reserve(2)
+    await budget.async_retry_load()
+    with pytest.raises(DecisionBudgetError, match='request_budget_exhausted'): await budget.reserve(1)
+
+
+async def test_a_ledger_that_is_gone_is_a_healthy_empty_one_on_retry():
+    store = MemoryStore(); store.value = 'invalid'
+    budget = DecisionRequestBudget(store)
+    await budget.async_load()
+    store.value = None
+    await budget.async_retry_load()
+    assert budget.summary(2)['available'] is True
+    await budget.reserve(2)
+
+
+async def test_a_first_reservation_that_failed_to_save_is_not_refunded_by_a_retry():
+    store = MemoryStore()
+    budget = DecisionRequestBudget(store)
+    store.async_save = AsyncMock(side_effect=OSError('disk'))
+    with pytest.raises(DecisionBudgetError, match='budget_unavailable'): await budget.reserve(1)
+    store.async_save = MemoryStore.async_save.__get__(store)
+    await budget.async_retry_load()
+    assert budget.summary(1)['available'] is True
+    with pytest.raises(DecisionBudgetError, match='request_budget_exhausted'): await budget.reserve(1)
 
 
 async def test_concurrent_callers_share_exact_allowance_and_restart():

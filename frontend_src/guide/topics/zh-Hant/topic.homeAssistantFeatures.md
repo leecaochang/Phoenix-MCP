@@ -1,5 +1,5 @@
 ---
-{ "id": "topic.homeAssistantFeatures", "title": "語音智慧體、AI 任務或 Assist 工具提供方", "parent": "window.settingsHome", "order": 2, "keywords": ["對話智慧體", "LLM API", "控制 Home Assistant", "哪個模型"] }
+{ "id": "topic.homeAssistantFeatures", "title": "語音智慧體、AI 任務或 Assist 工具提供者", "parent": "window.settingsHome", "order": 2, "keywords": ["對話智慧體", "LLM API", "控制 Home Assistant", "哪個模型"] }
 ---
 Phoenix 可以透過三種方式與 Home Assistant 的 AI 功能協作。差別在於由誰的模型回答，以及存取金鑰控制什麼。
 
@@ -13,7 +13,7 @@ Phoenix 使用你的帳戶和模型，自己回答 Home Assistant 對話。它�
 
 Phoenix 使用你的帳戶和模型，為自動化和腳本執行 Home Assistant 的 AI 任務操作。它在自己的存取金鑰範圍內代表整個家庭行動。如果 Home Assistant 告知任務由誰發起，任務只擁有該使用者的權限。
 
-## Assist 工具提供方 {#assist-tool-provider}
+## Assist 工具提供者 {#assist-tool-provider}
 
 由另一個整合的模型回答，Phoenix 只借用工具。綁定的存取金鑰決定該模型取得哪些工具，發起請求的 Home Assistant 使用者會進一步限制它們。Phoenix 在這裡不執行模型，也不使用你的額度。
 

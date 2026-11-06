@@ -239,7 +239,7 @@ GET    /api/phoenix-mcp/admin/audit
 | `limit` | integer | 默认 100，最多 500。 |
 | `offset` | integer | 参见[请求体](guide:topic.adminApi#bodies)。 |
 | `access_key_id` | string | 精确匹配。 |
-| `outcome` | string | 精确匹配：`allowed`、`denied`、`not_found`、`rate_limited`、`not_implemented`、`invalid_request` 或 `pending_approval`。 |
+| `outcome` | string | 精确匹配：`allowed`、`denied`、`not_found`、`rate_limited`、`not_implemented`、`invalid_request`、`pending_approval`、`cancelled` 或 `unknown`。 |
 | `ip` | string | 客户端地址的一部分。 |
 | `method` | string | 方法的一部分，不区分大小写。 |
 | `resource` | string | 资源的一部分，不区分大小写。 |

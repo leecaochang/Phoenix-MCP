@@ -10,15 +10,19 @@ from enum import Enum
 from collections.abc import Callable, Mapping
 from typing import Any, NamedTuple
 
+from homeassistant.const import STATE_UNAVAILABLE
 from homeassistant.core import HomeAssistant, State
 from homeassistant.helpers import area_registry as ar
 from homeassistant.helpers import floor_registry as fr
 from homeassistant.helpers import entity_registry as er
+from homeassistant.helpers.entity_component import DATA_INSTANCES
 from homeassistant.util.dt import utcnow
 from homeassistant.config_entries import ConfigEntryState
 
 from .const import (
-    BLOCKED_DOMAINS, DOMAIN, MUSIC_ASSISTANT_DOMAIN, PHYSICAL_GATE_DOMAINS, SCRIPT_ENTITY_SERVICES,
+    BLOCKED_DOMAINS, DOMAIN, DUAL_GATE_SERVICES, MUSIC_ASSISTANT_DOMAIN,
+    MUSIC_ASSISTANT_LIBRARY_SERVICES, NON_ACTUATING_SERVICES, NO_TARGET_SERVICES,
+    PHYSICAL_COMMAND_SERVICES, PHYSICAL_GATE_DOMAINS, PRIMARY_ENTITY_DOMAINS, SCRIPT_ENTITY_SERVICES,
     SENSITIVE_ATTRIBUTES, APPROVAL_TARGET_DEPTH, APPROVAL_TARGET_LIMIT, SENSITIVE_KEY_FINAL_WORDS,
     SENSITIVE_KEY_SUBSTRINGS, SENSITIVE_KEY_SUFFIXES, PERSONA_HOME_COMPANION,
     HOME_COMPANION_SENSOR_CLASSES, HOME_COMPANION_CONTROL_DOMAINS, HOME_COMPANION_READ_DOMAINS,
@@ -32,6 +36,7 @@ from .device_semantics import (
     effective_entity_area_id,
 )
 from .access_key_store import AccessKeyRecord
+from .capability import service_capability, strictest_capability
 from .household_authority import household_admin_access
 from .request_authority import household_authority
 
@@ -358,6 +363,22 @@ def resolve_device_registry_access(
     return Permission.NO_ACCESS
 
 
+def device_read_check(access_key: AccessKeyRecord, hass: HomeAssistant) -> Callable[[str], bool]:
+    """Return a remembering test of whether this key can read a device, as get_device decides."""
+    snapshot: DeviceRegistrySnapshot | None = None
+    known: dict[str, bool] = {}
+
+    def readable(device_id: str) -> bool:
+        nonlocal snapshot
+        if device_id not in known:
+            snapshot = snapshot or device_registry_snapshot(hass)
+            known[device_id] = resolve_device_registry_access(
+                device_id, access_key, hass, snapshot=snapshot) in (Permission.READ, Permission.WRITE)
+        return known[device_id]
+
+    return readable
+
+
 def resolve_device_registry_write(
     device_id: str,
     access_key: AccessKeyRecord,
@@ -527,13 +548,14 @@ def is_sensitive_key(key: Any) -> bool:
     """Return whether a key name marks its value as sensitive, case-insensitively.
 
     Matches SENSITIVE_ATTRIBUTES, SENSITIVE_KEY_SUBSTRINGS, SENSITIVE_KEY_SUFFIXES or a last
-    word in SENSITIVE_KEY_FINAL_WORDS.
+    word in SENSITIVE_KEY_FINAL_WORDS. A dash or a space reads as an underscore, so x-api-key
+    and "wifi key" match.
     """
     if not isinstance(key, str):
         return False
     if key in SENSITIVE_ATTRIBUTES:
         return True
-    lowered = key.lower()
+    lowered = key.lower().replace("-", "_").replace(" ", "_")
     return (any(marker in lowered for marker in SENSITIVE_KEY_SUBSTRINGS)
             or lowered.endswith(SENSITIVE_KEY_SUFFIXES)
             or re.split(r"[^a-z0-9]+", lowered)[-1] in SENSITIVE_KEY_FINAL_WORDS)
@@ -805,11 +827,23 @@ def resolve_service_targets(
     return permitted, visible
 
 
+def _loaded_group_members(hass: HomeAssistant, entity_id: str) -> list[object]:
+    """Read the members a group entity holds; an unavailable state drops them, the entity not."""
+    component = hass.data.get(DATA_INSTANCES, {}).get(entity_id.split(".", 1)[0])
+    entity = component.get_entity(entity_id) if component is not None else None
+    if entity is None or getattr(entity.platform, "platform_name", None) != "group":
+        return []
+    configured = (entity.extra_state_attributes or {}).get("entity_id")
+    return [] if configured is None else [configured]
+
+
 def group_member_ids(entity_id: str, hass: HomeAssistant) -> frozenset[str] | None:
     """Return every member of a group helper, nested groups included.
 
-    Empty for anything else; scenes, scripts and automations stay governed by their primary
-    entity. None when membership cannot be read, which callers treat as a refusal.
+    A state listing members counts whatever the registry says, as a YAML group has no entry,
+    and an unavailable group answers from its loaded entity. Empty for anything else; scenes,
+    scripts and automations stay governed by their primary entity. None when membership
+    cannot be read, which callers treat as a refusal.
     """
     registry = er.async_get(hass)
     members: set[str] = set()
@@ -817,13 +851,19 @@ def group_member_ids(entity_id: str, hass: HomeAssistant) -> frozenset[str] | No
     seen = {entity_id}
     while pending:
         current, depth = pending.pop()
+        if current.split(".", 1)[0] in PRIMARY_ENTITY_DOMAINS:
+            continue
         entry = registry.async_get(current)
         state = hass.states.get(current)
         attributes = state.attributes if state is not None else {}
         helper = current.startswith("group.") or (entry is not None and entry.platform == "group")
-        if not (helper or "group_entities" in attributes):
-            continue
         listed = [attributes[key] for key in ("group_entities", "entity_id") if key in attributes]
+        lists_members = isinstance(attributes.get("entity_id"), (list, tuple, set, frozenset))
+        if not (listed or state is None or state.state != STATE_UNAVAILABLE):
+            listed = _loaded_group_members(hass, current)
+            lists_members = bool(listed)
+        if not (helper or "group_entities" in attributes or lists_members):
+            continue
         if not listed or depth >= APPROVAL_TARGET_DEPTH:
             return None
         for value in listed:
@@ -853,6 +893,20 @@ def group_member_denied(entity_id: str, access_key: AccessKeyRecord, hass: HomeA
     return any(resolve(member, access_key, hass) == Permission.DENY for member in members)
 
 
+def unreadable_group_targets(
+    entity_id: str | list[str] | None, access_key: AccessKeyRecord, hass: HomeAssistant,
+) -> list[str]:
+    """Return the named targets this key may write that refuse only as unreadable groups.
+
+    Names nothing the key could not already see, so a refusal can say why.
+    """
+    named = [entity_id] if isinstance(entity_id, str) else entity_id if isinstance(entity_id, list) else []
+    return [
+        target for target in dict.fromkeys(canonical_entity_id(item, hass) for item in named if isinstance(item, str))
+        if resolve(target, access_key, hass) == Permission.WRITE and group_member_ids(target, hass) is None
+    ]
+
+
 def service_target_binding_valid(
     domain: str, service: str, targets: list[str], hass: HomeAssistant,
 ) -> bool:
@@ -872,14 +926,49 @@ def service_target_binding_valid(
 def physical_gate_applies(domain: str, service: str, targets: list[str]) -> bool:
     """Return whether the physical gate covers a call over a resolved target list.
 
-    The single rule for enforcement and preview. Every service on a physical actuator domain
-    qualifies, as does homeassistant.toggle when a target is physical.
+    The single rule for enforcement and preview. Every service of a physical actuator domain
+    qualifies, as does a raw command service, and any other service with a physical target
+    unless it cannot actuate one.
     """
-    if domain in PHYSICAL_GATE_DOMAINS:
+    service_key = f"{domain}/{service}"
+    if domain in PHYSICAL_GATE_DOMAINS or service_key in PHYSICAL_COMMAND_SERVICES:
         return True
-    if domain == "homeassistant" and service == "toggle":
-        return any(e.split(".")[0] in PHYSICAL_GATE_DOMAINS for e in targets)
-    return False
+    if service_key in NON_ACTUATING_SERVICES:
+        return False
+    return any(entity_id.split(".", 1)[0] in PHYSICAL_GATE_DOMAINS for entity_id in targets)
+
+
+def service_gate_targets(
+    *,
+    domain: str,
+    service: str,
+    entity_id: str | list[str] | None = None,
+    device_id: str | list[str] | None = None,
+    area_id: str | list[str] | None = None,
+    access_key: AccessKeyRecord,
+    hass: HomeAssistant,
+) -> list[str]:
+    """Return the entities a call reaches, for the gates that follow target domains.
+
+    The resolved targets with the members of any group among them, so a generic toggle of a
+    group of covers counts; every entity of the owning device for an ESPHome device action,
+    whose firmware can drive any of them; nothing for a service that ignores targets.
+    """
+    if f"{domain}/{service}" in DUAL_GATE_SERVICES | NO_TARGET_SERVICES | MUSIC_ASSISTANT_LIBRARY_SERVICES:
+        return []
+    if domain == ESPHOME_DOMAIN and (entry := resolve_esphome_user_service(hass, service)) is not None:
+        return [
+            reg_entry.entity_id
+            for reg_entry in er.async_entries_for_config_entry(er.async_get(hass), entry.entry_id)
+        ]
+    targets, _ = resolve_service_targets(
+        entity_id=entity_id, device_id=device_id, area_id=area_id,
+        service_domain=domain, access_key=access_key, hass=hass,
+    )
+    reached = list(targets)
+    for target in targets:
+        reached.extend(sorted(group_member_ids(target, hass) or ()))
+    return reached
 
 
 def call_needs_physical_gate(
@@ -894,17 +983,41 @@ def call_needs_physical_gate(
 ) -> bool:
     """Return True if a call_service must gate on cap_physical_control.
 
-    Resolves the target list, then applies physical_gate_applies.
+    Resolves what the call reaches, then applies physical_gate_applies.
     """
-    if domain in PHYSICAL_GATE_DOMAINS:
-        return True
-    if domain == "homeassistant" and service == "toggle":
-        targets, _ = resolve_service_targets(
-            entity_id=entity_id, device_id=device_id, area_id=area_id,
-            service_domain=domain, access_key=access_key, hass=hass,
-        )
-        return physical_gate_applies(domain, service, targets)
-    return False
+    return physical_gate_applies(domain, service, []) or physical_gate_applies(
+        domain, service, service_gate_targets(
+            domain=domain, service=service, entity_id=entity_id, device_id=device_id,
+            area_id=area_id, access_key=access_key, hass=hass,
+        ),
+    )
+
+
+def required_service_cap(
+    *,
+    domain: str,
+    service: str,
+    service_data: object,
+    entity_id: str | list[str] | None = None,
+    device_id: str | list[str] | None = None,
+    area_id: str | list[str] | None = None,
+    access_key: AccessKeyRecord,
+    hass: HomeAssistant,
+) -> str | None:
+    """Return the capability that decides a call, shared by admission, execution and preview.
+
+    A call may need physical control and a service capability at once; the one binding this
+    key hardest decides, so neither is passed over.
+    """
+    targets = service_gate_targets(
+        domain=domain, service=service, entity_id=entity_id, device_id=device_id,
+        area_id=area_id, access_key=access_key, hass=hass,
+    )
+    return strictest_capability(
+        access_key,
+        "cap_physical_control" if physical_gate_applies(domain, service, targets) else None,
+        service_capability(domain, service, service_data, targets),
+    )
 
 
 def _hidden_entity_reference(

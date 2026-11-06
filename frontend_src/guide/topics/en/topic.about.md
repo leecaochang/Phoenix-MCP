@@ -9,15 +9,15 @@ Phoenix MCP lets AI agents work with your Home Assistant, safely. Each agent get
 - **An external app**: connect an MCP client, such as a desktop assistant or a coding tool, with an access key. The app's own model does the thinking.
 - **Home Assistant's own assistants**: Phoenix can answer as a voice agent, run AI Task actions, or lend its tools to another assistant.
 
-Whichever you use, every action goes through the same checks, and the audit log records it.
+Whichever you use, the same checks apply, and the audit log records each action.
 
 Related: [{{label:agentchat.title}}](guide:window.agentChat), [Connecting External Apps](guide:topic.connecting), [Voice Agent, AI Task or Assist Tool Provider](guide:topic.homeAssistantFeatures)
 
-## What every action goes through {#checks}
+## The checks {#checks}
 
 1. **Capabilities**: what kinds of things the key may do at all, such as control devices or edit automations. Each is Deny, Allow or Confirm.
 2. **Permissions**: which areas, devices and entities the key can see and change.
-3. **MESA**: how careful to be with each device, whatever the key allows: let agents act, ask you first, or keep them off it.
+3. **MESA**: how careful to be with each device: let agents act, ask you first, or keep them off it. By default it mostly warns. [{{label:settings.mesaModeEnforced}}](guide:window.settingsSafety#mesa-mode) makes the rules hold. It [doesn't cover every action](guide:topic.mesaRules#coverage).
 4. **Approvals**: an action set to Confirm waits until you approve it.
 
 Related: [What Agents Can Do](guide:topic.tools), [Security](guide:topic.security), [Running Phoenix](guide:topic.running), [Admin API](guide:topic.adminApi), [{{label:accessKeys.cardCapabilities}}](guide:window.capabilities), [How a permission is decided](guide:topic.permissionResolution), [How MESA Decides](guide:topic.mesaRules), [How an approval works](guide:topic.approvalLifecycle)
