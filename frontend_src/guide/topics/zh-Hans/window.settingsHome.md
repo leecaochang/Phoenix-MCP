@@ -1,5 +1,5 @@
 ---
-{ "id": "window.settingsHome", "title": "{{label:workspace.homeAssistant}}", "parent": "workspace.settings", "order": 3, "keywords": ["语音", "Assist", "助手"], "sectionKeywords": { "voice-agent": ["对话智能体", "管道"], "voice-assistant": ["管道"], "ai-task": ["生成数据"], "assist-tool-provider": ["LLM API", "控制 Home Assistant"] } }
+{ "id": "window.settingsHome", "title": "{{label:workspace.homeAssistant}}", "parent": "workspace.settings", "order": 3, "keywords": ["语音", "Assist", "助手"], "sectionKeywords": { "ai-decisions": ["评估", "ai_task.evaluate"], "voice-agent": ["对话智能体", "管道"], "voice-assistant": ["管道"], "ai-task": ["生成数据"], "assist-tool-provider": ["LLM API", "控制 Home Assistant"] } }
 ---
 把 Phoenix 连接到 Home Assistant 自己的 AI 功能。每个选项卡设置一个功能，每个功能中都有一个访问密钥决定 Phoenix 可以做什么。
 
@@ -104,6 +104,30 @@ Home Companion 密钥会把对话交给 Home Companion 处理，并隐藏 **{{la
 ### {{label:settings.detailLevel}} {#ai-task-detail}
 
 文本结果说多少内容。默认：{{label:settings.detailBalanced}}。请求结构化数据的任务则使用它们自己的格式。
+
+## {{label:settings.aiDecisionsHeading}} {#ai-decisions}
+
+为 Home Assistant 添加第二个实体 Phoenix MCP Decisions，用于“评估”操作。自动化和脚本可以用它对传入的文本或数据提出是非题、选择题和评分题。决策提供商负责回答，每个回答都附带概率。
+
+此部分仅在 Home Assistant 2026.11 或更高版本上、且正在使用决策提供商时显示。要添加或选择决策提供商，请前往 [{{label:workspace.aiProviders}}](guide:window.settingsProviders#decision-provider)。
+
+问题和传入的数据会发送到你的决策提供商，每次发送的请求都计入[请求限额](guide:window.settingsProviders#decision-request-limit)。根据回答执行操作的自动化以 Home Assistant 的身份运行，不受 Phoenix 检查。
+
+### {{label:settings.aiDecisionsEnableLabel}} {#ai-decisions-enable}
+
+打开此实体。默认关闭。只有在此开关打开且已选择访问密钥时，实体才存在。
+
+撤销访问密钥或移除决策提供商会关闭此功能并移除实体，你在 Home Assistant 中对它所做的更改也会丢失。
+
+### {{label:settings.aiDecisionsDefaultLabel}} {#ai-decisions-default}
+
+将其设为 Home Assistant 中未指定实体的“评估”操作的默认实体，并立即替换当前默认实体。
+
+### {{label:settings.accessKey}} {#ai-decisions-access-key}
+
+允许“评估”操作运行的访问密钥。它与 AI 任务的密钥相互独立。它必须处于有效状态，并将 **{{label:caps.cap_service_response.label}}** 设为 {{label:caps.modeAllow}}；直通密钥已视为此设置。
+
+实体权限和 MESA 在此不适用：此操作没有目标实体，也不会改变任何内容。
 
 ## {{label:settings.assistCard}} {#assist-tool-provider}
 

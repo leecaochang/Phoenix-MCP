@@ -1,5 +1,5 @@
 ---
-{ "id": "window.settingsHome", "title": "{{label:workspace.homeAssistant}}", "parent": "workspace.settings", "order": 3, "keywords": ["語音", "Assist", "助理"], "sectionKeywords": { "voice-agent": ["對話智慧體", "管線"], "voice-assistant": ["管線"], "ai-task": ["產生資料"], "assist-tool-provider": ["LLM API", "控制 Home Assistant"] } }
+{ "id": "window.settingsHome", "title": "{{label:workspace.homeAssistant}}", "parent": "workspace.settings", "order": 3, "keywords": ["語音", "Assist", "助理"], "sectionKeywords": { "ai-decisions": ["評估", "ai_task.evaluate"], "voice-agent": ["對話智慧體", "管線"], "voice-assistant": ["管線"], "ai-task": ["產生資料"], "assist-tool-provider": ["LLM API", "控制 Home Assistant"] } }
 ---
 把 Phoenix 連接到 Home Assistant 自己的 AI 功能。每個分頁設定一個功能，每個功能中都有一個存取金鑰決定 Phoenix 可以做什麼。
 
@@ -104,6 +104,30 @@ Home Companion 金鑰會把對話交給 Home Companion 處理，並隱藏 **{{la
 ### {{label:settings.detailLevel}} {#ai-task-detail}
 
 文字結果說多少內容。預設：{{label:settings.detailBalanced}}。要求結構化資料的任務則使用它們自己的格式。
+
+## {{label:settings.aiDecisionsHeading}} {#ai-decisions}
+
+為 Home Assistant 新增第二個實體 Phoenix MCP Decisions，用於「評估」動作。自動化和腳本可以用它對傳入的文字或資料提出是非題、選擇題和評分題。決策提供者負責回答，每個回答都附帶機率。
+
+此部分僅在 Home Assistant 2026.11 或更新版本上、且正在使用決策提供者時顯示。若要新增或選擇決策提供者，請前往 [{{label:workspace.aiProviders}}](guide:window.settingsProviders#decision-provider)。
+
+問題和傳入的資料會傳送到你的決策提供者，每次傳送的請求都計入[請求限額](guide:window.settingsProviders#decision-request-limit)。依回答執行動作的自動化以 Home Assistant 的身分執行，不受 Phoenix 檢查。
+
+### {{label:settings.aiDecisionsEnableLabel}} {#ai-decisions-enable}
+
+開啟此實體。預設為關閉。只有在此開關開啟且已選擇存取金鑰時，實體才存在。
+
+撤銷存取金鑰或移除決策提供者會關閉此功能並移除實體，你在 Home Assistant 中對它所做的變更也會遺失。
+
+### {{label:settings.aiDecisionsDefaultLabel}} {#ai-decisions-default}
+
+將其設為 Home Assistant 中未指定實體的「評估」動作的預設實體，並立即取代目前的預設實體。
+
+### {{label:settings.accessKey}} {#ai-decisions-access-key}
+
+允許「評估」動作執行的存取金鑰。它與 AI 任務的金鑰彼此獨立。它必須處於有效狀態，並將 **{{label:caps.cap_service_response.label}}** 設為 {{label:caps.modeAllow}}；直通金鑰已視為此設定。
+
+實體權限和 MESA 在此不適用：此動作沒有目標實體，也不會變更任何內容。
 
 ## {{label:settings.assistCard}} {#assist-tool-provider}
 

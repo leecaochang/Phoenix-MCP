@@ -160,6 +160,7 @@ class PhoenixData:
     # The live Phoenix MCP AI Task entity while it exists (None otherwise). Tracked so the
     # sync can remove it; the source of truth for "does the entity currently exist".
     ai_task_entity: object | None = None
+    ai_evaluate_entity: object | None = None
     # Called by the admin settings PATCH when audit_flush_interval changes, so
     # the periodic flush timer picks up the new interval immediately.
     reschedule_audit_flush: Callable | None = None

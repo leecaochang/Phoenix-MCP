@@ -192,7 +192,7 @@ Renaming a key changes the display name of its sensors and device in Home Assist
 
 `DELETE /access-keys/{id}` revokes the key straight away and moves it to the archive. The response is `204` with no body. Phoenix also:
 
-- Removes the key from the Assist, Voice Agent and AI Task bindings. An Assist pipeline or AI Task entity that Phoenix created for the key goes too.
+- Removes the key from the Assist, Voice Agent, AI Task and Decisions bindings. An Assist pipeline, AI Task entity or Decisions entity that Phoenix created for the key goes too.
 - Cancels the key's queued approvals and releases its MESA leases.
 - Drops its rate-limit state and request counters, and removes its sensors.
 - Fires the `phoenix_mcp_access_key_revoked` event with `access_key_id`, `access_key_name`, `revoked_by` and `timestamp`.

@@ -1497,7 +1497,24 @@
       "haNotificationsHelp": "Affichez ou masquez quand Phoenix MCP vous envoie une notification Home Assistant.",
       "aboutHelp": "Affichez ou masquez les numéros de version et l’endroit où Phoenix MCP conserve ses données.",
       "githubHelp": "Ouvrez le code source et le suivi des problèmes de Phoenix MCP sur GitHub dans un nouvel onglet.",
-      "showSecret": "Afficher la clé"
+      "showSecret": "Afficher la clé",
+      "aiDecisionsHeading": "Décisions",
+      "aiDecisionsIntro": "Répondez à l’action Évaluer de Home Assistant avec votre fournisseur de décisions.",
+      "aiDecisionsEnableLabel": "Activer Phoenix MCP Decisions",
+      "aiDecisionsEnableHelp": "Ajoute une entité Phoenix MCP Decisions pour que les automatisations et les scripts posent des questions. Désactivé par défaut.",
+      "aiDecisionsDefaultLabel": "Entité de décisions par défaut",
+      "aiDecisionsDefaultOff": "Utiliser Phoenix MCP lorsqu’une action Évaluer ne précise pas d’entité.",
+      "aiDecisionsDefaultOn": "Phoenix MCP traite les actions Évaluer qui ne précisent pas d’entité.",
+      "aiDecisionsConfigureFirst": "Activez-la d’abord et choisissez une clé d’accès.",
+      "aiDecisionsAccessKeyAria": "Clé d’accès des décisions",
+      "aiDecisionsAccessKeyHelp": "Les actions Évaluer ne s’exécutent que si cette clé d’accès est active et peut renvoyer des données de réponse.",
+      "aiDecisionsCapabilityNote": "Cette clé d’accès doit avoir {capability} sur {mode}.",
+      "aiDecisionsSetDefaultFailed": "Impossible de définir l’entité de décisions par défaut.",
+      "aiDecisionsEnabledToast": "Décisions activées",
+      "aiDecisionsDisabledToast": "Décisions désactivées",
+      "aiDecisionsDefaultSetToast": "Phoenix MCP Decisions est désormais l’entité par défaut",
+      "aiDecisionsDefaultReplacedToast": "Phoenix MCP Decisions est désormais l’entité par défaut et remplace {name}",
+      "aiDecisionsDefaultClearedToast": "Phoenix MCP Decisions n’est plus l’entité par défaut"
     },
     "agentchat": {
       "accessKey": "Clé d’accès",
@@ -2031,7 +2048,8 @@
       "recoverySnapshotUnsafeAt": "Aucune copie complète de cet élément sans secrets n’est disponible, donc rien n’a été modifié. Phoenix l’a refusé à {location}.",
       "invalidHostHeader": "L’en-tête Host de la requête n’est pas une adresse valide.",
       "approvalOutcomeNotSaved": "L'action est terminée, mais son résultat n'a pas pu être enregistré. Vérifiez son effet dans Home Assistant ; cette approbation ne sera plus proposée.",
-      "providerRemoteUrlResolutionFailed": "L'URL du fournisseur n'a pas pu être résolue, son adresse n'a donc pas pu être vérifiée."
+      "providerRemoteUrlResolutionFailed": "L'URL du fournisseur n'a pas pu être résolue, son adresse n'a donc pas pu être vérifiée.",
+      "aiDecisionsNotConfigured": "Activez d’abord Phoenix MCP Decisions avec une clé d’accès."
     },
     "mesaSuggestion": {
       "baseline_note": " Interdit correspond à la ligne de base intégrée pour ce domaine, le profil rend donc cette intention explicite. Pour autoriser plutôt le contrôle de l'agent soumis à l'approbation de l'administrateur, choisissez Confirmer dans l'Éditeur de profil avant d'enregistrer ; l'approbation s'applique lorsque MESA est appliqué.",
@@ -2926,7 +2944,8 @@
       "accessKeyFilter": "Affichez uniquement les clés d’accès dont le nom ou l’état contient ce texte.",
       "guideDismissWelcome": "Masquez cette page d’accueil. Retrouvez-la dans le Sommaire.",
       "showSecret": "Afficher la clé en clair pour vérifier ce qui a été collé.",
-      "guideSearchAgain": "Recherchez à nouveau ceci dans le guide."
+      "guideSearchAgain": "Recherchez à nouveau ceci dans le guide.",
+      "settingsAiDecisionsReplaceDefault": "Home Assistant a une seule entité de décisions par défaut, cela remplace donc l’entité actuelle."
     },
     "guide": {
       "title": "Guide",

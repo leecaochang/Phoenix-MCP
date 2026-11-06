@@ -12,7 +12,8 @@ from homeassistant.core import HomeAssistant
 
 from ..access_key_store import access_key_name_slug, valid_command_routing_languages
 from ..ai_task import (
-    AiTaskSetupError, ai_task_preferred_status, ai_task_supported, clear_ai_task_preferred,
+    AiTaskSetupError, ai_evaluate_preferred_status, ai_task_decisions_supported, ai_task_preferred_status,
+    ai_task_supported, clear_ai_evaluate_preferred, clear_ai_task_preferred, set_ai_evaluate_preferred,
     set_ai_task_preferred,
 )
 from ..approvals import (
@@ -134,6 +135,7 @@ def _settings_response(settings, hass: HomeAssistant) -> dict:
         assist_pipeline_preferred(hass, settings.voice_agent_pipeline_id) if hass else False
     )
     body["ai_task_supported"] = ai_task_supported()
+    body["ai_task_decisions_supported"] = ai_task_decisions_supported()
     esphome = esphome_availability(hass)
     body["esphome_integration"] = esphome.integration
     body["esphome_builder"] = esphome.builder
@@ -154,7 +156,7 @@ _BOOL_SETTINGS = frozenset({
     "log_rate_limited", "log_entity_names", "log_client_ip", "notify_on_rate_limit",
     "notify_on_approval", "mesa_inject_enabled", "access_key_presets_enabled",
     "agentcli_global", "agentcli_home_focused", "voice_agent_enabled",
-    "voice_agent_home_focused", "ai_task_enabled", "decision_shadow_enabled",
+    "voice_agent_home_focused", "ai_task_enabled", "ai_task_decisions_enabled", "decision_shadow_enabled",
     "agentcli_routing_shadow_enabled", "conversation_log_enabled",
     "provider_catalog_refresh_enabled",
 })
@@ -173,8 +175,8 @@ _DETAIL_LEVEL_SETTINGS = frozenset({
 # below, so the panel cannot point a surface at a dead access key or provider.
 _NULLABLE_STRING_SETTINGS = (
     "voice_agent_access_key_id", "voice_agent_provider_id", "voice_agent_model",
-    "ai_task_access_key_id", "ai_task_provider_id", "ai_task_model", "decision_provider_id",
-    "decision_provider_default_id",
+    "ai_task_access_key_id", "ai_task_provider_id", "ai_task_model", "ai_task_decisions_access_key_id",
+    "decision_provider_id", "decision_provider_default_id",
 )
 
 # (access key setting, provider setting) pairs validated against live records.
@@ -399,7 +401,15 @@ async def _validated_settings_patch(
     elif (patchable.get("decision_provider_default_id") and "decision_provider_id" not in patchable
             and current.decision_provider_id):
         patchable["decision_provider_id"] = patchable["decision_provider_default_id"]
-    if (patchable.get("decision_shadow_enabled") or patchable.get("voice_agent_routing_mode") == "hybrid"
+    if patchable.get("ai_task_decisions_access_key_id"):
+        bound = data.store.get_access_key_by_id(patchable["ai_task_decisions_access_key_id"])
+        if bound is None or not bound.is_valid():
+            return {}, _err(
+                "invalid_request", "ai_task_decisions_access_key_id must reference an active access key.",
+                400, rid, key="activeAccessKeyRequired", params={"field": "ai_task_decisions_access_key_id"},
+            )
+    if (patchable.get("decision_shadow_enabled") or patchable.get("ai_task_decisions_enabled")
+            or patchable.get("voice_agent_routing_mode") == "hybrid"
             or patchable.get("agentcli_routing_mode") == "hybrid"
             or any(patchable.get(key) in ("observe", "advise") for key in TOOL_ROUTING_SETTINGS.values())):
         account = patchable.get("decision_provider_id", data.store.get_settings().decision_provider_id)
@@ -415,6 +425,7 @@ async def _validated_settings_patch(
                             400, rid, key="toolRoutingUnqualified")
     if "decision_provider_id" in patchable and patchable["decision_provider_id"] is None:
         patchable["decision_shadow_enabled"] = False
+        patchable["ai_task_decisions_enabled"] = False
         patchable.update({key: "off" for key in TOOL_ROUTING_SETTINGS.values()})
         for key in ("voice_agent_routing_mode", "agentcli_routing_mode"):
             if getattr(data.store.get_settings(), key) == "hybrid":
@@ -484,7 +495,8 @@ async def _apply_settings_side_effects(
     # Add/remove the Phoenix MCP AI Task entity to match its config (it exists only while
     # fully configured), so it appears in HA's AI Task picker only when usable.
     if data.async_sync_ai_task is not None and (
-        "kill_switch" in patchable or any(k.startswith("ai_task_") for k in patchable)
+        "kill_switch" in patchable or "decision_provider_id" in patchable
+        or any(k.startswith("ai_task_") for k in patchable)
     ):
         data.async_sync_ai_task()
 
@@ -824,6 +836,57 @@ class PhoenixAdminAiTaskPreferredView(PhoenixView):
         return _ok(result, request_id=rid)
 
 
+class PhoenixAdminAiEvaluatePreferredView(PhoenixView):
+    """GET/POST/DELETE /api/phoenix-mcp/admin/ai_task/evaluate_preferred - the default Decisions entity.
+
+    POST makes Phoenix's entity HA's default, overwriting any prior one; DELETE clears it if
+    it is Phoenix's; GET reports the state. Admin session auth only.
+    """
+
+    url = "/api/phoenix-mcp/admin/ai_task/evaluate_preferred"
+    name = "api:phoenix-mcp:admin:ai_task:evaluate_preferred"
+    requires_auth = True
+
+    def _entry(self) -> Any:
+        entries = self.hass.config_entries.async_entries(DOMAIN)
+        return entries[0] if entries else None
+
+    def _missing(self, rid: str) -> web.Response:
+        return _err("not_found", "Phoenix MCP is not set up.", 404, rid, key="setupMissing")
+
+    @require_admin
+    async def get(self, request: web.Request) -> web.Response:
+        rid = request["phoenix_mcp_rid"]
+        entry = self._entry()
+        if entry is None:
+            return self._missing(rid)
+        return _ok(ai_evaluate_preferred_status(self.hass, entry), request_id=rid)
+
+    @require_admin
+    async def post(self, request: web.Request) -> web.Response:
+        rid = request["phoenix_mcp_rid"]
+        entry = self._entry()
+        if entry is None:
+            return self._missing(rid)
+        try:
+            result = set_ai_evaluate_preferred(self.hass, entry)
+        except AiTaskSetupError as err:
+            reason = err.args[0]
+            return _err("invalid_request", str(reason), 400, rid, key=reason.key)
+        _audit_admin(self.hass, request, rid, "ai_evaluate_preferred")
+        return _ok(result, request_id=rid)
+
+    @require_admin
+    async def delete(self, request: web.Request) -> web.Response:
+        rid = request["phoenix_mcp_rid"]
+        entry = self._entry()
+        if entry is None:
+            return self._missing(rid)
+        result = clear_ai_evaluate_preferred(self.hass, entry)
+        _audit_admin(self.hass, request, rid, "ai_evaluate_preferred")
+        return _ok(result, request_id=rid)
+
+
 def _wipe_flag(value: Any, default: bool) -> bool:
     """Coerce a wipe-scope flag: honor a real bool, else fall back to default."""
     return value if isinstance(value, bool) else default
@@ -992,8 +1055,10 @@ class PhoenixAdminWipeView(PhoenixView):
                             ai_task_provider_id=None,
                             ai_task_model=None,
                         )
-                    if settings.decision_provider_id:
+                    decision_removed = bool(settings.decision_provider_id)
+                    if decision_removed:
                         provider_patch.update(decision_provider_id=None, decision_shadow_enabled=False,
+                                              ai_task_decisions_enabled=False,
                                               **{key: "off" for key in TOOL_ROUTING_SETTINGS.values()})
                         for key in ("voice_agent_routing_mode", "agentcli_routing_mode"):
                             if getattr(settings, key) == "hybrid":
@@ -1007,7 +1072,7 @@ class PhoenixAdminWipeView(PhoenixView):
                     if data.async_sync_voice_agent is not None:
                         data.async_sync_voice_agent()
                     await async_remove_assist_pipeline(hass, data)
-                if ai_task_provider_removed and data.async_sync_ai_task is not None:
+                if (ai_task_provider_removed or decision_removed) and data.async_sync_ai_task is not None:
                     data.async_sync_ai_task()
 
         if wipe_mesa:

@@ -1111,7 +1111,9 @@ async def _async_setup_entry_impl(hass: HomeAssistant, entry: ConfigEntry) -> bo
     hass.data[RUNTIME_READY_KEY] = True
     if data.async_sync_ai_task is not None:
         try:
-            data.async_sync_ai_task()
+            from .ai_task import async_refresh_ai_task
+
+            await async_refresh_ai_task(hass, data)
         except Exception:
             _LOGGER.exception("Could not refresh the optional AI Task entity")
     await _reconcile_configuration()
@@ -1184,7 +1186,7 @@ class _PipelineOwner:
 async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
     """Delete credentials while preserving configuration and recovery evidence."""
     from .llm.accounts import async_wipe_agentcli_secrets
-    from .ai_task import clear_ai_task_preferred
+    from .ai_task import clear_ai_evaluate_preferred, clear_ai_task_preferred
     from .approvals import (
         REASON_INTEGRATION_REMOVED,
         async_cancel_approvals_for_access_key,
@@ -1199,6 +1201,7 @@ async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
     # alone, so this is the last point at which Phoenix's entity can be recognized.
     try:
         clear_ai_task_preferred(hass, entry)
+        clear_ai_evaluate_preferred(hass, entry)
     except Exception:  # removal retires credentials regardless
         _LOGGER.exception("Phoenix MCP: could not clear the AI Task default during removal")
     try:
@@ -1215,7 +1218,8 @@ async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
         await store.async_patch_settings(assist_bound_access_key_id=None,
             voice_agent_enabled=False, voice_agent_access_key_id=None,
             voice_agent_provider_id=None, voice_agent_model=None, ai_task_enabled=False, ai_task_access_key_id=None,
-            ai_task_provider_id=None, ai_task_model=None, decision_provider_id=None,
+            ai_task_provider_id=None, ai_task_model=None, ai_task_decisions_enabled=False,
+            ai_task_decisions_access_key_id=None, decision_provider_id=None,
             decision_provider_default_id=None)
     for record in changed:
         dismiss_approval_notification(hass, record.id)

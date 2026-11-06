@@ -703,6 +703,8 @@ class GlobalSettings:
     provider_catalog_refresh_enabled: bool = True
     provider_catalog_refresh_hours: int = PROVIDER_CATALOG_REFRESH_HOURS_DEFAULT
     decision_shadow_enabled: bool = False
+    ai_task_decisions_enabled: bool = False
+    ai_task_decisions_access_key_id: str | None = None
     decision_timeout_ms: int = DECISION_TIMEOUT_DEFAULT_MS
     decision_request_budget: int = 0
     voice_agent_enabled: bool = False
@@ -768,6 +770,8 @@ class GlobalSettings:
             "provider_catalog_refresh_enabled": self.provider_catalog_refresh_enabled,
             "provider_catalog_refresh_hours": self.provider_catalog_refresh_hours,
             "decision_shadow_enabled": self.decision_shadow_enabled,
+            "ai_task_decisions_enabled": self.ai_task_decisions_enabled,
+            "ai_task_decisions_access_key_id": self.ai_task_decisions_access_key_id,
             "decision_timeout_ms": self.decision_timeout_ms,
             "decision_request_budget": self.decision_request_budget,
             "voice_agent_enabled": self.voice_agent_enabled,
@@ -846,6 +850,8 @@ class GlobalSettings:
                 PROVIDER_CATALOG_REFRESH_HOURS_DEFAULT,
             ),
             decision_shadow_enabled=data.get("decision_shadow_enabled") is True,
+            ai_task_decisions_enabled=data.get("ai_task_decisions_enabled") is True,
+            ai_task_decisions_access_key_id=_coerce_opt_str(data.get("ai_task_decisions_access_key_id")),
             decision_timeout_ms=_clamp_range(data.get("decision_timeout_ms", DECISION_TIMEOUT_DEFAULT_MS),
                                             DECISION_TIMEOUT_MIN_MS, DECISION_TIMEOUT_MAX_MS, DECISION_TIMEOUT_DEFAULT_MS),
             decision_request_budget=_clamp_range(data.get('decision_request_budget', 0), 0, DECISION_REQUEST_BUDGET_MAX, 0),

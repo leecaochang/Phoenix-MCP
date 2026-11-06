@@ -1222,7 +1222,8 @@
       "recoverySnapshotUnsafeAt": "Er is geen volledige kopie van dit item zonder geheimen beschikbaar, dus er is niets gewijzigd. Phoenix heeft het geweigerd bij {location}.",
       "invalidHostHeader": "De Host-header van het verzoek is geen geldig adres.",
       "approvalOutcomeNotSaved": "De actie is voltooid, maar het resultaat kon niet worden opgeslagen. Controleer het effect in Home Assistant; deze goedkeuring wordt niet opnieuw aangeboden.",
-      "providerRemoteUrlResolutionFailed": "De provider-URL kon niet worden opgelost, dus het adres kon niet worden gecontroleerd."
+      "providerRemoteUrlResolutionFailed": "De provider-URL kon niet worden opgelost, dus het adres kon niet worden gecontroleerd.",
+      "aiDecisionsNotConfigured": "Schakel eerst Phoenix MCP Decisions in met een toegangssleutel."
     },
     "wizard": {
       "accessSub": "Selecteer het driehoekje naast <code>light</code> om de lichtgroep te openen. Daarin staan je lichtapparaten; selecteer het driehoekje naast een apparaat om de entiteiten te zien. Of typ de naam van je licht in het filterveld. Selecteer daarna <strong>W</strong> bij een licht dat je kunt controleren, zodat de agent het kan lezen en bedienen. Je kunt later meer machtigingen toevoegen.",
@@ -2131,7 +2132,24 @@
       "haNotificationsHelp": "Toon of verberg wanneer Phoenix MCP je een Home Assistant-melding stuurt.",
       "aboutHelp": "Toon of verberg de versienummers en waar Phoenix MCP zijn gegevens bewaart.",
       "githubHelp": "Open de broncode en issuetracker van Phoenix MCP op GitHub in een nieuw tabblad.",
-      "showSecret": "Sleutel tonen"
+      "showSecret": "Sleutel tonen",
+      "aiDecisionsHeading": "Beslissingen",
+      "aiDecisionsIntro": "Beantwoord de Home Assistant-actie Beoordelen met je beslissingsprovider.",
+      "aiDecisionsEnableLabel": "Phoenix MCP Decisions inschakelen",
+      "aiDecisionsEnableHelp": "Voegt een Phoenix MCP Decisions-entiteit toe waarmee automatiseringen en scripts vragen stellen. Standaard uit.",
+      "aiDecisionsDefaultLabel": "Standaardentiteit voor beslissingen",
+      "aiDecisionsDefaultOff": "Gebruik Phoenix MCP als een Beoordelen-actie geen entiteit opgeeft.",
+      "aiDecisionsDefaultOn": "Phoenix MCP handelt Beoordelen-acties af die geen entiteit opgeven.",
+      "aiDecisionsConfigureFirst": "Schakel dit eerst in en kies een toegangssleutel.",
+      "aiDecisionsAccessKeyAria": "Toegangssleutel voor beslissingen",
+      "aiDecisionsAccessKeyHelp": "Beoordelen-acties werken alleen zolang deze toegangssleutel actief is en antwoordgegevens mag teruggeven.",
+      "aiDecisionsCapabilityNote": "Deze toegangssleutel heeft {capability} op {mode} nodig.",
+      "aiDecisionsSetDefaultFailed": "Kan de standaardentiteit voor beslissingen niet instellen.",
+      "aiDecisionsEnabledToast": "Beslissingen ingeschakeld",
+      "aiDecisionsDisabledToast": "Beslissingen uitgeschakeld",
+      "aiDecisionsDefaultSetToast": "Phoenix MCP Decisions is nu de standaard",
+      "aiDecisionsDefaultReplacedToast": "Phoenix MCP Decisions is nu de standaard en vervangt {name}",
+      "aiDecisionsDefaultClearedToast": "Phoenix MCP Decisions is niet langer de standaard"
     },
     "approvalSummary": {
       "action.optionalReason": "Optionele reden",
@@ -3007,7 +3025,8 @@
       "accessKeyFilter": "Toon alleen toegangssleutels waarvan de naam of status deze tekst bevat.",
       "guideDismissWelcome": "Verberg deze welkomstpagina. Je vindt hem terug onder Inhoud.",
       "showSecret": "Toon de sleutel als platte tekst om te controleren wat er is geplakt.",
-      "guideSearchAgain": "Zoek hier opnieuw naar in de gids."
+      "guideSearchAgain": "Zoek hier opnieuw naar in de gids.",
+      "settingsAiDecisionsReplaceDefault": "Home Assistant heeft één standaardentiteit voor beslissingen, dus dit vervangt de huidige."
     },
     "guide": {
       "title": "Gids",

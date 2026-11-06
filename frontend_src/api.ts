@@ -7,7 +7,7 @@ import type {
   AgentCliProviderKind,
   AgentCliInstance,
   AgentCliProvidersResponse,
-  AiTaskPreferredStatus,
+  AiEvaluatePreferredStatus, AiTaskPreferredStatus,
   ApprovalListParams,
   ApprovalListResponse,
   ApprovalRecord,
@@ -279,6 +279,13 @@ export const api = {
     req<AiTaskPreferredStatus>("POST", "/ai_task/preferred"),
   clearAiTaskPreferred: () =>
     req<AiTaskPreferredStatus>("DELETE", "/ai_task/preferred"),
+  // The "Decisions" default entity, for the Evaluate action.
+  getAiEvaluatePreferred: () =>
+    req<AiEvaluatePreferredStatus>("GET", "/ai_task/evaluate_preferred"),
+  setAiEvaluatePreferred: () =>
+    req<AiEvaluatePreferredStatus>("POST", "/ai_task/evaluate_preferred"),
+  clearAiEvaluatePreferred: () =>
+    req<AiEvaluatePreferredStatus>("DELETE", "/ai_task/evaluate_preferred"),
 
   wipe: (scope?: { wipe_core?: boolean; wipe_providers?: boolean; wipe_mesa?: boolean }) =>
     req<void>("DELETE", "/wipe", { confirm: "WIPE", ...(scope ?? {}) }),

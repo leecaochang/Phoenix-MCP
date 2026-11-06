@@ -828,6 +828,9 @@
 /* A group ending its section, or followed by a folded section (which draws its own rule) or by
    the action it chooses for, ends without a rule. */
 .phx-setting-checks:is(:last-child, :has(+ .phx-disclosure, + .phx-window-actions, + .settings-divider)) { border-bottom: none; }
+/* The Decisions block of the AI Task tab is ruled off above, not between its own rows. */
+.phx-ai-decisions { margin-top: 12px; padding-top: 16px; border-top: 1px solid var(--phx-divider); }
+.phx-ai-decisions > .phx-setting-checks { border-bottom: none; }
 /* Audit and Conversation recording side by side once the window has 620 px inside, stacked below that. */
 .phx-settings { container-type: inline-size; }
 .phx-settings-columns { display: grid; grid-template-columns: minmax(0, 1fr); gap: 4px 24px; }

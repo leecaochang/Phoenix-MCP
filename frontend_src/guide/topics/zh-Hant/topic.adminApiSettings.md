@@ -24,6 +24,7 @@ PATCH  /api/phoenix-mcp/admin/settings
 - `voice_agent_pipeline_preferred`
 - `voice_agent_pipeline_id`，僅由[語音智慧體助理](guide:#voice-pipeline)路由設定
 - `ai_task_supported`
+- `ai_task_decisions_supported`
 - `esphome_integration`、`esphome_builder` 和 `esphome_builder_live`
 
 ### 變更設定 {#settings-change}
@@ -92,7 +93,7 @@ Phoenix 在寫入任何內容之前檢查每個值。第一個問題會拒絕整
 | `voice_agent_routing_mode` | `off`、`auto`、`local_shadow`、`local` 或 `hybrid` | `off` | 面板只寫入 `off` 和 `auto`。參見[Home Assistant](guide:window.settingsHome#voice-commands)和[僅 API 設定](guide:#api-only)。 |
 | `command_routing_languages` | 路由語言標籤清單，無重複 | `["en"]` | 僅 API。空清單會暫停使用它的模式中的辨識。參見[僅 API 設定](guide:#api-only)。 |
 | `command_routing_timeout_ms` | integer，50 到 5000 | 500 | 僅 API。拒絕。需要 JSON 整數。 |
-| `decision_provider_id` | 決策帳戶 ID 或 `null` | `null` | 正在使用的決策帳戶。設定它也會設定預設值。`null` 會關閉影子觀察、所有工具審核和每個 `hybrid` 模式。參見[AI 提供者](guide:window.settingsProviders#decision-provider)。 |
+| `decision_provider_id` | 決策帳戶 ID 或 `null` | `null` | 正在使用的決策帳戶。設定它也會設定預設值。`null` 會關閉影子觀察、所有工具審核、決策和每個 `hybrid` 模式。參見[AI 提供者](guide:window.settingsProviders#decision-provider)。 |
 | `decision_provider_default_id` | 決策帳戶 ID 或 `null` | `null` | 選定的預設值，在決策提供者關閉時保留。在正在使用帳戶時設定它會切換到該帳戶。 |
 | `decision_shadow_enabled` | boolean | `false` | 僅 API。開啟它需要決策帳戶。參見[僅 API 設定](guide:#api-only)。 |
 | `decision_timeout_ms` | integer，250 到 30000 | 5000 | 拒絕。需要 JSON 整數。參見[AI 提供者](guide:window.settingsProviders#decision-timeout)。 |
@@ -112,6 +113,8 @@ Phoenix 在寫入任何內容之前檢查每個值。第一個問題會拒絕整
 | `voice_agent_home_focused` | boolean | `false` | 參見[Home Assistant](guide:window.settingsHome#voice-home-focused)。 |
 | `ai_task_enabled` | boolean | `false` | 參見[Home Assistant](guide:window.settingsHome#ai-task-enable)。 |
 | `ai_task_access_key_id` | 有效存取金鑰 ID 或 `null` | `null` | 參見[Home Assistant](guide:window.settingsHome#ai-task-access-key)。 |
+| `ai_task_decisions_enabled` | boolean | `false` | 需要正在使用決策帳戶。參見[Home Assistant](guide:window.settingsHome#ai-decisions-enable)。 |
+| `ai_task_decisions_access_key_id` | 有效存取金鑰 ID 或 `null` | `null` | 參見[Home Assistant](guide:window.settingsHome#ai-decisions-access-key)。 |
 | `ai_task_provider_id` | 對話帳戶 ID 或 `null` | `null` | 參見[Home Assistant](guide:window.settingsHome#ai-task-provider)。 |
 | `ai_task_model` | string 或 `null` | `null` | 參見[Home Assistant](guide:window.settingsHome#ai-task-model)。 |
 | `ai_task_conversation_style` | 同 `agentcli_conversation_style` | `direct` | 參見[Home Assistant](guide:window.settingsHome#ai-task-style)。 |
@@ -366,6 +369,9 @@ DELETE /api/phoenix-mcp/admin/voice_agent/pipeline/preferred
 GET    /api/phoenix-mcp/admin/ai_task/preferred
 POST   /api/phoenix-mcp/admin/ai_task/preferred
 DELETE /api/phoenix-mcp/admin/ai_task/preferred
+GET    /api/phoenix-mcp/admin/ai_task/evaluate_preferred
+POST   /api/phoenix-mcp/admin/ai_task/evaluate_preferred
+DELETE /api/phoenix-mcp/admin/ai_task/evaluate_preferred
 ```
 
 讀取和設定 Home Assistant 的預設資料產生實體。`POST` 讓 Phoenix 的 AI 任務實體成為預設，替換其他任何實體。`DELETE` 僅在預設實體是 Phoenix 的時候清除它。

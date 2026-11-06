@@ -5,6 +5,7 @@ import { api } from "../api";
 import { t } from "../i18n";
 import { SettingLabel, helpRow } from "../ui/SettingLabel";
 import { useNotify } from "../ui/notify";
+import { AiTaskDecisionsSection } from "./AiTaskDecisionsSection";
 import { ConversationBehaviorControls } from "./ConversationBehaviorControls";
 
 // AI Task settings. Registers Phoenix MCP as a Home Assistant AI Task entity ("Phoenix MCP AI
@@ -198,6 +199,10 @@ export function AiTaskSettings({
         onDetailChange={(value) => onChange("ai_task_detail_level", value)}
         aiTaskFreeTextOnly
       />
+
+      {settings.ai_task_decisions_supported === true && !!settings.decision_provider_id && (
+        <AiTaskDecisionsSection settings={settings} onChange={onChange} saving={saving} accessKeys={accessKeys} />
+      )}
     </div>
   );
 }

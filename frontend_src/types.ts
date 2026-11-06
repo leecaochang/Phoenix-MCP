@@ -204,6 +204,11 @@ export interface GlobalSettings {
   // Phoenix MCP AI Task entity: Phoenix MCP registered as an HA AITaskEntity running its own model
   // on the chosen access key's scope. Independent of the voice agent and the bridge.
   ai_task_enabled?: boolean;
+  /** The opt-in Decisions entity, answered by the decision provider. */
+  ai_task_decisions_enabled?: boolean;
+  ai_task_decisions_access_key_id?: string | null;
+  /** Read-only: this Home Assistant has the Evaluate action (2026.11 and later). */
+  ai_task_decisions_supported?: boolean;
   ai_task_access_key_id?: string | null;
   ai_task_provider_id?: string | null;
   ai_task_model?: string | null;
@@ -220,6 +225,13 @@ export interface GlobalSettings {
 }
 
 // Status of HA's "Data generation tasks" default entity vs Phoenix MCP's AI Task entity.
+export interface AiEvaluatePreferredStatus {
+  entity_id: string | null;          // Phoenix MCP's Decisions entity (null until configured)
+  evaluate_entity_id: string | null; // the current default Decisions entity
+  evaluate_name: string | null;      // its friendly name (for the overwrite warning)
+  is_preferred: boolean;             // Phoenix MCP is the current default
+}
+
 export interface AiTaskPreferredStatus {
   supported: boolean;
   entity_id: string | null;          // Phoenix MCP's AI Task entity (null until configured)

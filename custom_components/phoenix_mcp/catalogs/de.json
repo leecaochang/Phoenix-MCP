@@ -1387,7 +1387,24 @@
       "haNotificationsHelp": "Ein- oder ausblenden, wann Phoenix MCP Ihnen eine Home Assistant-Benachrichtigung sendet.",
       "aboutHelp": "Die Versionsnummern und den Speicherort der Phoenix MCP-Daten ein- oder ausblenden.",
       "githubHelp": "Quellcode und Issue-Tracker von Phoenix MCP auf GitHub in einem neuen Tab öffnen.",
-      "showSecret": "Schlüssel anzeigen"
+      "showSecret": "Schlüssel anzeigen",
+      "aiDecisionsHeading": "Entscheidungen",
+      "aiDecisionsIntro": "Beantworten Sie die Home Assistant-Aktion Bewerten mit Ihrem Entscheidungsanbieter.",
+      "aiDecisionsEnableLabel": "Phoenix MCP Decisions aktivieren",
+      "aiDecisionsEnableHelp": "Fügt eine Phoenix MCP Decisions-Entität hinzu, mit der Automatisierungen und Skripte Fragen stellen. Standardmäßig aus.",
+      "aiDecisionsDefaultLabel": "Standard-Entität für Entscheidungen",
+      "aiDecisionsDefaultOff": "Phoenix MCP verwenden, wenn eine Bewerten-Aktion keine Entität angibt.",
+      "aiDecisionsDefaultOn": "Phoenix MCP übernimmt Bewerten-Aktionen, die keine Entität angeben.",
+      "aiDecisionsConfigureFirst": "Aktivieren Sie sie zuerst und wählen Sie einen Zugriffsschlüssel.",
+      "aiDecisionsAccessKeyAria": "Zugriffsschlüssel für Entscheidungen",
+      "aiDecisionsAccessKeyHelp": "Bewerten-Aktionen laufen nur, solange dieser Zugriffsschlüssel aktiv ist und Antwortdaten zurückgeben darf.",
+      "aiDecisionsCapabilityNote": "Dieser Zugriffsschlüssel braucht {capability} auf {mode}.",
+      "aiDecisionsSetDefaultFailed": "Die Standard-Entität für Entscheidungen konnte nicht festgelegt werden.",
+      "aiDecisionsEnabledToast": "Entscheidungen aktiviert",
+      "aiDecisionsDisabledToast": "Entscheidungen deaktiviert",
+      "aiDecisionsDefaultSetToast": "Phoenix MCP Decisions ist jetzt der Standard",
+      "aiDecisionsDefaultReplacedToast": "Phoenix MCP Decisions ist jetzt der Standard und ersetzt {name}",
+      "aiDecisionsDefaultClearedToast": "Phoenix MCP Decisions ist nicht mehr der Standard"
     },
     "diff": {
       "blueprint.create": "{domain}-Blueprint '{rel}' erstellen",
@@ -1715,7 +1732,8 @@
       "recoverySnapshotUnsafeAt": "Es gibt keine vollständige Kopie dieses Elements ohne Geheimnisse, daher wurde nichts geändert. Phoenix hat es bei {location} abgelehnt.",
       "invalidHostHeader": "Der Host-Header der Anfrage ist keine gültige Adresse.",
       "approvalOutcomeNotSaved": "Die Aktion wurde beendet, ihr Ergebnis konnte aber nicht gespeichert werden. Prüfen Sie die Auswirkung in Home Assistant; diese Genehmigung wird nicht erneut angeboten.",
-      "providerRemoteUrlResolutionFailed": "Die Anbieter-URL ließ sich nicht auflösen, daher konnte ihre Adresse nicht geprüft werden."
+      "providerRemoteUrlResolutionFailed": "Die Anbieter-URL ließ sich nicht auflösen, daher konnte ihre Adresse nicht geprüft werden.",
+      "aiDecisionsNotConfigured": "Aktivieren Sie zuerst Phoenix MCP Decisions mit einem Zugriffsschlüssel."
     },
     "approvalSummary": {
       "action.optionalReason": "Optionaler Grund",
@@ -2926,7 +2944,8 @@
       "accessKeyFilter": "Nur Zugriffsschlüssel zeigen, deren Name oder Status diesen Text enthält.",
       "guideDismissWelcome": "Diese Willkommensseite ausblenden. Sie ist weiter unter Inhalt zu finden.",
       "showSecret": "Den Schlüssel als Klartext anzeigen, um zu prüfen, was eingefügt wurde.",
-      "guideSearchAgain": "Erneut im Leitfaden danach suchen."
+      "guideSearchAgain": "Erneut im Leitfaden danach suchen.",
+      "settingsAiDecisionsReplaceDefault": "Home Assistant hat eine Standard-Entität für Entscheidungen, daher ersetzt dies die aktuelle."
     },
     "guide": {
       "title": "Leitfaden",

@@ -77,6 +77,9 @@ export const SETTING_INDEX: readonly SettingEntry[] = [
   { id: "aiTaskModel", labelKey: "settings.aiTaskModelAria", window: "settingsHome", tab: "aiTask", aria: ["settings.aiTaskModelAria"] },
   { id: "aiTaskStyle", labelKey: "settings.conversationStyleAria", window: "settingsHome", tab: "aiTask", aria: ["settings.conversationStyleAria", aiTask] },
   { id: "aiTaskDetail", labelKey: "settings.detailLevelAria", window: "settingsHome", tab: "aiTask", aria: ["settings.detailLevelAria", aiTask] },
+  { id: "aiDecisionsEnable", labelKey: "settings.aiDecisionsEnableLabel", window: "settingsHome", tab: "aiTask", aria: ["settings.aiDecisionsEnableLabel"], optional: true },
+  { id: "aiDecisionsDefault", labelKey: "settings.aiDecisionsDefaultLabel", window: "settingsHome", tab: "aiTask", aria: ["settings.aiDecisionsDefaultLabel"], optional: true },
+  { id: "aiDecisionsAccessKey", labelKey: "settings.aiDecisionsAccessKeyAria", window: "settingsHome", tab: "aiTask", aria: ["settings.aiDecisionsAccessKeyAria"], optional: true },
 
   { id: "assistAccessKey", labelKey: "settings.assistBoundAccessKeyAria", window: "settingsHome", tab: "assist", aria: ["settings.assistBoundAccessKeyAria"] },
 

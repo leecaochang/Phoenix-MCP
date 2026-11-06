@@ -111,6 +111,7 @@ def _settings(kill_switch: bool = False):
         mesa_mode="off",
         audit_flush_interval=0,
         voice_agent_enabled=False,
+        ai_task_decisions_enabled=False,
     )
 
 

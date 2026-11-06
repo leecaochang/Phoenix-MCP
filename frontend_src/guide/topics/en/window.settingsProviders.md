@@ -86,6 +86,8 @@ Phoenix offers one decision provider, TypeSafe / JEV. Add your account here and 
 
 To use it, choose its account. Choose **{{label:routing.noProvider}}** to stop using it; commands then rely on sentence matching alone.
 
+It can also answer Home Assistant's Evaluate action for automations and scripts: see [Decisions](guide:window.settingsHome#ai-decisions).
+
 Related: [How a command is routed](guide:topic.commandRouting)
 
 ## {{label:routing.connectionSettings}} {#decision-connection}

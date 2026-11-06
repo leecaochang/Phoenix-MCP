@@ -327,8 +327,12 @@ DECISION_TYPESAFE_HTTP_ERRORS = MappingProxyType({"max_tokens_exceeded": "provid
 DECISION_FOLLOWED_ALIASES = frozenset({("typesafe", DECISION_TYPESAFE_BASE_URL, "jev-latest")})
 DECISION_FOLLOWED_REVISION = r"jev-\d+\.\d+\.\d+"
 DECISION_METRIC_SAMPLES = 256
-DECISION_METRIC_SCOPES = frozenset({"preview", "voice", "chat", "voice_shadow", "chat_shadow", "tool_chat", "tool_voice", "tool_ai_task"})
-DECISION_METRIC_OPERATIONS = frozenset({"classify", "target", "context", "batch", "reference", "tool"})
+DECISION_METRIC_SCOPES = frozenset({"preview", "voice", "chat", "voice_shadow", "chat_shadow", "tool_chat", "tool_voice", "tool_ai_task", "ai_task_evaluate"})
+DECISION_METRIC_OPERATIONS = frozenset({"classify", "target", "context", "batch", "reference", "tool", "evaluate"})
+# Home Assistant bounds neither, and JEV refuses more than these criteria per question.
+DECISION_EVALUATE_MAX_BYTES = 65536
+DECISION_EVALUATE_MAX_CHOICES = 255
+DECISION_EVALUATE_MAX_SCORE_LEVELS = 10
 DECISION_DIAGNOSTIC_QUESTIONS = frozenset({
     "route", "target", "value", "attribute", "color", "percentage", "summary_scope", "summary",
 })

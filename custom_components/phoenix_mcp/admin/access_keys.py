@@ -496,6 +496,9 @@ class PhoenixAdminAccessKeyView(PhoenixView):
                     _patch["voice_agent_access_key_id"] = None
                 if _s.ai_task_access_key_id == access_key_id:
                     _patch["ai_task_access_key_id"] = None
+                if _s.ai_task_decisions_access_key_id == access_key_id:
+                    _patch["ai_task_decisions_access_key_id"] = None
+                    _patch["ai_task_decisions_enabled"] = False
                 if _patch:
                     await data.store.async_patch_settings(**_patch)
                 # A revoked access key's queued approvals must not linger as approvable
@@ -521,9 +524,10 @@ class PhoenixAdminAccessKeyView(PhoenixView):
             # Phoenix-created Assist pipeline so a broken assistant is not left behind.
             await async_remove_assist_pipeline(hass, data)
 
-        if "ai_task_access_key_id" in _patch and data.async_sync_ai_task is not None:
-            # The AI Task lost its access key and is not fully configured; remove the AI
-            # Task entity from HA (and the picker).
+        if data.async_sync_ai_task is not None and any(
+                key in _patch for key in ("ai_task_access_key_id", "ai_task_decisions_access_key_id")):
+            # A surface lost its access key and is not fully configured; remove its
+            # entity from HA (and the picker).
             data.async_sync_ai_task()
 
         data.rate_limiter.destroy(access_key_id)

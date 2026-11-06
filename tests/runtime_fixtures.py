@@ -697,7 +697,8 @@ class DecisionWire:
     Replies choose `picks[question]` where it is a valid answer, else `none`, else the
     first criterion. `before_send[n]` runs while the budget reservation of the n-th
     POST awaits, the last yield before that request's guard. `after_reply[n]` runs
-    while the n-th POST is in flight, as a change between two questions would.
+    while the n-th POST is in flight, as a change between two questions would. `reply`
+    replaces the whole response body and `status` fails the request.
     """
 
     def __init__(self, mock: Any) -> None:
@@ -705,6 +706,8 @@ class DecisionWire:
         self.gets: list[str] = []
         self.picks: dict[str, str] = {}
         self.model = "jev-1.13.0"
+        self.reply: dict | None = None
+        self.status = 200
         self.before_send: dict[int, Callable[[], Awaitable[None]]] = {}
         self.after_reply: dict[int, Callable[[], Awaitable[None]]] = {}
         self._reservations = 0
@@ -721,6 +724,12 @@ class DecisionWire:
         return SimpleNamespace(reserve=reserve)
 
     def _answer(self, question: str, spec: dict) -> dict:
+        if spec["type"] == "noul":
+            return {"type": "noul", "noul": 0.75}
+        if spec["type"] == "score":
+            levels = {str(level): float(level == 0) for level in range(len(spec["criteria"]))}
+            return {"type": "score", "score": 0, "confidence": 1, "probabilities": levels,
+                    "legend": {str(level): text for level, text in enumerate(spec["criteria"])}}
         wanted = self.picks.get(question)
         criteria = list(spec["criteria"])
         selected = next(key for key in (wanted, "none", criteria[0]) if key in criteria)
@@ -732,7 +741,9 @@ class DecisionWire:
         action = self.after_reply.get(len(self.posts))
         if action is not None:
             await action()
-        body = {"model": self.model, "answers": {
+        if self.status != 200:
+            return AiohttpClientMockResponse("post", url, status=self.status, json={})
+        body = self.reply if self.reply is not None else {"model": self.model, "answers": {
             question: self._answer(question, spec) for question, spec in payload["questions"].items()}}
         return AiohttpClientMockResponse("post", url, json=body)
 

@@ -210,7 +210,8 @@
       "recoverySnapshotUnsafeAt": "Non è disponibile una copia completa di questo elemento senza segreti, quindi non è stato modificato nulla. Phoenix l'ha rifiutato in {location}.",
       "invalidHostHeader": "L'intestazione Host della richiesta non è un indirizzo valido.",
       "approvalOutcomeNotSaved": "L'azione è terminata, ma non è stato possibile salvarne il risultato. Controlla il suo effetto in Home Assistant; questa approvazione non verrà riproposta.",
-      "providerRemoteUrlResolutionFailed": "Non è stato possibile risolvere l'URL del provider, quindi il suo indirizzo non è stato verificato."
+      "providerRemoteUrlResolutionFailed": "Non è stato possibile risolvere l'URL del provider, quindi il suo indirizzo non è stato verificato.",
+      "aiDecisionsNotConfigured": "Prima attiva Phoenix MCP Decisions con una chiave di accesso."
     },
     "agentchat": {
       "accessKey": "Chiave di accesso",
@@ -1742,7 +1743,24 @@
         "office": "Ufficio",
         "aubergine": "Melanzana"
       },
-      "showSecret": "Mostra chiave"
+      "showSecret": "Mostra chiave",
+      "aiDecisionsHeading": "Decisioni",
+      "aiDecisionsIntro": "Rispondi all'azione Valuta di Home Assistant con il tuo fornitore di decisioni.",
+      "aiDecisionsEnableLabel": "Abilita Phoenix MCP Decisions",
+      "aiDecisionsEnableHelp": "Aggiunge un'entità Phoenix MCP Decisions con cui automazioni e script possono fare domande. Disattivato per impostazione predefinita.",
+      "aiDecisionsDefaultLabel": "Entità decisioni predefinita",
+      "aiDecisionsDefaultOff": "Usa Phoenix MCP quando un'azione Valuta non specifica un'entità.",
+      "aiDecisionsDefaultOn": "Phoenix MCP gestisce le azioni Valuta che non specificano un'entità.",
+      "aiDecisionsConfigureFirst": "Prima abilitala e scegli una chiave di accesso.",
+      "aiDecisionsAccessKeyAria": "Chiave di accesso delle decisioni",
+      "aiDecisionsAccessKeyHelp": "Le azioni Valuta vengono eseguite solo mentre questa chiave di accesso è attiva e può restituire dati di risposta.",
+      "aiDecisionsCapabilityNote": "Questa chiave di accesso richiede {capability} su {mode}.",
+      "aiDecisionsSetDefaultFailed": "Impossibile impostare l'entità decisioni predefinita.",
+      "aiDecisionsEnabledToast": "Decisioni abilitate",
+      "aiDecisionsDisabledToast": "Decisioni disabilitate",
+      "aiDecisionsDefaultSetToast": "Phoenix MCP Decisions è ora predefinita",
+      "aiDecisionsDefaultReplacedToast": "Phoenix MCP Decisions è ora predefinita e sostituisce {name}",
+      "aiDecisionsDefaultClearedToast": "Phoenix MCP Decisions non è più predefinita"
     },
     "version": {
       "card.added": "aggiunto {subject} ({where})",
@@ -2926,7 +2944,8 @@
       "accessKeyFilter": "Mostra solo le chiavi di accesso il cui nome o stato contiene questo testo.",
       "guideDismissWelcome": "Nascondi questa pagina di benvenuto. La ritrovi nell'Indice.",
       "showSecret": "Mostra la chiave come testo semplice, per controllare cosa è stato incollato.",
-      "guideSearchAgain": "Cerca di nuovo questo nella guida."
+      "guideSearchAgain": "Cerca di nuovo questo nella guida.",
+      "settingsAiDecisionsReplaceDefault": "Home Assistant ha una sola entità decisioni predefinita, quindi questa sostituisce quella attuale."
     },
     "guide": {
       "title": "Guida",

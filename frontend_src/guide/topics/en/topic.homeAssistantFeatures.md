@@ -13,6 +13,8 @@ Use it if you want Phoenix's own model and tools behind voice and Assist.
 
 Phoenix runs Home Assistant's AI Task actions for automations and scripts, with your account and model. It acts for the household, within its access key. If Home Assistant says who started a task, the task has only that person's rights.
 
+It can also answer Home Assistant's Evaluate action for automations and scripts: see [Decisions](guide:window.settingsHome#ai-decisions).
+
 ## Assist Tool Provider {#assist-tool-provider}
 
 Another integration's model answers, and Phoenix only lends it tools. The bound access key decides which tools that model gets, and the Home Assistant user who asked limits them further. Phoenix runs no model here, and uses none of your credit.

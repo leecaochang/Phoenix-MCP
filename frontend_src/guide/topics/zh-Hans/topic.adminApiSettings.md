@@ -24,6 +24,7 @@ PATCH  /api/phoenix-mcp/admin/settings
 - `voice_agent_pipeline_preferred`
 - `voice_agent_pipeline_id`，仅由[语音智能体助手](guide:#voice-pipeline)路由设置
 - `ai_task_supported`
+- `ai_task_decisions_supported`
 - `esphome_integration`、`esphome_builder` 和 `esphome_builder_live`
 
 ### 更改设置 {#settings-change}
@@ -92,7 +93,7 @@ Phoenix 在写入任何内容之前检查每个值。第一个问题会拒绝整
 | `voice_agent_routing_mode` | `off`、`auto`、`local_shadow`、`local` 或 `hybrid` | `off` | 面板只写入 `off` 和 `auto`。参见[Home Assistant](guide:window.settingsHome#voice-commands)和[仅 API 设置](guide:#api-only)。 |
 | `command_routing_languages` | 路由语言标签列表，无重复 | `["en"]` | 仅 API。空列表会暂停使用它的模式中的识别。参见[仅 API 设置](guide:#api-only)。 |
 | `command_routing_timeout_ms` | integer，50 到 5000 | 500 | 仅 API。拒绝。需要 JSON 整数。 |
-| `decision_provider_id` | 决策账户 ID 或 `null` | `null` | 正在使用的决策账户。设置它也会设置默认值。`null` 会关闭影子观察、所有工具审核和每个 `hybrid` 模式。参见[AI 提供商](guide:window.settingsProviders#decision-provider)。 |
+| `decision_provider_id` | 决策账户 ID 或 `null` | `null` | 正在使用的决策账户。设置它也会设置默认值。`null` 会关闭影子观察、所有工具审核、决策和每个 `hybrid` 模式。参见[AI 提供商](guide:window.settingsProviders#decision-provider)。 |
 | `decision_provider_default_id` | 决策账户 ID 或 `null` | `null` | 选定的默认值，在决策提供商关闭时保留。在正在使用账户时设置它会切换到该账户。 |
 | `decision_shadow_enabled` | boolean | `false` | 仅 API。开启它需要决策账户。参见[仅 API 设置](guide:#api-only)。 |
 | `decision_timeout_ms` | integer，250 到 30000 | 5000 | 拒绝。需要 JSON 整数。参见[AI 提供商](guide:window.settingsProviders#decision-timeout)。 |
@@ -112,6 +113,8 @@ Phoenix 在写入任何内容之前检查每个值。第一个问题会拒绝整
 | `voice_agent_home_focused` | boolean | `false` | 参见[Home Assistant](guide:window.settingsHome#voice-home-focused)。 |
 | `ai_task_enabled` | boolean | `false` | 参见[Home Assistant](guide:window.settingsHome#ai-task-enable)。 |
 | `ai_task_access_key_id` | 活动访问密钥 ID 或 `null` | `null` | 参见[Home Assistant](guide:window.settingsHome#ai-task-access-key)。 |
+| `ai_task_decisions_enabled` | boolean | `false` | 需要正在使用决策账户。参见[Home Assistant](guide:window.settingsHome#ai-decisions-enable)。 |
+| `ai_task_decisions_access_key_id` | 活动访问密钥 ID 或 `null` | `null` | 参见[Home Assistant](guide:window.settingsHome#ai-decisions-access-key)。 |
 | `ai_task_provider_id` | 对话账户 ID 或 `null` | `null` | 参见[Home Assistant](guide:window.settingsHome#ai-task-provider)。 |
 | `ai_task_model` | string 或 `null` | `null` | 参见[Home Assistant](guide:window.settingsHome#ai-task-model)。 |
 | `ai_task_conversation_style` | 同 `agentcli_conversation_style` | `direct` | 参见[Home Assistant](guide:window.settingsHome#ai-task-style)。 |
@@ -366,6 +369,9 @@ DELETE /api/phoenix-mcp/admin/voice_agent/pipeline/preferred
 GET    /api/phoenix-mcp/admin/ai_task/preferred
 POST   /api/phoenix-mcp/admin/ai_task/preferred
 DELETE /api/phoenix-mcp/admin/ai_task/preferred
+GET    /api/phoenix-mcp/admin/ai_task/evaluate_preferred
+POST   /api/phoenix-mcp/admin/ai_task/evaluate_preferred
+DELETE /api/phoenix-mcp/admin/ai_task/evaluate_preferred
 ```
 
 读取和设置 Home Assistant 的默认数据生成实体。`POST` 让 Phoenix 的 AI 任务实体成为默认，替换其他任何实体。`DELETE` 仅在默认实体是 Phoenix 的时候清除它。

@@ -1,5 +1,5 @@
 ---
-{ "id": "window.settingsHome", "title": "{{label:workspace.homeAssistant}}", "parent": "workspace.settings", "order": 3, "keywords": ["voice", "Assist", "assistant"], "sectionKeywords": { "voice-agent": ["conversation agent", "pipeline"], "voice-assistant": ["pipeline"], "ai-task": ["generate data"], "assist-tool-provider": ["LLM API", "Control Home Assistant"] }, "covers": ["frontend_src/components/VoiceAgentSettings.tsx", "frontend_src/components/AiTaskSettings.tsx", "frontend_src/components/AssistBridgeSettings.tsx"] }
+{ "id": "window.settingsHome", "title": "{{label:workspace.homeAssistant}}", "parent": "workspace.settings", "order": 3, "keywords": ["voice", "Assist", "assistant"], "sectionKeywords": { "ai-decisions": ["evaluate", "ai_task.evaluate"], "voice-agent": ["conversation agent", "pipeline"], "voice-assistant": ["pipeline"], "ai-task": ["generate data"], "assist-tool-provider": ["LLM API", "Control Home Assistant"] }, "covers": ["frontend_src/components/VoiceAgentSettings.tsx", "frontend_src/components/AiTaskSettings.tsx", "frontend_src/components/AiTaskDecisionsSection.tsx", "custom_components/phoenix_mcp/routing/decision_evaluation.py", "frontend_src/components/AssistBridgeSettings.tsx"] }
 ---
 Connect Phoenix to Home Assistant's own AI features. Each tab sets up one feature, and in each one an access key decides what Phoenix may do.
 
@@ -104,6 +104,30 @@ How text results sound. Default: {{label:settings.styleDirect}}.
 ### {{label:settings.detailLevel}} {#ai-task-detail}
 
 How much text results say. Default: {{label:settings.detailBalanced}}. Tasks that ask for structured data use their own format instead.
+
+## {{label:settings.aiDecisionsHeading}} {#ai-decisions}
+
+Gives Home Assistant a second entity, Phoenix MCP Decisions, for the Evaluate action. Automations and scripts use it to ask yes-or-no, choice and rating questions about text or data they pass in. Your decision provider answers, and each answer comes with probabilities.
+
+This section shows only on Home Assistant 2026.11 or later, while a decision provider is in use. To add or choose one, go to [{{label:workspace.aiProviders}}](guide:window.settingsProviders#decision-provider).
+
+The questions and the data passed in go to your decision provider, and every request sent counts towards your [request limit](guide:window.settingsProviders#decision-request-limit). An automation that acts on an answer runs as Home Assistant, outside Phoenix's checks.
+
+### {{label:settings.aiDecisionsEnableLabel}} {#ai-decisions-enable}
+
+Turns the entity on. Off by default. The entity exists only while this is on and an access key is chosen.
+
+Revoking the access key or removing the decision provider turns this off and removes the entity, along with any changes you made to it in Home Assistant.
+
+### {{label:settings.aiDecisionsDefaultLabel}} {#ai-decisions-default}
+
+Makes this Home Assistant's default for Evaluate actions that name no entity. It replaces any current default straight away.
+
+### {{label:settings.accessKey}} {#ai-decisions-access-key}
+
+The access key that lets Evaluate actions run. It's separate from the AI Task's key. It must be active, with **{{label:caps.cap_service_response.label}}** set to {{label:caps.modeAllow}}, which a pass-through key already counts as.
+
+Entity permissions and MESA don't apply here: the action has no target entity and changes nothing.
 
 ## {{label:settings.assistCard}} {#assist-tool-provider}
 

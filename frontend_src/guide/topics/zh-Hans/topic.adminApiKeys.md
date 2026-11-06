@@ -192,7 +192,7 @@ PATCH 拒绝不在此表中的任何字段，且 `expires_at` 根本无法更改
 
 `DELETE /access-keys/{id}` 立即吊销密钥并将其移到归档。响应为 `204`，没有正文。Phoenix 还会：
 
-- 从 Assist、语音智能体和 AI 任务绑定中移除密钥。Phoenix 为该密钥创建的 Assist 管道或 AI 任务实体也会被移除。
+- 从 Assist、语音智能体、AI 任务和决策绑定中移除密钥。Phoenix 为该密钥创建的 Assist 管道、AI 任务实体或决策实体也会被移除。
 - 取消该密钥排队的审批，并释放其 MESA 租约。
 - 丢弃其速率限制状态和请求计数，并移除其传感器。
 - 触发 `phoenix_mcp_access_key_revoked` 事件，包含 `access_key_id`、`access_key_name`、`revoked_by` 和 `timestamp`。

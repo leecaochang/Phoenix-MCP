@@ -38,6 +38,7 @@ export function mockSettingsApi(): void {
   vi.mocked(api.listAccessKeys).mockResolvedValue([]);
   vi.mocked(api.getAgentCliProviders).mockResolvedValue({ instances: [], provider_types: [] } as never);
   vi.mocked(api.getAgentCliModels).mockResolvedValue({ models: [] } as never);
+  vi.mocked(api.getAiEvaluatePreferred).mockResolvedValue({ entity_id: null, evaluate_entity_id: null, evaluate_name: null, is_preferred: false });
   vi.mocked(api.getAiTaskPreferred).mockResolvedValue({ supported: false, entity_id: null, gen_data_entity_id: null, gen_data_name: null, is_preferred: false });
   vi.mocked(api.getDecisionProviders).mockResolvedValue({ instances: [], provider_types: [] } as never);
 }

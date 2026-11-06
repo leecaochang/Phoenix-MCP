@@ -1045,7 +1045,8 @@
       "recoverySnapshotUnsafeAt": "비밀 정보가 없는 이 항목의 완전한 사본이 없어 아무것도 변경되지 않았습니다. Phoenix가 {location}에서 거부했습니다.",
       "invalidHostHeader": "요청의 Host 헤더가 올바른 주소가 아닙니다.",
       "approvalOutcomeNotSaved": "작업은 완료되었지만 결과를 저장할 수 없습니다. Home Assistant에서 영향을 확인하십시오. 이 승인은 다시 제공되지 않습니다.",
-      "providerRemoteUrlResolutionFailed": "제공업체 URL을 확인할 수 없어 주소를 검사하지 못했습니다."
+      "providerRemoteUrlResolutionFailed": "제공업체 URL을 확인할 수 없어 주소를 검사하지 못했습니다.",
+      "aiDecisionsNotConfigured": "먼저 액세스 키로 Phoenix MCP Decisions를 켜세요."
     },
     "mesa": {
       "addAreaProfile": "영역 프로필 추가",
@@ -1657,7 +1658,24 @@
         "office": "오피스",
         "aubergine": "가지색"
       },
-      "showSecret": "키 표시"
+      "showSecret": "키 표시",
+      "aiDecisionsHeading": "판단",
+      "aiDecisionsIntro": "Home Assistant의 평가 작업에 결정 제공업체로 답합니다.",
+      "aiDecisionsEnableLabel": "Phoenix MCP Decisions 사용",
+      "aiDecisionsEnableHelp": "자동화와 스크립트가 질문할 수 있는 Phoenix MCP Decisions 엔터티를 추가합니다. 기본적으로 꺼져 있습니다.",
+      "aiDecisionsDefaultLabel": "기본 판단 엔터티",
+      "aiDecisionsDefaultOff": "평가 작업에 엔터티가 지정되지 않으면 Phoenix MCP를 사용합니다.",
+      "aiDecisionsDefaultOn": "Phoenix MCP가 엔터티를 지정하지 않은 평가 작업을 처리합니다.",
+      "aiDecisionsConfigureFirst": "먼저 사용 설정하고 액세스 키를 선택하세요.",
+      "aiDecisionsAccessKeyAria": "판단 액세스 키",
+      "aiDecisionsAccessKeyHelp": "이 액세스 키가 활성 상태이고 응답 데이터를 반환할 수 있을 때만 평가 작업이 실행됩니다.",
+      "aiDecisionsCapabilityNote": "이 액세스 키는 {capability}이(가) {mode}(으)로 설정되어야 합니다.",
+      "aiDecisionsSetDefaultFailed": "기본 판단 엔터티를 설정할 수 없습니다.",
+      "aiDecisionsEnabledToast": "판단 사용",
+      "aiDecisionsDisabledToast": "판단 사용 안 함",
+      "aiDecisionsDefaultSetToast": "이제 Phoenix MCP Decisions가 기본값입니다",
+      "aiDecisionsDefaultReplacedToast": "이제 {name} 대신 Phoenix MCP Decisions가 기본값입니다",
+      "aiDecisionsDefaultClearedToast": "Phoenix MCP Decisions는 더 이상 기본값이 아닙니다"
     },
     "approvalSummary": {
       "action.optionalReason": "선택 사유",
@@ -2932,7 +2950,8 @@
       "accessKeyFilter": "이름이나 상태에 이 텍스트가 포함된 액세스 키만 표시합니다.",
       "guideDismissWelcome": "이 환영 페이지를 숨깁니다. 목차에서 다시 찾을 수 있습니다.",
       "showSecret": "붙여 넣은 내용을 확인할 수 있도록 키를 일반 텍스트로 표시합니다.",
-      "guideSearchAgain": "가이드에서 이 내용을 다시 검색합니다."
+      "guideSearchAgain": "가이드에서 이 내용을 다시 검색합니다.",
+      "settingsAiDecisionsReplaceDefault": "Home Assistant의 기본 판단 엔터티는 하나이므로 현재 엔터티를 대체합니다."
     },
     "guide": {
       "title": "가이드",

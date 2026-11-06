@@ -399,7 +399,8 @@
       "recoverySnapshotUnsafeAt": "Tästä kohteesta ei ole täydellistä kopiota ilman salaisuuksia, joten mitään ei muutettu. Phoenix hylkäsi sen kohdassa {location}.",
       "invalidHostHeader": "Pyynnön Host-otsake ei ole kelvollinen osoite.",
       "approvalOutcomeNotSaved": "Toiminto päättyi, mutta sen tulosta ei voitu tallentaa. Tarkista sen vaikutus Home Assistantissa; tätä hyväksyntää ei tarjota uudelleen.",
-      "providerRemoteUrlResolutionFailed": "Palveluntarjoajan URL-osoitetta ei voitu ratkaista, joten sen osoitetta ei voitu tarkistaa."
+      "providerRemoteUrlResolutionFailed": "Palveluntarjoajan URL-osoitetta ei voitu ratkaista, joten sen osoitetta ei voitu tarkistaa.",
+      "aiDecisionsNotConfigured": "Ota ensin Phoenix MCP Decisions käyttöön käyttöavaimella."
     },
     "agentchat": {
       "accessKey": "Käyttöavain",
@@ -2442,7 +2443,24 @@
         "office": "Toimisto",
         "aubergine": "Munakoiso"
       },
-      "showSecret": "Näytä avain"
+      "showSecret": "Näytä avain",
+      "aiDecisionsHeading": "Päätökset",
+      "aiDecisionsIntro": "Vastaa Home Assistantin Arvioi-toimintoon päätöstarjoajallasi.",
+      "aiDecisionsEnableLabel": "Ota Phoenix MCP Decisions käyttöön",
+      "aiDecisionsEnableHelp": "Lisää Phoenix MCP Decisions -kohde, jonka avulla automaatiot ja skriptit voivat esittää kysymyksiä. Oletuksena pois päältä.",
+      "aiDecisionsDefaultLabel": "Päätösten oletuskohde",
+      "aiDecisionsDefaultOff": "Käytä Phoenix MCP:tä, kun Arvioi-toiminto ei määritä kohdetta.",
+      "aiDecisionsDefaultOn": "Phoenix MCP käsittelee Arvioi-toiminnot, jotka eivät määritä kohdetta.",
+      "aiDecisionsConfigureFirst": "Ota se ensin käyttöön ja valitse käyttöavain.",
+      "aiDecisionsAccessKeyAria": "Päätösten käyttöavain",
+      "aiDecisionsAccessKeyHelp": "Arvioi-toiminnot toimivat vain, kun tämä käyttöavain on aktiivinen ja voi palauttaa vastaustietoja.",
+      "aiDecisionsCapabilityNote": "Tämä käyttöavain tarvitsee asetuksen {capability} tilaan {mode}.",
+      "aiDecisionsSetDefaultFailed": "Päätösten oletuskohdetta ei voitu asettaa.",
+      "aiDecisionsEnabledToast": "Päätökset otettu käyttöön",
+      "aiDecisionsDisabledToast": "Päätökset poistettu käytöstä",
+      "aiDecisionsDefaultSetToast": "Phoenix MCP Decisions on nyt oletus",
+      "aiDecisionsDefaultReplacedToast": "Phoenix MCP Decisions on nyt oletus ja korvaa kohteen {name}",
+      "aiDecisionsDefaultClearedToast": "Phoenix MCP Decisions ei ole enää oletus"
     },
     "shell": {
       "agentChat": "Agent Chat",
@@ -2932,7 +2950,8 @@
       "accessKeyFilter": "Näytä vain käyttöavaimet, joiden nimi tai tila sisältää tämän tekstin.",
       "guideDismissWelcome": "Piilota tämä tervetulosivu. Löydät sen uudelleen Sisällyksestä.",
       "showSecret": "Näytä avain tavallisena tekstinä, jotta voit tarkistaa, mitä liitettiin.",
-      "guideSearchAgain": "Hae tätä oppaasta uudelleen."
+      "guideSearchAgain": "Hae tätä oppaasta uudelleen.",
+      "settingsAiDecisionsReplaceDefault": "Home Assistantissa on yksi päätösten oletuskohde, joten tämä korvaa nykyisen."
     },
     "guide": {
       "title": "Opas",

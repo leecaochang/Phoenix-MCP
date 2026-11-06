@@ -1240,7 +1240,8 @@
       "recoverySnapshotUnsafeAt": "Brak pełnej kopii tego elementu bez sekretów, więc nic nie zostało zmienione. Phoenix odrzucił go w miejscu {location}.",
       "invalidHostHeader": "Nagłówek Host żądania nie jest prawidłowym adresem.",
       "approvalOutcomeNotSaved": "Działanie zakończyło się, ale nie udało się zapisać jego wyniku. Sprawdź jego efekt w Home Assistant; to zatwierdzenie nie zostanie zaproponowane ponownie.",
-      "providerRemoteUrlResolutionFailed": "Nie udało się rozwiązać adresu URL dostawcy, więc nie można było sprawdzić jego adresu."
+      "providerRemoteUrlResolutionFailed": "Nie udało się rozwiązać adresu URL dostawcy, więc nie można było sprawdzić jego adresu.",
+      "aiDecisionsNotConfigured": "Najpierw włącz Phoenix MCP Decisions z kluczem dostępu."
     },
     "wizard": {
       "accessSub": "Wybierz trójkąt obok <code>light</code>, aby otworzyć grupę świateł. Zawiera ona Twoje urządzenia oświetleniowe; wybierz trójkąt obok urządzenia, aby zobaczyć jego encje. Możesz też wpisać nazwę światła w polu filtra. Następnie wybierz <strong>W</strong> przy świetle, które możesz sprawdzić, aby agent mógł je odczytywać i nim sterować. Więcej uprawnień możesz dodać później.",
@@ -2181,7 +2182,24 @@
         "office": "Biuro",
         "aubergine": "Bakłażan"
       },
-      "showSecret": "Pokaż klucz"
+      "showSecret": "Pokaż klucz",
+      "aiDecisionsHeading": "Decyzje",
+      "aiDecisionsIntro": "Odpowiadaj na akcję Oceń w Home Assistant za pomocą dostawcy decyzji.",
+      "aiDecisionsEnableLabel": "Włącz Phoenix MCP Decisions",
+      "aiDecisionsEnableHelp": "Dodaje encję Phoenix MCP Decisions, dzięki której automatyzacje i skrypty mogą zadawać pytania. Domyślnie wyłączone.",
+      "aiDecisionsDefaultLabel": "Domyślna encja decyzji",
+      "aiDecisionsDefaultOff": "Używaj Phoenix MCP, gdy akcja Oceń nie wskazuje encji.",
+      "aiDecisionsDefaultOn": "Phoenix MCP obsługuje akcje Oceń, które nie wskazują encji.",
+      "aiDecisionsConfigureFirst": "Najpierw ją włącz i wybierz klucz dostępu.",
+      "aiDecisionsAccessKeyAria": "Klucz dostępu decyzji",
+      "aiDecisionsAccessKeyHelp": "Akcje Oceń działają tylko wtedy, gdy ten klucz dostępu jest aktywny i może zwracać dane odpowiedzi.",
+      "aiDecisionsCapabilityNote": "Ten klucz dostępu wymaga ustawienia {capability} na {mode}.",
+      "aiDecisionsSetDefaultFailed": "Nie udało się ustawić domyślnej encji decyzji.",
+      "aiDecisionsEnabledToast": "Decyzje włączone",
+      "aiDecisionsDisabledToast": "Decyzje wyłączone",
+      "aiDecisionsDefaultSetToast": "Phoenix MCP Decisions jest teraz domyślną encją",
+      "aiDecisionsDefaultReplacedToast": "Phoenix MCP Decisions jest teraz domyślną encją i zastępuje {name}",
+      "aiDecisionsDefaultClearedToast": "Phoenix MCP Decisions nie jest już domyślną encją"
     },
     "approvalSummary": {
       "action.optionalReason": "Opcjonalny powód",
@@ -3067,7 +3085,8 @@
       "accessKeyFilter": "Pokaż tylko klucze dostępu, których nazwa lub stan zawiera ten tekst.",
       "guideDismissWelcome": "Ukryj tę stronę powitalną. Znajdziesz ją ponownie w Spisie treści.",
       "showSecret": "Pokaż klucz jako zwykły tekst, aby sprawdzić, co zostało wklejone.",
-      "guideSearchAgain": "Wyszukaj to ponownie w przewodniku."
+      "guideSearchAgain": "Wyszukaj to ponownie w przewodniku.",
+      "settingsAiDecisionsReplaceDefault": "Home Assistant ma jedną domyślną encję decyzji, więc ta zmiana zastępuje obecną."
     },
     "guide": {
       "title": "Przewodnik",

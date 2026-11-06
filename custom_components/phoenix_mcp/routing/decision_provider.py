@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Coroutine, Mapping
+from collections.abc import Coroutine, Iterable, Mapping
 import json
 import logging
 import math
@@ -134,6 +134,28 @@ def revision_admitted(registry: Mapping[tuple[str, str, str], frozenset[str]], c
         key in DECISION_FOLLOWED_ALIASES and re.fullmatch(DECISION_FOLLOWED_REVISION, returned) is not None)
 
 
+def distribution_fits(values: Iterable[float], rounding_error: float = 0) -> bool:
+    """Whether probabilities are a normalized distribution, within the endpoint's rounding."""
+    probabilities = list(values)
+    if not rounding_error:
+        return math.isclose(sum(probabilities), 1, abs_tol=DECISION_PROBABILITY_SUM_TOLERANCE)
+    # Require a normalized distribution to fit within the rounding intervals.
+    # Clip at probability bounds and preserve every original value.
+    lower = math.fsum(max(0, value - rounding_error) for value in probabilities)
+    upper = math.fsum(min(1, value + rounding_error) for value in probabilities)
+    return (lower <= 1 + DECISION_PROBABILITY_ROUNDING_EPSILON
+            and upper >= 1 - DECISION_PROBABILITY_ROUNDING_EPSILON)
+
+
+def checked_model(body: Mapping[str, Any]) -> str:
+    """Return the answering model's identifier; refuse one that is not a bounded plain name."""
+    model = body.get("model")
+    if (not isinstance(model, str) or not model or len(model) > 200
+            or not all(ch.isalnum() or ch in "-_/.:@" for ch in model)):
+        raise DecisionValidationError("model_identifier")
+    return model
+
+
 def parse_choice(body: Any, choices: Mapping[str, str], question: str = "route", *,
                  rounding_error: float = 0) -> dict:
     """Require the complete requested distribution; keep confidence provider-defined."""
@@ -153,24 +175,12 @@ def parse_choice(body: Any, choices: Mapping[str, str], question: str = "route",
         raise DecisionValidationError("probability_values")
     if not _probability(answer.get("confidence")):
         raise DecisionValidationError("confidence")
-    probability_sum = sum(probabilities.values())
-    normalized = math.isclose(probability_sum, 1, abs_tol=DECISION_PROBABILITY_SUM_TOLERANCE)
-    if rounding_error:
-        # Require a normalized distribution to fit within the rounding intervals.
-        # Clip at probability bounds and preserve every original value.
-        lower = math.fsum(max(0, value - rounding_error) for value in probabilities.values())
-        upper = math.fsum(min(1, value + rounding_error) for value in probabilities.values())
-        normalized = (lower <= 1 + DECISION_PROBABILITY_ROUNDING_EPSILON
-                      and upper >= 1 - DECISION_PROBABILITY_ROUNDING_EPSILON)
-    if not normalized:
-        raise DecisionValidationError("probability_total", question=question,
-                                      choice_count=len(choices), probability_sum=probability_sum)
+    if not distribution_fits(probabilities.values(), rounding_error):
+        raise DecisionValidationError("probability_total", question=question, choice_count=len(choices),
+                                      probability_sum=sum(probabilities.values()))
     if probabilities[selected] < max(probabilities.values()):
         raise DecisionValidationError("selected_not_highest")
-    model = body.get("model")
-    if (not isinstance(model, str) or not model or len(model) > 200
-            or not all(ch.isalnum() or ch in "-_/.:@" for ch in model)):
-        raise DecisionValidationError("model_identifier")
+    model = checked_model(body)
     return {"choice": selected, "confidence": answer["confidence"],
             "probabilities": probabilities, "model": model}
 
@@ -191,11 +201,13 @@ class DecisionProvider:
         self.request_limit = request_limit
         self.request_guard = request_guard
 
-    def _parse_choice(self, body: Any, choices: Mapping[str, str], question: str = "route") -> dict:
+    @property
+    def rounding_error(self) -> float:
         """Apply precision evidence only to the known TypeSafe endpoint."""
-        rounding_error = DECISION_PROBABILITY_ROUNDING.get(
-            (self.cfg.kind, self.cfg.base_url, self.protocol), 0)
-        return parse_choice(body, choices, question, rounding_error=rounding_error)
+        return DECISION_PROBABILITY_ROUNDING.get((self.cfg.kind, self.cfg.base_url, self.protocol), 0)
+
+    def _parse_choice(self, body: Any, choices: Mapping[str, str], question: str = "route") -> dict:
+        return parse_choice(body, choices, question, rounding_error=self.rounding_error)
 
     def _group_choices(self, payload: dict, *, sequential: bool = False, choice_limit: int = DECISION_MAX_TARGETS + 1) -> dict[str, list[str]]:
         """Keep all candidates in shared state; partition only bounded Choice answers."""
@@ -276,8 +288,17 @@ class DecisionProvider:
             pass
         return "http_error"
 
+    async def request_evaluation(self, session: ClientSession, state: Any, questions: Mapping[str, Any],
+                                 timeout_ms: int) -> dict:
+        """Ask caller-written questions; the names and state reach neither metrics nor spans."""
+        return await self._request(session, "POST", "systemone", timeout_ms,
+                                   {"model": self.cfg.model, "state": state, "questions": dict(questions)},
+                                   operation="evaluate",
+                                   input_facts={"state_type": type(state).__name__, "question_count": len(questions)})
+
     async def _request(self, session: ClientSession, method: str, path: str,
-                       timeout_ms: int, payload: dict | None = None) -> dict:
+                       timeout_ms: int, payload: dict | None = None, *,
+                       operation: str | None = None, input_facts: dict | None = None) -> dict:
         size = len(json.dumps(payload).encode()) if payload is not None else 0
         if method == 'POST' and payload is not None and self.request_budget is not None:
             try:
@@ -292,18 +313,20 @@ class DecisionProvider:
         started = monotonic()
         parsed = None
         statistics = begin_decision(self.metric_scope) if method == "POST" and payload is not None else None
-        questions = set(payload.get("questions", {})) if payload else set()
-        operation = ("models" if method == "GET" else
-                     "tool" if any(q.startswith("tool_") for q in questions) else
-                     "reference" if questions == set(DECISION_REFERENCE_CHECKS) else
-                     "batch" if {"route", "target"} <= questions else
-                     "context" if questions == set(DECISION_CONTEXT_CHECKS) else
-                     "target" if "target" in questions else "classify")
-        state = payload.get("state", {}) if payload else {}
-        # Project only the user text and context counts, never classifier instructions.
-        input_facts = {"text": state.get("utterance"), "language": state.get("language"),
-                       "history_messages": len(state.get("history", [])),
-                       "target_count": len(state.get("targets", {}))}
+        if operation is None:
+            questions = set(payload.get("questions", {})) if payload else set()
+            operation = ("models" if method == "GET" else
+                         "tool" if any(q.startswith("tool_") for q in questions) else
+                         "reference" if questions == set(DECISION_REFERENCE_CHECKS) else
+                         "batch" if {"route", "target"} <= questions else
+                         "context" if questions == set(DECISION_CONTEXT_CHECKS) else
+                         "target" if "target" in questions else "classify")
+        if input_facts is None:
+            state = payload.get("state", {}) if payload else {}
+            # Project only the user text and context counts, never classifier instructions.
+            input_facts = {"text": state.get("utterance"), "language": state.get("language"),
+                           "history_messages": len(state.get("history", [])),
+                           "target_count": len(state.get("targets", {}))}
         with routing_span("decision_provider", provider=self.cfg.kind, model=self.cfg.model,
                           scope=self.metric_scope, observation_only="shadow" in self.metric_scope,
                           method=method, operation=operation, input=input_facts) as receipt:

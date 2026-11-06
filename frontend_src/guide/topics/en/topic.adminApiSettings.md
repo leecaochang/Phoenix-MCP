@@ -24,6 +24,7 @@ Read and change the settings behind the Settings workspace. For what each settin
 - `voice_agent_pipeline_preferred`
 - `voice_agent_pipeline_id`, set only by the [Voice Agent assistant](guide:#voice-pipeline) routes
 - `ai_task_supported`
+- `ai_task_decisions_supported`
 - `esphome_integration`, `esphome_builder` and `esphome_builder_live`
 
 ### Change settings {#settings-change}
@@ -92,7 +93,7 @@ The audit log records the change with the names of the changed settings, not the
 | `voice_agent_routing_mode` | `off`, `auto`, `local_shadow`, `local` or `hybrid` | `off` | The panel writes only `off` and `auto`. See [Home Assistant](guide:window.settingsHome#voice-commands) and [API-only settings](guide:#api-only). |
 | `command_routing_languages` | list of routing language tags, no duplicates | `["en"]` | API only. An empty list pauses recognition in the modes that use it. See [API-only settings](guide:#api-only). |
 | `command_routing_timeout_ms` | integer, 50 to 5000 | 500 | API only. Rejected. Needs a JSON integer. |
-| `decision_provider_id` | decision account ID or `null` | `null` | The decision account in use. Setting it also sets the default. `null` turns off shadow observation, all tool review and every `hybrid` mode. See [AI providers](guide:window.settingsProviders#decision-provider). |
+| `decision_provider_id` | decision account ID or `null` | `null` | The decision account in use. Setting it also sets the default. `null` turns off shadow observation, all tool review, Decisions and every `hybrid` mode. See [AI providers](guide:window.settingsProviders#decision-provider). |
 | `decision_provider_default_id` | decision account ID or `null` | `null` | The chosen default, kept while the decision provider is off. Setting it while an account is in use switches to it. |
 | `decision_shadow_enabled` | boolean | `false` | API only. Turning it on needs a decision account. See [API-only settings](guide:#api-only). |
 | `decision_timeout_ms` | integer, 250 to 30000 | 5000 | Rejected. Needs a JSON integer. See [AI providers](guide:window.settingsProviders#decision-timeout). |
@@ -112,6 +113,8 @@ The audit log records the change with the names of the changed settings, not the
 | `voice_agent_home_focused` | boolean | `false` | See [Home Assistant](guide:window.settingsHome#voice-home-focused). |
 | `ai_task_enabled` | boolean | `false` | See [Home Assistant](guide:window.settingsHome#ai-task-enable). |
 | `ai_task_access_key_id` | active access key ID or `null` | `null` | See [Home Assistant](guide:window.settingsHome#ai-task-access-key). |
+| `ai_task_decisions_enabled` | boolean | `false` | Needs a decision account in use. See [Home Assistant](guide:window.settingsHome#ai-decisions-enable). |
+| `ai_task_decisions_access_key_id` | active access key ID or `null` | `null` | See [Home Assistant](guide:window.settingsHome#ai-decisions-access-key). |
 | `ai_task_provider_id` | conversation account ID or `null` | `null` | See [Home Assistant](guide:window.settingsHome#ai-task-provider). |
 | `ai_task_model` | string or `null` | `null` | See [Home Assistant](guide:window.settingsHome#ai-task-model). |
 | `ai_task_conversation_style` | as `agentcli_conversation_style` | `direct` | See [Home Assistant](guide:window.settingsHome#ai-task-style). |
@@ -366,6 +369,9 @@ The response has `pipeline_id`, `name` and `preferred`.
 GET    /api/phoenix-mcp/admin/ai_task/preferred
 POST   /api/phoenix-mcp/admin/ai_task/preferred
 DELETE /api/phoenix-mcp/admin/ai_task/preferred
+GET    /api/phoenix-mcp/admin/ai_task/evaluate_preferred
+POST   /api/phoenix-mcp/admin/ai_task/evaluate_preferred
+DELETE /api/phoenix-mcp/admin/ai_task/evaluate_preferred
 ```
 
 Read and set Home Assistant's default data generation entity. `POST` makes Phoenix's AI Task entity the default, replacing any other. `DELETE` clears the default only if it's Phoenix's.

@@ -13,6 +13,8 @@ Phoenix 使用你的账户和模型，自己回答 Home Assistant 对话。它�
 
 Phoenix 使用你的账户和模型，为自动化和脚本运行 Home Assistant 的 AI 任务操作。它在自己的访问密钥范围内代表整个家庭行动。如果 Home Assistant 告知任务由谁发起，任务只拥有该用户的权限。
 
+它还可以为自动化和脚本回答 Home Assistant 的“评估”操作，请参阅[决策](guide:window.settingsHome#ai-decisions)。
+
 ## Assist 工具提供商 {#assist-tool-provider}
 
 由另一个集成的模型回答，Phoenix 只借用工具。绑定的访问密钥决定该模型获得哪些工具，发起请求的 Home Assistant 用户会进一步限制它们。Phoenix 在这里不运行模型，也不使用你的额度。

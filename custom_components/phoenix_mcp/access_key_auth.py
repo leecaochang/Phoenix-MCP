@@ -183,6 +183,9 @@ async def async_archive_expired_access_key(
                 _patch["voice_agent_access_key_id"] = None
             if _s.ai_task_access_key_id == current.id:
                 _patch["ai_task_access_key_id"] = None
+            if _s.ai_task_decisions_access_key_id == current.id:
+                _patch["ai_task_decisions_access_key_id"] = None
+                _patch["ai_task_decisions_enabled"] = False
             if _patch:
                 await data.store.async_patch_settings(**_patch)
             changed_approvals = await async_cancel_approvals_for_access_key(
@@ -200,8 +203,9 @@ async def async_archive_expired_access_key(
         # The voice agent lost its access key and is unregistered; remove any
         # Phoenix-created Assist pipeline so a broken assistant is not left behind.
         await async_remove_assist_pipeline(hass, data)
-    if "ai_task_access_key_id" in _patch and data.async_sync_ai_task is not None:
-        # The AI Task lost its access key; remove the AI Task entity from HA (and picker).
+    if data.async_sync_ai_task is not None and any(
+            key in _patch for key in ("ai_task_access_key_id", "ai_task_decisions_access_key_id")):
+        # A surface lost its access key; remove its entity from HA (and picker).
         data.async_sync_ai_task()
     data.rate_limiter.destroy(current.id)
     data.rate_limit_notified.pop(current.id, None)

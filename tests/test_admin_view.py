@@ -1879,7 +1879,7 @@ async def test_entity_tree_force_reload_bypasses_cache():
 
 
 def test_all_admin_views_exported():
-    assert len(ALL_ADMIN_VIEWS) == 67
+    assert len(ALL_ADMIN_VIEWS) == 68
 
 
 def test_archived_views_before_access_key_view():
@@ -2294,7 +2294,7 @@ async def test_wipe_providers_only_clears_dependent_settings():
         voice_agent_model=None,
         ai_task_provider_id=None,
         ai_task_model=None,
-        decision_provider_id=None, decision_shadow_enabled=False,
+        decision_provider_id=None, decision_shadow_enabled=False, ai_task_decisions_enabled=False,
         agentcli_tool_routing_mode="off", voice_agent_tool_routing_mode="off", ai_task_tool_routing_mode="off",
         voice_agent_routing_mode="off", agentcli_routing_mode="off",
     )
@@ -2897,6 +2897,114 @@ async def test_settings_patch_ai_task_rejects_unknown_provider():
     with patch_readers("custom_components.phoenix_mcp.llm.accounts._get_secret_store", AsyncMock(return_value=provider_store)):
         resp = await view.patch(_make_admin_request(body=body))
     assert resp.status == 400
+
+
+@pytest.mark.asyncio
+async def test_a_wipe_of_only_the_decision_provider_syncs_the_decisions_entity():
+    data = _make_wipe_data()
+    data.store.get_settings.return_value = GlobalSettings(
+        decision_provider_id="decision-provider", ai_task_decisions_enabled=True,
+        ai_task_decisions_access_key_id="k",
+    )
+    data.async_sync_ai_task = MagicMock()
+    view = PhoenixAdminWipeView()
+    view.hass = _make_hass(data)
+    with patch("custom_components.phoenix_mcp.admin.settings.async_wipe_agentcli_secrets", new=AsyncMock()):
+        resp = await view.delete(_make_admin_request(body=_wipe_body(wipe_core=False, wipe_providers=True)))
+    assert resp.status == 204
+    data.async_sync_ai_task.assert_called_once_with()
+
+
+@pytest.mark.asyncio
+async def test_settings_get_reports_decisions_support():
+    data, _ = _settings_data([])
+    view = PhoenixAdminSettingsView()
+    view.hass = _make_hass(data)
+    resp = await view.get(_make_admin_request())
+    assert json.loads(resp.text)["ai_task_decisions_supported"] is True
+
+
+@pytest.mark.asyncio
+async def test_settings_patch_decisions_needs_a_provider_and_a_live_key():
+    access_key = _make_active_access_key()
+    data, holder = _settings_data([access_key])
+    data.async_sync_ai_task = MagicMock()
+    view = PhoenixAdminSettingsView()
+    view.hass = _make_hass(data)
+    provider_store = MagicMock()
+    provider_store.resolve.return_value = None
+    enable = json.dumps({"ai_task_decisions_enabled": True}).encode()
+    with patch_readers("custom_components.phoenix_mcp.llm.accounts._get_secret_store", AsyncMock(return_value=provider_store)):
+        refused = await view.patch(_make_admin_request(body=enable))
+    assert refused.status == 400
+    assert json.loads(refused.text)["message_key"] == "adminError.decisionProviderRequired"
+
+    ghost = json.dumps({"ai_task_decisions_access_key_id": "ghost"}).encode()
+    resp = await view.patch(_make_admin_request(body=ghost))
+    assert resp.status == 400
+    assert json.loads(resp.text)["message_key"] == "adminError.activeAccessKeyRequired"
+
+    provider_store.resolve.return_value = MagicMock()
+    holder["s"] = GlobalSettings(decision_provider_id="a")
+    body = json.dumps({"ai_task_decisions_enabled": True, "ai_task_decisions_access_key_id": access_key.id}).encode()
+    with patch_readers("custom_components.phoenix_mcp.llm.accounts._get_secret_store", AsyncMock(return_value=provider_store)):
+        resp = await view.patch(_make_admin_request(body=body))
+    assert resp.status == 200
+    assert holder["s"].ai_task_decisions_enabled is True
+    assert holder["s"].ai_task_decisions_access_key_id == access_key.id
+    data.async_sync_ai_task.assert_called_once_with()
+
+
+@pytest.mark.asyncio
+async def test_turning_the_decision_provider_off_turns_decisions_off_and_syncs():
+    data, holder = _settings_data([])
+    holder["s"] = GlobalSettings(decision_provider_id="a", ai_task_decisions_enabled=True,
+                                 ai_task_decisions_access_key_id="k")
+    data.async_sync_ai_task = MagicMock()
+    view = PhoenixAdminSettingsView()
+    view.hass = _make_hass(data)
+    resp = await view.patch(_make_admin_request(body=json.dumps({"decision_provider_id": None}).encode()))
+    assert resp.status == 200
+    assert holder["s"].ai_task_decisions_enabled is False
+    data.async_sync_ai_task.assert_called_once_with()
+
+
+@pytest.mark.asyncio
+async def test_revoke_clears_the_decisions_access_key_and_syncs():
+    access_key = _make_active_access_key()
+    data, holder = _settings_data([access_key])
+    holder["s"] = GlobalSettings(decision_provider_id="a", ai_task_decisions_enabled=True,
+                                 ai_task_decisions_access_key_id=access_key.id)
+    data.store.async_archive_access_key = AsyncMock(return_value=MagicMock())
+    data.async_sync_ai_task = MagicMock()
+    view = PhoenixAdminAccessKeyView()
+    view.hass = _make_hass(data)
+    resp = await view.delete(_make_admin_request(), access_key_id=access_key.id)
+    assert resp.status == 204
+    assert holder["s"].ai_task_decisions_access_key_id is None
+    assert holder["s"].ai_task_decisions_enabled is False
+    data.async_sync_ai_task.assert_called_once_with()
+
+
+@pytest.mark.asyncio
+async def test_evaluate_preferred_view_sets_clears_and_refuses(hass):
+    from pytest_homeassistant.common import MockConfigEntry
+    from custom_components.phoenix_mcp.admin.settings import PhoenixAdminAiEvaluatePreferredView
+
+    data = _make_data([])
+    hass.data[DOMAIN] = data
+    view = PhoenixAdminAiEvaluatePreferredView()
+    view.hass = hass
+    assert (await view.get(_make_admin_request())).status == 404
+    MockConfigEntry(domain=DOMAIN).add_to_hass(hass)
+    assert json.loads((await view.get(_make_admin_request())).text)["is_preferred"] is False
+    refused = await view.post(_make_admin_request())
+    assert refused.status == 400
+    assert json.loads(refused.text)["message_key"] == "adminError.aiDecisionsNotConfigured"
+    assert (await view.delete(_make_admin_request())).status == 200
+    status = {"entity_id": "ai_task.d", "evaluate_entity_id": "ai_task.d", "evaluate_name": "D", "is_preferred": True}
+    with patch("custom_components.phoenix_mcp.admin.settings.set_ai_evaluate_preferred", return_value=status):
+        assert json.loads((await view.post(_make_admin_request())).text)["is_preferred"] is True
 
 
 @pytest.mark.asyncio

@@ -5,13 +5,17 @@ permissions, MESA, approvals and audit apply. A confirm-gated action degrades to
 the task never blocks. A ``structure`` is converted to JSON, requested from the model, and
 validated.
 
+``ai_task.evaluate`` is a second, opt-in entity answered by the decision provider
+(routing/decision_evaluation.py). It exists only on a Home Assistant that has the feature.
+
 The file name is the platform registration. The ``homeassistant.components.ai_task`` import is
 guarded, and async_generate_ai_task_data does not touch the base class.
 """
 from __future__ import annotations
 
 import logging
-from typing import Any
+from collections.abc import Callable
+from typing import Any, NamedTuple
 
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import HomeAssistantError
@@ -26,9 +30,10 @@ from .catalog_text import LocalizedReason
 from .redaction import _scrub_log_text
 from .helpers import instance_base_url as _base_url
 from .household_authority import household_scope
-from .llm.accounts import _get_secret_store
+from .llm.accounts import _get_secret_store, loaded_decision_account
 from .llm.factory import build_provider
 from .request_authority import AuthorityChangedError
+from .routing.decision_evaluation import async_evaluate, decisions_configured
 from .schema_compat import schema_engine
 
 _LOGGER = logging.getLogger(__name__)
@@ -44,6 +49,9 @@ except ImportError:  # pragma: no cover - camera requirement not installed
     _ai_task = None  # type: ignore[assignment]
     _AI_TASK_AVAILABLE = False
 
+# HA 2026.11 added evaluation; generate_data keeps working on an older one.
+_EVALUATE_FEATURE = getattr(getattr(_ai_task, "AITaskEntityFeature", None), "EVALUATE", None)
+
 # Concurrent AI Tasks are independent; do not serialize them behind one another.
 PARALLEL_UPDATES = 0
 
@@ -52,23 +60,31 @@ def ai_task_supported() -> bool:
     return _AI_TASK_AVAILABLE
 
 
+def ai_task_decisions_supported() -> bool:
+    return _EVALUATE_FEATURE is not None
+
+
 class AiTaskSetupError(Exception):
     """A one-click AI Task preference operation could not complete."""
 
 
-def _ai_task_entity_id(hass: HomeAssistant, entry_id: str) -> str | None:
-    """The registered entity_id of Phoenix MCP's AI Task entity, or None if absent."""
-    return er.async_get(hass).async_get_entity_id("ai_task", DOMAIN, f"{entry_id}_ai_task")
+_GENERATE_SUFFIX = "ai_task"
+_EVALUATE_SUFFIX = "ai_evaluate"
 
 
-def _loaded_ai_task_entity_id(hass: HomeAssistant, entry_id: str) -> str | None:
+def _ai_task_entity_id(hass: HomeAssistant, entry_id: str, suffix: str = _GENERATE_SUFFIX) -> str | None:
+    """The registered entity_id of one Phoenix MCP AI Task entity, or None if absent."""
+    return er.async_get(hass).async_get_entity_id("ai_task", DOMAIN, f"{entry_id}_{suffix}")
+
+
+def _loaded_ai_task_entity_id(hass: HomeAssistant, entry_id: str, suffix: str = _GENERATE_SUFFIX) -> str | None:
     """Return an entity eligible for selection, excluding registry-only leftovers."""
     if not _AI_TASK_AVAILABLE:
         return None
     # Local: optional component, imported only when this path runs.
     from homeassistant.components.ai_task.const import DATA_COMPONENT
 
-    entity_id = _ai_task_entity_id(hass, entry_id)
+    entity_id = _ai_task_entity_id(hass, entry_id, suffix)
     component = hass.data.get(DATA_COMPONENT)
     if entity_id is None or component is None or component.get_entity(entity_id) is None:
         return None
@@ -133,6 +149,49 @@ def clear_ai_task_preferred(hass: HomeAssistant, entry) -> dict:
     if prefs is not None and entity_id is not None and prefs.gen_data_entity_id == entity_id:
         prefs.async_set_preferences(gen_data_entity_id=None)
     return ai_task_preferred_status(hass, entry)
+
+
+def ai_evaluate_preferred_status(hass: HomeAssistant, entry) -> dict:
+    """Return the 'Decisions' default versus Phoenix's entity, for the panel.
+
+    Keys: entity_id (null until configured), evaluate_entity_id, evaluate_name and is_preferred.
+    """
+    entity_id = _loaded_ai_task_entity_id(hass, entry.entry_id, _EVALUATE_SUFFIX)
+    prefs = _ai_task_preferences(hass)
+    current = getattr(prefs, "evaluate_entity_id", None) if prefs is not None else None
+    state = hass.states.get(current) if current else None
+    return {
+        "entity_id": entity_id,
+        "evaluate_entity_id": current,
+        "evaluate_name": (state.name if state else current) if current else None,
+        "is_preferred": entity_id is not None and current == entity_id,
+    }
+
+
+def set_ai_evaluate_preferred(hass: HomeAssistant, entry) -> dict:
+    """Make Phoenix's Decisions entity HA's default, overwriting any prior one.
+
+    Raises AiTaskSetupError unless the entity is loaded; returns the new status.
+    """
+    entity_id = _loaded_ai_task_entity_id(hass, entry.entry_id, _EVALUATE_SUFFIX)
+    if entity_id is None:
+        raise AiTaskSetupError(LocalizedReason(
+            "Turn on Phoenix MCP Decisions with an access key first.", "aiDecisionsNotConfigured",
+        ))
+    prefs = _ai_task_preferences(hass)
+    if prefs is None:
+        raise AiTaskSetupError(LocalizedReason("AI Task preferences are not available on this Home Assistant.", "aiTaskPreferencesUnavailable"))
+    prefs.async_set_preferences(evaluate_entity_id=entity_id)
+    return ai_evaluate_preferred_status(hass, entry)
+
+
+def clear_ai_evaluate_preferred(hass: HomeAssistant, entry) -> dict:
+    """Clear the default 'Decisions' entity if it is Phoenix MCP's. Best-effort."""
+    entity_id = _ai_task_entity_id(hass, entry.entry_id, _EVALUATE_SUFFIX)
+    prefs = _ai_task_preferences(hass)
+    if entity_id is not None and getattr(prefs, "evaluate_entity_id", None) == entity_id:
+        prefs.async_set_preferences(evaluate_entity_id=None)
+    return ai_evaluate_preferred_status(hass, entry)
 
 
 def _is_fully_configured(settings: Any) -> bool:
@@ -464,6 +523,53 @@ else:  # pragma: no cover - camera requirement not installed
     PhoenixAITaskEntity = None  # type: ignore[assignment,misc]
 
 
+def _evaluation_answer(answer: dict) -> Any:
+    """Build HA's answer from the fields decision_evaluation returns."""
+    if answer["type"] == "noul":
+        return _ai_task.NoulAnswer(noul=answer["noul"])
+    if answer["type"] == "score":
+        return _ai_task.ScoreAnswer(score=answer["score"], probabilities=answer["probabilities"])
+    return _ai_task.ChoiceAnswer(choice=answer["choice"], probabilities=answer["probabilities"])
+
+
+if _EVALUATE_FEATURE is not None:
+
+    class PhoenixEvaluationEntity(_ai_task.AITaskEntity):
+        """Answers ``ai_task.evaluate`` through the decision provider, for one bound access key."""
+
+        # Evaluation only, so Home Assistant itself refuses attachments here.
+        _attr_supported_features = _ai_task.AITaskEntityFeature.EVALUATE
+        _attr_name = "Phoenix MCP Decisions"
+
+        def __init__(self, hass: HomeAssistant, entry: Any) -> None:
+            self.hass = hass
+            self._attr_unique_id = f"{entry.entry_id}_{_EVALUATE_SUFFIX}"
+
+        @property
+        def available(self) -> bool:
+            """Return True while configured, with its account loaded and its key current."""
+            data = self.hass.data.get(DOMAIN)
+            if data is None:
+                return False
+            settings = data.store.get_settings()
+            return (decisions_configured(settings)
+                    and _current_dispatch_access_key(data, settings.ai_task_decisions_access_key_id) is not None
+                    and loaded_decision_account(self.hass, settings.decision_provider_id) is not None)
+
+        async def _async_evaluate(self, task: Any) -> Any:
+            """Answer one ai_task.evaluate call."""
+            data = self.hass.data.get(DOMAIN)
+            if data is None:
+                raise HomeAssistantError("Phoenix MCP is not set up.")
+            answers = await async_evaluate(self.hass, data, task.name, task.questions, task.state,
+                                           user_id=_task_user_id())
+            return _ai_task.EvaluationTaskResult(
+                answers={name: _evaluation_answer(answer) for name, answer in answers.items()})
+
+else:
+    PhoenixEvaluationEntity = None  # type: ignore[assignment,misc]
+
+
 async def async_setup_entry(hass: HomeAssistant, config_entry, async_add_entities) -> None:
     """Set up the Phoenix MCP AI Task platform.
 
@@ -484,55 +590,88 @@ async def async_setup_entry(hass: HomeAssistant, config_entry, async_add_entitie
     _sync()  # add the entity now if already fully configured
 
 
+class _EntitySpec(NamedTuple):
+    """One optional entity: its registry suffix, PhoenixData slot and HA default."""
+
+    suffix: str
+    attr: str
+    pref: str
+    should_exist: Callable[[Any], bool]
+    factory: Callable[[HomeAssistant, Any], Any]
+
+
+_ENTITY_SPECS = (
+    _EntitySpec(_GENERATE_SUFFIX, "ai_task_entity", "gen_data_entity_id", _is_fully_configured,
+                lambda hass, entry: PhoenixAITaskEntity(hass, entry)),
+    _EntitySpec(_EVALUATE_SUFFIX, "ai_evaluate_entity", "evaluate_entity_id",
+                lambda settings: _EVALUATE_FEATURE is not None and decisions_configured(settings),
+                lambda hass, entry: PhoenixEvaluationEntity(hass, entry)),
+)
+
+
+async def async_refresh_ai_task(hass: HomeAssistant, data: Any) -> None:
+    """Publish availability once startup is ready; Decisions reads an account loaded on first use."""
+    if data.store.get_settings().ai_task_decisions_enabled:
+        await _get_secret_store(hass)
+    data.async_sync_ai_task()
+
+
 @callback
 def async_sync_ai_task(hass: HomeAssistant, entry, data, async_add_entities) -> None:
-    """Add or remove the AI Task entity to match current settings.
+    """Add or remove each AI Task entity to match current settings.
 
-    Present when enabled with key, provider and model; the kill switch does not remove it.
-    Removal drops the registry entry, and with it the live entity and picker choice.
+    The kill switch does not remove one. Removal drops the registry entry, and with it the
+    live entity and picker choice.
     """
     if not _AI_TASK_AVAILABLE:
         return
+    for spec in _ENTITY_SPECS:
+        _sync_entity(hass, entry, data, async_add_entities, spec)
+
+
+def _sync_entity(hass: HomeAssistant, entry, data, async_add_entities, spec: _EntitySpec) -> None:
     # Platform forwarding runs before Phoenix publishes its final ready flag, so
     # existence depends only on persisted configuration; ``available`` independently
     # keeps the entity unusable until startup is complete. Gating existence on
     # data.ready would skip registration on every HA restart and leave the restored
     # registry entity unavailable until a settings toggle re-synced it.
-    should_exist = _is_fully_configured(data.store.get_settings())
+    should_exist = spec.should_exist(data.store.get_settings())
+    unique_id = f"{entry.entry_id}_{spec.suffix}"
 
     if should_exist:
         registry = er.async_get(hass)
-        entity_id = registry.async_get_entity_id("ai_task", DOMAIN, f"{entry.entry_id}_ai_task")
+        entity_id = registry.async_get_entity_id("ai_task", DOMAIN, unique_id)
         registered = registry.async_get(entity_id) if entity_id is not None else None
         if registered is not None and registered.disabled:
-            data.ai_task_entity = None
+            setattr(data, spec.attr, None)
             return
 
-    if should_exist and data.ai_task_entity is None:
-        entity = PhoenixAITaskEntity(hass, entry)
-        data.ai_task_entity = entity
+    if should_exist and getattr(data, spec.attr) is None:
+        entity = spec.factory(hass, entry)
+        setattr(data, spec.attr, entity)
         async_add_entities([entity])
     elif should_exist:
         # HA's AI Task entity does not poll. Refresh the published availability
         # after startup and settings changes without replacing the live entity.
-        entity = data.ai_task_entity
+        entity = getattr(data, spec.attr)
         if entity.entity_id is not None:
             if entity.hass is None or entity.platform is None:
                 # HA can assign an ID and then abort platform registration.
-                data.ai_task_entity = None
+                setattr(data, spec.attr, None)
             else:
                 entity.async_write_ha_state()
     elif not should_exist:
-        data.ai_task_entity = None
+        setattr(data, spec.attr, None)
         # Remove any registry entry for our unique_id: a tracked entity, or a leftover
         # from a run where config changed while HA was down.
         registry = er.async_get(hass)
-        entity_id = registry.async_get_entity_id("ai_task", DOMAIN, f"{entry.entry_id}_ai_task")
+        entity_id = registry.async_get_entity_id("ai_task", DOMAIN, unique_id)
         if entity_id is not None:
-            # If Phoenix MCP was HA's default "Data generation tasks" entity, clear that
-            # first so no dangling default is left (disable, revoke, provider delete and
-            # wipe all route through here; integration removal clears it itself).
+            # If this entity was HA's default, clear that first so no dangling default
+            # is left (disable, revoke, provider delete and wipe all route through
+            # here; integration removal clears it itself). A leftover after a Home
+            # Assistant downgrade names a preference that release does not have.
             prefs = _ai_task_preferences(hass)
-            if prefs is not None and prefs.gen_data_entity_id == entity_id:
-                prefs.async_set_preferences(gen_data_entity_id=None)
+            if prefs is not None and getattr(prefs, spec.pref, None) == entity_id:
+                prefs.async_set_preferences(**{spec.pref: None})
             registry.async_remove(entity_id)

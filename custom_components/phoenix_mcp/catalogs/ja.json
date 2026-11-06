@@ -1148,7 +1148,8 @@
       "recoverySnapshotUnsafeAt": "シークレットを含まないこの項目の完全なコピーがないため、何も変更されませんでした。Phoenix は {location} で拒否しました。",
       "invalidHostHeader": "リクエストの Host ヘッダーが有効なアドレスではありません。",
       "approvalOutcomeNotSaved": "アクションは完了しましたが、結果を保存できませんでした。Home Assistant で影響を確認してください。この承認は再度提示されません。",
-      "providerRemoteUrlResolutionFailed": "プロバイダー URL を解決できなかったため、そのアドレスを確認できませんでした。"
+      "providerRemoteUrlResolutionFailed": "プロバイダー URL を解決できなかったため、そのアドレスを確認できませんでした。",
+      "aiDecisionsNotConfigured": "先にアクセスキーを指定して Phoenix MCP Decisions をオンにしてください。"
     },
     "agentchat": {
       "accessKey": "アクセスキー",
@@ -1754,7 +1755,24 @@
         "office": "オフィス",
         "aubergine": "オーベルジーヌ"
       },
-      "showSecret": "キーを表示"
+      "showSecret": "キーを表示",
+      "aiDecisionsHeading": "意思決定",
+      "aiDecisionsIntro": "Home Assistant の「評価する」アクションに判断プロバイダーで回答します。",
+      "aiDecisionsEnableLabel": "Phoenix MCP Decisions を有効にする",
+      "aiDecisionsEnableHelp": "オートメーションやスクリプトが質問できる Phoenix MCP Decisions エンティティを追加します。既定ではオフです。",
+      "aiDecisionsDefaultLabel": "既定の意思決定エンティティ",
+      "aiDecisionsDefaultOff": "「評価する」アクションでエンティティが指定されていないときに Phoenix MCP を使います。",
+      "aiDecisionsDefaultOn": "エンティティが指定されていない「評価する」アクションを Phoenix MCP が処理します。",
+      "aiDecisionsConfigureFirst": "先に有効にして、アクセスキーを選択してください。",
+      "aiDecisionsAccessKeyAria": "意思決定のアクセスキー",
+      "aiDecisionsAccessKeyHelp": "このアクセスキーが有効で応答データを返せる間だけ、「評価する」アクションを実行します。",
+      "aiDecisionsCapabilityNote": "このアクセスキーは {capability} を {mode} にする必要があります。",
+      "aiDecisionsSetDefaultFailed": "既定の意思決定エンティティを設定できませんでした。",
+      "aiDecisionsEnabledToast": "意思決定を有効にしました",
+      "aiDecisionsDisabledToast": "意思決定を無効にしました",
+      "aiDecisionsDefaultSetToast": "Phoenix MCP Decisions が既定になりました",
+      "aiDecisionsDefaultReplacedToast": "Phoenix MCP Decisions が {name} に代わって既定になりました",
+      "aiDecisionsDefaultClearedToast": "Phoenix MCP Decisions は既定ではなくなりました"
     },
     "mesa": {
       "addAreaProfile": "エリアプロファイルを追加",
@@ -2926,7 +2944,8 @@
       "accessKeyFilter": "名前または状態にこのテキストを含むアクセスキーだけを表示します。",
       "guideDismissWelcome": "このようこそページを非表示にします。目次からいつでも開けます。",
       "showSecret": "貼り付けた内容を確認できるよう、キーをプレーンテキストで表示します。",
-      "guideSearchAgain": "これをもう一度ガイドで検索します。"
+      "guideSearchAgain": "これをもう一度ガイドで検索します。",
+      "settingsAiDecisionsReplaceDefault": "Home Assistant の既定の意思決定エンティティはひとつだけなので、現在のものを置き換えます。"
     },
     "guide": {
       "title": "ガイド",

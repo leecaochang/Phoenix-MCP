@@ -86,6 +86,8 @@ Phoenix 提供一個決策提供者：TypeSafe / JEV。在此新增你的帳戶�
 
 若要使用它，請選擇其帳戶。選擇 **{{label:routing.noProvider}}** 可停止使用它；命令隨後只依賴句子比對。
 
+它也可以為自動化和腳本回答 Home Assistant 的「評估」動作，請參閱[決策](guide:window.settingsHome#ai-decisions)。
+
 相關：[命令如何路由](guide:topic.commandRouting)
 
 ## {{label:routing.connectionSettings}} {#decision-connection}

@@ -291,7 +291,8 @@
       "recoverySnapshotUnsafeAt": "Нет полной копии этого элемента без секретов, поэтому ничего не изменено. Phoenix отклонил его в месте {location}.",
       "invalidHostHeader": "Заголовок Host запроса не является допустимым адресом.",
       "approvalOutcomeNotSaved": "Действие завершено, но его результат не удалось сохранить. Проверьте его эффект в Home Assistant; это одобрение больше не будет предложено.",
-      "providerRemoteUrlResolutionFailed": "Не удалось разрешить URL провайдера, поэтому его адрес не проверен."
+      "providerRemoteUrlResolutionFailed": "Не удалось разрешить URL провайдера, поэтому его адрес не проверен.",
+      "aiDecisionsNotConfigured": "Сначала включите Phoenix MCP Decisions с ключом доступа."
     },
     "agentchat": {
       "accessKey": "Ключ доступа",
@@ -2108,7 +2109,24 @@
         "office": "Офис",
         "aubergine": "Баклажан"
       },
-      "showSecret": "Показать ключ"
+      "showSecret": "Показать ключ",
+      "aiDecisionsHeading": "Решения",
+      "aiDecisionsIntro": "Отвечайте на действие Home Assistant «Оценить» с помощью провайдера решений.",
+      "aiDecisionsEnableLabel": "Включить Phoenix MCP Decisions",
+      "aiDecisionsEnableHelp": "Добавляет объект Phoenix MCP Decisions, чтобы автоматизации и скрипты могли задавать вопросы. По умолчанию выключено.",
+      "aiDecisionsDefaultLabel": "Объект решений по умолчанию",
+      "aiDecisionsDefaultOff": "Использовать Phoenix MCP, если в действии «Оценить» не указан объект.",
+      "aiDecisionsDefaultOn": "Phoenix MCP обрабатывает действия «Оценить», в которых не указан объект.",
+      "aiDecisionsConfigureFirst": "Сначала включите его и выберите ключ доступа.",
+      "aiDecisionsAccessKeyAria": "Ключ доступа для решений",
+      "aiDecisionsAccessKeyHelp": "Действия «Оценить» выполняются, только пока этот ключ доступа активен и может возвращать данные ответа.",
+      "aiDecisionsCapabilityNote": "Для этого ключа доступа {capability} должно быть в режиме {mode}.",
+      "aiDecisionsSetDefaultFailed": "Не удалось задать объект решений по умолчанию.",
+      "aiDecisionsEnabledToast": "Решения включены",
+      "aiDecisionsDisabledToast": "Решения выключены",
+      "aiDecisionsDefaultSetToast": "Phoenix MCP Decisions теперь используется по умолчанию",
+      "aiDecisionsDefaultReplacedToast": "Phoenix MCP Decisions теперь используется по умолчанию вместо {name}",
+      "aiDecisionsDefaultClearedToast": "Phoenix MCP Decisions больше не используется по умолчанию"
     },
     "shell": {
       "agentChat": "Agent Chat",
@@ -3063,7 +3081,8 @@
       "accessKeyFilter": "Показывать только ключи доступа, имя или состояние которых содержит этот текст.",
       "guideDismissWelcome": "Скрыть эту приветственную страницу. Её можно снова найти в «Содержании».",
       "showSecret": "Показать ключ обычным текстом, чтобы проверить, что было вставлено.",
-      "guideSearchAgain": "Снова найти это в руководстве."
+      "guideSearchAgain": "Снова найти это в руководстве.",
+      "settingsAiDecisionsReplaceDefault": "В Home Assistant один объект решений по умолчанию, поэтому он заменит текущий."
     },
     "guide": {
       "title": "Руководство",

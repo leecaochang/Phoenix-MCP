@@ -399,7 +399,8 @@
       "recoverySnapshotUnsafeAt": "Det finns ingen fullständig kopia av det här objektet utan hemligheter, så inget ändrades. Phoenix avvisade det vid {location}.",
       "invalidHostHeader": "Begärans Host-rubrik är inte en giltig adress.",
       "approvalOutcomeNotSaved": "Åtgärden slutfördes, men resultatet kunde inte sparas. Kontrollera effekten i Home Assistant. Godkännandet erbjuds inte igen.",
-      "providerRemoteUrlResolutionFailed": "Leverantörens URL kunde inte slås upp, så dess adress kunde inte kontrolleras."
+      "providerRemoteUrlResolutionFailed": "Leverantörens URL kunde inte slås upp, så dess adress kunde inte kontrolleras.",
+      "aiDecisionsNotConfigured": "Slå först på Phoenix MCP Decisions med en åtkomstnyckel."
     },
     "agentchat": {
       "accessKey": "Åtkomstnyckel",
@@ -2442,7 +2443,24 @@
       "haNotificationsHelp": "Visa eller dölj när Phoenix MCP skickar en Home Assistant-avisering till dig.",
       "aboutHelp": "Visa eller dölj versionsnumren och var Phoenix MCP lagrar sina data.",
       "githubHelp": "Öppna källkoden och ärendehanteringen för Phoenix MCP på GitHub i en ny flik.",
-      "showSecret": "Visa nyckel"
+      "showSecret": "Visa nyckel",
+      "aiDecisionsHeading": "Beslut",
+      "aiDecisionsIntro": "Svara på Home Assistants åtgärd Utvärdera med din beslutsleverantör.",
+      "aiDecisionsEnableLabel": "Aktivera Phoenix MCP Decisions",
+      "aiDecisionsEnableHelp": "Lägger till en Phoenix MCP Decisions-entitet som automationer och skript kan ställa frågor till. Av som standard.",
+      "aiDecisionsDefaultLabel": "Standardentitet för beslut",
+      "aiDecisionsDefaultOff": "Använd Phoenix MCP när en Utvärdera-åtgärd inte anger en entitet.",
+      "aiDecisionsDefaultOn": "Phoenix MCP hanterar Utvärdera-åtgärder som inte anger en entitet.",
+      "aiDecisionsConfigureFirst": "Aktivera den först och välj en åtkomstnyckel.",
+      "aiDecisionsAccessKeyAria": "Åtkomstnyckel för beslut",
+      "aiDecisionsAccessKeyHelp": "Utvärdera-åtgärder körs bara medan den här åtkomstnyckeln är aktiv och kan returnera svarsdata.",
+      "aiDecisionsCapabilityNote": "Den här åtkomstnyckeln behöver {capability} inställt på {mode}.",
+      "aiDecisionsSetDefaultFailed": "Det gick inte att ange standardentiteten för beslut.",
+      "aiDecisionsEnabledToast": "Beslut aktiverade",
+      "aiDecisionsDisabledToast": "Beslut inaktiverade",
+      "aiDecisionsDefaultSetToast": "Phoenix MCP Decisions är nu standard",
+      "aiDecisionsDefaultReplacedToast": "Phoenix MCP Decisions är nu standard och ersätter {name}",
+      "aiDecisionsDefaultClearedToast": "Phoenix MCP Decisions är inte längre standard"
     },
     "shell": {
       "agentChat": "Agent Chat",
@@ -2932,7 +2950,8 @@
       "accessKeyFilter": "Visa bara åtkomstnycklar vars namn eller status innehåller den här texten.",
       "guideDismissWelcome": "Dölj den här välkomstsidan. Hitta den igen under Innehåll.",
       "showSecret": "Visa nyckeln som vanlig text för att kontrollera vad som klistrades in.",
-      "guideSearchAgain": "Sök efter detta i guiden igen."
+      "guideSearchAgain": "Sök efter detta i guiden igen.",
+      "settingsAiDecisionsReplaceDefault": "Home Assistant har en standardentitet för beslut, så detta ersätter den nuvarande."
     },
     "guide": {
       "title": "Guide",

@@ -399,7 +399,8 @@
       "recoverySnapshotUnsafeAt": "Der findes ingen komplet kopi af dette element uden hemmeligheder, så intet blev ændret. Phoenix afviste det ved {location}.",
       "invalidHostHeader": "Anmodningens Host-header er ikke en gyldig adresse.",
       "approvalOutcomeNotSaved": "Handlingen blev afsluttet, men resultatet kunne ikke gemmes. Kontrollér virkningen i Home Assistant; denne godkendelse tilbydes ikke igen.",
-      "providerRemoteUrlResolutionFailed": "Udbyderens webadresse kunne ikke opløses, så dens adresse kunne ikke kontrolleres."
+      "providerRemoteUrlResolutionFailed": "Udbyderens webadresse kunne ikke opløses, så dens adresse kunne ikke kontrolleres.",
+      "aiDecisionsNotConfigured": "Slå først Phoenix MCP Decisions til med en adgangsnøgle."
     },
     "agentchat": {
       "accessKey": "Adgangsnøgle",
@@ -2442,7 +2443,24 @@
       "haNotificationsHelp": "Vis eller skjul, hvornår Phoenix MCP sender dig en Home Assistant-notifikation.",
       "aboutHelp": "Vis eller skjul versionsnumrene, og hvor Phoenix MCP gemmer sine data.",
       "githubHelp": "Åbn Phoenix MCP's kildekode og fejlsporing på GitHub i en ny fane.",
-      "showSecret": "Vis nøgle"
+      "showSecret": "Vis nøgle",
+      "aiDecisionsHeading": "Beslutninger",
+      "aiDecisionsIntro": "Besvar Home Assistants handling Evaluer med din beslutningsudbyder.",
+      "aiDecisionsEnableLabel": "Aktivér Phoenix MCP Decisions",
+      "aiDecisionsEnableHelp": "Tilføj en Phoenix MCP Decisions-enhed, så automatiseringer og scripts kan stille spørgsmål. Slået fra som standard.",
+      "aiDecisionsDefaultLabel": "Standardenhed for beslutninger",
+      "aiDecisionsDefaultOff": "Brug Phoenix MCP, når en Evaluer-handling ikke angiver en enhed.",
+      "aiDecisionsDefaultOn": "Phoenix MCP håndterer Evaluer-handlinger, der ikke angiver en enhed.",
+      "aiDecisionsConfigureFirst": "Aktivér den, og vælg først en adgangsnøgle.",
+      "aiDecisionsAccessKeyAria": "Adgangsnøgle til beslutninger",
+      "aiDecisionsAccessKeyHelp": "Evaluer-handlinger kører kun, mens denne adgangsnøgle er aktiv og kan returnere svardata.",
+      "aiDecisionsCapabilityNote": "Denne adgangsnøgle skal have {capability} sat til {mode}.",
+      "aiDecisionsSetDefaultFailed": "Kunne ikke angive standardenheden for beslutninger.",
+      "aiDecisionsEnabledToast": "Beslutninger aktiveret",
+      "aiDecisionsDisabledToast": "Beslutninger deaktiveret",
+      "aiDecisionsDefaultSetToast": "Phoenix MCP Decisions er nu standard",
+      "aiDecisionsDefaultReplacedToast": "Phoenix MCP Decisions er nu standard og erstatter {name}",
+      "aiDecisionsDefaultClearedToast": "Phoenix MCP Decisions er ikke længere standard"
     },
     "shell": {
       "agentChat": "Agent Chat",
@@ -2932,7 +2950,8 @@
       "accessKeyFilter": "Vis kun adgangsnøgler, hvis navn eller status indeholder denne tekst.",
       "guideDismissWelcome": "Skjul denne velkomstside. Find den igen under Indhold.",
       "showSecret": "Vis nøglen som almindelig tekst for at kontrollere, hvad der blev indsat.",
-      "guideSearchAgain": "Søg efter dette i guiden igen."
+      "guideSearchAgain": "Søg efter dette i guiden igen.",
+      "settingsAiDecisionsReplaceDefault": "Home Assistant har én standardenhed for beslutninger, så dette erstatter den nuværende."
     },
     "guide": {
       "title": "Guide",

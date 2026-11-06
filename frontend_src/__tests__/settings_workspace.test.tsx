@@ -199,7 +199,7 @@ describe("Find Setting index", () => {
     vi.mocked(api.getDecisionProviders).mockResolvedValue({ instances: [{ id: "d1", kind: "jev", name: "JEV", model: "jev-latest" }], provider_types: [] } as never);
     vi.mocked(api.getAiTaskPreferred).mockResolvedValue({ supported: true, entity_id: "ai_task.phoenix_mcp_ai_task", gen_data_entity_id: null, gen_data_name: null, is_preferred: false });
     const { container, registry } = renderSettings({ settings: {
-      ...BASE_SETTINGS, decision_provider_id: "d1", decision_provider_default_id: "d1", voice_agent_pipeline_id: "pl1",
+      ...BASE_SETTINGS, decision_provider_id: "d1", decision_provider_default_id: "d1", voice_agent_pipeline_id: "pl1", ai_task_decisions_supported: true,
     } as GlobalSettings });
     await screen.findByRole("radio", { name: "JEV" });
     // Adding an account shows on request.
@@ -207,6 +207,7 @@ describe("Find Setting index", () => {
     act(() => add.onSelect!());
     await settingsWindow("AI Providers").findAllByLabelText("Provider type");
     await screen.findByRole("checkbox", { name: "Default AI Task", hidden: true });
+    await screen.findByRole("checkbox", { name: t("settings.aiDecisionsDefaultLabel"), hidden: true });
     const missing = SETTING_INDEX.filter((entry) => {
       const windowEl = container.querySelector(`[data-phx-window="${entry.window}"]`);
       return !windowEl || !findControl(windowEl, entry);

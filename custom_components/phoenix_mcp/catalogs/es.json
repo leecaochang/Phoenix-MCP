@@ -1149,7 +1149,8 @@
       "recoverySnapshotUnsafeAt": "No hay una copia completa de este elemento sin secretos, así que no se cambió nada. Phoenix lo rechazó en {location}.",
       "invalidHostHeader": "El encabezado Host de la solicitud no es una dirección válida.",
       "approvalOutcomeNotSaved": "La acción terminó, pero no se pudo guardar su resultado. Compruebe su efecto en Home Assistant; esta aprobación no se volverá a ofrecer.",
-      "providerRemoteUrlResolutionFailed": "No se pudo resolver la URL del proveedor, por lo que no se pudo comprobar su dirección."
+      "providerRemoteUrlResolutionFailed": "No se pudo resolver la URL del proveedor, por lo que no se pudo comprobar su dirección.",
+      "aiDecisionsNotConfigured": "Primero activa Phoenix MCP Decisions con una clave de acceso."
     },
     "accessKeys": {
       "announceAllHelp": "Ofrezca a los agentes de esta clave todas las herramientas, incluso las que no puede usar. Solo para solucionar problemas; consume más tokens.",
@@ -1944,7 +1945,24 @@
         "office": "Oficina",
         "aubergine": "Berenjena"
       },
-      "showSecret": "Mostrar clave"
+      "showSecret": "Mostrar clave",
+      "aiDecisionsHeading": "Decisiones",
+      "aiDecisionsIntro": "Responde a la acción Evaluar de Home Assistant con tu proveedor de decisiones.",
+      "aiDecisionsEnableLabel": "Habilitar Phoenix MCP Decisions",
+      "aiDecisionsEnableHelp": "Añade una entidad Phoenix MCP Decisions para que automatizaciones y scripts hagan preguntas. Desactivado de forma predeterminada.",
+      "aiDecisionsDefaultLabel": "Entidad de decisiones predeterminada",
+      "aiDecisionsDefaultOff": "Usar Phoenix MCP cuando una acción Evaluar no especifique una entidad.",
+      "aiDecisionsDefaultOn": "Phoenix MCP gestiona las acciones Evaluar que no especifican una entidad.",
+      "aiDecisionsConfigureFirst": "Primero habilítala y elige una clave de acceso.",
+      "aiDecisionsAccessKeyAria": "Clave de acceso de decisiones",
+      "aiDecisionsAccessKeyHelp": "Las acciones Evaluar solo se ejecutan mientras esta clave de acceso esté activa y pueda devolver datos de respuesta.",
+      "aiDecisionsCapabilityNote": "Esta clave de acceso necesita {capability} en {mode}.",
+      "aiDecisionsSetDefaultFailed": "No se pudo establecer la entidad de decisiones predeterminada.",
+      "aiDecisionsEnabledToast": "Decisiones habilitadas",
+      "aiDecisionsDisabledToast": "Decisiones deshabilitadas",
+      "aiDecisionsDefaultSetToast": "Phoenix MCP Decisions es ahora la predeterminada",
+      "aiDecisionsDefaultReplacedToast": "Phoenix MCP Decisions es ahora la predeterminada y sustituye a {name}",
+      "aiDecisionsDefaultClearedToast": "Phoenix MCP Decisions ya no es la predeterminada"
     },
     "approvalSummary": {
       "action.optionalReason": "Motivo opcional",
@@ -2926,7 +2944,8 @@
       "accessKeyFilter": "Muestre solo las claves de acceso cuyo nombre o estado contiene este texto.",
       "guideDismissWelcome": "Oculte esta página de bienvenida. Vuelva a encontrarla en Contenido.",
       "showSecret": "Mostrar la clave como texto sin formato para comprobar lo que se pegó.",
-      "guideSearchAgain": "Vuelva a buscar esto en la guía."
+      "guideSearchAgain": "Vuelva a buscar esto en la guía.",
+      "settingsAiDecisionsReplaceDefault": "Home Assistant tiene una entidad de decisiones predeterminada, así que esto sustituye a la actual."
     },
     "guide": {
       "title": "Guía",

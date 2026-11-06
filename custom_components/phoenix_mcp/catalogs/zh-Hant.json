@@ -216,7 +216,8 @@
       "recoverySnapshotUnsafeAt": "此項目沒有不含機密的完整副本，因此未進行任何變更。Phoenix 在 {location} 處拒絕了它。",
       "invalidHostHeader": "請求的 Host 標頭不是有效位址。",
       "approvalOutcomeNotSaved": "操作已完成，但無法儲存其結果。請在 Home Assistant 中檢查其效果；此核准不會再次提供。",
-      "providerRemoteUrlResolutionFailed": "無法解析提供者 URL，因此無法檢查其位址。"
+      "providerRemoteUrlResolutionFailed": "無法解析提供者 URL，因此無法檢查其位址。",
+      "aiDecisionsNotConfigured": "請先使用存取金鑰開啟 Phoenix MCP Decisions。"
     },
     "agentchat": {
       "accessKey": "存取金鑰",
@@ -1991,7 +1992,24 @@
         "office": "辦公",
         "aubergine": "茄紫"
       },
-      "showSecret": "顯示金鑰"
+      "showSecret": "顯示金鑰",
+      "aiDecisionsHeading": "決策",
+      "aiDecisionsIntro": "使用決策提供者回答 Home Assistant 的「評估」動作。",
+      "aiDecisionsEnableLabel": "啟用 Phoenix MCP Decisions",
+      "aiDecisionsEnableHelp": "新增 Phoenix MCP Decisions 實體，供自動化和腳本提問。預設為關閉。",
+      "aiDecisionsDefaultLabel": "預設決策實體",
+      "aiDecisionsDefaultOff": "當「評估」動作未指定實體時使用 Phoenix MCP。",
+      "aiDecisionsDefaultOn": "Phoenix MCP 處理未指定實體的「評估」動作。",
+      "aiDecisionsConfigureFirst": "請先啟用並選擇存取金鑰。",
+      "aiDecisionsAccessKeyAria": "決策存取金鑰",
+      "aiDecisionsAccessKeyHelp": "僅當此存取金鑰有效且可傳回回應資料時，「評估」動作才會執行。",
+      "aiDecisionsCapabilityNote": "此存取金鑰需要將 {capability} 設為 {mode}。",
+      "aiDecisionsSetDefaultFailed": "無法設定預設決策實體。",
+      "aiDecisionsEnabledToast": "決策已啟用",
+      "aiDecisionsDisabledToast": "決策已停用",
+      "aiDecisionsDefaultSetToast": "Phoenix MCP Decisions 現為預設",
+      "aiDecisionsDefaultReplacedToast": "Phoenix MCP Decisions 現為預設，已取代 {name}",
+      "aiDecisionsDefaultClearedToast": "Phoenix MCP Decisions 不再是預設"
     },
     "shell": {
       "agentChat": "Agent Chat",
@@ -2932,7 +2950,8 @@
       "accessKeyFilter": "只顯示名稱或狀態包含此文字的存取金鑰。",
       "guideDismissWelcome": "隱藏此歡迎頁面。可在目錄中再次找到它。",
       "showSecret": "以純文字顯示金鑰，以便檢查貼上的內容。",
-      "guideSearchAgain": "再次在指南中搜尋此內容。"
+      "guideSearchAgain": "再次在指南中搜尋此內容。",
+      "settingsAiDecisionsReplaceDefault": "Home Assistant 只有一個預設決策實體，因此這會取代目前的實體。"
     },
     "guide": {
       "title": "指南",

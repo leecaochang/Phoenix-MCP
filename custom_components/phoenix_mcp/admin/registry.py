@@ -41,7 +41,8 @@ from .permissions import (
     PhoenixAdminResolveView, PhoenixAdminScopeView,
 )
 from .settings import (
-    PhoenixAdminAiTaskPreferredView, PhoenixAdminCardCatalogView, PhoenixAdminCatalogView,
+    PhoenixAdminAiEvaluatePreferredView, PhoenixAdminAiTaskPreferredView, PhoenixAdminCardCatalogView,
+    PhoenixAdminCatalogView,
     PhoenixAdminCommandPreviewView, PhoenixAdminInfoView, PhoenixAdminRoutingStatisticsView,
     PhoenixAdminSettingsView, PhoenixAdminVoiceAgentPipelineView,
     PhoenixAdminVoiceAgentPreferredView, PhoenixAdminWipeView,
@@ -82,6 +83,7 @@ ALL_ADMIN_VIEWS: list[type[PhoenixView]] = [
     PhoenixAdminVoiceAgentPipelineView,
     PhoenixAdminVoiceAgentPreferredView,
     PhoenixAdminAiTaskPreferredView,
+    PhoenixAdminAiEvaluatePreferredView,
     PhoenixAdminWipeView,
     PhoenixAdminApprovalsView,
     PhoenixAdminApprovalView,

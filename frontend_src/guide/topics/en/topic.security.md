@@ -75,6 +75,7 @@ Phoenix runs inside Home Assistant, but your AI model may not. Whatever Phoenix 
 - Agent Chat sends the conversation with every message, including images you attach.
 - Tool results go too: states, names, history, logs, YAML files and camera images, whatever the access key lets the agent read.
 - The Voice Agent, AI Task and Home Companion send the same kinds of data to their accounts.
+- Decisions sends the questions and data an automation passes in to your decision provider.
 - A decision provider receives what was said. For some checks it also gets recent messages and lists of devices or tools to choose from.
 - An external app sends what it reads to its own model. That app's settings decide where it goes.
 
@@ -87,7 +88,7 @@ Related: [{{label:workspace.aiProviders}}](guide:window.settingsProviders)
 - Give each app its own key, with only the capabilities it needs.
 - Use pass-through only for an agent you fully trust. It also opens Diagnostics and Service response data.
 - Keep System log read, Diagnostics and YAML configuration for agents that need them.
-- Before setting an expiry on a key used by Voice, AI Task or Assist, know that expiry unlinks it.
+- Before setting an expiry on a key used by Voice, AI Task, Decisions or Assist, know that expiry unlinks it.
 - Use HTTPS when apps connect over a network you don't trust. The key travels with every request.
 
 Related: [What Pass-Through Opens](guide:topic.passThrough)

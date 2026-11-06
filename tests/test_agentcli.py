@@ -5353,11 +5353,15 @@ async def test_deleting_the_default_decision_account_passes_the_default_on_but_s
     store = llm_accounts.AgentCliStore(AsyncMock())
     first = await store.add("typesafe", {"api_key": "k1", "model": "jev-latest"})
     second = await store.add("typesafe", {"api_key": "k2", "model": "jev-latest"})
-    await access_key_store.async_patch_settings(decision_provider_id=first, decision_provider_default_id=first)
+    await access_key_store.async_patch_settings(decision_provider_id=first, decision_provider_default_id=first,
+                                                ai_task_decisions_enabled=True, ai_task_decisions_access_key_id="k")
+    data.async_sync_ai_task = MagicMock()
     delete = agent_chat_views.PhoenixAgentCliProviderView(); delete.hass = hass
     with patch_readers("custom_components.phoenix_mcp.llm.accounts._get_secret_store", AsyncMock(return_value=store)):
         assert (await delete.delete(_admin_request(), instance_id=first)).status == 200
     settings = access_key_store.get_settings()
+    assert settings.ai_task_decisions_enabled is False
+    data.async_sync_ai_task.assert_called_once_with()
     # One account must stay selected while any exists; using it is a separate switch.
     assert settings.decision_provider_default_id == second
     assert settings.decision_provider_id is None

@@ -790,7 +790,8 @@
       "recoverySnapshotUnsafeAt": "此项目没有不含机密的完整副本，因此未进行任何更改。Phoenix 在 {location} 处拒绝了它。",
       "invalidHostHeader": "请求的 Host 标头不是有效地址。",
       "approvalOutcomeNotSaved": "操作已完成，但无法保存其结果。请在 Home Assistant 中检查其效果；此审批不会再次提供。",
-      "providerRemoteUrlResolutionFailed": "无法解析提供商 URL，因此无法检查其地址。"
+      "providerRemoteUrlResolutionFailed": "无法解析提供商 URL，因此无法检查其地址。",
+      "aiDecisionsNotConfigured": "请先使用访问密钥开启 Phoenix MCP Decisions。"
     },
     "audit": {
       "accessPassThrough": "直通",
@@ -1743,7 +1744,24 @@
         "office": "办公",
         "aubergine": "茄紫"
       },
-      "showSecret": "显示密钥"
+      "showSecret": "显示密钥",
+      "aiDecisionsHeading": "决策",
+      "aiDecisionsIntro": "使用决策提供商回答 Home Assistant 的“评估”操作。",
+      "aiDecisionsEnableLabel": "启用 Phoenix MCP Decisions",
+      "aiDecisionsEnableHelp": "添加 Phoenix MCP Decisions 实体，供自动化和脚本提问。默认关闭。",
+      "aiDecisionsDefaultLabel": "默认决策实体",
+      "aiDecisionsDefaultOff": "当“评估”操作未指定实体时使用 Phoenix MCP。",
+      "aiDecisionsDefaultOn": "Phoenix MCP 处理未指定实体的“评估”操作。",
+      "aiDecisionsConfigureFirst": "请先启用并选择访问密钥。",
+      "aiDecisionsAccessKeyAria": "决策访问密钥",
+      "aiDecisionsAccessKeyHelp": "仅当此访问密钥有效且可以返回响应数据时，“评估”操作才会运行。",
+      "aiDecisionsCapabilityNote": "此访问密钥需要将 {capability} 设为 {mode}。",
+      "aiDecisionsSetDefaultFailed": "无法设置默认决策实体。",
+      "aiDecisionsEnabledToast": "决策已启用",
+      "aiDecisionsDisabledToast": "决策已停用",
+      "aiDecisionsDefaultSetToast": "Phoenix MCP Decisions 现为默认",
+      "aiDecisionsDefaultReplacedToast": "Phoenix MCP Decisions 现为默认，已替换 {name}",
+      "aiDecisionsDefaultClearedToast": "Phoenix MCP Decisions 不再是默认"
     },
     "agentchat": {
       "accessKey": "访问密钥",
@@ -2926,7 +2944,8 @@
       "accessKeyFilter": "只显示名称或状态包含此文本的访问密钥。",
       "guideDismissWelcome": "隐藏此欢迎页面。可在目录中再次找到它。",
       "showSecret": "以纯文本显示密钥，以便检查粘贴的内容。",
-      "guideSearchAgain": "再次在指南中搜索此内容。"
+      "guideSearchAgain": "再次在指南中搜索此内容。",
+      "settingsAiDecisionsReplaceDefault": "Home Assistant 只有一个默认决策实体，因此这会替换当前实体。"
     },
     "guide": {
       "title": "指南",

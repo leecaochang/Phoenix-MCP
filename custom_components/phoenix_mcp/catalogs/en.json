@@ -860,7 +860,8 @@
       "guideLink": "Open this page in the Guide. Back returns you to the page you were reading.",
       "accessKeyFilter": "Show only access keys whose name or status contains this text.",
       "guideDismissWelcome": "Hide this welcome page. Find it again in Contents.",
-      "showSecret": "Show the key as plain text, to check what was pasted."
+      "showSecret": "Show the key as plain text, to check what was pasted.",
+      "settingsAiDecisionsReplaceDefault": "Home Assistant has one default Decisions entity, so this replaces the current one."
     },
     "guide": {
       "title": "Guide",
@@ -1861,7 +1862,24 @@
       "haNotificationsHelp": "Show or hide when Phoenix MCP sends you a Home Assistant notification.",
       "aboutHelp": "Show or hide the version numbers and where Phoenix MCP keeps its data.",
       "githubHelp": "Open the Phoenix MCP source code and issue tracker on GitHub in a new tab.",
-      "showSecret": "Show key"
+      "showSecret": "Show key",
+      "aiDecisionsHeading": "Decisions",
+      "aiDecisionsIntro": "Answer Home Assistant's Evaluate action with your decision provider.",
+      "aiDecisionsEnableLabel": "Enable Phoenix MCP Decisions",
+      "aiDecisionsEnableHelp": "Add a Phoenix MCP Decisions entity for automations and scripts to ask questions. Off by default.",
+      "aiDecisionsDefaultLabel": "Default Decisions entity",
+      "aiDecisionsDefaultOff": "Use Phoenix MCP when an Evaluate action does not specify an entity.",
+      "aiDecisionsDefaultOn": "Phoenix MCP handles Evaluate actions that do not specify an entity.",
+      "aiDecisionsConfigureFirst": "Enable it and choose an access key first.",
+      "aiDecisionsAccessKeyAria": "Decisions access key",
+      "aiDecisionsAccessKeyHelp": "Evaluate actions run only while this access key is active and can return response data.",
+      "aiDecisionsCapabilityNote": "This access key needs {capability} set to {mode}.",
+      "aiDecisionsSetDefaultFailed": "Could not set the default Decisions entity.",
+      "aiDecisionsEnabledToast": "Decisions enabled",
+      "aiDecisionsDisabledToast": "Decisions disabled",
+      "aiDecisionsDefaultSetToast": "Phoenix MCP Decisions is now the default",
+      "aiDecisionsDefaultReplacedToast": "Phoenix MCP Decisions is now the default, replacing {name}",
+      "aiDecisionsDefaultClearedToast": "Phoenix MCP Decisions is no longer the default"
     },
     "agentchat": {
       "accessKey": "Access Key",
@@ -2396,7 +2414,8 @@
       "recoverySnapshotUnsafeAt": "No complete copy of this item without secrets is available, so nothing was changed. Phoenix refused it at {location}.",
       "invalidHostHeader": "The request's Host header is not a valid address.",
       "approvalOutcomeNotSaved": "The action finished, but its result could not be saved. Check its effect in Home Assistant; this approval will not be offered again.",
-      "providerRemoteUrlResolutionFailed": "The provider URL could not be resolved, so its address could not be checked."
+      "providerRemoteUrlResolutionFailed": "The provider URL could not be resolved, so its address could not be checked.",
+      "aiDecisionsNotConfigured": "Turn on Phoenix MCP Decisions with an access key first."
     },
     "mesaSuggestion": {
       "baseline_note": " Prohibited matches the built-in baseline for this domain, so the profile makes that intent explicit. To allow agent control behind admin approval instead, choose Confirm in Profile Editor before saving; approval applies while MESA is enforced.",

@@ -654,6 +654,7 @@ class PhoenixAgentCliProviderView(PhoenixView):
                 settings = data.store.get_settings()
                 voice_removed = settings.voice_agent_provider_id == instance_id
                 ai_task_removed = settings.ai_task_provider_id == instance_id
+                decision_removed = False
                 patchable: dict[str, Any] = {}
                 if settings.decision_provider_default_id == instance_id:
                     # One decision account must stay selected while any exists, so
@@ -666,7 +667,9 @@ class PhoenixAgentCliProviderView(PhoenixView):
                     patchable["decision_provider_default_id"] = remaining[0] if remaining else None
                 if settings.decision_provider_id == instance_id:
                     data.decision_shadow.cancel()
+                    decision_removed = True
                     patchable.update(decision_provider_id=None, decision_shadow_enabled=False,
+                                     ai_task_decisions_enabled=False,
                                      agentcli_tool_routing_mode="off", voice_agent_tool_routing_mode="off", ai_task_tool_routing_mode="off")
                     for key in ("voice_agent_routing_mode", "agentcli_routing_mode"):
                         if getattr(settings, key) == "hybrid":
@@ -690,8 +693,8 @@ class PhoenixAgentCliProviderView(PhoenixView):
                 # The voice agent lost its provider and is unregistered;
                 # remove any Phoenix-created Assist pipeline as well.
                 await async_remove_assist_pipeline(self.hass, data)
-            if ai_task_removed and data.async_sync_ai_task is not None:
-                # The AI Task is not fully configured; remove its entity
+            if (ai_task_removed or decision_removed) and data.async_sync_ai_task is not None:
+                # A surface is not fully configured; remove its entity
                 # from Home Assistant and the AI Task picker.
                 data.async_sync_ai_task()
         _audit_admin(self.hass, request, rid, f"provider:{instance_id}")
