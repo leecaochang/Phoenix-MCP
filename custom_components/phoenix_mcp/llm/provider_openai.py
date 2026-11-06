@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import re
-from typing import Any, AsyncIterator
+from typing import Any, AsyncIterator, Iterator
 
 from aiohttp import ClientError, ClientSession, SocketTimeoutError
 
@@ -775,28 +775,138 @@ class OpenAICompatProvider:
 
     @_total_provider_response
     async def _parse(self, resp: Any, show_thinking: bool) -> AsyncIterator[dict]:
-        text_parts: list[str] = []
+        stream = _ChatStream(self.definition.tool_stream == "gemini")
+        async for line in _sse_lines(resp):
+            payload = _sse_payload(line)
+            if not payload:
+                continue
+            if payload == "[DONE]":
+                break
+            for event in self._chunk_events(_provider_object(payload), stream, show_thinking):
+                yield event
+        _settle_finish(stream)
+        # Flush any held-back tail from the think splitter.
+        for event in _segment_events(stream.think.flush(), stream, show_thinking):
+            yield event
+        assistant_tool_calls, parsed_tools, checked, bad = _checked_tool_calls(stream)
+        assistant_msg = self._assistant_message(stream, assistant_tool_calls)
+        if bad:
+            yield _bad_tool_call_event(stream, assistant_msg, assistant_tool_calls, checked)
+            return
+        _refuse_unusable_end(stream, parsed_tools)
+        for tool_call in parsed_tools:
+            yield _norm(EV_TOOL, id=tool_call["id"], name=tool_call["name"],
+                        input=tool_call["input"])
+        yield _norm(EV_DONE, stop_reason=_norm_stop(stream.finish), assistant_msg=assistant_msg)
+
+    def _chunk_events(self, chunk: dict, stream: _ChatStream, show_thinking: bool) -> Iterator[dict]:
+        """Fold one stream chunk into `stream`, yielding its events in the order they apply."""
+        usage = _usage_event(chunk)
+        if usage is not None:
+            yield usage
+        picked = _chunk_choice(chunk)
+        if picked is None:
+            return
+        choice, delta = picked
+        thinking = self._kept_reasoning(delta, stream, show_thinking)
+        if thinking is not None:
+            yield thinking
+        yield from self._content_events(delta, stream, show_thinking)
+        _merge_tool_fragments(delta, stream)
+        if choice.get("finish_reason"):
+            stream.finish = choice["finish_reason"]
+            stream.saw_finish = True
+
+    def _kept_reasoning(self, delta: dict, stream: _ChatStream, show_thinking: bool) -> dict | None:
+        """Retain the reasoning this provider needs back; the thinking event to show, or None."""
+        # Retain protocol-required reasoning even when its display is hidden.
+        # Ollama's reasoning field remains display-only.
+        reasoning = delta.get("reasoning_content") or delta.get("reasoning")
+        if reasoning is not None and not isinstance(reasoning, str):
+            raise _ProviderResponseError()
+        if self.kind == "openrouter" and isinstance(delta.get("reasoning_details"), list):
+            stream.reasoning_details.extend(d for d in delta["reasoning_details"] if isinstance(d, dict))
+        if reasoning and self.kind in _REPLAY_REASONING_KINDS:
+            stream.replay_reasoning_parts.append(str(reasoning))
+        if reasoning and show_thinking:
+            return _norm(EV_THINKING, text=reasoning)
+        return None
+
+    def _content_events(self, delta: dict, stream: _ChatStream, show_thinking: bool) -> Iterator[dict]:
+        """Refuse a content of the wrong shape, else fold it in and yield what it shows."""
+        content = delta.get("content")
+        if content is not None and not isinstance(content, str) and not (
+            self._mistral_content and isinstance(content, list)
+        ):
+            raise _ProviderResponseError()
+        if self._mistral_content and isinstance(content, list):
+            yield from _mistral_block_events(content, stream, show_thinking)
+        elif self._mistral_content and isinstance(content, str) \
+                and content and stream.mistral_content_parts:
+            # Mistral may switch from structured ThinkChunk content to
+            # ordinary string deltas for the answer. Materialize those as
+            # TextChunk content after the retained thinking blocks.
+            stream.text_parts.append(content)
+            if stream.mistral_content_parts[-1].get("type") == "text":
+                old_text = str(stream.mistral_content_parts[-1].get("text", ""))
+                stream.mistral_content_parts[-1]["text"] = old_text + content
+            else:
+                stream.mistral_content_parts.append({"type": "text", "text": content})
+            yield _norm(EV_TEXT, text=content)
+        elif isinstance(content, str) and content:
+            yield from _segment_events(stream.think.feed(content), stream, show_thinking)
+
+    def _assistant_message(self, stream: _ChatStream, assistant_tool_calls: list[dict]) -> dict:
+        """The assistant message that goes back to the provider on the next turn."""
+        # Use "" (not None) for a tool-only reply: a null content serializes to
+        # JSON null, which Ollama's OpenAI-compatible endpoint rejects on the next
+        # turn ("invalid message content type: <nil>"). An empty string is valid
+        # for OpenAI/DeepSeek/Gemini too, so this is safe across all of them.
+        answer_text = "".join(stream.text_parts)
+        if self._mistral_content and stream.mistral_content_parts:
+            assistant_content: str | list[dict] = stream.mistral_content_parts
+        else:
+            assistant_content = answer_text
+        assistant_msg: dict = {"role": "assistant", "content": assistant_content}
+        if stream.replay_reasoning_parts:
+            assistant_msg["reasoning_content"] = "".join(stream.replay_reasoning_parts)
+        if stream.reasoning_details:
+            assistant_msg["reasoning_details"] = stream.reasoning_details
+        if assistant_tool_calls:
+            assistant_msg["tool_calls"] = assistant_tool_calls
+        return assistant_msg
+
+
+# (id, name, parsed arguments or None, model-facing JSON error or None).
+_CheckedCall = tuple[Any, Any, Any, str | None]
+
+
+class _ChatStream:
+    """What one Chat Completions stream has accumulated so far."""
+
+    def __init__(self, gemini: bool) -> None:
+        self.text_parts: list[str] = []
         # The providers in _REPLAY_REASONING_KINDS retain reasoning_content verbatim
         # with the assistant tool call on the next round. Other compatible
         # providers use this field for display only, so retention is
         # profile-controlled.
-        replay_reasoning_parts: list[str] = []
+        self.replay_reasoning_parts: list[str] = []
         # OpenRouter requires its structured `reasoning_details` array to be sent
         # back unmodified, in order, across tool calls (encrypted and summarised
         # reasoning cannot be rebuilt from text).
-        reasoning_details: list = []
+        self.reasoning_details: list = []
         # Mistral emits reasoning as structured ThinkChunk content. Unlike the
         # display-only reasoning fields used by other compatible APIs, Mistral
         # requires these chunks to be replayed in the assistant message on the
         # next turn, even when verbose output is hidden in Phoenix.
-        mistral_content_parts: list[dict] = []
+        self.mistral_content_parts: list[dict] = []
         # tool calls accumulated by index: {index: {"id","name","args"}}
-        calls: dict[int, dict] = {}
+        self.calls: dict[int, dict] = {}
         # Gemini's compatibility layer deviates from OpenAI streaming for tool
         # calls (see _merged_whole_arguments and _gemini_tool_slot).
-        gemini = self.definition.tool_stream == "gemini"
-        pending_extra: dict | None = None
-        finish = "stop"
+        self.gemini = gemini
+        self.pending_extra: dict | None = None
+        self.finish = "stop"
         # Whether the stream ever reported WHY it ended. Every provider sends a
         # finish_reason on its final chunk, so the default above standing
         # untouched means the response stopped arriving rather than finishing:
@@ -804,284 +914,266 @@ class OpenAICompatProvider:
         # one. Deliberately not keyed on the "[DONE]" sentinel, which is an
         # OpenAI convention some compatible backends never send, and which would
         # therefore relabel their genuinely malformed calls as dropped ones.
-        saw_finish = False
+        self.saw_finish = False
         # Some local reasoning models (e.g. r1 via Ollama) emit their chain of
         # thought inline as <think>...</think> inside content rather than in a
         # separate reasoning field. Split it out so it is treated as thinking
         # (shown only when show_thinking) and never leaks into the reply or the
         # message history sent back next turn.
-        think = _ThinkSplitter()
-        async for line in _sse_lines(resp):
-            if not line.startswith("data:"):
-                if line.lstrip().startswith(("{", "[")):
-                    _provider_object(line)
-                    raise _ProviderResponseError()
-                continue
-            payload = line[5:].strip()
-            if not payload:
-                continue
-            if payload == "[DONE]":
-                break
-            chunk = _provider_object(payload)
-            # Usage must be read BEFORE the empty-choices skip: OpenAI's final
-            # usage chunk (stream_options include_usage) carries choices: [].
-            # Some backends (Gemini, Grok) volunteer usage on content chunks
-            # instead; cumulative-replace semantics cover both. Ollama sends
-            # usage only when include_usage is requested.
-            usage = chunk.get("usage")
-            if isinstance(usage, dict):
-                pt = _usage_int(usage.get("prompt_tokens"))
-                ct = _usage_int(usage.get("completion_tokens"))
-                details = usage.get("prompt_tokens_details")
-                cached = _usage_int(details.get("cached_tokens")) if isinstance(details, dict) else 0
-                cached = cached or _usage_int(usage.get("prompt_cache_hit_tokens"))
-                if pt or ct:
-                    yield _norm(EV_USAGE, input_tokens=pt, output_tokens=ct, cache_read_tokens=cached)
-            choices = chunk.get("choices")
-            if not isinstance(choices, list):
-                raise _ProviderResponseError()
-            if not choices:
-                continue
-            choice = choices[0]
-            if not isinstance(choice, dict):
-                raise _ProviderResponseError()
-            delta = choice.get("delta") or {}
-            if not isinstance(delta, dict):
-                raise _ProviderResponseError()
-            if delta.get("refusal") or choice.get("finish_reason") == "content_filter":
-                raise _ProviderResponseError("provider_blocked", retryable=False)
-            # Retain protocol-required reasoning even when its display is hidden.
-            # Ollama's reasoning field remains display-only.
-            reasoning = delta.get("reasoning_content") or delta.get("reasoning")
-            if reasoning is not None and not isinstance(reasoning, str):
-                raise _ProviderResponseError()
-            if self.kind == "openrouter" and isinstance(delta.get("reasoning_details"), list):
-                reasoning_details.extend(d for d in delta["reasoning_details"] if isinstance(d, dict))
-            if reasoning and self.kind in _REPLAY_REASONING_KINDS:
-                replay_reasoning_parts.append(str(reasoning))
-            if reasoning and show_thinking:
-                yield _norm(EV_THINKING, text=reasoning)
-            content = delta.get("content")
-            if content is not None and not isinstance(content, str) and not (
-                self._mistral_content and isinstance(content, list)
-            ):
-                raise _ProviderResponseError()
-            if self._mistral_content and isinstance(content, list):
-                for block in content:
-                    if not isinstance(block, dict):
-                        continue
-                    # Retain each structured block in its original order and
-                    # shape. Mistral explicitly requires the full assistant
-                    # content, including ThinkChunk, on subsequent turns.
-                    mistral_content_parts.append(block)
-                    if block.get("type") == "thinking":
-                        thinking_text = "".join(
-                            str(item.get("text", ""))
-                            for item in block.get("thinking", [])
-                            if isinstance(item, dict) and item.get("type") == "text"
-                        )
-                        if thinking_text:
-                            if show_thinking:
-                                yield _norm(EV_THINKING, text=thinking_text)
-                    elif block.get("type") == "text" and block.get("text"):
-                        seg = str(block["text"])
-                        text_parts.append(seg)
-                        yield _norm(EV_TEXT, text=seg)
-            elif self._mistral_content and isinstance(content, str) \
-                    and content and mistral_content_parts:
-                # Mistral may switch from structured ThinkChunk content to
-                # ordinary string deltas for the answer. Materialize those as
-                # TextChunk content after the retained thinking blocks.
-                text_parts.append(content)
-                if mistral_content_parts[-1].get("type") == "text":
-                    old_text = str(mistral_content_parts[-1].get("text", ""))
-                    mistral_content_parts[-1]["text"] = old_text + content
-                else:
-                    mistral_content_parts.append({"type": "text", "text": content})
-                yield _norm(EV_TEXT, text=content)
-            elif isinstance(content, str) and content:
-                for kind, seg in think.feed(content):
-                    if kind == "text":
-                        text_parts.append(seg)
-                        yield _norm(EV_TEXT, text=seg)
-                    elif show_thinking:
-                        yield _norm(EV_THINKING, text=seg)
-            fragments = delta.get("tool_calls", [])
-            if not isinstance(fragments, list):
-                raise _ProviderResponseError()
-            if gemini and isinstance(delta.get("extra_content"), dict):
-                # A thought signature can arrive on the delta rather than the call.
-                pending_extra = delta["extra_content"]
-            for tc in fragments:
-                if not isinstance(tc, dict):
-                    raise _ProviderResponseError()
-                idx = _gemini_tool_slot(calls, tc) if gemini else tc.get("index", 0)
-                if type(idx) is not int or idx < 0:
-                    raise _ProviderResponseError()
-                slot = calls.setdefault(idx, {"id": None, "name": None, "args": ""})
-                if tc.get("id"):
-                    slot["id"] = tc["id"]
-                if gemini:
-                    extra = tc.get("extra_content")
-                    if isinstance(extra, dict):
-                        slot["extra_content"] = extra
-                    elif pending_extra is not None and "extra_content" not in slot:
-                        slot["extra_content"] = pending_extra
-                    pending_extra = None
-                fn = tc.get("function", {})
-                if not isinstance(fn, dict):
-                    raise _ProviderResponseError()
-                if fn.get("name"):
-                    slot["name"] = fn["name"]
-                if "arguments" in fn:
-                    if not isinstance(fn["arguments"], str):
-                        record_rejected_tool(slot["id"], slot["name"], fn["arguments"],
-                                             reason="The provider must send tool arguments as JSON text.")
-                        raise _ProviderResponseError()
-                    slot["args"] = (_merged_whole_arguments(slot["args"], fn["arguments"]) if gemini
-                                    else slot["args"] + fn["arguments"])
-            if choice.get("finish_reason"):
-                finish = choice["finish_reason"]
-                saw_finish = True
-        if finish in _FINISH_FAILURES:
-            code, retryable = _FINISH_FAILURES[finish]
-            raise _ProviderResponseError(code, retryable=retryable)
-        if finish == "repetition_truncation":
-            # MiMo cut a degenerate repetition short: the output stopped early.
-            finish = "length"
-        if gemini and finish == "stop" and calls:
-            # Gemini ends a tool-call response with "stop" rather than "tool_calls".
-            finish = "tool_calls"
-        # Flush any held-back tail from the think splitter.
-        for kind, seg in think.flush():
-            if kind == "text":
-                text_parts.append(seg)
-                yield _norm(EV_TEXT, text=seg)
-            elif show_thinking:
-                yield _norm(EV_THINKING, text=seg)
-        assistant_tool_calls = []
-        parsed_tools = []
-        bad = False
-        # (id, name, parsed arguments or None, model-facing JSON error or None).
-        checked: list[tuple[Any, Any, Any, str | None]] = []
-        for idx in sorted(calls):
-            slot = calls[idx]
-            args_str = slot["args"] or "{}"
-            hint = None
-            try:
-                parsed = json.loads(args_str)
-                if not _valid_tool_call(slot["id"], slot["name"], parsed):
-                    record_rejected_tool(slot["id"], slot["name"], slot["args"],
-                                         reason=_tool_call_problem(slot["id"], slot["name"]),
-                                         finish_reason=finish if saw_finish else None)
-                    raise _ProviderResponseError(retryable=finish != "length")
-            except json.JSONDecodeError as exc:
-                bad = True
-                parsed = None
-                hint = _json_error_hint(args_str, exc)
-                reason = ("The output length limit interrupted the tool arguments." if finish == "length"
-                          else "The stream ended before the tool arguments were complete." if not saw_finish
-                          else "Tool arguments are not valid JSON.")
-                record_rejected_tool(slot["id"], slot["name"], slot["args"], reason=reason,
-                                     finish_reason=finish if saw_finish else None, error=exc)
-            checked.append((slot["id"], slot["name"], parsed, hint))
-            assistant_tool_calls.append({
-                "id": slot["id"], "type": "function",
-                "function": {"name": slot["name"], "arguments": args_str},
-                # Gemini's thought signature must return with its call, unchanged,
-                # or the next request is refused.
-                **({"extra_content": slot["extra_content"]} if slot.get("extra_content") else {}),
-            })
-            if parsed is not None:
-                parsed_tools.append({"id": slot["id"], "name": slot["name"], "input": parsed})
-        # Use "" (not None) for a tool-only reply: a null content serializes to
-        # JSON null, which Ollama's OpenAI-compatible endpoint rejects on the next
-        # turn ("invalid message content type: <nil>"). An empty string is valid
-        # for OpenAI/DeepSeek/Gemini too, so this is safe across all of them.
-        answer_text = "".join(text_parts)
-        if self._mistral_content and mistral_content_parts:
-            assistant_content: str | list[dict] = mistral_content_parts
-        else:
-            assistant_content = answer_text
-        assistant_msg: dict = {"role": "assistant", "content": assistant_content}
-        if replay_reasoning_parts:
-            assistant_msg["reasoning_content"] = "".join(replay_reasoning_parts)
-        if reasoning_details:
-            assistant_msg["reasoning_details"] = reasoning_details
-        if assistant_tool_calls:
-            assistant_msg["tool_calls"] = assistant_tool_calls
-        if bad:
-            # The model emitted a tool call whose arguments never parse as JSON.
-            # Do not dispatch garbage; end the turn with a clear error rather
-            # than hanging. THREE causes, and each sends the operator somewhere
-            # different, so each gets its own code (the panel localizes on the
-            # code, not the message, so one code cannot carry three sentences).
-            #
-            # A stream that stopped on the output-token limit was TRUNCATED (for
-            # example a whole-dashboard write exceeding the provider's default
-            # cap), so the fix is a smaller change. A stream that never reported
-            # a finish_reason did not finish: the connection dropped mid-call,
-            # the fix is to send it again, and NOTHING about what the model wrote
-            # was wrong. Reporting that as malformed output would send the
-            # operator to inspect a config that was fine. Anything else genuinely
-            # is malformed output (a known Ollama failure mode).
-            if finish == "length":
-                code = "tool_call_truncated"
-                retryable = False
-                message = (
-                    "The model hit its output length limit in the middle of a tool "
-                    "call, so the action was not run. The requested change was too "
-                    "large to emit in one call; try asking for a smaller change."
-                )
-            elif not saw_finish:
-                code = "tool_call_cut"
-                retryable = True
-                message = (
-                    "The connection to the model ended in the middle of a tool "
-                    "call, so the action was not run. Nothing was applied and the "
-                    "request itself was not at fault; send it again."
-                )
-            else:
-                # A finished tool-call response whose JSON is the model's own
-                # syntax error. Hand it back with the position and likely missing
-                # closer so the model can resend it. Replayed history carries `{}`
-                # for the unparseable arguments: several OpenAI-compatible servers
-                # parse historical arguments and would refuse every later request.
-                event = _invalid_tool_calls(checked, {
-                    **assistant_msg,
-                    "tool_calls": [
-                        call if hint is None else {**call, "function": {**call["function"], "arguments": "{}"}}
-                        for call, (_id, _name, _parsed, hint) in zip(assistant_tool_calls, checked)
-                    ],
-                }) if finish == "tool_calls" else None
-                if event is not None:
-                    yield event
-                    return
-                yield _invalid_tools_error()
-                return
-            yield _norm(EV_ERROR, status=0, code=code,
-                        message=message, retryable=retryable, diagnostic={'category': code})
-            return
-        if not saw_finish:
-            for slot in calls.values():
+        self.think = _ThinkSplitter()
+
+
+def _sse_payload(line: str) -> str:
+    """The payload of one SSE line, empty when it has none; bare JSON outside the framing is refused."""
+    if not line.startswith("data:"):
+        if line.lstrip().startswith(("{", "[")):
+            _provider_object(line)
+            raise _ProviderResponseError()
+        return ""
+    return line[5:].strip()
+
+
+def _usage_event(chunk: dict) -> dict | None:
+    """The usage event of one chunk, or None when it reports no tokens."""
+    # Usage must be read BEFORE the empty-choices skip: OpenAI's final
+    # usage chunk (stream_options include_usage) carries choices: [].
+    # Some backends (Gemini, Grok) volunteer usage on content chunks
+    # instead; cumulative-replace semantics cover both. Ollama sends
+    # usage only when include_usage is requested.
+    usage = chunk.get("usage")
+    if isinstance(usage, dict):
+        pt = _usage_int(usage.get("prompt_tokens"))
+        ct = _usage_int(usage.get("completion_tokens"))
+        details = usage.get("prompt_tokens_details")
+        cached = _usage_int(details.get("cached_tokens")) if isinstance(details, dict) else 0
+        cached = cached or _usage_int(usage.get("prompt_cache_hit_tokens"))
+        if pt or ct:
+            return _norm(EV_USAGE, input_tokens=pt, output_tokens=ct, cache_read_tokens=cached)
+    return None
+
+
+def _chunk_choice(chunk: dict) -> tuple[dict, dict] | None:
+    """The first choice of a chunk and its delta, None when it has no choices; refuses a bad shape or a block."""
+    choices = chunk.get("choices")
+    if not isinstance(choices, list):
+        raise _ProviderResponseError()
+    if not choices:
+        return None
+    choice = choices[0]
+    if not isinstance(choice, dict):
+        raise _ProviderResponseError()
+    delta = choice.get("delta") or {}
+    if not isinstance(delta, dict):
+        raise _ProviderResponseError()
+    if delta.get("refusal") or choice.get("finish_reason") == "content_filter":
+        raise _ProviderResponseError("provider_blocked", retryable=False)
+    return choice, delta
+
+
+def _segment_events(
+    segments: list[tuple[str, str]], stream: _ChatStream, show_thinking: bool,
+) -> Iterator[dict]:
+    """Yield think-splitter segments: text joins the reply, thinking shows only when asked."""
+    for kind, seg in segments:
+        if kind == "text":
+            stream.text_parts.append(seg)
+            yield _norm(EV_TEXT, text=seg)
+        elif show_thinking:
+            yield _norm(EV_THINKING, text=seg)
+
+
+def _mistral_block_events(content: list, stream: _ChatStream, show_thinking: bool) -> Iterator[dict]:
+    """Retain Mistral's structured content blocks and yield what each one shows."""
+    for block in content:
+        if not isinstance(block, dict):
+            continue
+        # Retain each structured block in its original order and
+        # shape. Mistral explicitly requires the full assistant
+        # content, including ThinkChunk, on subsequent turns.
+        stream.mistral_content_parts.append(block)
+        if block.get("type") == "thinking":
+            thinking_text = "".join(
+                str(item.get("text", ""))
+                for item in block.get("thinking", [])
+                if isinstance(item, dict) and item.get("type") == "text"
+            )
+            if thinking_text:
+                if show_thinking:
+                    yield _norm(EV_THINKING, text=thinking_text)
+        elif block.get("type") == "text" and block.get("text"):
+            seg = str(block["text"])
+            stream.text_parts.append(seg)
+            yield _norm(EV_TEXT, text=seg)
+
+
+def _merge_tool_fragments(delta: dict, stream: _ChatStream) -> None:
+    """Fold a delta's tool call fragments into `stream.calls`, refusing a bad shape."""
+    fragments = delta.get("tool_calls", [])
+    if not isinstance(fragments, list):
+        raise _ProviderResponseError()
+    if stream.gemini and isinstance(delta.get("extra_content"), dict):
+        # A thought signature can arrive on the delta rather than the call.
+        stream.pending_extra = delta["extra_content"]
+    for tc in fragments:
+        _merge_tool_fragment(tc, stream)
+
+
+def _merge_tool_fragment(tc: Any, stream: _ChatStream) -> None:
+    """Fold one tool call fragment into its slot; a rejected one is recorded before the refusal."""
+    if not isinstance(tc, dict):
+        raise _ProviderResponseError()
+    idx = _gemini_tool_slot(stream.calls, tc) if stream.gemini else tc.get("index", 0)
+    if type(idx) is not int or idx < 0:
+        raise _ProviderResponseError()
+    slot = stream.calls.setdefault(idx, {"id": None, "name": None, "args": ""})
+    if tc.get("id"):
+        slot["id"] = tc["id"]
+    if stream.gemini:
+        extra = tc.get("extra_content")
+        if isinstance(extra, dict):
+            slot["extra_content"] = extra
+        elif stream.pending_extra is not None and "extra_content" not in slot:
+            slot["extra_content"] = stream.pending_extra
+        stream.pending_extra = None
+    fn = tc.get("function", {})
+    if not isinstance(fn, dict):
+        raise _ProviderResponseError()
+    if fn.get("name"):
+        slot["name"] = fn["name"]
+    if "arguments" in fn:
+        if not isinstance(fn["arguments"], str):
+            record_rejected_tool(slot["id"], slot["name"], fn["arguments"],
+                                 reason="The provider must send tool arguments as JSON text.")
+            raise _ProviderResponseError()
+        slot["args"] = (_merged_whole_arguments(slot["args"], fn["arguments"]) if stream.gemini
+                        else slot["args"] + fn["arguments"])
+
+
+def _settle_finish(stream: _ChatStream) -> None:
+    """Refuse a finish reason that means failure and normalize the rest."""
+    if stream.finish in _FINISH_FAILURES:
+        code, retryable = _FINISH_FAILURES[stream.finish]
+        raise _ProviderResponseError(code, retryable=retryable)
+    if stream.finish == "repetition_truncation":
+        # MiMo cut a degenerate repetition short: the output stopped early.
+        stream.finish = "length"
+    if stream.gemini and stream.finish == "stop" and stream.calls:
+        # Gemini ends a tool-call response with "stop" rather than "tool_calls".
+        stream.finish = "tool_calls"
+
+
+def _checked_tool_calls(stream: _ChatStream) -> tuple[list[dict], list[dict], list[_CheckedCall], bool]:
+    """Judge each accumulated call: (history form, runnable, checked rows, any unparseable JSON)."""
+    assistant_tool_calls = []
+    parsed_tools = []
+    bad = False
+    checked: list[_CheckedCall] = []
+    for idx in sorted(stream.calls):
+        slot = stream.calls[idx]
+        args_str = slot["args"] or "{}"
+        hint = None
+        try:
+            parsed = json.loads(args_str)
+            if not _valid_tool_call(slot["id"], slot["name"], parsed):
                 record_rejected_tool(slot["id"], slot["name"], slot["args"],
-                                     reason="The provider response ended before the tool call was complete.")
-            raise _ProviderResponseError("provider_incomplete")
-        if finish not in ("stop", "tool_calls", "length"):
-            raise _ProviderResponseError()
-        if finish == "tool_calls" and not parsed_tools:
-            raise _ProviderResponseError()
-        if parsed_tools and finish != "tool_calls":
-            raise _ProviderResponseError("provider_incomplete", retryable=finish != "length")
-        if len({tool["id"] for tool in parsed_tools}) != len(parsed_tools):
-            for tool in parsed_tools:
-                record_rejected_tool(tool["id"], tool["name"], tool["input"],
-                                     reason="The response contains duplicate tool call IDs.", finish_reason=finish)
-            raise _ProviderResponseError()
-        for tool_call in parsed_tools:
-            yield _norm(EV_TOOL, id=tool_call["id"], name=tool_call["name"],
-                        input=tool_call["input"])
-        yield _norm(EV_DONE, stop_reason=_norm_stop(finish), assistant_msg=assistant_msg)
+                                     reason=_tool_call_problem(slot["id"], slot["name"]),
+                                     finish_reason=stream.finish if stream.saw_finish else None)
+                raise _ProviderResponseError(retryable=stream.finish != "length")
+        except json.JSONDecodeError as exc:
+            bad = True
+            parsed = None
+            hint = _json_error_hint(args_str, exc)
+            reason = ("The output length limit interrupted the tool arguments." if stream.finish == "length"
+                      else "The stream ended before the tool arguments were complete." if not stream.saw_finish
+                      else "Tool arguments are not valid JSON.")
+            record_rejected_tool(slot["id"], slot["name"], slot["args"], reason=reason,
+                                 finish_reason=stream.finish if stream.saw_finish else None, error=exc)
+        checked.append((slot["id"], slot["name"], parsed, hint))
+        assistant_tool_calls.append({
+            "id": slot["id"], "type": "function",
+            "function": {"name": slot["name"], "arguments": args_str},
+            # Gemini's thought signature must return with its call, unchanged,
+            # or the next request is refused.
+            **({"extra_content": slot["extra_content"]} if slot.get("extra_content") else {}),
+        })
+        if parsed is not None:
+            parsed_tools.append({"id": slot["id"], "name": slot["name"], "input": parsed})
+    return assistant_tool_calls, parsed_tools, checked, bad
+
+
+def _bad_tool_call_event(
+    stream: _ChatStream, assistant_msg: dict, assistant_tool_calls: list[dict], checked: list[_CheckedCall],
+) -> dict:
+    """The one event that ends a response whose tool arguments never parse as JSON."""
+    # The model emitted a tool call whose arguments never parse as JSON.
+    # Do not dispatch garbage; end the turn with a clear error rather
+    # than hanging. THREE causes, and each sends the operator somewhere
+    # different, so each gets its own code (the panel localizes on the
+    # code, not the message, so one code cannot carry three sentences).
+    #
+    # A stream that stopped on the output-token limit was TRUNCATED (for
+    # example a whole-dashboard write exceeding the provider's default
+    # cap), so the fix is a smaller change. A stream that never reported
+    # a finish_reason did not finish: the connection dropped mid-call,
+    # the fix is to send it again, and NOTHING about what the model wrote
+    # was wrong. Reporting that as malformed output would send the
+    # operator to inspect a config that was fine. Anything else genuinely
+    # is malformed output (a known Ollama failure mode).
+    if stream.finish == "length":
+        code = "tool_call_truncated"
+        retryable = False
+        message = (
+            "The model hit its output length limit in the middle of a tool "
+            "call, so the action was not run. The requested change was too "
+            "large to emit in one call; try asking for a smaller change."
+        )
+    elif not stream.saw_finish:
+        code = "tool_call_cut"
+        retryable = True
+        message = (
+            "The connection to the model ended in the middle of a tool "
+            "call, so the action was not run. Nothing was applied and the "
+            "request itself was not at fault; send it again."
+        )
+    else:
+        # A finished tool-call response whose JSON is the model's own
+        # syntax error. Hand it back with the position and likely missing
+        # closer so the model can resend it. Replayed history carries `{}`
+        # for the unparseable arguments: several OpenAI-compatible servers
+        # parse historical arguments and would refuse every later request.
+        event = _invalid_tool_calls(checked, {
+            **assistant_msg,
+            "tool_calls": [
+                call if hint is None else {**call, "function": {**call["function"], "arguments": "{}"}}
+                for call, (_id, _name, _parsed, hint) in zip(assistant_tool_calls, checked)
+            ],
+        }) if stream.finish == "tool_calls" else None
+        if event is not None:
+            return event
+        return _invalid_tools_error()
+    return _norm(EV_ERROR, status=0, code=code,
+                 message=message, retryable=retryable, diagnostic={'category': code})
+
+
+def _refuse_unusable_end(stream: _ChatStream, parsed_tools: list[dict]) -> None:
+    """Refuse a stream that never finished, ended oddly, or whose calls cannot run."""
+    if not stream.saw_finish:
+        for slot in stream.calls.values():
+            record_rejected_tool(slot["id"], slot["name"], slot["args"],
+                                 reason="The provider response ended before the tool call was complete.")
+        raise _ProviderResponseError("provider_incomplete")
+    if stream.finish not in ("stop", "tool_calls", "length"):
+        raise _ProviderResponseError()
+    if stream.finish == "tool_calls" and not parsed_tools:
+        raise _ProviderResponseError()
+    if parsed_tools and stream.finish != "tool_calls":
+        raise _ProviderResponseError("provider_incomplete", retryable=stream.finish != "length")
+    if len({tool["id"] for tool in parsed_tools}) != len(parsed_tools):
+        for tool in parsed_tools:
+            record_rejected_tool(tool["id"], tool["name"], tool["input"],
+                                 reason="The response contains duplicate tool call IDs.",
+                                 finish_reason=stream.finish)
+        raise _ProviderResponseError()
 
 
 def _estimated_prompt_tokens(body: dict) -> int:
