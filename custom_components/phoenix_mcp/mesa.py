@@ -1133,11 +1133,15 @@ def _limit_equivalents(
         own_domain = entity_id.partition(".")[0]
     services = [f"{own_domain}.{service}"]
     measured = params
-    if own_domain == "light" and service in ("turn_on", "toggle"):
+    turns_on = False
+    if service == "toggle":
         state = runtime.hass.states.get(entity_id)
-        if service == "turn_on" or params or state is None or state.state != "on":
-            measured = _light_limit_params(runtime.hass, entity_id, params)
-    if service == "toggle" and measured:
+        turns_on = state is None or state.state != "on"
+    if own_domain == "light" and (service == "turn_on" or (service == "toggle" and (params or turns_on))):
+        measured = _light_limit_params(runtime.hass, entity_id, params)
+    # A toggle that turns the entity on is that turn_on, so a limit refusing an
+    # absent parameter must see it even when the toggle carries no data.
+    if service == "toggle" and (measured or turns_on):
         services.append(f"{own_domain}.turn_on")
     exact = f"{domain}.{service}"
     forms = [
@@ -1190,14 +1194,10 @@ def evaluate_service_entities(
         # divergence the target check exists to catch, and the audit record would
         # describe a call that never happened. service_data has already had its
         # target selectors CONSUMED by target resolution, so they are absent from
-        # the outgoing call too. The one exception is a non-mapping target, which
-        # is a data field such as a notification recipient, selects nothing in
-        # hass.services.async_call, and has no entity for mesa-core to compare.
+        # the outgoing call too. A non-mapping target is a data field such as a
+        # notification recipient, so it stays in for declared limits to measure.
         # The resolved entity goes last so no caller value can displace it.
-        service_params = {
-            key: value for key, value in entity_service_data.items()
-            if key != "target" or isinstance(value, Mapping)
-        }
+        service_params = dict(entity_service_data)
         result = runtime.enforcer.evaluate(
             entity_id=entity_id,
             service=service_str,
@@ -1242,8 +1242,6 @@ def evaluate_service_entities(
         if result.allowed and mode is None:
             verdict.blocked.append((entity_id, "policy_unavailable", "MESA returned no evaluated control mode."))
             continue
-        if result.rule_applied == "policy_unavailable":
-            mesa_audit.record_policy_failure(entity_id, service_str, caller, result)
         if confirmation:
             if confirm_approved or not _host_enforced(settings_mode, result):
                 verdict.allowed.append(entity_id)

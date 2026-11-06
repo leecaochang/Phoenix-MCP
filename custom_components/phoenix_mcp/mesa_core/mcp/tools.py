@@ -43,7 +43,7 @@ _CALLER: contextvars.ContextVar[CallerContext | None] = contextvars.ContextVar(
     "mesa_caller", default=None
 )
 
-MESA_VERSION = "1.2"
+MESA_VERSION = "1.3"
 
 # component_type values derivable from an entity ID's domain (Spec 9.3).
 # Results are always entity-keyed, so scoped component types never occur.
@@ -196,7 +196,20 @@ class MesaToolHandlers:
         get_semantic_moments: Callable[[str], list[dict[str, Any]] | None] | None = None,
         privacy_enforcer: PrivacyEnforcer | None = None,
         get_validity_context: Callable[[str], dict[str, Any]] | None = None,
+        *,
+        store_is_scoped_view: bool = False,
     ) -> None:
+        """``store_is_scoped_view`` declares ``store`` a per-caller view of the
+        store ``lease_manager`` uses. Otherwise they must be the same store, or
+        leases would check different automations than retrieval shows.
+        """
+        if (
+            lease_manager is not None
+            and lease_manager.store is not None
+            and lease_manager.store is not store
+            and not store_is_scoped_view
+        ):
+            raise MesaError("lease manager must use the registered profile store")
         self.store = store
         self.resolver = resolver or store.resolver
         self.caller_context_fn = caller_context_fn
@@ -616,15 +629,19 @@ class MesaToolHandlers:
             )
             # Denial reasons and warnings can identify protected automations.
             # Shape those identities with the same caller snapshot as retrieval.
+            # A scoped store answers None for what it hides, and resolving such
+            # an entity succeeds without its profile, so absence decides first.
             hidden = []
-            for key in await _run_sync(self.store.entity_keys):
-                if key.startswith("automation."):
-                    try:
-                        profile = await _run_sync(self.resolver.resolve, key)
-                        if not self._access(key, profile).allowed:
-                            hidden.append(key)
-                    except (MesaError, ValueError, OSError, RecursionError):
+            for key in response.automations_consulted:
+                try:
+                    if await _run_sync(self.store.get, key) is None:
                         hidden.append(key)
+                        continue
+                    profile = await _run_sync(self.resolver.resolve, key)
+                    if not self._access(key, profile).allowed:
+                        hidden.append(key)
+                except (MesaError, ValueError, OSError, RecursionError):
+                    hidden.append(key)
             for key in hidden:
                 response.denial_reasons = {
                     entity: (

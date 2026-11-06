@@ -304,6 +304,7 @@ def _build_handlers(
         resolver=resolver,
         caller_context_fn=lambda: ctx,
         lease_manager=runtime.lease_manager,
+        store_is_scoped_view=True,
         get_semantic_moments=get_semantic_moments,
         get_validity_context=_build_validity_context(hass),
     )

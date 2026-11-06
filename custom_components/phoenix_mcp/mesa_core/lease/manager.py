@@ -101,6 +101,10 @@ class LeaseResponse:
     # layer can distinguish the lease_conflict envelope (Spec 9.6) from a
     # plain existing-holder denial.
     automation_denials: list[str] = field(default_factory=list)
+    # Every automation this response may name. The tool layer tests each against
+    # the caller's scope, because a scoped store cannot be walked to find what it
+    # hides and denial reasons are free text. Never serialized.
+    automations_consulted: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         out: dict[str, Any] = {
@@ -235,8 +239,9 @@ class LeaseManager:
 
     def _automation_conflicts(
         self, requested: set[str], warnings: list[str]
-    ) -> tuple[dict[str, str], list[dict[str, Any]]]:
-        """Denials and advisory conflicts from stored automation profiles.
+    ) -> tuple[dict[str, str], list[dict[str, Any]], list[str]]:
+        """Denials, advisory conflicts, and the automations consulted, from
+        stored automation profiles.
 
         Reads the unmodeled Section 11 fields from ``raw``: monitored entities
         are trigger + condition entities (11.3); for ``critical`` the scope
@@ -245,12 +250,14 @@ class LeaseManager:
         """
         denials: dict[str, str] = {}
         conflicts: list[dict[str, Any]] = []
+        consulted: list[str] = []
         if self.store is None:
             warnings.append("no profile store configured; automation protection cannot be checked")
-            return denials, conflicts
+            return denials, conflicts, consulted
         for key in self.store.entity_keys():
             if not key.startswith("automation."):
                 continue
+            consulted.append(key)
             try:
                 profile = (
                     self.resolver.resolve(key)
@@ -363,7 +370,7 @@ class LeaseManager:
                         f"assertive automation {key} may counteract actions on "
                         f"{sorted(overlap)} (Spec 21.5)"
                     )
-        return denials, conflicts
+        return denials, conflicts, consulted
 
     # -- lifecycle (Spec 21.4) ------------------------------------------------------
 
@@ -423,7 +430,7 @@ class LeaseManager:
         preemption_handling: str = "rollback_abort",
         caller_priority: float | None = None,
         now: datetime | None = None,
-        policy: tuple[dict[str, str], list[dict[str, Any]]] | None = None,
+        policy: tuple[dict[str, str], list[dict[str, Any]], list[str]] | None = None,
         policy_warnings: list[str] | None = None,
     ) -> LeaseResponse:
         now = _utc_now(now)
@@ -451,7 +458,7 @@ class LeaseManager:
                 "holders take precedence"
             )
 
-        denial_reasons, active_conflicts = (
+        denial_reasons, active_conflicts, automations_consulted = (
             policy if policy is not None else self._automation_conflicts(set(entities), warnings)
         )
         automation_denials = sorted(denial_reasons)
@@ -517,6 +524,7 @@ class LeaseManager:
             active_conflicts=active_conflicts,
             warnings=warnings,
             automation_denials=automation_denials,
+            automations_consulted=automations_consulted,
         )
 
     def release(

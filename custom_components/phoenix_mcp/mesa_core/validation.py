@@ -25,6 +25,7 @@ VALID_TRIGGERS = {"likely", "none", "unknown", "deployment_defined"}
 VALID_PRIVACY_LEVELS = {"public", "normal", "sensitive", "restricted"}
 VALID_ORIGINS = {"developer", "user", "hybrid", "inferred_ai", "unknown"}
 VALID_ENFORCEMENT_MODES = {"advisory", "enforced"}
+VALID_WHEN_ABSENT = {"allow", "refuse"}
 VALID_REVERSIBILITY_COSTS = {"none", "trivial", "moderate", "high"}
 VALID_SIDE_EFFECT_SCOPES = {
     "entity_only",
@@ -389,6 +390,7 @@ def _check_value_constraint(spec: dict[str, Any], where: str, report: Validation
         _check_number(spec, key, f"{where}.{key}", report)
     if "permitted_values" in spec and not isinstance(spec["permitted_values"], list):
         report.errors.append(f"{where}.permitted_values: must be an array")
+    _check_enum(spec, "when_absent", VALID_WHEN_ABSENT, f"{where}.when_absent", report)
     low, high = spec.get("min_value"), spec.get("max_value")
     if isinstance(low, int | float) and isinstance(high, int | float) and low > high:
         message = f"{where}: min_value must not exceed max_value"
@@ -471,6 +473,8 @@ def _check_temporal_constraint(tc: Any, where: str, report: ValidationReport) ->
         report.errors.append(
             f"{where}.effect: {_safe_repr(bounds[0])} requires 'service' (Spec 6.5)"
         )
+    if "when_absent" in effect and "service" not in effect:
+        report.errors.append(f"{where}.effect: 'when_absent' requires 'service' (Spec 6.5)")
     if "service" in effect and "parameter" not in effect:
         report.errors.append(f"{where}.effect: 'service' requires 'parameter' (Spec 6.5)")
     if "control_mode" not in effect and not bounds:

@@ -210,7 +210,7 @@ class TemporalEvaluator:
                         "parameter": effect["parameter"],
                     },
                 }
-                for key in ("max_value", "min_value", "permitted_values"):
+                for key in ("max_value", "min_value", "permitted_values", "when_absent"):
                     if key in effect:
                         limit["limit"][key] = effect[key]
                 if "human_reason" in tc:

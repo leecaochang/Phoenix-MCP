@@ -17,7 +17,7 @@ import pytest
 def test_vendored_package_imports_with_pinned_version():
     from custom_components.phoenix_mcp import mesa_core
 
-    assert mesa_core.__version__ == "1.4.0"
+    assert mesa_core.__version__ == "1.5.0"
 
 
 def test_no_top_level_mesa_core_leak():
@@ -207,8 +207,8 @@ def test_manifest_records_the_immutable_release_source():
     manifest = json.loads(pathlib.Path(sync.MANIFEST).read_text(encoding="utf-8"))
 
     assert manifest["source_repository"] == "https://github.com/leecaochang/mesa-core.git"
-    assert manifest["source_revision"] == "481554eeb1203fd685a79d7f118ac351f162599f"
-    assert manifest["source_tag"] == "v1.4.0"
+    assert manifest["source_revision"] == "67413c166f30a8ae0896664f64eb723310eccfc7"
+    assert manifest["source_tag"] == "v1.5.0"
 
 
 def test_sync_accepts_a_clean_untagged_source_revision(tmp_path):

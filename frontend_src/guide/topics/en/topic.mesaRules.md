@@ -104,7 +104,7 @@ A limit also covers the same request sent another way. `homeassistant.turn_on` c
 
 `fan.turn_on`, `fan.set_percentage` and a speed step count as one fan percentage. A thermostat's `temperature`, `target_temp_high` and `target_temp_low` count against each other's limits. A light turned on with no brightness counts at its default light profile's brightness. Without such a profile, a limit can't see the level the light restores.
 
-A limit doesn't reach a different action with a similar effect, such as `fan.turn_on` with a percentage against a limit on `fan.set_percentage`. A command that sends no value, such as a plain turn on, passes.
+A limit doesn't reach a different action with a similar effect. A command that sends no value, such as a plain turn on, passes unless the limit says to refuse it.
 
 A time window can follow a calendar. It applies while the calendar is on, and also when Phoenix can't tell.
 

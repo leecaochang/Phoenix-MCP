@@ -38,6 +38,7 @@ _SECTION_KEYS = {
 # and the target blocks of purpose-specific triggers). Only the host can
 # resolve these against the HA registries.
 _TARGET_KEYS = HA_AUTOMATION_SELECTOR_KEYS
+_EXCLUDE_SIBLINGS = ("entity_id", *_TARGET_KEYS)
 
 
 @dataclass
@@ -104,6 +105,9 @@ def _collect_references(node: Any, entities: set[str], targets: set[tuple[str, s
                     targets.add((key, value))
                 elif isinstance(value, list):
                     targets.update((key, v) for v in value if isinstance(v, str))
+            elif key == "exclude" and any(k in current for k in _EXCLUDE_SIBLINGS):
+                # A target's exclude block names what the automation does NOT reach.
+                continue
             else:
                 pending.append(value)
 

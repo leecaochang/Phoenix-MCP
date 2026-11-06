@@ -714,3 +714,52 @@ async def test_the_gate_flags_the_audit_row_of_a_call_it_lets_through_with_warni
     )
     assert outcome.decision == "allow"
     assert mesa_advisory_ctx.get() is flagged
+
+
+# --- what an upgraded mesa-core adds at this seam ---------------------------------
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("state", "domain", "service", "blocked"), [
+    ("off", "light", "turn_on", True),
+    ("off", "light", "toggle", True),
+    ("off", "homeassistant", "toggle", True),
+    ("on", "light", "toggle", False),
+])
+async def test_a_limit_can_refuse_a_call_that_omits_its_parameter(hass, state, domain, service, blocked):
+    runtime = await async_setup_mesa(hass, "advisory")
+    hass.states.async_set("light.dim", state)
+    _limited(runtime, "light.dim", max_value=128, when_absent="refuse")
+    verdict = _call(runtime, "light.dim", domain, service, {})
+    assert bool(verdict.blocked) is blocked, verdict
+
+
+@pytest.mark.asyncio
+async def test_a_limit_on_absent_parameters_stays_allowed_by_default(hass):
+    runtime = await async_setup_mesa(hass, "advisory")
+    hass.states.async_set("light.dim", "off")
+    _limited(runtime, "light.dim", max_value=128)
+    assert not _call(runtime, "light.dim", "light", "toggle", {}).blocked
+
+
+@pytest.mark.asyncio
+async def test_a_limit_measures_a_plain_target_field(hass):
+    runtime = await async_setup_mesa(hass, "advisory")
+    _limited(runtime, "notify.pager", service="notify.send_message", parameter="target", permitted_values=["ops"])
+    allowed = _call(runtime, "notify.pager", "notify", "send_message", {"target": "ops"})
+    refused = _call(runtime, "notify.pager", "notify", "send_message", {"target": "everyone"})
+    assert not allowed.blocked and refused.blocked
+
+
+@pytest.mark.asyncio
+async def test_an_unresolvable_profile_writes_one_audit_row(hass, caplog):
+    from custom_components.phoenix_mcp import mesa_audit
+
+    runtime = await async_setup_mesa(hass, "enforced")
+    rows = []
+    with (patch.object(runtime.enforcer.resolver, "explain", side_effect=ValueError("damaged")),
+          patch.object(mesa_audit, "emit_audit_event", side_effect=rows.append),
+          mesa_audit.request_context(_access_key(), "rid", None)):
+        verdict = _call(runtime, "light.dim", "light", "turn_on", {})
+    assert verdict.blocked
+    assert not [row for row in rows if row.details.get("enforcement_source") == "phoenix_policy_failure"]

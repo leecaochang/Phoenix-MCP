@@ -124,29 +124,6 @@ def record_read_only_denial(
     ))
 
 
-def record_policy_failure(
-    entity_id: str, service: str, caller: CallerContext, result: EnforcementResult
-) -> None:
-    """Record a profile that could not be evaluated, for actual requests only.
-
-    mesa-core returns this refusal without an audit event, and it is the case an
-    operator most needs explained: the entity is blocked by a damaged profile.
-    """
-    if _context.get() is None:
-        return
-    emit_audit_event(MesaAuditEvent(
-        event_type="enforcement_decision",
-        action=service,
-        decision="blocked",
-        entity_id=entity_id,
-        caller_id=caller.caller_id,
-        roles=caller.effective_roles(),
-        profile_version=result.effective_profile.metadata.profile_version,
-        rule_applied="policy_unavailable",
-        details={"enforcement_source": "phoenix_policy_failure"},
-    ))
-
-
 class MesaAuditBridge(logging.Handler):
     """Records mesa-core denials, including privacy and lease refusals, in Phoenix's audit log.
 

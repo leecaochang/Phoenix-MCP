@@ -18,7 +18,7 @@ from custom_components.phoenix_mcp.mesa_core.exceptions import MesaError
 
 logger = logging.getLogger("mesa_core.migration")
 
-CURRENT_SCHEMA_VERSION = "1.1"
+CURRENT_SCHEMA_VERSION = "1.2"
 
 
 def _parse_version(version: str) -> tuple[int, ...]:
@@ -34,11 +34,17 @@ def _migrate_1_0_to_1_1(sp: dict[str, Any]) -> None:
     version and transforms nothing."""
 
 
+def _migrate_1_1_to_1_2(sp: dict[str, Any]) -> None:
+    """The 1.2 format is purely additive (optional ``when_absent`` on value
+    constraints), so the step restamps the version and transforms nothing."""
+
+
 # source version, then (next version, transformation). Steps chain until the
 # target is reached; a version with no registered step, and any downgrade,
 # has no path and raises.
 _MIGRATIONS: dict[tuple[int, ...], tuple[str, Callable[[dict[str, Any]], None]]] = {
     (1, 0): ("1.1", _migrate_1_0_to_1_1),
+    (1, 1): ("1.2", _migrate_1_1_to_1_2),
 }
 
 

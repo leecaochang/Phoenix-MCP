@@ -102,12 +102,14 @@ HELPER_DOMAINS: frozenset[str] = frozenset(
 
 # Home Assistant service-action targets: keys that name what an action acts on
 # instead of how. Each can reach entities other than the one being evaluated,
-# and only the host can resolve them, so the enforcer refuses a call carrying
-# one (mesa-core decides policy per entity).
+# except exclude (HA 2026.11), which subtracts from a target and so changes what
+# the action reaches. Only the host can resolve them, so the enforcer refuses a
+# call carrying one (mesa-core decides policy per entity).
 HA_TARGET_SELECTOR_KEYS: tuple[str, ...] = (
     "area_id",
     "config_entry_id",
     "device_id",
+    "exclude",
     "floor_id",
     "label_id",
 )
@@ -115,10 +117,11 @@ HA_TARGET_SELECTOR_KEYS: tuple[str, ...] = (
 # The subset an automation config can use to reference entities indirectly
 # (device triggers and conditions, and the target blocks of purpose-specific
 # triggers). A config entry is a service-action target, not something an
-# automation references, so it is absent here. Kept beside the set above so the
-# difference is deliberate and visible rather than a drift.
+# automation references, and an exclude block names what an automation does not
+# reach, so both are absent here. Kept beside the set above so the difference is
+# deliberate and visible rather than a drift.
 HA_AUTOMATION_SELECTOR_KEYS: tuple[str, ...] = tuple(
-    key for key in HA_TARGET_SELECTOR_KEYS if key != "config_entry_id"
+    key for key in HA_TARGET_SELECTOR_KEYS if key not in ("config_entry_id", "exclude")
 )
 
 # Built-in domain safety baseline (Spec 5.8). Applies without an explicit
@@ -248,7 +251,7 @@ class ProfileMetadata(_DeclaredFields):
     # Programmatically built profiles are authored by this library, so they
     # carry the current format version; from_dict keeps "1.0" for unversioned
     # stored documents (Spec 23: never silently migrated).
-    schema_version: str = "1.1"
+    schema_version: str = "1.2"
     profile_version: str | None = None
     source: MetadataOrigin = MetadataOrigin.UNKNOWN
     confidence: float | None = None

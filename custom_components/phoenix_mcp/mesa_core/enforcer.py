@@ -80,6 +80,16 @@ class EnforcementResult:
     evaluated_control_mode: ControlMode | None = None
 
 
+def _is_plain_data(value: Any) -> bool:
+    """Whether a non-mapping ``target`` value can only be service data.
+
+    A template string is not: an action config renders one into a target block.
+    """
+    if isinstance(value, str):
+        return not any(mark in value for mark in ("{{", "{%", "{#"))
+    return value is None or isinstance(value, bool | int | float)
+
+
 def _target_conflict(entity_id: str, service_params: dict[str, Any]) -> str | None:
     """Why these parameters target something other than ``entity_id``, or None.
 
@@ -92,6 +102,14 @@ def _target_conflict(entity_id: str, service_params: dict[str, Any]) -> str | No
     refused rather than evaluated against the single entity it was handed:
     otherwise a challenge approved for a light could execute against a lock, a
     whole area, or a floor.
+
+    ``exclude`` only subtracts from a target, so it cannot reach another entity,
+    but the call would then do less than the decision describes. It is refused
+    for the same reason: only the host can resolve it.
+
+    A non-mapping ``target`` selects nothing in a service call. It is a data
+    field, such as a notification recipient, and is left for declared limits to
+    constrain, unless it could still become a target (see ``_is_plain_data``).
     """
 
     def conflict_in(mapping: dict[str, Any], where: str) -> str | None:
@@ -101,6 +119,11 @@ def _target_conflict(entity_id: str, service_params: dict[str, Any]) -> str | No
                 f"evaluated for {entity_id!r}"
             )
         for key in HA_TARGET_SELECTOR_KEYS:
+            if key == "exclude" and key in mapping:
+                return (
+                    f"{where} carries an exclude block, so the call may do less than "
+                    f"the decision for {entity_id!r} describes; the host must resolve it"
+                )
             if key in mapping:
                 return (
                     f"{where} carries the target selector {key}={mapping[key]!r}, which "
@@ -114,12 +137,14 @@ def _target_conflict(entity_id: str, service_params: dict[str, Any]) -> str | No
         return direct
     if "target" in service_params:
         target = service_params["target"]
-        if not isinstance(target, dict):
+        if isinstance(target, dict):
+            return conflict_in(target, "service_params.target")
+        items = target if isinstance(target, list) else [target]
+        if not all(_is_plain_data(item) for item in items):
             return (
-                f"service_params carries a target of type {type(target).__name__}, "
-                "which names no resolvable entity"
+                f"service_params carries a target of type {type(target).__name__} that "
+                "could resolve to entities; only the host can resolve it"
             )
-        return conflict_in(target, "service_params.target")
     return None
 
 
@@ -389,10 +414,13 @@ class MesaEnforcer:
         if spec.get("service") != service:
             return None
         parameter = spec.get("parameter")
-        if parameter not in service_params:
-            return None
-        value = service_params[parameter]
         human_reason = limit.get("human_reason") or "declared limit"
+        if parameter not in service_params:
+            # Spec 6.4: anything but "allow" refuses, so a malformed value fails closed.
+            if spec.get("when_absent", "allow") == "allow":
+                return None
+            return f"{parameter} is absent, so its effective value is unknown: {human_reason}"
+        value = service_params[parameter]
         if "max_value" in spec:
             observed = _finite_number(value)
             bound = _finite_number(spec["max_value"])
@@ -430,18 +458,30 @@ class MesaEnforcer:
         service_params = service_params or {}
         try:
             explanation = self.resolver.explain(entity_id)
-        except (MesaError, ValueError, OSError, RecursionError):
+        except (MesaError, ValueError, OSError, RecursionError) as err:
+            fallback = SemanticProfile(
+                entity_id,
+                operational_boundaries=OperationalBoundaries(control_mode=ControlMode.PROHIBITED),
+            )
+            emit_audit_event(
+                MesaAuditEvent(
+                    event_type="enforcement_decision",
+                    action=service,
+                    decision="blocked",
+                    entity_id=entity_id,
+                    caller_id=caller_context.caller_id if caller_context else None,
+                    roles=caller_context.effective_roles() if caller_context else [],
+                    profile_version=fallback.metadata.profile_version,
+                    rule_applied="policy_unavailable",
+                    details={"cause": "policy_resolution_failed", "error": type(err).__name__},
+                )
+            )
             return EnforcementResult(
                 allowed=False,
                 reason="entity policy could not be evaluated",
                 rule_applied="policy_unavailable",
                 entity_id=entity_id,
-                effective_profile=SemanticProfile(
-                    entity_id,
-                    operational_boundaries=OperationalBoundaries(
-                        control_mode=ControlMode.PROHIBITED
-                    ),
-                ),
+                effective_profile=fallback,
             )
         profile = explanation.effective_profile
         warnings = list(explanation.warnings)
@@ -508,8 +548,10 @@ class MesaEnforcer:
                 level=level,
             )
 
-        def blocked(reason: str, rule: str) -> EnforcementResult:
-            audit("blocked", rule)
+        def blocked(
+            reason: str, rule: str, details: dict[str, Any] | None = None
+        ) -> EnforcementResult:
+            audit("blocked", rule, details=details)
             return EnforcementResult(
                 allowed=False,
                 reason=reason,
@@ -587,7 +629,11 @@ class MesaEnforcer:
         # 4. control_mode.
         mode = boundaries.control_mode
         if not isinstance(mode, ControlMode):
-            return blocked("unrecognized control mode", "policy_unavailable")
+            return blocked(
+                "unrecognized control mode",
+                "policy_unavailable",
+                {"cause": "unrecognized_control_mode"},
+            )
         reason_suffix = boundaries.control_reason or entity_id
         enforced = self._is_enforced(boundaries.enforcement_mode)
         if mode == ControlMode.READ_ONLY:
