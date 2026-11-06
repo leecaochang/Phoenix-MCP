@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import base64
 from contextvars import ContextVar
+from dataclasses import dataclass
 import json
 import logging
 import math
@@ -816,6 +817,521 @@ def _legacy_session_error_response(
     )
 
 
+@dataclass(slots=True)
+class _McpPost:
+    """One authenticated POST, shared by the steps of PhoenixMcpView._post.
+
+    ``access_key`` is replaced by the current record once the body has been read, so each
+    refusal audits the record the request holds at that moment.
+    """
+
+    request: web.Request
+    hass: HomeAssistant
+    data: PhoenixData
+    access_key: AccessKeyRecord
+    request_id: str
+    client_ip: str
+
+    def audited(
+        self,
+        response: web.Response,
+        *,
+        body: Any = None,
+        outcome: Outcome = "invalid_request",
+        resource: str = "/api/phoenix-mcp",
+    ) -> web.Response:
+        """Audit a message that does not reach dispatch and return its response."""
+        _audit_mcp_transport(
+            self.data, self.access_key, self.request_id, self.client_ip,
+            body=body, outcome=outcome, resource=resource,
+        )
+        return response
+
+    def dead_session_response(self, body: Any = None) -> web.Response | None:
+        """Answer 404 for a legacy message naming a session that is gone, whatever its shape."""
+        request = self.request
+        if not request.headers.get("Mcp-Session-Id"):
+            return None
+        modern_body = _is_modern_request(body, request) if isinstance(body, dict) else _modern_headers(request)
+        if modern_body or _legacy_session(self.data, request, self.access_key) is not None:
+            return None
+        msg_id = _sanitize_jsonrpc_id(body.get("id")) if isinstance(body, dict) else None
+        return self.audited(
+            _legacy_session_error_response(request, msg_id, self.request_id),
+            body=body, outcome="not_found",
+        )
+
+    def parse_error_response(self) -> web.Response:
+        """Refuse an unparseable body, a dead session answering first."""
+        dead_session = self.dead_session_response()
+        if dead_session is not None:
+            return dead_session
+        return self.audited(web.Response(
+            status=400,
+            content_type="application/json",
+            text=json.dumps(_jsonrpc_error(None, -32700, "Parse error.", modern=_modern_headers(self.request))),
+            headers={"X-Phoenix-Request-ID": self.request_id},
+        ))
+
+
+@dataclass(frozen=True, slots=True)
+class _McpMessage:
+    """One JSON-RPC message that passed envelope classification."""
+
+    body: dict
+    modern: bool
+    is_notification: bool
+    msg_id: str | int | None
+    method: str
+    params: dict
+
+
+async def _read_post_body(post: _McpPost) -> list[bytes] | web.Response:
+    """Return the body's chunks, or the refusal of an oversized or unreadable body."""
+    request, request_id = post.request, post.request_id
+    if request.content_length is not None and request.content_length > _MAX_BODY:
+        return post.audited(
+            _error("request_too_large", "Request body too large.", 413, request_id)
+        )
+    # aiohttp's StreamReader.read(n) is a SHORT read: it returns as soon as
+    # the buffer has ANY data, up to n bytes, not once n bytes have
+    # arrived. A single read(_MAX_BODY + 1) call could therefore silently
+    # truncate a larger tool-call body arriving across multiple
+    # TCP/chunked segments. Loop until EOF instead, bailing as soon as the
+    # cap is exceeded.
+    chunks: list[bytes] = []
+    total = 0
+    try:
+        while True:
+            chunk = await request.content.read(_MAX_BODY - total + 1)
+            if not chunk:
+                break
+            chunks.append(chunk)
+            total += len(chunk)
+            if total > _MAX_BODY:
+                return post.audited(
+                    _error("request_too_large", "Request body too large.", 413, request_id)
+                )
+            at_eof = getattr(request.content, "at_eof", None)
+            if callable(at_eof) and at_eof():
+                break
+    except Exception:
+        return post.audited(
+            _error("invalid_request", "Failed to read request body.", 400, request_id)
+        )
+    return chunks
+
+
+def _authority_lost_response(post: _McpPost) -> web.Response:
+    """Answer a request whose authority ended while its body was being read."""
+    data, hass, request_id = post.data, post.hass, post.request_id
+    unavailable = not data.ready or data.shutting_down or data.store.get_settings().kill_switch or hass.data.get(DOMAIN) is not data
+    return _error(
+        "service_unavailable" if unavailable else "unauthorized",
+        "Service unavailable." if unavailable else "Unauthorized.",
+        503 if unavailable else 401, request_id,
+    )
+
+
+def _batch_refusal(post: _McpPost, parsed: list) -> web.Response | None:
+    """Refuse a batch its protocol era, session or capacity cannot admit, before any charge.
+
+    A first-position initialized notification completes the session's handshake here.
+    """
+    request, data, access_key, request_id = post.request, post.data, post.access_key, post.request_id
+    header_version = request.headers.get("MCP-Protocol-Version")
+    carries_modern_meta = any(
+        isinstance(item, dict)
+        and _MCP_PROTOCOL_META in (_request_meta(item.get("params")) or {})
+        for item in parsed
+    )
+    if (
+        header_version == _MCP_MODERN_VERSION
+        or carries_modern_meta
+    ):
+        return post.audited(_protocol_error_response(
+            None,
+            -32600,
+            "Invalid Request: JSON-RPC batches are not supported by this protocol version.",
+            request_id,
+            modern=True,
+        ), body=parsed, resource="mcp:batch")
+    if header_version and header_version not in MCP_PROTOCOL_VERSIONS:
+        return post.audited(_protocol_error_response(
+            None, -32022, "Unsupported protocol version", request_id,
+            data={"supported": list(MCP_PROTOCOL_VERSIONS), "requested": header_version},
+            modern=True,
+        ), body=parsed, resource="mcp:batch")
+    session = _legacy_session(data, request, access_key)
+    # A dead session answers first, as for every other body shape.
+    if (session is not None or not request.headers.get("Mcp-Session-Id")) and any(
+        isinstance(item, dict) and item.get("method") == "initialize"
+        for item in parsed
+    ):
+        return post.audited(_protocol_error_response(
+            None,
+            -32600,
+            "Invalid Request: initialize must not be sent in a batch.",
+            request_id,
+        ), body=parsed, resource="mcp:batch")
+    if session is None:
+        session_outcome: Outcome = (
+            "not_found"
+            if request.headers.get("Mcp-Session-Id")
+            else "invalid_request"
+        )
+        return post.audited(
+            _legacy_session_error_response(request, None, request_id),
+            body=parsed,
+            outcome=session_outcome,
+            resource="mcp:batch",
+        )
+    if not session.get("initialized") and parsed:
+        first = parsed[0]
+        if (isinstance(first, dict) and first.get("jsonrpc") == "2.0" and "id" not in first
+                and first.get("method") in {"notifications/initialized", "initialized"}
+                and _classify_jsonrpc_message(first)[0] == "dispatch"):
+            session["initialized"] = True
+    if not session.get("initialized"):
+        return post.audited(_protocol_error_response(
+            None, -32000, "Legacy MCP initialization is not complete.", request_id
+        ), body=parsed, resource="mcp:batch")
+    if len(parsed) > MAX_BATCH_ITEMS or (access_key.rate_limit_requests > 0 and (
+            (access_key.rate_limit_burst > 0 and len(parsed) > access_key.rate_limit_burst)
+            or len(parsed) > access_key.rate_limit_requests)):
+        return post.audited(_protocol_error_response(None, -32600,
+            "Batch exceeds the configured request capacity; split it into smaller requests.", request_id),
+            body=parsed, resource="mcp:batch")
+    return None
+
+
+async def _post_batch(
+    post: _McpPost, parsed: list, rl_headers: dict[str, str], wants_sse: bool, base_url: str,
+) -> web.Response:
+    """Charge and dispatch one legacy batch, or return its refusal."""
+    refused = _batch_refusal(post, parsed)
+    if refused is not None:
+        return refused
+    request, hass, data, access_key = post.request, post.hass, post.data, post.access_key
+    request_id, client_ip = post.request_id, post.client_ip
+    # A batch is ONE HTTP request carrying up to MAX_BATCH_ITEMS calls,
+    # and the auth check charged it as one, so batching would
+    # multiply an access key's effective rate by MAX_BATCH_ITEMS. The items are
+    # the work, so the other N-1 are charged here, once the count is
+    # known, and the whole batch is REFUSED if the budget will not cover
+    # it. Preflighting is what makes the ceiling real: charging without
+    # refusing would let an access key run every item and only then be
+    # throttled. Nothing has been dispatched yet, so there is no
+    # half-applied batch to worry about.
+    batch_rl = data.rate_limiter.charge_batch(
+        access_key.id, access_key.rate_limit_requests, access_key.rate_limit_burst,
+        min(len(parsed), MAX_BATCH_ITEMS) - 1,
+    )
+    if not batch_rl.allowed:
+        _fire_rate_limit_events(hass, data, access_key)
+        _log(
+            data, access_key, request_id=request_id, method="POST",
+            resource="mcp:batch", outcome="rate_limited", client_ip=client_ip,
+        )
+        resp = _error("rate_limited", "Rate limit exceeded.", 429, request_id)
+        resp.headers["Retry-After"] = str(batch_rl.retry_after)
+        return resp
+    # From here on the batch's own result is what the client is told, on
+    # BOTH paths: the single-request result was computed before the
+    # other N-1 items were charged, so it would report a budget the access key
+    # no longer has. This covers the SSE framing; the JSON path takes
+    # batch_rl directly.
+    if batch_rl.rate_limiting_enabled:
+        rl_headers = _rate_limit_headers(access_key, batch_rl)
+    # A batch with no request may need an error status, which a stream cannot carry.
+    if (wants_sse and _batch_expects_response(parsed) and _batch_has_request(parsed)
+            and 0 < len(parsed) <= MAX_BATCH_ITEMS):
+        bus = _ProgressBus()
+        _progress_ctx.set(bus)
+        return cast(web.Response, await _mcp_sse_response(
+            request, hass, request_id, rl_headers, bus,
+            _dispatch_streamable_batch(
+                parsed, access_key, hass, data, client_ip, base_url=base_url,
+                request_id=request_id,
+            ),
+            cancel_on_disconnect=False,
+        ))
+    batch_dispatch = _handle_streamable_batch(parsed, access_key, batch_rl, hass, data, request_id, client_ip, base_url=base_url)
+    batch_task = asyncio.create_task(batch_dispatch)
+    batch_task.add_done_callback(_log_dispatch_task_error)
+    return await asyncio.shield(batch_task)
+
+
+def _admit_envelope(post: _McpPost, body: dict) -> _McpMessage | web.Response:
+    """Classify one JSON-RPC object, returning the dispatchable message or its response."""
+    request, request_id = post.request, post.request_id
+    modern = _is_modern_request(body, request)
+    is_notification = "id" not in body
+    # MCP requires an HTTP error status when a message with no id cannot be
+    # accepted. The body stays, which it permits and JSON-RPC asks for.
+    refused_status = 400 if is_notification else 200
+    if body.get("jsonrpc") != "2.0":
+        return post.audited(web.Response(
+            status=refused_status,
+            content_type="application/json",
+            text=json.dumps(_jsonrpc_error(_sanitize_jsonrpc_id(body.get("id")), -32600, "Invalid Request.", modern=modern)),
+            headers={"X-Phoenix-Request-ID": request_id},
+        ), body=body)
+
+    msg_id = _sanitize_jsonrpc_id(body.get("id"))
+    # A JSON-RPC notification is a VALID request that omits `id`; it must
+    # never receive a response. But `id`-absence alone is not enough: a
+    # malformed envelope (bad method, non-object params) is an Invalid
+    # Request and MUST get an error, not be silently swallowed. So classify
+    # FIRST and only suppress the dispatch path. (`id: null` is a request,
+    # not a notification, hence membership, not value.)
+    kind, payload = _classify_jsonrpc_message(body)
+    if kind == "accepted":
+        if modern:
+            return post.audited(_protocol_error_response(
+                msg_id,
+                -32600,
+                "Invalid Request: clients must not send JSON-RPC responses for this protocol version.",
+                request_id,
+                modern=True,
+            ), body=body)
+        return post.audited(
+            web.Response(status=202, headers={"X-Phoenix-Request-ID": request_id}),
+            body=body,
+            outcome="allowed",
+            resource="mcp:response",
+        )
+    if kind in ("error", "unsupported"):
+        # A structurally valid but undispatchable request (positional params)
+        # is still a valid notification when it has no id, so it gets no reply;
+        # a malformed envelope always gets an error.
+        if kind == "unsupported" and is_notification:
+            return post.audited(
+                web.Response(status=202, headers={"X-Phoenix-Request-ID": request_id}),
+                body=body,
+            )
+        code, message = payload
+        return post.audited(web.Response(
+            status=refused_status,
+            content_type="application/json",
+            text=json.dumps(_jsonrpc_error(msg_id, code, message, modern=modern)),
+            headers={"X-Phoenix-Request-ID": request_id},
+        ), body=body)
+    method, params = payload
+
+    if is_notification and method in _MCP_METHODS and method not in {"notifications/initialized", "initialized"}:
+        return post.audited(web.Response(status=400,
+            headers={"X-Phoenix-Request-ID": request_id}), body=body)
+    return _McpMessage(body, modern, is_notification, msg_id, method, params)
+
+
+def _open_initialize_session(post: _McpPost, message: _McpMessage) -> str | web.Response:
+    """Return the session a legacy initialize opens, or the response refusing it."""
+    request, data, access_key, request_id = post.request, post.data, post.access_key, post.request_id
+    body, msg_id, params = message.body, message.msg_id, message.params
+    if request.headers.get("Mcp-Session-Id"):
+        return post.audited(_protocol_error_response(
+            msg_id,
+            -32600,
+            "Invalid Request: initialize must start a new session.",
+            request_id,
+        ), body=body)
+    invalid_initialize = _validate_legacy_initialize(params)
+    if invalid_initialize is not None:
+        return post.audited(_protocol_error_response(
+            msg_id, *invalid_initialize, request_id
+        ), body=body)
+    legacy_session_id = _open_legacy_session(data, access_key)
+    if legacy_session_id is None:
+        response = _protocol_error_response(
+            msg_id, -32000, "Legacy MCP session capacity reached. Close unused sessions or retry after they expire.", request_id,
+            status=429,
+        )
+        response.headers["Retry-After"] = str(_legacy_session_retry_after(data, access_key))
+        return post.audited(response, body=body)
+    return legacy_session_id
+
+
+def _legacy_message_refusal(post: _McpPost, message: _McpMessage) -> web.Response | None:
+    """Refuse a legacy message with no live session or before initialization completes.
+
+    The initialized notification completes it here.
+    """
+    request, data, access_key, request_id = post.request, post.data, post.access_key, post.request_id
+    body, msg_id, method = message.body, message.msg_id, message.method
+    session = _legacy_session(data, request, access_key)
+    if session is None:
+        message_session_outcome: Outcome = (
+            "not_found"
+            if request.headers.get("Mcp-Session-Id")
+            else "invalid_request"
+        )
+        return post.audited(
+            _legacy_session_error_response(request, msg_id, request_id),
+            body=body,
+            outcome=message_session_outcome,
+        )
+    if method in ("notifications/initialized", "initialized"):
+        session["initialized"] = True
+    elif method != "ping" and not session.get("initialized"):
+        return post.audited(_protocol_error_response(
+            msg_id,
+            -32000,
+            "Legacy MCP initialization is not complete.",
+            request_id,
+        ), body=body)
+    return None
+
+
+async def _answer_unknown_method(post: _McpPost, message: _McpMessage, base_url: str) -> web.Response:
+    """Answer a method this era does not serve; only the HTTP status is decided here."""
+    hass, data, access_key = post.hass, post.data, post.access_key
+    request_id, client_ip = post.request_id, post.client_ip
+    method, msg_id, params = message.method, message.msg_id, message.params
+    modern, is_notification = message.modern, message.is_notification
+    response_msg: dict | None
+    # Still routed through the dispatcher rather than answered here, so
+    # the error body and the audit row keep one definition; only the
+    # HTTP status is decided at this layer. A notification for a method
+    # that is not implemented is accepted and dropped (202), not refused:
+    # the envelope is valid and the sender is not owed a reply. That
+    # includes notifications/cancelled, which a receiver may ignore: legacy
+    # dispatch runs to completion, because stopping a write partway cannot
+    # undo what ran, and one held for approval stays queued for the operator
+    # whether or not anything is waiting on it.
+    if method in _MCP_METHODS:
+        _log(
+            data,
+            access_key,
+            request_id=request_id,
+            method=method,
+            resource="/api/phoenix-mcp",
+            outcome="not_implemented",
+            client_ip=client_ip,
+        )
+        response_msg = _jsonrpc_error(msg_id, -32601, "Method not found.")
+    else:
+        response_msg, _m, _r, _o = await _dispatch_mcp(
+            method, msg_id, params, access_key, hass, data, client_ip,
+            base_url=base_url,
+            request_id=request_id,
+        )
+    if modern:
+        response_msg = _modernize_response(response_msg, method)
+    if is_notification or response_msg is None:
+        return web.Response(status=202, headers={"X-Phoenix-Request-ID": request_id})
+    return web.Response(
+        status=404 if modern else 200,
+        content_type="application/json",
+        text=json.dumps(response_msg),
+        headers={"X-Phoenix-Request-ID": request_id},
+    )
+
+
+async def _dispatch_post_message(
+    post: _McpPost, message: _McpMessage, rl_headers: dict[str, str], wants_sse: bool, base_url: str,
+) -> web.Response:
+    """Dispatch one admitted message over SSE or as a plain JSON reply."""
+    request, hass, data, access_key = post.request, post.hass, post.data, post.access_key
+    request_id, client_ip = post.request_id, post.client_ip
+    method, msg_id, params = message.method, message.msg_id, message.params
+    modern, is_notification = message.modern, message.is_notification
+    response_msg: dict | None
+    if wants_sse and not is_notification:
+        bus = _ProgressBus(progress_token=_progress_token(method, params))
+        _progress_ctx.set(bus)
+        dispatch = (
+            _dispatch_modern_mcp_result(
+                method, msg_id, params, access_key, hass, data, client_ip,
+                base_url=base_url,
+                request_id=request_id,
+            )
+            if modern
+            else _dispatch_mcp_result(
+                method, msg_id, params, access_key, hass, data, client_ip,
+                base_url=base_url,
+                request_id=request_id,
+            )
+        )
+        return cast(web.Response, await _mcp_sse_response(
+            request, hass, request_id, rl_headers, bus,
+            dispatch,
+            cancel_on_disconnect=modern,
+            msg_id=msg_id,
+        ))
+
+    inline_dispatch = _dispatch_mcp(method, msg_id, params, access_key, hass, data, client_ip,
+                             base_url=base_url, request_id=request_id)
+    if not modern:
+        task = asyncio.create_task(inline_dispatch)
+        task.add_done_callback(_log_dispatch_task_error)
+        response_msg, _log_method, _log_resource, _outcome = await asyncio.shield(task)
+    else:
+        response_msg, _log_method, _log_resource, _outcome = await inline_dispatch
+    if modern:
+        response_msg = _modernize_response(response_msg, method)
+
+    if is_notification or response_msg is None:
+        return web.Response(status=202, headers={"X-Phoenix-Request-ID": request_id})
+
+    resp = web.Response(
+        status=200,
+        content_type="application/json",
+        text=json.dumps(response_msg, default=str),
+        headers={"X-Phoenix-Request-ID": request_id},
+    )
+    resp.headers.update(rl_headers)
+    return resp
+
+
+async def _post_message(
+    post: _McpPost, parsed: Any, rl_headers: dict[str, str], wants_sse: bool, base_url: str,
+) -> web.Response:
+    """Take one non-batch body through session, envelope and lifecycle checks to dispatch."""
+    dead_session = post.dead_session_response(parsed)
+    if dead_session is not None:
+        return dead_session
+
+    request, request_id = post.request, post.request_id
+    if not isinstance(parsed, dict):
+        return post.audited(web.Response(
+            status=400,
+            content_type="application/json",
+            text=json.dumps(_jsonrpc_error(None, -32600, "Invalid Request.", modern=_modern_headers(request))),
+            headers={"X-Phoenix-Request-ID": request_id},
+        ), body=parsed)
+
+    message = _admit_envelope(post, parsed)
+    if isinstance(message, web.Response):
+        return message
+
+    legacy_session_id: str | None = None
+    if message.modern:
+        validation_error = _validate_modern_request(parsed, request, request_id)
+        if validation_error is not None:
+            return post.audited(validation_error, body=parsed)
+        known_methods = _MCP_MODERN_METHODS
+    else:
+        known_methods = _MCP_LEGACY_METHODS
+        if message.method == "initialize":
+            opened = _open_initialize_session(post, message)
+            if isinstance(opened, web.Response):
+                return opened
+            legacy_session_id = opened
+        else:
+            refused = _legacy_message_refusal(post, message)
+            if refused is not None:
+                return refused
+
+    if message.method not in known_methods:
+        return await _answer_unknown_method(post, message, base_url)
+
+    if legacy_session_id is not None:
+        rl_headers = {**rl_headers, "Mcp-Session-Id": legacy_session_id}
+
+    return await _dispatch_post_message(post, message, rl_headers, wants_sse, base_url)
+
+
 class PhoenixMcpView(PhoenixView):
     """POST/DELETE /api/phoenix-mcp - MCP Streamable HTTP transport.
 
@@ -934,7 +1450,11 @@ class PhoenixMcpView(PhoenixView):
         return web.Response(status=204, headers={"X-Phoenix-Request-ID": request_id})
 
     async def _post(self, request: web.Request) -> web.Response:
-        """Authenticate, read, and dispatch one Streamable HTTP request."""
+        """Authenticate, read, and dispatch one Streamable HTTP request.
+
+        Refuses in order: readiness, Origin, then authentication with its kill switch and rate
+        limit, body size and read, current authority, parse, Host, then the message itself.
+        """
         hass = self.hass
         request_id = generate_request_id()
         data = hass.data.get(DOMAIN)
@@ -956,86 +1476,18 @@ class PhoenixMcpView(PhoenixView):
         access_key, rl_result = result
         authority = RequestAuthority(hass, data, access_key.id, access_key.access_key_hash)
         request_authority.set(authority)
+        post = _McpPost(request, hass, data, access_key, request_id, client_ip)
 
-        def audited_transport_response(
-            response: web.Response,
-            *,
-            body: Any = None,
-            outcome: Outcome = "invalid_request",
-            resource: str = "/api/phoenix-mcp",
-        ) -> web.Response:
-            _audit_mcp_transport(
-                data, access_key, request_id, client_ip,
-                body=body, outcome=outcome, resource=resource,
-            )
-            return response
-
-        def dead_session_response(body: Any = None) -> web.Response | None:
-            """Answer 404 for a legacy message naming a session that is gone, whatever its shape."""
-            if not request.headers.get("Mcp-Session-Id"):
-                return None
-            modern_body = _is_modern_request(body, request) if isinstance(body, dict) else _modern_headers(request)
-            if modern_body or _legacy_session(data, request, access_key) is not None:
-                return None
-            msg_id = _sanitize_jsonrpc_id(body.get("id")) if isinstance(body, dict) else None
-            return audited_transport_response(
-                _legacy_session_error_response(request, msg_id, request_id),
-                body=body, outcome="not_found",
-            )
-
-        def parse_error_response() -> web.Response:
-            dead_session = dead_session_response()
-            if dead_session is not None:
-                return dead_session
-            return audited_transport_response(web.Response(
-                status=400,
-                content_type="application/json",
-                text=json.dumps(_jsonrpc_error(None, -32700, "Parse error.", modern=_modern_headers(request))),
-                headers={"X-Phoenix-Request-ID": request_id},
-            ))
-
-        if request.content_length is not None and request.content_length > _MAX_BODY:
-            return audited_transport_response(
-                _error("request_too_large", "Request body too large.", 413, request_id)
-            )
-        # aiohttp's StreamReader.read(n) is a SHORT read: it returns as soon as
-        # the buffer has ANY data, up to n bytes, not once n bytes have
-        # arrived. A single read(_MAX_BODY + 1) call could therefore silently
-        # truncate a larger tool-call body arriving across multiple
-        # TCP/chunked segments. Loop until EOF instead, bailing as soon as the
-        # cap is exceeded.
-        chunks: list[bytes] = []
-        total = 0
+        chunks = await _read_post_body(post)
+        if isinstance(chunks, web.Response):
+            return chunks
         try:
-            while True:
-                chunk = await request.content.read(_MAX_BODY - total + 1)
-                if not chunk:
-                    break
-                chunks.append(chunk)
-                total += len(chunk)
-                if total > _MAX_BODY:
-                    return audited_transport_response(
-                        _error("request_too_large", "Request body too large.", 413, request_id)
-                    )
-                at_eof = getattr(request.content, "at_eof", None)
-                if callable(at_eof) and at_eof():
-                    break
-        except Exception:
-            return audited_transport_response(
-                _error("invalid_request", "Failed to read request body.", 400, request_id)
-            )
-        try:
-            access_key = authority.current_access_key()
+            post.access_key = authority.current_access_key()
         except AuthorityChangedError:
-            unavailable = not data.ready or data.shutting_down or data.store.get_settings().kill_switch or hass.data.get(DOMAIN) is not data
-            return _error(
-                "service_unavailable" if unavailable else "unauthorized",
-                "Service unavailable." if unavailable else "Unauthorized.",
-                503 if unavailable else 401, request_id,
-            )
+            return _authority_lost_response(post)
         body_bytes = b"".join(chunks)
         if not body_bytes:
-            return parse_error_response()
+            return post.parse_error_response()
         try:
             parsed = parse_json_body(body_bytes)
         except (ValueError, RecursionError):  # Invalid JSON or text, numeric overflow, or excessive nesting.
@@ -1043,7 +1495,7 @@ class PhoenixMcpView(PhoenixView):
                 "MCP POST: invalid JSON body (%d bytes read, Content-Length %s) rid=%s",
                 len(body_bytes), request.content_length, request_id,
             )
-            return parse_error_response()
+            return post.parse_error_response()
 
         # Response framing, not a session: an SSE-capable client gets the SAME
         # single JSON-RPC response, delivered as one `message` event, with
@@ -1055,331 +1507,14 @@ class PhoenixMcpView(PhoenixView):
         try:
             base_url = str(request.url.origin())
         except ValueError:  # A Host header that does not form a URL.
-            return audited_transport_response(
+            return post.audited(
                 _error("invalid_request", "Invalid Host header.", 400, request_id)
             )
-        rl_headers = _rate_limit_headers(access_key, rl_result)
+        rl_headers = _rate_limit_headers(post.access_key, rl_result)
 
         if isinstance(parsed, list):
-            header_version = request.headers.get("MCP-Protocol-Version")
-            carries_modern_meta = any(
-                isinstance(item, dict)
-                and _MCP_PROTOCOL_META in (_request_meta(item.get("params")) or {})
-                for item in parsed
-            )
-            if (
-                header_version == _MCP_MODERN_VERSION
-                or carries_modern_meta
-            ):
-                return audited_transport_response(_protocol_error_response(
-                    None,
-                    -32600,
-                    "Invalid Request: JSON-RPC batches are not supported by this protocol version.",
-                    request_id,
-                    modern=True,
-                ), body=parsed, resource="mcp:batch")
-            if header_version and header_version not in MCP_PROTOCOL_VERSIONS:
-                return audited_transport_response(_protocol_error_response(
-                    None, -32022, "Unsupported protocol version", request_id,
-                    data={"supported": list(MCP_PROTOCOL_VERSIONS), "requested": header_version},
-                    modern=True,
-                ), body=parsed, resource="mcp:batch")
-            session = _legacy_session(data, request, access_key)
-            # A dead session answers first, as for every other body shape.
-            if (session is not None or not request.headers.get("Mcp-Session-Id")) and any(
-                isinstance(item, dict) and item.get("method") == "initialize"
-                for item in parsed
-            ):
-                return audited_transport_response(_protocol_error_response(
-                    None,
-                    -32600,
-                    "Invalid Request: initialize must not be sent in a batch.",
-                    request_id,
-                ), body=parsed, resource="mcp:batch")
-            if session is None:
-                session_outcome: Outcome = (
-                    "not_found"
-                    if request.headers.get("Mcp-Session-Id")
-                    else "invalid_request"
-                )
-                return audited_transport_response(
-                    _legacy_session_error_response(request, None, request_id),
-                    body=parsed,
-                    outcome=session_outcome,
-                    resource="mcp:batch",
-                )
-            if not session.get("initialized") and parsed:
-                first = parsed[0]
-                if (isinstance(first, dict) and first.get("jsonrpc") == "2.0" and "id" not in first
-                        and first.get("method") in {"notifications/initialized", "initialized"}
-                        and _classify_jsonrpc_message(first)[0] == "dispatch"):
-                    session["initialized"] = True
-            if not session.get("initialized"):
-                return audited_transport_response(_protocol_error_response(
-                    None, -32000, "Legacy MCP initialization is not complete.", request_id
-                ), body=parsed, resource="mcp:batch")
-            if len(parsed) > MAX_BATCH_ITEMS or (access_key.rate_limit_requests > 0 and (
-                    (access_key.rate_limit_burst > 0 and len(parsed) > access_key.rate_limit_burst)
-                    or len(parsed) > access_key.rate_limit_requests)):
-                return audited_transport_response(_protocol_error_response(None, -32600,
-                    "Batch exceeds the configured request capacity; split it into smaller requests.", request_id),
-                    body=parsed, resource="mcp:batch")
-            # A batch is ONE HTTP request carrying up to MAX_BATCH_ITEMS calls,
-            # and the auth check above charged it as one, so batching would
-            # multiply an access key's effective rate by MAX_BATCH_ITEMS. The items are
-            # the work, so the other N-1 are charged here, once the count is
-            # known, and the whole batch is REFUSED if the budget will not cover
-            # it. Preflighting is what makes the ceiling real: charging without
-            # refusing would let an access key run every item and only then be
-            # throttled. Nothing has been dispatched yet, so there is no
-            # half-applied batch to worry about.
-            batch_rl = data.rate_limiter.charge_batch(
-                access_key.id, access_key.rate_limit_requests, access_key.rate_limit_burst,
-                min(len(parsed), MAX_BATCH_ITEMS) - 1,
-            )
-            if not batch_rl.allowed:
-                _fire_rate_limit_events(hass, data, access_key)
-                _log(
-                    data, access_key, request_id=request_id, method="POST",
-                    resource="mcp:batch", outcome="rate_limited", client_ip=client_ip,
-                )
-                resp = _error("rate_limited", "Rate limit exceeded.", 429, request_id)
-                resp.headers["Retry-After"] = str(batch_rl.retry_after)
-                return resp
-            # From here on the batch's own result is what the client is told, on
-            # BOTH paths: the single-request result above was computed before the
-            # other N-1 items were charged, so it would report a budget the access key
-            # no longer has. This covers the SSE framing; the JSON path takes
-            # batch_rl directly.
-            if batch_rl.rate_limiting_enabled:
-                rl_headers = _rate_limit_headers(access_key, batch_rl)
-            # A batch with no request may need an error status, which a stream cannot carry.
-            if (wants_sse and _batch_expects_response(parsed) and _batch_has_request(parsed)
-                    and 0 < len(parsed) <= MAX_BATCH_ITEMS):
-                bus = _ProgressBus()
-                _progress_ctx.set(bus)
-                return cast(web.Response, await _mcp_sse_response(
-                    request, hass, request_id, rl_headers, bus,
-                    _dispatch_streamable_batch(
-                        parsed, access_key, hass, data, client_ip, base_url=base_url,
-                        request_id=request_id,
-                    ),
-                    cancel_on_disconnect=False,
-                ))
-            batch_dispatch = _handle_streamable_batch(parsed, access_key, batch_rl, hass, data, request_id, client_ip, base_url=base_url)
-            batch_task = asyncio.create_task(batch_dispatch)
-            batch_task.add_done_callback(_log_dispatch_task_error)
-            return await asyncio.shield(batch_task)
-
-        dead_session = dead_session_response(parsed)
-        if dead_session is not None:
-            return dead_session
-
-        if not isinstance(parsed, dict):
-            return audited_transport_response(web.Response(
-                status=400,
-                content_type="application/json",
-                text=json.dumps(_jsonrpc_error(None, -32600, "Invalid Request.", modern=_modern_headers(request))),
-                headers={"X-Phoenix-Request-ID": request_id},
-            ), body=parsed)
-
-        body = parsed
-        modern = _is_modern_request(body, request)
-        is_notification = "id" not in body
-        # MCP requires an HTTP error status when a message with no id cannot be
-        # accepted. The body stays, which it permits and JSON-RPC asks for.
-        refused_status = 400 if is_notification else 200
-        if body.get("jsonrpc") != "2.0":
-            return audited_transport_response(web.Response(
-                status=refused_status,
-                content_type="application/json",
-                text=json.dumps(_jsonrpc_error(_sanitize_jsonrpc_id(body.get("id")), -32600, "Invalid Request.", modern=modern)),
-                headers={"X-Phoenix-Request-ID": request_id},
-            ), body=body)
-
-        msg_id = _sanitize_jsonrpc_id(body.get("id"))
-        # A JSON-RPC notification is a VALID request that omits `id`; it must
-        # never receive a response. But `id`-absence alone is not enough: a
-        # malformed envelope (bad method, non-object params) is an Invalid
-        # Request and MUST get an error, not be silently swallowed. So classify
-        # FIRST and only suppress the dispatch path. (`id: null` is a request,
-        # not a notification, hence membership, not value.)
-        kind, payload = _classify_jsonrpc_message(body)
-        if kind == "accepted":
-            if modern:
-                return audited_transport_response(_protocol_error_response(
-                    msg_id,
-                    -32600,
-                    "Invalid Request: clients must not send JSON-RPC responses for this protocol version.",
-                    request_id,
-                    modern=True,
-                ), body=body)
-            return audited_transport_response(
-                web.Response(status=202, headers={"X-Phoenix-Request-ID": request_id}),
-                body=body,
-                outcome="allowed",
-                resource="mcp:response",
-            )
-        if kind in ("error", "unsupported"):
-            # A structurally valid but undispatchable request (positional params)
-            # is still a valid notification when it has no id, so it gets no reply;
-            # a malformed envelope always gets an error.
-            if kind == "unsupported" and is_notification:
-                return audited_transport_response(
-                    web.Response(status=202, headers={"X-Phoenix-Request-ID": request_id}),
-                    body=body,
-                )
-            code, message = payload
-            return audited_transport_response(web.Response(
-                status=refused_status,
-                content_type="application/json",
-                text=json.dumps(_jsonrpc_error(msg_id, code, message, modern=modern)),
-                headers={"X-Phoenix-Request-ID": request_id},
-            ), body=body)
-        method, params = payload
-
-        if is_notification and method in _MCP_METHODS and method not in {"notifications/initialized", "initialized"}:
-            return audited_transport_response(web.Response(status=400,
-                headers={"X-Phoenix-Request-ID": request_id}), body=body)
-        legacy_session_id: str | None = None
-        if modern:
-            validation_error = _validate_modern_request(body, request, request_id)
-            if validation_error is not None:
-                return audited_transport_response(validation_error, body=body)
-            known_methods = _MCP_MODERN_METHODS
-        else:
-            known_methods = _MCP_LEGACY_METHODS
-            if method == "initialize":
-                if request.headers.get("Mcp-Session-Id"):
-                    return audited_transport_response(_protocol_error_response(
-                        msg_id,
-                        -32600,
-                        "Invalid Request: initialize must start a new session.",
-                        request_id,
-                    ), body=body)
-                invalid_initialize = _validate_legacy_initialize(params)
-                if invalid_initialize is not None:
-                    return audited_transport_response(_protocol_error_response(
-                        msg_id, *invalid_initialize, request_id
-                    ), body=body)
-                legacy_session_id = _open_legacy_session(data, access_key)
-                if legacy_session_id is None:
-                    response = _protocol_error_response(
-                        msg_id, -32000, "Legacy MCP session capacity reached. Close unused sessions or retry after they expire.", request_id,
-                        status=429,
-                    )
-                    response.headers["Retry-After"] = str(_legacy_session_retry_after(data, access_key))
-                    return audited_transport_response(response, body=body)
-            else:
-                session = _legacy_session(data, request, access_key)
-                if session is None:
-                    message_session_outcome: Outcome = (
-                        "not_found"
-                        if request.headers.get("Mcp-Session-Id")
-                        else "invalid_request"
-                    )
-                    return audited_transport_response(
-                        _legacy_session_error_response(request, msg_id, request_id),
-                        body=body,
-                        outcome=message_session_outcome,
-                    )
-                if method in ("notifications/initialized", "initialized"):
-                    session["initialized"] = True
-                elif method != "ping" and not session.get("initialized"):
-                    return audited_transport_response(_protocol_error_response(
-                        msg_id,
-                        -32000,
-                        "Legacy MCP initialization is not complete.",
-                        request_id,
-                    ), body=body)
-
-        response_msg: dict | None
-        if method not in known_methods:
-            # Still routed through the dispatcher rather than answered here, so
-            # the error body and the audit row keep one definition; only the
-            # HTTP status is decided at this layer. A notification for a method
-            # that is not implemented is accepted and dropped (202), not refused:
-            # the envelope is valid and the sender is not owed a reply. That
-            # includes notifications/cancelled, which a receiver may ignore: legacy
-            # dispatch runs to completion, because stopping a write partway cannot
-            # undo what ran, and one held for approval stays queued for the operator
-            # whether or not anything is waiting on it.
-            if method in _MCP_METHODS:
-                _log(
-                    data,
-                    access_key,
-                    request_id=request_id,
-                    method=method,
-                    resource="/api/phoenix-mcp",
-                    outcome="not_implemented",
-                    client_ip=client_ip,
-                )
-                response_msg = _jsonrpc_error(msg_id, -32601, "Method not found.")
-            else:
-                response_msg, _m, _r, _o = await _dispatch_mcp(
-                    method, msg_id, params, access_key, hass, data, client_ip,
-                    base_url=base_url,
-                    request_id=request_id,
-                )
-            if modern:
-                response_msg = _modernize_response(response_msg, method)
-            if is_notification or response_msg is None:
-                return web.Response(status=202, headers={"X-Phoenix-Request-ID": request_id})
-            return web.Response(
-                status=404 if modern else 200,
-                content_type="application/json",
-                text=json.dumps(response_msg),
-                headers={"X-Phoenix-Request-ID": request_id},
-            )
-
-        if legacy_session_id is not None:
-            rl_headers = {**rl_headers, "Mcp-Session-Id": legacy_session_id}
-
-        if wants_sse and not is_notification:
-            bus = _ProgressBus(progress_token=_progress_token(method, params))
-            _progress_ctx.set(bus)
-            dispatch = (
-                _dispatch_modern_mcp_result(
-                    method, msg_id, params, access_key, hass, data, client_ip,
-                    base_url=base_url,
-                    request_id=request_id,
-                )
-                if modern
-                else _dispatch_mcp_result(
-                    method, msg_id, params, access_key, hass, data, client_ip,
-                    base_url=base_url,
-                    request_id=request_id,
-                )
-            )
-            return cast(web.Response, await _mcp_sse_response(
-                request, hass, request_id, rl_headers, bus,
-                dispatch,
-                cancel_on_disconnect=modern,
-                msg_id=msg_id,
-            ))
-
-        inline_dispatch = _dispatch_mcp(method, msg_id, params, access_key, hass, data, client_ip,
-                                 base_url=base_url, request_id=request_id)
-        if not modern:
-            task = asyncio.create_task(inline_dispatch)
-            task.add_done_callback(_log_dispatch_task_error)
-            response_msg, _log_method, _log_resource, _outcome = await asyncio.shield(task)
-        else:
-            response_msg, _log_method, _log_resource, _outcome = await inline_dispatch
-        if modern:
-            response_msg = _modernize_response(response_msg, method)
-
-        if is_notification or response_msg is None:
-            return web.Response(status=202, headers={"X-Phoenix-Request-ID": request_id})
-
-        resp = web.Response(
-            status=200,
-            content_type="application/json",
-            text=json.dumps(response_msg, default=str),
-            headers={"X-Phoenix-Request-ID": request_id},
-        )
-        resp.headers.update(rl_headers)
-        return resp
+            return await _post_batch(post, parsed, rl_headers, wants_sse, base_url)
+        return await _post_message(post, parsed, rl_headers, wants_sse, base_url)
 
 
 class PhoenixMcpContextView(PhoenixView):

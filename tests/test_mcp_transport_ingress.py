@@ -8,7 +8,7 @@ actually manages to write afterwards.
 from __future__ import annotations
 
 import asyncio
-from dataclasses import fields
+from dataclasses import fields, replace
 from functools import partial
 import json
 import logging
@@ -22,7 +22,7 @@ from homeassistant.helpers.storage import Store
 from homeassistant.setup import async_setup_component
 import pytest
 
-from custom_components.phoenix_mcp import tool_dispatch
+from custom_components.phoenix_mcp import mcp_transport, tool_dispatch
 from custom_components.phoenix_mcp.access_key_store import AccessKeyStore, GlobalSettings
 from custom_components.phoenix_mcp.audit import AuditLog
 from custom_components.phoenix_mcp.const import (
@@ -31,12 +31,15 @@ from custom_components.phoenix_mcp.const import (
     AUDIT_STORAGE_KEY,
     AUDIT_STORAGE_VERSION,
     DOMAIN,
+    MAX_BATCH_ITEMS,
     MAX_REQUEST_BODY_BYTES,
+    MCP_AUTHORITY_CHANGED_ERROR,
 )
 from custom_components.phoenix_mcp.data import PhoenixData
 from custom_components.phoenix_mcp.access_key_auth import async_get_authenticated_access_key
 from custom_components.phoenix_mcp.mcp_transport import ALL_MCP_VIEWS
 from custom_components.phoenix_mcp.request_authority import AuthorityChangedError
+from custom_components.phoenix_mcp.tool_common import _progress_ctx
 from custom_components.phoenix_mcp.tool_defs import _NO_HOME_EFFECT_TOOLS, _TOOL_ANNOTATIONS
 from custom_components.phoenix_mcp.tool_dispatch import _TOOL_DEFS_BY_NAME, _dispatch_mcp
 from custom_components.phoenix_mcp.rate_limiter import RateLimiter
@@ -783,3 +786,530 @@ async def test_a_refused_call_with_a_huge_multiline_argument_does_not_stall_the_
     assert max(gaps) < 3.0
     rows = data.audit.query()
     assert rows and len(rows[0].payload) < 2200
+
+
+# --- refusals before dispatch ---------------------------------------------------
+
+
+def _audit_rows(data: PhoenixData) -> list[tuple]:
+    return [(row.method, row.resource, row.outcome) for row in data.audit.query()]
+
+
+async def test_a_body_that_cannot_be_read_is_refused_for_the_authenticated_key(env):
+    client, data = env
+    _, raw = await _key(data)
+    head = b"\r\n".join([
+        b"POST " + ROUTE.encode() + b" HTTP/1.1",
+        f"Host: {client.server.host}:{client.server.port}".encode(),
+        b"Authorization: Bearer " + raw.encode(), b"Connection: close",
+        b"Content-Encoding: deflate", b"Content-Length: 12"])
+    reply = await _raw_request(client, head + b"\r\n\r\nnot deflate!")
+    assert reply.startswith(b"HTTP/1.1 400 "), reply
+    assert b"Failed to read request body." in reply
+    await asyncio.sleep(0)
+    assert _audit_rows(data) == [("POST", ROUTE, "invalid_request")]
+
+
+@pytest.mark.parametrize("item", [
+    PING,
+    {"jsonrpc": "2.0", "id": 1, "method": "notifications/initialized"},
+    {"jsonrpc": "2.0", "method": "notifications/initialized", "params": [1]},
+    {"jsonrpc": "1.0", "method": "notifications/initialized"},
+    {"jsonrpc": "2.0", "method": "notifications/cancelled"},
+    "not a message",
+], ids=["request", "with-id", "positional-params", "wrong-version", "other-notification", "scalar"])
+async def test_a_batch_cannot_complete_initialization_with_anything_but_the_notification(env, item):
+    client, data = env
+    key, raw = await _key(data)
+    opened = await client.post(ROUTE, headers=_headers(raw), json=INITIALIZE)
+    session_id = opened.headers["Mcp-Session-Id"]
+    response = await client.post(ROUTE, headers=_headers(raw, **{"Mcp-Session-Id": session_id}), json=[item, PING])
+    assert response.status == 400
+    assert (await response.json())["error"]["message"] == "Legacy MCP initialization is not complete."
+    assert data.mcp_sessions[session_id]["initialized"] is False
+    assert _audit_rows(data)[0] == ("POST", "mcp:batch", "invalid_request")
+    assert key.id == data.audit.query()[0].access_key_id
+
+
+@pytest.mark.parametrize("params,detail", [
+    ({"capabilities": {}, "clientInfo": {"name": "c", "version": "1"}}, "protocolVersion is required"),
+    ({"protocolVersion": "2025-03-26", "clientInfo": {"name": "c", "version": "1"}}, "capabilities are required"),
+    ({"protocolVersion": "2025-03-26", "capabilities": {}}, "clientInfo is required"),
+    ({"protocolVersion": "2025-03-26", "capabilities": {}, "clientInfo": {"name": 1, "version": "1"}}, "clientInfo is required"),
+], ids=["version", "capabilities", "client-info", "client-name"])
+async def test_a_malformed_legacy_initialize_opens_no_session(env, params, detail):
+    client, data = env
+    _, raw = await _key(data)
+    response = await client.post(ROUTE, headers=_headers(raw), json={"jsonrpc": "2.0", "id": 7, "method": "initialize", "params": params})
+    assert response.status == 400
+    assert "Mcp-Session-Id" not in response.headers
+    reply = await response.json()
+    assert reply["id"] == 7
+    assert (reply["error"]["code"], detail in reply["error"]["message"]) == (-32602, True)
+    assert not data.mcp_sessions
+    assert _audit_rows(data) == [("initialize", ROUTE, "invalid_request")]
+
+
+def _refusal_chain(data, key) -> list:
+    """The door's refusals in contract order: a name, how to provoke it, and its answer."""
+
+    def origin(request):
+        request["lines"].append(b"Origin: http://evil.example")
+
+    def bearer(request):
+        request["auth"] = False
+
+    def limit(_request):
+        key.rate_limit_requests = 1
+        data.rate_limiter.check(key.id, 1, 0)
+
+    def oversize(request):
+        request["length"] = MAX_REQUEST_BODY_BYTES + 1
+
+    def lose_authority(request):
+        request["lose"] = True
+
+    def unparseable(request):
+        request["body"] = b"{"
+
+    def host(request):
+        request["host"] = b"a b["
+
+    def dead_session(request):
+        request["lines"].append(b"Mcp-Session-Id: gone")
+
+    return [
+        ("shutting-down", lambda _r: setattr(data, "shutting_down", True), 503, b"Service unavailable."),
+        ("origin", origin, 403, b"Origin not allowed."),
+        ("kill-switch", lambda _r: setattr(data.store.get_settings(), "kill_switch", True), 503, b"Service unavailable."),
+        ("bearer", bearer, 401, b"Unauthorized."),
+        ("rate-limit", limit, 429, b"Rate limit exceeded."),
+        ("body-size", oversize, 413, b"Request body too large."),
+        ("authority", lose_authority, 401, b"Unauthorized."),
+        # A dead session answers an unreadable body itself, so this step is held to that.
+        ("parse", unparseable, 404, b"Legacy MCP session required."),
+        ("host", host, 400, b"Invalid Host header."),
+        ("dead-session", dead_session, 404, b"Legacy MCP session required."),
+    ]
+
+
+@pytest.mark.parametrize("start", range(10), ids=[
+    "shutting-down", "origin", "kill-switch", "bearer", "rate-limit", "body-size", "authority", "parse", "host", "dead-session"])
+async def test_the_first_refusal_in_the_contract_order_wins(env, hass, start):
+    """Every later refusal holds at once, so a dropped or swapped step answers differently."""
+    client, data = env
+    key, raw = await _key(data)
+    chain = _refusal_chain(data, key)
+    request = {"lines": [], "auth": True, "body": json.dumps(PING).encode(), "length": None, "lose": False,
+               "host": f"{client.server.host}:{client.server.port}".encode()}
+    for _name, apply, _status, _marker in chain[start:]:
+        apply(request)
+    _name, _apply, status, marker = chain[start]
+    head = [b"POST " + ROUTE.encode() + b" HTTP/1.1", b"Host: " + request["host"], b"Connection: close",
+            b"Content-Length: %d" % (request["length"] or len(request["body"])), *request["lines"]]
+    if request["auth"]:
+        head.append(b"Authorization: Bearer " + raw.encode())
+
+    async def authenticate(*args):
+        result = await async_get_authenticated_access_key(*args)
+        if request["lose"]:
+            key.revoked = True
+        return result
+
+    with patch.object(mcp_transport, "_async_get_authenticated_access_key", authenticate):
+        reply = await _raw_request(client, b"\r\n".join(head) + b"\r\n\r\n" + request["body"])
+    assert reply.startswith(b"HTTP/1.1 %d " % status), reply
+    assert marker in reply, reply
+
+
+async def test_a_parse_error_answers_before_a_host_that_forms_no_url(env):
+    client, data = env
+    _, raw = await _key(data)
+    reply = await _raw_request(client, b"\r\n".join([
+        b"POST " + ROUTE.encode() + b" HTTP/1.1", b"Host: a b[", b"Connection: close", b"Content-Length: 1",
+        b"Authorization: Bearer " + raw.encode()]) + b"\r\n\r\n{")
+    assert reply.startswith(b"HTTP/1.1 400 ") and b"Parse error." in reply
+
+
+@pytest.mark.parametrize("dead", [False, True], ids=["no-session", "dead-session"])
+async def test_a_dead_session_answers_an_unreadable_message_before_its_parse_error(env, dead):
+    client, data = env
+    _, raw = await _key(data)
+    headers = _headers(raw, **({"Mcp-Session-Id": "gone"} if dead else {}))
+    response = await client.post(ROUTE, headers=headers, data=b"{")
+    assert response.status == (404 if dead else 400)
+    code = (await response.json())["error"]["code"]
+    assert code == (-32000 if dead else -32700)
+
+
+@pytest.mark.parametrize("body,status,name", [
+    (b"1", 400, "renamed"),
+    (b"{", 400, "renamed"),
+    (json.dumps([]).encode(), 400, "renamed"),
+    (json.dumps({"jsonrpc": "1.0", "id": 1, "method": "ping"}).encode(), 200, "renamed"),
+    (b" " * (MAX_REQUEST_BODY_BYTES + 1), 413, "transport"),
+], ids=["scalar", "parse-error", "batch", "envelope", "oversized"])
+async def test_a_refusal_audits_the_record_the_request_holds_at_that_moment(env, body, status, name):
+    """Authority is read again after the body, so later refusals use that record and earlier ones do not."""
+    client, data = env
+    key, raw = await _key(data)
+    replaced = replace(key, name="renamed")
+
+    async def authenticate(*args):
+        result = await async_get_authenticated_access_key(*args)
+        data.store._access_keys[key.id] = replaced
+        return result
+
+    with patch.object(mcp_transport, "_async_get_authenticated_access_key", authenticate):
+        response = await client.post(ROUTE, headers=_headers(raw), data=body)
+    assert response.status == status
+    assert data.audit.query()[0].access_key_name == name
+
+
+async def test_a_host_that_forms_no_url_is_audited_for_the_key(env):
+    client, data = env
+    _, raw = await _key(data)
+    reply = await _raw_request(client, _post_bytes(client, b"Authorization: Bearer " + raw.encode(), host=b"a b["))
+    assert reply.startswith(b"HTTP/1.1 400 ") and b"Invalid Host header." in reply
+    assert _audit_rows(data) == [("POST", ROUTE, "invalid_request")]
+
+
+async def test_an_empty_body_is_a_parse_error_without_the_invalid_json_warning(env, caplog):
+    client, data = env
+    _, raw = await _key(data)
+    response = await client.post(ROUTE, headers=_headers(raw), data=b"")
+    assert response.status == 400
+    assert (await response.json())["error"]["code"] == -32700
+    assert not any("invalid JSON body" in record.getMessage() for record in caplog.records)
+
+
+async def test_rate_limit_headers_report_the_record_read_after_the_body(env):
+    client, data = env
+    key, raw = await _key(data)
+    key.rate_limit_requests = 50
+    replaced = replace(key, rate_limit_requests=70)
+
+    async def authenticate(*args):
+        result = await async_get_authenticated_access_key(*args)
+        data.store._access_keys[key.id] = replaced
+        return result
+
+    opened = await client.post(ROUTE, headers=_headers(raw), json=INITIALIZE)
+    assert opened.headers["X-RateLimit-Limit"] == "50"
+    session = {"Mcp-Session-Id": opened.headers["Mcp-Session-Id"]}
+    await client.post(ROUTE, headers=_headers(raw, **session), json={"jsonrpc": "2.0", "method": "notifications/initialized"})
+    with patch.object(mcp_transport, "_async_get_authenticated_access_key", authenticate):
+        response = await client.post(ROUTE, headers=_headers(raw, **session), json=PING)
+    assert response.headers["X-RateLimit-Limit"] == "70"
+
+
+@pytest.mark.parametrize("lose,status,error", [
+    (lambda hass, data, key: setattr(key, "revoked", True), 401, b"Unauthorized."),
+    (lambda hass, data, key: setattr(data, "ready", False), 503, b"Service unavailable."),
+    (lambda hass, data, key: setattr(data, "shutting_down", True), 503, b"Service unavailable."),
+    (lambda hass, data, key: setattr(data.store.get_settings(), "kill_switch", True), 503, b"Service unavailable."),
+    (lambda hass, data, key: hass.data.pop(DOMAIN), 503, b"Service unavailable."),
+], ids=["revoked", "not-ready", "shutting-down", "kill-switch", "runtime-removed"])
+async def test_authority_lost_while_reading_answers_by_what_was_lost(env, hass, lose, status, error):
+    client, data = env
+    key, raw = await _key(data)
+
+    async def authenticate(*args):
+        result = await async_get_authenticated_access_key(*args)
+        lose(hass, data, key)
+        return result
+
+    with patch.object(mcp_transport, "_async_get_authenticated_access_key", authenticate):
+        response = await client.post(ROUTE, headers=_headers(raw), json=PING)
+    assert response.status == status
+    assert error in await response.read()
+
+
+@pytest.mark.parametrize("body,method", [
+    (b"{", "POST"),
+    (b"1", "POST"),
+    (json.dumps(PING).encode(), "ping"),
+], ids=["unparseable", "scalar", "message"])
+async def test_a_dead_session_is_audited_as_not_found(env, body, method):
+    client, data = env
+    _, raw = await _key(data)
+    response = await client.post(ROUTE, headers=_headers(raw, **{"Mcp-Session-Id": "gone"}), data=body)
+    assert response.status == 404
+    assert _audit_rows(data) == [(method, ROUTE, "not_found")]
+
+
+@pytest.mark.parametrize("raw_id,expected", [({}, None), (True, None), (1.5, None), ("a", "a"), (7, 7)],
+                         ids=["object", "bool", "float", "string", "integer"])
+async def test_a_dead_session_replies_only_with_a_usable_id(env, raw_id, expected):
+    client, data = env
+    _, raw = await _key(data)
+    response = await client.post(ROUTE, headers=_headers(raw, **{"Mcp-Session-Id": "gone"}), json={**PING, "id": raw_id})
+    assert response.status == 404
+    assert (await response.json())["id"] == expected
+
+
+async def test_a_modern_body_with_no_version_header_ignores_a_stale_session(env):
+    client, data = env
+    _, raw = await _key(data)
+    response = await client.post(ROUTE, headers=_headers(raw, **{"Mcp-Session-Id": "gone"}), json=_modern("tools/list"))
+    assert response.status == 400
+    assert (await response.json())["error"]["code"] == -32020
+
+
+@pytest.mark.parametrize("padding,status", [(0, 200), (1, 413)], ids=["at-the-cap", "over-the-cap"])
+async def test_a_chunked_body_meets_the_same_cap_as_a_declared_one(env, padding, status):
+    client, data = env
+    _, _, headers = await _session(client, data)
+    message = json.dumps(PING).encode()
+    half = (MAX_REQUEST_BODY_BYTES - len(message)) // 2
+    pieces = [b" " * half, b" " * (MAX_REQUEST_BODY_BYTES - len(message) - half + padding), message]
+
+    async def body():
+        for piece in pieces:
+            yield piece
+
+    response = await client.post(ROUTE, headers=headers, data=body())
+    assert response.status == status
+
+
+async def test_a_client_gone_mid_body_cancels_the_read_without_an_audit_row(env):
+    client, data = env
+    _, raw = await _key(data)
+    head = b"\r\n".join([
+        b"POST " + ROUTE.encode() + b" HTTP/1.1", b"Host: x", b"Content-Length: 100",
+        b"Authorization: Bearer " + raw.encode()]) + b"\r\n\r\n{"
+    _, writer = await asyncio.open_connection(client.server.host, client.server.port)
+    writer.write(head)
+    await writer.drain()
+    await asyncio.sleep(0.05)
+    writer.transport.abort()
+    await asyncio.sleep(0.05)
+    assert _audit_rows(data) == []
+
+
+async def test_a_batch_carrying_modern_metadata_is_refused_with_no_version_header(env):
+    client, data = env
+    _, _, headers = await _session(client, data)
+    response = await client.post(ROUTE, headers=headers, json=[_modern("ping")])
+    assert response.status == 400
+    assert "batches are not supported" in (await response.json())["error"]["message"]
+    assert _audit_rows(data)[0] == ("POST", "mcp:batch", "invalid_request")
+
+
+@pytest.mark.parametrize("session,status,outcome", [(None, 400, "invalid_request"), ("gone", 404, "not_found")],
+                         ids=["no-session", "dead-session"])
+async def test_a_batch_with_no_live_session_is_audited_by_what_was_missing(env, session, status, outcome):
+    client, data = env
+    _, raw = await _key(data)
+    headers = _headers(raw, **({"Mcp-Session-Id": session} if session else {}))
+    response = await client.post(ROUTE, headers=headers, json=[PING])
+    assert response.status == status
+    assert _audit_rows(data) == [("POST", "mcp:batch", outcome)]
+
+
+async def test_an_oversized_batch_is_refused_before_it_is_charged(env):
+    client, data = env
+    key, raw = await _key(data)
+    key.rate_limit_requests = 1000
+    opened = await client.post(ROUTE, headers=_headers(raw), json=INITIALIZE)
+    headers = _headers(raw, **{"Mcp-Session-Id": opened.headers["Mcp-Session-Id"]})
+    await client.post(ROUTE, headers=headers, json={"jsonrpc": "2.0", "method": "notifications/initialized"})
+    charged = len(data.rate_limiter._windows[key.id])
+    response = await client.post(ROUTE, headers=headers, json=[PING] * (MAX_BATCH_ITEMS + 1))
+    assert response.status == 400
+    assert "request capacity" in (await response.json())["error"]["message"]
+    assert len(data.rate_limiter._windows[key.id]) == charged + 1
+
+
+async def test_a_batch_over_the_window_is_refused_whole_and_recorded(env):
+    client, data = env
+    key, raw = await _key(data)
+    key.rate_limit_requests = 4
+    opened = await client.post(ROUTE, headers=_headers(raw), json=INITIALIZE)
+    headers = _headers(raw, **{"Mcp-Session-Id": opened.headers["Mcp-Session-Id"]})
+    await client.post(ROUTE, headers=headers, json={"jsonrpc": "2.0", "method": "notifications/initialized"})
+    with patch.object(mcp_transport, "_fire_rate_limit_events") as fired, patch.object(mcp_transport, "_dispatch_mcp") as dispatch:
+        response = await client.post(ROUTE, headers=headers, json=[PING, {**PING, "id": 2}, {**PING, "id": 3}])
+    assert response.status == 429
+    assert int(response.headers["Retry-After"]) > 0
+    assert "X-RateLimit-Limit" not in response.headers
+    fired.assert_called_once()
+    dispatch.assert_not_called()
+    assert _audit_rows(data)[0] == ("POST", "mcp:batch", "rate_limited")
+
+
+SSE_ACCEPT = {"Accept": "application/json, text/event-stream"}
+
+
+async def test_a_streamed_batch_reports_the_budget_after_every_item_is_charged(env):
+    client, data = env
+    key, raw = await _key(data)
+    key.rate_limit_requests = 100
+    opened = await client.post(ROUTE, headers=_headers(raw), json=INITIALIZE)
+    headers = _headers(raw, **{"Mcp-Session-Id": opened.headers["Mcp-Session-Id"]})
+    await client.post(ROUTE, headers=headers, json={"jsonrpc": "2.0", "method": "notifications/initialized"})
+    batch = [{**PING, "id": index} for index in range(3)]
+    response = await client.post(ROUTE, headers={**headers, **SSE_ACCEPT}, json=batch)
+    assert response.headers["Content-Type"].startswith("text/event-stream")
+    assert response.headers["X-RateLimit-Remaining"] == "95"
+
+
+@pytest.mark.parametrize("batched", [False, True], ids=["single", "batch"])
+async def test_a_streamed_call_publishes_its_progress_bus_to_dispatch(env, batched):
+    client, data = env
+    _, _, headers = await _session(client, data)
+    seen = []
+
+    async def dispatch(_method, msg_id, *_args, **_kwargs):
+        seen.append(_progress_ctx.get().progress_token)
+        return {"jsonrpc": "2.0", "id": msg_id, "result": {}}, "tools/call", "get_state", "allowed"
+
+    call = {"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": "get_state", "_meta": {"progressToken": "token"}}}
+    with patch.object(mcp_transport, "_dispatch_mcp", dispatch):
+        response = await client.post(ROUTE, headers={**headers, **SSE_ACCEPT}, json=[call] if batched else call)
+    assert response.status == 200
+    await response.read()
+    assert seen == ["token"]
+
+
+async def test_a_scalar_body_is_audited(env):
+    client, data = env
+    _, raw = await _key(data)
+    response = await client.post(ROUTE, headers=_headers(raw), data=b"1")
+    assert response.status == 400
+    assert _audit_rows(data) == [("POST", ROUTE, "invalid_request")]
+
+
+@pytest.mark.parametrize("accept,batched", [({}, False), ({}, True), (SSE_ACCEPT, False), (SSE_ACCEPT, True)],
+                         ids=["json", "json-batch", "sse", "sse-batch"])
+async def test_legacy_work_finishes_after_the_client_leaves(env, accept, batched):
+    client, data = env
+    _, _, headers = await _session(client, data)
+    started, release, finished = asyncio.Event(), asyncio.Event(), []
+
+    async def dispatch(_method, msg_id, *_args, **_kwargs):
+        started.set()
+        await release.wait()
+        finished.append(msg_id)
+        return {"jsonrpc": "2.0", "id": msg_id, "result": {}}, "ping", "ping", "allowed"
+
+    with patch.object(mcp_transport, "_dispatch_mcp", dispatch):
+        await _disconnect_mid_call(client, {**headers, **accept}, [PING] if batched else PING, started)
+        await asyncio.sleep(0.05)
+        release.set()
+        await asyncio.sleep(0.05)
+    assert finished == [1]
+
+
+@pytest.mark.parametrize("batched", [False, True], ids=["single", "batch"])
+async def test_a_detached_legacy_dispatch_reports_its_own_failure(env, batched):
+    client, data = env
+    _, _, headers = await _session(client, data)
+    with patch.object(mcp_transport, "_log_dispatch_task_error") as logged:
+        response = await client.post(ROUTE, headers=headers, json=[PING] if batched else PING)
+    assert response.status == 200
+    logged.assert_called_once()
+    assert logged.call_args.args[0].done()
+
+
+async def test_a_legacy_response_object_is_accepted_and_audited_as_such(env):
+    client, data = env
+    _, raw = await _key(data)
+    response = await client.post(ROUTE, headers=_headers(raw), json={"jsonrpc": "2.0", "id": 1, "result": {}})
+    assert response.status == 202
+    assert _audit_rows(data) == [("POST", "mcp:response", "allowed")]
+
+
+async def test_initialize_on_a_live_session_is_refused_and_opens_nothing(env):
+    client, data = env
+    _, _, headers = await _session(client, data)
+    before = set(data.mcp_sessions)
+    response = await client.post(ROUTE, headers=headers, json=INITIALIZE)
+    assert response.status == 400
+    assert "must start a new session" in (await response.json())["error"]["message"]
+    assert set(data.mcp_sessions) == before
+
+
+async def test_only_ping_is_served_before_initialization_completes(env):
+    client, data = env
+    _, raw = await _key(data)
+    opened = await client.post(ROUTE, headers=_headers(raw), json=INITIALIZE)
+    headers = _headers(raw, **{"Mcp-Session-Id": opened.headers["Mcp-Session-Id"]})
+    assert (await client.post(ROUTE, headers=headers, json=PING)).status == 200
+    refused = await client.post(ROUTE, headers=headers, json={"jsonrpc": "2.0", "id": 2, "method": "tools/list"})
+    assert (await refused.json())["error"]["message"] == "Legacy MCP initialization is not complete."
+
+
+async def test_a_session_quota_refusal_is_audited_with_its_retry(env):
+    client, data = env
+    key, raw = await _key(data)
+    for index in range(8):
+        data.mcp_sessions[f"busy-{index}"] = {"access_key_id": key.id, "initialized": True, "in_use": 1, "last_seen": time.monotonic()}
+    response = await client.post(ROUTE, headers=_headers(raw), json=INITIALIZE)
+    assert response.status == 429
+    assert int(response.headers["Retry-After"]) > 0
+    assert _audit_rows(data) == [("initialize", ROUTE, "invalid_request")]
+
+
+async def test_a_modern_notification_this_era_does_not_serve_is_accepted_silently(env):
+    client, data = env
+    _, raw = await _key(data)
+    method = "notifications/initialized"
+    response = await client.post(ROUTE, headers=_modern_headers(raw, method), json=_modern(method, None))
+    assert response.status == 202
+    assert await response.read() == b""
+
+
+async def test_a_modern_unknown_method_keeps_the_modern_error_codes(env):
+    client, data = env
+    _, raw = await _key(data)
+
+    async def dispatch(_method, msg_id, *_args, **_kwargs):
+        return {"jsonrpc": "2.0", "id": msg_id, "error": {"code": -32000, "message": "Changed."}}, "no/such", "no/such", "denied"
+
+    with patch.object(mcp_transport, "_dispatch_mcp", dispatch):
+        response = await client.post(ROUTE, headers=_modern_headers(raw, "no/such"), json=_modern("no/such"))
+    assert response.status == 404
+    assert (await response.json())["error"]["code"] == MCP_AUTHORITY_CHANGED_ERROR
+
+
+async def test_a_streamed_failure_answers_with_the_request_id(env):
+    client, data = env
+    _, _, headers = await _session(client, data)
+
+    async def dispatch(*_args, **_kwargs):
+        raise RuntimeError("held")
+
+    with patch.object(mcp_transport, "_dispatch_mcp", dispatch):
+        response = await client.post(ROUTE, headers={**headers, **SSE_ACCEPT}, json={**PING, "id": 41})
+        text = await response.text()
+    frame = json.loads(text.split("data: ", 1)[1])
+    assert (frame["id"], frame["error"]["code"]) == (41, -32603)
+
+
+async def test_a_notification_gets_no_body_whatever_dispatch_returns(env):
+    client, data = env
+    _, raw = await _key(data)
+    opened = await client.post(ROUTE, headers=_headers(raw), json=INITIALIZE)
+    headers = _headers(raw, **{"Mcp-Session-Id": opened.headers["Mcp-Session-Id"]})
+
+    async def dispatch(*_args, **_kwargs):
+        return {"jsonrpc": "2.0", "id": None, "result": {}}, "initialized", "initialized", "allowed"
+
+    with patch.object(mcp_transport, "_dispatch_mcp", dispatch):
+        response = await client.post(ROUTE, headers=headers, json={"jsonrpc": "2.0", "method": "notifications/initialized"})
+    assert response.status == 202
+    assert await response.read() == b""
+
+
+async def test_a_reply_holding_a_value_json_cannot_write_is_stringified(env):
+    client, data = env
+    _, _, headers = await _session(client, data)
+
+    async def dispatch(_method, msg_id, *_args, **_kwargs):
+        return {"jsonrpc": "2.0", "id": msg_id, "result": {"value": set}}, "ping", "ping", "allowed"
+
+    with patch.object(mcp_transport, "_dispatch_mcp", dispatch):
+        response = await client.post(ROUTE, headers=headers, json=PING)
+    assert response.status == 200
+    assert (await response.json())["result"]["value"] == "<class 'set'>"
