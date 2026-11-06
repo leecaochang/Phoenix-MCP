@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import asyncio
+from dataclasses import dataclass
 import json
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any, NamedTuple
 
 from aiohttp import web
 from homeassistant.components.http.const import KEY_HASS_USER
@@ -38,6 +39,12 @@ from ..tool_dispatch import ExecutorNotRegistered, async_execute_approved_tool
 from ..tools.restore import _restore_access_key
 from ..view_base import PhoenixView, _err
 from .common import _ok, _parse_pagination, _read_body, require_admin
+
+if TYPE_CHECKING:
+    from homeassistant.auth.models import User
+
+    from ..access_key_store import AccessKeyRecord, GlobalSettings
+    from ..approvals import PendingApproval
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -308,6 +315,308 @@ async def _resolve_approval(
     return _ok(updated.to_dict(), request_id=rid)
 
 
+class _ClosedApproval(NamedTuple):
+    """A request closed under the lock, announced once the lock is released."""
+
+    record: PendingApproval | None
+    method: str
+    reason: str | None
+    response: web.Response
+
+
+@dataclass
+class _ApprovalAttempt:
+    """One approve request once its record has been read under the store lock.
+
+    ``resolved`` is what the ``finally`` of ``_approve_approval`` reads: while it is False the
+    surfaces are told the claim was released and a pending record is offered again.
+    """
+
+    hass: HomeAssistant
+    data: PhoenixData
+    rid: str
+    user: User
+    approval_id: str
+    record: PendingApproval
+    settings: GlobalSettings
+    recovery_request: bool
+    resolved: bool = False
+
+    def record_admin_lifecycle(
+        self,
+        method: str,
+        *,
+        outcome: Outcome,
+        reason: str | None = None,
+    ) -> None:
+        self.data.audit.record(
+            request_id=self.rid,
+            access_key_id="admin",
+            access_key_name=f"admin:{self.user.id}",
+            method=method,
+            resource=f"approval:{self.record.tool_name}:{self.approval_id}",
+            outcome=outcome,
+            client_ip="",
+            settings=self.settings,
+            payload={"reason": reason} if reason else None,
+            ha_user_id=self.user.id,
+        )
+
+
+def _refuse_unclaimable_record(attempt: _ApprovalAttempt) -> web.Response | None:
+    """Answer a record this request cannot claim, or None. Caller holds ``store.async_lock``."""
+    record, rid = attempt.record, attempt.rid
+    if record.is_terminal():
+        return _ok(record.to_dict(), request_id=rid)
+
+    if attempt.approval_id in attempt.data.approvals_in_progress:
+        return _err(
+            "conflict", "Approval is already being processed.", 409, rid,
+            key="approvalProcessing",
+        )
+
+    # Persist the claim under the lock before dispatch, and add the in-memory claim only
+    # after it lands, so a stop or crash leaves a trace and an unwritable store fails
+    # closed.
+    #
+    # A marker already on the record means an earlier attempt never reported back.
+    # Refuse rather than overwrite that evidence; only recovery resolves these.
+    if record.execution_started_at is not None:
+        return _err(
+            "conflict",
+            "A previous attempt may already have applied. Check the result "
+            "before changing or retrying this approval.",
+            409, rid,
+            key="approvalExecutionInterrupted",
+        )
+    return None
+
+
+async def _close_without_authority(
+    attempt: _ApprovalAttempt, access_key: AccessKeyRecord | None,
+) -> _ClosedApproval | None:
+    """Close a request its key, capability or the kill switch no longer allows, else None.
+
+    Caller holds ``store.async_lock``.
+    """
+    data, approval_id, user = attempt.data, attempt.approval_id, attempt.user
+    record, recovery_request, rid = attempt.record, attempt.recovery_request, attempt.rid
+    if access_key is None or not access_key.is_valid():
+        closed_record = await async_update_approval_status(
+            data.store, approval_id,
+            status=STATUS_CANCELLED,
+            approved_by_user_id=user.id,
+            closure_reason=REASON_ACCESS_KEY_INACTIVE,
+        )
+        return _ClosedApproval(closed_record, "approval/cancelled", REASON_ACCESS_KEY_INACTIVE, _err(
+            "not_found", "Access key no longer active.", 404, rid,
+            key="approvalAccessKeyInactive",
+        ))
+    if not recovery_request and record.cap_name != MESA_CONFIRM_CAP and effective_cap(access_key, record.cap_name) == "deny":
+        # The MESA sentinel cap is re-evaluated by its executor instead.
+        closed_record = await async_update_approval_status(
+            data.store, approval_id,
+            status=STATUS_FAILED,
+            approved_by_user_id=user.id,
+            closure_reason=REASON_CAPABILITY_DENIED,
+        )
+        return _ClosedApproval(closed_record, "approval/failed", REASON_CAPABILITY_DENIED, _err(
+            "forbidden", "Capability is now denied for this access key.", 403, rid,
+            key="approvalCapabilityDenied",
+        ))
+    if attempt.settings.kill_switch and not recovery_request:
+        closed_record = await async_update_approval_status(
+            data.store, approval_id,
+            status=STATUS_CANCELLED,
+            approved_by_user_id=user.id,
+            closure_reason=REASON_KILL_SWITCH,
+        )
+        return _ClosedApproval(closed_record, "approval/cancelled", REASON_KILL_SWITCH, _err(
+            "service_unavailable", "Kill switch engaged.", 503, rid,
+            key="killSwitchEngaged",
+        ))
+    return None
+
+
+def _announce_closed_approval(attempt: _ApprovalAttempt, closed: _ClosedApproval) -> web.Response:
+    """Tell the surfaces and the audit a request closed. Runs after the lock is released."""
+    hass, approval_id = attempt.hass, attempt.approval_id
+    if closed.record is None:
+        return _err("not_found", "Approval not found.", 404, attempt.rid, key="approvalNotFound")
+    dismiss_approval_notification(hass, approval_id)
+    fire_approval_resolved_event(hass, closed.record)
+    attempt.record_admin_lifecycle(
+        closed.method or "approval/failed",
+        outcome="denied",
+        reason=closed.reason,
+    )
+    return closed.response
+
+
+def _announce_claim(attempt: _ApprovalAttempt) -> None:
+    """Audit the durable claim and tell every surface, all before dispatch."""
+    hass, approval_id = attempt.hass, attempt.approval_id
+    # Persisting the execution marker also persisted approved_at and the approving
+    # admin. Mirror that durable decision into the audit ring BEFORE dispatch, so the
+    # audit never says consent happened after the side effect.
+    try:
+        attempt.record_admin_lifecycle("approval/approved", outcome="allowed")
+
+        # Tell every surface the claim landed, BEFORE the execution rather than after
+        # it: the resolved event cannot fire until the tool finishes, and until then
+        # the panel, Agent Chat and the notification would all still offer Approve and
+        # Reject on an approval that is already being acted on. Dismissing the
+        # notification here is the same signal for the surface that has no UI state.
+        fire_approval_claim_event(hass, approval_id, claimed=True)
+        dismiss_approval_notification(hass, approval_id)
+    except BaseException:
+        # The durable marker still blocks a retry. Release only the local guard
+        # because dispatch has not started.
+        attempt.data.approvals_in_progress.discard(approval_id)
+        raise
+
+
+async def _execute_for_household(
+    record: PendingApproval, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData,
+) -> tuple[dict, str, str]:
+    """Run a household request under its original requester's current authority."""
+    async with household_scope(hass, user_id=record.ha_user_id):
+        try:
+            check_request_authority()
+        except AuthorityChangedError:
+            # This check precedes the executor. A removed or inactive requester
+            # cannot have caused effects.
+            tool_result = _tool_refused_before_write(
+                "Requester authority changed. No action was dispatched.")
+            outcome, _resource = "denied", record.tool_name
+        else:
+            tool_result, outcome, _resource = await async_execute_approved_tool(
+                record.tool_name, record.args, access_key, hass, data,
+            )
+    return tool_result, outcome, _resource
+
+
+async def _dispatch_approved_action(
+    attempt: _ApprovalAttempt, access_key: AccessKeyRecord,
+) -> tuple[dict, str, str]:
+    """Run the saved action, leaving whatever it raises for the caller to classify."""
+    hass, data, record = attempt.hass, attempt.data, attempt.record
+    # Approved executors must retain the admitted access key and policy epoch
+    # across their own waits, just like ordinary MCP dispatch.
+    authority_ctx = request_authority.set(
+        None if attempt.recovery_request else RequestAuthority(hass, data, access_key.id, access_key.access_key_hash)
+    )
+    policy_ctx = policy_version.set(access_key.settings_version)
+    try:
+        with data.conversations.approval_scope(attempt.approval_id):
+            if attempt.recovery_request:
+                tool_result, outcome, _resource = await execute_recovery_approval(record, attempt.user, hass, data)
+            elif record.household_request:
+                tool_result, outcome, _resource = await _execute_for_household(record, access_key, hass, data)
+            else:
+                tool_result, outcome, _resource = await async_execute_approved_tool(
+                    record.tool_name, record.args, access_key, hass, data,
+                )
+    finally:
+        policy_version.reset(policy_ctx)
+        request_authority.reset(authority_ctx)
+    return tool_result, outcome, _resource
+
+
+async def _finalize_execution(attempt: _ApprovalAttempt, tool_result: dict, outcome: str) -> web.Response:
+    """Save what the executor returned, then announce and audit it.
+
+    Runs inside the try of ``_approve_approval``, whose ``finally`` reads ``attempt.resolved``.
+    """
+    hass, data, approval_id = attempt.hass, attempt.data, attempt.approval_id
+    record, rid, settings = attempt.record, attempt.rid, attempt.settings
+    is_error = bool(tool_result.get("isError"))
+    saved_result: dict[str, Any] = {"tool_result": tool_result, "outcome": outcome}
+    if isinstance(tool_result, RefusedBeforeWrite):
+        # Persisted because the type does not survive storage. Server-owned:
+        # executor text cannot set a key at this level.
+        saved_result["refused_before_write"] = True
+    final_status = STATUS_FAILED if is_error else STATUS_APPROVED
+    auto_reason = "execution_failed" if is_error else None
+    if isinstance(tool_result, UncertainOutcome):
+        auto_reason = REASON_EXECUTION_INTERRUPTED
+    audit_outcome: Outcome = "allowed" if final_status == STATUS_APPROVED else "denied"
+
+    def _record_execution_audit(payload: dict | None = None) -> None:
+        data.audit.record(
+            request_id=rid,
+            access_key_id=record.access_key_id,
+            access_key_name=record.access_key_name,
+            method="approval/failed" if is_error else "approval/executed",
+            resource=f"approval:{record.tool_name}:{approval_id}",
+            outcome=audit_outcome,
+            client_ip="",
+            settings=settings,
+            payload=payload,
+            ha_user_id=record.ha_user_id,
+        )
+
+    try:
+        async with data.store.async_lock:
+            updated = await async_update_approval_status(
+                data.store, approval_id,
+                status=final_status,
+                approved_by_user_id=attempt.user.id,
+                closure_reason=auto_reason,
+                result=saved_result,
+            )
+    except DurableStorageError:
+        # The executor returned, so the outcome is known and only its write failed. The
+        # store returned to its marked record, which recovery closes; the surfaces keep
+        # their claim, as Approve is refused until then and the audit row holds the result.
+        _LOGGER.exception("Could not save the outcome of approval %s", approval_id)
+        _record_execution_audit({"finalization": "not_saved", "executor_outcome": outcome})
+        attempt.resolved = True
+        return _err(
+            "internal_error",
+            "The action finished, but its result could not be saved. Check its effect in "
+            "Home Assistant; this approval will not be offered again.",
+            500, rid, key="approvalOutcomeNotSaved",
+        )
+    if updated is None:
+        _record_execution_audit({
+            "finalization": "missing_after_execution",
+            "executor_outcome": outcome,
+        })
+        return _err("not_found", "Approval not found.", 404, rid, key="approvalNotFound")
+    if updated.status != final_status:
+        _record_execution_audit({
+            "finalization": "conflict",
+            "stored_status": updated.status,
+            "executor_outcome": outcome,
+        })
+        return _err(
+            "conflict", "Approval was already resolved.", 409, rid,
+            key="approvalAlreadyResolved",
+        )
+    dismiss_approval_notification(hass, approval_id)
+    attempt.resolved = True
+    fire_approval_resolved_event(hass, updated)
+    _record_execution_audit()
+    return _ok(updated.to_dict(), request_id=rid)
+
+
+def _release_claim(attempt: _ApprovalAttempt) -> None:
+    """Drop the in-memory claim and, unless resolved, put the approval back on the surfaces."""
+    hass, data, approval_id = attempt.hass, attempt.data, attempt.approval_id
+    data.approvals_in_progress.discard(approval_id)
+    if not attempt.resolved:
+        # A pre-dispatch failure can leave the record pending and genuinely
+        # retryable. The surfaces were told to stop offering it, so they have
+        # to be told it is back; leaving them quiet would hide a live approval
+        # until the next reload. The notification is recreated for the same
+        # reason.
+        fire_approval_claim_event(hass, approval_id, claimed=False)
+        still_pending = get_approval(data.store, approval_id)
+        if still_pending is not None and not still_pending.is_terminal():
+            create_approval_notification(hass, still_pending)
+
+
 async def _approve_approval(hass: HomeAssistant, request: web.Request, approval_id: str) -> web.Response:
     """Claim, execute and finalize one pending approval.
 
@@ -318,11 +627,7 @@ async def _approve_approval(hass: HomeAssistant, request: web.Request, approval_
     rid = request["phoenix_mcp_rid"]
     data: PhoenixData = hass.data[DOMAIN]
     user = request[KEY_HASS_USER]
-    closed_record = None
-    closed_method: str | None = None
-    closed_reason: str | None = None
-    closed_response: web.Response | None = None
-    resolved = False
+    closed: _ClosedApproval | None = None
     async with data.store.async_lock:
         if data.core_wipe_in_progress:
             return _err(
@@ -334,49 +639,11 @@ async def _approve_approval(hass: HomeAssistant, request: web.Request, approval_
             return _err("not_found", "Approval not found.", 404, rid, key="approvalNotFound")
         settings = data.store.get_settings()
         recovery_request = is_recovery_approval(record, data)
+        attempt = _ApprovalAttempt(hass, data, rid, user, approval_id, record, settings, recovery_request)
 
-        def _record_admin_lifecycle(
-            method: str,
-            *,
-            outcome: Outcome,
-            reason: str | None = None,
-        ) -> None:
-            data.audit.record(
-                request_id=rid,
-                access_key_id="admin",
-                access_key_name=f"admin:{user.id}",
-                method=method,
-                resource=f"approval:{record.tool_name}:{approval_id}",
-                outcome=outcome,
-                client_ip="",
-                settings=settings,
-                payload={"reason": reason} if reason else None,
-                ha_user_id=user.id,
-            )
-
-        if record.is_terminal():
-            return _ok(record.to_dict(), request_id=rid)
-
-        if approval_id in data.approvals_in_progress:
-            return _err(
-                "conflict", "Approval is already being processed.", 409, rid,
-                key="approvalProcessing",
-            )
-
-        # Persist the claim under the lock before dispatch, and add the in-memory claim only
-        # after it lands, so a stop or crash leaves a trace and an unwritable store fails
-        # closed.
-        #
-        # A marker already on the record means an earlier attempt never reported back.
-        # Refuse rather than overwrite that evidence; only recovery resolves these.
-        if record.execution_started_at is not None:
-            return _err(
-                "conflict",
-                "A previous attempt may already have applied. Check the result "
-                "before changing or retrying this approval.",
-                409, rid,
-                key="approvalExecutionInterrupted",
-            )
+        refusal = _refuse_unclaimable_record(attempt)
+        if refusal is not None:
+            return refusal
 
         if record.expires_at <= utcnow():
             closed_record = await async_update_approval_status(
@@ -384,103 +651,37 @@ async def _approve_approval(hass: HomeAssistant, request: web.Request, approval_
                 approval_id,
                 status=STATUS_EXPIRED,
             )
-            closed_method = "approval/expired"
-            closed_response = _err(
+            closed = _ClosedApproval(closed_record, "approval/expired", None, _err(
                 "conflict", "This request expired before it was approved, so nothing was run.", 409, rid,
                 key="approvalExpired",
-            )
+            ))
         else:
             access_key = _restore_access_key(user.id) if recovery_request else data.store.get_access_key_by_id(record.access_key_id)
-            if access_key is None or not access_key.is_valid():
-                closed_record = await async_update_approval_status(
-                    data.store, approval_id,
-                    status=STATUS_CANCELLED,
-                    approved_by_user_id=user.id,
-                    closure_reason=REASON_ACCESS_KEY_INACTIVE,
-                )
-                closed_method = "approval/cancelled"
-                closed_reason = REASON_ACCESS_KEY_INACTIVE
-                closed_response = _err(
-                    "not_found", "Access key no longer active.", 404, rid,
-                    key="approvalAccessKeyInactive",
-                )
-            elif not recovery_request and record.cap_name != MESA_CONFIRM_CAP and effective_cap(access_key, record.cap_name) == "deny":
-                # The MESA sentinel cap is re-evaluated by its executor instead.
-                closed_record = await async_update_approval_status(
-                    data.store, approval_id,
-                    status=STATUS_FAILED,
-                    approved_by_user_id=user.id,
-                    closure_reason=REASON_CAPABILITY_DENIED,
-                )
-                closed_method = "approval/failed"
-                closed_reason = REASON_CAPABILITY_DENIED
-                closed_response = _err(
-                    "forbidden", "Capability is now denied for this access key.", 403, rid,
-                    key="approvalCapabilityDenied",
-                )
-            elif settings.kill_switch and not recovery_request:
-                closed_record = await async_update_approval_status(
-                    data.store, approval_id,
-                    status=STATUS_CANCELLED,
-                    approved_by_user_id=user.id,
-                    closure_reason=REASON_KILL_SWITCH,
-                )
-                closed_method = "approval/cancelled"
-                closed_reason = REASON_KILL_SWITCH
-                closed_response = _err(
-                    "service_unavailable", "Kill switch engaged.", 503, rid,
-                    key="killSwitchEngaged",
-                )
-            elif not await async_mark_execution_started(
-                data.store, approval_id, approved_by_user_id=user.id,
-            ):
-                return _err(
-                    "service_unavailable",
-                    "Could not record this approval before running it. Nothing was run; try again.",
-                    503, rid,
-                    key="approvalRecordFailed",
-                )
-            else:
+            closed = await _close_without_authority(attempt, access_key)
+            if closed is None:
+                if not await async_mark_execution_started(
+                    data.store, approval_id, approved_by_user_id=user.id,
+                ):
+                    return _err(
+                        "service_unavailable",
+                        "Could not record this approval before running it. Nothing was run; try again.",
+                        503, rid,
+                        key="approvalRecordFailed",
+                    )
                 # Add the in-memory claim only after durable persistence succeeds.
                 # Cancellation during the save leaves the marker as the backstop,
                 # without stranding a process-local claim.
                 data.approvals_in_progress.add(approval_id)
 
-    if closed_response is not None:
-        if closed_record is None:
-            return _err("not_found", "Approval not found.", 404, rid, key="approvalNotFound")
-        dismiss_approval_notification(hass, approval_id)
-        fire_approval_resolved_event(hass, closed_record)
-        _record_admin_lifecycle(
-            closed_method or "approval/failed",
-            outcome="denied",
-            reason=closed_reason,
-        )
-        return closed_response
+    if closed is not None:
+        return _announce_closed_approval(attempt, closed)
     if access_key is None:
         return _err(
             "not_found", "Access key no longer active.", 404, rid,
             key="approvalAccessKeyInactive",
         )
 
-    # Persisting the execution marker above also persisted approved_at and the
-    # approving admin. Mirror that durable decision into the audit ring BEFORE
-    # dispatch, so the audit never says consent happened after the side effect.
-    try:
-        _record_admin_lifecycle("approval/approved", outcome="allowed")
-
-    # Tell every surface the claim landed, BEFORE the execution rather than after
-    # it: the resolved event cannot fire until the tool finishes, and until then
-    # the panel, Agent Chat and the notification would all still offer Approve and
-    # Reject on an approval that is already being acted on. Dismissing the
-    # notification here is the same signal for the surface that has no UI state.
-        fire_approval_claim_event(hass, approval_id, claimed=True)
-        dismiss_approval_notification(hass, approval_id)
-    except BaseException:
-        # The durable marker still blocks a retry. Release only the local guard
-        # because dispatch has not started.
-        data.approvals_in_progress.discard(approval_id)
-        raise
+    _announce_claim(attempt)
 
     # Execute outside the lock so the tool can use it freely. The claim is
     # released in the finally below; whether the approval is OFFERED AGAIN after a
@@ -488,39 +689,7 @@ async def _approve_approval(hass: HomeAssistant, request: web.Request, approval_
     # is the distinction the two excepts below draw.
     try:
         try:
-            # Approved executors must retain the admitted access key and policy epoch
-            # across their own waits, just like ordinary MCP dispatch.
-            authority_ctx = request_authority.set(
-                None if recovery_request else RequestAuthority(hass, data, access_key.id, access_key.access_key_hash)
-            )
-            policy_ctx = policy_version.set(access_key.settings_version)
-            try:
-                with data.conversations.approval_scope(approval_id):
-                    if recovery_request:
-                        tool_result, outcome, _resource = await execute_recovery_approval(record, user, hass, data)
-                    else:
-                        if record.household_request:
-
-                            async with household_scope(hass, user_id=record.ha_user_id):
-                                try:
-                                    check_request_authority()
-                                except AuthorityChangedError:
-                                    # This check precedes the executor. A removed or
-                                    # inactive requester cannot have caused effects.
-                                    tool_result = _tool_refused_before_write(
-                                        "Requester authority changed. No action was dispatched.")
-                                    outcome, _resource = "denied", record.tool_name
-                                else:
-                                    tool_result, outcome, _resource = await async_execute_approved_tool(
-                                        record.tool_name, record.args, access_key, hass, data,
-                                    )
-                        else:
-                            tool_result, outcome, _resource = await async_execute_approved_tool(
-                                record.tool_name, record.args, access_key, hass, data,
-                            )
-            finally:
-                policy_version.reset(policy_ctx)
-                request_authority.reset(authority_ctx)
+            tool_result, outcome, _resource = await _dispatch_approved_action(attempt, access_key)
         except ExecutorNotRegistered:
             # The registry lookup raises before any executor is called, so this
             # also proves nothing was dispatched. It has its own exception type
@@ -529,7 +698,7 @@ async def _approve_approval(hass: HomeAssistant, request: web.Request, approval_
             # missing config key) is indistinguishable from the lookup failing,
             # and a side effect that HAD begun would be re-offered as retryable.
             await async_clear_execution_marker(data.store, approval_id)
-            _record_admin_lifecycle(
+            attempt.record_admin_lifecycle(
                 "approval/failed",
                 outcome="denied",
                 reason="executor_missing",
@@ -566,10 +735,10 @@ async def _approve_approval(hass: HomeAssistant, request: web.Request, approval_
                         approved_by_user_id=user.id,
                         closure_reason=REASON_EXECUTION_INTERRUPTED,
                     )
-                resolved = True
+                attempt.resolved = True
                 if interrupted is not None:
                     fire_approval_resolved_event(hass, interrupted)
-                _record_admin_lifecycle(
+                attempt.record_admin_lifecycle(
                     "approval/failed",
                     outcome="denied",
                     reason=REASON_EXECUTION_INTERRUPTED,
@@ -583,7 +752,7 @@ async def _approve_approval(hass: HomeAssistant, request: web.Request, approval_
                 # re-offer it. Only for cancellation is `resolved` left False: the
                 # finally then re-offers the still-pending record, but the marker
                 # check refuses the retry, and re-raising skips the response anyway.
-                resolved = not cancelled
+                attempt.resolved = not cancelled
             if cancelled:
                 # Never swallow a cancellation: the event loop owns it, and
                 # returning a response here would report a completed request for
@@ -597,84 +766,6 @@ async def _approve_approval(hass: HomeAssistant, request: web.Request, approval_
                 key="approvalExecutionUncertain",
             )
 
-        is_error = bool(tool_result.get("isError"))
-        saved_result: dict[str, Any] = {"tool_result": tool_result, "outcome": outcome}
-        if isinstance(tool_result, RefusedBeforeWrite):
-            # Persisted because the type does not survive storage. Server-owned:
-            # executor text cannot set a key at this level.
-            saved_result["refused_before_write"] = True
-        final_status = STATUS_FAILED if is_error else STATUS_APPROVED
-        auto_reason = "execution_failed" if is_error else None
-        if isinstance(tool_result, UncertainOutcome):
-            auto_reason = REASON_EXECUTION_INTERRUPTED
-        audit_outcome: Outcome = "allowed" if final_status == STATUS_APPROVED else "denied"
-
-        def _record_execution_audit(payload: dict | None = None) -> None:
-            data.audit.record(
-                request_id=rid,
-                access_key_id=record.access_key_id,
-                access_key_name=record.access_key_name,
-                method="approval/failed" if is_error else "approval/executed",
-                resource=f"approval:{record.tool_name}:{approval_id}",
-                outcome=audit_outcome,
-                client_ip="",
-                settings=settings,
-                payload=payload,
-                ha_user_id=record.ha_user_id,
-            )
-
-        try:
-            async with data.store.async_lock:
-                updated = await async_update_approval_status(
-                    data.store, approval_id,
-                    status=final_status,
-                    approved_by_user_id=user.id,
-                    closure_reason=auto_reason,
-                    result=saved_result,
-                )
-        except DurableStorageError:
-            # The executor returned, so the outcome is known and only its write failed. The
-            # store returned to its marked record, which recovery closes; the surfaces keep
-            # their claim, as Approve is refused until then and the audit row holds the result.
-            _LOGGER.exception("Could not save the outcome of approval %s", approval_id)
-            _record_execution_audit({"finalization": "not_saved", "executor_outcome": outcome})
-            resolved = True
-            return _err(
-                "internal_error",
-                "The action finished, but its result could not be saved. Check its effect in "
-                "Home Assistant; this approval will not be offered again.",
-                500, rid, key="approvalOutcomeNotSaved",
-            )
-        if updated is None:
-            _record_execution_audit({
-                "finalization": "missing_after_execution",
-                "executor_outcome": outcome,
-            })
-            return _err("not_found", "Approval not found.", 404, rid, key="approvalNotFound")
-        if updated.status != final_status:
-            _record_execution_audit({
-                "finalization": "conflict",
-                "stored_status": updated.status,
-                "executor_outcome": outcome,
-            })
-            return _err(
-                "conflict", "Approval was already resolved.", 409, rid,
-                key="approvalAlreadyResolved",
-            )
-        dismiss_approval_notification(hass, approval_id)
-        resolved = True
-        fire_approval_resolved_event(hass, updated)
-        _record_execution_audit()
-        return _ok(updated.to_dict(), request_id=rid)
+        return await _finalize_execution(attempt, tool_result, outcome)
     finally:
-        data.approvals_in_progress.discard(approval_id)
-        if not resolved:
-            # A pre-dispatch failure can leave the record pending and genuinely
-            # retryable. The surfaces were told to stop offering it, so they have
-            # to be told it is back; leaving them quiet would hide a live approval
-            # until the next reload. The notification is recreated for the same
-            # reason.
-            fire_approval_claim_event(hass, approval_id, claimed=False)
-            still_pending = get_approval(data.store, approval_id)
-            if still_pending is not None and not still_pending.is_terminal():
-                create_approval_notification(hass, still_pending)
+        _release_claim(attempt)

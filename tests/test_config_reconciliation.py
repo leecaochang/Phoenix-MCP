@@ -284,6 +284,15 @@ async def test_durable_claim_failure_prevents_restore(hass, runtime):
     assert path.read_text() == UNEXPECTED
 
 
+async def test_a_reviewed_restore_stays_available_under_the_kill_switch(hass, runtime):
+    rid, path = await interrupted(hass, runtime)
+    await reconcile_configurations(hass, runtime)
+    runtime.store.get_settings().kill_switch = True
+    response = await _approve_approval(hass, request(), runtime.config_recovery.get(rid)["approval_id"])
+    assert response.status == 200, response.body
+    assert path.read_text() == SAVED
+
+
 async def test_system_approval_requires_durable_back_reference(hass, runtime):
     rid, path = await interrupted(hass, runtime)
     await reconcile_configurations(hass, runtime)
