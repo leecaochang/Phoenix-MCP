@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Collection, Callable
 from datetime import datetime
+import asyncio
 import functools
 import json
 import logging
@@ -16,7 +17,7 @@ from homeassistant.components.http.const import KEY_AUTHENTICATED, KEY_HASS_USER
 from homeassistant.core import HomeAssistant
 from homeassistant.util.dt import as_utc
 
-from ..const import DOMAIN, MAX_REQUEST_BODY_BYTES, RUNTIME_READY_KEY
+from ..const import ADMIN_BODY_READ_TIMEOUT_SECONDS, DOMAIN, MAX_REQUEST_BODY_BYTES, RUNTIME_READY_KEY
 from ..data import PhoenixData
 from ..durable_storage import MesaSaveError
 from ..tool_input import parse_json_body
@@ -102,17 +103,18 @@ async def _read_body(
     chunks: list[bytes] = []
     total = 0
     try:
-        while True:
-            chunk = await request.content.read(limit - total + 1)
-            if not chunk:
-                break
-            chunks.append(chunk)
-            total += len(chunk)
-            if total > limit:
-                return _err("request_too_large", "Request body too large.", 413, request_id, key="bodyTooLarge")
-            at_eof = getattr(request.content, "at_eof", None)
-            if callable(at_eof) and at_eof():
-                break
+        async with asyncio.timeout(ADMIN_BODY_READ_TIMEOUT_SECONDS):
+            while True:
+                chunk = await request.content.read(limit - total + 1)
+                if not chunk:
+                    break
+                chunks.append(chunk)
+                total += len(chunk)
+                if total > limit:
+                    return _err("request_too_large", "Request body too large.", 413, request_id, key="bodyTooLarge")
+                at_eof = getattr(request.content, "at_eof", None)
+                if callable(at_eof) and at_eof():
+                    break
     except Exception:
         return _err("invalid_request", "Failed to read request body.", 400, request_id, key="bodyUnreadable")
 

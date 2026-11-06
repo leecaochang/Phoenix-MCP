@@ -640,13 +640,17 @@ def create_approval_notification(hass: HomeAssistant, approval: PendingApproval)
 
 
 def dismiss_approval_notification(hass: HomeAssistant, approval_id: str) -> None:
+    """Dismiss an approval's notification. A failure is logged, as a notice decides no approval."""
     # Local: optional component, imported only when this path runs.
     from homeassistant.components import persistent_notification
 
-    persistent_notification.async_dismiss(
-        hass,
-        notification_id=notification_id_for_approval(approval_id),
-    )
+    try:
+        persistent_notification.async_dismiss(
+            hass,
+            notification_id=notification_id_for_approval(approval_id),
+        )
+    except Exception:
+        _LOGGER.warning("Could not dismiss the notification of approval %s", approval_id, exc_info=True)
 
 
 async def async_prune_terminal_approvals(store: AccessKeyStore, *, skip_ids: set[str] | None = None) -> None:

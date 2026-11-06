@@ -63,7 +63,7 @@
 | 問題 | 狀態 | `message_key` |
 |---|---|---|
 | 本文超過 1 MiB | 413 | `adminError.bodyTooLarge` |
-| 本文無法讀取 | 400 | `adminError.bodyUnreadable` |
+| 本文無法讀取，或 2 分鐘後仍未傳完 | 400 | `adminError.bodyUnreadable` |
 | 不是有效 JSON | 400 | `adminError.badJson` |
 | JSON 不是物件 | 400 | `adminError.bodyNotObject` |
 

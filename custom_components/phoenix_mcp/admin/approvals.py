@@ -76,9 +76,13 @@ class PhoenixAdminApprovalsView(PhoenixView):
         # in_progress rides the row rather than only the claim EVENT, so a panel
         # that was loaded (or reloaded) while an approve was already executing
         # still renders it as non-actionable. The event gives the instant update;
-        # this is what makes a fresh page correct.
+        # this is what makes a fresh page correct. A marker with no live claim
+        # counts too: Approve refuses it until recovery closes it.
         return _ok({
-            "approvals": [{**row, "in_progress": row["id"] in data.approvals_in_progress} for row in rows],
+            "approvals": [{
+                **row,
+                "in_progress": row["id"] in data.approvals_in_progress or bool(row["execution_started_at"]),
+            } for row in rows],
             "total": total,
             "limit": limit,
             "offset": offset,
@@ -446,7 +450,7 @@ def _announce_closed_approval(attempt: _ApprovalAttempt, closed: _ClosedApproval
     dismiss_approval_notification(hass, approval_id)
     fire_approval_resolved_event(hass, closed.record)
     attempt.record_admin_lifecycle(
-        closed.method or "approval/failed",
+        closed.method,
         outcome="denied",
         reason=closed.reason,
     )
@@ -571,7 +575,6 @@ async def _finalize_execution(attempt: _ApprovalAttempt, tool_result: dict, outc
         # their claim, as Approve is refused until then and the audit row holds the result.
         _LOGGER.exception("Could not save the outcome of approval %s", approval_id)
         _record_execution_audit({"finalization": "not_saved", "executor_outcome": outcome})
-        attempt.resolved = True
         return _err(
             "internal_error",
             "The action finished, but its result could not be saved. Check its effect in "
@@ -602,19 +605,24 @@ async def _finalize_execution(attempt: _ApprovalAttempt, tool_result: dict, outc
 
 
 def _release_claim(attempt: _ApprovalAttempt) -> None:
-    """Drop the in-memory claim and, unless resolved, put the approval back on the surfaces."""
+    """Drop the in-memory claim and put a retryable approval back on the surfaces."""
     hass, data, approval_id = attempt.hass, attempt.data, attempt.approval_id
     data.approvals_in_progress.discard(approval_id)
-    if not attempt.resolved:
-        # A pre-dispatch failure can leave the record pending and genuinely
-        # retryable. The surfaces were told to stop offering it, so they have
-        # to be told it is back; leaving them quiet would hide a live approval
-        # until the next reload. The notification is recreated for the same
-        # reason.
-        fire_approval_claim_event(hass, approval_id, claimed=False)
-        still_pending = get_approval(data.store, approval_id)
-        if still_pending is not None and not still_pending.is_terminal():
-            create_approval_notification(hass, still_pending)
+    if attempt.resolved:
+        return
+    current = get_approval(data.store, approval_id)
+    pending = None if current is None or current.is_terminal() else current
+    if pending is not None and pending.execution_started_at is not None:
+        # The action may have run. Approve refuses a marked record, so the surfaces
+        # keep the claim until recovery closes it and announces the result.
+        return
+    # A failure with no marker left the record genuinely retryable. The surfaces were
+    # told to stop offering it, so they have to be told it is back; leaving them quiet
+    # would hide a live approval until the next reload. The notification is recreated
+    # for the same reason.
+    fire_approval_claim_event(hass, approval_id, claimed=False)
+    if pending is not None:
+        create_approval_notification(hass, pending)
 
 
 async def _approve_approval(hass: HomeAssistant, request: web.Request, approval_id: str) -> web.Response:
@@ -748,11 +756,6 @@ async def _approve_approval(hass: HomeAssistant, request: web.Request, approval_
                     "Could not resolve approval %s after a failed execution; the "
                     "recovery will close it as interrupted", approval_id,
                 )
-                # An ordinary failure counts as resolved, so the finally does not
-                # re-offer it. Only for cancellation is `resolved` left False: the
-                # finally then re-offers the still-pending record, but the marker
-                # check refuses the retry, and re-raising skips the response anyway.
-                attempt.resolved = not cancelled
             if cancelled:
                 # Never swallow a cancellation: the event loop owns it, and
                 # returning a response here would report a completed request for

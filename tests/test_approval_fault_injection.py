@@ -42,6 +42,7 @@ from custom_components.phoenix_mcp.tool_dispatch import ExecutorNotRegistered
 from homeassistant.util.dt import utcnow
 
 APPROVE = "/api/phoenix-mcp/admin/approvals/{}/approve"
+APPROVALS = "/api/phoenix-mcp/admin/approvals"
 REJECT = "/api/phoenix-mcp/admin/approvals/{}/reject"
 LIST = "/api/phoenix-mcp/admin/approvals"
 EXECUTOR = "custom_components.phoenix_mcp.admin.approvals.async_execute_approved_tool"
@@ -362,7 +363,7 @@ async def test_a_failed_execution_whose_closure_cannot_be_saved_is_not_offered_a
 
 
 async def test_a_cancelled_execution_whose_closure_cannot_be_saved_stays_marked(hass, home, caplog):
-    """Cancellation leaves the record unresolved, so the surfaces hear of it, and the marker refuses."""
+    """The marker stays, so the surfaces keep their claim, a fresh list agrees and a retry is refused."""
     data, runner, client, _ = home
     record = await _approval(data, runner)
 
@@ -374,10 +375,12 @@ async def test_a_cancelled_execution_whose_closure_cannot_be_saved_stays_marked(
         await _post_expecting_cancel(client, record.id)
         await hass.async_block_till_done()
     del data.store._store.async_save
-    assert log == [*CLAIMED, ("save", STATUS_FAILED, False), ("claim", False), ("offer", STATUS_PENDING)]
+    assert log == [*CLAIMED, ("save", STATUS_FAILED, False)]
     assert "Could not resolve approval" in caplog.text
     assert record.id not in data.approvals_in_progress
     assert get_approval(data.store, record.id).execution_started_at is not None
+    listed = await (await client.get(APPROVALS)).json()
+    assert [(row["id"], row["in_progress"]) for row in listed["approvals"]] == [(record.id, True)]
 
     with _traced(data, record.id, AsyncMock(return_value=OK)) as retry:
         again = await client.post(APPROVE.format(record.id), json={})
@@ -616,8 +619,8 @@ async def test_an_unsaved_outcome_records_what_the_executor_reported(hass, home)
     assert audit.call_args.kwargs["payload"] == {"finalization": "not_saved", "executor_outcome": "allowed"}
 
 
-async def test_an_audit_failure_on_an_unsaved_outcome_leaves_the_record_unsettled(hass, home):
-    """The row holding the result did not land, so the surfaces are told the claim ended."""
+async def test_an_audit_failure_on_an_unsaved_outcome_still_keeps_the_claim(hass, home):
+    """The marker stands whether or not the row landed, so nothing offers the action again."""
     data, runner, client, _ = home
     record = await _approval(data, runner)
     real_audit = data.audit.record
@@ -635,7 +638,26 @@ async def test_an_audit_failure_on_an_unsaved_outcome_leaves_the_record_unsettle
         response = await client.post(APPROVE.format(record.id), json={})
     del data.store._store.async_save
     assert response.status == 500
-    assert log[-2:] == [("claim", False), ("offer", STATUS_PENDING)]
+    assert not {"claim", "offer"} & {entry[0] for entry in log[len(CLAIMED):]}
+    assert get_approval(data.store, record.id).execution_started_at is not None
+
+
+async def test_a_notification_that_cannot_be_dismissed_decides_nothing(hass, home, caplog):
+    data, runner, client, _ = home
+    record = await _approval(data, runner)
+    resolved = []
+    hass.bus.async_listen(f"{DOMAIN}_approval_resolved", resolved.append)
+    execute = AsyncMock(return_value=OK)
+
+    with (patch("homeassistant.components.persistent_notification.async_dismiss", side_effect=RuntimeError("boom")),
+          patch(EXECUTOR, execute)):
+        response = await client.post(APPROVE.format(record.id), json={})
+        await hass.async_block_till_done()
+    assert response.status == 200
+    assert execute.await_count == 1
+    assert get_approval(data.store, record.id).status == "approved"
+    assert [event.data["approval_id"] for event in resolved] == [record.id]
+    assert "Could not dismiss the notification" in caplog.text
 
 
 async def test_a_failed_final_dismissal_still_releases_the_claim(hass, home):

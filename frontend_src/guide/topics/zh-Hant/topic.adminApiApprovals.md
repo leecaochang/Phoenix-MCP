@@ -59,7 +59,7 @@ recovery_review_replaced   phoenix_mcp_restarted
 | `limit` | query, integer | 預設 50，最多 500。更大的值按 500 計。 |
 | `offset` | query, integer | 預設 0。 |
 
-回應為 `{ approvals, total, limit, offset }`。`approvals` 中的每一項都是記錄加上 `in_progress`，在核准正在執行它時為 `true`。即使其狀態仍為 `pending`，也應把這樣的列視為不可操作。
+回應為 `{ approvals, total, limit, offset }`。`approvals` 中的每一項都是記錄加上 `in_progress`，在核准正在執行它時為 `true`，在 Phoenix 關閉一次未回報結果的執行之前也為 `true`。即使其狀態仍為 `pending`，也應把這樣的列視為不可操作。
 
 錯誤：[請求體](guide:topic.adminApi#bodies)中的分頁錯誤。
 

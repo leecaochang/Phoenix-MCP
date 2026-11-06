@@ -1087,6 +1087,69 @@ async def test_a_malformed_chunk_after_the_first_ends_the_request(env):
     assert _audit_rows(data) == [("POST", ROUTE, "invalid_request")]
 
 
+async def test_an_oversized_body_with_no_length_is_audited_once_as_too_large(env):
+    client, data = env
+    _, raw = await _key(data)
+
+    async def oversized():
+        yield b" " * (MAX_REQUEST_BODY_BYTES + 1)
+
+    response = await client.post(ROUTE, headers=_headers(raw), data=oversized())
+    assert response.status == 413
+    assert _audit_rows(data) == [("POST", ROUTE, "invalid_request")]
+
+
+async def test_a_body_stops_being_read_once_it_is_too_large(env):
+    client, data = env
+    _, raw = await _key(data)
+
+    async def oversized_then_stalled():
+        yield b" " * (MAX_REQUEST_BODY_BYTES + 1)
+        await asyncio.Event().wait()
+
+    async with asyncio.timeout(5):
+        response = await client.post(ROUTE, headers=_headers(raw), data=oversized_then_stalled())
+    assert response.status == 413
+
+
+async def test_a_legacy_message_with_no_session_is_audited_as_invalid(env):
+    client, data = env
+    _, raw = await _key(data)
+    response = await client.post(ROUTE, headers=_headers(raw), json=PING)
+    assert response.status == 400
+    assert _audit_rows(data) == [("ping", ROUTE, "invalid_request")]
+
+
+@pytest.mark.parametrize("chunked", [False, True], ids=["declared", "chunked"])
+async def test_a_failing_audit_is_not_reported_as_an_unreadable_body(env, chunked):
+    client, data = env
+    _, raw = await _key(data)
+    body = b" " * (MAX_REQUEST_BODY_BYTES + 1)
+
+    async def stream():
+        yield body
+
+    with patch.object(mcp_transport, "_audit_mcp_transport", side_effect=RuntimeError("boom")):
+        response = await client.post(ROUTE, headers=_headers(raw), data=stream() if chunked else body)
+    assert response.status == 500
+    assert b"Failed to read request body." not in await response.read()
+
+
+@pytest.mark.parametrize("body,status,answer", [
+    (b"{", 404, b'"id": null'),
+    (json.dumps(PING).encode(), 400, b"Invalid Host header."),
+], ids=["unparseable", "parseable"])
+async def test_a_dead_session_with_an_unusable_host_answers_by_what_parsed(env, body, status, answer):
+    client, data = env
+    _, raw = await _key(data)
+    head = b"\r\n".join([
+        b"POST " + ROUTE.encode() + b" HTTP/1.1", b"Host: a b[", b"Connection: close",
+        b"Authorization: Bearer " + raw.encode(), b"Mcp-Session-Id: gone", b"Content-Length: %d" % len(body)])
+    reply = await _raw_request(client, head + b"\r\n\r\n" + body)
+    assert reply.startswith(b"HTTP/1.1 %d " % status), reply
+    assert answer in reply
+
+
 async def test_a_slow_body_that_finishes_in_time_is_served(env):
     client, data = env
     _, raw = await _key(data)

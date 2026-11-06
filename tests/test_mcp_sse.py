@@ -16,7 +16,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from custom_components.phoenix_mcp import mcp_transport, tool_common, tool_dispatch
-from custom_components.phoenix_mcp.mcp_transport import _batch_expects_response, _progress_token
+from custom_components.phoenix_mcp.mcp_transport import _progress_token
 
 from tests.runtime_fixtures import make_mcp_data as _make_data, make_mcp_hass as _make_hass, make_mcp_access_key as _make_access_key
 from tests.runtime_fixtures import FakeStream as _FakeStream, make_sse_request as _make_request, sse_view as _view, stream_patch as _stream_patch
@@ -139,8 +139,8 @@ class TestBatchOverSse:
         assert payload[1]["error"]["code"] == -32600
 
 
-class TestBatchExpectsResponse:
-    """The pre-scan must agree with what the dispatcher actually replies to."""
+class TestBatchReplies:
+    """The dispatcher replies to requests and malformed items, never to notifications."""
 
     @pytest.mark.parametrize(
         ("items", "expected"),
@@ -156,9 +156,8 @@ class TestBatchExpectsResponse:
               {"jsonrpc": "2.0", "id": 2, "method": "ping"}], True),
         ],
     )
-    async def test_agrees_with_the_dispatcher(self, items, expected):
+    async def test_the_dispatcher_replies_only_where_one_is_due(self, items, expected):
         access_key, _raw, data, hass = _env()
-        assert _batch_expects_response(items) is expected
         actual = await mcp_transport._dispatch_streamable_batch(
             items, access_key, hass, data, "127.0.0.1", base_url="http://h")
         assert bool(actual) is expected

@@ -59,7 +59,7 @@ Lists approvals, newest first.
 | `limit` | query, integer | Default 50, at most 500. A larger value counts as 500. |
 | `offset` | query, integer | Default 0. |
 
-The response is `{ approvals, total, limit, offset }`. Each item in `approvals` is the record plus `in_progress`, which is `true` while an approve is running it. Treat such a row as not actionable, even when its status is still `pending`.
+The response is `{ approvals, total, limit, offset }`. Each item in `approvals` is the record plus `in_progress`, which is `true` while an approve is running it, or until Phoenix closes a run that never reported back. Treat such a row as not actionable, even when its status is still `pending`.
 
 Errors: the paging errors in [Request bodies](guide:topic.adminApi#bodies).
 

@@ -63,7 +63,7 @@ Send a JSON object of up to 1 MiB. An empty body counts as `{}`. Phoenix reads t
 | Problem | Status | `message_key` |
 |---|---|---|
 | Body over 1 MiB | 413 | `adminError.bodyTooLarge` |
-| Body can't be read | 400 | `adminError.bodyUnreadable` |
+| Body can't be read, or hasn't finished arriving after 2 minutes | 400 | `adminError.bodyUnreadable` |
 | Not valid JSON | 400 | `adminError.badJson` |
 | JSON that isn't an object | 400 | `adminError.bodyNotObject` |
 

@@ -58,6 +58,8 @@ APPROVAL_REASON_FORMAT_INCOMPATIBLE = "approval_format_incompatible"
 MAX_REQUEST_BODY_BYTES = 1_048_576
 # Bounds the whole read, so a client that stops sending ends its own request.
 MCP_BODY_READ_TIMEOUT_SECONDS = 30
+# Longer than the MCP bound: Agent Chat bodies carry images over a home upload link.
+ADMIN_BODY_READ_TIMEOUT_SECONDS = 120
 MAX_BATCH_ITEMS = 50
 # Storage collections use domain/create|update|delete and a domain_id target.
 STORAGE_HELPER_TYPES = frozenset({

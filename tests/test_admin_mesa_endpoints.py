@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 from homeassistant.core import HomeAssistant
@@ -18,9 +19,10 @@ from custom_components.phoenix_mcp.admin.mesa import (
 )
 from custom_components.phoenix_mcp.admin.common import _read_body
 from custom_components.phoenix_mcp.audit import AuditLog
-from custom_components.phoenix_mcp.const import DOMAIN
+from custom_components.phoenix_mcp.const import ADMIN_BODY_READ_TIMEOUT_SECONDS, DOMAIN
 from custom_components.phoenix_mcp.data import PhoenixData
 from custom_components.phoenix_mcp.mesa import async_setup_mesa
+from custom_components.phoenix_mcp.provider_constants import AGENT_CHAT_REQUEST_BODY_BYTES
 from custom_components.phoenix_mcp.rate_limiter import RateLimiter
 from custom_components.phoenix_mcp.access_key_store import GlobalSettings, AccessKeyStore
 from tests.runtime_fixtures import mesa_admin_request as _admin_request
@@ -113,6 +115,37 @@ async def test_a_paired_surrogate_escape_is_one_character():
     request.content = _ChunkedContent([raw])
 
     assert await _read_body(request, "rid") == {"notes": "\U0001f600 caf\u00e9"}
+
+
+class _StalledContent(_ChunkedContent):
+    """A body whose client stops sending after its chunks."""
+
+    async def read(self, limit: int) -> bytes:
+        if not self._chunks:
+            await asyncio.Event().wait()
+        return await super().read(limit)
+
+    def at_eof(self) -> bool:
+        return False
+
+
+@pytest.mark.asyncio
+async def test_a_body_that_stops_arriving_is_the_ordinary_unreadable_refusal():
+    request = MagicMock()
+    request.content_length = None
+    request.content = _StalledContent([b"{"])
+
+    with patch("custom_components.phoenix_mcp.admin.common.ADMIN_BODY_READ_TIMEOUT_SECONDS", 0.01):
+        async with asyncio.timeout(5):
+            response = await _read_body(request, "rid")
+
+    assert response.status == 400
+    assert json.loads(response.text)["message_key"] == "adminError.bodyUnreadable"
+
+
+def test_the_admin_body_bound_leaves_room_for_a_full_chat_upload():
+    """A largest chat body fits at about half a megabit, a slow home upload."""
+    assert AGENT_CHAT_REQUEST_BODY_BYTES * 8 / ADMIN_BODY_READ_TIMEOUT_SECONDS <= 500_000
 
 
 @pytest.mark.asyncio

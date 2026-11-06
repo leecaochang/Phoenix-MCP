@@ -357,24 +357,6 @@ def _batch_has_request(items: list) -> bool:
     )
 
 
-def _batch_expects_response(items: list) -> bool:
-    """Return whether a batch produces any reply entry, without dispatching anything.
-
-    Mirrors the suppression rules in _dispatch_streamable_batch; a change there changes this.
-    """
-    for item in items:
-        if not isinstance(item, dict) or item.get("jsonrpc") != "2.0":
-            return True  # malformed: gets an Invalid Request entry
-        kind, _payload = _classify_jsonrpc_message(item)
-        if kind == "accepted":
-            continue  # a response/notification object never gets a reply
-        if kind == "unsupported" and "id" not in item:
-            continue  # valid positional-params notification: no entry
-        if kind == "error" or "id" in item:
-            return True
-    return False
-
-
 async def _dispatch_streamable_batch(
     items: list,
     access_key: AccessKeyRecord,
@@ -904,22 +886,22 @@ async def _read_post_body(post: _McpPost) -> list[bytes] | web.Response:
     total = 0
     try:
         async with asyncio.timeout(MCP_BODY_READ_TIMEOUT_SECONDS):
-            while True:
+            while total <= _MAX_BODY:
                 chunk = await request.content.read(_MAX_BODY - total + 1)
                 if not chunk:
                     break
                 chunks.append(chunk)
                 total += len(chunk)
-                if total > _MAX_BODY:
-                    return post.audited(
-                        _error("request_too_large", "Request body too large.", 413, request_id)
-                    )
                 at_eof = getattr(request.content, "at_eof", None)
                 if callable(at_eof) and at_eof():
                     break
     except Exception:
         return post.audited(
             _error("invalid_request", "Failed to read request body.", 400, request_id)
+        )
+    if total > _MAX_BODY:
+        return post.audited(
+            _error("request_too_large", "Request body too large.", 413, request_id)
         )
     return chunks
 
@@ -1052,8 +1034,7 @@ async def _post_batch(
     if batch_rl.rate_limiting_enabled:
         rl_headers = _rate_limit_headers(access_key, batch_rl)
     # A batch with no request may need an error status, which a stream cannot carry.
-    if (wants_sse and _batch_expects_response(parsed) and _batch_has_request(parsed)
-            and 0 < len(parsed) <= MAX_BATCH_ITEMS):
+    if wants_sse and _batch_has_request(parsed):
         bus = _ProgressBus()
         _progress_ctx.set(bus)
         return cast(web.Response, await _mcp_sse_response(
@@ -1169,16 +1150,8 @@ def _legacy_message_refusal(post: _McpPost, message: _McpMessage) -> web.Respons
     body, msg_id, method = message.body, message.msg_id, message.method
     session = _legacy_session(data, request, access_key)
     if session is None:
-        message_session_outcome: Outcome = (
-            "not_found"
-            if request.headers.get("Mcp-Session-Id")
-            else "invalid_request"
-        )
-        return post.audited(
-            _legacy_session_error_response(request, msg_id, request_id),
-            body=body,
-            outcome=message_session_outcome,
-        )
+        # A named session that is gone answered 404 before this step.
+        return post.audited(_legacy_session_error_response(request, msg_id, request_id), body=body)
     if method in ("notifications/initialized", "initialized"):
         session["initialized"] = True
     elif method != "ping" and not session.get("initialized"):
