@@ -93,11 +93,14 @@ def _epoch(value: Any) -> float | None:
     """A provider timestamp (Unix seconds or an ISO string) as epoch seconds."""
     if isinstance(value, bool):
         return None
-    if isinstance(value, (int, float)):
-        return float(value) if value > 0 else None
-    if isinstance(value, str) and value:
-        parsed = parse_datetime(value)
-        return parsed.timestamp() if parsed else None
+    try:
+        if isinstance(value, (int, float)):
+            return float(value) if value > 0 else None
+        if isinstance(value, str) and value:
+            parsed = parse_datetime(value)
+            return parsed.timestamp() if parsed else None
+    except (ValueError, OverflowError):
+        return None
     return None
 
 
@@ -107,8 +110,11 @@ def _is_expired(row: Any) -> bool:
         return False
     for key in ("shutdown_date", "expiration_date", "deprecation"):
         value = row.get(key)
-        stamp = parse_datetime(value) if isinstance(value, str) and "T" in value else (
-            parse_date(value) if isinstance(value, str) and value else None)
+        try:
+            stamp = parse_datetime(value) if isinstance(value, str) and "T" in value else (
+                parse_date(value) if isinstance(value, str) and value else None)
+        except ValueError:
+            continue
         if stamp is None:
             continue
         when = stamp if isinstance(stamp, datetime) else datetime.combine(stamp, datetime.min.time(), tzinfo=dt_util.UTC)

@@ -109,7 +109,8 @@ describe("AiTaskDecisionsSection", () => {
   });
 
   it.each([
-    ["deny", false, true], ["allow", false, false], ["deny", true, false],
+    ["deny", false, true], ["confirm", false, true], ["allow", false, false],
+    ["deny", true, false], ["confirm", true, true], ["allow", true, false],
   ])("capability %s with pass-through %s", async (mode, passThrough, shown) => {
     listAccessKeys.mockResolvedValue([{ id: "tok-1", name: "decisions", cap_service_response: mode, pass_through: passThrough }]);
     renderCard(settings());

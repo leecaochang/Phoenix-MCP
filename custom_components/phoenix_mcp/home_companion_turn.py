@@ -62,7 +62,7 @@ async def run_request(arguments: dict, access_key: Any, hass: HomeAssistant, dat
 
     if (not isinstance(arguments, dict) or set(arguments) - {"request", "language"}
             or not isinstance(arguments.get("request"), str) or not arguments["request"].strip()
-            or len(arguments["request"].encode()) > HOME_COMPANION_MAX_REQUEST_BYTES
+            or len(arguments["request"].encode("utf-8", "backslashreplace")) > HOME_COMPANION_MAX_REQUEST_BYTES
             or not isinstance(arguments.get("language", "en"), str)
             or not 1 <= len(arguments.get("language", "en")) <= 32):
         return _result("invalid_request", "Provide a nonempty bounded request and optional language.")

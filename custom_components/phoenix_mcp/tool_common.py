@@ -38,6 +38,7 @@ from .const import (
     REGISTRY_ID_HINT_MAX,
     TOOL_RESULT_MAX_BYTES,
 )
+from .config_recovery import ConfigurationRecoveryError
 from .conversation_log import record_event, json_size
 from .mesa_audit import note_mesa_advisory
 from .device_semantics import (
@@ -49,7 +50,7 @@ from .helpers import content_hash
 from .catalog_text import version_summary_fields as _version_summary
 from .approvals import DiffSource, async_evaluate_capability
 from .access_key_store import AccessKeyRecord
-from .request_authority import check_request_authority
+from .request_authority import AuthorityChangedError, check_request_authority
 
 if TYPE_CHECKING:
     from .data import PhoenixData
@@ -195,6 +196,27 @@ class UncertainOutcome(dict):
 def _tool_uncertain(body: dict) -> dict:
     """Return a dispatched write whose outcome is unconfirmed, always as an error."""
     return UncertainOutcome(_tool_error(json.dumps(body, default=str)))
+
+
+def _recovery_failure(exc: Exception, sent: str | None, *, lost: str, unsent: str) -> dict:
+    """The error of a recovery transaction that raised; `sent` is its record id once dispatched.
+
+    A ConfigurationRecoveryError speaks for itself. After dispatch the write may have landed, so
+    the error is uncertain and keeps the record's id.
+    """
+    message = str(exc) if isinstance(exc, ConfigurationRecoveryError) else None
+    if sent is None:
+        return _tool_error(message or unsent)
+    return _tool_uncertain({"status": "unknown", "recovery_id": sent, "retry_safe": False, "message": message or lost})
+
+
+async def _check_authority_before_dispatch(recovery: Any, rid: str) -> None:
+    """Refuse a change whose authority lapsed, recording that nothing was sent."""
+    try:
+        check_request_authority()
+    except AuthorityChangedError:
+        await recovery.mark(rid, "not_applied")
+        raise
 
 
 class RefusedBeforeWrite(dict):

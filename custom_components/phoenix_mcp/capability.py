@@ -28,29 +28,31 @@ def is_announcement(domain: str, service: str, service_data: object) -> bool:
     return (domain, service) == ("media_player", "play_media") and isinstance(service_data, dict) and bool(service_data.get("announce"))
 
 
-def service_capability(domain: str, service: str, service_data: object, targets: Iterable[str]) -> str | None:
-    """Return the capability a service needs beyond Write, physical control aside.
+def service_capabilities(domain: str, service: str, service_data: object, targets: Iterable[str]) -> tuple[str, ...]:
+    """Return every capability a service needs beyond Write, physical control aside.
 
-    One definition for admission, execution and preview; the executor is the authority. A
-    service in any domain that acts on a notify entity needs cap_notify.
+    One definition for admission, execution and preview; the executor is the authority. What
+    a call reaches adds to what its name needs and never replaces it, so a service in any
+    domain that acts on a notify entity needs cap_notify as well.
     """
 
     service_key = f"{domain}/{service}"
+    needed: list[str] = []
     if service_key in DUAL_GATE_SERVICES:
-        return "cap_restart"
+        needed.append("cap_restart")
     if domain == "notify" or (
         service_key not in NON_ACTUATING_SERVICES and any(target.split(".", 1)[0] == "notify" for target in targets)
     ):
-        return "cap_notify"
+        needed.append("cap_notify")
     if is_announcement(domain, service, service_data):
-        return "cap_broadcast"
+        needed.append("cap_broadcast")
     if service_key in NO_TARGET_SERVICES:
-        return "cap_yaml_edit"
+        needed.append("cap_yaml_edit")
     if service_key == "scene/delete":
-        return "cap_scene_write"
+        needed.append("cap_scene_write")
     if service_key == "recorder/purge_entities":
-        return "cap_registry_write"
-    return None
+        needed.append("cap_registry_write")
+    return tuple(needed)
 
 
 def effective_cap(access_key: AccessKeyRecord, cap_name: str) -> str:

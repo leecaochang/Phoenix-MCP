@@ -1,24 +1,26 @@
 """Faults during an approval: cancellation at each stage of the claim, corrupt stored rows.
 
-Runs over HA's real router against a real store. aiohttp does not cancel a handler
-when its client leaves, so each fault cancels the handler's own task from the point
-it is parked, which is also how a stopping Home Assistant reaches it.
+Runs over HA's real router against a real store. Home Assistant's server cancels a handler
+when its client leaves, so the action has a task of its own that outlives the handler; the
+disconnect tests use a real socket on a server configured the same way. Most faults here
+cancel the task that is running the action, which is how a stopping Home Assistant reaches it.
 """
 
 import asyncio
-from contextlib import contextmanager
+from contextlib import contextmanager, suppress
 from dataclasses import replace
 from datetime import timedelta
 from unittest.mock import AsyncMock, patch
 
 import aiohttp
-from aiohttp.test_utils import make_mocked_request
+from aiohttp.test_utils import TestClient, TestServer, make_mocked_request
 from homeassistant.components.http.const import KEY_HASS_USER
 from homeassistant.setup import async_setup_component
 from pytest_homeassistant.common import MockConfigEntry
 import pytest
 
 import custom_components.phoenix_mcp as phoenix
+from custom_components.phoenix_mcp.admin import approvals as admin_approvals
 from custom_components.phoenix_mcp.admin.approvals import _approve_approval
 from custom_components.phoenix_mcp.approvals import (
     STATUS_CANCELLED,
@@ -66,6 +68,25 @@ async def home(hass, hass_storage, enable_custom_integrations, hass_client, hass
     data.store.get_access_key_by_id(runner.id).cap_restart = "confirm"
     await data.store.async_save()
     return data, runner, await hass_client(), entry
+
+
+@pytest.fixture
+async def socket_home(hass, hass_storage, enable_custom_integrations, hass_access_token, socket_enabled):
+    """The integration behind a real socket, on a server that cancels a handler on disconnect."""
+    assert await async_setup_component(hass, "homeassistant", {})
+    entry = MockConfigEntry(domain=DOMAIN, unique_id=DOMAIN, title="Phoenix MCP")
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    data = hass.data[DOMAIN]
+    runner, _ = await data.store.async_create_access_key("runner", "admin")
+    data.store.get_access_key_by_id(runner.id).cap_restart = "confirm"
+    await data.store.async_save()
+    client = TestClient(TestServer(hass.http.app, handler_cancellation=True),
+                        headers={"Authorization": f"Bearer {hass_access_token}"})
+    await client.start_server()
+    yield data, runner, client
+    await client.close()
 
 
 async def _approval(data, access_key, request_id="r1"):
@@ -143,6 +164,211 @@ async def test_cancel_during_dispatch_resolves_failed_and_is_never_offered_again
     assert response.status == 200
     assert (await response.json())["status"] == STATUS_FAILED
     executor.assert_not_awaited()
+
+
+class _Disconnect:
+    """Post an approve, drop the socket once ``reached`` is set and wait for the handler to end."""
+
+    def __init__(self, client, url, body=None):
+        self.client, self.url, self.body = client, url, {} if body is None else body
+        self.reached, self.handler_gone = asyncio.Event(), asyncio.Event()
+
+    @contextmanager
+    def watching(self):
+        real = admin_approvals._approve_approval
+
+        async def watched(*args):
+            try:
+                return await real(*args)
+            except asyncio.CancelledError:
+                self.handler_gone.set()
+                raise
+
+        with patch.object(admin_approvals, "_approve_approval", watched):
+            yield self
+
+    async def leave(self):
+        request = asyncio.create_task(self.client.post(self.url, json=self.body))
+        async with asyncio.timeout(5):
+            await self.reached.wait()
+        request.cancel()
+        with suppress(asyncio.CancelledError):
+            await request
+        async with asyncio.timeout(5):
+            await self.handler_gone.wait()
+
+
+async def _settled(data, record_id):
+    async with asyncio.timeout(5):
+        while record_id in data.approvals_in_progress:
+            await asyncio.sleep(0.01)
+
+
+def _audit_methods(data):
+    return [row.method for row in data.audit._log]
+
+
+async def test_a_disconnect_leaves_the_approved_action_running_to_its_end(hass, socket_home):
+    data, runner, client = socket_home
+    record = await _approval(data, runner)
+    resolved = []
+    hass.bus.async_listen(f"{DOMAIN}_approval_resolved", resolved.append)
+    steps, resume = [], asyncio.Event()
+    leaving = _Disconnect(client, APPROVE.format(record.id))
+
+    async def execute(*_):
+        steps.append("first")
+        leaving.reached.set()
+        await resume.wait()
+        steps.append("second")
+        return OK
+
+    with leaving.watching(), patch(EXECUTOR, execute):
+        await leaving.leave()
+        # The handler has gone and the action has not: Reject and a second Approve still lose.
+        assert steps == ["first"] and record.id in data.approvals_in_progress
+        assert (await client.post(REJECT.format(record.id), json={})).status == 409
+        resume.set()
+        await _settled(data, record.id)
+    await hass.async_block_till_done()
+    assert steps == ["first", "second"]
+    closed = get_approval(data.store, record.id)
+    assert closed.status == "approved" and closed.execution_started_at is None
+    assert [event.data["approval_id"] for event in resolved] == [record.id]
+    assert _audit_methods(data).count("approval/executed") == 1
+
+
+async def test_a_disconnect_during_the_final_save_still_reports_the_outcome(hass, socket_home):
+    data, runner, client = socket_home
+    record = await _approval(data, runner)
+    resolved = []
+    hass.bus.async_listen(f"{DOMAIN}_approval_resolved", resolved.append)
+    resume = asyncio.Event()
+    leaving = _Disconnect(client, APPROVE.format(record.id))
+    real_save = data.store._store.async_save
+
+    async def held_save(payload):
+        leaving.reached.set()
+        await resume.wait()
+        await real_save(payload)
+
+    async def execute(*_):
+        data.store._store.async_save = held_save
+        return OK
+
+    with leaving.watching(), patch(EXECUTOR, execute):
+        await leaving.leave()
+        resume.set()
+        await _settled(data, record.id)
+    del data.store._store.async_save
+    await hass.async_block_till_done()
+    assert get_approval(data.store, record.id).status == "approved"
+    assert [event.data["approval_id"] for event in resolved] == [record.id]
+    assert _audit_methods(data).count("approval/executed") == 1
+
+
+async def test_a_disconnect_finishes_the_batch_item_running_and_starts_no_other(hass, socket_home):
+    data, runner, client = socket_home
+    first, second = await _approval(data, runner), await _approval(data, runner, "r2")
+    resume = asyncio.Event()
+    leaving = _Disconnect(client, f"{APPROVALS}/batch/approve", {"approval_ids": [first.id, second.id]})
+    ran = []
+
+    async def execute(*_):
+        ran.append("ran")
+        leaving.reached.set()
+        await resume.wait()
+        return OK
+
+    with leaving.watching(), patch(EXECUTOR, execute):
+        await leaving.leave()
+        resume.set()
+        await _settled(data, first.id)
+    assert ran == ["ran"]
+    assert get_approval(data.store, first.id).status == "approved"
+    untouched = get_approval(data.store, second.id)
+    assert untouched.status == STATUS_PENDING and untouched.execution_started_at is None
+
+
+async def test_the_task_of_an_action_reports_its_own_failure(hass, home):
+    data, runner, client, _ = home
+    record = await _approval(data, runner)
+    with patch.object(admin_approvals, "_log_dispatch_task_error") as logged, patch(EXECUTOR, AsyncMock(return_value=OK)):
+        response = await client.post(APPROVE.format(record.id), json={})
+    assert response.status == 200
+    logged.assert_called_once()
+    assert logged.call_args.args[0].done()
+
+
+@pytest.mark.parametrize("save", ["open", "refused"])
+async def test_a_stopping_home_assistant_ends_the_action_and_it_closes_as_interrupted(hass, socket_home, save):
+    """Stop waits for no action. A closure saved in the final write or recovery's closes it."""
+    data, runner, client = socket_home
+    record = await _approval(data, runner)
+    steps, started = [], asyncio.Event()
+
+    async def execute(*_):
+        steps.append("first")
+        if save == "refused":
+            _refuse_saves(data)
+        started.set()
+        await asyncio.Event().wait()
+        steps.append("second")
+
+    with patch(EXECUTOR, execute):
+        request = asyncio.create_task(client.post(APPROVE.format(record.id), json={}))
+        async with asyncio.timeout(5):
+            await started.wait()
+        async with asyncio.timeout(10):
+            await hass.async_stop(force=True)
+        with suppress(aiohttp.ClientError, asyncio.TimeoutError):
+            await request
+    assert steps == ["first"]
+    assert record.id not in data.approvals_in_progress
+    if save == "refused":
+        del data.store._store.async_save
+        assert get_approval(data.store, record.id).execution_started_at is not None
+    async with data.store.async_lock:
+        await async_reconcile_interrupted_approvals(data.store)
+    closed = get_approval(data.store, record.id)
+    assert closed.status == STATUS_FAILED and closed.closure_reason == "execution_interrupted"
+
+
+@pytest.mark.parametrize("written", [True, False], ids=["written", "refused"])
+async def test_a_stop_during_the_final_save_reports_only_a_saved_outcome(hass, home, written):
+    """The save finishes before it reports the cancellation, so its result decides."""
+    data, runner, client, _ = home
+    record = await _approval(data, runner)
+    resolved = []
+    hass.bus.async_listen(f"{DOMAIN}_approval_resolved", resolved.append)
+    real_save = data.store._store.async_save
+    running = []
+
+    async def cancelled_save(payload):
+        running[0].cancel()
+        await asyncio.sleep(0)
+        if not written:
+            raise DurableStorageError("no room")
+        await real_save(payload)
+
+    async def execute(*_):
+        running.append(asyncio.current_task())
+        data.store._store.async_save = cancelled_save
+        return OK
+
+    with patch(EXECUTOR, execute):
+        await _post_expecting_cancel(client, record.id)
+    del data.store._store.async_save
+    await hass.async_block_till_done()
+    stored = get_approval(data.store, record.id)
+    assert record.id not in data.approvals_in_progress
+    if written:
+        assert stored.status == "approved" and len(resolved) == 1
+        assert _audit_methods(data).count("approval/executed") == 1
+    else:
+        assert stored.status == STATUS_PENDING and stored.execution_started_at is not None
+        assert not resolved
+        assert [row.payload for row in data.audit._log if row.method == "approval/executed"] != []
 
 
 @contextmanager
@@ -437,6 +663,24 @@ async def test_the_first_failed_check_closes_the_request(hass, home, hass_admin_
         "admin", f"admin:{hass_admin_user.id}", hass_admin_user.id)
 
 
+@pytest.mark.parametrize(("claimed", "marked", "expected"), [
+    (False, False, False), (True, False, True), (False, True, True), (True, True, True),
+], ids=["open", "claimed", "marked", "both"])
+async def test_the_list_and_the_single_read_agree_on_what_is_still_actionable(hass, home, claimed, marked, expected):
+    data, runner, client, _ = home
+    record = await _approval(data, runner)
+    if marked:
+        next(row for row in data.store.get_pending_approvals() if row["id"] == record.id)[
+            "execution_started_at"] = utcnow().isoformat()
+    if claimed:
+        data.approvals_in_progress.add(record.id)
+    listed = await (await client.get(APPROVALS)).json()
+    single = await (await client.get(f"{APPROVALS}/{record.id}")).json()
+    data.approvals_in_progress.discard(record.id)
+    assert listed["approvals"][0]["in_progress"] is expected
+    assert single["in_progress"] is expected
+
+
 async def test_a_wipe_refuses_before_any_record_is_read(hass, home):
     data, _, client, _ = home
     data.core_wipe_in_progress = True
@@ -696,10 +940,12 @@ async def test_dispatch_leaves_no_authority_in_the_calling_context(hass, home, h
     request = make_mocked_request("POST", "/approve")
     request[KEY_HASS_USER] = hass_admin_user
     request["phoenix_mcp_rid"] = "rid"
-    with patch(EXECUTOR, execute):
+    # The closure runs in the task that ran the action, right after it.
+    after = []
+    seen = lambda *_a: after.append((request_authority.get(), policy_version.get()))
+    with patch(EXECUTOR, execute), patch(RESOLVED_EVENT, side_effect=seen):
         await _approve_approval(hass, request, record.id)
-    assert request_authority.get() is None
-    assert policy_version.get() is None
+    assert after == [(None, None)]
 
 
 async def test_dispatch_runs_in_the_conversation_scope_of_its_own_approval(hass, home):

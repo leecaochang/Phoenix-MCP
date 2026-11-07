@@ -35,7 +35,8 @@ from ..capability import effective_cap
 from ..redaction import redact_structure
 from ..request_authority import AuthorityChangedError, check_request_authority
 from ..tool_common import (
-    _CAP_FORBIDDEN_MESSAGE, _gate, _restore_ctx, _tool_error, _tool_success, _tool_uncertain,
+    _CAP_FORBIDDEN_MESSAGE, _check_authority_before_dispatch, _gate, _recovery_failure, _restore_ctx, _tool_error,
+    _tool_success, _tool_uncertain,
 )
 from ..request_authority import _approved_exec_ctx
 from ..ws_dispatch import (
@@ -378,21 +379,13 @@ def _matches_expected(observed: dict, expected: dict) -> bool:
         row.get(key) == value for key, value in (expected.get("resource") or {}).items())
 
 
-async def _check_authority_before_dispatch(recovery: Any, rid: str) -> None:
-    """Refuse a change whose authority lapsed, recording that nothing was sent."""
-    try:
-        check_request_authority()
-    except AuthorityChangedError:
-        await recovery.mark(rid, "not_applied")
-        raise
-
-
 async def _recoverable_resource_write(
     plan: ResourcePlan, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData,
 ) -> tuple[dict, str, str]:
     """Persist, serialize, dispatch and read back one resource change."""
     recovery = data.config_recovery
     resource_name = f"dashboard_resource:{plan.key}"
+    sent = None
     try:
         async with recovery.resource(RECOVERY_RESOURCE):
             rid = await recovery.begin(RECOVERY_RESOURCE, f"dashboard_resource_{plan.operation}",
@@ -404,12 +397,18 @@ async def _recoverable_resource_write(
                     return _tool_error("The dashboard resource changed while preparing its recovery snapshot; "
                                        "nothing was dispatched."), "invalid_request", _SET_TOOL
                 await _check_authority_before_dispatch(recovery, rid)
+                sent = rid
                 try:
                     result = await async_ws_command(hass, plan.command, plan.payload)
-                except WsDispatchError as exc:
-                    await recovery.mark(rid, "not_applied" if isinstance(exc, WsCommandNotDispatchedError) else "unknown",
-                                        error="command_rejected")
+                except WsCommandNotDispatchedError as exc:
+                    await recovery.mark(rid, "not_applied", error="command_rejected")
                     return _tool_error(f"Dashboard resource change failed: {exc}"), "invalid_request", _SET_TOOL
+                except WsDispatchError as exc:
+                    await recovery.mark(rid, "unknown", error="command_rejected")
+                    return _tool_uncertain({
+                        "status": "unknown", "recovery_id": rid, "retry_safe": False,
+                        "message": f"The dashboard resource outcome is unknown: {exc}",
+                    }), "invalid_request", resource_name
                 try:
                     after = await read_resource_snapshot(hass, plan.lookup, plan.key)
                 except Exception:  # the change may have landed
@@ -436,13 +435,12 @@ async def _recoverable_resource_write(
                 return _tool_success(json.dumps(body)), "allowed", resource_name
             finally:
                 recovery.leave(rid)
-    except ConfigurationRecoveryError as exc:
-        return _tool_error(str(exc)), "invalid_request", _SET_TOOL
     except AuthorityChangedError:
         raise
-    except Exception:  # retain unresolved state on persistence errors
-        return _tool_error("The dashboard resource outcome is uncertain; inspect configuration recovery "
-                           "before retrying."), "invalid_request", _SET_TOOL
+    except Exception as exc:  # retain unresolved state on persistence errors
+        return _recovery_failure(
+            exc, sent, lost="The dashboard resource outcome is uncertain; inspect configuration recovery before retrying.",
+            unsent="The recovery record could not be saved, so nothing was changed."), "invalid_request", _SET_TOOL
 
 
 # Restoration. A recovery record holds the resource as it was before and after one
@@ -518,6 +516,7 @@ async def execute_restore(
         return _tool_error("This dashboard resource snapshot is invalid."), "invalid_request", tool
     if content_hash(snapshot) != snapshot_digest:
         return _tool_error("The selected dashboard resource snapshot changed after approval."), "invalid_request", tool
+    sent = None
     try:
         target = await restore_target(hass, record, side, snapshot)
         if content_hash(target) != target_fingerprint:
@@ -559,12 +558,18 @@ async def execute_restore(
                     await recovery.mark(rid, "not_applied")
                     return _tool_error("The dashboard resource changed before restore dispatch."), "invalid_request", tool
                 await _check_authority_before_dispatch(recovery, rid)
+                sent = rid
                 try:
                     await async_ws_command(hass, command, payload)
-                except WsDispatchError as exc:
-                    await recovery.mark(rid, "not_applied" if isinstance(exc, WsCommandNotDispatchedError) else "unknown",
-                                        error="command_rejected")
+                except WsCommandNotDispatchedError as exc:
+                    await recovery.mark(rid, "not_applied", error="command_rejected")
                     return _tool_error(f"Dashboard resource restore failed: {exc}"), "invalid_request", tool
+                except WsDispatchError as exc:
+                    await recovery.mark(rid, "unknown", error="command_rejected")
+                    return _tool_uncertain({
+                        "status": "unknown", "recovery_id": rid, "retry_safe": False,
+                        "message": f"Dashboard resource restore outcome is unknown: {exc}",
+                    }), "invalid_request", tool
                 observed = await read_resource_snapshot(hass, lookup, key)
                 await _record_ownership(data, command, key, observed)
                 if not _matches_expected(observed, expected):
@@ -581,10 +586,9 @@ async def execute_restore(
                 })), "allowed", tool
             finally:
                 recovery.leave(rid)
-    except ConfigurationRecoveryError as exc:
-        return _tool_error(str(exc)), "invalid_request", tool
     except AuthorityChangedError:
         raise
-    except Exception:  # keep an uncertain outcome in the recovery store
-        return _tool_error("Dashboard resource restore outcome is uncertain; inspect configuration recovery "
-                           "before retrying."), "invalid_request", tool
+    except Exception as exc:  # keep an uncertain outcome in the recovery store
+        return _recovery_failure(
+            exc, sent, lost="Dashboard resource restore outcome is uncertain; inspect configuration recovery before retrying.",
+            unsent="The recovery record could not be saved, so nothing was changed."), "invalid_request", tool

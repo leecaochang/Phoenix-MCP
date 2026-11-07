@@ -12,6 +12,7 @@ any socket work; widening it is a security decision.
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Callable
 import json
 import logging
 import re
@@ -192,8 +193,12 @@ class _OutputCollector:
     caller asked.
     """
 
-    def __init__(self, max_chars: int, head_ratio: float = 0.75) -> None:
+    def __init__(
+        self, max_chars: int, head_ratio: float = 0.75, scrub: Callable[[str], str] | None = None
+    ) -> None:
         self._max_chars = max_chars
+        # Runs on each line before the bound, or a credential crossing the cut survives as a prefix.
+        self._scrub = scrub
         # head_ratio 0 keeps only the tail, which is what a caller polling a
         # build in progress wants: the newest lines say where it has got to, and
         # the banner at the top is identical on every poll.
@@ -204,6 +209,8 @@ class _OutputCollector:
 
     def add(self, chunk: str) -> None:
         cleaned = _ANSI_RE.sub("", chunk)
+        if self._scrub is not None:
+            cleaned = self._scrub(cleaned)
         # The add-on sends one event per line with the terminator already
         # stripped, so concatenating verbatim collapses the run into a single
         # line. Re-terminate only when the chunk did not bring its own, which
@@ -338,18 +345,19 @@ async def async_builder_command(
     collect_output: bool = False,
     max_chars: int | None = None,
     head_ratio: float = 0.75,
+    scrub_output: Callable[[str], str] | None = None,
 ) -> BuilderResult:
     """Run one allowlisted Device Builder command and return its outcome.
     ``url`` is the dashboard coordinator's base URL; ``head_ratio`` is the share of bounded
-    output kept from its start. Raises BuilderUnavailable, BuilderAuthRequired or
-    BuilderCommandError.
+    output kept from its start; ``scrub_output`` runs on each output line before that bound.
+    Raises BuilderUnavailable, BuilderAuthRequired or BuilderCommandError.
     """
     if command not in ESPHOME_BUILDER_ALLOWED_COMMANDS:
         # Before any network work: this is the allowlist boundary, not a hint.
         raise ValueError(f"Command not allowed for the Device Builder client: {command}")
 
     session = async_get_clientsession(hass)
-    collector = _OutputCollector(_max_chars(max_chars), head_ratio) if collect_output else None
+    collector = _OutputCollector(_max_chars(max_chars), head_ratio, scrub_output) if collect_output else None
     endpoint = f"{url.rstrip('/')}/ws"
 
     try:
@@ -388,10 +396,11 @@ async def async_builder_command(
 
 
 def collect_output_lines(
-    lines: Any, max_chars: int | None = None, *, head_ratio: float = 0.75
+    lines: Any, max_chars: int | None = None, *, head_ratio: float = 0.75,
+    scrub_output: Callable[[str], str] | None = None,
 ) -> tuple[str, bool]:
     """Normalize output delivered as a list, through the same collector as frames."""
-    collector = _OutputCollector(_max_chars(max_chars), head_ratio)
+    collector = _OutputCollector(_max_chars(max_chars), head_ratio, scrub_output)
     for line in lines if isinstance(lines, list) else []:
         collector.add(str(line))
     return collector.finish()
@@ -446,6 +455,7 @@ async def async_builder_capture(
     *,
     capture_seconds: float,
     max_chars: int | None = None,
+    scrub_output: Callable[[str], str] | None = None,
 ) -> BuilderResult:
     """Collect a bounded window of an open-ended stream, then close.
 
@@ -457,7 +467,7 @@ async def async_builder_capture(
         raise ValueError(f"Command not allowed for the Device Builder client: {command}")
 
     session = async_get_clientsession(hass)
-    collector = _OutputCollector(_max_chars(max_chars))
+    collector = _OutputCollector(_max_chars(max_chars), scrub=scrub_output)
 
     try:
         # The connect and handshake get the normal request budget on top of the

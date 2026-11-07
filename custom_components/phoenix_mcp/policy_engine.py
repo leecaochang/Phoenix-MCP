@@ -11,7 +11,7 @@ from collections.abc import Callable, Mapping
 from typing import Any, NamedTuple
 
 from homeassistant.const import STATE_UNAVAILABLE
-from homeassistant.core import HomeAssistant, State
+from homeassistant.core import HomeAssistant, State, valid_entity_id
 from homeassistant.helpers import area_registry as ar
 from homeassistant.helpers import floor_registry as fr
 from homeassistant.helpers import entity_registry as er
@@ -26,6 +26,7 @@ from .const import (
     SENSITIVE_ATTRIBUTES, APPROVAL_TARGET_DEPTH, APPROVAL_TARGET_LIMIT, SENSITIVE_KEY_FINAL_WORDS,
     SENSITIVE_KEY_SUBSTRINGS, SENSITIVE_KEY_SUFFIXES, PERSONA_HOME_COMPANION,
     HOME_COMPANION_SENSOR_CLASSES, HOME_COMPANION_CONTROL_DOMAINS, HOME_COMPANION_READ_DOMAINS,
+    UPDATE_INSTALL_SERVICE,
 )
 from .esphome_constants import ESPHOME_DOMAIN
 from .device_semantics import (
@@ -36,11 +37,12 @@ from .device_semantics import (
     effective_entity_area_id,
 )
 from .access_key_store import AccessKeyRecord
-from .capability import service_capability, strictest_capability
+from .capability import service_capabilities, strictest_capability
 from .household_authority import household_admin_access
 from .request_authority import household_authority
 
 _LOGGER = logging.getLogger(__name__)
+SWITCH_AS_X_PLATFORM = "switch_as_x"
 
 
 class Permission(str, Enum):
@@ -827,7 +829,7 @@ def resolve_service_targets(
     return permitted, visible
 
 
-def _loaded_group_members(hass: HomeAssistant, entity_id: str) -> list[object]:
+def loaded_group_members(hass: HomeAssistant, entity_id: str) -> list[object]:
     """Read the members a group entity holds; an unavailable state drops them, the entity not."""
     component = hass.data.get(DATA_INSTANCES, {}).get(entity_id.split(".", 1)[0])
     entity = component.get_entity(entity_id) if component is not None else None
@@ -837,13 +839,27 @@ def _loaded_group_members(hass: HomeAssistant, entity_id: str) -> list[object]:
     return [] if configured is None else [configured]
 
 
+def _switch_wrapper_source(hass: HomeAssistant, entry: er.RegistryEntry) -> str | None:
+    """Return the entity a Switch as X wrapper actuates, or None if its entry cannot say."""
+    # Static and readable in the config entry, unlike a template entity's arbitrary target.
+    config_entry = hass.config_entries.async_get_entry(entry.config_entry_id) if entry.config_entry_id else None
+    reference = config_entry.options.get("entity_id") if config_entry is not None else None
+    if not isinstance(reference, str):
+        return None
+    source = er.async_get(hass).async_get(reference)
+    if source is not None:
+        return source.entity_id
+    return reference.lower() if valid_entity_id(reference.lower()) else None
+
+
 def group_member_ids(entity_id: str, hass: HomeAssistant) -> frozenset[str] | None:
     """Return every member of a group helper, nested groups included.
 
     A state listing members counts whatever the registry says, as a YAML group has no entry,
-    and an unavailable group answers from its loaded entity. Empty for anything else; scenes,
-    scripts and automations stay governed by their primary entity. None when membership
-    cannot be read, which callers treat as a refusal.
+    and an unavailable group answers from its loaded entity. A Switch as X wrapper has its
+    source as its one member. Empty for anything else; scenes, scripts and automations stay
+    governed by their primary entity. None when membership cannot be read, which callers
+    treat as a refusal.
     """
     registry = er.async_get(hass)
     members: set[str] = set()
@@ -854,13 +870,22 @@ def group_member_ids(entity_id: str, hass: HomeAssistant) -> frozenset[str] | No
         if current.split(".", 1)[0] in PRIMARY_ENTITY_DOMAINS:
             continue
         entry = registry.async_get(current)
+        if entry is not None and entry.platform == SWITCH_AS_X_PLATFORM:
+            source = _switch_wrapper_source(hass, entry)
+            if source is None or depth >= APPROVAL_TARGET_DEPTH:
+                return None
+            members.add(source)
+            if source not in seen:
+                seen.add(source)
+                pending.append((source, depth + 1))
+            continue
         state = hass.states.get(current)
         attributes = state.attributes if state is not None else {}
         helper = current.startswith("group.") or (entry is not None and entry.platform == "group")
         listed = [attributes[key] for key in ("group_entities", "entity_id") if key in attributes]
         lists_members = isinstance(attributes.get("entity_id"), (list, tuple, set, frozenset))
         if not (listed or state is None or state.state != STATE_UNAVAILABLE):
-            listed = _loaded_group_members(hass, current)
+            listed = loaded_group_members(hass, current)
             lists_members = bool(listed)
         if not (helper or "group_entities" in attributes or lists_members):
             continue
@@ -938,6 +963,27 @@ def physical_gate_applies(domain: str, service: str, targets: list[str]) -> bool
     return any(entity_id.split(".", 1)[0] in PHYSICAL_GATE_DOMAINS for entity_id in targets)
 
 
+def firmware_flash_applies(domain: str, service: str, targets: list[str], hass: HomeAssistant) -> bool:
+    """Return whether a call installs firmware on an ESPHome device, as the install tool does."""
+    if f"{domain}/{service}" != UPDATE_INSTALL_SERVICE:
+        return False
+    registry = er.async_get(hass)
+    return any((entry := registry.async_get(target)) is not None and entry.platform == ESPHOME_DOMAIN
+               for target in targets)
+
+
+def whole_device_entities(targets: list[str], hass: HomeAssistant) -> list[str]:
+    """Return the targets with every entity of their devices and child devices, disabled ones too."""
+    registry = er.async_get(hass)
+    snapshot = device_registry_snapshot(hass)
+    reached = dict.fromkeys(targets)
+    for target in targets:
+        entry = registry.async_get(target)
+        if entry is not None and entry.device_id:
+            reached.update(dict.fromkeys(device_cascade_entity_ids(hass, entry.device_id, snapshot=snapshot)))
+    return list(reached)
+
+
 def service_gate_targets(
     *,
     domain: str,
@@ -1006,8 +1052,8 @@ def required_service_cap(
 ) -> str | None:
     """Return the capability that decides a call, shared by admission, execution and preview.
 
-    A call may need physical control and a service capability at once; the one binding this
-    key hardest decides, so neither is passed over.
+    A call may need several capabilities at once; the one binding this key hardest decides,
+    so none is passed over.
     """
     targets = service_gate_targets(
         domain=domain, service=service, entity_id=entity_id, device_id=device_id,
@@ -1016,7 +1062,8 @@ def required_service_cap(
     return strictest_capability(
         access_key,
         "cap_physical_control" if physical_gate_applies(domain, service, targets) else None,
-        service_capability(domain, service, service_data, targets),
+        "cap_esphome_flash" if firmware_flash_applies(domain, service, targets, hass) else None,
+        *service_capabilities(domain, service, service_data, targets),
     )
 
 

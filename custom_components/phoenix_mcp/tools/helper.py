@@ -30,6 +30,7 @@ from ..const import (
     CAP_DENY,
     HELPER_FIELD_HELP_MAX,
     HELPER_STEP_HELP_MAX,
+    REDACTION_SENTINEL,
     STORAGE_HELPER_ICON_TYPES,
     STORAGE_HELPER_MERGING_TYPES,
     STORAGE_HELPER_REQUEST_FIELDS,
@@ -54,7 +55,10 @@ from ..catalog_text import (
     diff_summary_fields as _summary, version_summary_fields as _version_summary,
 )
 from ..capability import effective_cap
-from ..redaction import redact_inaccessible_entity_ids_in_text
+from ..redaction import (
+    _redact_entity_ids, redact_diagnostics, redact_inaccessible_entity_ids_in_text, redact_secrets_in_text,
+    redact_structure,
+)
 from ..tool_common import (
     _CAP_FORBIDDEN_MESSAGE, _cas_conflict, _gate, _pending_or_inline, _record_version, _restore_ctx, fitted_list, redaction_sentinel_path, _tool_error, _tool_success, _tool_uncertain, _truncate, serialize_ha_schema,
 )
@@ -63,7 +67,9 @@ from ..policy_engine import (
     _ENTITY_ID_RE,
     Permission,
     filter_entities_for_access_key,
+    is_sensitive_key,
     resolve,
+    resolve_read,
     resolve_registry_access,
 )
 from ..access_key_store import AccessKeyRecord
@@ -2370,6 +2376,22 @@ def _config_entry_helper_entity_ids(hass: HomeAssistant, entry_id: str) -> list[
     )
 
 
+async def _scoped_helper_entry(hass: HomeAssistant, entry_id: Any, access_key: AccessKeyRecord) -> Any | None:
+    """_helper_config_entry for one key: None unless it may read every entity the entry owns.
+
+    A scoped key cannot be checked against an entry that owns no entity, so such an entry reads
+    as absent, the rule resolve_config_entry_registry_write applies.
+    """
+    entry = await _helper_config_entry(hass, entry_id)
+    if entry is None:
+        return None
+    owned = _config_entry_helper_entity_ids(hass, entry.entry_id)
+    if not owned and not access_key.pass_through:
+        return None
+    readable = (Permission.READ, Permission.WRITE)
+    return entry if all(resolve_read(eid, access_key, hass, registry=True) in readable for eid in owned) else None
+
+
 def _config_entry_helper_mesa_entities(
     hass: HomeAssistant, entry: Any, data: PhoenixData
 ) -> list[str] | tuple[dict, str, str]:
@@ -2402,6 +2424,11 @@ def _config_entry_helper_mesa_entities(
 # and flow helpers below rather than spread across the tools.
 _OPTIONS = "options"
 _RECONFIGURE = "reconfigure"
+_SETTINGS_MAX_DEPTH = 25
+_REDACTED_SETTINGS_NOTE = (
+    "A value shown as <redacted> is hidden from this access key and cannot be sent back; "
+    "leave that field out to keep it."
+)
 _RECONFIGURE_OK = "reconfigure_successful"
 
 
@@ -2613,26 +2640,95 @@ async def _abort_flow(hass: HomeAssistant, mechanism: str | None, flow_id: str |
         _LOGGER.debug("Could not abort options flow %s", flow_id, exc_info=True)
 
 
+def _readable_setting_text(text: str, access_key: AccessKeyRecord, hass: HomeAssistant) -> str:
+    """One settings string as this key may read it; a body naming a hidden entity goes whole.
+
+    A template can reach an entity in forms no text pattern sees (states.lock.front.state), so one
+    is parsed, and one that cannot be proved in scope is withheld. A missing entity stays readable,
+    since repointing a helper whose source went away needs the old ID.
+    """
+    def hidden(entity_id: str) -> bool:
+        return resolve(entity_id, access_key, hass) in (Permission.NO_ACCESS, Permission.DENY)
+
+    try:
+        if any(hidden(eid) for eid in _entities_in_options(text, er.async_get(hass))):
+            return REDACTION_SENTINEL
+    except HelperScopeError:
+        return REDACTION_SENTINEL
+    return redact_secrets_in_text(
+        _redact_entity_ids(text, hass, lambda eid: not hidden(eid), REDACTION_SENTINEL)) or ""
+
+
+def _readable_settings(value: Any, access_key: AccessKeyRecord, hass: HomeAssistant, depth: int = 0) -> Any:
+    """Stored or form settings as this key may read them.
+
+    A sensitive key's value is masked, an entry keyed by a hidden entity drops, and a string goes
+    through _readable_setting_text. Past the depth limit a container is masked.
+    """
+    if isinstance(value, str):
+        return _readable_setting_text(value, access_key, hass)
+    if isinstance(value, (dict, list, tuple, set, frozenset)) and depth > _SETTINGS_MAX_DEPTH:
+        return REDACTION_SENTINEL
+    if isinstance(value, dict):
+        return {
+            key: REDACTION_SENTINEL if is_sensitive_key(key) else _readable_settings(item, access_key, hass, depth + 1)
+            for key, item in value.items()
+            if not isinstance(key, str) or _readable_setting_text(key, access_key, hass) == key
+        }
+    if isinstance(value, (list, tuple, set, frozenset)):
+        return [_readable_settings(item, access_key, hass, depth + 1) for item in value]
+    return value
+
+
+def _readable_schema(fields: list, access_key: AccessKeyRecord, hass: HomeAssistant) -> list:
+    """A serialized form as this key may read it: a field's name stays, a sensitive one's values go."""
+    shown: list = []
+    for field in fields:
+        if not isinstance(field, dict):
+            shown.append(_readable_settings(field, access_key, hass))
+            continue
+        item = _readable_settings(field, access_key, hass)
+        if "name" in field:
+            item["name"] = field["name"]
+        if isinstance(field.get("schema"), list):
+            item["schema"] = _readable_schema(field["schema"], access_key, hass)
+        if is_sensitive_key(field.get("name")):
+            if "default" in item:
+                item["default"] = REDACTION_SENTINEL
+            if isinstance(item.get("description"), dict) and "suggested_value" in item["description"]:
+                item["description"]["suggested_value"] = REDACTION_SENTINEL
+        shown.append(item)
+    return shown
+
+
+def _helper_settings_result(body: dict, tool: str) -> tuple[dict, str, str]:
+    """A settings read's success, saying what a redacted value means when it holds one."""
+    if redaction_sentinel_path([body.get("settings"), body.get("editable_settings")]) is not None:
+        body["note"] = f"{body.get('note', '')} {_REDACTED_SETTINGS_NOTE}".strip()
+    return _tool_success(json.dumps(body, default=str)), "allowed", tool
+
+
 async def _tool_get_helper_settings(
     args: dict, access_key: AccessKeyRecord, hass: HomeAssistant
 ) -> tuple[dict, str, str]:
     """MCP tool: read one helper config entry's options and the schema for them.
 
     A read, never approval-gated. It opens the settings flow for the schema, which the flow declares
-    rather than stores, and aborts it at once.
+    rather than stores, and aborts it at once. An entry outside the key's scope reads as absent,
+    what the entry refers to is redacted, and content_hash covers what this key reads.
     """
     tool = "get_helper_settings"
     if effective_cap(access_key, "cap_helper_write") == CAP_DENY:
         return _tool_error("Forbidden."), "denied", tool
-    entry = await _helper_config_entry(hass, args.get("entry_id"))
+    entry = await _scoped_helper_entry(hass, args.get("entry_id"), access_key)
     if entry is None:
         return _tool_error(_NOT_A_HELPER_ENTRY), "not_found", tool
     mechanism = _settings_mechanism(entry)
-    settings = _settings_store(entry, mechanism)
+    settings = _readable_settings(_settings_store(entry, mechanism), access_key, hass)
     body: dict[str, Any] = {
         "entry_id": entry.entry_id,
         "domain": entry.domain,
-        "title": entry.title,
+        "title": redact_diagnostics(entry.title),
         "mechanism": mechanism,
         "settings": settings,
         "content_hash": content_hash(settings),
@@ -2640,12 +2736,14 @@ async def _tool_get_helper_settings(
     if mechanism is None:
         body["schema"] = []
         body["note"] = "This helper exposes no way to change its settings, so they cannot be changed here."
-        return _tool_success(json.dumps(body, default=str)), "allowed", tool
+        return _helper_settings_result(body, tool)
     flow_id = None
     try:
         result = await _init_settings_flow(hass, entry, mechanism)
         flow_id = result.get("flow_id")
         schema = _options_schema_json(result)
+        if schema is not None:
+            schema = _readable_schema(schema, access_key, hass)
         body["step_id"] = result.get("step_id")
         if schema is None:
             # Settings still readable and writable; only the field description is
@@ -2655,7 +2753,7 @@ async def _tool_get_helper_settings(
                 "available. You can still change settings by sending the values you want; "
                 "send the whole of settings, since the fields it accepts are unknown here."
             )
-            return _tool_success(json.dumps(body, default=str)), "allowed", tool
+            return _helper_settings_result(body, tool)
         if described := await _with_field_help(
                 hass, entry.domain, "options" if mechanism == _OPTIONS else "config", result.get("step_id"), schema):
             body["help"] = described
@@ -2693,7 +2791,7 @@ async def _tool_get_helper_settings(
         return _tool_error("Could not read this helper's settings."), "invalid_request", tool
     finally:
         await _abort_flow(hass, mechanism, flow_id)
-    return _tool_success(json.dumps(body, default=str)), "allowed", tool
+    return _helper_settings_result(body, tool)
 
 
 def _entities_in_options(options: Any, registry: er.EntityRegistry) -> set[str]:
@@ -2773,6 +2871,11 @@ def _config_entry_settings_precheck(
             _tool_error("This helper exposes no way to change its settings, so they cannot be changed here."),
             "invalid_request", tool,
         )
+    if redaction_sentinel_path(settings) is not None:
+        return (
+            _tool_error("Redacted settings cannot be written back. Omit a redacted field to keep its value."),
+            "invalid_request", tool,
+        )
     try:
         denied = _unwritable_option_entities(
             settings, access_key, hass,
@@ -2807,8 +2910,8 @@ async def _build_diff_set_config_entry_options(
         "kind": "config_diff",
         **_summary("config_entry.options", label=label, keys=", ".join(changed) or "(nothing)"),
         "target": {"type": "config_entry", "id": args.get("entry_id"), "label": label},
-        "before": _truncate(json.dumps(before, indent=2, default=str)),
-        "after": _truncate(json.dumps(after, indent=2, default=str)),
+        "before": _truncate(json.dumps(redact_structure(before), indent=2, default=str)),
+        "after": _truncate(json.dumps(redact_structure(after), indent=2, default=str)),
         "preview": {
             "domain": entry.domain if entry is not None else None,
             "mechanism": mechanism,
@@ -2863,7 +2966,7 @@ async def _tool_set_helper_settings(
     tool = "set_helper_settings"
     if effective_cap(access_key, "cap_helper_write") == CAP_DENY:
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", tool
-    entry = await _helper_config_entry(hass, args.get("entry_id"))
+    entry = await _scoped_helper_entry(hass, args.get("entry_id"), access_key)
     if entry is None:
         return _tool_error(_NOT_A_HELPER_ENTRY), "not_found", tool
     mechanism = _settings_mechanism(entry)
@@ -2872,7 +2975,7 @@ async def _tool_set_helper_settings(
     if pre is not None:
         return pre
     conflict = _cas_conflict(
-        args.get("expected_hash"), _settings_store(entry, mechanism), tool)
+        args.get("expected_hash"), _readable_settings(_settings_store(entry, mechanism), access_key, hass), tool)
     if conflict is not None:
         return conflict
     if entry.domain == "template":
@@ -2919,6 +3022,8 @@ async def _execute_set_config_entry_options(
     if entry is None or entry.domain != "template":
         return await _apply_config_entry_options(args, access_key, hass, data)
     tool = "set_helper_settings"
+    if await _scoped_helper_entry(hass, entry.entry_id, access_key) is None:
+        return _tool_error(_NOT_A_HELPER_ENTRY), "not_found", tool
     pre = _config_entry_settings_precheck(args.get("settings"), entry, _settings_mechanism(entry), access_key, hass, tool)
     if pre is not None:
         return pre
@@ -2965,7 +3070,7 @@ async def _apply_config_entry_options(
     args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData, *, record_history: bool = True, recovery_before: dict | None = None
 ) -> tuple[dict, str, str]:
     tool = "set_helper_settings"
-    entry = await _helper_config_entry(hass, args.get("entry_id"))
+    entry = await _scoped_helper_entry(hass, args.get("entry_id"), access_key)
     if entry is None:
         return _tool_error(_NOT_A_HELPER_ENTRY), "not_found", tool
     mechanism = _settings_mechanism(entry)
@@ -2977,7 +3082,7 @@ async def _apply_config_entry_options(
         return pre
     before = _settings_store(entry, mechanism)
     version_before = template_snapshot(hass, entry) if entry.domain == "template" else before
-    conflict = _cas_conflict(args.get("expected_hash"), before, tool)
+    conflict = _cas_conflict(args.get("expected_hash"), _readable_settings(before, access_key, hass), tool)
     if conflict is not None:
         return conflict
     entity_ids = _config_entry_helper_mesa_entities(hass, entry, data)
@@ -3076,10 +3181,11 @@ async def _apply_config_entry_options(
             after=template_snapshot(hass, applied_entry) if entry.domain == "template" else after, alias=entry.title,
             summary=_version_summary("config_entry.options", subject=entry.title),
         )
+    shown = _readable_settings(after, access_key, hass)
     return (
         _tool_success(json.dumps({
-            "entry_id": entry.entry_id, "domain": entry.domain, "title": entry.title,
-            "mechanism": mechanism, "settings": after, "content_hash": content_hash(after),
+            "entry_id": entry.entry_id, "domain": entry.domain, "title": redact_diagnostics(entry.title),
+            "mechanism": mechanism, "settings": shown, "content_hash": content_hash(shown),
             "note": "The helper reloaded with these settings; no restart is needed.",
         }, default=str)),
         "allowed", f"config_entry:{entry.entry_id}",

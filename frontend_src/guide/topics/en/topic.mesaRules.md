@@ -54,7 +54,7 @@ A profile set to **{{label:mesa.modeEnforced}}** is enforced while the setting i
 
 When an action targets several entities, MESA drops the blocked ones and the action runs on the rest. A warning or a block reaches the agent with the reason.
 
-A group is different. If MESA blocks one member, it blocks the whole group, and if a member needs confirmation, the whole group waits for your approval.
+A group is different. If MESA blocks one member, it blocks the whole group, and if a member needs confirmation, the whole group waits for your approval. A Switch as X entity works the same way, through the switch behind it.
 
 ## Privacy {#privacy}
 
@@ -72,8 +72,10 @@ It checks:
 - Renaming, enabling, disabling and removing entities and devices, and moving them out of a profiled area.
 - Integration and helper changes, areas and floors.
 - Calendar and to-do changes, and notifications.
-- Zigbee device changes and ESPHome firmware installs. These must pass on every entity of the device and its child devices.
+- Zigbee device changes, raw Z-Wave and ISY commands, `update.install` and ESPHome firmware installs. These must pass on every entity of the device and its child devices.
 - An ESPHome file whose device Phoenix can't work out. This only warns in {{label:settings.mesaModeAdvisory}}, and is refused in {{label:settings.mesaModeEnforced}} once any ESPHome device is set up.
+
+Phoenix can't work out the device of a file that takes its name from a package or a substitution, or of a new file the Device Builder doesn't list.
 
 It doesn't check:
 
@@ -87,7 +89,7 @@ Reading a state isn't checked, except camera images. Automations and scripts run
 
 When you rename an entity in Home Assistant, its profile follows it straight away. If Phoenix wasn't running at that moment, the profile follows the next time Phoenix starts or reloads.
 
-If the new ID already has a profile, Phoenix keeps both. The new ID takes the stricter control mode and enforcement of the two and the limits of both, and the other profile shows as an orphan for you to review. An agent's rename works the same way, after MESA has checked the rename itself.
+If the new ID already has a profile, Phoenix keeps both. The new ID takes the stricter control mode, enforcement and privacy of the two and the limits of both. The other profile shows as an orphan for you to review. An agent's rename works the same way, after MESA has checked the rename itself.
 
 Moving something out of an area with a profile counts as a change, because it could lift a rule. Moving into one doesn't, because a new area only makes rules stricter.
 

@@ -103,6 +103,8 @@ Creates, changes and deletes calendar events.
 
 Controls locks, alarm panels, covers and valves, through their own actions or any other action that reaches them. Raw device commands such as `zwave_js.set_value` always need it, and so do ESPHome actions on a device with one of these. The agent also needs W on them in the {{label:accessKeys.permissionsTree}}. Radio tools that change Zigbee devices need it too.
 
+Creating or editing a scene with one of these in it needs this capability as well.
+
 ### {{label:caps.cap_notify.label}} {#notify}
 
 Sends notifications, through its own tool, a notify action or any other action that sends through a notify entity.
@@ -141,7 +143,7 @@ Changes the Energy dashboard's settings.
 
 ### {{label:caps.cap_esphome_flash.label}} {#esphome-flash}
 
-Installs firmware on ESPHome devices, through the ESPHome Device Builder. It also needs {{label:caps.cap_esphome_yaml.label}}. Only the ESPHome Devices persona allows it, with your approval.
+Installs firmware on ESPHome devices, through the ESPHome Device Builder. It also needs {{label:caps.cap_esphome_yaml.label}}. Only the ESPHome Devices persona allows it, with your approval. `update.install` on an ESPHome device needs this capability as well.
 
 ### {{label:caps.cap_yaml_edit.label}} {#yaml-edit}
 

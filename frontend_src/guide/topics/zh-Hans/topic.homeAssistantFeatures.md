@@ -9,6 +9,8 @@ Phoenix 使用你的账户和模型，自己回答 Home Assistant 对话。它�
 
 如果你希望语音和 Assist 背后使用 Phoenix 自己的模型和工具，请使用它。
 
+回复在 8,000 个字符处停止，并说明已被截断。Assist 显示相同的文本。
+
 ## AI 任务 {#ai-task}
 
 Phoenix 使用你的账户和模型，为自动化和脚本运行 Home Assistant 的 AI 任务操作。它在自己的访问密钥范围内代表整个家庭行动。如果 Home Assistant 告知任务由谁发起，任务只拥有该用户的权限。

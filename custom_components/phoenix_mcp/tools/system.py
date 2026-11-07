@@ -26,7 +26,7 @@ from ..household_authority import household_tool_access
 from ..mesa_audit import request_context
 from ..mesa_tools import async_call_mesa_tool, mesa_tool_defs
 from ..policy_engine import Permission, resolve_read, scrub_sensitive_attributes
-from ..request_authority import AuthorityChangedError, check_request_authority
+from ..request_authority import AuthorityChangedError, check_request_authority, mark_dispatch_started
 from ..template_render import async_render_template_for_access_key, TemplateRenderError
 from ..tool_catalog import (
     _EXECUTOR_REGISTRY, _tool_any_caps, _tool_required_caps, _write_gate_open,
@@ -190,6 +190,7 @@ async def _execute_restart_ha(
             check_request_authority()
             try:
                 async with asyncio.timeout(PROXY_TIMEOUT_SECONDS):
+                    mark_dispatch_started()
                     await hass.services.async_call("homeassistant", "restart", {}, blocking=True)
             except asyncio.TimeoutError:
                 pass

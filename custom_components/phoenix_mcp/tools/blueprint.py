@@ -32,13 +32,15 @@ from ..capability import effective_cap
 from ..helpers import content_hash
 from ..redaction import redact_secrets_in_text
 from ..config_recovery import ConfigurationRecoveryError, safe_snapshot
-from ..request_authority import check_request_authority
+from ..request_authority import AuthorityChangedError
 from ..access_key_store import AccessKeyRecord
 from ..tool_common import (
     _CAP_FORBIDDEN_MESSAGE,
     _gate,
     _read_text_capped,
     _record_version,
+    _check_authority_before_dispatch,
+    _recovery_failure,
     _tool_error,
     _tool_success,
     _tool_uncertain,
@@ -512,6 +514,7 @@ async def _save_blueprint(
     consumers = await hass.async_add_executor_job(_blueprint_consumers, hass, domain, rel)
     resource = f"blueprint:{domain}/{rel}"
     recovery = data.config_recovery
+    sent = None
     try:
         before_snapshot = _blueprint_recovery_snapshot(domain, rel, before)
         async with recovery.resource(resource):
@@ -522,15 +525,22 @@ async def _save_blueprint(
                 if await _read_blueprint_source(hass, target) != before:
                     await recovery.mark(rid, "not_applied")
                     return _tool_error("The blueprint changed while preparing its recovery snapshot; nothing was dispatched."), "invalid_request", tool_name
-                check_request_authority()
+                await _check_authority_before_dispatch(recovery, rid)
+                sent = rid
                 try:
                     result = await async_ws_command(hass, "blueprint/save", {
                         "domain": domain, "path": rel, "yaml": content,
                         "allow_override": allow_override,
                     })
-                except WsDispatchError as exc:
-                    await recovery.mark(rid, "not_applied" if isinstance(exc, WsCommandNotDispatchedError) else "unknown", error="save_rejected")
+                except WsCommandNotDispatchedError as exc:
+                    await recovery.mark(rid, "not_applied", error="save_rejected")
                     return _tool_error(f"Failed to save blueprint: {exc}"), "invalid_request", tool_name
+                except WsDispatchError as exc:
+                    await recovery.mark(rid, "unknown", error="save_rejected")
+                    return _tool_uncertain({
+                        "status": "unknown", "recovery_id": rid, "retry_safe": False,
+                        "message": f"Blueprint save outcome is unknown: {exc}",
+                    }), "invalid_request", resource
                 observed = await _read_blueprint_source(hass, target)
                 if observed != expected_source:
                     await recovery.mark(rid, "partial", observed_hash=content_hash(observed or ""))
@@ -542,11 +552,13 @@ async def _save_blueprint(
                 await recovery.set_source(rid, _blueprint_recovery_snapshot(domain, rel, observed))
             finally:
                 recovery.leave(rid)
-    except ConfigurationRecoveryError as exc:
-        return _tool_error(str(exc)), "invalid_request", tool_name
-    except Exception:  # retain the dispatch record when readback is incomplete
+    except AuthorityChangedError:
+        raise
+    except Exception as exc:  # retain the dispatch record when readback is incomplete
         _LOGGER.exception("blueprint recovery transaction failed for %s", resource)
-        return _tool_error("Blueprint save outcome is uncertain; inspect configuration recovery before retrying."), "invalid_request", tool_name
+        return _recovery_failure(
+            exc, sent, lost="Blueprint save outcome is uncertain; inspect configuration recovery before retrying.",
+            unsent="The recovery record could not be saved, so nothing was changed."), "invalid_request", tool_name
     await _record_version(
         data, access_key, resource_type="blueprint", resource_id=f"{domain}/{rel}",
         action="edit" if before is not None else "create",
@@ -602,6 +614,7 @@ async def _execute_delete_blueprint(
         return _tool_error("Blueprint not found."), "not_found", "delete_blueprint"
     resource = f"blueprint:{domain}/{rel}"
     recovery = data.config_recovery
+    sent = None
     try:
         before_snapshot = _blueprint_recovery_snapshot(domain, rel, before)
         async with recovery.resource(resource):
@@ -612,12 +625,19 @@ async def _execute_delete_blueprint(
                 if await _read_blueprint_source(hass, target) != before:
                     await recovery.mark(rid, "not_applied")
                     return _tool_error("The blueprint changed while preparing its recovery snapshot; nothing was dispatched."), "invalid_request", "delete_blueprint"
-                check_request_authority()
+                await _check_authority_before_dispatch(recovery, rid)
+                sent = rid
                 try:
                     await async_ws_command(hass, "blueprint/delete", {"domain": domain, "path": rel})
-                except WsDispatchError as exc:
-                    await recovery.mark(rid, "not_applied" if isinstance(exc, WsCommandNotDispatchedError) else "unknown", error="delete_rejected")
+                except WsCommandNotDispatchedError as exc:
+                    await recovery.mark(rid, "not_applied", error="delete_rejected")
                     return _tool_error(f"Failed to delete blueprint: {exc}"), "invalid_request", "delete_blueprint"
+                except WsDispatchError as exc:
+                    await recovery.mark(rid, "unknown", error="delete_rejected")
+                    return _tool_uncertain({
+                        "status": "unknown", "recovery_id": rid, "retry_safe": False,
+                        "message": f"Blueprint delete outcome is unknown: {exc}",
+                    }), "invalid_request", resource
                 if await _read_blueprint_source(hass, target) is not None:
                     await recovery.mark(rid, "partial", observed="blueprint_still_exists")
                     return _tool_uncertain({
@@ -628,11 +648,13 @@ async def _execute_delete_blueprint(
                 await recovery.set_source(rid, _blueprint_recovery_snapshot(domain, rel, None))
             finally:
                 recovery.leave(rid)
-    except ConfigurationRecoveryError as exc:
-        return _tool_error(str(exc)), "invalid_request", "delete_blueprint"
-    except Exception:  # keep incomplete outcomes recoverable
+    except AuthorityChangedError:
+        raise
+    except Exception as exc:  # keep incomplete outcomes recoverable
         _LOGGER.exception("blueprint deletion recovery failed for %s", resource)
-        return _tool_error("Blueprint delete outcome is uncertain; inspect configuration recovery before retrying."), "invalid_request", "delete_blueprint"
+        return _recovery_failure(
+            exc, sent, lost="Blueprint delete outcome is uncertain; inspect configuration recovery before retrying.",
+            unsent="The recovery record could not be saved, so nothing was changed."), "invalid_request", "delete_blueprint"
     await _record_version(
         data, access_key, resource_type="blueprint", resource_id=f"{domain}/{rel}",
         action="delete", before=_version_content_payload(before), after=None, alias=rel,

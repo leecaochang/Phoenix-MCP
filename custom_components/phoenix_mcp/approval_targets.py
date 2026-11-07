@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 
+from homeassistant.const import STATE_UNAVAILABLE
 from homeassistant.core import HomeAssistant, valid_entity_id
 from homeassistant.helpers import entity_registry as er
 
@@ -13,6 +14,7 @@ from .const import (
     APPROVAL_TARGETS_VERSION,
 )
 from .device_semantics import device_registry_snapshot
+from .policy_engine import loaded_group_members
 from .request_authority import _approved_exec_ctx
 
 TARGETS_CHANGED = "Approval targets changed or cannot be verified. Submit a new request."
@@ -43,21 +45,20 @@ def target_binding(entities: list[str], hass: HomeAssistant) -> dict:
             raise ValueError
         state = hass.states.get(entity_id)
         members: set[str] = set()
-        if state is not None:
-            for key in ("group_entities", "entity_id"):
-                if key not in state.attributes:
-                    continue
-                value = state.attributes[key]
-                if not isinstance(value, (list, tuple, set, frozenset)) or len(value) > APPROVAL_TARGET_LIMIT:
-                    raise ValueError
-                if any(not isinstance(member, str) for member in value):
-                    raise ValueError
-                members.update(value)
+        attributes = state.attributes if state is not None else {}
+        listed = [attributes[key] for key in ("group_entities", "entity_id") if key in attributes]
+        if not listed and state is not None and state.state == STATE_UNAVAILABLE:
+            listed = loaded_group_members(hass, entity_id)
+        for value in listed:
+            if not isinstance(value, (list, tuple, set, frozenset)) or len(value) > APPROVAL_TARGET_LIMIT:
+                raise ValueError
+            if any(not isinstance(member, str) for member in value):
+                raise ValueError
+            members.update(value)
         budget -= len(members)
         if budget < 0:
             raise ValueError
-        if entry.platform == "group" and (state is None or not any(
-                key in state.attributes for key in ("group_entities", "entity_id"))):
+        if entry.platform == "group" and not listed:
             raise ValueError
         visiting.add(entity_id)
         for member in sorted(members):
@@ -88,6 +89,11 @@ def target_binding(entities: list[str], hass: HomeAssistant) -> dict:
 def bind_targets(args: dict, entities: list[str], hass: HomeAssistant) -> dict:
     """Replace any input binding with server-captured evidence, never caller evidence."""
     return {**args, APPROVAL_TARGETS_KEY: target_binding(entities, hass)}
+
+
+def targets_bound(args: dict) -> bool:
+    """Whether bound arguments can pass at execution; one with no fingerprint never can."""
+    return args[APPROVAL_TARGETS_KEY]["fingerprint"] is not None
 
 
 def targets_current(args: dict, entities: list[str], hass: HomeAssistant) -> bool:

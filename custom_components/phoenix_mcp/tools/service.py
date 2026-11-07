@@ -14,10 +14,10 @@ from homeassistant.exceptions import (
 )
 
 from ..access_key_store import AccessKeyRecord
-from ..approval_targets import TARGETS_CHANGED, targets_current
+from ..approval_targets import target_binding, TARGETS_CHANGED, targets_current
 from ..audit import Outcome
 from ..const import (
-    CAP_DENY, DUAL_GATE_SERVICES, HIGH_RISK_DOMAINS, MUSIC_ASSISTANT_LIBRARY_SERVICES,
+    CAP_CONFIRM, CAP_DENY, DUAL_GATE_SERVICES, HIGH_RISK_DOMAINS, MUSIC_ASSISTANT_LIBRARY_SERVICES,
     NO_TARGET_SERVICES, PROXY_TIMEOUT_SECONDS, SERVICE_RESULT_STATES_MAX, APPROVAL_TARGETS_KEY,
     TTS_SPEAK_PLAYER_FIELD, TTS_SPEAK_SERVICE,
 )
@@ -31,7 +31,7 @@ from ..capability import effective_cap
 from ..household_authority import household_service_kwargs
 from ..mesa import async_apply_mesa_to_call, fire_mesa_blocked_event
 from ..policy_engine import (
-    call_needs_physical_gate, esphome_entry_writable, filter_service_response,
+    call_needs_physical_gate, esphome_entry_writable, filter_service_response, group_member_ids,
     music_assistant_readable_entries, Permission, required_service_cap, resolve,
     resolve_esphome_user_service, resolve_service_targets, service_target_binding_valid,
     unreadable_group_targets,
@@ -41,10 +41,11 @@ from ..routing.plan_currency import service_plan_is_current, bind_service_plan
 from ..routing.command_verification import async_verify_command_state
 from ..routing.routing_tables import COMMAND_ROUTING_PLAN_KEY
 from ..service_targets import (
-    dedicated_tool_refusal, entity_id_argument, merge_speech_players, named_script_refusal, secondary_target_error,
+    call_reach, CallReach, dedicated_tool_refusal, entity_id_argument, gate_entity_ids, merge_speech_players,
+    named_script_refusal, script_input_selector_error, script_input_selectors, secondary_target_error,
     speech_engines, speech_players, speech_target_refusal, template_fields, template_fields_error,
     todo_removal_review, unbound_service_targets, unbound_target_error, unreadable_group_error,
-    unsupported_secondary_targets,
+    unsupported_secondary_targets, visible_reach_warnings,
 )
 from ..tool_common import (
     _add_mesa_advisory, _CAP_FORBIDDEN_MESSAGE, _gate, _mesa_confirm_annotation, _pending_or_inline, _tool_error, _tool_refused_before_write, _tool_success, MESA_DENIED_MESSAGE,
@@ -119,6 +120,8 @@ async def _tool_call_service(
         return _tool_error(template_fields_error(templated)), "invalid_request", "call_service"
     if refusal := await named_script_refusal(hass, domain, service):
         return _tool_refused_before_write(refusal), "invalid_request", "call_service"
+    if selecting := await script_input_selectors(hass, domain, service, args.get("service_data"), args.get("entity_id")):
+        return _tool_refused_before_write(script_input_selector_error(selecting)), "invalid_request", "call_service"
 
 
     targetless = (service_key in DUAL_GATE_SERVICES | NO_TARGET_SERVICES | MUSIC_ASSISTANT_LIBRARY_SERVICES
@@ -133,6 +136,7 @@ async def _tool_call_service(
         )
 
     targets: list[str] = []
+    reach = CallReach([])
     if not targetless:
         targets, _ = resolve_service_targets(
             entity_id=args.get("entity_id"), device_id=args.get("device_id"),
@@ -142,6 +146,7 @@ async def _tool_call_service(
             return _tool_refused_before_write(unbound_target_error(domain, service, unbound)), "denied", "call_service"
         if refusal := speech_target_refusal(domain, service, args.get("entity_id"), targets):
             return _tool_refused_before_write(refusal), "denied", "call_service"
+        reach = call_reach(domain, service, args.get("service_data"), targets, access_key, hass)
 
     bound_args = bind_service_plan(args, hass, data, access_key)
     if bound_args is None:
@@ -149,17 +154,26 @@ async def _tool_call_service(
     args = bound_args
 
     required_cap = _service_required_cap(args, domain, service, access_key, hass)
+    denied = required_cap is not None and effective_cap(access_key, required_cap) == CAP_DENY
+    if reach.refusal and not denied:
+        return _tool_refused_before_write(reach.refusal), "denied", "call_service"
     if required_cap is not None:
-        # An approval must bind the targets it will act on, and a key holding none
-        # of them queues nothing. A denied capability refuses without resolving.
-        bind_targets = not targetless and effective_cap(access_key, required_cap) != CAP_DENY
+        # An approval must bind everything it will reach, and a key holding no target
+        # queues nothing. A denied capability refuses without resolving.
+        bind_targets = not targetless and not denied
         if bind_targets and not targets:
             return _tool_error("Forbidden."), "denied", "call_service"
+        # An approval that cannot verify its targets at execution could never run.
+        if (bind_targets and effective_cap(access_key, required_cap) == CAP_CONFIRM
+                and target_binding(reach.entities, hass)["fingerprint"] is None):
+            groups = [target for target in targets if group_member_ids(target, hass)]
+            refusal = unreadable_group_error(groups) if groups else "Forbidden."
+            return _tool_refused_before_write(refusal), "denied", "call_service"
         blocked = await _gate(
             required_cap, access_key, hass, data,
             tool_name="call_service", args=args, request_id=request_id,
             client_ip=client_ip, diff=lambda: _build_diff_call_service(args, access_key, hass),
-            target_entities=targets if bind_targets else None,
+            target_entities=reach.entities if bind_targets else None,
         )
         if blocked is not None:
             return blocked
@@ -172,9 +186,11 @@ def _service_required_cap(
     args: dict, domain: str, service: str, access_key: AccessKeyRecord, hass: HomeAssistant,
 ) -> str | None:
     """The capability this call needs at admission and again at execution."""
+    service_data = args.get("service_data")
     return required_service_cap(
-        domain=domain, service=service, service_data=args.get("service_data"),
-        entity_id=args.get("entity_id"), device_id=args.get("device_id"),
+        domain=domain, service=service, service_data=service_data,
+        entity_id=gate_entity_ids(domain, service, service_data, args.get("entity_id"), hass),
+        device_id=args.get("device_id"),
         area_id=args.get("area_id"), access_key=access_key, hass=hass,
     )
 
@@ -344,6 +360,8 @@ async def _execute_call_service(
         return _tool_error(template_fields_error(templated)), "invalid_request", resource
     if refusal := await named_script_refusal(hass, domain, service):
         return _tool_refused_before_write(refusal), "invalid_request", resource
+    if selecting := await script_input_selectors(hass, domain, service, args.get("service_data"), args.get("entity_id")):
+        return _tool_refused_before_write(script_input_selector_error(selecting)), "invalid_request", resource
 
     check_request_authority()
     entity_id = args.get("entity_id")
@@ -442,11 +460,14 @@ async def _execute_call_service(
         return _tool_refused_before_write(unbound_target_error(domain, service, unbound)), "denied", resource
     if refusal := speech_target_refusal(domain, service, entity_id, permitted_entities):
         return _tool_refused_before_write(refusal), "denied", resource
+    reach = call_reach(domain, service, service_data, permitted_entities, access_key, hass)
+    if reach.refusal:
+        return _tool_refused_before_write(reach.refusal), "denied", resource
 
     if not service_plan_is_current(args, hass, data, access_key, permitted_entities):
         return _tool_error("Command targets or configuration changed."), "denied", resource
 
-    if not targets_current(args, permitted_entities, hass):
+    if not targets_current(args, reach.entities, hass):
         return _tool_error(TARGETS_CHANGED), "denied", resource
 
     # MESA enforcement runs last, on the flattened entity list Phoenix MCP already
@@ -455,16 +476,19 @@ async def _execute_call_service(
     # denied; it can drop entities, gate the whole call for confirmation, or
     # block outright.
     exact_approval = APPROVAL_TARGETS_KEY in args or _approved_exec_ctx.get()
-    every_target = local_plan or exact_approval or service_key == TTS_SPEAK_SERVICE
+    every_target = local_plan or exact_approval or service_key == TTS_SPEAK_SERVICE or reach.every_target
     local_constraints: dict[str, Any] = {"require_all": True} if every_target else {}
-    if local_plan:
+    if local_plan or reach.every_target:
+        # The approval runs this call; what it reaches beyond its targets is not dispatched to.
         local_constraints["approval_args"] = args
+    if reach.every_target:
+        local_constraints["approval_diff"] = lambda: _build_diff_call_service(args, access_key, hass)
     if approve_as is not None:
         local_constraints.update(approval_tool_name=approve_as[0], approval_args=approve_as[1])
     mesa_outcome = await async_apply_mesa_to_call(
         hass, data, access_key,
         domain=domain, service=service, service_data=service_data,
-        entities=permitted_entities,
+        entities=reach.entities,
         request_id=request_id, client_ip=client_ip, session_id=request_id,
         confirm_approved=mesa_approved or _approved_exec_ctx.get(),
         **local_constraints,
@@ -478,13 +502,14 @@ async def _execute_call_service(
     if mesa_outcome.decision == "deny":
         return _tool_error(MESA_DENIED_MESSAGE), "denied", resource
     check_request_authority()
-    permitted_entities = mesa_outcome.entities
+    if not reach.every_target:
+        permitted_entities = mesa_outcome.entities
     if not service_target_binding_valid(domain, service, permitted_entities, hass):
         return _tool_error("Forbidden."), "denied", resource
     if not service_plan_is_current(args, hass, data, access_key, permitted_entities):
         return _tool_error("Command targets or configuration changed."), "denied", resource
 
-    if not targets_current(args, permitted_entities, hass):
+    if not targets_current(args, reach.entities if reach.every_target else permitted_entities, hass):
         return _tool_error(TARGETS_CHANGED), "denied", resource
 
     if domain in HIGH_RISK_DOMAINS:
@@ -600,7 +625,7 @@ async def _execute_call_service(
     except Exception:  # the effect already happened; the report is optional
         _LOGGER.debug("Could not describe call_service targets", exc_info=True)
     if mesa_outcome.warnings:
-        _add_mesa_advisory(body, mesa_outcome.warnings)
+        _add_mesa_advisory(body, visible_reach_warnings(mesa_outcome.warnings, reach, access_key, hass))
 
     return _tool_success(json.dumps(body, default=str)), "allowed", resource
 
@@ -678,7 +703,10 @@ def _build_diff_call_service(args: dict, access_key: AccessKeyRecord, hass: Home
         access_key=access_key, hass=hass,
     )
     preview.update(todo_removal_review(hass, domain, service, service_data, resolved))
-    mesa_note = _mesa_confirm_annotation(access_key, hass, [(domain, service, resolved)])
+    reach = call_reach(domain, service, service_data, resolved, access_key, hass)
+    if also_reaches := [entity_id for entity_id in reach.entities if entity_id not in resolved]:
+        preview["also_reaches"] = also_reaches
+    mesa_note = _mesa_confirm_annotation(access_key, hass, [(domain, service, reach.entities)])
     if mesa_note:
         preview["mesa"] = mesa_note
     return {

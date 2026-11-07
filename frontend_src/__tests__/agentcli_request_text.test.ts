@@ -18,6 +18,6 @@ describe("the chat request body", () => {
   });
 
   it("keeps a whole pair", async () => {
-    expect(JSON.parse(await sent("smile 😀")).messages[0].content).toBe("smile 😀");
+    expect(JSON.parse(await sent("smile \u{1F600}")).messages[0].content).toBe("smile \u{1F600}");
   });
 });

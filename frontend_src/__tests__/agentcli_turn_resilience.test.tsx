@@ -255,6 +255,54 @@ describe("what a screen reader hears when a turn ends early", () => {
     expect(announced()).toBe("Error: The provider is temporarily unavailable.");
   });
 
+  describe("on a notice", () => {
+    const stream = (...frames: Uint8Array[]) => () => new Response(new ReadableStream({
+      start(controller) {
+        for (const chunk of frames) controller.enqueue(chunk);
+        controller.close();
+      },
+    }), { status: 200, headers: { "content-type": "text/event-stream" } });
+    const emptyTurn = frame("notice", { code: "empty_turn", message: "english empty" });
+    const maxTokens = frame("notice", { code: "max_tokens_stop", message: "english limit" });
+    const done = frame("done", {});
+
+    it("says a turn ended with no reply, in the reader's language", async () => {
+      serve(stream(emptyTurn, done));
+      await sendInWindow("x");
+      expect(announced()).toBe(en.panel.agentchat.notice.empty_turn);
+    });
+
+    it("says a turn hit its limit with no reply", async () => {
+      serve(stream(maxTokens, done));
+      await sendInWindow("x");
+      expect(announced()).toBe(en.panel.agentchat.notice.max_tokens_stop);
+    });
+
+    it("says the reply first, then that it was cut off", async () => {
+      serve(stream(frame("assistant_delta", { text: "half a **reply**" }), maxTokens, done));
+      await sendInWindow("x");
+      expect(announced()).toBe(`half a reply ${en.panel.agentchat.notice.max_tokens_stop}`);
+    });
+
+    it("keeps the notice whole after a long reply", async () => {
+      serve(stream(frame("assistant_delta", { text: "word ".repeat(200) }), maxTokens, done));
+      await sendInWindow("x");
+      expect(announced().endsWith(en.panel.agentchat.notice.max_tokens_stop)).toBe(true);
+    });
+
+    it("keeps a notice that does not end the turn out of it", async () => {
+      serve(stream(frame("notice", { code: "bad_tool_call_retry", message: "retrying" }), frame("assistant_delta", { text: "hello" }), done));
+      await sendInWindow("x");
+      expect(announced()).toBe("hello");
+    });
+
+    it("says a streamed error instead of the notice before it", async () => {
+      serve(stream(maxTokens, frame("error", { code: "network", message: "boom", retryable: false })));
+      await sendInWindow("x");
+      expect(announced()).toBe("Error: The provider is temporarily unavailable.");
+    });
+  });
+
   it("says a repeated failure again", async () => {
     serve(() => new Response(JSON.stringify({ error: "request_too_large", message: "Request body too large." }), { status: 413, headers: { "content-type": "application/json" } }));
     const box = await sendInWindow("x");

@@ -96,6 +96,19 @@ describe("a wipe in another tab", () => {
     expect(getDurable().open).toBe(false);
   });
 
+  it("reaches this tab only through a purge that removed something", async () => {
+    await wipeInAnotherTab();
+    __resetAgentCliState();
+    render(chatWindow());
+    await act(async () => {});
+    localStorage.clear();
+    const heard = vi.fn();
+    window.addEventListener("storage", heard);
+    await act(async () => { await wipeInAnotherTab(); });
+    window.removeEventListener("storage", heard);
+    expect(heard).not.toHaveBeenCalled();
+  });
+
   it("leaves a later page free to save", async () => {
     await wipeInAnotherTab();
     __resetAgentCliState();

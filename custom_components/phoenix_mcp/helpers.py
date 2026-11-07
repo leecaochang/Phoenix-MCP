@@ -181,6 +181,8 @@ def parse_time_param(value: str) -> datetime:
         return parse_relative_time(value)
     except RelativeTimeError:
         raise
+    except OverflowError:
+        raise ValueError(f"Time out of range: {value!r}. {TIME_INPUT_FORMS}") from None
     except ValueError:
         pass
     dt = parse_datetime(value.strip())
@@ -188,6 +190,10 @@ def parse_time_param(value: str) -> datetime:
         raise ValueError(f"Unrecognized time format: {value!r}. {TIME_INPUT_FORMS}")
     if dt.tzinfo is None or dt.utcoffset() is None:
         dt = dt.replace(tzinfo=get_default_time_zone())
+    # The first and last year of the calendar parse, then overflow in a caller's zone
+    # conversion or range arithmetic.
+    if not 2 <= dt.year <= 9998:
+        raise ValueError(f"Time out of range: {value!r}. {TIME_INPUT_FORMS}")
     return dt
 
 

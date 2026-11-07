@@ -10,7 +10,7 @@ import yaml
 
 from custom_components.phoenix_mcp.const import MAX_FILE_BYTES, YAML_MAX_DEPTH
 from custom_components.phoenix_mcp.esphome_yaml import redact_esphome_text
-from custom_components.phoenix_mcp.yaml_includes import YamlParseError, load_tagged_lenient, read_entry
+from custom_components.phoenix_mcp.yaml_includes import YamlParseError, load_tagged, load_tagged_lenient, read_entry
 
 
 def alias_graph(depth=8):
@@ -71,3 +71,11 @@ def test_alias_chains_cannot_exceed_walk_depth():
         text += f"v{level}: &v{level} [*v{level - 1}]\n"
     with pytest.raises(YamlParseError, match="depth"):
         load_tagged_lenient(text)
+
+
+def test_a_value_no_constructor_can_read_is_a_yaml_error(tmp_path):
+    path = tmp_path / "configuration.yaml"
+    path.write_text("a: !!int hunter2secret\n")
+    with pytest.raises(yaml.YAMLError) as refused:
+        load_tagged(str(path))
+    assert "hunter2" not in str(refused.value)

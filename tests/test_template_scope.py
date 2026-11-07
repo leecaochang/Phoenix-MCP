@@ -196,6 +196,28 @@ async def test_partial_edit_checks_retained_reference_and_allows_removing_it(has
     assert entry.options["state"] == "{{ 9 }}"
 
 
+async def test_a_real_template_body_with_a_hidden_source_is_withheld(hass):
+    """Through HA's own form: the stored body and the form's suggested value both go."""
+    hass.states.async_set("sensor.source", "7")
+    entry = await create_entry(hass, "{{ states('sensor.source') }}")
+    access_key = agent()
+    access_key.permissions.entities["sensor.source"] = PermissionNode(state="RED")
+    result, outcome, _ = await _call_tool("get_helper_settings", {"entry_id": entry.entry_id}, access_key, hass, runtime())
+    assert outcome == "allowed", result
+    assert "sensor.source" not in result["content"][0]["text"]
+    body = json.loads(result["content"][0]["text"])
+    assert body["settings"]["state"] == "<redacted>"
+    assert body["editable_settings"]["state"] == "<redacted>"
+
+
+async def test_a_real_template_body_in_scope_stays_readable(hass):
+    hass.states.async_set("sensor.source", "7")
+    entry = await create_entry(hass, "{{ states('sensor.source') }}")
+    result, outcome, _ = await _call_tool("get_helper_settings", {"entry_id": entry.entry_id}, agent(), hass, runtime())
+    assert outcome == "allowed", result
+    assert json.loads(result["content"][0]["text"])["settings"]["state"] == "{{ states('sensor.source') }}"
+
+
 async def test_settings_revalidate_source_after_form_wait(hass):
     hass.states.async_set("sensor.source", "7")
     entry = await create_entry(hass)

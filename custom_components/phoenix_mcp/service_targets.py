@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
+from dataclasses import dataclass
 from functools import partial
 from inspect import unwrap
 import logging
@@ -10,22 +11,32 @@ from typing import Any
 
 import voluptuous as vol
 from homeassistant.core import HomeAssistant, valid_entity_id
-from homeassistant.helpers import entity_registry as er, service as ha_service
+from homeassistant.helpers import config_validation as cv, entity_registry as er, service as ha_service
+from homeassistant.helpers.entity_component import DATA_INSTANCES
 from homeassistant.helpers.service import async_get_all_descriptions
 from homeassistant.helpers.template import is_template_string
 
+from .access_key_store import AccessKeyRecord
 from .const import (
     CROSS_DOMAIN_SERVICES,
+    DEVICE_ACTUATOR_DOMAINS,
     DOMAIN,
     MUSIC_ASSISTANT_LIBRARY_SERVICES,
+    NO_TARGET_SERVICES,
+    PHYSICAL_COMMAND_SERVICES,
+    REACH_WIDENING_FLAGS,
     SCRIPT_ENTITY_SERVICES,
+    SCRIPT_INPUT_FIELD,
+    SCRIPT_INPUT_SERVICES,
     SECONDARY_TARGET_SELECTOR_KEYS,
     TARGET_SELECTOR_KEYS,
     TTS_SPEAK_ENGINE_DOMAIN,
     TTS_SPEAK_PLAYER_DOMAIN,
     TTS_SPEAK_PLAYER_FIELD,
     TTS_SPEAK_SERVICE,
+    WHOLE_DEVICE_SERVICES,
 )
+from .policy_engine import Permission, resolve, resolve_service_targets, whole_device_entities
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -34,6 +45,10 @@ _TARGET_SELECTOR_TYPES = frozenset({"area", "device", "entity", "floor", "label"
 # a field of that name, which carries its own selector.
 _AMBIGUOUS_SELECTOR_TYPES = frozenset({"floor", "label"})
 _DESCRIPTIONS_FAILED = f"{DOMAIN}_service_descriptions_failed"
+# A variable of these names selects a registry target, which only resolution can judge.
+_INPUT_SELECTOR_KEYS = TARGET_SELECTOR_KEYS - {"entity_id", "exclude"}
+_REGISTRY_ID_CHARS = 32
+_DEVICE_REACH_ADVISORY = "An entity of this device has an advisory policy restriction."
 
 
 async def _service_descriptions(hass: HomeAssistant) -> Mapping[str, Any] | None:
@@ -277,8 +292,216 @@ async def named_script_refusal(hass: HomeAssistant, domain: str, service: str) -
     return (
         f"script.{service} takes an input named entity_id, which cannot be filled when it is run "
         "by name. Call script.turn_on with this script as the target and pass the input in "
-        "variables. No action was dispatched."
+        "variables; an entity named there needs the same access as a target. No action was "
+        "dispatched."
     )
+
+
+def script_inputs(domain: str, service: str, service_data: object) -> Mapping | None:
+    """Return the values a call hands a script or automation, or None for any other call."""
+    if not isinstance(service_data, Mapping):
+        return None
+    service_key = f"{domain}/{service}"
+    if service_key in SCRIPT_INPUT_SERVICES:
+        variables = service_data.get(SCRIPT_INPUT_FIELD)
+        return variables if isinstance(variables, Mapping) else None
+    if domain == "script" and service not in SCRIPT_ENTITY_SERVICES and service_key not in NO_TARGET_SERVICES:
+        return service_data
+    return None
+
+
+def _input_tokens(value: object) -> Iterator[str]:
+    """Yield each string of a nested input as HA reads a target: comma-separated, lowercased."""
+    pending = [value]
+    while pending:
+        item = pending.pop()
+        if isinstance(item, str):
+            yield from (token.strip().lower() for token in item.split(","))
+        elif isinstance(item, Mapping):
+            pending.extend(item.keys())
+            pending.extend(item.values())
+        elif isinstance(item, (list, tuple)):
+            pending.extend(item)
+
+
+def _names_entity(token: str, hass: HomeAssistant) -> bool:
+    """Whether a token can name an entity: an ID of a domain in use, or a registry ID.
+
+    Decided without asking if that entity exists, so a hidden one and a missing one read alike.
+    A device ID has the registry ID's shape and is refused with them.
+    """
+    if len(token) == _REGISTRY_ID_CHARS and all(char in "0123456789abcdef" for char in token):
+        return True
+    if not valid_entity_id(token):
+        return False
+    domain = token.split(".", 1)[0]
+    return domain in hass.data.get(DATA_INSTANCES, {}) or hass.states.async_entity_ids_count(domain) > 0
+
+
+def script_input_entities(domain: str, service: str, service_data: object, hass: HomeAssistant) -> list[str]:
+    """Return the entities a call's script or automation inputs name, in canonical form.
+
+    A script can read any variable, whether or not a field declares it, and act on its value,
+    so the value decides, not the field. Non-entity values are left alone.
+    """
+    inputs = script_inputs(domain, service, service_data)
+    if not inputs:
+        return []
+    registry = er.async_get(hass)
+    named: dict[str, None] = {}
+    for token in _input_tokens(inputs):
+        if _names_entity(token, hass):
+            entry = registry.async_get(token)
+            named[entry.entity_id if entry is not None else token] = None
+    return list(named)
+
+
+def gate_entity_ids(
+    domain: str, service: str, service_data: object, entity_id: str | list[str] | None, hass: HomeAssistant,
+) -> str | list[str] | None:
+    """Return a call's entity targets with the entities its inputs name, for the capability gates."""
+    named = script_input_entities(domain, service, service_data, hass)
+    if not named:
+        return entity_id
+    return [*([entity_id] if isinstance(entity_id, str) else entity_id if isinstance(entity_id, list) else []), *named]
+
+
+def _scripts_run(domain: str, service: str, entity_id: object) -> list[str]:
+    """Return the object IDs of the scripts a call runs, as far as its entity targets say."""
+    if domain != "script":
+        return []
+    if service not in SCRIPT_ENTITY_SERVICES:
+        return [service]
+    named = [entity_id] if isinstance(entity_id, str) else entity_id if isinstance(entity_id, list) else []
+    return [item.split(".", 1)[1] for item in named if isinstance(item, str) and item.startswith("script.")]
+
+
+async def script_input_selectors(
+    hass: HomeAssistant, domain: str, service: str, service_data: object, entity_id: object,
+) -> tuple[str, ...]:
+    """Return the inputs that select targets no entity ID names: devices, areas, labels, "all".
+
+    Read by key and by the fields of the scripts this call runs. An entity selector stays out,
+    as its value is judged like any other. "all" in a field declared with no target selector
+    is an ordinary word.
+    """
+    inputs = script_inputs(domain, service, service_data)
+    if not inputs:
+        return ()
+    scripts = _scripts_run(domain, service, entity_id)
+    descriptions = await _service_descriptions(hass) if scripts else None
+    services = descriptions.get("script") if descriptions is not None else None
+    fields: dict[str, Any] = {}
+    for script in scripts:
+        fields.update(_flat_fields(services.get(script)) if isinstance(services, Mapping) else {})
+
+    def selects(name: str, value: object) -> bool:
+        field = fields.get(name)
+        selector = field.get("selector") if isinstance(field, Mapping) else None
+        declared_plain = isinstance(selector, Mapping) and not _contains_target_selector(selector)
+        entity_only = isinstance(selector, Mapping) and set(selector) == {"entity"}
+        if selector is not None and not declared_plain and not entity_only and value not in (None, "", [], {}):
+            return True
+        if not declared_plain and "all" in _input_tokens(value):
+            return True
+        pending: list[object] = [{name: value}]
+        while pending:
+            item = pending.pop()
+            if isinstance(item, Mapping):
+                if any(key in _INPUT_SELECTOR_KEYS and nested for key, nested in item.items()):
+                    return True
+                pending.extend(item.values())
+            elif isinstance(item, (list, tuple)):
+                pending.extend(item)
+        return False
+
+    return tuple(sorted(str(name) for name, value in inputs.items() if selects(str(name), value)))
+
+
+def script_input_selector_error(names: tuple[str, ...]) -> str:
+    """Explain a refusal using only input names the caller supplied."""
+    return (
+        f"These inputs select targets that cannot be checked: {', '.join(names)}. Name each "
+        "entity by its entity ID instead. No action was dispatched."
+    )
+
+
+@dataclass(frozen=True)
+class CallReach:
+    """What a call reaches beyond the targets it dispatches to.
+
+    ``entities`` is what WRITE, the approval binding and MESA judge, the targets among them.
+    ``every_target`` means no permitted subset: all of it passes, or nothing runs.
+    """
+
+    entities: list[str]
+    every_target: bool = False
+    refusal: str | None = None
+
+
+def call_reach(
+    domain: str, service: str, service_data: object, targets: list[str],
+    access_key: AccessKeyRecord, hass: HomeAssistant,
+) -> CallReach:
+    """Return what a call over resolved targets reaches, and its refusal if a key may not.
+
+    An entity named in a script's inputs is authorized as a target, and the refusal reads alike
+    for a hidden one and a missing one. A whole-device service reaches the targets' devices,
+    and a raw command needs Write on each thing it can operate there.
+    """
+    reached = list(targets)
+    every_target = False
+    refusal = None
+    if named := script_input_entities(domain, service, service_data, hass):
+        every_target = True
+        permitted, _ = resolve_service_targets(
+            entity_id=named, service_domain=domain, access_key=access_key, hass=hass,
+        )
+        if set(named) - set(permitted):
+            refusal = (
+                f"An input of {domain}.{service} names an entity. Every entity named in an input "
+                "needs the same access as a target. No action was dispatched."
+            )
+        reached = list(dict.fromkeys([*reached, *permitted]))
+    service_key = f"{domain}/{service}"
+    if service_key in WHOLE_DEVICE_SERVICES:
+        every_target = True
+        reached = whole_device_entities(reached, hass)
+        if service_key in PHYSICAL_COMMAND_SERVICES and any(
+            entity_id.split(".", 1)[0] in DEVICE_ACTUATOR_DOMAINS
+            and resolve(entity_id, access_key, hass) != Permission.WRITE
+            for entity_id in reached
+        ):
+            refusal = (
+                f"{domain}.{service} reaches the whole device, so it needs write access to "
+                "everything that device can operate. No action was dispatched."
+            )
+    return CallReach(reached, every_target, refusal)
+
+
+def visible_reach(entities: list[str], access_key: AccessKeyRecord, hass: HomeAssistant) -> list[str]:
+    """Return the entities of a reach this key may see; a device can hold others."""
+    return [
+        entity_id for entity_id in entities
+        if resolve(entity_id, access_key, hass) in (Permission.READ, Permission.WRITE)
+    ]
+
+
+def visible_reach_warnings(
+    warnings: list[str], reach: CallReach, access_key: AccessKeyRecord, hass: HomeAssistant,
+) -> list[str]:
+    """Return advisory warnings for the key; with a hidden entity in reach, only its own stay.
+
+    A warning can carry an operator's reason without naming its entity, so a warning that
+    does not open with an entity the key may see turns generic.
+    """
+    shown = visible_reach(reach.entities, access_key, hass)
+    if len(shown) == len(reach.entities):
+        return warnings
+    return list(dict.fromkeys(
+        warning if warning.startswith(tuple(f"{entity_id}:" for entity_id in shown)) else _DEVICE_REACH_ADVISORY
+        for warning in warnings
+    ))
 
 
 def unbound_target_error(domain: str, service: str, targets: tuple[str, ...]) -> str:
@@ -337,6 +560,21 @@ def secondary_target_fields(descriptions: object) -> frozenset[str]:
     return frozenset(found)
 
 
+def _reach_widening_flags(domain: str, service: str, service_data: Mapping[str, Any]) -> tuple[str, ...]:
+    """Return the data flags set here that send a call past its targets, read as HA reads them."""
+
+    def is_set(value: object) -> bool:
+        try:
+            return cv.boolean(value)
+        except vol.Invalid:
+            return True
+
+    return tuple(
+        flag for flag in REACH_WIDENING_FLAGS.get(f"{domain}/{service}", ())
+        if flag in service_data and is_set(service_data[flag])
+    )
+
+
 async def unsupported_secondary_targets(
     hass: HomeAssistant, service_data: object, *, domain: str, service: str
 ) -> tuple[str, ...]:
@@ -351,12 +589,13 @@ async def unsupported_secondary_targets(
     if not isinstance(service_data, dict) or not service_data:
         return ()
     primary =tuple(sorted(str(key) for key in service_data if key in TARGET_SELECTOR_KEYS))
+    widened = _reach_widening_flags(domain, service, service_data)
     # A target mapping is a selector block outside the call's own target, which
     # selects nothing at this boundary. A scalar target stays a data field.
     if isinstance(service_data.get("target"), Mapping):
         primary = tuple(sorted((*primary, "target")))
-    if primary:
-        return primary
+    if primary or widened:
+        return tuple(sorted((*primary, *widened)))
     descriptions = await _service_descriptions(hass)
     unsafe = set(secondary_target_fields(descriptions))
     # Only an explicit text selector on this service can disambiguate a name

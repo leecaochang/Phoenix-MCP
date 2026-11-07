@@ -28,6 +28,7 @@ from custom_components.phoenix_mcp.approval_targets import bind_targets
 from custom_components.phoenix_mcp.approvals import async_create_pending_approval
 from custom_components.phoenix_mcp.const import CAPABILITY_NAMES, DOMAIN, MESA_APPROVED_EXECUTOR, MESA_CONFIRM_CAP
 from custom_components.phoenix_mcp.tool_common import UncertainOutcome
+from custom_components.phoenix_mcp.tools import authoring
 from custom_components.phoenix_mcp.tools.todo import _items, _reviewed
 from custom_components.phoenix_mcp.ws_dispatch import async_save_lovelace_config, async_ws_command
 from tests.runtime_fixtures import schema_baseline
@@ -301,6 +302,21 @@ class _StubbornList(TodoListEntity):
 
     async def async_delete_todo_items(self, uids: list[str]) -> None:
         """Keep everything."""
+
+
+async def test_an_approved_delete_whose_reload_fails_closes_as_interrupted(sweep):
+    """The entry left its file, so an approval closed as a plain failure would say nothing happened."""
+    args, _ = await authoring._bind_delete_args({"automation_id": "sweep"}, sweep.hass, "automation", "sweep")
+    async with sweep.data.store.async_lock:
+        record = await async_create_pending_approval(
+            sweep.data.store, access_key_id=sweep.access_key.id, access_key_name=sweep.access_key.name,
+            tool_name="delete_automation", cap_name="cap_automation_write", args=args,
+            diff={"kind": "config_diff", "summary": "delete"}, request_id="r-delete",
+        )
+    status, calls = await sweep.approve("delete_automation", record.id)
+    assert status == 200 and isinstance(calls[0][0], UncertainOutcome), calls
+    stored = next(row for row in sweep.data.store.get_pending_approvals() if row["id"] == record.id)
+    assert (stored["status"], stored["closure_reason"]) == ("failed", "execution_interrupted")
 
 
 async def test_an_approved_clear_that_leaves_items_closes_as_interrupted(sweep):

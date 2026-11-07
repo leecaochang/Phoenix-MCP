@@ -28,6 +28,7 @@ from custom_components.phoenix_mcp.config_reconciliation import _matches, observ
 from custom_components.phoenix_mcp.config_recovery import ConfigurationRecoveryError
 from custom_components.phoenix_mcp.const import DASHBOARD_RESOURCE_BINDING, REDACTION_SENTINEL
 from custom_components.phoenix_mcp.dashboard_resource_ownership import DashboardResourceOwnership
+from custom_components.phoenix_mcp.tool_common import UncertainOutcome
 from custom_components.phoenix_mcp.data import PhoenixData
 from custom_components.phoenix_mcp.capability import effective_cap
 from custom_components.phoenix_mcp.tool_dispatch import _call_tool
@@ -570,10 +571,40 @@ async def test_an_uncertain_command_keeps_the_barrier(lovelace):
     with patch.object(resources_tool, "async_ws_command",
                       AsyncMock(side_effect=WsDispatchError("timed out after dispatch"))):
         result = await _create(lovelace, data)
-    assert result[1] == "invalid_request"
+    assert result[1] == "invalid_request" and isinstance(result[0], UncertainOutcome)
     assert data.config_recovery.records()[0]["phase"] == "unknown"
     blocked = await _create(lovelace, data, url="/local/other.js")
     assert "Resolve the configuration recovery request" in _text(blocked)
+
+
+async def test_a_command_that_never_ran_is_a_plain_failure(lovelace):
+    data = _data()
+    with patch.object(resources_tool, "async_ws_command",
+                      AsyncMock(side_effect=WsCommandNotDispatchedError("not loaded"))):
+        result = await _create(lovelace, data)
+    assert result[1] == "invalid_request" and not isinstance(result[0], UncertainOutcome)
+    assert data.config_recovery.records()[0]["phase"] == "not_applied"
+
+
+async def test_a_record_lost_after_dispatch_is_uncertain(lovelace):
+    data = _data()
+    real = data.config_recovery.mark
+
+    async def mark(rid, phase, **observed):
+        if phase != "dispatching":
+            raise RuntimeError("storage full")
+        await real(rid, phase, **observed)
+
+    with patch.object(data.config_recovery, "mark", mark):
+        result = await _create(lovelace, data)
+    assert isinstance(result[0], UncertainOutcome)
+
+
+async def test_a_failure_before_dispatch_says_nothing_changed(lovelace):
+    data = _data()
+    with patch.object(data.config_recovery, "begin", AsyncMock(side_effect=RuntimeError("storage full"))):
+        result = await _create(lovelace, data)
+    assert not isinstance(result[0], UncertainOutcome) and "nothing was changed" in _text(result)
 
 
 async def test_a_readback_that_differs_is_partial(lovelace):

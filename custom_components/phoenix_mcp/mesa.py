@@ -41,7 +41,7 @@ from homeassistant.util.yaml import load_yaml as _load_yaml
 from homeassistant.util import dt as dt_util
 
 from . import mesa_audit
-from .approval_targets import bind_targets, bound_preview
+from .approval_targets import bind_targets, bound_preview, targets_bound
 from .approvals import (
     create_approval_notification, async_create_pending_approval, fire_approval_requested_event,
 )
@@ -69,7 +69,7 @@ from .mesa_core import (
 )
 from .mesa_core.backends import StorageBackend
 from .mesa_core.exceptions import MesaError
-from .mesa_core.profile import CONTROL_MODE_RANK
+from .mesa_core.profile import CONTROL_MODE_RANK, PRIVACY_RANK
 from .request_authority import dispatch_client_ip, dispatch_request_id, check_request_authority
 from .service_targets import todo_removal_review
 
@@ -892,7 +892,7 @@ def refresh_orphans(hass: HomeAssistant, runtime: MesaRuntime) -> None:
     ]
 
 
-def _boundaries_at(runtime: MesaRuntime, entity_id: str, document: dict[str, Any]) -> Any | None:
+def _effective_at(runtime: MesaRuntime, entity_id: str, document: dict[str, Any]) -> Any | None:
     """What a stored document amounts to on an entity, or None if it cannot be read.
 
     Resolved as the enforcer would, so a mode left unset reads as the baseline it stands for.
@@ -902,8 +902,8 @@ def _boundaries_at(runtime: MesaRuntime, entity_id: str, document: dict[str, Any
         explained = runtime.resolver.explain(entity_id, entity_profile=profile)
     except _POLICY_READ_ERRORS:
         return None
-    boundaries = explained.effective_profile.operational_boundaries
-    return boundaries if isinstance(boundaries.control_mode, ControlMode) else None
+    effective = explained.effective_profile
+    return effective if isinstance(effective.operational_boundaries.control_mode, ControlMode) else None
 
 
 def _control_strictness(boundaries: Any) -> tuple[int, bool]:
@@ -912,9 +912,35 @@ def _control_strictness(boundaries: Any) -> tuple[int, bool]:
     return CONTROL_MODE_RANK[mode], mode is ControlMode.READ_ONLY
 
 
-def _tightened_document(carried: dict[str, Any], own: Any, other: Any) -> dict[str, Any]:
-    """The carried document, raised to the other's control mode, enforcement and limits."""
+def _tighten_privacy(document: dict[str, Any], own: Any, other: Any) -> None:
+    """Raise a document to the other's privacy: a stricter level, every denial and restriction.
+
+    A role keeps unrestricted access only where both sides grant it, or it would undo the raise.
+    """
+    mine, theirs = own.privacy_classification, other.privacy_classification
+    held, taken = mine.access_roles or {}, theirs.access_roles or {}
+    roles = dict(held)
+    for name in ("deny_for", "restricted_for"):
+        if names := sorted({*held.get(name, ()), *taken.get(name, ())}):
+            roles[name] = names
+    if "unrestricted_for" in held:
+        roles["unrestricted_for"] = [
+            name for name in held["unrestricted_for"] if name in taken.get("unrestricted_for", ())]
+    level = max(mine.level, theirs.level, key=PRIVACY_RANK.__getitem__)
+    profile = document.setdefault("semantic_profile", {})
+    if other.person_traits.is_minor is True:
+        profile.setdefault("person_traits", {})["is_minor"] = True
+    if roles != held or level != mine.level:
+        privacy = document.setdefault("privacy_classification", profile.pop("privacy_classification", {}))
+        privacy["level"] = level.value
+        if roles:
+            privacy["access_roles"] = roles
+
+
+def _tightened_document(carried: dict[str, Any], own_profile: Any, other_profile: Any) -> dict[str, Any]:
+    """The carried document, raised to the other's control mode, enforcement, limits and privacy."""
     document = copy.deepcopy(carried)
+    own, other = own_profile.operational_boundaries, other_profile.operational_boundaries
     boundaries = document.setdefault("semantic_profile", {}).setdefault("operational_boundaries", {})
     if _control_strictness(other) > _control_strictness(own):
         boundaries["control_mode"] = other.control_mode.value
@@ -935,6 +961,7 @@ def _tightened_document(carried: dict[str, Any], own: Any, other: Any) -> dict[s
             held.append({**item, "id": identifier} if identifier is not None else item)
         if held:
             boundaries[name] = held
+    _tighten_privacy(document, own_profile, other_profile)
     return document
 
 
@@ -942,8 +969,9 @@ def carry_renamed_profile(runtime: MesaRuntime, old_entity_id: str, new_entity_i
     """Move an entity profile to the entity's new id. Returns whether it had one.
     Synchronous, so it wins over any later call; on True the caller persists and refreshes
     orphans. A profile already at the new id stays under the old id as an orphan, and the new
-    id keeps the stricter of the two on control mode, enforcement and limits, so a collision
-    never loosens either. A document that cannot be read keeps the new id, where it refuses.
+    id keeps the stricter of the two on control mode, enforcement, limits and privacy, so a
+    collision never loosens either. A document that cannot be read keeps the new id, where it
+    refuses.
     """
     carried = runtime.backend.read(old_entity_id)
     if carried is None:
@@ -956,8 +984,8 @@ def carry_renamed_profile(runtime: MesaRuntime, old_entity_id: str, new_entity_i
             "%s takes the stricter of each and the other is now an orphan to review.",
             old_entity_id, new_entity_id, new_entity_id,
         )
-        own = _boundaries_at(runtime, new_entity_id, carried)
-        other = _boundaries_at(runtime, new_entity_id, resident)
+        own = _effective_at(runtime, new_entity_id, carried)
+        other = _effective_at(runtime, new_entity_id, resident)
         if other is None:
             runtime.storage.registry_ids.pop(old_entity_id, None)
             return True
@@ -1739,6 +1767,8 @@ async def async_apply_mesa_to_call(
         if approval_tool_name in (MESA_APPROVED_EXECUTOR, "HassSetVolumeRelative", "set_todo_item"):
             if APPROVAL_TARGETS_KEY not in saved_args:
                 saved_args = bind_targets(saved_args, verdict.confirm + verdict.allowed, hass)
+                if not targets_bound(saved_args):
+                    return MesaGateOutcome(decision="deny", blocked=verdict.blocked, warnings=verdict.warnings)
             diff = bound_preview(diff, saved_args)
         approval = await async_create_mesa_approval(
             hass,

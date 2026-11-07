@@ -105,6 +105,8 @@
 
 智能体还需要在{{label:accessKeys.permissionsTree}}中对它们有 W。更改 Zigbee 设备的无线电工具也需要它。
 
+创建或编辑包含这些实体的场景也需要此能力。
+
 ### {{label:caps.cap_notify.label}} {#notify}
 
 通过自己的工具、通知操作或其他通过通知实体发送消息的操作发送通知。
@@ -143,7 +145,7 @@
 
 ### {{label:caps.cap_esphome_flash.label}} {#esphome-flash}
 
-通过 ESPHome Device Builder 在 ESPHome 设备上安装固件。它还需要 {{label:caps.cap_esphome_yaml.label}}。只有 ESPHome 设备角色允许它，并且需要你的审批。
+通过 ESPHome Device Builder 在 ESPHome 设备上安装固件。它还需要 {{label:caps.cap_esphome_yaml.label}}。只有 ESPHome 设备角色允许它，并且需要你的审批。ESPHome 设备上的 `update.install` 也需要此能力。
 
 ### {{label:caps.cap_yaml_edit.label}} {#yaml-edit}
 

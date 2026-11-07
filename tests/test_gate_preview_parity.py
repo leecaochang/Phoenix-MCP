@@ -143,7 +143,7 @@ class TestFindAvailableActionsScope:
 
     def test_it_does_not_restate_the_rule(self):
         body = self._body()
-        assert "physical_gate_applies(" in body and "service_capability(" in body
+        assert "required_service_cap(" in body
         assert "PHYSICAL_GATE_DOMAINS" not in body and 'domain == "notify"' not in body
 
     def test_it_enumerates_only_the_entitys_own_domain(self):

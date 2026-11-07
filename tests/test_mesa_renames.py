@@ -47,10 +47,10 @@ def _profile(key: str, mode: str | None = "prohibited", enforcement: str | None 
     )
 
 
-def _access_key() -> AccessKeyRecord:
+def _access_key(persona: str | None = None) -> AccessKeyRecord:
     return AccessKeyRecord(
         id=str(uuid.uuid4()), name="renames", access_key_hash="x", created_at=utcnow(), created_by="t",
-        permissions=PermissionTree(domains={"light": PermissionNode(state="GREEN")}),
+        permissions=PermissionTree(domains={"light": PermissionNode(state="GREEN")}), persona=persona,
     )
 
 
@@ -135,6 +135,134 @@ async def test_a_collision_turns_no_refusal_into_an_approval_when_the_mode_chang
     assert _verdict(data, "light.b").blocked
     data.store.get_settings.return_value = GlobalSettings(mesa_mode="enforced")
     assert _verdict(data, "light.b").blocked
+
+
+def _private(key: str, privacy: dict, *, nested: bool = False, traits: dict | None = None) -> SemanticProfile:
+    profile: dict = {"operational_boundaries": {"control_mode": "autonomous", "enforcement_mode": "enforced"}}
+    if traits:
+        profile["person_traits"] = traits
+    document: dict = {"semantic_profile": profile}
+    if nested:
+        profile["privacy_classification"] = privacy
+    else:
+        document["privacy_classification"] = privacy
+    return SemanticProfile.from_dict(key, document, default_origin=MetadataOrigin.USER)
+
+
+def _persona_verdict(data: PhoenixData, entity_id: str, persona: str | None = "guest"):
+    return evaluate_service_call(
+        data.mesa, data.store.get_settings().mesa_mode, _access_key(persona), [entity_id],
+        domain="light", service="turn_on", service_data={}, session_id="s",
+    )
+
+
+@pytest.mark.parametrize("mode", ["advisory", "enforced"])
+@pytest.mark.parametrize("denied_on", ["old", "resident"])
+@pytest.mark.parametrize("nested", [False, True])
+async def test_a_collision_keeps_a_privacy_denial_from_either_side(hass, mode, denied_on, nested):
+    data, _entry = await _data(hass, mode)
+    _entity(hass, "a")
+    denial = {"level": "normal", "access_roles": {"deny_for": ["guest"]}}
+    plain = {"level": "normal", "access_roles": {"deny_for": ["visitor"]}}
+    data.mesa.store.set("light.a", _private("light.a", denial if denied_on == "old" else plain, nested=nested))
+    data.mesa.store.set("light.b", _private("light.b", plain if denied_on == "old" else denial, nested=nested))
+    _rename(hass, "light.a", "light.b")
+    await hass.async_block_till_done()
+    for persona in ("guest", "visitor"):
+        verdict = _persona_verdict(data, "light.b", persona)
+        assert verdict.blocked and verdict.blocked[0][1] == "privacy:deny_for"
+    assert _persona_verdict(data, "light.b", "resident").allowed == ["light.b"]
+
+
+@pytest.mark.parametrize("restricted_on", ["old", "resident"])
+async def test_a_collision_keeps_the_stricter_privacy_level(hass, restricted_on):
+    data, _entry = await _data(hass)
+    _entity(hass, "a")
+    restricted, normal = {"level": "restricted"}, {"level": "normal", "privacy_note": "kept"}
+    data.mesa.store.set("light.a", _private("light.a", restricted if restricted_on == "old" else normal))
+    data.mesa.store.set("light.b", _private("light.b", normal if restricted_on == "old" else restricted))
+    _rename(hass, "light.a", "light.b")
+    await hass.async_block_till_done()
+    assert _persona_verdict(data, "light.b").confirm == ["light.b"]
+
+
+async def test_a_collision_keeps_a_role_restriction(hass):
+    data, _entry = await _data(hass)
+    _entity(hass, "a")
+    data.mesa.store.set("light.a", _private("light.a", {"level": "normal"}))
+    data.mesa.store.set("light.b", _private("light.b", {"level": "normal", "access_roles": {"restricted_for": ["guest"]}}))
+    _rename(hass, "light.a", "light.b")
+    await hass.async_block_till_done()
+    assert _persona_verdict(data, "light.b").confirm == ["light.b"]
+
+
+async def test_an_unrestricted_role_on_one_side_cannot_undo_the_others_level(hass):
+    data, _entry = await _data(hass)
+    _entity(hass, "a")
+    data.mesa.store.set("light.a", _private("light.a", {"level": "normal", "access_roles": {"unrestricted_for": ["guest"]}}))
+    data.mesa.store.set("light.b", _private("light.b", {"level": "restricted"}))
+    _rename(hass, "light.a", "light.b")
+    await hass.async_block_till_done()
+    assert _persona_verdict(data, "light.b").confirm == ["light.b"]
+
+
+async def test_a_role_both_sides_leave_unrestricted_stays_so(hass):
+    data, _entry = await _data(hass)
+    _entity(hass, "a")
+    unrestricted = {"level": "restricted", "access_roles": {"unrestricted_for": ["guest"]}}
+    data.mesa.store.set("light.a", _private("light.a", unrestricted))
+    data.mesa.store.set("light.b", _private("light.b", unrestricted))
+    _rename(hass, "light.a", "light.b")
+    await hass.async_block_till_done()
+    assert _persona_verdict(data, "light.b").allowed == ["light.b"]
+    assert _persona_verdict(data, "light.b", "resident").confirm == ["light.b"]
+
+
+async def test_a_collision_keeps_a_minors_restriction(hass):
+    data, _entry = await _data(hass)
+    _entity(hass, "a")
+    data.mesa.store.set("light.a", _private("light.a", {"level": "normal"}))
+    data.mesa.store.set("light.b", _private("light.b", {"level": "normal"}, traits={"is_minor": True}))
+    _rename(hass, "light.a", "light.b")
+    await hass.async_block_till_done()
+    assert _persona_verdict(data, "light.b").confirm == ["light.b"]
+
+
+async def test_a_raised_privacy_keeps_the_rest_of_a_nested_classification(hass):
+    """A classification may sit under semantic_profile; one at the root would replace it whole."""
+    data, _entry = await _data(hass)
+    _entity(hass, "a")
+    data.mesa.backend.write("light.a", {"semantic_profile": {
+        "operational_boundaries": {"control_mode": "autonomous"},
+        "privacy_classification": {"level": "normal", "privacy_note": "kept"},
+    }})
+    data.mesa.store.set("light.b", _private("light.b", {"level": "restricted"}))
+    _rename(hass, "light.a", "light.b")
+    await hass.async_block_till_done()
+    assert data.mesa.backend.read("light.b")["privacy_classification"] == {"level": "restricted", "privacy_note": "kept"}
+
+
+async def test_a_collision_without_privacy_on_either_side_adds_none(hass):
+    data, _entry = await _data(hass)
+    _entity(hass, "a")
+    data.mesa.store.set("light.a", _profile("light.a", "confirm"))
+    data.mesa.store.set("light.b", _profile("light.b", "autonomous"))
+    _rename(hass, "light.a", "light.b")
+    await hass.async_block_till_done()
+    assert "privacy_classification" not in data.mesa.backend.read("light.b")
+
+
+async def test_a_resident_with_unreadable_roles_keeps_the_new_id(hass):
+    data, _entry = await _data(hass)
+    _entity(hass, "a")
+    data.mesa.store.set("light.a", _profile("light.a", "autonomous"))
+    data.mesa.backend.write("light.b", {
+        "semantic_profile": {"operational_boundaries": {"control_mode": "confirm"}},
+        "privacy_classification": {"level": "normal", "access_roles": {"deny_for": "guest"}},
+    })
+    _rename(hass, "light.a", "light.b")
+    await hass.async_block_till_done()
+    assert data.mesa.backend.read("light.b")["privacy_classification"]["access_roles"] == {"deny_for": "guest"}
 
 
 @pytest.mark.parametrize("limit_on", ["old", "resident"])

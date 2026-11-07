@@ -152,8 +152,17 @@ async def test_all_blocked_denies(hass: HomeAssistant):
 
 
 @pytest.mark.asyncio
+def _register(hass: HomeAssistant, *names: str) -> None:
+    """Give lights registry entries: an approval binds registry identities."""
+    from homeassistant.helpers import entity_registry as er
+
+    for name in names:
+        er.async_get(hass).async_get_or_create("light", "demo", name, suggested_object_id=name)
+
+
 async def test_confirm_creates_pending_approval(hass: HomeAssistant):
     data = await _make_data(hass, "enforced")
+    _register(hass, "gate", "ok")
     _set_profile(data, "light.gate", "confirm")
     _set_profile(data, "light.ok", "autonomous")
 
@@ -185,6 +194,7 @@ async def test_confirm_refuses_when_authority_changed_before_queuing(hass: HomeA
     )
 
     data = await _make_data(hass, "enforced")
+    _register(hass, "gate")
     _set_profile(data, "light.gate", "confirm")
     # The request was admitted for this runtime; hass no longer holds it, so the
     # authority check finds the runtime gone.

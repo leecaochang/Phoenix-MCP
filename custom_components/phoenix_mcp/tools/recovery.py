@@ -13,11 +13,11 @@ from ..helpers import content_hash
 from ..catalog_text import diff_summary_fields as _summary
 from ..capability import effective_cap
 from ..policy_engine import filter_service_response
-from ..request_authority import check_request_authority
+from ..request_authority import AuthorityChangedError, check_request_authority
 from ..template_recovery import restore_template, validate_restore_scope
 from ..template_snapshots import validate_snapshot, TEMPLATE_RECOVERY_ADAPTERS, template_snapshot
 from ..tool_common import (
-    _CAP_FORBIDDEN_MESSAGE, _gate, _restore_ctx, _tool_error, _tool_success, _tool_uncertain,
+    _CAP_FORBIDDEN_MESSAGE, _check_authority_before_dispatch, _gate, _recovery_failure, _restore_ctx, _tool_error, _tool_success, _tool_uncertain,
     _record_version, _version_content_payload,
 )
 from .blueprint import (
@@ -457,6 +457,7 @@ async def _execute_restore_dashboard_registry(args, record, side, snapshot, acce
     key = _dashboard_registry_lookup_key(record, side, snapshot)
     if content_hash(snapshot) != args.get("snapshot_digest"):
         return _tool_error("The selected dashboard registry snapshot changed after approval."), "invalid_request", tool
+    sent = None
     try:
         target = await _dashboard_registry_snapshot(hass, key)
         if content_hash(target) != args.get("target_fingerprint"):
@@ -474,7 +475,7 @@ async def _execute_restore_dashboard_registry(args, record, side, snapshot, acce
                 if current != target:
                     await recovery.mark(rid, "not_applied")
                     return _tool_error("The dashboard registry changed before restore dispatch."), "invalid_request", tool
-                check_request_authority()
+                await _check_authority_before_dispatch(recovery, rid)
                 if snapshot["exists"]:
                     dashboard = snapshot.get("dashboard")
                     if not isinstance(dashboard, dict):
@@ -501,6 +502,7 @@ async def _execute_restore_dashboard_registry(args, record, side, snapshot, acce
                 else:
                     await recovery.mark(rid, "not_applied")
                     return _tool_error("No dashboard registry change is needed."), "invalid_request", tool
+                sent = rid
                 try:
                     result = await async_ws_command(hass, command, payload)
                 except WsDispatchError as exc:
@@ -508,7 +510,10 @@ async def _execute_restore_dashboard_registry(args, record, side, snapshot, acce
                         await recovery.mark(rid, "not_applied", error="command_rejected")
                         return _tool_error(f"Home Assistant refused the dashboard restore; nothing was changed: {exc}"), "invalid_request", tool
                     await recovery.mark(rid, "unknown", error="command_rejected")
-                    return _tool_error("Dashboard registry restore outcome is uncertain; inspect configuration recovery before retrying."), "invalid_request", tool
+                    return _tool_uncertain({
+                        "status": "unknown", "recovery_id": rid, "retry_safe": False,
+                        "message": "Dashboard registry restore outcome is uncertain; inspect configuration recovery before retrying.",
+                    }), "invalid_request", tool
                 observed = await _dashboard_registry_snapshot(hass, key)
                 same = (observed.get("exists") == snapshot["exists"] and
                         (not snapshot["exists"] or all(
@@ -529,10 +534,12 @@ async def _execute_restore_dashboard_registry(args, record, side, snapshot, acce
                 }, default=str)), "allowed", tool
             finally:
                 recovery.leave(rid)
-    except ConfigurationRecoveryError as exc:
-        return _tool_error(str(exc)), "invalid_request", tool
-    except Exception:  # keep uncertain outcome in the recovery store
-        return _tool_error("Dashboard registry restore outcome is uncertain; inspect configuration recovery before retrying."), "invalid_request", tool
+    except AuthorityChangedError:
+        raise
+    except Exception as exc:  # keep uncertain outcome in the recovery store
+        return _recovery_failure(
+            exc, sent, lost="Dashboard registry restore outcome is uncertain; inspect configuration recovery before retrying.",
+            unsent="The recovery record could not be saved, so nothing was changed."), "invalid_request", tool
 
 
 async def _tool_restore_dashboard_resource(
@@ -647,6 +654,7 @@ async def _execute_restore_configuration(
 
         if effective_cap(access_key, "cap_energy_write") == "deny":
             return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", tool
+        started = False
         try:
             validate_energy_recovery_snapshot(selected)
             validate_energy_recovery_scope(selected, access_key, hass)
@@ -655,11 +663,12 @@ async def _execute_restore_configuration(
             if content_hash(await energy_recovery_target(hass)) != args.get("target_fingerprint"):
                 return _tool_error("The Energy target changed after approval."), "invalid_request", tool
             check_request_authority()
+            started = True
             return await restore_energy_configuration(selected, access_key, hass, data)
         except ConfigurationRecoveryError as exc:
             return _tool_error(str(exc)), "invalid_request", tool
         except Exception:  # family adapter owns the recovery outcome
-            return _tool_error("Energy restoration failed; inspect Home Assistant and configuration recovery before retrying."), "invalid_request", tool
+            return _restore_failed("Energy restoration failed", started), "invalid_request", tool
     if isinstance(selected, dict) and selected.get("snapshot_type") in ("authored_file", "yaml_file"):
         return _tool_error(_FILE_RECORD_REFUSED), "invalid_request", tool
     if isinstance(selected, dict) and selected.get("snapshot_type") == "blueprint_source":
@@ -675,6 +684,7 @@ async def _execute_restore_configuration(
         )
     if effective_cap(access_key, "cap_helper_write") == "deny":
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", tool
+    started = False
     try:
 
         selected = _selected_template_snapshot(record, side)
@@ -695,6 +705,7 @@ async def _execute_restore_configuration(
         if isinstance(context, tuple):
             return context
         check_request_authority()
+        started = True
         return await restore_template(
             selected, access_key, hass, data, mesa_fingerprint=args.get(_HELPER_MESA_FINGERPRINT),
         )
@@ -703,7 +714,13 @@ async def _execute_restore_configuration(
     except ConfigurationRecoveryError as exc:
         return _tool_error(str(exc)), "invalid_request", tool
     except Exception:  # restoration adapter owns the detailed recovery receipt
-        return _tool_error("Template restoration failed; inspect Home Assistant and configuration recovery before retrying."), "invalid_request", tool
+        return _restore_failed("Template restoration failed", started), "invalid_request", tool
+
+
+def _restore_failed(summary: str, started: bool) -> dict:
+    """A restore that raised: uncertain once its adapter was entered, as it may have written."""
+    message = f"{summary}; inspect Home Assistant and configuration recovery before retrying."
+    return _tool_uncertain({"status": "unknown", "retry_safe": False, "message": message}) if started else _tool_error(message)
 
 
 async def _execute_restore_blueprint_configuration(args, record, side, snapshot, access_key, hass: HomeAssistant, data):
@@ -724,6 +741,7 @@ async def _execute_restore_blueprint_configuration(args, record, side, snapshot,
     target_path = resolved[0]
     recovery = data.config_recovery
     resource = f"blueprint:{domain}/{path}"
+    sent = None
     try:
         if content_hash(snapshot) != args.get("snapshot_digest"):
             return _tool_error("The selected blueprint snapshot changed after approval."), "invalid_request", tool
@@ -736,7 +754,8 @@ async def _execute_restore_blueprint_configuration(args, record, side, snapshot,
             rid = await recovery.begin(resource, tool, access_key.id, before, source=snapshot, expected=snapshot)
             try:
                 await recovery.mark(rid, "dispatching")
-                check_request_authority()
+                await _check_authority_before_dispatch(recovery, rid)
+                sent = rid
                 if snapshot["exists"]:
                     await async_ws_command(hass, "blueprint/save", {
                         "domain": domain, "path": path, "yaml": snapshot["content"],
@@ -772,10 +791,12 @@ async def _execute_restore_blueprint_configuration(args, record, side, snapshot,
                 }), "invalid_request", tool
             finally:
                 recovery.leave(rid)
-    except ConfigurationRecoveryError as exc:
-        return _tool_error(str(exc)), "invalid_request", tool
-    except Exception:  # records remain unresolved if verification fails
-        return _tool_error("Blueprint restoration failed; inspect configuration recovery before retrying."), "invalid_request", tool
+    except AuthorityChangedError:
+        raise
+    except Exception as exc:  # records remain unresolved if verification fails
+        return _recovery_failure(
+            exc, sent, lost="Blueprint restoration failed; inspect configuration recovery before retrying.",
+            unsent="The recovery record could not be saved, so nothing was changed."), "invalid_request", tool
 
 
 async def _execute_restore_dashboard_layout(args, record, side, snapshot, access_key, hass: HomeAssistant, data):
@@ -790,6 +811,7 @@ async def _execute_restore_dashboard_layout(args, record, side, snapshot, access
     url_path = snapshot.get("url_path")
     if url_path is not None and not isinstance(url_path, str):
         return _tool_error("The dashboard layout target is invalid."), "invalid_request", tool
+    started = False
     try:
         if content_hash(snapshot) != args.get("snapshot_digest"):
             return _tool_error("The selected dashboard snapshot changed after approval."), "invalid_request", tool
@@ -801,6 +823,7 @@ async def _execute_restore_dashboard_layout(args, record, side, snapshot, access
         if content_hash(target) != args.get("target_fingerprint"):
             return _tool_error("The dashboard layout changed after approval."), "invalid_request", tool
         check_request_authority()
+        started = True
         result = await _recoverable_dashboard_save(
             url_path=url_path, before=before, after=snapshot["config"],
             access_key=access_key, hass=hass, data=data, return_result=True,
@@ -818,4 +841,4 @@ async def _execute_restore_dashboard_layout(args, record, side, snapshot, access
     except ConfigurationRecoveryError as exc:
         return _tool_error(str(exc)), "invalid_request", tool
     except Exception:  # owning adapter keeps uncertain status in recovery
-        return _tool_error("Dashboard layout restore failed; inspect configuration recovery before retrying."), "invalid_request", tool
+        return _restore_failed("Dashboard layout restore failed", started), "invalid_request", tool

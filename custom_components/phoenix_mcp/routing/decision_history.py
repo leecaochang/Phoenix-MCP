@@ -12,6 +12,14 @@ from .routing_tables import (
 from ..policy_engine import is_sensitive_key
 
 
+class ContextTooDeepError(ValueError):
+    """The value nests past the inspection budget, so it was not fully read."""
+
+
+class SensitiveContextKeyError(ValueError):
+    """A key follows the shared sensitive-name rule."""
+
+
 def _object(pairs: list[tuple[str, Any]]) -> dict:
     result: dict = {}
     for key, value in pairs:
@@ -28,7 +36,7 @@ def _json(text: str) -> Any:
 def history_texts(value: Any, depth: int = 0, *, check_sensitive: bool = False) -> list[str]:
     """Inspect keys and decoded JSON strings too; never send a redacted transcript."""
     if depth > DECISION_CONTEXT_MAX_DEPTH:
-        raise ValueError("Context nesting exceeds budget")
+        raise ContextTooDeepError("Context nesting exceeds budget")
     if isinstance(value, str):
         texts = [value]
         if value.lstrip().startswith(("{", "[", '"')):
@@ -43,7 +51,7 @@ def history_texts(value: Any, depth: int = 0, *, check_sensitive: bool = False) 
         if any(not isinstance(key, str) for key in value):
             raise ValueError("Invalid context key")
         if check_sensitive and any(is_sensitive_key(key) for key in value):
-            raise ValueError("Sensitive context key")
+            raise SensitiveContextKeyError("Sensitive context key")
         return [text for key, item in value.items() for part in (key, item)
                 for text in history_texts(part, depth + 1, check_sensitive=check_sensitive)]
     if isinstance(value, list):

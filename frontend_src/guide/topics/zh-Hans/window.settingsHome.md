@@ -113,6 +113,8 @@ Home Companion 密钥会把对话交给 Home Companion 处理，并隐藏 **{{la
 
 问题和传入的数据会发送到你的决策提供商，每次发送的请求都计入[请求限额](guide:window.settingsProviders#decision-request-limit)。根据回答执行操作的自动化以 Home Assistant 的身份运行，不受 Phoenix 检查。
 
+发起“评估”操作的人需要对 Decisions 实体有控制权限，即使操作未指定实体。不是由人发起的自动化不需要。每次调用和拒绝都会写入[审计日志](guide:topic.logRecords#audit-entries)。
+
 ### {{label:settings.aiDecisionsEnableLabel}} {#ai-decisions-enable}
 
 打开此实体。默认关闭。只有在此开关打开且已选择访问密钥时，实体才存在。

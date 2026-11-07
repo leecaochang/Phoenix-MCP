@@ -26,7 +26,7 @@ from homeassistant.util.dt import utcnow
 from pytest_homeassistant.common import MockConfigEntry
 
 from custom_components.phoenix_mcp import radio as radio_backend
-from custom_components.phoenix_mcp import tool_defs
+from custom_components.phoenix_mcp import tool_defs, tool_dispatch
 from custom_components.phoenix_mcp.access_key_store import (
     AccessKeyRecord,
     AccessKeyStore,
@@ -716,6 +716,82 @@ async def test_a_file_the_builder_reports_with_no_adopted_device_is_a_true_orpha
     assert builder.commands.count("firmware/install") == 1
 
 
+async def _install_with_row(hass, esphome_dir, esphome_entries, source, mode="enforced", protect=True, host=None):
+    """Install new.yaml, which the Builder reports under a name no adopted device has."""
+    (esphome_dir / "new.yaml").write_text(source)
+    entity_id = _adopted_entity(hass, esphome_entries)
+    if host is not None:
+        esphome_entries[-1].data = {"host": host}
+    data = await _data(hass, mode)
+    if protect:
+        data.mesa.store.set(entity_id, _profile(entity_id, "prohibited"))
+    dash = _dash()
+    dash.data = {"harmless": {"configuration": "new.yaml"}}
+    builder = FakeBuilder(**{"firmware/install": {"job_id": JOB, "status": "queued"}})
+    with patch(_DASHBOARD, return_value=dash), patch(_COMMAND, builder):
+        result = await _call_tool("install_esphome_firmware", {"file": "new.yaml"}, _flash_key(), hass, data, request_id="rid")
+    return result, builder
+
+
+@pytest.mark.parametrize("address", ["rf-blaster1.local", "RF-Blaster1.local.", "rf-blaster1"])
+async def test_a_file_aimed_at_an_adopted_name_is_gated_as_that_device(hass, esphome_dir, esphome_entries, address):
+    source = f"esphome:\n  name: harmless\nwifi:\n  use_address: {address}\n"
+    result, builder = await _install_with_row(hass, esphome_dir, esphome_entries, source)
+    assert result[1] == "denied" and result[0]["content"][0]["text"] == MESA_DENIED_MESSAGE
+    assert "firmware/install" not in builder.commands
+
+
+async def test_a_file_aimed_at_an_adopted_host_is_gated_as_that_device(hass, esphome_dir, esphome_entries):
+    source = "esphome:\n  name: harmless\nwifi:\n  use_address: 192.0.2.7\n"
+    result, builder = await _install_with_row(hass, esphome_dir, esphome_entries, source, host="192.0.2.7")
+    assert result[1] == "denied" and result[0]["content"][0]["text"] == MESA_DENIED_MESSAGE
+    assert "firmware/install" not in builder.commands
+
+
+async def test_a_static_address_of_an_adopted_device_is_gated_as_that_device(hass, esphome_dir, esphome_entries):
+    source = "esphome:\n  name: harmless\nwifi:\n  manual_ip:\n    static_ip: 192.0.2.7\n"
+    result, builder = await _install_with_row(hass, esphome_dir, esphome_entries, source, host="192.0.2.7")
+    assert result[1] == "denied"
+    assert "firmware/install" not in builder.commands
+
+
+@pytest.mark.parametrize(("mode", "outcome"), [("advisory", "allowed"), ("enforced", "denied")])
+async def test_an_address_matching_nothing_leaves_the_owner_unknown(hass, esphome_dir, esphome_entries, mode, outcome):
+    source = "esphome:\n  name: harmless\nwifi:\n  use_address: somewhere.example\n"
+    result, builder = await _install_with_row(hass, esphome_dir, esphome_entries, source, mode, protect=False)
+    assert result[1] == outcome, result
+    assert builder.commands.count("firmware/install") == (1 if outcome == "allowed" else 0)
+    assert ("could not check" in json.dumps(result[0])) is (mode == "advisory")
+
+
+@pytest.mark.parametrize("source", [
+    "packages:\n  base: !include hidden.yaml\n",
+    "esphome:\n  name: harmless\npackages:\n  base: !include hidden.yaml\n",
+    "substitutions:\n  n: harmless\nesphome:\n  name: ${n}\n",
+    "esphome:\n  name: harmless\nwifi:\n  use_address: !secret target\n",
+    "wifi: !include wifi.yaml\nesphome:\n  name: harmless\n",
+], ids=["name_in_package", "package_beside_name", "substitution", "tagged_address", "included_network"])
+async def test_a_file_that_can_reach_elsewhere_is_no_orphan_despite_a_builder_row(
+    hass, esphome_dir, esphome_entries, source
+):
+    result, builder = await _install_with_row(hass, esphome_dir, esphome_entries, source)
+    assert result[1] == "denied", result
+    assert "firmware/install" not in builder.commands
+
+
+
+async def test_a_literal_name_the_builder_does_not_list_is_refused_under_enforced(hass, esphome_dir, esphome_entries):
+    """A new device installs once the Builder reports the file, not before."""
+    (esphome_dir / "new.yaml").write_text("esphome:\n  name: brand-new\n")
+    _adopted_entity(hass, esphome_entries)
+    data = await _data(hass)
+    builder = FakeBuilder(**{"firmware/install": {"job_id": JOB, "status": "queued"}})
+    with patch(_DASHBOARD, return_value=_dash()), patch(_COMMAND, builder):
+        result = await _call_tool("install_esphome_firmware", {"file": "new.yaml"}, _flash_key(), hass, data, request_id="rid")
+    assert result[1] == "denied", result
+    assert "firmware/install" not in builder.commands
+
+
 # --- structural matrix ------------------------------------------------------
 
 _PACKAGE = Path(radio_tools.__file__).resolve().parent.parent
@@ -857,6 +933,51 @@ def _dispatch_sites(nodes: dict[str, ast.AST]) -> set[str]:
             for child in ast.walk(node)
         )
     }
+
+
+def _tracked_handlers() -> set[str]:
+    """The handlers tool_dispatch trusts for dispatch evidence, read from where it says so."""
+    tree = ast.parse((_PACKAGE / "tool_dispatch.py").read_text())
+    call = next(
+        node for node in ast.walk(tree)
+        if isinstance(node, ast.Call) and getattr(node.func, "id", "") == "DispatchProgress"
+        and any(keyword.arg == "tracked" and isinstance(keyword.value, ast.Compare) for keyword in node.keywords)
+    )
+    compare = next(keyword.value for keyword in call.keywords if keyword.arg == "tracked")
+    return {_qualified(getattr(tool_dispatch, item.id)) for item in compare.comparators[0].elts}
+
+
+def _unmarked_dispatches(node: ast.AST) -> list[int]:
+    """Lines of a function's service calls with no mark_dispatch_started before them."""
+    calls = [child for child in ast.walk(node) if isinstance(child, ast.Call)]
+    marks = [child.lineno for child in calls if getattr(child.func, "id", "") == "mark_dispatch_started"]
+    return [
+        child.lineno for child in calls
+        if isinstance(child.func, ast.Attribute) and child.func.attr == "async_call"
+        and not any(mark <= child.lineno for mark in marks)
+    ]
+
+
+def test_a_tracked_handler_marks_before_every_dispatch():
+    """A tracked handler that never marked proves nothing ran, so one unmarked branch lies."""
+    nodes, edges = _function_bodies()
+    tracked = _tracked_handlers()
+    assert len(tracked) >= 2, f"the scan found only {tracked}; it is not working"
+    reached = set().union(*(_reachable(handler, edges) for handler in tracked))
+    sites = _dispatch_sites(nodes) & reached
+    assert len(sites) >= 4, f"the scan found only {sites}; it is not working"
+    unmarked = {site: lines for site in sites if (lines := _unmarked_dispatches(nodes[site]))}
+    assert unmarked == {}
+
+
+def test_the_marking_scan_catches_an_unmarked_dispatch():
+    tree = ast.parse(
+        "async def f(hass):\n"
+        "    await hass.services.async_call('a', 'b')\n"
+        "    mark_dispatch_started()\n"
+        "    await hass.services.async_call('a', 'c')\n"
+    )
+    assert _unmarked_dispatches(tree) == [2]
 
 
 def test_every_mutating_tool_reaches_mesa_or_states_why_it_cannot():

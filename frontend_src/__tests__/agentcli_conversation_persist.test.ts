@@ -291,6 +291,7 @@ describe("what is left in the browser", () => {
     purgeAgentCliStorage();
     events.push(localStorage.getItem("phx-purged-agentcli"));
     setAgentCliOwner("next-user");
+    setSessionTurns([{ text: "another secret" }]);
     vi.spyOn(Date, "now").mockReturnValue(Date.now() + 1);
     purgeAgentCliStorage();
     events.push(localStorage.getItem("phx-purged-agentcli"));
@@ -298,6 +299,28 @@ describe("what is left in the browser", () => {
     expect(events[0]).toBeTruthy();
     expect(events[1]).not.toBe(events[0]);
     expect(events.join()).not.toContain("1234");
+  });
+
+  it("writes nothing when there was nothing to remove", () => {
+    purgeAgentCliStorage();
+    localStorage.removeItem("phx-purged-agentcli");
+    const write = vi.spyOn(Storage.prototype, "setItem");
+    for (let poll = 0; poll < 3; poll += 1) purgeAgentCliStorage();
+    expect(write).not.toHaveBeenCalled();
+    expect(localStorage.getItem("phx-purged-agentcli")).toBeNull();
+    write.mockRestore();
+    setAgentCliOwner(null);
+    setAgentCliOwner("test-admin");
+  });
+
+  it("still tells other tabs when only a rejection reason was removed", () => {
+    purgeAgentCliStorage();
+    localStorage.removeItem("phx-purged-agentcli");
+    setReasonDraft("a1", "not this one");
+    purgeAgentCliStorage();
+    expect(localStorage.getItem("phx-purged-agentcli")).toBeTruthy();
+    setAgentCliOwner(null);
+    setAgentCliOwner("test-admin");
   });
 
   it("empties a window whose turns were never stored", () => {

@@ -15,7 +15,7 @@
 
 該鏈中任何位置的 D 都會拒絕存取，即使實體本身設為 W。
 
-含有 D 成員的群組也會被拒絕，因為對群組的操作會觸及該成員。在範圍更大的請求中（例如整個分區），Phoenix 會略過該群組，只對其餘實體執行操作。場景、腳本和自動化不算作群組。
+含有 D 成員的群組也會被拒絕，因為對群組的操作會觸及該成員。在範圍更大的請求中（例如整個分區），Phoenix 會略過該群組，只對其餘實體執行操作。Switch as X 實體算作包含其背後開關的群組。場景、腳本和自動化不算作群組。
 
 ## 最近的授權決定結果 {#nearest}
 
@@ -58,6 +58,10 @@ R 用於觸發是安全的：智慧體可以看到這些實體，但無法執行
 若要保護觸發器，請為自動化、腳本或場景設定一個設為確認的 MESA 策略。當{{label:settings.mesaModeLabel}}或該策略為{{label:settings.mesaModeEnforced}}時，每次執行都會等待你的核准，無論其操作做什麼。在{{label:settings.mesaModeAdvisory}}下，執行會直接進行。[{{label:mesa.suggestTitle}}](guide:window.mesaSuggestions)會找出會觸及風險裝置的那些。
 
 核准只涵蓋請求時指定的確切實體及其任何群組成員。如果群組變更，智慧體必須重新詢問。Phoenix 不會檢查場景或腳本隨後做了什麼。
+
+智慧體在執行輸入中指定的實體不同：它[需要與目標相同的存取權限](guide:topic.tools#actions)。Phoenix 只能看到輸入中直接寫明的內容，所以由片段拼出實體 ID 的腳本能繞過這項檢查。
+
+通用恆溫器和通用濕度調節器輔助項目同樣以 Home Assistant 的身分動作。Phoenix 不會透過它們檢查其驅動的開關。
 
 相關：[自動化和腳本](guide:topic.tools#automations)
 

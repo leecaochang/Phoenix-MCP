@@ -15,7 +15,7 @@ Phoenix decides every request the same way, whichever app or feature sends it.
 
 A D anywhere in that chain denies, even when the entity itself is set to W.
 
-A group with a D member is refused too, because acting on the group would reach that member. In a wider request, such as a whole area, Phoenix leaves the group out and acts on the rest. Scenes, scripts and automations don't count as groups.
+A group with a D member is refused too, because acting on the group would reach that member. In a wider request, such as a whole area, Phoenix leaves the group out and acts on the rest. A Switch as X entity counts as a group holding the switch behind it. Scenes, scripts and automations don't count as groups.
 
 ## The nearest grant decides {#nearest}
 
@@ -58,6 +58,10 @@ R is safe for triggering: the agent can see these entities but can't run them. T
 To guard a trigger, give the automation, script or scene a MESA profile set to Confirm. When {{label:settings.mesaModeLabel}} or that profile is {{label:settings.mesaModeEnforced}}, each run waits for your approval, whatever its actions do. Under {{label:settings.mesaModeAdvisory}}, the run goes ahead. [{{label:mesa.suggestTitle}}](guide:window.mesaSuggestions) finds the ones that reach risky devices.
 
 An approval covers the exact entities, and any group members, it was requested for. If the group changes, the agent must ask again. Phoenix doesn't check what a scene or script then does.
+
+An entity the agent names in a run's inputs is different: it [needs the same access as a target](guide:topic.tools#actions). Phoenix sees only what an input names outright, so a script that builds an entity ID from parts gets past this.
+
+Generic Thermostat and Generic Hygrostat helpers also act as Home Assistant. Phoenix doesn't look through them to the switch they drive.
 
 Related: [Automations and scripts](guide:topic.tools#automations)
 

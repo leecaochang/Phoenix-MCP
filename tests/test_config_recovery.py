@@ -19,6 +19,8 @@ from custom_components.phoenix_mcp.tool_dispatch import _call_tool
 from custom_components.phoenix_mcp.access_key_store import PermissionNode, PermissionTree, AccessKeyRecord
 from custom_components.phoenix_mcp.template_snapshots import template_snapshot
 from custom_components.phoenix_mcp.template_recovery import restore_template
+from custom_components.phoenix_mcp.tool_common import UncertainOutcome
+from custom_components.phoenix_mcp.ws_dispatch import WsCommandNotDispatchedError, WsDispatchError
 from homeassistant.util.dt import utcnow
 
 
@@ -387,6 +389,43 @@ async def test_agent_dashboard_registry_restore_uses_dashboard_command(hass):
     assert body["status"] == "verified"
     assert rows[0]["title"] == "Before"
     assert runtime.config_recovery.records()[0]["operation"] == "dashboard_registry_restore"
+
+
+@pytest.mark.parametrize(("error", "phase", "uncertain"), [
+    (WsDispatchError("timed out after dispatch"), "unknown", True),
+    (WsCommandNotDispatchedError("not loaded"), "not_applied", False),
+], ids=["lost", "never_ran"])
+async def test_an_agent_dashboard_registry_restore_closes_by_what_is_known(hass, error, phase, uncertain):
+    from custom_components.phoenix_mcp.helpers import content_hash
+    from custom_components.phoenix_mcp.tools.recovery import _execute_restore_configuration
+
+    access_key = AccessKeyRecord(
+        id=uuid.uuid4().hex, name="dashboard-agent", access_key_hash="x", created_at=utcnow(), created_by="test",
+        permissions=PermissionTree(), cap_lovelace_write="allow",
+    )
+    row = {"id": "dash-1", "url_path": "dashboard-one", "title": "Current"}
+
+    async def ws(_hass, command, payload=None):
+        if command == "lovelace/dashboards/list":
+            return [dict(row)]
+        raise error
+
+    snapshot = {"snapshot_type": "dashboard_registry", "schema": 1, "resource_id": "dashboard-one", "exists": True,
+                "dashboard": {"id": "dash-1", "url_path": "dashboard-one", "title": "Before"}}
+    target = {"snapshot_type": "dashboard_registry", "schema": 1, "resource_id": "dashboard-one", "exists": True,
+              "dashboard": row}
+    runtime = data()
+    rid = await runtime.config_recovery.begin("dashboard_registry:dashboard-one", "edit_dashboard", access_key.id, snapshot)
+    await runtime.config_recovery.mark(rid, "verified")
+    with patch("custom_components.phoenix_mcp.tools.lovelace.async_ws_command", AsyncMock(side_effect=ws)), patch(
+        "custom_components.phoenix_mcp.tools.recovery.async_ws_command", AsyncMock(side_effect=ws),
+    ):
+        result, outcome, _ = await _execute_restore_configuration({
+            "recovery_id": rid, "side": "before", "snapshot_digest": content_hash(snapshot),
+            "target_fingerprint": content_hash(target),
+        }, access_key, hass, runtime)
+    assert outcome == "invalid_request" and isinstance(result, UncertainOutcome) is uncertain, result
+    assert runtime.config_recovery.records()[0]["phase"] == phase
 
 
 async def test_real_template_collision_never_creates(hass):

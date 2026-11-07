@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import json
 import uuid
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from homeassistant.core import HomeAssistant
@@ -30,6 +30,8 @@ import voluptuous as vol
 from custom_components.phoenix_mcp.tool_catalog import _EXECUTOR_REGISTRY
 from custom_components.phoenix_mcp.tool_dispatch import _call_tool
 from custom_components.phoenix_mcp.access_key_store import PermissionNode, PermissionTree, AccessKeyRecord
+from custom_components.phoenix_mcp.helpers import content_hash
+from custom_components.phoenix_mcp.tools.helper import _build_diff_set_config_entry_options
 
 def options_schema(current: dict | None = None) -> vol.Schema:
     """The step schema, with suggested values seeded from the stored settings.
@@ -68,6 +70,11 @@ def _access_key(**caps) -> AccessKeyRecord:
 
 def _json(content: dict) -> dict:
     return json.loads(content["content"][0]["text"])
+
+
+def _config_entry_entity(hass: HomeAssistant, entry: MockConfigEntry) -> str:
+    """The one registry entity a test's helper entry owns."""
+    return er.async_entries_for_config_entry(er.async_get(hass), entry.entry_id)[0].entity_id
 
 
 def _flow_data() -> MagicMock:
@@ -588,6 +595,220 @@ class TestReconfigureMechanism:
         assert body["mechanism"] is None
         assert body["schema"] == []
         assert "no way to change its settings" in body["note"]
+
+
+class TestScope:
+    """What a key reads of a helper follows its tree, on the read and on what a write returns."""
+
+    @staticmethod
+    def _key(tree: PermissionTree, **caps) -> AccessKeyRecord:
+        return AccessKeyRecord(
+            id=str(uuid.uuid4()), name="t", access_key_hash="x", created_at=utcnow(), created_by="u",
+            permissions=tree, cap_helper_write="allow", **caps,
+        )
+
+    def _source_hidden(self) -> AccessKeyRecord:
+        """Can read the helper's own entity, not the entity it watches."""
+        return self._key(PermissionTree(domains={"binary_sensor": PermissionNode(state="GREEN")}))
+
+    async def test_an_entry_owning_a_hidden_entity_reads_as_absent(self, hass, helper_entry, as_helper):
+        """Same outcome and same bytes as an entry that does not exist, for read and write."""
+        key = self._key(PermissionTree(entities={"sensor.other": PermissionNode(state="GREEN")}))
+        for name, extra in (
+            ("get_helper_settings", {}),
+            ("set_helper_settings", {"settings": {"hysteresis": 1.0}}),
+        ):
+            absent = await _call(name, {"entry_id": "no-such-entry", **extra}, key, hass)
+            hidden = await _call(name, {"entry_id": "helper1", **extra}, key, hass)
+            assert hidden[1] == "not_found"
+            assert hidden[0] == absent[0]
+        assert helper_entry.options["hysteresis"] == 0.0
+
+    async def test_an_entry_owning_a_hidden_entity_creates_no_approval(self, hass, helper_entry, as_helper):
+        key = self._key(PermissionTree(entities={"sensor.other": PermissionNode(state="GREEN")}))
+        with patch("custom_components.phoenix_mcp.tools.helper._helper_mesa_approval_gate", AsyncMock()) as gate:
+            _, outcome, _ = await _call(
+                "set_helper_settings", {"entry_id": "helper1", "settings": {"hysteresis": 1.0}}, key, hass)
+        assert outcome == "not_found"
+        gate.assert_not_awaited()
+
+    async def test_one_hidden_entity_of_several_hides_the_entry(self, hass, helper_entry, as_helper):
+        second = er.async_get(hass).async_get_or_create(
+            "lock", "threshold", "helper1-second", config_entry=helper_entry)
+        hass.states.async_set(second.entity_id, "locked", {})
+        _, outcome, _ = await _call("get_helper_settings", {"entry_id": "helper1"}, _access_key(), hass)
+        assert outcome == "not_found"
+
+    async def test_a_red_owned_entity_hides_the_entry_despite_its_domain(self, hass, helper_entry, as_helper):
+        owned = _config_entry_entity(hass, helper_entry)
+        key = _access_key()
+        key.permissions.entities[owned] = PermissionNode(state="RED")
+        _, outcome, _ = await _call("get_helper_settings", {"entry_id": "helper1"}, key, hass)
+        assert outcome == "not_found"
+
+    async def test_an_entry_owning_nothing_is_absent_to_a_scoped_key_only(self, hass, as_helper):
+        entry = MockConfigEntry(domain="threshold", entry_id="bare", title="Bare", options={"hysteresis": 1.0})
+        entry.add_to_hass(hass)
+        _, outcome, _ = await _call("get_helper_settings", {"entry_id": "bare"}, _access_key(), hass)
+        assert outcome == "not_found"
+        key = self._key(PermissionTree(), pass_through=True)
+        _, outcome, _ = await _call("get_helper_settings", {"entry_id": "bare"}, key, hass)
+        assert outcome == "allowed"
+
+    async def test_an_unexposed_owned_entity_hides_the_entry_from_a_pass_through_key(
+        self, hass, helper_entry, as_helper,
+    ):
+        key = self._key(PermissionTree(), pass_through=True, use_assist_exposure=True)
+        with patch("custom_components.phoenix_mcp.policy_engine._assist_exposed", return_value=False):
+            _, outcome, _ = await _call("get_helper_settings", {"entry_id": "helper1"}, key, hass)
+        assert outcome == "not_found"
+
+    async def test_a_hidden_source_is_redacted_everywhere_it_appears(self, hass, helper_entry, as_helper):
+        init, configure, _ = _flow(hass)
+        with init, configure:
+            content, outcome, _ = await _call(
+                "get_helper_settings", {"entry_id": "helper1"}, self._source_hidden(), hass)
+        assert outcome == "allowed"
+        assert "sensor.kitchen" not in content["content"][0]["text"]
+        body = _json(content)
+        assert body["settings"]["entity_id"] == "<redacted>"
+        assert body["settings"]["hysteresis"] == 0.0
+        assert body["editable_settings"]["entity_id"] == "<redacted>"
+        field = next(f for f in body["schema"] if f["name"] == "entity_id")
+        assert field["description"]["suggested_value"] == "<redacted>"
+        assert "leave that field out" in body["note"]
+
+    @pytest.mark.parametrize("value", [
+        "sensor.kitchen",
+        "SENSOR.KITCHEN",
+        "sensor.other, sensor.kitchen",
+        "registry",
+        "{{ states('sensor.kitchen') }}",
+        "{{ states.sensor.kitchen.state }}",
+        "{{ states | list }}",
+        "watches sensor.kitchen today",
+    ])
+    async def test_every_spelling_of_a_hidden_entity_is_redacted(self, hass, helper_entry, as_helper, value):
+        """Each form HA reads as an entity, including a template no text pattern can see into."""
+        registered = er.async_get(hass).async_get_or_create(
+            "sensor", "test", "kitchen", suggested_object_id="kitchen")
+        hass.states.async_set(registered.entity_id, "20", {})
+        stored = registered.id if value == "registry" else value
+        hass.config_entries.async_update_entry(helper_entry, options={"entity_id": stored})
+        init, configure, _ = _flow(hass)
+        key = self._key(PermissionTree(
+            domains={"binary_sensor": PermissionNode(state="GREEN")},
+            entities={"sensor.other": PermissionNode(state="GREEN")},
+        ))
+        with init, configure:
+            content, outcome, _ = await _call("get_helper_settings", {"entry_id": "helper1"}, key, hass)
+        assert outcome == "allowed"
+        text = content["content"][0]["text"]
+        assert stored not in text
+        assert "kitchen" not in text.replace("Kitchen threshold", "").replace("kitchen_threshold", "")
+        assert "<redacted>" in _json(content)["settings"]["entity_id"]
+
+    @pytest.mark.parametrize("value", [
+        "{{ states('binary_sensor.kitchen_threshold') }}",
+        "{{ now().hour }}",
+        "sensor.gone",
+        "Plain words 1.5",
+    ])
+    async def test_what_the_key_may_see_stays_readable(self, hass, helper_entry, as_helper, value):
+        """A missing source stays named: repointing a helper needs the old ID."""
+        hass.config_entries.async_update_entry(helper_entry, options={"entity_id": value})
+        init, configure, _ = _flow(hass)
+        with init, configure:
+            content, _, _ = await _call("get_helper_settings", {"entry_id": "helper1"}, self._source_hidden(), hass)
+        assert _json(content)["settings"]["entity_id"] == value
+
+    async def test_a_sensitive_option_is_masked_in_settings_and_schema(self, hass, helper_entry, as_helper):
+        hass.config_entries.async_update_entry(
+            helper_entry,
+            options={"entity_id": "sensor.kitchen", "hysteresis": 0.0, "api_key": "hunter2-secret",
+                     "nested": {"Password": "hunter2-secret"}, "url": "http://user:hunter2-secret@example.com/"},
+        )
+
+        async def _init(entry_id, context=None, data=None):
+            return {"type": FlowResultType.FORM, "flow_id": "f1", "step_id": "init", "data_schema": vol.Schema({
+                vol.Required("api_key", default="hunter2-secret",
+                             description={"suggested_value": "hunter2-secret"}): selector.TextSelector(),
+            })}
+
+        with patch.object(hass.config_entries.options, "async_init", _init):
+            content, outcome, _ = await _call("get_helper_settings", {"entry_id": "helper1"}, _access_key(), hass)
+        assert outcome == "allowed"
+        assert "hunter2" not in content["content"][0]["text"]
+        body = _json(content)
+        assert body["settings"]["api_key"] == "<redacted>"
+        assert body["editable_settings"]["api_key"] == "<redacted>"
+
+    async def test_a_write_returns_only_what_the_key_may_read(self, hass, helper_entry, as_helper):
+        init, configure, _ = _flow(hass)
+        with init, configure:
+            content, outcome, _ = await _call(
+                "set_helper_settings", {"entry_id": "helper1", "settings": {"hysteresis": 2.0}},
+                self._source_hidden(), hass)
+        assert outcome == "allowed", content
+        assert "sensor.kitchen" not in content["content"][0]["text"]
+        assert _json(content)["settings"]["entity_id"] == "<redacted>"
+
+    async def test_a_redacted_value_cannot_be_written_back(self, hass, helper_entry, as_helper):
+        init, configure, created = _flow(hass)
+        with init, configure:
+            content, outcome, _ = await _call(
+                "set_helper_settings",
+                {"entry_id": "helper1", "settings": {"entity_id": "<redacted>", "hysteresis": 2.0}},
+                self._source_hidden(), hass)
+        assert outcome == "invalid_request"
+        assert "Redacted settings" in content["content"][0]["text"]
+        assert created == {}
+        assert helper_entry.options["entity_id"] == "sensor.kitchen"
+
+    async def test_the_hash_a_key_reads_is_the_one_a_write_accepts(self, hass, helper_entry, as_helper):
+        """It covers the redacted view, so it cannot confirm a guess at the hidden value."""
+        key = self._source_hidden()
+        init, configure, _ = _flow(hass)
+        with init, configure:
+            read, _, _ = await _call("get_helper_settings", {"entry_id": "helper1"}, key, hass)
+            digest = _json(read)["content_hash"]
+            assert digest != content_hash(dict(helper_entry.options))
+            refused, outcome, _ = await _call(
+                "set_helper_settings",
+                {"entry_id": "helper1", "settings": {"hysteresis": 2.0},
+                 "expected_hash": content_hash(dict(helper_entry.options))}, key, hass)
+            assert outcome != "allowed", refused
+            written, outcome, _ = await _call(
+                "set_helper_settings",
+                {"entry_id": "helper1", "settings": {"hysteresis": 2.0}, "expected_hash": digest}, key, hass)
+        assert outcome == "allowed", written
+
+    async def test_authority_lost_while_an_approval_waits_refuses_at_execution(self, hass, helper_entry, as_helper):
+        key = _access_key()
+        owned = _config_entry_entity(hass, helper_entry)
+        key.permissions.entities[owned] = PermissionNode(state="RED")
+        init, configure, created = _flow(hass)
+        with init, configure:
+            _, outcome, _ = await _EXECUTOR_REGISTRY["set_helper_settings"](
+                {"entry_id": "helper1", "settings": {"hysteresis": 2.0}}, key, hass, _flow_data())
+        assert outcome == "not_found"
+        assert created == {}
+
+    async def test_a_full_scope_read_is_unchanged(self, hass, helper_entry, as_helper):
+        init, configure, _ = _flow(hass)
+        with init, configure:
+            content, _, _ = await _call("get_helper_settings", {"entry_id": "helper1"}, _access_key(), hass)
+        body = _json(content)
+        assert body["content_hash"] == content_hash(dict(helper_entry.options))
+        assert "redacted" not in body["note"]
+
+    async def test_the_approval_card_masks_a_sensitive_option(self, hass, helper_entry, as_helper):
+        hass.config_entries.async_update_entry(
+            helper_entry, options={"entity_id": "sensor.kitchen", "api_key": "hunter2-secret"})
+        diff = await _build_diff_set_config_entry_options(
+            {"entry_id": "helper1", "settings": {"api_key": "another-secret"}}, _access_key(), hass)
+        assert "hunter2" not in diff["before"]
+        assert "another-secret" not in diff["after"]
 
 
 def test_schema_serializer_follows_the_schema_engine_not_package_presence(monkeypatch):

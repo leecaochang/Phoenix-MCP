@@ -56,6 +56,8 @@ _PROBE_COLOURS: dict[str, tuple[int, int, int]] = {
     "yellow": (240, 210, 30), "black": (15, 15, 15), "white": (250, 250, 250),
 }
 _PROBE_COLOUR_WORD = re.compile(r"\b(" + "|".join(_PROBE_COLOURS) + r")\b")
+# Stops at the next opening tag, so a reply of unclosed tags costs one pass, not one per tag.
+_PROBE_THINKING = re.compile(r"(?is)<think>(?:(?!<think>).)*?</think>")
 _PROBE_IMAGE_QUESTION = (
     "This image has three vertical stripes. Name their colors from left to right, using only these words: "
     + ", ".join(_PROBE_COLOURS) + ". Reply with just the three words, separated by commas."
@@ -97,7 +99,7 @@ async def async_probe_vision(session: ClientSession, cfg: ProviderConfig) -> boo
         return False
     if status != 200:
         return None
-    reply = re.sub(r"(?is)<think>.*?</think>", "", text).strip().lower()
+    reply = _PROBE_THINKING.sub("", text).strip().lower()
     if not reply:
         return None
     return _PROBE_COLOUR_WORD.findall(reply)[:3] == stripes

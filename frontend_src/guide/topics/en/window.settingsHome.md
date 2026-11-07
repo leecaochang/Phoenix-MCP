@@ -113,6 +113,8 @@ This section shows only on Home Assistant 2026.11 or later, while a decision pro
 
 The questions and the data passed in go to your decision provider, and every request sent counts towards your [request limit](guide:window.settingsProviders#decision-request-limit). An automation that acts on an answer runs as Home Assistant, outside Phoenix's checks.
 
+A person who starts an Evaluate action needs control of the Decisions entity, even when the action names no entity. An automation no person started doesn't. Each call and refusal goes in the [audit log](guide:topic.logRecords#audit-entries).
+
 ### {{label:settings.aiDecisionsEnableLabel}} {#ai-decisions-enable}
 
 Turns the entity on. Off by default. The entity exists only while this is on and an access key is chosen.

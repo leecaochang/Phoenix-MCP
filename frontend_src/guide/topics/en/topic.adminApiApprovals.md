@@ -65,7 +65,7 @@ Errors: the paging errors in [Request bodies](guide:topic.adminApi#bodies).
 
 ### Read one approval {#read-approval}
 
-Returns the approval record, without `in_progress`.
+Returns the approval record plus `in_progress`, as in [List approvals](guide:#list-approvals).
 
 | Status | `error` | `message_key` | When |
 |---|---|---|---|
@@ -76,6 +76,8 @@ Returns the approval record, without `in_progress`.
 Approves the approval and runs the held action as the agent asked it. The endpoint takes no body and ignores any you send.
 
 Phoenix checks the approval in the order of the error table below. Before running anything, it saves an execution marker to disk. If a run reaches the action and never reports back, that marker stays, and every later approve, reject or cancel answers `409`.
+
+If the client disconnects, the action still finishes. Read the outcome from the record or the `phoenix_mcp_approval_resolved` event.
 
 Approvals that MESA held for confirmation, and recovery reviews, skip the capability check. Recovery reviews skip the kill switch check too.
 
@@ -107,7 +109,7 @@ Three of those errors sound temporary but close the approval for good: `approval
 
 ### Approve several {#batch-approve}
 
-Approves several approvals in order, one at a time, through the same steps as a single approve. The batch stops at the first approval that doesn't come back as `200` with `status: "approved"`.
+Approves several approvals in order, one at a time, through the same steps as a single approve. The batch stops at the first approval that doesn't come back as `200` with `status: "approved"`. If the client disconnects, the running approval finishes and the rest stay pending.
 
 | Field | Type | Notes |
 |---|---|---|
@@ -176,7 +178,7 @@ Phoenix fires two events on Home Assistant's event bus, so a script can follow a
 - It fires again with `claimed: false` if a failure before the run leaves the approval pending.
 - `phoenix_mcp_approval_resolved` fires whenever an approval reaches a final status. Data: `approval_id`, `access_key_id`, `access_key_name`, `tool_name`, `status`, `closure_reason`, `approved_by_user_id`, `timestamp`.
 
-A page that loads while a run is under way sees `in_progress: true` on the row in [List approvals](guide:#list-approvals).
+A page that loads while a run is under way sees `in_progress: true` in [List approvals](guide:#list-approvals) and [Read one approval](guide:#read-approval).
 
 Related: [Events for automations](guide:topic.running#events)
 

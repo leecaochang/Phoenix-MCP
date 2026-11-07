@@ -4,9 +4,10 @@ ESPHome device files often hold credentials inline, and get_yaml_config reads ot
 files beside Home Assistant's, so both reads share this walk. Masking is span-surgical:
 ``yaml.compose`` gives each scalar's source span, so a placeholder is spliced into the raw text
 and formatting survives. Device files feed three layers into one span set: curated paths,
-credential-looking keys at any depth, and whole values matching secrets.yaml. Every scalar below
-a credential-named key is masked, and every other scalar is scanned for URLs, tokens and quoted
-assignments. A comment naming a credential goes with the comments touching it, since a commented-out
+credential-looking keys at any depth, and values matching secrets.yaml. Every scalar below a
+credential-named key is masked, and every other scalar is scanned for URLs, tokens, quoted
+assignments and the text of the credentials found, which a file can repeat under a neutral key.
+A comment naming or quoting a credential goes with the comments touching it, since a commented-out
 block spans lines. The output is for reading: no tool writes it to a file.
 
 Over-redaction is the accepted failure direction. ``secrets.yaml`` is parsed here only to know
@@ -15,18 +16,24 @@ what not to emit; no tool can read it.
 
 from __future__ import annotations
 
-from bisect import bisect_left
+from bisect import bisect_left, bisect_right
 import difflib
 import re
-from collections.abc import Callable, Collection, Iterator
-from typing import Any
+from collections.abc import Callable, Collection, Iterable, Iterator
+from typing import Any, NamedTuple
 
 import yaml
 
 from .const import REDACTION_SENTINEL
 from .policy_engine import is_sensitive_key
 from .redaction import redact_secrets_in_text
-from .yaml_includes import OPAQUE_TAGS, PhoenixLenientLoader, YamlParseError, yaml_error_detail
+from .yaml_includes import (
+    OPAQUE_TAGS,
+    YAML_READ_ERRORS,
+    PhoenixLenientLoader,
+    YamlParseError,
+    yaml_error_detail,
+)
 
 # Known credential locations. "[]" matches any list index, so both the modern
 # list form (ota: - platform: esphome / password:) and the legacy mapping form
@@ -67,17 +74,28 @@ _HEADERS_KEY_RE = re.compile(r"headers$", re.IGNORECASE)
 # a key cannot be judged by name, so everything below one counts as a credential.
 _KEY_SEGMENT = "<key>"
 _COMPLEX_KEY = "<complex key>"
+_HIDDEN_KEY = "<key name>"
+# A mapping key below a credential key stays readable only when it reads as an option, as in
+# `encryption: {key: ...}`. Anything else there can be the credential: `tokens:` maps a token to
+# a client name in several add-ons. Digits are left out because generated tokens hold them.
+_OPTION_NAME_RE = re.compile(r"[a-z][a-z_]{0,31}")
 
 # Credentials in a scalar's text that redact_secrets_in_text leaves: a token alone as URL
 # userinfo, the query parameter map and search APIs use, a bearer value, and a credential-named
 # string assigned in a lambda or a JSON body. Bounded and anchored, as these scan whole files.
 _URL_USERINFO_RE = re.compile(r"://[^/\s@]{1,512}@")
-_URL_KEY_PARAM_RE = re.compile(r"(?i)([?&](?:key|sig|signature|pass|passwd|pwd)=)[^&#\s\"']+")
+_URL_PARAM_RE = re.compile(r"([?&#;][\w.\-]{1,64}=)[^&#\s\"']+")
+_URL_CREDENTIAL_PARAM_RE = re.compile(r"(?i)(?:^|[_\-])key$|^(?:sig|signature|pass|passwd|pwd)$")
 _BEARER_RE = re.compile(r"(?i)\b(bearer\s{1,16})[A-Za-z0-9._~+/=\-]{8,}")
 _QUOTED_ASSIGNMENT_RE = re.compile(
-    r"""(?<![\w\-])([A-Za-z_][\w\-]{0,127})(["'\]]{0,3}\s{0,16}[:=]\s{0,16})(["'])(?:[^\\\n]|\\.){0,4096}?\3"""
+    r"""(?<![\w\-])([A-Za-z_][\w\-]{0,127})"""
+    r"""((?:["'\]]{0,3}\s{0,16}[:=]|\[\s{0,16}\w{0,16}\s{0,16}\]\s{0,16}=|\s{0,16}[({])\s{0,16}|\s{1,16})"""
+    r"""(["'])(?:[^\\\n]|\\.){0,4096}?\3"""
 )
 
+_SCRUB_MARK_RE = re.compile(r"<(?:redacted|token|phoenix-access-key)>")
+_SCALAR_PROPERTIES_RE = re.compile(r"(?:[&!]\S*\s+)+")
+_LINE_BREAK_RE = re.compile("[\r\n\x85\u2028\u2029]")
 _COMMENT_RE = re.compile(r"#[^\r\n]*")
 _BLOCK_HEADER_COMMENT_RE = re.compile(r"[|>][+\-0-9]*[ \t]+(#[^\r\n]*)")
 _WORD_RE = re.compile(r"[A-Za-z0-9_]+")
@@ -92,7 +110,7 @@ Span = tuple[int, int, str, str | None]
 # Layer 3 floor. It catches a credential inlined in one file but referenced by
 # `!secret` in another. A short secrets.yaml value (a pin number, a small integer)
 # would match unrelated scalars all over a device file and mangle it, so only
-# values of at least this length are cross-checked, and only as whole scalars.
+# values of at least this length are cross-checked.
 MIN_CROSS_CHECK_LENGTH = 8
 
 _PLACEHOLDER_PREFIX = "__PHOENIX_REDACTED__"
@@ -110,7 +128,7 @@ def esphome_rel_path_ok(rel: str) -> bool:
     """Return whether a config-relative path may be read as device YAML.
 
     Follows _yaml_read_path_ok, except that ``archive/`` is refused and ``esphome/`` admitted.
-    secrets.yaml is never reachable.
+    No file named like secrets is reachable, as a backup copy holds the same values.
     """
     if not isinstance(rel, str) or not rel.strip():
         return False
@@ -121,10 +139,8 @@ def esphome_rel_path_ok(rel: str) -> bool:
         return False
     if parts[0].lower() == _ARCHIVE_DIR:
         return False
-    name = parts[-1]
-    if name.lower() == "secrets.yaml":
-        return False
-    return name.lower().endswith(_ALLOWED_SUFFIXES)
+    name = parts[-1].lower()
+    return "secret" not in name and name.endswith(_ALLOWED_SUFFIXES)
 
 
 def _path_matches_curated(path: tuple[str, ...]) -> bool:
@@ -148,17 +164,47 @@ def _format_path(path: tuple[str, ...]) -> str:
     return out
 
 
-def _walk(node: Any, path: tuple[str, ...]) -> Iterator[tuple[str, tuple[str, ...], Any]]:
-    """Yield (dotted_path, path_tuple, scalar_node) for every scalar, mapping keys included."""
+def _hides_key(key_node: Any, value_node: Any, path: tuple[str, ...], secret_key: Callable[[str], bool]) -> bool:
+    """Return whether a mapping key below a credential key is itself treated as a credential.
+
+    A key with no value is the value, as in a !!set or `? x`. A header's name stays readable.
+    """
+    if not isinstance(key_node, yaml.ScalarNode) or _COMPLEX_KEY in path:
+        return False
+    named = any(secret_key(segment) for segment in path)
+    if not named and not any(_HEADERS_KEY_RE.search(segment) for segment in path):
+        return False
+    if isinstance(value_node, yaml.ScalarNode) and not value_node.value:
+        return True
+    return named and not _OPTION_NAME_RE.fullmatch(key_node.value)
+
+
+def _no_key_is_secret(_name: str) -> bool:
+    """Key test for a walk that treats every key as a name."""
+    return False
+
+
+def _walk(
+    node: Any, path: tuple[str, ...], secret_key: Callable[[str], bool] = _no_key_is_secret
+) -> Iterator[tuple[str, tuple[str, ...], Any]]:
+    """Yield (dotted_path, path_tuple, scalar_node) for every scalar, mapping keys included.
+
+    A key that may be a credential enters paths as its index, never its text.
+    """
     if isinstance(node, yaml.MappingNode):
-        for key_node, value_node in node.value:
+        for index, (key_node, value_node) in enumerate(node.value):
+            if _hides_key(key_node, value_node, path, secret_key):
+                slot = f"[{index}]"
+                yield from _walk(key_node, path + (slot, _HIDDEN_KEY), secret_key)
+                yield from _walk(value_node, path + (slot,), secret_key)
+                continue
             key = getattr(key_node, "value", None)
             name = key if isinstance(key, str) else _COMPLEX_KEY
-            yield from _walk(key_node, path + (_KEY_SEGMENT if isinstance(key, str) else _COMPLEX_KEY,))
-            yield from _walk(value_node, path + (name,))
+            yield from _walk(key_node, path + (_KEY_SEGMENT if isinstance(key, str) else _COMPLEX_KEY,), secret_key)
+            yield from _walk(value_node, path + (name,), secret_key)
     elif isinstance(node, yaml.SequenceNode):
         for index, item in enumerate(node.value):
-            yield from _walk(item, path + (f"[{index}]",))
+            yield from _walk(item, path + (f"[{index}]",), secret_key)
     elif isinstance(node, yaml.ScalarNode):
         yield _format_path(path), path, node
 
@@ -187,7 +233,12 @@ def _holds_no_value(node: yaml.ScalarNode) -> bool:
     # default` carries a value of its own, and !lambda holds code.
     if node.tag == "!env_var":
         return len(node.value.split()) == 1
-    return not node.value or node.tag == _YAML_BOOL_TAG or node.tag in OPAQUE_TAGS
+    if not node.value:
+        # An unquoted credential starting with & or ! parses as an anchor or a tag on nothing.
+        return node.style is not None or node.start_mark.index == node.end_mark.index
+    if node.tag == _YAML_BOOL_TAG:
+        return node.value.lower() in yaml.constructor.SafeConstructor.bool_values
+    return node.tag in OPAQUE_TAGS
 
 
 def _under_secret_key(path: tuple[str, ...], secret_key: Callable[[str], bool]) -> bool:
@@ -228,72 +279,185 @@ def _scrubbed(text: str, secret_key: Callable[[str], bool]) -> str:
             return match[0]
         return f"{match[1]}{match[2]}{match[3]}{REDACTION_SENTINEL}{match[3]}"
 
+    def parameter(match: re.Match[str]) -> str:
+        name = match[1][1:-1]
+        if not secret_key(name) and not _URL_CREDENTIAL_PARAM_RE.search(name):
+            return match[0]
+        return match[1] + REDACTION_SENTINEL
+
     out = redact_secrets_in_text(text) or ""
     out = _URL_USERINFO_RE.sub(f"://{REDACTION_SENTINEL}@", out)
-    out = _URL_KEY_PARAM_RE.sub(lambda match: match[1] + REDACTION_SENTINEL, out)
+    out = _URL_PARAM_RE.sub(parameter, out)
     out = _BEARER_RE.sub(lambda match: match[1] + REDACTION_SENTINEL, out)
     return _QUOTED_ASSIGNMENT_RE.sub(assignment, out)
 
 
+def _credential_forms(value: str, source: str) -> set[str]:
+    """The text a credential scalar can appear as elsewhere: decoded, as written, and by line."""
+    properties = _SCALAR_PROPERTIES_RE.match(source)
+    written = source[properties.end():] if properties else source
+    lines = {value, written, *value.splitlines(), *written.splitlines()}
+    forms = {line.strip().strip("\"'") for line in lines}
+    return {form for form in forms if len(form) >= MIN_CROSS_CHECK_LENGTH}
+
+
+def _embedded(source: str, clean: str) -> set[str]:
+    """The credentials a scrub took out of `source`: the text between what `clean` kept."""
+    pieces = _SCRUB_MARK_RE.split(clean)
+    found: set[str] = set()
+    cursor = 0
+    for index, piece in enumerate(pieces):
+        at = len(source) if not piece and index == len(pieces) - 1 else source.find(piece, cursor)
+        if at < 0:
+            break
+        removed = source[cursor:at].strip().strip("\"'")
+        if index:
+            found.update((removed, removed.partition(":")[2]))
+        cursor = at + len(piece)
+    return {value for value in found if len(value) >= MIN_CROSS_CHECK_LENGTH}
+
+
+def _value_hits(chunks: list[str], values: Iterable[str]) -> dict[int, set[str]]:
+    """Which chunks hold which values, in one pass over all of them per value."""
+    joined = "\0".join(chunks)
+    starts = [0]
+    for chunk in chunks:
+        starts.append(starts[-1] + len(chunk) + 1)
+    hits: dict[int, set[str]] = {}
+    for value in filter(None, values):
+        at = joined.find(value)
+        while at >= 0:
+            hits.setdefault(bisect_right(starts, at) - 1, set()).add(value)
+            at = joined.find(value, at + len(value))
+    return hits
+
+
+def _node_span(text: str, node: yaml.ScalarNode) -> tuple[int, int]:
+    """A scalar's source span; a block scalar's end mark runs into the next key's indentation."""
+    start, end = node.start_mark.index, node.end_mark.index
+    while end > start and text[end - 1] in " \t\r\n":
+        end -= 1
+    return start, end
+
+
+def _node_text(text: str, node: yaml.ScalarNode) -> str:
+    """A scalar's source text, its anchor, tag and block header included."""
+    start, end = _node_span(text, node)
+    return text[start:end]
+
+
+def _load_secrets(text: str) -> Any:
+    """The node tree of a secrets.yaml, or None when it is empty or does not parse."""
+    try:
+        return _compose(text)
+    except YamlParseError:
+        return None
+
+
 def secret_values_from_text(text: str) -> set[str]:
-    """Values defined in a secrets.yaml, for the layer-3 cross-check.
+    """Values defined in a secrets.yaml at any depth, for the layer-3 cross-check.
 
     Returns an empty set for unparseable or empty input: a missing secrets.yaml
     degrades redaction to layers 1 and 2 rather than failing every read.
     """
-    try:
-        data = yaml.load(text, Loader=PhoenixLenientLoader)
-    except yaml.YAMLError:
+    root = _load_secrets(text)
+    if not isinstance(root, yaml.MappingNode):
         return set()
-    if not isinstance(data, dict):
-        return set()
-    return {
-        value for value in data.values()
-        if isinstance(value, str) and len(value) >= MIN_CROSS_CHECK_LENGTH
-    }
+    values: set[str] = set()
+    for _dotted, path, node in _walk(root, ()):
+        if path[-1:] != (_KEY_SEGMENT,) and not _holds_no_value(node):
+            values |= _credential_forms(node.value, _node_text(text, node))
+    return values
 
 
 def secret_keys_from_text(text: str) -> set[str]:
     """Key NAMES defined in a secrets.yaml, reported as defined_secrets."""
-    try:
-        data = yaml.load(text, Loader=PhoenixLenientLoader)
-    except yaml.YAMLError:
+    root = _load_secrets(text)
+    if not isinstance(root, yaml.MappingNode):
         return set()
-    if not isinstance(data, dict):
-        return set()
-    return {k for k in data if isinstance(k, str)}
+    return {key_node.value for key_node, _value in root.value if isinstance(key_node, yaml.ScalarNode)}
 
 
-def _scalar_spans(
+class _Partition(NamedTuple):
+    """A document's scalars, split by whether they are a credential whole."""
+
+    credentials: list[tuple[str, tuple[str, ...], Any]]
+    others: list[tuple[str, tuple[str, ...], Any]]
+    # Credential text, all of it, and the part safe to look for inside other text: a value
+    # that is also a key of this file would rewrite the file's structure.
+    values: set[str]
+    searchable: set[str]
+
+
+def _partition(
+    text: str,
+    root: Any,
+    secret_path: Callable[[tuple[str, ...]], bool],
+    secret_key: Callable[[str], bool],
+    secret_values: Collection[str],
+) -> _Partition:
+    """Split a document's scalars, collecting the text of every whole credential."""
+    credentials, others = [], []
+    values = set(secret_values)
+    names: set[str] = set()
+    for item in _walk(root, (), secret_key):
+        _dotted, path, node = item
+        if path[-1:] == (_KEY_SEGMENT,):
+            names.add(node.value)
+        if _holds_no_value(node):
+            continue
+        if secret_path(path) or (len(node.value) >= MIN_CROSS_CHECK_LENGTH and node.value in secret_values):
+            credentials.append(item)
+            values |= _credential_forms(node.value, _node_text(text, node))
+        else:
+            others.append(item)
+    return _Partition(credentials, others, values, {
+        value for value in values if len(value) >= MIN_CROSS_CHECK_LENGTH and value not in names})
+
+
+class _Scan(NamedTuple):
+    """What a document holds: the spans to change and the credential text behind them."""
+
+    spans: list[Span]
+    values: set[str]
+    searchable: set[str]
+
+
+def _scan_scalars(
     text: str,
     secret_path: Callable[[tuple[str, ...]], bool],
     secret_key: Callable[[str], bool],
     secret_values: Collection[str],
-) -> list[Span]:
+) -> _Scan:
     """Every scalar to change: whole for a credential, or with its embedded credential replaced."""
     root = _compose(text)
-    spans: list[Span] = []
     if root is None:
-        return spans
-    for dotted, path, node in _walk(root, ()):
-        if _holds_no_value(node):
-            continue
-        value = node.value
-        start, end = node.start_mark.index, node.end_mark.index
-        # A block scalar's end mark runs into the next key's indentation.
-        while end > start and text[end - 1] in " \t\r\n":
-            end -= 1
-        if secret_path(path) or (len(value) >= MIN_CROSS_CHECK_LENGTH and value in secret_values):
-            spans.append((start, end, dotted, None))
-            continue
-        source = text[start:end]
-        clean = _scrubbed(source, secret_key)
-        if clean != source:
-            spans.append((start, end, dotted, clean))
-        elif _scrubbed(value, secret_key) != value:
+        return _Scan([], set(secret_values), set(secret_values))
+    found = _partition(text, root, secret_path, secret_key, secret_values)
+    spans: list[Span] = [(*_node_span(text, node), dotted, None) for dotted, _path, node in found.credentials]
+    values = set(found.values)
+    hits = _value_hits([node.value for _dotted, _path, node in found.others], found.searchable)
+    for index, (dotted, _path, node) in enumerate(found.others):
+        start, end = _node_span(text, node)
+        repeated = hits.get(index, set())
+        # A block header's line is left to the comment pass, which can blank a comment on it.
+        header_end = _LINE_BREAK_RE.search(text, start, end) if node.style in ("|", ">") else None
+        body = header_end.start() if header_end else start
+        source = text[body:end]
+        clean = scrub_secret_values(_scrubbed(source, secret_key), repeated)
+        decoded = _scrubbed(node.value, secret_key)
+        if any(value not in source for value in repeated) or (clean == source and decoded != node.value):
             # Quoting or folding hid it from the source text.
             spans.append((start, end, dotted, None))
-    return spans
+            values |= _embedded(node.value, decoded)
+        elif clean != source:
+            spans.append((body, end, dotted, clean))
+            values |= _embedded(source, clean)
+    paths = _value_hits([span[2] for span in spans], set(secret_values) | found.searchable)
+    for index, repeated in paths.items():
+        start, end, dotted, replacement = spans[index]
+        spans[index] = (start, end, scrub_secret_values(dotted, repeated), replacement)
+    return _Scan(spans, values, found.searchable)
 
 
 def _comments(text: str) -> list[tuple[int, int]]:
@@ -322,8 +486,10 @@ def _comment_names_secret(comment: str, secret_key: Callable[[str], bool]) -> bo
     return any(secret_key(name) for name in names) or _scrubbed(comment, secret_key) != comment
 
 
-def _comment_spans(text: str, scalars: list[Span], secret_key: Callable[[str], bool]) -> list[Span]:
-    """Comments to blank: those naming a credential or beside a changed scalar.
+def _comment_spans(
+    text: str, scalars: list[Span], secret_key: Callable[[str], bool], values: Iterable[str]
+) -> list[Span]:
+    """Comments to blank: those naming or quoting a credential or beside a changed scalar.
 
     Adjacent comment lines go together, since a commented-out key's value or PEM body is on
     the lines after its name.
@@ -331,6 +497,7 @@ def _comment_spans(text: str, scalars: list[Span], secret_key: Callable[[str], b
     comments = _comments(text)
     if not comments:
         return []
+    quoting = {comments[index] for index in _value_hits([text[start:end] for start, end in comments], values)}
     breaks = [match.start() for match in re.finditer("\n", text)]
     changed = {bisect_left(breaks, index) for start, end, *_ in scalars for index in (start, end)}
     spans: list[Span] = []
@@ -338,7 +505,7 @@ def _comment_spans(text: str, scalars: list[Span], secret_key: Callable[[str], b
     previous_line = -2
 
     def close_run() -> None:
-        if any(line in changed or _comment_names_secret(text[start:end], secret_key)
+        if any(line in changed or (start, end) in quoting or _comment_names_secret(text[start:end], secret_key)
                for line, start, end in run):
             spans.extend((start, end, "", _MASKED_COMMENT) for _line, start, end in run)
         run.clear()
@@ -371,8 +538,8 @@ def _splice(text: str, spans: list[Span], placeholder: Callable[[str], str]) -> 
 
 def _secret_spans(text: str, secret_values: Collection[str]) -> list[Span]:
     """Every span of a device file to change, unioning all three detection layers."""
-    scalars = _scalar_spans(text, _device_secret_path, _device_secret_key, secret_values)
-    return scalars + _comment_spans(text, scalars, _device_secret_key)
+    scan = _scan_scalars(text, _device_secret_path, _device_secret_key, secret_values)
+    return scan.spans + _comment_spans(text, scan.spans, _device_secret_key, scan.searchable)
 
 
 def redact_esphome_text(
@@ -392,8 +559,8 @@ def mask_yaml_text(text: str) -> str:
     `!secret` and include references stay, as they hold no value. Raises YamlParseError,
     failing closed: an unparsed file's credentials cannot be located.
     """
-    scalars = _scalar_spans(text, _config_secret_path, is_sensitive_key, ())
-    spans = scalars + _comment_spans(text, scalars, is_sensitive_key)
+    scan = _scan_scalars(text, _config_secret_path, is_sensitive_key, ())
+    spans = scan.spans + _comment_spans(text, scan.spans, is_sensitive_key, scan.searchable)
     return _splice(text, spans, lambda _dotted: REDACTION_SENTINEL)
 
 
@@ -403,20 +570,26 @@ def masked_yaml_data(text: str) -> Any:
     Masking the shared node means an alias or merge of a credential cannot bring it back under
     a harmless name. Raises YamlParseError, as mask_yaml_text does.
     """
-    loader = PhoenixLenientLoader(text)
+    try:
+        loader = PhoenixLenientLoader(text)
+    except yaml.YAMLError as err:
+        raise YamlParseError(yaml_error_detail(err)) from err
     try:
         root = loader.get_single_node()
         if root is None:
             return None
-        for _dotted, path, node in _walk(root, ()):
-            if _holds_no_value(node):
-                continue
-            clean = (REDACTION_SENTINEL if _config_secret_path(path)
-                     else _scrubbed(node.value, is_sensitive_key))
+        found = _partition(text, root, _config_secret_path, is_sensitive_key, ())
+        hits = _value_hits([node.value for _dotted, _path, node in found.others], found.searchable)
+        for _dotted, path, node in found.credentials:
+            # Masked keys stay distinct, or a set or mapping would lose all but one of them.
+            suffix = path[-2] if path[-1] == _HIDDEN_KEY else ""
+            node.tag, node.value = _YAML_STR_TAG, f"{REDACTION_SENTINEL}{suffix}"
+        for index, (_dotted, _path, node) in enumerate(found.others):
+            clean = scrub_secret_values(_scrubbed(node.value, is_sensitive_key), hits.get(index, ()))
             if clean != node.value:
                 node.tag, node.value = _YAML_STR_TAG, clean
         return loader.construct_document(root)
-    except (yaml.YAMLError, RecursionError) as err:
+    except YAML_READ_ERRORS as err:
         raise YamlParseError(yaml_error_detail(err)) from err
     finally:
         loader.dispose()
@@ -530,18 +703,47 @@ def _scalar_entries(node: Any) -> dict[str, str]:
     }
 
 
-def declared_device_name(text: str) -> tuple[str, bool] | None:
-    """Return the file's own esphome.name and whether a MAC suffix extends it, or None.
+def _plain(node: Any) -> str:
+    """An untagged scalar node's text, else nothing."""
+    return node.value if isinstance(node, yaml.ScalarNode) and not _is_tagged(node) else ""
 
-    None when the file does not state a name itself: a name from a package or an include, or a
-    substitution the file does not define. No constructor runs. Raises YamlParseError for a file
-    that does not parse.
+
+def _keys(node: Any) -> dict[str, Any]:
+    """A mapping node's value nodes by scalar key; empty for anything else."""
+    if not isinstance(node, yaml.MappingNode):
+        return {}
+    return {key_node.value: value_node for key_node, value_node in node.value
+            if isinstance(key_node, yaml.ScalarNode)}
+
+
+class DeclaredDevice(NamedTuple):
+    """What a device file says about the device it builds, as far as the file alone can tell."""
+
+    name: str | None
+    mac_suffix: bool
+    # Where a flash of this file goes when that is stated, which can be another device's address.
+    addresses: tuple[str, ...]
+    # A literal name, no use_address, and nothing merged in that could supply either.
+    self_contained: bool
+
+
+# Top-level keys that bring configuration in from elsewhere.
+_IMPORTING_KEYS = frozenset({"packages", "dashboard_import", "<<"})
+# The components ESPHome takes an OTA address from.
+_NETWORK_KEYS = ("wifi", "ethernet", "openthread")
+
+
+def declared_device(text: str) -> DeclaredDevice | None:
+    """Return what a file declares about its device, or None for a file that is not a mapping.
+
+    ``name`` is None when the file does not state one: a name from a package or an include, or a
+    substitution it does not define. No constructor runs. Raises YamlParseError for a file that
+    does not parse.
     """
     root = _compose(text)
     if not isinstance(root, yaml.MappingNode):
         return None
-    top = {key_node.value: value_node for key_node, value_node in root.value
-           if isinstance(key_node, yaml.ScalarNode)}
+    top = _keys(root)
     settings = _scalar_entries(top.get("esphome"))
     substitutions = _scalar_entries(top.get("substitutions"))
 
@@ -552,12 +754,20 @@ def declared_device_name(text: str) -> tuple[str, bool] | None:
             return None
         return _SUBSTITUTION_RE.sub(lambda match: substitutions[match[1] or match[2]], value)
 
-    name = _expanded(settings.get("name", ""))
-    if not name:
-        return None
+    written = settings.get("name", "")
+    name = _expanded(written) or None
     suffix = _expanded(settings.get("name_add_mac_suffix", ""))
+    addresses: list[str] = []
+    contained = written == name and not _IMPORTING_KEYS & top.keys() and not _uses_include(root)
+    for block in (_keys(top.get(key)) for key in _NETWORK_KEYS):
+        contained = contained and "use_address" not in block and "<<" not in block
+        stated = _scalar_entries(block.get("manual_ip")).get("static_ip", "")
+        for value in (_plain(block.get("use_address")), stated):
+            address = _expanded(value)
+            if address:
+                addresses.append(address)
     # A flag this file cannot settle widens the match, the safe side for an owner lookup.
-    return name, suffix is None or suffix.lower() in _YAML_TRUE
+    return DeclaredDevice(name, suffix is None or suffix.lower() in _YAML_TRUE, tuple(addresses), contained)
 
 
 def apply_line_splice(text: str, from_line: int, to_line: int, replacement: str) -> str:
@@ -610,23 +820,54 @@ def masked_unified_diff(
 
 
 def inline_secret_values(text: str, secret_values: set[str] | None = None) -> set[str]:
-    """Return the credential values a device file carries inline, for scrubbing free text.
+    """Return the credential text a device file carries, for scrubbing free text.
 
-    Same three layers as masking; validation output can quote them. Values under
-    MIN_CROSS_CHECK_LENGTH are dropped, as the scrub is a blind substring replace.
+    Same three layers as masking; validation output can quote them. A credential is collected
+    decoded, as written and line by line, and one inside a larger value as the matched text alone.
+    Values under MIN_CROSS_CHECK_LENGTH are dropped, as the scrub is a blind substring replace.
     """
-    values: set[str] = set()
-    for start, end, dotted, _replacement in _secret_spans(text, secret_values or set()):
-        raw = text[start:end].strip().strip("\"'")
-        if dotted and len(raw) >= MIN_CROSS_CHECK_LENGTH:
-            values.add(raw)
-    return values
+    scan = _scan_scalars(text, _device_secret_path, _device_secret_key, secret_values or set())
+    return {value for value in scan.values if len(value) >= MIN_CROSS_CHECK_LENGTH}
 
 
-def scrub_secret_values(text: str, values: set[str]) -> str:
+def scrub_secret_values(text: str, values: Iterable[str]) -> str:
     """Replace every occurrence of every known credential in free text, longest first."""
     out = text
     for value in sorted(values, key=len, reverse=True):
         if value:
-            out = out.replace(value, "<redacted>")
+            out = out.replace(value, REDACTION_SENTINEL)
     return out
+
+
+def _strings_in(data: Any) -> Iterator[str]:
+    """Every string in JSON-like data, dictionary keys included."""
+    if isinstance(data, str):
+        yield data
+    elif isinstance(data, dict):
+        for key, value in data.items():
+            yield from _strings_in(key)
+            yield from _strings_in(value)
+    elif isinstance(data, (list, tuple)):
+        for item in data:
+            yield from _strings_in(item)
+
+
+def _scrub_strings(data: Any, values: set[str]) -> Any:
+    """Copy JSON-like data with `values` replaced in every string."""
+    if isinstance(data, str):
+        return scrub_secret_values(data, values)
+    if isinstance(data, dict):
+        return {_scrub_strings(key, values): _scrub_strings(value, values) for key, value in data.items()}
+    if isinstance(data, (list, tuple)):
+        return [_scrub_strings(item, values) for item in data]
+    return data
+
+
+def scrub_secret_data(data: Any, values: Iterable[str]) -> Any:
+    """Return JSON-like data with every known credential replaced in its strings.
+
+    For use before encoding, where a value holding a quote, a backslash or a non-ASCII character
+    still reads as itself. Data holding none of the values comes back as it is.
+    """
+    hits = _value_hits(list(_strings_in(data)), values)
+    return _scrub_strings(data, set().union(*hits.values())) if hits else data

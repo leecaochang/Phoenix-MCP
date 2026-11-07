@@ -278,4 +278,71 @@ describe("hostile input stays cheap", () => {
     const large = unit.repeat(80_000 / unit.length);
     expect(cost(large)).toBeLessThan(9 * Math.max(cost(small), 2));
   }, 120_000);
+
+  describe("tables", () => {
+    /** A header of `columns` cells over `rows` rows of one empty cell each. */
+    const padded = (columns: number, rows: number) => `${"|".repeat(columns + 1)}\n|-\n${"|\n".repeat(rows)}`;
+    const cells = (html: string) => (html.match(/<t[dh]>/g) ?? []).length;
+
+    it("draws a short row only as far as it goes", () => {
+      const html = renderMarkdown("| a | b | c |\n|---|---|---|\n| 1 |\n| 1 | 2 | 3 | 4 |");
+      expect(html).toContain("<tr><td>1</td></tr>");
+      expect(html).toContain("<tr><td>1</td><td>2</td><td>3</td></tr>");
+    });
+
+    it("keeps its cost to its source when a wide header sits over short rows", () => {
+      const html = renderMarkdown(padded(64, 4_000));
+      expect(html).toContain("<table>");
+      expect(cells(html)).toBe(64 + 4_000);
+      expect(html.length).toBeLessThan(20 * 8_000);
+    });
+
+    it.each([
+      ["too many columns", padded(65, 1)],
+      ["too many cells", `a|b\n-|-\n${"1|2\n".repeat(5_000)}`],
+    ])("falls back to escaped text with %s", (_name, source) => {
+      const html = renderMarkdown(`${source}\nafter <b>`);
+      expect(html.startsWith("<pre><code>")).toBe(true);
+      expect(html).not.toContain("<table>");
+      expect(html).toContain("after &lt;b&gt;");
+    });
+
+    it("draws a table right at both limits", () => {
+      expect(renderMarkdown(padded(64, 1))).toContain("<table>");
+      expect(renderMarkdown(`a|b\n-|-\n${"1|2\n".repeat(4_999)}`)).toContain("<table>");
+    });
+
+    it("escapes what it falls back to", () => {
+      const html = renderMarkdown(`<img src=x onerror=y>${"|".repeat(70)}\n|-\n|`);
+      expect(html).toContain("&lt;img");
+      expect(html).not.toContain("<img");
+    });
+
+    // A row that drew every column would make each of these quadratic.
+    it.each([
+      ["a header of pipes over rows of pipes", (n: number) => `${"|".repeat(n / 4)}\n|-\n${"|\n".repeat(n / 4)}`],
+      ["a header at the column limit over empty rows", (n: number) => padded(64, n / 2)],
+    ])("%s grow linearly and stay small", (_name, build) => {
+      const small = build(20_000);
+      const large = build(80_000);
+      expect(cost(large)).toBeLessThan(9 * Math.max(cost(small), 2));
+      expect(renderMarkdown(large).length).toBeLessThan(10 * large.length);
+    }, 120_000);
+
+    it("stays quick for a header and rows of pipes", () => {
+      const started = performance.now();
+      renderMarkdown(`${"|".repeat(4_000)}\n|-\n${"|\n".repeat(4_000)}`);
+      expect(performance.now() - started).toBeLessThan(1000);
+    });
+
+    it("does not repeat a block's cost in any other block shape", () => {
+      const unit = [
+        "> a\n", "- a\n1. b\n", "# a\n", "---\n", "```\n", "a|\n",
+      ];
+      for (const piece of unit) {
+        const source = piece.repeat(20_000 / piece.length);
+        expect(renderMarkdown(source).length, piece).toBeLessThan(40 * source.length);
+      }
+    });
+  });
 });

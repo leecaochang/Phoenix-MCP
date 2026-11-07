@@ -294,11 +294,16 @@ async def test_invalid_input_sends_no_provider_request(hass,companion,monkeypatc
 async def test_mesa_gate_remains_effective_and_approval_ends_batch(hass,companion,monkeypatch,mode):
     from custom_components.phoenix_mcp.mesa import async_setup_mesa
     from custom_components.phoenix_mcp.mesa_core import MetadataOrigin, SemanticProfile
+    from homeassistant.helpers import entity_registry as er
     data,access_key,_,_=companion
     await data.store.async_patch_settings(mesa_mode='enforced')
     data.mesa = await async_setup_mesa(hass,'enforced')
     data.mesa.store.set('light.selected',SemanticProfile.from_dict('light.selected',
         {'semantic_profile':{'operational_boundaries':{'control_mode':mode}}},default_origin=MetadataOrigin.USER))
+    attributes=hass.states.get('light.selected').attributes
+    hass.states.async_remove('light.selected')
+    er.async_get(hass).async_get_or_create('light','test','selected',suggested_object_id='selected')
+    hass.states.async_set('light.selected','off',attributes)
     rounds=[[('light__HassLightSet',{'name':'light.selected','brightness':40}),
              ('fan__HassFanSetSpeed',{'name':'fan.selected','percentage':50})]]
     if mode == 'read_only':
@@ -1092,7 +1097,9 @@ async def test_household_receipts_readback_and_provider_failure_do_not_replay(ha
 
 @pytest.mark.parametrize('mode,expected', [('allow', 'completed'), ('confirm', 'pending_approval'), ('deny', 'refused')])
 async def test_companion_cover_capability_gate_is_preserved(hass, companion, monkeypatch, mode, expected):
+    from homeassistant.helpers import entity_registry as er
     data, access_key, _, _ = companion
+    er.async_get(hass).async_get_or_create('cover', 'test', 'household', suggested_object_id='household')
     await data.store.async_patch_access_key(access_key.id, cap_physical_control=mode)
     access_key.permissions.entities['cover.household'] = PermissionNode('GREEN')
     hass.states.async_set('cover.household', 'closed', {'friendly_name': 'Household cover', 'current_position': 0})
@@ -1286,3 +1293,22 @@ async def test_an_external_request_cannot_choose_the_provider_account(hass, comp
     catalogs = scripted(monkeypatch, [])
     report = payload(await rpc(hass, companion, args={'request': 'Read the temperature.', 'account': other}))
     assert report['status'] == 'invalid_request' and catalogs == []
+
+
+@pytest.mark.parametrize('text', ['half an emoji \ud83d here', '\ud83d'])
+async def test_half_a_character_in_model_text_does_not_end_the_request(hass, companion, monkeypatch, text):
+    tool_text = {'type': llm_base.EV_DONE, 'stop_reason': 'tool_use', 'assistant_msg': {'role': 'assistant', 'content': [
+        {'type': 'text', 'text': text},
+        {'type': 'tool_use', 'id': 'a', 'name': 'get_state', 'input': {'entity_id': 'sensor.temperature', 'projection': {'kind': 'compact'}}}]}}
+    report = json.dumps({'status': 'completed', 'message': '23 degrees.'})
+    scripted(monkeypatch, [text, report])
+    assert payload(await rpc(hass, companion))['status'] not in ('provider_error', 'outcome_unknown')
+    rounds = scripted(monkeypatch, [tool_text, report])
+    result = payload(await rpc(hass, companion))
+    assert result['status'] not in ('provider_error', 'outcome_unknown')
+    assert len(rounds) == 2
+
+
+def test_a_measured_size_counts_half_a_character_as_its_escape():
+    assert home_companion._context_bytes('s', [{'role': 'user', 'content': '\ud83d'}]) > 0
+    assert home_companion._byte_size('\ud83d') == len('\\ud83d')

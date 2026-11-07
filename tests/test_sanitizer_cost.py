@@ -16,13 +16,16 @@ import pytest
 
 from homeassistant.helpers import entity_registry as er
 
-from custom_components.phoenix_mcp import approvals, audit, conversation_log as history, redaction
+from custom_components.phoenix_mcp import (
+    approvals, audit, conversation_log as history, esphome_yaml, redaction, voice_agent,
+)
 from custom_components.phoenix_mcp.access_key_store import AccessKeyStore
 from custom_components.phoenix_mcp.admin.approvals import PhoenixAdminApprovalsView
 from custom_components.phoenix_mcp.approvals import PendingApproval, async_create_pending_approval, list_approvals
 from custom_components.phoenix_mcp.audit import AuditLog
 from custom_components.phoenix_mcp.const import CONVERSATION_LOG_SCAN_BYTES, CONVERSATION_LOG_TEXT_SCAN_CHARS, DOMAIN
 from custom_components.phoenix_mcp.data import PhoenixData
+from custom_components.phoenix_mcp.llm import probes
 from custom_components.phoenix_mcp.rate_limiter import RateLimiter
 from custom_components.phoenix_mcp.tool_dispatch import _dispatch_mcp
 from tests.runtime_fixtures import make_admin_request
@@ -61,7 +64,23 @@ SHAPES = {
     "alarm code digits": lambda n: "alarm code 1" + "-" * n + "x",
     "repeated data uri": lambda n: "data:" * (n // 5),
     "secret prefix then dashes": lambda n: "sk-" + "-" * n + "!",
+    "credential call openings": lambda n: "password(" * (n // 9),
+    "credential array openings": lambda n: "key[" * (n // 4),
+    "credential then open quote": lambda n: 'password "' * (n // 10),
+    "url parameters": lambda n: "?a=" * (n // 3),
+    "url parameter names": lambda n: "?" + "a" * n,
     "newlines": lambda n: "\n" * n,
+    "unclosed strong": lambda n: "**a " * (n // 4),
+    "unclosed underscores": lambda n: "__a " * (n // 4),
+    "unclosed emphasis": lambda n: " _a" * (n // 3),
+    "unclosed star": lambda n: " *a" * (n // 3),
+    "unclosed strike": lambda n: "~~a " * (n // 4),
+    "open brackets": lambda n: "[" * n,
+    "open image brackets": lambda n: "![" * (n // 2),
+    "open link targets": lambda n: "[a](" * (n // 4),
+    "spaces before no newline": lambda n: " " * n + "x",
+    "rule marks": lambda n: "- " * (n // 2) + "x",
+    "open thinking tags": lambda n: "<think>" * (n // 7),
     "short lines": lambda n: "k: v\n" * (n // 5),
     "unicode space": lambda n: " " * n + "x",
 }
@@ -71,6 +90,9 @@ SCANNERS = {
     "_scrub_log_text": redaction._scrub_log_text,
     "sanitized": lambda text: history.sanitized(text, max_bytes=CONVERSATION_LOG_SCAN_BYTES),
     "sanitized hiding addresses": lambda text: history.sanitized(text, max_bytes=CONVERSATION_LOG_SCAN_BYTES, hide_ip=True),
+    "_spoken_text": voice_agent._spoken_text,
+    "probe thinking": lambda text: probes._PROBE_THINKING.sub("", text),
+    "device file scalar": lambda text: esphome_yaml._scrubbed(text, esphome_yaml._device_secret_key),
 }
 
 
@@ -93,6 +115,13 @@ def test_every_shape_costs_in_proportion_to_its_size(scanner):
     run = SCANNERS[scanner]
     for name, shape in SHAPES.items():
         _assert_linear(_cost(run, shape(SMALL)), _cost(run, shape(SMALL * FACTOR)), name)
+
+
+def test_finding_known_values_costs_in_proportion_to_the_text():
+    values = [f"secret-value-{index:04d}" for index in range(50)]
+    chunks = lambda count: ["secret-value-0007 and other text"] * count
+    _assert_linear(_cost(esphome_yaml._value_hits, chunks(SMALL), values),
+                   _cost(esphome_yaml._value_hits, chunks(SMALL * FACTOR), values), "value hits")
 
 
 def test_the_guard_measures_a_quadratic_pattern():

@@ -43,12 +43,14 @@ from .dashboard_search import Criteria, parse_criteria, search_layout
 from ..policy_engine import Permission, filter_service_response, is_sensitive_key, resolve_registry_access
 from ..access_key_store import AccessKeyRecord
 from ..config_recovery import ConfigurationRecoveryError, safe_snapshot
-from ..request_authority import check_request_authority
+from ..request_authority import AuthorityChangedError
 from ..tool_common import (
     _CAP_FORBIDDEN_MESSAGE,
     _cas_conflict,
+    _check_authority_before_dispatch,
     _gate,
     _record_version,
+    _recovery_failure,
     _tool_error,
     _tool_refused_before_write,
     _tool_success,
@@ -125,6 +127,7 @@ async def _recoverable_dashboard_registry_write(
     """Persist, serialize, execute and read back a dashboard registry mutation."""
     recovery = data.config_recovery
     resource = f"dashboard_registry:{dashboard_id}"
+    sent = None
     try:
         async with recovery.resource(resource):
             # Core pops allow_single_word on create and never stores it, so it is
@@ -141,12 +144,19 @@ async def _recoverable_dashboard_registry_write(
                 if await _dashboard_registry_snapshot(hass, dashboard_id) != before:
                     await recovery.mark(rid, "not_applied")
                     return _tool_error("The dashboard registry changed while preparing its recovery snapshot; nothing was dispatched."), "invalid_request", operation
-                check_request_authority()
+                await _check_authority_before_dispatch(recovery, rid)
+                sent = rid
                 try:
                     result = await async_ws_command(hass, command, payload)
                 except WsDispatchError as exc:
-                    await recovery.mark(rid, "not_applied" if dashboard_registry_refused(exc) else "unknown", error="command_rejected")
-                    return _tool_error(f"Dashboard registry operation failed: {exc}"), "invalid_request", operation
+                    if dashboard_registry_refused(exc):
+                        await recovery.mark(rid, "not_applied", error="command_rejected")
+                        return _tool_error(f"Dashboard registry operation failed: {exc}"), "invalid_request", operation
+                    await recovery.mark(rid, "unknown", error="command_rejected")
+                    return _tool_uncertain({
+                        "status": "unknown", "recovery_id": rid, "retry_safe": False,
+                        "message": f"Dashboard registry operation outcome is unknown: {exc}",
+                    }), "invalid_request", f"dashboard:{dashboard_id}"
                 try:
                     after = await _dashboard_registry_snapshot(hass, dashboard_id)
                 except Exception:  # dispatch may have landed
@@ -177,10 +187,12 @@ async def _recoverable_dashboard_registry_write(
                 }, default=str)), "allowed", f"dashboard:{dashboard_id}"
             finally:
                 recovery.leave(rid)
-    except ConfigurationRecoveryError as exc:
-        return _tool_error(str(exc)), "invalid_request", operation
-    except Exception:  # retain unresolved state on persistence or authority errors
-        return _tool_error("Dashboard registry outcome is uncertain; inspect configuration recovery before retrying."), "invalid_request", operation
+    except AuthorityChangedError:
+        raise
+    except Exception as exc:  # retain unresolved state on persistence errors
+        return _recovery_failure(
+            exc, sent, lost="Dashboard registry outcome is uncertain; inspect configuration recovery before retrying.",
+            unsent="The recovery record could not be saved, so nothing was changed."), "invalid_request", operation
 
 
 async def _recoverable_dashboard_save(
@@ -192,7 +204,7 @@ async def _recoverable_dashboard_save(
     resource_id = url_path or "lovelace"
     resource = f"dashboard_layout:{resource_id}"
     recovery = data.config_recovery
-    dispatched = False
+    sent = None
     try:
         before_snapshot = _dashboard_layout_snapshot(url_path, before)
         async with recovery.resource(resource):
@@ -212,13 +224,19 @@ async def _recoverable_dashboard_save(
                 if current != before:
                     await recovery.mark(rid, "not_applied")
                     return _tool_error("The dashboard layout changed while preparing its recovery snapshot; nothing was dispatched."), "invalid_request", "dashboard"
-                check_request_authority()
-                dispatched = True
+                await _check_authority_before_dispatch(recovery, rid)
+                sent = rid
                 try:
                     await async_save_lovelace_config(hass, url_path, after)
-                except WsDispatchError as exc:
-                    await recovery.mark(rid, "not_applied" if isinstance(exc, WsCommandNotDispatchedError) else "unknown", error="save_rejected")
+                except WsCommandNotDispatchedError as exc:
+                    await recovery.mark(rid, "not_applied", error="save_rejected")
                     return _tool_error(f"Failed to save dashboard config: {exc}"), "invalid_request", "dashboard"
+                except WsDispatchError as exc:
+                    await recovery.mark(rid, "unknown", error="save_rejected")
+                    return _tool_uncertain({
+                        "status": "unknown", "recovery_id": rid, "retry_safe": False,
+                        "message": f"Dashboard layout outcome is unknown: {exc}",
+                    }), "invalid_request", f"dashboard:{resource_id}"
                 try:
                     observed = await async_get_lovelace_config(hass, url_path, storage_only=True)
                 except WsDashboardNotFoundError:
@@ -238,12 +256,12 @@ async def _recoverable_dashboard_save(
                     })), "allowed", f"dashboard:{resource_id}"
             finally:
                 recovery.leave(rid)
-    except ConfigurationRecoveryError as exc:
-        return _tool_error(str(exc)), "invalid_request", "dashboard"
-    except Exception:  # keep uncertain writes in the recovery store
-        if not dispatched:
-            return _tool_error("The recovery snapshot could not be saved, so the dashboard was not changed."), "invalid_request", "dashboard"
-        return _tool_error("Dashboard layout outcome is uncertain; inspect configuration recovery before retrying."), "invalid_request", "dashboard"
+    except AuthorityChangedError:
+        raise
+    except Exception as exc:  # keep uncertain writes in the recovery store
+        return _recovery_failure(
+            exc, sent, lost="Dashboard layout outcome is uncertain; inspect configuration recovery before retrying.",
+            unsent="The recovery snapshot could not be saved, so the dashboard was not changed."), "invalid_request", "dashboard"
     return None
 
 

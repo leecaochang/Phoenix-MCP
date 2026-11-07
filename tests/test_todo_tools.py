@@ -26,6 +26,7 @@ from custom_components.phoenix_mcp.service_targets import todo_items_in_review, 
 from custom_components.phoenix_mcp.tool_common import RefusedBeforeWrite, UncertainOutcome, stored_result_bytes
 from custom_components.phoenix_mcp.tool_defs import _ENTITY_TOOL_DEFS
 from custom_components.phoenix_mcp.tool_dispatch import _call_tool, async_execute_approved_tool
+from custom_components.phoenix_mcp.tools import todo as todo_tools
 from custom_components.phoenix_mcp.tools.service import _build_diff_call_service
 from tests.runtime_fixtures import mesa_off_store
 
@@ -116,6 +117,36 @@ async def test_a_read_only_key_reads_but_cannot_change(hass, lists):
                              _key("YELLOW"))
     assert outcome == "denied"
     assert [item.summary for item in lists.todo_items] == ["Milk", "Eggs", "Bread", "bread"]
+
+
+@pytest.mark.parametrize("fields", [
+    {"action": "update", "item": "milk", "description": "password: <redacted>\nnew note"},
+    {"action": "update", "item": "milk", "summary": "Milk <redacted>"},
+    {"action": "update", "item": "milk", "description": "see <redacted-entity>"},
+    {"action": "add", "summary": "password: <redacted>"},
+    {"action": "add", "summary": "Tea", "description": "<redacted>"},
+])
+async def test_a_redacted_value_cannot_be_written_back(hass, lists, fields):
+    """A read masks a secret or a hidden entity, so sending that text back would overwrite the real one."""
+    lists.todo_items[0].description = "password: hunter2"
+    before = [(item.uid, item.summary, item.description) for item in lists.todo_items]
+    with patch.object(todo_tools, "_tool_call_service") as service:
+        body, outcome = await _call(hass, "set_todo_item", {"entity_id": "todo.shopping", **fields})
+    assert outcome == "invalid_request"
+    assert "Redacted item text" in body
+    service.assert_not_called()
+    assert [(item.uid, item.summary, item.description) for item in lists.todo_items] == before
+
+
+async def test_a_masked_note_a_read_returns_is_refused_end_to_end(hass, lists):
+    lists.todo_items[0].description = "password: hunter2"
+    read, _ = await _call(hass, "get_todo_items", {"entity_id": "todo.shopping"})
+    masked = next(item for item in read["items"] if item["uid"] == "milk")["description"]
+    assert "hunter2" not in masked
+    _, outcome = await _call(hass, "set_todo_item", {"entity_id": "todo.shopping", "action": "update", "item": "milk",
+                                                     "description": f"{masked}\nnew note"})
+    assert outcome == "invalid_request"
+    assert lists.todo_items[0].description == "password: hunter2"
 
 
 async def test_add_complete_and_remove_are_read_back(hass, lists):

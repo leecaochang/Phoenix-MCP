@@ -2,13 +2,20 @@
 
 from __future__ import annotations
 
+import json
+
 import pytest
 
 from custom_components.phoenix_mcp.esphome_yaml import (
+    DeclaredDevice,
+    declared_device,
     esphome_rel_path_ok,
     inline_secret_values,
+    mask_yaml_text,
+    masked_yaml_data,
     redact_esphome_slice,
     redact_esphome_text,
+    scrub_secret_data,
     scrub_secret_values,
     secret_keys_from_text,
     secret_values_from_text,
@@ -56,7 +63,8 @@ class TestJail:
         assert esphome_rel_path_ok(rel) is True
 
     @pytest.mark.parametrize("rel", [
-        "secrets.yaml", "SECRETS.YAML", "Secrets.Yaml",
+        "secrets.yaml", "SECRETS.YAML", "Secrets.Yaml", "secrets.yml", "secrets_old.yaml", "secret.yaml",
+        "old/secrets.backup.yml", "my-Secret-copy.yaml",
         "archive/old.yaml", "ARCHIVE/old.yaml",
         ".device-builder.json", ".git/config", "sub/.hidden/x.yaml",
         "notes.txt", "device.yaml.bak", "", "   ",
@@ -145,6 +153,26 @@ class TestLayer2KeyNameHeuristic:
 
 # Each document carries credentials spelled SECRETVAL<n> in a shape device files use.
 LEAK_SHAPES = {
+    "camel_case_key": "x:\n  aesKey: SECRETVAL20\n",
+    "two_word_comment": "x: 1\n# api key SECRETVAL21\n",
+    "partly_scrubbed_alias": "note: &n https://u:SECRETVAL22@host/a\npassword: *n\n",
+    "lambda_setter": 'x:\n  lambda: |-\n    id(w).set_password("SECRETVAL23");\n',
+    "lambda_array": 'x:\n  lambda: |-\n    const char key[] = "SECRETVAL24";\n',
+    "lambda_sized_array": 'x:\n  lambda: |-\n    char key[16] = "SECRETVAL24";\n',
+    "lambda_define": 'x:\n  lambda: |-\n    #define PASSWORD "SECRETVAL25"\n',
+    "lambda_constructor": 'x:\n  lambda: |-\n    std::string password("SECRETVAL26");\n',
+    "lambda_braces": 'x:\n  lambda: |-\n    std::string token{"SECRETVAL27"};\n',
+    "url_hyphen_key": "x:\n  url: https://x.y/a?api-key=SECRETVAL28\n",
+    "url_auth_key": "x:\n  url: https://x.y/a?auth_key=SECRETVAL29&b=1\n",
+    "url_fragment": "x:\n  url: https://x.y/a#access_token=SECRETVAL30\n",
+    "key_below_credential": "api_keys:\n  SECRETVAL31-abc: myapp\n",
+    "digit_key_below_credential": "tokens:\n  SECRETVAL32: admin\n",
+    "set_below_credential": "password: !!set {SECRETVAL33, other}\n",
+    "question_key_below_credential": "password:\n  ? SECRETVAL34\n",
+    "tag_as_value": "password: !SECRETVAL35\n",
+    "anchor_as_value": "password: &SECRETVAL36\n",
+    "bool_tag": "password: !!bool SECRETVAL37\n",
+    "header_comment_beside_a_url": "notes: |  # pw SECRETVAL38\n  https://a:b@host\n",
     "list_under_key": "wifi:\n  ssid: x\n  passwords:\n    - SECRETVAL1\n    - SECRETVAL2\n",
     "flow_list_under_key": "my_component:\n  api_tokens: [SECRETVAL3, SECRETVAL4]\n",
     "mapping_under_key": "foo:\n  password:\n    value: SECRETVAL5\n",
@@ -235,8 +263,9 @@ class TestLeakShapes:
         assert masked == "x:\n  url: https://<redacted>@example.com/path\n"
 
     def test_the_credential_in_a_url_is_scrubbed_from_free_text_too(self):
-        url = "https://user:hunter2@example.com/path"
-        assert url in inline_secret_values(f"x:\n  url: {url}\n")
+        values = inline_secret_values("x:\n  url: https://user:hunter2secret@example.com/path\n")
+        assert "hunter2secret" in values
+        assert scrub_secret_values("error at hunter2secret", values) == "error at <redacted>"
 
     @pytest.mark.parametrize("key", ["public_key", "peer_public_key", "bypass", "compass", "keys", "tx_pin"])
     def test_public_names_stay_readable(self, key):
@@ -287,10 +316,11 @@ class TestLayer3SecretsCrossCheck:
         assert paths == []
         assert red == text
 
-    def test_substring_occurrences_never_trigger(self):
+    def test_a_value_inside_a_larger_scalar_is_replaced_alone(self):
         text = "esphome:\n  name: housepassword1-extended-name\n"
-        _, paths = redact_esphome_text(text, {"housepassword1"})
-        assert paths == []
+        red, paths = redact_esphome_text(text, {"housepassword1"})
+        assert red == "esphome:\n  name: <redacted>-extended-name\n"
+        assert paths == ["esphome.name"]
 
     def test_missing_secrets_degrades_to_layers_1_and_2(self):
         red, paths = redact_esphome_text(LIVE_SHAPE, set())
@@ -441,3 +471,232 @@ def test_masked_diff_keeps_an_unterminated_last_line_apart():
 
     diff, truncated = masked_unified_diff("x", "a: 1\n", "old", "new", 10_000)
     assert "-x\n+a: 1\n" in diff and truncated is False
+
+
+S = "hunter2secretvalue"
+
+
+class TestInlineValuesForFreeText:
+    @pytest.mark.parametrize("text", [
+        f"password: {S}\n",
+        f'password: "{S}"\n',
+        f"password: &p {S}\nx: *p\n",
+        f"password: !!str {S}\n",
+        f"private_key: |\n  {S}\n  second line here\n",
+        f"token: >-\n  {S}\n",
+        f"mqtt:\n  password: |-\n    {S}\n",
+        'password: "hunter2\\u0073ecretvalue"\n',
+        f"url: https://user:{S}@example.com/a\n",
+        f"url: https://x.y/a?token={S}\n",
+        f"x: 'password = \"{S}\"'\n",
+    ], ids=["plain", "quoted", "anchor", "tag", "block", "folded", "nested_block", "escape", "userinfo", "query", "lambda"])
+    def test_the_credential_alone_is_collected(self, text):
+        assert scrub_secret_values(f"error near {S} here", inline_secret_values(text)) == "error near <redacted> here"
+
+    def test_every_block_line_is_collected(self):
+        values = inline_secret_values("private_key: |\n  first-line-of-key\n  second-line-of-key\n")
+        assert {"first-line-of-key", "second-line-of-key"} <= values
+
+    def test_the_source_form_of_an_escaped_value_is_collected(self):
+        assert "hunter2\\u0073ecretvalue" in inline_secret_values('password: "hunter2\\u0073ecretvalue"\n')
+
+    def test_a_short_value_is_never_collected(self):
+        assert inline_secret_values("password: abc\n") == set()
+
+
+class TestScrubBeforeEncoding:
+    @pytest.mark.parametrize("value", ['pass"word123', "pass\\word123", "pässwörd123"])
+    def test_a_value_that_encoding_would_change_is_replaced(self, value):
+        scrubbed = scrub_secret_data({"output": [f"saw {value}", {value: 1}]}, {value})
+        assert json.dumps(scrubbed) == '{"output": ["saw <redacted>", {"<redacted>": 1}]}'
+
+    def test_data_without_a_value_comes_back_as_it_is(self):
+        data = {"a": ["b"]}
+        assert scrub_secret_data(data, {"absent-value"}) is data
+
+
+class TestSecretsYamlInsideOtherText:
+    TEXT = f"""wifi:
+  ssid: {S}
+api:
+  url: http://x/{S}/y
+x:
+  lambda: 'return "{S}";'
+# note {S}
+name: pre{S}
+"""
+
+    def test_a_value_inside_a_scalar_or_comment_is_replaced(self):
+        masked, _ = redact_esphome_text(self.TEXT, {S})
+        assert S not in masked
+        assert "http://x/<redacted>/y" in masked and "name: pre<redacted>" in masked
+
+    def test_a_credential_repeated_at_a_neutral_key_is_replaced(self):
+        masked, _ = redact_esphome_text(f"password: {S}\nnote: see {S} here\n")
+        assert masked.splitlines()[1] == "note: see <redacted> here"
+
+    def test_a_credential_repeated_behind_an_escape_masks_the_scalar(self):
+        masked, _ = redact_esphome_text(f'password: {S}\nnote: "hunter2\\u0073ecretvalue and more"\n')
+        assert masked.splitlines()[1] == "note: __PHOENIX_REDACTED__note__"
+
+    def test_a_config_file_repeat_is_replaced_in_both_reads(self):
+        text = f"password: {S}\nnote: see {S} here\n"
+        assert S not in mask_yaml_text(text)
+        assert masked_yaml_data(text) == {"password": "<redacted>", "note": "see <redacted> here"}
+
+    def test_a_value_that_is_also_a_key_leaves_the_structure_readable(self):
+        text = "wifi:\n  password: password\nname: password-reset\n"
+        masked, paths = redact_esphome_text(text)
+        assert masked == "wifi:\n  password: __PHOENIX_REDACTED__wifi.password__\nname: password-reset\n"
+        assert paths == ["wifi.password"]
+
+    def test_the_floor_applies_inside_other_text(self):
+        text = "name: abc1234\n"
+        assert redact_esphome_text(text, {"abc1234"}) == (text, [])
+
+    def test_numeric_and_nested_values_are_collected(self):
+        values = secret_values_from_text("a: 12345678\nb: [hunter3secret]\nc: {e: hunter4secret}\n")
+        assert values == {"12345678", "hunter3secret", "hunter4secret"}
+
+    def test_every_line_of_a_block_value_is_collected(self):
+        assert "first-line-long" in secret_values_from_text("k: |\n  first-line-long\n  second\n")
+
+    def test_a_key_holding_a_value_leaves_no_trace_in_a_path(self):
+        masked, paths = redact_esphome_text(f"{S}x:\n  password: value1\n", {S})
+        assert S not in masked and not any(S in path for path in paths)
+
+
+class TestKeysBelowACredentialKey:
+    def test_an_index_stands_in_for_the_key(self):
+        masked, paths = redact_esphome_text("api_keys:\n  sk-live-abcdef123456: myapp\n")
+        assert "sk-live" not in masked and "myapp" not in masked
+        assert paths == ["api_keys[0]", "api_keys[0].<key name>"]
+
+    def test_an_option_name_stays_readable(self):
+        masked, paths = redact_esphome_text("api:\n  encryption:\n    key: abcdefgh\n")
+        assert masked == "api:\n  encryption:\n    key: __PHOENIX_REDACTED__api.encryption.key__\n"
+        assert paths == ["api.encryption.key"]
+
+    def test_a_header_name_stays_readable(self):
+        text = "http_request:\n  headers:\n    X-Custom-Name: value-to-hide\n"
+        assert "X-Custom-Name:" in mask_yaml_text(text) and "value-to-hide" not in mask_yaml_text(text)
+
+    def test_a_loaded_mapping_keeps_one_row_per_key(self):
+        loaded = masked_yaml_data("api_keys:\n  sk-one-1: a\n  sk-two-2: b\n")
+        assert loaded == {"api_keys": {"<redacted>[0]": "<redacted>", "<redacted>[1]": "<redacted>"}}
+
+    def test_a_loaded_set_keeps_one_row_per_member(self):
+        assert masked_yaml_data("password: !!set {one1, two2}\n") == {"password": {"<redacted>[0]", "<redacted>[1]"}}
+
+
+class TestSyntaxStandingForAValue:
+    @pytest.mark.parametrize("text", [
+        "password: !hunter2secret\n", "password: &hunter2secret\n", "password: !!bool hunter2secret\n",
+    ], ids=["tag", "anchor", "bool"])
+    def test_all_three_reads_mask_it(self, text):
+        assert "hunter2" not in mask_yaml_text(text)
+        assert "hunter2" not in redact_esphome_text(text)[0]
+        assert "hunter2" not in repr(masked_yaml_data(text))
+
+    @pytest.mark.parametrize("text", ['password: ""\n', "password:\n", "flag: true\n", "password: !secret name\n"])
+    def test_nothing_to_hide_stays(self, text):
+        assert redact_esphome_text(text) == (text, [])
+
+    def test_a_true_flag_below_a_credential_key_stays(self):
+        text = "encryption:\n  allow_plaintext_upload: !!bool yes\n"
+        assert redact_esphome_text(text) == (text, [])
+
+    @pytest.mark.parametrize("text", [
+        "password: *hunter2secret\n", "a: &hunter2secret 1\nc: !hunter2secret!x y\n",
+    ], ids=["alias", "tag_handle"])
+    def test_a_refusal_does_not_repeat_it(self, text):
+        for read in (mask_yaml_text, redact_esphome_text, masked_yaml_data):
+            with pytest.raises(YamlParseError) as refused:
+                read(text)
+            assert "hunter2" not in str(refused.value)
+
+    def test_a_refusal_still_says_where(self):
+        with pytest.raises(YamlParseError, match="undefined alias .* at line 1, column 11"):
+            mask_yaml_text("password: *hunter2secret\n")
+
+
+class TestValuesAConstructorCannotRead:
+    @pytest.mark.parametrize("line", [
+        "a: 2020-02-31", "pin_date: 2024-13-01", "a: !!int abc", "a: !!float abc", "a: !!timestamp 2020-13-45",
+    ])
+    def test_a_secrets_file_keeps_working(self, line):
+        text = f"{line}\nwifi_password: housepassword1\n"
+        assert "housepassword1" in secret_values_from_text(text)
+        assert "wifi_password" in secret_keys_from_text(text)
+
+    @pytest.mark.parametrize("line", ["a: 2020-02-31", "a: !!int hunter2secret", "a: !!float hunter2secret"])
+    def test_a_key_read_refuses_without_the_value(self, line):
+        with pytest.raises(YamlParseError) as refused:
+            masked_yaml_data(f"{line}\n")
+        assert "hunter2" not in str(refused.value)
+
+    @pytest.mark.parametrize("text", ["", "- a\n", "a: [unclosed\n"])
+    def test_a_secrets_file_with_no_mapping_is_empty(self, text):
+        assert secret_values_from_text(text) == set() and secret_keys_from_text(text) == set()
+
+
+class TestDeclaredDevice:
+    def test_a_literal_name_is_self_contained(self):
+        assert declared_device("esphome:\n  name: a\n") == DeclaredDevice("a", False, (), True)
+
+    def test_a_substituted_name_matches_but_proves_nothing(self):
+        declared = declared_device("substitutions:\n  n: a\nesphome:\n  name: ${n}\n")
+        assert (declared.name, declared.self_contained) == ("a", False)
+
+    @pytest.mark.parametrize("extra", [
+        "wifi:\n  use_address: b.local\n",
+        "ethernet:\n  use_address: b.local\n",
+        "wifi:\n  use_address: !secret target\n",
+        "wifi:\n  <<: *base\n",
+        "packages:\n  a: github://x/y/z.yaml\n",
+        "wifi: !include wifi.yaml\n",
+        "dashboard_import:\n  package_import_url: github://x/y/z.yaml\n",
+    ], ids=["wifi", "ethernet", "tagged", "merge", "package", "include", "import"])
+    def test_anything_that_can_retarget_the_file_is_not_self_contained(self, extra):
+        anchor = "base: &base\n  ssid: x\n"
+        assert declared_device(f"{anchor}esphome:\n  name: a\n{extra}").self_contained is False
+
+    def test_addresses_are_expanded(self):
+        declared = declared_device("substitutions:\n  t: b.local\nesphome:\n  name: a\nwifi:\n  use_address: $t\n")
+        assert declared.addresses == ("b.local",)
+
+    def test_a_static_address_is_a_target_and_still_self_contained(self):
+        declared = declared_device("esphome:\n  name: a\nwifi:\n  manual_ip:\n    static_ip: 192.0.2.7\n")
+        assert (declared.addresses, declared.self_contained) == (("192.0.2.7",), True)
+
+    def test_a_file_with_no_name_declares_none(self):
+        assert declared_device("wifi:\n  ssid: x\n").name is None
+
+    def test_a_list_declares_nothing(self):
+        assert declared_device("- a\n") is None
+
+
+class TestWhatTheShapesCannotTellApart:
+    @pytest.mark.parametrize("text", ["password:\n  ? hunter\n", "password: !!set {hunter, other}\n"])
+    def test_a_lowercase_key_with_no_value_is_the_value(self, text):
+        assert "hunter" not in redact_esphome_text(text)[0]
+
+    def test_a_comment_alone_quoting_a_value_is_blanked(self):
+        masked, _ = redact_esphome_text("a: 1\n\n# was abcd1234efgh\n\nb: 2\n", {"abcd1234efgh"})
+        assert masked == "a: 1\n\n# <redacted>\n\nb: 2\n"
+
+    def test_the_whole_mask_wins_over_a_partly_scrubbed_alias(self):
+        masked, _ = redact_esphome_text("note: &n https://u:SECRETVAL22@host/a\npassword: *n\n")
+        assert masked == "note: __PHOENIX_REDACTED__password__\npassword: *n\n"
+
+    def test_a_two_word_comment_name_marks_a_configuration_file_comment(self):
+        assert mask_yaml_text("x: 1\n\n# api key abc123\n") == "x: 1\n\n# <redacted>\n"
+
+    @pytest.mark.parametrize("name", ["api-key", "auth_key", "pass"])
+    def test_a_url_parameter_is_masked_in_a_configuration_file(self, name):
+        assert "abc123" not in mask_yaml_text(f"url: https://x.y/a?{name}=abc123\n")
+
+    @pytest.mark.parametrize("mark", ["#", ";"])
+    def test_a_url_fragment_or_matrix_parameter_is_masked(self, mark):
+        masked, _ = redact_esphome_text(f"url: https://x.y/a{mark}aes_key=abc123\n")
+        assert masked == f"url: https://x.y/a{mark}aes_key=<redacted>\n"

@@ -30,6 +30,7 @@ from custom_components.phoenix_mcp.config_recovery import (
 from custom_components.phoenix_mcp.const import CONFIG_RECOVERY_LAYOUT_MAX_DEPTH
 from custom_components.phoenix_mcp.data import PhoenixData
 from custom_components.phoenix_mcp.esphome_yaml import redact_esphome_text
+from custom_components.phoenix_mcp.tool_common import UncertainOutcome
 from custom_components.phoenix_mcp.tools import authoring, helper, lovelace
 from custom_components.phoenix_mcp.tools.energy import (
     _apply_op,
@@ -481,9 +482,10 @@ async def test_a_delete_keeps_its_version_when_the_reload_fails(hass, domain, fi
     args, _ = await authoring._bind_delete_args({id_field: "a1"}, hass, domain, "a1")
     # No reload service is registered, so the reload raises after the file write.
     result = await execute(args, key, hass, data)
-    assert result[0].get("isError") and result[1] == "invalid_request"
+    assert isinstance(result[0], UncertainOutcome) and result[1] == "invalid_request"
     body = _body(result)
-    assert body == {**body, "deleted": True, "verified": False, "reload_status": "failed", id_field: "a1"}
+    assert body == {**body, "deleted": True, "verified": False, "reload_status": "failed", id_field: "a1",
+                    "status": "partial", "retry_safe": False}
     assert "do not repeat the delete" in body["message"]
     data.versions.record.assert_awaited_once()
     assert "a1" not in Path(hass.config.path(file)).read_text()

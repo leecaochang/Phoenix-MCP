@@ -29,6 +29,7 @@ from pytest_homeassistant.common import MockConfigEntry
 
 import custom_components.phoenix_mcp.radio as radio
 import custom_components.phoenix_mcp.tools.radio as radio_tools
+from custom_components.phoenix_mcp.const import DOMAIN
 from tests.runtime_fixtures import mesa_off_store
 
 from custom_components.phoenix_mcp.data import PhoenixData
@@ -3209,3 +3210,46 @@ class TestConfirmedZigbeeWrites:
         await self._confirm(hass, broker, access_key, "remove_zigbee_group", {
             "group_entity_id": radio_env["z2m_group_eid"], "expected_hash": group["content_hash"]})
         assert broker.published[-1][0].endswith("group/remove")
+
+
+class TestApprovalCardNamesMesaEntities:
+    """A card names every Confirm entity the change reaches, not only those of the first device."""
+
+    async def _mesa(self, hass, access_key, tool: str, args: dict, confirm_entity: str) -> dict:
+        data, store = _appr_data()
+        hass.data[DOMAIN] = data
+
+        def preview(_data, _key, *, domain, service, service_data, entities):
+            return [entity_id for entity_id in entities if entity_id == confirm_entity]
+
+        with patch("custom_components.phoenix_mcp.tool_common.mesa_confirm_preview", preview):
+            result = await _call_tool(tool, args, access_key, hass, data, "rid-card", "1.2.3.4")
+        assert result[1] == "pending_approval", result
+        return store._p[0]["diff"]["preview"]["mesa"]
+
+    async def test_a_property_card_names_the_devices_entity(self, hass, radio_env, broker):
+        access_key = _light_access_key(cap_diagnostics="allow", cap_radio_write="confirm", cap_physical_control="allow")
+        current = await TestSetZigbeeDeviceProperty()._current(hass, radio_env, access_key)
+        mesa = await self._mesa(hass, access_key, "set_zigbee_device_property", {
+            "device_id": radio_env["z2m_bulb"], "property": "led_mode", "value": "on",
+            "expected_hash": current["content_hash"],
+        }, radio_env["z2m_bulb_eid"])
+        assert mesa["confirm_entities"] == [radio_env["z2m_bulb_eid"]]
+
+    @pytest.mark.parametrize(("side", "entity"), [("source", "z2m_bulb_eid"), ("target", "z2m_lock_eid")])
+    async def test_a_binding_card_names_an_entity_on_either_device(self, hass, radio_env, broker, side, entity):
+        access_key = _z2m_pair_access_key(
+            cap_diagnostics="allow", cap_radio_write="confirm", cap_physical_control="confirm")
+        args = await TestSetZigbeeBinding()._args(hass, radio_env, access_key)
+        mesa = await self._mesa(hass, access_key, "set_zigbee_binding", args, radio_env[entity])
+        assert mesa["confirm_entities"] == [radio_env[entity]]
+
+    async def test_a_group_card_names_the_group_entity(self, hass, radio_env, broker):
+        hass.config.components.add("mqtt")
+        access_key = _z2m_pair_access_key(cap_radio_write="confirm", cap_physical_control="allow", cap_diagnostics="allow")
+        groups = _body(await _call_tool("get_zigbee_groups", {}, access_key, hass, _data()))["groups"]
+        group = next(row for row in groups if row["name"] == Z2M_GROUP_NAME)
+        mesa = await self._mesa(hass, access_key, "remove_zigbee_group", {
+            "group_entity_id": radio_env["z2m_group_eid"], "expected_hash": group["content_hash"],
+        }, radio_env["z2m_group_eid"])
+        assert mesa["confirm_entities"] == [radio_env["z2m_group_eid"]]

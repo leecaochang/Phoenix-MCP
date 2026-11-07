@@ -22,6 +22,10 @@ ESPHOME_YAML_SEARCH_CONTEXT_LINES_MAX = 3
 ESPHOME_YAML_SEARCH_SNIPPET_MAX_CHARS = 1_000
 ESPHOME_YAML_SEARCH_MAX_MATCHES = 1_000
 ESPHOME_YAML_INVENTORY_MAX_ENTRIES = 1_000
+# What one listing parses to learn the devices its files declare. Past it a file's owner is
+# unknown, which refuses a scoped key. Parsed results are kept per file version.
+ESPHOME_YAML_SCOPE_MAX_BYTES = 16_777_216
+ESPHOME_DECLARED_CACHE_ENTRIES = 1_024
 ESPHOME_BUILDER_METADATA_MAX_CHARS = 512
 ESPHOME_BUILDER_DEVICE_STATES = frozenset({"online", "offline", "unknown"})
 

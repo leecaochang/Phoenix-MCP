@@ -30,7 +30,10 @@ export function AiTaskDecisionsSection({
   const enabled = !!settings.ai_task_decisions_enabled;
   const accessKeyId = settings.ai_task_decisions_access_key_id ?? "";
   const chosenKey = accessKeys.find((key) => key.id === accessKeyId);
-  const needsCapability = !!chosenKey && !chosenKey.pass_through && chosenKey.cap_service_response !== "allow";
+  // Evaluate needs Allow, and pass-through opens up Deny but leaves Confirm as it is.
+  const needsCapability = !!chosenKey && (chosenKey.pass_through
+    ? chosenKey.cap_service_response === "confirm"
+    : chosenKey.cap_service_response !== "allow");
 
   // The entity exists only while configured, so re-read the default when that changes.
   const loadPref = () => {

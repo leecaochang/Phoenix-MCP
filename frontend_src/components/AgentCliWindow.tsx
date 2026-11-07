@@ -605,6 +605,9 @@ interface AgentCliHass {
 /** How much of a finished reply is read aloud; the rest is in the transcript. */
 const ANNOUNCE_MAX_CHARS = 300;
 
+/** Notices the backend sends as a turn's last word. Nothing follows them, so they are said. */
+const TURN_END_NOTICES = new Set(["empty_turn", "max_tokens_stop"]);
+
 /** The plain text a reply renders to, cut at a word when it is long. */
 export function replyAnnouncement(markdown: string): string {
   const box = document.createElement("div");
@@ -820,13 +823,14 @@ export function AgentCliWindow({
   // a live region over token-by-token deltas would announce every chunk.
   const [announcement, setAnnouncement] = useState("");
   // Cleared first, so a repeated message is said again.
+  const announcerRef = useRef<HTMLDivElement>(null);
+  // The frame comes from the window showing the announcer: a hidden document runs none, and a
+  // popped-out Chat stays in view while the main page behind it is hidden.
   const announce = useCallback((text: string) => {
     setAnnouncement("");
-    window.requestAnimationFrame(() => setAnnouncement(text));
+    const ownerWindow = announcerRef.current?.ownerDocument.defaultView ?? window;
+    ownerWindow.requestAnimationFrame(() => setAnnouncement(text));
   }, []);
-  // A finished reply is said as the text it renders to, not its Markdown, and only its start: a
-  // long answer read in full would hold the screen reader.
-  const announceReply = useCallback((markdown: string) => announce(replyAnnouncement(markdown)), [announce]);
   const [popupMount, setPopupMount] = useState<HTMLElement | null>(null);
   const [popOutError, setPopOutError] = useState("");
   const poppedOut = popupMount !== null;
@@ -1642,10 +1646,17 @@ export function AgentCliWindow({
         // Announce the completed reply now that streaming is over.
         const finals = entries.filter((e) => e.kind === "assistant" && e.text.trim());
         const finalText = finals.length ? (finals[finals.length - 1] as Extract<ChatEntry, { kind: "assistant" }>).text : "";
-        if (finalText && !endAnnounced) announceReply(finalText);
+        const endNotice = entries.find((e): e is Extract<ChatEntry, { kind: "notice" }> => e.kind === "notice" && TURN_END_NOTICES.has(e.code ?? ""));
+        // A reply is said as the text it renders to, not its Markdown, and only its start: a long
+        // answer read in full would hold the screen reader. The notice comes after it, whole.
+        const spoken = [
+          finalText ? replyAnnouncement(finalText) : "",
+          endNotice ? chatNoticeText(endNotice.code, endNotice.message, endNotice.messageParams) : "",
+        ].filter(Boolean).join(" ");
+        if (spoken && !endAnnounced) announce(spoken);
       }
     }
-  }, [sending, accessKeys, turns, scrollbackLines, accessKeyId, persistenceOwner, resetUsage, instanceId, model, kind, options, caps, updateLive, streamLive, announce, announceReply]);
+  }, [sending, accessKeys, turns, scrollbackLines, accessKeyId, persistenceOwner, resetUsage, instanceId, model, kind, options, caps, updateLive, streamLive, announce]);
 
   // Why images cannot go with the next message, when they cannot. Unknown model
   // support is allowed: the composer says so, and a provider refusal is learned.
@@ -2193,7 +2204,7 @@ export function AgentCliWindow({
          }}>
       {/* Persistent polite announcer; mounted unconditionally so assistive
           tech reliably picks up updates (live regions must pre-exist). */}
-      <div className="sr-only" role="status">{announcement}</div>
+      <div ref={announcerRef} className="sr-only" role="status">{announcement}</div>
       {collapsed && narrowViewport ? (
         // On a phone Chat comes back full screen, as when the toolbar opens it.
         <button type="button" className="agentcli-mobile-pill"

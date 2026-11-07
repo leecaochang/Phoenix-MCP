@@ -432,7 +432,7 @@
       "tooLarge": "이 스냅샷은 너무 커서 저장되지 않았으므로 복원할 수 없습니다.",
       "refusalAuditOnly": "이 변경은 감사 기록용으로만 저장되었으므로 복원할 수 없습니다.",
       "refusalTemplateIncompatible": "이 Template 도우미 스냅샷은 다른 버전의 Home Assistant에서 저장되었으므로 복원할 수 없습니다.",
-      "refusalEntityMissing": "이 엔터티는 더 이상 Home Assistant에 없으므로 설정을 복원할 수 없습니다.",
+      "refusalEntityMissing": "이 엔티티는 더 이상 Home Assistant에 없으므로 설정을 복원할 수 없습니다.",
       "versionGone": "이 변경은 더 이상 보관되지 않습니다. 각 항목은 최신 변경 20개를 보관합니다.",
       "historyOnly": "Phoenix는 구성 파일을 다시 쓰지 않으므로 이 버전은 기록 전용입니다. 내용을 복사해 직접 적용하세요.",
       "confirmRestoreQuestion": "{name}을(를) {time}의 '{side}' 상태로 복원할까요?",
@@ -1662,15 +1662,15 @@
       "aiDecisionsHeading": "판단",
       "aiDecisionsIntro": "Home Assistant의 평가 작업에 결정 제공업체로 답합니다.",
       "aiDecisionsEnableLabel": "Phoenix MCP Decisions 사용",
-      "aiDecisionsEnableHelp": "자동화와 스크립트가 질문할 수 있는 Phoenix MCP Decisions 엔터티를 추가합니다. 기본적으로 꺼져 있습니다.",
-      "aiDecisionsDefaultLabel": "기본 판단 엔터티",
-      "aiDecisionsDefaultOff": "평가 작업에 엔터티가 지정되지 않으면 Phoenix MCP를 사용합니다.",
-      "aiDecisionsDefaultOn": "Phoenix MCP가 엔터티를 지정하지 않은 평가 작업을 처리합니다.",
+      "aiDecisionsEnableHelp": "자동화와 스크립트가 질문할 수 있는 Phoenix MCP Decisions 엔티티를 추가합니다. 기본적으로 꺼져 있습니다.",
+      "aiDecisionsDefaultLabel": "기본 판단 엔티티",
+      "aiDecisionsDefaultOff": "평가 작업에 엔티티가 지정되지 않으면 Phoenix MCP를 사용합니다.",
+      "aiDecisionsDefaultOn": "Phoenix MCP가 엔티티를 지정하지 않은 평가 작업을 처리합니다.",
       "aiDecisionsConfigureFirst": "먼저 사용 설정하고 액세스 키를 선택하세요.",
       "aiDecisionsAccessKeyAria": "판단 액세스 키",
       "aiDecisionsAccessKeyHelp": "이 액세스 키가 활성 상태이고 응답 데이터를 반환할 수 있을 때만 평가 작업이 실행됩니다.",
       "aiDecisionsCapabilityNote": "이 액세스 키는 {capability}이(가) {mode}(으)로 설정되어야 합니다.",
-      "aiDecisionsSetDefaultFailed": "기본 판단 엔터티를 설정할 수 없습니다.",
+      "aiDecisionsSetDefaultFailed": "기본 판단 엔티티를 설정할 수 없습니다.",
       "aiDecisionsEnabledToast": "판단 사용",
       "aiDecisionsDisabledToast": "판단 사용 안 함",
       "aiDecisionsDefaultSetToast": "이제 Phoenix MCP Decisions가 기본값입니다",
@@ -2529,7 +2529,7 @@
         "size_limit": "기록 제한을 지키기 위해 일부 세부 내용을 축약하거나 생략했습니다."
       },
       "operation": {
-        "state": "엔터티 상태 읽기",
+        "state": "엔티티 상태 읽기",
         "action": "장치 작업 요청",
         "read": "설정 읽기",
         "write": "설정 변경 요청",
@@ -2951,7 +2951,7 @@
       "guideDismissWelcome": "이 환영 페이지를 숨깁니다. 목차에서 다시 찾을 수 있습니다.",
       "showSecret": "붙여 넣은 내용을 확인할 수 있도록 키를 일반 텍스트로 표시합니다.",
       "guideSearchAgain": "가이드에서 이 내용을 다시 검색합니다.",
-      "settingsAiDecisionsReplaceDefault": "Home Assistant의 기본 판단 엔터티는 하나이므로 현재 엔터티를 대체합니다."
+      "settingsAiDecisionsReplaceDefault": "Home Assistant의 기본 판단 엔티티는 하나이므로 현재 엔티티를 대체합니다."
     },
     "guide": {
       "title": "가이드",

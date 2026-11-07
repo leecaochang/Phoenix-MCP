@@ -23,7 +23,7 @@ from custom_components.phoenix_mcp.version_store import VersionRecord, VersionSt
 from custom_components.phoenix_mcp.policy_engine import resolve_esphome_user_service
 from custom_components.phoenix_mcp.ws_dispatch import ALLOWED_WS_COMMANDS
 from custom_components.phoenix_mcp.access_key_store import PermissionNode, PermissionTree
-from tests.runtime_fixtures import DEVICE_YAML, esphome_access_key as _access_key, esphome_call as _call, esphome_device_info as _device_info, esphome_entry as _esphome_entry, esphome_json as _json, esphome_runtime as _runtime, esphome_yaml_access_key as _yaml_access_key
+from tests.runtime_fixtures import DEVICE_YAML, FakeBuilder, esphome_access_key as _access_key, esphome_call as _call, esphome_device_info as _device_info, esphome_entry as _esphome_entry, esphome_json as _json, esphome_runtime as _runtime, esphome_yaml_access_key as _yaml_access_key
 
 _DASHBOARD_PATCH = "custom_components.phoenix_mcp.tools.esphome._esphome_dashboard"
 
@@ -704,7 +704,7 @@ class TestScopedEsphomeInventory:
 
     async def test_search_case_paging_and_hidden_unloaded_owner(self, hass, esphome_dir, esphome_entries):
         (esphome_dir / "private.yaml").write_text("esphome:\n  name: private\n# needle\n")
-        (esphome_dir / "a.yaml").write_text("# Needle\n# needle\n")
+        (esphome_dir / "a.yaml").write_text("esphome:\n  name: a\n# Needle\n# needle\n")
         entry = _esphome_entry(hass, esphome_entries, entity_ids=("light.private",),
                                state=ConfigEntryState.NOT_LOADED, runtime=None)
         entry.data = {"device_name": "private"}
@@ -718,6 +718,7 @@ class TestScopedEsphomeInventory:
         assert _json(content)["count"] == 1
 
     async def test_search_scope_text_and_jail_before_matching(self, hass, esphome_dir, tmp_path):
+        hass.states.async_set("light.another", "on")
         (esphome_dir / "a.yaml").write_text("# light.attic_hidden\n")
         outside = tmp_path / "outside.yaml"
         outside.write_text("# hiddenneedle\n")
@@ -907,3 +908,206 @@ class TestOverviewDeclaredActions:
         with patch(_DASHBOARD_PATCH, return_value=None):
             content, _, _ = await _call("get_esphome_overview", {}, _access_key(), hass)
         assert "actions" not in _json(content)["devices"][0]
+
+
+PRIVATE_FILE = "esphome:\n  name: private-device\napi:\n  encryption:\n    key: abcdefgh\n"
+
+
+def _private_entry(hass, esphome_entries):
+    entry = _esphome_entry(hass, esphome_entries, entity_ids=("light.private_device",),
+                           state=ConfigEntryState.NOT_LOADED, runtime=None)
+    entry.data = {"device_name": "private-device"}
+    return entry
+
+
+def _all_lights_key():
+    return _yaml_access_key(permissions=PermissionTree(domains={"light": PermissionNode(state="GREEN")}))
+
+
+class TestReadScopeFollowsTheDeclaredDevice:
+    """A file's owner is found by what the file states, on every read and with no Builder running."""
+
+    @pytest.mark.parametrize("source", [
+        PRIVATE_FILE,
+        "substitutions:\n  devicename: private-device\nesphome:\n  name: ${devicename}\n",
+        "esphome:\n  name: private\n  name_add_mac_suffix: true\n",
+        "esphome:\n  name: harmless\nwifi:\n  use_address: private-device.local\n",
+    ], ids=["literal", "substitution", "mac_suffix", "address"])
+    async def test_a_differently_named_file_is_hidden_from_a_key_outside_its_device(
+        self, hass, esphome_dir, esphome_entries, source
+    ):
+        (esphome_dir / "private_device.yaml").write_text(source)
+        entry = _private_entry(hass, esphome_entries)
+        if "mac" in source:
+            entry.data = {"device_name": "private-a1b2c3"}
+        with patch(_DASHBOARD_PATCH, return_value=None):
+            content, outcome, _ = await _call("get_esphome_yaml", {"file": "private_device.yaml"}, _yaml_access_key(), hass)
+            assert outcome == "denied" and "private" not in content["content"][0]["text"].replace("private_device", "")
+            listing, _, _ = await _call("get_esphome_yaml", {}, _yaml_access_key(), hass)
+            assert all(row["file"] != "private_device.yaml" for row in _json(listing)["files"])
+            found, _, _ = await _call("search_esphome_yaml", {"query": "esphome"}, _yaml_access_key(), hass)
+            assert all(row["file"] != "private_device.yaml" for row in _json(found)["matches"])
+            refusal, _path, _rel = await esphome._esphome_file_precheck(
+                hass, _yaml_access_key(), {"file": "private_device.yaml"}, "validate_esphome_yaml")
+            assert refusal[1] == "denied"
+            content, outcome, _ = await _call("get_esphome_yaml", {"file": "private_device.yaml"}, _all_lights_key(), hass)
+            assert outcome == "allowed"
+
+    @pytest.mark.parametrize("source", [
+        "packages:\n  base: !include base.yaml\n",
+        "wifi:\n  ssid: x\n",
+        "esphome:\n  name: ${elsewhere}\n",
+        "esphome:\n  name: other\nwifi:\n  use_address: nowhere.example\n",
+        "esphome:\n  name: other\npackages:\n  base: !include base.yaml\n",
+        "a: [unclosed\n",
+    ], ids=["package", "fragment", "open_substitution", "unmatched_address", "name_with_package", "unparseable"])
+    async def test_an_unknown_owner_needs_every_adopted_device(self, hass, esphome_dir, esphome_entries, source):
+        (esphome_dir / "unknown.yaml").write_text(source)
+        _private_entry(hass, esphome_entries)
+        with patch(_DASHBOARD_PATCH, return_value=None):
+            _content, outcome, _ = await _call("get_esphome_yaml", {"file": "unknown.yaml"}, _yaml_access_key(), hass)
+            assert outcome == "denied"
+            assert not esphome._esphome_file_in_scope(hass, _yaml_access_key(), "unknown.yaml", write=False)
+            _content, outcome, _ = await _call("get_esphome_yaml", {"file": "unknown.yaml"}, _all_lights_key(), hass)
+            assert outcome != "denied"
+
+    async def test_a_file_proving_it_names_another_device_follows_the_capability(self, hass, esphome_dir, esphome_entries):
+        (esphome_dir / "own.yaml").write_text("esphome:\n  name: own\n")
+        _private_entry(hass, esphome_entries)
+        with patch(_DASHBOARD_PATCH, return_value=None):
+            _content, outcome, _ = await _call("get_esphome_yaml", {"file": "own.yaml"}, _yaml_access_key(), hass)
+        assert outcome == "allowed"
+
+    async def test_past_the_byte_budget_an_owner_is_unknown(self, hass, esphome_dir, esphome_entries):
+        (esphome_dir / "own.yaml").write_text("esphome:\n  name: own\n")
+        _private_entry(hass, esphome_entries)
+        with patch(_DASHBOARD_PATCH, return_value=None), \
+                patch("custom_components.phoenix_mcp.tools.esphome.ESPHOME_YAML_SCOPE_MAX_BYTES", 1):
+            rows = await esphome._esphome_listing(hass, _yaml_access_key())
+        assert rows == []
+
+    async def test_a_file_is_parsed_once_per_version(self, hass, esphome_dir, esphome_entries):
+        target = esphome_dir / "own.yaml"
+        target.write_text("esphome:\n  name: own\n")
+        _private_entry(hass, esphome_entries)
+        with patch.object(esphome, "declared_device", wraps=esphome.declared_device) as parse:
+            for _ in range(3):
+                await hass.async_add_executor_job(esphome._read_declared_device, hass, "own.yaml")
+            assert parse.call_count == 1
+            target.write_text("esphome:\n  name: changed\n")
+            os.utime(target, ns=(1, 1))
+            assert (await hass.async_add_executor_job(esphome._read_declared_device, hass, "own.yaml")).name == "changed"
+
+
+class TestFileReadsHideEntitiesAndValues:
+    FILE = (
+        "esphome:\n  name: own\nsensor:\n  - platform: homeassistant\n    entity_id: lock.vault_door\n"
+        "lambda: |-\n  it.printf(0, 0, \"x\");\n"
+    )
+
+    async def test_a_read_hides_an_entity_the_key_cannot_read(self, hass, esphome_dir):
+        hass.states.async_set("lock.vault_door", "locked")
+        (esphome_dir / "own.yaml").write_text(self.FILE)
+        content, outcome, _ = await _call("get_esphome_yaml", {"file": "own.yaml"}, _yaml_access_key(), hass)
+        body = _json(content)
+        assert outcome == "allowed" and "vault_door" not in body["content"]
+        assert "entity_id: <redacted-entity>" in body["content"]
+        assert body["content_hash"] == content_hash(body["content"])
+
+    async def test_a_read_and_a_search_show_the_same_text(self, hass, esphome_dir):
+        hass.states.async_set("lock.vault_door", "locked")
+        (esphome_dir / "own.yaml").write_text(self.FILE)
+        found, _, _ = await _call("search_esphome_yaml", {"query": "printf", "context_lines": 3}, _yaml_access_key(), hass)
+        assert "it.printf" in _json(found)["matches"][0]["text"]
+        assert "vault_door" not in _json(found)["matches"][0]["text"]
+
+    async def test_an_entity_the_key_can_read_stays(self, hass, esphome_dir):
+        hass.states.async_set("lock.vault_door", "locked")
+        (esphome_dir / "own.yaml").write_text(self.FILE)
+        key = _yaml_access_key(permissions=PermissionTree(domains={"lock": PermissionNode(state="YELLOW")}))
+        content, _, _ = await _call("get_esphome_yaml", {"file": "own.yaml"}, key, hass)
+        assert "lock.vault_door" in _json(content)["content"]
+
+    async def test_a_read_and_a_search_mask_a_secrets_value_inside_a_scalar(self, hass, esphome_dir):
+        (esphome_dir / "own.yaml").write_text(
+            "esphome:\n  name: own\nx:\n  url: http://x/housepassword1/y\n# note housepassword1\n")
+        content, _, _ = await _call("get_esphome_yaml", {"file": "own.yaml"}, _yaml_access_key(), hass)
+        assert "housepassword1" not in _json(content)["content"]
+        assert "http://x/<redacted>/y" in _json(content)["content"]
+        found, _, _ = await _call("search_esphome_yaml", {"query": "http", "context_lines": 3}, _yaml_access_key(), hass)
+        assert "housepassword1" not in json.dumps(_json(found))
+
+
+class TestSecretsFileThatWillNotConstruct:
+    @pytest.mark.parametrize("line", ["pin_date: 2024-13-01", "a: 2020-02-31", "a: !!int abc"])
+    async def test_every_read_keeps_working(self, hass, esphome_dir, line):
+        (esphome_dir / "secrets.yaml").write_text(f"{line}\nwifi_password: housepassword1\n")
+        (esphome_dir / "own.yaml").write_text("esphome:\n  name: own\nnote: see housepassword1\n")
+        content, outcome, _ = await _call("get_esphome_yaml", {"file": "own.yaml"}, _yaml_access_key(), hass)
+        assert outcome == "allowed"
+        assert "housepassword1" not in _json(content)["content"]
+        assert "wifi_password" in _json(content)["defined_secrets"]
+        _content, outcome, _ = await _call("get_esphome_yaml", {}, _yaml_access_key(), hass)
+        assert outcome == "allowed"
+
+    async def test_an_undecodable_secrets_file_leaves_the_other_layers(self, hass, esphome_dir):
+        (esphome_dir / "secrets.yaml").write_bytes(b"a: \xff\xfe\n")
+        _content, outcome, _ = await _call("get_esphome_yaml", {"file": "rf-blaster1.yaml"}, _yaml_access_key(), hass)
+        assert outcome == "allowed"
+
+
+class TestScrubComesBeforeTheBound:
+    async def test_metadata_is_redacted_whole(self, hass):
+        token = "eyJhbGciOiJIUzI1NiJ9." + "a" * 40 + "." + "b" * 40
+        text = "x" * 480 + token
+        with patch.object(esphome, "ESPHOME_BUILDER_METADATA_MAX_CHARS", 512):
+            clipped = esphome._esphome_metadata_text(text, _yaml_access_key(), hass)
+        assert "eyJ" not in clipped
+
+    def test_output_is_scrubbed_before_the_collector_bounds_it(self):
+        secret = "hunter2secretvalue"
+        text, truncated = esphome.collect_output_lines(
+            ["x" * 90 + secret, "y" * 200], 100, head_ratio=1.0, scrub_output=esphome._esphome_output_scrub({secret}))
+        assert truncated and "hunter2" not in text
+
+    async def test_a_commit_message_is_scrubbed_before_its_bound(self, hass, esphome_dir):
+        secret = "housepassword1"
+        message = "m" * (esphome.ESPHOME_BUILDER_METADATA_MAX_CHARS - 5) + secret
+        builder = FakeBuilder(**{"version_history/list_versions": [{"sha": "a" * 40, "message": message}]})
+        dash = SimpleNamespace(url="http://b", data={})
+        with patch(_DASHBOARD_PATCH, return_value=dash), \
+                patch("custom_components.phoenix_mcp.tools.esphome.async_builder_command", builder):
+            content, _, _ = await _call("get_esphome_history", {"file": "rf-blaster1.yaml"}, _yaml_access_key(), hass)
+        assert "house" not in _json(content)["versions"][0]["message"]
+
+    async def test_a_value_holding_a_quote_is_scrubbed_from_an_encoded_result(self, hass, esphome_dir):
+        value = 'pass"word12345'
+        (esphome_dir / "secrets.yaml").write_text(f"a: '{value}'\n")
+        builder = FakeBuilder(**{"automations/get_available": {"triggers": [{"id": f"x{value}"}]}})
+        dash = SimpleNamespace(url="http://b", data={})
+        with patch(_DASHBOARD_PATCH, return_value=dash), \
+                patch("custom_components.phoenix_mcp.tools.esphome.async_builder_command", builder), \
+                patch.object(esphome, "_project_esphome_automations", side_effect=lambda result: result):
+            content, _, _ = await _call("get_esphome_automations", {"file": "rf-blaster1.yaml"}, _yaml_access_key(), hass)
+        assert "word12345" not in content["content"][0]["text"]
+
+
+class TestAutomationRowsAndMigrationDiff:
+    RAW = 'on_boot:\n  - lambda: |-\n      id(x).call("lock.vault_door");\n'
+    VIEW = esphome._EntityView(frozenset(), frozenset({"lock"}))
+
+    def test_a_row_shows_no_hidden_entity_and_is_scrubbed_before_its_bound(self, hass):
+        parsed = [{"from_line": 1, "to_line": 3, "raw_yaml": self.RAW, "label": "a housepassword1",
+                   "location": {"id": "x" * 505 + "housepassword1"}}]
+        rows, _warnings = esphome._esphome_automation_rows(
+            hass, self.RAW, set(), {"housepassword1"}, parsed, self.VIEW)
+        assert "vault_door" not in rows[0]["yaml"] and "<redacted-entity>" in rows[0]["yaml"]
+        assert rows[0]["label"] == "a <redacted>"
+        assert "house" not in rows[0]["location"]["id"]
+
+    def test_a_migration_diff_shows_no_hidden_entity(self, hass):
+        raw = "entity_id: lock.vault_door\nold: 1\n"
+        shown = esphome._esphome_migration_diff(
+            hass, raw, {"fromLine": 2, "toLine": 2, "replacement": "new: 1\n"}, set(), "a.yaml", self.VIEW)
+        assert shown is not None and "new: 1" in shown[0]
+        assert "vault_door" not in shown[0]

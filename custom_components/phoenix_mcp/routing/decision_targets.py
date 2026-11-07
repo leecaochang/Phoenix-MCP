@@ -4,6 +4,7 @@ from __future__ import annotations
 from collections import Counter
 from copy import deepcopy
 from dataclasses import dataclass
+from functools import lru_cache
 import json
 from typing import Any
 
@@ -20,8 +21,9 @@ from .routing_tables import (
     DECISION_BATCH_MAX_TARGETS, DECISION_SUMMARY_COMPONENTS,
 )
 from .decision_types import DecisionError
-from ..device_semantics import DeviceRegistrySnapshot, device_registry_snapshot
+from ..device_semantics import DeviceRegistrySnapshot, device_registry_snapshot, readable_entity_aliases
 from ..entity_commands import entity_metadata
+from ..policy_engine import Permission, resolve_device_registry_access
 from ..redaction import redact_inaccessible_entity_ids_in_text, redact_secrets_in_text
 
 
@@ -61,6 +63,11 @@ def capture_targets(hass: HomeAssistant, access_key: Any, category: str, *,
     targets: dict[str, dict] = {}
     fingerprints: dict[str, str] = {}
 
+    @lru_cache(maxsize=None)
+    def parent_readable(device_id: str) -> bool:
+        return resolve_device_registry_access(
+            device_id, access_key, hass, snapshot=devices) in (Permission.READ, Permission.WRITE)
+
     def text(value: Any) -> str:
         if not isinstance(value, str):
             raise DecisionError("target_metadata_too_large")
@@ -87,7 +94,8 @@ def capture_targets(hass: HomeAssistant, access_key: Any, category: str, *,
         descriptor: dict[str, Any] = {
             "entity_id": entity_id,
             "name": text(name),
-            "aliases": sorted(text(alias) for alias in er.async_get_entity_aliases(hass, entry)),
+            "aliases": sorted(text(alias) for alias in readable_entity_aliases(
+                hass, entry, state.attributes.get("friendly_name"), parent_readable)),
             "area": text(area.name) if area else "",
         }
         if intent in COMMAND_ROUTING_ENTITY_INTENTS:

@@ -234,7 +234,9 @@ export function patchDurable(patch: Partial<AgentCliDurable>, owner = ownerId): 
 const CONV_KEY = "phx-agentcli-conversation";
 const PURGE_EVENT = "phx-agentcli-purged";
 // PURGE_EVENT stays inside its page. This key reaches the other tabs: a storage
-// event fires there only when the value changes, so each purge writes a new one.
+// event fires there only when the value changes, so each purge that removed
+// something writes a new one. A non-admin page purges on every identity poll, and
+// with nothing removed it must not touch storage or tell the other tabs anything.
 // It holds nothing but that value.
 const PURGE_MARKER_KEY = "phx-purged-agentcli";
 
@@ -429,15 +431,16 @@ function closeStorage(): void {
  */
 export function purgeAgentCliStorage(): void {
   closeStorage();
+  let removed = clearAllReasonDrafts();
   try {
     for (const key of Object.keys(localStorage)) {
       if (key === LS_KEY || key === CONV_KEY || [LS_KEY, CONV_KEY, TURN_KEY].some((base) => key.startsWith(`${base}:`))) {
         localStorage.removeItem(key);
+        removed = true;
       }
     }
-    localStorage.setItem(PURGE_MARKER_KEY, `${Date.now()}.${tabId}`);
+    if (removed) localStorage.setItem(PURGE_MARKER_KEY, `${Date.now()}.${tabId}`);
   } catch { /* storage unavailable */ }
-  clearAllReasonDrafts();
   window.dispatchEvent(new Event(PURGE_EVENT));
 }
 

@@ -474,6 +474,43 @@ async def test_mistral_greedy_temperature_sends_top_p_one(kind, model, temperatu
     assert sent.get("top_p") == top_p
 
 
+def _delta_stream(deltas: tuple[dict, ...], finish: str) -> bytes:
+    frames = [f'data: {json.dumps({"choices": [{"delta": delta, "finish_reason": None}]})}' for delta in deltas]
+    return _sse(*frames, f'data: {{"choices":[{{"delta":{{}},"finish_reason":"{finish}"}}]}}', "data: [DONE]")
+
+
+async def _delta_events(*deltas: dict, finish: str = "stop") -> list[dict]:
+    cfg = ProviderConfig(kind="together", model="m", base_url="https://api.together.xyz/v1", api_key="k")
+    return await _collect(OpenAICompatProvider(cfg).stream_turn(
+        _FakeSession(_FakeResp(200, _delta_stream(deltas, finish))), system_prompt="s", messages=[], tools=[], options={}))
+
+
+@pytest.mark.asyncio
+async def test_a_null_for_an_unset_tool_field_means_absent():
+    events = await _delta_events(
+        {"content": "hi", "tool_calls": None},
+        {"tool_calls": [{"index": 0, "id": "c1", "function": None}]},
+        {"tool_calls": [{"index": 0, "function": {"name": "get_state", "arguments": "{}"}}]},
+        finish="tool_calls",
+    )
+    assert [event for event in events if event["type"] == llm_base.EV_ERROR] == []
+    assert [event["text"] for event in events if event["type"] == llm_base.EV_TEXT] == ["hi"]
+    assert next(event for event in events if event["type"] == llm_base.EV_TOOL)["name"] == "get_state"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("delta", [
+    {"tool_calls": {}}, {"tool_calls": ""}, {"tool_calls": 0}, {"tool_calls": False}, {"tool_calls": "x"},
+    {"tool_calls": [{"index": 0, "function": ""}]}, {"tool_calls": [{"index": 0, "function": 0}]},
+    {"tool_calls": [{"index": 0, "function": False}]}, {"tool_calls": [{"index": 0, "function": []}]},
+])
+async def test_any_other_wrong_shape_for_a_tool_field_is_refused(delta):
+    """The call before it is complete, so only the shape can be what is refused."""
+    whole = {"tool_calls": [{"index": 0, "id": "c1", "function": {"name": "get_state", "arguments": "{}"}}]}
+    events = await _delta_events(whole, delta, finish="tool_calls")
+    assert next(event for event in events if event["type"] == llm_base.EV_ERROR)["code"] == "provider_malformed"
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize(("model", "mistral_shape"), [("mistral-large-4", True), ("glm-5.3", False)])
 async def test_opencode_accepts_mistral_content_parts_only_for_mistral_models(model, mistral_shape):

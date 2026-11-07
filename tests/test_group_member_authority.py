@@ -15,7 +15,7 @@ from homeassistant.const import EVENT_CALL_SERVICE
 from homeassistant.helpers import entity_registry as er
 from homeassistant.setup import async_setup_component
 from homeassistant.util.dt import utcnow
-from pytest_homeassistant.common import async_mock_service
+from pytest_homeassistant.common import MockConfigEntry, async_mock_service
 
 from custom_components.phoenix_mcp.access_key_store import (
     AccessKeyRecord,
@@ -84,6 +84,104 @@ def _set_profile(data: PhoenixData, entity_id: str, mode: str) -> None:
         entity_id, {"semantic_profile": {"operational_boundaries": {"control_mode": mode}}},
         default_origin=MetadataOrigin.USER,
     ))
+
+
+async def _wrapped_switch(hass, reference: str = "registry", target_domain: str = "light") -> tuple[list, str]:
+    """A real Switch as X entry over switch.vault; the call log and the wrapper's entity id."""
+    assert await async_setup_component(hass, "homeassistant", {})
+    switch_calls = async_mock_service(hass, "switch", "turn_on")
+    async_mock_service(hass, "switch", "turn_off")
+    source = er.async_get(hass).async_get_or_create("switch", "test", "vault", suggested_object_id="vault")
+    hass.states.async_set(source.entity_id, "off")
+    entry = MockConfigEntry(domain="switch_as_x", title="Wrapper", options={
+        "entity_id": source.id if reference == "registry" else source.entity_id,
+        "invert": False, "target_domain": target_domain,
+    })
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    wrapper = er.async_entries_for_config_entry(er.async_get(hass), entry.entry_id)[0].entity_id
+    assert wrapper.startswith(f"{target_domain}.")
+    return switch_calls, wrapper
+
+
+@pytest.mark.parametrize("reference", ["registry", "entity_id"])
+@pytest.mark.parametrize("target_domain", ["light", "fan", "cover", "lock", "siren", "valve"])
+async def test_a_switch_wrapper_has_its_source_as_its_member(hass, reference, target_domain):
+    _, wrapper = await _wrapped_switch(hass, reference, target_domain)
+    assert group_member_ids(wrapper, hass) == frozenset({"switch.vault"})
+
+
+async def test_a_red_source_refuses_its_wrapper(hass):
+    switch_calls, wrapper = await _wrapped_switch(hass)
+    data, _ = _data(hass)
+    key = _key({"switch.vault": "RED"}, {"light": "GREEN"})
+    assert group_member_denied(wrapper, key, hass) is True
+    _, outcome, _ = await _call_tool("call_service", _turn_on(wrapper), key, hass, data)
+    await hass.async_block_till_done()
+    assert outcome != "allowed"
+    assert switch_calls == []
+
+
+async def test_a_wrapper_reaches_an_ungranted_source_as_a_group_reaches_a_member(hass):
+    switch_calls, wrapper = await _wrapped_switch(hass)
+    data, _ = _data(hass)
+    result, outcome, _ = await _call_tool("call_service", _turn_on(wrapper), _key(domains={"light": "GREEN"}), hass, data)
+    await hass.async_block_till_done()
+    assert outcome == "allowed", result
+    assert [call.data["entity_id"] for call in switch_calls] == ["switch.vault"]
+
+
+@pytest.mark.parametrize("pass_through", [False, True])
+async def test_a_prohibited_source_blocks_its_wrapper(hass, pass_through):
+    switch_calls, wrapper = await _wrapped_switch(hass)
+    data, _ = _data(hass, "enforced")
+    data.mesa = await async_setup_mesa(hass, "enforced")
+    _set_profile(data, "switch.vault", "prohibited")
+    key = _key(domains={"light": "GREEN"}, pass_through=pass_through)
+    result, outcome, _ = await _call_tool("call_service", _turn_on(wrapper), key, hass, data)
+    await hass.async_block_till_done()
+    assert outcome == "denied", result
+    assert "switch.vault" not in result["content"][0]["text"]
+    assert switch_calls == []
+
+
+async def test_a_source_needing_confirmation_sends_its_wrapper_to_approval(hass):
+    switch_calls, wrapper = await _wrapped_switch(hass)
+    data, _ = _data(hass, "enforced")
+    data.mesa = await async_setup_mesa(hass, "enforced")
+    _set_profile(data, "switch.vault", "confirm")
+    verdict = evaluate_service_call(
+        data.mesa, "enforced", _key(domains={"light": "GREEN"}), [wrapper],
+        domain="light", service="turn_on", service_data={}, session_id="s",
+    )
+    assert verdict.confirm == [wrapper]
+    assert verdict.allowed == [] and switch_calls == []
+
+
+async def test_a_group_of_wrappers_reaches_the_source(hass):
+    _, wrapper = await _wrapped_switch(hass)
+    hass.states.async_set("light.room", "on", {"group_entities": [wrapper]})
+    assert group_member_ids("light.room", hass) == frozenset({wrapper, "switch.vault"})
+
+
+@pytest.mark.parametrize("options", [{}, {"entity_id": "not an id"}, {"entity_id": 3}])
+async def test_a_wrapper_whose_source_cannot_be_read_is_refused(hass, options):
+    entry = MockConfigEntry(domain="switch_as_x", options=options)
+    entry.add_to_hass(hass)
+    wrapper = er.async_get(hass).async_get_or_create(
+        "light", "switch_as_x", "w", config_entry=entry, suggested_object_id="w").entity_id
+    assert group_member_ids(wrapper, hass) is None
+    assert group_member_denied(wrapper, _key({wrapper: "GREEN"}), hass) is True
+
+
+async def test_another_platforms_entity_id_option_is_not_a_source(hass):
+    entry = MockConfigEntry(domain="threshold", options={"entity_id": "switch.vault"})
+    entry.add_to_hass(hass)
+    entity_id = er.async_get(hass).async_get_or_create(
+        "light", "threshold", "t", config_entry=entry, suggested_object_id="t").entity_id
+    hass.states.async_set(entity_id, "on")
+    assert group_member_ids(entity_id, hass) == frozenset()
 
 
 async def test_a_group_with_a_red_member_is_refused(hass):

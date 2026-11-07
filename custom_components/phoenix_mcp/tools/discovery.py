@@ -55,20 +55,21 @@ from ..device_semantics import (
     readable_entity_aliases,
 )
 from ..routing.intent_recognition import RecognitionUnavailable, async_recognize
-from ..service_targets import dedicated_tool_refusal, merge_speech_players, named_script_refusal, required_secondary_targets, secondary_target_error, speech_target_refusal, unreadable_group_error, template_fields, template_fields_error, unbound_service_targets, unbound_target_error, unsupported_secondary_targets
+from ..service_targets import call_reach, dedicated_tool_refusal, gate_entity_ids, merge_speech_players, named_script_refusal, required_secondary_targets, script_input_selector_error, script_input_selectors, secondary_target_error, speech_target_refusal, unreadable_group_error, template_fields, template_fields_error, unbound_service_targets, unbound_target_error, unsupported_secondary_targets, visible_reach, visible_reach_warnings
 from ..tool_contracts import normalize_tool_args, state_projection
 from ..mesa import async_semantic_moments, build_expand_target, entity_control_mode, evaluate_service_call
 from ..mesa_core.trigger_validator import entities_by_role
 from ..mesa_tools import MESA_TOOLS_CAP, authored_restrictions
 from ..helpers import parse_time_param as _parse_time_param
 from ..tool_input import sanitize_service_data as _sanitize_service_data, str_arg, str_list_arg
-from ..capability import effective_cap, service_capability
+from ..capability import effective_cap
 from ..redaction import (
     entity_hint_for_agent, redact_diagnostics as _redact_diagnostics, redact_inaccessible_entity_ids_in_text,
 )
 from .esphome import _ESPHOME_DOMAIN, _esphome_action_signature, _esphome_actions_for_entity, esphome_availability
 from ..tool_common import _project_state, _resolve_area_id, _tool_error, _tool_success, fitted_offset_page, longest_fitting, offset_page
 from ..ws_dispatch import WsDispatchError, async_get_lovelace_config, async_ws_command
+from ..approval_targets import target_binding
 from ..policy_engine import _ENTITY_ID_RE, Permission, assist_expose_check, device_config_entry_ids, device_read_check, device_registry_entity_ids, esphome_entry_writable, filter_entities_for_access_key, filter_service_response, group_member_denied, music_assistant_readable_entries, physical_gate_applies, required_service_cap, resolve_config_entry_registry_access, resolve_device_registry_access, resolve_esphome_user_service, resolve_read, resolve_registry_access, resolve_service_targets, service_gate_targets, service_target_binding_valid, scrub_sensitive_attributes, unreadable_group_targets
 from ..proxy_diagnostics import device_bluetooth_scanners, rf_capabilities
 from ..radio import device_radio_types
@@ -1885,6 +1886,9 @@ _CAPABILITY_REASONS = MappingProxyType({
     "cap_restart": "requires restart capability",
     "cap_notify": "requires notifications capability",
     "cap_broadcast": "requires broadcast capability",
+    "cap_esphome_flash": "requires ESPHome flash capability",
+    "cap_physical_control": "requires physical control capability",
+    "cap_registry_write": "requires registry write capability",
     "cap_scene_write": "requires scene write capability",
 })
 
@@ -1926,7 +1930,6 @@ async def _tool_find_available_actions(
 
     domain = entity_id.split(".")[0]
     writable = access_key.pass_through or perm == Permission.WRITE
-    physical_ok = effective_cap(access_key, "cap_physical_control") != CAP_DENY
     yaml_edit_ok = effective_cap(access_key, "cap_yaml_edit") != CAP_DENY
     group_refused = writable and group_member_denied(entity_id, access_key, hass)
 
@@ -1939,7 +1942,9 @@ async def _tool_find_available_actions(
             continue
         available = writable
         reason: str | None = None
-        needed = service_capability(domain, svc, None, [entity_id])
+        needed = required_service_cap(
+            domain=domain, service=svc, service_data=None, entity_id=entity_id, access_key=access_key, hass=hass,
+        )
         dedicated = dedicated_tool_refusal(domain, svc)
         # No-target reload services gate on cap_yaml_edit, not the entity's WRITE
         # permission, so they are annotated before the writable-based branches.
@@ -1950,8 +1955,6 @@ async def _tool_find_available_actions(
             available, reason = False, dedicated[1]
         elif not writable:
             reason = "read-only access to this entity"
-        elif physical_gate_applies(domain, svc, [entity_id]) and not physical_ok:
-            available, reason = False, "requires physical control capability"
         elif needed is not None and needed in _CAPABILITY_REASONS and effective_cap(access_key, needed) == CAP_DENY:
             available, reason = False, _CAPABILITY_REASONS[needed]
         elif refusal := await named_script_refusal(hass, domain, svc):
@@ -3185,6 +3188,8 @@ async def _tool_dry_run_service(
         return _tool_error(template_fields_error(templated)), "invalid_request", "dry_run_service"
     if refusal := await named_script_refusal(hass, domain, service):
         return _tool_error(refusal), "invalid_request", "dry_run_service"
+    if selecting := await script_input_selectors(hass, domain, service, args.get("service_data"), args.get("entity_id")):
+        return _tool_error(script_input_selector_error(selecting)), "invalid_request", "dry_run_service"
     # Sanitised exactly as the real call sanitises it, so the preview predicts
     # the call that would actually run rather than the one the caller wrote.
     service_data = _sanitize_service_data(args.get("service_data"))
@@ -3270,7 +3275,8 @@ async def _tool_dry_run_service(
     )
 
     target_args: dict[str, Any] = {
-        "entity_id": args.get("entity_id"), "device_id": args.get("device_id"), "area_id": args.get("area_id"),
+        "entity_id": gate_entity_ids(domain, service, service_data, args.get("entity_id"), hass),
+        "device_id": args.get("device_id"), "area_id": args.get("area_id"),
     }
     # Taken before a refusal below empties the list, as the call gates on what was asked.
     physical_gate = physical_gate_applies(domain, service, service_gate_targets(
@@ -3286,6 +3292,9 @@ async def _tool_dry_run_service(
     speech_refusal = speech_target_refusal(domain, service, args.get("entity_id"), permitted)
     if unbound or speech_refusal:
         permitted = []
+    reach = call_reach(domain, service, service_data, permitted, access_key, hass)
+    if reach.refusal:
+        permitted = []
 
     # Predict the outcome in the same order call_service applies its gates: the
     # capability gate first (before MESA), then an empty resolution denies, then
@@ -3294,10 +3303,13 @@ async def _tool_dry_run_service(
     # enforcing path's own, not a copy, so the preview cannot drift from the call
     # it predicts.
     predicted: str
-    if unbound or speech_refusal:
+    if unbound or speech_refusal or reach.refusal:
         predicted = "denied"
     elif required_cap is not None and effective_cap(access_key, required_cap) != CAP_ALLOW:
         predicted = _cap_outcome(effective_cap(access_key, required_cap))
+        if (predicted == "pending_approval" and permitted
+                and target_binding(reach.entities, hass)["fingerprint"] is None):
+            predicted = "denied"
     elif not permitted:
         predicted = "denied"
     else:
@@ -3307,19 +3319,23 @@ async def _tool_dry_run_service(
     settings = data.store.get_settings()
     if data.mesa is not None and settings.mesa_mode != MESA_MODE_OFF and permitted:
         verdict = evaluate_service_call(
-            data.mesa, settings.mesa_mode, access_key, permitted,
+            data.mesa, settings.mesa_mode, access_key, reach.entities,
             domain=domain, service=service, service_data=service_data, session_id="dry_run",
         )
+        visible = visible_reach(reach.entities, access_key, hass)
         mesa = {
-            "allowed": verdict.allowed,
-            "confirm": verdict.confirm,
-            "blocked": [{"entity_id": e, "rule": r, "reason": reason} for e, r, reason in verdict.blocked],
-            "warnings": verdict.warnings,
+            "allowed": [entity_id for entity_id in verdict.allowed if entity_id in visible],
+            "confirm": [entity_id for entity_id in verdict.confirm if entity_id in visible],
+            "blocked": [{"entity_id": e, "rule": r, "reason": reason} for e, r, reason in verdict.blocked
+                        if e in visible],
+            "warnings": visible_reach_warnings(verdict.warnings, reach, access_key, hass),
         }
         # MESA only narrows the outcome, and only when the cap gate did not
         # already deny/pend (mirrors call_service: the cap gate returns first).
         if predicted == "allowed":
-            if verdict.confirm:
+            if reach.every_target and verdict.blocked:
+                predicted = "denied"
+            elif verdict.confirm:
                 predicted = "pending_approval"
             elif not verdict.allowed:
                 predicted = "denied"
@@ -3337,8 +3353,8 @@ async def _tool_dry_run_service(
     if unbound:
         body["unbound_targets"] = list(unbound)
         body["unbound_reason"] = unbound_target_error(domain, service, unbound)
-    if speech_refusal:
-        body["refusal_reason"] = speech_refusal
+    if speech_refusal or reach.refusal:
+        body["refusal_reason"] = speech_refusal or reach.refusal
     elif unreadable:
         body["refusal_reason"] = unreadable_group_error(unreadable)
     return _tool_success(json.dumps(body, default=str)), "allowed", "dry_run_service"

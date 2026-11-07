@@ -37,6 +37,10 @@
 
 設為確認時，包含其中一項的命令會等待你的核准。設為拒絕存取時，智慧體無法控制它們。
 
+原始 Z-Wave 或 ISY 命令作用於整個裝置。智慧體需要對裝置能操作的一切（例如門鎖、燈和開關）有 W，MESA 也會檢查裝置的每個實體。
+
+開啟 `broadcast` 的 Z-Wave 多點傳送會被拒絕，因為它會到達網路中的每個裝置。
+
 透過 Assist 衛星裝置廣播訊息或在其上發起對話需要廣播。MESA 會在能力和權限樹之後最後檢查每個命令。
 
 允許它的能力：[{{label:caps.cap_physical_control.label}}](guide:window.capabilities#physical-control)、[{{label:caps.cap_broadcast.label}}](guide:window.capabilities#broadcast)
@@ -55,12 +59,18 @@
 - `tts.speak` 還需要對其指定的每個喇叭有 W。一般播放只需要 W。
 - ESPHome 裝置操作只需要裝置上的 W。MESA 不檢查它們，也不檢查重新載入或重新啟動。
 - 搜尋或列出 Music Assistant 音樂庫需要服務回應資料，以及某個 Music Assistant 實體（例如喇叭）上的 R。這些操作不會播放任何內容，所以 MESA 也不檢查它們。
+- `update.install` 必須在裝置的每個實體上通過 MESA。在 ESPHome 裝置上還需要 ESPHome 韌體刷寫。
+- 在腳本或自動化的輸入中指定的實體需要與目標相同的存取權限，MESA 也會檢查它。只要有一個不符合，就不會執行。
+- 任何形如實體 ID 或 32 字元登錄 ID 的輸入都算作指定了實體。
+- 選擇裝置、分區、樓層或標籤的輸入會被拒絕。`all` 也會被拒絕，除非腳本把該輸入宣告為一般資料。請逐一指定實體。
+
+需要多個能力的操作遵循最嚴格的那個。拒絕存取會拒絕它，確認會讓它等待你的核准。
 
 未宣告目標的操作（例如 `shell_command`、`rest_command` 或 `python_script`）對每個金鑰都會被拒絕，包括直通金鑰。智慧體指定什麼目標都一樣，即使是該操作所屬網域的實體。沒有目標的其他操作也會被拒絕。
 
 自訂操作由 Home Assistant 在其實體上執行，或其註冊的結構描述列出 `entity_id` 時，算作已宣告目標。
 
-行事曆變更和 `homeassistant.reload_config_entry` 同樣會被拒絕，因為它們有自己的工具。執行超過 30 秒的操作會被回報為可能未完成。
+行事曆變更、`homeassistant.reload_config_entry` 和 `todo.remove_completed_items` 同樣會被拒絕，因為它們有自己的工具。執行超過 30 秒的操作會被回報為可能未完成。
 
 允許它的能力：[{{label:caps.cap_restart.label}}](guide:window.capabilities#restart)、[{{label:caps.cap_yaml_edit.label}}](guide:window.capabilities#yaml-edit)、[{{label:caps.cap_service_response.label}}](guide:window.capabilities#service-response)、[{{label:caps.cap_notify.label}}](guide:window.capabilities#notify)、[{{label:caps.cap_search.label}}](guide:window.capabilities#search)（用於預覽）
 
@@ -68,7 +78,7 @@
 
 智慧體可以新增、變更和移除待辦事項，也可以清除已完成的事項，這只需要清單上的 W。移除事項是永久性的：Phoenix 不保留副本，因此[無法還原](guide:topic.configurationHistory#not-recorded)。結果會列出移除了哪些事項。
 
-如果你核准移除，Phoenix 會先重新讀取清單。在請求等待期間發生變化的事項會保留，結果會說明是哪些。
+如果你核准透過 Phoenix 待辦工具請求的移除，Phoenix 會先重新讀取清單。在請求等待期間發生變化的事項會保留，結果會說明是哪些。原始 `todo.remove_item` 操作會移除它指定的事項。
 
 智慧體可以建立、變更和刪除行事曆事件，這還需要行事曆寫入。MESA 會檢查待辦和行事曆變更。每次行事曆變更都會留下回執，智慧體之後可以查看。
 
@@ -110,16 +120,24 @@
 
 智慧體可以讀取、建立、編輯和刪除 Home Assistant 場景編輯器中的場景。場景中的每個實體都需要權限樹中的 W，即使只是讀取場景。MESA 不檢查場景變更。
 
-允許它的能力：[{{label:caps.cap_scene_write.label}}](guide:window.capabilities#scene-write)
+場景中的群組也需要 W。如果金鑰被拒絕存取群組的某個成員，或 Phoenix 無法讀取成員，群組就不符合要求。
+
+建立或編輯包含門鎖、警報、捲簾或閥門的場景（直接包含或透過群組包含）還需要物理控制。設為拒絕存取時，變更會被拒絕。設為確認時，它會等待你的核准，並把它們列為 `physical_entities`。
+
+允許它的能力：[{{label:caps.cap_scene_write.label}}](guide:window.capabilities#scene-write)、[{{label:caps.cap_physical_control.label}}](guide:window.capabilities#physical-control)
 
 ## 輔助項目 {#helpers}
 
 智慧體可以建立、編輯和刪除輔助項目。包括開關、數字、文字、清單、日期、按鈕、計數器、計時器、排程、區域、標籤和人員。它們還可以管理透過整合設定的輔助項目，例如模板，並變更其設定。
 
 - MESA 會檢查輔助項目變更。MESA 確認會要求自己的核准，即使管理輔助項目為允許。
-- 只有區域、標籤和人員遵循權限樹。其他輔助項目僅受能力和 MESA 限制。
+- 只有區域、標籤和人員遵循權限樹。其他輔助項目僅受能力和 MESA 限制，但下面的設定規則除外。
 - 刪除模板輔助項目還需要整合管理。
 - 在 YAML 中定義的輔助項目無法變更。
+
+讀取或變更透過整合設定的輔助項目的設定，需要對它擁有的每個實體有 R。否則該輔助項目看起來就像不存在。不擁有任何實體的輔助項目也一樣，除非金鑰是直通金鑰。
+
+提到對金鑰隱藏內容的設定顯示為 `<redacted>`，智慧體不能把它傳回。憑證也這樣顯示。提到隱藏實體或 Phoenix 無法檢查的模板本文會被整個隱藏，對直通金鑰也一樣。
 
 允許它的能力：[{{label:caps.cap_helper_write.label}}](guide:window.capabilities#helper-write)、[{{label:caps.cap_integration_write.label}}](guide:window.capabilities#integration-write)
 
@@ -192,6 +210,12 @@ YAML 設定讓智慧體讀取你的 YAML 檔案，名稱中含有 secret 的檔�
 智慧體可以讀取和搜尋 ESPHome 裝置設定，密碼、金鑰、所有請求標頭的值、網址中的憑證以及提到它們的註解都會被遮蔽。
 
 使用 ESPHome Device Builder 附加元件時，它們還可以校驗、編譯、讀取裝置日誌、分析記憶體並檢查連線。沒有該附加元件時，只能讀取和搜尋。
+
+secrets.yaml 中的值無論出現在哪裡都會被遮蔽，即使在網址或註解中。金鑰無法讀取的實體 ID 顯示為 `<redacted-entity>`。任何智慧體都不能讀取或安裝名稱含 secret 的檔案。
+
+Phoenix 依檔名、檔案宣告的裝置名稱以及任何 `use_address` 或靜態 IP 確定檔案所屬的裝置。僅限部分裝置的金鑰只能讀取這些裝置的檔案。宣告了自己的名稱且不符合任何裝置的檔案只受能力限制。
+
+Phoenix 無法確定所屬裝置的檔案（例如共用套件或已刪除的檔案）需要能存取每個 ESPHome 裝置的金鑰。
 
 編譯、清理和記憶體分析需要裝置上的 W。安裝韌體需要 ESPHome 韌體刷寫、ESPHome 裝置 YAML 和裝置上的 W，並且 MESA 會檢查它。
 

@@ -36,8 +36,10 @@ from ..policy_engine import Permission, filter_service_response, resolve, resolv
 from ..access_key_store import AccessKeyRecord
 from ..tool_common import (
     _CAP_FORBIDDEN_MESSAGE,
+    _check_authority_before_dispatch,
     _gate,
     _record_version,
+    _recovery_failure,
     _tool_error,
     _tool_success,
     _tool_uncertain,
@@ -46,7 +48,7 @@ from ..tool_common import (
 )
 from ..config_recovery import ConfigurationRecoveryError, safe_snapshot
 from ..recorder_queries import parse_recorder_window, read_statistic_window
-from ..request_authority import check_request_authority
+from ..request_authority import AuthorityChangedError, check_request_authority
 from ..ws_dispatch import WsCommandNotDispatchedError, WsDispatchError, async_ws_command, validate_ws_payload
 
 _LOGGER = logging.getLogger(__name__)
@@ -861,6 +863,7 @@ async def _execute_edit_energy_config(
         _LOGGER.exception("edit_energy_config: could not read the current preferences")
         return _tool_error("Could not read the Energy dashboard configuration."), "invalid_request", tool
 
+    sent = None
     try:
         recovery = data.config_recovery
         resource = "energy:preferences"
@@ -872,11 +875,12 @@ async def _execute_edit_energy_config(
                 expected=_energy_recovery_snapshot(after))
             try:
                 await recovery.mark(rid, "dispatching")
-                check_request_authority()
+                await _check_authority_before_dispatch(recovery, rid)
                 current = await _read_prefs_raw(hass)
                 if current != before:
                     await recovery.mark(rid, "not_applied")
                     return _tool_error("Energy preferences changed while preparing the safety copy; nothing was dispatched."), "invalid_request", tool
+                sent = rid
                 # Send ONLY top-level keys changed by the addressed operation;
                 # `after` is what Core's schema makes of them.
                 try:
@@ -887,9 +891,12 @@ async def _execute_edit_energy_config(
                     await recovery.mark(rid, "not_applied" if refused else "unknown", error="save_rejected")
                     if refused:
                         return _tool_error(_core_refusal(err, access_key, hass)), "invalid_request", tool
-                    return _tool_error(redact_inaccessible_entity_ids_in_text(
-                        f"The Energy save outcome is unknown: {err} Inspect configuration recovery before retrying.",
-                        access_key, hass)), "invalid_request", tool
+                    return _tool_uncertain({
+                        "status": "unknown", "saved": False, "recovery_id": rid, "retry_safe": False,
+                        "message": redact_inaccessible_entity_ids_in_text(
+                            f"The Energy save outcome is unknown: {err} Inspect configuration recovery before retrying.",
+                            access_key, hass),
+                    }), "invalid_request", "energy:preferences"
                 try:
                     observed = await _read_prefs_raw(hass)
                     if observed == after:
@@ -909,14 +916,19 @@ async def _execute_edit_energy_config(
                         }), "invalid_request", "energy:preferences"
                 except Exception:  # a committed write with failed readback is uncertain
                     await recovery.mark(rid, "unknown", readback="unavailable")
-                    return _tool_error("Energy preferences were submitted, but readback is incomplete; inspect configuration recovery before retrying."), "invalid_request", tool
+                    return _tool_uncertain({
+                        "status": "unknown", "saved": False, "recovery_id": rid, "retry_safe": False,
+                        "message": "Energy preferences were submitted, but readback is incomplete; inspect configuration recovery before retrying.",
+                    }), "invalid_request", "energy:preferences"
             finally:
                 recovery.leave(rid)
-    except ConfigurationRecoveryError as err:
-        return _tool_error(str(err)), "invalid_request", tool
-    except Exception:  # never claim a saved Energy write without its record
+    except AuthorityChangedError:
+        raise
+    except Exception as err:  # never claim a saved Energy write without its record
         _LOGGER.exception("edit_energy_config recovery persistence failed")
-        return _tool_error("Could not verify the Energy configuration change; inspect configuration recovery before retrying."), "invalid_request", tool
+        return _recovery_failure(
+            err, sent, lost="Could not verify the Energy configuration change; inspect configuration recovery before retrying.",
+            unsent="The recovery record could not be saved, so nothing was changed."), "invalid_request", tool
 
     await _record_version(
         data, access_key, resource_type="energy", resource_id="preferences",
@@ -1104,7 +1116,11 @@ async def async_restore_energy_prefs(
                                        expected=_energy_recovery_snapshot(expected))
             try:
                 await recovery.mark(rid, "dispatching")
-                await async_ws_command(hass, "energy/save_prefs", payload)
+                try:
+                    await async_ws_command(hass, "energy/save_prefs", payload)
+                except WsCommandNotDispatchedError as err:
+                    await recovery.mark(rid, "not_applied", error="save_rejected")
+                    return _tool_error(f"Home Assistant rejected the Energy configuration: {err}"), "invalid_request", tool
                 observed = await _read_prefs_raw(hass)
                 if observed != expected:
                     await recovery.mark(rid, "partial", observed_hash=content_hash(observed))
@@ -1117,9 +1133,15 @@ async def async_restore_energy_prefs(
                     }), "invalid_request", "energy:preferences"
                 await recovery.mark(rid, "verified", observed_hash=content_hash(observed))
                 await recovery.set_source(rid, _energy_recovery_snapshot(observed))
-            except WsDispatchError:
+            except WsDispatchError as err:
+                _LOGGER.exception("restore energy preferences failed")
                 await recovery.mark(rid, "unknown", error="save_or_readback_failed")
-                raise
+                return _tool_uncertain({
+                    "status": "unknown", "saved": False, "recovery_id": rid, "retry_safe": False,
+                    "message": redact_inaccessible_entity_ids_in_text(
+                        f"The Energy restore outcome is unknown: {err} Inspect configuration recovery before retrying.",
+                        access_key, hass),
+                }), "invalid_request", "energy:preferences"
             finally:
                 recovery.leave(rid)
     except ConfigurationRecoveryError as err:

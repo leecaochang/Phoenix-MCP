@@ -28,7 +28,7 @@ from custom_components.phoenix_mcp.access_key_store import (
     PermissionNode,
     PermissionTree,
 )
-from custom_components.phoenix_mcp.capability import service_capability
+from custom_components.phoenix_mcp.capability import service_capabilities
 from custom_components.phoenix_mcp.const import (
     DOMAIN,
     NON_ACTUATING_SERVICES,
@@ -95,7 +95,7 @@ def test_every_core_service_on_a_physical_target_is_gated(domain, service, decla
 
 @pytest.mark.parametrize(("domain", "service", "declared"), _declaring("notify"))
 def test_every_core_service_on_a_notify_target_needs_the_capability(domain, service, declared):
-    assert service_capability(domain, service, {}, ["notify.x"]) == "cap_notify"
+    assert "cap_notify" in service_capabilities(domain, service, {}, ["notify.x"])
 
 
 def test_every_integration_filtered_service_has_been_judged():
@@ -120,7 +120,7 @@ def test_a_raw_command_is_physical_on_any_target(service_key):
 def test_a_service_that_cannot_actuate_adds_no_requirement(service_key):
     domain, service = service_key.split("/")
     assert physical_gate_applies(domain, service, ["lock.front"]) is False
-    assert service_capability(domain, service, {}, ["notify.chat"]) is None
+    assert service_capabilities(domain, service, {}, ["notify.chat"]) == service_capabilities(domain, service, {}, [])
 
 
 def _data(hass) -> tuple[PhoenixData, list]:

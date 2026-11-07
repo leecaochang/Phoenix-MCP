@@ -15,7 +15,7 @@
 
 该链中任何位置的 D 都会拒绝访问，即使实体本身设为 W。
 
-含有 D 成员的组也会被拒绝，因为对组的操作会触及该成员。在范围更大的请求中（例如整个区域），Phoenix 会跳过该组，只对其余实体执行操作。场景、脚本和自动化不算作组。
+含有 D 成员的组也会被拒绝，因为对组的操作会触及该成员。在范围更大的请求中（例如整个区域），Phoenix 会跳过该组，只对其余实体执行操作。Switch as X 实体算作包含其背后开关的组。场景、脚本和自动化不算作组。
 
 ## 最近的授权决定结果 {#nearest}
 
@@ -58,6 +58,10 @@ R 用于触发是安全的：智能体可以看到这些实体，但无法运行
 要保护触发器，请为自动化、脚本或场景设置一个设为确认的 MESA 策略。当{{label:settings.mesaModeLabel}}或该策略为{{label:settings.mesaModeEnforced}}时，每次运行都会等待你的审批，无论其操作做什么。在{{label:settings.mesaModeAdvisory}}下，运行会直接进行。[{{label:mesa.suggestTitle}}](guide:window.mesaSuggestions)会找出会触及风险设备的那些。
 
 审批只覆盖请求时指定的确切实体及其任何组成员。如果组发生变化，智能体必须重新询问。Phoenix 不会检查场景或脚本随后做了什么。
+
+智能体在运行输入中指定的实体不同：它[需要与目标相同的访问权限](guide:topic.tools#actions)。Phoenix 只能看到输入中直接写明的内容，所以由片段拼出实体 ID 的脚本能绕过这项检查。
+
+通用恒温器和通用湿度调节器辅助元素同样以 Home Assistant 的身份动作。Phoenix 不会透过它们检查其驱动的开关。
 
 相关：[自动化和脚本](guide:topic.tools#automations)
 

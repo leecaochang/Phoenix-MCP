@@ -141,7 +141,7 @@ def test_a_text_that_encodes_parses_as_home_assistant_parses_it():
     assert time_text.parse_date("not a date") is None
 
 
-def test_an_impossible_date_and_a_wrong_type_raise_what_callers_already_handle():
+def test_the_parser_raises_on_an_impossible_date_or_a_wrong_type():
     with pytest.raises(ValueError):
         time_text.parse_datetime("2026-13-45T00:00:00")
     with pytest.raises(TypeError):

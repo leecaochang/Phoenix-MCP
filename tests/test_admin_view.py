@@ -9,6 +9,9 @@ from datetime import datetime, timezone
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
+from awesomeversion import AwesomeVersion
+from homeassistant.const import __version__ as HA_VERSION
+
 import pytest
 
 from custom_components.phoenix_mcp.admin.settings import (
@@ -2916,12 +2919,25 @@ async def test_a_wipe_of_only_the_decision_provider_syncs_the_decisions_entity()
 
 
 @pytest.mark.asyncio
-async def test_settings_get_reports_decisions_support():
+@pytest.mark.parametrize("supported", [True, False])
+async def test_settings_get_reports_decisions_support(supported):
+    data, _ = _settings_data([])
+    view = PhoenixAdminSettingsView()
+    view.hass = _make_hass(data)
+    with patch("custom_components.phoenix_mcp.admin.settings.ai_task_decisions_supported", return_value=supported):
+        resp = await view.get(_make_admin_request())
+    assert json.loads(resp.text)["ai_task_decisions_supported"] is supported
+
+
+@pytest.mark.asyncio
+async def test_settings_get_reports_decisions_support_of_the_running_home_assistant():
+    """Evaluate arrived in 2026.11, so the supported floor reports False from the real detection."""
     data, _ = _settings_data([])
     view = PhoenixAdminSettingsView()
     view.hass = _make_hass(data)
     resp = await view.get(_make_admin_request())
-    assert json.loads(resp.text)["ai_task_decisions_supported"] is True
+    expected = AwesomeVersion(HA_VERSION) >= AwesomeVersion("2026.11.0b0")
+    assert json.loads(resp.text)["ai_task_decisions_supported"] is expected
 
 
 @pytest.mark.asyncio

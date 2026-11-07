@@ -32,11 +32,13 @@ Phoenix checks the request again before running it:
 
 Once those pass, Phoenix records your decision before it runs anything. Each action also checks its own targets, permissions and MESA rules again. If the devices it targets have changed since the request, it's refused, and the agent must ask again.
 
+A request can reach more than it names, such as a raw command that works on a whole device. It lists the rest as `also_reaches`, and those entities count as targets.
+
 ## How it can end {#outcomes}
 
 - Approved: it ran, and its result is saved.
 - Failed: it was refused at the last check, or the action returned an error. It isn't offered again.
-- Interrupted: it stopped while running and may have partly applied. Check the result yourself.
+- Interrupted: it stopped while running, or Phoenix couldn't confirm the result, so it may have partly applied. Check the result yourself.
 
 Only a failure before the action starts leaves the request pending, to approve again.
 
@@ -47,6 +49,8 @@ The agent receives your reason, or is told to ask you if you gave none. A reject
 ## What ends a request early {#cancelled}
 
 Restarting Home Assistant cancels every pending request. Reloading Phoenix doesn't, and an approved action that's already running carries on. Revoking the access key, the key expiring and deleting core data cancel its requests too. Approving while the kill switch is on cancels the request instead, except for a configuration recovery review.
+
+An approved action that's running also carries on if you reload or close the page.
 
 ## Notifications {#notify}
 

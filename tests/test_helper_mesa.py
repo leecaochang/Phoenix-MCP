@@ -404,6 +404,7 @@ async def test_read_only_blocks_config_flow_helper_settings_before_approval(
         _profile(registry_entry.entity_id, "read_only"),
     )
     access_key = _access_key("sensor")
+    access_key.permissions.domains["binary_sensor"] = PermissionNode(state="YELLOW")
     gate = AsyncMock()
 
     async def _helper_integration(_hass, _domain):

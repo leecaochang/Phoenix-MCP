@@ -30,6 +30,7 @@ from ..const import DOMAIN, MAX_BATCH_APPROVALS, MESA_CONFIRM_CAP
 from ..data import PhoenixData
 from ..durable_storage import DurableStorageError
 from ..household_authority import household_scope
+from ..mcp_transport import _log_dispatch_task_error
 from ..request_authority import (
     AuthorityChangedError, RequestAuthority, check_request_authority, policy_version,
     request_authority,
@@ -47,6 +48,16 @@ if TYPE_CHECKING:
     from ..approvals import PendingApproval
 
 _LOGGER = logging.getLogger(__name__)
+
+
+def _panel_row(row: dict, data: PhoenixData) -> dict:
+    """An approval as the panel reads it, from its ``to_dict``.
+
+    in_progress rides the row rather than only the claim EVENT, so a page loaded or reopened
+    while an approve runs still renders it as non-actionable. A marker with no live claim
+    counts too: Approve refuses it until recovery closes it.
+    """
+    return {**row, "in_progress": row["id"] in data.approvals_in_progress or bool(row["execution_started_at"])}
 
 
 class PhoenixAdminApprovalsView(PhoenixView):
@@ -73,16 +84,8 @@ class PhoenixAdminApprovalsView(PhoenixView):
         records = records[offset:offset + limit]
         # Redaction reads every queued argument a key chose, for a whole page of rows.
         rows = await hass.async_add_executor_job(lambda: [r.to_dict() for r in records])
-        # in_progress rides the row rather than only the claim EVENT, so a panel
-        # that was loaded (or reloaded) while an approve was already executing
-        # still renders it as non-actionable. The event gives the instant update;
-        # this is what makes a fresh page correct. A marker with no live claim
-        # counts too: Approve refuses it until recovery closes it.
         return _ok({
-            "approvals": [{
-                **row,
-                "in_progress": row["id"] in data.approvals_in_progress or bool(row["execution_started_at"]),
-            } for row in rows],
+            "approvals": [_panel_row(row, data) for row in rows],
             "total": total,
             "limit": limit,
             "offset": offset,
@@ -108,7 +111,7 @@ class PhoenixAdminApprovalView(PhoenixView):
         record = get_approval(data.store, approval_id)
         if record is None:
             return _err("not_found", "Approval not found.", 404, rid, key="approvalNotFound")
-        return _ok(record.to_dict(), request_id=rid)
+        return _ok(_panel_row(record.to_dict(), data), request_id=rid)
 
     @require_admin
     async def delete(self, request: web.Request, approval_id: str) -> web.Response:
@@ -332,8 +335,8 @@ class _ClosedApproval(NamedTuple):
 class _ApprovalAttempt:
     """One approve request once its record has been read under the store lock.
 
-    ``resolved`` is what the ``finally`` of ``_approve_approval`` reads: while it is False the
-    surfaces are told the claim was released and a pending record is offered again.
+    ``resolved`` is what the ``finally`` of ``_run_claimed_approval`` reads: while it is False
+    the surfaces are told the claim was released and a pending record is offered again.
     """
 
     hass: HomeAssistant
@@ -530,7 +533,8 @@ async def _dispatch_approved_action(
 async def _finalize_execution(attempt: _ApprovalAttempt, tool_result: dict, outcome: str) -> web.Response:
     """Save what the executor returned, then announce and audit it.
 
-    Runs inside the try of ``_approve_approval``, whose ``finally`` reads ``attempt.resolved``.
+    Runs inside the try of ``_run_claimed_approval``, whose ``finally`` reads
+    ``attempt.resolved``.
     """
     hass, data, approval_id = attempt.hass, attempt.data, attempt.approval_id
     record, rid, settings = attempt.record, attempt.rid, attempt.settings
@@ -545,6 +549,12 @@ async def _finalize_execution(attempt: _ApprovalAttempt, tool_result: dict, outc
     if isinstance(tool_result, UncertainOutcome):
         auto_reason = REASON_EXECUTION_INTERRUPTED
     audit_outcome: Outcome = "allowed" if final_status == STATUS_APPROVED else "denied"
+
+    def _announce_outcome(saved: PendingApproval) -> None:
+        dismiss_approval_notification(hass, approval_id)
+        attempt.resolved = True
+        fire_approval_resolved_event(hass, saved)
+        _record_execution_audit()
 
     def _record_execution_audit(payload: dict | None = None) -> None:
         data.audit.record(
@@ -569,6 +579,15 @@ async def _finalize_execution(attempt: _ApprovalAttempt, tool_result: dict, outc
                 closure_reason=auto_reason,
                 result=saved_result,
             )
+    except asyncio.CancelledError:
+        # A stopping Home Assistant, as a save finishes its write before it reports the
+        # cancellation. A record still marked is left to recovery.
+        stored = get_approval(data.store, approval_id)
+        if stored is not None and stored.status == final_status:
+            _announce_outcome(stored)
+        else:
+            _record_execution_audit({"finalization": "not_saved", "executor_outcome": outcome})
+        raise
     except DurableStorageError:
         # The executor returned, so the outcome is known and only its write failed. The
         # store returned to its marked record, which recovery closes; the surfaces keep
@@ -597,10 +616,7 @@ async def _finalize_execution(attempt: _ApprovalAttempt, tool_result: dict, outc
             "conflict", "Approval was already resolved.", 409, rid,
             key="approvalAlreadyResolved",
         )
-    dismiss_approval_notification(hass, approval_id)
-    attempt.resolved = True
-    fire_approval_resolved_event(hass, updated)
-    _record_execution_audit()
+    _announce_outcome(updated)
     return _ok(updated.to_dict(), request_id=rid)
 
 
@@ -625,11 +641,100 @@ def _release_claim(attempt: _ApprovalAttempt) -> None:
         create_approval_notification(hass, pending)
 
 
+async def _run_claimed_approval(attempt: _ApprovalAttempt, access_key: AccessKeyRecord) -> web.Response:
+    """Dispatch a claimed approval, save its outcome and release the claim, in that order."""
+    hass, data, rid = attempt.hass, attempt.data, attempt.rid
+    approval_id, user = attempt.approval_id, attempt.user
+
+    # Runs outside the lock so the tool can use it freely. The claim is released in the
+    # finally below; whether the approval is OFFERED AGAIN after a failure depends on
+    # whether the executor could have applied anything, which is the distinction the two
+    # excepts below draw.
+    try:
+        try:
+            tool_result, outcome, _resource = await _dispatch_approved_action(attempt, access_key)
+        except ExecutorNotRegistered:
+            # The registry lookup raises before any executor is called, so this
+            # also proves nothing was dispatched. It has its own exception type
+            # because catching bare KeyError would be ambiguous: an executor that
+            # raises KeyError internally (a dict lookup on a service response, a
+            # missing config key) is indistinguishable from the lookup failing,
+            # and a side effect that HAD begun would be re-offered as retryable.
+            await async_clear_execution_marker(data.store, approval_id)
+            attempt.record_admin_lifecycle(
+                "approval/failed",
+                outcome="denied",
+                reason="executor_missing",
+            )
+            return _err(
+                "invalid_request", "No executor registered for this tool.", 400, rid,
+                key="approvalExecutorMissing",
+            )
+        except BaseException as exc:
+            # BaseException, because a CancelledError would otherwise skip this handler and
+            # re-offer a dispatched approval. Anything here may have raised after the side
+            # effect applied, so the record resolves as recovery resolves an interrupted
+            # one. If persisting that fails, the durable marker blocks a retry until the
+            # sweep closes it.
+            cancelled = isinstance(exc, asyncio.CancelledError)
+            if cancelled:
+                _LOGGER.warning(
+                    "Approval %s was cancelled mid-execution; it may have applied",
+                    approval_id,
+                )
+            else:
+                _LOGGER.exception("Approval execution failed for %s", approval_id)
+            # Best-effort during a cancellation: awaiting inside a cancelled task
+            # can be interrupted again, and the marker left on disk is the
+            # backstop either way (recovery reconciles it, and the marker check
+            # refuses any retry before then). So a failure to resolve here
+            # degrades to "resolved at the next recovery sweep", never to "offered
+            # again".
+            try:
+                async with data.store.async_lock:
+                    interrupted = await async_update_approval_status(
+                        data.store, approval_id,
+                        status=STATUS_FAILED,
+                        approved_by_user_id=user.id,
+                        closure_reason=REASON_EXECUTION_INTERRUPTED,
+                    )
+                attempt.resolved = True
+                if interrupted is not None:
+                    fire_approval_resolved_event(hass, interrupted)
+                attempt.record_admin_lifecycle(
+                    "approval/failed",
+                    outcome="denied",
+                    reason=REASON_EXECUTION_INTERRUPTED,
+                )
+            except BaseException:  # the marker is the backstop
+                _LOGGER.exception(
+                    "Could not resolve approval %s after a failed execution; the "
+                    "recovery will close it as interrupted", approval_id,
+                )
+            if cancelled:
+                # Never swallow a cancellation: the event loop owns it, and
+                # returning a response here would report a completed request for
+                # a task Home Assistant is tearing down.
+                raise
+            return _err(
+                "internal_error",
+                "Execution failed and may have partly applied. This approval was "
+                "closed rather than offered again; check the result before retrying.",
+                500, rid,
+                key="approvalExecutionUncertain",
+            )
+
+        return await _finalize_execution(attempt, tool_result, outcome)
+    finally:
+        _release_claim(attempt)
+
+
 async def _approve_approval(hass: HomeAssistant, request: web.Request, approval_id: str) -> web.Response:
     """Claim, execute and finalize one pending approval.
 
     Validation and the durable execution marker run under ``store.async_lock``; the executor
-    runs outside it and its outcome is written back under the lock.
+    runs outside it, in ``_run_claimed_approval``, and its outcome is written back under the
+    lock.
     """
 
     rid = request["phoenix_mcp_rid"]
@@ -691,84 +796,12 @@ async def _approve_approval(hass: HomeAssistant, request: web.Request, approval_
 
     _announce_claim(attempt)
 
-    # Execute outside the lock so the tool can use it freely. The claim is
-    # released in the finally below; whether the approval is OFFERED AGAIN after a
-    # failure depends on whether the executor could have applied anything, which
-    # is the distinction the two excepts below draw.
-    try:
-        try:
-            tool_result, outcome, _resource = await _dispatch_approved_action(attempt, access_key)
-        except ExecutorNotRegistered:
-            # The registry lookup raises before any executor is called, so this
-            # also proves nothing was dispatched. It has its own exception type
-            # because catching bare KeyError would be ambiguous: an executor that
-            # raises KeyError internally (a dict lookup on a service response, a
-            # missing config key) is indistinguishable from the lookup failing,
-            # and a side effect that HAD begun would be re-offered as retryable.
-            await async_clear_execution_marker(data.store, approval_id)
-            attempt.record_admin_lifecycle(
-                "approval/failed",
-                outcome="denied",
-                reason="executor_missing",
-            )
-            return _err(
-                "invalid_request", "No executor registered for this tool.", 400, rid,
-                key="approvalExecutorMissing",
-            )
-        except BaseException as exc:
-            # BaseException, because a CancelledError would otherwise skip this handler and
-            # re-offer a dispatched approval. Anything here may have raised after the side
-            # effect applied, so the record resolves as recovery resolves an interrupted
-            # one. If persisting that fails, the durable marker blocks a retry until the
-            # sweep closes it.
-            cancelled = isinstance(exc, asyncio.CancelledError)
-            if cancelled:
-                _LOGGER.warning(
-                    "Approval %s was cancelled mid-execution; it may have applied",
-                    approval_id,
-                )
-            else:
-                _LOGGER.exception("Approval execution failed for %s", approval_id)
-            # Best-effort during a cancellation: awaiting inside a cancelled task
-            # can be interrupted again, and the marker left on disk is the
-            # backstop either way (recovery reconciles it, and the marker check
-            # above refuses any retry before then). So a failure to resolve here
-            # degrades to "resolved at the next recovery sweep", never to "offered
-            # again".
-            try:
-                async with data.store.async_lock:
-                    interrupted = await async_update_approval_status(
-                        data.store, approval_id,
-                        status=STATUS_FAILED,
-                        approved_by_user_id=user.id,
-                        closure_reason=REASON_EXECUTION_INTERRUPTED,
-                    )
-                attempt.resolved = True
-                if interrupted is not None:
-                    fire_approval_resolved_event(hass, interrupted)
-                attempt.record_admin_lifecycle(
-                    "approval/failed",
-                    outcome="denied",
-                    reason=REASON_EXECUTION_INTERRUPTED,
-                )
-            except BaseException:  # the marker is the backstop
-                _LOGGER.exception(
-                    "Could not resolve approval %s after a failed execution; the "
-                    "recovery will close it as interrupted", approval_id,
-                )
-            if cancelled:
-                # Never swallow a cancellation: the event loop owns it, and
-                # returning a response here would report a completed request for
-                # a task Home Assistant is tearing down.
-                raise
-            return _err(
-                "internal_error",
-                "Execution failed and may have partly applied. This approval was "
-                "closed rather than offered again; check the result before retrying.",
-                500, rid,
-                key="approvalExecutionUncertain",
-            )
-
-        return await _finalize_execution(attempt, tool_result, outcome)
-    finally:
-        _release_claim(attempt)
+    # Home Assistant cancels a handler whose client left, and a page reload must not stop an
+    # approved action partway, so the action has a task of its own and the client just sees a
+    # dropped connection. Being a background task, it does not hold up a stopping Home
+    # Assistant, which cancels it and leaves the handling below to close the record.
+    task = hass.async_create_background_task(
+        _run_claimed_approval(attempt, access_key), f"phoenix_mcp_approval_{approval_id}",
+    )
+    task.add_done_callback(_log_dispatch_task_error)
+    return await asyncio.shield(task)

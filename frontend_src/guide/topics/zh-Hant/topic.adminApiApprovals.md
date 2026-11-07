@@ -65,7 +65,7 @@ recovery_review_replaced   phoenix_mcp_restarted
 
 ### 讀取單一核准 {#read-approval}
 
-傳回核准記錄，不含 `in_progress`。
+傳回核准記錄加上 `in_progress`，與[列出核准](guide:#list-approvals)相同。
 
 | 狀態 | `error` | `message_key` | 條件 |
 |---|---|---|---|
@@ -76,6 +76,8 @@ recovery_review_replaced   phoenix_mcp_restarted
 核准該核准記錄，並依智慧體的請求執行暫緩的操作。該端點不接受本文，並忽略你傳送的任何本文。
 
 Phoenix 依下文錯誤表的順序檢查核准。執行任何內容之前，它會向磁碟儲存一個執行標記。如果某次執行到達操作卻從未回報，該標記會保留，之後每次核准、拒絕或取消都會傳回 `409`。
+
+如果用戶端中斷連線，操作仍會完成。請從記錄或 `phoenix_mcp_approval_resolved` 事件讀取結果。
 
 MESA 為確認而暫緩的核准，以及復原審核，會跳過能力檢查。復原審核還會跳過緊急停止開關檢查。
 
@@ -107,7 +109,7 @@ MESA 為確認而暫緩的核准，以及復原審核，會跳過能力檢查。
 
 ### 核准多個 {#batch-approve}
 
-依序逐個核准多個核准，經過與單一核准相同的步驟。批次會在第一個未傳回 `200` 且 `status: "approved"` 的核准處停止。
+依序逐個核准多個核准，經過與單一核准相同的步驟。批次會在第一個未傳回 `200` 且 `status: "approved"` 的核准處停止。如果用戶端中斷連線，正在執行的核准會完成，其餘核准維持待處理。
 
 | 欄位 | 類型 | 說明 |
 |---|---|---|
@@ -176,7 +178,7 @@ Phoenix 在 Home Assistant 的事件匯流排上觸發兩個事件，以便腳�
 - 如果執行前的失敗使核准保持待處理，它會再次以 `claimed: false` 觸發。
 - 核准達到最終狀態時觸發 `phoenix_mcp_approval_resolved`。資料：`approval_id`、`access_key_id`、`access_key_name`、`tool_name`、`status`、`closure_reason`、`approved_by_user_id`、`timestamp`。
 
-執行期間載入的頁面會在[列出核准](guide:#list-approvals)的列上看到 `in_progress: true`。
+執行期間載入的頁面會在[列出核准](guide:#list-approvals)和[讀取單一核准](guide:#read-approval)中看到 `in_progress: true`。
 
 相關：[自動化事件](guide:topic.running#events)
 

@@ -7,19 +7,13 @@
  */
 
 import { useEffect, useRef, type RefObject } from "react";
-import { focusDialog } from "../components/Modal";
+import { focusDialog, gone, shown } from "../components/Modal";
 
 /** One area F6 can reach: the element that holds it and the element that takes focus first. */
 export interface FocusArea {
   key: string;
   holds: (el: Element) => boolean;
   target: HTMLElement;
-}
-
-function shown(el: Element | null): el is HTMLElement {
-  if (!(el instanceof HTMLElement) || el.closest("[hidden]")) return false;
-  const r = el.getBoundingClientRect();
-  return r.width > 0 && r.height > 0;
 }
 
 /** Top to bottom, then left to right, as the eye reads the workspace. */
@@ -87,11 +81,6 @@ export function enterArea(area: FocusArea, remembered: Element | undefined): voi
   const target = area.target;
   if (!target.matches("button, a[href], input, select, textarea, [tabindex]")) target.tabIndex = -1;
   target.focus();
-}
-
-/** Whether focus left `el` because it went away: removed, hidden, made inert or disabled. */
-function gone(el: Element): boolean {
-  return !el.isConnected || !!el.closest("[hidden], [inert]") || el.matches(":disabled") || !shown(el);
 }
 
 /**

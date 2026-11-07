@@ -60,6 +60,45 @@ export function focusDialog(dialog: HTMLElement): void {
   (tabbable(dialog)[0] ?? dialog).focus();
 }
 
+/** Whether an element has a box on the page, outside anything hidden. */
+export function shown(el: Element | null): el is HTMLElement {
+  if (!(el instanceof HTMLElement) || el.closest("[hidden]")) return false;
+  const r = el.getBoundingClientRect();
+  return r.width > 0 && r.height > 0;
+}
+
+/** Whether focus left `el` because it went away: removed, hidden, made inert or disabled. */
+export function gone(el: Element): boolean {
+  return !el.isConnected || !!el.closest("[hidden], [inert]") || el.matches(":disabled") || !shown(el);
+}
+
+/**
+ * Keep focus in a dialog when its focused control goes away; the browser would
+ * drop it to the page, behind the backdrop. Only the top dialog acts. This needs
+ * nothing around the dialog, because the injected editors open one with no panel.
+ */
+function holdFocus(modal: HTMLElement, isTop: () => boolean): () => void {
+  const scope = modal.getRootNode() as Document | ShadowRoot;
+  const page = modal.ownerDocument;
+  // Opening the dialog put focus on a control before this listens.
+  let last: Element | null = activeElement();
+  const onFocus = (e: FocusEvent) => { last = e.composedPath()[0] as Element; };
+  const check = () => {
+    if (!last || !isTop() || modal.closest("[hidden]")) return;
+    // Focus that moved on purpose landed somewhere; focus whose control went away landed on the page.
+    const inScope = scope.activeElement;
+    if ((inScope && inScope !== page.body) || (page.activeElement && page.activeElement !== page.body)) return;
+    if (gone(last)) focusDialog(modal);
+  };
+  const observer = new MutationObserver(check);
+  observer.observe(modal, { childList: true, subtree: true, attributes: true, attributeFilter: ["hidden", "disabled", "inert"] });
+  modal.addEventListener("focusin", onFocus);
+  return () => {
+    observer.disconnect();
+    modal.removeEventListener("focusin", onFocus);
+  };
+}
+
 function activeElement(): HTMLElement | null {
   let active = document.activeElement;
   while (active?.shadowRoot?.activeElement) active = active.shadowRoot.activeElement;
@@ -190,7 +229,11 @@ export function Modal({ titleId, onClose, onNavigatePrevious, onNavigateNext, re
       navigate();
     };
     document.addEventListener("keydown", onKey);
+    const releaseFocus = modalRef.current
+      ? holdFocus(modalRef.current, () => modalStack[modalStack.length - 1] === close)
+      : undefined;
     return () => {
+      releaseFocus?.();
       document.removeEventListener("keydown", onKey);
       const i = modalStack.lastIndexOf(close);
       if (i !== -1) modalStack.splice(i, 1);

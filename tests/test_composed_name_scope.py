@@ -12,14 +12,17 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 import uuid
 
+from homeassistant.components.homeassistant.exposed_entities import async_expose_entity
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
+from homeassistant.setup import async_setup_component
 from homeassistant.util.dt import utcnow
 from pytest_homeassistant.common import MockConfigEntry
 import pytest
 
 from custom_components.phoenix_mcp.access_key_store import AccessKeyRecord, PermissionNode, PermissionTree
 from custom_components.phoenix_mcp.data import PhoenixData
+from custom_components.phoenix_mcp.routing.decision_targets import capture_targets
 from custom_components.phoenix_mcp.tool_dispatch import _call_tool
 from custom_components.phoenix_mcp.version_store import VersionStore
 from tests.runtime_fixtures import mesa_off_store
@@ -105,6 +108,28 @@ async def test_a_resolved_alias_does_not_carry_a_hidden_parent(hass, home):
     granted = _key(_entities(home, devices={home.parent.id: PermissionNode(state="GREEN")}))
     described, _ = await _call(hass, "describe_entity", {"entity_id": home.relay}, granted)
     assert described["aliases"] == [COMPOSED, "Boiler"]
+
+
+async def test_the_decision_catalog_alias_does_not_carry_a_hidden_parent(hass, home):
+    """The provider receives the catalog, so it follows the same rule as a read."""
+    assert await async_setup_component(hass, "homeassistant", {})
+    assert await async_setup_component(hass, "conversation", {})
+    entities = er.async_get(hass)
+    lamp = entities.async_get_or_create("light", "test", "plug_lamp", device_id=home.child.id,
+                                        config_entry=hass.config_entries.async_entries("test")[0],
+                                        original_name="Relay", has_entity_name=True)
+    entities.async_update_entity(lamp.entity_id, aliases=[er.COMPUTED_NAME, "Boiler"])
+    async_expose_entity(hass, "conversation", lamp.entity_id, True)
+    hass.states.async_set(lamp.entity_id, "off", {"friendly_name": PLAIN, "supported_color_modes": ["onoff"]})
+    grant = {lamp.entity_id: PermissionNode(state="GREEN")}
+
+    def aliases(key) -> list:
+        targets = capture_targets(hass, key, "light_on").targets.values()
+        return next(target for target in targets if target["entity_id"] == lamp.entity_id)["aliases"]
+
+    assert aliases(_key(PermissionTree(entities=grant))) == sorted([PLAIN, "Boiler"])
+    granted = PermissionTree(entities=grant, devices={home.parent.id: PermissionNode(state="GREEN")})
+    assert aliases(_key(granted)) == sorted([COMPOSED, "Boiler"])
 
 
 async def test_a_red_parent_hides_it_whichever_way_the_entity_is_reached(hass, home):

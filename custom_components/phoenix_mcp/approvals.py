@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Any
 
 from homeassistant.util.dt import utcnow
 
-from .approval_targets import bind_targets, bound_preview
+from .approval_targets import bind_targets, bound_preview, targets_bound
 from .conversation_log import redact_device_codes, approval_event
 from .catalog_text import notification_text
 from .capability import effective_cap
@@ -768,6 +768,8 @@ async def async_evaluate_capability(
     # and nowhere else. Both early returns above leave it untouched.
     if target_entities is not None:
         args = bind_targets(args, target_entities, hass)
+        if not targets_bound(args):
+            return CapabilityResult(CAP_DENY)
     resolved_diff = await _resolve_diff(diff)
     if target_entities is not None:
         resolved_diff = bound_preview(resolved_diff, args)

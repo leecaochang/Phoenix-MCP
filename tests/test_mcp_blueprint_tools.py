@@ -23,7 +23,8 @@ from custom_components.phoenix_mcp.tool_catalog import _EXECUTOR_REGISTRY
 from custom_components.phoenix_mcp.tool_dispatch import _call_tool
 from custom_components.phoenix_mcp.access_key_store import PermissionTree, AccessKeyRecord
 from custom_components.phoenix_mcp.version_store import VersionStore
-from custom_components.phoenix_mcp.ws_dispatch import WsDispatchError
+from custom_components.phoenix_mcp.tool_common import UncertainOutcome
+from custom_components.phoenix_mcp.ws_dispatch import WsCommandNotDispatchedError, WsDispatchError
 
 VALID = """\
 blueprint:
@@ -445,6 +446,44 @@ class TestEdit:
                 _access_key(), hass, _data()[0])
         assert outcome == "invalid_request"
         assert "disk full" in _text(content)
+        assert isinstance(content, UncertainOutcome)
+
+    @pytest.mark.parametrize(("tool", "extra"), [("edit_blueprint", {"content": VALID}), ("delete_blueprint", {})])
+    async def test_a_command_that_never_ran_is_a_plain_failure(self, hass, bp_env, tool, extra):
+        _write_existing(bp_env)
+        data = _data()[0]
+        with _patch_ws(side_effect=WsCommandNotDispatchedError("not loaded")), _patch_consumers([]):
+            content, outcome, _ = await _call(
+                tool, {"domain": "automation", "path": "author/existing.yaml", **extra}, _access_key(), hass, data)
+        assert outcome == "invalid_request" and not isinstance(content, UncertainOutcome)
+        assert [record["phase"] for record in data.config_recovery.records()] == ["not_applied"]
+
+    @pytest.mark.parametrize(("tool", "extra"), [("edit_blueprint", {"content": VALID}), ("delete_blueprint", {})])
+    async def test_a_record_lost_after_dispatch_is_uncertain(self, hass, bp_env, tool, extra):
+        _write_existing(bp_env)
+        data = _data()[0]
+        real = data.config_recovery.mark
+
+        async def mark(rid, phase, **observed):
+            if phase != "dispatching":
+                raise RuntimeError("storage full")
+            await real(rid, phase, **observed)
+
+        with _patch_ws(return_value=None), _patch_consumers([]), patch.object(data.config_recovery, "mark", mark):
+            content, _, _ = await _call(
+                tool, {"domain": "automation", "path": "author/existing.yaml", **extra}, _access_key(), hass, data)
+        assert isinstance(content, UncertainOutcome)
+
+    @pytest.mark.parametrize(("tool", "extra"), [("edit_blueprint", {"content": VALID}), ("delete_blueprint", {})])
+    async def test_a_failure_before_dispatch_says_nothing_changed(self, hass, bp_env, tool, extra):
+        _write_existing(bp_env)
+        data = _data()[0]
+        with _patch_ws(return_value=None) as dispatch, _patch_consumers([]), patch.object(
+                data.config_recovery, "begin", AsyncMock(side_effect=RuntimeError("storage full"))):
+            content, _, _ = await _call(
+                tool, {"domain": "automation", "path": "author/existing.yaml", **extra}, _access_key(), hass, data)
+        assert not isinstance(content, UncertainOutcome) and "nothing was changed" in _text(content)
+        dispatch.assert_not_called()
 
 
 class TestDelete:
@@ -483,6 +522,7 @@ class TestDelete:
                 _access_key(), hass, _data()[0])
         assert outcome == "invalid_request"
         assert "in use" in _text(content)
+        assert isinstance(content, UncertainOutcome)
 
     async def test_delete_does_not_require_content(self, hass, bp_env):
         _write_existing(bp_env)

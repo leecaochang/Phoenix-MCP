@@ -21,7 +21,7 @@ from custom_components.phoenix_mcp.agent_recovery import AgentRecovery
 from custom_components.phoenix_mcp import agent_chat, agent_turn, voice_agent
 from custom_components.phoenix_mcp.llm.base import EV_DONE, EV_ERROR, EV_TEXT, EV_TOOL
 from custom_components.phoenix_mcp.agent_chat import async_run_voice_turn
-from custom_components.phoenix_mcp.const import VOICE_AGENT_CLIENT_IP
+from custom_components.phoenix_mcp.const import VOICE_AGENT_CLIENT_IP, VOICE_MAX_SPOKEN_CHARS
 from custom_components.phoenix_mcp.provider_constants import AGENT_CHAT_MAX_TURN_OUTPUT_BYTES
 from custom_components.phoenix_mcp.catalog_templates import VOICE_TEMPLATES
 from custom_components.phoenix_mcp.access_key_store import GlobalSettings
@@ -629,6 +629,47 @@ def test_spoken_text_removes_formatting_without_changing_literal_symbols(
     markdown: str, spoken: str
 ):
     assert voice_agent._spoken_text(markdown) == spoken
+
+
+@pytest.mark.parametrize(("markdown", "spoken"), [
+    ("![Chart](http://x/a.png) and [the docs](http://x)", "Chart and the docs"),
+    ("**" + "a" * 300 + "**", "a" * 300),
+    ("line  \t\nnext", "line\nnext"),
+])
+def test_ordinary_spans_are_still_stripped(markdown, spoken):
+    assert voice_agent._spoken_text(markdown) == spoken
+
+
+def test_a_span_past_the_bound_loses_only_its_marks():
+    assert voice_agent._spoken_text("**" + "a" * 400 + "**") == "a" * 400
+
+
+def test_a_long_reply_is_cut_to_the_limit_and_says_so():
+    text = "word " * VOICE_MAX_SPOKEN_CHARS
+    spoken = voice_agent._speakable(text, "de")
+    assert spoken.endswith(voice_text("de", "answer_truncated"))
+    assert len(spoken) < VOICE_MAX_SPOKEN_CHARS + 100
+    assert voice_agent._speakable("Short. ") == "Short."
+
+
+async def test_both_speech_sites_clip_before_stripping(hass):
+    """A reply past the limit never reaches the Markdown patterns at full length."""
+    seen = []
+    real = voice_agent._spoken_text
+
+    def spy(text):
+        seen.append(len(text))
+        return real(text)
+
+    long_reply = "x " * VOICE_MAX_SPOKEN_CHARS
+    data = MagicMock()
+    data.conversations.async_save = AsyncMock()
+    agent = voice_agent.PhoenixConversationAgent(hass, data)
+    user_input = SimpleNamespace(text="hi", conversation_id="c", language="en", satellite_id=None)
+    with (patch.object(voice_agent, "_spoken_text", spy), patch.object(voice_agent, "household_scope", MagicMock()),
+          patch.object(voice_agent, "_async_voice_answer", AsyncMock(return_value=long_reply))):
+        await agent.async_process(user_input)
+    assert seen == [VOICE_MAX_SPOKEN_CHARS, VOICE_MAX_SPOKEN_CHARS]
 
 
 _FULL_CFG = dict(

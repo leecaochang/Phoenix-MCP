@@ -13,7 +13,7 @@ from homeassistant.util.dt import utcnow
 
 from custom_components.phoenix_mcp import conversation_log as history
 from custom_components.phoenix_mcp.audit import AuditLog
-from custom_components.phoenix_mcp.const import CONVERSATION_LOG_SCAN_BYTES, DOMAIN
+from custom_components.phoenix_mcp.const import CONVERSATION_LOG_MAX_DEPTH, CONVERSATION_LOG_SCAN_BYTES, DOMAIN
 from custom_components.phoenix_mcp.data import PhoenixData
 from custom_components.phoenix_mcp.tool_dispatch import _dispatch_mcp
 from custom_components.phoenix_mcp.rate_limiter import RateLimiter
@@ -1356,6 +1356,34 @@ def test_a_cut_keeps_the_text_before_the_word_it_falls_in():
     assert history.clip_text("one two three", 7) == "one "
     assert history.clip_text("short", 9) == "short"
     assert history.clip_text("opaque-word", 4) == ""
+
+
+@pytest.mark.parametrize("limit", [0, -1, -5000])
+def test_a_cut_with_nothing_left_keeps_nothing(limit):
+    assert history.clip_text("y " * 1000, limit) == ""
+
+
+def test_a_first_element_that_spends_the_budget_ends_the_list():
+    value = history.sanitized(["x " * 500, "second", "third"], max_bytes=100_000, scan_chars=100)
+    assert len(value) == 1
+
+
+def test_a_key_as_long_as_the_budget_left_ends_the_object():
+    # The object itself costs one, which leaves 99.
+    assert history.sanitized({"k" * 99: "value", "later": "tail"}, max_bytes=100_000, scan_chars=100) == {}
+    assert "k" * 98 in history.sanitized({"k" * 98: "v"}, max_bytes=100_000, scan_chars=100)
+
+
+def test_empty_nodes_spend_the_budget_too():
+    assert len(history.sanitized([[] for _ in range(1000)], max_bytes=100_000, scan_chars=100)) < 100
+
+
+def test_a_value_past_the_depth_limit_is_hidden_rather_than_refused():
+    deep: list = ["bottom"]
+    for _ in range(CONVERSATION_LOG_MAX_DEPTH):
+        deep = [deep]
+    value = history.sanitized(deep, max_bytes=100_000, scan_chars=1000)
+    assert history._REDACTED in str(value) and "bottom" not in str(value)
 
 
 def test_a_shortened_string_counts_as_an_omission(conversation_data):

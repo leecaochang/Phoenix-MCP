@@ -117,7 +117,10 @@ def clip_text(raw: str, limit: int) -> str:
     """The text up to `limit`, less the word the cut falls in.
 
     Credential patterns need the whole credential, so a cut one would pass as plain text.
+    A limit of zero or less keeps nothing.
     """
+    if limit <= 0:
+        return ""
     if len(raw) <= limit:
         return raw
     kept = raw[:limit]

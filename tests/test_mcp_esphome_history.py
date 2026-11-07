@@ -13,6 +13,7 @@ from unittest.mock import patch
 
 import pytest
 
+from custom_components.phoenix_mcp.access_key_store import PermissionNode, PermissionTree
 from custom_components.phoenix_mcp.esphome_builder import BuilderCommandError
 from tests.runtime_fixtures import FakeBuilder
 from tests.runtime_fixtures import esphome_call as _call, esphome_device_info as _device_info, esphome_entry as _esphome_entry, esphome_json as _json, esphome_runtime as _runtime, esphome_yaml_access_key as _yaml_access_key
@@ -137,10 +138,10 @@ class TestDeletedFiles:
         hidden, hidden_outcome, _ = await _run({"file": "stair-light.yaml"}, hass, builder)
         missing, missing_outcome, _ = await _run({"file": "never-existed.yaml"}, hass, builder)
         assert hidden["content"][0]["text"] == missing["content"][0]["text"]
-        assert (hidden_outcome, missing_outcome) == ("denied", "not_found")
+        # A file that is not there declares nothing, so its owner could be the hidden device.
+        assert (hidden_outcome, missing_outcome) == ("denied", "denied")
         # The out-of-scope file never reached the add-on.
-        assert builder.args_for("version_history/list_versions") == {"configuration": "never-existed.yaml"}
-        assert len(builder.calls) == 1
+        assert builder.calls == []
 
     async def test_a_deleted_file_with_history_is_readable_in_scope(self, hass, esphome_dir):
         content, outcome, _ = await _run({"file": "hallway-light.yaml"}, hass, _builder())
@@ -155,6 +156,24 @@ class TestDeletedFiles:
         content, outcome, _ = await _run({}, hass, _builder(**{"version_history/list_deleted": deleted}))
         body = _json(content)
         assert outcome == "allowed"
-        assert body["deleted"] == [{"file": "hallway-light.yaml"}]
-        assert body["total"] == 1
+        # A deleted file states no name, so only a key reaching every adopted device sees it.
+        assert body["deleted"] == []
+        assert body["total"] == 0
         assert "stair-light" not in content["content"][0]["text"]
+        everything = _yaml_access_key(permissions=PermissionTree(domains={"light": PermissionNode(state="GREEN")}))
+        content, _outcome, _ = await _run({}, hass, _builder(**{"version_history/list_deleted": deleted}), everything)
+        assert _json(content)["deleted"] == [{"file": "hallway-light.yaml"}, {"file": "stair-light.yaml"}]
+
+
+class TestHiddenEntities:
+    VERSION = "esphome:\n  name: rf-blaster1\nsensor:\n  - entity_id: lock.vault_door\n"
+
+    @pytest.mark.parametrize("args", [
+        {"view": "content"}, {"view": "diff"}, {"view": "diff", "compare_to": NEW_SHA},
+    ], ids=["content", "diff_to_current", "diff_between_versions"])
+    async def test_a_version_shows_no_entity_the_key_cannot_read(self, hass, esphome_dir, args):
+        hass.states.async_set("lock.vault_door", "locked")
+        builder = _builder(**{"version_history/get_version": {"content": self.VERSION}})
+        content, outcome, _ = await _run({"file": FILE, "sha": OLD_SHA, **args}, hass, builder)
+        assert outcome == "allowed"
+        assert "vault_door" not in content["content"][0]["text"]

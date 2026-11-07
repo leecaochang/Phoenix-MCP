@@ -673,6 +673,29 @@ async def test_a_disconnect_before_the_service_ran_claims_nothing(env, hass, log
     assert len(calls) == 1
 
 
+async def test_a_restart_through_call_service_cancelled_in_flight_holds_the_key(env, hass):
+    _, data = env
+    key, _ = await _key(data, allow_all=True)
+    started = asyncio.Event()
+
+    async def restart(_call) -> None:
+        started.set()
+        await asyncio.sleep(30)
+
+    hass.services.async_register("homeassistant", "restart", restart)
+    arguments = {"service": {"domain": "homeassistant", "name": "restart"}}
+    task = asyncio.create_task(_dispatch_mcp(
+        "tools/call", 1, {"name": "call_service", "arguments": arguments}, key, hass, data, "10.0.0.5", "http://x"))
+    async with asyncio.timeout(3):
+        await started.wait()
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    await hass.async_block_till_done()
+    assert data.agent_recovery.blocks(key.id)
+    assert _cancelled_rows(data) != ["cancelled"]
+
+
 @pytest.mark.parametrize("name", sorted(_NO_HOME_EFFECT_TOOLS))
 async def test_a_tool_that_cannot_change_the_home_leaves_no_claim(env, hass, name):
     _, data = env

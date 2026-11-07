@@ -797,6 +797,34 @@ describe("AgentCliWindow pop-out", () => {
     iframe.remove();
   });
 
+  it("takes an announcement's frame from the popup, which stays shown with the main page hidden", async () => {
+    const { popup, iframe } = createPopupWindow();
+    vi.spyOn(window, "open").mockReturnValue(popup);
+    vi.spyOn(window, "requestAnimationFrame").mockImplementation(() => 0);
+    const popupFrames: FrameRequestCallback[] = [];
+    vi.spyOn(popup, "requestAnimationFrame").mockImplementation((callback) => popupFrames.push(callback));
+    agentCliChat.mockImplementation(async (_body, onEvent: (n: string, p: unknown) => void) => {
+      onEvent("assistant_delta", { text: "From the popup." });
+      onEvent("done", {});
+    });
+    render(
+      <AgentCliWindow accessKeys={ACCESS_KEYS} instances={INSTANCES} scrollbackLines={500}
+                      initialAccessKeyId="t1" onClose={() => {}} />,
+    );
+    await waitFor(() => expect(getAgentCliModels).toHaveBeenCalled());
+    fireEvent.click(screen.getByRole("button", { name: "Pop Out to a Separate Window" }));
+    const textarea = popup.document.querySelector("textarea")!;
+    fireEvent.change(textarea, { target: { value: "hello" } });
+    fireEvent.keyDown(textarea, { key: "Enter" });
+    await waitFor(() => expect(popup.document.querySelector(".agentcli-body")?.textContent).toContain("From the popup."));
+    const announcer = () => popup.document.querySelector(".sr-only[role='status']");
+
+    await waitFor(() => expect(popupFrames.length).toBeGreaterThan(0));
+    act(() => { for (const callback of popupFrames.splice(0)) callback(0); });
+    expect(announcer()?.textContent).toBe("From the popup.");
+    iframe.remove();
+  });
+
   it("honors the profile-gated Shift+A toggle while the popup has focus", () => {
     const { popup, iframe } = createPopupWindow();
     vi.spyOn(window, "open").mockReturnValue(popup);

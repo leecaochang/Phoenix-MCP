@@ -262,32 +262,51 @@ class PhoenixInputLoader(PhoenixLenientLoader):
 def load_tagged(path: str) -> Any:
     """Parse a YAML file with the opaque-tag loader. Returns None for empty files."""
     with open(path, "r", encoding="utf-8") as f:
-        return yaml.load(f.read(), Loader=PhoenixSafeLoader)
+        text = f.read()
+    try:
+        return yaml.load(text, Loader=PhoenixSafeLoader)
+    except (ValueError, KeyError, TypeError, OverflowError) as err:
+        raise yaml.YAMLError(yaml_error_detail(err)) from err
 
 
 class YamlParseError(Exception):
     """Raised when text handed to load_tagged_lenient is not valid YAML."""
 
 
-def yaml_error_detail(err: BaseException) -> str:
-    """Name a YAML failure and its position, without the source lines PyYAML quotes.
+# What loading can raise. A constructor raises ValueError for a date that does not exist or a
+# scalar a tag cannot convert, and KeyError or TypeError for some explicit tags.
+YAML_READ_ERRORS = (yaml.YAMLError, RecursionError, ValueError, KeyError, TypeError, OverflowError)
 
-    A quoted line of a configuration file can hold the credential a refusal is protecting.
+# PyYAML quotes the alias, anchor, tag or character it stopped at, and an unquoted credential
+# parses as exactly those. Token names such as '<block end>' are its own words.
+_QUOTED_SOURCE_RE = re.compile(r"""'(?!<)[^'\n]*'|"(?!<)[^"\n]*\"""")
+
+
+def yaml_error_detail(err: BaseException) -> str:
+    """Name a YAML failure and its position, without the source text PyYAML quotes.
+
+    A quoted line or name from a configuration file can hold the credential a refusal is
+    protecting, and so can the text of a conversion failure.
     """
     if isinstance(err, yaml.MarkedYAMLError):
         mark = err.problem_mark or err.context_mark
         where = f" at line {mark.line + 1}, column {mark.column + 1}" if mark else ""
-        return f"{err.problem or err.context or 'invalid YAML'}{where}"
+        problem = _QUOTED_SOURCE_RE.sub("(hidden)", err.problem or err.context or "invalid YAML")
+        return f"{problem}{where}"
     if isinstance(err, yaml.reader.ReaderError):
         return "the text holds a character YAML does not allow"
-    return str(err)
+    if isinstance(err, yaml.YAMLError):
+        return str(err)
+    if isinstance(err, RecursionError):
+        return "the text is nested too deeply"
+    return "a value cannot be read as the type YAML gives it"
 
 
 def load_tagged_lenient(text: str, *, allow_aliases: bool = True) -> Any:
     """Parse YAML keeping known and unknown tags opaque; raise YamlParseError on bad syntax."""
     try:
         return yaml.load(text, Loader=PhoenixLenientLoader if allow_aliases else PhoenixInputLoader)
-    except (yaml.YAMLError, RecursionError) as err:
+    except YAML_READ_ERRORS as err:
         raise YamlParseError(yaml_error_detail(err)) from err
 
 

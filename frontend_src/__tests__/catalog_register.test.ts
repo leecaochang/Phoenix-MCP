@@ -6,7 +6,11 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
+import da from "../../custom_components/phoenix_mcp/catalogs/da.json";
 import de from "../../custom_components/phoenix_mcp/catalogs/de.json";
+import fi from "../../custom_components/phoenix_mcp/catalogs/fi.json";
+import ko from "../../custom_components/phoenix_mcp/catalogs/ko.json";
+import nb from "../../custom_components/phoenix_mcp/catalogs/nb.json";
 import pl from "../../custom_components/phoenix_mcp/catalogs/pl.json";
 import ru from "../../custom_components/phoenix_mcp/catalogs/ru.json";
 import zhHant from "../../custom_components/phoenix_mcp/catalogs/zh-Hant.json";
@@ -39,6 +43,24 @@ describe("Traditional Chinese", () => {
     const folder = "frontend_src/guide/topics/zh-Hant";
     const pages = readdirSync(folder).filter((name) => readFileSync(join(folder, name), "utf8").includes("提供方"));
     expect(pages).toEqual([]);
+  });
+});
+
+describe("the term for an entity", () => {
+  const decisions = (catalog: unknown) => flat(catalog).filter(([key]) => /[aA]iDecisions/.test(key));
+
+  it.each([
+    ["Danish", da, /enhed/i, /entitet/i],
+    ["Norwegian", nb, /enhet/i, /entitet/i],
+    ["Finnish", fi, /kohde|kohtee/i, /entiteet/i],
+  ])("%s keeps the word for a device or a target out of the Decisions strings", (_name, catalog, wrong, right) => {
+    const values = decisions(catalog);
+    expect(values.filter(([, value]) => wrong.test(value))).toEqual([]);
+    expect(values.filter(([, value]) => right.test(value)).length).toBeGreaterThanOrEqual(6);
+  });
+
+  it("is spelled one way in Korean", () => {
+    expect(flat(ko).filter(([, value]) => value.includes("엔터티"))).toEqual([]);
   });
 });
 

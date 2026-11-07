@@ -23,6 +23,7 @@ from uuid import uuid4
 from .agent_chat import async_run_voice_turn
 from .agent_turn import _current_dispatch_access_key
 from .catalog_text import LocalizedReason, voice_text
+from .const import VOICE_MAX_SPOKEN_CHARS
 from .helpers import instance_base_url as _base_url
 from .home_companion import is_companion
 from .household_authority import household_scope
@@ -46,17 +47,21 @@ _LOGGER = logging.getLogger(__name__)
 _MARKDOWN_FENCE_LINE_RE = re.compile(
     r"^[ \t]*(?:```+|~~~+)(?:[A-Za-z0-9_.+-]+)?[ \t]*$", re.MULTILINE
 )
-_MARKDOWN_IMAGE_RE = re.compile(r"!\[([^\]]*)\]\([^\n)]*\)")
-_MARKDOWN_LINK_RE = re.compile(r"\[([^\]]+)\]\([^\n)]*\)")
+# Spans are bounded, as each opening mark otherwise scans the rest of the reply, which makes
+# unclosed marks quadratic. Marks around a longer span are removed one by one instead.
+_MARKDOWN_SPAN = 300
+_MARKDOWN_URL = 1000
+_MARKDOWN_IMAGE_RE = re.compile(rf"!\[([^\]]{{0,{_MARKDOWN_SPAN}}})\]\([^\n)]{{0,{_MARKDOWN_URL}}}\)")
+_MARKDOWN_LINK_RE = re.compile(rf"\[([^\]]{{1,{_MARKDOWN_SPAN}}})\]\([^\n)]{{0,{_MARKDOWN_URL}}}\)")
 _MARKDOWN_HEADING_RE = re.compile(r"^[ \t]{0,3}#{1,6}[ \t]+", re.MULTILINE)
 _MARKDOWN_QUOTE_RE = re.compile(r"^[ \t]{0,3}>[ \t]?", re.MULTILINE)
 _MARKDOWN_BULLET_RE = re.compile(r"^[ \t]*[-+*][ \t]+", re.MULTILINE)
 _MARKDOWN_RULE_RE = re.compile(r"^[ \t]*(?:[-*_][ \t]*){3,}$", re.MULTILINE)
-_MARKDOWN_STRONG_RE = re.compile(r"(\*\*|__)(?=\S)(.+?)(?<=\S)\1", re.DOTALL)
+_MARKDOWN_STRONG_RE = re.compile(rf"(\*\*|__)(?=\S)(.{{1,{_MARKDOWN_SPAN}}}?)(?<=\S)\1", re.DOTALL)
 _MARKDOWN_EMPHASIS_RE = re.compile(
-    r"(?<!\w)([*_])(?=\S)(.+?)(?<=\S)\1(?!\w)", re.DOTALL
+    rf"(?<!\w)([*_])(?=\S)(.{{1,{_MARKDOWN_SPAN}}}?)(?<=\S)\1(?!\w)", re.DOTALL
 )
-_MARKDOWN_STRIKE_RE = re.compile(r"~~(?=\S)(.+?)(?<=\S)~~", re.DOTALL)
+_MARKDOWN_STRIKE_RE = re.compile(rf"~~(?=\S)(.{{1,{_MARKDOWN_SPAN}}}?)(?<=\S)~~", re.DOTALL)
 _MARKDOWN_ESCAPE_RE = re.compile(r"\\([\\`*_{}\[\]()#+\-.!>|])")
 
 
@@ -75,9 +80,17 @@ def _spoken_text(text: str) -> str:
     spoken = _MARKDOWN_EMPHASIS_RE.sub(r"\2", spoken)
     spoken = spoken.replace("`", "")
     spoken = re.sub(r"[*_~]{2,}", "", spoken)
-    spoken = re.sub(r"[ \t]+\n", "\n", spoken)
+    spoken = re.sub(r"(?<![ \t])[ \t]+\n", "\n", spoken)
     spoken = re.sub(r"\n{3,}", "\n\n", spoken)
     return spoken.strip()
+
+
+def _speakable(text: str, language: object = None) -> str:
+    """A reply as speech: at most the spoken limit, saying so when cut, without Markdown."""
+    if len(text) <= VOICE_MAX_SPOKEN_CHARS:
+        return _spoken_text(text)
+    return f"{_spoken_text(text[:VOICE_MAX_SPOKEN_CHARS])} {voice_text(language, 'answer_truncated')}"
+
 
 # conversation is a declared after-dependency, and routing_tables needs the intents
 # package it brings. This guard only keeps the agent class undefined when the
@@ -97,7 +110,7 @@ from .routing.routing_statistics import tracked_turn, local_result
 from .conversation_log import recorded_turn, record_identity
 
 
-@recorded_turn("voice", "user_text", transform=lambda text: _spoken_text(text))
+@recorded_turn("voice", "user_text", transform=lambda text: _speakable(text))
 async def async_voice_answer(
     hass: HomeAssistant, data: Any, user_text: str, *,
     include_review_hint: bool = False, language: object = None,
@@ -280,7 +293,7 @@ if _CONVERSATION_AVAILABLE:
                 context=getattr(user_input, "context", None),
             )
             response = intent.IntentResponse(language=user_input.language)
-            response.async_set_speech(_spoken_text(text))
+            response.async_set_speech(_speakable(text, user_input.language))
             return _conversation.ConversationResult(
                 response=response,
                 conversation_id=conversation_id,

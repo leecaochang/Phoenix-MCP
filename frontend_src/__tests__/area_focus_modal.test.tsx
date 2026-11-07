@@ -59,6 +59,169 @@ function DeleteEditor({ keepOpener }: { keepOpener: boolean }) {
   );
 }
 
+describe("focus lost inside a dialog with no panel around it", () => {
+  const removeButton = (root: ParentNode) => [...root.querySelectorAll("button")].find((button) => button.className === "tag-chip-x")!;
+  const press = (control: HTMLElement) => {
+    control.focus();
+    fireEvent.click(control);
+  };
+  function BareChips() {
+    const [tags, setTags] = useState(["ns.a", "ns.b"]);
+    return (
+      <Modal titleId="t" onClose={() => {}}>
+        <h3 id="t">Title</h3>
+        <TagInput value={tags} onChange={setTags} canonicalTags={["ns.a", "ns.b", "ns.c"]} />
+        <button>Save</button>
+      </Modal>
+    );
+  }
+
+  it("stays in the dialog when a tag's remove button goes away", async () => {
+    render(<div><button>Behind</button><BareChips /></div>);
+    await settle(0);
+    press(removeButton(document));
+    await settle();
+    expect(inDialog()).toBeTruthy();
+    await userEvent.tab();
+    expect(inDialog()).toBeTruthy();
+  });
+
+  it("stays in the dialog when the control it opened on goes away", async () => {
+    render(<BareChips />);
+    await settle(0);
+    const remove = removeButton(document);
+    expect(document.activeElement).toBe(remove);
+    fireEvent.click(remove);
+    await settle();
+    expect(inDialog()).toBeTruthy();
+  });
+
+  it("stays in the dialog inside a shadow root, as the injector mounts it", async () => {
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    const shadow = host.attachShadow({ mode: "open" });
+    const mount = document.createElement("div");
+    shadow.appendChild(mount);
+    render(<BareChips />, { container: mount });
+    await settle(0);
+    press(removeButton(shadow));
+    await settle();
+    expect(document.activeElement).toBe(host);
+    expect((shadow.activeElement as HTMLElement).closest(".modal")).toBeTruthy();
+    host.remove();
+  });
+
+  it("gives way to the top dialog of two", async () => {
+    function Nested() {
+      const [open, setOpen] = useState(false);
+      const [gone, setGone] = useState(false);
+      return (
+        <Modal titleId="o" onClose={() => {}}>
+          <h3 id="o">Outer</h3>
+          <button onClick={() => setOpen(true)}>Outer control</button>
+          {open && (
+            <Modal titleId="i" onClose={() => {}}>
+              <h3 id="i">Inner</h3>
+              <button>Inner control</button>
+              {!gone && <button onClick={() => setGone(true)}>Remove me</button>}
+            </Modal>
+          )}
+        </Modal>
+      );
+    }
+    render(<Nested />);
+    await settle(0);
+    fireEvent.click(screen.getByText("Outer control"));
+    await settle(0);
+    press(screen.getByText("Remove me"));
+    await settle();
+    expect(document.activeElement).toBe(screen.getByText("Inner control"));
+  });
+
+  it("leaves focus alone when a control that did not hold it goes away", async () => {
+    function Other() {
+      const [gone, setGone] = useState(false);
+      return (
+        <Modal titleId="t" onClose={() => {}}>
+          <h3 id="t">Title</h3>
+          <button>First</button>
+          <button onClick={() => setGone(true)}>Second</button>
+          {!gone && <button>Removed</button>}
+        </Modal>
+      );
+    }
+    render(<Other />);
+    await settle(0);
+    const second = screen.getByText("Second");
+    press(second);
+    await settle();
+    expect(document.activeElement).toBe(second);
+  });
+
+  it("leaves focus that its control sent out of the dialog before going away", async () => {
+    function Mover() {
+      const [gone, setGone] = useState(false);
+      const outside = useRef<HTMLButtonElement>(null);
+      return (
+        <>
+          <button ref={outside}>Outside</button>
+          <Modal titleId="t" onClose={() => {}}>
+            <h3 id="t">Title</h3>
+            <button>First</button>
+            {!gone && <button onClick={() => { outside.current?.focus(); setGone(true); }}>Remove me</button>}
+          </Modal>
+        </>
+      );
+    }
+    render(<Mover />);
+    await settle(0);
+    press(screen.getByText("Remove me"));
+    await settle();
+    expect(document.activeElement).toBe(screen.getByText("Outside"));
+  });
+
+  it("leaves focus the reader took out of the dialog while its control stays", async () => {
+    function Changing() {
+      const [more, setMore] = useState(false);
+      return (
+        <Modal titleId="t" onClose={() => {}}>
+          <h3 id="t">Title</h3>
+          <button onClick={() => setMore(true)}>First</button>
+          {more && <p>More</p>}
+        </Modal>
+      );
+    }
+    render(<Changing />);
+    await settle(0);
+    const first = screen.getByText("First");
+    first.blur();
+    fireEvent.click(first);
+    await settle();
+    expect(screen.getByText("More")).toBeTruthy();
+    expect(document.activeElement).toBe(document.body);
+  });
+
+  it("gives focus back to the opener when it closes, not to itself", async () => {
+    function Closing() {
+      const [open, setOpen] = useState(false);
+      return (
+        <>
+          <button onClick={() => setOpen(true)}>Opener</button>
+          {open && <Modal titleId="t" onClose={() => {}}><h3 id="t">Title</h3><button onClick={() => setOpen(false)}>Close</button></Modal>}
+        </>
+      );
+    }
+    render(<Closing />);
+    await settle(0);
+    press(screen.getByText("Opener"));
+    await settle(0);
+    press(screen.getByText("Close"));
+    await settle();
+    expect(document.querySelector(".modal")).toBeNull();
+    expect(document.activeElement).toBe(screen.getByText("Opener"));
+  });
+});
+
 describe("focus lost inside an open dialog", () => {
   it("stays in the dialog when a tag's remove button goes away", async () => {
     render(<Panel><ChipEditor /></Panel>);

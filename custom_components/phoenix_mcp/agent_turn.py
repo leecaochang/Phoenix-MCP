@@ -10,6 +10,7 @@ from contextvars import ContextVar
 import dataclasses
 from datetime import datetime, tzinfo
 import json
+import logging
 from typing import Any, AsyncGenerator, AsyncIterator, Awaitable, Callable
 
 from aiohttp import ClientSession, web
@@ -34,6 +35,7 @@ from .const import (
 from .conversation_log import record_rejected_tool
 from .data import PhoenixData
 from .catalog_text import voice_text
+from .helpers import log_internal_failure
 from .home_companion import (
     internal_turn, preflight_control_calls, incomplete_proposal, invalid_read_report,
     append_fitting_results, check_turn_context, ambiguous_control, count_source, is_companion,
@@ -67,6 +69,8 @@ from .tool_input import tool_arguments_error
 from .tool_loading import ToolLoader
 from .tool_dispatch import _dispatch_mcp
 from .time_text import parse_datetime
+
+_LOGGER = logging.getLogger(__name__)
 
 
 def _clip_display(text: str) -> str:
@@ -290,12 +294,18 @@ def _agentcli_local_time(value: Any, local_tz: tzinfo) -> str | None:
         except (OverflowError, OSError, ValueError):
             return None
     elif isinstance(value, str):
-        parsed = parse_datetime(value)
+        try:
+            parsed = parse_datetime(value)
+        except ValueError:
+            return None
         if parsed is None or parsed.tzinfo is None or parsed.utcoffset() is None:
             return None
     else:
         return None
-    return parsed.astimezone(local_tz).isoformat()
+    try:
+        return parsed.astimezone(local_tz).isoformat()
+    except OverflowError:
+        return None
 
 
 def _agentcli_add_local_time_fields(
@@ -394,14 +404,19 @@ def _agentcli_time_arg_error(
 ) -> str | None:
     """Refuse a query time the model shifted into another zone itself.
 
-    A wall time without an offset, or one carrying HA's own offset for that instant, passes.
+    A wall time without an offset, or one carrying HA's own offset for that instant, passes,
+    and so does a time that names no moment, which the tool refuses in its own words.
     """
     for field in _AGENT_CHAT_LOCAL_QUERY_FIELDS.get(tool_name, ()):
         value = args.get(field)
-        parsed = parse_datetime(value) if isinstance(value, str) else None
-        if parsed is None or parsed.tzinfo is None or parsed.utcoffset() is None:
+        try:
+            parsed = parse_datetime(value) if isinstance(value, str) else None
+            if parsed is None or parsed.tzinfo is None or parsed.utcoffset() is None:
+                continue
+            shifted = parsed.astimezone(local_tz).utcoffset() != parsed.utcoffset()
+        except (ValueError, OverflowError):
             continue
-        if parsed.astimezone(local_tz).utcoffset() != parsed.utcoffset():
+        if shifted:
             return (
                 f"Agent Chat {field} must be a Home Assistant local wall time without "
                 "a timezone suffix, a relative time, or a _local value copied unchanged "
@@ -1258,8 +1273,9 @@ async def _run_tool_batch(
 ) -> _ToolBatchResult:
     """Dispatch one round's tool calls, honoring cancel and mid-turn authority loss.
     Every tool_use id gets a result, even a synthetic error, as Anthropic requires each one
-    answered. An unknown outcome stops dispatch but not the answers. The key is re-resolved
-    per call, so authority loss is honored before any side effect.
+    answered. An unknown outcome stops dispatch but not the answers, and an exception after a
+    write ran is one. The key is re-resolved per call, so authority loss is honored before
+    any side effect.
     """
 
     results: list[dict] = []
@@ -1267,144 +1283,157 @@ async def _run_tool_batch(
     stop_turn = False
     authority_lost = False
     write_started = False
+    # A write of this round reached its executor; a review still waiting has not.
+    write_ran = False
     outcome_unknown = False
     # The approved executor's own error, when that is what made the outcome unknown.
     unknown_reason: str | None = None
 
-    for tc in tool_calls:
-        name = str(tc.get("name") or "")[:MAX_TOOL_NAME_LENGTH]
-        dispatch_access_key = None if (cancel.is_set() or stop_turn) \
-            else _current_dispatch_access_key(data, access_key_id)
-        if dispatch_access_key is None:
-            stop_turn = True
+    try:
+        for tc in tool_calls:
+            name = str(tc.get("name") or "")[:MAX_TOOL_NAME_LENGTH]
+            dispatch_access_key = None if (cancel.is_set() or stop_turn) \
+                else _current_dispatch_access_key(data, access_key_id)
+            if dispatch_access_key is None:
+                stop_turn = True
+                if cancel.is_set():
+                    reason: str | None = "Cancelled by the operator; not run."
+                else:
+                    authority_lost = True
+                    reason = ("Phoenix MCP was stopped by its kill switch; not run." if _kill_switch_on(data)
+                              else "This access key is no longer authorized; not run.")
+                results.append({"tool_use_id": tc.get("id"), "tool_name": name,
+                                "result_text": reason, "is_error": True})
+                continue
+            args = tc.get("input") or {}
+            await emit("tool_call", {"id": tc.get("id"), "name": name, "arguments": args})
+            # emit() can set cancel if the client vanished mid-batch; re-check
+            # AFTER the emit and before the side effect closes that gap.
             if cancel.is_set():
-                reason: str | None = "Cancelled by the operator; not run."
-            else:
-                authority_lost = True
-                reason = ("Phoenix MCP was stopped by its kill switch; not run." if _kill_switch_on(data)
-                          else "This access key is no longer authorized; not run.")
-            results.append({"tool_use_id": tc.get("id"), "tool_name": name,
-                            "result_text": reason, "is_error": True})
-            continue
-        args = tc.get("input") or {}
-        await emit("tool_call", {"id": tc.get("id"), "name": name, "arguments": args})
-        # emit() can set cancel if the client vanished mid-batch; re-check
-        # AFTER the emit and before the side effect closes that gap.
-        if cancel.is_set():
-            stop_turn = True
-            results.append({"tool_use_id": tc.get("id"), "tool_name": name,
-                            "result_text": "Cancelled by the operator; not run.",
-                            "is_error": True})
-            continue
-        # Only arguments the dispatcher would admit are read; it refuses the others itself.
-        time_error = _agentcli_time_arg_error(
-            name, args, dt_util.now().tzinfo or dt_util.UTC,
-        ) if tool_arguments_error(args) is None else None
-        if time_error is not None:
-            await emit("tool_result", {
-                "id": tc.get("id"), "name": name,
-                "is_error": True, "summary": time_error,
-            })
-            results.append({
-                "tool_use_id": tc.get("id"), "tool_name": name,
-                "result_text": time_error, "is_error": True,
-            })
-            continue
-        dispatch_request_id = generate_request_id()
-        write_started = write_started or not tool_is_read_only(name)
-        try:
-            resp_msg, _m, _r, outcome = await _dispatch_with_progress(
-                emit, tc.get("id"),
-                dispatch_agent_tool(
-                    _dispatch_mcp, hass=hass, data=data, access_key=dispatch_access_key,
-                    name=name, arguments=args, tool_id=tc.get("id"),
-                    client_ip=client_ip, base_url=base_url, request_id=dispatch_request_id,
-                ),
-            )
-        except BaseException as exc:
-            # Creation may have saved a queue entry before dispatch was interrupted.
-            for saved in data.store.get_pending_approvals():
-                if saved.get("access_key_id") == access_key_id and saved.get("request_id") == dispatch_request_id:
-                    await _cancel_agent_approval(hass, data, saved["id"])
-            if not isinstance(exc, RecoveryRequired):
-                raise
-            outcome_unknown = True
-            break
-        result = dispatch_tool_result(resp_msg)
-        if outcome in ("denied", "invalid_request") and (resp_msg or {}).get("error", {}).get("code") == -32000:
-            authority_lost = stop_turn = True
-        pending = _parse_pending(
-            result,
-            outcome=outcome,
-            data=data,
-            access_key_id=access_key_id,
-            tool_name=name,
-            request_id=dispatch_request_id,
-        )
-        if pending:
-            record = pending["record"]
-            try:
-                await emit("approval_required", {
-                    "approval_id": pending["approval_id"],
-                    "tool_name": name,
-                    "review_url": pending.get("review_url"),
-                    "expires_at": pending.get("expires_at"),
-                    "diff": record.diff,
+                stop_turn = True
+                results.append({"tool_use_id": tc.get("id"), "tool_name": name,
+                                "result_text": "Cancelled by the operator; not run.",
+                                "is_error": True})
+                continue
+            # Only arguments the dispatcher would admit are read; it refuses the others itself.
+            time_error = _agentcli_time_arg_error(
+                name, args, dt_util.now().tzinfo or dt_util.UTC,
+            ) if tool_arguments_error(args) is None else None
+            if time_error is not None:
+                await emit("tool_result", {
+                    "id": tc.get("id"), "name": name,
+                    "is_error": True, "summary": time_error,
                 })
-                result = await _await_agent_approval(
-                    hass, data, pending["approval_id"], cancel, AGENT_CHAT_APPROVAL_WAIT_SECONDS,
+                results.append({
+                    "tool_use_id": tc.get("id"), "tool_name": name,
+                    "result_text": time_error, "is_error": True,
+                })
+                continue
+            dispatch_request_id = generate_request_id()
+            write_started = write_started or not tool_is_read_only(name)
+            try:
+                resp_msg, _m, _r, outcome = await _dispatch_with_progress(
+                    emit, tc.get("id"),
+                    dispatch_agent_tool(
+                        _dispatch_mcp, hass=hass, data=data, access_key=dispatch_access_key,
+                        name=name, arguments=args, tool_id=tc.get("id"),
+                        client_ip=client_ip, base_url=base_url, request_id=dispatch_request_id,
+                    ),
                 )
-            finally:
-                await _cancel_agent_approval(hass, data, pending["approval_id"])
-            status = _status_of(result)
-            # The transcript shows WHY, not just the status: the admin's
-            # typed rejection reason, or the executor's error when an
-            # approval executed but failed (status "execution_failed").
-            resolved_record = get_approval(data.store, pending["approval_id"])
-            reason = failure = None
-            if resolved_record is not None:
-                failure = execution_failure_text(resolved_record)
-                reason = failure or getattr(resolved_record, "closure_reason", None)
-            await emit("approval_resolved", {
-                "approval_id": pending["approval_id"],
-                "status": status,
-                "reason": _clip_display(reason) if reason else None,
-                # The executor's own text is English for the agent; the panel
-                # shows its localized form, as the Approvals window does.
-                **({"reason_kind": "execution"} if failure else {}),
-            })
-            refused = refused_before_write(resolved_record)
-            if status in (STATUS_FAILED, "execution_failed") and not refused:
-                # The executor may have applied part of the approved action.
-                # Do not let the next model round turn its error into a replay.
-                unknown_reason = execution_failure_text(resolved_record) if resolved_record else None
+            except BaseException as exc:
+                # Creation may have saved a queue entry before dispatch was interrupted.
+                for saved in data.store.get_pending_approvals():
+                    if saved.get("access_key_id") == access_key_id and saved.get("request_id") == dispatch_request_id:
+                        await _cancel_agent_approval(hass, data, saved["id"])
+                if not isinstance(exc, RecoveryRequired):
+                    raise
                 outcome_unknown = True
                 break
-            # A refusal before writing reaches the model with the executor's
-            # reason (see _resolved_result), so it can re-read and propose again.
-            if status in (STATUS_APPROVED, STATUS_REJECTED) or refused:
-                human_resolved = True
-        is_error = bool(result.get("isError"))
-        content = result.get("content", [])
-        text = _agentcli_add_local_time_fields(
-            name,
-            _flatten_text(content),
-            dt_util.now().tzinfo or dt_util.UTC,
-        )
-        images = _extract_image_blocks(content)
-        for index, image in enumerate(images):
-            await emit("tool_image", {
-                "id": tc.get("id"),
-                "name": name,
-                "index": index,
-                "mime_type": image["mime_type"],
-                "data": image["data"],
-            })
-        await emit("tool_result", {"id": tc.get("id"), "name": name,
-                                   "is_error": is_error, "summary": _clip_display(text)})
-        model_text = _agentcli_add_resource_match_guidance(name, args, text)
-        results.append({"tool_use_id": tc.get("id"), "tool_name": name,
-                        "result_text": model_text, "images": images, "is_error": is_error})
+            result = dispatch_tool_result(resp_msg)
+            if outcome in ("denied", "invalid_request") and (resp_msg or {}).get("error", {}).get("code") == -32000:
+                authority_lost = stop_turn = True
+            pending = _parse_pending(
+                result,
+                outcome=outcome,
+                data=data,
+                access_key_id=access_key_id,
+                tool_name=name,
+                request_id=dispatch_request_id,
+            )
+            if pending:
+                record = pending["record"]
+                try:
+                    await emit("approval_required", {
+                        "approval_id": pending["approval_id"],
+                        "tool_name": name,
+                        "review_url": pending.get("review_url"),
+                        "expires_at": pending.get("expires_at"),
+                        "diff": record.diff,
+                    })
+                    result = await _await_agent_approval(
+                        hass, data, pending["approval_id"], cancel, AGENT_CHAT_APPROVAL_WAIT_SECONDS,
+                    )
+                finally:
+                    await _cancel_agent_approval(hass, data, pending["approval_id"])
+                status = _status_of(result)
+                write_ran = write_ran or status != STATUS_REJECTED
+                # The transcript shows WHY, not just the status: the admin's
+                # typed rejection reason, or the executor's error when an
+                # approval executed but failed (status "execution_failed").
+                resolved_record = get_approval(data.store, pending["approval_id"])
+                reason = failure = None
+                if resolved_record is not None:
+                    failure = execution_failure_text(resolved_record)
+                    reason = failure or getattr(resolved_record, "closure_reason", None)
+                await emit("approval_resolved", {
+                    "approval_id": pending["approval_id"],
+                    "status": status,
+                    "reason": _clip_display(reason) if reason else None,
+                    # The executor's own text is English for the agent; the panel
+                    # shows its localized form, as the Approvals window does.
+                    **({"reason_kind": "execution"} if failure else {}),
+                })
+                refused = refused_before_write(resolved_record)
+                if status in (STATUS_FAILED, "execution_failed") and not refused:
+                    # The executor may have applied part of the approved action.
+                    # Do not let the next model round turn its error into a replay.
+                    unknown_reason = execution_failure_text(resolved_record) if resolved_record else None
+                    outcome_unknown = True
+                    break
+                # A refusal before writing reaches the model with the executor's
+                # reason (see _resolved_result), so it can re-read and propose again.
+                if status in (STATUS_APPROVED, STATUS_REJECTED) or refused:
+                    human_resolved = True
+            else:
+                write_ran = write_ran or not tool_is_read_only(name)
+            is_error = bool(result.get("isError"))
+            content = result.get("content", [])
+            text = _agentcli_add_local_time_fields(
+                name,
+                _flatten_text(content),
+                dt_util.now().tzinfo or dt_util.UTC,
+            )
+            images = _extract_image_blocks(content)
+            for index, image in enumerate(images):
+                await emit("tool_image", {
+                    "id": tc.get("id"),
+                    "name": name,
+                    "index": index,
+                    "mime_type": image["mime_type"],
+                    "data": image["data"],
+                })
+            await emit("tool_result", {"id": tc.get("id"), "name": name,
+                                       "is_error": is_error, "summary": _clip_display(text)})
+            model_text = _agentcli_add_resource_match_guidance(name, args, text)
+            results.append({"tool_use_id": tc.get("id"), "tool_name": name,
+                            "result_text": model_text, "images": images, "is_error": is_error})
+    except Exception as exc:
+        # Repeating a write that ran is the risk: its receipts stay as the barrier and the
+        # results so far go back with the turn.
+        if not write_ran:
+            raise
+        log_internal_failure(_LOGGER, "agent_chat_batch", exc)
+        outcome_unknown = True
 
     if outcome_unknown:
         # Every earlier call appended its result, so the uncertain call is the

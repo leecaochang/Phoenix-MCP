@@ -10,6 +10,8 @@ the dispatcher.
 
 
 import asyncio
+from collections.abc import Callable
+from functools import lru_cache
 import ipaddress
 import json
 import logging
@@ -43,8 +45,8 @@ from ..esphome_constants import (
     ESPHOME_BUILDER_MAX_COMPONENT_IDS, ESPHOME_BUILDER_METADATA_MAX_CHARS,
     ESPHOME_BUILDER_DEVICE_STATES, ESPHOME_BUILDER_OUTPUT_MAX_CHARS, ESPHOME_BUILDER_PAGE_LIMIT,
     ESPHOME_BUILDER_PAGE_LIMIT_MAX, ESPHOME_BUILDER_REQUEST_TIMEOUT_SECONDS,
-    ESPHOME_BUILDER_VALIDATE_TIMEOUT_SECONDS, ESPHOME_YAML_INVENTORY_MAX_ENTRIES,
-    ESPHOME_YAML_SEARCH_CONTEXT_LINES_MAX, ESPHOME_YAML_SEARCH_MAX_BYTES,
+    ESPHOME_BUILDER_VALIDATE_TIMEOUT_SECONDS, ESPHOME_DECLARED_CACHE_ENTRIES, ESPHOME_YAML_INVENTORY_MAX_ENTRIES,
+    ESPHOME_YAML_SCOPE_MAX_BYTES, ESPHOME_YAML_SEARCH_CONTEXT_LINES_MAX, ESPHOME_YAML_SEARCH_MAX_BYTES,
     ESPHOME_YAML_SEARCH_MAX_QUERY_CHARS, ESPHOME_YAML_SEARCH_MAX_MATCHES,
     ESPHOME_YAML_SEARCH_SNIPPET_MAX_CHARS,
 )
@@ -80,14 +82,16 @@ from ..esphome_builder import (
     collect_output_lines,
 )
 from ..esphome_yaml import (
+    DeclaredDevice,
     apply_line_splice,
     declared_components,
-    declared_device_name,
+    declared_device,
     esphome_rel_path_ok,
     inline_secret_values,
     masked_unified_diff,
     redact_esphome_slice,
     redact_esphome_text,
+    scrub_secret_data,
     scrub_secret_values,
     secret_keys_from_text,
     secret_values_from_text,
@@ -254,6 +258,13 @@ def _esphome_arg_type(arg: Any) -> str | None:
     return str(getattr(arg_type, "name", arg_type)).lower()
 
 
+def _esphome_metadata_text(value: str, access_key: AccessKeyRecord, hass: HomeAssistant) -> str:
+    """A Device Builder or device string as returned: scrubbed whole, then bounded."""
+    # In the other order a credential crossing the cut survives as a prefix.
+    return redact_diagnostics(redact_inaccessible_entity_ids_in_text(
+        value, access_key, hass))[:ESPHOME_BUILDER_METADATA_MAX_CHARS]
+
+
 def _esphome_action_metadata(obj: Any, hass: HomeAssistant, access_key: AccessKeyRecord | None) -> dict:
     """Optional 2026.9 action descriptions/examples, bounded and scrubbed."""
     if access_key is None:
@@ -262,8 +273,7 @@ def _esphome_action_metadata(obj: Any, hass: HomeAssistant, access_key: AccessKe
     for key in ("description", "example"):
         value = getattr(obj, key, None)
         if isinstance(value, str) and value:
-            metadata[key] = redact_diagnostics(redact_inaccessible_entity_ids_in_text(
-                value[:ESPHOME_BUILDER_METADATA_MAX_CHARS], access_key, hass))
+            metadata[key] = _esphome_metadata_text(value, access_key, hass)
     return metadata
 
 
@@ -423,7 +433,7 @@ _ESPHOME_DIR = "esphome"
 
 _ESPHOME_PATH_REFUSED = (
     "Only jailed .yaml and .yml files inside the ESPHome configuration directory "
-    "can be read; secrets.yaml, the archive folder, and hidden files are excluded."
+    "can be read; files named like secrets, the archive folder, and hidden files are excluded."
 )
 
 
@@ -487,49 +497,91 @@ def _read_esphome_secrets(hass: HomeAssistant) -> tuple[set[str], set[str] | Non
     try:
         with open(path, "r", encoding="utf-8") as handle:
             text = handle.read()
-    except OSError:
+    except (OSError, ValueError):
         return set(), None
     return secret_values_from_text(text), secret_keys_from_text(text)
 
 
-def _read_declared_device_name(hass: HomeAssistant, rel: str) -> tuple[str, bool] | None:
+@lru_cache(maxsize=ESPHOME_DECLARED_CACHE_ENTRIES)
+def _declared_device_at(path: str, _mtime_ns: int, _size: int) -> DeclaredDevice | None:
+    """Parse one version of a file, as a listing asks for every file on each call."""
+    try:
+        return declared_device(_read_text_capped(path))
+    except (OSError, ValueError, yaml_includes.YamlParseError):
+        _LOGGER.debug("ESPHome device details could not be read from %s", path, exc_info=True)
+        return None
+
+
+def _read_declared_device(hass: HomeAssistant, rel: str) -> DeclaredDevice | None:
     """The device a file declares. Blocking: executor only. An unreadable file declares nothing."""
     resolved = _resolve_esphome_path(hass, rel)
     if resolved is None:
         return None
     try:
-        return declared_device_name(_read_text_capped(resolved[0]))
-    except (OSError, ValueError, yaml_includes.YamlParseError):
-        _LOGGER.debug("ESPHome device name could not be read from %s", rel, exc_info=True)
+        status = os.stat(resolved[0])
+    except OSError:
         return None
+    return _declared_device_at(resolved[0], status.st_mtime_ns, status.st_size)
 
 
-def _names_declared_device(name: str, declared: tuple[str, bool] | None) -> bool:
+def _esphome_declared_devices(hass: HomeAssistant, rels: list[str]) -> dict[str, DeclaredDevice | None]:
+    """What each file declares. Blocking: executor only.
+
+    Past the byte budget a file declares nothing, which leaves its owner unknown.
+    """
+    declared: dict[str, DeclaredDevice | None] = {}
+    remaining = ESPHOME_YAML_SCOPE_MAX_BYTES
+    for rel in dict.fromkeys(rels):
+        resolved = _resolve_esphome_path(hass, rel)
+        try:
+            remaining -= os.path.getsize(resolved[0]) if resolved is not None else 0
+        except OSError:
+            continue
+        if remaining >= 0:
+            declared[rel] = _read_declared_device(hass, rel)
+    return declared
+
+
+async def _esphome_declared_for_scope(hass: HomeAssistant, rels: list[str]) -> dict[str, DeclaredDevice | None]:
+    """Read what files declare for the scope decision that follows on the event loop."""
+    if not hass.config_entries.async_entries(_ESPHOME_DOMAIN):
+        return {}
+    return await hass.async_add_executor_job(_esphome_declared_devices, hass, rels)
+
+
+def _names_declared_device(name: str, declared: DeclaredDevice | None) -> bool:
     """Whether a reported device name is the one a file declares, MAC suffix included."""
-    if declared is None:
+    if declared is None or declared.name is None:
         return False
-    stated, mac_suffix = declared
-    return name == stated or (mac_suffix and re.fullmatch(rf"{re.escape(stated)}-[0-9a-f]{{6}}", name) is not None)
+    return name == declared.name or (
+        declared.mac_suffix and re.fullmatch(rf"{re.escape(declared.name)}-[0-9a-f]{{6}}", name) is not None)
+
+
+def _esphome_address_key(address: str) -> str:
+    """An address as compared with an adopted device's host or name."""
+    return address.strip().lower().rstrip(".").removesuffix(".local")
 
 
 def _esphome_entries_for_file(
-    hass: HomeAssistant, rel: str, declared: tuple[str, bool] | None = None
+    hass: HomeAssistant, rel: str, declared: DeclaredDevice | None = None
 ) -> list[Any]:
     """Find adopted owners, including entries without live runtime data.
 
     HA persists device_name through disconnects, so unloading never turns an adopted configuration
     into an orphan governed by the capability alone. ``declared`` adds the name the file itself
-    states, for callers that read it.
+    states and the addresses it flashes, for callers that read it.
     """
     dashboard = _esphome_dashboard(hass)
     dash_data = getattr(dashboard, "data", None) or {} if dashboard is not None else {}
     stem = os.path.splitext(os.path.basename(rel))[0]
+    targets = {_esphome_address_key(address) for address in declared.addresses} if declared else set()
     matches: list[Any] = []
     for entry in hass.config_entries.async_entries(_ESPHOME_DOMAIN):
-        persisted = getattr(entry, "data", {}).get("device_name")
+        stored = getattr(entry, "data", {})
         info = getattr(getattr(entry, "runtime_data", None), "device_info", None)
-        names = {persisted, getattr(info, "name", None)}
-        if any(
+        names = {stored.get("device_name"), getattr(info, "name", None)}
+        reached = {_esphome_address_key(value) for value in (*names, stored.get("host")) if isinstance(value, str)}
+        if targets & reached or any(
             isinstance(name, str) and name and (
                 (dash_data.get(name) or {}).get("configuration") == rel or name == stem
                 or _names_declared_device(name, declared)
@@ -540,19 +592,57 @@ def _esphome_entries_for_file(
     return matches
 
 
-def _esphome_device_for_file(hass: HomeAssistant, rel: str) -> Any | None:
+def _esphome_device_for_file(hass: HomeAssistant, rel: str, declared: DeclaredDevice | None = None) -> Any | None:
     """Return the sole adopted owner for display; ambiguous owners stay unnamed."""
-    entries = _esphome_entries_for_file(hass, rel)
+    entries = _esphome_entries_for_file(hass, rel, declared)
     return entries[0] if len(entries) == 1 else None
 
 
-def _esphome_file_in_scope(hass: HomeAssistant, access_key: AccessKeyRecord, rel: str, *, write: bool) -> bool:
+def _esphome_file_has_no_owner(hass: HomeAssistant, declared: DeclaredDevice | None) -> bool:
+    """Whether a file with no matched owner can be taken to have none.
+
+    Nothing adopted is proof, and so is a file stating its own name and no address: a name from
+    elsewhere or an address could point it at an adopted device.
+    """
+    return not hass.config_entries.async_entries(_ESPHOME_DOMAIN) or (
+        declared is not None and declared.self_contained)
+
+
+def _esphome_file_is_orphan(hass: HomeAssistant, rel: str, declared: DeclaredDevice | None) -> bool:
+    """Whether a flash of a file with no matched owner goes to a new device.
+
+    Past _esphome_file_has_no_owner the Builder must report the file too, as a device whose
+    registration has not reached Home Assistant yet has no name to match.
+    """
+    if not hass.config_entries.async_entries(_ESPHOME_DOMAIN):
+        return True
+    if not _esphome_file_has_no_owner(hass, declared):
+        return False
+    dashboard = _esphome_dashboard(hass)
+    dash_data = getattr(dashboard, "data", None) or {} if dashboard is not None else {}
+    return any((row or {}).get("configuration") == rel for row in dash_data.values())
+
+
+def _esphome_file_in_scope(
+    hass: HomeAssistant, access_key: AccessKeyRecord, rel: str, *, write: bool,
+    declared: DeclaredDevice | None = None,
+) -> bool:
     """Whether the access key may read the device YAML at rel, or with write, build from it.
 
-    Every adopted owner must be in scope, even when unloaded. Orphan files
-    follow the capability alone.
+    Every adopted owner must be in scope, even when unloaded. A file with no owner follows the
+    capability alone. With the owner unknown it could be any adopted device, so all of them must be
+    in scope; ``declared`` None means the file was not read and is that case.
     """
-    return _esphome_entries_in_scope(hass, access_key, _esphome_entries_for_file(hass, rel), write=write)
+    owners = _esphome_entries_for_file(hass, rel, declared)
+    if not owners and not _esphome_file_has_no_owner(hass, declared):
+        owners = hass.config_entries.async_entries(_ESPHOME_DOMAIN)
+    return _esphome_entries_in_scope(hass, access_key, owners, write=write)
+
+
+def _esphome_name_in_scope(hass: HomeAssistant, access_key: AccessKeyRecord, name: str) -> bool:
+    """Whether every adopted device going by a Builder-reported name is readable by this key."""
+    return _esphome_entries_in_scope(
+        hass, access_key, _esphome_entries_for_file(hass, f"{name}.yaml"), write=False)
 
 
 def _esphome_entries_in_scope(
@@ -574,7 +664,7 @@ def _esphome_files(hass: HomeAssistant) -> list[dict]:
     """Recursively list jailed device YAML, without following directory symlinks.
 
     UNSCOPED: runs in a worker thread, so the caller filters the rows with
-    _esphome_file_in_scope on the event loop (_esphome_listing).
+    _esphome_file_in_scope on the event loop (_esphome_scoped_rows).
     """
     root = os.path.join(hass.config.config_dir, _ESPHOME_DIR)
     try:
@@ -613,19 +703,51 @@ def _esphome_files(hass: HomeAssistant) -> list[dict]:
     return rows
 
 
+async def _esphome_scoped_rows(hass: HomeAssistant, access_key: AccessKeyRecord, rows: list[dict]) -> list[dict]:
+    """Rows naming a file this access key may read; scope is decided on the loop."""
+    declared = await _esphome_declared_for_scope(hass, [row["file"] for row in rows])
+    return [row for row in rows if _esphome_file_in_scope(
+        hass, access_key, row["file"], write=False, declared=declared.get(row["file"]))]
+
+
 async def _esphome_listing(hass: HomeAssistant, access_key: AccessKeyRecord) -> list[dict]:
-    """The device YAML files this access key may read; scope is decided on the loop."""
-    rows = await hass.async_add_executor_job(_esphome_files, hass)
-    return [row for row in rows if _esphome_file_in_scope(hass, access_key, row["file"], write=False)]
+    """The device YAML files this access key may read."""
+    return await _esphome_scoped_rows(hass, access_key, await hass.async_add_executor_job(_esphome_files, hass))
+
+
+class _EntityView(NamedTuple):
+    """What a worker thread needs to hide entity IDs, decided on the event loop."""
+
+    visible: frozenset[str]
+    domains: frozenset[str]
+
+
+def _esphome_entity_view(access_key: AccessKeyRecord, hass: HomeAssistant) -> _EntityView:
+    """The key's visible entity IDs and every domain in use. Event loop only."""
+    known = {*hass.states.async_entity_ids(), *er.async_get(hass).entities.keys()}
+    return _EntityView(visible_entity_ids(access_key, hass), frozenset(eid.split(".", 1)[0] for eid in known))
+
+
+def _esphome_hide_entities(text: str, view: _EntityView, hass: HomeAssistant) -> str:
+    """Device YAML with hidden entity IDs replaced. A lambda's it.printf is no entity reference."""
+    return redact_entity_ids_outside(text, view.visible, hass, domains=view.domains)
+
+
+def _esphome_masked_text(
+    hass: HomeAssistant, text: str, secret_values: set[str], view: _EntityView
+) -> tuple[str, list[str]]:
+    """A device file as a key reads it: (masked text, redacted paths). Executor only."""
+    masked, paths = redact_esphome_text(text, secret_values)
+    return _esphome_hide_entities(masked, view, hass), [_esphome_hide_entities(path, view, hass) for path in paths]
 
 
 def _esphome_search(
-    hass: HomeAssistant, rows: list[dict], visible: frozenset[str],
+    hass: HomeAssistant, rows: list[dict], view: _EntityView,
     query: str, case_sensitive: bool, context: int,
 ) -> dict:
     """Search only masked, authorized files within a total byte budget.
 
-    Runs in a worker thread over rows and visible entity IDs the loop decided.
+    Runs in a worker thread over rows and an entity view the loop decided.
     """
     values, _keys = _read_esphome_secrets(hass)
     needle = query if case_sensitive else query.casefold()
@@ -642,8 +764,7 @@ def _esphome_search(
         try:
             raw = _read_text_capped(resolved[0])
             scanned += len(raw.encode("utf-8"))
-            masked, _paths = redact_esphome_text(raw, values)
-            masked = redact_entity_ids_outside(masked, visible, hass)
+            masked = _esphome_masked_text(hass, raw, values, view)[0]
         except (OSError, ValueError, yaml_includes.YamlParseError):
             incomplete = True
             continue
@@ -703,13 +824,12 @@ async def _tool_search_esphome_yaml(
                            "case_sensitive, and context_lines between 0 and 3."), "invalid_request", resource
     try:
         rows = await _esphome_listing(hass, access_key)
-        visible = visible_entity_ids(access_key, hass)
+        view = _esphome_entity_view(access_key, hass)
         result = await hass.async_add_executor_job(
-            _esphome_search, hass, rows, visible, query, sensitive, context)
+            _esphome_search, hass, rows, view, query, sensitive, context)
     except (OSError, ValueError):
         return _tool_error("ESPHome configuration search could not complete."), "invalid_request", resource
-    rows = [row for row in result["matches"]
-            if _esphome_file_in_scope(hass, access_key, row["file"], write=False)]
+    rows = await _esphome_scoped_rows(hass, access_key, result["matches"])
     body = _esphome_paged(rows, args, "matches")
     body["incomplete"] = result["incomplete"]
     return _tool_success(json.dumps(body)), "allowed", resource
@@ -744,7 +864,8 @@ async def _tool_get_esphome_yaml(
     if resolved is None:
         return _tool_error(_ESPHOME_PATH_REFUSED), "invalid_request", "get_esphome_yaml"
     path, rel = resolved
-    if not _esphome_file_in_scope(hass, access_key, rel, write=False):
+    declared = (await _esphome_declared_for_scope(hass, [rel])).get(rel)
+    if not _esphome_file_in_scope(hass, access_key, rel, write=False, declared=declared):
         return _tool_error(_ESPHOME_NOT_FOUND), "denied", f"esphome:{rel}"
 
     try:
@@ -756,7 +877,7 @@ async def _tool_get_esphome_yaml(
 
     try:
         redacted, redacted_paths = await hass.async_add_executor_job(
-            redact_esphome_text, raw, secret_values
+            _esphome_masked_text, hass, raw, secret_values, _esphome_entity_view(access_key, hass)
         )
     except yaml_includes.YamlParseError as err:
         # Fail closed: a file whose credentials cannot be located must not be
@@ -766,7 +887,7 @@ async def _tool_get_esphome_yaml(
             "invalid_request", f"esphome:{rel}",
         )
 
-    entry = _esphome_device_for_file(hass, rel)
+    entry = _esphome_device_for_file(hass, rel, declared)
     device_info = getattr(getattr(entry, "runtime_data", None), "device_info", None)
     body = {
         "file": rel,
@@ -832,7 +953,9 @@ async def _esphome_file_precheck(
     if located is None:
         return (_tool_error(_ESPHOME_PATH_REFUSED), "invalid_request", tool_name), "", ""
     path, rel, is_file = located
-    if not _esphome_file_in_scope(hass, access_key, rel, write=write):
+    declared = (await _esphome_declared_for_scope(hass, [rel])).get(rel)
+    in_scope = _esphome_file_in_scope(hass, access_key, rel, write=write, declared=declared)
+    if not in_scope and (is_file or _esphome_entries_for_file(hass, rel)):
         return (_tool_error(_ESPHOME_NOT_FOUND), "denied", f"esphome:{rel}"), path, rel
     if not is_file:
         return (_tool_error(_ESPHOME_NOT_FOUND), "not_found", f"esphome:{rel}"), path, rel
@@ -848,11 +971,20 @@ def _esphome_scrub_values(hass: HomeAssistant, path: str) -> set[str]:
     secret_values, _keys = _read_esphome_secrets(hass)
     values = set(secret_values or set())
     try:
-        with open(path, encoding="utf-8") as handle:
-            values |= inline_secret_values(handle.read(), values)
+        values |= inline_secret_values(_read_text_capped(path), values)
     except (OSError, ValueError, yaml_includes.YamlParseError):
         _LOGGER.debug("ESPHome scrub could not read inline credentials", exc_info=True)
     return values
+
+
+def _esphome_scrubbed_json(body: Any, values: set[str]) -> str:
+    """Encode a result after scrubbing it; an encoded value no longer matches itself."""
+    return json.dumps(scrub_secret_data(body, values), default=str)
+
+
+def _esphome_output_scrub(values: set[str]) -> Callable[[str], str]:
+    """A scrub for Builder output, applied to each line before the collector bounds it."""
+    return lambda line: scrub_secret_values(line, values)
 
 
 def _esphome_page_limit(args: dict) -> int:
@@ -899,7 +1031,7 @@ async def _tool_validate_esphome_yaml(
         res = await async_builder_command(
             hass, url, "devices/validate", {"configuration": rel, "show_secrets": False},
             timeout_seconds=ESPHOME_BUILDER_VALIDATE_TIMEOUT_SECONDS,
-            collect_output=True,
+            collect_output=True, scrub_output=_esphome_output_scrub(values),
         )
     except BuilderError as err:
         return _builder_refusal(err, f"esphome:{rel}")
@@ -923,7 +1055,8 @@ async def _tool_validate_esphome_yaml(
     if raw is None:
         body["migration_unavailable"] = "The file could not be read and parsed, so it was not checked for migrations."
     else:
-        body.update(await _esphome_migration_check(hass, url, rel, raw, secret_values, values))
+        view = _esphome_entity_view(access_key, hass)
+        body.update(await _esphome_migration_check(hass, url, rel, raw, secret_values, values, view))
     return _tool_success(json.dumps(body, default=str)), "allowed", f"esphome:{rel}"
 
 
@@ -971,7 +1104,7 @@ def _esphome_migration_changes(raw_changes: Any) -> list[dict]:
 
 
 def _esphome_migration_diff(
-    raw: str, yaml_diff: dict, secret_values: set[str], rel: str
+    hass: HomeAssistant, raw: str, yaml_diff: dict, secret_values: set[str], rel: str, view: _EntityView
 ) -> tuple[str, bool] | None:
     """Masked unified diff of the migration, or None when it cannot be shown safely. Executor only.
 
@@ -981,9 +1114,9 @@ def _esphome_migration_diff(
     try:
         migrated = apply_line_splice(
             raw, int(yaml_diff["fromLine"]), int(yaml_diff["toLine"]), str(yaml_diff["replacement"]))
-        before, before_paths = redact_esphome_text(raw, secret_values)
+        before, before_paths = _esphome_masked_text(hass, raw, secret_values, view)
         known = secret_values | inline_secret_values(raw, secret_values)
-        after, after_paths = redact_esphome_text(migrated, known)
+        after, after_paths = _esphome_masked_text(hass, migrated, known, view)
     except (KeyError, TypeError, ValueError, yaml_includes.YamlParseError):
         return None
     if len(after_paths) < len(before_paths):
@@ -992,7 +1125,8 @@ def _esphome_migration_diff(
 
 
 async def _esphome_migration_check(
-    hass: HomeAssistant, url: str, rel: str, raw: str, secret_values: set[str], values: set[str]
+    hass: HomeAssistant, url: str, rel: str, raw: str, secret_values: set[str], values: set[str],
+    view: _EntityView,
 ) -> dict:
     """The validate reply's migration block: rules that would respell this file, and a masked diff.
 
@@ -1013,7 +1147,7 @@ async def _esphome_migration_check(
     if not isinstance(yaml_diff, dict):
         return {"migration": {"needed": False}}
     migration: dict[str, Any] = {"needed": True, "changes": changes}
-    shown = await hass.async_add_executor_job(_esphome_migration_diff, raw, yaml_diff, secret_values, rel)
+    shown = await hass.async_add_executor_job(_esphome_migration_diff, hass, raw, yaml_diff, secret_values, rel, view)
     if shown is None:
         migration["diff_withheld"] = "The migrated text could not be masked reliably; review it in the ESPHome dashboard."
     else:
@@ -1295,11 +1429,8 @@ async def _tool_get_esphome_automations(
 
     # Belt-and-braces: the catalog is component metadata rather than config
     # values, but it is derived from this file, so scrub the rendered body too.
-    rendered = json.dumps(
-        {"file": rel, "automations": _project_esphome_automations(res.result)},
-        default=str,
-    )
-    return _tool_success(scrub_secret_values(rendered, values)), "allowed", f"esphome:{rel}"
+    body = {"file": rel, "automations": _project_esphome_automations(res.result)}
+    return _tool_success(_esphome_scrubbed_json(body, values)), "allowed", f"esphome:{rel}"
 
 
 # Catalog ids as the add-on spells them, e.g. light.turn_on or on_press.
@@ -1406,11 +1537,14 @@ def _esphome_same_slice(local: str, reported: str) -> bool:
         return False
 
 
-def _esphome_automation_rows(raw: str, secret_values: set[str], parsed: Any) -> tuple[list[dict], list[str]]:
+def _esphome_automation_rows(
+    hass: HomeAssistant, raw: str, secret_values: set[str], values: set[str], parsed: Any, view: _EntityView,
+) -> tuple[list[dict], list[str]]:
     """Project automations/parse rows, with YAML cut from Phoenix's own masked read. Executor only.
 
     The add-on's raw_yaml only checks that both read the same file and is never relayed. A row whose
-    lines no longer match loses its YAML; an unparseable file withholds all YAML.
+    lines no longer match loses its YAML; an unparseable file withholds all YAML. Label and error
+    stay unbounded for the event loop, where the scrub that precedes their bound runs.
     """
     rows: list[dict] = []
     warnings: list[str] = []
@@ -1422,13 +1556,13 @@ def _esphome_automation_rows(raw: str, secret_values: set[str], parsed: Any) -> 
         location = item.get("location")
         if isinstance(location, dict):
             row["location"] = {
-                k: (v[:ESPHOME_BUILDER_METADATA_MAX_CHARS] if isinstance(v, str) else v)
+                k: (scrub_secret_values(v, values)[:ESPHOME_BUILDER_METADATA_MAX_CHARS] if isinstance(v, str) else v)
                 for k, v in location.items()
                 if k in _ESPHOME_LOCATION_KEYS and (isinstance(v, str) or (isinstance(v, int) and not isinstance(v, bool)))
             }
         for key in ("label", "error"):
             if isinstance(item.get(key), str) and item[key]:
-                row[key] = item[key][:ESPHOME_BUILDER_METADATA_MAX_CHARS]
+                row[key] = scrub_secret_values(item[key], values)
         if item.get("unsupported") is True:
             row["unsupported"] = True
         first, last = item.get("from_line"), item.get("to_line")
@@ -1444,7 +1578,7 @@ def _esphome_automation_rows(raw: str, secret_values: set[str], parsed: Any) -> 
             if local is None or not isinstance(reported, str) or not _esphome_same_slice(local, reported):
                 row["yaml_withheld"] = "The file changed while it was being read; ask again."
             elif not parse_failed:
-                masked = redact_esphome_slice(raw, secret_values, first, last)
+                masked = _esphome_hide_entities(redact_esphome_slice(raw, secret_values, first, last), view, hass)
                 if len(masked) > ESPHOME_AUTOMATION_YAML_MAX_CHARS:
                     masked = masked[:ESPHOME_AUTOMATION_YAML_MAX_CHARS]
                     row["yaml_truncated"] = True
@@ -1478,11 +1612,12 @@ async def _esphome_existing_automations(
         )
     except BuilderError as err:
         return _builder_refusal(err, f"esphome:{rel}")
-    rows, warnings = await hass.async_add_executor_job(_esphome_automation_rows, raw, secret_values, res.result)
+    rows, warnings = await hass.async_add_executor_job(
+        _esphome_automation_rows, hass, raw, secret_values, values, res.result, _esphome_entity_view(access_key, hass))
     for row in rows:
         for key in ("label", "error"):
             if key in row:
-                row[key] = redact_diagnostics(redact_inaccessible_entity_ids_in_text(row[key], access_key, hass))
+                row[key] = _esphome_metadata_text(row[key], access_key, hass)
     listed: list[dict] = []
     size = 0
     for row in rows:
@@ -1496,8 +1631,7 @@ async def _esphome_existing_automations(
         warnings.append("The result is full; read the rest of the file with get_esphome_yaml.")
     if warnings:
         body["warnings"] = warnings
-    rendered = json.dumps(body, default=str)
-    return _tool_success(scrub_secret_values(rendered, values)), "allowed", f"esphome:{rel}"
+    return _tool_success(_esphome_scrubbed_json(body, values)), "allowed", f"esphome:{rel}"
 
 
 # Phoenix MCP only ever flashes over the air. A caller-supplied serial path would
@@ -1592,6 +1726,7 @@ async def _tool_list_esphome_jobs(
     jobs = _esphome_job_list(result.result)
     located = await hass.async_add_executor_job(
         _locate_esphome_files, hass, [job.get("configuration") for job in jobs])
+    declared = await _esphome_declared_for_scope(hass, [resolved[1] for resolved in located.values()])
     rows = []
     for job in jobs:
         configuration = job.get("configuration")
@@ -1599,7 +1734,7 @@ async def _tool_list_esphome_jobs(
         if resolved is None:
             continue
         rel = resolved[1]
-        if (not _esphome_file_in_scope(hass, access_key, rel, write=False)
+        if (not _esphome_file_in_scope(hass, access_key, rel, write=False, declared=declared.get(rel))
                 or (payload and rel != payload["configuration"])
                 or (status is not None and status != job.get("status"))):
             continue
@@ -1609,8 +1744,7 @@ async def _tool_list_esphome_jobs(
         for key in ("job_id", "status", "job_type", "created_at", "started_at", "completed_at"):
             value = job.get(key)
             if isinstance(value, str):
-                row[key] = redact_diagnostics(
-                    redact_inaccessible_entity_ids_in_text(value[:ESPHOME_BUILDER_METADATA_MAX_CHARS], access_key, hass))
+                row[key] = _esphome_metadata_text(value, access_key, hass)
         rows.append(row)
     rows.sort(key=lambda row: (row.get("created_at", ""), row.get("job_id", "")), reverse=True)
     return _tool_success(json.dumps(_esphome_paged(rows, args, "jobs"))), "allowed", resource
@@ -1670,6 +1804,7 @@ async def _tool_list_esphome_devices(
         _locate_esphome_files, hass,
         [d.get("configuration") for d in configured if isinstance(d, dict)] if isinstance(configured, list) else [],
     )
+    declared = await _esphome_declared_for_scope(hass, [resolved[1] for resolved in located.values()])
     rows = []
     for kind in ("configured", "importable") if include else ("configured",):
         candidates = result.result.get(kind)
@@ -1686,12 +1821,12 @@ async def _tool_list_esphome_devices(
                 if resolved is None:
                     continue
                 rel = resolved[1]
-                if not _esphome_file_in_scope(hass, access_key, rel, write=False):
+                if not _esphome_file_in_scope(hass, access_key, rel, write=False, declared=declared.get(rel)):
                     continue
-                if not _esphome_file_in_scope(hass, access_key, name + ".yaml", write=False):
+                if not _esphome_name_in_scope(hass, access_key, name):
                     continue
                 row["file"] = rel
-            elif not _esphome_file_in_scope(hass, access_key, name + ".yaml", write=False):
+            elif not _esphome_name_in_scope(hass, access_key, name):
                 # Discovery does not make an adopted but unloaded device an orphan.
                 continue
             runtime = device.get("runtime_state")
@@ -1703,8 +1838,7 @@ async def _tool_list_esphome_devices(
                         "project_name", "project_version"):
                 value = device.get(key)
                 if isinstance(value, str):
-                    row[key] = redact_diagnostics(
-                        redact_inaccessible_entity_ids_in_text(value[:ESPHOME_BUILDER_METADATA_MAX_CHARS], access_key, hass))
+                    row[key] = _esphome_metadata_text(value, access_key, hass)
             if kind == "configured":
                 row.update(_esphome_device_firmware(device, runtime))
             if query.casefold() not in json.dumps(row).casefold():
@@ -1830,7 +1964,8 @@ async def _esphome_job_precheck(
     if not isinstance(configuration, str) or not esphome_rel_path_ok(configuration):
         return (_tool_error(missing), "not_found", tool_name), {}
     rel = configuration
-    if not _esphome_file_in_scope(hass, access_key, rel, write=False):
+    declared = (await _esphome_declared_for_scope(hass, [rel])).get(rel)
+    if not _esphome_file_in_scope(hass, access_key, rel, write=False, declared=declared):
         return (_tool_error(missing), "denied", f"esphome:{rel}"), {}
     return None, job
 
@@ -1860,7 +1995,8 @@ async def _esphome_job_output(
         # its own terminators, so hand-joining it yields visible colour codes with
         # a blank line between every line.
         text, truncated = collect_output_lines(
-            job.get("output"), ESPHOME_BUILDER_JOB_PROGRESS_MAX_CHARS, head_ratio=0.0
+            job.get("output"), ESPHOME_BUILDER_JOB_PROGRESS_MAX_CHARS, head_ratio=0.0,
+            scrub_output=_esphome_output_scrub(values),
         )
         return _EsphomeJobOutput(scrub_secret_values(text, values), truncated)
 
@@ -1870,6 +2006,7 @@ async def _esphome_job_output(
             timeout_seconds=ESPHOME_BUILDER_JOB_LOG_TIMEOUT_SECONDS,
             collect_output=True,
             max_chars=ESPHOME_BUILDER_JOB_OUTPUT_MAX_CHARS,
+            scrub_output=_esphome_output_scrub(values),
         )
     except BuilderError:
         # The status is the answer the caller actually needs; a missing log is
@@ -2059,15 +2196,6 @@ async def _install_esphome_precheck(
     return None, url, rel
 
 
-def _esphome_file_is_orphan(hass: HomeAssistant, rel: str) -> bool:
-    """Whether a file with no matched owner provably has none."""
-    if not hass.config_entries.async_entries(_ESPHOME_DOMAIN):
-        return True
-    dashboard = _esphome_dashboard(hass)
-    dash_data = getattr(dashboard, "data", None) or {} if dashboard is not None else {}
-    return any((row or {}).get("configuration") == rel for row in dash_data.values())
-
-
 async def _install_esphome_mesa_gate(
     hass: HomeAssistant,
     data: PhoenixData,
@@ -2083,15 +2211,15 @@ async def _install_esphome_mesa_gate(
     Returns the refusal or pending approval, else advisory warnings. Every registry entity of every
     owner is evaluated, and one refusal stops the install.
     """
-    # Flashing replaces what the whole device runs, so owners are matched on the name the file
-    # states too, which also binds the key's scope to them. An orphan file has no device in Home
-    # Assistant yet, so no profile can cover it and a new device's install proceeds. That needs
-    # proof: no adopted device at all, or the Builder reporting the file under a name none has.
-    # Otherwise the owner is unknown, which warns in advisory mode and is refused where policy must
-    # be met, a failed runtime included. An approval satisfies Confirm for this exact action only.
-    declared = await hass.async_add_executor_job(_read_declared_device_name, hass, rel)
+    # Flashing replaces what the whole device runs, so owners are matched on the name and address
+    # the file states too, which also binds the key's scope to them. An orphan file has no device
+    # in Home Assistant yet, so no profile can cover it and a new device's install proceeds. That
+    # needs proof (_esphome_file_is_orphan). Otherwise the owner is unknown, which warns in advisory
+    # mode and is refused where policy must be met, a failed runtime included. An approval satisfies
+    # Confirm for this exact action only.
+    declared = await hass.async_add_executor_job(_read_declared_device, hass, rel)
     owners = _esphome_entries_for_file(hass, rel, declared)
-    if not _esphome_entries_in_scope(hass, access_key, owners, write=True):
+    if not _esphome_file_in_scope(hass, access_key, rel, write=True, declared=declared):
         return _tool_error(_ESPHOME_NOT_FOUND), "denied", f"esphome:{rel}"
     registry = er.async_get(hass)
     entities = sorted({
@@ -2100,7 +2228,7 @@ async def _install_esphome_mesa_gate(
         for reg_entry in er.async_entries_for_config_entry(registry, entry.entry_id)
     })
     if not entities and data.mesa is not None:
-        if not owners and _esphome_file_is_orphan(hass, rel):
+        if not owners and _esphome_file_is_orphan(hass, rel, declared):
             return []
         devices = dr.async_get(hass)
         device_ids = [
@@ -2663,6 +2791,7 @@ async def _tool_get_esphome_device_logs(
             hass, url, "devices/logs", {"configuration": rel},
             capture_seconds=seconds,
             max_chars=ESPHOME_BUILDER_JOB_OUTPUT_MAX_CHARS,
+            scrub_output=_esphome_output_scrub(values),
         )
     except BuilderError as err:
         return _builder_refusal(err, f"esphome:{rel}")
@@ -2740,8 +2869,7 @@ async def _tool_decode_esphome_backtrace(
     # putting in front of the agent.
     if payload.get("unavailable_reason"):
         body["unavailable_reason"] = payload["unavailable_reason"]
-    rendered = json.dumps(body, default=str)
-    return _tool_success(scrub_secret_values(rendered, values)), "allowed", f"esphome:{rel}"
+    return _tool_success(_esphome_scrubbed_json(body, values)), "allowed", f"esphome:{rel}"
 
 
 # The add-on's own failure classification ("" or "provision" in 1.25.0).
@@ -2763,14 +2891,16 @@ async def _esphome_history_precheck(
 ) -> tuple[tuple[dict, str, str] | None, str, str, bool]:
     """Resolve and authorize a device file that may no longer exist.
 
-    The usual jail and name rules apply without existence. Scope follows device ownership by name; a
-    true orphan follows the capability.
+    The usual jail and name rules apply without existence. A deleted file declares nothing, so past
+    an owner found by name it needs every adopted device in scope; a proven orphan follows the
+    capability.
     """
     located = await hass.async_add_executor_job(_locate_esphome_file, hass, args.get("file"))
     if located is None:
         return (_tool_error(_ESPHOME_PATH_REFUSED), "invalid_request", tool_name), "", "", False
     path, rel, is_file = located
-    if not _esphome_file_in_scope(hass, access_key, rel, write=False):
+    declared = (await _esphome_declared_for_scope(hass, [rel])).get(rel)
+    if not _esphome_file_in_scope(hass, access_key, rel, write=False, declared=declared):
         return (_tool_error(_ESPHOME_NOT_FOUND), "denied", f"esphome:{rel}"), path, rel, is_file
     return None, path, rel, is_file
 
@@ -2785,21 +2915,21 @@ def _esphome_history_names(hass: HomeAssistant, names: list[Any]) -> list[str]:
     return out
 
 
-def _esphome_mask_version(hass: HomeAssistant, text: str) -> tuple[str, list[str]]:
+def _esphome_mask_version(hass: HomeAssistant, text: str, view: _EntityView) -> tuple[str, list[str]]:
     """Mask one historical version whole. Executor only; raises on oversize or unparseable text."""
     # A scrub alone would not do: an old version can carry a credential since rotated out of
     # secrets.yaml and every current file.
     if len(text.encode("utf-8")) > MAX_FILE_BYTES:
         raise ValueError("version too large")
     secret_values, _keys = _read_esphome_secrets(hass)
-    return redact_esphome_text(text, set(secret_values or set()))
+    return _esphome_masked_text(hass, text, set(secret_values or set()), view)
 
 
-def _esphome_mask_current(hass: HomeAssistant, path: str) -> str:
+def _esphome_mask_current(hass: HomeAssistant, path: str, view: _EntityView) -> str:
     """The current file, masked; "" when it no longer exists. Executor only."""
     if not os.path.isfile(path):
         return ""
-    return _esphome_mask_version(hass, _read_text_capped(path))[0]
+    return _esphome_mask_version(hass, _read_text_capped(path), view)[0]
 
 
 async def _esphome_versions(hass: HomeAssistant, url: str, rel: str) -> list[dict] | None:
@@ -2885,9 +3015,10 @@ async def _tool_get_esphome_history(
             if isinstance(commit.get("message"), str):
                 # The file's own name reads like an entity id (porch-light.yaml holds
                 # "light.yaml"), so it is kept whole and only the text around it is redacted.
-                parts = scrub_secret_values(commit["message"][:ESPHOME_BUILDER_METADATA_MAX_CHARS], values).split(rel)
+                parts = scrub_secret_values(commit["message"], values).split(rel)
                 row["message"] = rel.join(
-                    redact_diagnostics(redact_inaccessible_entity_ids_in_text(part, access_key, hass)) for part in parts)
+                    redact_diagnostics(redact_inaccessible_entity_ids_in_text(part, access_key, hass))
+                    for part in parts)[:ESPHOME_BUILDER_METADATA_MAX_CHARS]
             # Whether the Builder made it; the author name itself is never returned.
             row["origin"] = "device_builder" if commit.get("author") == ESPHOME_BUILDER_HISTORY_AUTHOR else "other"
             rows.append(row)
@@ -2902,20 +3033,21 @@ async def _tool_get_esphome_history(
     if old is None:
         return (_tool_error("The file does not exist at that version, which may be the one that deleted "
                             "it; read the version before it."), "not_found", f"esphome:{rel}")
+    entities = _esphome_entity_view(access_key, hass)
     try:
-        masked_old, paths = await hass.async_add_executor_job(_esphome_mask_version, hass, old)
+        masked_old, paths = await hass.async_add_executor_job(_esphome_mask_version, hass, old, entities)
         if view == "content":
             body = {"file": rel, "sha": sha, "content": masked_old, "redacted_paths": paths}
-            return _tool_success(scrub_secret_values(json.dumps(body, default=str), values)), "allowed", f"esphome:{rel}"
+            return _tool_success(_esphome_scrubbed_json(body, values)), "allowed", f"esphome:{rel}"
         if compare_to is not None:
             newer = await _esphome_version_text(hass, url, rel, compare_to)
             if newer is None:
                 return (_tool_error("The file does not exist at the compare_to version."),
                         "not_found", f"esphome:{rel}")
-            masked_new = (await hass.async_add_executor_job(_esphome_mask_version, hass, newer))[0]
+            masked_new = (await hass.async_add_executor_job(_esphome_mask_version, hass, newer, entities))[0]
             label = f"{rel}@{compare_to[:7]}"
         else:
-            masked_new = await hass.async_add_executor_job(_esphome_mask_current, hass, path)
+            masked_new = await hass.async_add_executor_job(_esphome_mask_current, hass, path, entities)
             label = f"{rel} (current)" if exists else f"{rel} (deleted)"
     except (OSError, ValueError, yaml_includes.YamlParseError):
         return (_tool_error("That version could not be parsed, so its credentials cannot be masked; "
@@ -2929,7 +3061,7 @@ async def _tool_get_esphome_history(
         body["note"] = "No differences."
     elif not exists and compare_to is None:
         body["note"] = "The file no longer exists, so the diff shows the whole version as removed."
-    return _tool_success(scrub_secret_values(json.dumps(body, default=str), values)), "allowed", f"esphome:{rel}"
+    return _tool_success(_esphome_scrubbed_json(body, values)), "allowed", f"esphome:{rel}"
 
 
 async def _esphome_deleted_files(
@@ -2946,8 +3078,7 @@ async def _esphome_deleted_files(
         return _builder_refusal(err, resource)
     names = [r.get("configuration") for r in res.result if isinstance(r, dict)] if isinstance(res.result, list) else []
     located = await hass.async_add_executor_job(_esphome_history_names, hass, names)
-    rows = [{"file": rel} for rel in sorted(located)
-            if _esphome_file_in_scope(hass, access_key, rel, write=False)]
+    rows = await _esphome_scoped_rows(hass, access_key, [{"file": rel} for rel in sorted(located)])
     return _tool_success(json.dumps(_esphome_paged(rows, args, "deleted"))), "allowed", resource
 
 
@@ -3101,6 +3232,7 @@ async def _tool_analyze_esphome_memory(
             # The per-component summary prints first and the per-symbol detail runs on
             # for tens of thousands of lines, so the head is kept and the tail trimmed.
             collect_output=True, max_chars=ESPHOME_BUILDER_ANALYZE_OUTPUT_MAX_CHARS, head_ratio=0.75,
+            scrub_output=_esphome_output_scrub(values),
         )
     except BuilderCommandError:
         return (_tool_error("The analysis ended before it could be followed, and the Device Builder keeps "

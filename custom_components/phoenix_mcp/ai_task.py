@@ -562,7 +562,7 @@ if _EVALUATE_FEATURE is not None:
             if data is None:
                 raise HomeAssistantError("Phoenix MCP is not set up.")
             answers = await async_evaluate(self.hass, data, task.name, task.questions, task.state,
-                                           user_id=_task_user_id())
+                                           entity_id=self.entity_id, user_id=_task_user_id())
             return _ai_task.EvaluationTaskResult(
                 answers={name: _evaluation_answer(answer) for name, answer in answers.items()})
 

@@ -40,16 +40,16 @@ from ..entity_registration import async_observe_registration
 from ..helpers import content_hash
 from ..tool_input import dict_arg, str_arg, str_list_arg
 from ..catalog_text import diff_summary_fields as _summary
-from ..capability import effective_cap
+from ..capability import effective_cap, strictest_capability
 from ..log_read import _strict_phoenix_log_text
 from ..redaction import redact_inaccessible_entity_ids_in_text
 from ..tool_common import (
-    _CAP_FORBIDDEN_MESSAGE, _cas_conflict, _gate, _record_version, _tool_error, _tool_refused_before_write,
+    _CAP_FORBIDDEN_MESSAGE, _cas_conflict, _gate, _record_version, _tool_error, _tool_refused_before_write, _tool_uncertain,
     _tool_success, _truncate, fitted_list, longest_fitting,
 )
 from ..policy_engine import (
-    Permission, filter_entities_for_access_key, resolve, resolve_read, is_sensitive_key,
-    scrub_sensitive_attributes,
+    Permission, filter_entities_for_access_key, group_member_denied, group_member_ids, resolve, resolve_read,
+    is_sensitive_key, physical_gate_applies, scrub_sensitive_attributes,
 )
 from ..request_authority import AuthorityChangedError, check_request_authority
 from ..access_key_store import AccessKeyRecord
@@ -759,8 +759,9 @@ async def _finish_entity_delete(
             "%s reload failed after the entry was removed: %s",
             tool_name, _strict_phoenix_log_text(format_exc(), access_key, hass),
         )
-        result = _tool_success(json.dumps({
-            "deleted": True, f"{domain}_id": item_id, "verified": False, "reload_status": "failed",
+        return _tool_uncertain({
+            "status": "partial", "deleted": True, f"{domain}_id": item_id, "verified": False,
+            "retry_safe": False, "reload_status": "failed",
             "error": (
                 _strict_phoenix_log_text(str(exc), access_key, hass)[:500]
                 if isinstance(exc, HomeAssistantError)
@@ -770,9 +771,7 @@ async def _finish_entity_delete(
                 f"{domain.capitalize()} '{item_id}' was removed from its file and its version recorded, "
                 "but reload failed. Inspect HA logs before retrying reload; do not repeat the delete."
             ),
-        }, default=str))
-        result["isError"] = True
-        return result, "invalid_request", tool_name
+        }), "invalid_request", tool_name
     return await _deletion_receipt(hass, domain, item_id, tool_name)
 
 
@@ -1429,8 +1428,28 @@ def _scene_member_entities(config: Any) -> list[str]:
 
 
 def _unwritable_scene_members(config: Any, access_key: AccessKeyRecord, hass: HomeAssistant) -> list[str]:
-    """Scene member entities the access key cannot WRITE (the scene will actuate them)."""
-    return sorted(e for e in _scene_member_entities(config) if resolve(e, access_key, hass) != Permission.WRITE)
+    """Scene member entities the access key cannot WRITE (the scene will actuate them).
+
+    A group counts when it reaches a member RED for this key, or none can be read.
+    """
+    return sorted(
+        e for e in _scene_member_entities(config)
+        if resolve(e, access_key, hass) != Permission.WRITE or group_member_denied(e, access_key, hass)
+    )
+
+
+def _scene_physical_members(config: Any, hass: HomeAssistant) -> list[str]:
+    """Scene members the physical gate covers, looking through groups: activation will actuate them."""
+    return sorted(
+        member for member in _scene_member_entities(config)
+        if physical_gate_applies("scene", "turn_on", [member, *(group_member_ids(member, hass) or ())])
+    )
+
+
+def _scene_gate_capability(config: Any, access_key: AccessKeyRecord, hass: HomeAssistant) -> str:
+    """Return the capability deciding this scene write; a scene that actuates hardware needs both."""
+    physical = "cap_physical_control" if _scene_physical_members(config, hass) else None
+    return strictest_capability(access_key, "cap_scene_write", physical) or "cap_scene_write"
 
 
 def _valid_scene_config(config: Any) -> bool:
@@ -1519,6 +1538,8 @@ async def _scene_write(
         return _tool_error(yaml_includes.TAG_STRING_REFUSAL), "invalid_request", tool_name
     if (invalid := _scene_schema_error(config)) is not None:
         return _tool_error(invalid), "invalid_request", tool_name
+    if effective_cap(access_key, _scene_gate_capability(config, access_key, hass)) == CAP_DENY:
+        return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", tool_name
     bad = _unwritable_scene_members(config, access_key, hass)
     if bad:
         return _tool_error("Scene references entities this access key cannot write: " + ", ".join(bad)), "denied", tool_name
@@ -1622,11 +1643,14 @@ async def _tool_create_scene(
     pre = _scene_write_precheck(args, "create_scene", require_id=False)
     if pre is not None:
         return pre
+    gate_cap = _scene_gate_capability(args.get("config"), access_key, hass)
+    if effective_cap(access_key, gate_cap) == CAP_DENY:
+        return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "create_scene"
     refused = await _editor_file_refusal(hass, "scene", "", "create_scene", create=True)
     if refused is not None:
         return refused
     blocked = await _gate(
-        "cap_scene_write", access_key, hass, data,
+        gate_cap, access_key, hass, data,
         tool_name="create_scene", args=args, request_id=request_id,
         client_ip=client_ip, diff=lambda: _build_diff_create_scene(args, access_key, hass),
     )
@@ -1660,6 +1684,9 @@ async def _tool_edit_scene(
     pre = _scene_write_precheck(args, "edit_scene", require_id=True)
     if pre is not None:
         return pre
+    gate_cap = _scene_gate_capability(args.get("config"), access_key, hass)
+    if effective_cap(access_key, gate_cap) == CAP_DENY:
+        return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "edit_scene"
     scene_id = str(args.get("scene_id") or "").strip()
     current = await _read_config_entry(hass, "scene", scene_id)
     # Only a scene this key may already edit is located, so the refusal is no
@@ -1674,7 +1701,7 @@ async def _tool_edit_scene(
     if stale is not None:
         return stale
     blocked = await _gate(
-        "cap_scene_write", access_key, hass, data,
+        gate_cap, access_key, hass, data,
         tool_name="edit_scene", args=args, request_id=request_id,
         client_ip=client_ip, diff=lambda: _build_diff_edit_scene(args, access_key, hass),
     )
@@ -1808,17 +1835,23 @@ def _build_diff_create_automation(args: dict, access_key: AccessKeyRecord, hass:
 
 
 async def _deletion_receipt(hass: HomeAssistant, domain: str, item_id: str, tool_name: str) -> tuple[dict, str, str]:
-    """Read a deletion back after the reload: no stored entry and no entity left."""
+    """Read a deletion back after the reload: no stored entry and no entity left.
+
+    Anything left over is uncertain rather than a success, as the delete did not finish as reviewed.
+    """
     stored = await _read_config_entry(hass, domain, item_id)
     remains = _authoring_entity_id(hass, domain, item_id) is not None
-    verified = stored is None and not remains
-    body: dict[str, Any] = {"deleted": True, f"{domain}_id": item_id, "verified": verified,
-                            "message": f"{domain.capitalize()} '{item_id}' deleted successfully."}
-    if not verified:
-        body["message"] = (f"{domain.capitalize()} '{item_id}' was removed from its file, but "
-                           + ("its configuration still reads back" if stored is not None else "its entity is still present")
-                           + "; inspect it before retrying, and do not repeat the delete.")
-    return _tool_success(json.dumps(body)), "allowed", tool_name
+    if stored is None and not remains:
+        return _tool_success(json.dumps({
+            "deleted": True, f"{domain}_id": item_id, "verified": True,
+            "message": f"{domain.capitalize()} '{item_id}' deleted successfully.",
+        })), "allowed", tool_name
+    return _tool_uncertain({
+        "status": "partial", "deleted": stored is None, f"{domain}_id": item_id, "verified": False, "retry_safe": False,
+        "message": (f"{domain.capitalize()} '{item_id}' was removed from its file, but "
+                    + ("its configuration still reads back" if stored is not None else "its entity is still present")
+                    + "; inspect it before retrying, and do not repeat the delete."),
+    }), "invalid_request", tool_name
 
 
 def _authoring_entity_id(hass: HomeAssistant, domain: str, entry_id: str) -> str | None:
@@ -1956,7 +1989,8 @@ def _build_diff_create_scene(args: dict, access_key: AccessKeyRecord, hass: Home
         "before": None,
         "after": _truncate(json.dumps(config, indent=2, default=str)),
         "preview": {"name": config.get("name"), "entities": members,
-                    "unwritable_entities": _unwritable_scene_members(config, access_key, hass)},
+                    "unwritable_entities": _unwritable_scene_members(config, access_key, hass),
+                    "physical_entities": _scene_physical_members(config, hass)},
     }
 
 
@@ -1971,7 +2005,8 @@ async def _build_diff_edit_scene(args: dict, access_key: AccessKeyRecord, hass: 
         "before": before,
         "after": _truncate(json.dumps(config, indent=2, default=str)),
         "preview": {"name": config.get("name"), "entities": _scene_member_entities(config),
-                    "unwritable_entities": _unwritable_scene_members(config, access_key, hass)},
+                    "unwritable_entities": _unwritable_scene_members(config, access_key, hass),
+                    "physical_entities": _scene_physical_members(config, hass)},
     }
 
 

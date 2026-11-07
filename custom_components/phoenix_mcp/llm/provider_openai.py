@@ -1014,7 +1014,10 @@ def _mistral_block_events(content: list, stream: _ChatStream, show_thinking: boo
 
 def _merge_tool_fragments(delta: dict, stream: _ChatStream) -> None:
     """Fold a delta's tool call fragments into `stream.calls`, refusing a bad shape."""
-    fragments = delta.get("tool_calls", [])
+    # OpenAI-compatible servers serialize an unset field as null.
+    fragments = delta.get("tool_calls")
+    if fragments is None:
+        fragments = []
     if not isinstance(fragments, list):
         raise _ProviderResponseError()
     if stream.gemini and isinstance(delta.get("extra_content"), dict):
@@ -1041,7 +1044,9 @@ def _merge_tool_fragment(tc: Any, stream: _ChatStream) -> None:
         elif stream.pending_extra is not None and "extra_content" not in slot:
             slot["extra_content"] = stream.pending_extra
         stream.pending_extra = None
-    fn = tc.get("function", {})
+    fn = tc.get("function")
+    if fn is None:
+        fn = {}
     if not isinstance(fn, dict):
         raise _ProviderResponseError()
     if fn.get("name"):

@@ -146,8 +146,13 @@ def record_outcome(access_key: Any, name: str, outcome: str, result: dict | None
             turn.evidence.warnings = [scrub(warning) for warning in turn.evidence.warnings]
 
 
+def _byte_size(text: str) -> int:
+    """Encoded size of provider text, which can hold half a character split across events."""
+    return len(text.encode("utf-8", "backslashreplace"))
+
+
 def _context_bytes(system: str, messages: list[dict]) -> int:
-    return len(json.dumps({"system": system, "messages": messages}, ensure_ascii=False, default=str).encode())
+    return _byte_size(json.dumps({"system": system, "messages": messages}, ensure_ascii=False, default=str))
 
 
 def check_turn_context(access_key: Any, system: str, messages: list[dict]) -> bool:
@@ -171,7 +176,7 @@ def append_fitting_results(access_key: Any, system: str, messages: list[dict], r
         return
     withheld: set[int] = set()
     while (size := _context_bytes(system, messages)) > HOME_COMPANION_MAX_CONTEXT_BYTES:
-        reads = [(len(str(row.get("result_text") or "").encode()), index) for index, row in enumerate(results)
+        reads = [(_byte_size(str(row.get("result_text") or "")), index) for index, row in enumerate(results)
                  if index not in withheld and not row.get("is_error") and tool_is_read_only(str(row.get("tool_name") or ""))]
         if not reads:
             return

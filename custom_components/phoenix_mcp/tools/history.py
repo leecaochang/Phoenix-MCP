@@ -815,14 +815,17 @@ async def _history_summary(
     warnings = retention_warnings("short_term", window.page_start, keep_days, now)
     if window.end > now:
         warnings.append("end_time is in the future; the summary stops at the current time.")
-    body = summary_body(
-        entity_id, (window.start, window.end), summary, max_states=HISTORY_SUMMARY_MAX_STATES,
-        retention=retention_metadata("short_term", keep_days), warnings=warnings,
-        continued=window.page_start > window.start,
-    )
-    if attribute is not None:
-        body = {"attribute": attribute, **body}
-    return _tool_success(json.dumps(body)), "allowed", entity_id
+    def build(count: int) -> dict:
+        # A label is a whole attribute value, so fifty of them can pass the result bound.
+        body = summary_body(
+            entity_id, (window.start, window.end), summary, max_states=count,
+            retention=retention_metadata("short_term", keep_days), warnings=list(warnings),
+            continued=window.page_start > window.start,
+        )
+        return body if attribute is None else {"attribute": attribute, **body}
+
+    fitted = longest_fitting(build, min(HISTORY_SUMMARY_MAX_STATES, len(summary.totals)))
+    return _tool_success(json.dumps(fitted)), "allowed", entity_id
 
 
 _STATISTIC_WINDOW_TYPES = ("mean", "min", "max", "change")

@@ -34,7 +34,11 @@ from custom_components.phoenix_mcp.data import PhoenixData
 from custom_components.phoenix_mcp.tool_dispatch import _call_tool
 from custom_components.phoenix_mcp.access_key_store import PermissionNode, PermissionTree, AccessKeyRecord
 from custom_components.phoenix_mcp.version_store import VersionStore
-from custom_components.phoenix_mcp.ws_dispatch import ALLOWED_WS_COMMANDS, WsDispatchError, validate_ws_payload
+from custom_components.phoenix_mcp.tool_common import UncertainOutcome
+from custom_components.phoenix_mcp.tools.energy import async_restore_energy_prefs
+from custom_components.phoenix_mcp.ws_dispatch import (
+    ALLOWED_WS_COMMANDS, WsCommandNotDispatchedError, WsDispatchError, validate_ws_payload,
+)
 
 # Patched AT the call site in tools.energy, never at ws_dispatch where it is
 # defined: the module imported the name at import time, so a mutation applied to
@@ -59,6 +63,10 @@ def _data() -> PhoenixData:
     return PhoenixData(
         store=MagicMock(), rate_limiter=MagicMock(), audit=MagicMock(), versions=VersionStore(),
     )
+
+
+def _json_error(content: dict) -> dict:
+    return json.loads(content["content"][0]["text"])
 
 
 def _access_key(**caps) -> AccessKeyRecord:
@@ -226,6 +234,92 @@ async def test_dispatch_failure_is_invalid_request_not_denied(hass: HomeAssistan
 
     assert outcome == "invalid_request"
     assert content.get("isError") is True
+
+
+def _failing_save(error: Exception | None, *, unreadable_after: bool = False):
+    """A dispatcher answering the read and failing the save, or the read that follows it."""
+    prefs = json.loads(json.dumps(PREFS))
+    saved = False
+
+    async def dispatch(_hass, command, payload=None, **kw):
+        nonlocal saved
+        if command == "energy/get_prefs":
+            if saved and unreadable_after:
+                raise WsDispatchError("timed out")
+            return json.loads(json.dumps(prefs))
+        if command == "energy/validate":
+            return {"energy_sources": [], "device_consumption": []}
+        saved = True
+        if error is not None:
+            raise error
+        return {}
+
+    return AsyncMock(side_effect=dispatch)
+
+
+def _energy_states(hass: HomeAssistant) -> None:
+    for entity_id in ("sensor.grid_import", "sensor.grid_export", "sensor.solar_production",
+                      "sensor.washer_energy", "sensor.washer_two"):
+        hass.states.async_set(entity_id, "1.0", {"unit_of_measurement": "kWh"})
+
+
+async def _edit_with(hass: HomeAssistant, dispatch: AsyncMock, data: PhoenixData) -> tuple[dict, str, str]:
+    _energy_states(hass)
+    with patch(_WS, dispatch):
+        return await _call_tool(
+            "edit_energy_config",
+            {"operation": "replace_statistic", "target": {"kind": "statistic", "id": "sensor.washer_energy"},
+             "changes": {"new_statistic": "sensor.washer_two"}},
+            _access_key(cap_energy_write="allow"), hass, data, "req-1", None,
+        )
+
+
+@pytest.mark.parametrize(("error", "unreadable"), [(WsDispatchError("timed out"), False), (None, True)],
+                         ids=["save_result_lost", "readback_lost"])
+async def test_an_energy_save_with_no_known_outcome_is_uncertain(hass: HomeAssistant, error, unreadable) -> None:
+    data = _data()
+    content, outcome, _ = await _edit_with(hass, _failing_save(error, unreadable_after=unreadable), data)
+    assert isinstance(content, UncertainOutcome) and outcome == "invalid_request", content
+    assert _json_error(content)["status"] == "unknown"
+    assert [record["phase"] for record in data.config_recovery.records()] == ["unknown"]
+
+
+async def test_an_energy_save_core_refused_is_a_plain_failure(hass: HomeAssistant) -> None:
+    data = _data()
+    content, outcome, _ = await _edit_with(hass, _failing_save(WsCommandNotDispatchedError("invalid")), data)
+    assert outcome == "invalid_request" and not isinstance(content, UncertainOutcome), content
+    assert [record["phase"] for record in data.config_recovery.records()] == ["not_applied"]
+
+
+async def test_an_energy_record_lost_after_dispatch_is_uncertain(hass: HomeAssistant) -> None:
+    data = _data()
+    real = data.config_recovery.mark
+
+    async def mark(rid, phase, **observed):
+        if phase != "dispatching":
+            raise RuntimeError("storage full")
+        await real(rid, phase, **observed)
+
+    with patch.object(data.config_recovery, "mark", mark):
+        content, _, _ = await _edit_with(hass, _failing_save(None), data)
+    assert isinstance(content, UncertainOutcome), content
+
+
+@pytest.mark.parametrize(("error", "unreadable", "phase", "uncertain"), [
+    (WsDispatchError("timed out"), False, "unknown", True),
+    (None, True, "unknown", True),
+    (WsCommandNotDispatchedError("invalid"), False, "not_applied", False),
+], ids=["save_result_lost", "readback_lost", "refused"])
+async def test_a_version_restore_of_energy_closes_by_what_is_known(
+    hass: HomeAssistant, error, unreadable, phase, uncertain,
+) -> None:
+    data = _data()
+    _energy_states(hass)
+    with patch(_WS, _failing_save(error, unreadable_after=unreadable)):
+        content, outcome, _ = await async_restore_energy_prefs(
+            {"energy_sources": [], "device_consumption": []}, _access_key(cap_energy_write="allow"), hass, data)
+    assert outcome == "invalid_request" and isinstance(content, UncertainOutcome) is uncertain, content
+    assert [record["phase"] for record in data.config_recovery.records()] == [phase]
 
 
 async def test_unexpected_shape_degrades_instead_of_returning_a_bare_value(

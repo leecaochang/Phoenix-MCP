@@ -113,6 +113,8 @@ Home Companion 金鑰會把對話交給 Home Companion 處理，並隱藏 **{{la
 
 問題和傳入的資料會傳送到你的決策提供者，每次傳送的請求都計入[請求限額](guide:window.settingsProviders#decision-request-limit)。依回答執行動作的自動化以 Home Assistant 的身分執行，不受 Phoenix 檢查。
 
+發起「評估」動作的人需要對 Decisions 實體有控制權限，即使動作未指定實體。不是由人發起的自動化不需要。每次呼叫和拒絕都會寫入[稽核日誌](guide:topic.logRecords#audit-entries)。
+
 ### {{label:settings.aiDecisionsEnableLabel}} {#ai-decisions-enable}
 
 開啟此實體。預設為關閉。只有在此開關開啟且已選擇存取金鑰時，實體才存在。

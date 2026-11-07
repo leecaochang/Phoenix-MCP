@@ -547,7 +547,7 @@ _ENTITY_TOOL_DEFS: list[dict] = [
             "unless stop_actions=false), script.turn_on (start, inputs in data.variables), "
             "script.turn_off (stop all runs), or scene.turn_on (activate). Named script services "
             "require the exact script entity target and wait for completion; their inputs go directly "
-            "in data. Use create/edit tools for configuration and set_entity for registry disabling. "
+            "in data. An entity named in a script or automation input needs the same access as a target. Use create/edit tools for configuration and set_entity for registry disabling. "
             "The result's targets reports how many entities were called, each one's state right after the call, "
             "and any that were unavailable, which Home Assistant skips without failing the call. Use "
             "find_available_actions with include_fields to learn a service's data fields first."
@@ -2308,11 +2308,14 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
         "requires": "esphome",
         "description": (
             "List the ESPHome device YAML files this access key can see, or read one. Credentials "
-            "(values under credential-named keys, including every list or mapping below one, and "
-            "anything matching the ESPHome secrets.yaml) are replaced with "
-            "__PHOENIX_REDACTED__<path>__ placeholders. Credentials inside a URL, lambda or other "
-            "value show as <redacted>, and so does a comment that names one. A file that does not "
-            "parse is refused, as its credentials cannot be located. Read-only: "
+            "(values under credential-named keys, including every list or mapping below one and any "
+            "key there that is not an option name, and anything matching the ESPHome secrets.yaml) "
+            "are replaced with __PHOENIX_REDACTED__<path>__ placeholders. A credential or "
+            "secrets.yaml value inside a URL, lambda or other value shows as <redacted>, and so does "
+            "a comment that names or quotes one. Entity IDs this key cannot read show as "
+            "<redacted-entity>. A file that does not parse is refused, as its credentials cannot be "
+            "located, and so is one whose device cannot be told apart from an adopted device this "
+            "key cannot reach. Files named like secrets are never readable. Read-only: "
             "the operator edits device YAML in the ESPHome dashboard. content_hash changes "
             "whenever the visible content does. defined_secrets lists the secret NAMES available "
             "for !secret references."
@@ -2334,7 +2337,7 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
     {
         "name": "search_esphome_yaml",
         "requires": "esphome",
-        "description": "Search authorized local ESPHome YAML, including nested folders. Credentials and inaccessible entity references are masked before matching. Returns line numbers and bounded context, with paging after scope filtering. incomplete means a file could not be parsed or a scan budget was reached. Results are read previews; use get_esphome_yaml to read a whole file.",
+        "description": "Search authorized local ESPHome YAML, including nested folders. Credentials and inaccessible entity references are masked before matching, as in get_esphome_yaml. Returns line numbers and bounded context, with paging after scope filtering. incomplete means a file could not be parsed or a scan budget was reached. Results are read previews; use get_esphome_yaml to read a whole file.",
         "cap": "cap_esphome_yaml",
         "inputSchema": {
             "type": "object",
@@ -3007,7 +3010,8 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
         "name": "create_scene",
         "description": (
             "Create a Home Assistant scene in scenes.yaml. Provide a config with 'name' and 'entities' "
-            "(a map of entity_id to desired state). Every referenced entity must be writable by this access key. "
+            "(a map of entity_id to desired state). Every referenced entity must be writable by this access key, "
+            "and a lock, cover, valve or alarm panel among them also needs physical control. "
             "Phoenix MCP assigns the scene id and returns the saved config."
             " Returns a receipt with config, write_success, reload_status and registration "
             "(status, observed entity_id and state_present). A registration timeout does not undo the saved write; retry a lookup, not the write."
@@ -3027,7 +3031,7 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
             "Replace the config of an existing scene by its scene id. The 'config' object ENTIRELY "
             "replaces the current scene, so call get_scene first and resend every member you want "
             "to keep; anything you omit is destroyed. Every referenced entity must be writable by "
-            "this access key."
+            "this access key, and a lock, cover, valve or alarm panel among them also needs physical control."
             " Returns a receipt with config, write_success, reload_status and registration "
             "(status, observed entity_id and state_present). A registration timeout does not undo the saved write; retry a lookup, not the write."
         ),

@@ -37,6 +37,10 @@
 
 设为确认时，包含其中一项的命令会等待你的审批。设为拒绝访问时，智能体无法控制它们。
 
+原始 Z-Wave 或 ISY 命令作用于整个设备。智能体需要对设备能操作的一切（例如锁、灯和开关）有 W，MESA 也会检查设备的每个实体。
+
+开启 `broadcast` 的 Z-Wave 组播会被拒绝，因为它会到达网络中的每个设备。
+
 通过 Assist 卫星设备播报消息或在其上发起对话需要广播。MESA 在能力和权限树之后最后检查每个命令。
 
 允许它的能力：[{{label:caps.cap_physical_control.label}}](guide:window.capabilities#physical-control)、[{{label:caps.cap_broadcast.label}}](guide:window.capabilities#broadcast)
@@ -55,12 +59,18 @@
 - `tts.speak` 还需要对其指定的每个音箱有 W。普通播放只需要 W。
 - ESPHome 设备操作只需要设备上的 W。MESA 不检查它们，也不检查重新加载或重启。
 - 搜索或列出 Music Assistant 音乐库需要服务响应数据，以及某个 Music Assistant 实体（例如音箱）上的 R。这些操作不会播放任何内容，所以 MESA 也不检查它们。
+- `update.install` 必须在设备的每个实体上通过 MESA。在 ESPHome 设备上还需要 ESPHome 固件刷写。
+- 在脚本或自动化的输入中指定的实体需要与目标相同的访问权限，MESA 也会检查它。只要有一个不满足，就不会运行。
+- 任何形如实体 ID 或 32 字符注册表 ID 的输入都算作指定了实体。
+- 选择设备、区域、楼层或标签的输入会被拒绝。`all` 也会被拒绝，除非脚本把该输入声明为普通数据。请逐个指定实体。
+
+需要多个能力的操作遵循最严格的那个。拒绝访问会拒绝它，确认会让它等待你的审批。
 
 未声明目标的操作（例如 `shell_command`、`rest_command` 或 `python_script`）对每个密钥都会被拒绝，包括直通密钥。智能体指定什么目标都一样，即使是该操作所属域的实体。没有目标的其他操作也会被拒绝。
 
 自定义操作由 Home Assistant 在其实体上运行，或其注册的架构列出 `entity_id` 时，算作已声明目标。
 
-日历更改和 `homeassistant.reload_config_entry` 同样会被拒绝，因为它们有自己的工具。运行超过 30 秒的操作会被报告为可能未完成。
+日历更改、`homeassistant.reload_config_entry` 和 `todo.remove_completed_items` 同样会被拒绝，因为它们有自己的工具。运行超过 30 秒的操作会被报告为可能未完成。
 
 允许它的能力：[{{label:caps.cap_restart.label}}](guide:window.capabilities#restart)、[{{label:caps.cap_yaml_edit.label}}](guide:window.capabilities#yaml-edit)、[{{label:caps.cap_service_response.label}}](guide:window.capabilities#service-response)、[{{label:caps.cap_notify.label}}](guide:window.capabilities#notify)、[{{label:caps.cap_search.label}}](guide:window.capabilities#search)（用于预览）
 
@@ -68,7 +78,7 @@
 
 智能体可以添加、更改和移除待办事项，也可以清除已完成的事项，这只需要列表上的 W。移除事项是永久性的：Phoenix 不保留副本，因此[无法还原](guide:topic.configurationHistory#not-recorded)。结果会列出移除了哪些事项。
 
-如果你批准移除，Phoenix 会先重新读取列表。在请求等待期间发生变化的事项会保留，结果会说明是哪些。
+如果你批准通过 Phoenix 待办工具请求的移除，Phoenix 会先重新读取列表。在请求等待期间发生变化的事项会保留，结果会说明是哪些。原始 `todo.remove_item` 操作会移除它指定的事项。
 
 智能体可以创建、更改和删除日历事件，这还需要日历写入。MESA 会检查待办和日历更改。每次日历更改都会留下回执，智能体之后可以查看。
 
@@ -110,16 +120,24 @@
 
 智能体可以读取、创建、编辑和删除 Home Assistant 场景编辑器中的场景。场景中的每个实体都需要权限树中的 W，即使只是读取场景。MESA 不检查场景更改。
 
-允许它的能力：[{{label:caps.cap_scene_write.label}}](guide:window.capabilities#scene-write)
+场景中的组也需要 W。如果密钥被拒绝访问组的某个成员，或 Phoenix 无法读取成员，组就不符合要求。
+
+创建或编辑包含锁、警报、卷帘或阀门的场景（直接包含或通过组包含）还需要物理控制。设为拒绝访问时，更改会被拒绝。设为确认时，它会等待你的审批，并把它们列为 `physical_entities`。
+
+允许它的能力：[{{label:caps.cap_scene_write.label}}](guide:window.capabilities#scene-write)、[{{label:caps.cap_physical_control.label}}](guide:window.capabilities#physical-control)
 
 ## 辅助元素 {#helpers}
 
 智能体可以创建、编辑和删除辅助元素。包括开关、数字、文本、列表、日期、按钮、计数器、定时器、日程、地点、标签和人员。它们还可以管理通过集成设置的辅助元素，例如模板，并更改其设置。
 
 - MESA 会检查辅助元素更改。MESA 确认会请求自己的审批，即使管理辅助元素为允许。
-- 只有地点、标签和人员遵循权限树。其他辅助元素仅受能力和 MESA 限制。
+- 只有地点、标签和人员遵循权限树。其他辅助元素仅受能力和 MESA 限制，但下面的设置规则除外。
 - 删除模板辅助元素还需要集成管理。
 - 在 YAML 中定义的辅助元素无法更改。
+
+读取或更改通过集成设置的辅助元素的设置，需要对它拥有的每个实体有 R。否则该辅助元素看起来就像不存在。不拥有任何实体的辅助元素也一样，除非密钥是直通密钥。
+
+提到对密钥隐藏内容的设置显示为 `<redacted>`，智能体不能把它发回。凭据也这样显示。提到隐藏实体或 Phoenix 无法检查的模板正文会被整个隐藏，对直通密钥也一样。
 
 允许它的能力：[{{label:caps.cap_helper_write.label}}](guide:window.capabilities#helper-write)、[{{label:caps.cap_integration_write.label}}](guide:window.capabilities#integration-write)
 
@@ -192,6 +210,12 @@ YAML 配置让智能体读取你的 YAML 文件，名称中含有 secret 的文�
 智能体可以读取和搜索 ESPHome 设备配置，密码、密钥、所有请求头的值、网址中的凭据以及提到它们的注释都会被遮蔽。
 
 使用 ESPHome Device Builder 加载项时，它们还可以校验、编译、读取设备日志、分析内存并检查连接。没有该加载项时，只能读取和搜索。
+
+secrets.yaml 中的值无论出现在哪里都会被遮蔽，即使在网址或注释中。密钥无法读取的实体 ID 显示为 `<redacted-entity>`。任何智能体都不能读取或安装名称含 secret 的文件。
+
+Phoenix 根据文件名、文件声明的设备名称以及任何 `use_address` 或静态 IP 确定文件所属的设备。仅限部分设备的密钥只能读取这些设备的文件。声明了自己的名称且不匹配任何设备的文件只受能力限制。
+
+Phoenix 无法确定所属设备的文件（例如共享包或已删除的文件）需要能访问每个 ESPHome 设备的密钥。
 
 编译、清理和内存分析需要设备上的 W。安装固件需要 ESPHome 固件刷写、ESPHome 设备 YAML 和设备上的 W，并且 MESA 会检查它。
 

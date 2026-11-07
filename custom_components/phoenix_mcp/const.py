@@ -333,6 +333,9 @@ BUILTIN_CARD_TYPES = frozenset({
 # speaker hears that the provider is too slow, instead of waiting out the
 # silent-stream bound. A healthy provider starts its stream within seconds.
 VOICE_FIRST_REPLY_SECONDS = 30
+# The most of one reply a speaker hears, about ten minutes of speech. Past it nobody is
+# listening, and Markdown stripping runs on the event loop for each turn.
+VOICE_MAX_SPOKEN_CHARS = 8000
 
 # Server-owned conversation behavior values. These are persisted settings rather
 # than provider options: every provider receives the same prompt contract, and
@@ -903,17 +906,37 @@ PHYSICAL_COMMAND_SERVICES = frozenset({
     "zwave_js/set_config_parameter",
     "zwave_js/set_value",
 })
+# The installer of an update entity: firmware reaches every entity of the device, whichever
+# integration owns it, so MESA judges them all. An ESPHome one also needs cap_esphome_flash.
+UPDATE_INSTALL_SERVICE = "update/install"
+# Services whose effect belongs to the device, not the entity they name. MESA judges every
+# entity of the device and its children, and the call runs on all of them or not at all.
+WHOLE_DEVICE_SERVICES = PHYSICAL_COMMAND_SERVICES | {UPDATE_INSTALL_SERVICE}
+# What a raw command can operate on a device, so a key sending one needs write access to each.
+DEVICE_ACTUATOR_DOMAINS = PHYSICAL_GATE_DOMAINS | {
+    "climate", "fan", "humidifier", "lawn_mower", "light", "media_player", "remote", "siren",
+    "switch", "vacuum", "water_heater",
+}
+# Data flags that send a call past its targets, which Phoenix resolved and judged. A broadcast
+# addresses every node of the network. Read from every core services.yaml.
+REACH_WIDENING_FLAGS = MappingProxyType({"zwave_js/multicast_set_value": ("broadcast",)})
+# A caller's data that HA hands to the script or automation a call runs, which can read any
+# variable whether or not a field declares it. A script run by name takes its data this way.
+SCRIPT_INPUT_SERVICES = frozenset({"automation/trigger", "script/turn_on"})
+SCRIPT_INPUT_FIELD = "variables"
 # Services that take an entity and cannot actuate it, or do nothing on physical and notify
 # domains, so such a target adds no capability. A deliberate list: an unknown service on a
 # lock stays gated, and readers that return door codes (schlage.get_codes,
 # zwave_js.get_lock_usercode) stay out of it. homeassistant.turn_on and turn_off call the
 # target domain's own turn_on or turn_off, which none of these domains has; toggle is not
-# here because cover and valve have one.
+# here because cover and valve have one. recorder.purge_entities keeps cap_registry_write.
 NON_ACTUATING_SERVICES = frozenset({
     "homeassistant/turn_off",
     "homeassistant/turn_on",
     "homeassistant/update_entity",
+    "homekit/reset_accessory",
     "logbook/log",
+    "recorder/purge_entities",
     "zwave_js/ping",
     "zwave_js/refresh_notifications",
     "zwave_js/refresh_value",

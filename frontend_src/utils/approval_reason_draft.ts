@@ -76,7 +76,13 @@ export function clearReasonDraft(approvalId: string): void {
   writeAll(drafts);
 }
 
-/** Drop every draft in this browser, whoever wrote it. */
-export function clearAllReasonDrafts(): void {
-  try { localStorage.removeItem(LS_KEY); } catch { /* storage blocked */ }
+/** Drop every draft in this browser, whoever wrote it. True when there were any. */
+export function clearAllReasonDrafts(): boolean {
+  try {
+    if (localStorage.getItem(LS_KEY) === null) return false;
+    localStorage.removeItem(LS_KEY);
+    return true;
+  } catch {
+    return false; // storage blocked
+  }
 }

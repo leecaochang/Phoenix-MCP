@@ -167,13 +167,26 @@ function splitTableRow(line: string): string[] {
   if (s.endsWith("|")) s = s.slice(0, -1);
   return s.split("|").map((c) => c.trim());
 }
+// A table's cost is its cells, not its source: one pipe in a header adds a column
+// to every row, so these keep a short degenerate reply from filling the page. Past
+// either limit nobody could read it as a table anyway.
+const MAX_TABLE_COLUMNS = 64;
+const MAX_TABLE_CELLS = 10_000;
+/** The cells a row draws: a short one stops at its own end, so a row never costs more than its source. */
+function rowCells(row: string[], header: string[]): number {
+  return Math.min(row.length, header.length);
+}
+function tableFits(header: string[], rows: string[][]): boolean {
+  if (header.length > MAX_TABLE_COLUMNS) return false;
+  return rows.reduce((cells, row) => cells + rowCells(row, header), header.length) <= MAX_TABLE_CELLS;
+}
 function renderTable(header: string[], rows: string[][], opts: MarkdownOptions): string {
   const names = header.map((h) => inline(esc(h), opts));
   const th = names.map((h) => `<th>${h}</th>`).join("");
   const body = rows.map((r) => {
     const cells: string[] = [];
-    for (let i = 0; i < header.length; i++) {
-      const cell = inline(esc(r[i] ?? ""), opts);
+    for (let i = 0; i < rowCells(r, header); i++) {
+      const cell = inline(esc(r[i]), opts);
       const labeled = opts.stackTables && i > 0 && cell;
       cells.push(labeled ? `<td><span class="phx-cell-label">${names[i]}</span><span>${cell}</span></td>` : `<td>${cell}</td>`);
     }
@@ -218,7 +231,9 @@ export function renderMarkdown(src: string, opts: MarkdownOptions = {}): string 
         if (/^\s*$/.test(r) || !r.includes("|")) break;
         rows.push(splitTableRow(r));
       }
-      out.push(renderTable(header, rows, opts));
+      out.push(tableFits(header, rows)
+        ? renderTable(header, rows, opts)
+        : `<pre><code>${esc(lines.slice(li, j).join("\n"))}</code></pre>`);
       li = j - 1;
       continue;
     }

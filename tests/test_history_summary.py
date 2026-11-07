@@ -227,6 +227,21 @@ async def test_attribute_totals_follow_attribute_only_updates(recorder_mock, has
     assert body["complete"] is True
 
 
+async def test_an_attribute_summary_stays_within_the_result_bound(recorder_mock, hass: HomeAssistant) -> None:
+    """A label is a whole attribute value, so the states that fit are listed and the rest are combined."""
+    _anchor(hass)
+    values = 12
+    for index in range(values):
+        _set(hass, "sensor.forecast", "on", 60 * (index + 1), {"forecast": f"{index:02d}" + "x" * 14_000})
+    await async_wait_recording_done(hass)
+    body = await _summary(hass, "sensor.forecast", 0, 3600, attribute="forecast")
+    assert json_size(json.dumps(body)) <= TOOL_RESULT_MAX_BYTES
+    assert body["attribute"] == "forecast"
+    assert body["states"] and body["other_states"]["count"] > 0
+    assert len(body["states"]) + body["other_states"]["count"] >= values - 1
+    assert sum("distinct states" in warning for warning in body["warnings"]) == 1
+
+
 async def test_attribute_totals_are_the_same_across_internal_pages(recorder_mock, hass: HomeAssistant) -> None:
     _anchor(hass)
     _hvac(hass)

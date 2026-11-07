@@ -35,6 +35,8 @@ Agents turn things on and off, set lights, fans, climate, covers and volume, con
 
 Locks, alarms, covers and valves also need Physical control. So does any other action that reaches one, such as an integration's own unlock action, and a raw device command such as `zwave_js.set_value`, whichever entity it names. On Confirm, a command that includes one waits for your approval. On Deny, the agent can't control them.
 
+A raw Z-Wave or ISY command works on the whole device. The agent needs Write on everything the device can operate, such as its locks, lights and switches, and MESA checks every entity of the device. A Z-Wave multicast with `broadcast` on is refused, because it reaches every device on the network.
+
 Announcing a message through Assist satellites, or starting a conversation on one, needs Broadcast. MESA checks every command last, after the capability and the tree.
 
 Allowed by: [{{label:caps.cap_physical_control.label}}](guide:window.capabilities#physical-control), [{{label:caps.cap_broadcast.label}}](guide:window.capabilities#broadcast)
@@ -52,12 +54,18 @@ Agents can also run Home Assistant actions on targets they can write, and previe
 - Announcements need Broadcast: `assist_satellite.announce`, `start_conversation` and `ask_question`, `music_assistant.play_announcement`, `media_player.play_media` with `announce`, and `tts.speak`. `tts.speak` also needs Write on every speaker it names. Ordinary playback needs only Write.
 - ESPHome device actions need only Write on the device. MESA doesn't check them, and doesn't check reloads or restarts either.
 - Searching or listing the Music Assistant library needs Service response data and Read on a Music Assistant entity, such as a speaker. Nothing plays, so MESA doesn't check these either.
+- `update.install` must pass MESA on every entity of the device. On an ESPHome device it also needs ESPHome firmware flashing.
+- An entity named in a script's or automation's inputs needs the same access as a target, and MESA checks it. If one falls short, nothing runs.
+- Any input shaped like an entity ID or a 32-character registry ID counts as naming an entity.
+- An input that selects a device, area, floor or label is refused, and so is `all` unless the script declares that input as plain data. Name each entity instead.
+
+An action that needs several capabilities follows the strictest. Deny refuses it, and Confirm holds it for your approval.
 
 An action that doesn't declare a target, such as `shell_command`, `rest_command` or `python_script`, is refused for every key, pass-through included. That holds whatever target the agent names, even an entity of the action's own domain. Other actions without a target are refused too.
 
 A custom action declares a target when Home Assistant runs it on its entities, or when its registered schema names `entity_id`.
 
-Calendar changes and `homeassistant.reload_config_entry` are refused as well, because they have their own tools. An action still running after 30 seconds is reported as possibly incomplete.
+Calendar changes, `homeassistant.reload_config_entry` and `todo.remove_completed_items` are refused as well, because they have their own tools. An action still running after 30 seconds is reported as possibly incomplete.
 
 Allowed by: [{{label:caps.cap_restart.label}}](guide:window.capabilities#restart), [{{label:caps.cap_yaml_edit.label}}](guide:window.capabilities#yaml-edit), [{{label:caps.cap_service_response.label}}](guide:window.capabilities#service-response), [{{label:caps.cap_notify.label}}](guide:window.capabilities#notify), [{{label:caps.cap_search.label}}](guide:window.capabilities#search) for previews
 
@@ -65,7 +73,7 @@ Allowed by: [{{label:caps.cap_restart.label}}](guide:window.capabilities#restart
 
 Agents add, change and remove to-do items and clear completed ones, which needs only Write on the list. Removing an item is permanent: Phoenix keeps no copy, so you [can't restore it](guide:topic.configurationHistory#not-recorded). The result names what went.
 
-If you approve a removal, Phoenix reads the list again first. An item that changed while the request waited stays, and the result says which.
+If you approve a removal requested through Phoenix's to-do tool, Phoenix reads the list again first. An item that changed while the request waited stays, and the result says which. A raw `todo.remove_item` action removes what it names.
 
 Agents create, change and delete calendar events, which also needs Calendar write. MESA checks both to-do and calendar changes. Each calendar change leaves a receipt the agent can check later.
 
@@ -107,16 +115,24 @@ Allowed by: [{{label:caps.cap_automation_write.label}}](guide:window.capabilitie
 
 Agents read, create, edit and delete scenes in Home Assistant's scene editor. Every entity in a scene needs Write in the tree, even just to read the scene. MESA doesn't check scene changes.
 
-Allowed by: [{{label:caps.cap_scene_write.label}}](guide:window.capabilities#scene-write)
+A group in a scene needs Write too, and it fails this check if the key is denied one of its members, or Phoenix can't read them.
+
+Creating or editing a scene with a lock, alarm, cover or valve in it, directly or through a group, also needs Physical control. On Deny, the change is refused. On Confirm, it waits for your approval and lists them as `physical_entities`.
+
+Allowed by: [{{label:caps.cap_scene_write.label}}](guide:window.capabilities#scene-write), [{{label:caps.cap_physical_control.label}}](guide:window.capabilities#physical-control)
 
 ## Helpers {#helpers}
 
 Agents create, edit and delete helpers: toggles, numbers, text, lists, dates, buttons, counters, timers, schedules, zones, tags and people. They also manage helpers set up through an integration, such as Template, and change their settings.
 
 - MESA checks helper changes. A MESA Confirm asks for its own approval, even when Manage helpers is Allow.
-- Only zones, tags and people follow the tree. Other helpers are limited by the capability and MESA alone.
+- Only zones, tags and people follow the tree. Other helpers are limited by the capability and MESA alone, apart from the settings rule below.
 - Deleting a Template helper also needs Integration management.
 - Helpers defined in YAML can't be changed.
+
+Reading or changing the settings of a helper set up through an integration needs Read on every entity the helper owns. Otherwise the helper looks as if it doesn't exist. So does a helper that owns no entity, unless the key is pass-through.
+
+Settings that name something hidden from the key show as `<redacted>`, and the agent can't send them back. Credentials show the same way. A Template body that names a hidden entity, or that Phoenix can't check, is hidden whole, for pass-through keys too.
 
 Allowed by: [{{label:caps.cap_helper_write.label}}](guide:window.capabilities#helper-write), [{{label:caps.cap_integration_write.label}}](guide:window.capabilities#integration-write)
 
@@ -187,6 +203,12 @@ Allowed by: [{{label:caps.cap_filesystem.label}}](guide:window.capabilities#file
 ## ESPHome {#esphome}
 
 Agents read and search ESPHome device configuration, with passwords, keys, every request header value, credentials in web addresses and comments that mention them masked. With the ESPHome Device Builder add-on, they can also validate, compile, read device logs, analyse memory and check connections. Without the add-on, only reading and searching remain.
+
+A value from secrets.yaml is masked wherever it appears, even inside a web address or a comment. Entity IDs the key can't read show as `<redacted-entity>`. No agent can read or install a file with secret in its name.
+
+Phoenix works out a file's device from the file name, the device name it states and any `use_address` or static IP. A key limited to some devices reads only their files. A file that states its own name and matches no device follows the capability alone.
+
+A file whose device Phoenix can't tell, such as a shared package or a deleted file, needs a key that reaches every ESPHome device.
 
 Compiling, cleaning and memory analysis need Write on the device. Installing firmware needs ESPHome firmware flashing, ESPHome device YAML and Write on the device, and MESA checks it.
 
