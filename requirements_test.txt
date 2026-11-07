@@ -64,7 +64,7 @@ pyflakes==4.0.3
 
 # Standalone type checker, same rationale as pyflakes above (not pulled in by
 # the test package). Config lives in pyproject.toml.
-mypy==2.4.0
+mypy==2.4.1
 
 # Locale-aware routing replies; matches the integration manifest.
 Babel==2.18.0
