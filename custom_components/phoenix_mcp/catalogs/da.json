@@ -963,7 +963,8 @@
       "todoItems": "Elementer, der fjernes",
       "todoRemovalWarning": "Fjernelse af opgaveelementer er permanent. Phoenix gemmer ingen kopi, så de kan ikke gendannes.",
       "todoStatusCompleted": "Afsluttet",
-      "todoStatusNeedsAction": "Ikke afsluttet"
+      "todoStatusNeedsAction": "Ikke afsluttet",
+      "reviewedActions": "Skal gennemgås, fordi det tilføjer: {actions}"
     },
     "attention": {
       "actionTitle": "Kontrollér en tidligere handling",
@@ -1131,8 +1132,8 @@
         "label": "Administrér entitetsregister"
       },
       "cap_restart": {
-        "description": "Genstart eller stop Home Assistant, hvilket kortvarigt tager alle enheder offline.",
-        "label": "Genstart eller stop Home Assistant"
+        "description": "Genstart eller stop Home Assistant, og installér opdateringer. Hver opdatering kræver godkendelse.",
+        "label": "Genstart Home Assistant eller installér opdateringer"
       },
       "cap_scene_write": {
         "description": "Læs, opret, redigér og slet scener. Adgangsnøglen skal kunne skrive til alle entiteter i en scene.",
@@ -2021,7 +2022,7 @@
         "label": "ESPHome-enheder"
       },
       "home_admin": {
-        "description": "Administrerer det meste af hjemmet. Genstarter, YAML-redigering samt låse, alarmer, gardiner/porte og ventiler kræver godkendelse.",
+        "description": "Administrerer det meste af hjemmet. Genstarter, YAML-konfiguration samt låse, alarmer, gardiner/porte og ventiler kræver godkendelse.",
         "label": "Hjemmeadministrator"
       },
       "home_companion": {

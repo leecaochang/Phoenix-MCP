@@ -78,3 +78,20 @@ describe("service preview values", () => {
     expect(screen.getByText("Careful")).toBeTruthy();
   });
 });
+
+describe("reviewed actions", () => {
+  const change = (reviewed_actions?: string[]) => ({
+    ...record({}), diff: { kind: "config_diff", before: null, after: "alias: A", reviewed_actions },
+  }) as unknown as Parameters<typeof ApprovalChange>[0]["record"];
+
+  it("says what sent the change to a person", () => {
+    const { container } = render(<ApprovalChange record={change(["shell_command.wipe", "hassio.host_shutdown"])} />);
+    expect(container.textContent).toContain("Needs your review because it adds: shell_command.wipe");
+    expect(container.textContent).toContain("hassio.host_shutdown");
+  });
+
+  it("says nothing on an ordinary change", () => {
+    const { container } = render(<ApprovalChange record={change()} />);
+    expect(container.textContent).not.toContain("Needs your review");
+  });
+});

@@ -235,7 +235,7 @@ AGENT_CHAT_DEFERRED_TOOL_GROUPS: Mapping[str, tuple[tuple[str, ...], tuple[str, 
     "integrations": (("cap_integration_write", "cap_integration_reconfigure"), (),
                      "Adding, removing, reloading and reconfiguring integrations."),
     "registry_writes": (("cap_registry_write",), (), "Renaming, moving, enabling, disabling and removing registry entries."),
-    "files_and_backups": (("cap_backup", "cap_filesystem", "cap_yaml_edit"), (), "Configuration files, YAML edits and backups."),
+    "files_and_backups": (("cap_backup", "cap_filesystem", "cap_yaml_edit"), (), "Reading configuration files and YAML, and backups."),
     "helpers": (("cap_helper_write",), (), "Creating, editing and deleting helpers."),
     "mesa": ((), ("mesa_",), "MESA device-safety profiles, their explanations and control leases."),
 })

@@ -6,7 +6,8 @@
       }
     },
     "abort": {
-      "already_configured": "Phoenix MCP ist bereits konfiguriert."
+      "already_configured": "Phoenix MCP ist bereits konfiguriert.",
+      "single_instance_allowed": "Phoenix MCP ist bereits konfiguriert."
     },
     "create_entry": {
       "default": "Verwenden Sie das Phoenix-MCP-Panel in der Seitenleiste, um Ihre Zugriffsschlüssel zu verwalten. Das Panel wird nur Administratoren angezeigt."

@@ -1,7 +1,8 @@
 {
   "config": {
     "abort": {
-      "already_configured": "Phoenix MCP on jo määritetty."
+      "already_configured": "Phoenix MCP on jo määritetty.",
+      "single_instance_allowed": "Phoenix MCP on jo määritetty."
     },
     "create_entry": {
       "default": "Hallitse käyttöavaimiasi sivupalkin Phoenix MCP -paneelissa. Paneeli näkyy vain ylläpitäjille."

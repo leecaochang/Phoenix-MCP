@@ -824,7 +824,7 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
         "name": "create_automation",
         "description": (
             "Create a new Home Assistant automation in automations.yaml, which configuration.yaml must load "
-            "with a plain !include; any other layout is refused. Do not include an 'id' (Phoenix MCP "
+            "with a plain !include; any other layout is refused. Adding a call to shell_command, python_script, pyscript, hassio or rest_command, a restart, stop or update.install, a templated action name, or a blueprint always needs an administrator's approval, even with this capability on Allow. Do not include an 'id' (Phoenix MCP "
             "assigns and returns it unless automation_id is supplied). Creation refuses an occupied ID, "
             "even with the same alias; use get_automation then edit_automation for replacement. "
             "HA validates before saving; invalid configs are rejected with an "
@@ -847,7 +847,7 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
             "Replace the configuration of an existing Home Assistant automation. "
             "The 'config' object ENTIRELY replaces the current automation configuration, so call "
             "get_automation first and resend every part you want to keep; anything you omit is "
-            "destroyed. "
+            "destroyed. Only entries written inline in automations.yaml can be changed; one defined in hand-written YAML, an included file or a package is refused. A config holding !secret or !include text cannot be written. Adding a call to shell_command, python_script, pyscript, hassio or rest_command, a restart, stop or update.install, a templated action name, or a blueprint always needs an administrator's approval, even with this capability on Allow. "
             "The automation_id is preserved - do not include it in 'config'. "
             "Adding, removing, or changing alias requires the current content_hash as expected_hash. "
             "Same-alias edits may omit the hash. "
@@ -870,7 +870,7 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
     {
         "name": "delete_automation",
         "description": (
-            "Delete a Home Assistant automation from the YAML config. The deletion is recorded in the change "
+            "Delete a Home Assistant automation from automations.yaml; one defined in hand-written YAML, an included file or a package is refused. The deletion is recorded in the change "
             "history, where an administrator can usually restore it. "
             "Use search_entities with domain 'automation' to find automations; an automation's id is in its 'id' state attribute and is returned by create_automation. "
             "Phoenix-created automations have IDs prefixed with 'phoenix_mcp_'."
@@ -917,7 +917,7 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
     {
         "name": "create_script",
         "description": (
-            "Create a new Home Assistant script in the YAML config. Provide a unique script_id slug (e.g. "
+            "Create a new Home Assistant script in scripts.yaml, which configuration.yaml must load with a plain !include; any other layout is refused. Adding a call to shell_command, python_script, pyscript, hassio or rest_command, a restart, stop or update.install, a templated action name, or a blueprint always needs an administrator's approval, even with this capability on Allow. Provide a unique script_id slug (e.g. "
             "'morning_routine'). HA validates before saving; invalid "
             "configs are rejected with an error. To build from a blueprint instead, pass 'use_blueprint' "
             "({'path': ..., 'input': {...}}) in place of 'sequence'; see list_blueprints."
@@ -940,7 +940,7 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
             "Replace the configuration of an existing Home Assistant script. "
             "The 'config' object ENTIRELY replaces the current script configuration, so call "
             "get_script first and resend every part you want to keep; anything you omit is "
-            "destroyed. "
+            "destroyed. Only entries written inline in scripts.yaml can be changed; one defined in hand-written YAML, an included file or a package is refused. A config holding !secret or !include text cannot be written. Adding a call to shell_command, python_script, pyscript, hassio or rest_command, a restart, stop or update.install, a templated action name, or a blueprint always needs an administrator's approval, even with this capability on Allow. "
             "Returns the updated configuration. "
             "The config is validated by HA before saving - invalid configs are rejected with an error. "
             "Use the script_id storage key from list_scripts; a renamed entity_id may have a different suffix."
@@ -961,7 +961,7 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
     {
         "name": "delete_script",
         "description": (
-            "Delete a Home Assistant script from the YAML config. The deletion is recorded in the change "
+            "Delete a Home Assistant script from scripts.yaml; one defined in hand-written YAML, an included file or a package is refused. The deletion is recorded in the change "
             "history, where an administrator can usually restore it. "
             "Use the script_id storage key from list_scripts; a renamed entity_id may have a different suffix."
         ),
@@ -3009,7 +3009,7 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
     {
         "name": "create_scene",
         "description": (
-            "Create a Home Assistant scene in scenes.yaml. Provide a config with 'name' and 'entities' "
+            "Create a Home Assistant scene in scenes.yaml, which configuration.yaml must load with a plain !include; any other layout is refused. Provide a config with 'name' and 'entities' "
             "(a map of entity_id to desired state). Every referenced entity must be writable by this access key, "
             "and a lock, cover, valve or alarm panel among them also needs physical control. "
             "Phoenix MCP assigns the scene id and returns the saved config."
@@ -3028,7 +3028,7 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
     {
         "name": "edit_scene",
         "description": (
-            "Replace the config of an existing scene by its scene id. The 'config' object ENTIRELY "
+            "Replace the config of an existing scene by its scene id. Only entries written inline in scenes.yaml can be changed; one defined in hand-written YAML, an included file or a package is refused. The 'config' object ENTIRELY "
             "replaces the current scene, so call get_scene first and resend every member you want "
             "to keep; anything you omit is destroyed. Every referenced entity must be writable by "
             "this access key, and a lock, cover, valve or alarm panel among them also needs physical control."
@@ -3048,7 +3048,7 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
     },
     {
         "name": "delete_scene",
-        "description": "Permanently delete a scene from scenes.yaml by its scene id.",
+        "description": "Delete a scene from scenes.yaml by its scene id; one defined in hand-written YAML, an included file or a package is refused. The deletion is recorded in the change history, where an administrator can usually restore it.",
         "cap": "cap_scene_write",
         "inputSchema": {
             "type": "object",

@@ -1,7 +1,8 @@
 {
   "config": {
     "abort": {
-      "already_configured": "Phoenix MCP가 이미 설정되어 있습니다."
+      "already_configured": "Phoenix MCP가 이미 설정되어 있습니다.",
+      "single_instance_allowed": "Phoenix MCP가 이미 설정되어 있습니다."
     },
     "create_entry": {
       "default": "사이드바의 Phoenix MCP 패널에서 액세스 키를 관리하세요. 이 패널은 관리자에게만 표시됩니다."

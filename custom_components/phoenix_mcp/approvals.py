@@ -752,6 +752,7 @@ async def async_evaluate_capability(
     diff: DiffSource = None,
     client_ip: str | None = None,
     target_entities: list[str] | None = None,
+    review: bool = False,
 ) -> CapabilityResult:
     """Resolve a capability check into Allow, Deny or Pending(approval).
 
@@ -760,7 +761,7 @@ async def async_evaluate_capability(
     """
 
     mode = effective_cap(access_key, cap_name)
-    if mode == CAP_ALLOW:
+    if mode == CAP_ALLOW and not review:
         return CapabilityResult(CAP_ALLOW)
     if mode == CAP_DENY:
         return CapabilityResult(CAP_DENY)

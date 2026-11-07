@@ -1,7 +1,8 @@
 {
   "config": {
     "abort": {
-      "already_configured": "Phoenix MCP er allerede konfigurert."
+      "already_configured": "Phoenix MCP er allerede konfigurert.",
+      "single_instance_allowed": "Phoenix MCP er allerede konfigurert."
     },
     "create_entry": {
       "default": "Bruk Phoenix MCP-panelet i sidepanelet til å administrere tilgangsnøklene dine. Panelet vises bare for administratorer."

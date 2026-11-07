@@ -20,7 +20,7 @@ from ..const import (
     CAP_CONFIRM, CAP_DENY, DUAL_GATE_SERVICES, HIGH_RISK_DOMAINS, MUSIC_ASSISTANT_LIBRARY_SERVICES,
     NO_TARGET_SERVICES, PRIMARY_ENTITY_DOMAINS, PROXY_TIMEOUT_SECONDS, SERVICE_FAILURE_TEXT_MAX,
     SERVICE_RESULT_STATES_MAX, APPROVAL_TARGETS_KEY,
-    TTS_SPEAK_PLAYER_FIELD, TTS_SPEAK_SERVICE,
+    TTS_SPEAK_PLAYER_FIELD, TTS_SPEAK_SERVICE, UPDATE_INSTALL_SERVICE,
 )
 from ..data import PhoenixData
 from ..helpers import (
@@ -169,8 +169,10 @@ async def _tool_call_service(
         bind_targets = not targetless and not denied
         if bind_targets and not targets:
             return _tool_error("Forbidden."), "denied", "call_service"
+        # An update replaces running code, so a person reviews it whatever the mode.
+        review = service_key == UPDATE_INSTALL_SERVICE
         # An approval that cannot verify its targets at execution could never run.
-        if (bind_targets and effective_cap(access_key, required_cap) == CAP_CONFIRM
+        if (bind_targets and (review or effective_cap(access_key, required_cap) == CAP_CONFIRM)
                 and target_binding(reach.entities, hass)["fingerprint"] is None):
             groups = [target for target in targets if group_member_ids(target, hass)]
             refusal = unreadable_group_error(groups) if groups else "Forbidden."
@@ -179,7 +181,7 @@ async def _tool_call_service(
             required_cap, access_key, hass, data,
             tool_name="call_service", args=args, request_id=request_id,
             client_ip=client_ip, diff=lambda: _build_diff_call_service(args, access_key, hass),
-            target_entities=reach.entities if bind_targets else None,
+            target_entities=reach.entities if bind_targets else None, review=review,
         )
         if blocked is not None:
             return blocked

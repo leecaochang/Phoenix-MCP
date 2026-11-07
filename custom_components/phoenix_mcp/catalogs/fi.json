@@ -963,7 +963,8 @@
       "todoItems": "Poistettavat kohteet",
       "todoRemovalWarning": "Tehtävien poistaminen on pysyvää. Phoenix ei säilytä niistä kopiota, joten niitä ei voi palauttaa.",
       "todoStatusCompleted": "Valmis",
-      "todoStatusNeedsAction": "Ei valmis"
+      "todoStatusNeedsAction": "Ei valmis",
+      "reviewedActions": "Vaatii tarkistuksen, koska se lisää: {actions}"
     },
     "attention": {
       "actionTitle": "Tarkista aiempi toiminto",
@@ -1131,8 +1132,8 @@
         "label": "Hallitse entiteettirekisteriä"
       },
       "cap_restart": {
-        "description": "Käynnistä Home Assistant uudelleen tai pysäytä se, jolloin kaikki laitteet ovat hetken poissa käytöstä.",
-        "label": "Käynnistä tai pysäytä Home Assistant"
+        "description": "Käynnistä Home Assistant uudelleen tai pysäytä se ja asenna päivityksiä. Jokainen päivitys vaatii hyväksynnän.",
+        "label": "Käynnistä Home Assistant uudelleen tai asenna päivityksiä"
       },
       "cap_scene_write": {
         "description": "Lue, luo, muokkaa ja poista tilanteita. Käyttöavaimella on oltava kirjoitusoikeus jokaiseen tilanteen entiteettiin.",
@@ -2021,7 +2022,7 @@
         "label": "ESPHome-laitteet"
       },
       "home_admin": {
-        "description": "Hallitsee suurinta osaa kodista. Uudelleenkäynnistykset, YAML-muokkaukset sekä lukot, hälytykset, suojukset ja venttiilit vaativat hyväksynnän.",
+        "description": "Hallitsee suurinta osaa kodista. Uudelleenkäynnistykset, YAML-määritys sekä lukot, hälytykset, suojukset ja venttiilit vaativat hyväksynnän.",
         "label": "Kodin ylläpitäjä"
       },
       "home_companion": {

@@ -635,6 +635,8 @@ export type ApprovalStatus =
 
 export interface ApprovalDiff {
   kind?: "yaml_diff" | "config_diff" | "service_preview" | "system_action";
+  /** What sent this change to a person whatever its capability allows. */
+  reviewed_actions?: string[];
   summary?: string;
   /** Catalog key + params for `summary`, so the panel can render it localized.
    *  Absent on older records and on any key this bundle does not know; both fall

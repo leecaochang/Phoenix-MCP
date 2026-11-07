@@ -66,6 +66,7 @@
       "loadFailed": "Failed to load approvals.",
       "mesaAllowed": "Also allowed",
       "mesaBlocked": "Blocked",
+      "reviewedActions": "Needs your review because it adds: {actions}",
       "mesaConfirm": "MESA confirm",
       "metaCapability": "Capability",
       "metaCreated": "Created",
@@ -210,8 +211,8 @@
         "description": "Control locks, alarms, covers and valves, and change Zigbee groups, bindings and device properties."
       },
       "cap_restart": {
-        "label": "Restart or stop Home Assistant",
-        "description": "Restart or stop Home Assistant, which briefly takes every device offline."
+        "label": "Restart Home Assistant or install updates",
+        "description": "Restart or stop Home Assistant and install updates. Every update needs approval."
       },
       "cap_integration_write": {
         "label": "Integration management",
@@ -303,7 +304,7 @@
       },
       "home_admin": {
         "label": "Home Administrator",
-        "description": "Manages most of the home. Restarts, YAML edits and locks, alarms, covers and valves need approval."
+        "description": "Manages most of the home. Restarts, YAML configuration and locks, alarms, covers and valves need approval."
       },
       "maintenance": {
         "label": "Maintenance / Backups",

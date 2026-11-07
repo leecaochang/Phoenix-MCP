@@ -75,15 +75,15 @@
 
 ### {{label:caps.cap_automation_write.label}} {#automation-write}
 
-读取、创建、编辑和删除自动化。
+读取、创建、编辑和删除自动化。添加运行代码或触及主机的调用时，始终需要您审批，即使设为“允许”也一样。重启、更新、模板化的动作名称和蓝图也是如此。
 
 ### {{label:caps.cap_script_write.label}} {#script-write}
 
-读取、创建、编辑和删除脚本。
+读取、创建、编辑和删除脚本。自动化的审批规则同样适用于此。
 
 ### {{label:caps.cap_blueprint_write.label}} {#blueprint-write}
 
-创建、编辑和删除蓝图。写入蓝图还需要匹配的自动化或脚本能力：任一为拒绝访问都会拒绝它，任一为确认都会暂缓它以等待审批。
+创建、编辑和删除蓝图。写入蓝图还需要匹配的自动化或脚本能力：任一为拒绝访问都会拒绝它，任一为确认都会暂缓它以等待审批。自动化的审批规则同样适用于此。
 
 ### {{label:caps.cap_scene_write.label}} {#scene-write}
 
@@ -113,7 +113,7 @@
 
 ### {{label:caps.cap_restart.label}} {#restart}
 
-重启或停止 Home Assistant。
+重启或停止 Home Assistant 并安装更新。每次更新都需要您审批，即使设为“允许”也一样。ESPHome 固件使用它自己的能力。
 
 ### {{label:caps.cap_log_control.label}} {#log-control}
 

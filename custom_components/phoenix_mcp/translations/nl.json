@@ -6,7 +6,8 @@
       }
     },
     "abort": {
-      "already_configured": "Phoenix MCP is al geconfigureerd."
+      "already_configured": "Phoenix MCP is al geconfigureerd.",
+      "single_instance_allowed": "Phoenix MCP is al geconfigureerd."
     },
     "create_entry": {
       "default": "Gebruik het Phoenix MCP-paneel in de zijbalk om je toegangssleutels te beheren. Het paneel is alleen zichtbaar voor beheerders."

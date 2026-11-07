@@ -914,6 +914,11 @@ UPDATE_INSTALL_SERVICE = "update/install"
 # Services whose effect belongs to the device, not the entity they name. MESA judges every
 # entity of the device and its children, and the call runs on all of them or not at all.
 WHOLE_DEVICE_SERVICES = PHYSICAL_COMMAND_SERVICES | {UPDATE_INSTALL_SERVICE}
+# What a saved automation, script or blueprint may not gain without a person's review, whatever
+# its capability's mode. These run code, reach the host or replace software, and a saved config
+# runs as Home Assistant, past every check call_service makes.
+REVIEWED_ACTION_DOMAINS = frozenset({"hassio", "pyscript", "python_script", "rest_command", "shell_command"})
+REVIEWED_ACTION_SERVICES = DUAL_GATE_SERVICES | {UPDATE_INSTALL_SERVICE}
 # What a raw command can operate on a device, so a key sending one needs write access to each.
 DEVICE_ACTUATOR_DOMAINS = PHYSICAL_GATE_DOMAINS | {
     "climate", "fan", "humidifier", "lawn_mower", "light", "media_player", "remote", "siren",

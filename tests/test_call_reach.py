@@ -711,26 +711,29 @@ def _firmware(hass, platform: str) -> tuple[str, str, str]:
 async def test_update_install_judges_every_entity_of_the_device(hass, platform):
     assert await async_setup_component(hass, "homeassistant", {})
     ran = _record(hass, ("update", "install"))
-    data, _ = await _data(hass, "enforced")
+    data, pending = await _data(hass, "enforced")
     _, light, update = _firmware(hass, platform)
     data.mesa.store.set(light, _profile(light, "prohibited"))
     data.mesa.store.set(update, _profile(update, "autonomous"))
-    key = _key({update: "GREEN"}, cap_esphome_flash="allow")
+    key = _key({update: "GREEN"}, cap_esphome_flash="allow", cap_restart="allow")
     args = _call("update", "install", update)
-    assert _body(await _call_tool("dry_run_service", args, key, hass, data))["predicted_outcome"] == "denied"
     result = await _call_tool("call_service", args, key, hass, data, request_id="rid")
-    assert result[1] == "denied", result
+    assert result[1] == "pending_approval", result
+    approved = await async_execute_approved_tool("call_service", pending[0]["args"], key, hass, data)
+    assert approved[1] == "denied", approved
     assert ran == []
 
 
 async def test_update_install_runs_once_the_whole_device_passes(hass):
     assert await async_setup_component(hass, "homeassistant", {})
     ran = _record(hass, ("update", "install"))
-    data, _ = await _data(hass, "enforced")
+    data, pending = await _data(hass, "enforced")
     _, light, update = _firmware(hass, "zha")
     data.mesa.store.set(light, _profile(light, "autonomous"))
     data.mesa.store.set(update, _profile(update, "autonomous"))
-    result = await _call_tool("call_service", _call("update", "install", update), _key({update: "GREEN"}), hass, data, request_id="rid")
+    key = _key({update: "GREEN"}, cap_restart="allow")
+    assert (await _call_tool("call_service", _call("update", "install", update), key, hass, data, request_id="rid"))[1] == "pending_approval"
+    result = await async_execute_approved_tool("call_service", pending[0]["args"], key, hass, data)
     assert result[1] == "allowed", result
     assert ran[0][2]["entity_id"] in ([update], update)
 
@@ -754,13 +757,21 @@ async def test_an_esphome_update_needs_the_flash_capability(hass):
     assert len(ran) == 1
 
 
-async def test_an_update_of_another_integration_needs_no_flash_capability(hass):
+@pytest.mark.parametrize("pass_through", [False, True])
+async def test_any_other_update_needs_its_capability_and_a_review(hass, pass_through):
+    """Core, an add-on or a HACS card: new code runs, so Allow does not skip the person."""
     assert await async_setup_component(hass, "homeassistant", {})
     ran = _record(hass, ("update", "install"))
-    data, _ = await _data(hass)
+    data, pending = await _data(hass)
     _, _, update = _firmware(hass, "zha")
-    key = _key({update: "GREEN"}, cap_esphome_flash="deny")
-    assert (await _call_tool("call_service", _call("update", "install", update), key, hass, data))[1] == "allowed"
+    args = _call("update", "install", update)
+    denied = _key({update: "GREEN"}, cap_esphome_flash="deny", cap_restart="deny", pass_through=pass_through)
+    assert (await _call_tool("call_service", args, denied, hass, data))[1] == "denied"
+    key = _key({update: "GREEN"}, cap_esphome_flash="deny", cap_restart="allow", pass_through=pass_through)
+    assert _body(await _call_tool("dry_run_service", args, key, hass, data))["predicted_outcome"] == "pending_approval"
+    assert (await _call_tool("call_service", args, key, hass, data))[1] == "pending_approval"
+    assert ran == []
+    assert (await async_execute_approved_tool("call_service", pending[0]["args"], key, hass, data))[1] == "allowed"
     assert len(ran) == 1
 
 

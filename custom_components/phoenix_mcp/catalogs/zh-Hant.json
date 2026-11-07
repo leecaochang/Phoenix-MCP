@@ -780,7 +780,8 @@
       "todoItems": "將移除的事項",
       "todoRemovalWarning": "移除待辦事項是永久性的。Phoenix 不保留副本，因此無法還原。",
       "todoStatusCompleted": "已完成",
-      "todoStatusNeedsAction": "未完成"
+      "todoStatusNeedsAction": "未完成",
+      "reviewedActions": "需要您審核，因為它新增了：{actions}"
     },
     "audit": {
       "accessPassThrough": "直通",
@@ -920,8 +921,8 @@
         "label": "管理實體登錄檔"
       },
       "cap_restart": {
-        "description": "重新啟動或停止 Home Assistant，這會讓所有裝置短暫離線。",
-        "label": "重新啟動或停止 Home Assistant"
+        "description": "重新啟動或停止 Home Assistant 並安裝更新。每次更新都需要核准。",
+        "label": "重新啟動 Home Assistant 或安裝更新"
       },
       "cap_scene_write": {
         "description": "讀取、建立、編輯和刪除場景。場景中的每個實體都必須允許該存取金鑰寫入。",
@@ -1624,7 +1625,7 @@
         "label": "ESPHome 裝置"
       },
       "home_admin": {
-        "description": "管理家庭的大部分內容。重新啟動、YAML 編輯以及門鎖、警報、捲簾和閥門需要核准。",
+        "description": "管理家庭的大部分內容。重新啟動、YAML 設定以及門鎖、警報、捲簾和閥門需要核准。",
         "label": "家庭管理員"
       },
       "maintenance": {

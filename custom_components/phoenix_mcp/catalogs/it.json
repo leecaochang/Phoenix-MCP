@@ -841,7 +841,8 @@
       "todoItems": "Elementi da rimuovere",
       "todoRemovalWarning": "La rimozione degli elementi delle liste di cose da fare è definitiva. Phoenix non ne conserva alcuna copia, quindi non possono essere ripristinati.",
       "todoStatusCompleted": "Completato",
-      "todoStatusNeedsAction": "Non completato"
+      "todoStatusNeedsAction": "Non completato",
+      "reviewedActions": "Richiede la tua revisione perché aggiunge: {actions}"
     },
     "caps": {
       "cap_automation_write": {
@@ -933,8 +934,8 @@
         "label": "Gestisci il registro delle entità"
       },
       "cap_restart": {
-        "description": "Riavvia o arresta Home Assistant, il che porta brevemente offline ogni dispositivo.",
-        "label": "Riavvia o arresta Home Assistant"
+        "description": "Riavvia o arresta Home Assistant e installa aggiornamenti. Ogni aggiornamento richiede l'approvazione.",
+        "label": "Riavvia Home Assistant o installa aggiornamenti"
       },
       "cap_scene_write": {
         "description": "Legge, crea, modifica ed elimina scene. La chiave di accesso deve poter scrivere su ogni entità di una scena.",
@@ -1072,7 +1073,7 @@
         "label": "Dispositivi ESPHome"
       },
       "home_admin": {
-        "description": "Gestisce gran parte della casa. Riavvii, modifiche YAML, serrature, allarmi, tapparelle e valvole richiedono approvazione.",
+        "description": "Gestisce gran parte della casa. Riavvii, configurazione YAML, serrature, allarmi, tapparelle e valvole richiedono approvazione.",
         "label": "Amministratore della casa"
       },
       "maintenance": {

@@ -165,7 +165,7 @@
         "label": "Urządzenia ESPHome"
       },
       "home_admin": {
-        "description": "Zarządza większością domu. Restarty, edycje YAML, zamki, alarmy, rolety i zawory wymagają zatwierdzenia.",
+        "description": "Zarządza większością domu. Restarty, konfiguracja YAML, zamki, alarmy, rolety i zawory wymagają zatwierdzenia.",
         "label": "Administrator domu"
       },
       "maintenance": {
@@ -509,8 +509,8 @@
         "label": "Zarządzaj rejestrem encji"
       },
       "cap_restart": {
-        "description": "Uruchamiaj ponownie lub zatrzymuj Home Assistant, co na chwilę odłącza każde urządzenie.",
-        "label": "Ponowne uruchomienie lub zatrzymanie Home Assistant"
+        "description": "Uruchamiaj ponownie lub zatrzymuj Home Assistant i instaluj aktualizacje. Każda aktualizacja wymaga zatwierdzenia.",
+        "label": "Ponowne uruchomienie Home Assistant lub instalacja aktualizacji"
       },
       "cap_scene_write": {
         "description": "Odczytuj, twórz, edytuj i usuwaj sceny. Klucz dostępu musi mieć prawo zapisu do każdej encji w scenie.",
@@ -848,7 +848,8 @@
       "todoItems": "Elementy do usunięcia",
       "todoRemovalWarning": "Usunięcie elementów listy zadań jest trwałe. Phoenix nie zachowuje ich kopii, więc nie można ich przywrócić.",
       "todoStatusCompleted": "Ukończone",
-      "todoStatusNeedsAction": "Nieukończone"
+      "todoStatusNeedsAction": "Nieukończone",
+      "reviewedActions": "Wymaga sprawdzenia, ponieważ dodaje: {actions}"
     },
     "agentchat": {
       "accessKey": "Klucz dostępu",

@@ -48,7 +48,7 @@ from .device_semantics import (
 from .mesa import mesa_confirm_preview
 from .helpers import content_hash
 from .catalog_text import version_summary_fields as _version_summary
-from .approvals import DiffSource, async_evaluate_capability
+from .approvals import DiffSource, _resolve_diff, async_evaluate_capability
 from .access_key_store import AccessKeyRecord
 from .request_authority import AuthorityChangedError, check_request_authority
 
@@ -477,22 +477,33 @@ async def _gate(
     client_ip: str | None,
     diff: DiffSource,
     target_entities: list[str] | None = None,
+    review: bool = False,
 ) -> tuple[dict, str, str] | None:
     """Run capability gating. Returns a response tuple for deny or pending, None for allow.
     Deny gives (error_dict, "denied", tool_name); pending gives (pending_dict,
     "pending_approval", approval_resource). Pass ``diff`` as a zero-arg builder, as only the
-    Confirm path reads it.
+    Confirm path reads it. ``review`` sends an Allow to a person too.
     """
     result = await async_evaluate_capability(
         cap_name, access_key, hass, data,
         tool_name=tool_name, args=args, request_id=request_id,
-        client_ip=client_ip, diff=diff, target_entities=target_entities,
+        client_ip=client_ip, diff=diff, target_entities=target_entities, review=review,
     )
     if result.is_deny:
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", tool_name
     if result.is_pending:
         return await _pending_or_inline(hass, data, access_key, result.approval)
     return None
+
+
+def _noting_reviewed_actions(diff: DiffSource, actions: list[str]) -> DiffSource:
+    """A diff that tells the reviewer which actions sent this change to them."""
+    if not actions:
+        return diff
+
+    async def build() -> dict:
+        return {**await _resolve_diff(diff), "reviewed_actions": actions}
+    return build
 
 
 async def _await_inline_confirm(

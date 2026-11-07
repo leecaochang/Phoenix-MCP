@@ -3,12 +3,14 @@
   "name": "Phoenix MCP",
   "after_dependencies": ["assist_pipeline", "backup", "blueprint", "bluetooth", "cloud", "conversation", "esphome", "http", "logger", "lovelace", "mqtt", "network", "recorder", "template", "trace", "usb", "zha"],
   "categories": ["ai_voice", "other_ecosystems"],
-  "codeowners": [],
+  "codeowners": ["@leecaochang"],
   "config_flow": true,
   "dependencies": ["frontend"],
   "documentation": "https://github.com/leecaochang/Phoenix-MCP",
+  "integration_type": "service",
   "iot_class": "calculated",
   "issue_tracker": "https://github.com/leecaochang/Phoenix-MCP/issues",
   "requirements": ["Babel>=2.18.0", "jsonschema>=4.26.0"],
+  "single_config_entry": true,
   "version": "2.0.0"
 }

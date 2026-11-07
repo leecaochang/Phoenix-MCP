@@ -108,7 +108,16 @@ export function ApprovalChange({ record }: {
     if (!canPreview || mode !== "preview") {
       // Diff mode: the Diff|Preview switch rides in the diff's own toolbar,
       // right next to the side-by-side/stacked layout toggle.
-      return <BeforeAfter before={diff.before ?? null} after={diff.after ?? null} toolbarExtra={modeToggle} />;
+      return (
+        <>
+          {diff.reviewed_actions?.length ? (
+            <ul className="mesa-preview-warnings">
+              <li>{t("approvals.reviewedActions", { actions: diff.reviewed_actions.join(t("common.listSeparator")) })}</li>
+            </ul>
+          ) : null}
+          <BeforeAfter before={diff.before ?? null} after={diff.after ?? null} toolbarExtra={modeToggle} />
+        </>
+      );
     }
     if (energyPreview) {
       return (

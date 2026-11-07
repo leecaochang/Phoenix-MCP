@@ -1,7 +1,8 @@
 {
   "config": {
     "abort": {
-      "already_configured": "Phoenix MCP уже настроен."
+      "already_configured": "Phoenix MCP уже настроен.",
+      "single_instance_allowed": "Phoenix MCP уже настроен."
     },
     "create_entry": {
       "default": "Используйте панель Phoenix MCP на боковой панели для управления ключами доступа. Панель видна только администраторам."

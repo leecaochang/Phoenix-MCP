@@ -75,15 +75,15 @@ Pass-through never changes these; each keeps its own setting.
 
 ### {{label:caps.cap_automation_write.label}} {#automation-write}
 
-Reads, creates, edits and deletes automations.
+Reads, creates, edits and deletes automations. Adding a call that runs code or reaches the host, a restart or update, a templated action name, or a blueprint always needs your approval, even on Allow.
 
 ### {{label:caps.cap_script_write.label}} {#script-write}
 
-Reads, creates, edits and deletes scripts.
+Reads, creates, edits and deletes scripts. The approval rule for automations applies here too.
 
 ### {{label:caps.cap_blueprint_write.label}} {#blueprint-write}
 
-Creates, edits and deletes blueprints. Writing a blueprint also needs the matching automations or scripts capability: Deny on either refuses it, and Confirm on either holds it for approval.
+Creates, edits and deletes blueprints. Writing a blueprint also needs the matching automations or scripts capability: Deny on either refuses it, and Confirm on either holds it for approval. The approval rule for automations applies here too.
 
 ### {{label:caps.cap_scene_write.label}} {#scene-write}
 
@@ -111,7 +111,7 @@ Sends notifications, through its own tool, a notify action or any other action t
 
 ### {{label:caps.cap_restart.label}} {#restart}
 
-Restarts or stops Home Assistant.
+Restarts or stops Home Assistant and installs updates. Every update needs your approval, even on Allow. ESPHome firmware uses its own capability instead.
 
 ### {{label:caps.cap_log_control.label}} {#log-control}
 

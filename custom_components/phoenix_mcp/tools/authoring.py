@@ -40,11 +40,11 @@ from ..entity_registration import async_observe_registration
 from ..helpers import content_hash
 from ..tool_input import dict_arg, str_arg, str_list_arg
 from ..catalog_text import diff_summary_fields as _summary
-from ..capability import effective_cap, strictest_capability
+from ..capability import effective_cap, reviewed_actions, strictest_capability
 from ..log_read import _strict_phoenix_log_text
 from ..redaction import redact_inaccessible_entity_ids_in_text
 from ..tool_common import (
-    _CAP_FORBIDDEN_MESSAGE, _cas_conflict, _gate, _record_version, _tool_error, _tool_refused_before_write, _tool_uncertain,
+    _CAP_FORBIDDEN_MESSAGE, _cas_conflict, _gate, _noting_reviewed_actions, _record_version, _tool_error, _tool_refused_before_write, _tool_uncertain,
     _tool_success, _truncate, fitted_list, longest_fitting,
 )
 from ..policy_engine import (
@@ -209,6 +209,21 @@ async def _read_config_entry(hass: HomeAssistant, domain: str, entry_id: str) ->
     return await hass.async_add_executor_job(
         yaml_includes.read_entry, hass.config.config_dir, domain, entry_id,
     )
+
+
+async def _added_reviewed_actions(hass: HomeAssistant, domain: str, entry_id: str | None, config: Any) -> list[str]:
+    """What this save adds that needs a person's review, whatever the capability's mode.
+
+    What an entry already calls gives no new reach, so a small edit of it stays unreviewed. An
+    entry that cannot be read counts as calling nothing.
+    """
+    current = None
+    if entry_id:
+        try:
+            current = await _read_config_entry(hass, domain, entry_id)
+        except Exception:  # noqa: BLE001 - an unreadable entry only costs a review
+            _LOGGER.debug("Could not read %s %s", domain, entry_id, exc_info=True)
+    return sorted(reviewed_actions(config) - reviewed_actions(current))
 
 
 def _config_read_response(
@@ -554,10 +569,12 @@ async def _tool_create_automation(
     pre = await _automation_write_precheck(args, hass, "create_automation", require_id=False)
     if pre is not None:
         return pre
+    actions = await _added_reviewed_actions(hass, "automation", None, args["config"])
     blocked = await _gate(
         "cap_automation_write", access_key, hass, data,
-        tool_name="create_automation", args=args, request_id=request_id,
-        client_ip=client_ip, diff=lambda: _build_diff_create_automation(args, access_key, hass),
+        tool_name="create_automation", args=args, request_id=request_id, client_ip=client_ip,
+        diff=_noting_reviewed_actions(lambda: _build_diff_create_automation(args, access_key, hass), actions),
+        review=bool(actions),
     )
     if blocked is not None:
         return blocked
@@ -632,10 +649,12 @@ async def _tool_edit_automation(
     pre = await _automation_write_precheck(args, hass, "edit_automation", require_id=True)
     if pre is not None:
         return pre
+    actions = await _added_reviewed_actions(hass, "automation", str(args.get("automation_id") or "").strip(), args["config"])
     blocked = await _gate(
         "cap_automation_write", access_key, hass, data,
-        tool_name="edit_automation", args=args, request_id=request_id,
-        client_ip=client_ip, diff=lambda: _build_diff_edit_automation(args, access_key, hass),
+        tool_name="edit_automation", args=args, request_id=request_id, client_ip=client_ip,
+        diff=_noting_reviewed_actions(lambda: _build_diff_edit_automation(args, access_key, hass), actions),
+        review=bool(actions),
     )
     if blocked is not None:
         return blocked
@@ -914,10 +933,12 @@ async def _tool_create_script(
     pre = await _script_write_precheck(args, hass, "create_script")
     if pre is not None:
         return pre
+    actions = await _added_reviewed_actions(hass, "script", None, args["config"])
     blocked = await _gate(
         "cap_script_write", access_key, hass, data,
-        tool_name="create_script", args=args, request_id=request_id,
-        client_ip=client_ip, diff=lambda: _build_diff_create_script(args, access_key, hass),
+        tool_name="create_script", args=args, request_id=request_id, client_ip=client_ip,
+        diff=_noting_reviewed_actions(lambda: _build_diff_create_script(args, access_key, hass), actions),
+        review=bool(actions),
     )
     if blocked is not None:
         return blocked
@@ -994,10 +1015,12 @@ async def _tool_edit_script(
     )
     if stale is not None:
         return stale
+    actions = await _added_reviewed_actions(hass, "script", str(args.get("script_id") or "").strip(), args["config"])
     blocked = await _gate(
         "cap_script_write", access_key, hass, data,
-        tool_name="edit_script", args=args, request_id=request_id,
-        client_ip=client_ip, diff=lambda: _build_diff_edit_script(args, access_key, hass),
+        tool_name="edit_script", args=args, request_id=request_id, client_ip=client_ip,
+        diff=_noting_reviewed_actions(lambda: _build_diff_edit_script(args, access_key, hass), actions),
+        review=bool(actions),
     )
     if blocked is not None:
         return blocked

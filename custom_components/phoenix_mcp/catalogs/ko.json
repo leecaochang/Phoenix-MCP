@@ -82,7 +82,7 @@
       },
       "home_admin": {
         "label": "홈 관리자",
-        "description": "홈의 대부분을 관리합니다. 재시작, YAML 편집과 잠금, 경보, 커버, 밸브에는 승인이 필요합니다."
+        "description": "홈의 대부분을 관리합니다. 재시작, YAML 구성과 잠금, 경보, 커버, 밸브에는 승인이 필요합니다."
       },
       "maintenance": {
         "label": "유지 관리 / 백업",
@@ -244,8 +244,8 @@
         "description": "잠금, 경보, 커버 및 밸브를 제어하고, Zigbee 그룹, 바인딩 및 기기 속성을 변경합니다."
       },
       "cap_restart": {
-        "label": "Home Assistant 재시작 또는 중지",
-        "description": "Home Assistant를 재시작하거나 중지합니다. 그동안 모든 기기가 잠시 오프라인이 됩니다."
+        "label": "Home Assistant 재시작 또는 업데이트 설치",
+        "description": "Home Assistant를 재시작하거나 중지하고 업데이트를 설치합니다. 모든 업데이트에는 승인이 필요합니다."
       },
       "cap_integration_write": {
         "label": "통합 구성 요소 관리",
@@ -2064,7 +2064,8 @@
       "todoItems": "제거할 항목",
       "todoRemovalWarning": "할 일 항목 제거는 영구적입니다. Phoenix는 사본을 보관하지 않으므로 복원할 수 없습니다.",
       "todoStatusCompleted": "완료됨",
-      "todoStatusNeedsAction": "완료되지 않음"
+      "todoStatusNeedsAction": "완료되지 않음",
+      "reviewedActions": "다음을 추가하므로 검토가 필요합니다: {actions}"
     },
     "wizard": {
       "accessSub": "<code>light</code> 옆의 삼각형을 선택하여 조명 그룹을 여십시오. 조명 기기 목록이 표시됩니다. 기기 옆의 삼각형을 선택하면 해당 엔티티가 표시됩니다. 또는 필터 상자에 조명 이름을 입력하십시오. 그런 다음 직접 확인할 수 있는 조명에서 <strong>W</strong>를 선택하면 에이전트가 해당 조명을 읽고 제어할 수 있습니다. 권한은 나중에 추가할 수 있습니다.",

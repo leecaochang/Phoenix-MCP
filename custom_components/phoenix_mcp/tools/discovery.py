@@ -42,7 +42,7 @@ from homeassistant.exceptions import HomeAssistantError
 from homeassistant.const import __version__ as ha_version
 
 from ..authoring_validation import async_validation_message, authoring_input_error
-from ..const import CAP_ALLOW, CAP_CONFIRM, CAP_DENY, DEVICE_LIST_DEFAULT_LIMIT, DEVICE_LIST_MAX_LIMIT, DUAL_GATE_SERVICES, MAX_COMPARE_LIST_VALUES, MAX_COMPARE_VALUE_CHARS, MAX_DANGLING_PATHS, MAX_CONFIG_CHECK_MESSAGES, MAX_SEARCH_QUERY_LEN, MAX_SEARCH_MEMBERS, MAX_SEARCH_MEMBER_CHECKS, MAX_SEARCH_MEMBER_ID_LEN, MESA_MODE_OFF, MUSIC_ASSISTANT_LIBRARY_SERVICES, STORAGE_HELPER_TYPES, NO_TARGET_SERVICES, RUNTIME_SERVICE_GUIDANCE, SCRIPT_ENTITY_SERVICES, SEARCH_ENTITIES_MAX_LIMIT, SEARCH_FUZZY_MATCH_CUTOFF, SEARCH_POWER_TYPES, SEARCH_RADIO_TYPES, SERVICE_FIELDS_MAX, SERVICE_FIELD_MAX_DESCRIPTION, SERVICE_FIELD_MAX_OPTIONS, REFERENCE_WARNING_MAX
+from ..const import UPDATE_INSTALL_SERVICE, CAP_ALLOW, CAP_CONFIRM, CAP_DENY, DEVICE_LIST_DEFAULT_LIMIT, DEVICE_LIST_MAX_LIMIT, DUAL_GATE_SERVICES, MAX_COMPARE_LIST_VALUES, MAX_COMPARE_VALUE_CHARS, MAX_DANGLING_PATHS, MAX_CONFIG_CHECK_MESSAGES, MAX_SEARCH_QUERY_LEN, MAX_SEARCH_MEMBERS, MAX_SEARCH_MEMBER_CHECKS, MAX_SEARCH_MEMBER_ID_LEN, MESA_MODE_OFF, MUSIC_ASSISTANT_LIBRARY_SERVICES, STORAGE_HELPER_TYPES, NO_TARGET_SERVICES, RUNTIME_SERVICE_GUIDANCE, SCRIPT_ENTITY_SERVICES, SEARCH_ENTITIES_MAX_LIMIT, SEARCH_FUZZY_MATCH_CUTOFF, SEARCH_POWER_TYPES, SEARCH_RADIO_TYPES, SERVICE_FIELDS_MAX, SERVICE_FIELD_MAX_DESCRIPTION, SERVICE_FIELD_MAX_OPTIONS, REFERENCE_WARNING_MAX
 from ..consumer_identity import ConsumerIdentityIndex, IDENTITY_COVERAGE
 from ..household_authority import household_admin_access
 from ..data import PhoenixData
@@ -3359,10 +3359,12 @@ async def _tool_dry_run_service(
     # enforcing path's own, not a copy, so the preview cannot drift from the call
     # it predicts.
     predicted: str
+    reviewed = f"{domain}/{service}" == UPDATE_INSTALL_SERVICE
     if unbound or speech_refusal or reach.refusal:
         predicted = "denied"
-    elif required_cap is not None and effective_cap(access_key, required_cap) != CAP_ALLOW:
-        predicted = _cap_outcome(effective_cap(access_key, required_cap))
+    elif required_cap is not None and (reviewed or effective_cap(access_key, required_cap) != CAP_ALLOW):
+        predicted = _cap_outcome(CAP_CONFIRM if reviewed and effective_cap(access_key, required_cap) == CAP_ALLOW
+                                 else effective_cap(access_key, required_cap))
         if (predicted == "pending_approval" and permitted
                 and target_binding(reach.entities, hass)["fingerprint"] is None):
             predicted = "denied"

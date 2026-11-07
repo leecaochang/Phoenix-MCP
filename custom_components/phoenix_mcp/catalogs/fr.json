@@ -134,7 +134,8 @@
       "todoItems": "Éléments à supprimer",
       "todoRemovalWarning": "La suppression d’éléments de liste de tâches est définitive. Phoenix n’en conserve aucune copie, ils ne peuvent donc pas être restaurés.",
       "todoStatusCompleted": "Terminé",
-      "todoStatusNeedsAction": "Non terminé"
+      "todoStatusNeedsAction": "Non terminé",
+      "reviewedActions": "À vérifier, car cela ajoute : {actions}"
     },
     "caps": {
       "cap_config_read": {
@@ -210,8 +211,8 @@
         "description": "Contrôler les serrures, les alarmes, les volets et les vannes, et modifier les groupes Zigbee, les liaisons et les propriétés des appareils."
       },
       "cap_restart": {
-        "label": "Redémarrer ou arrêter Home Assistant",
-        "description": "Redémarrer ou arrêter Home Assistant, ce qui met brièvement chaque appareil hors ligne."
+        "label": "Redémarrer Home Assistant ou installer des mises à jour",
+        "description": "Redémarrer ou arrêter Home Assistant et installer des mises à jour. Chaque mise à jour nécessite une approbation."
       },
       "cap_integration_write": {
         "label": "Gestion des intégrations",
@@ -303,7 +304,7 @@
       },
       "home_admin": {
         "label": "Administrateur du foyer",
-        "description": "Gère la plus grande partie de la maison. Les redémarrages, modifications YAML ainsi que serrures, alarmes, volets et vannes nécessitent une approbation."
+        "description": "Gère la plus grande partie de la maison. Les redémarrages, la configuration YAML ainsi que serrures, alarmes, volets et vannes nécessitent une approbation."
       },
       "maintenance": {
         "label": "Maintenance / sauvegardes",

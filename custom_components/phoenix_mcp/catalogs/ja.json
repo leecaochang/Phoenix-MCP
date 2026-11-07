@@ -134,7 +134,8 @@
       "todoItems": "削除する項目",
       "todoRemovalWarning": "To-do 項目の削除は取り消せません。Phoenix はコピーを保持しないため、復元できません。",
       "todoStatusCompleted": "完了",
-      "todoStatusNeedsAction": "未完了"
+      "todoStatusNeedsAction": "未完了",
+      "reviewedActions": "次を追加するため確認が必要です: {actions}"
     },
     "caps": {
       "cap_config_read": {
@@ -210,8 +211,8 @@
         "description": "ロック、アラーム、カバー、バルブを制御し、Zigbee のグループ、バインディング、デバイスのプロパティを変更します。"
       },
       "cap_restart": {
-        "label": "Home Assistant の再起動または停止",
-        "description": "Home Assistant を再起動または停止します。その間、すべてのデバイスが一時的にオフラインになります。"
+        "label": "Home Assistant の再起動またはアップデートのインストール",
+        "description": "Home Assistant を再起動または停止し、アップデートをインストールします。アップデートには毎回承認が必要です。"
       },
       "cap_integration_write": {
         "label": "インテグレーションの管理",
@@ -303,7 +304,7 @@
       },
       "home_admin": {
         "label": "ホーム管理者",
-        "description": "ホームの大部分を管理します。再起動、YAML の編集と、ロック、アラーム、カバー、バルブには承認が必要です。"
+        "description": "ホームの大部分を管理します。再起動、YAML 設定と、ロック、アラーム、カバー、バルブには承認が必要です。"
       },
       "maintenance": {
         "label": "メンテナンスとバックアップ",

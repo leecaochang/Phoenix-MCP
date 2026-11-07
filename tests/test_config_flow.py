@@ -2,7 +2,7 @@
 
 The flow is single-step and single-instance with no remote connection, so there
 are no cannot_connect or invalid_auth cases. Covered: the initial form, entry
-creation, and the already_configured abort.
+creation, and the single-instance abort.
 """
 
 from __future__ import annotations
@@ -55,4 +55,4 @@ async def test_single_instance_only(hass: HomeAssistant):
     result = await hass.config_entries.flow.async_init(
         DOMAIN, context={"source": config_entries.SOURCE_USER})
     assert result["type"] == FlowResultType.ABORT
-    assert result["reason"] == "already_configured"
+    assert result["reason"] == "single_instance_allowed"

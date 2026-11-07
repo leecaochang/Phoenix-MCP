@@ -28,7 +28,7 @@ from ..const import (
 )
 from ..data import PhoenixData
 from ..catalog_text import diff_summary_fields as _summary
-from ..capability import effective_cap
+from ..capability import effective_cap, reviewed_actions
 from ..helpers import content_hash
 from ..redaction import redact_secrets_in_text
 from ..config_recovery import ConfigurationRecoveryError, safe_snapshot
@@ -37,6 +37,7 @@ from ..access_key_store import AccessKeyRecord
 from ..tool_common import (
     _CAP_FORBIDDEN_MESSAGE,
     _gate,
+    _noting_reviewed_actions,
     _read_text_capped,
     _record_version,
     _check_authority_before_dispatch,
@@ -318,6 +319,21 @@ def _blueprint_gate_cap(access_key: AccessKeyRecord, domain: Any) -> str:
     return "cap_blueprint_write"
 
 
+def _added_blueprint_actions(content: str, current: str | None) -> list[str]:
+    """What this source adds that needs a person's review: every config built on it runs it."""
+    # Local: not part of the recorded Home Assistant import floor.
+    from homeassistant.util import yaml as yaml_util
+
+    def actions(source: str | None) -> frozenset[str]:
+        if source is None:
+            return frozenset()
+        try:
+            return reviewed_actions(yaml_util.parse_yaml(source))
+        except (HomeAssistantError, YamlParseError, RecursionError):
+            return frozenset()
+    return sorted(actions(content) - actions(current))
+
+
 async def _read_blueprint_source(hass: HomeAssistant, target: str) -> str | None:
     """Current blueprint file text, or None when absent or unreadable."""
     if not await hass.async_add_executor_job(os.path.isfile, target):
@@ -425,10 +441,12 @@ async def _tool_create_blueprint(
     pre = await _blueprint_recovery_precheck(hass, target, args["domain"], rel, args["content"], "create_blueprint")
     if pre is not None:
         return pre
+    actions = await hass.async_add_executor_job(_added_blueprint_actions, args["content"], None)
     blocked = await _gate(
         _blueprint_gate_cap(access_key, args.get("domain")), access_key, hass, data,
         tool_name="create_blueprint", args=args, request_id=request_id,
-        client_ip=client_ip, diff=lambda: _build_diff_blueprint(args, hass, "create"),
+        client_ip=client_ip, diff=_noting_reviewed_actions(lambda: _build_diff_blueprint(args, hass, "create"), actions),
+        review=bool(actions),
     )
     if blocked is not None:
         return blocked
@@ -447,15 +465,18 @@ async def _tool_edit_blueprint(
         args, hass, "edit_blueprint", needs_content=True)
     if pre is not None:
         return pre
-    if await _read_blueprint_source(hass, target) is None:
+    current = await _read_blueprint_source(hass, target)
+    if current is None:
         return _tool_error("Blueprint not found."), "not_found", "edit_blueprint"
     pre = await _blueprint_recovery_precheck(hass, target, args["domain"], rel, args["content"], "edit_blueprint")
     if pre is not None:
         return pre
+    actions = await hass.async_add_executor_job(_added_blueprint_actions, args["content"], current)
     blocked = await _gate(
         _blueprint_gate_cap(access_key, args.get("domain")), access_key, hass, data,
         tool_name="edit_blueprint", args=args, request_id=request_id,
-        client_ip=client_ip, diff=lambda: _build_diff_blueprint(args, hass, "edit"),
+        client_ip=client_ip, diff=_noting_reviewed_actions(lambda: _build_diff_blueprint(args, hass, "edit"), actions),
+        review=bool(actions),
     )
     if blocked is not None:
         return blocked

@@ -963,7 +963,8 @@
       "todoItems": "Objekt som tas bort",
       "todoRemovalWarning": "Att ta bort objekt från att göra-listor är permanent. Phoenix sparar ingen kopia, så de kan inte återställas.",
       "todoStatusCompleted": "Slutförd",
-      "todoStatusNeedsAction": "Ej slutförd"
+      "todoStatusNeedsAction": "Ej slutförd",
+      "reviewedActions": "Behöver granskas eftersom det lägger till: {actions}"
     },
     "attention": {
       "actionTitle": "Kontrollera en tidigare åtgärd",
@@ -1131,8 +1132,8 @@
         "label": "Hantera entitetsregistret"
       },
       "cap_restart": {
-        "description": "Starta om eller stoppa Home Assistant, vilket kortvarigt tar alla enheter offline.",
-        "label": "Starta om eller stoppa Home Assistant"
+        "description": "Starta om eller stoppa Home Assistant och installera uppdateringar. Varje uppdatering kräver godkännande.",
+        "label": "Starta om Home Assistant eller installera uppdateringar"
       },
       "cap_scene_write": {
         "description": "Läs, skapa, redigera och radera scener. Åtkomstnyckeln måste kunna skriva till alla entiteter i en scen.",
@@ -2021,7 +2022,7 @@
         "label": "ESPHome-enheter"
       },
       "home_admin": {
-        "description": "Hanterar större delen av hemmet. Omstarter, YAML-ändringar samt lås, larm, skydd och ventiler kräver godkännande.",
+        "description": "Hanterar större delen av hemmet. Omstarter, YAML-konfiguration samt lås, larm, skydd och ventiler kräver godkännande.",
         "label": "Hemadministratör"
       },
       "home_companion": {

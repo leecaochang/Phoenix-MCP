@@ -162,7 +162,7 @@ at what they would have told you.
 - `validate_esphome_yaml` checks one file for configuration errors. It reads the
   file **from disk**, so it checks what the operator saved. It does not compile
   or flash anything, and a failure leaves the device untouched. Run it after any
-  non-trivial edit rather than declaring the change good. Its `migration` block
+  non-trivial edit by the operator rather than declaring the change good. Its `migration` block
   lists keys and actions the installed ESPHome would respell, with a masked
   diff; pass that to the operator, who applies it in the dashboard.
 - `get_esphome_board` gives a board's real pin map, including which pins are
@@ -182,7 +182,7 @@ at what they would have told you.
 
 ### Building and flashing ESPHome firmware
 
-The full loop is edit, validate, compile, install. Validation catches schema
+Once the operator has saved an edit, the full loop is validate, compile, install. Validation catches schema
 and pin errors; compiling catches the C++ and lambda errors it cannot, which is
 where hand-written ESPHome configs usually break. Do not tell an operator a
 config is good on the strength of validation alone if you can compile it.
@@ -372,8 +372,12 @@ General, for automations, scripts, and scenes:
   ID: omit `automation_id` for a new generated ID, or supply an unused literal ID.
   Use `edit_automation` for intentional replacement; stored IDs cannot be changed.
 - A `!secret` or `!include` in a config you read comes back as display text (for
-  example `"!secret my_key"`), never the resolved value. Send it back unchanged
-  to preserve the reference.
+  example `"!secret my_key"`), never the resolved value. Phoenix MCP cannot write
+  a config holding that text, so the operator makes that edit.
+- Adding a call to `shell_command`, `python_script`, `pyscript`, `hassio` or
+  `rest_command`, a restart, stop or `update.install`, a templated action name, or
+  a blueprint needs an administrator's approval, even on Allow. What an entry
+  already calls does not.
 - Prefer native Home Assistant constructs (helpers such as `input_boolean`,
   `input_number`, `timer`, `counter`; native triggers and conditions) over
   hand-written templates when a native option exists. Templates are powerful but

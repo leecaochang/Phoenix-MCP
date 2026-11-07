@@ -100,7 +100,8 @@
       "todoItems": "Zu entfernende Einträge",
       "todoRemovalWarning": "Das Entfernen von To-do-Einträgen ist endgültig. Phoenix behält keine Kopie, daher können sie nicht wiederhergestellt werden.",
       "todoStatusCompleted": "Erledigt",
-      "todoStatusNeedsAction": "Unerledigt"
+      "todoStatusNeedsAction": "Unerledigt",
+      "reviewedActions": "Muss geprüft werden, weil es Folgendes hinzufügt: {actions}"
     },
     "inject": {
       "profileSet": "MESA-Profil für {key} festgelegt - zum Bearbeiten klicken",
@@ -357,8 +358,8 @@
         "description": "Schlösser, Alarmanlagen, Abdeckungen und Ventile steuern sowie Zigbee-Gruppen, Zigbee-Bindungen und Geräteeigenschaften ändern."
       },
       "cap_restart": {
-        "label": "Home Assistant neu starten oder stoppen",
-        "description": "Home Assistant neu starten oder stoppen, wodurch kurz jedes Gerät offline geht."
+        "label": "Home Assistant neu starten oder Updates installieren",
+        "description": "Home Assistant neu starten oder stoppen und Updates installieren. Jedes Update braucht eine Genehmigung."
       },
       "cap_integration_write": {
         "label": "Integrationsverwaltung",
@@ -450,7 +451,7 @@
       },
       "home_admin": {
         "label": "Heimadministrator",
-        "description": "Verwaltet den Großteil des Zuhauses. Neustarts, YAML-Änderungen sowie Schlösser, Alarmanlagen, Abdeckungen und Ventile erfordern eine Genehmigung."
+        "description": "Verwaltet den Großteil des Zuhauses. Neustarts, YAML-Konfiguration sowie Schlösser, Alarmanlagen, Abdeckungen und Ventile erfordern eine Genehmigung."
       },
       "maintenance": {
         "label": "Wartung / Backups",

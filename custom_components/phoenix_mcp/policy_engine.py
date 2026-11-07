@@ -995,6 +995,15 @@ def response_required(domain: str, service: str, hass: HomeAssistant) -> bool:
     return handler is not None and handler.supports_response is SupportsResponse.ONLY
 
 
+def software_update_applies(domain: str, service: str, targets: list[str], hass: HomeAssistant) -> bool:
+    """Return whether a call installs anything but ESPHome firmware: Core, an add-on, a HACS card."""
+    if f"{domain}/{service}" != UPDATE_INSTALL_SERVICE:
+        return False
+    registry = er.async_get(hass)
+    return not targets or any((entry := registry.async_get(target)) is None or entry.platform != ESPHOME_DOMAIN
+                              for target in targets)
+
+
 def whole_device_entities(targets: list[str], hass: HomeAssistant) -> list[str]:
     """Return the targets with every entity of their devices and child devices, disabled ones too."""
     registry = er.async_get(hass)
@@ -1086,6 +1095,7 @@ def required_service_cap(
         access_key,
         "cap_physical_control" if physical_gate_applies(domain, service, targets) else None,
         "cap_esphome_flash" if firmware_flash_applies(domain, service, targets, hass) else None,
+        "cap_restart" if software_update_applies(domain, service, targets, hass) else None,
         "cap_service_response" if response_required(domain, service, hass) else None,
         *service_capabilities(domain, service, service_data, targets),
     )

@@ -963,7 +963,8 @@
       "todoItems": "Elementer som fjernes",
       "todoRemovalWarning": "Fjerning av gjøremål er permanent. Phoenix beholder ingen kopi, så de kan ikke gjenopprettes.",
       "todoStatusCompleted": "Fullført",
-      "todoStatusNeedsAction": "Ikke fullført"
+      "todoStatusNeedsAction": "Ikke fullført",
+      "reviewedActions": "Må gjennomgås fordi det legger til: {actions}"
     },
     "attention": {
       "actionTitle": "Sjekk en tidligere handling",
@@ -1131,8 +1132,8 @@
         "label": "Administrer entitetsregisteret"
       },
       "cap_restart": {
-        "description": "Start Home Assistant på nytt eller stopp det, noe som en kort stund tar alle enheter frakoblet.",
-        "label": "Start Home Assistant på nytt eller stopp"
+        "description": "Start Home Assistant på nytt eller stopp det, og installer oppdateringer. Hver oppdatering krever godkjenning.",
+        "label": "Start Home Assistant på nytt eller installer oppdateringer"
       },
       "cap_scene_write": {
         "description": "Les, opprett, rediger og slett scener. Tilgangsnøkkelen må kunne skrive til alle entiteter i en scene.",
@@ -2021,7 +2022,7 @@
         "label": "ESPHome-enheter"
       },
       "home_admin": {
-        "description": "Administrerer det meste av hjemmet. Omstart, YAML-redigering samt låser, alarmer, deksler og ventiler krever godkjenning.",
+        "description": "Administrerer det meste av hjemmet. Omstart, YAML-konfigurasjon samt låser, alarmer, deksler og ventiler krever godkjenning.",
         "label": "Hjemmeadministrator"
       },
       "home_companion": {

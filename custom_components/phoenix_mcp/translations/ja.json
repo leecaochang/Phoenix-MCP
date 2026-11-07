@@ -6,7 +6,8 @@
       }
     },
     "abort": {
-      "already_configured": "Phoenix MCP はすでに設定されています。"
+      "already_configured": "Phoenix MCP はすでに設定されています。",
+      "single_instance_allowed": "Phoenix MCP はすでに設定されています。"
     },
     "create_entry": {
       "default": "サイドバーの Phoenix MCP パネルでアクセスキーを管理してください。このパネルは管理者にのみ表示されます。"

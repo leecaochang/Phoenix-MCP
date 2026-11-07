@@ -74,8 +74,8 @@
         "description": "Controla cerraduras, alarmas, cubiertas y válvulas, y cambia grupos Zigbee, enlaces y propiedades de dispositivos."
       },
       "cap_restart": {
-        "label": "Reiniciar o detener Home Assistant",
-        "description": "Reinicia o detiene Home Assistant, lo que desconecta brevemente todos los dispositivos."
+        "label": "Reiniciar Home Assistant o instalar actualizaciones",
+        "description": "Reinicia o detiene Home Assistant e instala actualizaciones. Cada actualización requiere aprobación."
       },
       "cap_integration_write": {
         "label": "Gestión de integraciones",
@@ -533,7 +533,8 @@
       "todoItems": "Elementos que se eliminarán",
       "todoRemovalWarning": "La eliminación de tareas pendientes es permanente. Phoenix no guarda ninguna copia, por lo que no se pueden restaurar.",
       "todoStatusCompleted": "Completado",
-      "todoStatusNeedsAction": "Sin completar"
+      "todoStatusNeedsAction": "Sin completar",
+      "reviewedActions": "Requiere tu revisión porque añade: {actions}"
     },
     "wizard": {
       "accessSub": "Seleccione el triángulo junto a <code>light</code> para abrir el grupo de luces. Muestra sus dispositivos de luz; seleccione el triángulo junto a un dispositivo para ver sus entidades. O escriba el nombre de su luz en el cuadro de filtro. Después seleccione <strong>W</strong> en una luz que pueda comprobar, para que el agente pueda leerla y controlarla. Puede añadir más permisos más adelante.",
@@ -2304,7 +2305,7 @@
       },
       "home_admin": {
         "label": "Administrador del hogar",
-        "description": "Gestiona la mayor parte del hogar. Los reinicios, las ediciones de YAML y las cerraduras, alarmas, persianas y válvulas requieren aprobación."
+        "description": "Gestiona la mayor parte del hogar. Los reinicios, las la configuración YAML y las cerraduras, alarmas, persianas y válvulas requieren aprobación."
       },
       "maintenance": {
         "label": "Mantenimiento / copias de seguridad",

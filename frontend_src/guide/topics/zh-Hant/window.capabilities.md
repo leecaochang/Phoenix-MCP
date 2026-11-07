@@ -75,15 +75,15 @@
 
 ### {{label:caps.cap_automation_write.label}} {#automation-write}
 
-讀取、建立、編輯和刪除自動化。
+讀取、建立、編輯和刪除自動化。新增執行程式碼或觸及主機的呼叫時，一律需要您核准，即使設為「允許」也一樣。重新啟動、更新、範本化的動作名稱和藍圖也是如此。
 
 ### {{label:caps.cap_script_write.label}} {#script-write}
 
-讀取、建立、編輯和刪除腳本。
+讀取、建立、編輯和刪除腳本。自動化的核准規則同樣適用於此。
 
 ### {{label:caps.cap_blueprint_write.label}} {#blueprint-write}
 
-建立、編輯和刪除藍圖。寫入藍圖還需要符合的自動化或腳本能力：任一為拒絕存取都會拒絕它，任一為確認都會暫緩它以等待核准。
+建立、編輯和刪除藍圖。寫入藍圖還需要符合的自動化或腳本能力：任一為拒絕存取都會拒絕它，任一為確認都會暫緩它以等待核准。自動化的核准規則同樣適用於此。
 
 ### {{label:caps.cap_scene_write.label}} {#scene-write}
 
@@ -113,7 +113,7 @@
 
 ### {{label:caps.cap_restart.label}} {#restart}
 
-重新啟動或停止 Home Assistant。
+重新啟動或停止 Home Assistant 並安裝更新。每次更新都需要您核准，即使設為「允許」也一樣。ESPHome 韌體使用它自己的能力。
 
 ### {{label:caps.cap_log_control.label}} {#log-control}
 

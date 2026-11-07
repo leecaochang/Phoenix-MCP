@@ -147,8 +147,8 @@
         "description": "编辑实体和设备，管理区域、楼层、标签和类别，删除失效条目，并清除实体的历史记录。"
       },
       "cap_restart": {
-        "label": "重启或停止 Home Assistant",
-        "description": "重启或停止 Home Assistant，这会让所有设备短暂离线。"
+        "label": "重启 Home Assistant 或安装更新",
+        "description": "重启或停止 Home Assistant 并安装更新。每次更新都需要审批。"
       },
       "cap_scene_write": {
         "label": "管理场景",
@@ -224,7 +224,7 @@
       },
       "home_admin": {
         "label": "家庭管理员",
-        "description": "管理家庭的大部分内容。重启、YAML 编辑以及门锁、警报、卷帘和阀门需要审批。"
+        "description": "管理家庭的大部分内容。重启、YAML 配置以及门锁、警报、卷帘和阀门需要审批。"
       },
       "maintenance": {
         "label": "维护与备份",
@@ -1245,7 +1245,8 @@
       "todoItems": "将移除的事项",
       "todoRemovalWarning": "移除待办事项是永久性的。Phoenix 不保留副本，因此无法还原。",
       "todoStatusCompleted": "已完成",
-      "todoStatusNeedsAction": "未完成"
+      "todoStatusNeedsAction": "未完成",
+      "reviewedActions": "需要您审核，因为它添加了：{actions}"
     },
     "accessKeys": {
       "announceAllHelp": "向此密钥的智能体提供所有工具，包括它无法使用的工具。仅用于排查问题；会消耗更多 token。",

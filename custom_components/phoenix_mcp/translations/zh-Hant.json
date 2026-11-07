@@ -1,7 +1,8 @@
 {
   "config": {
     "abort": {
-      "already_configured": "Phoenix MCP 已設定。"
+      "already_configured": "Phoenix MCP 已設定。",
+      "single_instance_allowed": "Phoenix MCP 已設定。"
     },
     "create_entry": {
       "default": "請在側邊欄的 Phoenix MCP 面板中管理您的存取金鑰。此面板僅向管理員顯示。"

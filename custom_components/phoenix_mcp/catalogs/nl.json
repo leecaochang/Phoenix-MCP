@@ -163,7 +163,7 @@
         "label": "ESPHome-apparaten"
       },
       "home_admin": {
-        "description": "Beheert het grootste deel van het huis. Herstarts, YAML-bewerkingen, sloten, alarmen, rolluiken en kleppen vereisen goedkeuring.",
+        "description": "Beheert het grootste deel van het huis. Herstarts, YAML-configuratie, sloten, alarmen, rolluiken en kleppen vereisen goedkeuring.",
         "label": "Huisbeheerder"
       },
       "maintenance": {
@@ -499,8 +499,8 @@
         "label": "Entiteitenregister beheren"
       },
       "cap_restart": {
-        "description": "Home Assistant herstarten of stoppen, waardoor elk apparaat even offline gaat.",
-        "label": "Home Assistant herstarten of stoppen"
+        "description": "Home Assistant herstarten of stoppen en updates installeren. Elke update heeft goedkeuring nodig.",
+        "label": "Home Assistant herstarten of updates installeren"
       },
       "cap_scene_write": {
         "description": "Scènes lezen, maken, bewerken en verwijderen. De toegangssleutel moet schrijftoegang hebben tot elke entiteit in een scène.",
@@ -836,7 +836,8 @@
       "todoItems": "Te verwijderen items",
       "todoRemovalWarning": "Het verwijderen van takenlijstitems is definitief. Phoenix bewaart geen kopie, dus ze kunnen niet worden hersteld.",
       "todoStatusCompleted": "Voltooid",
-      "todoStatusNeedsAction": "Niet voltooid"
+      "todoStatusNeedsAction": "Niet voltooid",
+      "reviewedActions": "Moet worden beoordeeld omdat dit wordt toegevoegd: {actions}"
     },
     "agentchat": {
       "accessKey": "Toegangssleutel",
