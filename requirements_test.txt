@@ -70,7 +70,7 @@ mypy==2.4.1
 Babel==2.18.0
 
 # Subprocess instrumentation uses coverage.py's supported patch mechanism.
-coverage==7.16.2
+coverage==7.17.1
 # Coverage in pytest; the test package does not pull it in.
 pytest-cov==7.1.0
 # The per-test timeout in pyproject.toml; the test package does not pull it in.
