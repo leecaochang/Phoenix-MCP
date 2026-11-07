@@ -1,5 +1,5 @@
 ---
-{ "id": "topic.adminApiChat", "title": "Agent Chat 端点", "parent": "topic.adminApi", "order": 40, "keywords": ["提供商", "AI 提供商", "账户", "模型", "聊天", "智能体轮次", "SSE", "流"], "sectionKeywords": { "providers": ["提供商账户", "实例", "instance_id"], "provider-kinds": ["Anthropic", "OpenAI", "Claude", "ChatGPT", "Gemini", "Ollama", "OpenRouter", "Qwen", "TypeSafe", "JEV", "决策提供商", "endpoint_id", "区域"], "setup-fields": ["api_key", "base_url", "endpoint_id", "API 密钥"], "list-providers": ["provider_types", "purpose", "capabilities"], "change-provider": ["自动模型", "auto", "model_mode"], "refresh-models": ["刷新", "能力"], "probe-model": ["探测", "选项", "努力", "视觉"], "check-setup": ["探测", "测试连接"], "chat": ["agentcli/chat", "轮次", "access_key_id"], "chat-options": ["思考", "努力", "温度", "max_tokens", "show_thinking"], "chat-images": ["附件", "图像", "JPEG", "PNG", "GIF", "base64"], "events": ["保活", "text/event-stream", "Server-Sent Events", "ready", "status", "thinking_delta", "assistant_delta", "focus_declined", "tool_call", "tool_progress", "approval_required", "approval_resolved", "tool_image", "tool_result", "usage", "notice", "continue_required", "error", "messages", "done", "事件流", "SSE"] } }
+{ "id": "topic.adminApiChat", "title": "Agent Chat 端点", "parent": "topic.adminApi", "order": 40, "keywords": ["提供商", "AI 提供商", "账户", "模型", "聊天", "智能体轮次", "SSE", "流"], "sectionKeywords": { "providers": ["提供商账户", "实例", "instance_id"], "provider-kinds": ["Anthropic", "OpenAI", "Claude", "ChatGPT", "Gemini", "Ollama", "OpenRouter", "Infron", "Qwen", "TypeSafe", "JEV", "决策提供商", "endpoint_id", "区域"], "setup-fields": ["api_key", "base_url", "endpoint_id", "API 密钥"], "list-providers": ["provider_types", "purpose", "capabilities"], "change-provider": ["自动模型", "auto", "model_mode"], "refresh-models": ["刷新", "能力"], "probe-model": ["探测", "选项", "努力", "视觉"], "check-setup": ["探测", "测试连接"], "chat": ["agentcli/chat", "轮次", "access_key_id"], "chat-options": ["思考", "努力", "温度", "max_tokens", "show_thinking"], "chat-images": ["附件", "图像", "JPEG", "PNG", "GIF", "base64"], "events": ["保活", "text/event-stream", "Server-Sent Events", "ready", "status", "thinking_delta", "assistant_delta", "focus_declined", "tool_call", "tool_progress", "approval_required", "approval_resolved", "tool_image", "tool_result", "usage", "notice", "continue_required", "error", "messages", "done", "事件流", "SSE"] } }
 ---
 使用这些端点管理 Phoenix 使用的 AI 提供商账户，并从你自己的代码运行 Agent Chat 轮次。每个端点都遵循[管理 API](guide:topic.adminApi)概述中的规则。
 
@@ -43,6 +43,7 @@ POST   /api/phoenix-mcp/admin/agentcli/probe
 | `ollama_cloud` | 对话 | `api_key` |
 | `ollama`（本地） | 对话 | `base_url` |
 | `openrouter` | 对话 | `api_key` |
+| `infron` | 对话 | `api_key` |
 | `together` | 对话 | `api_key` |
 | `cerebras` | 对话 | `api_key` |
 | `fireworks` | 对话 | `api_key` |

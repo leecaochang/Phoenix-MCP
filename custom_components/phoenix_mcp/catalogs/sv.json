@@ -2297,6 +2297,7 @@
       "providerGemini": "Gemini",
       "providerGrok": "Grok",
       "providerGroq": "Groq",
+      "providerInfron": "Infron",
       "providerKimi": "Kimi",
       "providerMeta": "Meta",
       "providerMiMo": "Xiaomi MiMo",

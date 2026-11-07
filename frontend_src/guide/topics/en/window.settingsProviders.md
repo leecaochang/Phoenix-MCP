@@ -1,5 +1,5 @@
 ---
-{ "id": "window.settingsProviders", "title": "{{label:workspace.aiProviders}}", "parent": "workspace.settings", "order": 1, "keywords": ["API key", "model", "LLM", "account", "credit", "TypeSafe", "JEV"], "sectionKeywords": { "provider-add": ["new account", "Anthropic", "Claude", "DeepSeek", "OpenAI", "ChatGPT", "GPT", "Gemini", "Google", "Grok", "xAI", "Groq", "Kimi", "Moonshot", "Meta", "Llama", "MiniMax", "Mistral AI", "NVIDIA NIM", "Xiaomi MiMo", "Tencent Cloud TokenHub", "OpenCode", "Ollama", "OpenRouter", "Together AI", "Cerebras", "Fireworks AI", "Alibaba Cloud Model Studio", "Qwen", "DashScope", "Z.ai", "Zhipu", "GLM", "offline", "local model", "price", "pricing", "billing"], "decision-provider": ["TypeSafe", "JEV", "fast path"] }, "covers": ["frontend_src/components/LlmProviderSettings.tsx", "frontend_src/components/ProviderAddForm.tsx", "frontend_src/components/DecisionProviderSettings.tsx", "custom_components/phoenix_mcp/tool_loading.py", "custom_components/phoenix_mcp/model_selection.py", "custom_components/phoenix_mcp/routing/decision_budget.py"] }
+{ "id": "window.settingsProviders", "title": "{{label:workspace.aiProviders}}", "parent": "workspace.settings", "order": 1, "keywords": ["API key", "model", "LLM", "account", "credit", "TypeSafe", "JEV"], "sectionKeywords": { "provider-add": ["new account", "Anthropic", "Claude", "DeepSeek", "OpenAI", "ChatGPT", "GPT", "Gemini", "Google", "Grok", "xAI", "Groq", "Kimi", "Moonshot", "Meta", "Llama", "MiniMax", "Mistral AI", "NVIDIA NIM", "Xiaomi MiMo", "Tencent Cloud TokenHub", "OpenCode", "Ollama", "OpenRouter", "Infron", "Together AI", "Cerebras", "Fireworks AI", "Alibaba Cloud Model Studio", "Qwen", "DashScope", "Z.ai", "Zhipu", "GLM", "offline", "local model", "price", "pricing", "billing"], "decision-provider": ["TypeSafe", "JEV", "fast path"] }, "covers": ["frontend_src/components/LlmProviderSettings.tsx", "frontend_src/components/ProviderAddForm.tsx", "frontend_src/components/DecisionProviderSettings.tsx", "custom_components/phoenix_mcp/tool_loading.py", "custom_components/phoenix_mcp/model_selection.py", "custom_components/phoenix_mcp/routing/decision_budget.py"] }
 ---
 Add the AI accounts Phoenix uses. Each account needs an API key or, for a local model, a server address.
 
@@ -17,7 +17,7 @@ If something is wrong with an account, such as a model the provider no longer of
 
 Choose from the models the provider offers. Models that can't use tools are greyed out, because Phoenix needs tools to act.
 
-**{{label:settings.agentcliModelAuto}}** always uses the provider's newest suitable model. If you pick a model yourself, Phoenix keeps it until the provider retires it, then switches to its successor.
+**{{label:settings.agentcliModelAuto}}** always uses the provider's newest suitable model. If you pick a model yourself, Phoenix keeps it until the provider retires it, then switches to its successor. A model whose name ends in `:free` switches only to another free model.
 
 When **{{label:settings.agentcliVerifyOptions}}** is on, saving also checks which options the model supports. This uses a little API credit.
 
@@ -60,7 +60,7 @@ Most providers need only an API key. Some also need to know where your account i
 - Qwen: your workspace's base URL, a public HTTPS address, as well as the API key.
 - Ollama (local): your Ollama server's address. Home Assistant connects to it, so use an address the Home Assistant host can reach.
 
-OpenAI, Gemini, Groq, Kimi, Mistral AI, OpenRouter and Z.ai accept at most 128 tools per request. Phoenix gives them a smaller set to start with, and loads more when the model asks.
+OpenAI, Gemini, Groq, Kimi, Mistral AI, OpenRouter and Z.ai accept at most 128 tools per request, and Phoenix applies the same limit to Infron. Phoenix gives them a smaller set to start with, and loads more when the model asks.
 
 ## {{label:settings.catalogChecks}} {#catalog-checks}
 

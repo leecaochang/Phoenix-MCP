@@ -172,6 +172,7 @@ ALLOW_IDENTICAL = frozenset({
     "panel.settings.providerGrok",
     "panel.settings.providerGroq",
     "panel.settings.providerKimi",
+    "panel.settings.providerInfron",
     "panel.settings.providerMeta",
     "panel.settings.providerMiniMax",
     "panel.settings.providerMistral",

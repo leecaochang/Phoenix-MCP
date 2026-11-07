@@ -251,9 +251,9 @@ async def test_reasoning_precedes_the_text_of_its_chunk():
     assert _types(events)[:2] == [EV_THINKING, EV_TEXT]
 
 
-@pytest.mark.parametrize("kind, kept", [("openrouter", True), ("chatgpt", False)])
+@pytest.mark.parametrize("kind, kept", [("openrouter", True), ("infron", True), ("chatgpt", False)])
 @pytest.mark.asyncio
-async def test_reasoning_details_are_retained_for_openrouter_alone(kind, kept):
+async def test_reasoning_details_are_retained_for_aggregators_alone(kind, kept):
     details = [{"type": "reasoning.encrypted", "data": "x"}, "dropped", {"type": "reasoning.text", "text": "y"}]
     events = await _events(_provider(kind), _frame({"reasoning_details": details}),
                            _frame({"reasoning_details": "not a list"}),
@@ -840,3 +840,10 @@ async def test_finish_reason_read_from_a_chunk_with_a_delta_and_the_last_reason_
 async def test_a_later_empty_finish_reason_leaves_the_earlier_one():
     events = await _events(_provider(), _frame(finish="length"), _frame({"content": "hello!!!"}))
     assert events[-1]["stop_reason"] == "max_tokens"
+
+
+@pytest.mark.asyncio
+async def test_infron_returns_a_signature_carried_on_the_call():
+    signed = _tool(arguments="{}", thought_signature="s")
+    events = await _events(_provider("infron"), _frame({"tool_calls": [signed]}, finish="tool_calls"))
+    assert events[-1]["assistant_msg"]["tool_calls"][0]["thought_signature"] == "s"

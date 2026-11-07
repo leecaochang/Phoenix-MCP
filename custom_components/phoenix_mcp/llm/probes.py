@@ -37,7 +37,7 @@ def _effort_probe_body(kind: str, level: str) -> dict | None:
         return {"thinking": {"type": "adaptive"}, "output_config": {"effort": level}}
     if kind in ("deepseek", "zai"):
         return {"thinking": {"type": "enabled"}, "reasoning_effort": level}
-    if kind == "openrouter":
+    if kind in ("openrouter", "infron"):
         # The nested object carries every level, including max.
         return {"reasoning": {"effort": level}}
     if kind in (

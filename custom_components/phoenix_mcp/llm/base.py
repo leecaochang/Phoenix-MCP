@@ -45,7 +45,7 @@ _IMAGE_PROBE_TIMEOUT = ClientTimeout(total=90, connect=5, sock_connect=5)
 # back verbatim with its tool calls on the next round. Kimi's thinking models and
 # Qwen's preserve_thinking models take it the same way; others use the field for
 # display only.
-_REPLAY_REASONING_KINDS = frozenset({"deepseek", "zai", "mimo", "tencent", "kimi", "qwen", "fireworks", "opencode"})
+_REPLAY_REASONING_KINDS = frozenset({"deepseek", "zai", "mimo", "tencent", "kimi", "qwen", "fireworks", "opencode", "infron"})
 # Upper bound on catalogue pages followed, so a misbehaving provider cannot loop forever.
 _MODEL_LIST_MAX_PAGES = 10
 
@@ -347,6 +347,8 @@ _PROVIDER_BILLING: dict[str, tuple[frozenset[str], tuple[str, ...]]] = {
     "opencode": (frozenset({"creditserror", "monthlylimiterror", "userlimiterror"}), ()),
     "openrouter": (frozenset({"openrouter_credits", "openrouter_key_limit"}), ("key limit exceeded",)),
     "ollama_cloud": (frozenset(), ("requires a subscription",)),
+    # Infron's free-tier balance refusal is an HTTP 429 with only a generic type, so the sentence names it.
+    "infron": (frozenset({"insufficient_user_quota"}), ("current credits have been used up", "free model requires")),
     "zai": (frozenset({"1113", "1309"}), ()),
     "tencent": (frozenset({"403004", "401007", "401008", "failedoperation.servicestoparrears",
                            "failedoperation.resourcepackexhausted", "failedoperation.freeresourcepackexhausted"}), ()),
@@ -362,6 +364,10 @@ _OPENROUTER_IN_FLIGHT = "openrouter_in_flight_budget"
 _PROVIDER_NON_RETRYABLE: dict[str, frozenset[str]] = {
     "zai": frozenset({"1308", "1310", "1313", "1316", "1317", "1318", "1319", "1320", "1321"}),
     "tencent": frozenset({"429004"}),
+}
+# The same, for a provider whose errors carry only a sentence.
+_PROVIDER_NON_RETRYABLE_PHRASES: dict[str, tuple[str, ...]] = {
+    "infron": ("daily limit exceeded",),
 }
 # Refusals of this request that the status alone misnames: Z.ai's model outside
 # the plan, and OpenCode's free models, which answer only OpenCode's own app.
@@ -440,7 +446,8 @@ def _http_failure(
     elif _PROVIDER_REJECTED.get(kind, frozenset()) & set(codes):
         code, retryable = "provider_rejected", False
     elif (codes and codes[0] in _NON_RETRYABLE_ERROR_CODES) or daily or (
-            _PROVIDER_NON_RETRYABLE.get(kind, frozenset()) & set(codes)):
+            _PROVIDER_NON_RETRYABLE.get(kind, frozenset()) & set(codes)) or any(
+            phrase in _envelope_message(envelope).lower() for phrase in _PROVIDER_NON_RETRYABLE_PHRASES.get(kind, ())):
         retryable = False
     if delay is not None and status in (429, 503):
         given = extra.get("rate_limit")
@@ -1237,6 +1244,19 @@ def _openrouter_capabilities(data: list[dict]) -> dict[str, dict]:
                 for item in modalities
             )
         out[model_id] = row
+    return out
+
+
+def _infron_capabilities(data: list[dict]) -> dict[str, dict]:
+    """Per-model declared capabilities from Infron's catalog; a missing key means "not declared"."""
+    out: dict[str, dict] = {}
+    for m in data:
+        if not isinstance(m, dict) or not m.get("id"):
+            continue
+        row = {name: m[field] for name, field in (("tools", "supports_function_calling"), ("vision", "supports_vision"))
+               if isinstance(m.get(field), bool)}
+        if row:
+            out[m["id"]] = row
     return out
 
 

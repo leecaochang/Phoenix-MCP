@@ -25,7 +25,7 @@ PROVIDER_API_KEY_MAX_LENGTH = 4096
 AGENT_CHAT_PROVIDERS = frozenset({
     "claude", "deepseek", "chatgpt", "gemini", "grok", "kimi", "meta",
     "minimax", "mistral", "openrouter", "nvidia", "ollama", "ollama_cloud",
-    "zai", "groq", "together", "cerebras", "fireworks", "qwen", "opencode", "mimo", "tencent"})
+    "zai", "groq", "together", "cerebras", "fireworks", "qwen", "opencode", "mimo", "tencent", "infron"})
 # Default endpoints/models; the panel may override the model per conversation.
 AGENT_CHAT_CLAUDE_BASE_URL = "https://api.anthropic.com"
 AGENT_CHAT_ANTHROPIC_VERSION = "2023-06-01"
@@ -76,6 +76,10 @@ AGENT_CHAT_META_BASE_URL = "https://api.meta.ai/v1"
 # region-friendly way to reach Meta's Llama and hundreds of other models). Base
 # includes /api/v1; no default model (the live tool-capable list drives the dropdown).
 AGENT_CHAT_OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
+# Infron (infron.ai) serves its API from onerouter.pro. Its model list answers without
+# a key, so only the balance endpoint, on a second host, can prove one.
+AGENT_CHAT_INFRON_BASE_URL = "https://llm.onerouter.pro/v1"
+AGENT_CHAT_INFRON_BALANCE_URL = "https://api.onerouter.pro/v1/balance"
 # NVIDIA (build.nvidia.com) hosts many vendors' models behind one OpenAI-compatible
 # key (Authorization: Bearer nvapi-...); base includes /v1 so chat/models append
 # cleanly. No default model: the live list drives the dropdown. Model ids are

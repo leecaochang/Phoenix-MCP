@@ -21,7 +21,8 @@ from ..model_selection import effective_model
 from ..provider_constants import (
     AGENT_CHAT_CEREBRAS_BASE_URL, AGENT_CHAT_CLAUDE_BASE_URL, AGENT_CHAT_DEEPSEEK_BASE_URL,
     AGENT_CHAT_FIREWORKS_BASE_URL, AGENT_CHAT_GEMINI_BASE_URL, AGENT_CHAT_GROK_BASE_URL,
-    AGENT_CHAT_GROK_US_BASE_URL, AGENT_CHAT_GROQ_BASE_URL, AGENT_CHAT_KIMI_BASE_URL,
+    AGENT_CHAT_GROK_US_BASE_URL, AGENT_CHAT_GROQ_BASE_URL, AGENT_CHAT_INFRON_BALANCE_URL,
+    AGENT_CHAT_INFRON_BASE_URL, AGENT_CHAT_KIMI_BASE_URL,
     AGENT_CHAT_KIMI_CHINA_BASE_URL, AGENT_CHAT_LEARNABLE_OPTIONS, AGENT_CHAT_LEARNED_REFUSAL_TTL_DAYS,
     AGENT_CHAT_MAX_TOOLS_PER_REQUEST, AGENT_CHAT_META_BASE_URL, AGENT_CHAT_MIMO_BASE_URL,
     AGENT_CHAT_MIMO_TOKEN_PLAN_AMS_BASE_URL, AGENT_CHAT_MIMO_TOKEN_PLAN_BASE_URL,
@@ -134,6 +135,8 @@ class ProviderDefinition:
     # How tool calls arrive in a stream. "openai" concatenates argument deltas
     # by index; "gemini" is Gemini's compatibility layer (see _merged_whole_arguments).
     tool_stream: str = "openai"
+    # What proves an API key, for a provider whose model list answers without one.
+    key_check_url: str | None = None
 
     def public(self) -> dict[str, Any]:
         out: dict[str, Any] = {
@@ -242,6 +245,7 @@ _PROVIDER_LABEL_KEYS = {
     "gemini": "settings.providerGemini",
     "grok": "settings.providerGrok",
     "groq": "settings.providerGroq",
+    "infron": "settings.providerInfron",
     "kimi": "settings.providerKimi",
     "meta": "settings.providerMeta",
     "minimax": "settings.providerMiniMax",
@@ -269,12 +273,13 @@ def _definition(
     reasoning: str = "effort", model_filter: str = "chat",
     models_shape: str = "data", validation_error: str | None = None,
     ollama: str | None = None, max_tools: int | None = None, tool_stream: str = "openai",
+    key_check_url: str | None = None,
 ) -> ProviderDefinition:
     return ProviderDefinition(
         kind, label, adapter, base_url, model,
         label_key or _PROVIDER_LABEL_KEYS[kind], fields, endpoints,
         include_usage, reasoning, model_filter, models_shape, validation_error,
-        ollama, max_tools=max_tools, tool_stream=tool_stream,
+        ollama, max_tools=max_tools, tool_stream=tool_stream, key_check_url=key_check_url,
     )
 
 
@@ -331,6 +336,10 @@ PROVIDER_DEFINITIONS: dict[str, ProviderDefinition] = {
         # models behind it refuse more than 128.
         _definition("openrouter", "OpenRouter", AGENT_CHAT_OPENROUTER_BASE_URL, include_usage=True, reasoning="probed_effort",
                     model_filter="openrouter", max_tools=AGENT_CHAT_MAX_TOOLS_PER_REQUEST),
+        # Infron forwards the tools array the same way, to the same vendors.
+        _definition("infron", "Infron", AGENT_CHAT_INFRON_BASE_URL, include_usage=True, reasoning="probed_effort",
+                    model_filter="infron", max_tools=AGENT_CHAT_MAX_TOOLS_PER_REQUEST,
+                    key_check_url=AGENT_CHAT_INFRON_BALANCE_URL),
         _definition(
             "together", "Together", AGENT_CHAT_TOGETHER_BASE_URL,
             model_filter="together", models_shape="list",

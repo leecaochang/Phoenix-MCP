@@ -1,5 +1,5 @@
 ---
-{ "id": "window.settingsProviders", "title": "{{label:workspace.aiProviders}}", "parent": "workspace.settings", "order": 1, "keywords": ["API 金鑰", "模型", "LLM", "帳戶", "額度", "TypeSafe", "JEV"], "sectionKeywords": { "provider-add": ["新帳戶", "Anthropic", "Claude", "DeepSeek", "OpenAI", "ChatGPT", "GPT", "Gemini", "Google", "Grok", "xAI", "Groq", "Kimi", "Moonshot", "Meta", "Llama", "MiniMax", "Mistral AI", "NVIDIA NIM", "Xiaomi MiMo", "Tencent Cloud TokenHub", "OpenCode", "Ollama", "OpenRouter", "Together AI", "Cerebras", "Fireworks AI", "Alibaba Cloud Model Studio", "Qwen", "DashScope", "Z.ai", "Zhipu", "GLM", "深度求索", "通義千問", "千問", "阿里雲百煉", "百煉", "智譜", "月之暗面", "騰訊雲", "小米", "離線", "本機模型", "價格", "計費"], "decision-provider": ["TypeSafe", "JEV", "快速路徑"] } }
+{ "id": "window.settingsProviders", "title": "{{label:workspace.aiProviders}}", "parent": "workspace.settings", "order": 1, "keywords": ["API 金鑰", "模型", "LLM", "帳戶", "額度", "TypeSafe", "JEV"], "sectionKeywords": { "provider-add": ["新帳戶", "Anthropic", "Claude", "DeepSeek", "OpenAI", "ChatGPT", "GPT", "Gemini", "Google", "Grok", "xAI", "Groq", "Kimi", "Moonshot", "Meta", "Llama", "MiniMax", "Mistral AI", "NVIDIA NIM", "Xiaomi MiMo", "Tencent Cloud TokenHub", "OpenCode", "Ollama", "OpenRouter", "Infron", "Together AI", "Cerebras", "Fireworks AI", "Alibaba Cloud Model Studio", "Qwen", "DashScope", "Z.ai", "Zhipu", "GLM", "深度求索", "通義千問", "千問", "阿里雲百煉", "百煉", "智譜", "月之暗面", "騰訊雲", "小米", "離線", "本機模型", "價格", "計費"], "decision-provider": ["TypeSafe", "JEV", "快速路徑"] } }
 ---
 新增 Phoenix 使用的 AI 帳戶。每個帳戶需要 API 金鑰，或者對於本機模型，需要伺服器位址。
 
@@ -17,7 +17,7 @@ Agent Chat、語音智慧體和 AI 任務各使用其中一個帳戶，並搭配
 
 從提供者提供的模型中選擇。無法使用工具的模型會顯示為灰色，因為 Phoenix 需要工具來執行操作。
 
-**{{label:settings.agentcliModelAuto}}** 一律使用提供者最新且合適的模型。如果你自己選擇模型，Phoenix 會一直保留它，直到提供者停用它，然後切換到其後續模型。
+**{{label:settings.agentcliModelAuto}}** 一律使用提供者最新且合適的模型。如果你自己選擇模型，Phoenix 會一直保留它，直到提供者停用它，然後切換到其後續模型。名稱以 `:free` 結尾的模型只會切換到另一個免費模型。
 
 當 **{{label:settings.agentcliVerifyOptions}}** 開啟時，儲存時還會檢查模型支援哪些選項。這會消耗少量 API 額度。
 
@@ -60,7 +60,7 @@ Agent Chat、語音智慧體和 AI 任務各使用其中一個帳戶，並搭配
 - Qwen：除了 API 金鑰，還需要你的工作區基礎 URL，即一個公開的 HTTPS 位址。
 - Ollama（本機）：你的 Ollama 伺服器位址。Home Assistant 會連線它，因此請使用 Home Assistant 主機可以存取的位址。
 
-OpenAI、Gemini、Groq、Kimi、Mistral AI、OpenRouter 和 Z.ai 每個請求最多接受 128 個工具。Phoenix 會先給它們較小的工具集，並在模型要求時載入更多。
+OpenAI、Gemini、Groq、Kimi、Mistral AI、OpenRouter 和 Z.ai 每個請求最多接受 128 個工具，Phoenix 對 Infron 也採用同樣的上限。Phoenix 會先給它們較小的工具集，並在模型要求時載入更多。
 
 ## {{label:settings.catalogChecks}} {#catalog-checks}
 

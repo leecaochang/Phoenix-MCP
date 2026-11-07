@@ -17,7 +17,7 @@ from .base import (
     _gemini_tool_slot, _http_failure, _http_failure_code, _IMAGE_PROBE_TIMEOUT,
     _invalid_tool_calls, _invalid_tools_error, _is_expired, _json_error_hint,
     _merged_whole_arguments, _MISTRAL_RATE_LIMIT_HEADER_FIELDS, _model_result_text, _norm,
-    _norm_stop, _ollama_capabilities, _openrouter_capabilities, _parse_provider_error,
+    _infron_capabilities, _norm_stop, _ollama_capabilities, _openrouter_capabilities, _parse_provider_error,
     _PROBE_TIMEOUT, _provider_object, _provider_tool, _ProviderResponseError,
     _rate_limit_headers, _read_json, _REFUSAL_STATUSES, _refused_option,
     _REPLAY_REASONING_KINDS, _RETRY_AFTER_HEADER_FIELDS, _retry_transient, _RETRYABLE_STATUSES,
@@ -111,6 +111,22 @@ def _filter_openrouter_models(data: list[dict]) -> list[str]:
             and _text_only(m)]
     tool_ids = sorted(m["id"] for m in live if "tools" in (m.get("supported_parameters") or []))
     return tool_ids or sorted(m["id"] for m in data if m.get("id"))
+
+
+def _filter_infron_models(data: list[dict]) -> list[str]:
+    """Keep Infron's tool-capable text models reachable through Chat Completions.
+
+    The catalog also lists media, embedding and Responses-only models. Sorted for a stable
+    dropdown; falls back to every id if none qualify (schema drift).
+    """
+    rows = [m for m in data if isinstance(m, dict) and m.get("id")]
+    return sorted(
+        str(m["id"]) for m in rows
+        if m.get("category_type") == "LLM" and m.get("supports_function_calling") is True
+        and m.get("output_modalities") == ["text"]
+        and "openai" in (m.get("supported_endpoint_types") or [])
+        and not m.get("deprecated") and not m.get("is_display_only")
+    ) or sorted(str(m["id"]) for m in rows)
 
 
 def _filter_mistral_models(data: list[dict]) -> list[str]:
@@ -351,7 +367,7 @@ class OpenAICompatProvider:
                         return False, LocalizedReason("API key rejected.", "providerKeyRejected")
                     label = "Ollama Cloud" if self._is_ollama_cloud else "Ollama"
                     return False, LocalizedReason(f"{label} returned HTTP {resp.status}.", "providerNamedHttpStatus", provider=label, status=resp.status)
-            async with session.get(self._models_url(), headers=self._headers(),
+            async with session.get(self.definition.key_check_url or self._models_url(), headers=self._headers(),
                                    timeout=_PROBE_TIMEOUT, allow_redirects=False) as resp:
                 if resp.status == 200:
                     return True, ""
@@ -424,6 +440,8 @@ class OpenAICompatProvider:
             self.model_created = _created_map(data)
             if self.definition.model_filter == "openrouter":
                 return _filter_openrouter_models(data) or ([self.cfg.model] if self.cfg.model else [])
+            if self.definition.model_filter == "infron":
+                return _filter_infron_models(data) or ([self.cfg.model] if self.cfg.model else [])
             if self.definition.model_filter == "mistral":
                 return _filter_mistral_models(data)
             if self.definition.model_filter in ("mimo", "tencent"):
@@ -513,14 +531,14 @@ class OpenAICompatProvider:
         Empty means "declared nothing", never "supports nothing", or a failed lookup would strip a
         working model's controls.
         """
-        # OpenRouter, Mistral and Ollama report this; Z.ai, Qwen and MiMo are credited with thinking
+        # OpenRouter, Infron, Mistral and Ollama report this; Z.ai, Qwen and MiMo are credited with thinking
         # from their reasoning style. Other backends list only an id and an owner, so the shipped
         # capability table stays and probing is a separate step.
         try:
             if self._is_ollama:
                 return await _ollama_capabilities(
                     session, self.cfg.base_url, self._headers(), models)
-            if self.definition.model_filter == "openrouter":
+            if self.definition.model_filter in ("openrouter", "infron"):
                 async with session.get(
                     f"{self.cfg.base_url}/models", headers=self._headers(),
                     timeout=_PROBE_TIMEOUT, allow_redirects=False,
@@ -528,6 +546,8 @@ class OpenAICompatProvider:
                     if resp.status != 200:
                         return {}
                     body = await _read_json(resp)
+                if self.definition.model_filter == "infron":
+                    return _infron_capabilities(body.get("data", []))
                 return _openrouter_capabilities(body.get("data", []))
             if self.definition.model_filter == "mistral":
                 async with session.get(
@@ -637,8 +657,9 @@ class OpenAICompatProvider:
             # no levels are established, the panel offers none, and this branch
             # never fires. The wrong guess costs nothing. OpenRouter's nested
             # `reasoning` object carries every level its catalog lists, max
-            # included, which its top-level reasoning_effort does not.
-            if effort and self.kind == "openrouter":
+            # included, which its top-level reasoning_effort does not. Infron
+            # documents only the nested form.
+            if effort and self.kind in ("openrouter", "infron"):
                 body["reasoning"] = {"effort": effort}
             elif effort:
                 body["reasoning_effort"] = effort
@@ -824,7 +845,7 @@ class OpenAICompatProvider:
         reasoning = delta.get("reasoning_content") or delta.get("reasoning")
         if reasoning is not None and not isinstance(reasoning, str):
             raise _ProviderResponseError()
-        if self.kind == "openrouter" and isinstance(delta.get("reasoning_details"), list):
+        if self.kind in ("openrouter", "infron") and isinstance(delta.get("reasoning_details"), list):
             stream.reasoning_details.extend(d for d in delta["reasoning_details"] if isinstance(d, dict))
         if reasoning and self.kind in _REPLAY_REASONING_KINDS:
             stream.replay_reasoning_parts.append(str(reasoning))
@@ -1044,6 +1065,9 @@ def _merge_tool_fragment(tc: Any, stream: _ChatStream) -> None:
         elif stream.pending_extra is not None and "extra_content" not in slot:
             slot["extra_content"] = stream.pending_extra
         stream.pending_extra = None
+    elif isinstance(tc.get("thought_signature"), str) and tc["thought_signature"]:
+        # Infron carries a thought signature on the call itself.
+        slot["thought_signature"] = tc["thought_signature"]
     fn = tc.get("function")
     if fn is None:
         fn = {}
@@ -1106,6 +1130,7 @@ def _checked_tool_calls(stream: _ChatStream) -> tuple[list[dict], list[dict], li
             # Gemini's thought signature must return with its call, unchanged,
             # or the next request is refused.
             **({"extra_content": slot["extra_content"]} if slot.get("extra_content") else {}),
+            **({"thought_signature": slot["thought_signature"]} if slot.get("thought_signature") else {}),
         })
         if parsed is not None:
             parsed_tools.append({"id": slot["id"], "name": slot["name"], "input": parsed})

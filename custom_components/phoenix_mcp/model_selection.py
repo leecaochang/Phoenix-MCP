@@ -26,10 +26,16 @@ TIER_PREFERENCES: dict[str, tuple[str, ...]] = {
     "qwen": ("max", "plus", "flash"),
     "tencent": (r"^hy", r"^deepseek"),
     "openrouter": (r"anthropic/claude-opus", r"anthropic/claude-sonnet", r"openai/gpt", r"google/gemini"),
+    # A free variant is rate-limited and needs a funded account, so automatic mode never prefers one.
+    "infron": (r"anthropic/claude-opus(?!.*:free$)", r"anthropic/claude-sonnet(?!.*:free$)",
+               r"openai/gpt(?!.*:free$)", r"google/gemini(?!.*:free$)"),
     # The plain GLM model leads its line; flash variants are the fast tier.
     "zai": (r"^glm-[\d.]+$", r"-air(?:$|-)", r"-flash$", r"-flashx"),
     "meta": ("wonder", "spark"),
 }
+
+# How aggregators mark a free variant of a model.
+FREE_MODEL_SUFFIX = ":free"
 
 # Markers of a model the provider has not finished. A stable model always ranks
 # ahead of one of these in the same tier.
@@ -117,7 +123,13 @@ def successor(
     kind: str, retired: str, models: Sequence[str],
     created: Mapping[str, float] | None = None,
 ) -> str:
-    """The model that replaces a dropped id: its own family first, then the best overall."""
+    """The model that replaces a dropped id: its own family first, then the best overall.
+
+    A dropped ``:free`` id takes only another free model, or "" when none is listed, so that a
+    retirement never starts charging the account.
+    """
+    if retired.endswith(FREE_MODEL_SUFFIX):
+        models = [m for m in models if m.endswith(FREE_MODEL_SUFFIX)]
     if not models:
         return ""
     family = family_key(retired)
@@ -139,5 +151,6 @@ def effective_model(
     if not stored:
         return best_model(kind, pool, created), ""
     if catalogue and stored not in catalogue and stored in seen:
-        return successor(kind, stored, pool, created), stored
+        replacement = successor(kind, stored, pool, created)
+        return (replacement, stored) if replacement else (stored, "")
     return stored, ""

@@ -4754,7 +4754,7 @@ class TestAggregatorEffort:
         assert llm_probes._effort_probe_body(kind, "high") == {"reasoning_effort": "high"}
 
     @pytest.mark.asyncio
-    @pytest.mark.parametrize("kind", ["openrouter", "nvidia", "opencode", "tencent"])
+    @pytest.mark.parametrize("kind", ["openrouter", "infron", "nvidia", "opencode", "tencent"])
     async def test_an_effort_reaches_the_request(self, hass, kind):
         cfg = llm_accounts.ProviderConfig(kind=kind, model="vendor/m", base_url="https://x", api_key="k")
         # Capture the request the real builder produces.
@@ -4782,7 +4782,7 @@ class TestAggregatorEffort:
                 break
         except Exception:
             pass
-        if kind == "openrouter":
+        if kind in ("openrouter", "infron"):
             assert sent.get("reasoning") == {"effort": "high"} and "reasoning_effort" not in sent
         else:
             assert sent.get("reasoning_effort") == "high"
