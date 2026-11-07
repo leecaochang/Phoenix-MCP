@@ -76,7 +76,7 @@ async def async_register_phoenix_panel(hass: HomeAssistant) -> None:
         # name untranslated in its zh-Hans strings, and several places name this
         # integration in HA's own UI where it cannot be localized.
         sidebar_title="Phoenix MCP",
-        sidebar_icon="mdi:fire",
+        sidebar_icon="mdi:duck",
         frontend_url_path=_PANEL_KEY,
         require_admin=True,
         config={
