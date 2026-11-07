@@ -193,9 +193,23 @@ class UncertainOutcome(dict):
     """
 
 
+class ReportedFailure(UncertainOutcome):
+    """A dispatched service call Home Assistant itself answered with a failure.
+
+    Agent loops hand it back to the model, as a device being offline must not hold a key at the
+    unknown-outcome barrier; a copy that drops the type keeps that barrier. Approval still closes
+    the run as interrupted, since a call on several targets may have applied in part.
+    """
+
+
 def _tool_uncertain(body: dict) -> dict:
     """Return a dispatched write whose outcome is unconfirmed, always as an error."""
     return UncertainOutcome(_tool_error(json.dumps(body, default=str)))
+
+
+def _tool_reported_failure(message: str) -> dict:
+    """Return a dispatched call that failed in Home Assistant, always as an error."""
+    return ReportedFailure(_tool_uncertain({"status": "unknown", "retry_safe": False, "message": message}))
 
 
 def _recovery_failure(exc: Exception, sent: str | None, *, lost: str, unsent: str) -> dict:

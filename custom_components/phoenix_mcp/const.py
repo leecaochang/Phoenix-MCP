@@ -114,6 +114,8 @@ TODO_TIMEOUT_SECONDS = 15
 SERVICE_FIELDS_MAX = 40
 SERVICE_FIELD_MAX_OPTIONS = 30
 SERVICE_FIELD_MAX_DESCRIPTION = 160
+# How much of Home Assistant's reason for a failed call reaches the agent.
+SERVICE_FAILURE_TEXT_MAX = 300
 # An unknown label or category refusal lists at most this many valid IDs.
 REGISTRY_ID_HINT_MAX = 50
 # Integration INFO/DEBUG records kept in memory for get_logs source=integration_debug.

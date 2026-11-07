@@ -7,7 +7,7 @@ from typing import Any
 from homeassistant.core import HomeAssistant
 
 from .agent_recovery import NotDispatched, RecoveryRequired, _journal_tool_name, tool_is_read_only
-from .tool_common import RefusedBeforeWrite, _tool_error
+from .tool_common import RefusedBeforeWrite, ReportedFailure, _tool_error
 
 
 async def dispatch_agent_tool(
@@ -46,6 +46,9 @@ async def dispatch_agent_tool(
             if isinstance(result, dict) and result.get("isError") is not True:
                 await recovery.received(request_id)
             elif isinstance(result, dict) and outcome in ("denied", "not_found"):
+                await recovery.received(request_id)
+            elif isinstance(result, ReportedFailure):
+                # Home Assistant answered, and the model is told to check before repeating.
                 await recovery.received(request_id)
             elif isinstance(result, RefusedBeforeWrite):
                 # Server-owned proof that nothing was written: the model gets the

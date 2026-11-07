@@ -72,7 +72,7 @@
 
 自定义操作由 Home Assistant 在其实体上运行，或其注册的架构列出 `entity_id` 时，算作已声明目标。
 
-日历更改、`homeassistant.reload_config_entry` 和 `todo.remove_completed_items` 同样会被拒绝，因为它们有自己的工具。运行超过 30 秒的操作会被报告为可能未完成。
+日历更改、`homeassistant.reload_config_entry` 和 `todo.remove_completed_items` 同样会被拒绝，因为它们有自己的工具。运行超过 30 秒的操作会被报告为可能未完成。如果 Home Assistant 表示操作失败，智能体会收到原因，并被告知在重试前先检查结果。
 
 允许它的能力：[{{label:caps.cap_restart.label}}](guide:window.capabilities#restart)、[{{label:caps.cap_yaml_edit.label}}](guide:window.capabilities#yaml-edit)、[{{label:caps.cap_service_response.label}}](guide:window.capabilities#service-response)、[{{label:caps.cap_notify.label}}](guide:window.capabilities#notify)、[{{label:caps.cap_search.label}}](guide:window.capabilities#search)（用于预览）
 

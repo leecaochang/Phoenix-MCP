@@ -585,17 +585,39 @@ async def test_agent_refusal_before_writing_leaves_no_barrier(hass, refusal):
     assert await async_get_lovelace_config(hass, None) == layout
 
 
-@pytest.mark.parametrize("result", ["unmarked", "copied"])
+async def test_a_failure_home_assistant_reported_does_not_hold_the_key(hass):
+    # An offline device must not stop a key until someone reconciles it.
+    from custom_components.phoenix_mcp.agent_dispatch import dispatch_agent_tool
+    from custom_components.phoenix_mcp.tool_common import _tool_reported_failure
+
+    data, access_key, _ = await _environment(hass)
+
+    async def handler(*args, **kwargs):
+        return _tool_reported_failure("Home Assistant could not complete light.turn_on."), "invalid_request", "call_service"
+
+    with patch.dict(tool_catalog._TOOL_HANDLERS, {"call_service": (handler, (), {})}):
+        body, _, _, outcome = await dispatch_agent_tool(
+            tool_dispatch._dispatch_mcp, hass=hass, data=data, access_key=access_key, name="call_service",
+            arguments=_write()["params"]["arguments"], tool_id=1, request_id="reported",
+            client_ip="agentcli", base_url="")
+    assert outcome == "invalid_request"
+    assert body["result"]["isError"] is True
+    assert set(body["result"]) == {"content", "isError"}  # the marker adds nothing on the wire
+    assert not data.agent_recovery.blocks(access_key.id)
+
+
+@pytest.mark.parametrize("result", ["unmarked", "copied", "copied failure"])
 async def test_agent_write_error_without_the_marker_keeps_the_barrier(hass, result):
     # A handler error after the handler ran may follow a partial write, and a
     # copy that drops the marker's type proves nothing either: both fail closed.
     from custom_components.phoenix_mcp.agent_dispatch import dispatch_agent_tool
     from custom_components.phoenix_mcp.agent_recovery import RecoveryRequired
-    from custom_components.phoenix_mcp.tool_common import _tool_error, _tool_refused_before_write
+    from custom_components.phoenix_mcp.tool_common import _tool_error, _tool_refused_before_write, _tool_reported_failure
 
     data, access_key, _ = await _environment(hass)
     text = "Failed to save dashboard config: connection lost."
-    error = _tool_error(text) if result == "unmarked" else dict(_tool_refused_before_write(text))
+    error = {"unmarked": _tool_error, "copied": _tool_refused_before_write, "copied failure": _tool_reported_failure}[result](text)
+    error = dict(error)
 
     async def handler(*args, **kwargs):
         return error, "invalid_request", "call_service"

@@ -67,7 +67,7 @@ An action that doesn't declare a target, such as `shell_command`, `rest_command`
 
 A custom action declares a target when Home Assistant runs it on its entities, or when its registered schema names `entity_id`.
 
-Calendar changes, `homeassistant.reload_config_entry` and `todo.remove_completed_items` are refused as well, because they have their own tools. An action still running after 30 seconds is reported as possibly incomplete.
+Calendar changes, `homeassistant.reload_config_entry` and `todo.remove_completed_items` are refused as well, because they have their own tools. An action still running after 30 seconds is reported as possibly incomplete. If Home Assistant says an action failed, the agent gets the reason and is told to check the result before trying again.
 
 Allowed by: [{{label:caps.cap_restart.label}}](guide:window.capabilities#restart), [{{label:caps.cap_yaml_edit.label}}](guide:window.capabilities#yaml-edit), [{{label:caps.cap_service_response.label}}](guide:window.capabilities#service-response), [{{label:caps.cap_notify.label}}](guide:window.capabilities#notify), [{{label:caps.cap_search.label}}](guide:window.capabilities#search) for previews
 

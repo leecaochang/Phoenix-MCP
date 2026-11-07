@@ -18,7 +18,8 @@ from ..approval_targets import target_binding, TARGETS_CHANGED, targets_current
 from ..audit import Outcome
 from ..const import (
     CAP_CONFIRM, CAP_DENY, DUAL_GATE_SERVICES, HIGH_RISK_DOMAINS, MUSIC_ASSISTANT_LIBRARY_SERVICES,
-    NO_TARGET_SERVICES, PROXY_TIMEOUT_SECONDS, SERVICE_RESULT_STATES_MAX, APPROVAL_TARGETS_KEY,
+    NO_TARGET_SERVICES, PRIMARY_ENTITY_DOMAINS, PROXY_TIMEOUT_SECONDS, SERVICE_FAILURE_TEXT_MAX,
+    SERVICE_RESULT_STATES_MAX, APPROVAL_TARGETS_KEY,
     TTS_SPEAK_PLAYER_FIELD, TTS_SPEAK_SERVICE,
 )
 from ..data import PhoenixData
@@ -49,8 +50,9 @@ from ..service_targets import (
     unsupported_secondary_targets, visible_reach_warnings,
 )
 from ..tool_common import (
-    _add_mesa_advisory, _CAP_FORBIDDEN_MESSAGE, _gate, _mesa_confirm_annotation, _pending_or_inline, _tool_error, _tool_refused_before_write, _tool_success, MESA_DENIED_MESSAGE,
+    _add_mesa_advisory, _CAP_FORBIDDEN_MESSAGE, _gate, _mesa_confirm_annotation, _pending_or_inline, _tool_error, _tool_refused_before_write, _tool_reported_failure, _tool_success, MESA_DENIED_MESSAGE,
 )
+from ..redaction import redact_diagnostics, redact_inaccessible_entity_ids_in_text
 from ..request_authority import _approved_exec_ctx
 from ..tool_contracts import normalize_tool_args, service_name_error
 from .esphome import _ESPHOME_DOMAIN
@@ -186,6 +188,23 @@ async def _tool_call_service(
     )
 
 
+def _failure_text(err: HomeAssistantError, domain: str, service: str, access_key: AccessKeyRecord,
+                  hass: HomeAssistant, *, detail: bool = True) -> str:
+    """Name a failed call, with Core's reason scrubbed then bounded when `detail` is set."""
+    reason = str(err).strip() if detail else ""
+    if not reason:
+        return f"Home Assistant could not complete {domain}.{service}."
+    scrubbed = redact_diagnostics(redact_inaccessible_entity_ids_in_text(reason, access_key, hass))
+    return f"Home Assistant could not complete {domain}.{service}: {scrubbed[:SERVICE_FAILURE_TEXT_MAX]}"
+
+
+def _service_failure(err: HomeAssistantError, domain: str, service: str, access_key: AccessKeyRecord,
+                     hass: HomeAssistant, *, detail: bool = True) -> dict:
+    """The result of a dispatched call that failed, which may have applied in part."""
+    text = _failure_text(err, domain, service, access_key, hass, detail=detail)
+    return _tool_reported_failure(f"{text.rstrip('.')}. It may have applied in part, so check the result before repeating it.")
+
+
 def _service_required_cap(
     args: dict, domain: str, service: str, access_key: AccessKeyRecord, hass: HomeAssistant,
 ) -> str | None:
@@ -250,8 +269,11 @@ async def _dispatch_no_target_tool_call(
         if not surface_validation_errors:
             return _tool_error("Forbidden."), "denied", resource
         return _tool_error(_validation_error_message(err)), "invalid_request", resource
-    except HomeAssistantError:
+    except Unauthorized:
         return _tool_error("Forbidden."), "denied", resource
+    except HomeAssistantError as err:
+        failure = _service_failure(err, domain, service, access_key, hass, detail=surface_validation_errors)
+        return failure, "invalid_request", resource
     # Nothing to read back: such an action changes no entity's state.
     return _tool_success(json.dumps({
         "success": True, "verified": None,
@@ -307,8 +329,10 @@ async def _execute_music_assistant_library_read(
     except (ServiceValidationError, vol.Invalid) as err:
         # Authorized by now; the message is about the caller's own arguments.
         return _tool_refused_before_write(_validation_error_message(err)), "invalid_request", resource
-    except HomeAssistantError:
+    except Unauthorized:
         return _tool_refused_before_write("Forbidden."), "denied", resource
+    except HomeAssistantError as err:
+        return _tool_refused_before_write(_failure_text(err, domain, service, access_key, hass)), "invalid_request", resource
     body = {"success": True, "service_response": filter_service_response(response, access_key, hass)}
     return _tool_success(json.dumps(body, default=str)), "allowed", resource
 
@@ -610,8 +634,13 @@ async def _execute_call_service(
         # ServiceValidationError: it describes the caller's own argument shape,
         # not hidden state.
         return _tool_error(_validation_error_message(err)), "invalid_request", resource
-    except HomeAssistantError:
+    except Unauthorized:
         return _tool_error("Forbidden."), "denied", resource
+    except HomeAssistantError as err:
+        # A scene, script or automation runs other entities' actions, so its failure can name
+        # what this key cannot read.
+        failure = _service_failure(err, domain, service, access_key, hass, detail=domain not in PRIMARY_ENTITY_DOMAINS)
+        return failure, "invalid_request", resource
 
     body: dict[str, Any] = {"success": True}
     if local_plan:
