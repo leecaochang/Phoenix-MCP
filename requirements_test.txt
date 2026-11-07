@@ -60,7 +60,7 @@ serialx==1.15.1
 dbus-fast==5.0.22
 
 # Standalone lint tool used by the dev workflow (not pulled in by the test package).
-pyflakes==4.0.3
+pyflakes==4.1.0
 
 # Standalone type checker, same rationale as pyflakes above (not pulled in by
 # the test package). Config lives in pyproject.toml.
