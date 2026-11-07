@@ -7,6 +7,7 @@ import logging
 import random
 import re
 import struct
+from typing import Any
 import zlib
 
 from aiohttp import ClientSession
@@ -15,7 +16,8 @@ from .accounts import ProviderConfig
 from .base import _IMAGE_REFUSAL, _REFUSAL_STATUSES
 from .factory import build_provider
 from ..provider_constants import (
-    AGENT_CHAT_EFFORT_LEVEL_ORDER, AGENT_CHAT_PROBE_MAX_CALLS, AGENT_CHAT_PROBE_SENTINEL,
+    AGENT_CHAT_EFFORT_LEVEL_ORDER, AGENT_CHAT_INFRON_EFFORT_LEVELS, AGENT_CHAT_PROBE_MAX_CALLS,
+    AGENT_CHAT_PROBE_SENTINEL,
 )
 
 
@@ -105,6 +107,16 @@ async def async_probe_vision(session: ClientSession, cfg: ProviderConfig) -> boo
     return _PROBE_COLOUR_WORD.findall(reply)[:3] == stripes
 
 
+async def _observed_effort_levels(provider: Any, session: ClientSession) -> tuple[list[str], int]:
+    """Infron's levels if this model visibly reasons, without "none" if it cannot stop; and the calls made."""
+    _status, reasons = await provider.probe_reasoning(session, "low")
+    if not reasons:
+        return [], 1
+    status, still = await provider.probe_reasoning(session, "none")
+    stops = status == 200 and not still
+    return [level for level in AGENT_CHAT_INFRON_EFFORT_LEVELS if stops or level != "none"], 2
+
+
 async def async_probe_capabilities(
     session: ClientSession, cfg: ProviderConfig,
 ) -> tuple[dict, int, bool]:
@@ -126,7 +138,12 @@ async def async_probe_capabilities(
         return caps, calls, False
 
     fragment = _effort_probe_body(cfg.kind, AGENT_CHAT_PROBE_SENTINEL)
-    if fragment is not None:
+    if cfg.kind == "infron":
+        levels, used = await _observed_effort_levels(provider, session)
+        calls += used
+        if levels:
+            caps["effort_levels"] = levels
+    elif fragment is not None:
         status = await provider.probe_option(session, fragment)
         calls += 1
         # Only a refusal (400 or 422) is evidence. Unreachable (None) says

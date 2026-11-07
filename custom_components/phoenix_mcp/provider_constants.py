@@ -182,6 +182,10 @@ AGENT_CHAT_PROBE_SENTINEL = "phoenix-probe-invalid"
 # temperature), so this is a backstop that keeps a new knob from turning a button
 # into unbounded spend.
 AGENT_CHAT_PROBE_MAX_CALLS = 10
+# Infron maps one documented set of efforts onto every vendor and refuses no value, so a refusal
+# proves nothing there: a small reasoning question shows whether the effort does anything.
+AGENT_CHAT_INFRON_EFFORT_LEVELS = ("none", "minimal", "low", "medium", "high", "xhigh")
+AGENT_CHAT_REASONING_PROBE_MAX_TOKENS = 256
 # Output room for the image check's short answer, with headroom for models
 # that reason before replying.
 AGENT_CHAT_PROBE_IMAGE_MAX_TOKENS = 2048

@@ -30,7 +30,7 @@ class _Response:
         self.payload = payload
         self.body = text
         self.headers: dict = {}
-        self.content = _Content(text.encode())
+        self.content = _Content((text or json.dumps(payload)).encode())
 
     async def __aenter__(self):
         return self
@@ -183,3 +183,79 @@ def test_a_retired_free_model_with_no_free_replacement_is_kept_not_charged():
 
 def test_a_retired_paid_model_may_still_move_to_the_best_overall():
     assert successor("infron", "gone/model", CATALOG) == "anthropic/claude-opus-5.5"
+
+
+def _reply(reasoning: str = "", tokens: int = 0) -> _Response:
+    return _Response(200, {
+        "choices": [{"message": {"content": "391", **({"reasoning": reasoning} if reasoning else {})}}],
+        "usage": {"completion_tokens_details": {"reasoning_tokens": tokens}},
+    })
+
+
+class _Probe:
+    """Answers each reasoning question from a table of effort to reply."""
+
+    def __init__(self, replies: dict[str, _Response]) -> None:
+        self.replies = replies
+        self.bodies: list[dict] = []
+
+    def post(self, _url, **kwargs):
+        body = kwargs["json"]
+        self.bodies.append(body)
+        if body["max_tokens"] == 1:
+            return _Response(200, {"choices": []})
+        return self.replies[body["reasoning"]["effort"]]
+
+
+LEVELS = ["none", "minimal", "low", "medium", "high", "xhigh"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("low", "none", "levels"), [
+    (_reply("thinking"), _reply(), LEVELS),
+    (_reply(tokens=40), _reply(), LEVELS),
+    (_reply("thinking"), _reply("still thinking"), LEVELS[1:]),
+    (_reply(tokens=40), _reply(tokens=12), LEVELS[1:]),
+    (_reply("thinking"), _Response(400, text="{}"), LEVELS[1:]),
+    (_reply(), _reply(), None),
+    (_Response(400, text="{}"), _reply(), None),
+])
+async def test_effort_levels_follow_what_the_model_visibly_does(low, none, levels):
+    session = _Probe({"low": low, "none": none})
+    caps, calls, answered = await llm_probes.async_probe_capabilities(session, _provider("a/m").cfg)
+    assert answered is True and caps.get("effort_levels") == levels
+    assert calls == len(session.bodies) <= 6
+
+
+@pytest.mark.asyncio
+async def test_a_refused_invalid_effort_proves_nothing_here():
+    class Refusing(_Probe):
+        def post(self, url, **kwargs):
+            refused = kwargs["json"].get("reasoning", {}).get("effort") == "phoenix-probe-invalid"
+            return _Response(400, text="{}") if refused else super().post(url, **kwargs)
+
+    session = Refusing({"low": _reply()})
+    caps, _calls, _answered = await llm_probes.async_probe_capabilities(session, _provider("a/m").cfg)
+    assert "effort_levels" not in caps
+    assert not any(body.get("reasoning", {}).get("effort") == "phoenix-probe-invalid" for body in session.bodies)
+
+
+def test_a_catalogue_answer_keeps_probed_facts_it_does_not_mention():
+    previous = {"a": {"effort_levels": ["low"], "temperature": False, "tools": True}, "b": {"effort_levels": ["low"]}}
+    declared = {"a": {"tools": False, "vision": True}}
+    assert llm_accounts._with_probed(declared, previous) == {
+        "a": {"tools": False, "vision": True, "effort_levels": ["low"], "temperature": False},
+        "b": {"effort_levels": ["low"]},
+    }
+    assert declared == {"a": {"tools": False, "vision": True}}
+
+
+def test_a_catalogue_answer_wins_over_a_probed_fact_it_states():
+    previous = {"a": {"effort_levels": ["low"], "temperature": False}}
+    declared = {"a": {"effort_levels": ["high"], "temperature": True}}
+    assert llm_accounts._with_probed(declared, previous) == declared
+
+
+def test_an_empty_catalogue_answer_keeps_probed_facts():
+    assert llm_accounts._with_probed({}, {"a": {"effort_levels": ["low"], "tools": True}}) == {"a": {"effort_levels": ["low"]}}
+    assert llm_accounts._with_probed({"a": {}}, None) == {"a": {}}

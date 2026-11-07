@@ -159,7 +159,7 @@ Related: [Settings and System Endpoints](guide:topic.adminApiSettings#settings)
 
 ### Refresh models and capabilities {#refresh-models}
 
-`POST /api/phoenix-mcp/admin/agentcli/providers/{instance_id}/refresh` takes no body. It rereads the model list and the declared capabilities, and stores them. It sends no completion requests, so it costs no tokens. For `ollama`, it sends one request per model.
+`POST /api/phoenix-mcp/admin/agentcli/providers/{instance_id}/refresh` takes no body. It rereads the model list and the declared capabilities, and stores them. Effort levels and temperature limits found by an options check stay stored unless the provider now declares them. It sends no completion requests, so it costs no tokens. For `ollama`, it sends one request per model.
 
 The response has `models`, `capabilities`, `declared` (whether the provider reports capabilities at all) and `checked_at`.
 
@@ -172,7 +172,7 @@ The response has `models`, `capabilities`, `declared` (whether the provider repo
 
 `POST /api/phoenix-mcp/admin/agentcli/providers/{instance_id}/probe` takes no body. It asks the provider which options the selected model accepts. This spends credit.
 
-Phoenix sends up to 10 one-token completions, plus one image check when image support is unknown. The result goes over the declared capabilities.
+Phoenix sends up to 10 very short completions, plus one image check when image support is unknown. The result goes over the declared capabilities.
 
 The response has `model`, `probed`, `calls`, `checked_at`, `effort_checkable`, `answered` and `vision_checked`. `answered` is `false` when the provider declined every question.
 

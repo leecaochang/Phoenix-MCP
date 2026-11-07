@@ -159,7 +159,7 @@ POST   /api/phoenix-mcp/admin/agentcli/probe
 
 ### 刷新模型和能力 {#refresh-models}
 
-`POST /api/phoenix-mcp/admin/agentcli/providers/{instance_id}/refresh` 不接受正文。它会重新读取模型列表和声明的能力并存储它们。它不发送补全请求，因此不消耗 token。对于 `ollama`，它会为每个模型发送一个请求。
+`POST /api/phoenix-mcp/admin/agentcli/providers/{instance_id}/refresh` 不接受正文。它会重新读取模型列表和声明的能力并存储它们。选项检查得出的努力级别和温度限制会继续保留，除非提供商现在声明了它们。它不发送补全请求，因此不消耗 token。对于 `ollama`，它会为每个模型发送一个请求。
 
 响应包含 `models`、`capabilities`、`declared`（提供商是否报告能力）和 `checked_at`。
 
@@ -172,7 +172,7 @@ POST   /api/phoenix-mcp/admin/agentcli/probe
 
 `POST /api/phoenix-mcp/admin/agentcli/providers/{instance_id}/probe` 不接受正文。它会询问提供商所选模型接受哪些选项。这会消耗额度。
 
-Phoenix 最多发送 10 个单 token 补全，并在图像支持未知时额外发送一次图像检查。结果会覆盖声明的能力。
+Phoenix 最多发送 10 个非常简短的补全，并在图像支持未知时额外发送一次图像检查。结果会覆盖声明的能力。
 
 响应包含 `model`、`probed`、`calls`、`checked_at`、`effort_checkable`、`answered` 和 `vision_checked`。当提供商拒绝了每个问题时，`answered` 为 `false`。
 

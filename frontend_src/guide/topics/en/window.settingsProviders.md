@@ -27,7 +27,7 @@ Reloads the provider's list of models. This uses no tokens. On a local Ollama se
 
 ### {{label:settings.accountCheckOptions}} {#check-options}
 
-Finds out which effort levels the model supports and whether it can read images, by sending it a few one-token requests.
+Finds out which effort levels the model supports and whether it can read images, by sending it a few very short requests.
 
 This uses a little credit, so Phoenix asks first. Hover over the button to see when it last ran.
 

@@ -45,6 +45,21 @@ from ..time_text import parse_datetime
 _MODEL_SEEN_LIMIT = 1000
 
 
+# What a probe finds and a provider's catalogue may not state.
+_PROBED_CAPABILITIES = ("effort_levels", "temperature")
+
+
+def _with_probed(capabilities: dict, previous: Any) -> dict:
+    """The new capabilities, plus each probed fact of `previous` they do not mention."""
+    merged = {model: dict(row) for model, row in capabilities.items()}
+    for model, row in (previous if isinstance(previous, dict) else {}).items():
+        kept = {key: row[key] for key in _PROBED_CAPABILITIES
+                if isinstance(row, dict) and key in row and key not in merged.get(model, {})}
+        if kept:
+            merged[model] = {**merged.get(model, {}), **kept}
+    return merged
+
+
 def _catalog_of(cfg: dict) -> dict:
     """The cached provider catalogue of a stored account, or {} when it has none."""
     catalog = cfg.get("catalog")
@@ -594,13 +609,14 @@ class AgentCliStore:
         """Record what this account's provider declared, with when it was asked.
 
         Stored per account because one kind can differ by endpoint or key entitlement. The timestamp
-        lets an operator judge an answer that has no invalidation signal.
+        lets an operator judge an answer that has no invalidation signal. A probed fact the new
+        answer does not mention is kept, because reading a catalogue does not retest it.
         """
         async with self._lock:
             cfg = self._data.get(instance_id)
             if not isinstance(cfg, dict):
                 return False
-            cfg["capabilities"] = capabilities
+            cfg["capabilities"] = _with_probed(capabilities, cfg.get("capabilities"))
             cfg["capabilities_checked_at"] = checked_at
             await self._save()
             return True

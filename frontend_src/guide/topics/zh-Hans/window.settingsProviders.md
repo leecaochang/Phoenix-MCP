@@ -27,7 +27,7 @@ Agent Chat、语音智能体和 AI 任务各使用其中一个账户，并搭配
 
 ### {{label:settings.accountCheckOptions}} {#check-options}
 
-通过发送几个单 token 请求，查明模型支持哪些努力级别以及是否能读取图像。
+通过发送几个非常简短的请求，查明模型支持哪些努力级别以及是否能读取图像。
 
 这会消耗少量额度，因此 Phoenix 会先询问。将指针悬停在按钮上可查看上次运行的时间。
 

@@ -29,6 +29,7 @@ from ..provider_constants import (
     AGENT_CHAT_DEEPSEEK_MAX_TOKENS, AGENT_CHAT_NVIDIA_MAX_TOKENS, AGENT_CHAT_OPENCODE_CHAT_MODELS,
     AGENT_CHAT_OPENCODE_CONSOLE_BASE_URL, AGENT_CHAT_OPENCODE_LEGACY_CHAT_EXCEPTIONS,
     AGENT_CHAT_PROBE_IMAGE_MAX_TOKENS, AGENT_CHAT_PROMPT_CHARS_PER_TOKEN,
+    AGENT_CHAT_REASONING_PROBE_MAX_TOKENS,
 )
 
 
@@ -111,6 +112,18 @@ def _filter_openrouter_models(data: list[dict]) -> list[str]:
             and _text_only(m)]
     tool_ids = sorted(m["id"] for m in live if "tools" in (m.get("supported_parameters") or []))
     return tool_ids or sorted(m["id"] for m in data if m.get("id"))
+
+
+def _reasoned(reply: Any) -> bool:
+    """Whether a finished Chat Completion shows reasoning, as text or as counted tokens."""
+    choices = reply.get("choices") if isinstance(reply, dict) else None
+    message = choices[0].get("message") if isinstance(choices, list) and choices and isinstance(choices[0], dict) else None
+    if isinstance(message, dict) and any(message.get(field) for field in ("reasoning", "reasoning_content", "reasoning_details")):
+        return True
+    usage = reply.get("usage") if isinstance(reply, dict) else None
+    details = usage.get("completion_tokens_details") if isinstance(usage, dict) else None
+    tokens = details.get("reasoning_tokens") if isinstance(details, dict) else None
+    return isinstance(tokens, int) and tokens > 0
 
 
 def _filter_infron_models(data: list[dict]) -> list[str]:
@@ -500,6 +513,22 @@ class OpenAICompatProvider:
             content = "".join(part.get("text", "") for part in content
                               if isinstance(part, dict) and isinstance(part.get("text"), str))
         return 200, content if isinstance(content, str) else ""
+
+    async def probe_reasoning(self, session: ClientSession, effort: str) -> tuple[int | None, bool]:
+        """Status for a small question at this effort, and whether the model visibly reasoned."""
+        body = {
+            "model": self.cfg.model, "max_tokens": AGENT_CHAT_REASONING_PROBE_MAX_TOKENS, "stream": False,
+            "messages": [{"role": "user", "content": "What is 17 times 23? Answer with the number."}],
+            "reasoning": {"effort": effort},
+        }
+        try:
+            async with session.post(self._chat_url(), headers=self._headers(), json=body,
+                                    timeout=_IMAGE_PROBE_TIMEOUT, allow_redirects=False) as resp:
+                if resp.status != 200:
+                    return resp.status, False
+                return 200, _reasoned(await _read_json(resp))
+        except (ClientError, asyncio.TimeoutError, ValueError):
+            return None, False
 
     async def probe_option(self, session: ClientSession, extra: dict) -> int | None:
         """HTTP status for the smallest possible completion carrying `extra`.

@@ -582,6 +582,11 @@ describe("agentCLI model capabilities (real per-provider levels)", () => {
     expect(vals(caps)).toEqual(["off", "on"]);
     expect(caps.temperature).toBe(true);
   });
+  it("infron: only measured levels create the thinking control", () => {
+    expect(modelCaps("infron", "a/m", false).thinking).toEqual([]);
+    const levels = ["minimal", "low", "medium", "high", "xhigh"];
+    expect(modelCaps("infron", "a/m", false, { effort_levels: levels }).thinking.map((o) => o.value)).toEqual(levels);
+  });
   it("openrouter: no thinking control, temperature only", () => {
     const caps = modelCaps("openrouter", "meta-llama/llama-3.3-70b-instruct", false);
     expect(caps.thinking).toEqual([]);

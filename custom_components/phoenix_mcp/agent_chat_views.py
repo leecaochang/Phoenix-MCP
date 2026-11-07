@@ -853,7 +853,7 @@ class PhoenixAgentCliRefreshView(PhoenixView):
 class PhoenixAgentCliProbeCapsView(PhoenixView):
     """POST /api/phoenix-mcp/admin/agentcli/providers/{instance_id}/probe.
 
-    Sends one-token completions to learn what the selected model accepts. Separate from
+    Sends very short completions to learn what the selected model accepts. Separate from
     /refresh because this spends the operator's credit, so it has its own consent. Only that
     model is probed.
     """
