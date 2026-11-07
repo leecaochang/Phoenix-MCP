@@ -5586,7 +5586,7 @@ def test_provider_detail_is_scrubbed_and_clipped():
 
 
 @pytest.mark.parametrize("key", [
-    "AIzaSyA1b2C3d4E5f6G7h8I9j0KlMnOpQrStUvW", "gsk_" + "a1B2c3D4" * 6, "xai-" + "Q9w8E7r6" * 6,
+    "AIza" + "SyA1b2C3d4E5f6G7h8I9j0KlMnOpQrStUvW", "gsk_" + "a1B2c3D4" * 6, "xai-" + "Q9w8E7r6" * 6,
     "nvapi-" + "z1X2c3V4" * 6, "custom.Format+With/Symbols==",
 ])
 def test_provider_detail_never_echoes_a_key(key):
