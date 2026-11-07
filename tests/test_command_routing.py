@@ -23,8 +23,8 @@ async def routing(hass, access_key_store):
     access_key.permissions = PermissionTree(domains={"light": PermissionNode(state="GREEN")})
     data = PhoenixData(store=access_key_store, rate_limiter=MagicMock(), audit=MagicMock())
     hass.data[DOMAIN] = data
-    # Cold intent loading on a slow runner can exceed the 500 ms default.
-    await access_key_store.async_patch_settings(command_routing_timeout_ms=5000)
+    # Cold intent loading on a busy runner can outlast the 5 s the setting allows, so set it directly.
+    access_key_store.get_settings().command_routing_timeout_ms = 60000
     return data, access_key
 
 

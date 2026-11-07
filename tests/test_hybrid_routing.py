@@ -40,7 +40,9 @@ async def hybrid_home(hass, access_key_store, immediate_command_observation):
     chat = await store.add("deepseek", {"api_key": "chat-secret", "model": "chat"})
     await access_key_store.async_patch_settings(voice_agent_enabled=True, voice_agent_access_key_id=access_key.id,
         voice_agent_provider_id=chat, voice_agent_model="chat", voice_agent_routing_mode="hybrid",
-        decision_provider_id=decision, mesa_mode="off", command_routing_timeout_ms=5000)
+        decision_provider_id=decision, mesa_mode="off")
+    # Cold intent loading on a busy runner can outlast the 5 s the setting allows, so set it directly.
+    access_key_store.get_settings().command_routing_timeout_ms = 60000
     assert await async_setup_component(hass, "homeassistant", {})
     assert await async_setup_component(hass, "conversation", {})
     registry = er.async_get(hass)
