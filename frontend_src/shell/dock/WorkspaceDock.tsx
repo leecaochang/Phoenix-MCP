@@ -20,7 +20,7 @@ import type { HostId, WorkspaceController, WorkspaceLayout } from "./controller"
 
 /** Thickness of the edge highlight showing where a dragged window will dock. */
 const DROP_LINE = 4;
-/** A pinned band never takes more than this share of the workspace's height, so the grid keeps room between two bands; beyond it the band scrolls. */
+/** A pinned band never takes more than this share of the workspace's height, so the grid keeps room between two bands; beyond it its windows shrink to fit. */
 const BAND_SHARE = 0.35;
 
 /**

@@ -107,6 +107,12 @@ export class WorkspaceCanvas {
    * over; a window drawn taller than intended only fills space left in its column.
    */
   intended: Heights = {};
+  /**
+   * For a pinned band that needs more than it may take: the heights its windows
+   * are drawn at to fit. Their intended heights stay, so they are given back
+   * when the band has room again.
+   */
+  private squeezed: Heights | null = null;
   /** The visible height at the last layout, to tell whether a layout that fitted still does. */
   private lastVisible = 0;
 
@@ -117,8 +123,9 @@ export class WorkspaceCanvas {
     /** Whether a window is folded down to its title bar. */
     private readonly collapsed: (id: string) => boolean,
     /**
-     * For a pinned band: the band is as tall as its windows, up to this height,
-     * and scrolls only beyond it. Without it, the host keeps its own height.
+     * For a pinned band: the band is as tall as its windows, up to this height.
+     * Beyond it the windows shrink to fit, and the band scrolls only when they
+     * are at their smallest. Without it, the host keeps its own height.
      */
     private readonly maxHeight?: () => number,
     /** The windows always fit the visible height; the canvas never scrolls. */
@@ -150,7 +157,7 @@ export class WorkspaceCanvas {
   /** The height a window takes in the layout: its title bar when folded, none when hidden. */
   private heightOf(id: string): number {
     if (this.hidden(id)) return 0;
-    return this.collapsed(id) ? TITLE_BAR_HEIGHT : this.intended[id] ?? MIN_WINDOW_HEIGHT;
+    return this.collapsed(id) ? TITLE_BAR_HEIGHT : this.squeezed?.[id] ?? this.intended[id] ?? MIN_WINDOW_HEIGHT;
   }
 
   /** The edge whose band last grew or shrank; the window nearest it takes the space left. */
@@ -224,7 +231,14 @@ export class WorkspaceCanvas {
     const grid = api.toJSON().grid;
     const rootStacks = grid.orientation === "VERTICAL";
     const heightOf = (id: string): number => this.heightOf(id);
-    if (this.fit && !this.maxHeight && api.panels.length) this.shrinkToFit(grid.root, rootStacks, new Set(Object.keys(targets)));
+    const keep = new Set(Object.keys(targets));
+    if (this.fit && !this.maxHeight && api.panels.length) this.shrinkToFit(grid.root, rootStacks, keep);
+    this.squeezed = null;
+    const room = this.maxHeight ? Math.max(0, this.maxHeight()) : 0;
+    if (room > 0 && api.panels.length) {
+      const squeezed = this.fitted(grid.root, rootStacks, keep, room);
+      if (Object.keys(squeezed).length) this.squeezed = squeezed;
+    }
     const required = api.panels.length ? requiredHeight(grid.root, rootStacks, heightOf) : 0;
     if (this.maxHeight) {
       const height = Math.min(required, Math.max(0, this.maxHeight()));
@@ -259,6 +273,15 @@ export class WorkspaceCanvas {
       const group = id ? api.getPanel(id)?.group : undefined;
       if (group && isGrid(group)) group.api.setSize({ height });
     };
+    // The height a grid node has now: `grid` was read before the canvas changed.
+    const drawn = (node: GridNode, stacks: boolean): number => {
+      if (node.type === "leaf") {
+        const group = api.getPanel(leafId(node) ?? "")?.group;
+        return group?.api.isVisible ? group.height : 0;
+      }
+      const sizes = childrenOf(node).map((child) => drawn(child, !stacks));
+      return stacks ? sizes.reduce((a, b) => a + b, 0) : Math.max(0, ...sizes);
+    };
     const walk = (node: GridNode, stacks: boolean): void => {
       if (node.type === "leaf") return;
       const children = childrenOf(node);
@@ -276,7 +299,16 @@ export class WorkspaceCanvas {
         const unsized = flexible.filter((c) => !settable(c));
         const takers = unsized.length ? unsized : pool;
         const absorber = this.growEdge === "top" ? takers[0] : takers[takers.length - 1];
-        for (const child of children) if (child !== absorber && !fixed(child) && sized(child)) setHeight(child, needs(child, false));
+        // Dockview takes any change from the lowest window, and the lowest window's own from the one above
+        // it. An absorber higher up is therefore given what is left, or that window would take it instead.
+        const last = children[children.length - 1];
+        const left = absorber && absorber !== last && settable(absorber)
+          ? children.reduce((sum, c) => sum + drawn(c, false) - (c === absorber ? 0 : !fixed(c) && sized(c) ? needs(c, false) : drawn(c, false)), 0)
+          : undefined;
+        for (const child of children) {
+          if (child === absorber) { if (left !== undefined) setHeight(child, left); }
+          else if (!fixed(child) && sized(child)) setHeight(child, needs(child, false));
+        }
       }
       for (const child of children) walk(child, !stacks);
     };
@@ -304,19 +336,20 @@ export class WorkspaceCanvas {
     return lo;
   }
 
-  /**
-   * In a fitted workspace, make the intended heights fit the visible height:
-   * windows not just given a height shrink in proportion first, and the ones
-   * just sized only if that is not enough.
-   */
+  /** In a fitted workspace, make the intended heights fit the visible height. */
   private shrinkToFit(root: unknown, rootStacks: boolean, keep: ReadonlySet<string>): void {
-    // Side-by-side columns each fit the screen on their own: one that already fits keeps its heights.
-    if (!rootStacks) {
-      for (const column of childrenOf(root as GridNode)) this.shrinkToFit(column, true, keep);
-      return;
-    }
     const visible = this.visibleHeight();
-    if (visible <= 0) return;
+    if (visible > 0) Object.assign(this.intended, this.fitted(root, rootStacks, keep, visible));
+  }
+
+  /**
+   * The heights that make the intended ones fit in `room`, empty when they
+   * already do: windows not just given a height shrink in proportion first, and
+   * the ones just sized only if that is not enough.
+   */
+  private fitted(root: unknown, rootStacks: boolean, keep: ReadonlySet<string>, room: number): Heights {
+    // Side-by-side columns each fit on their own: one that already fits keeps its heights.
+    if (!rootStacks) return Object.assign({}, ...childrenOf(root as GridNode).map((column) => this.fitted(column, true, keep, room))) as Heights;
     const mine = new Set(leafOrder(root));
     const base = Object.fromEntries(Object.entries(this.intended).filter(([id]) => mine.has(id)));
     const scaled = (f: number, all: boolean) => (id: string): number => {
@@ -325,19 +358,19 @@ export class WorkspaceCanvas {
       const h = base[id] ?? MIN_WINDOW_HEIGHT;
       return all || !keep.has(id) ? Math.max(MIN_WINDOW_HEIGHT, Math.floor(h * f)) : h;
     };
-    if (requiredHeight(root, rootStacks, scaled(1, false)) <= visible) return;
+    if (requiredHeight(root, rootStacks, scaled(1, false)) <= room) return {};
     for (const all of [false, true]) {
       let lo = 0, hi = 1;
       for (let i = 0; i < 20; i++) {
         const mid = (lo + hi) / 2;
-        if (requiredHeight(root, rootStacks, scaled(mid, all)) <= visible) lo = mid; else hi = mid;
+        if (requiredHeight(root, rootStacks, scaled(mid, all)) <= room) lo = mid; else hi = mid;
       }
-      if (requiredHeight(root, rootStacks, scaled(lo, all)) <= visible || all) {
+      if (requiredHeight(root, rootStacks, scaled(lo, all)) <= room || all) {
         const size = scaled(lo, all);
-        for (const id of Object.keys(base)) if (!this.collapsed(id)) this.intended[id] = size(id);
-        return;
+        return Object.fromEntries(Object.keys(base).filter((id) => !this.collapsed(id)).map((id) => [id, size(id)]));
       }
     }
+    return {};
   }
 
   /**

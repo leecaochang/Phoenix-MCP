@@ -1463,9 +1463,14 @@ export class WorkspaceController {
     if (group && width && width > 0 && width < 100000) group.api.setSize({ width: Math.round(width) });
   }
 
-  /** A band is about to change height: the grid window beside it takes or gives the difference. */
+  /**
+   * A band is about to change height: the grid window beside it takes or gives
+   * the difference. Where windows are as tall as their content the space left
+   * stays under the lowest window, since a frame ending at its content would
+   * leave it as a gap between two windows.
+   */
   private bandChanging(band: HostId | null): void {
-    if (this.canvas && isBand(band)) this.canvas.growEdge = band;
+    if (this.canvas && isBand(band) && !this.contentSized) this.canvas.growEdge = band;
   }
 
   /** For each pair, the window the user last had on the left when the two shared a row. */

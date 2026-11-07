@@ -29,9 +29,9 @@ const stacked: Arrange = (_, add) => {
 };
 
 /** A controller with all four hosts, each a real Dockview instance with a stubbed size. */
-function mount(opts: { heights?: Record<string, number>; pinned?: Partial<Record<"top" | "bottom", string[]>>; frame?: number; pairs?: Record<string, string>; closedAt?: Record<string, { neighbor: string; side: "bottom"; host?: "float" }>; arrange?: Arrange; floatWidths?: Record<string, number> } = {}) {
-  const controller = new WorkspaceController("test", WINDOWS, opts.arrange ?? stacked, (id) => `Title ${id}`, { heights: opts.heights, pinned: opts.pinned, pairs: opts.pairs, closedAt: opts.closedAt, floatWidths: opts.floatWidths });
-  const components = Object.fromEntries(WINDOWS.map((id) => [id, () => <div>{id}</div>]));
+function mount(opts: { bandMax?: number; contentHeights?: boolean; windows?: string[];  heights?: Record<string, number>; pinned?: Partial<Record<"top" | "bottom", string[]>>; frame?: number; pairs?: Record<string, string>; closedAt?: Record<string, { neighbor: string; side: "bottom"; host?: "float" }>; arrange?: Arrange; floatWidths?: Record<string, number> } = {}) {
+  const controller = new WorkspaceController("test", opts.windows ?? WINDOWS, opts.arrange ?? stacked, (id) => `Title ${id}`, { heights: opts.heights, pinned: opts.pinned, pairs: opts.pairs, closedAt: opts.closedAt, floatWidths: opts.floatWidths, contentHeights: opts.contentHeights });
+  const components = Object.fromEntries((opts.windows ?? WINDOWS).map((id) => [id, () => <div>{id}</div>]));
   const hosts: Partial<Record<HostId, HTMLElement>> = {};
   const apis: Partial<Record<HostId, DockviewApi>> = {};
   const sized = (id: HostId, visible: number) => (el: HTMLElement | null) => {
@@ -50,8 +50,8 @@ function mount(opts: { heights?: Record<string, number>; pinned?: Partial<Record
       }
       const collapsed = (w: string) => controller.folds.collapsedHeight(w) !== undefined;
       controller.attach("main", apis.main!, new WorkspaceCanvas(apis.main!, hosts.main!, collapsed));
-      controller.attach("top", apis.top!, new WorkspaceCanvas(apis.top!, hosts.top!, collapsed, () => 300));
-      controller.attach("bottom", apis.bottom!, new WorkspaceCanvas(apis.bottom!, hosts.bottom!, collapsed, () => 300));
+      controller.attach("top", apis.top!, new WorkspaceCanvas(apis.top!, hosts.top!, collapsed, () => opts.bandMax ?? 300));
+      controller.attach("bottom", apis.bottom!, new WorkspaceCanvas(apis.bottom!, hosts.bottom!, collapsed, () => opts.bandMax ?? 300));
       controller.attach("float", apis.float!);
       controller.load(undefined);
     }
@@ -254,6 +254,36 @@ describe("pinned bands and the floating layer", () => {
     expect(after.b).toBe(before.b);
   });
 
+  const fourStacked: Arrange = (_, add) => {
+    add("a");
+    add("b", { referencePanel: "a", direction: "below" });
+    add("c", { referencePanel: "b", direction: "below" });
+    add("d", { referencePanel: "c", direction: "below" });
+  };
+
+  it("gives height freed by a top band to the window beside it, however many windows are stacked", () => {
+    const w = mount({ windows: ["a", "b", "c", "d"], arrange: fourStacked, heights: { a: 150, b: 150, c: 150, d: 150 }, frame: 600 });
+    w.controller.pin(w.group("d"), "top");
+    const before = w.heights("main");
+    w.controller.close(w.group("d"));
+    const after = w.heights("main");
+    expect(after.a).toBe(before.a + 150);
+    expect(after.b).toBe(before.b);
+    expect(after.c).toBe(before.c);
+  });
+
+  it("gives that height to the first open window when the one beside the band is folded", () => {
+    const w = mount({ windows: ["a", "b", "c", "d"], arrange: fourStacked, heights: { a: 150, b: 150, c: 150, d: 150 }, frame: 600 });
+    w.controller.toggleFold(w.group("a"));
+    w.controller.pin(w.group("d"), "top");
+    const before = w.heights("main");
+    w.controller.close(w.group("d"));
+    const after = w.heights("main");
+    expect(after.b).toBeGreaterThan(before.b);
+    expect(after.c).toBe(before.c);
+    expect(after.a).toBe(before.a);
+  });
+
   it("floats a closed window over the workspace from a tool, and closes it from the same tool", () => {
     const w = mount();
     w.controller.close(w.group("b"));
@@ -279,13 +309,86 @@ describe("pinned bands and the floating layer", () => {
     expect(w.hosts.bottom!.style.height).toBe("0px");
   });
 
-  it("caps a band at its share of the workspace; the band scrolls beyond it", () => {
+  it("caps a band at its share of the workspace: its windows shrink to fit and the band does not scroll", () => {
     const w = mount({ heights: { a: 300, b: 300, c: 300 } });
     w.controller.pin(w.group("a"), "top");
     w.controller.pin(w.group("b"), "top");
     expect(w.controller.hostOf("a")).toBe("top");
     expect(w.hosts.top!.style.height).toBe("300px");
-    expect(w.controller.canvasOf("top")!.height).toBe(600);
+    expect(w.controller.canvasOf("top")!.height).toBe(0);
+    expect(w.hosts.top!.classList.contains("phx-scrolls")).toBe(false);
+    const drawn = w.heights("top");
+    expect(drawn.a + drawn.b).toBe(300);
+    expect(drawn.a).toBeGreaterThanOrEqual(100);
+    expect(drawn.b).toBeGreaterThanOrEqual(100);
+  });
+
+  it("keeps a small pinned window whole when another joins its band, as Help stays on screen", () => {
+    // a is Help, at the smallest height a window has; b is pinned at the tallest a new window takes.
+    const w = mount({ heights: { a: 100, b: 360, c: 300 }, pinned: { bottom: ["a"] }, bandMax: 287 });
+    w.controller.pin(w.group("b"), "bottom");
+    expect(w.hosts.bottom!.style.height).toBe("287px");
+    expect(w.controller.canvasOf("bottom")!.height).toBe(0);
+    expect(w.heights("bottom")).toEqual({ a: 100, b: 187 });
+  });
+
+  it("fits a window docked back to the band it floated from", () => {
+    const w = mount({ heights: { a: 100, b: 360, c: 300 }, pinned: { bottom: ["a"] }, bandMax: 287 });
+    w.controller.pin(w.group("b"), "bottom");
+    w.controller.float(w.group("b"));
+    expect(w.controller.hostOf("b")).toBe("float");
+    w.controller.dock(w.group("b"));
+    expect(w.controller.hostOf("b")).toBe("bottom");
+    expect(w.controller.canvasOf("bottom")!.height).toBe(0);
+    expect(w.heights("bottom").a).toBe(100);
+    expect(w.heights("bottom").a + w.heights("bottom").b).toBe(287);
+  });
+
+  it("gives squeezed windows their own heights back once the band has room, and saves those heights", () => {
+    const w = mount({ heights: { a: 300, b: 300, c: 300 } });
+    w.controller.pin(w.group("a"), "top");
+    w.controller.pin(w.group("b"), "top");
+    expect(w.controller.layout()!.bands!.top!.heights).toEqual({ a: 300, b: 300 });
+    w.controller.unpin(w.group("b"));
+    expect(w.heights("top")).toEqual({ a: 300 });
+    // It returns to the grid at its own height, not the one the band drew it at.
+    expect(w.heights("main").b).toBe(300);
+  });
+
+  it("scrolls a band only when its windows are at their smallest and still need more", () => {
+    const w = mount({ heights: { a: 300, b: 300, c: 300 }, bandMax: 250 });
+    for (const id of ["a", "b", "c"]) w.controller.pin(w.group(id), "top");
+    expect(w.heights("top")).toEqual({ a: 100, b: 100, c: 100 });
+    expect(w.hosts.top!.style.height).toBe("250px");
+    expect(w.controller.canvasOf("top")!.height).toBe(300);
+  });
+
+  it("leaves the space left under a column's lowest window where windows are as tall as their content", () => {
+    // Pinning the first column along the top must not hand c, in the middle of a column, the spare height:
+    // its frame ends at its content, so the spare height would show as a gap above d.
+    const w = mount({
+      windows: ["e", "a", "b", "c", "d"],
+      contentHeights: true,
+      heights: { e: 300, a: 900, b: 200, c: 200, d: 200 },
+      arrange: (_, add) => {
+        add("e");
+        add("a", { referencePanel: "e", direction: "right" });
+        add("b", { referencePanel: "a", direction: "right" });
+        add("c", { referencePanel: "b", direction: "below" });
+        add("d", { referencePanel: "c", direction: "below" });
+      },
+    });
+    w.controller.pin(w.group("e"), "top");
+    const main = w.heights("main");
+    expect(main.b).toBe(200);
+    expect(main.c).toBe(200);
+    expect(main.d).toBe(500);
+  });
+
+  it("still gives the window beside a band the space it frees where windows do not follow their content", () => {
+    const w = mount({ heights: { a: 200, b: 200, c: 100 }, frame: 600 });
+    w.controller.pin(w.group("c"), "top");
+    expect(w.controller.canvas!.growEdge).toBe("top");
   });
 
   it("lists the top band first, then the grid, the bottom band and floating windows", () => {
