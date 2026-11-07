@@ -59,6 +59,8 @@ Agents can also run Home Assistant actions on targets they can write, and previe
 - Any input shaped like an entity ID or a 32-character registry ID counts as naming an entity.
 - An input that selects a device, area, floor or label is refused, and so is `all` unless the script declares that input as plain data. Name each entity instead.
 
+An entity with no unique ID, such as a YAML light or an automation without an `id`, can't be a target. Home Assistant keeps no registry entry for it, so Phoenix refuses the action for every key and tells the agent why.
+
 An action that needs several capabilities follows the strictest. Deny refuses it, and Confirm holds it for your approval.
 
 An action that doesn't declare a target, such as `shell_command`, `rest_command` or `python_script`, is refused for every key, pass-through included. That holds whatever target the agent names, even an entity of the action's own domain. Other actions without a target are refused too.

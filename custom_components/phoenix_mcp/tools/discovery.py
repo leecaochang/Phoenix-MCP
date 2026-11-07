@@ -57,7 +57,7 @@ from ..device_semantics import (
     readable_entity_aliases,
 )
 from ..routing.intent_recognition import RecognitionUnavailable, async_recognize
-from ..service_targets import call_reach, dedicated_tool_refusal, gate_entity_ids, merge_speech_players, named_script_refusal, required_secondary_targets, script_input_selector_error, script_input_selectors, secondary_target_error, speech_target_refusal, unreadable_group_error, template_fields, template_fields_error, unbound_service_targets, unbound_target_error, unsupported_secondary_targets, visible_reach, visible_reach_warnings
+from ..service_targets import call_reach, dedicated_tool_refusal, gate_entity_ids, merge_speech_players, named_script_refusal, required_secondary_targets, script_input_selector_error, script_input_selectors, secondary_target_error, speech_target_refusal, unreadable_group_error, unregistered_target_error, template_fields, template_fields_error, unbound_service_targets, unbound_target_error, unsupported_secondary_targets, visible_reach, visible_reach_warnings
 from ..tool_contracts import normalize_tool_args, state_projection
 from ..mesa import async_semantic_moments, build_expand_target, entity_control_mode, evaluate_service_call
 from ..mesa_core.trigger_validator import entities_by_role
@@ -72,7 +72,7 @@ from .esphome import _ESPHOME_DOMAIN, _esphome_action_signature, _esphome_action
 from ..tool_common import _project_state, _resolve_area_id, _tool_error, _tool_success, fitted_offset_page, longest_fitting, offset_page
 from ..ws_dispatch import WsDispatchError, async_get_lovelace_config, async_ws_command
 from ..approval_targets import target_binding
-from ..policy_engine import _ENTITY_ID_RE, Permission, assist_expose_check, device_config_entry_ids, device_read_check, device_registry_entity_ids, esphome_entry_writable, filter_entities_for_access_key, filter_service_response, group_member_denied, music_assistant_readable_entries, physical_gate_applies, required_service_cap, resolve_config_entry_registry_access, resolve_device_registry_access, resolve_esphome_user_service, resolve_read, resolve_registry_access, resolve_service_targets, service_gate_targets, service_target_binding_valid, scrub_sensitive_attributes, unreadable_group_targets
+from ..policy_engine import _ENTITY_ID_RE, Permission, assist_expose_check, device_config_entry_ids, device_read_check, device_registry_entity_ids, esphome_entry_writable, filter_entities_for_access_key, filter_service_response, group_member_denied, music_assistant_readable_entries, physical_gate_applies, required_service_cap, resolve_config_entry_registry_access, resolve_device_registry_access, resolve_esphome_user_service, resolve_read, resolve_registry_access, resolve_service_targets, service_gate_targets, service_target_binding_valid, scrub_sensitive_attributes, unreadable_group_targets, unregistered_targets
 from ..proxy_diagnostics import device_bluetooth_scanners, rf_capabilities
 from ..radio import device_radio_types
 from ..recorder_queries import iso_utc, state_timestamp
@@ -1980,6 +1980,7 @@ async def _tool_find_available_actions(
     writable = access_key.pass_through or perm == Permission.WRITE
     yaml_edit_ok = effective_cap(access_key, "cap_yaml_edit") != CAP_DENY
     group_refused = writable and group_member_denied(entity_id, access_key, hass)
+    unregistered = writable and bool(unregistered_targets(entity_id, access_key, hass))
 
     actions: list[dict] = []
     for svc in sorted(hass.services.async_services().get(domain, {}).keys()):
@@ -2003,6 +2004,8 @@ async def _tool_find_available_actions(
             available, reason = False, dedicated[1]
         elif not writable:
             reason = "read-only access to this entity"
+        elif unregistered:
+            available, reason = False, "no registry entry, so call_service cannot target this entity"
         elif needed is not None and needed in _CAPABILITY_REASONS and effective_cap(access_key, needed) == CAP_DENY:
             available, reason = False, _CAPABILITY_REASONS[needed]
         elif refusal := await named_script_refusal(hass, domain, svc):
@@ -2033,7 +2036,7 @@ async def _tool_find_available_actions(
     body: dict = {
         "entity_id": entity_id,
         "domain": domain,
-        "writable": writable,
+        "writable": writable and not unregistered,
         "actions": actions,
     }
     if fields_unavailable:
@@ -2630,7 +2633,8 @@ async def _tool_describe_entity(
         "state": scrubbed.get("state"),
         "attributes": scrubbed.get("attributes"),
         "area": _area_name_for_entity(entity_id, registry, dr.async_get(hass), ar.async_get(hass)),
-        "writable": access_key.pass_through or perm == Permission.WRITE,
+        "writable": (access_key.pass_through or perm == Permission.WRITE)
+        and not unregistered_targets(entity_id, access_key, hass),
         "domain_services": sorted(hass.services.async_services().get(domain, {}).keys()),
         "referenced_by": referenced_by,
         # This field covers automations, scripts and scenes only; get_relationships
@@ -3337,6 +3341,7 @@ async def _tool_dry_run_service(
         domain=domain, service=service, service_data=service_data, access_key=access_key, hass=hass, **target_args,
     )
     unreadable = unreadable_group_targets(args.get("entity_id"), access_key, hass) if not permitted else []
+    unregistered = unregistered_targets(args.get("entity_id"), access_key, hass) if not permitted else []
     if not service_target_binding_valid(domain, service, permitted, hass):
         permitted = []
     unbound = await unbound_service_targets(hass, permitted, domain=domain, service=service)
@@ -3408,6 +3413,8 @@ async def _tool_dry_run_service(
         body["refusal_reason"] = speech_refusal or reach.refusal
     elif unreadable:
         body["refusal_reason"] = unreadable_group_error(unreadable)
+    elif unregistered:
+        body["refusal_reason"] = unregistered_target_error(unregistered)
     return _tool_success(json.dumps(body, default=str)), "allowed", "dry_run_service"
 
 

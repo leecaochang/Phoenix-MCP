@@ -34,7 +34,7 @@ from ..policy_engine import (
     call_needs_physical_gate, esphome_entry_writable, filter_service_response, group_member_ids,
     music_assistant_readable_entries, Permission, required_service_cap, resolve,
     resolve_esphome_user_service, resolve_service_targets, service_target_binding_valid,
-    unreadable_group_targets,
+    unreadable_group_targets, unregistered_targets,
 )
 from ..request_authority import check_request_authority, mark_dispatch_started, RequestAuthority
 from ..routing.plan_currency import service_plan_is_current, bind_service_plan
@@ -45,6 +45,7 @@ from ..service_targets import (
     named_script_refusal, script_input_selector_error, script_input_selectors, secondary_target_error,
     speech_engines, speech_players, speech_target_refusal, template_fields, template_fields_error,
     todo_removal_review, unbound_service_targets, unbound_target_error, unreadable_group_error,
+    unregistered_target_error,
     unsupported_secondary_targets, visible_reach_warnings,
 )
 from ..tool_common import (
@@ -157,6 +158,9 @@ async def _tool_call_service(
     denied = required_cap is not None and effective_cap(access_key, required_cap) == CAP_DENY
     if reach.refusal and not denied:
         return _tool_refused_before_write(reach.refusal), "denied", "call_service"
+    if not targetless and not targets and not denied and (
+            unregistered := unregistered_targets(args.get("entity_id"), access_key, hass)):
+        return _tool_refused_before_write(unregistered_target_error(unregistered)), "denied", "call_service"
     if required_cap is not None:
         # An approval must bind everything it will reach, and a key holding no target
         # queues nothing. A denied capability refuses without resolving.

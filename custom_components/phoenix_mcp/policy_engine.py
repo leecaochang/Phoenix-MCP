@@ -932,6 +932,23 @@ def unreadable_group_targets(
     ]
 
 
+def unregistered_targets(
+    entity_id: str | list[str] | None, access_key: AccessKeyRecord, hass: HomeAssistant,
+) -> list[str]:
+    """Return the named targets this key may write that resolve_service_targets skips for lack of a registry entry.
+
+    Names nothing the key could not already see, so a refusal can say why. An unreadable group
+    keeps its own refusal.
+    """
+    registry = er.async_get(hass)
+    named = [entity_id] if isinstance(entity_id, str) else entity_id if isinstance(entity_id, list) else []
+    return [
+        target for target in dict.fromkeys(canonical_entity_id(item, hass) for item in named if isinstance(item, str))
+        if registry.async_get(target) is None and resolve(target, access_key, hass) == Permission.WRITE
+        and group_member_ids(target, hass) is not None
+    ]
+
+
 def service_target_binding_valid(
     domain: str, service: str, targets: list[str], hass: HomeAssistant,
 ) -> bool:

@@ -188,7 +188,8 @@ async def test_physical_target_validated_before_approval(hass, target):
 @pytest.mark.parametrize('change', ['revoke', 'policy', 'kill'])
 async def test_service_preparation_wait_rechecks_before_side_effect(hass, change):
     data, access_key, raw = await _environment(hass)
-    hass.states.async_set('light.audit', 'off')
+    entity_id = er.async_get(hass).async_get_or_create('light', 'test', 'audit', suggested_object_id='audit').entity_id
+    hass.states.async_set(entity_id, 'off')
     sink = AsyncMock()
     hass.services.async_register('light', 'turn_on', sink)
     prepares = 0
@@ -207,7 +208,7 @@ async def test_service_preparation_wait_rechecks_before_side_effect(hass, change
         return []
     body = {'jsonrpc': '2.0', 'id': 1, 'method': 'tools/call', 'params': {
         'name': 'call_service', 'arguments': {'service': {'domain': 'light', 'name': 'turn_on'},
-        'targets': [{'kind': 'entity', 'ids': ['light.audit']} ]}}}
+        'targets': [{'kind': 'entity', 'ids': [entity_id]} ]}}}
     with patch.object(service_tools, 'unsupported_secondary_targets', prepare):
         response = await _view(hass).post(_make_request(body, 'application/json', raw))
     assert prepares == 2

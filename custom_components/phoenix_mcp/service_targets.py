@@ -513,6 +513,15 @@ def unbound_target_error(domain: str, service: str, targets: tuple[str, ...]) ->
     )
 
 
+def unregistered_target_error(targets: list[str]) -> str:
+    """Explain a refusal using only targets the caller may already write."""
+    named = ", ".join(targets[:3]) + (f" and {len(targets) - 3} more" if len(targets) > 3 else "")
+    return (
+        f"Home Assistant has no registry entry for {named}, usually because of a missing unique ID, "
+        "and call_service only targets registered entities. No action was dispatched."
+    )
+
+
 def unreadable_group_error(groups: list[str]) -> str:
     """Explain a refusal using only groups the caller may write."""
     return (
