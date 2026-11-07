@@ -57,7 +57,7 @@ ical==14.3.1
 rf-protocols==4.3.0
 aiousbwatcher==1.1.2
 serialx==1.15.1
-dbus-fast==5.0.22
+dbus-fast==5.2.0
 
 # Standalone lint tool used by the dev workflow (not pulled in by the test package).
 pyflakes==4.1.0
