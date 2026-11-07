@@ -11,6 +11,7 @@ tools/system.py.
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Callable, Mapping
 from datetime import datetime, timedelta
 from types import MappingProxyType
 from typing import Any
@@ -32,6 +33,7 @@ from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers import floor_registry as fr
 from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers import label_registry as lr
+from homeassistant.helpers.translation import async_get_translations
 from homeassistant.core import HomeAssistant, valid_entity_id
 from homeassistant.util.dt import as_utc, utcnow
 
@@ -1842,7 +1844,49 @@ def _field_applies(field: dict, state: Any) -> bool:
     return True
 
 
-def _service_fields(description: Any, state: Any) -> list[dict]:
+_TEXT_PLACEHOLDER = re.compile(r"\{(\w+)\}")
+ServiceTextReader = Callable[..., str | None]
+
+
+async def _service_translations(hass: HomeAssistant, domain: str) -> Mapping[str, str]:
+    """Core's cached English service text for a domain, read-only; empty when unreadable."""
+    try:
+        return await async_get_translations(hass, "en", "services", {domain})
+    except Exception:  # text is documentation, never required
+        _LOGGER.debug("Service text unavailable for %s", domain, exc_info=True)
+        return {}
+
+
+def _service_text_reader(
+    translations: Mapping[str, str], domain: str, descriptions: dict, access_key: AccessKeyRecord, hass: HomeAssistant,
+) -> ServiceTextReader:
+    """A reader of one service's translated text or a bounded fallback.
+
+    Translations ship with an integration, so only what the instance supplies is scrubbed:
+    the fallback and placeholder values. Whole entity-like words in shipped text stay.
+    """
+
+    def scrub(value: Any) -> str:
+        return _safe_repair_text(str(value), access_key, hass)
+
+    def read(service: str, path: str, fallback: Any = None) -> str | None:
+        text = translations.get(f"component.{domain}.services.{service}.{path}")
+        if not text and isinstance(fallback, str):
+            text = scrub(fallback)
+        if not text:
+            return None
+        description = descriptions.get(service)
+        placeholders = description.get("description_placeholders") if isinstance(description, dict) else None
+        if isinstance(placeholders, Mapping):
+            # A known key only, and never str.format: the text can come from a custom integration.
+            text = _TEXT_PLACEHOLDER.sub(
+                lambda match: scrub(placeholders[match[1]]) if match[1] in placeholders else match[0], text)
+        return text[:SERVICE_FIELD_MAX_DESCRIPTION]
+
+    return read
+
+
+def _service_fields(description: Any, state: Any, service: str, text_of: ServiceTextReader) -> list[dict]:
     """Compact, bounded field schemas for one service, as this entity can use them."""
     raw = description.get("fields") if isinstance(description, dict) else None
     flat: list[tuple[str, dict]] = []
@@ -1874,9 +1918,8 @@ def _service_fields(description: Any, state: Any) -> list[dict]:
         for name in ("example", "default"):
             if name in field:
                 row[name] = field[name]
-        description_text = field.get("description")
-        if isinstance(description_text, str) and description_text:
-            row["description"] = description_text[:SERVICE_FIELD_MAX_DESCRIPTION]
+        if text := text_of(service, f"fields.{key}.description", field.get("description")):
+            row["description"] = text
         fields.append(row)
     return fields
 
@@ -1890,6 +1933,7 @@ _CAPABILITY_REASONS = MappingProxyType({
     "cap_physical_control": "requires physical control capability",
     "cap_registry_write": "requires registry write capability",
     "cap_scene_write": "requires scene write capability",
+    "cap_service_response": "requires service response capability",
 })
 
 
@@ -1915,20 +1959,24 @@ async def _tool_find_available_actions(
     if perm not in (Permission.READ, Permission.WRITE):
         # Nonexistent and inaccessible give the same response, so no existence oracle.
         return _tool_error("Entity not found."), "not_found", entity_id
+    domain = entity_id.split(".")[0]
     descriptions: dict = {}
+    translations: Mapping[str, str] = {}
     fields_unavailable = False
     if include_fields:
         try:
             # Local: inside a guard for releases that lack it.
             from homeassistant.helpers.service import async_get_all_descriptions
-            descriptions = (await async_get_all_descriptions(hass)).get(entity_id.split(".")[0], {}) or {}
+            descriptions = (await async_get_all_descriptions(hass)).get(domain, {}) or {}
         except Exception:  # descriptions are documentation, never required
             _LOGGER.debug("Service descriptions unavailable for %s", entity_id, exc_info=True)
             fields_unavailable = True
+        else:
+            translations = await _service_translations(hass, domain)
         check_request_authority()
     state = hass.states.get(entity_id)
 
-    domain = entity_id.split(".")[0]
+    text_of = _service_text_reader(translations, domain, descriptions, access_key, hass)
     writable = access_key.pass_through or perm == Permission.WRITE
     yaml_edit_ok = effective_cap(access_key, "cap_yaml_edit") != CAP_DENY
     group_refused = writable and group_member_denied(entity_id, access_key, hass)
@@ -1968,10 +2016,13 @@ async def _tool_find_available_actions(
             entry["description"] = guidance
         elif domain == "script" and svc not in SCRIPT_ENTITY_SERVICES and key not in NO_TARGET_SERVICES:
             entry["description"] = "Run this script and wait for completion; pass inputs directly in service data. Target this exact entity."
+        elif include_fields and (text := text_of(svc, "description")):
+            # Translations only: Core's own copy of a named script's text needs cap_script_write.
+            entry["description"] = text
         if reason:
             entry["reason"] = reason
         if include_fields and not fields_unavailable:
-            entry["fields"] = _service_fields(descriptions.get(svc), state)
+            entry["fields"] = _service_fields(descriptions.get(svc), state, svc, text_of)
         actions.append(entry)
 
     # An ESPHome device's user-defined actions live in the esphome domain, not the

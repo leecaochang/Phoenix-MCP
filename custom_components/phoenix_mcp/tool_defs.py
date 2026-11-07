@@ -2222,8 +2222,8 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
             "native trigger/condition rather than a generic equivalent. Includes the entity's MESA "
             "control_mode when MESA is active. Runtime controls include descriptions explaining start, "
             "stop, enable and trigger behavior. Named script services are listed only for this entity. "
-            "Set include_fields to get each service's data fields (required, type, range, options, example) "
-            "limited to the ones this entity supports, before calling call_service. "
+            "Set include_fields to get what each service does and its data fields (required, type, range, options, "
+            "example, description) limited to the ones this entity supports, before calling call_service. "
             "Returns 'not found' if the entity is not accessible."
         ),
         "cap": "cap_search",

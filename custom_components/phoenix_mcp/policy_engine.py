@@ -11,7 +11,7 @@ from collections.abc import Callable, Mapping
 from typing import Any, NamedTuple
 
 from homeassistant.const import STATE_UNAVAILABLE
-from homeassistant.core import HomeAssistant, State, valid_entity_id
+from homeassistant.core import HomeAssistant, State, SupportsResponse, valid_entity_id
 from homeassistant.helpers import area_registry as ar
 from homeassistant.helpers import floor_registry as fr
 from homeassistant.helpers import entity_registry as er
@@ -972,6 +972,12 @@ def firmware_flash_applies(domain: str, service: str, targets: list[str], hass: 
                for target in targets)
 
 
+def response_required(domain: str, service: str, hass: HomeAssistant) -> bool:
+    """Return whether Core refuses a call to this service unless a response is requested."""
+    handler = hass.services.async_services_for_domain(domain).get(service)
+    return handler is not None and handler.supports_response is SupportsResponse.ONLY
+
+
 def whole_device_entities(targets: list[str], hass: HomeAssistant) -> list[str]:
     """Return the targets with every entity of their devices and child devices, disabled ones too."""
     registry = er.async_get(hass)
@@ -1063,6 +1069,7 @@ def required_service_cap(
         access_key,
         "cap_physical_control" if physical_gate_applies(domain, service, targets) else None,
         "cap_esphome_flash" if firmware_flash_applies(domain, service, targets, hass) else None,
+        "cap_service_response" if response_required(domain, service, hass) else None,
         *service_capabilities(domain, service, service_data, targets),
     )
 

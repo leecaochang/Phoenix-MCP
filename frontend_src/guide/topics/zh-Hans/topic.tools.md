@@ -53,7 +53,7 @@
 
 - 重启或停止 Home Assistant 需要重启能力。
 - 重新加载自动化、脚本、场景、辅助元素或核心配置需要 YAML 配置。
-- 操作返回的数据需要服务响应数据。没有它，操作仍会运行。
+- 操作返回的数据需要服务响应数据。没有它，大多数操作仍会运行，但不返回数据。只返回数据的操作（例如 `weather.get_forecasts`）会被拒绝。
 - 发送消息的通知操作需要通知能力。集成自带的、通过通知实体发送消息的操作也需要。
 - 通知播放需要广播能力：`assist_satellite.announce`、`start_conversation`、`ask_question`、`music_assistant.play_announcement`、带 `announce` 的 `media_player.play_media` 和 `tts.speak`。
 - `tts.speak` 还需要对其指定的每个音箱有 W。普通播放只需要 W。

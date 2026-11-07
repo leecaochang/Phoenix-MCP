@@ -53,7 +53,7 @@
 
 - 重新啟動或停止 Home Assistant 需要重新啟動能力。
 - 重新載入自動化、腳本、場景、輔助項目或核心設定需要 YAML 設定。
-- 操作傳回的資料需要服務回應資料。沒有它，操作仍會執行。
+- 操作傳回的資料需要服務回應資料。沒有它，大多數操作仍會執行，但不傳回資料。只傳回資料的操作（例如 `weather.get_forecasts`）會被拒絕。
 - 傳送訊息的通知操作需要通知能力。整合自帶的、透過通知實體傳送訊息的操作也需要。
 - 公告播放需要廣播能力：`assist_satellite.announce`、`start_conversation`、`ask_question`、`music_assistant.play_announcement`、帶 `announce` 的 `media_player.play_media` 和 `tts.speak`。
 - `tts.speak` 還需要對其指定的每個喇叭有 W。一般播放只需要 W。

@@ -720,6 +720,76 @@ async def test_response_services_keep_returning_data(hass):
     assert json.loads(result["content"][0]["text"])["service_response"] == {"ok": True}
 
 
+def _response_service(hass, supports_response):
+    """Register a read service and return its entity and call log."""
+    calls = []
+
+    async def handler(call: ServiceCall) -> dict | None:
+        calls.append(call)
+        return {"ok": True} if call.return_response else None
+
+    hass.services.async_register("todo", "get_items", handler, supports_response=supports_response)
+    return _entity(hass, "todo"), calls
+
+
+async def _listed(hass, data, key, entity_id):
+    result, outcome, _ = await _call_tool("find_available_actions", {"entity_id": entity_id}, key, hass, data)
+    assert outcome == "allowed", result
+    return next(row for row in json.loads(result["content"][0]["text"])["actions"] if row["service"] == "todo.get_items")
+
+
+async def _preview(hass, data, key, entity_id):
+    result, outcome, _ = await _call_tool("dry_run_service", {
+        "service": {"domain": "todo", "name": "get_items"}, "targets": [{"kind": "entity", "ids": [entity_id]}],
+    }, key, hass, data)
+    assert outcome == "allowed", result
+    return json.loads(result["content"][0]["text"])["predicted_outcome"]
+
+
+async def test_a_response_only_service_needs_the_response_capability_everywhere(hass):
+    entity_id, calls = _response_service(hass, SupportsResponse.ONLY)
+    data, _ = _environment(hass)
+    key = _key({entity_id: "GREEN"}, cap_search="allow", cap_service_response="deny")
+
+    assert await _listed(hass, data, key, entity_id) == {
+        "service": "todo.get_items", "available": False, "reason": "requires service response capability"}
+    assert await _preview(hass, data, key, entity_id) == "denied"
+    result, outcome, _ = await _call_service(hass, data, key, "todo", "get_items", entity_id)
+    assert outcome == "denied", result
+    assert "capability" in result["content"][0]["text"] and calls == []
+
+    # The same key with the capability: the positive control for all three.
+    key.cap_service_response = "allow"
+    assert await _listed(hass, data, key, entity_id) == {"service": "todo.get_items", "available": True}
+    assert await _preview(hass, data, key, entity_id) == "allowed"
+    result, outcome, _ = await _call_service(hass, data, key, "todo", "get_items", entity_id)
+    assert outcome == "allowed", result
+    assert json.loads(result["content"][0]["text"])["service_response"] == {"ok": True} and len(calls) == 1
+
+
+async def test_a_service_with_an_optional_response_still_runs_without_the_capability(hass):
+    entity_id, calls = _response_service(hass, SupportsResponse.OPTIONAL)
+    data, _ = _environment(hass)
+    key = _key({entity_id: "GREEN"}, cap_search="allow", cap_service_response="deny")
+
+    assert await _listed(hass, data, key, entity_id) == {"service": "todo.get_items", "available": True}
+    assert await _preview(hass, data, key, entity_id) == "allowed"
+    result, outcome, _ = await _call_service(hass, data, key, "todo", "get_items", entity_id)
+    assert outcome == "allowed", result
+    assert "service_response" not in json.loads(result["content"][0]["text"]) and len(calls) == 1
+
+
+async def test_a_pass_through_key_needs_no_response_grant(hass):
+    entity_id, calls = _response_service(hass, SupportsResponse.ONLY)
+    data, _ = _environment(hass)
+    key = _key({}, cap_search="allow", cap_service_response="deny", pass_through=True)
+
+    assert (await _listed(hass, data, key, entity_id))["available"] is True
+    result, outcome, _ = await _call_service(hass, data, key, "todo", "get_items", entity_id)
+    assert outcome == "allowed", result
+    assert len(calls) == 1
+
+
 @pytest.mark.parametrize(("schema", "sent"), [
     pytest.param(vol.Schema({vol.Required("entity_id"): cv.entity_id}), "sensor.x", id="one entity"),
     pytest.param(vol.Schema({vol.Required("entity_id"): cv.string}), "sensor.x", id="one string"),

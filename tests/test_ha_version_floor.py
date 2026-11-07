@@ -156,6 +156,8 @@ KNOWN_IMPORTS: dict[str, dict[str, str]] = {
         "Event": "0.0.0",
         "HomeAssistant": "0.0.0",
         "State": "0.0.0",
+        # Older than any claimed floor; verified in 2026.7.0.
+        "SupportsResponse": "0.0.0",
         # Verified absent in 2024.5.0, present in 2024.10.0.
         "async_get_hass_or_none": "2024.10.0",
         "callback": "0.0.0",
@@ -223,6 +225,10 @@ KNOWN_IMPORTS: dict[str, dict[str, str]] = {
     "homeassistant.helpers.service": {
         # Present in 2024.1.0, older than any claimed floor.
         "async_get_all_descriptions": "0.0.0",
+    },
+    "homeassistant.helpers.translation": {
+        # Older than any claimed floor; the same signature in 2026.7.0.
+        "async_get_translations": "0.0.0",
     },
     "homeassistant.loader": {
         "IntegrationNotFound": "0.0.0",

@@ -63,7 +63,7 @@
 
 ### {{label:caps.cap_service_response.label}} {#service-response}
 
-傳回操作回應的資料。沒有它，操作仍會執行，但不傳回資料，Music Assistant 音樂庫搜尋也會被拒絕。直通模式允許它。
+傳回操作回應的資料。沒有它，大多數操作仍會執行，但不傳回資料。Phoenix 會拒絕只傳回資料的操作，例如天氣預報和 Music Assistant 音樂庫搜尋。直通模式允許它。
 
 ### {{label:caps.cap_esphome_yaml.label}} {#esphome-yaml}
 
