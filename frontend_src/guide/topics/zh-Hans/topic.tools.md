@@ -51,10 +51,10 @@
 
 智能体还可以在它们可以写入的目标上运行 Home Assistant 操作，并先预览结果。目标必须是该操作适用的对象，因此对开关运行 `light.turn_on` 会被拒绝。`homeassistant.turn_on`、`turn_off`、`toggle` 和 `update_entity` 适用于任何对象。少数操作需要更多条件：
 
-- 重启或停止 Home Assistant 需要重启能力。
+- 重启或停止 Home Assistant 需要重启能力。安装更新也需要它，并且始终需要您审批。
 - 重新加载自动化、脚本、场景、辅助元素或核心配置需要 YAML 配置。
 - 操作返回的数据需要服务响应数据。没有它，大多数操作仍会运行，但不返回数据。只返回数据的操作（例如 `weather.get_forecasts`）会被拒绝。
-- 发送消息的通知操作需要通知能力。集成自带的、通过通知实体发送消息的操作也需要。
+- 发送消息的通知操作需要通知能力。集成自带的、通过通知实体发送消息的操作也需要。手机以外的旧版通知服务始终需要您审批。
 - 通知播放需要广播能力：`assist_satellite.announce`、`start_conversation`、`ask_question`、`music_assistant.play_announcement`、带 `announce` 的 `media_player.play_media` 和 `tts.speak`。
 - `tts.speak` 还需要对其指定的每个音箱有 W。普通播放只需要 W。
 - ESPHome 设备操作只需要设备上的 W。MESA 不检查它们，也不检查重新加载或重启。

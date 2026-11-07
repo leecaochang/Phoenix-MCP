@@ -88,9 +88,7 @@ Phoenix deletes a conversation after 30 days without use, and when you delete co
 
 It also deletes it when someone who isn't an administrator signs in on this browser, but only while **{{label:settings.agentcliGlobalLabel}}** or **{{label:settings.injectLabel}}** is on. With both off, Phoenix doesn't load for that person, so the conversation stays.
 
-While a reply runs, Phoenix sets aside Home Assistant's profile option that closes the connection on a hidden page, so the reply isn't cut off. The option comes back when the reply ends, and your profile page shows it off until then. If the page crashes, the next Home Assistant page you open puts it back a few minutes later.
-
-A reply can still be cut off if the main Home Assistant page was already hidden when you sent the message, such as behind a popped-out Agent Chat. Keep that page in view for long replies.
+Home Assistant closes the connection of a page left hidden for 5 minutes, which cuts off a running reply. For long replies, keep the page in view, or turn off that option in your Home Assistant profile. The main page counts too when it sits behind a popped-out Agent Chat.
 
 Related: [What leaves your home](guide:topic.security#leaves-home)
 

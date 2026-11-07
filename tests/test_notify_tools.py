@@ -10,7 +10,7 @@ import asyncio
 import json
 import uuid
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from homeassistant.components import persistent_notification
@@ -80,6 +80,16 @@ async def test_an_unknown_or_hidden_target_lists_only_what_the_key_can_use(hass,
         assert outcome == "invalid_request" and "secret_screen" not in text
         assert "persistent_notification" in text and "notify.office_screen" in text and "mobile_app_alex_phone" in text
     assert home.await_count == 0
+
+
+async def test_a_legacy_service_waits_for_a_person_even_on_allow(hass, home):
+    """It may pipe the message to a command or a URL, and it has no entity to scope."""
+    hass.services.async_register("notify", "shell_pipe", home)
+    with patch("custom_components.phoenix_mcp.tools.notify._gate", AsyncMock(return_value=None)) as gate:
+        await _call(hass, "send_notification", {"target": "shell_pipe", "message": "hello"})
+        await _call(hass, "send_notification", {"target": "mobile_app_alex_phone", "message": "hello"})
+        await _call(hass, "send_notification", {"target": "persistent_notification", "message": "hello"})
+    assert [call.kwargs["review"] for call in gate.call_args_list] == [True, False, False]
 
 
 @pytest.mark.parametrize("message", ["request_location_update", "command_dnd", "TTS"])

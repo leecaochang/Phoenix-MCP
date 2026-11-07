@@ -51,10 +51,10 @@
 
 智慧體還可以在它們可以寫入的目標上執行 Home Assistant 操作，並先預覽結果。目標必須是該操作適用的對象，因此對開關執行 `light.turn_on` 會被拒絕。`homeassistant.turn_on`、`turn_off`、`toggle` 和 `update_entity` 適用於任何對象。少數操作需要更多條件：
 
-- 重新啟動或停止 Home Assistant 需要重新啟動能力。
+- 重新啟動或停止 Home Assistant 需要重新啟動能力。安裝更新也需要它，並且一律需要您核准。
 - 重新載入自動化、腳本、場景、輔助項目或核心設定需要 YAML 設定。
 - 操作傳回的資料需要服務回應資料。沒有它，大多數操作仍會執行，但不傳回資料。只傳回資料的操作（例如 `weather.get_forecasts`）會被拒絕。
-- 傳送訊息的通知操作需要通知能力。整合自帶的、透過通知實體傳送訊息的操作也需要。
+- 傳送訊息的通知操作需要通知能力。整合自帶的、透過通知實體傳送訊息的操作也需要。手機以外的舊版通知服務一律需要您核准。
 - 公告播放需要廣播能力：`assist_satellite.announce`、`start_conversation`、`ask_question`、`music_assistant.play_announcement`、帶 `announce` 的 `media_player.play_media` 和 `tts.speak`。
 - `tts.speak` 還需要對其指定的每個喇叭有 W。一般播放只需要 W。
 - ESPHome 裝置操作只需要裝置上的 W。MESA 不檢查它們，也不檢查重新載入或重新啟動。

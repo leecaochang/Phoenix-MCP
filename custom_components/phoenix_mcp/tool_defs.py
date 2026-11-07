@@ -1904,7 +1904,8 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
         "description": (
             "Send a notification to a person or a screen. target is persistent_notification (Home Assistant's own "
             "notification list), a notify.* entity the access key can WRITE, or a notify service such as "
-            "mobile_app_<phone>; an unknown target is refused with the list of targets this key can use. Mobile app "
+            "mobile_app_<phone>; an unknown target is refused with the list of targets this key can use. Any other "
+            "notify service needs an administrator's approval, even on Allow. Mobile app "
             "commands such as request_location_update are not sent. The result says sent, and verified only for "
             "persistent_notification, since Home Assistant does not report delivery to a device."
         ),

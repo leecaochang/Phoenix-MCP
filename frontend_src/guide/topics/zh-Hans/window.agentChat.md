@@ -88,9 +88,7 @@ Home Companion 密钥无法发送图像，也无法发送给只读取文本的�
 
 非管理员在此浏览器中登录时，Phoenix 也会删除它，但前提是 **{{label:settings.agentcliGlobalLabel}}** 或 **{{label:settings.injectLabel}}** 已开启。两者都关闭时，Phoenix 不会为此人加载，对话会保留。
 
-回复运行期间，Phoenix 会暂时搁置 Home Assistant 个人资料中在页面隐藏时关闭连接的选项，以免回复被切断。回复结束后，该选项会恢复，在此之前个人资料页面会显示它已关闭。如果页面崩溃，你打开的下一个 Home Assistant 页面会在几分钟后恢复它。
-
-如果发送消息时 Home Assistant 主页面已经隐藏，例如位于弹出的 Agent Chat 后面，回复仍可能被切断。回复较长时，请让该页面保持可见。
+页面隐藏 5 分钟后，Home Assistant 会关闭它的连接，正在进行的回复也会中断。如需长时间回复，请让页面保持可见，或在 Home Assistant 个人资料中关闭该选项。主页面位于弹出的 Agent Chat 后面时同样如此。
 
 相关：[哪些数据会离开你的家](guide:topic.security#leaves-home)
 

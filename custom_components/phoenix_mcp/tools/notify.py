@@ -1,8 +1,9 @@
 """Send notifications and read Home Assistant's persistent ones.
 
 Sending needs cap_notify, which Confirm can gate. A notify entity also needs write and passes MESA;
-a legacy notify service has no entity, so the capability alone decides. Mobile app command messages
-act on the phone rather than inform anyone and are refused. Reading needs cap_log_read. Phoenix's
+a legacy notify service has no entity and may pipe the message to a command or a URL, so a person
+reviews each one, even on Allow, except the mobile app's. Mobile app command messages act on the
+phone rather than inform anyone and are refused. Reading needs cap_log_read. Phoenix's
 own operator notifications are never shown, and text is scrubbed of addresses and of entity IDs the
 key cannot read.
 """
@@ -103,9 +104,11 @@ async def _tool_send_notification(
         return _tool_error(resolved), "invalid_request", tool
     if error := _message_error(resolved[0], args.get("message"), args.get("title")):
         return _tool_error(error), "invalid_request", tool
+    kind, name = resolved
     blocked = await _gate(
         "cap_notify", access_key, hass, data, tool_name=tool, args=args, request_id=request_id,
         client_ip=client_ip, diff=lambda: _build_diff_send_notification(args, access_key, hass),
+        review=kind == "service" and not name.startswith("mobile_app_"),
     )
     if blocked is not None:
         return blocked

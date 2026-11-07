@@ -38,7 +38,6 @@
   "frontend_src/utils/ime.ts": "Input-method guard for key handlers; nothing an operator configures.",
   "frontend_src/utils/latest_request.ts": "Discards superseded responses.",
   "frontend_src/utils/markdown.ts": "Guide link rendering.",
-  "frontend_src/utils/page_suspend.ts": "Keeps the page awake during a chat turn; the behaviour is described with Agent Chat.",
   "frontend_src/version.ts": "Build number.",
   "frontend_src/vite-env.d.ts": "Build type declarations."
 }

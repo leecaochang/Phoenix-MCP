@@ -17,7 +17,6 @@ import { api } from "../api";
 import { syncCardCatalog } from "../utils/card_harvest";
 import { registerAgentChatShortcut } from "../utils/agentchat_shortcut";
 import { onConnectionChange } from "../utils/connection";
-import { releaseAbandonedHold } from "../utils/page_suspend";
 import { t } from "../i18n";
 import type { WorkspaceId } from "./storage";
 import { APPROVALS_SCOPES, type ApprovalsScope } from "./approvals";
@@ -355,7 +354,6 @@ export function PanelDataProvider({ hass, narrow, theme, onThemeChange, language
     if (!agentCliInstancesLoaded) void loadAgentCliInstances();
   };
   useEffect(() => onConnectionChange((up) => { if (up) readMissingRef.current(); }), []);
-  useEffect(releaseAbandonedHold, []);
 
   // Load configured agentCLI providers, open the floating chat window when a
   // "connect" surface requests it, and refresh the provider list whenever it

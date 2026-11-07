@@ -107,7 +107,7 @@ Creating or editing a scene with one of these in it needs this capability as wel
 
 ### {{label:caps.cap_notify.label}} {#notify}
 
-Sends notifications, through its own tool, a notify action or any other action that sends through a notify entity.
+Sends notifications, through its own tool, a notify action or any other action that sends through a notify entity. A legacy notify service other than a phone's always needs your approval, even on Allow.
 
 ### {{label:caps.cap_restart.label}} {#restart}
 

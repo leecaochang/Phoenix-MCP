@@ -20,7 +20,6 @@ import { localizedApprovalReason } from "../utils/approval_reason";
 import { chatNoticeText, failureDetailText } from "../utils/chat_notice";
 import { localizedExecutorError } from "../utils/approval_text";
 import { subscribeApprovalEvents } from "../utils/approval_events";
-import { keepPageAwakeWhileHidden } from "../utils/page_suspend";
 import {
   AGENTCHAT_REVIEW_CLOSED_EVENT,
   AGENTCHAT_REVIEW_DECIDED_EVENT,
@@ -1348,10 +1347,6 @@ export function AgentCliWindow({
       window.removeEventListener("beforeunload", warnBeforeUnload);
     };
   }, [sending]);
-
-  // Home Assistant drops a page hidden for some minutes, and with it the request
-  // the running turn depends on.
-  useEffect(() => (sending ? keepPageAwakeWhileHidden() : undefined), [sending]);
 
   useEffect(() => (sending ? announceRunningTurn(persistenceOwner) : undefined), [sending, persistenceOwner]);
   useEffect(() => watchOtherTabTurn(setOtherTabTurn), [persistenceOwner]);

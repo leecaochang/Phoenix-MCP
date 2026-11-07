@@ -17,7 +17,6 @@
 
 import { JS_BUILD } from "../version";
 import { registerAgentChatShortcut } from "../utils/agentchat_shortcut";
-import { releaseAbandonedHold } from "../utils/page_suspend";
 import { claimInjectController, type InjectController } from "./ownership";
 import {
   setAgentCliOwner, agentCliOpenPatch, purgeAgentCliStorage,
@@ -142,7 +141,6 @@ function start(): void {
     return;
   }
   setAgentCliOwner(typeof hass.user.id === "string" ? hass.user.id : null);
-  releaseAbandonedHold();
   if (!hass.user.is_admin) {
     // What an admin's chat left in this browser is not for this user to read.
     purgeAgentCliStorage();
