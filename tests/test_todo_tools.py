@@ -758,3 +758,64 @@ async def test_a_change_that_does_not_read_back_is_uncertain(hass, lists):
                                                              "item": "milk", "due": None}, _key(), hass, _data())
     assert isinstance(content, UncertainOutcome) and outcome == "invalid_request"
     assert json.loads(content["content"][0]["text"])["status"] == "partial"
+
+
+async def _queued_call(hass, key, items) -> dict:
+    """What a MESA Confirm saves for a raw call_service todo.remove_item."""
+    data = _data()
+    data.mesa = MagicMock()
+    data.store.get_settings().mesa_mode = "enforced"
+    approval = MagicMock(id="a", expires_at=utcnow())
+    with (patch("custom_components.phoenix_mcp.mesa.evaluate_service_call",
+                return_value=MesaVerdict(confirm=["todo.shopping"])),
+          patch("custom_components.phoenix_mcp.mesa.async_create_mesa_approval",
+                AsyncMock(return_value=approval)) as create):
+        result = await _call_tool("call_service", {"domain": "todo", "service": "remove_item", "entity_id": "todo.shopping",
+                                                   "service_data": {"item": items}}, key, hass, data)
+    assert create.await_args is not None, result
+    return json.loads(json.dumps(create.await_args.kwargs, default=str))
+
+
+async def test_a_raw_removal_binds_the_items_it_names(hass, lists):
+    saved = await _queued_call(hass, _key(), ["Eggs"])
+    assert saved["args"][APPROVAL_TARGETS_KEY]["todo_items"] == [
+        {"list": "todo.shopping", "uid": "eggs", "summary": "Eggs", "status": "completed"}]
+    assert len(lists._attr_todo_items) == 4
+
+
+@pytest.mark.parametrize("change", ["reopened", "renamed_into_match", "unchanged"])
+async def test_an_approved_raw_removal_runs_only_on_what_was_reviewed(hass, lists, change):
+    key = _key()
+    saved = await _queued_call(hass, key, ["Eggs"])
+    if change == "reopened":
+        lists._attr_todo_items[1] = TodoItem(uid="eggs", summary="Eggs", status=TodoItemStatus.NEEDS_ACTION)
+    elif change == "renamed_into_match":
+        lists._attr_todo_items[0] = TodoItem(uid="milk", summary="Eggs", status=TodoItemStatus.NEEDS_ACTION)
+    before = [item.uid for item in lists._attr_todo_items]
+    content, outcome, _ = await _approve(hass, saved, key)
+    if change == "unchanged":
+        assert outcome == "allowed", content
+        assert "eggs" not in [item.uid for item in lists._attr_todo_items]
+    else:
+        assert outcome == "denied" and "changed" in content["content"][0]["text"]
+        assert [item.uid for item in lists._attr_todo_items] == before
+
+
+@pytest.mark.parametrize(("service", "data"), [
+    ("add_item", {"item": "Call <redacted-entity> back"}),
+    ("update_item", {"item": "milk", "rename": "Milk <redacted>"}),
+    ("update_item", {"item": "milk", "description": "near <redacted-host>"}),
+])
+async def test_a_raw_item_write_refuses_placeholder_text(hass, lists, service, data):
+    before = [(item.uid, item.summary, item.description) for item in lists._attr_todo_items]
+    body, outcome = await _call(hass, "call_service", {"domain": "todo", "service": service,
+                                                       "entity_id": "todo.shopping", "service_data": data})
+    assert outcome == "invalid_request" and "Redacted item text" in body
+    assert [(item.uid, item.summary, item.description) for item in lists._attr_todo_items] == before
+
+
+async def test_a_raw_item_write_without_placeholders_still_runs(hass, lists):
+    _, outcome = await _call(hass, "call_service", {"domain": "todo", "service": "add_item",
+                                                    "entity_id": "todo.shopping", "service_data": {"item": "Tea"}})
+    assert outcome == "allowed"
+    assert "Tea" in [item.summary for item in lists._attr_todo_items]

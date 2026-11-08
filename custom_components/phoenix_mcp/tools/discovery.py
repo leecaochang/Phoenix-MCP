@@ -13,7 +13,6 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Callable, Mapping
 from datetime import datetime, timedelta
-from types import MappingProxyType
 from typing import Any
 import dataclasses
 import difflib
@@ -42,7 +41,7 @@ from homeassistant.exceptions import HomeAssistantError
 from homeassistant.const import __version__ as ha_version
 
 from ..authoring_validation import async_target_findings, async_validation_message, authoring_input_error
-from ..const import UPDATE_INSTALL_SERVICE, CAP_ALLOW, CAP_CONFIRM, CAP_DENY, DEVICE_LIST_DEFAULT_LIMIT, DEVICE_LIST_MAX_LIMIT, DUAL_GATE_SERVICES, MAX_COMPARE_LIST_VALUES, MAX_COMPARE_VALUE_CHARS, MAX_DANGLING_PATHS, MAX_CONFIG_CHECK_MESSAGES, MAX_SEARCH_QUERY_LEN, MAX_SEARCH_MEMBERS, MAX_SEARCH_MEMBER_CHECKS, MAX_SEARCH_MEMBER_ID_LEN, MESA_MODE_OFF, MUSIC_ASSISTANT_LIBRARY_SERVICES, STORAGE_HELPER_TYPES, NO_TARGET_SERVICES, RUNTIME_SERVICE_GUIDANCE, SCRIPT_ENTITY_SERVICES, SEARCH_ENTITIES_MAX_LIMIT, SEARCH_FUZZY_MATCH_CUTOFF, SEARCH_POWER_TYPES, SEARCH_RADIO_TYPES, SERVICE_FIELDS_MAX, SERVICE_FIELD_MAX_DESCRIPTION, SERVICE_FIELD_MAX_OPTIONS, REFERENCE_WARNING_MAX
+from ..const import UPDATE_INSTALL_SERVICE, CAPABILITY_DENIED_REASONS, CAP_ALLOW, CAP_CONFIRM, CAP_DENY, DEVICE_LIST_DEFAULT_LIMIT, DEVICE_LIST_MAX_LIMIT, DUAL_GATE_SERVICES, MAX_COMPARE_LIST_VALUES, MAX_COMPARE_VALUE_CHARS, MAX_DANGLING_PATHS, MAX_CONFIG_CHECK_MESSAGES, MAX_SEARCH_QUERY_LEN, MAX_SEARCH_MEMBERS, MAX_SEARCH_MEMBER_CHECKS, MAX_SEARCH_MEMBER_ID_LEN, MESA_MODE_OFF, MUSIC_ASSISTANT_LIBRARY_SERVICES, STORAGE_HELPER_TYPES, NO_TARGET_SERVICES, RUNTIME_SERVICE_GUIDANCE, SCRIPT_ENTITY_SERVICES, SEARCH_ENTITIES_MAX_LIMIT, SEARCH_FUZZY_MATCH_CUTOFF, SEARCH_POWER_TYPES, SEARCH_RADIO_TYPES, SERVICE_FIELDS_MAX, SERVICE_FIELD_MAX_DESCRIPTION, SERVICE_FIELD_MAX_OPTIONS, SERVICE_FIELD_VALUE_MAX_DEPTH, REDACTION_SENTINEL, REFERENCE_WARNING_MAX
 from ..consumer_identity import ConsumerIdentityIndex, IDENTITY_COVERAGE
 from ..household_authority import household_admin_access
 from ..data import PhoenixData
@@ -1886,8 +1885,12 @@ def _service_text_reader(
     return read
 
 
-def _service_fields(description: Any, state: Any, service: str, text_of: ServiceTextReader) -> list[dict]:
-    """Compact, bounded field schemas for one service, as this entity can use them."""
+def _service_fields(description: Any, state: Any, service: str, text_of: ServiceTextReader,
+                    value_of: Callable[[Any], Any] | None = None) -> list[dict]:
+    """Compact, bounded field schemas for one service, as this entity can use them.
+
+    ``value_of`` scrubs an ``example`` or ``default`` the instance wrote, as a script's fields are.
+    """
     raw = description.get("fields") if isinstance(description, dict) else None
     flat: list[tuple[str, dict]] = []
     for key, field in (raw or {}).items():
@@ -1917,7 +1920,7 @@ def _service_fields(description: Any, state: Any, service: str, text_of: Service
                         row["options_truncated"] = True
         for name in ("example", "default"):
             if name in field:
-                row[name] = field[name]
+                row[name] = value_of(field[name]) if value_of else field[name]
         if text := text_of(service, f"fields.{key}.description", field.get("description")):
             row["description"] = text
         fields.append(row)
@@ -1925,16 +1928,6 @@ def _service_fields(description: Any, state: Any, service: str, text_of: Service
 
 
 # find_available_actions' reason for each capability a target-bound service can need.
-_CAPABILITY_REASONS = MappingProxyType({
-    "cap_restart": "requires restart capability",
-    "cap_notify": "requires notifications capability",
-    "cap_broadcast": "requires broadcast capability",
-    "cap_esphome_flash": "requires ESPHome flash capability",
-    "cap_physical_control": "requires physical control capability",
-    "cap_registry_write": "requires registry write capability",
-    "cap_scene_write": "requires scene write capability",
-    "cap_service_response": "requires service response capability",
-})
 
 
 async def _tool_find_available_actions(
@@ -2006,8 +1999,8 @@ async def _tool_find_available_actions(
             reason = "read-only access to this entity"
         elif unregistered:
             available, reason = False, "no registry entry, so call_service cannot target this entity"
-        elif needed is not None and needed in _CAPABILITY_REASONS and effective_cap(access_key, needed) == CAP_DENY:
-            available, reason = False, _CAPABILITY_REASONS[needed]
+        elif needed is not None and needed in CAPABILITY_DENIED_REASONS and effective_cap(access_key, needed) == CAP_DENY:
+            available, reason = False, CAPABILITY_DENIED_REASONS[needed]
         elif refusal := await named_script_refusal(hass, domain, svc):
             available, reason = False, refusal
         elif blocked_fields := await required_secondary_targets(hass, domain, svc):
@@ -2025,7 +2018,9 @@ async def _tool_find_available_actions(
         if reason:
             entry["reason"] = reason
         if include_fields and not fields_unavailable:
-            entry["fields"] = _service_fields(descriptions.get(svc), state, svc, text_of)
+            # A script's field values are the author's; shipped examples keep their sample entity IDs.
+            entry["fields"] = _service_fields(descriptions.get(svc), state, svc, text_of,
+                                              _value_scrubber(access_key, hass) if domain == "script" else None)
         actions.append(entry)
 
     # An ESPHome device's user-defined actions live in the esphome domain, not the
@@ -2103,6 +2098,21 @@ def _repair_ref(access_key: AccessKeyRecord, domain: str, issue_id: str) -> str:
         hashlib.sha256,
     ).hexdigest()[:20]
     return f"repair_{digest}"
+
+
+def _value_scrubber(access_key: AccessKeyRecord, hass: HomeAssistant) -> Callable[[Any], Any]:
+    """Scrub every string in a value, keeping its shape."""
+    def scrub(value: Any, depth: int = 0) -> Any:
+        if isinstance(value, str):
+            return _safe_repair_text(value, access_key, hass)
+        if depth >= SERVICE_FIELD_VALUE_MAX_DEPTH:
+            return REDACTION_SENTINEL if isinstance(value, (dict, list)) else value
+        if isinstance(value, list):
+            return [scrub(item, depth + 1) for item in value]
+        if isinstance(value, dict):
+            return {key: scrub(item, depth + 1) for key, item in value.items()}
+        return value
+    return scrub
 
 
 def _safe_repair_text(value: Any, access_key: AccessKeyRecord, hass: HomeAssistant) -> Any:
@@ -2716,7 +2726,7 @@ async def _entity_definition(
         if helper is None:
             config_entry = hass.config_entries.async_get_entry(entry.config_entry_id)
             return {"kind": "integration", "integration": config_entry.domain if config_entry else entry.platform}
-        return {"kind": "ui_helper", "helper_type": helper.domain, "title": helper.title,
+        return {"kind": "ui_helper", "helper_type": helper.domain, "title": _redact_diagnostics(helper.title),
                 **({"entry_id": helper.entry_id} if can_list else {}), **tool("get_helper_settings", "cap_helper_write")}
     attributes = getattr(state, "attributes", {}) or {}
     # HA marks a storage helper editable and a YAML one not; tags exist only in

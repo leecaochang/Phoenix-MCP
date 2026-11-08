@@ -17,8 +17,9 @@ import logging
 from collections.abc import Callable
 from typing import Any, NamedTuple
 
+from homeassistant.auth.permissions.const import POLICY_CONTROL
 from homeassistant.core import HomeAssistant, callback
-from homeassistant.exceptions import HomeAssistantError
+from homeassistant.exceptions import HomeAssistantError, Unauthorized
 from homeassistant.helpers import chat_session, entity_registry as er
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.util.json import json_loads
@@ -428,12 +429,18 @@ def _task_user_id() -> str | None:
 @recorded_turn("ai_task", "instructions")
 async def async_generate_ai_task_data(
     hass: HomeAssistant, data: Any, instructions: str, structure: Any,
-    *, user_id: str | None = None,
+    *, user_id: str | None = None, entity_id: str | None = None,
 ) -> Any:
-    """Intersect the bound key with the requesting user; a task with none keeps household scope."""
+    """Intersect the bound key with the requesting user; a task with none keeps household scope.
+
+    A known user without Control on ``entity_id`` gets Unauthorized, as Core gives a call naming the
+    entity, so the default route spends the provider only for users who may use this entity.
+    """
 
     try:
-        async with household_scope(hass, user_id=user_id):
+        async with household_scope(hass, user_id=user_id) as authority:
+            if entity_id and not authority.entity_access(entity_id)[1]:
+                raise Unauthorized(user_id=user_id, entity_id=entity_id, permission=POLICY_CONTROL)
             return await _async_generate_ai_task_data(hass, data, instructions, structure)
     except AuthorityChangedError as err:
         raise HomeAssistantError("The AI Task's authority changed; check any earlier actions.") from err
@@ -513,6 +520,7 @@ if _AI_TASK_AVAILABLE:
                 raise HomeAssistantError("Phoenix MCP is not set up.")
             result = await async_generate_ai_task_data(
                 self.hass, data, task.instructions, task.structure, user_id=_task_user_id(),
+                entity_id=self.entity_id,
             )
             return _ai_task.GenDataTaskResult(
                 conversation_id=chat_log.conversation_id,

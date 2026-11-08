@@ -766,3 +766,48 @@ def test_probatio_structure_serialization_does_not_import_legacy_converter(monke
     result = ai_task._structure_to_json(schema)
     assert result["properties"]["count"]["type"] == "integer"
     assert result["required"] == ["count"]
+
+
+def _session_carries_user() -> bool:
+    import dataclasses
+
+    from homeassistant.helpers.chat_session import ChatSession
+    return "user_id" in {field.name for field in dataclasses.fields(ChatSession)}
+
+
+@pytest.mark.skipif(not _session_carries_user(), reason="Core gives AI Task no user before its chat session carries one")
+@pytest.mark.parametrize("named", [True, False])
+async def test_generate_data_refuses_a_read_only_user_however_the_entity_is_chosen(hass, phoenix_ai_task_platform, named):
+    """Core checks Control only on a named entity, so the default route is Phoenix's to gate."""
+    from homeassistant.core import Context
+    from homeassistant.exceptions import Unauthorized
+    from homeassistant.setup import async_setup_component
+
+    platform, entry = phoenix_ai_task_platform
+    data = _make_data(**_FULL)
+    data.ai_task_entity = None
+    hass.data[DOMAIN] = data
+    assert await async_setup_component(hass, "homeassistant", {})
+    assert await async_setup_component(hass, "ai_task", {})
+    await ai_task.async_setup_entry(hass, entry, platform._async_schedule_add_entities_for_entry)
+    await hass.async_block_till_done()
+    ai_task.set_ai_task_preferred(hass, entry)
+    await hass.auth.async_create_user("Owner", group_ids=["system-admin"])  # the first user is the owner
+    kid = await hass.auth.async_create_user("kid", group_ids=["system-read-only"])
+    guest = await hass.auth.async_create_user("guest", group_ids=["system-users"])
+    call = {"task_name": "t", "instructions": "summarize"}
+    if named:
+        call["entity_id"] = data.ai_task_entity.entity_id
+
+    async def generate(context):
+        return await hass.services.async_call("ai_task", "generate_data", call, blocking=True,
+                                              return_response=True, context=context)
+
+    run = AsyncMock(return_value="ok")
+    with patch.object(ai_task, "_async_generate_ai_task_data", run):
+        with pytest.raises(Unauthorized):
+            await generate(Context(user_id=kid.id))
+        assert run.await_count == 0
+        assert (await generate(Context(user_id=guest.id)))["data"] == "ok"
+        assert (await generate(Context()))["data"] == "ok"
+    assert run.await_count == 2

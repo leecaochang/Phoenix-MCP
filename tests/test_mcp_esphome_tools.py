@@ -390,6 +390,23 @@ class TestUserServiceDiscovery:
         assert rows[0]["available"] is False
         assert rows[0]["reason"] == "read-only access to this device"
 
+    @pytest.mark.parametrize(("cap_notify", "available"), [("deny", False), ("allow", True)])
+    async def test_a_row_asks_the_capability_call_service_asks(self, hass, esphome_entries, cap_notify, available):
+        """A device with a notify entity needs Notifications, not only Physical Control, to run an action."""
+        _esphome_entry(hass, esphome_entries, entity_ids=("sensor.rf_blaster1_rssi", "notify.rf_blaster1_chime"),
+                       runtime=_runtime(services={1: _user_service()}))
+        hass.states.async_set("sensor.rf_blaster1_rssi", "-60")
+        access_key = _access_key(cap_search="allow", cap_physical_control="allow", cap_notify=cap_notify,
+                                 permissions=PermissionTree(domains={"sensor": PermissionNode(state="GREEN"),
+                                                                     "notify": PermissionNode(state="GREEN")}))
+        content, _, _ = await _call("find_available_actions", {"entity_id": "sensor.rf_blaster1_rssi"}, access_key, hass)
+        [row] = [a for a in _json(content)["actions"] if a["service"].startswith("esphome.")]
+        assert row["available"] is available
+        assert row.get("reason") == (None if available else "requires notifications capability")
+        dry, _, _ = await _call("dry_run_service", {"domain": "esphome", "service": "rf_blaster1_transmit_raw",
+                                                    "service_data": {"timings": [1], "repeats": 1}}, access_key, hass)
+        assert _json(dry)["would_execute"] is available
+
     async def test_non_esphome_entity_gains_no_rows(self, hass, esphome_entries):
         _esphome_entry(hass, esphome_entries, runtime=_runtime(services={1: _user_service()}))
         hass.states.async_set("sensor.unrelated", "1")

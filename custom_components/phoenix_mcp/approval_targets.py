@@ -16,6 +16,7 @@ from .const import (
 from .device_semantics import device_registry_snapshot
 from .policy_engine import loaded_group_members
 from .request_authority import _approved_exec_ctx
+from .service_targets import todo_items_in_review
 
 TARGETS_CHANGED = "Approval targets changed or cannot be verified. Submit a new request."
 
@@ -86,9 +87,24 @@ def target_binding(entities: list[str], hass: HomeAssistant) -> dict:
     return {"version": APPROVAL_TARGETS_VERSION, "entity_ids": roots, "fingerprint": fingerprint}
 
 
+def _call_binding(args: dict, entities: list[str], hass: HomeAssistant, *, items: bool = True) -> dict:
+    """A call's target binding; a todo.remove_item call also binds the items it names.
+
+    Core removes whatever now matches a name or uid, so a reviewed removal must find the same
+    items, in the same state, when it runs. ``items`` False leaves them out, for a binding made
+    without them (set_todo_item checks its own reviewed rows).
+    """
+    binding = target_binding(entities, hass)
+    if items and args.get("domain") == "todo" and args.get("service") == "remove_item":
+        data = args.get("service_data")
+        rows = todo_items_in_review(hass, "todo", "remove_item", data if isinstance(data, dict) else {}, sorted(set(entities)))
+        binding["todo_items"] = sorted(rows, key=lambda row: (row["list"], str(row["uid"]), str(row["summary"])))
+    return binding
+
+
 def bind_targets(args: dict, entities: list[str], hass: HomeAssistant) -> dict:
     """Replace any input binding with server-captured evidence, never caller evidence."""
-    return {**args, APPROVAL_TARGETS_KEY: target_binding(entities, hass)}
+    return {**args, APPROVAL_TARGETS_KEY: _call_binding(args, entities, hass)}
 
 
 def targets_bound(args: dict) -> bool:
@@ -105,7 +121,7 @@ def targets_current(args: dict, entities: list[str], hass: HomeAssistant) -> boo
     return (isinstance(binding, dict) and type(binding.get("version")) is int
             and isinstance(binding.get("fingerprint"), str)
             and isinstance(entities, list) and all(isinstance(entity, str) for entity in entities)
-            and binding == target_binding(entities, hass))
+            and binding == _call_binding(args, entities, hass, items="todo_items" in binding))
 
 
 def bound_preview(diff: dict, args: dict) -> dict:

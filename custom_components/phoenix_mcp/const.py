@@ -113,6 +113,19 @@ TODO_TIMEOUT_SECONDS = 15
 # find_available_actions include_fields bounds per service.
 SERVICE_FIELDS_MAX = 40
 SERVICE_FIELD_MAX_OPTIONS = 30
+# A script field's example or default deeper than this reads as the redaction sentinel.
+SERVICE_FIELD_VALUE_MAX_DEPTH = 16
+# Why an action row says unavailable when this capability is denied (find_available_actions).
+CAPABILITY_DENIED_REASONS = MappingProxyType({
+    "cap_restart": "requires restart capability",
+    "cap_notify": "requires notifications capability",
+    "cap_broadcast": "requires broadcast capability",
+    "cap_esphome_flash": "requires ESPHome flash capability",
+    "cap_physical_control": "requires physical control capability",
+    "cap_registry_write": "requires registry write capability",
+    "cap_scene_write": "requires scene write capability",
+    "cap_service_response": "requires service response capability",
+})
 SERVICE_FIELD_MAX_DESCRIPTION = 160
 # How much of Home Assistant's reason for a failed call reaches the agent.
 SERVICE_FAILURE_TEXT_MAX = 300
@@ -492,6 +505,9 @@ SENSITIVE_KEY_SUFFIXES = ("access_key", "accesskey")
 # redacting producers spell the literal inline, deliberately, and must keep emitting this
 # value.
 REDACTION_SENTINEL = "<redacted>"
+# Every placeholder a redacting reader writes: the sentinel and its kinds (<redacted-entity>,
+# <redacted-host> and the rest). A write path refuses any of them.
+REDACTION_PLACEHOLDER_RE = re.compile(r"<redacted(?:-[a-z]+)?>")
 
 # Domain-aware "lean" view for get_state: without `fields` or `detailed`, a state narrows to
 # entity_id, state, LEAN_ALWAYS_ATTRS and the domain's attributes below. Selection runs

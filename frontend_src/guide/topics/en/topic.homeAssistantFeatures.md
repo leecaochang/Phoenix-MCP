@@ -15,6 +15,8 @@ A reply stops at 8,000 characters and says it was cut. Assist shows the same tex
 
 Phoenix runs Home Assistant's AI Task actions for automations and scripts, with your account and model. It acts for the household, within its access key. If Home Assistant says who started a task, the task has only that person's rights.
 
+That person needs control of the AI Task entity, even when the task names no entity. An automation no person started doesn't.
+
 It can also answer Home Assistant's Evaluate action for automations and scripts: see [Decisions](guide:window.settingsHome#ai-decisions).
 
 ## Assist Tool Provider {#assist-tool-provider}

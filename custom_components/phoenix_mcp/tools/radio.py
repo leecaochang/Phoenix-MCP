@@ -54,6 +54,7 @@ from ..policy_engine import (
 )
 from ..proxy_diagnostics import bluetooth_network, full_pass_through, serial_inventory
 from ..access_key_store import AccessKeyRecord
+from ..service_targets import CallReach, visible_reach_warnings
 from .. import radio as radio_backend
 
 _LOGGER = logging.getLogger(__name__)
@@ -644,7 +645,7 @@ async def _radio_device_mesa_gate(
         return await _pending_or_inline(hass, data, access_key, outcome.approval)
     if outcome.decision == "deny":
         return _tool_error(MESA_DENIED_MESSAGE), "denied", resource
-    return [*warnings, *outcome.warnings]
+    return [*warnings, *visible_reach_warnings(outcome.warnings, CallReach(entities), access_key, hass)]
 
 
 def _same_radio_network(

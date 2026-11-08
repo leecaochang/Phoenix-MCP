@@ -51,6 +51,7 @@ from ..service_targets import (
 )
 from ..tool_common import (
     _add_mesa_advisory, _CAP_FORBIDDEN_MESSAGE, _gate, _mesa_confirm_annotation, _pending_or_inline, _tool_error, _tool_refused_before_write, _tool_reported_failure, _tool_success, MESA_DENIED_MESSAGE,
+    redaction_sentinel_path,
 )
 from ..redaction import redact_diagnostics, redact_inaccessible_entity_ids_in_text
 from ..request_authority import _approved_exec_ctx
@@ -60,6 +61,9 @@ from .system import _execute_restart_ha
 
 
 _LOGGER = logging.getLogger(__name__)
+
+
+TODO_PLACEHOLDER_REFUSAL = "Redacted item text cannot be written back. Send the whole new text, or leave the field out to keep it."
 
 
 async def _tool_call_service(
@@ -121,6 +125,9 @@ async def _tool_call_service(
         )
     if templated := template_fields(args.get("service_data")):
         return _tool_error(template_fields_error(templated)), "invalid_request", "call_service"
+    # Item text read through get_todo_items may hold placeholders; set_todo_item refuses them too.
+    if domain == "todo" and service in ("add_item", "update_item") and redaction_sentinel_path(args.get("service_data")) is not None:
+        return _tool_refused_before_write(TODO_PLACEHOLDER_REFUSAL), "invalid_request", "call_service"
     if refusal := await named_script_refusal(hass, domain, service):
         return _tool_refused_before_write(refusal), "invalid_request", "call_service"
     if selecting := await script_input_selectors(hass, domain, service, args.get("service_data"), args.get("entity_id")):

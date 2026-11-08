@@ -73,9 +73,9 @@ Allowed by: [{{label:caps.cap_restart.label}}](guide:window.capabilities#restart
 
 ## Lists and calendars {#lists}
 
-Agents add, change and remove to-do items and clear completed ones, which needs only Write on the list. Removing an item is permanent: Phoenix keeps no copy, so you [can't restore it](guide:topic.configurationHistory#not-recorded). The result names what went.
+Agents add, change and remove to-do items and clear completed ones, which needs only Write on the list. Removing an item is permanent: Phoenix keeps no copy, so you [can't restore it](guide:topic.configurationHistory#not-recorded). The result names what went. Item text that still holds a `<redacted>` mark from a read is refused.
 
-If you approve a removal requested through Phoenix's to-do tool, Phoenix reads the list again first. An item that changed while the request waited stays, and the result says which. A raw `todo.remove_item` action removes what it names.
+If you approve a removal requested through Phoenix's to-do tool, Phoenix reads the list again first. An item that changed while the request waited stays, and the result says which. A raw `todo.remove_item` action is refused instead if any item it names changed while it waited.
 
 Agents create, change and delete calendar events, which also needs Calendar write. MESA checks both to-do and calendar changes. Each calendar change leaves a receipt the agent can check later.
 

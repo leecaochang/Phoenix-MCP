@@ -15,6 +15,8 @@ Phoenix 使用你的账户和模型，自己回答 Home Assistant 对话。它�
 
 Phoenix 使用你的账户和模型，为自动化和脚本运行 Home Assistant 的 AI 任务操作。它在自己的访问密钥范围内代表整个家庭行动。如果 Home Assistant 告知任务由谁发起，任务只拥有该用户的权限。
 
+该用户需要对 AI 任务实体有控制权限，即使任务未指定实体。不是由人发起的自动化不需要。
+
 它还可以为自动化和脚本回答 Home Assistant 的“评估”操作，请参阅[决策](guide:window.settingsHome#ai-decisions)。
 
 ## Assist 工具提供商 {#assist-tool-provider}

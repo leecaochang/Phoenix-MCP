@@ -50,3 +50,26 @@ async def test_ghost_entity_redacts_identically(hass: HomeAssistant) -> None:
 def test_redact_structure_emits_the_constant() -> None:
     """The sensitive-key path, used for approval records and audit payloads."""
     assert redact_structure({"password": "hunter2"})["password"] == REDACTION_SENTINEL
+
+
+def test_every_placeholder_a_reader_spells_is_one_writes_refuse() -> None:
+    """A new placeholder kind must match REDACTION_PLACEHOLDER_RE, or writes would accept it."""
+    import re
+    from pathlib import Path
+
+    from custom_components.phoenix_mcp.const import REDACTION_PLACEHOLDER_RE
+
+    package = Path(__file__).resolve().parent.parent / "custom_components" / "phoenix_mcp"
+    spelled = {match for path in package.rglob("*.py") if "mesa_core" not in path.parts
+               for match in re.findall(r"<redacted[-a-z_0-9]*>", path.read_text(encoding="utf-8"))}
+    assert {"<redacted>", "<redacted-entity>", "<redacted-host>"} <= spelled
+    assert {text for text in spelled if not REDACTION_PLACEHOLDER_RE.fullmatch(text)} == set()
+
+
+def test_the_write_guard_finds_every_placeholder_kind_in_values_and_keys() -> None:
+    from custom_components.phoenix_mcp.tool_common import redaction_sentinel_path
+
+    for mark in ("<redacted>", "<redacted-entity>", "<redacted-host>", "<redacted-ip>"):
+        assert redaction_sentinel_path({"a": [1, {"b": f"see {mark} here"}]}) == ["a", 1, "b"]
+        assert redaction_sentinel_path({"a": {mark: 1}}) == ["a", mark]
+    assert redaction_sentinel_path({"a": "<redactedness> and <Redacted-Entity>", "b": "redacted-entity"}) is None

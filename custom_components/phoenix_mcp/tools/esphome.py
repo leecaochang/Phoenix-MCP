@@ -27,6 +27,7 @@ from homeassistant.helpers import entity_registry as er
 from homeassistant.config_entries import ConfigEntryState
 
 from ..const import (
+    CAPABILITY_DENIED_REASONS,
     AI_TASK_CLIENT_IP, ASSIST_CLIENT_IP, CAP_DENY, MAX_FILE_BYTES, VOICE_AGENT_CLIENT_IP,
 )
 from ..esphome_constants import (
@@ -68,8 +69,8 @@ from ..redaction import (
 )
 from ..request_authority import check_request_authority
 from ..policy_engine import (
-    Permission, esphome_entry_for_entity, esphome_entry_writable, physical_gate_applies, resolve,
-    resolve_registry_access,
+    Permission, esphome_entry_for_entity, esphome_entry_writable, required_service_cap,
+    resolve, resolve_registry_access,
 )
 from ..access_key_store import AccessKeyRecord
 from ..esphome_builder import (
@@ -194,7 +195,7 @@ def _esphome_actions_for_entity(
 ) -> list[dict]:
     """The owning ESPHome device's user-defined actions, as find_available_actions rows.
 
-    Availability follows the device's write scope and physical gate, as call_service does. `args` is included
+    Availability follows the device's write scope and the capability call_service asks for. `args` is included
     because these schemas are device-defined.
     """
     entry = esphome_entry_for_entity(hass, entity_id)
@@ -208,14 +209,15 @@ def _esphome_actions_for_entity(
 
     available = writable or esphome_entry_writable(hass, entry, access_key)
     prefix = name.replace("-", "_")
-    gated = physical_gate_applies(_ESPHOME_DOMAIN, "", [
-        reg_entry.entity_id for reg_entry in er.async_entries_for_config_entry(er.async_get(hass), entry.entry_id)
-    ]) and effective_cap(access_key, "cap_physical_control") == CAP_DENY
     rows: list[dict] = []
     for svc in (getattr(runtime, "services", None) or {}).values():
         action = getattr(svc, "name", None)
         if not action:
             continue
+        # The capability call_service asks for this exact action decides, so the row matches the call.
+        needed = required_service_cap(domain=_ESPHOME_DOMAIN, service=f"{prefix}_{action}", service_data=None,
+                                      access_key=access_key, hass=hass)
+        gated = needed is not None and effective_cap(access_key, needed) == CAP_DENY
         row: dict = {
             "service": f"{_ESPHOME_DOMAIN}.{prefix}_{action}",
             "available": available and not gated,
@@ -228,8 +230,8 @@ def _esphome_actions_for_entity(
         }
         if not available:
             row["reason"] = "read-only access to this device"
-        elif gated:
-            row["reason"] = "requires physical control capability"
+        elif gated and needed is not None:
+            row["reason"] = CAPABILITY_DENIED_REASONS.get(needed, "requires a capability this access key lacks")
         rows.append(row)
     rows.sort(key=lambda r: r["service"])
     return rows

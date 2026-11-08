@@ -415,6 +415,26 @@ async def test_advisory_warns_in_the_result_and_runs(hass, zigbee_device):
     assert any("prohibited" in warning for warning in body["mesa_advisory"])
 
 
+async def test_an_advisory_on_a_hidden_entity_of_the_device_does_not_name_it(hass, zigbee_device):
+    """A device holds entities the key may not see, so its advisories turn generic, as call_service's do."""
+    device, light, entry = zigbee_device
+    hidden = er.async_get(hass).async_get_or_create(
+        "lock", "zha", "node-lock", config_entry=entry, device_id=device.id, suggested_object_id="node_lock",
+    )
+    data = await _data(hass, "advisory")
+    data.mesa.store.set(hidden.entity_id, _profile(hidden.entity_id, "prohibited"))
+    data.mesa.store.set(light, _profile(light, "prohibited"))
+    key = _access_key()
+    key.permissions = PermissionTree(entities={light: PermissionNode(state="GREEN")})
+    with (patch(f"{_RADIO}.radio_backend.async_remove_device", AsyncMock(return_value={"removed": True})),
+          patch(f"{_RADIO}.radio_backend.async_confirm_device_removed", AsyncMock(return_value=True))):
+        result = await _call_tool("remove_zigbee_device", {"device_id": device.id}, key, hass, data, request_id="rid")
+    assert result[1] == "allowed", result
+    warnings = json.loads(result[0]["content"][0]["text"])["mesa_advisory"]
+    assert hidden.entity_id not in json.dumps(warnings)
+    assert warnings == ["An entity of this device has an advisory policy restriction."]
+
+
 async def test_off_mode_passes_and_an_unavailable_runtime_refuses(hass, zigbee_device):
     device, _light, _entry = zigbee_device
     args = {"device_id": device.id}

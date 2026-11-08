@@ -179,3 +179,33 @@ async def test_runtime_guidance_is_never_replaced(hass, service):
     assert outcome == "allowed", result
     rows = {row["service"]: row for row in json.loads(result["content"][0]["text"])["actions"]}
     assert rows[f"script.{service}"]["description"] == RUNTIME_SERVICE_GUIDANCE[f"script/{service}"]
+
+
+async def test_a_script_fields_example_and_default_are_scrubbed(hass):
+    """A named script's field values are its author's, so they are scrubbed like its other text."""
+    hass.states.async_set("lock.back_door", "locked")
+    assert await async_setup_component(hass, "script", {"script": {"porch": {"sequence": [], "fields": {
+        "target": {"example": "lock.back_door", "selector": {"text": {}}},
+        "data": {"default": {"notify": ["lock.back_door", 5], "token": "token=hunter2"}, "selector": {"object": {}}},
+    }}}})
+    await hass.async_block_till_done()
+    with patch(_TRANSLATIONS, AsyncMock(return_value={})):
+        result, outcome, _ = await _call_tool("find_available_actions", {"entity_id": "script.porch", "include_fields": True},
+                                              _key("script"), hass, _data())
+    assert outcome == "allowed", result
+    rows = {row["service"]: row for row in json.loads(result["content"][0]["text"])["actions"]}
+    by_field = {row["field"]: row for row in rows["script.porch"]["fields"]}
+    assert by_field["target"]["example"] == "<redacted>"
+    assert by_field["data"]["default"]["notify"] == ["<redacted>", 5]
+    assert "hunter2" not in json.dumps(by_field)
+
+
+async def test_a_shipped_example_keeps_its_sample_entity(hass):
+    hass.services.async_register("light", "turn_on", lambda call: None)
+    hass.states.async_set("light.hall", "on")
+    loader = AsyncMock(return_value={"light": {"turn_on": {"fields": {"flash": {"example": "light.kitchen", "selector": {"text": {}}}}}}})
+    with patch("homeassistant.helpers.service.async_get_all_descriptions", loader), patch(_TRANSLATIONS, AsyncMock(return_value={})):
+        result, _, _ = await _call_tool("find_available_actions", {"entity_id": "light.hall", "include_fields": True},
+                                        _key("light"), hass, _data())
+    rows = {row["service"]: row for row in json.loads(result["content"][0]["text"])["actions"]}
+    assert rows["light.turn_on"]["fields"][0]["example"] == "light.kitchen"

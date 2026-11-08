@@ -34,7 +34,7 @@ from .const import (
     MAX_DIFF_INLINE_BYTES,
     MAX_FILE_BYTES,
     MAX_CONFIRM_INLINE_WAIT_SECONDS,
-    REDACTION_SENTINEL,
+    REDACTION_PLACEHOLDER_RE,
     REGISTRY_ID_HINT_MAX,
     TOOL_RESULT_MAX_BYTES,
 )
@@ -795,13 +795,13 @@ def _cas_conflict(
 
 
 def redaction_sentinel_path(value: Any, _prefix: tuple = ()) -> list | None:
-    """Find the first placeholder path, visiting shared containers only once."""
+    """Find the first path holding any redaction placeholder, visiting shared containers only once."""
     pending = [(value, _prefix)]
     visited: set[int] = set()
     while pending:
         current, path = pending.pop()
         if isinstance(current, str):
-            if REDACTION_SENTINEL in current:
+            if REDACTION_PLACEHOLDER_RE.search(current):
                 return list(path)
         elif isinstance(current, (dict, list)):
             identity = id(current)
@@ -810,7 +810,7 @@ def redaction_sentinel_path(value: Any, _prefix: tuple = ()) -> list | None:
             visited.add(identity)
             if isinstance(current, dict):
                 for key in current:
-                    if isinstance(key, str) and REDACTION_SENTINEL in key:
+                    if isinstance(key, str) and REDACTION_PLACEHOLDER_RE.search(key):
                         return [*path, key]
                 children = list(current.items())
             else:

@@ -1734,6 +1734,14 @@ class TestDescribeEntityDefinedBy:
         assert _result_json(content)["defined_by"] == {"kind": "ui_helper", "helper_type": "template",
                                                        "title": "Server Room AC Not On 10min"}
 
+    async def test_a_helper_title_is_scrubbed_like_other_entry_titles(self, definition_env):
+        entry = definition_env.config_entries.async_get_entry("01TEMPLATEHELPER")
+        definition_env.config_entries.async_update_entry(entry, title="Rack token=hunter2 via http://user:pw@nas/x")
+        content, _, _ = await _call("describe_entity", {"entity_id": "binary_sensor.ac_not_on"},
+                                    _definition_key(), definition_env)
+        title = _result_json(content)["defined_by"]["title"]
+        assert "hunter2" not in title and "user:pw" not in title and title.startswith("Rack token=")
+
     async def test_an_entity_without_a_registry_entry_is_not_guessed(self, definition_env):
         content, outcome, _ = await _call("describe_entity", {"entity_id": "binary_sensor.unregistered"},
                                           _definition_key(), definition_env)

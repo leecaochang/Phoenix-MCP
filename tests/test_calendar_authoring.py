@@ -133,6 +133,16 @@ async def test_invalid_event_refuses_before_approval(calendar_env, event):
 
 
 
+@pytest.mark.parametrize('mark', ['<redacted>', '<redacted-entity>', '<redacted-host>'])
+async def test_placeholder_text_refuses_before_approval(calendar_env, mark):
+    calendar_env[2].cap_calendar_write = 'confirm'
+    event = {'summary': 'Dinner', 'start': '2026-10-02', 'end': '2026-10-03', 'description': f'Ask {mark} first'}
+    result = await call(calendar_env, 'create_calendar_event', {**CREATE, 'event': event})
+    assert result[1] == 'invalid_request' and 'Redacted event content' in result[0]['content'][0]['text']
+    assert not calendar_env[1].store.get_pending_approvals()
+    assert not calendar_env[3].calls
+
+
 async def test_a_time_without_an_offset_is_home_assistant_local_time(calendar_env):
     """As HA's own calendar websocket schema reads it (as_local_timezone)."""
     from homeassistant.util import dt as dt_util

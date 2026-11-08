@@ -24,7 +24,7 @@ from homeassistant.util import dt as dt_util
 
 from ..access_key_store import AccessKeyRecord
 from ..const import (
-    APPROVAL_TARGETS_KEY, REDACTION_SENTINEL, TODO_ITEMS_DEFAULT_LIMIT, TODO_ITEMS_MAX_LIMIT, TODO_TIMEOUT_SECONDS,
+    APPROVAL_TARGETS_KEY, REDACTION_PLACEHOLDER_RE, TODO_ITEMS_DEFAULT_LIMIT, TODO_ITEMS_MAX_LIMIT, TODO_TIMEOUT_SECONDS,
 )
 from ..data import PhoenixData
 from ..household_authority import household_service_kwargs
@@ -36,12 +36,11 @@ from ..tool_common import (
 )
 from ..time_text import parse_datetime
 from .calendar import _safe_calendar_data
-from .service import _execute_call_service, _tool_call_service
+from .service import TODO_PLACEHOLDER_REFUSAL, _execute_call_service, _tool_call_service
 
 STATUSES = ("needs_action", "completed")
 _TOOL = "set_todo_item"
 _NOT_FOUND = "Todo list not found."
-_REDACTION_MARKS = (REDACTION_SENTINEL, "<redacted-entity>")
 _UNAVAILABLE = "The list is unavailable, so Home Assistant skips it and returns no items."
 # The schema's limit on an item's text. A list may hold longer; a receipt shows this much of it.
 _SUMMARY_CHARS = 1000
@@ -224,10 +223,8 @@ async def _tool_set_todo_item(
     status = args.get("status")
     if status is not None and status not in STATUSES:
         return _tool_error("status must be needs_action or completed."), "invalid_request", tool
-    if any(isinstance(text, str) and mark in text for text in (summary, description) for mark in _REDACTION_MARKS):
-        return _tool_error(
-            "Redacted item text cannot be written back. Send the whole new text, or leave the field out to keep it."
-        ), "invalid_request", tool
+    if any(isinstance(text, str) and REDACTION_PLACEHOLDER_RE.search(text) for text in (summary, description)):
+        return _tool_error(TODO_PLACEHOLDER_REFUSAL), "invalid_request", tool
     target: dict | None = None
     before: list[dict] = []
     approve_as: tuple[str, dict] | None = None
