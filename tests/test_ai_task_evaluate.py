@@ -845,3 +845,39 @@ async def test_an_older_home_assistant_never_creates_the_entity(hass, home):
         assert ai_task.ai_task_decisions_supported() is False
         ai_task.async_sync_ai_task(hass, SimpleNamespace(entry_id="e"), home.data, add)
     assert home.data.ai_evaluate_entity is None
+
+
+# --------------------------------------------------------------------------- #
+# Routing Statistics
+# --------------------------------------------------------------------------- #
+
+def _evaluate_stats(home):
+    return home.data.routing_statistics.summary()["ai_task"]
+
+
+async def test_an_answer_counts_with_its_decision_tokens(home):
+    home.wire.reply = {"model": "jev-latest", "answers": {"arrived": {"type": "noul", "noul": 0.75}},
+                       "usage": {"input_tokens": 120, "output_tokens": 8}}
+    await home.ask()
+    stats = _evaluate_stats(home)
+    assert stats["outcomes"]["decision"] == 1 and sum(stats["outcomes"].values()) == 1
+    assert stats["decision_usage"] == {"requests": 1, "reports": 1, "input_tokens": 120, "output_tokens": 8}
+    assert stats["provider_usage"]["requests"] == 0
+    assert home.data.routing_statistics.summary()["voice"]["decision_usage"]["requests"] == 0
+
+
+async def test_a_refusal_and_a_failure_count_apart(hass, home):
+    user = await _member(hass, "system-read-only")
+    with pytest.raises(Unauthorized):
+        await home.ask(user_id=user.id)
+    home.wire.status = 500
+    with pytest.raises(HomeAssistantError):
+        await home.ask()
+    outcomes = _evaluate_stats(home)["outcomes"]
+    assert outcomes["refused"] == 1 and outcomes["failed"] == 1 and outcomes["decision"] == 0
+
+
+async def test_a_reset_of_ai_task_leaves_voice_and_chat(home):
+    await home.ask()
+    await home.data.routing_statistics.async_reset("ai_task")
+    assert sum(_evaluate_stats(home)["outcomes"].values()) == 0

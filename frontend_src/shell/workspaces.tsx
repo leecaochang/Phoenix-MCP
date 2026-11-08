@@ -20,7 +20,7 @@ import { AdvisoryWindow, MesaProfilesWindow, ProfileEditorWindow, SuggestedProfi
 import type { MesaFindings } from "./mesa";
 import { SETTINGS_WINDOW_TITLE_KEYS } from "./settingsIndex";
 import { OnboardingWizard } from "../views/OnboardingWizard";
-import { AgentChatSettingsWindow, AiProvidersWindow, ChatRoutingStatisticsWindow, GeneralSettingsWindow, HomeAssistantWindow, LogsSettingsWindow, SafetyWindow, VoiceRoutingStatisticsWindow } from "../views/SettingsWindows";
+import { AgentChatSettingsWindow, AiProvidersWindow, AiTaskRoutingStatisticsWindow, ChatRoutingStatisticsWindow, GeneralSettingsWindow, HomeAssistantWindow, LogsSettingsWindow, SafetyWindow, VoiceRoutingStatisticsWindow } from "../views/SettingsWindows";
 import { t } from "../i18n";
 import type { IconName } from "../ui/Icon";
 import { ControllerContext } from "./dock/TitleBar";
@@ -65,6 +65,7 @@ export const WINDOW_TITLE_KEYS = {
   ...SETTINGS_WINDOW_TITLE_KEYS,
   chatRoutingStatistics: "routingStats.chatWindow",
   voiceRoutingStatistics: "routingStats.voiceWindow",
+  aiTaskRoutingStatistics: "routingStats.aiTaskWindow",
   agentChat: "agentchat.title",
   attention: "attention.title",
   notifications: "notifications.title",
@@ -289,7 +290,7 @@ const OWN_WINDOWS: Record<WorkspaceId, WorkspaceDef> = {
     labelKey: "shell.tabSettings",
     helpKey: "help.wsSettings",
     icon: "settings",
-    windows: ["settingsProviders", "settingsChat", "settingsHome", "settingsSafety", "settingsLogs", "settingsGeneral", "chatRoutingStatistics", "voiceRoutingStatistics", "attention"],
+    windows: ["settingsProviders", "settingsChat", "settingsHome", "settingsSafety", "settingsLogs", "settingsGeneral", "chatRoutingStatistics", "voiceRoutingStatistics", "aiTaskRoutingStatistics", "attention"],
     // Three equal columns: AI Providers alone on the left; Home Assistant over
     // Logs and Notifications in the middle; Agent Chat over Safety over General on the right.
     // Every window is as tall as its content and the workspace scrolls.
@@ -304,18 +305,19 @@ const OWN_WINDOWS: Record<WorkspaceId, WorkspaceDef> = {
       share(api, "settingsHome", 1 / 3);
     },
     // Heights until the content is measured.
-    heights: { settingsProviders: 600, settingsChat: 600, settingsHome: 680, settingsSafety: 680, settingsLogs: 640, settingsGeneral: 520, chatRoutingStatistics: 360, voiceRoutingStatistics: 360 },
+    heights: { settingsProviders: 600, settingsChat: 600, settingsHome: 680, settingsSafety: 680, settingsLogs: 640, settingsGeneral: 520, chatRoutingStatistics: 360, voiceRoutingStatistics: 360, aiTaskRoutingStatistics: 320 },
     contentHeights: true,
     // Show Routing Statistics, in Agent Chat and on the Voice Agent tab, floats that surface's
     // counts over the workspace at their own height, and closes them again.
     closedAt: {
       chatRoutingStatistics: { neighbor: "settingsChat", side: "bottom", host: "float" },
       voiceRoutingStatistics: { neighbor: "settingsHome", side: "bottom", host: "float" },
+      aiTaskRoutingStatistics: { neighbor: "settingsHome", side: "bottom", host: "float" },
     },
     // Wide enough that each count and its name share a line.
-    floatWidths: { chatRoutingStatistics: 520, voiceRoutingStatistics: 520 },
-    contentMax: { chatRoutingStatistics: 1, voiceRoutingStatistics: 1 },
-    toolWindows: ["chatRoutingStatistics", "voiceRoutingStatistics"],
+    floatWidths: { chatRoutingStatistics: 520, voiceRoutingStatistics: 520, aiTaskRoutingStatistics: 520 },
+    contentMax: { chatRoutingStatistics: 1, voiceRoutingStatistics: 1, aiTaskRoutingStatistics: 1 },
+    toolWindows: ["chatRoutingStatistics", "voiceRoutingStatistics", "aiTaskRoutingStatistics"],
     // 4: three columns, nothing folded, replaced the two columns with folded windows along the bottom.
     layoutVersion: 4,
   },
@@ -598,6 +600,7 @@ export const WINDOW_CONTENT: Record<WindowId, FunctionComponent> = {
   settingsGeneral: GeneralSettingsWindow,
   chatRoutingStatistics: ChatRoutingStatisticsWindow,
   voiceRoutingStatistics: VoiceRoutingStatisticsWindow,
+  aiTaskRoutingStatistics: AiTaskRoutingStatisticsWindow,
   logDetails: LogDetailsWindowContent,
   agentChat: ChatDockWindow,
   attention: AttentionContent,

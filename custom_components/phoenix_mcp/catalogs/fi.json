@@ -344,7 +344,7 @@
       "restoreStale": "Kohde on muuttunut sen jälkeen, kun valitsit palautuksen. Tarkista vertailu ja yritä uudelleen.",
       "routingPreviewInvalid": "Tarkista käyttöavain, komentokieli ja reititysasetukset.",
       "routingLanguagesInvalid": "Valitse komentojen reitityskielet asennetuista Assist-kielistä.",
-      "routingStatisticsResetInvalid": "Valitse ääni tai chat ja vahvista tilastojen nollaus.",
+      "routingStatisticsResetInvalid": "Valitse ääni, chat tai tekoälytehtävä ja vahvista tilastojen nollaus.",
       "selectorIdRequired": "selector_id on pakollinen.",
       "selectorTypeInvalid": "selector_type on oltava area, label tai integration.",
       "serviceDisabled": "Hätäkatkaisu on päällä, joten agenttipyynnöt torjutaan.",
@@ -2079,7 +2079,7 @@
     },
     "routingStats": {
       "cancelled": "Peruutettu",
-      "confirm": "Tyhjennetäänkö nämä tilastot? Ääniagentilla ja Agent Chatilla on omat tilastonsa, joten toisen tilastot ja kaikki asetukset säilyvät ennallaan. Käynnissä olevat pyynnöt jätetään uuden jakson ulkopuolelle.",
+      "confirm": "Tyhjennetäänkö nämä tilastot? Ääniagentilla, Agent Chatilla ja Arvioi-toiminnolla on omat tilastonsa, joten muiden tilastot ja kaikki asetukset säilyvät ennallaan. Käynnissä olevat pyynnöt jätetään uuden jakson ulkopuolelle.",
       "decision": "Valmistui päätöstarjoajan kautta",
       "decisionTokens": "Päätöstokenit: input / output",
       "empty": "Yhtään pyyntöä ei ole vielä kirjattu.",
@@ -2092,7 +2092,7 @@
       "provider": "Lähetettiin keskustelupalveluntarjoajalle",
       "providerTokens": "Keskustelutokenit: input / output",
       "reset": "Nollaa tilastot",
-      "scope": "Vain Phoenixin ääni ja chat. Ulkoiset MCP-asiakkaat ja tekoälytehtävä on jätetty pois.",
+      "scope": "Vain Phoenixin ääni ja chat. Ulkoiset MCP-asiakkaat on jätetty pois, ja tekoälytehtävän Arvioi-toiminnolla on omat tilastonsa.",
       "since": "Alkaen {date}. Säilytetään uudelleenkäynnistysten yli.",
       "title": "Reititystilastot",
       "unavailable": "Ei saatavissa",
@@ -2105,7 +2105,22 @@
       "voiceWindow": "Ääniagentin reititystilastot",
       "showHelp": "Näytä tai piilota tämän agentin reitityslaskurit: ilman tekoälymalliasi valmistuneet pyynnöt ja käytetyt tokenit.",
       "refreshHelp": "Lataa laskurit uudelleen, jotta mukaan tulevat pyynnöt, jotka on tehty tämän avaamisen jälkeen.",
-      "resetHelp": "Nollaa tämän agentin reitityslaskurit ja aloita uusi jakso. Tätä ei voi kumota."
+      "resetHelp": "Nollaa tämän agentin reitityslaskurit ja aloita uusi jakso. Tätä ei voi kumota.",
+      "aiTaskTitle": "Arvioi-tilastot",
+      "aiTaskShow": "Näytä Arvioi-tilastot",
+      "aiTaskWindow": "Tekoälytehtävän Arvioi-tilastot",
+      "aiTaskScope": "Home Assistantin Arvioi-toiminto, johon Decisions-entiteetti vastaa. Tiedontuotantoa ei lasketa.",
+      "aiTaskNote": "Vain raportoidut tokenit. Torjuttu laskee kutsut, jotka entiteetti torjui, kuten henkilöltä, jolla ei ole oikeutta ohjata sitä.",
+      "aiTaskHeadline": {
+        "one": "{count} arviointi kirjattu.",
+        "other": "{count} arviointia kirjattu."
+      },
+      "aiTaskEmpty": "Yhtään arviointia ei ole vielä kirjattu.",
+      "evaluated": "Vastattu",
+      "refused": "Torjuttu",
+      "aiTaskShowHelp": "Näytä tai piilota Arvioi-laskurit: vastatut, torjutut ja epäonnistuneet kutsut sekä niiden käyttämät päätöstokenit.",
+      "aiTaskResetHelp": "Nollaa Arvioi-laskurit ja aloita uusi jakso. Tätä ei voi kumota.",
+      "aiTaskConfirm": "Tyhjennetäänkö Arvioi-tilastot? Ääniagentilla ja Agent Chatilla on omat tilastonsa, ja kaikki asetukset säilyvät ennallaan. Käynnissä olevat arvioinnit jätetään uuden jakson ulkopuolelle."
     },
     "selectBy": {
       "area": "Huone",

@@ -344,7 +344,7 @@
       "restoreStale": "Objektet har ändrats sedan du valde att återställa. Granska jämförelsen och försök igen.",
       "routingPreviewInvalid": "Kontrollera åtkomstnyckeln, kommandospråket och routningsinställningarna.",
       "routingLanguagesInvalid": "Välj språk för kommandoroutning bland de installerade Assist-språken.",
-      "routingStatisticsResetInvalid": "Välj Voice eller Chat och bekräfta nollställningen av statistiken.",
+      "routingStatisticsResetInvalid": "Välj Voice, Chat eller AI-uppgift och bekräfta nollställningen av statistiken.",
       "selectorIdRequired": "selector_id krävs.",
       "selectorTypeInvalid": "selector_type måste vara area, label eller integration.",
       "serviceDisabled": "Nödstoppet är på, så agentbegäranden avvisas.",
@@ -2079,7 +2079,7 @@
     },
     "routingStats": {
       "cancelled": "Avbruten",
-      "confirm": "Rensa den här statistiken? Röstagent och Agent Chat har separat statistik, så den andra och alla inställningar ändras inte. Begäranden som redan pågår ingår inte i den nya perioden.",
+      "confirm": "Rensa den här statistiken? Röstagent, Agent Chat och Utvärdera har separat statistik, så de andra och alla inställningar ändras inte. Begäranden som redan pågår ingår inte i den nya perioden.",
       "decision": "Slutförda via beslutsleverantör",
       "decisionTokens": "Beslutstokens: indata / utdata",
       "empty": "Inga begäranden har registrerats ännu.",
@@ -2092,7 +2092,7 @@
       "provider": "Skickade till konversationsleverantör",
       "providerTokens": "Konversationstokens: indata / utdata",
       "reset": "Återställ statistik",
-      "scope": "Endast Phoenix Voice och Chat. Externa MCP-klienter och AI-uppgift undantas.",
+      "scope": "Endast Phoenix Voice och Chat. Externa MCP-klienter undantas, och AI-uppgiftens åtgärd Utvärdera har egen statistik.",
       "since": "Sedan {date}. Bevaras mellan omstarter.",
       "title": "Routningsstatistik",
       "unavailable": "Otillgänglig",
@@ -2105,7 +2105,22 @@
       "voiceWindow": "Routningsstatistik för röstagenten",
       "showHelp": "Visa eller dölj agentens routningsräkning: begäranden som slutfördes utan din AI-modell, och använda tokens.",
       "refreshHelp": "Läs in räkningen igen för att ta med begäranden sedan du öppnade detta.",
-      "resetHelp": "Nollställ agentens routningsräkning och börja en ny period. Detta kan inte ångras."
+      "resetHelp": "Nollställ agentens routningsräkning och börja en ny period. Detta kan inte ångras.",
+      "aiTaskTitle": "Utvärdera-statistik",
+      "aiTaskShow": "Visa Utvärdera-statistik",
+      "aiTaskWindow": "Utvärdera-statistik för AI-uppgift",
+      "aiTaskScope": "Home Assistants åtgärd Utvärdera, besvarad av entiteten för beslut. Datagenerering räknas inte.",
+      "aiTaskNote": "Endast rapporterade tokens. Avvisade räknar anrop som entiteten avvisade, till exempel från en person som inte får styra den.",
+      "aiTaskHeadline": {
+        "one": "{count} utvärdering registrerad.",
+        "other": "{count} utvärderingar registrerade."
+      },
+      "aiTaskEmpty": "Inga utvärderingar har registrerats ännu.",
+      "evaluated": "Besvarade",
+      "refused": "Avvisade",
+      "aiTaskShowHelp": "Visa eller dölj Utvärdera-räkningen: anrop som besvarades, avvisades och misslyckades, och beslutstokens de använde.",
+      "aiTaskResetHelp": "Nollställ Utvärdera-räkningen och börja en ny period. Detta kan inte ångras.",
+      "aiTaskConfirm": "Rensa Utvärdera-statistiken? Röstagent och Agent Chat har egen statistik, och inga inställningar ändras. Utvärderingar som redan pågår ingår inte i den nya perioden."
     },
     "selectBy": {
       "area": "Område",

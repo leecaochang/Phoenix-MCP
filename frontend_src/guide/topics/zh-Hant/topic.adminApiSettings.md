@@ -197,7 +197,7 @@ DELETE /api/phoenix-mcp/admin/wipe
 |---|---|
 | [清除資料](guide:#wipe) | `{"confirm": "WIPE"}` 加上選填的範圍旗標 |
 | [清除對話記錄](guide:#clear-conversations) | 完全為 `{"confirm": true}` |
-| [重設路由統計](guide:#reset-statistics) | 完全為 `{"surface": "voice", "confirm": true}`，或 `"chat"` |
+| [重設路由統計](guide:#reset-statistics) | 完全為 `{"surface": "voice", "confirm": true}`，或 `"chat"`、`"ai_task"` |
 
 ## 版本和工具 {#info}
 
@@ -447,10 +447,10 @@ DELETE /api/phoenix-mcp/admin/command-routing/statistics
 
 ### 路由統計 {#routing-statistics}
 
-`GET /api/phoenix-mcp/admin/command-routing/statistics` 傳回已儲存的總量，跨重新啟動保留。回應包含 `voice` 和 `chat`，各含：
+`GET /api/phoenix-mcp/admin/command-routing/statistics` 傳回已儲存的總量，跨重新啟動保留。回應包含 `voice`、`chat` 和 `ai_task`（「評估」動作），各含：
 
 - `since`
-- `outcomes`：`local`、`decision`、`provider`、`pending`、`failed` 和 `cancelled`
+- `outcomes`：`local`、`decision`、`provider`、`pending`、`failed`、`cancelled` 和 `refused`；`ai_task` 用 `decision` 表示回答，用 `refused` 表示拒絕
 - `provider_turns`
 - `decision_usage` 和 `provider_usage`，各含 `requests`、`reports`、`input_tokens` 和 `output_tokens`
 
@@ -462,7 +462,7 @@ DELETE /api/phoenix-mcp/admin/command-routing/statistics
 {"surface": "voice", "confirm": true}
 ```
 
-把 `surface` 設為 `voice` 或 `chat`。回應會顯示重設後的兩個介面。決策請求計數不會被重設。
+把 `surface` 設為 `voice`、`chat` 或 `ai_task`。回應會顯示重設後的所有介面。決策請求計數不會被重設。
 
 | 狀態 | `error` | `message_key` | 條件 |
 |---|---|---|---|

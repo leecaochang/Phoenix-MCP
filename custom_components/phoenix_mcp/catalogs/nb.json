@@ -344,7 +344,7 @@
       "restoreStale": "Elementet er endret siden du valgte å gjenopprette. Se gjennom sammenligningen og prøv igjen.",
       "routingPreviewInvalid": "Sjekk tilgangsnøkkelen, kommandospråket og rutinginnstillingene.",
       "routingLanguagesInvalid": "Velg språk for kommandoruting blant de installerte Assist-språkene.",
-      "routingStatisticsResetInvalid": "Velg taleagent eller Agent Chat, og bekreft nullstillingen av statistikken.",
+      "routingStatisticsResetInvalid": "Velg taleagent, Agent Chat eller AI-oppgave, og bekreft nullstillingen av statistikken.",
       "selectorIdRequired": "selector_id er påkrevd.",
       "selectorTypeInvalid": "selector_type må være area, label eller integration.",
       "serviceDisabled": "Nødstoppen er slått på, så agentforespørsler avslås.",
@@ -2079,7 +2079,7 @@
     },
     "routingStats": {
       "cancelled": "Avbrutt",
-      "confirm": "Slette denne statistikken? Taleagent og Agent Chat har hver sin statistikk, så den andre og alle innstillinger forblir uendret. Forespørsler som allerede er i gang, holdes utenfor den nye perioden.",
+      "confirm": "Slette denne statistikken? Taleagent, Agent Chat og Evaluer har hver sin statistikk, så de andre og alle innstillinger forblir uendret. Forespørsler som allerede er i gang, holdes utenfor den nye perioden.",
       "decision": "Fullført via beslutningsleverandør",
       "decisionTokens": "Beslutningstokens: inndata / utdata",
       "empty": "Ingen forespørsler er registrert ennå.",
@@ -2092,7 +2092,7 @@
       "provider": "Sendt til samtaleleverandør",
       "providerTokens": "Samtaletokens: inndata / utdata",
       "reset": "Nullstill statistikk",
-      "scope": "Bare taleagenten og Agent Chat i Phoenix. Eksterne MCP-klienter og AI-oppgave er utelatt.",
+      "scope": "Bare taleagenten og Agent Chat i Phoenix. Eksterne MCP-klienter er utelatt, og Evaluer-handlingen i AI-oppgave har egen statistikk.",
       "since": "Siden {date}. Beholdes ved omstart.",
       "title": "Rutingstatistikk",
       "unavailable": "Utilgjengelig",
@@ -2105,7 +2105,22 @@
       "voiceWindow": "Rutingstatistikk for taleagent",
       "showHelp": "Vis eller skjul rutingtallene til denne agenten: forespørsler fullført uten AI-modellen din, og tokenene som ble brukt.",
       "refreshHelp": "Last inn tallene på nytt for å ta med forespørsler gjort siden du åpnet dette.",
-      "resetHelp": "Nullstill rutingtallene til denne agenten og start en ny periode. Dette kan ikke angres."
+      "resetHelp": "Nullstill rutingtallene til denne agenten og start en ny periode. Dette kan ikke angres.",
+      "aiTaskTitle": "Evaluer-statistikk",
+      "aiTaskShow": "Vis Evaluer-statistikk",
+      "aiTaskWindow": "Evaluer-statistikk for AI-oppgave",
+      "aiTaskScope": "Home Assistant-handlingen Evaluer, besvart av entiteten for beslutninger. Datagenerering telles ikke.",
+      "aiTaskNote": "Bare rapporterte tokens. Avslått teller kall som entiteten avslo, for eksempel fra en person uten kontroll over den.",
+      "aiTaskHeadline": {
+        "one": "{count} evaluering registrert.",
+        "other": "{count} evalueringer registrert."
+      },
+      "aiTaskEmpty": "Ingen evalueringer er registrert ennå.",
+      "evaluated": "Besvart",
+      "refused": "Avslått",
+      "aiTaskShowHelp": "Vis eller skjul Evaluer-tallene: kall som ble besvart, avslått og mislyktes, og beslutningstokenene de brukte.",
+      "aiTaskResetHelp": "Nullstill Evaluer-tallene og start en ny periode. Dette kan ikke angres.",
+      "aiTaskConfirm": "Slette Evaluer-statistikken? Taleagent og Agent Chat har sin egen statistikk, og alle innstillinger forblir uendret. Evalueringer som allerede er i gang, holdes utenfor den nye perioden."
     },
     "selectBy": {
       "area": "Område",

@@ -155,7 +155,7 @@
       "routingLanguagesInvalid": "請從已安裝的 Assist 語言中選擇命令路由語言。",
       "providerModelNotListed": "請選取此提供者傳回的模型。",
       "providerAccountChanged": "提供者帳戶已變更，請重新整理後再試。",
-      "routingStatisticsResetInvalid": "請選擇 Voice 或 Chat 並確認重設統計。",
+      "routingStatisticsResetInvalid": "請選擇 Voice、Chat 或 AI 任務並確認重設統計。",
       "recoveryBlocked": "Phoenix MCP 無法安全地完成此操作，因此已停止。請在 Home Assistant 中檢查該項目，然後再試。",
       "recoveryStorageUnavailable": "無法載入設定復原儲存。請檢查 Home Assistant 記錄，然後再試。",
       "recoveryOperationActive": "對此項目的變更仍在進行。請等待其完成，然後再試。",
@@ -2391,7 +2391,7 @@
     },
     "routingStats": {
       "title": "路由統計",
-      "scope": "僅統計 Phoenix 語音和聊天。外部 MCP 用戶端和 AI 任務不計入。",
+      "scope": "僅統計 Phoenix 語音和聊天。外部 MCP 用戶端不計入，AI 任務的「評估」動作另有統計。",
       "headline": "{percent}% 的請求無需對話模型即可完成。",
       "empty": "尚無請求記錄。",
       "since": "自 {date} 起統計。重新啟動後保留。",
@@ -2406,7 +2406,7 @@
       "unavailable": "無法使用",
       "note": "僅顯示回報的權杖用量，不估算節省量。核准計數反映回覆時的情況，而非目前核准狀態。",
       "reset": "重設統計",
-      "confirm": "清除這些統計資料？語音智慧體和 Agent Chat 的統計資料彼此獨立，另一方的統計資料和所有設定保持不變。已在執行的請求不會計入新的統計週期。",
+      "confirm": "清除這些統計資料？語音智慧體、Agent Chat 和「評估」的統計資料彼此獨立，其他統計資料和所有設定保持不變。已在執行的請求不會計入新的統計週期。",
       "error": "無法載入或重設統計資料，請重試。",
       "missing": {
         "one": "{count} 個請求缺少用量資料",
@@ -2417,7 +2417,22 @@
       "voiceWindow": "語音智慧體路由統計",
       "showHelp": "顯示或隱藏此智慧體的路由統計：無需您的 AI 模型即完成的請求，以及使用的 token 數。",
       "refreshHelp": "重新載入統計，以納入您開啟此處之後的請求。",
-      "resetHelp": "清除此智慧體的路由統計並開始新的統計週期。此操作無法撤銷。"
+      "resetHelp": "清除此智慧體的路由統計並開始新的統計週期。此操作無法撤銷。",
+      "aiTaskTitle": "「評估」統計",
+      "aiTaskShow": "顯示「評估」統計",
+      "aiTaskWindow": "AI 任務「評估」統計",
+      "aiTaskScope": "Home Assistant 的「評估」動作，由決策實體回答。不計入資料產生。",
+      "aiTaskNote": "僅顯示回報的權杖用量。「已拒絕」統計被該實體拒絕的呼叫，例如來自無權控制該實體的人員的呼叫。",
+      "aiTaskHeadline": {
+        "one": "已記錄 {count} 次評估。",
+        "other": "已記錄 {count} 次評估。"
+      },
+      "aiTaskEmpty": "尚無評估記錄。",
+      "evaluated": "已回答",
+      "refused": "已拒絕",
+      "aiTaskShowHelp": "顯示或隱藏「評估」統計：已回答、已拒絕和失敗的呼叫，以及它們使用的決策權杖。",
+      "aiTaskResetHelp": "清除「評估」統計並開始新的統計週期。此操作無法撤銷。",
+      "aiTaskConfirm": "清除「評估」統計資料？語音智慧體和 Agent Chat 有各自的統計資料，所有設定保持不變。已在執行的評估不會計入新的統計週期。"
     },
     "conversations": {
       "title": "對話記錄",

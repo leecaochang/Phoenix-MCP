@@ -131,6 +131,10 @@ Home Companion 密钥会把对话交给 Home Companion 处理，并隐藏 **{{la
 
 实体权限和 MESA 在此不适用：此操作没有目标实体，也不会改变任何内容。
 
+### {{label:routingStats.aiTaskTitle}} {#ai-decisions-statistics}
+
+**{{label:routingStats.aiTaskShow}}** 会打开一个窗口，统计该实体回答、拒绝或失败的“评估”操作，以及它们使用的决策 token。请参阅[评估](guide:topic.routingStatistics#evaluate)。
+
 ## {{label:settings.assistCard}} {#assist-tool-provider}
 
 把 Phoenix 的工具借给在别处运行的模型，例如设为使用 Phoenix MCP（限定范围）控制 Home Assistant 的对话智能体。Phoenix 在这里不运行自己的模型。

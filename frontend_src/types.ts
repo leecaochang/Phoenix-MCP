@@ -854,12 +854,14 @@ export interface CommandRoutePreview {
 
 export interface RoutingSurfaceStatistics {
   since: string;
-  outcomes: Record<"local" | "decision" | "provider" | "pending" | "failed" | "cancelled", number>;
+  outcomes: Record<"local" | "decision" | "provider" | "pending" | "failed" | "cancelled" | "refused", number>;
   provider_turns: number;
   decision_usage: { requests: number; reports: number; input_tokens: number; output_tokens: number };
   provider_usage: RoutingSurfaceStatistics["decision_usage"];
 }
-export type RoutingStatisticsResponse = Record<"voice" | "chat", RoutingSurfaceStatistics>;
+/** Voice Agent, Agent Chat, and the AI Task Evaluate action. */
+export type RoutingSurface = "voice" | "chat" | "ai_task";
+export type RoutingStatisticsResponse = Record<RoutingSurface, RoutingSurfaceStatistics>;
 
 export type ConversationCoverage = "full_turn" | "partial_conversation" | "tool_exchange";
 export type ConversationOutcome = "completed" | "failed" | "denied" | "pending_approval" | "cancelled"

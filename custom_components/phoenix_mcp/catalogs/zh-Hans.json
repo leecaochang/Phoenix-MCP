@@ -729,7 +729,7 @@
       "routingLanguagesInvalid": "请从已安装的 Assist 语言中选择命令路由语言。",
       "providerModelNotListed": "请选择此提供商返回的模型。",
       "providerAccountChanged": "提供商账户已更改，请刷新后重试。",
-      "routingStatisticsResetInvalid": "请选择 Voice 或 Chat 并确认重置统计。",
+      "routingStatisticsResetInvalid": "请选择 Voice、Chat 或 AI 任务并确认重置统计。",
       "recoveryBlocked": "Phoenix MCP 无法安全地完成此操作，因此已停止。请在 Home Assistant 中检查该项目，然后再试。",
       "recoveryStorageUnavailable": "无法加载配置恢复存储。请检查 Home Assistant 日志，然后再试。",
       "recoveryOperationActive": "对此项目的更改仍在进行。请等待其完成，然后再试。",
@@ -2385,7 +2385,7 @@
     },
     "routingStats": {
       "title": "路由统计",
-      "scope": "仅统计 Phoenix 语音和聊天。外部 MCP 客户端和 AI 任务不计入。",
+      "scope": "仅统计 Phoenix 语音和聊天。外部 MCP 客户端不计入，AI 任务的“评估”操作另有统计。",
       "headline": "{percent}% 的请求无需对话模型即可完成。",
       "empty": "尚无请求记录。",
       "since": "自 {date} 起统计。重启后保留。",
@@ -2400,7 +2400,7 @@
       "unavailable": "不可用",
       "note": "仅显示报告的令牌用量，不估算节省量。审批计数反映回复时的情况，而非当前审批状态。",
       "reset": "重置统计",
-      "confirm": "清除这些统计数据？语音智能体和 Agent Chat 的统计数据相互独立，另一方的统计数据和所有设置保持不变。已在执行的请求不会计入新统计周期。",
+      "confirm": "清除这些统计数据？语音智能体、Agent Chat 和“评估”的统计数据相互独立，其他统计数据和所有设置保持不变。已在执行的请求不会计入新统计周期。",
       "error": "无法加载或重置统计数据，请重试。",
       "missing": {
         "one": "{count} 个请求缺少用量数据",
@@ -2411,7 +2411,22 @@
       "voiceWindow": "语音智能体路由统计",
       "showHelp": "显示或隐藏此智能体的路由统计：无需您的 AI 模型即完成的请求，以及使用的 token 数。",
       "refreshHelp": "重新加载统计，以包含您打开此处之后的请求。",
-      "resetHelp": "清除此智能体的路由统计并开始新的统计周期。此操作无法撤销。"
+      "resetHelp": "清除此智能体的路由统计并开始新的统计周期。此操作无法撤销。",
+      "aiTaskTitle": "“评估”统计",
+      "aiTaskShow": "显示“评估”统计",
+      "aiTaskWindow": "AI 任务“评估”统计",
+      "aiTaskScope": "Home Assistant 的“评估”操作，由决策实体回答。不计入数据生成。",
+      "aiTaskNote": "仅显示报告的令牌用量。“已拒绝”统计被该实体拒绝的调用，例如来自无权控制该实体的人员的调用。",
+      "aiTaskHeadline": {
+        "one": "已记录 {count} 次评估。",
+        "other": "已记录 {count} 次评估。"
+      },
+      "aiTaskEmpty": "尚无评估记录。",
+      "evaluated": "已回答",
+      "refused": "已拒绝",
+      "aiTaskShowHelp": "显示或隐藏“评估”统计：已回答、已拒绝和失败的调用，以及它们使用的决策令牌。",
+      "aiTaskResetHelp": "清除“评估”统计并开始新的统计周期。此操作无法撤销。",
+      "aiTaskConfirm": "清除“评估”统计数据？语音智能体和 Agent Chat 有各自的统计数据，所有设置保持不变。已在执行的评估不会计入新统计周期。"
     },
     "conversations": {
       "title": "对话日志",

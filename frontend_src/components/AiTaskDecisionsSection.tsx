@@ -1,10 +1,11 @@
 import { BusyInput, BusySelect } from "./BusyButton";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import type { GlobalSettings, AccessKeyRecord, AiEvaluatePreferredStatus } from "../types";
 import { api } from "../api";
 import { t } from "../i18n";
 import { SettingLabel, helpRow } from "../ui/SettingLabel";
 import { useNotify } from "../ui/notify";
+import { RoutingStatistics } from "./RoutingStatistics";
 
 // The opt-in Decisions entity: Home Assistant's Evaluate action, answered by the decision
 // provider. It has its own access key, so turning it on never widens the AI Task's key.
@@ -15,12 +16,15 @@ export function AiTaskDecisionsSection({
   onChange,
   saving,
   accessKeys,
+  statistics = <RoutingStatistics surface="ai_task" />,
 }: {
   settings: GlobalSettings;
   /** Save a setting; false when it failed (the window reports why). */
   onChange: (key: keyof GlobalSettings, value: boolean | string) => Promise<boolean> | void;
   saving: boolean;
   accessKeys: AccessKeyRecord[];
+  /** The Evaluate counts, or the control that opens them. */
+  statistics?: ReactNode;
 }) {
   const notify = useNotify();
   const [pref, setPref] = useState<AiEvaluatePreferredStatus | null>(null);
@@ -126,6 +130,7 @@ export function AiTaskDecisionsSection({
           ))}
         </BusySelect>
       </div>
+      {statistics}
     </section>
   );
 }

@@ -1673,7 +1673,7 @@
       "routingLanguagesInvalid": "Wählen Sie die Sprachen für die Befehlsweiterleitung aus den installierten Assist-Sprachen.",
       "providerModelNotListed": "Wählen Sie ein vom Anbieter zurückgegebenes Modell.",
       "providerAccountChanged": "Das Anbieterkonto wurde geändert. Laden Sie neu und versuchen Sie es erneut.",
-      "routingStatisticsResetInvalid": "Wählen Sie Voice oder Chat und bestätigen Sie das Zurücksetzen der Statistik.",
+      "routingStatisticsResetInvalid": "Wählen Sie Voice, Chat oder KI-Aufgabe und bestätigen Sie das Zurücksetzen der Statistik.",
       "recoveryBlocked": "Phoenix MCP konnte dies nicht sicher ausführen und hat angehalten. Prüfen Sie das Element in Home Assistant und versuchen Sie es dann erneut.",
       "recoveryStorageUnavailable": "Der Speicher der Konfigurationswiederherstellung konnte nicht geladen werden. Prüfen Sie das Home Assistant-Protokoll und versuchen Sie es dann erneut.",
       "recoveryOperationActive": "Eine Änderung an diesem Element läuft noch. Warten Sie, bis sie abgeschlossen ist, und versuchen Sie es dann erneut.",
@@ -2385,7 +2385,7 @@
     },
     "routingStats": {
       "title": "Routing-Statistik",
-      "scope": "Nur Phoenix Voice und Chat. Externe MCP-Clients und die KI-Aufgabe sind ausgeschlossen.",
+      "scope": "Nur Phoenix Voice und Chat. Externe MCP-Clients sind ausgeschlossen, und die Aktion Bewerten der KI-Aufgabe hat eine eigene Statistik.",
       "headline": "{percent}% der Anfragen wurden ohne das Gesprächsmodell abgeschlossen.",
       "empty": "Noch keine Anfragen erfasst.",
       "since": "Seit {date}. Bleibt bei Neustarts erhalten.",
@@ -2400,7 +2400,7 @@
       "unavailable": "Nicht verfügbar",
       "note": "Nur gemeldete Tokens, keine geschätzten Einsparungen. Die Genehmigungszahl bezieht sich auf die Antwort, nicht den aktuellen Status.",
       "reset": "Statistik zurücksetzen",
-      "confirm": "Diese Statistik löschen? Sprachagent und Agent Chat führen getrennte Statistiken, daher bleiben die andere und alle Einstellungen unverändert. Bereits laufende Anfragen werden im neuen Zeitraum nicht gezählt.",
+      "confirm": "Diese Statistik löschen? Sprachagent, Agent Chat und Bewerten führen getrennte Statistiken, daher bleiben die anderen und alle Einstellungen unverändert. Bereits laufende Anfragen werden im neuen Zeitraum nicht gezählt.",
       "error": "Statistik konnte nicht geladen oder zurückgesetzt werden. Erneut versuchen.",
       "missing": {
         "one": "{count} Anfrage ohne Nutzungsdaten",
@@ -2411,7 +2411,22 @@
       "voiceWindow": "Routing-Statistik des Sprachagenten",
       "showHelp": "Die Routing-Zahlen dieses Agenten ein- oder ausblenden: ohne Ihr KI-Modell erledigte Anfragen und die verbrauchten Tokens.",
       "refreshHelp": "Die Zahlen neu laden, um Anfragen seit dem Öffnen einzubeziehen.",
-      "resetHelp": "Die Routing-Zahlen dieses Agenten löschen und einen neuen Zeitraum beginnen. Dies lässt sich nicht rückgängig machen."
+      "resetHelp": "Die Routing-Zahlen dieses Agenten löschen und einen neuen Zeitraum beginnen. Dies lässt sich nicht rückgängig machen.",
+      "aiTaskTitle": "Bewerten-Statistik",
+      "aiTaskShow": "Bewerten-Statistik anzeigen",
+      "aiTaskWindow": "Bewerten-Statistik der KI-Aufgabe",
+      "aiTaskScope": "Die Home Assistant-Aktion Bewerten, beantwortet von der Decisions-Entität. Datengenerierung wird nicht gezählt.",
+      "aiTaskNote": "Nur gemeldete Tokens. Abgelehnt zählt Aufrufe, die die Entität abgelehnt hat, etwa von einer Person, die sie nicht steuern darf.",
+      "aiTaskHeadline": {
+        "one": "{count} Bewertung erfasst.",
+        "other": "{count} Bewertungen erfasst."
+      },
+      "aiTaskEmpty": "Noch keine Bewertungen erfasst.",
+      "evaluated": "Beantwortet",
+      "refused": "Abgelehnt",
+      "aiTaskShowHelp": "Die Bewerten-Zahlen ein- oder ausblenden: beantwortete, abgelehnte und fehlgeschlagene Aufrufe und die verbrauchten Entscheidungs-Tokens.",
+      "aiTaskResetHelp": "Die Bewerten-Zahlen löschen und einen neuen Zeitraum beginnen. Dies lässt sich nicht rückgängig machen.",
+      "aiTaskConfirm": "Die Bewerten-Statistik löschen? Sprachagent und Agent Chat führen eigene Statistiken, und alle Einstellungen bleiben unverändert. Bereits laufende Bewertungen werden im neuen Zeitraum nicht gezählt."
     },
     "conversations": {
       "title": "Gesprächsprotokoll",

@@ -1,5 +1,5 @@
 import { BusyInput, BusySelect } from "./BusyButton";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import type { GlobalSettings, AccessKeyRecord, AgentCliInstance, AiTaskPreferredStatus } from "../types";
 import { api } from "../api";
 import { t } from "../i18n";
@@ -20,11 +20,14 @@ export function AiTaskSettings({
   settings,
   onChange,
   saving,
+  statistics,
 }: {
   settings: GlobalSettings;
   /** Save a setting; false when it failed (the window reports why). */
   onChange: (key: keyof GlobalSettings, value: boolean | string) => Promise<boolean> | void;
   saving: boolean;
+  /** The Evaluate counts, or the control that opens them; they unfold in place when omitted. */
+  statistics?: ReactNode;
 }) {
   const notify = useNotify();
   const [accessKeys, setAccessKeys] = useState<AccessKeyRecord[]>([]);
@@ -201,7 +204,8 @@ export function AiTaskSettings({
       />
 
       {settings.ai_task_decisions_supported === true && !!settings.decision_provider_id && (
-        <AiTaskDecisionsSection settings={settings} onChange={onChange} saving={saving} accessKeys={accessKeys} />
+        <AiTaskDecisionsSection settings={settings} onChange={onChange} saving={saving} accessKeys={accessKeys}
+          statistics={statistics} />
       )}
     </div>
   );

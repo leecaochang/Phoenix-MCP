@@ -23,7 +23,7 @@ import { movedOrder, phoneOrder, withMember, type PhoneLayout } from "./phoneLay
 import { PHONE_ROWS, RowLimitContext } from "../ui/table/rowLimit";
 
 /** Windows a phone never stacks: their content shows inside the window that opens them. */
-const INLINE_ON_PHONES: readonly string[] = ["chatRoutingStatistics", "voiceRoutingStatistics"];
+const INLINE_ON_PHONES: readonly string[] = ["chatRoutingStatistics", "voiceRoutingStatistics", "aiTaskRoutingStatistics"];
 
 /** Previous and Next in a details window (Log Details, Comparison, Review), by their Help keys. */
 const STEP_BUTTONS = '[data-help="help.previousRecord"], [data-help="help.nextRecord"]';

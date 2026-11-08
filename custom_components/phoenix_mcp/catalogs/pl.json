@@ -1180,7 +1180,7 @@
       "routingLanguagesInvalid": "Wybierz języki kierowania poleceń spośród zainstalowanych języków Assist.",
       "providerModelNotListed": "Wybierz model zwrócony przez tego dostawcę.",
       "providerAccountChanged": "Konto dostawcy uległo zmianie. Odśwież i spróbuj ponownie.",
-      "routingStatisticsResetInvalid": "Wybierz Voice lub Chat i potwierdź wyzerowanie statystyk.",
+      "routingStatisticsResetInvalid": "Wybierz Voice, Chat lub Zadanie AI i potwierdź wyzerowanie statystyk.",
       "recoveryBlocked": "Phoenix MCP nie mógł zrobić tego bezpiecznie, więc przerwał. Sprawdź element w Home Assistant, a następnie spróbuj ponownie.",
       "recoveryStorageUnavailable": "Nie udało się wczytać magazynu odzyskiwania konfiguracji. Sprawdź dziennik Home Assistant, a następnie spróbuj ponownie.",
       "recoveryOperationActive": "Zmiana tego elementu nadal trwa. Poczekaj, aż się zakończy, a następnie spróbuj ponownie.",
@@ -2516,7 +2516,7 @@
     },
     "routingStats": {
       "title": "Statystyki routingu",
-      "scope": "Tylko Voice i Chat Phoenix. Zewnętrzne klienty MCP i Zadanie AI są wyłączone.",
+      "scope": "Tylko Voice i Chat Phoenix. Zewnętrzne klienty MCP są wyłączone, a akcja Oceń Zadania AI ma własne statystyki.",
       "headline": "{percent}% żądań ukończono bez modelu konwersacyjnego.",
       "empty": "Nie zarejestrowano jeszcze żądań.",
       "since": "Od {date}. Zachowywane po restarcie.",
@@ -2531,7 +2531,7 @@
       "unavailable": "Niedostępne",
       "note": "Tylko zgłoszone tokeny, bez szacowania oszczędności. Zatwierdzenia odzwierciedlają stan przy odpowiedzi, nie stan bieżący.",
       "reset": "Wyzeruj statystyki",
-      "confirm": "Usunąć te statystyki? Agent głosowy i Agent Chat mają osobne statystyki, więc statystyki drugiego i wszystkie ustawienia pozostaną bez zmian. Trwające żądania nie trafią do nowego okresu.",
+      "confirm": "Usunąć te statystyki? Agent głosowy, Agent Chat i akcja Oceń mają osobne statystyki, więc pozostałe statystyki i wszystkie ustawienia pozostaną bez zmian. Trwające żądania nie trafią do nowego okresu.",
       "error": "Nie można wczytać lub wyzerować statystyk. Spróbuj ponownie.",
       "missing": {
         "one": "{count} żądanie bez danych o zużyciu",
@@ -2544,7 +2544,24 @@
       "voiceWindow": "Statystyki routingu agenta głosowego",
       "showHelp": "Pokaż lub ukryj liczniki routingu tego agenta: żądania obsłużone bez Twojego modelu AI i zużyte tokeny.",
       "refreshHelp": "Wczytaj liczniki ponownie, aby uwzględnić żądania wysłane od otwarcia tego widoku.",
-      "resetHelp": "Wyzeruj liczniki routingu tego agenta i rozpocznij nowy okres. Tego nie można cofnąć."
+      "resetHelp": "Wyzeruj liczniki routingu tego agenta i rozpocznij nowy okres. Tego nie można cofnąć.",
+      "aiTaskTitle": "Statystyki akcji Oceń",
+      "aiTaskShow": "Pokaż statystyki akcji Oceń",
+      "aiTaskWindow": "Statystyki akcji Oceń w Zadaniu AI",
+      "aiTaskScope": "Akcja Oceń w Home Assistant, na którą odpowiada encja decyzji. Generowanie danych nie jest liczone.",
+      "aiTaskNote": "Tylko zgłoszone tokeny. Odrzucone obejmują wywołania, które encja odrzuciła, na przykład od osoby, która nie może nią sterować.",
+      "aiTaskHeadline": {
+        "one": "Zarejestrowano {count} ocenę.",
+        "few": "Zarejestrowano {count} oceny.",
+        "many": "Zarejestrowano {count} ocen.",
+        "other": "Zarejestrowano {count} ocen."
+      },
+      "aiTaskEmpty": "Nie zarejestrowano jeszcze ocen.",
+      "evaluated": "Z odpowiedzią",
+      "refused": "Odrzucone",
+      "aiTaskShowHelp": "Pokaż lub ukryj liczniki akcji Oceń: wywołania z odpowiedzią, odrzucone i nieudane oraz zużyte przez nie tokeny decyzji.",
+      "aiTaskResetHelp": "Wyzeruj liczniki akcji Oceń i rozpocznij nowy okres. Tego nie można cofnąć.",
+      "aiTaskConfirm": "Usunąć statystyki akcji Oceń? Agent głosowy i Agent Chat mają własne statystyki, a wszystkie ustawienia pozostaną bez zmian. Trwające oceny nie trafią do nowego okresu."
     },
     "conversations": {
       "title": "Dziennik rozmów",

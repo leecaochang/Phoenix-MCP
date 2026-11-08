@@ -1,4 +1,4 @@
-"""Durable aggregate turn accounting for Phoenix Chat and Voice, without transcripts."""
+"""Durable aggregate turn accounting for Phoenix Chat, Voice and AI Task Evaluate, without transcripts."""
 from __future__ import annotations
 
 import asyncio
@@ -95,7 +95,8 @@ class RoutingStatistics:
         row = self.surfaces[turn.surface]
         if row["generation"] != turn.generation:
             return
-        outcome = "cancelled" if turn.cancelled else "failed" if turn.failed else "pending" if turn.pending else turn.route if turn.completed else "failed"
+        outcome = ("cancelled" if turn.cancelled else "refused" if turn.refused else "failed" if turn.failed
+                   else "pending" if turn.pending else turn.route if turn.completed else "failed")
         if turn.provider_used and outcome in ("local", "decision"):
             outcome = "provider"
         row["outcomes"][outcome] += 1
@@ -115,6 +116,7 @@ class TurnStatistics:
     failed: bool = False
     cancelled: bool = False
     pending: bool = False
+    refused: bool = False
     provider_used: bool = False
     closed: bool = False
     decision_usage: dict = field(default_factory=_usage)
@@ -155,9 +157,19 @@ def voice_result(outcome: str, pending: bool, has_text: bool) -> None:
         turn.failed = not turn.completed and not pending
 
 
+def evaluation_result(outcome: str) -> None:
+    """Record how an Evaluate call ended: answered, refused or failed. Cancellation is the wrapper's."""
+    turn = _current.get()
+    if turn is not None and turn.surface == "ai_task":
+        turn.route = "decision"
+        turn.completed = outcome == "answered"
+        turn.refused = outcome == "refused"
+        turn.failed = outcome == "failed"
+
+
 def begin_decision(scope: str) -> TurnStatistics | None:
     turn = _current.get()
-    if turn is not None and not turn.closed and scope in (turn.surface, f"tool_{turn.surface}"):
+    if turn is not None and not turn.closed and scope in (turn.surface, f"tool_{turn.surface}", f"{turn.surface}_evaluate"):
         turn.decision_usage["requests"] += 1
         return turn
     return None

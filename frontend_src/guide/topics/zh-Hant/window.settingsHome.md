@@ -131,6 +131,10 @@ Home Companion 金鑰會把對話交給 Home Companion 處理，並隱藏 **{{la
 
 實體權限和 MESA 在此不適用：此動作沒有目標實體，也不會變更任何內容。
 
+### {{label:routingStats.aiTaskTitle}} {#ai-decisions-statistics}
+
+**{{label:routingStats.aiTaskShow}}** 會開啟一個視窗，統計該實體回答、拒絕或失敗的「評估」動作，以及它們使用的決策 token。請參閱[評估](guide:topic.routingStatistics#evaluate)。
+
 ## {{label:settings.assistCard}} {#assist-tool-provider}
 
 把 Phoenix 的工具借給在別處執行的模型，例如設為使用 Phoenix MCP（限定範圍）控制 Home Assistant 的對話智慧體。Phoenix 在這裡不執行自己的模型。

@@ -582,8 +582,9 @@ _DECISION_TARGET_INTENTS['state_summary'] = 'PhoenixStateSummary'
 
 # Aggregate routing telemetry has fixed dimensions and contains no transcripts.
 ROUTING_STATISTICS_STORAGE_KEY = "phoenix_mcp_routing_statistics"
-ROUTING_STATISTICS_SURFACES = ("voice", "chat")
-ROUTING_STATISTICS_OUTCOMES = ("local", "decision", "provider", "pending", "failed", "cancelled")
+# AI Task counts the Evaluate action only: "decision" is an answer, "refused" a policy refusal.
+ROUTING_STATISTICS_SURFACES = ("voice", "chat", "ai_task")
+ROUTING_STATISTICS_OUTCOMES = ("local", "decision", "provider", "pending", "failed", "cancelled", "refused")
 ROUTING_STATISTICS_FLUSH_INTERVAL = datetime.timedelta(seconds=30)
 
 # Tool advice has separate qualification from direct-command execution.

@@ -1989,7 +1989,7 @@
       "routingLanguagesInvalid": "Choisissez les langues de routage des commandes parmi les langues Assist installées.",
       "providerModelNotListed": "Choisissez un modèle renvoyé par ce fournisseur.",
       "providerAccountChanged": "Le compte du fournisseur a changé. Rechargez et réessayez.",
-      "routingStatisticsResetInvalid": "Choisissez Voice ou Chat et confirmez la réinitialisation des statistiques.",
+      "routingStatisticsResetInvalid": "Choisissez Voice, Chat ou Tâche d'IA et confirmez la réinitialisation des statistiques.",
       "recoveryBlocked": "Phoenix MCP n’a pas pu le faire en toute sécurité et s’est arrêté. Vérifiez l’élément dans Home Assistant, puis réessayez.",
       "recoveryStorageUnavailable": "Le stockage de récupération de la configuration n’a pas pu être chargé. Consultez le journal de Home Assistant, puis réessayez.",
       "recoveryOperationActive": "Une modification de cet élément est encore en cours. Attendez qu’elle se termine, puis réessayez.",
@@ -2385,7 +2385,7 @@
     },
     "routingStats": {
       "title": "Statistiques de routage",
-      "scope": "Uniquement Voice et Chat de Phoenix. Les clients MCP externes et la Tâche d'IA sont exclus.",
+      "scope": "Uniquement Voice et Chat de Phoenix. Les clients MCP externes sont exclus, et l'action Évaluer de la Tâche d'IA a ses propres statistiques.",
       "headline": "{percent}% des requêtes ont abouti sans le modèle conversationnel.",
       "empty": "Aucune requête enregistrée.",
       "since": "Depuis {date}. Conservé après redémarrage.",
@@ -2400,7 +2400,7 @@
       "unavailable": "Indisponible",
       "note": "Tokens déclarés uniquement, sans estimation des économies. Les validations reflètent la réponse, pas leur état actuel.",
       "reset": "Réinitialiser les statistiques",
-      "confirm": "Effacer ces statistiques ? L'Agent vocal et Agent Chat ont des statistiques distinctes : celles de l'autre et tous les réglages restent inchangés. Les requêtes déjà en cours sont exclues de la nouvelle période.",
+      "confirm": "Effacer ces statistiques ? L'Agent vocal, Agent Chat et l'action Évaluer ont des statistiques distinctes : celles des autres et tous les réglages restent inchangés. Les requêtes déjà en cours sont exclues de la nouvelle période.",
       "error": "Impossible de charger ou réinitialiser les statistiques. Réessayez.",
       "missing": {
         "one": "{count} requête sans données d'utilisation",
@@ -2411,7 +2411,22 @@
       "voiceWindow": "Statistiques de routage de l'agent vocal",
       "showHelp": "Affichez ou masquez les compteurs de routage de cet agent : requêtes traitées sans votre modèle d’IA et jetons utilisés.",
       "refreshHelp": "Rechargez les compteurs pour inclure les requêtes faites depuis l’ouverture.",
-      "resetHelp": "Remettez à zéro les compteurs de routage de cet agent et commencez une nouvelle période. Action irréversible."
+      "resetHelp": "Remettez à zéro les compteurs de routage de cet agent et commencez une nouvelle période. Action irréversible.",
+      "aiTaskTitle": "Statistiques de l'action Évaluer",
+      "aiTaskShow": "Afficher les statistiques de l'action Évaluer",
+      "aiTaskWindow": "Statistiques de l'action Évaluer de la Tâche d'IA",
+      "aiTaskScope": "L'action Évaluer de Home Assistant, à laquelle répond l'entité Decisions. La génération de données n'est pas comptée.",
+      "aiTaskNote": "Tokens déclarés uniquement. Refusées compte les appels que l'entité a refusés, par exemple celui d'une personne qui n'a pas le contrôle de l'entité.",
+      "aiTaskHeadline": {
+        "one": "{count} évaluation enregistrée.",
+        "other": "{count} évaluations enregistrées."
+      },
+      "aiTaskEmpty": "Aucune évaluation enregistrée.",
+      "evaluated": "Avec réponse",
+      "refused": "Refusées",
+      "aiTaskShowHelp": "Affichez ou masquez les compteurs de l'action Évaluer : appels avec réponse, refusés et en échec, et les tokens de décision utilisés.",
+      "aiTaskResetHelp": "Remettez à zéro les compteurs de l'action Évaluer et commencez une nouvelle période. Action irréversible.",
+      "aiTaskConfirm": "Effacer les statistiques de l'action Évaluer ? L'Agent vocal et Agent Chat conservent leurs propres statistiques, et tous les réglages restent inchangés. Les évaluations déjà en cours sont exclues de la nouvelle période."
     },
     "conversations": {
       "title": "Journal des conversations",

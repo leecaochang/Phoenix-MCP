@@ -31,6 +31,7 @@ from ..household_authority import household_scope
 from ..llm.accounts import _get_secret_store, PROVIDER_DEFINITIONS
 from ..redaction import redact_secrets_in_text
 from ..request_authority import AuthorityChangedError, check_request_authority
+from .routing_statistics import evaluation_result, tracked_turn
 from .decision_history import ContextTooDeepError, history_texts, SensitiveContextKeyError
 from .decision_provider import (
     DecisionProvider, DecisionValidationError, _evaluate_guarded, _probability, checked_model,
@@ -242,6 +243,7 @@ async def _evaluate(hass: HomeAssistant, data: Any, questions: dict[str, Any], s
     return parse_evaluation(body, questions, provider.rounding_error)
 
 
+@tracked_turn("ai_task")
 @recorded_turn("ai_task", "task_name")
 async def async_evaluate(hass: HomeAssistant, data: Any, task_name: str, questions: dict[str, Any], state: Any,
                          *, entity_id: str, user_id: str | None = None) -> dict:
@@ -279,12 +281,17 @@ async def async_evaluate(hass: HomeAssistant, data: Any, task_name: str, questio
             raise
         except Unauthorized:
             audit("denied", "not_authorized")
+            evaluation_result("refused")
             raise
         except AuthorityChangedError:
             audit("denied", "authority_unavailable")
+            evaluation_result("refused")
             raise _Refused("authority_unavailable") from None
         except _Refused as refused:
-            audit("denied" if refused.code in _POLICY_REFUSALS else "invalid_request", refused.code)
+            policy = refused.code in _POLICY_REFUSALS
+            audit("denied" if policy else "invalid_request", refused.code)
+            evaluation_result("refused" if policy else "failed")
             raise
         audit("allowed")
+        evaluation_result("answered")
         return answers

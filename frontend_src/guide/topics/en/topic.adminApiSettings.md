@@ -197,7 +197,7 @@ Only three routes ask for a confirmation in the body. The settings PATCH asks fo
 |---|---|
 | [Wipe data](guide:#wipe) | `{"confirm": "WIPE"}` plus optional scope flags |
 | [Clear the Conversation Log](guide:#clear-conversations) | Exactly `{"confirm": true}` |
-| [Reset routing statistics](guide:#reset-statistics) | Exactly `{"surface": "voice", "confirm": true}`, or `"chat"` |
+| [Reset routing statistics](guide:#reset-statistics) | Exactly `{"surface": "voice", "confirm": true}`, or `"chat"` or `"ai_task"` |
 
 ## Version and tools {#info}
 
@@ -447,10 +447,10 @@ If the key or the settings change during the test, the result is `route: provide
 
 ### Routing statistics {#routing-statistics}
 
-`GET /api/phoenix-mcp/admin/command-routing/statistics` returns saved totals, kept across restarts. The response has `voice` and `chat`, each with:
+`GET /api/phoenix-mcp/admin/command-routing/statistics` returns saved totals, kept across restarts. The response has `voice`, `chat` and `ai_task` (the Evaluate action), each with:
 
 - `since`
-- `outcomes`: `local`, `decision`, `provider`, `pending`, `failed` and `cancelled`
+- `outcomes`: `local`, `decision`, `provider`, `pending`, `failed`, `cancelled` and `refused`; `ai_task` uses `decision` for an answer and `refused` for a refusal
 - `provider_turns`
 - `decision_usage` and `provider_usage`, each with `requests`, `reports`, `input_tokens` and `output_tokens`
 
@@ -462,7 +462,7 @@ If the key or the settings change during the test, the result is `route: provide
 {"surface": "voice", "confirm": true}
 ```
 
-Set `surface` to `voice` or `chat`. The response shows both surfaces after the reset. The decision request count isn't reset.
+Set `surface` to `voice`, `chat` or `ai_task`. The response shows every surface after the reset. The decision request count isn't reset.
 
 | Status | `error` | `message_key` | When |
 |---|---|---|---|

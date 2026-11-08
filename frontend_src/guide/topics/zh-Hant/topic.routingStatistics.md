@@ -1,7 +1,7 @@
 ---
 { "id": "topic.routingStatistics", "title": "閱讀路由統計", "parent": "window.settingsChat", "order": 2, "keywords": ["計數", "百分比", "token", "用量", "重設"] }
 ---
-路由統計顯示 Phoenix 有多少次在沒有使用你的 AI 模型的情況下執行了命令，以及其餘部分花費了多少。Agent Chat 和語音智慧體分別計數。
+路由統計顯示 Phoenix 有多少次在沒有使用你的 AI 模型的情況下執行了命令，以及其餘部分花費了多少。Agent Chat、語音智慧體和「評估」動作分別計數。
 
 ## 總體數字 {#headline}
 
@@ -18,6 +18,16 @@
 - **{{label:routingStats.failed}}** 和 **{{label:routingStats.cancelled}}**：未完成的訊息。
 
 傳送給你的 AI 模型的訊息也可能失敗或被取消，因此各列相加不一定等於總數。
+
+## 評估 {#evaluate}
+
+「評估」視窗統計 [Decisions 實體](guide:window.settingsHome#ai-decisions)處理的「評估」動作。頂部數字是呼叫次數，因為每次呼叫都會傳送給決策提供者。資料產生不計入。
+
+- **{{label:routingStats.evaluated}}**：決策提供者給出了回答。
+- **{{label:routingStats.refused}}**：實體拒絕了這次呼叫，例如發起者對它沒有控制權限，或已達到請求上限。
+- **{{label:routingStats.failed}}** 和 **{{label:routingStats.cancelled}}**：未完成的呼叫。
+
+它只顯示決策 token。
 
 ## Token {#tokens}
 

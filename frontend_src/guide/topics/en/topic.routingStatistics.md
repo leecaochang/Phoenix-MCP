@@ -1,7 +1,7 @@
 ---
 { "id": "topic.routingStatistics", "title": "Reading Routing Statistics", "parent": "window.settingsChat", "order": 2, "keywords": ["counts", "percentage", "tokens", "usage", "reset"], "covers": ["frontend_src/components/RoutingStatistics.tsx", "custom_components/phoenix_mcp/routing/routing_statistics.py", "custom_components/phoenix_mcp/routing/chat_routing_history.py", "custom_components/phoenix_mcp/routing/decision_metrics.py"] }
 ---
-Routing statistics show how often Phoenix carried out a command without your AI model, and what the rest cost. Agent Chat and the Voice Agent are counted separately.
+Routing statistics show how often Phoenix carried out a command without your AI model, and what the rest cost. Agent Chat, the Voice Agent and the Evaluate action are counted separately.
 
 ## The headline {#headline}
 
@@ -18,6 +18,16 @@ Each message is counted once, by its outcome. If a message used your AI model at
 - **{{label:routingStats.failed}}** and **{{label:routingStats.cancelled}}**: messages that didn't finish.
 
 A message sent to your AI model can also fail or be cancelled, so the rows don't always add up.
+
+## Evaluate {#evaluate}
+
+The Evaluate window counts the Evaluate actions the [Decisions entity](guide:window.settingsHome#ai-decisions) handled. Its headline is the number of calls, as each one goes to the decision provider. Data generation isn't counted.
+
+- **{{label:routingStats.evaluated}}**: the decision provider answered.
+- **{{label:routingStats.refused}}**: the entity turned the call down, for example for a person without control of it, or after the request limit.
+- **{{label:routingStats.failed}}** and **{{label:routingStats.cancelled}}**: calls that didn't finish.
+
+It shows decision tokens only.
 
 ## Tokens {#tokens}
 

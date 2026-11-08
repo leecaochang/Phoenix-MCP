@@ -344,7 +344,7 @@
       "restoreStale": "Elementet er ændret, siden du valgte at gendanne. Gennemgå sammenligningen, og prøv igen.",
       "routingPreviewInvalid": "Kontrollér adgangsnøglen, kommandosproget og indstillingerne for ruting.",
       "routingLanguagesInvalid": "Vælg sprog til kommandorouting blandt de installerede Assist-sprog.",
-      "routingStatisticsResetInvalid": "Vælg Stemme eller Chat, og bekræft nulstillingen af statistikken.",
+      "routingStatisticsResetInvalid": "Vælg Stemme, Chat eller AI-opgave, og bekræft nulstillingen af statistikken.",
       "selectorIdRequired": "selector_id er påkrævet.",
       "selectorTypeInvalid": "selector_type skal være area, label eller integration.",
       "serviceDisabled": "Nødstoppet er slået til, så agentanmodninger afvises.",
@@ -2079,7 +2079,7 @@
     },
     "routingStats": {
       "cancelled": "Annulleret",
-      "confirm": "Ryd denne statistik? Stemmeagent og Agent Chat har hver deres statistik, så den anden og alle indstillinger forbliver uændrede. Anmodninger, der allerede er i gang, tælles ikke med i den nye periode.",
+      "confirm": "Ryd denne statistik? Stemmeagent, Agent Chat og Evaluer har hver deres statistik, så de andre og alle indstillinger forbliver uændrede. Anmodninger, der allerede er i gang, tælles ikke med i den nye periode.",
       "decision": "Fuldført via beslutningsudbyder",
       "decisionTokens": "Beslutningstokens: input / output",
       "empty": "Der er endnu ikke registreret anmodninger.",
@@ -2092,7 +2092,7 @@
       "provider": "Sendt til samtalemodeludbyder",
       "providerTokens": "Samtaletokens: input / output",
       "reset": "Nulstil statistik",
-      "scope": "Kun stemme og chat i Phoenix. Eksterne MCP-klienter og AI-opgaven er udeladt.",
+      "scope": "Kun stemme og chat i Phoenix. Eksterne MCP-klienter er udeladt, og AI-opgavens handling Evaluer har sin egen statistik.",
       "since": "Siden {date}. Bevares på tværs af genstart.",
       "title": "Routingstatistik",
       "unavailable": "Utilgængelig",
@@ -2105,7 +2105,22 @@
       "voiceWindow": "Routingstatistik for stemmeagent",
       "showHelp": "Vis eller skjul agentens routingtal: anmodninger fuldført uden din AI-model og de brugte tokens.",
       "refreshHelp": "Indlæs tallene igen, så anmodninger siden du åbnede dette kommer med.",
-      "resetHelp": "Nulstil agentens routingtal, og start en ny periode. Det kan ikke fortrydes."
+      "resetHelp": "Nulstil agentens routingtal, og start en ny periode. Det kan ikke fortrydes.",
+      "aiTaskTitle": "Evaluer-statistik",
+      "aiTaskShow": "Vis Evaluer-statistik",
+      "aiTaskWindow": "Evaluer-statistik for AI-opgave",
+      "aiTaskScope": "Home Assistants handling Evaluer, besvaret af Decisions-entiteten. Datagenerering tælles ikke med.",
+      "aiTaskNote": "Kun indberettede tokens. Afvist tæller kald, som entiteten afviste, for eksempel et fra en person, der ikke må styre den.",
+      "aiTaskHeadline": {
+        "one": "{count} evaluering registreret.",
+        "other": "{count} evalueringer registreret."
+      },
+      "aiTaskEmpty": "Der er endnu ikke registreret evalueringer.",
+      "evaluated": "Besvaret",
+      "refused": "Afvist",
+      "aiTaskShowHelp": "Vis eller skjul Evaluer-tallene: besvarede, afviste og mislykkede kald og de brugte beslutningstokens.",
+      "aiTaskResetHelp": "Nulstil Evaluer-tallene, og start en ny periode. Det kan ikke fortrydes.",
+      "aiTaskConfirm": "Ryd Evaluer-statistikken? Stemmeagent og Agent Chat har hver deres statistik, og alle indstillinger forbliver uændrede. Evalueringer, der allerede er i gang, tælles ikke med i den nye periode."
     },
     "selectBy": {
       "area": "Område",

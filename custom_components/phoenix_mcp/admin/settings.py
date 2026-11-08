@@ -532,7 +532,7 @@ class PhoenixAdminRoutingStatisticsView(PhoenixView):
         if isinstance(body, web.Response):
             return body
         if set(body) != {"surface", "confirm"} or not _in_menu(body.get("surface"), ROUTING_STATISTICS_SURFACES) or body.get("confirm") is not True:
-            return _err("invalid_request", "Choose Voice or Chat and confirm the statistics reset.", 400, rid, key="routingStatisticsResetInvalid")
+            return _err("invalid_request", "Choose Voice, Chat or AI Task and confirm the statistics reset.", 400, rid, key="routingStatisticsResetInvalid")
         data = self.hass.data[DOMAIN]
         await data.routing_statistics.async_reset(body["surface"])
         _audit_admin(self.hass, request, rid, request.path)

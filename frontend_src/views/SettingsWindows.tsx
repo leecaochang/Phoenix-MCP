@@ -21,6 +21,7 @@ import { LlmProviderSettings } from "../components/LlmProviderSettings";
 import { AUDIT_TOGGLES, LoggingSettings, PRIVACY_TOGGLES } from "../components/LoggingSettings";
 import { NotificationSettings } from "../components/NotificationSettings";
 import { RoutingStatistics, RoutingStatisticsContent } from "../components/RoutingStatistics";
+import type { RoutingSurface } from "../types";
 import { VoiceAgentSettings } from "../components/VoiceAgentSettings";
 import { DEFAULT_WIPE_SCOPES, WIPE_SCOPES, WipeConfirmModal, type WipeScopes } from "../components/WipeConfirmModal";
 import { LANGUAGES, LANGUAGE_AUTO, t, tn } from "../i18n";
@@ -147,22 +148,23 @@ export function AgentChatSettingsWindow() {
 }
 
 /** Each surface's routing counts float over Settings in a window of their own. */
-const STATISTICS_WINDOW = { chat: "chatRoutingStatistics", voice: "voiceRoutingStatistics" } as const;
+const STATISTICS_WINDOW = { chat: "chatRoutingStatistics", voice: "voiceRoutingStatistics", ai_task: "aiTaskRoutingStatistics" } as const;
 
 /**
  * Show Routing Statistics: opens and closes the surface's counts floating over the
  * workspace. Where the workspace has no such window, as outside
  * the shell, the counts unfold in place instead.
  */
-function RoutingStatisticsButton({ surface }: { surface: "voice" | "chat" }) {
+function RoutingStatisticsButton({ surface }: { surface: RoutingSurface }) {
   const id = STATISTICS_WINDOW[surface];
   const toggle = useWindowToggle(id);
   const controller = useContext(ControllerContext);
   if (!toggle || !controller?.windows.includes(id)) return <RoutingStatistics surface={surface} />;
   return (
     <div className="phx-window-actions phx-window-actions-end routing-statistics-open">
-      <ActionButton icon="statistics" label={t("routingStats.show")} className="btn btn-outline btn-sm"
-        help="routingStats.showHelp" pressed={toggle.open} onClick={toggle.toggle} />
+      <ActionButton icon="statistics" label={t(surface === "ai_task" ? "routingStats.aiTaskShow" : "routingStats.show")}
+        className="btn btn-outline btn-sm" help={surface === "ai_task" ? "routingStats.aiTaskShowHelp" : "routingStats.showHelp"}
+        pressed={toggle.open} onClick={toggle.toggle} />
     </div>
   );
 }
@@ -173,6 +175,10 @@ export function ChatRoutingStatisticsWindow() {
 
 export function VoiceRoutingStatisticsWindow() {
   return <div className="phx-window-pad"><RoutingStatisticsContent surface="voice" /></div>;
+}
+
+export function AiTaskRoutingStatisticsWindow() {
+  return <div className="phx-window-pad"><RoutingStatisticsContent surface="ai_task" /></div>;
 }
 
 const tabId = (tab: HomeTab) => `phx-home-tab-${tab}`;
@@ -215,7 +221,8 @@ export function HomeAssistantWindow() {
           statistics={<RoutingStatisticsButton surface="voice" />} />
       </div>
       <div id={panelId("aiTask")} role="tabpanel" aria-labelledby={tabId("aiTask")} hidden={current !== "aiTask"}>
-        <AiTaskSettings settings={settings} onChange={change} saving={saving} />
+        <AiTaskSettings settings={settings} onChange={change} saving={saving}
+          statistics={<RoutingStatisticsButton surface="ai_task" />} />
       </div>
       <div id={panelId("assist")} role="tabpanel" aria-labelledby={tabId("assist")} hidden={current !== "assist"}>
         <AssistBridgeSettings settings={settings} onChange={change} saving={saving} />

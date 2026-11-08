@@ -4,6 +4,7 @@ import type {
   ConversationEntry, ConversationListResponse,
   CommandRoutePreview,
   RoutingStatisticsResponse,
+  RoutingSurface,
   AgentCliProviderKind,
   AgentCliInstance,
   AgentCliProvidersResponse,
@@ -252,7 +253,7 @@ export const api = {
   getInfo: () => req<{ version: string; min_ha_version: string; github_url: string; home_companion_reach?: CompanionDomains }>("GET", "/info"),
 
   getRoutingStatistics: () => req<RoutingStatisticsResponse>("GET", "/command-routing/statistics"),
-  resetRoutingStatistics: (surface: "voice" | "chat") => req<RoutingStatisticsResponse>("DELETE", "/command-routing/statistics", { surface, confirm: true }),
+  resetRoutingStatistics: (surface: RoutingSurface) => req<RoutingStatisticsResponse>("DELETE", "/command-routing/statistics", { surface, confirm: true }),
   previewCommandRoute: (accessKeyId: string, sentence: string, decision = false, targets = false, language = "en") =>
     req<CommandRoutePreview>("POST", "/command-routing/preview", { access_key_id: accessKeyId, sentence, language, ...(decision ? { decision: true, ...(targets ? { targets: true } : {}) } : {}) }),
 

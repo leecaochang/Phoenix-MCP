@@ -131,6 +131,10 @@ The access key that lets Evaluate actions run. It's separate from the AI Task's 
 
 Entity permissions and MESA don't apply here: the action has no target entity and changes nothing.
 
+### {{label:routingStats.aiTaskTitle}} {#ai-decisions-statistics}
+
+**{{label:routingStats.aiTaskShow}}** opens a window that counts the Evaluate actions the entity answered, refused or failed, and the decision tokens they used. See [Evaluate](guide:topic.routingStatistics#evaluate).
+
 ## {{label:settings.assistCard}} {#assist-tool-provider}
 
 Lends Phoenix's tools to a model that runs elsewhere, such as a conversation agent set to Control Home Assistant with Phoenix MCP (scoped). Phoenix runs no model of its own here.

@@ -1,7 +1,7 @@
 ---
 { "id": "topic.routingStatistics", "title": "阅读路由统计", "parent": "window.settingsChat", "order": 2, "keywords": ["计数", "百分比", "token", "用量", "重置"] }
 ---
-路由统计显示 Phoenix 有多少次在没有使用你的 AI 模型的情况下执行了命令，以及其余部分花费了多少。Agent Chat 和语音智能体分别计数。
+路由统计显示 Phoenix 有多少次在没有使用你的 AI 模型的情况下执行了命令，以及其余部分花费了多少。Agent Chat、语音智能体和“评估”操作分别计数。
 
 ## 总体数字 {#headline}
 
@@ -18,6 +18,16 @@
 - **{{label:routingStats.failed}}** 和 **{{label:routingStats.cancelled}}**：未完成的消息。
 
 发送给你的 AI 模型的消息也可能失败或被取消，因此各行相加不一定等于总数。
+
+## 评估 {#evaluate}
+
+“评估”窗口统计 [Decisions 实体](guide:window.settingsHome#ai-decisions)处理的“评估”操作。顶部数字是调用次数，因为每次调用都会发送给决策提供商。数据生成不计入。
+
+- **{{label:routingStats.evaluated}}**：决策提供商给出了回答。
+- **{{label:routingStats.refused}}**：实体拒绝了这次调用，例如发起者对它没有控制权限，或已达到请求上限。
+- **{{label:routingStats.failed}}** 和 **{{label:routingStats.cancelled}}**：未完成的调用。
+
+它只显示决策 token。
 
 ## Token {#tokens}
 

@@ -1089,7 +1089,7 @@
       "routingLanguagesInvalid": "Elija los idiomas de enrutamiento de órdenes entre los idiomas de Assist instalados.",
       "providerModelNotListed": "Elige un modelo devuelto por este proveedor.",
       "providerAccountChanged": "La cuenta del proveedor ha cambiado. Recarga y vuelve a intentarlo.",
-      "routingStatisticsResetInvalid": "Elige Voice o Chat y confirma el restablecimiento de las estadísticas.",
+      "routingStatisticsResetInvalid": "Elige Voice, Chat o Tarea IA y confirma el restablecimiento de las estadísticas.",
       "recoveryBlocked": "Phoenix MCP no pudo hacerlo de forma segura, así que se detuvo. Comprueba el elemento en Home Assistant y vuelve a intentarlo.",
       "recoveryStorageUnavailable": "No se pudo cargar el almacenamiento de recuperación de la configuración. Revisa el registro de Home Assistant y vuelve a intentarlo.",
       "recoveryOperationActive": "Un cambio en este elemento sigue en curso. Espera a que termine y vuelve a intentarlo.",
@@ -2385,7 +2385,7 @@
     },
     "routingStats": {
       "title": "Estadísticas de enrutamiento",
-      "scope": "Solo Voice y Chat de Phoenix. Se excluyen los clientes MCP externos y la tarea IA.",
+      "scope": "Solo Voice y Chat de Phoenix. Se excluyen los clientes MCP externos, y la acción Evaluar de la tarea IA tiene sus propias estadísticas.",
       "headline": "El {percent}% de las solicitudes se completó sin el modelo conversacional.",
       "empty": "Aún no hay solicitudes registradas.",
       "since": "Desde {date}. Se conserva tras reiniciar.",
@@ -2400,7 +2400,7 @@
       "unavailable": "No disponible",
       "note": "Solo tokens declarados, no ahorros estimados. Las aprobaciones reflejan la respuesta, no su estado actual.",
       "reset": "Restablecer estadísticas",
-      "confirm": "¿Borrar estas estadísticas? El agente de voz y Agent Chat tienen estadísticas separadas, así que las del otro y toda la configuración no cambian. Las solicitudes ya en curso se excluyen del nuevo período.",
+      "confirm": "¿Borrar estas estadísticas? El agente de voz, Agent Chat y Evaluar tienen estadísticas separadas, así que las de los demás y toda la configuración no cambian. Las solicitudes ya en curso se excluyen del nuevo período.",
       "error": "No se pudieron cargar o restablecer las estadísticas. Inténtalo de nuevo.",
       "missing": {
         "one": "{count} solicitud sin datos de uso",
@@ -2411,7 +2411,22 @@
       "voiceWindow": "Estadísticas de enrutamiento del agente de voz",
       "showHelp": "Muestre u oculte los recuentos de enrutamiento de este agente: solicitudes resueltas sin su modelo de IA y los tokens usados.",
       "refreshHelp": "Vuelva a cargar los recuentos para incluir las solicitudes hechas desde que abrió esto.",
-      "resetHelp": "Borre los recuentos de enrutamiento de este agente y empiece un nuevo periodo. No se puede deshacer."
+      "resetHelp": "Borre los recuentos de enrutamiento de este agente y empiece un nuevo periodo. No se puede deshacer.",
+      "aiTaskTitle": "Estadísticas de Evaluar",
+      "aiTaskShow": "Mostrar estadísticas de Evaluar",
+      "aiTaskWindow": "Estadísticas de Evaluar de la tarea IA",
+      "aiTaskScope": "La acción Evaluar de Home Assistant, respondida por la entidad Decisions. La generación de datos no se cuenta.",
+      "aiTaskNote": "Solo tokens declarados. Rechazadas cuenta las llamadas que la entidad rechazó, como una de una persona sin control sobre ella.",
+      "aiTaskHeadline": {
+        "one": "{count} evaluación registrada.",
+        "other": "{count} evaluaciones registradas."
+      },
+      "aiTaskEmpty": "Aún no hay evaluaciones registradas.",
+      "evaluated": "Respondidas",
+      "refused": "Rechazadas",
+      "aiTaskShowHelp": "Muestre u oculte los recuentos de Evaluar: llamadas respondidas, rechazadas y fallidas, y los tokens de decisión que usaron.",
+      "aiTaskResetHelp": "Borre los recuentos de Evaluar y empiece un nuevo periodo. No se puede deshacer.",
+      "aiTaskConfirm": "¿Borrar las estadísticas de Evaluar? El agente de voz y Agent Chat conservan sus propias estadísticas, y toda la configuración se mantiene sin cambios. Las evaluaciones ya en curso se excluyen del nuevo período."
     },
     "conversations": {
       "title": "Registro de conversaciones",

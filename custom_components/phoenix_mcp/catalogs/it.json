@@ -149,7 +149,7 @@
       "routingLanguagesInvalid": "Scegli le lingue per l'instradamento dei comandi tra le lingue di Assist installate.",
       "providerModelNotListed": "Scegli un modello restituito da questo provider.",
       "providerAccountChanged": "L’account del provider è cambiato. Ricarica e riprova.",
-      "routingStatisticsResetInvalid": "Scegli Voice o Chat e conferma il ripristino delle statistiche.",
+      "routingStatisticsResetInvalid": "Scegli Voice, Chat o Attività di IA e conferma il ripristino delle statistiche.",
       "recoveryBlocked": "Phoenix MCP non è riuscito a farlo in sicurezza e si è fermato. Controlla l’elemento in Home Assistant, poi riprova.",
       "recoveryStorageUnavailable": "Non è stato possibile caricare l’archivio di ripristino della configurazione. Controlla il log di Home Assistant, poi riprova.",
       "recoveryOperationActive": "Una modifica a questo elemento è ancora in corso. Attendi che finisca, poi riprova.",
@@ -2385,7 +2385,7 @@
     },
     "routingStats": {
       "title": "Statistiche di instradamento",
-      "scope": "Solo Voice e Chat di Phoenix. Client MCP esterni e Attività di IA sono esclusi.",
+      "scope": "Solo Voice e Chat di Phoenix. I client MCP esterni sono esclusi e l'azione Valuta di Attività di IA ha statistiche proprie.",
       "headline": "Il {percent}% delle richieste è stato completato senza il modello conversazionale.",
       "empty": "Nessuna richiesta registrata.",
       "since": "Dal {date}. Conservate dopo il riavvio.",
@@ -2400,7 +2400,7 @@
       "unavailable": "Non disponibile",
       "note": "Solo token dichiarati, non risparmi stimati. Le approvazioni riflettono la risposta, non lo stato attuale.",
       "reset": "Reimposta statistiche",
-      "confirm": "Cancellare queste statistiche? Agente vocale e Agent Chat hanno statistiche separate, quindi quelle dell'altro e tutte le impostazioni non cambiano. Le richieste già in corso sono escluse dal nuovo periodo.",
+      "confirm": "Cancellare queste statistiche? Agente vocale, Agent Chat e Valuta hanno statistiche separate, quindi le altre e tutte le impostazioni non cambiano. Le richieste già in corso sono escluse dal nuovo periodo.",
       "error": "Impossibile caricare o reimpostare le statistiche. Riprova.",
       "missing": {
         "one": "{count} richiesta senza dati di utilizzo",
@@ -2411,7 +2411,22 @@
       "voiceWindow": "Statistiche di instradamento dell'agente vocale",
       "showHelp": "Mostra o nascondi i conteggi di instradamento di questo agente: richieste completate senza il tuo modello di IA e token usati.",
       "refreshHelp": "Ricarica i conteggi per includere le richieste fatte da quando hai aperto questa sezione.",
-      "resetHelp": "Azzera i conteggi di instradamento di questo agente e inizia un nuovo periodo. Non si può annullare."
+      "resetHelp": "Azzera i conteggi di instradamento di questo agente e inizia un nuovo periodo. Non si può annullare.",
+      "aiTaskTitle": "Statistiche di Valuta",
+      "aiTaskShow": "Mostra statistiche di Valuta",
+      "aiTaskWindow": "Statistiche di Valuta per Attività di IA",
+      "aiTaskScope": "L'azione Valuta di Home Assistant, a cui risponde l'entità decisioni. La generazione dati non viene conteggiata.",
+      "aiTaskNote": "Solo token dichiarati. Rifiutate conta le chiamate che l'entità ha rifiutato, ad esempio quella di una persona che non ne ha il controllo.",
+      "aiTaskHeadline": {
+        "one": "{count} valutazione registrata.",
+        "other": "{count} valutazioni registrate."
+      },
+      "aiTaskEmpty": "Nessuna valutazione registrata.",
+      "evaluated": "Con risposta",
+      "refused": "Rifiutate",
+      "aiTaskShowHelp": "Mostra o nascondi i conteggi di Valuta: chiamate con risposta, rifiutate e fallite, e i token decisionali usati.",
+      "aiTaskResetHelp": "Azzera i conteggi di Valuta e inizia un nuovo periodo. Non si può annullare.",
+      "aiTaskConfirm": "Cancellare le statistiche di Valuta? Agente vocale e Agent Chat hanno statistiche proprie e tutte le impostazioni non cambiano. Le valutazioni già in corso sono escluse dal nuovo periodo."
     },
     "conversations": {
       "title": "Registro conversazioni",

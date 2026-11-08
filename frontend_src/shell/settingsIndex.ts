@@ -80,6 +80,7 @@ export const SETTING_INDEX: readonly SettingEntry[] = [
   { id: "aiDecisionsEnable", labelKey: "settings.aiDecisionsEnableLabel", window: "settingsHome", tab: "aiTask", aria: ["settings.aiDecisionsEnableLabel"], optional: true },
   { id: "aiDecisionsDefault", labelKey: "settings.aiDecisionsDefaultLabel", window: "settingsHome", tab: "aiTask", aria: ["settings.aiDecisionsDefaultLabel"], optional: true },
   { id: "aiDecisionsAccessKey", labelKey: "settings.aiDecisionsAccessKeyAria", window: "settingsHome", tab: "aiTask", aria: ["settings.aiDecisionsAccessKeyAria"], optional: true },
+  { id: "aiDecisionsStatistics", labelKey: "routingStats.aiTaskTitle", window: "settingsHome", tab: "aiTask", selector: ".phx-ai-decisions .routing-statistics-open button, .phx-ai-decisions .routing-statistics > summary", optional: true },
 
   { id: "assistAccessKey", labelKey: "settings.assistBoundAccessKeyAria", window: "settingsHome", tab: "assist", aria: ["settings.assistBoundAccessKeyAria"] },
 

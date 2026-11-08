@@ -3709,6 +3709,18 @@ async def test_routing_statistics_reset_is_explicit_and_surface_scoped(body,stat
     assert d.routing_statistics.summary()['chat']['outcomes']['local'] == (0 if status == 200 else 5)
 
 
+async def test_routing_statistics_reset_of_ai_task_leaves_voice_and_chat():
+    from custom_components.phoenix_mcp.admin.settings import PhoenixAdminRoutingStatisticsView
+    d = _make_data()
+    for surface, count in (("voice", 3), ("chat", 5), ("ai_task", 7)):
+        d.routing_statistics.surfaces[surface]['outcomes']['decision'] = count
+    view = PhoenixAdminRoutingStatisticsView(); view.hass = _make_hass(d)
+    response = await view.delete(_make_admin_request(body=json.dumps({'surface': 'ai_task', 'confirm': True}).encode()))
+    assert response.status == 200
+    summary = d.routing_statistics.summary()
+    assert [summary[name]['outcomes']['decision'] for name in ('voice', 'chat', 'ai_task')] == [3, 5, 0]
+
+
 @pytest.mark.parametrize(("view_type", "method"), [
     (PhoenixAdminVoiceAgentPipelineView, "post"),
     (PhoenixAdminAiTaskPreferredView, "get"),
