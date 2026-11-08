@@ -1509,7 +1509,7 @@
       "aiDecisionsDefaultLabel": "Entité de décisions par défaut",
       "aiDecisionsDefaultOff": "Utiliser Phoenix MCP lorsqu’une action Évaluer ne précise pas d’entité.",
       "aiDecisionsDefaultOn": "Phoenix MCP traite les actions Évaluer qui ne précisent pas d’entité.",
-      "aiDecisionsConfigureFirst": "Activez-la d’abord et choisissez une clé d’accès.",
+      "aiDecisionsConfigureFirst": "Disponible une fois {setting} activé et une clé d’accès choisie.",
       "aiDecisionsAccessKeyAria": "Clé d’accès des décisions",
       "aiDecisionsAccessKeyHelp": "Les actions Évaluer ne s’exécutent que si cette clé d’accès est active et peut renvoyer des données de réponse.",
       "aiDecisionsCapabilityNote": "Cette clé d’accès doit avoir {capability} sur {mode}.",

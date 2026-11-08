@@ -2194,7 +2194,7 @@
       "aiDecisionsDefaultLabel": "Domyślna encja decyzji",
       "aiDecisionsDefaultOff": "Używaj Phoenix MCP, gdy akcja Oceń nie wskazuje encji.",
       "aiDecisionsDefaultOn": "Phoenix MCP obsługuje akcje Oceń, które nie wskazują encji.",
-      "aiDecisionsConfigureFirst": "Najpierw ją włącz i wybierz klucz dostępu.",
+      "aiDecisionsConfigureFirst": "Dostępne po włączeniu opcji {setting} i wybraniu klucza dostępu.",
       "aiDecisionsAccessKeyAria": "Klucz dostępu decyzji",
       "aiDecisionsAccessKeyHelp": "Akcje Oceń działają tylko wtedy, gdy ten klucz dostępu jest aktywny i może zwracać dane odpowiedzi.",
       "aiDecisionsCapabilityNote": "Ten klucz dostępu wymaga ustawienia {capability} na {mode}.",

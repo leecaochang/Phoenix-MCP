@@ -2144,7 +2144,7 @@
       "aiDecisionsDefaultLabel": "Standaardentiteit voor beslissingen",
       "aiDecisionsDefaultOff": "Gebruik Phoenix MCP als een Beoordelen-actie geen entiteit opgeeft.",
       "aiDecisionsDefaultOn": "Phoenix MCP handelt Beoordelen-acties af die geen entiteit opgeven.",
-      "aiDecisionsConfigureFirst": "Schakel dit eerst in en kies een toegangssleutel.",
+      "aiDecisionsConfigureFirst": "Beschikbaar zodra {setting} aan staat en er een toegangssleutel is gekozen.",
       "aiDecisionsAccessKeyAria": "Toegangssleutel voor beslissingen",
       "aiDecisionsAccessKeyHelp": "Beoordelen-acties werken alleen zolang deze toegangssleutel actief is en antwoordgegevens mag teruggeven.",
       "aiDecisionsCapabilityNote": "Deze toegangssleutel heeft {capability} op {mode} nodig.",

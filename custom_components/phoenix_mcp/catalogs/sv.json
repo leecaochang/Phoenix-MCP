@@ -2470,7 +2470,7 @@
       "aiDecisionsDefaultLabel": "Standardentitet för beslut",
       "aiDecisionsDefaultOff": "Använd Phoenix MCP när en Utvärdera-åtgärd inte anger en entitet.",
       "aiDecisionsDefaultOn": "Phoenix MCP hanterar Utvärdera-åtgärder som inte anger en entitet.",
-      "aiDecisionsConfigureFirst": "Aktivera den först och välj en åtkomstnyckel.",
+      "aiDecisionsConfigureFirst": "Tillgänglig när {setting} är på och en åtkomstnyckel är vald.",
       "aiDecisionsAccessKeyAria": "Åtkomstnyckel för beslut",
       "aiDecisionsAccessKeyHelp": "Utvärdera-åtgärder körs bara medan den här åtkomstnyckeln är aktiv och kan returnera svarsdata.",
       "aiDecisionsCapabilityNote": "Den här åtkomstnyckeln behöver {capability} inställt på {mode}.",

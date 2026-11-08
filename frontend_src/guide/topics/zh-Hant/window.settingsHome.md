@@ -123,7 +123,7 @@ Home Companion 金鑰會把對話交給 Home Companion 處理，並隱藏 **{{la
 
 ### {{label:settings.aiDecisionsDefaultLabel}} {#ai-decisions-default}
 
-將其設為 Home Assistant 中未指定實體的「評估」動作的預設實體，並立即取代目前的預設實體。
+將其設為 Home Assistant 中未指定實體的「評估」動作的預設實體，並立即取代目前的預設實體。開啟{{label:settings.aiDecisionsEnableLabel}}並選擇存取金鑰後可用。
 
 ### {{label:settings.accessKey}} {#ai-decisions-access-key}
 

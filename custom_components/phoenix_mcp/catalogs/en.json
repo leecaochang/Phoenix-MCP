@@ -1874,7 +1874,7 @@
       "aiDecisionsDefaultLabel": "Default Decisions entity",
       "aiDecisionsDefaultOff": "Use Phoenix MCP when an Evaluate action does not specify an entity.",
       "aiDecisionsDefaultOn": "Phoenix MCP handles Evaluate actions that do not specify an entity.",
-      "aiDecisionsConfigureFirst": "Enable it and choose an access key first.",
+      "aiDecisionsConfigureFirst": "Available once {setting} is on and an access key is chosen.",
       "aiDecisionsAccessKeyAria": "Decisions access key",
       "aiDecisionsAccessKeyHelp": "Evaluate actions run only while this access key is active and can return response data.",
       "aiDecisionsCapabilityNote": "This access key needs {capability} set to {mode}.",

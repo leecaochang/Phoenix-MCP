@@ -1399,7 +1399,7 @@
       "aiDecisionsDefaultLabel": "Standard-Entität für Entscheidungen",
       "aiDecisionsDefaultOff": "Phoenix MCP verwenden, wenn eine Bewerten-Aktion keine Entität angibt.",
       "aiDecisionsDefaultOn": "Phoenix MCP übernimmt Bewerten-Aktionen, die keine Entität angeben.",
-      "aiDecisionsConfigureFirst": "Aktivieren Sie sie zuerst und wählen Sie einen Zugriffsschlüssel.",
+      "aiDecisionsConfigureFirst": "Verfügbar, sobald {setting} aktiviert und ein Zugriffsschlüssel gewählt ist.",
       "aiDecisionsAccessKeyAria": "Zugriffsschlüssel für Entscheidungen",
       "aiDecisionsAccessKeyHelp": "Bewerten-Aktionen laufen nur, solange dieser Zugriffsschlüssel aktiv ist und Antwortdaten zurückgeben darf.",
       "aiDecisionsCapabilityNote": "Dieser Zugriffsschlüssel braucht {capability} auf {mode}.",

@@ -2118,7 +2118,7 @@
       "aiDecisionsDefaultLabel": "Объект решений по умолчанию",
       "aiDecisionsDefaultOff": "Использовать Phoenix MCP, если в действии «Оценить» не указан объект.",
       "aiDecisionsDefaultOn": "Phoenix MCP обрабатывает действия «Оценить», в которых не указан объект.",
-      "aiDecisionsConfigureFirst": "Сначала включите его и выберите ключ доступа.",
+      "aiDecisionsConfigureFirst": "Доступно, когда включён параметр {setting} и выбран ключ доступа.",
       "aiDecisionsAccessKeyAria": "Ключ доступа для решений",
       "aiDecisionsAccessKeyHelp": "Действия «Оценить» выполняются, только пока этот ключ доступа активен и может возвращать данные ответа.",
       "aiDecisionsCapabilityNote": "Для этого ключа доступа {capability} должно быть в режиме {mode}.",

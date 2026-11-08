@@ -72,7 +72,16 @@ export function AiTaskDecisionsSection({
   }
 
   const defaultReady = !!pref?.entity_id;
-  const defaultHelp = t(pref?.is_preferred ? "settings.aiDecisionsDefaultOn" : "settings.aiDecisionsDefaultOff");
+  const defaultLocked = !defaultReady && !pref?.is_preferred;
+  // Why a control is unavailable belongs in Help beside what it does, not under its name.
+  const defaultHelp = [
+    t(pref?.is_preferred ? "settings.aiDecisionsDefaultOn" : "settings.aiDecisionsDefaultOff"),
+    defaultLocked ? t("settings.aiDecisionsConfigureFirst", { setting: t("settings.aiDecisionsEnableLabel") }) : null,
+  ].filter(Boolean).join(" ");
+  const accessKeyHelp = [
+    t("settings.aiDecisionsAccessKeyHelp"),
+    needsCapability ? t("settings.aiDecisionsCapabilityNote", { capability: t("caps.cap_service_response.label"), mode: t("caps.modeAllow") }) : null,
+  ].filter(Boolean).join(" ");
   return (
     <section className="phx-settings-section phx-ai-decisions" data-help-text={t("settings.aiDecisionsIntro")}>
       <h3 className="phx-section-title">{t("settings.aiDecisionsHeading")}</h3>
@@ -92,10 +101,9 @@ export function AiTaskDecisionsSection({
             <span className="toggle-switch-track" />
           </label>
         </div>
-        <div className={`toggle-row${!defaultReady && !pref?.is_preferred ? " toggle-row-greyed" : ""}`} {...helpRow(defaultHelp)}>
+        <div className={`toggle-row${defaultLocked ? " toggle-row-greyed" : ""}`} {...helpRow(defaultHelp)}>
           <SettingLabel help={defaultHelp}>
             <span>{t("settings.aiDecisionsDefaultLabel")}</span>
-            {!pref?.is_preferred && !defaultReady && <small>{t("settings.aiDecisionsConfigureFirst")}</small>}
           </SettingLabel>
           <label className="toggle-switch">
             <BusyInput
@@ -103,7 +111,7 @@ export function AiTaskDecisionsSection({
               aria-label={t("settings.aiDecisionsDefaultLabel")}
               data-help={!pref?.is_preferred && pref?.evaluate_entity_id ? "help.settingsAiDecisionsReplaceDefault" : undefined}
               checked={!!pref?.is_preferred}
-              busy={saving || busy} disabled={!defaultReady && !pref?.is_preferred}
+              busy={saving || busy} disabled={defaultLocked}
               onChange={(e) => void setDefault(e.target.checked)}
             />
             <span className="toggle-switch-track" />
@@ -112,10 +120,9 @@ export function AiTaskDecisionsSection({
       </div>
       {error && <div className="banner banner-error" role="alert">{error}</div>}
 
-      <div className="toggle-row toggle-row-stacked-control" {...helpRow(t("settings.aiDecisionsAccessKeyHelp"))}>
-        <SettingLabel help={t("settings.aiDecisionsAccessKeyHelp")}>
+      <div className="toggle-row toggle-row-stacked-control" {...helpRow(accessKeyHelp)}>
+        <SettingLabel help={accessKeyHelp}>
           <span>{t("settings.accessKey")}</span>
-          {needsCapability && <small>{t("settings.aiDecisionsCapabilityNote", { capability: t("caps.cap_service_response.label"), mode: t("caps.modeAllow") })}</small>}
         </SettingLabel>
         <BusySelect
           aria-label={t("settings.aiDecisionsAccessKeyAria")}

@@ -2001,7 +2001,7 @@
       "aiDecisionsDefaultLabel": "預設決策實體",
       "aiDecisionsDefaultOff": "當「評估」動作未指定實體時使用 Phoenix MCP。",
       "aiDecisionsDefaultOn": "Phoenix MCP 處理未指定實體的「評估」動作。",
-      "aiDecisionsConfigureFirst": "請先啟用並選擇存取金鑰。",
+      "aiDecisionsConfigureFirst": "開啟{setting}並選擇存取金鑰後可用。",
       "aiDecisionsAccessKeyAria": "決策存取金鑰",
       "aiDecisionsAccessKeyHelp": "僅當此存取金鑰有效且可傳回回應資料時，「評估」動作才會執行。",
       "aiDecisionsCapabilityNote": "此存取金鑰需要將 {capability} 設為 {mode}。",

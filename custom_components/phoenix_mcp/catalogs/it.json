@@ -1752,7 +1752,7 @@
       "aiDecisionsDefaultLabel": "Entità decisioni predefinita",
       "aiDecisionsDefaultOff": "Usa Phoenix MCP quando un'azione Valuta non specifica un'entità.",
       "aiDecisionsDefaultOn": "Phoenix MCP gestisce le azioni Valuta che non specificano un'entità.",
-      "aiDecisionsConfigureFirst": "Prima abilitala e scegli una chiave di accesso.",
+      "aiDecisionsConfigureFirst": "Disponibile quando {setting} è attivo ed è stata scelta una chiave di accesso.",
       "aiDecisionsAccessKeyAria": "Chiave di accesso delle decisioni",
       "aiDecisionsAccessKeyHelp": "Le azioni Valuta vengono eseguite solo mentre questa chiave di accesso è attiva e può restituire dati di risposta.",
       "aiDecisionsCapabilityNote": "Questa chiave di accesso richiede {capability} su {mode}.",

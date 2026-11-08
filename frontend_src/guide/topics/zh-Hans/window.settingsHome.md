@@ -123,7 +123,7 @@ Home Companion 密钥会把对话交给 Home Companion 处理，并隐藏 **{{la
 
 ### {{label:settings.aiDecisionsDefaultLabel}} {#ai-decisions-default}
 
-将其设为 Home Assistant 中未指定实体的“评估”操作的默认实体，并立即替换当前默认实体。
+将其设为 Home Assistant 中未指定实体的“评估”操作的默认实体，并立即替换当前默认实体。打开{{label:settings.aiDecisionsEnableLabel}}并选择访问密钥后可用。
 
 ### {{label:settings.accessKey}} {#ai-decisions-access-key}
 

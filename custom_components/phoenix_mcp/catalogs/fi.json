@@ -2470,7 +2470,7 @@
       "aiDecisionsDefaultLabel": "Päätösten oletusentiteetti",
       "aiDecisionsDefaultOff": "Käytä Phoenix MCP:tä, kun Arvioi-toiminto ei määritä entiteettiä.",
       "aiDecisionsDefaultOn": "Phoenix MCP käsittelee Arvioi-toiminnot, jotka eivät määritä entiteettiä.",
-      "aiDecisionsConfigureFirst": "Ota se ensin käyttöön ja valitse käyttöavain.",
+      "aiDecisionsConfigureFirst": "Käytettävissä, kun {setting} on käytössä ja käyttöavain on valittu.",
       "aiDecisionsAccessKeyAria": "Päätösten käyttöavain",
       "aiDecisionsAccessKeyHelp": "Arvioi-toiminnot toimivat vain, kun tämä käyttöavain on aktiivinen ja voi palauttaa vastaustietoja.",
       "aiDecisionsCapabilityNote": "Tämä käyttöavain tarvitsee asetuksen {capability} tilaan {mode}.",

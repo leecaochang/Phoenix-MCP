@@ -104,8 +104,12 @@ describe("AiTaskDecisionsSection", () => {
   it("cannot be made default before the entity exists", async () => {
     getAiEvaluatePreferred.mockResolvedValue({ entity_id: null, evaluate_entity_id: null, evaluate_name: null, is_preferred: false });
     renderCard(settings());
-    expect(await screen.findByText(t("settings.aiDecisionsConfigureFirst"))).toBeTruthy();
-    expect((screen.getByRole("checkbox", { name: defaultName() }) as HTMLInputElement).disabled).toBe(true);
+    const toggle = await screen.findByRole("checkbox", { name: defaultName() }) as HTMLInputElement;
+    expect(toggle.disabled).toBe(true);
+    // The reason is the row's Help, never a note under its name.
+    const reason = t("settings.aiDecisionsConfigureFirst", { setting: enableName() });
+    await waitFor(() => expect(toggle.closest(".toggle-row")?.getAttribute("data-help-text")).toContain(reason));
+    expect(screen.queryByText(reason, { selector: "small" })).toBeNull();
   });
 
   it.each([
@@ -116,6 +120,8 @@ describe("AiTaskDecisionsSection", () => {
     renderCard(settings());
     await screen.findAllByRole("option", { name: "decisions" });
     const note = t("settings.aiDecisionsCapabilityNote", { capability: t("caps.cap_service_response.label"), mode: t("caps.modeAllow") });
-    expect(!!screen.queryByText(note)).toBe(shown);
+    const row = screen.getByRole("combobox", { name: t("settings.aiDecisionsAccessKeyAria") }).closest(".toggle-row");
+    expect(!!row?.getAttribute("data-help-text")?.includes(note)).toBe(shown);
+    expect(row?.querySelector("small")).toBeNull();
   });
 });

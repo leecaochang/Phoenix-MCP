@@ -1767,7 +1767,7 @@
       "aiDecisionsDefaultLabel": "既定の意思決定エンティティ",
       "aiDecisionsDefaultOff": "「評価する」アクションでエンティティが指定されていないときに Phoenix MCP を使います。",
       "aiDecisionsDefaultOn": "エンティティが指定されていない「評価する」アクションを Phoenix MCP が処理します。",
-      "aiDecisionsConfigureFirst": "先に有効にして、アクセスキーを選択してください。",
+      "aiDecisionsConfigureFirst": "{setting} をオンにしてアクセスキーを選択すると使用できます。",
       "aiDecisionsAccessKeyAria": "意思決定のアクセスキー",
       "aiDecisionsAccessKeyHelp": "このアクセスキーが有効で応答データを返せる間だけ、「評価する」アクションを実行します。",
       "aiDecisionsCapabilityNote": "このアクセスキーは {capability} を {mode} にする必要があります。",

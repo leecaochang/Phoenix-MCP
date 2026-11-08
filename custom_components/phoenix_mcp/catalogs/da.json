@@ -2470,7 +2470,7 @@
       "aiDecisionsDefaultLabel": "Standardentitet for beslutninger",
       "aiDecisionsDefaultOff": "Brug Phoenix MCP, når en Evaluer-handling ikke angiver en entitet.",
       "aiDecisionsDefaultOn": "Phoenix MCP håndterer Evaluer-handlinger, der ikke angiver en entitet.",
-      "aiDecisionsConfigureFirst": "Aktivér den, og vælg først en adgangsnøgle.",
+      "aiDecisionsConfigureFirst": "Tilgængelig, når {setting} er slået til, og der er valgt en adgangsnøgle.",
       "aiDecisionsAccessKeyAria": "Adgangsnøgle til beslutninger",
       "aiDecisionsAccessKeyHelp": "Evaluer-handlinger kører kun, mens denne adgangsnøgle er aktiv og kan returnere svardata.",
       "aiDecisionsCapabilityNote": "Denne adgangsnøgle skal have {capability} sat til {mode}.",

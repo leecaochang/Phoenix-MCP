@@ -1756,7 +1756,7 @@
       "aiDecisionsDefaultLabel": "默认决策实体",
       "aiDecisionsDefaultOff": "当“评估”操作未指定实体时使用 Phoenix MCP。",
       "aiDecisionsDefaultOn": "Phoenix MCP 处理未指定实体的“评估”操作。",
-      "aiDecisionsConfigureFirst": "请先启用并选择访问密钥。",
+      "aiDecisionsConfigureFirst": "打开{setting}并选择访问密钥后可用。",
       "aiDecisionsAccessKeyAria": "决策访问密钥",
       "aiDecisionsAccessKeyHelp": "仅当此访问密钥有效且可以返回响应数据时，“评估”操作才会运行。",
       "aiDecisionsCapabilityNote": "此访问密钥需要将 {capability} 设为 {mode}。",

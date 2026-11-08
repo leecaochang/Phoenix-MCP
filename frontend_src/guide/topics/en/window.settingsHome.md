@@ -123,7 +123,7 @@ Revoking the access key or removing the decision provider turns this off and rem
 
 ### {{label:settings.aiDecisionsDefaultLabel}} {#ai-decisions-default}
 
-Makes this Home Assistant's default for Evaluate actions that name no entity. It replaces any current default straight away.
+Makes this Home Assistant's default for Evaluate actions that name no entity. It replaces any current default straight away. It's available once {{label:settings.aiDecisionsEnableLabel}} is on and an access key is chosen.
 
 ### {{label:settings.accessKey}} {#ai-decisions-access-key}
 
