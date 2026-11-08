@@ -1285,6 +1285,8 @@ UNKNOWN_ARGUMENT_MAX_ERRORS = 8
 # Value-free authoring error projection budgets.
 AUTHORING_MAX_ERRORS = 8
 AUTHORING_MAX_PATH_DEPTH = 8
+# Authoring warnings look up at most this many entity targets per config.
+AUTHORING_TARGET_CHECK_MAX = 100
 # Trace scoping replaces anything nested deeper than this with a sentinel.
 TRACE_SCOPE_MAX_DEPTH = 32
 # Longest HA field help (data_description or label) attached to a helper flow field.

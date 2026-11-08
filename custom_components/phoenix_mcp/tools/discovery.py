@@ -41,7 +41,7 @@ import voluptuous as vol
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.const import __version__ as ha_version
 
-from ..authoring_validation import async_validation_message, authoring_input_error
+from ..authoring_validation import async_target_findings, async_validation_message, authoring_input_error
 from ..const import UPDATE_INSTALL_SERVICE, CAP_ALLOW, CAP_CONFIRM, CAP_DENY, DEVICE_LIST_DEFAULT_LIMIT, DEVICE_LIST_MAX_LIMIT, DUAL_GATE_SERVICES, MAX_COMPARE_LIST_VALUES, MAX_COMPARE_VALUE_CHARS, MAX_DANGLING_PATHS, MAX_CONFIG_CHECK_MESSAGES, MAX_SEARCH_QUERY_LEN, MAX_SEARCH_MEMBERS, MAX_SEARCH_MEMBER_CHECKS, MAX_SEARCH_MEMBER_ID_LEN, MESA_MODE_OFF, MUSIC_ASSISTANT_LIBRARY_SERVICES, STORAGE_HELPER_TYPES, NO_TARGET_SERVICES, RUNTIME_SERVICE_GUIDANCE, SCRIPT_ENTITY_SERVICES, SEARCH_ENTITIES_MAX_LIMIT, SEARCH_FUZZY_MATCH_CUTOFF, SEARCH_POWER_TYPES, SEARCH_RADIO_TYPES, SERVICE_FIELDS_MAX, SERVICE_FIELD_MAX_DESCRIPTION, SERVICE_FIELD_MAX_OPTIONS, REFERENCE_WARNING_MAX
 from ..consumer_identity import ConsumerIdentityIndex, IDENTITY_COVERAGE
 from ..household_authority import household_admin_access
@@ -3450,6 +3450,16 @@ def reference_warnings(hass: HomeAssistant, access_key: AccessKeyRecord, cfg_typ
             f"{cfg_type} may not work as intended: {listed}{more}."]
 
 
+async def async_config_warnings(hass: HomeAssistant, access_key: AccessKeyRecord, cfg_type: str, config: dict) -> list[str]:
+    """A saved config's reference warnings plus its unregistered services and wrong-kind targets."""
+    return [*reference_warnings(hass, access_key, cfg_type, config),
+            *await async_target_findings(hass, config, _readable_by(access_key, hass))]
+
+
+def _readable_by(access_key: AccessKeyRecord, hass: HomeAssistant) -> Callable[[str], bool]:
+    return lambda entity_id: resolve_read(entity_id, access_key, hass) in (Permission.READ, Permission.WRITE)
+
+
 async def _tool_validate_automation_or_script(
     args: dict, access_key: AccessKeyRecord, hass: HomeAssistant
 ) -> tuple[dict, str, str]:
@@ -3504,4 +3514,9 @@ async def _tool_validate_automation_or_script(
         accessible = resolve_read(eid, access_key, hass) in (Permission.READ, Permission.WRITE)
         refs.append({"entity_id": eid, "exists": accessible, "accessible": accessible})
     body = {"type": cfg_type, "valid": valid, "errors": errors, "referenced_entities": refs}
+    if valid:
+        warnings = await async_target_findings(hass, config, _readable_by(access_key, hass))
+        check_request_authority()
+        if warnings:
+            body["warnings"] = warnings
     return _tool_success(json.dumps(body, default=str)), "allowed", "validate_automation_or_script"

@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import re
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from difflib import get_close_matches
 from traceback import format_tb
 from typing import Any
@@ -13,10 +13,12 @@ from typing import Any
 import voluptuous as vol
 from homeassistant.components.automation.config import PLATFORM_SCHEMA
 from homeassistant.components.script.config import SCRIPT_ENTITY_SCHEMA
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, valid_entity_id
+from homeassistant.helpers.entity import entity_sources
+from homeassistant.helpers.service import async_get_all_descriptions as async_get_all_service_descriptions
 from homeassistant.loader import IntegrationNotFound, async_get_integration
 
-from .const import AUTHORING_MAX_ERRORS, AUTHORING_MAX_PATH_DEPTH
+from .const import AUTHORING_MAX_ERRORS, AUTHORING_MAX_PATH_DEPTH, AUTHORING_TARGET_CHECK_MAX, REFERENCE_WARNING_MAX
 from .yaml_includes import TAG_STRING_REFUSAL, contains_tag_strings
 
 _LOGGER = logging.getLogger(__name__)
@@ -106,7 +108,7 @@ async def async_unknown_key_findings(hass: HomeAssistant, config: Any) -> list[s
     ``closest_matches`` searches the key's own domain first. A key is unknown only when its
     domain is loaded or no such integration exists. Failure to read keys gives no findings.
     """
-    sites = _key_sites(config)
+    sites = [(path, kind, key) for path, kind, key, _item in _key_sites(config) if kind != "action"]
     if not sites:
         return []
     try:
@@ -141,6 +143,124 @@ async def async_unknown_key_findings(hass: HomeAssistant, config: Any) -> list[s
     return findings
 
 
+# The script domain's own services; any other script.<name> runs a script entity, whose existence
+# a key may not be told.
+_SCRIPT_VERBS = frozenset({"turn_on", "turn_off", "toggle", "reload"})
+_OFFERED_SHOWN = 3
+_NOT_CHECKED = "Service and target references were not checked, because a Home Assistant lookup failed."
+
+
+async def async_target_findings(hass: HomeAssistant, config: Any, readable: Callable[[str], bool]) -> list[str]:
+    """Name each action service Core has not registered and each literal entity target its
+    service, trigger or condition does not apply to.
+
+    Only entities ``readable`` admits are checked or named. Templated, disabled and named-script
+    steps are skipped. A failed lookup adds one "not checked" finding. Never raises.
+    """
+    try:
+        sites = [site for site in _key_sites(config)
+                 if site[3].get("enabled", True) is not False and not _templated(site[2])]
+    except Exception:
+        _LOGGER.debug("target findings walk failed", exc_info=True)
+        return [_NOT_CHECKED]
+    if not sites:
+        return []
+    findings: list[str] = []
+    try:
+        # Local: optional component, imported only when this path runs.
+        from homeassistant.components.websocket_api.automation import (
+            async_get_conditions_for_target,
+            async_get_services_for_target,
+            async_get_triggers_for_target,
+        )
+        # Local: inside a guard for releases that lack it.
+        from homeassistant.helpers.condition import (
+            async_get_all_descriptions as async_get_all_condition_descriptions,
+        )
+        # Local: inside a guard for releases that lack it.
+        from homeassistant.helpers.trigger import (
+            async_get_all_descriptions as async_get_all_trigger_descriptions,
+        )
+
+        lookups = {"action": async_get_services_for_target, "trigger": async_get_triggers_for_target,
+                   "condition": async_get_conditions_for_target}
+        services = await async_get_all_service_descriptions(hass)
+        descriptions = {"trigger": await async_get_all_trigger_descriptions(hass),
+                        "condition": await async_get_all_condition_descriptions(hass)}
+        sources = entity_sources(hass)
+        checks = 0
+        for path, kind, key, item in sites:
+            shown = f' "{key}"' if _ECHOABLE_KEY.fullmatch(key) else ""
+            if kind == "action":
+                domain, _, name = key.lower().partition(".")
+                if not name or (domain == "script" and name not in _SCRIPT_VERBS):
+                    continue
+                if not hass.services.has_service(domain, name):
+                    findings.append(f"{path}{shown} is not a service this Home Assistant has registered, "
+                                    "so the step fails when it runs.")
+                    continue
+                description = (services.get(domain) or {}).get(name)
+            else:
+                description = descriptions[kind].get(key)
+            if not isinstance(description, dict) or "target" not in description:
+                continue
+            for entity_id in _literal_entities(item, kind):
+                if entity_id not in sources or not readable(entity_id):
+                    continue
+                checks += 1
+                if checks > AUTHORING_TARGET_CHECK_MAX:
+                    findings.append(f"Only the first {AUTHORING_TARGET_CHECK_MAX} entity targets were checked.")
+                    return _capped(findings)
+                offered = await lookups[kind](hass, {"entity_id": [entity_id]}, True)
+                if key in offered:
+                    continue
+                findings.append(_mismatch(path, shown, kind, key, entity_id, offered))
+    except Exception:
+        _LOGGER.debug("target findings lookup failed", exc_info=True)
+        findings.append(_NOT_CHECKED)
+    return _capped(findings)
+
+
+def _templated(value: Any) -> bool:
+    return isinstance(value, str) and ("{{" in value or "{%" in value)
+
+
+def _literal_entities(item: dict, kind: str) -> list[str]:
+    """Literal entity ids a step targets; templated and non-entity values are left out."""
+    holders = [item.get("target")]
+    if kind == "action":
+        holders += [item, item.get("data")]
+    found: list[str] = []
+    for holder in holders:
+        value = holder.get("entity_id") if isinstance(holder, dict) else None
+        values = value if isinstance(value, list) else [value]
+        for raw in values:
+            if not isinstance(raw, str) or _templated(raw):
+                continue
+            for part in raw.split(","):
+                if valid_entity_id(entity_id := part.strip().lower()) and entity_id not in found:
+                    found.append(entity_id)
+    return found
+
+
+def _mismatch(path: str, shown: str, kind: str, key: str, entity_id: str, offered: set[str]) -> str:
+    """A target finding naming what Core does offer for the entity, its same verb first."""
+    verb = key.rpartition(".")[2]
+    ranked = sorted(offered, key=lambda name: (name.rpartition(".")[2] != verb, name))
+    noun = "service" if kind == "action" else kind
+    text = (f"{path}{shown} does not apply to {entity_id}, so Home Assistant ignores that entity there.")
+    if not ranked:
+        return text + f" No {noun} this Home Assistant has applies to it."
+    more = f" and {len(ranked) - _OFFERED_SHOWN} more" if len(ranked) > _OFFERED_SHOWN else ""
+    return text + f" {noun.capitalize()}s that apply to it include {json.dumps(ranked[:_OFFERED_SHOWN])}{more}."
+
+
+def _capped(findings: list[str]) -> list[str]:
+    if len(findings) <= REFERENCE_WARNING_MAX:
+        return findings
+    return [*findings[:REFERENCE_WARNING_MAX], f"{len(findings) - REFERENCE_WARNING_MAX} more service or target findings not listed."]
+
+
 async def _is_unknown_key(hass: HomeAssistant, kind: str, key: str, registered: set[str]) -> bool:
     """Whether Core certainly has no such key, mirroring how it resolves one."""
     domain = key.split(".", 1)[0]
@@ -169,13 +289,14 @@ def _closest_keys(key: str, registered: set[str]) -> list[str]:
     return matches[:_MATCH_LIMIT]
 
 
-def _key_sites(config: Any) -> list[tuple[str, str, str]]:
-    """List (path, kind, key) for every trigger and condition key in a raw config.
+def _key_sites(config: Any) -> list[tuple[str, str, str, dict]]:
+    """List (path, kind, key, item) for every trigger, condition and action key in a raw config.
 
-    Walks every nesting action, with legacy ``platform`` and and/or/not shorthand. Paths use
-    only schema vocabulary and list indexes.
+    Walks every nesting action, with legacy ``platform``, ``service`` and and/or/not shorthand.
+    Data under a key (``event_data``, ``data``) is never walked. Paths use only schema
+    vocabulary and list indexes.
     """
-    sites: list[tuple[str, str, str]] = []
+    sites: list[tuple[str, str, str, dict]] = []
 
     def items(value: Any, path: str) -> Iterable[tuple[str, Any]]:
         for index, item in enumerate(value if isinstance(value, list) else [value]):
@@ -188,12 +309,12 @@ def _key_sites(config: Any) -> list[tuple[str, str, str]]:
                 triggers(item["triggers"], here + ".triggers", depth + 1)
             for field in ("trigger", "platform"):
                 if isinstance(item.get(field), str):
-                    sites.append((f"{here}.{field}", "trigger", item[field]))
+                    sites.append((f"{here}.{field}", "trigger", item[field], item))
                     break
 
     def condition(item: dict, here: str, depth: int) -> None:
         if isinstance(key := item.get("condition"), str):
-            sites.append((here + ".condition", "condition", key))
+            sites.append((here + ".condition", "condition", key, item))
         if depth >= AUTHORING_MAX_PATH_DEPTH:
             return
         for field in ("conditions", "and", "or", "not"):
@@ -211,6 +332,10 @@ def _key_sites(config: Any) -> list[tuple[str, str, str]]:
             if any(field in item for field in ("condition", "and", "or", "not")):
                 condition(item, here, depth)
                 continue
+            for field in ("action", "service"):
+                if isinstance(item.get(field), str):
+                    sites.append((f"{here}.{field}", "action", item[field], item))
+                    break
             conditions(item.get("if"), here + ".if", depth + 1)
             triggers(item.get("wait_for_trigger"), here + ".wait_for_trigger", depth + 1)
             for field in ("then", "else", "default", "sequence", "parallel"):

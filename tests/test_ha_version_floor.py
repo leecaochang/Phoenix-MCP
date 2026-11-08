@@ -203,6 +203,8 @@ KNOWN_IMPORTS: dict[str, dict[str, str]] = {
     "homeassistant.helpers.entity_component": {"DATA_INSTANCES": "2026.7.0"},
     "homeassistant.helpers.entity": {
         "DeviceInfo": "0.0.0",
+        # Older than any claimed floor; verified in 2026.7.0.
+        "entity_sources": "0.0.0",
     },
     "homeassistant.helpers.entity_platform": {
         "AddEntitiesCallback": "0.0.0",

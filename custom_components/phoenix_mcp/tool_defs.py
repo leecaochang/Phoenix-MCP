@@ -2961,7 +2961,8 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
         "description": (
             "Validate an automation or script config without saving it. Returns structural validity plus, "
             "for each referenced entity, whether it is accessible to this access key (entities outside the "
-            "access key's scope are reported as inaccessible and not visible). Decouples the "
+            "access key's scope are reported as inaccessible and not visible). warnings name an unregistered "
+            "service and a target its service, trigger or condition does not apply to. Decouples the "
             "schema check from committing the write."
         ),
         "cap": "cap_diagnostics",

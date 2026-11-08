@@ -54,7 +54,7 @@ from ..policy_engine import (
 from ..request_authority import AuthorityChangedError, check_request_authority
 from ..access_key_store import AccessKeyRecord
 from .. import yaml_includes
-from .discovery import _registry_relationship_preview, reference_warnings
+from .discovery import _registry_relationship_preview, async_config_warnings
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -119,7 +119,9 @@ async def _finish_entity_write(
         # Automation results have always named the entity at the top level.
         body["entity_id"] = body["registration"]["entity_id"]
     if domain in ("automation", "script"):
-        if warnings := reference_warnings(hass, access_key, domain, config):
+        warnings = await async_config_warnings(hass, access_key, domain, config)
+        check_request_authority()
+        if warnings:
             body["warnings"] = warnings
     status = body["registration"]["status"]
     if status == "timed_out":

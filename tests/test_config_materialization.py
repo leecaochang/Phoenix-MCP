@@ -464,6 +464,7 @@ async def test_script_delete_approval_names_the_automation_that_calls_it(hass, a
 
 async def test_automation_receipt_names_its_entity_and_flags_unresolvable_references(hass, admin_user):
     assert await async_setup_component(hass, "automation", {})
+    assert await async_setup_component(hass, "light", {})
     hass.states.async_set("light.porch", "off", {})
     hass.states.async_set("sun.sun", "above_horizon", {})
     key = _access_key(PermissionTree(domains={"automation": PermissionNode(state="GREEN"), "light": PermissionNode(state="GREEN"),
@@ -526,3 +527,21 @@ async def test_delete_removes_the_registry_entry_like_ha_does(hass, admin_user):
     await hass.async_block_till_done()
     assert registry.async_get("automation.garden") is None and registry.async_get("script.garden_water") is None
     assert hass.states.get("automation.garden") is None and hass.states.get("script.garden_water") is None
+
+
+async def test_saved_automation_warns_of_a_missing_service_and_a_wrong_kind_target(hass, admin_user):
+    assert await async_setup_component(hass, "automation", {})
+    assert await async_setup_component(hass, "select", {})
+    assert await async_setup_component(hass, "input_select", {"input_select": {"house_mode": {"options": ["Home", "Away"]}}})
+    key = _access_key(PermissionTree(domains={"automation": PermissionNode(state="GREEN"), "input_select": PermissionNode(state="GREEN")}),
+                      cap_automation_write="allow")
+    result, outcome, _ = await _call_tool("create_automation", {"config": {
+        "alias": "House mode", "triggers": [{"trigger": "event", "event_type": "probe"}],
+        "actions": [{"action": "nosuch.service_typo"},
+                    {"action": "select.select_option", "target": {"entity_id": "input_select.house_mode"}, "data": {"option": "Away"}}]}},
+        key, hass, _data())
+    assert outcome == "allowed", _text(result)
+    warnings = _json(result)["warnings"]
+    assert len(warnings) == 2
+    assert "nosuch.service_typo" in warnings[0] and '["input_select.select_option"' in warnings[1]
+    await hass.async_block_till_done()

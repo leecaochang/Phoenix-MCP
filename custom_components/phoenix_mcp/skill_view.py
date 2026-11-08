@@ -242,7 +242,9 @@ config is good on the strength of validation alone if you can compile it.
 - `whatif`: predicts which automations would fire if an entity became a given
   state, so you can reason about side effects first.
 - `validate_automation_or_script`: structurally checks an automation or script config, and
-  whether the entities it references exist and are accessible, before you save.
+  whether the entities it references exist and are accessible, before you save. Its
+  `warnings` name a service Home Assistant does not have and a target the service, trigger or
+  condition does not apply to; Core accepts both, so fix them before saving.
 
 ### 4. Act
 - Prefer the native intent tools (`intent__HassTurnOn`, `intent__HassTurnOff`,
