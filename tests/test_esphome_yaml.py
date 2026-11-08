@@ -157,6 +157,8 @@ LEAK_SHAPES = {
     "two_word_comment": "x: 1\n# api key SECRETVAL21\n",
     "partly_scrubbed_alias": "note: &n https://u:SECRETVAL22@host/a\npassword: *n\n",
     "lambda_setter": 'x:\n  lambda: |-\n    id(w).set_password("SECRETVAL23");\n',
+    "lambda_two_argument_setter": 'x:\n  lambda: |-\n    id(w).set_credentials("SECRETVAL39", "SECRETVAL40");\n',
+    "secret_tag_with_a_value": "password: !secret SECRETVAL41 more\n",
     "lambda_array": 'x:\n  lambda: |-\n    const char key[] = "SECRETVAL24";\n',
     "lambda_sized_array": 'x:\n  lambda: |-\n    char key[16] = "SECRETVAL24";\n',
     "lambda_define": 'x:\n  lambda: |-\n    #define PASSWORD "SECRETVAL25"\n',

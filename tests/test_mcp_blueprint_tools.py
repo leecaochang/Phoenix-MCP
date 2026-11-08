@@ -9,6 +9,7 @@ edit's real blast radius visible in the approval, and version capture.
 from __future__ import annotations
 
 import json
+import os
 import uuid
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -23,7 +24,7 @@ from custom_components.phoenix_mcp.tool_catalog import _EXECUTOR_REGISTRY
 from custom_components.phoenix_mcp.tool_dispatch import _call_tool
 from custom_components.phoenix_mcp.access_key_store import PermissionTree, AccessKeyRecord
 from custom_components.phoenix_mcp.version_store import VersionStore
-from custom_components.phoenix_mcp.tool_common import UncertainOutcome
+from custom_components.phoenix_mcp.tool_common import RefusedBeforeWrite, UncertainOutcome
 from custom_components.phoenix_mcp.ws_dispatch import WsCommandNotDispatchedError, WsDispatchError
 
 VALID = """\
@@ -523,6 +524,23 @@ class TestDelete:
         assert outcome == "invalid_request"
         assert "in use" in _text(content)
         assert isinstance(content, UncertainOutcome)
+
+    async def test_a_blueprint_in_use_is_refused_through_core_and_nothing_is_deleted(self, hass, bp_env, hass_admin_user):
+        """Core's own blueprint/delete refuses a used blueprint before removing it: a definite refusal."""
+        from homeassistant.setup import async_setup_component
+        target = _write_existing(bp_env)
+        assert await async_setup_component(hass, "automation", {"automation": [{
+            "id": "uses_it", "alias": "Uses it",
+            "use_blueprint": {"path": "author/existing.yaml", "input": {"trigger_entity": "sun.sun"}}}]})
+        await hass.async_block_till_done()
+        data = _data()[0]
+        content, outcome, _ = await _call(
+            "delete_blueprint", {"domain": "automation", "path": "author/existing.yaml"}, _access_key(), hass, data)
+        assert outcome == "invalid_request" and isinstance(content, RefusedBeforeWrite), content
+        assert "used by an automation or script" in _text(content)
+        assert os.path.exists(target)
+        [record] = [row for row in data.config_recovery.records() if row.get("operation") == "delete_blueprint"]
+        assert record["phase"] == "not_applied"
 
     async def test_delete_does_not_require_content(self, hass, bp_env):
         _write_existing(bp_env)

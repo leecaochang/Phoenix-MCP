@@ -27,7 +27,7 @@ from ..mesa import async_apply_mesa_to_call, fire_mesa_blocked_event
 from ..policy_engine import Permission, resolve
 from ..request_authority import check_request_authority, mark_dispatch_started
 from ..tool_common import (
-    MESA_DENIED_MESSAGE, _gate, _pending_or_inline, _tool_error, _tool_success, longest_fitting,
+    MESA_DENIED_MESSAGE, _gate, _pending_or_inline, _tool_error, _tool_refused_before_write, _tool_success, longest_fitting,
 )
 from ..request_authority import _approved_exec_ctx
 from ..ws_dispatch import async_ws_command
@@ -141,7 +141,7 @@ async def _execute_send_notification(
         if outcome.decision == "pending":
             return await _pending_or_inline(hass, data, access_key, outcome.approval)
         if outcome.decision == "deny":
-            return _tool_error(MESA_DENIED_MESSAGE), "denied", name
+            return _tool_refused_before_write(MESA_DENIED_MESSAGE), "denied", name
         domain, service, service_data = "notify", "send_message", {"entity_id": name, **fields}
     elif kind == "persistent":
         notification_id = uuid.uuid4().hex

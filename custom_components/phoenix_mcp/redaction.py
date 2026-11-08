@@ -409,15 +409,16 @@ def instance_entity_domains(hass: HomeAssistant) -> frozenset[str]:
 
 def redact_entity_ids_outside(
     text: str, visible: frozenset[str], hass: HomeAssistant, *, sentinel: str = "<redacted-entity>",
-    domains: Collection[str] | None = None,
+    domains: Collection[str] | None = None, keep: Callable[[str], bool] | None = None,
 ) -> str:
     """The worker-thread form: redact against visible_entity_ids computed on the loop.
 
-    With `domains`, a token outside them is not an entity ID and stays.
+    With `domains`, a token outside them is not an entity ID and stays; so does one `keep` admits.
     """
     return _redact_entity_ids(
         text, hass,
-        lambda eid: (domains is not None and eid.split(".", 1)[0] not in domains) or eid.lower() in visible,
+        lambda eid: ((domains is not None and eid.split(".", 1)[0] not in domains) or eid.lower() in visible
+                     or (keep is not None and keep(eid))),
         sentinel)
 
 

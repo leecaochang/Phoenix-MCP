@@ -1678,7 +1678,10 @@ async def _execute_create_helper(
     # storage leaves the create unconfirmed rather than failed.
     rows = await _storage_helper_rows(hass, str(helper_type))
     stored = next((row for row in rows if row.get("id") == new_id), None) if rows and new_id is not None else None
-    verified = None if rows is None else stored is not None and (not isinstance(item, dict) or stored == item)
+    # Every field Home Assistant reported must read back; a list may add derived ones, as tag/list
+    # adds the name it keeps in the entity registry.
+    verified = None if rows is None else stored is not None and (
+        not isinstance(item, dict) or all(stored.get(key) == value for key, value in item.items()))
     if stored is not None:
         item = stored
     public_item = (
@@ -1692,8 +1695,13 @@ async def _execute_create_helper(
         action="create", before=None, after=version_after, alias=config.get("name"),
     )
     body: dict[str, Any] = {"helper_type": helper_type, "helper": public_item, "verified": verified}
-    if verified is False:
-        body["note"] = "Home Assistant reported the helper created, but its stored configuration does not read back as reported."
+    if verified is not True:
+        # As edit and delete do: a create that does not read back is a write of unknown effect.
+        body.update(status="partial" if verified is False else "unknown", retry_safe=False, message=(
+            "Home Assistant reported the helper created, but its stored configuration does not read back as reported."
+            if verified is False else "Home Assistant reported the helper created, but its storage could not be read back."
+        ) + " Check the helper list before retrying; do not repeat the create.")
+        return _tool_uncertain(body), "invalid_request", f"helper:{helper_type}"
     return _tool_success(json.dumps(body, default=str)), "allowed", f"helper:{helper_type}"
 
 

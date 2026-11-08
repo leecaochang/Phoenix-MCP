@@ -14,6 +14,7 @@ from homeassistant.config_entries import ConfigEntryState
 from homeassistant.util.dt import utcnow
 
 from custom_components.phoenix_mcp.data import PhoenixData
+from custom_components.phoenix_mcp.esphome_builder import BuilderResult
 from custom_components.phoenix_mcp.helpers import content_hash
 from custom_components.phoenix_mcp.tools import esphome
 from custom_components.phoenix_mcp.tools.restore import async_restore_version
@@ -1038,6 +1039,23 @@ class TestFileReadsHideEntitiesAndValues:
         assert "it.printf" in _json(found)["matches"][0]["text"]
         assert "vault_door" not in _json(found)["matches"][0]["text"]
 
+    async def test_builder_output_hides_an_entity_and_keeps_file_names(self, hass, esphome_dir):
+        """Validate echoes the config and device logs print states; a compile log names sensor.cpp."""
+        hass.states.async_set("lock.vault_door", "locked")
+        hass.states.async_set("sensor.outdoor", "1")
+        (esphome_dir / "own.yaml").write_text(self.FILE)
+        log = ("[sensor:042] 'Vault' from lock.vault_door: locked\n"
+               "src/esphome/components/sensor/sensor.cpp:12: warning in light.h\n"
+               "  use_address: porch-light.local\n")
+        builder = FakeBuilder(**{"devices/validate": BuilderResult(output=log, success=True, exit_code=0)})
+        dash = SimpleNamespace(url="http://b", data={})
+        with patch(_DASHBOARD_PATCH, return_value=dash), \
+                patch("custom_components.phoenix_mcp.tools.esphome.async_builder_command", builder):
+            content, outcome, _ = await _call("validate_esphome_yaml", {"file": "own.yaml"}, _yaml_access_key(), hass)
+        output = _json(content)["output"]
+        assert outcome == "allowed" and "vault_door" not in output and "<redacted-entity>" in output
+        assert "sensor/sensor.cpp:12" in output and "light.h" in output and "porch-light.local" in output
+
     async def test_an_entity_the_key_can_read_stays(self, hass, esphome_dir):
         hass.states.async_set("lock.vault_door", "locked")
         (esphome_dir / "own.yaml").write_text(self.FILE)
@@ -1081,11 +1099,15 @@ class TestScrubComesBeforeTheBound:
             clipped = esphome._esphome_metadata_text(text, _yaml_access_key(), hass)
         assert "eyJ" not in clipped
 
-    def test_output_is_scrubbed_before_the_collector_bounds_it(self):
+    async def test_output_is_scrubbed_before_the_collector_bounds_it(self, hass):
         secret = "hunter2secretvalue"
-        text, truncated = esphome.collect_output_lines(
-            ["x" * 90 + secret, "y" * 200], 100, head_ratio=1.0, scrub_output=esphome._esphome_output_scrub({secret}))
-        assert truncated and "hunter2" not in text
+        hass.states.async_set("lock.vault_door", "locked")
+        view = esphome._esphome_entity_view(_yaml_access_key(), hass)
+        scrub = esphome._esphome_output_scrub({secret}, view, hass)
+        for line, hidden in ((secret, "hunter2"), (" lock.vault_door", "lock.vau")):
+            text, truncated = esphome.collect_output_lines(["x" * 90 + line, "y" * 200], 100, head_ratio=1.0,
+                                                           scrub_output=scrub)
+            assert truncated and hidden not in text
 
     async def test_a_commit_message_is_scrubbed_before_its_bound(self, hass, esphome_dir):
         secret = "housepassword1"

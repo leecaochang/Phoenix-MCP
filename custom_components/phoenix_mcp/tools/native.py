@@ -342,7 +342,7 @@ async def _mesa_gate_native(
             await _pending_or_inline(hass, data, access_key, outcome.approval), [], [])
     if outcome.decision == "deny":
         return _MesaGate(
-            (_tool_error("No accessible entities matched your request."), "denied", tool_name),
+            (_tool_refused_before_write("No accessible entities matched your request."), "denied", tool_name),
             [], [])
     return _MesaGate(None, outcome.entities, outcome.warnings)
 

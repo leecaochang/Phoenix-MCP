@@ -321,6 +321,30 @@ async def test_mesa_gate_remains_effective_and_approval_ends_batch(hass,companio
         assert not data.store.get_pending_approvals()
 
 
+async def test_a_confirm_refusal_with_no_registry_entry_reads_as_refused_when_the_turn_then_fails(hass,companion,monkeypatch):
+    """MESA refuses before dispatch, so a provider failure afterwards is not an unknown outcome."""
+    from custom_components.phoenix_mcp.mesa import async_setup_mesa
+    from custom_components.phoenix_mcp.mesa_core import MetadataOrigin, SemanticProfile
+    from homeassistant.helpers import entity_registry as er
+    data,access_key,_,_=companion
+    assert er.async_get(hass).async_get('light.selected') is None
+    await data.store.async_patch_settings(mesa_mode='enforced')
+    data.mesa = await async_setup_mesa(hass,'enforced')
+    data.mesa.store.set('light.selected',SemanticProfile.from_dict('light.selected',
+        {'semantic_profile':{'operational_boundaries':{'control_mode':'confirm'}}},default_origin=MetadataOrigin.USER))
+    blocked=[]
+    hass.bus.async_listen('phoenix_mcp_mesa_blocked',blocked.append)
+    # One control round and no answer: the next provider round fails.
+    scripted(monkeypatch,[[('light__HassLightSet',{'name':'light.selected','brightness':40})]])
+    with patch.object(ServiceRegistry,'async_call',AsyncMock()) as service:
+        result=payload(await rpc(hass,companion))
+    await hass.async_block_till_done()
+    service.assert_not_awaited()
+    assert result['status']=='refused', result
+    assert not data.agent_recovery.blocks(access_key.id)
+    assert [event.data['rule_applied'] for event in blocked]==['mesa:confirm_unbound']
+
+
 async def test_uncertain_prior_write_blocks_new_provider_turn(hass,companion,monkeypatch):
     data,access_key,_,_=companion
     await data.agent_recovery.begin(access_key.id,'light__HassLightSet','old')

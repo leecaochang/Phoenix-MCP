@@ -2374,7 +2374,8 @@ export function AgentCliWindow({
                                 const at = attachments.findIndex((item) => item.id === attachment.id);
                                 const panel = e.currentTarget.closest(".agentcli-window");
                                 setAttachments((current) => current.filter((item) => item.id !== attachment.id));
-                                window.requestAnimationFrame(() => {
+                                // The button's own window: a popped-out Chat runs frames while the page behind it is hidden.
+                                (e.currentTarget.ownerDocument.defaultView ?? window).requestAnimationFrame(() => {
                                   const left = [...(list?.querySelectorAll<HTMLElement>(".agentcli-attachment-remove") ?? [])];
                                   (left[Math.min(at, left.length - 1)] ?? panel?.querySelector<HTMLElement>(".agentcli-attach-btn"))?.focus();
                                 });

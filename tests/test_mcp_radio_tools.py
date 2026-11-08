@@ -20,6 +20,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.components.mqtt.const import ATTR_DISCOVERY_PAYLOAD
 from homeassistant.components.mqtt.models import DATA_MQTT
 from homeassistant.helpers import device_registry as dr
@@ -28,6 +29,7 @@ from homeassistant.util.dt import utcnow
 from pytest_homeassistant.common import MockConfigEntry
 
 import custom_components.phoenix_mcp.radio as radio
+from custom_components.phoenix_mcp.tool_common import ReportedFailure, UncertainOutcome
 import custom_components.phoenix_mcp.tools.radio as radio_tools
 from custom_components.phoenix_mcp.const import DOMAIN
 from tests.runtime_fixtures import mesa_off_store
@@ -2497,9 +2499,19 @@ class TestRemoveZigbeeDevice:
             "remove_zigbee_device", {"device_id": radio_env["z2m_bulb"]},
             _light_access_key(cap_radio_write="allow"), hass, _data(),
         )
-        assert res[1] == "allowed"
-        assert _body(res)["partial"] is True
+        # The leave request stays queued, so the removal is unknown and must not be retried.
+        assert res[1] == "invalid_request" and isinstance(res[0], UncertainOutcome)
+        assert _body(res)["status"] == "partial" and _body(res)["retry_safe"] is False
         assert _body(res)["verified"] is None
+
+    async def test_a_failure_home_assistant_reports_is_a_reported_failure(self, hass, radio_env, broker, monkeypatch):
+        hass.config.components.add("mqtt")
+        monkeypatch.setattr(radio, "async_remove_device", AsyncMock(side_effect=HomeAssistantError("busy")))
+        res = await _call_tool(
+            "remove_zigbee_device", {"device_id": radio_env["z2m_bulb"]},
+            _light_access_key(cap_radio_write="allow"), hass, _data(),
+        )
+        assert res[1] == "invalid_request" and isinstance(res[0], ReportedFailure)
 
     async def test_zha_allow_calls_remove_service(self, hass, radio_env, broker):
         calls = []

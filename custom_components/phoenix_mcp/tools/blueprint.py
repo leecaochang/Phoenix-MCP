@@ -16,6 +16,7 @@ import os
 import re
 from typing import Any
 
+from homeassistant.components.blueprint.errors import BlueprintInUse
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 
@@ -43,6 +44,7 @@ from ..tool_common import (
     _check_authority_before_dispatch,
     _recovery_failure,
     _tool_error,
+    _tool_refused_before_write,
     _tool_success,
     _tool_uncertain,
     _truncate,
@@ -654,6 +656,12 @@ async def _execute_delete_blueprint(
                     await recovery.mark(rid, "not_applied", error="delete_rejected")
                     return _tool_error(f"Failed to delete blueprint: {exc}"), "invalid_request", "delete_blueprint"
                 except WsDispatchError as exc:
+                    if isinstance(exc.__cause__, BlueprintInUse):
+                        # Core checks use before it removes the file, so nothing was deleted.
+                        await recovery.mark(rid, "not_applied", error="blueprint_in_use")
+                        return _tool_refused_before_write(
+                            "This blueprint is used by an automation or script, so nothing was deleted. "
+                            "Remove or change those first."), "invalid_request", "delete_blueprint"
                     await recovery.mark(rid, "unknown", error="delete_rejected")
                     return _tool_uncertain({
                         "status": "unknown", "recovery_id": rid, "retry_safe": False,

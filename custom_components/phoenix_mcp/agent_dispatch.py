@@ -43,17 +43,17 @@ async def dispatch_agent_tool(
             # A structured success is a dispatch receipt, not proof of physical
             # completion (queued jobs keep their own lifecycle). An executor
             # error may follow a partial action and remains unknown.
-            if isinstance(result, dict) and result.get("isError") is not True:
+            if isinstance(result, RefusedBeforeWrite):
+                # Server-owned proof that nothing was written, checked before the outcome
+                # string: the model gets the error back and there is no outcome to reconcile.
+                await recovery.finish(request_id)
+            elif isinstance(result, dict) and result.get("isError") is not True:
                 await recovery.received(request_id)
             elif isinstance(result, dict) and outcome in ("denied", "not_found"):
                 await recovery.received(request_id)
             elif isinstance(result, ReportedFailure):
                 # Home Assistant answered, and the model is told to check before repeating.
                 await recovery.received(request_id)
-            elif isinstance(result, RefusedBeforeWrite):
-                # Server-owned proof that nothing was written: the model gets the
-                # error back and there is no outcome to reconcile.
-                await recovery.finish(request_id)
             elif (isinstance(msg, dict) and isinstance(msg.get("error"), dict)
                   and msg["error"].get("code") == -32000):
                 msg["error"]["message"] = "Authority changed during dispatch. The action outcome is unknown; reconcile Home Assistant before retrying."

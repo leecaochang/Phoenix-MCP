@@ -100,7 +100,7 @@ from ..esphome_yaml import (
 from .. import yaml_includes
 
 from ..tool_common import (
-    MESA_DENIED_MESSAGE, _CAP_FORBIDDEN_MESSAGE, _gate, _pending_or_inline, _read_text_capped, _set_progress_status, _tool_error, _tool_success, _usable_path_arg, _with_mesa_advisory,
+    MESA_DENIED_MESSAGE, _CAP_FORBIDDEN_MESSAGE, _gate, _pending_or_inline, _read_text_capped, _set_progress_status, _tool_error, _tool_refused_before_write, _tool_success, _usable_path_arg, _with_mesa_advisory,
 )
 from ..request_authority import _approved_exec_ctx
 
@@ -984,9 +984,25 @@ def _esphome_scrubbed_json(body: Any, values: set[str]) -> str:
     return json.dumps(scrub_secret_data(body, values), default=str)
 
 
-def _esphome_output_scrub(values: set[str]) -> Callable[[str], str]:
+# The file names a compile log is full of (`sensor.cpp`, `light.h`) and the device's own host name
+# (`porch-light.local`) are not entity IDs. `home` stays out: `zone.home` is one.
+_BUILD_FILE_SUFFIXES = frozenset({
+    "a", "bin", "c", "cc", "cpp", "cxx", "elf", "h", "hh", "hpp", "hxx", "ino", "json", "ld", "log",
+    "map", "o", "py", "s", "so", "tcc", "txt", "yaml", "yml",
+    "arpa", "internal", "lan", "local", "localdomain",
+})
+
+
+def _esphome_builder_text(text: str, values: set[str], view: _EntityView, hass: HomeAssistant) -> str:
+    """Builder free text as a key reads it: secrets scrubbed, then entity IDs it may not read hidden."""
+    return redact_entity_ids_outside(
+        scrub_secret_values(text, values), view.visible, hass, domains=view.domains,
+        keep=lambda eid: eid.rsplit(".", 1)[1] in _BUILD_FILE_SUFFIXES)
+
+
+def _esphome_output_scrub(values: set[str], view: _EntityView, hass: HomeAssistant) -> Callable[[str], str]:
     """A scrub for Builder output, applied to each line before the collector bounds it."""
-    return lambda line: scrub_secret_values(line, values)
+    return lambda line: _esphome_builder_text(line, values, view, hass)
 
 
 def _esphome_page_limit(args: dict) -> int:
@@ -1029,11 +1045,12 @@ async def _tool_validate_esphome_yaml(
         return refusal
 
     raw, secret_values, values = await hass.async_add_executor_job(_esphome_read_for_migration, hass, path)
+    view = _esphome_entity_view(access_key, hass)
     try:
         res = await async_builder_command(
             hass, url, "devices/validate", {"configuration": rel, "show_secrets": False},
             timeout_seconds=ESPHOME_BUILDER_VALIDATE_TIMEOUT_SECONDS,
-            collect_output=True, scrub_output=_esphome_output_scrub(values),
+            collect_output=True, scrub_output=_esphome_output_scrub(values, view, hass),
         )
     except BuilderError as err:
         return _builder_refusal(err, f"esphome:{rel}")
@@ -1043,8 +1060,8 @@ async def _tool_validate_esphome_yaml(
         "valid": res.success,
         "exit_code": res.exit_code,
         # Validation errors quote the offending lines back, which can include a
-        # credential the file carries inline.
-        "output": scrub_secret_values(res.output, values),
+        # credential the file carries inline or an entity this key may not read.
+        "output": _esphome_builder_text(res.output, values, view, hass),
     }
     if res.output_truncated:
         body["output_truncated"] = True
@@ -1057,7 +1074,6 @@ async def _tool_validate_esphome_yaml(
     if raw is None:
         body["migration_unavailable"] = "The file could not be read and parsed, so it was not checked for migrations."
     else:
-        view = _esphome_entity_view(access_key, hass)
         body.update(await _esphome_migration_check(hass, url, rel, raw, secret_values, values, view))
     return _tool_success(json.dumps(body, default=str)), "allowed", f"esphome:{rel}"
 
@@ -1984,7 +2000,7 @@ class _EsphomeJobOutput(NamedTuple):
 
 
 async def _esphome_job_output(
-    hass: HomeAssistant, url: str, job: dict, values: set[str]
+    hass: HomeAssistant, url: str, job: dict, values: set[str], view: _EntityView
 ) -> _EsphomeJobOutput:
     """The job's log, fetched whichever way this job's state stores it.
 
@@ -1998,9 +2014,9 @@ async def _esphome_job_output(
         # a blank line between every line.
         text, truncated = collect_output_lines(
             job.get("output"), ESPHOME_BUILDER_JOB_PROGRESS_MAX_CHARS, head_ratio=0.0,
-            scrub_output=_esphome_output_scrub(values),
+            scrub_output=_esphome_output_scrub(values, view, hass),
         )
-        return _EsphomeJobOutput(scrub_secret_values(text, values), truncated)
+        return _EsphomeJobOutput(_esphome_builder_text(text, values, view, hass), truncated)
 
     try:
         res = await async_builder_command(
@@ -2008,7 +2024,7 @@ async def _esphome_job_output(
             timeout_seconds=ESPHOME_BUILDER_JOB_LOG_TIMEOUT_SECONDS,
             collect_output=True,
             max_chars=ESPHOME_BUILDER_JOB_OUTPUT_MAX_CHARS,
-            scrub_output=_esphome_output_scrub(values),
+            scrub_output=_esphome_output_scrub(values, view, hass),
         )
     except BuilderError:
         # The status is the answer the caller actually needs; a missing log is
@@ -2016,7 +2032,7 @@ async def _esphome_job_output(
         _LOGGER.debug("ESPHome job log replay failed", exc_info=True)
         return _EsphomeJobOutput("", False, available=False)
     armed = isinstance(res.result, dict) and res.result.get("queued_update_armed") is True
-    return _EsphomeJobOutput(scrub_secret_values(res.output, values), res.output_truncated, armed=armed)
+    return _EsphomeJobOutput(_esphome_builder_text(res.output, values, view, hass), res.output_truncated, armed=armed)
 
 
 async def _esphome_dependent_job(
@@ -2261,7 +2277,7 @@ async def _install_esphome_mesa_gate(
     if outcome.decision == "pending":
         return await _pending_or_inline(hass, data, access_key, outcome.approval)
     if outcome.decision == "deny":
-        return _tool_error(MESA_DENIED_MESSAGE), "denied", f"esphome:{rel}"
+        return _tool_refused_before_write(MESA_DENIED_MESSAGE), "denied", f"esphome:{rel}"
     return outcome.warnings
 
 
@@ -2470,11 +2486,11 @@ async def _tool_get_esphome_job(
     # steering only the tool a model was told to stop calling just moves its
     # polling loop here, spending the whole per-turn round budget.
     note = _ESPHOME_HEADLESS_STOP if client_ip in _ESPHOME_HEADLESS_CLIENT_IPS else None
-    return await _esphome_job_result(hass, url, job, note)
+    return await _esphome_job_result(hass, url, job, _esphome_entity_view(access_key, hass), note)
 
 
 async def _esphome_job_result(
-    hass: HomeAssistant, url: str, job: dict, unfinished_note: str | None = None
+    hass: HomeAssistant, url: str, job: dict, view: _EntityView, unfinished_note: str | None = None
 ) -> tuple[dict, str, str]:
     """Build the reply for one job. Shared so waiting returns the same shape.
 
@@ -2493,7 +2509,7 @@ async def _esphome_job_result(
         return _tool_success(json.dumps(body_analysis, default=str)), "allowed", f"esphome:{rel}"
     path = os.path.join(hass.config.config_dir, _ESPHOME_DIR, rel)
     values = await hass.async_add_executor_job(_esphome_scrub_values, hass, path)
-    out = await _esphome_job_output(hass, url, job, values)
+    out = await _esphome_job_output(hass, url, job, values, view)
 
     body: dict[str, Any] = {
         "job_id": job.get("job_id"),
@@ -2514,7 +2530,7 @@ async def _esphome_job_result(
     # The add-on's own failure text, from the same process that wrote the log,
     # so it gets the same scrub.
     if isinstance(job.get("error"), str) and job["error"]:
-        body["error"] = scrub_secret_values(job["error"], values)
+        body["error"] = _esphome_builder_text(job["error"], values, view, hass)
 
     # Only ever claim the device was flashed on the evidence of a COMPLETED
     # upload job. An install returns its compile job alone, so a finished compile
@@ -2631,7 +2647,7 @@ async def _tool_wait_for_esphome_job(
     if job.get("job_type") == "analyze_memory":
         # Nothing to wait for: the add-on drops the job and its report the moment
         # it ends, so a wait would only ever end on a vanished record.
-        return await _esphome_job_result(hass, url, job)
+        return await _esphome_job_result(hass, url, job, _esphome_entity_view(access_key, hass))
 
     started = job
     rel = job["configuration"]
@@ -2702,7 +2718,7 @@ async def _tool_wait_for_esphome_job(
     # One shared wording with get_esphome_job: two divergent versions of "stop
     # here" leave a gap a model can exploit.
     note = _ESPHOME_HEADLESS_STOP if client_ip in _ESPHOME_HEADLESS_CLIENT_IPS else None
-    content, outcome, resource = await _esphome_job_result(hass, url, current, note)
+    content, outcome, resource = await _esphome_job_result(hass, url, current, _esphome_entity_view(access_key, hass), note)
     return content, outcome, resource
 
 
@@ -2784,6 +2800,7 @@ async def _tool_get_esphome_device_logs(
 
     seconds = _esphome_capture_seconds(args)
     values = await hass.async_add_executor_job(_esphome_scrub_values, hass, path)
+    view = _esphome_entity_view(access_key, hass)
     _set_progress_status(
         f"Capturing {rel} device logs", total=float(seconds),
         key="agentchat.progress.esphomeLogs", params={"file": rel},
@@ -2793,7 +2810,7 @@ async def _tool_get_esphome_device_logs(
             hass, url, "devices/logs", {"configuration": rel},
             capture_seconds=seconds,
             max_chars=ESPHOME_BUILDER_JOB_OUTPUT_MAX_CHARS,
-            scrub_output=_esphome_output_scrub(values),
+            scrub_output=_esphome_output_scrub(values, view, hass),
         )
     except BuilderError as err:
         return _builder_refusal(err, f"esphome:{rel}")
@@ -2803,7 +2820,7 @@ async def _tool_get_esphome_device_logs(
     body: dict[str, Any] = {
         "file": rel,
         "captured_seconds": seconds,
-        "output": scrub_secret_values(res.output, values),
+        "output": _esphome_builder_text(res.output, values, view, hass),
     }
     if res.output_truncated:
         body["output_truncated"] = True
@@ -3209,6 +3226,7 @@ async def _tool_analyze_esphome_memory(
     if refusal is not None:
         return refusal
     values = await hass.async_add_executor_job(_esphome_scrub_values, hass, path)
+    view = _esphome_entity_view(access_key, hass)
     active = await _esphome_active_job(hass, url, rel)
     if active is not None:
         return (_tool_error(f"A firmware job for this file is {active.get('status')} (job_id "
@@ -3234,7 +3252,7 @@ async def _tool_analyze_esphome_memory(
             # The per-component summary prints first and the per-symbol detail runs on
             # for tens of thousands of lines, so the head is kept and the tail trimmed.
             collect_output=True, max_chars=ESPHOME_BUILDER_ANALYZE_OUTPUT_MAX_CHARS, head_ratio=0.75,
-            scrub_output=_esphome_output_scrub(values),
+            scrub_output=_esphome_output_scrub(values, view, hass),
         )
     except BuilderCommandError:
         return (_tool_error("The analysis ended before it could be followed, and the Device Builder keeps "
@@ -3253,11 +3271,11 @@ async def _tool_analyze_esphome_memory(
     payload = res.result if isinstance(res.result, dict) else {}
     status = payload.get("status")
     body: dict[str, Any] = {"file": rel, "job_id": job_id, "status": status,
-                            "exit_code": res.exit_code, "report": scrub_secret_values(res.output, values)}
+                            "exit_code": res.exit_code, "report": _esphome_builder_text(res.output, values, view, hass)}
     if res.output_truncated:
         body["report_truncated"] = True
     if isinstance(payload.get("error"), str) and payload["error"]:
-        body["error"] = scrub_secret_values(payload["error"], values)
+        body["error"] = _esphome_builder_text(payload["error"], values, view, hass)
     if status == "cancelled":
         body["note"] = ("Another build for this device started, and the Device Builder cancelled the "
                         "analysis to run it.")

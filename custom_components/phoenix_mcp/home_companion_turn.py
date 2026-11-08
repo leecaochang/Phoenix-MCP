@@ -42,6 +42,13 @@ from .tool_dispatch import _dispatch_mcp
 _LOGGER = logging.getLogger(__name__)
 
 
+def _refused_and_nothing_else(turn: Any) -> bool:
+    """Whether every control attempt was refused before dispatch, so a failure later changes nothing."""
+    evidence = turn.evidence
+    return bool(evidence.refused and not turn.write_started and not evidence.accepted
+                and not evidence.pending and not evidence.incomplete)
+
+
 def _result(status: str, message: str = "", *, outcomes: list[dict] | None = None,
             review_urls: list[str] | None = None, recovery_required: bool = False,
             language: object = None) -> tuple[dict, str, str]:
@@ -158,6 +165,8 @@ async def run_request(arguments: dict, access_key: Any, hass: HomeAssistant, dat
             guard()
         except TimeoutError:
             guard()
+            if _refused_and_nothing_else(turn):
+                return _result("refused", outcomes=turn.outcomes)
             return _result("outcome_unknown" if turn.write_started else "timeout", outcomes=turn.outcomes,
                            recovery_required=data.agent_recovery.blocks(access_key.id))
         if (result.outcome not in {TURN_OK, TURN_AUTHORITY_LOST} and not result.blocked_by_prior_action
@@ -169,6 +178,8 @@ async def run_request(arguments: dict, access_key: Any, hass: HomeAssistant, dat
             if data.agent_recovery.blocks(access_key.id):
                 return _result("outcome_unknown", outcomes=turn.outcomes, recovery_required=True)
         elif result.outcome != TURN_OK:
+            if _refused_and_nothing_else(turn) and not result.blocked_by_prior_action:
+                return _result("refused", outcomes=turn.outcomes)
             return _result(result.outcome, outcomes=turn.outcomes,
                            recovery_required=result.blocked_by_prior_action or data.agent_recovery.blocks(access_key.id))
         if result.review_urls or turn.evidence.pending:
@@ -212,6 +223,8 @@ async def run_request(arguments: dict, access_key: Any, hass: HomeAssistant, dat
         return _result(TURN_AUTHORITY_LOST)
     except Exception as exc:
         log_internal_failure(_LOGGER, "home_companion", exc)
+        if _refused_and_nothing_else(turn):
+            return _result("refused", outcomes=turn.outcomes)
         return _result("outcome_unknown" if turn.write_started else "provider_error", outcomes=turn.outcomes,
                        recovery_required=data.agent_recovery.blocks(access_key.id))
     finally:

@@ -23,6 +23,7 @@ from tests.runtime_fixtures import mesa_off_store
 
 from custom_components.phoenix_mcp.data import PhoenixData
 from custom_components.phoenix_mcp.tool_catalog import _EXECUTOR_REGISTRY
+from custom_components.phoenix_mcp.tool_common import UncertainOutcome
 from custom_components.phoenix_mcp.tool_dispatch import _call_tool
 from custom_components.phoenix_mcp.access_key_store import PermissionNode, PermissionTree, AccessKeyRecord
 from custom_components.phoenix_mcp.version_store import VersionStore
@@ -104,8 +105,24 @@ class TestCreateHelper:
             content, outcome, _ = await _call(
                 "create_helper", {"helper_type": "input_boolean", "config": {"name": "Porch"}}, _access_key(), hass)
         body = _json(content)
-        assert outcome == "allowed" and body["verified"] is verified and body["helper"]["name"] == "Porch"
-        assert ("note" in body) is (verified is False)
+        # As an edit that does not read back: the write may have landed, so it is uncertain, never a success.
+        assert outcome == "invalid_request" and content["isError"] and isinstance(content, UncertainOutcome)
+        assert body["verified"] is verified and body["helper"]["name"] == "Porch" and body["retry_safe"] is False
+        assert body["status"] == ("partial" if verified is False else "unknown")
+
+    async def test_a_reported_field_that_reads_back_differently_is_uncertain(self, hass, helper_env, hass_admin_user):
+        """A list may add derived fields, but each field the create reported must read back as reported."""
+        from custom_components.phoenix_mcp.tools import helper as helper_module
+        real = helper_module._storage_helper_rows
+
+        async def changed(hass, helper_type):
+            return [{**row, "name": "Not Porch"} for row in await real(hass, helper_type)]
+
+        with patch.object(helper_module, "_storage_helper_rows", changed):
+            content, outcome, _ = await _call(
+                "create_helper", {"helper_type": "input_boolean", "config": {"name": "Porch"}}, _access_key(), hass)
+        assert outcome == "invalid_request" and isinstance(content, UncertainOutcome)
+        assert _json(content)["status"] == "partial"
 
     async def test_bad_type(self, hass, helper_env, hass_admin_user):
         _, outcome, _ = await _call(

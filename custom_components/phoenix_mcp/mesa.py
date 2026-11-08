@@ -1768,7 +1768,13 @@ async def async_apply_mesa_to_call(
             if APPROVAL_TARGETS_KEY not in saved_args:
                 saved_args = bind_targets(saved_args, verdict.confirm + verdict.allowed, hass)
                 if not targets_bound(saved_args):
-                    return MesaGateOutcome(decision="deny", blocked=verdict.blocked, warnings=verdict.warnings)
+                    # An approval binds registry identities; name what has none, so the refusal is
+                    # fired and audited like any other block.
+                    registry = er_mod.async_get(hass)
+                    unbound = [(entity_id, "mesa:confirm_unbound",
+                                "Needs approval, but has no registry entry an approval can be bound to.")
+                               for entity_id in verdict.confirm + verdict.allowed if registry.async_get(entity_id) is None]
+                    return MesaGateOutcome(decision="deny", blocked=[*verdict.blocked, *unbound], warnings=verdict.warnings)
             diff = bound_preview(diff, saved_args)
         approval = await async_create_mesa_approval(
             hass,

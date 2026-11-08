@@ -33,7 +33,7 @@ from ..policy_engine import Permission, resolve, resolve_read
 from ..request_authority import AuthorityChangedError, check_request_authority, dispatch_request_id, mark_dispatch_started
 from ..access_key_store import AccessKeyRecord
 from ..tool_common import (
-    _gate, _pending_or_inline, _tool_error, _tool_success, fitted_offset_page, offset_page, redaction_sentinel_path, _tool_pending, _approval_notifies,
+    _gate, _pending_or_inline, _tool_error, _tool_success, _tool_uncertain, fitted_offset_page, offset_page, redaction_sentinel_path, _tool_pending, _approval_notifies,
 )
 from ..request_authority import _approved_exec_ctx
 from ..tool_contracts import normalize_tool_args
@@ -521,10 +521,11 @@ def _calendar_result(receipt: dict, access_key: AccessKeyRecord, hass: HomeAssis
     body.setdefault("verified", None)
     if receipt["after"] is not None:
         body["after"] = {**receipt["after"], "content_hash": content_hash(receipt["after"])}
-    result = _tool_success(json.dumps(_safe_calendar_data(body, access_key, hass)))
+    safe = _safe_calendar_data(body, access_key, hass)
     if error:
-        result["isError"] = True
-    return result, "invalid_request" if error else "allowed", receipt["entity_id"]
+        # Dispatch raised or the read-back failed: the event may have changed either way.
+        return _tool_uncertain(safe), "invalid_request", receipt["entity_id"]
+    return _tool_success(json.dumps(safe)), "allowed", receipt["entity_id"]
 
 
 async def _execute_create_calendar_event(args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData) -> tuple[dict, str, str]:

@@ -93,6 +93,9 @@ _QUOTED_ASSIGNMENT_RE = re.compile(
     r"""(["'])(?:[^\\\n]|\\.){0,4096}?\3"""
 )
 
+# The opening of a call, `set_credentials(`: a credential-named one has every quoted argument masked.
+_CALL_OPEN_RE = re.compile(r"(?<![\w\-])([A-Za-z_][\w\-]{0,127})\s{0,16}\(")
+_CALL_SCAN_CHARS = 4096
 _SCRUB_MARK_RE = re.compile(r"<(?:redacted|token|phoenix-access-key)>")
 _SCALAR_PROPERTIES_RE = re.compile(r"(?:[&!]\S*\s+)+")
 _LINE_BREAK_RE = re.compile("[\r\n\x85\u2028\u2029]")
@@ -231,7 +234,8 @@ def _holds_no_value(node: yaml.ScalarNode) -> bool:
     """Return whether a scalar has nothing to hide: empty, a flag, or a reference elsewhere."""
     # An option below `encryption:` such as allow_plaintext_upload is a flag. `!env_var NAME
     # default` carries a value of its own, and !lambda holds code.
-    if node.tag == "!env_var":
+    if node.tag in ("!env_var", "!secret"):
+        # A reference is one name; more words are a value written after the tag.
         return len(node.value.split()) == 1
     if not node.value:
         # An unquoted credential starting with & or ! parses as an anchor or a tag on nothing.
@@ -289,7 +293,40 @@ def _scrubbed(text: str, secret_key: Callable[[str], bool]) -> str:
     out = _URL_USERINFO_RE.sub(f"://{REDACTION_SENTINEL}@", out)
     out = _URL_PARAM_RE.sub(parameter, out)
     out = _BEARER_RE.sub(lambda match: match[1] + REDACTION_SENTINEL, out)
-    return _QUOTED_ASSIGNMENT_RE.sub(assignment, out)
+    return _credential_call_arguments(_QUOTED_ASSIGNMENT_RE.sub(assignment, out), secret_key)
+
+
+def _credential_call_arguments(text: str, secret_key: Callable[[str], bool]) -> str:
+    """Mask every quoted argument of a credential-named call, not only its first.
+
+    One forward pass: a call's arguments end at `)` or a line break, read at most
+    _CALL_SCAN_CHARS, and a call opening inside text already read is skipped.
+    """
+    parts: list[str] = []
+    done = 0
+    for match in _CALL_OPEN_RE.finditer(text):
+        if match.start() < done or not secret_key(match[1]):
+            continue
+        parts.append(text[done:match.end()])
+        index, stop = match.end(), min(len(text), match.end() + _CALL_SCAN_CHARS)
+        while index < stop and text[index] not in ")\n":
+            quote = text[index]
+            if quote not in "\"'":
+                parts.append(quote)
+                index += 1
+                continue
+            close = index + 1
+            while close < stop and text[close] not in (quote, "\n"):
+                close += 2 if text[close] == "\\" else 1
+            if close >= stop or text[close] != quote:
+                parts.append(text[index:close])
+                index = close
+                break
+            parts.append(f"{quote}{REDACTION_SENTINEL}{quote}")
+            index = close + 1
+        done = index
+    parts.append(text[done:])
+    return "".join(parts)
 
 
 def _credential_forms(value: str, source: str) -> set[str]:

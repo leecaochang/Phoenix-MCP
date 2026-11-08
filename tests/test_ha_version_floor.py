@@ -201,6 +201,10 @@ KNOWN_IMPORTS: dict[str, dict[str, str]] = {
         "async_get_clientsession": "0.0.0",
     },
     "homeassistant.helpers.entity_component": {"DATA_INSTANCES": "2026.7.0"},
+    "homeassistant.components.blueprint.errors": {
+        # Older than any claimed floor; verified in 2026.7.0.
+        "BlueprintInUse": "0.0.0",
+    },
     "homeassistant.helpers.entity": {
         "DeviceInfo": "0.0.0",
         # Older than any claimed floor; verified in 2026.7.0.

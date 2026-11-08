@@ -41,7 +41,7 @@ from ..capability import effective_cap
 from ..redaction import _scrub_log_text
 from .discovery import _accessible_entity_ids
 from ..tool_common import (
-    MESA_DENIED_MESSAGE, _CAP_FORBIDDEN_MESSAGE, _gate, _mesa_confirm_annotation, _pending_or_inline, _record_version, _set_progress_status, _tool_error, _tool_success, _truncate, _with_mesa_advisory,
+    MESA_DENIED_MESSAGE, _CAP_FORBIDDEN_MESSAGE, _gate, _mesa_confirm_annotation, _pending_or_inline, _record_version, _set_progress_status, _tool_error, _tool_refused_before_write, _tool_reported_failure, _tool_success, _tool_uncertain, _truncate, _with_mesa_advisory,
 )
 from ..request_authority import _approved_exec_ctx
 from ..policy_engine import (
@@ -617,7 +617,7 @@ async def _radio_device_mesa_gate(
     warnings: list[str] = []
     if unjudged and data.store.get_settings().mesa_mode != MESA_MODE_OFF:
         if any(unresolved_context_refused(data, device_id) for device_id in unjudged):
-            return _tool_error(MESA_DENIED_MESSAGE), "denied", resource
+            return _tool_refused_before_write(MESA_DENIED_MESSAGE), "denied", resource
         note_mesa_advisory([UNRESOLVED_CONTEXT_WARNING])
         warnings = [UNRESOLVED_CONTEXT_WARNING]
         if not entities:
@@ -644,7 +644,7 @@ async def _radio_device_mesa_gate(
     if outcome.decision == "pending":
         return await _pending_or_inline(hass, data, access_key, outcome.approval)
     if outcome.decision == "deny":
-        return _tool_error(MESA_DENIED_MESSAGE), "denied", resource
+        return _tool_refused_before_write(MESA_DENIED_MESSAGE), "denied", resource
     return [*warnings, *visible_reach_warnings(outcome.warnings, CallReach(entities), access_key, hass)]
 
 
@@ -3286,18 +3286,15 @@ async def _remove_zigbee_device(
     except RadioError as exc:
         return _tool_error(str(exc)), "invalid_request", device.id
     except TimeoutError:
-        # Removing an unreachable device can outlast the window; the leave
-        # request stays queued, so report partial rather than failure.
-        body = {
-            "success": True,
-            "partial": True,
-            "verified": None,
+        # Removing an unreachable device can outlast the window; the leave request stays queued,
+        # so the outcome is unknown, never a failure that invites a retry.
+        return _tool_uncertain({
+            "status": "partial", "retry_safe": False, "verified": None,
             "message": "Removal started; the network drops the device when it responds or times out.",
-        }
-        return _tool_success(json.dumps(body)), "allowed", device.id
+        }), "invalid_request", device.id
     except HomeAssistantError as exc:
         _LOGGER.error("remove_zigbee_device failed for %s: %s", ieee, _scrub_log_text(str(exc)))
-        return _tool_error("Failed to remove the device."), "denied", device.id
+        return _tool_reported_failure("Failed to remove the device."), "invalid_request", device.id
     verified = await radio_backend.async_confirm_device_removed(hass, backend, ieee)
     return (
         _tool_success(json.dumps({

@@ -13,6 +13,7 @@ from homeassistant.util.dt import utcnow
 
 from custom_components.phoenix_mcp import entity_registration as observation
 from custom_components.phoenix_mcp.const import DOMAIN
+from custom_components.phoenix_mcp.tool_common import UncertainOutcome
 from custom_components.phoenix_mcp.data import PhoenixData
 from custom_components.phoenix_mcp.tool_dispatch import _call_tool
 from custom_components.phoenix_mcp.tools.restore import async_restore_version
@@ -258,6 +259,8 @@ async def test_reload_failure_preserves_saved_write_and_safe_error(hass, write_e
     result, outcome, _ = await _call_tool("create_script", {"script_id": "stored", "config": {"sequence": []}}, _access_key(), hass, write_env)
     body = _body(result)
     assert result["isError"] and outcome == "invalid_request"
+    # The save landed, so an approval closes as interrupted rather than as a write that did nothing.
+    assert isinstance(result, UncertainOutcome) and body["status"] == "partial" and body["retry_safe"] is False
     assert body["write_success"] is True and body["reload_status"] == "failed"
     assert body["registration"]["status"] == "not_checked"
     assert "hidden-value" not in body["error"] and "private internal detail" not in body["error"]

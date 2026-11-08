@@ -26,6 +26,7 @@ from .redaction import redact_inaccessible_entity_ids_in_text, redact_secrets_in
 from .home_companion_response import ResponseEvidence
 from .policy_engine import resolve_intent_entities
 from .request_authority import check_request_authority
+from .tool_common import RefusedBeforeWrite
 from .tools.native import validate_native_control_args
 
 _LOGGER = logging.getLogger(__name__)
@@ -43,6 +44,8 @@ class CompanionTurn:
     evidence: ResponseEvidence = field(default_factory=ResponseEvidence)
     calls: int = 0
     write_started: bool = False
+    # Control writes admitted and not yet refused before dispatch; write_started follows it.
+    writes_open: int = 0
     writes: set[str] = field(default_factory=set)
     outcomes: list[dict] = field(default_factory=list)
 
@@ -121,6 +124,7 @@ def authorize_call(access_key: Any, name: str, arguments: Any) -> str | None:
             return "Do not repeat or replace a completed, failed or refused action within this request."
         turn.writes.add(signature)
         turn.write_started = True
+        turn.writes_open += 1
     turn.calls += 1
     return None
 
@@ -130,6 +134,10 @@ def record_outcome(access_key: Any, name: str, outcome: str, result: dict | None
     turn = _turn.get()
     if internal_turn(access_key) and turn is not None:
         turn.outcomes.append({"tool": name, "outcome": outcome})
+        if name in HOME_COMPANION_CONTROL_TOOLS and isinstance(result, RefusedBeforeWrite):
+            # Refused before dispatch (a MESA or scope refusal): this one changed nothing.
+            turn.writes_open -= 1
+            turn.write_started = turn.writes_open > 0
         turn.evidence.observe(name, outcome, result, arguments)
         if hass is not None:
             registry, areas, devices = er.async_get(hass), ar.async_get(hass), device_registry_snapshot(hass)

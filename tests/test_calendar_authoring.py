@@ -12,6 +12,7 @@ from homeassistant.helpers import entity_registry as er
 
 from custom_components.phoenix_mcp import tool_dispatch
 from custom_components.phoenix_mcp.audit import AuditLog
+from custom_components.phoenix_mcp.tool_common import UncertainOutcome
 from custom_components.phoenix_mcp.const import DOMAIN
 from custom_components.phoenix_mcp.data import PhoenixData
 from custom_components.phoenix_mcp.helpers import content_hash
@@ -315,7 +316,7 @@ async def test_readback_failure_does_not_repeat_successful_dispatch(calendar_env
         return await original(*args)
     monkeypatch.setattr(calendar_env[3], 'async_get_events', read)
     result = await call(calendar_env, 'create_calendar_event', CREATE)
-    assert result[1] == 'invalid_request'
+    assert result[1] == 'invalid_request' and isinstance(result[0], UncertainOutcome)
     assert payload(result)['status'] == 'applied'
     assert len(calendar_env[3].calls) == 1
     assert payload(await call(calendar_env, 'get_calendar_write', {'entity_id': 'calendar.test', 'receipt_id': payload(result)['receipt_id']}))['status'] == 'applied'

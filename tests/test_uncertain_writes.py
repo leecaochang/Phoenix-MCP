@@ -83,6 +83,18 @@ def test_a_body_claiming_no_outcome_never_reaches_a_plain_result(path):
                 pytest.fail(f"{path.name}:{inner.lineno}: {name} carries a status of partial or unknown")
 
 
+@pytest.mark.parametrize("path", _sources(), ids=lambda path: str(path.relative_to(ROOT)))
+def test_no_result_is_turned_into_an_error_by_hand(path):
+    """Setting isError on a success hides an applied write from the approve path, which reads the marker type."""
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+    for node in ast.walk(tree):
+        targets = node.targets if isinstance(node, ast.Assign) else []
+        for target in targets:
+            if (isinstance(target, ast.Subscript) and isinstance(target.slice, ast.Constant)
+                    and target.slice.value == "isError"):
+                pytest.fail(f"{path.name}:{node.lineno}: sets isError by hand; return _tool_uncertain or _tool_error")
+
+
 def _plain_error_text(call: ast.Call) -> str:
     return " ".join(str(node.value) for node in ast.walk(call)
                     if isinstance(node, ast.Constant) and isinstance(node.value, str))

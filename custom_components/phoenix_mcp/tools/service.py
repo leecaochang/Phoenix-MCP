@@ -537,7 +537,7 @@ async def _execute_call_service(
         # one definition, so the two kinds of gate cannot answer differently.
         return await _pending_or_inline(hass, data, access_key, mesa_outcome.approval)
     if mesa_outcome.decision == "deny":
-        return _tool_error(MESA_DENIED_MESSAGE), "denied", resource
+        return _tool_refused_before_write(MESA_DENIED_MESSAGE), "denied", resource
     check_request_authority()
     if not reach.every_target:
         permitted_entities = mesa_outcome.entities

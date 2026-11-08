@@ -164,6 +164,27 @@ describe("Agent Chat image attachments", () => {
     expect(screen.queryByRole("alert")).toBeNull();
   });
 
+  it("moves focus after a removal in a popped-out Chat while the main page is hidden", async () => {
+    const iframe = document.createElement("iframe");
+    document.body.appendChild(iframe);
+    const popup = iframe.contentWindow!;
+    vi.spyOn(popup, "focus").mockImplementation(() => {});
+    vi.spyOn(window, "open").mockReturnValue(popup);
+    await openWindow();
+    fireEvent.click(screen.getByRole("button", { name: "Pop Out to a Separate Window" }));
+    await waitFor(() => expect(popup.document.querySelector("textarea")).not.toBeNull());
+    // A hidden page runs no frames; only the popup's run.
+    vi.spyOn(window, "requestAnimationFrame").mockImplementation(() => 0);
+    const popupFrames: FrameRequestCallback[] = [];
+    vi.spyOn(popup, "requestAnimationFrame").mockImplementation((callback) => popupFrames.push(callback));
+    paste(popup.document.querySelector("textarea")!, [file("a.png"), file("b.png"), file("c.png")]);
+    await waitFor(() => expect(popup.document.querySelectorAll(".agentcli-attachment")).toHaveLength(3));
+    fireEvent.click(popup.document.querySelector("[aria-label='Remove b.png']")!);
+    act(() => { for (const callback of popupFrames.splice(0)) callback(0); });
+    expect(popup.document.activeElement?.getAttribute("aria-label")).toBe("Remove c.png");
+    iframe.remove();
+  });
+
   it("drops pending images with /clear", async () => {
     const { textarea } = await openWindow();
     paste(textarea, [file("a.png"), file("b.png")]);

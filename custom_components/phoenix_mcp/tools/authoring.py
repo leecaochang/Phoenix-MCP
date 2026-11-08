@@ -98,10 +98,10 @@ async def _finish_entity_write(
                 else "Internal reload error. Check HA logs for details."
             ),
             message="Configuration saved, but reload failed. Inspect the saved configuration and HA logs before retrying reload; do not repeat the create operation.",
+            status="partial", retry_safe=False,
         )
-        result = _tool_success(json.dumps(body, default=str))
-        result["isError"] = True
-        return result, "invalid_request", tool_name
+        # The save landed, so an approval closes as interrupted, never as a write that did nothing.
+        return _tool_uncertain(body), "invalid_request", tool_name
 
     try:
         body["registration"] = await async_observe_registration(hass, access_key, domain, storage_id)

@@ -206,7 +206,7 @@ Allowed by: [{{label:caps.cap_filesystem.label}}](guide:window.capabilities#file
 
 Agents read and search ESPHome device configuration, with passwords, keys, every request header value, credentials in web addresses and comments that mention them masked. With the ESPHome Device Builder add-on, they can also validate, compile, read device logs, analyse memory and check connections. Without the add-on, only reading and searching remain.
 
-A value from secrets.yaml is masked wherever it appears, even inside a web address or a comment. Entity IDs the key can't read show as `<redacted-entity>`. No agent can read or install a file with secret in its name.
+A value from secrets.yaml is masked wherever it appears, even inside a web address or a comment. Entity IDs the key can't read show as `<redacted-entity>`, in files and in the Device Builder's output and logs. No agent can read or install a file with secret in its name.
 
 Phoenix works out a file's device from the file name, the device name it states and any `use_address` or static IP. A key limited to some devices reads only their files. A file that states its own name and matches no device follows the capability alone.
 

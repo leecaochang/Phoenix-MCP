@@ -65,6 +65,8 @@ SHAPES = {
     "repeated data uri": lambda n: "data:" * (n // 5),
     "secret prefix then dashes": lambda n: "sk-" + "-" * n + "!",
     "credential call openings": lambda n: "password(" * (n // 9),
+    "credential call open arguments": lambda n: 'set_credentials("a", ' * (n // 21),
+    "credential call unclosed quote": lambda n: 'set_password("' + "a" * n,
     "credential array openings": lambda n: "key[" * (n // 4),
     "credential then open quote": lambda n: 'password "' * (n // 10),
     "url parameters": lambda n: "?a=" * (n // 3),
