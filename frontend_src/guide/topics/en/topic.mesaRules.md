@@ -3,6 +3,8 @@
 ---
 MESA checks every action an agent takes on a device, after the access key has allowed it. A profile describes how careful to be with what it covers. This page explains how profiles at different levels add up, and what happens when an action breaks one.
 
+MESA is an open specification. Phoenix includes mesa-core, its reference implementation, which you can read on [GitHub](https://github.com/leecaochang/mesa-core).
+
 ## Levels {#levels}
 
 A profile covers one of these levels. When an agent acts on an entity, MESA gathers every profile that covers it, most specific first:

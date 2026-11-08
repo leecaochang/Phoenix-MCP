@@ -9,7 +9,7 @@
 
 [English](README.md) | [Español](README.es.md) | [Français](README.fr.md) | [Italiano](README.it.md) | [Deutsch](README.de.md) | [Nederlands](README.nl.md) | [Polski](README.pl.md) | [简体中文](README.zh-CN.md) | [繁體中文](README.zh-Hant.md) | [日本語](README.ja.md) | **한국어** | [Русский](README.ru.md) | [Svenska](README.sv.md) | [Dansk](README.da.md) | [Norsk Bokmål](README.nb.md) | [Suomi](README.fi.md)
 
-Phoenix MCP는 AI 앱을 도구 및 데이터에 연결하는 개방형 표준인 MCP(Model Context Protocol)를 통해 AI 에이전트에 안전하고 제한된 Home Assistant 접근을 제공합니다. AI를 사용할 때 보안과 안전은 매우 중요하며, Phoenix MCP는 수개월에 걸친 개발과 보안 검토를 거쳤습니다. 각 에이전트는 고유한 액세스 키를 가지며, 허용한 엔티티와 기능으로만 제한됩니다. 추가 안전 계층(MESA)은 액세스 키에 부여된 권한과 관계없이 선택한 엔티티를 확인 전용 또는 접근 금지로 만들 수 있습니다.
+Phoenix MCP는 AI 앱을 도구 및 데이터에 연결하는 개방형 표준인 MCP(Model Context Protocol)를 통해 AI 에이전트에 안전하고 제한된 Home Assistant 접근을 제공합니다. AI를 사용할 때 보안과 안전은 매우 중요하며, Phoenix MCP는 수개월에 걸친 개발과 보안 검토를 거쳤습니다. 각 에이전트는 고유한 액세스 키를 가지며, 허용한 엔티티와 기능으로만 제한됩니다. 추가 안전 계층([MESA](https://github.com/leecaochang/mesa-core))은 액세스 키에 부여된 권한과 관계없이 선택한 엔티티를 확인 전용 또는 접근 금지로 만들 수 있습니다.
 
 Phoenix MCP는 Home Assistant 내부에서만 실행되므로 별도의 서비스를 배포할 필요가 없습니다. Claude Code, Cursor, ChatGPT, Gemini 등 이미 사용 중인 앱을 쓰거나, 원하는 AI 제공자를 선택해 Home Assistant 안에서 바로 채팅할 수 있습니다. 제공자는 클라우드든 Ollama를 통한 로컬이든 상관없습니다.
 

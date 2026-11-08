@@ -9,7 +9,7 @@
 
 [English](README.md) | [Español](README.es.md) | [Français](README.fr.md) | [Italiano](README.it.md) | [Deutsch](README.de.md) | [Nederlands](README.nl.md) | [Polski](README.pl.md) | [简体中文](README.zh-CN.md) | **繁體中文** | [日本語](README.ja.md) | [한국어](README.ko.md) | [Русский](README.ru.md) | [Svenska](README.sv.md) | [Dansk](README.da.md) | [Norsk Bokmål](README.nb.md) | [Suomi](README.fi.md)
 
-Phoenix MCP 透過 MCP（Model Context Protocol，一種連接 AI 應用程式與工具和資料的開放標準）為您的 AI 智慧體提供安全、受限的 Home Assistant 存取。使用 AI 時，安全至關重要，Phoenix MCP 經過了許多個月的開發和安全審查。每個智慧體都有自己的存取金鑰，只能使用您允許的實體和能力。額外的安全層（MESA）可以讓選定的實體必須經您確認才能操作，或完全禁止操作，無論存取金鑰被授予了什麼權限。
+Phoenix MCP 透過 MCP（Model Context Protocol，一種連接 AI 應用程式與工具和資料的開放標準）為您的 AI 智慧體提供安全、受限的 Home Assistant 存取。使用 AI 時，安全至關重要，Phoenix MCP 經過了許多個月的開發和安全審查。每個智慧體都有自己的存取金鑰，只能使用您允許的實體和能力。額外的安全層（[MESA](https://github.com/leecaochang/mesa-core)）可以讓選定的實體必須經您確認才能操作，或完全禁止操作，無論存取金鑰被授予了什麼權限。
 
 Phoenix MCP 完全在 Home Assistant 內執行，無需部署單獨的服務。您可以使用現有的應用程式，例如 Claude Code、Cursor、ChatGPT 或 Gemini，也可以直接在 Home Assistant 內，透過您選擇的 AI 供應商聊天，供應商可以在雲端，也可以透過 Ollama 在本機執行。
 

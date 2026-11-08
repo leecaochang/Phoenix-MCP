@@ -3,8 +3,8 @@
   "locales": {
     "README.da.md": {
       "intro.block.1": {
-        "source": "fc7449e76fdc",
-        "translation": "d4a053fff5df"
+        "source": "a7ff888383a7",
+        "translation": "b38787846e1b"
       },
       "intro.block.2": {
         "source": "54047009779e",
@@ -129,8 +129,8 @@
     },
     "README.de.md": {
       "intro.block.1": {
-        "source": "fc7449e76fdc",
-        "translation": "571a6f6b6729"
+        "source": "a7ff888383a7",
+        "translation": "c75a9b8665e8"
       },
       "intro.block.2": {
         "source": "54047009779e",
@@ -255,8 +255,8 @@
     },
     "README.es.md": {
       "intro.block.1": {
-        "source": "fc7449e76fdc",
-        "translation": "3454c6d6b6ff"
+        "source": "a7ff888383a7",
+        "translation": "a28aeb4a7e23"
       },
       "intro.block.2": {
         "source": "54047009779e",
@@ -381,8 +381,8 @@
     },
     "README.fi.md": {
       "intro.block.1": {
-        "source": "fc7449e76fdc",
-        "translation": "9847dc2ab37b"
+        "source": "a7ff888383a7",
+        "translation": "87dde2a99345"
       },
       "intro.block.2": {
         "source": "54047009779e",
@@ -507,8 +507,8 @@
     },
     "README.fr.md": {
       "intro.block.1": {
-        "source": "fc7449e76fdc",
-        "translation": "3d9806f555a2"
+        "source": "a7ff888383a7",
+        "translation": "0cb2b1fd5929"
       },
       "intro.block.2": {
         "source": "54047009779e",
@@ -633,8 +633,8 @@
     },
     "README.it.md": {
       "intro.block.1": {
-        "source": "fc7449e76fdc",
-        "translation": "41303aca5810"
+        "source": "a7ff888383a7",
+        "translation": "440c785c0f91"
       },
       "intro.block.2": {
         "source": "54047009779e",
@@ -759,8 +759,8 @@
     },
     "README.ja.md": {
       "intro.block.1": {
-        "source": "fc7449e76fdc",
-        "translation": "9e3dce036565"
+        "source": "a7ff888383a7",
+        "translation": "b0730d3e02c4"
       },
       "intro.block.2": {
         "source": "54047009779e",
@@ -885,8 +885,8 @@
     },
     "README.ko.md": {
       "intro.block.1": {
-        "source": "fc7449e76fdc",
-        "translation": "2a8eea7083d7"
+        "source": "a7ff888383a7",
+        "translation": "c96b18d8b9a4"
       },
       "intro.block.2": {
         "source": "54047009779e",
@@ -1011,8 +1011,8 @@
     },
     "README.nb.md": {
       "intro.block.1": {
-        "source": "fc7449e76fdc",
-        "translation": "0364a8e06cae"
+        "source": "a7ff888383a7",
+        "translation": "276bf75e53ff"
       },
       "intro.block.2": {
         "source": "54047009779e",
@@ -1137,8 +1137,8 @@
     },
     "README.nl.md": {
       "intro.block.1": {
-        "source": "fc7449e76fdc",
-        "translation": "50083fe12d10"
+        "source": "a7ff888383a7",
+        "translation": "b664386628eb"
       },
       "intro.block.2": {
         "source": "54047009779e",
@@ -1263,8 +1263,8 @@
     },
     "README.pl.md": {
       "intro.block.1": {
-        "source": "fc7449e76fdc",
-        "translation": "14f9946efa16"
+        "source": "a7ff888383a7",
+        "translation": "c94cdb7de5b6"
       },
       "intro.block.2": {
         "source": "54047009779e",
@@ -1389,8 +1389,8 @@
     },
     "README.ru.md": {
       "intro.block.1": {
-        "source": "fc7449e76fdc",
-        "translation": "188485c2682d"
+        "source": "a7ff888383a7",
+        "translation": "51f79e83fd39"
       },
       "intro.block.2": {
         "source": "54047009779e",
@@ -1515,8 +1515,8 @@
     },
     "README.sv.md": {
       "intro.block.1": {
-        "source": "fc7449e76fdc",
-        "translation": "e6551eb9a2e0"
+        "source": "a7ff888383a7",
+        "translation": "4a59d1ff7866"
       },
       "intro.block.2": {
         "source": "54047009779e",
@@ -1641,8 +1641,8 @@
     },
     "README.zh-CN.md": {
       "intro.block.1": {
-        "source": "fc7449e76fdc",
-        "translation": "21e7117c4cd9"
+        "source": "a7ff888383a7",
+        "translation": "758abf7c9405"
       },
       "intro.block.2": {
         "source": "54047009779e",
@@ -1767,8 +1767,8 @@
     },
     "README.zh-Hant.md": {
       "intro.block.1": {
-        "source": "fc7449e76fdc",
-        "translation": "ef9a19a83a62"
+        "source": "a7ff888383a7",
+        "translation": "1257264a1d43"
       },
       "intro.block.2": {
         "source": "54047009779e",

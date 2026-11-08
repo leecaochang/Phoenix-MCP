@@ -26,7 +26,7 @@ function guideTopics(): Plugin {
       const labelExists = (key: string) => labelOf(key) !== undefined;
       const fileExists = (path: string) => !path.startsWith("/") && !path.includes("..") && existsSync(resolve(__dirname, path));
       const bundles: GuideBundle[] = [];
-      for (const language of readdirSync(GUIDE_TOPICS)) {
+      for (const language of GUIDE_LANGUAGE_FOLDERS) {
         const dir = resolve(GUIDE_TOPICS, language);
         const files = readdirSync(dir).filter((f) => f.endsWith(".md")).sort().map((f) => {
           const path = resolve(dir, f);
