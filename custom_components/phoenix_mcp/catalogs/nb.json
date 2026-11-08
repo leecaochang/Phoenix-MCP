@@ -142,9 +142,12 @@
       "ptNoticeIntro": "<strong>Tilgangsnøkkel med gjennomkobling.</strong> Den hopper over tillatelsestreet og når alle entiteter, med sensitive attributter fjernet.",
       "ptNoticeUsage": "Gjennomkobling kan sende opplysninger om alle entiteter til modellen, noe som koster flere tokens enn et avgrenset tre.",
       "rateBurstLabel": "Burst per sekund (0 = ingen grense per sekund)",
+      "rateBurstShort": "Burst per sekund",
       "rateLimitHelp": "Begrens forespørsler fra eksterne apper per minutt (standard 60) og per sekund (standard 10). 0 betyr ingen grense.",
       "rateRequestsLabel": "Forespørsler per minutt (0 = deaktivert)",
+      "rateRequestsShort": "Forespørsler per minutt",
       "rateSaveFailed": "Lagringen mislyktes.",
+      "rateZeroHint": "Skriv 0 for ingen grense.",
       "rateValuesError": "Verdiene må være ikke-negative heltall.",
       "rawAccessKeyNote": "<strong>Denne tilgangsnøkkelen vises ikke igjen.</strong> Kopier den nå før du lukker.",
       "reconnectBanner": "<strong>Koble til agenten på nytt.</strong> De tilgjengelige verktøyene for denne tilgangsnøkkelen er endret.",
@@ -195,7 +198,7 @@
       "accessKeyNameLengthPattern": "name må være {min}-{max} tegn og bruke bokstaver, tall, bindestreker eller understreker.",
       "accessKeyNameTaken": "En tilgangsnøkkel med dette navnet finnes allerede. Navn som bare skiller seg i store og små bokstaver, eller i - og _, regnes som like.",
       "accessKeyNotFound": "Fant ikke tilgangsnøkkelen.",
-      "activeAccessKeyRequired": "{field} må referere til en aktiv tilgangsnøkkel.",
+      "activeAccessKeyRequired": "Den valgte tilgangsnøkkelen er tilbakekalt eller utløpt. Velg en annen tilgangsnøkkel.",
       "adminRequired": "Administratortilgang kreves.",
       "aiTaskPreferredFailed": "Kunne ikke konfigurere den foretrukne AI-oppgaveentiteten.",
       "aiTaskNotConfigured": "Sett først opp Phoenix MCP AI Task med en tilgangsnøkkel, en leverandør og en modell, og aktiver den.",
@@ -2028,7 +2031,6 @@
       "home_companion": {
         "description": "For Agent Chat og Taleagent: leser og styrer bare husstandens enheter.",
         "label": "Home Companion",
-        "setup": "I Agent Chat bruker den chattens konto og modell; ellers velger du en leverandør og en modell i innstillingene for taleagenten. Gi READ eller WRITE gjennom det vanlige tillatelsestreet. Bare husstandens enhets- og sensortyper kan nås, og sensorer, vær, kalendere og solen forblir skrivebeskyttet. Kapabiliteter aktiverer eller deaktiverer tilgang i husstandskatalogen; konfigurasjons- og opprettingsverktøy forblir utilgjengelige. Gjennomkobling og kunngjøring av alle verktøy er deaktivert.",
         "turnedOff": "Home Companion slo av gjennomkobling og kunngjøring av alle verktøy for {name}."
       },
       "maintenance": {

@@ -142,9 +142,12 @@
       "ptNoticeIntro": "<strong>Pass-through-åtkomstnyckel.</strong> Den hoppar över behörighetsträdet och når alla entiteter, med känsliga attribut borttagna.",
       "ptNoticeUsage": "Pass-through kan skicka uppgifter om varje entitet till modellen, vilket kostar fler tokens än ett avgränsat träd.",
       "rateBurstLabel": "Burst per sekund (0 = ingen gräns per sekund)",
+      "rateBurstShort": "Burst per sekund",
       "rateLimitHelp": "Begränsa begäranden från externa appar, per minut (standard 60) och per sekund (standard 10). 0 betyder ingen gräns.",
       "rateRequestsLabel": "Begäranden per minut (0 = inaktiverat)",
+      "rateRequestsShort": "Begäranden per minut",
       "rateSaveFailed": "Det gick inte att spara.",
+      "rateZeroHint": "Ange 0 för ingen gräns.",
       "rateValuesError": "Värdena måste vara icke-negativa heltal.",
       "rawAccessKeyNote": "<strong>Den här åtkomstnyckeln visas inte igen.</strong> Kopiera den nu innan du stänger.",
       "reconnectBanner": "<strong>Återanslut din agent.</strong> Den här åtkomstnyckelns tillgängliga verktyg har ändrats.",
@@ -195,7 +198,7 @@
       "accessKeyNameLengthPattern": "name måste vara {min}-{max} tecken och får endast innehålla bokstäver, siffror, bindestreck eller understreck.",
       "accessKeyNameTaken": "En åtkomstnyckel med detta namn finns redan. Namn som bara skiljer sig i versaler och gemener, eller i - mot _, räknas som samma.",
       "accessKeyNotFound": "Åtkomstnyckeln hittades inte.",
-      "activeAccessKeyRequired": "{field} måste referera till en aktiv åtkomstnyckel.",
+      "activeAccessKeyRequired": "Den valda åtkomstnyckeln är återkallad eller har gått ut. Välj en annan åtkomstnyckel.",
       "adminRequired": "Administratörsbehörighet krävs.",
       "aiTaskPreferredFailed": "Det gick inte att konfigurera den föredragna AI-uppgiftsentiteten.",
       "aiTaskNotConfigured": "Konfigurera först Phoenix MCP AI Task med en åtkomstnyckel, en leverantör och en modell, och aktivera den.",
@@ -2028,7 +2031,6 @@
       "home_companion": {
         "description": "För Agent Chat och Röstagent: läser och styr endast hushållets enheter.",
         "label": "Home Companion",
-        "setup": "I Agent Chat använder den chattens konto och modell; annars väljer du en leverantör och modell i Voice-inställningarna. Bevilja LÄS eller SKRIV via det vanliga behörighetsträdet. Endast hushållets enhets- och sensortyper kan nås, och sensorer, väder, kalendrar och solen förblir skrivskyddade. Funktioner aktiverar eller inaktiverar åtkomst inom hushållskatalogen; konfigurations- och redigeringsverktyg förblir otillgängliga. Pass-through och annonsering av alla verktyg är inaktiverade.",
         "turnedOff": "Home Companion stängde av pass-through och annonsering av alla verktyg för {name}."
       },
       "maintenance": {

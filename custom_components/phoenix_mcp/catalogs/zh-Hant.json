@@ -7,7 +7,7 @@
   },
   "panel": {
     "adminError": {
-      "activeAccessKeyRequired": "{field} 必須引用有效存取金鑰。",
+      "activeAccessKeyRequired": "所選存取金鑰已撤銷或過期。請選擇其他存取金鑰。",
       "adminRequired": "需要管理員權限。",
       "aiTaskPreferredFailed": "無法設定首選 AI 任務實體。",
       "aiTaskNotConfigured": "請先設定並啟用 Phoenix MCP AI 任務，並為其指定存取金鑰、提供者和模型。",
@@ -1652,7 +1652,6 @@
       "home_companion": {
         "label": "Home Companion",
         "description": "適用於 Agent Chat 和語音智慧體：僅讀取和控制家用裝置。",
-        "setup": "在 Agent Chat 中使用聊天所選的帳戶和模型；其他場合請在語音設定中選擇提供者和模型。透過一般權限樹授予讀取或寫入權限。只能存取家用裝置和感測器類型，感測器、天氣、行事曆和太陽始終為唯讀。能力設定可啟用或停用家庭工具目錄內的存取；設定和編寫工具仍不可用。直通模式和公布所有工具均已停用。",
         "turnedOff": "Home Companion 已為 {name} 關閉直通模式和宣告全部工具。"
       }
     },
@@ -2168,9 +2167,12 @@
       "ptNoticeIntro": "<strong>直通存取金鑰。</strong>它會略過權限樹並存取所有實體，敏感屬性會被移除。",
       "ptNoticeUsage": "直通模式可能會把每個實體的資訊都傳送給模型，比限定範圍的權限樹消耗更多 token。",
       "rateBurstLabel": "每秒突發上限（0 表示不限制每秒請求數）",
+      "rateBurstShort": "每秒突發上限",
       "rateLimitHelp": "限制外部應用程式的請求頻率：每分鐘（預設 60）和每秒（預設 10）。0 表示不限制。",
       "rateRequestsLabel": "每分鐘請求數（0 表示停用）",
+      "rateRequestsShort": "每分鐘請求數",
       "rateSaveFailed": "儲存失敗。",
+      "rateZeroHint": "輸入 0 表示不限制。",
       "rateValuesError": "取值必須為非負整數。",
       "rawAccessKeyNote": "<strong>此存取金鑰不會再次顯示。</strong>請在關閉前複製。",
       "reconnectBanner": "<strong>請重新連線您的智慧體。</strong>此存取金鑰可用的工具已發生變化。",

@@ -330,7 +330,6 @@
       "home_companion": {
         "label": "Home Companion",
         "description": "For Agent Chat and the Voice Agent: reads and controls household devices only.",
-        "setup": "In Agent Chat it uses the chat's account and model; elsewhere, choose a provider and model in Voice settings. Grant READ or WRITE through the normal permission tree. Only household device and sensor types can be reached, and sensors, weather, calendars, and the sun stay read-only. Capabilities enable or disable access within the household catalog; configuration and authoring tools stay unavailable. Pass-through and announce-all are disabled.",
         "turnedOff": "Home Companion turned off pass-through and announcing all tools for {name}."
       }
     },
@@ -480,9 +479,12 @@
       "ptNoticeIntro": "<strong>Pass-through access key.</strong> It skips the Permissions Tree and reaches every entity, with sensitive attributes removed.",
       "ptNoticeUsage": "Pass-through can send details of every entity to the model, which costs more tokens than a scoped tree.",
       "rateBurstLabel": "Burst per second (0 = no per-second limit)",
+      "rateBurstShort": "Burst per second",
       "rateLimitHelp": "Limit requests from external apps, per minute (default 60) and per second (default 10). 0 means no limit.",
       "rateRequestsLabel": "Requests per minute (0 = disabled)",
+      "rateRequestsShort": "Requests per minute",
       "rateSaveFailed": "Save failed.",
+      "rateZeroHint": "Enter 0 for no limit.",
       "rateValuesError": "Values must be non-negative integers.",
       "rawAccessKeyNote": "<strong>This access key will not be shown again.</strong> Copy it now before closing.",
       "reconnectBanner": "<strong>Reconnect your agent.</strong> This access key's available tools have changed.",
@@ -2230,7 +2232,7 @@
       "badEntityId": "Invalid entity ID format.",
       "nodeIdTooLong": "Node ID is too long.",
       "nodeIdInvalidChars": "Node ID contains invalid characters.",
-      "activeAccessKeyRequired": "{field} must reference an active access key.",
+      "activeAccessKeyRequired": "The chosen access key was revoked or has expired. Choose another access key.",
       "aiTaskPreferredFailed": "Could not configure the preferred AI Task entity.",
       "aiTaskNotConfigured": "Set up and turn on the Phoenix MCP AI Task first, with an access key, provider and model.",
       "aiTaskPreferencesUnavailable": "AI Task preferences aren't available on this Home Assistant.",

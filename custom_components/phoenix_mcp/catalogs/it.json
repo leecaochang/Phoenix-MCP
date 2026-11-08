@@ -1,7 +1,7 @@
 {
   "panel": {
     "adminError": {
-      "activeAccessKeyRequired": "{field} deve fare riferimento a una chiave di accesso attiva.",
+      "activeAccessKeyRequired": "La chiave di accesso scelta è revocata o scaduta. Scegli un'altra chiave di accesso.",
       "adminRequired": "Accesso amministratore richiesto.",
       "aiTaskPreferredFailed": "Impossibile configurare l'entità Attività di IA preferita.",
       "aiTaskNotConfigured": "Configura e abilita prima l'Attività di IA di Phoenix MCP, con una chiave di accesso, un provider e un modello.",
@@ -1100,7 +1100,6 @@
       "home_companion": {
         "label": "Home Companion",
         "description": "Per Agent Chat e l'Agente vocale: legge e controlla solo i dispositivi della casa.",
-        "setup": "In Agent Chat usa l'account e il modello della chat; altrove scegli un provider e un modello nelle impostazioni vocali. Concedi accesso in lettura o scrittura tramite il normale albero dei permessi. Sono raggiungibili solo i tipi di dispositivi e sensori domestici, e sensori, meteo, calendari e sole restano in sola lettura. Le capacità abilitano o disabilitano l’accesso nel catalogo domestico; gli strumenti di configurazione e creazione restano indisponibili. Il pass-through e l’annuncio di tutti gli strumenti sono disabilitati.",
         "turnedOff": "Home Companion ha disattivato il pass-through e l'annuncio di tutti gli strumenti per {name}."
       }
     },
@@ -2044,9 +2043,12 @@
       "ptNoticeIntro": "<strong>Chiave di accesso pass-through.</strong> Ignora l'Albero delle autorizzazioni e raggiunge ogni entità, con gli attributi sensibili rimossi.",
       "ptNoticeUsage": "Il pass-through può inviare al modello i dettagli di ogni entità, il che consuma più token di un albero limitato.",
       "rateBurstLabel": "Raffica al secondo (0 = nessun limite al secondo)",
+      "rateBurstShort": "Raffica al secondo",
       "rateLimitHelp": "Limita le richieste delle app esterne, al minuto (predefinito 60) e al secondo (predefinito 10). 0 significa nessun limite.",
       "rateRequestsLabel": "Richieste al minuto (0 = disattivato)",
+      "rateRequestsShort": "Richieste al minuto",
       "rateSaveFailed": "Salvataggio non riuscito.",
+      "rateZeroHint": "Inserisci 0 per nessun limite.",
       "rateValuesError": "I valori devono essere numeri interi non negativi.",
       "rawAccessKeyNote": "<strong>Questa chiave di accesso non verrà più mostrata.</strong> Copialo ora prima di chiudere.",
       "reconnectBanner": "<strong>Ricollega il tuo agente.</strong> Gli strumenti disponibili per questa chiave di accesso sono cambiati.",

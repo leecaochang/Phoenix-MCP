@@ -69,6 +69,14 @@ describe("AiTaskSettings", () => {
     await waitFor(() => expect(listAccessKeys).toHaveBeenCalled());
   });
 
+  it("offers the key that replaced a revoked one, under its new id", async () => {
+    renderCard(settings());
+    await screen.findByRole("option", { name: "ai-access-key" });
+    listAccessKeys.mockResolvedValue([{ id: "tok-2", name: "ai-access-key" }]);
+    window.dispatchEvent(new CustomEvent("phx-access-keys-changed"));
+    await waitFor(() => expect((screen.getByRole("option", { name: "ai-access-key" }) as HTMLOptionElement).value).toBe("tok-2"));
+  });
+
   it("writes the access key and provider selections", async () => {
     const { onChange } = renderCard(settings());
     await waitFor(() => expect(screen.getByRole("option", { name: "ai-access-key" })).toBeTruthy());

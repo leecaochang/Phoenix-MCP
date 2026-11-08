@@ -27,7 +27,7 @@
 
 ### 速率限制 {#key-rate-limits}
 
-**{{label:accessKeys.rateRequestsLabel}}**（默认 60）和 **{{label:accessKeys.rateBurstLabel}}**（默认 10）。两者之后都可以更改。
+**{{label:accessKeys.rateRequestsShort}}**（默认 60）和 **{{label:accessKeys.rateBurstShort}}**（默认 10）。设为 0 表示不限制。两者之后都可以更改。
 
 相关：[速率限制](guide:window.keySettings#rate-limiting)
 

@@ -142,9 +142,12 @@
       "ptNoticeIntro": "<strong>Pass-through-adgangsnøgle.</strong> Den springer tilladelsestræet over og når alle entiteter, med følsomme attributter fjernet.",
       "ptNoticeUsage": "Pass-through kan sende oplysninger om alle entiteter til modellen, hvilket koster flere tokens end et afgrænset træ.",
       "rateBurstLabel": "Spidsbelastning pr. sekund (0 = ingen grænse pr. sekund)",
+      "rateBurstShort": "Spidsbelastning pr. sekund",
       "rateLimitHelp": "Begræns anmodninger fra eksterne apps pr. minut (standard 60) og pr. sekund (standard 10). 0 betyder ingen grænse.",
       "rateRequestsLabel": "Anmodninger pr. minut (0 = deaktiveret)",
+      "rateRequestsShort": "Anmodninger pr. minut",
       "rateSaveFailed": "Kunne ikke gemme.",
+      "rateZeroHint": "Angiv 0 for ingen grænse.",
       "rateValuesError": "Værdierne skal være ikke-negative heltal.",
       "rawAccessKeyNote": "<strong>Denne adgangsnøgle vises ikke igen.</strong> Kopiér den nu, før du lukker.",
       "reconnectBanner": "<strong>Genopret forbindelsen til din agent.</strong> Denne adgangsnøgles tilgængelige værktøjer er ændret.",
@@ -195,7 +198,7 @@
       "accessKeyNameLengthPattern": "name skal være {min}-{max} tegn og må kun indeholde bogstaver, tal, bindestreger eller understreger.",
       "accessKeyNameTaken": "Der findes allerede en adgangsnøgle med det navn. Navne, der kun adskiller sig ved store og små bogstaver eller ved - og _, regnes som ens.",
       "accessKeyNotFound": "Adgangsnøglen blev ikke fundet.",
-      "activeAccessKeyRequired": "{field} skal referere til en aktiv adgangsnøgle.",
+      "activeAccessKeyRequired": "Den valgte adgangsnøgle er tilbagekaldt eller udløbet. Vælg en anden adgangsnøgle.",
       "adminRequired": "Administratoradgang kræves.",
       "aiTaskPreferredFailed": "Kunne ikke konfigurere den foretrukne AI-opgaveentitet.",
       "aiTaskNotConfigured": "Opsæt først Phoenix MCP AI Task med en adgangsnøgle, en udbyder og en model, og aktivér den.",
@@ -2028,7 +2031,6 @@
       "home_companion": {
         "description": "Til Agent Chat og Stemmeagent: læser og styrer kun husstandens enheder.",
         "label": "Home Companion",
-        "setup": "I Agent Chat bruger den chattens konto og model; andre steder vælger du en udbyder og model i stemmeindstillingerne. Giv LÆS- eller SKRIV-adgang via det normale tilladelsestræ. Kun husstandens enheds- og sensortyper kan nås, og sensorer, vejr, kalendere og solen forbliver skrivebeskyttede. Funktioner slår adgang til eller fra i husstandskataloget; konfigurations- og forfatterværktøjer forbliver utilgængelige. Pass-through og annoncering af alle værktøjer er deaktiveret.",
         "turnedOff": "Home Companion slog pass-through og annoncering af alle værktøjer fra for {name}."
       },
       "maintenance": {

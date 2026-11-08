@@ -108,7 +108,6 @@
       "home_companion": {
         "label": "Home Companion",
         "description": "Agent Chat과 음성 에이전트용: 가정의 기기만 읽고 제어합니다.",
-        "setup": "Agent Chat에서는 채팅의 계정과 모델을 사용합니다. 그 밖에서는 음성 설정에서 제공업체와 모델을 선택하세요. 일반 권한 트리에서 읽기 또는 쓰기 권한을 부여하세요. 가정용 기기와 센서 유형에만 접근할 수 있으며, 센서, 날씨, 캘린더, 태양은 읽기 전용으로 유지됩니다. 기능 설정으로 가정용 목록 내 접근을 활성화하거나 비활성화할 수 있습니다. 설정 및 작성 도구는 사용할 수 없습니다. 패스스루와 모든 도구 공개는 비활성화됩니다.",
         "turnedOff": "Home Companion이 {name}의 패스스루와 모든 도구 알림을 껐습니다."
       }
     },
@@ -836,7 +835,7 @@
       "zigbee_group.named.remove_members": "Zigbee 그룹 {name}에서 기기 제거"
     },
     "adminError": {
-      "activeAccessKeyRequired": "{field}은(는) 활성 액세스 키를 참조해야 합니다.",
+      "activeAccessKeyRequired": "선택한 액세스 키는 철회되었거나 만료되었습니다. 다른 액세스 키를 선택하십시오.",
       "adminRequired": "관리자 접근이 필요합니다.",
       "aiTaskPreferredFailed": "선호 AI 작업 엔티티를 구성할 수 없습니다.",
       "aiTaskNotConfigured": "먼저 액세스 키, 제공업체 및 모델로 Phoenix MCP AI 작업을 설정하고 활성화하십시오.",
@@ -2314,9 +2313,12 @@
       "ptNoticeIntro": "<strong>패스스루 액세스 키.</strong> 권한 트리를 건너뛰고 모든 엔티티에 접근하며, 민감 속성은 제거됩니다.",
       "ptNoticeUsage": "패스스루는 모든 엔티티의 정보를 모델에 보낼 수 있어 범위 제한 트리보다 토큰이 더 듭니다.",
       "rateBurstLabel": "초당 버스트 (0 = 초당 제한 없음)",
+      "rateBurstShort": "초당 버스트",
       "rateLimitHelp": "외부 앱의 요청을 분당(기본값 60), 초당(기본값 10)으로 제한합니다. 0은 제한 없음입니다.",
       "rateRequestsLabel": "분당 요청 수 (0 = 비활성화)",
+      "rateRequestsShort": "분당 요청 수",
       "rateSaveFailed": "저장에 실패했습니다.",
+      "rateZeroHint": "제한하지 않으려면 0을 입력하십시오.",
       "rateValuesError": "값은 음수가 아닌 정수여야 합니다.",
       "rawAccessKeyNote": "<strong>이 액세스 키는 다시 표시되지 않습니다.</strong> 닫기 전에 지금 복사하십시오.",
       "reconnectBanner": "<strong>에이전트를 다시 연결하십시오.</strong> 이 액세스 키의 사용 가능한 도구가 변경되었습니다.",

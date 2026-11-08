@@ -79,10 +79,6 @@ export function PersonaPicker(props: Props) {
   return (
     <div className="persona-picker" data-help={isSelectMode ? undefined : "help.persona"}>
       {error && <div role="alert" className="banner banner-error mb-8">{error}</div>}
-      {/* Home Companion needs setting up elsewhere: that stays in view while it is chosen. */}
-      {!isSelectMode && activeKey === "home_companion" && (
-        <p className="persona-helper">{t("personas.home_companion.setup")}</p>
-      )}
       <div className={`persona-grid${iconsOnly ? " is-compact" : ""}`}>
         {PERSONAS.filter((p) =>
           isSelectMode

@@ -272,7 +272,7 @@ export function AccessKeyCreateForm({ existingNames, onCreated, onClose, onOpenS
       }}>
       <h3 className="phx-section-title" id={`${uid}title`}>{t("accessKeys.createAccessKey")}</h3>
 
-      {/* One row of fields that wraps on narrow windows. */}
+      {/* Two columns of fields: name and expiry, then the rate limits; one column in a narrow window. */}
       <div className="access-key-create-fields">
         <div className="field access-key-create-name" data-guide="window.accessKeys#key-name">
           <label htmlFor={`${uid}name`}>{t("accessKeys.nameLabel")}</label>
@@ -328,18 +328,19 @@ export function AccessKeyCreateForm({ existingNames, onCreated, onClose, onOpenS
         {!passThrough && (
           <>
             <div className="field access-key-create-number" data-guide="window.accessKeys#key-rate-limits" {...helpRow(t("help.createRateLimits"))}>
-              <label htmlFor={`${uid}requests`}>{t("accessKeys.rateRequestsLabel")}</label>
+              <label htmlFor={`${uid}requests`}>{t("accessKeys.rateRequestsShort")}</label>
               <input
                 id={`${uid}requests`}
                 className="input"
                 type="number"
                 min={0}
                 value={rateLimitRequests}
+                aria-describedby={`${uid}rate-hint`}
                 onChange={(e) => setRateLimitRequests(e.target.value)}
               />
             </div>
             <div className="field access-key-create-number" data-guide="window.accessKeys#key-rate-limits" {...helpRow(t("help.createRateLimits"))}>
-              <label htmlFor={`${uid}burst`}>{t("accessKeys.rateBurstLabel")}</label>
+              <label htmlFor={`${uid}burst`}>{t("accessKeys.rateBurstShort")}</label>
               <input
                 id={`${uid}burst`}
                 className="input"
@@ -347,9 +348,11 @@ export function AccessKeyCreateForm({ existingNames, onCreated, onClose, onOpenS
                 min={0}
                 value={burstDisabled ? "0" : rateLimitBurst}
                 disabled={burstDisabled}
+                aria-describedby={`${uid}rate-hint`}
                 onChange={(e) => setRateLimitBurst(e.target.value)}
               />
             </div>
+            <p className="field-hint access-key-create-hint" id={`${uid}rate-hint`}>{t("accessKeys.rateZeroHint")}</p>
           </>
         )}
       </div>

@@ -18,6 +18,8 @@
 
 每個名稱後的文字會顯示結果：讀寫、唯讀、拒絕存取、無存取權限或未找到。
 
+無論你如何設定，{{label:personas.home_companion.label}} 金鑰都只能存取家用裝置。其他類型的裝置顯示無存取權限；感測器、天氣、行事曆和太陽即使設為 W 也顯示唯讀。參見[{{label:personas.home_companion.label}}](guide:window.persona#home-companion)。
+
 相關：[權限如何判定](guide:topic.permissionResolution)
 
 ## 權限樹 {#tree}

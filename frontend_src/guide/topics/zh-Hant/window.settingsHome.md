@@ -33,7 +33,7 @@
 
 ### {{label:settings.accessKey}} {#voice-access-key}
 
-決定智慧體可以做什麼的存取金鑰。你只能選擇有效的金鑰。如果金鑰已撤銷或過期，它會在此處被清除。
+決定智慧體可以做什麼的存取金鑰。你只能選擇有效的金鑰。建立或撤銷金鑰後，清單會隨之更新。如果金鑰已撤銷或過期，它會在此處被清除。
 
 Home Companion 金鑰會把對話交給 Home Companion 處理，並隱藏 **{{label:routing.enableVoice}}**。
 

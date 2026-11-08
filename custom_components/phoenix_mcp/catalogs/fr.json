@@ -330,7 +330,6 @@
       "home_companion": {
         "label": "Home Companion",
         "description": "Pour Agent Chat et l’agent vocal : lit et contrôle uniquement les appareils de la maison.",
-        "setup": "Dans Agent Chat, il utilise le compte et le modèle du chat ; ailleurs, choisissez un fournisseur et un modèle dans les paramètres vocaux. Accordez un accès en lecture ou en écriture via l’arbre habituel des permissions. Seuls les types d'appareils et de capteurs domestiques sont accessibles, et les capteurs, la météo, les calendriers et le soleil restent en lecture seule. Les capacités activent ou désactivent l’accès au catalogue domestique ; les outils de configuration et de création restent indisponibles. Le mode de passage direct et l’annonce de tous les outils sont désactivés.",
         "turnedOff": "Home Companion a désactivé la transmission directe et l'annonce de tous les outils pour {name}."
       }
     },
@@ -466,9 +465,12 @@
       "ptNoticeIntro": "<strong>Clé d’accès en transmission directe.</strong> Elle contourne l’arbre des autorisations et atteint chaque entité, sans les attributs sensibles.",
       "ptNoticeUsage": "La transmission directe peut envoyer au modèle les détails de chaque entité, ce qui coûte plus de jetons qu’un arbre limité.",
       "rateBurstLabel": "Rafale par seconde (0 = pas de limite par seconde)",
+      "rateBurstShort": "Rafale par seconde",
       "rateLimitHelp": "Limitez les requêtes des applications externes, par minute (60 par défaut) et par seconde (10 par défaut). 0 signifie aucune limite.",
       "rateRequestsLabel": "Requêtes par minute (0 = désactivé)",
+      "rateRequestsShort": "Requêtes par minute",
       "rateSaveFailed": "Échec de l'enregistrement.",
+      "rateZeroHint": "Saisissez 0 pour ne fixer aucune limite.",
       "rateValuesError": "Les valeurs doivent être des entiers non négatifs.",
       "rawAccessKeyNote": "<strong>Cette clé d’accès ne sera plus affichée.</strong> Copiez-le maintenant avant de fermer.",
       "reconnectBanner": "<strong>Reconnectez votre agent.</strong> Les outils disponibles de cette clé d’accès ont changé.",
@@ -1864,7 +1866,7 @@
       "badEntityId": "Format d'ID d'entité invalide.",
       "nodeIdTooLong": "L'ID de nœud est trop long.",
       "nodeIdInvalidChars": "L'ID de nœud contient des caractères invalides.",
-      "activeAccessKeyRequired": "{field} doit référencer une clé d’accès active.",
+      "activeAccessKeyRequired": "La clé d’accès choisie a été révoquée ou a expiré. Choisissez une autre clé d’accès.",
       "aiTaskPreferredFailed": "Impossible de configurer l'entité Tâche d'IA préférée.",
       "aiTaskNotConfigured": "Configurez et activez d'abord la Tâche d'IA Phoenix MCP, avec une clé d’accès, un fournisseur et un modèle.",
       "aiTaskPreferencesUnavailable": "Les préférences de Tâche d'IA ne sont pas disponibles dans ce Home Assistant.",

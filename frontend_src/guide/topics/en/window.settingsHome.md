@@ -33,7 +33,7 @@ Makes Phoenix's assistant the one Home Assistant uses by default. Turning it off
 
 ### {{label:settings.accessKey}} {#voice-access-key}
 
-The access key that decides what the agent may do. You can only choose an active key. If the key is revoked or expires, it's cleared here.
+The access key that decides what the agent may do. You can only choose an active key. The list updates when you create or revoke a key. If the key is revoked or expires, it's cleared here.
 
 A Home Companion key hands conversations to the companion, and hides **{{label:routing.enableVoice}}**.
 

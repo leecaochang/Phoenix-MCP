@@ -18,6 +18,8 @@ With the keyboard, a row's four buttons are one Tab stop. Use the arrow keys to 
 
 The word after each name shows the result: WRITE, READ, DENY, NO ACCESS or NOT FOUND.
 
+A Home Companion key reaches only household devices, whatever you set. Other kinds of device show NO ACCESS, and sensors, weather, calendars and the sun show READ even with W. See [{{label:personas.home_companion.label}}](guide:window.persona#home-companion).
+
 Related: [How a permission is decided](guide:topic.permissionResolution)
 
 ## The tree {#tree}

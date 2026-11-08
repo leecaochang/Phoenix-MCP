@@ -18,6 +18,8 @@
 
 每个名称后的文字显示结果：读写、只读、拒绝访问、无访问权限或未找到。
 
+无论你如何设置，{{label:personas.home_companion.label}} 密钥都只能访问家用设备。其他类型的设备显示无访问权限；传感器、天气、日历和太阳即使设为 W 也显示只读。参见[{{label:personas.home_companion.label}}](guide:window.persona#home-companion)。
+
 相关：[权限如何判定](guide:topic.permissionResolution)
 
 ## 权限树 {#tree}

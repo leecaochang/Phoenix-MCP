@@ -1,7 +1,8 @@
 import { BusyInput, BusySelect } from "./BusyButton";
 import { useEffect, useState, type ReactNode } from "react";
-import type { GlobalSettings, AccessKeyRecord, AgentCliInstance, AiTaskPreferredStatus } from "../types";
+import type { GlobalSettings, AgentCliInstance, AiTaskPreferredStatus } from "../types";
 import { api } from "../api";
+import { useAccessKeyList } from "../utils/access_key_list";
 import { t } from "../i18n";
 import { SettingLabel, helpRow } from "../ui/SettingLabel";
 import { useNotify } from "../ui/notify";
@@ -30,7 +31,7 @@ export function AiTaskSettings({
   statistics?: ReactNode;
 }) {
   const notify = useNotify();
-  const [accessKeys, setAccessKeys] = useState<AccessKeyRecord[]>([]);
+  const accessKeys = useAccessKeyList();
   const [instances, setInstances] = useState<AgentCliInstance[]>([]);
   const [models, setModels] = useState<string[]>([]);
   const [pref, setPref] = useState<AiTaskPreferredStatus | null>(null);
@@ -45,7 +46,6 @@ export function AiTaskSettings({
   const noProviders = instances.length === 0;
 
   useEffect(() => {
-    api.listAccessKeys().then(setAccessKeys).catch(() => setAccessKeys([]));
     const loadProviders = () =>
       api.getAgentCliProviders().then((r) => setInstances(r.instances)).catch(() => setInstances([]));
     loadProviders();

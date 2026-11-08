@@ -192,7 +192,6 @@
       "home_companion": {
         "label": "Home Companion",
         "description": "Dla Agent Chat i Agenta głosowego: odczytuje i steruje tylko urządzeniami domowymi.",
-        "setup": "W Agent Chat korzysta z konta i modelu czatu; gdzie indziej wybierz dostawcę i model w ustawieniach głosu. Nadaj dostęp do odczytu lub zapisu przez standardowe drzewo uprawnień. Dostępne są tylko domowe typy urządzeń i czujników, a czujniki, pogoda, kalendarze i słońce pozostają tylko do odczytu. Funkcje włączają lub wyłączają dostęp w katalogu domowym; narzędzia konfiguracji i tworzenia pozostają niedostępne. Tryb bezpośredni i ogłaszanie wszystkich narzędzi są wyłączone.",
         "turnedOff": "Home Companion wyłączył tryb Pass-through i ogłaszanie wszystkich narzędzi dla {name}."
       }
     },
@@ -1032,7 +1031,7 @@
       "errorLabel": "Błąd"
     },
     "adminError": {
-      "activeAccessKeyRequired": "{field} musi odnosić się do aktywnego klucza dostępu.",
+      "activeAccessKeyRequired": "Wybrany klucz dostępu jest unieważniony lub wygasł. Wybierz inny klucz dostępu.",
       "adminRequired": "Wymagany dostęp administratora.",
       "aiTaskPreferredFailed": "Nie można było skonfigurować preferowanej encji Zadania AI.",
       "aiTaskNotConfigured": "Najpierw skonfiguruj i włącz Phoenix MCP AI Task, podając klucz dostępu, dostawcę i model.",
@@ -1490,9 +1489,12 @@
       "ptNoticeIntro": "<strong>Klucz dostępu pass-through.</strong> Pomija Drzewo uprawnień i ma dostęp do każdej encji, z usuniętymi wrażliwymi atrybutami.",
       "ptNoticeUsage": "Pass-through może wysyłać do modelu szczegóły każdej encji, co zużywa więcej tokenów niż ograniczone drzewo.",
       "rateBurstLabel": "Burst na sekundę (0 = bez limitu na sekundę)",
+      "rateBurstShort": "Burst na sekundę",
       "rateLimitHelp": "Ogranicz żądania aplikacji zewnętrznych na minutę (domyślnie 60) i na sekundę (domyślnie 10). 0 oznacza brak limitu.",
       "rateRequestsLabel": "Żądania na minutę (0 = wyłączone)",
+      "rateRequestsShort": "Żądania na minutę",
       "rateSaveFailed": "Zapis nie powiódł się.",
+      "rateZeroHint": "Wpisz 0, aby nie ustawiać limitu.",
       "rateValuesError": "Wartości muszą być nieujemnymi liczbami całkowitymi.",
       "rawAccessKeyNote": "<strong>Ten klucz dostępu nie zostanie ponownie wyświetlony.</strong> Skopiuj go teraz, zanim zamkniesz.",
       "reconnectBanner": "<strong>Połącz ponownie swojego agenta.</strong> Dostępne narzędzia tego klucza dostępu uległy zmianie.",

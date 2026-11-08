@@ -1,7 +1,6 @@
 import { BusySelect } from "./BusyButton";
-import { useEffect, useState } from "react";
-import type { GlobalSettings, AccessKeyRecord } from "../types";
-import { api } from "../api";
+import type { GlobalSettings } from "../types";
+import { useAccessKeyList } from "../utils/access_key_list";
 import { t } from "../i18n";
 import { tPlain } from "../i18n/rich";
 import { SettingLabel, helpRow } from "../ui/SettingLabel";
@@ -20,13 +19,9 @@ export function AssistBridgeSettings({
   onChange: (key: keyof GlobalSettings, value: boolean | string) => void;
   saving: boolean;
 }) {
-  const [accessKeys, setAccessKeys] = useState<AccessKeyRecord[]>([]);
+  const accessKeys = useAccessKeyList();
   const supported = settings.assist_api_supported !== false;
   const boundId = settings.assist_bound_access_key_id ?? "";
-
-  useEffect(() => {
-    api.listAccessKeys().then(setAccessKeys).catch(() => setAccessKeys([]));
-  }, []);
 
   return (
     <div className="phx-settings-form" data-help-text={tPlain("settings.assistIntro")}>

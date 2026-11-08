@@ -477,7 +477,6 @@
       "home_companion": {
         "label": "Home Companion",
         "description": "Für Agent Chat und den Sprachagenten: liest und steuert nur Haushaltsgeräte.",
-        "setup": "In Agent Chat nutzt es das Konto und Modell des Chats; sonst wählen Sie einen Anbieter und ein Modell in den Spracheinstellungen. Gewähren Sie Lese- oder Schreibzugriff über den normalen Berechtigungsbaum. Nur Haushaltsgeräte- und Sensortypen sind erreichbar, und Sensoren, Wetter, Kalender und die Sonne bleiben schreibgeschützt. Fähigkeiten aktivieren oder deaktivieren den Zugriff innerhalb des Haushaltskatalogs; Konfigurations- und Erstellungswerkzeuge bleiben nicht verfügbar. Durchleitung und die Bekanntgabe aller Werkzeuge sind deaktiviert.",
         "turnedOff": "Home Companion hat die Durchreichung und das Ankündigen aller Tools für {name} ausgeschaltet."
       }
     },
@@ -727,9 +726,12 @@
       "ptNoticeIntro": "<strong>Durchreichungs-Zugriffsschlüssel.</strong> Er umgeht den Berechtigungsbaum und erreicht jede Entität, ohne sensible Attribute.",
       "ptNoticeUsage": "Durchreichung kann Details jeder Entität an das Modell senden, was mehr Tokens kostet als ein beschränkter Baum.",
       "rateBurstLabel": "Burst pro Sekunde (0 = kein Limit pro Sekunde)",
+      "rateBurstShort": "Burst pro Sekunde",
       "rateLimitHelp": "Anfragen externer Apps begrenzen, pro Minute (Standard 60) und pro Sekunde (Standard 10). 0 bedeutet kein Limit.",
       "rateRequestsLabel": "Anfragen pro Minute (0 = deaktiviert)",
+      "rateRequestsShort": "Anfragen pro Minute",
       "rateSaveFailed": "Speichern fehlgeschlagen.",
+      "rateZeroHint": "Geben Sie 0 für kein Limit ein.",
       "rateValuesError": "Die Werte müssen nicht negative ganze Zahlen sein.",
       "rawAccessKeyNote": "<strong>Dieser Zugriffsschlüssel wird nicht erneut angezeigt.</strong> Kopieren Sie ihn jetzt, bevor Sie schließen.",
       "reconnectBanner": "<strong>Verbinden Sie Ihren Agenten erneut.</strong> Die verfügbaren Tools dieses Zugriffsschlüssels haben sich geändert.",
@@ -1548,7 +1550,7 @@
       "badEntityId": "Ungültiges Entitäts-ID-Format.",
       "nodeIdTooLong": "Knoten-ID ist zu lang.",
       "nodeIdInvalidChars": "Knoten-ID enthält ungültige Zeichen.",
-      "activeAccessKeyRequired": "{field} muss auf einen aktiven Zugriffsschlüssel verweisen.",
+      "activeAccessKeyRequired": "Der gewählte Zugriffsschlüssel wurde widerrufen oder ist abgelaufen. Wählen Sie einen anderen Zugriffsschlüssel.",
       "aiTaskPreferredFailed": "Die bevorzugte KI-Aufgabe-Entität konnte nicht konfiguriert werden.",
       "aiTaskNotConfigured": "Richten Sie zuerst Phoenix MCP AI Task mit Zugriffsschlüssel, Anbieter und Modell ein und aktivieren Sie die KI-Aufgabe.",
       "aiTaskPreferencesUnavailable": "Einstellungen für KI-Aufgaben sind in diesem Home Assistant nicht verfügbar.",

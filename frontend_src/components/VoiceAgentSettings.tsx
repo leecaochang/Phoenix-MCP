@@ -2,8 +2,9 @@ import { BusyInput, BusySelect } from "./BusyButton";
 import { RoutingStatistics } from "./RoutingStatistics";
 import { CommandRoutingToggle } from "./CommandRoutingToggle";
 import { useEffect, useState, type ReactNode } from "react";
-import type { GlobalSettings, AccessKeyRecord, AgentCliInstance } from "../types";
+import type { GlobalSettings, AgentCliInstance } from "../types";
 import { api } from "../api";
+import { useAccessKeyList } from "../utils/access_key_list";
 import { t } from "../i18n";
 import { SettingLabel, helpRow } from "../ui/SettingLabel";
 import { useNotify } from "../ui/notify";
@@ -41,7 +42,7 @@ export function VoiceAgentSettings({
   statistics?: ReactNode;
 }) {
   const notify = useNotify();
-  const [accessKeys, setAccessKeys] = useState<AccessKeyRecord[]>([]);
+  const accessKeys = useAccessKeyList();
   const [instances, setInstances] = useState<AgentCliInstance[]>([]);
   const [models, setModels] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
@@ -59,7 +60,6 @@ export function VoiceAgentSettings({
   const companion = accessKeys.some(accessKey => accessKey.id === accessKeyId && accessKey.persona === "home_companion");
 
   useEffect(() => {
-    api.listAccessKeys().then(setAccessKeys).catch(() => setAccessKeys([]));
     const loadProviders = () =>
       api.getAgentCliProviders().then((r) => setInstances(r.instances)).catch(() => setInstances([]));
     loadProviders();

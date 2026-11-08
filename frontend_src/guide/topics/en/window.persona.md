@@ -49,6 +49,10 @@ Reads configuration, logs, search, the registry, diagnostics and ESPHome device 
 
 For a household helper. The agent gets a single tool that passes requests to Phoenix's own model, and reaches only household devices, whatever the tree grants. Physical control needs your approval.
 
+It can control lights, fans, switches, toggle helpers, climate, covers, valves, media players, vacuums, humidifiers and timers.
+
+It can read binary sensors, weather, calendars and the sun, plus temperature, humidity, light, power, energy and battery sensors. It can't change those, even with W. It can't reach anything else, so the tree shows NO ACCESS there.
+
 In Agent Chat it uses the account chosen there; everywhere else it uses the Voice Agent's account and model. It can't use pass-through or announce all tools: choosing it turns both off, and you're told when it does. Changing a capability doesn't turn it into Custom.
 
 ## {{label:personas.custom.label}} {#custom}

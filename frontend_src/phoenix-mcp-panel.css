@@ -1830,11 +1830,21 @@ input.input[type="number"]:not(.agentcli-number) { flex: 0 0 auto; width: 7rem; 
 /* Part of the window, like its other sections: no box of its own, a divider below. */
 .phx-inline-form { margin-bottom: 12px; padding: 0 0 12px; border-bottom: 1px solid var(--phx-divider); }
 .phx-inline-form-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
-.access-key-create-fields { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 10px 16px; }
-.access-key-create-fields > .field { margin: 0; }
-.access-key-create-name { flex: 0 1 280px; min-width: 180px; }
-.access-key-create-number { flex: 0 1 250px; min-width: 160px; }
+/* Create Access Key: a grid of two equal columns, capped so the fields stay short in a wide window, and one
+   column once a column would be narrower than 13rem. Every name sits above its control and every control
+   starts at its column's left edge; dropdowns and number fields keep the panel's own widths. */
+.access-key-create-fields {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 13rem), 1fr));
+  align-items: start; gap: 14px 16px; max-width: 36rem;
+}
+.access-key-create-fields > .field { margin: 0; min-width: 0; }
+/* Settings put a number field on its name's line; here the name stays above it, as for the other fields. */
+.access-key-create-fields > .field:has(> input[type="number"]) {
+  flex-direction: column; align-items: flex-start; justify-content: flex-start; gap: 5px;
+}
+.access-key-create-fields > .field:has(> input[type="number"]) > input { margin-left: 0; align-self: flex-start; }
 .access-key-create-expiry-row { display: flex; gap: 8px; }
+.access-key-create-hint { grid-column: 1 / -1; margin: -6px 0 0; font-size: 12px; color: var(--phx-text-2); }
 .access-key-create-pt { justify-content: flex-start; gap: 10px; margin-top: 10px; padding: 0; border-bottom: none; }
 .access-key-create-pt .toggle-label { flex: 0 1 auto; }
 
@@ -2056,7 +2066,6 @@ input.input[type="number"]:not(.agentcli-number) { flex: 0 0 auto; width: 7rem; 
    Persona Picker
    ============================================================ */
 .persona-picker { display: flex; flex-direction: column; gap: 12px; }
-.persona-helper { font-size: 12px; color: var(--phx-text-2); margin: 0 0 4px 0; }
 .persona-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 8px; }
 /* Names only, in icons-only mode: still large buttons, just shorter. */
 .persona-grid.is-compact { grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); }

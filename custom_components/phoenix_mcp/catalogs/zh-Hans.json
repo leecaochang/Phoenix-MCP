@@ -250,7 +250,6 @@
       "home_companion": {
         "label": "Home Companion",
         "description": "适用于 Agent Chat 和语音智能体：仅读取和控制家用设备。",
-        "setup": "在 Agent Chat 中使用聊天所选的账户和模型；其他场合请在语音设置中选择提供商和模型。通过常规权限树授予读取或写入权限。只能访问家用设备和传感器类型，传感器、天气、日历和太阳始终为只读。能力设置可启用或禁用家庭工具目录内的访问；配置和编写工具仍不可用。直通模式和公布所有工具均已禁用。",
         "turnedOff": "Home Companion 已为 {name} 关闭直通模式和声明全部工具。"
       }
     },
@@ -604,7 +603,7 @@
       "accessKeyNameTaken": "已存在同名的访问密钥。仅大小写不同，或仅 - 与 _ 不同的名称视为相同。",
       "accessKeyNotFound": "未找到访问密钥。",
       "unknownPersona": "未知的角色。",
-      "activeAccessKeyRequired": "{field} 必须引用有效访问密钥。",
+      "activeAccessKeyRequired": "所选访问密钥已撤销或过期。请选择其他访问密钥。",
       "aiTaskPreferredFailed": "无法配置首选 AI 任务实体。",
       "aiTaskNotConfigured": "请先设置并启用 Phoenix MCP AI 任务，并为其指定访问密钥、提供商和模型。",
       "aiTaskPreferencesUnavailable": "此 Home Assistant 上无法使用 AI 任务偏好设置。",
@@ -1379,9 +1378,12 @@
       "ptNoticeIntro": "<strong>直通访问密钥。</strong>它会跳过权限树并访问所有实体，敏感属性会被移除。",
       "ptNoticeUsage": "直通模式可能会把每个实体的信息都发送给模型，比限定范围的权限树消耗更多 token。",
       "rateBurstLabel": "每秒突发上限（0 表示不限制每秒请求数）",
+      "rateBurstShort": "每秒突发上限",
       "rateLimitHelp": "限制外部应用的请求频率：每分钟（默认 60）和每秒（默认 10）。0 表示不限制。",
       "rateRequestsLabel": "每分钟请求数（0 表示禁用）",
+      "rateRequestsShort": "每分钟请求数",
       "rateSaveFailed": "保存失败。",
+      "rateZeroHint": "输入 0 表示不限制。",
       "rateValuesError": "取值必须为非负整数。",
       "rawAccessKeyNote": "<strong>此访问密钥不会再次显示。</strong>请在关闭前复制。",
       "reconnectBanner": "<strong>请重新连接您的智能体。</strong>此访问密钥可用的工具已发生变化。",

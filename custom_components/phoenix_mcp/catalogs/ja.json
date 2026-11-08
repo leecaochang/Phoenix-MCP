@@ -330,7 +330,6 @@
       "home_companion": {
         "label": "Home Companion",
         "description": "Agent Chat と音声エージェント向け。家庭のデバイスの読み取りと操作のみを行います。",
-        "setup": "Agent Chat ではチャットのアカウントとモデルを使います。それ以外では音声設定でプロバイダーとモデルを選択してください。通常の権限ツリーで読み取りまたは書き込み権限を付与します。到達できるのは家庭用のデバイスとセンサーの種類だけで、センサー、天気、カレンダー、太陽は読み取り専用のままです。機能設定では家庭用カタログ内のアクセスを有効または無効にできます。設定変更や作成用のツールは利用できません。パススルーと全ツールの公開は無効です。",
         "turnedOff": "Home Companion により、{name} のパススルーとすべてのツールの通知がオフになりました。"
       }
     },
@@ -700,9 +699,12 @@
       "ptNoticeIntro": "<strong>パススルーアクセスキー。</strong>権限ツリーを迂回してすべてのエンティティにアクセスします。機密属性は削除されます。",
       "ptNoticeUsage": "パススルーではすべてのエンティティの情報をモデルに送る場合があり、スコープ付きのツリーより多くのトークンを消費します。",
       "rateBurstLabel": "一秒あたりのバースト（0 = 秒単位の制限なし）",
+      "rateBurstShort": "一秒あたりのバースト",
       "rateLimitHelp": "外部アプリからのリクエストを、一分あたり (既定 60) と一秒あたり (既定 10) で制限します。0 は無制限です。",
       "rateRequestsLabel": "一分あたりのリクエスト数（0 = 無効）",
+      "rateRequestsShort": "一分あたりのリクエスト数",
       "rateSaveFailed": "保存できませんでした。",
+      "rateZeroHint": "制限しない場合は 0 を入力します。",
       "rateValuesError": "値に負の整数は指定できません。",
       "rawAccessKeyNote": "<strong>このアクセスキーは再表示されません。</strong>閉じる前に今すぐコピーしてください。",
       "reconnectBanner": "<strong>エージェントを再接続してください。</strong>このアクセスキーで利用できるツールが変更されました。",
@@ -963,7 +965,7 @@
       "badEntityId": "エンティティ ID の形式が無効です。",
       "nodeIdTooLong": "ノード ID が長すぎます。",
       "nodeIdInvalidChars": "ノード ID に無効な文字が含まれています。",
-      "activeAccessKeyRequired": "{field} は有効なアクセスキーを参照する必要があります。",
+      "activeAccessKeyRequired": "選択したアクセスキーは取り消されたか期限切れです。別のアクセスキーを選択してください。",
       "aiTaskPreferredFailed": "優先 AI タスクエンティティを設定できませんでした。",
       "aiTaskNotConfigured": "先に Phoenix MCP AI Task をアクセスキー、プロバイダー、モデルとともに設定し、有効にしてください。",
       "aiTaskPreferencesUnavailable": "この Home Assistant では AI タスクの環境設定を利用できません。",

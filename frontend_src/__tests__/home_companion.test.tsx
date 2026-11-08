@@ -22,7 +22,7 @@ const STATES = {
 };
 
 describe("Home Companion setup", () => {
-  it("applies the explicit persona and shows its enforced scope guidance", async () => {
+  it("applies the explicit persona and leaves its scope to the Guide", async () => {
     const accessKey = { id: "test", persona: "custom" } as AccessKeyRecord;
     const updated = { ...accessKey, persona: "home_companion" } as AccessKeyRecord;
     vi.mocked(api.patchAccessKey).mockResolvedValue(updated);
@@ -32,7 +32,7 @@ describe("Home Companion setup", () => {
     await waitFor(() => expect(onUpdate).toHaveBeenCalledWith(updated));
     expect(api.patchAccessKey).toHaveBeenCalledWith("test", expect.objectContaining({ persona: "home_companion", cap_filesystem: "deny", cap_physical_control: "confirm", cap_service_response: "deny" }));
     view.rerender(<PersonaPicker accessKey={updated} onUpdate={onUpdate} />);
-    expect(screen.getByText(/Capabilities enable or disable access within the household catalog/)).toBeTruthy();
+    expect(screen.queryByText(/household catalog/)).toBeNull();
     expect(screen.getByRole("button", { name: /Home Companion/ }).getAttribute("aria-pressed")).toBe("true");
   });
 

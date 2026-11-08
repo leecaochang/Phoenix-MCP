@@ -142,9 +142,12 @@
       "ptNoticeIntro": "<strong>Läpivientikäyttöavain.</strong> Se ohittaa käyttöoikeuspuun ja ulottuu kaikkiin entiteetteihin, arkaluontoiset attribuutit poistettuina.",
       "ptNoticeUsage": "Läpivienti voi lähettää mallille tietoja jokaisesta entiteetistä, mikä kuluttaa enemmän tokeneita kuin rajattu puu.",
       "rateBurstLabel": "Purskeita sekunnissa (0 = ei sekuntikohtaista rajaa)",
+      "rateBurstShort": "Purskeita sekunnissa",
       "rateLimitHelp": "Rajoita ulkoisten sovellusten pyyntöjä minuutissa (oletus 60) ja sekunnissa (oletus 10). 0 tarkoittaa, ettei rajaa ole.",
       "rateRequestsLabel": "Pyyntöjä minuutissa (0 = poistettu käytöstä)",
+      "rateRequestsShort": "Pyyntöjä minuutissa",
       "rateSaveFailed": "Tallennus epäonnistui.",
+      "rateZeroHint": "Anna 0, jos et halua rajaa.",
       "rateValuesError": "Arvojen on oltava ei-negatiivisia kokonaislukuja.",
       "rawAccessKeyNote": "<strong>Tätä käyttöavainta ei näytetä enää uudelleen.</strong> Kopioi se nyt ennen sulkemista.",
       "reconnectBanner": "<strong>Yhdistä agenttisi uudelleen.</strong> Tämän käyttöavaimen käytettävissä olevat työkalut ovat muuttuneet.",
@@ -195,7 +198,7 @@
       "accessKeyNameLengthPattern": "name on oltava {min}-{max} merkkiä, ja siinä saa olla kirjaimia, numeroita, yhdysviivoja tai alaviivoja.",
       "accessKeyNameTaken": "Samanniminen käyttöavain on jo olemassa. Nimet, jotka eroavat vain kirjainkoolta tai merkeiltä - ja _, katsotaan samoiksi.",
       "accessKeyNotFound": "Käyttöavainta ei löytynyt.",
-      "activeAccessKeyRequired": "{field} on viitattava aktiiviseen käyttöavaimeen.",
+      "activeAccessKeyRequired": "Valittu käyttöavain on mitätöity tai vanhentunut. Valitse toinen käyttöavain.",
       "adminRequired": "Vaaditaan ylläpitäjän käyttöoikeudet.",
       "aiTaskPreferredFailed": "Ensisijaista tekoälytehtäväentiteettiä ei voitu määrittää.",
       "aiTaskNotConfigured": "Määritä ensin Phoenix MCP AI Task käyttöavaimella, palveluntarjoajalla ja mallilla ja ota se käyttöön.",
@@ -2028,7 +2031,6 @@
       "home_companion": {
         "description": "Agent Chatille ja ääniagentille: lukee ja ohjaa vain kodin laitteita.",
         "label": "Home Companion",
-        "setup": "Agent Chatissa se käyttää keskustelun tiliä ja mallia; muualla valitse palveluntarjoaja ja malli ääniagentin asetuksista. Myönnä READ- tai WRITE-käyttöoikeus tavallisen käyttöoikeuspuun kautta. Vain kotitalouden laite- ja anturityypit ovat tavoitettavissa, ja anturit, sää, kalenterit ja aurinko pysyvät vain luku -tilassa. Ominaisuudet ottavat käyttöön tai poistavat käytöstä pääsyn kotitalouden luettelon sisällä; kokoonpano- ja sisällöntuotantotyökalut pysyvät poissa käytöstä. Läpivienti ja kaikkien työkalujen ilmoittaminen on poistettu käytöstä.",
         "turnedOff": "Home Companion poisti läpiviennin ja kaikkien työkalujen ilmoittamisen käytöstä avaimelta {name}."
       },
       "maintenance": {

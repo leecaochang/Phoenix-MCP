@@ -27,7 +27,7 @@ No Expiry (default), or a number of minutes, hours, days or weeks. When the key 
 
 ### Rate limits {#key-rate-limits}
 
-**{{label:accessKeys.rateRequestsLabel}}** (default 60) and **{{label:accessKeys.rateBurstLabel}}** (default 10). You can change both later.
+**{{label:accessKeys.rateRequestsShort}}** (default 60) and **{{label:accessKeys.rateBurstShort}}** (default 10). Set either to 0 for no limit. You can change both later.
 
 Related: [Rate limiting](guide:window.keySettings#rate-limiting)
 

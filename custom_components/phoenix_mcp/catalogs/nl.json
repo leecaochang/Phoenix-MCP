@@ -190,7 +190,6 @@
       "home_companion": {
         "label": "Home Companion",
         "description": "Voor Agent Chat en de Spraakagent: leest en bedient alleen huishoudelijke apparaten.",
-        "setup": "In Agent Chat gebruikt het het account en model van de chat; elders kies je een provider en model in de spraakinstellingen. Verleen lees- of schrijftoegang via de normale machtigingsboom. Alleen huishoudelijke apparaat- en sensortypen zijn bereikbaar, en sensoren, weer, agenda's en de zon blijven alleen-lezen. Mogelijkheden schakelen toegang binnen de huishoudcatalogus in of uit; configuratie- en ontwerptools blijven niet beschikbaar. Doorvoer en het aankondigen van alle tools zijn uitgeschakeld.",
         "turnedOff": "Home Companion heeft pass-through en het aankondigen van alle tools uitgezet voor {name}."
       }
     },
@@ -1014,7 +1013,7 @@
       "errorLabel": "Fout"
     },
     "adminError": {
-      "activeAccessKeyRequired": "{field} moet naar een actief toegangssleutel verwijzen.",
+      "activeAccessKeyRequired": "De gekozen toegangssleutel is ingetrokken of verlopen. Kies een andere toegangssleutel.",
       "adminRequired": "Beheerderstoegang vereist.",
       "aiTaskPreferredFailed": "De voorkeurs-AI-taakentiteit kon niet worden geconfigureerd.",
       "aiTaskNotConfigured": "Stel eerst Phoenix MCP AI Task in met een toegangssleutel, provider en model, en schakel deze in.",
@@ -1472,9 +1471,12 @@
       "ptNoticeIntro": "<strong>Pass-through-toegangssleutel.</strong> Hij slaat de Machtigingsboom over en bereikt elke entiteit, met gevoelige attributen verwijderd.",
       "ptNoticeUsage": "Pass-through kan gegevens van elke entiteit naar het model sturen, wat meer tokens kost dan een afgebakende boom.",
       "rateBurstLabel": "Burst per seconde (0 = geen limiet per seconde)",
+      "rateBurstShort": "Burst per seconde",
       "rateLimitHelp": "Beperk verzoeken van externe apps, per minuut (standaard 60) en per seconde (standaard 10). 0 betekent geen limiet.",
       "rateRequestsLabel": "Verzoeken per minuut (0 = uitgeschakeld)",
+      "rateRequestsShort": "Verzoeken per minuut",
       "rateSaveFailed": "Opslaan mislukt.",
+      "rateZeroHint": "Vul 0 in voor geen limiet.",
       "rateValuesError": "Waarden moeten niet-negatieve gehele getallen zijn.",
       "rawAccessKeyNote": "<strong>Deze toegangssleutel wordt niet opnieuw weergegeven.</strong> Kopieer deze nu voordat je sluit.",
       "reconnectBanner": "<strong>Verbind je agent opnieuw.</strong> De beschikbare tools van deze toegangssleutel zijn gewijzigd.",

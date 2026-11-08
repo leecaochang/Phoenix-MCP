@@ -117,11 +117,12 @@ describe("Persona", () => {
     expect(compact.closest(".persona-grid")).toHaveClass("is-compact");
   });
 
-  it("keeps Home Companion's setup note in view while it is chosen", async () => {
+  it("leaves Home Companion's details to the Guide while it is chosen", async () => {
     current = accessKey({ persona: "home_companion" });
     const { container } = show(<PersonaWindow />);
     await screen.findByRole("button", { name: /Home Companion/, pressed: true });
-    expect(container.querySelector(".persona-helper")?.textContent).toContain("Voice settings");
+    expect(container.querySelector(".persona-helper")).toBeNull();
+    expect(container.querySelector(".persona-picker")?.textContent).not.toContain("Voice settings");
   });
 });
 
@@ -358,15 +359,21 @@ describe("Archived keys", () => {
 });
 
 describe("Create Access Key", () => {
-  it("keeps the pass-through explanation for Help and its fields on one row", () => {
+  it("keeps the pass-through explanation for Help and its fields in one grid", () => {
     const { container } = render(<AccessKeyCreateForm existingNames={[]} onCreated={vi.fn()} onClose={vi.fn()} onOpenSettings={vi.fn()} />);
     expect(container.querySelector("small")).toBeNull();
     const pt = screen.getByRole("checkbox", { name: /^Pass-through mode$/i });
     expect(pt.closest(".toggle-row")).toHaveAttribute("data-help", "accessKeys.passThroughModeHelp");
     expect(pt).toHaveAttribute("aria-description", t("accessKeys.passThroughModeHelp"));
     const row = container.querySelector(".access-key-create-fields")!;
-    for (const name of ["Name (required)", "Expiry", "Requests per minute (0 = disabled)", "Burst per second (0 = no per-second limit)"]) {
+    for (const name of ["Name (required)", "Expiry", "Requests per minute", "Burst per second"]) {
       expect(row.contains(screen.getByLabelText(name))).toBe(true);
+    }
+    // One hint under both limits says what 0 does; each limit points at it.
+    const hint = screen.getByText("Enter 0 for no limit.");
+    expect(row.contains(hint)).toBe(true);
+    for (const name of ["Requests per minute", "Burst per second"]) {
+      expect(screen.getByLabelText(name)).toHaveAttribute("aria-describedby", hint.id);
     }
     fireEvent.click(pt);
     expect(container.querySelector(".amber-block")).not.toBeNull();

@@ -964,7 +964,7 @@
       "badEntityId": "Formato de ID de entidad no válido.",
       "nodeIdTooLong": "El ID del nodo es demasiado largo.",
       "nodeIdInvalidChars": "El ID del nodo contiene caracteres no válidos.",
-      "activeAccessKeyRequired": "{field} debe hacer referencia a una clave de acceso activa.",
+      "activeAccessKeyRequired": "La clave de acceso elegida está revocada o ha expirado. Elija otra clave de acceso.",
       "aiTaskPreferredFailed": "No se pudo configurar la entidad de tarea IA preferida.",
       "aiTaskNotConfigured": "Configure y habilite primero la tarea IA de Phoenix MCP, con una clave de acceso, un proveedor y un modelo.",
       "aiTaskPreferencesUnavailable": "Las preferencias de tarea IA no están disponibles en este Home Assistant.",
@@ -1285,9 +1285,12 @@
       "ptNoticeIntro": "<strong>Clave de acceso de paso directo.</strong> Omite el árbol de permisos y llega a todas las entidades, sin los atributos sensibles.",
       "ptNoticeUsage": "El paso directo puede enviar al modelo detalles de todas las entidades, lo que cuesta más tokens que un árbol con ámbito.",
       "rateBurstLabel": "Ráfaga por segundo (0 = sin límite por segundo)",
+      "rateBurstShort": "Ráfaga por segundo",
       "rateLimitHelp": "Limite las solicitudes de aplicaciones externas, por minuto (60 por defecto) y por segundo (10 por defecto). 0 significa sin límite.",
       "rateRequestsLabel": "Solicitudes por minuto (0 = deshabilitado)",
+      "rateRequestsShort": "Solicitudes por minuto",
       "rateSaveFailed": "Error al guardar.",
+      "rateZeroHint": "Introduzca 0 para no aplicar ningún límite.",
       "rateValuesError": "Los valores deben ser números enteros no negativos.",
       "rawAccessKeyNote": "<strong>Esta clave de acceso no se mostrará de nuevo.</strong> Cópielo ahora antes de cerrar.",
       "reconnectBanner": "<strong>Vuelva a conectar su agente.</strong> Las herramientas disponibles de esta clave de acceso han cambiado.",
@@ -2332,7 +2335,6 @@
       "home_companion": {
         "label": "Home Companion",
         "description": "Para Agent Chat y el agente de voz: lee y controla solo los dispositivos del hogar.",
-        "setup": "En Agent Chat usa la cuenta y el modelo del chat; en los demás casos, elige un proveedor y un modelo en los ajustes de voz. Concede acceso de lectura o escritura mediante el árbol de permisos habitual. Solo se alcanzan tipos de dispositivos y sensores domésticos, y los sensores, el tiempo, los calendarios y el sol quedan en solo lectura. Las capacidades habilitan o deshabilitan el acceso dentro del catálogo doméstico; las herramientas de configuración y creación siguen sin estar disponibles. El modo de acceso directo y el anuncio de todas las herramientas están deshabilitados.",
         "turnedOff": "Home Companion desactivó el paso directo y el anuncio de todas las herramientas para {name}."
       }
     },

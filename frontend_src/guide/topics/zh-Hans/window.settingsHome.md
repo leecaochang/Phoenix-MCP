@@ -33,7 +33,7 @@
 
 ### {{label:settings.accessKey}} {#voice-access-key}
 
-决定智能体可以做什么的访问密钥。你只能选择有效的密钥。如果密钥被吊销或过期，它会在此处被清除。
+决定智能体可以做什么的访问密钥。你只能选择有效的密钥。创建或吊销密钥后，列表会随之更新。如果密钥被吊销或过期，它会在此处被清除。
 
 Home Companion 密钥会把对话交给 Home Companion 处理，并隐藏 **{{label:routing.enableVoice}}**。
 
