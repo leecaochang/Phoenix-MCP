@@ -198,23 +198,28 @@ EXEMPT = ROOT / "tests" / "contract" / "guide_exempt_sources.json"
 
 
 def _source_files() -> list[str]:
-    """Every tracked file whose change can alter what the panel or an agent sees."""
+    """Every file whose change can alter what the panel or an agent sees.
+
+    Untracked files count too: a new file is checked before it is first
+    committed, not only after.
+    """
     import subprocess
 
     try:
-        tracked = subprocess.run(
-            ["git", "ls-files", "frontend_src", "custom_components/phoenix_mcp"],
+        listed = subprocess.run(
+            ["git", "ls-files", "--cached", "--others", "--exclude-standard",
+             "frontend_src", "custom_components/phoenix_mcp"],
             cwd=ROOT, capture_output=True, text=True, check=True,
         ).stdout.split()
     except (OSError, subprocess.CalledProcessError):
-        pytest.skip("git is not available to enumerate tracked files")
-    return sorted(
-        path for path in tracked
-        if (path.startswith("frontend_src/") and path.endswith((".ts", ".tsx"))
-            and "/__tests__/" not in path and not path.startswith("frontend_src/guide/topics/"))
-        or (path.startswith("custom_components/phoenix_mcp/") and path.endswith(".py")
-            and "/mesa_core/" not in path)
-    )
+        pytest.skip("git is not available to enumerate source files")
+    def is_source(path: str) -> bool:
+        return ((path.startswith("frontend_src/") and path.endswith((".ts", ".tsx"))
+                 and "/__tests__/" not in path and not path.startswith("frontend_src/guide/topics/"))
+                or (path.startswith("custom_components/phoenix_mcp/") and path.endswith(".py")
+                    and "/mesa_core/" not in path))
+
+    return sorted(path for path in set(listed) if is_source(path) and (ROOT / path).is_file())
 
 
 def _covers() -> set[str]:
