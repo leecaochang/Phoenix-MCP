@@ -635,10 +635,41 @@ def _is_blank_or_comment(line: str) -> bool:
     return not stripped or stripped.startswith("#")
 
 
+def read_raw_text(path: str) -> str:
+    """Read a file as UTF-8 text with its line endings untranslated.
+
+    PyYAML treats CRLF as one line break, so marks and splitlines() still agree on line
+    numbers, and a splice can leave every untouched byte as it was.
+    """
+    with open(path, "r", encoding="utf-8", newline="") as f:
+        return f.read()
+
+
+def line_ending(text: str) -> str:
+    """The file's majority line ending: CRLF when more lines end in it than in a bare LF."""
+    crlf = text.count("\r\n")
+    return "\r\n" if crlf > text.count("\n") - crlf else "\n"
+
+
+def with_line_ending(text: str, eol: str) -> str:
+    """Convert LF-only text (a YAML dump) to the given line ending."""
+    return text if eol == "\n" else text.replace("\n", eol)
+
+
+def in_existing_line_ending(path: str, text: str) -> str:
+    """Convert a whole-file rewrite (LF-only) to the line ending the file already uses.
+
+    A missing file gets LF. The caller writes the result, so the writer guard still sees
+    every write site.
+    """
+    if not os.path.isfile(path):
+        return text
+    return with_line_ending(text, line_ending(read_raw_text(path)))
+
+
 def _parse_document(path: str) -> tuple[str, yaml.nodes.Node | None, PhoenixSafeLoader]:
     """Compose a file's single document node, keeping marks and the loader."""
-    with open(path, "r", encoding="utf-8") as f:
-        text = f.read()
+    text = read_raw_text(path)
     loader = PhoenixSafeLoader(text)
     node = loader.get_single_node()
     return text, node, loader
@@ -907,16 +938,21 @@ def locate_entry(layout: DomainLayout, entry_id: str) -> LocatedEntry:
 
 
 def _splice(text: str, start: int, end: int, replacement: str | None) -> str:
-    """Replace lines [start, end) with replacement text (None removes them)."""
+    """Replace lines [start, end) with replacement text (None removes them).
+
+    text keeps its own line endings; the LF-only replacement takes the file's majority
+    ending, so only the replaced lines change.
+    """
     lines = text.splitlines(keepends=True)
     before = lines[:start]
     after = lines[end:]
     # Content before the splice point may lack a trailing newline (only at EOF);
     # restore it so the replacement starts on its own line.
     if replacement is not None:
-        if before and not before[-1].endswith("\n"):
-            before[-1] += "\n"
-        return "".join(before) + replacement + "".join(after)
+        eol = line_ending(text)
+        if before and not before[-1].endswith(("\n", "\r")):
+            before[-1] += eol
+        return "".join(before) + with_line_ending(replacement, eol) + "".join(after)
     return "".join(before) + "".join(after)
 
 
@@ -1199,7 +1235,7 @@ def _automation_write_checked(
                 items.append(config)
             else:
                 items[matches[0]] = config
-            write_utf8_file_atomic(path, dump_tagged(items))
+            write_utf8_file_atomic(path, in_existing_line_ending(path, dump_tagged(items)))
         return OpResult(ok=True, before=current, file=path)
     try:
         located = locate_entry(layout, entry_id)
@@ -1340,8 +1376,7 @@ def _create_append(path: str, shape: str, entry_id: str, config: dict) -> OpResu
     doc = None
     if os.path.isfile(path):
         try:
-            with open(path, "r", encoding="utf-8") as f:
-                text = f.read()
+            text = read_raw_text(path)
             doc = yaml.load(text, Loader=PhoenixSafeLoader)
         except (OSError, yaml.YAMLError) as exc:
             return OpResult(
@@ -1374,9 +1409,10 @@ def _create_append(path: str, shape: str, entry_id: str, config: dict) -> OpResu
         # and write the entry as a clean block document.
         kept = [ln for ln in text.splitlines(keepends=True) if ln.strip() not in ("[]", "{}")]
         prefix = "".join(kept)
-        if prefix and not prefix.endswith("\n"):
-            prefix += "\n"
-        new_text = prefix + rendered
+        eol = line_ending(text)
+        if prefix and not prefix.endswith(("\n", "\r")):
+            prefix += eol
+        new_text = prefix + with_line_ending(rendered, eol)
 
     # Verify before writing: the result must parse and its new entry must read back
     # exactly as sent, so a malformed append or a rewritten value is refused and the

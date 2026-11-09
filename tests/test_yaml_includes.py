@@ -812,6 +812,78 @@ def test_self_check_aborts_on_bad_span(tmp_path):
 
 
 # ---------------------------------------------------------------------------
+def _crlf(text: str) -> bytes:
+    return textwrap.dedent(text).replace("\n", "\r\n").encode("utf-8")
+
+
+def test_edit_of_a_crlf_file_changes_only_the_edited_entry(tmp_path):
+    write(tmp_path, "configuration.yaml", DEFAULT_CONFIGURATION)
+    (tmp_path / "automations.yaml").write_bytes(_crlf(SPLICE_FILE))
+    res = yi.perform_edit(str(tmp_path), "automation", "aaa",
+                          {"id": "aaa", "alias": "First v2"})
+    assert res.ok, res.message
+    assert (tmp_path / "automations.yaml").read_bytes() == _crlf("""\
+        # top of file
+        - id: aaa
+          alias: First v2
+        # bbb section
+        - id: bbb
+          alias: Second
+          password: !secret db_pass
+
+        # trailing notes
+    """)
+    assert res.before == {"id": "aaa", "alias": "First"}
+
+
+def test_delete_from_a_crlf_file_keeps_crlf(tmp_path):
+    write(tmp_path, "configuration.yaml", DEFAULT_CONFIGURATION)
+    (tmp_path / "automations.yaml").write_bytes(_crlf(SPLICE_FILE))
+    res = yi.perform_delete(str(tmp_path), "automation", "aaa")
+    assert res.ok, res.message
+    assert (tmp_path / "automations.yaml").read_bytes() == _crlf("""\
+        # top of file
+        # bbb section
+        - id: bbb
+          alias: Second
+          password: !secret db_pass
+
+        # trailing notes
+    """)
+
+
+def test_crlf_block_scalar_reads_and_hashes_as_lf(tmp_path):
+    """The reviewed hash of a CRLF entry matches what a read reports, so edits are not refused."""
+    write(tmp_path, "configuration.yaml", DEFAULT_CONFIGURATION)
+    (tmp_path / "automations.yaml").write_bytes(
+        b"- id: aaa\r\n  alias: A\r\n  description: |\r\n    one\r\n    two\r\n- id: bbb\r\n  alias: B\r\n")
+    before = {"id": "aaa", "alias": "A", "description": "one\ntwo\n"}
+    res = yi.perform_delete(str(tmp_path), "automation", "aaa", content_hash(before))
+    assert res.ok, res.message
+    assert res.before == before
+    assert (tmp_path / "automations.yaml").read_bytes() == b"- id: bbb\r\n  alias: B\r\n"
+
+
+def test_edit_of_a_mixed_file_keeps_untouched_endings(tmp_path):
+    """Untouched lines keep their own endings; the spliced lines take the majority (CRLF)."""
+    write(tmp_path, "configuration.yaml", DEFAULT_CONFIGURATION)
+    (tmp_path / "automations.yaml").write_bytes(
+        b"# head\n- id: aaa\r\n  alias: A\r\n- id: bbb\r\n  alias: B\n")
+    res = yi.perform_edit(str(tmp_path), "automation", "aaa", {"id": "aaa", "alias": "A2"})
+    assert res.ok, res.message
+    assert (tmp_path / "automations.yaml").read_bytes() == (
+        b"# head\n- id: aaa\r\n  alias: A2\r\n- id: bbb\r\n  alias: B\n")
+
+
+def test_edit_of_a_crlf_file_without_trailing_newline(tmp_path):
+    write(tmp_path, "configuration.yaml", DEFAULT_CONFIGURATION)
+    (tmp_path / "automations.yaml").write_bytes(b"- id: aaa\r\n  alias: A\r\n- id: bbb\r\n  alias: B")
+    res = yi.perform_edit(str(tmp_path), "automation", "bbb", {"id": "bbb", "alias": "B2"})
+    assert res.ok, res.message
+    assert (tmp_path / "automations.yaml").read_bytes() == (
+        b"- id: aaa\r\n  alias: A\r\n- id: bbb\r\n  alias: B2\r\n")
+
+
 # Create routing
 # ---------------------------------------------------------------------------
 
@@ -875,6 +947,41 @@ def test_create_append_no_trailing_newline(tmp_path):
     assert res.ok
     assert read(tmp_path, "automations.yaml") == (
         "- id: aaa\n  alias: A\n- id: phoenix_mcp_x\n  alias: X\n")
+
+
+@pytest.mark.parametrize("existing, expected", [
+    (b"- id: aaa\r\n  alias: A\r\n", b"- id: aaa\r\n  alias: A\r\n- id: phoenix_mcp_x\r\n  alias: X\r\n"),
+    (b"- id: aaa\r\n  alias: A", b"- id: aaa\r\n  alias: A\r\n- id: phoenix_mcp_x\r\n  alias: X\r\n"),
+    (b"# mine\r\n[]\r\n", b"# mine\r\n- id: phoenix_mcp_x\r\n  alias: X\r\n"),
+])
+def test_create_in_a_crlf_file_appends_crlf(tmp_path, existing, expected):
+    write(tmp_path, "configuration.yaml", DEFAULT_CONFIGURATION)
+    (tmp_path / "automations.yaml").write_bytes(existing)
+    res = yi.perform_create(str(tmp_path), "automation", "phoenix_mcp_x", {"id": "phoenix_mcp_x", "alias": "X"})
+    assert res.ok, res.message
+    assert (tmp_path / "automations.yaml").read_bytes() == expected
+
+
+def test_fallback_rewrite_keeps_crlf(tmp_path):
+    """Without configuration.yaml the automation file is rewritten whole, in its own ending."""
+    (tmp_path / "automations.yaml").write_bytes(b"- id: aaa\r\n  alias: A\r\n")
+    res = yi.automation_write(str(tmp_path), "aaa", {"id": "aaa", "alias": "A2"}, create=False,
+                              expected_hash=content_hash({"id": "aaa", "alias": "A"}))
+    assert res.ok, res.message
+    assert (tmp_path / "automations.yaml").read_bytes() == b"- id: aaa\r\n  alias: A2\r\n"
+
+
+@pytest.mark.parametrize("existing, expected", [
+    (None, b"a: 1\n"),
+    (b"x: 0\n", b"a: 1\n"),
+    (b"x: 0\r\ny: 0\r\n", b"a: 1\r\n"),
+    (b"x: 0\r\ny: 0\nz: 0\n", b"a: 1\n"),
+])
+def test_in_existing_line_ending(tmp_path, existing, expected):
+    path = tmp_path / "f.yaml"
+    if existing is not None:
+        path.write_bytes(existing)
+    assert yi.in_existing_line_ending(str(path), "a: 1\n").encode("utf-8") == expected
 
 
 def test_create_beside_a_directory_goes_to_the_editor_file(tmp_path):

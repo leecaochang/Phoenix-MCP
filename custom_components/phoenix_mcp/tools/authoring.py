@@ -148,7 +148,7 @@ def _read_automations_yaml(path: str) -> list:
 
 def _write_automations_yaml(path: str, data: list) -> None:
     contents = _yaml_dump(data)
-    _write_utf8_file_atomic(path, contents)
+    _write_utf8_file_atomic(path, yaml_includes.in_existing_line_ending(path, contents))
 
 
 def _get_script_lock(hass: HomeAssistant) -> asyncio.Lock:
@@ -166,7 +166,7 @@ def _read_scripts_yaml(path: str) -> dict:
 
 def _write_scripts_yaml(path: str, data: dict) -> None:
     contents = _yaml_dump(data)
-    _write_utf8_file_atomic(path, contents)
+    _write_utf8_file_atomic(path, yaml_includes.in_existing_line_ending(path, contents))
 
 
 def _yaml_file_has_includes(path: str) -> bool:
@@ -190,7 +190,7 @@ def _read_scenes_yaml(path: str) -> list:
 
 
 def _write_scenes_yaml(path: str, data: list) -> None:
-    _write_utf8_file_atomic(path, _yaml_dump(data))
+    _write_utf8_file_atomic(path, yaml_includes.in_existing_line_ending(path, _yaml_dump(data)))
 
 
 def _get_scene_lock(hass: HomeAssistant) -> asyncio.Lock:
