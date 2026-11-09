@@ -2726,7 +2726,8 @@
       "unpin": "取消固定",
       "vertical": "纵向",
       "verticalScrolling": "纵向滚动",
-      "windowMenu": "窗口菜单"
+      "windowMenu": "窗口菜单",
+      "singleColumn": "单列"
     },
     "notifications": {
       "title": "通知",
@@ -2959,7 +2960,8 @@
       "guideDismissWelcome": "隐藏此欢迎页面。可在目录中再次找到它。",
       "showSecret": "以纯文本显示密钥，以便检查粘贴的内容。",
       "guideSearchAgain": "再次在指南中搜索此内容。",
-      "settingsAiDecisionsReplaceDefault": "Home Assistant 只有一个默认决策实体，因此这会替换当前实体。"
+      "settingsAiDecisionsReplaceDefault": "Home Assistant 只有一个默认决策实体，因此这会替换当前实体。",
+      "menuSingleColumn": "空间足够时，将工作区和窗口工具放在同一列。"
     },
     "guide": {
       "title": "指南",

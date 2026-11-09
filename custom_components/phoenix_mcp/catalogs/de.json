@@ -2726,7 +2726,8 @@
       "unpin": "Lösen",
       "vertical": "Vertikal",
       "verticalScrolling": "Vertikales Scrollen",
-      "windowMenu": "Fenstermenü"
+      "windowMenu": "Fenstermenü",
+      "singleColumn": "Einspaltig"
     },
     "notifications": {
       "title": "Benachrichtigungen",
@@ -2959,7 +2960,8 @@
       "guideDismissWelcome": "Diese Willkommensseite ausblenden. Sie ist weiter unter Inhalt zu finden.",
       "showSecret": "Den Schlüssel als Klartext anzeigen, um zu prüfen, was eingefügt wurde.",
       "guideSearchAgain": "Erneut im Leitfaden danach suchen.",
-      "settingsAiDecisionsReplaceDefault": "Home Assistant hat eine Standard-Entität für Entscheidungen, daher ersetzt dies die aktuelle."
+      "settingsAiDecisionsReplaceDefault": "Home Assistant hat eine Standard-Entität für Entscheidungen, daher ersetzt dies die aktuelle.",
+      "menuSingleColumn": "Arbeitsbereiche und Fensterwerkzeuge in eine Spalte setzen, wenn sie hineinpassen."
     },
     "guide": {
       "title": "Leitfaden",

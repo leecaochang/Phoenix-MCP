@@ -2732,7 +2732,8 @@
       "unpin": "Lossa",
       "vertical": "Lodrätt",
       "verticalScrolling": "Lodrät rullning",
-      "windowMenu": "Fönstermeny"
+      "windowMenu": "Fönstermeny",
+      "singleColumn": "En kolumn"
     },
     "notifications": {
       "title": "Aviseringar",
@@ -2965,7 +2966,8 @@
       "guideDismissWelcome": "Dölj den här välkomstsidan. Hitta den igen under Innehåll.",
       "showSecret": "Visa nyckeln som vanlig text för att kontrollera vad som klistrades in.",
       "guideSearchAgain": "Sök efter detta i guiden igen.",
-      "settingsAiDecisionsReplaceDefault": "Home Assistant har en standardentitet för beslut, så detta ersätter den nuvarande."
+      "settingsAiDecisionsReplaceDefault": "Home Assistant har en standardentitet för beslut, så detta ersätter den nuvarande.",
+      "menuSingleColumn": "Placera arbetsytorna och fönsterverktygen i en kolumn när de får plats."
     },
     "guide": {
       "title": "Guide",

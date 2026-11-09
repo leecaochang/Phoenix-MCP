@@ -38,6 +38,15 @@ export function chooseFit(apply: (step: number) => void, fits: () => boolean, st
 }
 
 /** Whether every button of a one-row toolbar sits on one line, with nothing running past its end. */
+/** Whether an upright toolbar's single column fits: nothing runs past its height or into a second column. */
+export function singleColumnFits(body: HTMLElement): boolean {
+  const boxes = [...body.querySelectorAll(".phx-toolbar-button")].map((b) => b.getBoundingClientRect()).filter((r) => r.width > 0 || r.height > 0);
+  if (body.scrollHeight > body.clientHeight + 1) return false;
+  if (boxes.length < 2) return true;
+  const firstColumnRight = Math.min(...boxes.map((r) => r.right));
+  return boxes.every((r) => r.left < firstColumnRight);
+}
+
 export function singleRowFits(body: HTMLElement): boolean {
   const boxes = [...body.querySelectorAll(".phx-toolbar-button")].map((b) => b.getBoundingClientRect()).filter((r) => r.width > 0 || r.height > 0);
   if (body.scrollWidth > body.clientWidth + 1) return false;

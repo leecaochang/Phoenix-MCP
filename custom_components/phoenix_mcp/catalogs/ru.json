@@ -2865,7 +2865,8 @@
       "unpin": "Открепить",
       "vertical": "Вертикально",
       "verticalScrolling": "Вертикальная прокрутка",
-      "windowMenu": "Меню окна"
+      "windowMenu": "Меню окна",
+      "singleColumn": "В один столбец"
     },
     "notifications": {
       "title": "Уведомления",
@@ -3098,7 +3099,8 @@
       "guideDismissWelcome": "Скрыть эту приветственную страницу. Её можно снова найти в «Содержании».",
       "showSecret": "Показать ключ обычным текстом, чтобы проверить, что было вставлено.",
       "guideSearchAgain": "Снова найти это в руководстве.",
-      "settingsAiDecisionsReplaceDefault": "В Home Assistant один объект решений по умолчанию, поэтому он заменит текущий."
+      "settingsAiDecisionsReplaceDefault": "В Home Assistant один объект решений по умолчанию, поэтому он заменит текущий.",
+      "menuSingleColumn": "Размещать рабочие области и инструменты окон в один столбец, если они помещаются."
     },
     "guide": {
       "title": "Руководство",

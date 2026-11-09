@@ -673,6 +673,8 @@
 .phx-toolbar-button.is-danger { color: var(--phx-toolbar-danger); }
 .phx-toolbar-handle,
 .phx-toolbar-plain { color: var(--phx-toolbar-muted); }
+/* Toolbar Options keeps the plain, borderless look but reads like every other toolbar button. */
+.phx-toolbar-plain.phx-toolbar-options { color: var(--phx-toolbar-btn-fg); }
 .phx-toolbar:focus-visible,
 .phx-toolbar-handle:focus-visible,
 .phx-toolbar-button:focus-visible { outline-color: var(--phx-toolbar-focus); }

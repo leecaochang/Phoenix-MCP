@@ -2726,7 +2726,8 @@
       "unpin": "Desfijar",
       "vertical": "Vertical",
       "verticalScrolling": "Desplazamiento vertical",
-      "windowMenu": "Menú de la ventana"
+      "windowMenu": "Menú de la ventana",
+      "singleColumn": "Una sola columna"
     },
     "notifications": {
       "title": "Notificaciones",
@@ -2959,7 +2960,8 @@
       "guideDismissWelcome": "Oculte esta página de bienvenida. Vuelva a encontrarla en Contenido.",
       "showSecret": "Mostrar la clave como texto sin formato para comprobar lo que se pegó.",
       "guideSearchAgain": "Vuelva a buscar esto en la guía.",
-      "settingsAiDecisionsReplaceDefault": "Home Assistant tiene una entidad de decisiones predeterminada, así que esto sustituye a la actual."
+      "settingsAiDecisionsReplaceDefault": "Home Assistant tiene una entidad de decisiones predeterminada, así que esto sustituye a la actual.",
+      "menuSingleColumn": "Coloque los espacios de trabajo y las herramientas de ventana en una sola columna cuando quepan."
     },
     "guide": {
       "title": "Guía",

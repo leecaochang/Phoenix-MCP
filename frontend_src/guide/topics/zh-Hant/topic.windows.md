@@ -15,8 +15,9 @@
 
 - **{{label:workspace.iconsAndText}}**（預設）或 **{{label:workspace.iconsOnly}}**。
 - **{{label:workspace.singleRow}}** 在放得下時把工具與工作區按鈕放在同一列，放不下時恢復為兩列。
+- **{{label:workspace.singleColumn}}** 在工具列停駐在側邊或直立浮動時起同樣作用：用一欄代替兩欄。它與 {{label:workspace.singleRow}} 是同一個選項，所以工具列轉向後仍然保留。
 - 把工具列停駐到任意邊緣，或用 **{{label:workspace.floatToolbar}}** 將它放到任意位置。你也可以拖曳它的握把使其浮動。
-- **{{label:workspace.collapseToolbar}}** 將它收起到握把。
+- **{{label:workspace.collapseToolbar}}** 將浮動的工具列收起到握把。停駐的工具列不會收起。收起後，選單只提供 **{{label:workspace.expandToolbar}}**。
 
 ## 標題列 {#title-bar}
 

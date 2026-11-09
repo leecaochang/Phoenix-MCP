@@ -2732,7 +2732,8 @@
       "unpin": "Løsne",
       "vertical": "Loddrett",
       "verticalScrolling": "Loddrett rulling",
-      "windowMenu": "Vindusmeny"
+      "windowMenu": "Vindusmeny",
+      "singleColumn": "Én kolonne"
     },
     "notifications": {
       "title": "Varsler",
@@ -2965,7 +2966,8 @@
       "guideDismissWelcome": "Skjul denne velkomstsiden. Finn den igjen under Innhold.",
       "showSecret": "Vis nøkkelen som vanlig tekst for å kontrollere hva som ble limt inn.",
       "guideSearchAgain": "Søk etter dette i veiledningen igjen.",
-      "settingsAiDecisionsReplaceDefault": "Home Assistant har én standardentitet for beslutninger, så dette erstatter den gjeldende."
+      "settingsAiDecisionsReplaceDefault": "Home Assistant har én standardentitet for beslutninger, så dette erstatter den gjeldende.",
+      "menuSingleColumn": "Plasser arbeidsområdene og vindusverktøyene i én kolonne når det er plass."
     },
     "guide": {
       "title": "Veiledning",

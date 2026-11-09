@@ -2732,7 +2732,8 @@
       "unpin": "Irrota",
       "vertical": "Pystysuora",
       "verticalScrolling": "Pystysuuntainen vieritys",
-      "windowMenu": "Ikkunan valikko"
+      "windowMenu": "Ikkunan valikko",
+      "singleColumn": "Yksi sarake"
     },
     "notifications": {
       "title": "Ilmoitukset",
@@ -2965,7 +2966,8 @@
       "guideDismissWelcome": "Piilota tämä tervetulosivu. Löydät sen uudelleen Sisällyksestä.",
       "showSecret": "Näytä avain tavallisena tekstinä, jotta voit tarkistaa, mitä liitettiin.",
       "guideSearchAgain": "Hae tätä oppaasta uudelleen.",
-      "settingsAiDecisionsReplaceDefault": "Home Assistantissa on yksi päätösten oletusentiteetti, joten tämä korvaa nykyisen."
+      "settingsAiDecisionsReplaceDefault": "Home Assistantissa on yksi päätösten oletusentiteetti, joten tämä korvaa nykyisen.",
+      "menuSingleColumn": "Sijoita työtilat ja ikkunatyökalut yhteen sarakkeeseen, kun ne mahtuvat."
     },
     "guide": {
       "title": "Opas",

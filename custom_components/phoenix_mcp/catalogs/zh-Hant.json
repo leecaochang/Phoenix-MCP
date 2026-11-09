@@ -2732,7 +2732,8 @@
       "unpin": "取消固定",
       "vertical": "縱向",
       "verticalScrolling": "縱向捲動",
-      "windowMenu": "視窗選單"
+      "windowMenu": "視窗選單",
+      "singleColumn": "單欄"
     },
     "notifications": {
       "title": "通知",
@@ -2965,7 +2966,8 @@
       "guideDismissWelcome": "隱藏此歡迎頁面。可在目錄中再次找到它。",
       "showSecret": "以純文字顯示金鑰，以便檢查貼上的內容。",
       "guideSearchAgain": "再次在指南中搜尋此內容。",
-      "settingsAiDecisionsReplaceDefault": "Home Assistant 只有一個預設決策實體，因此這會取代目前的實體。"
+      "settingsAiDecisionsReplaceDefault": "Home Assistant 只有一個預設決策實體，因此這會取代目前的實體。",
+      "menuSingleColumn": "空間足夠時，將工作區和視窗工具放在同一欄。"
     },
     "guide": {
       "title": "指南",

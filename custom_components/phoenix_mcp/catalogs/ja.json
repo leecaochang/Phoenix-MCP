@@ -2726,7 +2726,8 @@
       "unpin": "固定を解除",
       "vertical": "縦",
       "verticalScrolling": "縦スクロール",
-      "windowMenu": "ウィンドウメニュー"
+      "windowMenu": "ウィンドウメニュー",
+      "singleColumn": "一列表示"
     },
     "notifications": {
       "title": "通知",
@@ -2959,7 +2960,8 @@
       "guideDismissWelcome": "このようこそページを非表示にします。目次からいつでも開けます。",
       "showSecret": "貼り付けた内容を確認できるよう、キーをプレーンテキストで表示します。",
       "guideSearchAgain": "これをもう一度ガイドで検索します。",
-      "settingsAiDecisionsReplaceDefault": "Home Assistant の既定の意思決定エンティティはひとつだけなので、現在のものを置き換えます。"
+      "settingsAiDecisionsReplaceDefault": "Home Assistant の既定の意思決定エンティティはひとつだけなので、現在のものを置き換えます。",
+      "menuSingleColumn": "収まる場合は、ワークスペースとウィンドウのツールを一列に並べます。"
     },
     "guide": {
       "title": "ガイド",

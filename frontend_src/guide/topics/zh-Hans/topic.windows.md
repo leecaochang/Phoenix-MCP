@@ -15,8 +15,9 @@
 
 - **{{label:workspace.iconsAndText}}**（默认）或 **{{label:workspace.iconsOnly}}**。
 - **{{label:workspace.singleRow}}** 在放得下时把工具与工作区按钮放在同一行，放不下时恢复为两行。
+- **{{label:workspace.singleColumn}}** 在工具栏停靠在侧边或竖直浮动时起同样作用：用一列代替两列。它与 {{label:workspace.singleRow}} 是同一个选项，所以工具栏转向后仍然保留。
 - 把工具栏停靠到任意边缘，或用 **{{label:workspace.floatToolbar}}** 把它放到任意位置。你也可以拖动它的手柄使其浮动。
-- **{{label:workspace.collapseToolbar}}** 把它收缩到手柄。
+- **{{label:workspace.collapseToolbar}}** 把浮动的工具栏收缩到手柄。停靠的工具栏不会收缩。收缩后，菜单只提供 **{{label:workspace.expandToolbar}}**。
 
 ## 标题栏 {#title-bar}
 

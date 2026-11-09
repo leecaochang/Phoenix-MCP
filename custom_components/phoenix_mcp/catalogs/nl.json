@@ -2807,7 +2807,8 @@
       "unpin": "Losmaken",
       "vertical": "Verticaal",
       "verticalScrolling": "Verticaal schuiven",
-      "windowMenu": "Venstermenu"
+      "windowMenu": "Venstermenu",
+      "singleColumn": "Eén kolom"
     },
     "notifications": {
       "title": "Meldingen",
@@ -3040,7 +3041,8 @@
       "guideDismissWelcome": "Verberg deze welkomstpagina. Je vindt hem terug onder Inhoud.",
       "showSecret": "Toon de sleutel als platte tekst om te controleren wat er is geplakt.",
       "guideSearchAgain": "Zoek hier opnieuw naar in de gids.",
-      "settingsAiDecisionsReplaceDefault": "Home Assistant heeft één standaardentiteit voor beslissingen, dus dit vervangt de huidige."
+      "settingsAiDecisionsReplaceDefault": "Home Assistant heeft één standaardentiteit voor beslissingen, dus dit vervangt de huidige.",
+      "menuSingleColumn": "Zet de werkruimten en venstertools in één kolom als ze passen."
     },
     "guide": {
       "title": "Gids",

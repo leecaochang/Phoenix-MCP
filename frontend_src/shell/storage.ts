@@ -30,7 +30,7 @@ export interface ToolbarState {
   mode: "icons" | "icon-text";
   /** Whether a floating toolbar stands upright; a docked one follows its edge. */
   vertical: boolean;
-  /** A horizontal toolbar puts the tools on the main row, back on a second row while they do not fit. */
+  /** The tools join the workspaces in one row (one column when upright), back to two while they do not fit. */
   singleRow: boolean;
 }
 /** Docked at the top, icons only, tools shown: the accepted starting point. */

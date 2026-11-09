@@ -2726,7 +2726,8 @@
       "unpin": "Désépingler",
       "vertical": "Verticale",
       "verticalScrolling": "Défilement vertical",
-      "windowMenu": "Menu de la fenêtre"
+      "windowMenu": "Menu de la fenêtre",
+      "singleColumn": "Une seule colonne"
     },
     "notifications": {
       "title": "Notifications",
@@ -2959,7 +2960,8 @@
       "guideDismissWelcome": "Masquez cette page d’accueil. Retrouvez-la dans le Sommaire.",
       "showSecret": "Afficher la clé en clair pour vérifier ce qui a été collé.",
       "guideSearchAgain": "Recherchez à nouveau ceci dans le guide.",
-      "settingsAiDecisionsReplaceDefault": "Home Assistant a une seule entité de décisions par défaut, cela remplace donc l’entité actuelle."
+      "settingsAiDecisionsReplaceDefault": "Home Assistant a une seule entité de décisions par défaut, cela remplace donc l’entité actuelle.",
+      "menuSingleColumn": "Placez les espaces de travail et les outils de fenêtre dans une seule colonne quand ils tiennent."
     },
     "guide": {
       "title": "Guide",

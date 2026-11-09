@@ -16,7 +16,7 @@ import { MenuButton, useContextMenu, type MenuEntry } from "../ui/Menu";
 import type { WorkspaceController } from "./dock/controller";
 import { usePanelData } from "./PanelData";
 import { toolbarVertical, withToolbarDock, WORKSPACE_IDS, type Env, type ToolbarDock, type ToolbarState, type WorkspaceId } from "./storage";
-import { chooseFit, fitClass, rowFits, singleRowFits } from "./toolbarFit";
+import { chooseFit, fitClass, rowFits, singleColumnFits, singleRowFits } from "./toolbarFit";
 import { SHARED_GROUP, ToolRegistryContext, type Tool, type ToolGroup, type ToolRegistry } from "./tools";
 import { useSettings } from "./settings";
 import { HELP_WINDOW } from "./help";
@@ -101,21 +101,28 @@ function within(shell: DOMRect, bar: DOMRect, x: number, y: number): { x: number
 }
 
 /**
- * The toolbar's own menu: display mode, one row or two, where it sits, and
- * Collapse or Expand. While floating it offers the orientation it is not in,
- * and no Float Toolbar. Desktop only: phones keep the toolbar docked at the
+ * The toolbar's own menu: display mode, one row or two (columns when upright),
+ * where it sits, and Collapse while floating. While floating it offers the
+ * orientation it is not in, and no Float Toolbar. Collapsed, it offers only
+ * Expand. Desktop only: phones keep the toolbar docked at the
  * top, with icons only, and never collapsed.
  */
 function appearanceMenu(state: ToolbarState, onChange: (next: ToolbarState) => void, env: Env): MenuEntry[] {
   const update = (patch: Partial<ToolbarState>) => onChange({ ...state, ...patch });
+  // Collapsed, the menu holds only the way back.
+  if (state.collapsed) return [{ id: "expand", label: t("workspace.expandToolbar"), help: t("help.menuExpandToolbar"), onSelect: () => update({ collapsed: false }) }];
   const items: MenuEntry[] = [
     { id: "icons", label: t("workspace.iconsOnly"), help: t("help.menuIconsOnly"), checked: state.mode === "icons", onSelect: () => update({ mode: "icons" }) },
     { id: "icon-text", label: t("workspace.iconsAndText"), help: t("help.menuIconsAndText"), checked: state.mode === "icon-text", onSelect: () => update({ mode: "icon-text" }) },
   ];
-  // Single Row, checked while chosen; an upright toolbar has columns instead. It stays
-  // checked while the toolbar shows two rows because one does not fit.
-  if (env === "desktop" && !toolbarVertical(state)) {
-    items.push("separator", { id: "single-row", label: t("workspace.singleRow"), help: t("help.menuSingleRow"), checked: state.singleRow, toggle: true, onSelect: () => update({ singleRow: !state.singleRow }) });
+  // Single Row, or Single Column on an upright toolbar: one setting, kept when the toolbar turns.
+  // It stays checked while the toolbar shows two rows or columns because one does not fit.
+  if (env === "desktop") {
+    const upright = toolbarVertical(state);
+    items.push("separator", {
+      id: "single-row", label: t(upright ? "workspace.singleColumn" : "workspace.singleRow"), help: t(upright ? "help.menuSingleColumn" : "help.menuSingleRow"),
+      checked: state.singleRow, toggle: true, onSelect: () => update({ singleRow: !state.singleRow }),
+    });
   }
   if (env === "desktop") {
     items.push("separator");
@@ -129,9 +136,10 @@ function appearanceMenu(state: ToolbarState, onChange: (next: ToolbarState) => v
       items.push({ id: vertical ? "horizontal" : "vertical", label: t(vertical ? "workspace.horizontal" : "workspace.vertical"), help: t(vertical ? "help.menuToolbarHorizontal" : "help.menuToolbarVertical"), onSelect: () => update({ vertical: !vertical }) });
     }
   }
-  items.push("separator", state.collapsed
-    ? { id: "expand", label: t("workspace.expandToolbar"), help: t("help.menuExpandToolbar"), onSelect: () => update({ collapsed: false }) }
-    : { id: "collapse", label: t("workspace.collapseToolbar"), help: t("help.menuCollapseToolbar"), onSelect: () => update({ collapsed: true }) });
+  // Only a floating toolbar collapses; docked, it keeps its edge.
+  if (state.dock === "floating") {
+    items.push("separator", { id: "collapse", label: t("workspace.collapseToolbar"), help: t("help.menuCollapseToolbar"), onSelect: () => update({ collapsed: true }) });
+  }
   return items;
 }
 
@@ -276,7 +284,8 @@ export function Toolbar({ controller, shellRoot, env, state, onChange, documenta
   const fitOneLine = env === "desktop" && effective.mode === "icon-text" && !effective.collapsed && !vertical;
   // Phones always put the tools beside Agent Chat, Help and Workspace Options, so the toolbar is at
   // most two rows: the workspaces, then the rest.
-  const oneRow = (env === "mobile" || (env === "desktop" && effective.singleRow)) && !effective.collapsed && !vertical;
+  // Upright, the same setting puts everything in a single column.
+  const oneRow = (env === "mobile" || (env === "desktop" && effective.singleRow)) && !effective.collapsed;
   const fitKey = useRef("");
   const refit = useRef<(force?: boolean) => void>(() => {});
   useLayoutEffect(() => {
@@ -292,7 +301,7 @@ export function Toolbar({ controller, shellRoot, env, state, onChange, documenta
       if (oneRow && tools) {
         bar.dataset.rows = "1";
         if (fitOneLine) bar.dataset.fit = "0";
-        if (env === "mobile" || singleRowFits(body)) return;
+        if (env === "mobile" || (vertical ? singleColumnFits(body) : singleRowFits(body))) return;
       }
       delete bar.dataset.rows;
       if (!fitOneLine) { delete bar.dataset.fit; return; }
@@ -400,7 +409,10 @@ export function Toolbar({ controller, shellRoot, env, state, onChange, documenta
                 Phones have nothing to choose, so no menu. */}
             {env === "desktop" && !collapsed && (
               <MenuButton label={t("workspace.toolbarOptions")} help="help.toolbarOptions" icon={<Icon name="more" size={16} />}
-                items={() => appearanceMenu(state, onChange, env)} className="phx-toolbar-button phx-toolbar-plain phx-toolbar-options" />
+                items={() => appearanceMenu(state, onChange, env)} className={`phx-toolbar-button phx-toolbar-plain phx-toolbar-options ${fitClass(1)}`}>
+                {/* Named like the other buttons in icons-and-text mode; the first to give up its text when the row is short. */}
+                <span className="phx-toolbar-label">{t("workspace.toolbarOptions")}</span>
+              </MenuButton>
             )}
           </div>
           {/* The open windows' tools always show: hiding them only made them harder to find. */}

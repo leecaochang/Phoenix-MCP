@@ -245,8 +245,10 @@ describe("phoenix-mcp-panel full app shell", () => {
       expect(main.querySelector('[aria-label="Workspace Options"]')).toHaveClass("phx-fit-1");
       expect(main.querySelector('[aria-label="Help"]')).toHaveClass("phx-fit-2");
       expect([...main.querySelectorAll(".phx-toolbar-nav button")].every((b) => b.classList.contains("phx-fit-4"))).toBe(true);
-      // The toolbar options and the tools toggle are icons only and never part of the fit.
-      expect(main.querySelector('[aria-label="Toolbar Options"]')?.className).not.toMatch(/phx-fit-/);
+      // Toolbar Options is named like the other buttons, and gives up its text first, with Workspace Options.
+      const toolbarOptions = main.querySelector('[aria-label="Toolbar Options"]')!;
+      expect(toolbarOptions).toHaveClass("phx-fit-1");
+      expect(toolbarOptions.querySelector(".phx-toolbar-label")?.textContent).toBe("Toolbar Options");
     });
 
     it("sends this browser's arrangement when Home Assistant has none yet", async () => {
@@ -324,15 +326,24 @@ describe("phoenix-mcp-panel full app shell", () => {
       const grip = () => act(() => { el.shadowRoot!.querySelector<HTMLButtonElement>('.phx-toolbar > [aria-label="Move Toolbar"]')!.click(); });
       // The grip sits outside the rows, beside both of them.
       expect(el.shadowRoot!.querySelector(".phx-toolbar-main [aria-label='Move Toolbar']")).toBeNull();
-      // No separate collapse button: Collapse lives in the menu. Docked, no orientation choice.
+      // No separate collapse button. Docked, no orientation choice and no Collapse: only a floating toolbar collapses.
       expect(el.shadowRoot!.querySelector('[aria-label="Collapse Toolbar"]')).toBeNull();
       options();
-      expect(items()).toEqual(expect.arrayContaining(["Icons Only", "Icons and Text", "Dock at Left", "Float Toolbar", "Collapse Toolbar"]));
+      expect(items()).toEqual(expect.arrayContaining(["Icons Only", "Icons and Text", "Single Row", "Dock at Left", "Float Toolbar"]));
+      expect(items()).not.toContain("Collapse Toolbar");
       expect(items()).not.toContain("Vertical");
       expect(items()).not.toContain("Horizontal");
+      pick("Single Row");
+      await waitFor(() => expect(bar()).toHaveAttribute("data-rows", "1"));
+      options();
       pick("Dock at Left");
       await waitFor(() => expect(bar()).toHaveAttribute("data-orient", "vertical"));
+      // Upright, the same setting is Single Column, still on, and the toolbar keeps to one column.
+      expect(bar()).toHaveAttribute("data-rows", "1");
       options();
+      expect(items()).toContain("Single Column");
+      expect(items()).not.toContain("Single Row");
+      expect(items()).not.toContain("Collapse Toolbar");
       expect(items()).not.toContain("Horizontal");
       pick("Float Toolbar");
       await waitFor(() => expect(bar()).toHaveAttribute("data-dock", "floating"));
@@ -348,11 +359,11 @@ describe("phoenix-mcp-panel full app shell", () => {
       options();
       pick("Collapse Toolbar");
       await waitFor(() => expect(bar()).toHaveAttribute("data-collapsed"));
-      // Collapsed, only the grip remains, and it holds Expand.
+      // Collapsed, only the grip remains, and its menu holds Expand alone.
       expect(el.shadowRoot!.querySelector('[aria-label="Toolbar Options"]')).toBeNull();
       expect(el.shadowRoot!.querySelector(".phx-toolbar-body")).toBeNull();
       grip();
-      expect(items()).toContain("Expand Toolbar");
+      expect(items()).toEqual(["Expand Toolbar"]);
     });
 
     it("puts the tools on the main row from its menu, back on two rows while they do not fit", async () => {

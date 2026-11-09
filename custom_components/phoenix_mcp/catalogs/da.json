@@ -2732,7 +2732,8 @@
       "unpin": "Frigør",
       "vertical": "Lodret",
       "verticalScrolling": "Lodret rulning",
-      "windowMenu": "Vinduesmenu"
+      "windowMenu": "Vinduesmenu",
+      "singleColumn": "Én kolonne"
     },
     "notifications": {
       "title": "Notifikationer",
@@ -2965,7 +2966,8 @@
       "guideDismissWelcome": "Skjul denne velkomstside. Find den igen under Indhold.",
       "showSecret": "Vis nøglen som almindelig tekst for at kontrollere, hvad der blev indsat.",
       "guideSearchAgain": "Søg efter dette i guiden igen.",
-      "settingsAiDecisionsReplaceDefault": "Home Assistant har én standardentitet for beslutninger, så dette erstatter den nuværende."
+      "settingsAiDecisionsReplaceDefault": "Home Assistant har én standardentitet for beslutninger, så dette erstatter den nuværende.",
+      "menuSingleColumn": "Placer arbejdsområderne og vinduesværktøjerne i én kolonne, når der er plads."
     },
     "guide": {
       "title": "Guide",

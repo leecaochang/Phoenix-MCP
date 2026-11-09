@@ -2869,7 +2869,8 @@
       "unpin": "Odepnij",
       "vertical": "Pionowo",
       "verticalScrolling": "Przewijanie pionowe",
-      "windowMenu": "Menu okna"
+      "windowMenu": "Menu okna",
+      "singleColumn": "Jedna kolumna"
     },
     "notifications": {
       "title": "Powiadomienia",
@@ -3102,7 +3103,8 @@
       "guideDismissWelcome": "Ukryj tę stronę powitalną. Znajdziesz ją ponownie w Spisie treści.",
       "showSecret": "Pokaż klucz jako zwykły tekst, aby sprawdzić, co zostało wklejone.",
       "guideSearchAgain": "Wyszukaj to ponownie w przewodniku.",
-      "settingsAiDecisionsReplaceDefault": "Home Assistant ma jedną domyślną encję decyzji, więc ta zmiana zastępuje obecną."
+      "settingsAiDecisionsReplaceDefault": "Home Assistant ma jedną domyślną encję decyzji, więc ta zmiana zastępuje obecną.",
+      "menuSingleColumn": "Umieść obszary robocze i narzędzia okien w jednej kolumnie, gdy się mieszczą."
     },
     "guide": {
       "title": "Przewodnik",

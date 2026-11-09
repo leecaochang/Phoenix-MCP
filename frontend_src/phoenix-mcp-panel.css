@@ -427,6 +427,11 @@
 .phx-toolbar[data-rows="1"] .phx-toolbar-tools { order: 2; margin-inline-start: 2px; padding: 0 0 0 6px; border-top: none; border-inline-start: 1px solid var(--phx-toolbar-divider, var(--phx-border)); }
 .phx-toolbar[data-rows="1"] .phx-toolbar-group { order: 3; }
 .phx-toolbar[data-rows="1"] .phx-toolbar-options { order: 4; }
+/* Upright, the same setting makes one column: the tools follow the workspaces below a separator. */
+.phx-toolbar[data-rows="1"][data-orient="vertical"] .phx-toolbar-body { flex-direction: column; flex-wrap: nowrap; align-items: stretch; }
+.phx-env-desktop .phx-toolbar[data-mode="icon-text"][data-orient="vertical"][data-rows="1"] .phx-toolbar-body { display: flex; }
+.phx-toolbar[data-rows="1"][data-orient="vertical"] .phx-toolbar-tools { margin: 2px 0 0; padding: 6px 0 0; border: none; border-top: 1px solid var(--phx-toolbar-divider, var(--phx-border)); }
+.phx-toolbar[data-rows="1"][data-orient="vertical"] .phx-toolbar-group { margin-top: 2px; }
 
 /* The second row: tools for the visible workspace, grouped with separator bars. */
 .phx-toolbar-tools {

@@ -2732,7 +2732,8 @@
       "unpin": "고정 해제",
       "vertical": "세로",
       "verticalScrolling": "세로 스크롤",
-      "windowMenu": "창 메뉴"
+      "windowMenu": "창 메뉴",
+      "singleColumn": "한 열"
     },
     "notifications": {
       "title": "알림",
@@ -2965,7 +2966,8 @@
       "guideDismissWelcome": "이 환영 페이지를 숨깁니다. 목차에서 다시 찾을 수 있습니다.",
       "showSecret": "붙여 넣은 내용을 확인할 수 있도록 키를 일반 텍스트로 표시합니다.",
       "guideSearchAgain": "가이드에서 이 내용을 다시 검색합니다.",
-      "settingsAiDecisionsReplaceDefault": "Home Assistant의 기본 판단 엔티티는 하나이므로 현재 엔티티를 대체합니다."
+      "settingsAiDecisionsReplaceDefault": "Home Assistant의 기본 판단 엔티티는 하나이므로 현재 엔티티를 대체합니다.",
+      "menuSingleColumn": "공간이 충분하면 작업 공간과 창 도구를 한 열에 놓습니다."
     },
     "guide": {
       "title": "가이드",

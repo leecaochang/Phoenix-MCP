@@ -2726,7 +2726,8 @@
       "unpin": "Sblocca",
       "vertical": "Verticale",
       "verticalScrolling": "Scorrimento verticale",
-      "windowMenu": "Menu della finestra"
+      "windowMenu": "Menu della finestra",
+      "singleColumn": "Colonna singola"
     },
     "notifications": {
       "title": "Notifiche",
@@ -2959,7 +2960,8 @@
       "guideDismissWelcome": "Nascondi questa pagina di benvenuto. La ritrovi nell'Indice.",
       "showSecret": "Mostra la chiave come testo semplice, per controllare cosa è stato incollato.",
       "guideSearchAgain": "Cerca di nuovo questo nella guida.",
-      "settingsAiDecisionsReplaceDefault": "Home Assistant ha una sola entità decisioni predefinita, quindi questa sostituisce quella attuale."
+      "settingsAiDecisionsReplaceDefault": "Home Assistant ha una sola entità decisioni predefinita, quindi questa sostituisce quella attuale.",
+      "menuSingleColumn": "Metti le aree di lavoro e gli strumenti delle finestre in una sola colonna, quando c'è spazio."
     },
     "guide": {
       "title": "Guida",
