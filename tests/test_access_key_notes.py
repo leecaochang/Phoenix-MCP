@@ -439,3 +439,14 @@ def test_every_surface_says_when_to_orient_the_same_way(home):
         assert ORIENTATION_GUIDANCE in surface
     for surface in (primer, PHOENIX_SKILL_MARKDOWN, *descriptions.values()):
         assert "session start" not in surface and "get_capability_summary first" not in surface
+
+
+def test_the_primer_says_which_capabilities_need_no_approval(home):
+    """A model told only the Confirm list assumed every write needed approval and said so."""
+    key = _scoped(notes=None)
+    key.cap_registry_write = "confirm"
+    key.cap_helper_write = "allow"
+    primer = tool_dispatch._build_instructions(key, _settings_data(), BASE, home)
+    line = next(text for text in primer.splitlines() if text.startswith("- Admin approval per call"))
+    assert "cap_registry_write" in line and "cap_helper_write" not in line
+    assert "Tools of every other capability run without approval" in line

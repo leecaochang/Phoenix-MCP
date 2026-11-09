@@ -43,7 +43,7 @@ from ..policy_engine import (
     resolve_device_registry_access, resolve_read, resolve_registry_access,
 )
 from ..recorder_queries import iso_utc
-from ..request_authority import check_request_authority, request_authority
+from ..request_authority import check_request_authority, request_authority, write_boundary
 from ..tool_common import _CAP_FORBIDDEN_MESSAGE, _gate, _tool_error, _tool_success, longest_fitting
 from ..tool_contracts import normalize_tool_args
 from ..ws_dispatch import async_ws_command, WsDispatchError
@@ -817,6 +817,7 @@ async def _tool_set_integration_log_level(
     return await _execute_set_integration_log_level(execute_args, access_key, hass, data)
 
 
+@write_boundary
 async def _execute_set_integration_log_level(
     args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData
 ) -> tuple[dict, str, str]:

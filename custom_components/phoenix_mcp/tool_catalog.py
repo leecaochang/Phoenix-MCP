@@ -153,6 +153,32 @@ def _register_executor(tool_name: str, fn: Any) -> None:
     _EXECUTOR_REGISTRY[tool_name] = fn
 
 
+# Tools whose handler changes Home Assistant without calling its registered executor,
+# so a marked executor proves nothing about them. A test keeps this equal to the code.
+_HANDLER_WRITES_DIRECTLY = frozenset({
+    "HassTurnOff", "HassTurnOn", "add_dashboard_card", "create_zigbee_group", "delete_dashboard_card",
+    "edit_dashboard_card", "remove_zigbee_group", "set_todo_item", "set_zigbee_group_members",
+})
+# (tool name, registered handler) pairs whose executor marks dispatch on entry, frozen
+# once registration is complete so a stand-in handler is never trusted.
+_EXECUTOR_TRACKED: set[tuple[str, Any]] = set()
+
+
+def _freeze_executor_tracking() -> None:
+    """Record which registered handlers a @write_boundary executor covers. Called once."""
+    _EXECUTOR_TRACKED.clear()
+    _EXECUTOR_TRACKED.update(
+        (name, entry[0]) for name, entry in _TOOL_HANDLERS.items()
+        if name not in _HANDLER_WRITES_DIRECTLY
+        and getattr(_EXECUTOR_REGISTRY.get(name), "phoenix_write_boundary", False) is True
+    )
+
+
+def executor_tracked(tool_name: str, handler: Any) -> bool:
+    """Whether this registered handler only writes through its marked executor."""
+    return (tool_name, handler) in _EXECUTOR_TRACKED
+
+
 # Tool dispatch registry: name -> (handler, context params it accepts, bound kwargs).
 # Populated by tool_registration, once every handler is defined.
 _TOOL_HANDLERS: dict[str, tuple[Any, tuple[str, ...], dict[str, Any]]] = {}

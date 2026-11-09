@@ -43,10 +43,11 @@ from .request_authority import (
 )
 from .tool_catalog import (
     _EXECUTOR_REGISTRY, _tool_any_caps, _TOOL_CATALOG_FINGERPRINT, _TOOL_DEFS_BY_NAME,
-    _TOOL_HANDLERS, _tool_is_announced, _tool_required_caps, run_companion_turn as run_request,
+    _TOOL_HANDLERS, _tool_is_announced, _tool_required_caps, executor_tracked, run_companion_turn as run_request,
 )
 from .tool_common import (
-    _CAP_FORBIDDEN_MESSAGE, _resolve_area_id, _tool_error, _tool_refused_before_write, _tool_success,
+    _CAP_FORBIDDEN_MESSAGE, RefusedBeforeWrite, _resolve_area_id, _tool_error, _tool_refused_before_write,
+    _tool_success,
 )
 from .request_authority import _approved_exec_ctx
 from .tool_contracts import _RETIRED_REPLACEMENTS, adopt_near_misses, unknown_argument_error
@@ -59,9 +60,24 @@ from .tool_input import (
 )
 from .tools.calendar import _tool_calendar_write
 from .tools.native import _build_live_context, _UNTRUSTED_DATA_BOUNDARY
+from .tools.registry import _tool_delete_entity, _tool_remove_device, _tool_set_device, _tool_set_entity
 from .tools.service import _tool_call_service
 
 _LOGGER = logging.getLogger(__name__)
+
+# Handlers that call mark_dispatch_started() before every effect, so returning
+# without it proves nothing was written: an agent turn gets such a refusal back
+# instead of holding the key for review. Their executors mark inline, after their
+# own rechecks, and carry no @write_boundary.
+_BOUNDARY_TRACKED_HANDLERS = frozenset({
+    _tool_call_service, _tool_calendar_write,
+    _tool_set_entity, _tool_delete_entity, _tool_set_device, _tool_remove_device,
+})
+
+
+def _boundary_tracked(handler: Any, tool_name: str) -> bool:
+    """Whether returning before the dispatch mark proves this call wrote nothing."""
+    return handler in _BOUNDARY_TRACKED_HANDLERS or executor_tracked(tool_name, handler)
 
 # What this server can do, answered identically by initialize and
 # server/discover: one definition, because both make the same claim to two
@@ -283,7 +299,7 @@ async def _call_tool_checked(
     context = {"data": data, "request_id": request_id, "client_ip": client_ip}
     request_context = dispatch_request_id.set(request_id)
     client_context = dispatch_client_ip.set(client_ip)
-    progress = DispatchProgress(tracked=handler in (_tool_call_service, _tool_calendar_write))
+    progress = DispatchProgress(tracked=_boundary_tracked(handler, internal_name))
     parent_progress = dispatch_progress.get()
     if parent_progress is not None:
         parent_progress.tracked = progress.tracked
@@ -321,7 +337,17 @@ async def _call_tool_checked(
                         and isinstance(saved.result, dict) and saved.result.get("outcome") == "allowed"):
                     exc.receipt = ("allowed", result[2])
         raise
+    if progress.tracked and not progress.started:
+        result = _refused_before_write(result)
     record_outcome(access_key, tool_name, result[1], result[0], arguments, hass)
+    return result
+
+
+def _refused_before_write(result: tuple) -> tuple:
+    """Type a tracked handler's error as written nothing: it returned before its write step."""
+    body = result[0]
+    if (type(body) is dict and body.get("isError") is True):
+        return (RefusedBeforeWrite(body), *result[1:])
     return result
 
 
@@ -550,7 +576,9 @@ def _build_instructions(access_key: AccessKeyRecord, data: PhoenixData, base_url
         lines.append(
             "- Admin approval per call as of this connection: "
             + ", ".join(confirm_gated)
-            + ". Permissions can change mid-session; check get_capability_summary."
+            + ". Tools of every other capability run without approval unless MESA asks for it, "
+            "so do not tell the user they need one. Permissions can change mid-session; check "
+            "get_capability_summary."
         )
     if data.store.get_settings().mesa_mode != MESA_MODE_OFF:
         lines.append(

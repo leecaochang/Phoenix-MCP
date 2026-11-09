@@ -9,7 +9,7 @@ An action that reached Home Assistant, but Phoenix never learned whether it work
 
 Until you review it, that access key can't make any more changes, though it can still read. A calendar change with an unknown outcome is listed the same way.
 
-An app that disconnects while it waits for your approval isn't listed: the request stays in Approvals. While one of a key's changes is still running, its other changes are refused until that one finishes, and reads carry on.
+A change Phoenix refused before writing anything isn't listed, and neither is one you rejected. An app that disconnects while it waits for your approval isn't listed either: the request stays in Approvals. While one of a key's changes is still running, its other changes are refused until that one finishes, and reads carry on.
 
 ## Reviewing an action {#review}
 

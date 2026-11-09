@@ -16,6 +16,7 @@ Related: [Deny, Allow and Confirm](guide:window.capabilities#modes)
 - External apps hear at once that the request is waiting, and can ask for the outcome later. With an [inline approval wait](guide:window.keySettings#inline-wait), the app waits up to that long for your decision first.
 - Agent Chat waits for your decision for up to 15 minutes. If no decision comes by then, or the chat ends first, the request is cancelled.
 - The Voice Agent, Assist and AI Task don't wait: they report that the change is waiting for approval and carry on. Approving later still runs it.
+- Every agent also hears what the review page shows: the action, why it needs approval and which kinds of detail the page lists. It never hears the details themselves, such as the names of automations that use the target.
 
 ## How long a request waits {#expiry}
 

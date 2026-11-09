@@ -51,7 +51,7 @@ from ..policy_engine import (
     Permission, filter_entities_for_access_key, group_member_denied, group_member_ids, resolve, resolve_read,
     is_sensitive_key, physical_gate_applies, scrub_sensitive_attributes,
 )
-from ..request_authority import AuthorityChangedError, check_request_authority
+from ..request_authority import AuthorityChangedError, check_request_authority, write_boundary
 from ..access_key_store import AccessKeyRecord
 from .. import yaml_includes
 from .discovery import _registry_relationship_preview, async_config_warnings
@@ -583,6 +583,7 @@ async def _tool_create_automation(
     return await _execute_create_automation(args, access_key, hass, data)
 
 
+@write_boundary
 async def _execute_create_automation(
     args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData
 ) -> tuple[dict, str, str]:
@@ -663,6 +664,7 @@ async def _tool_edit_automation(
     return await _execute_edit_automation(args, access_key, hass, data)
 
 
+@write_boundary
 async def _execute_edit_automation(
     args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData
 ) -> tuple[dict, str, str]:
@@ -796,6 +798,7 @@ async def _finish_entity_delete(
     return await _deletion_receipt(hass, domain, item_id, tool_name)
 
 
+@write_boundary
 async def _execute_delete_automation(
     args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData
 ) -> tuple[dict, str, str]:
@@ -947,6 +950,7 @@ async def _tool_create_script(
     return await _execute_create_script(args, access_key, hass, data)
 
 
+@write_boundary
 async def _execute_create_script(
     args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData
 ) -> tuple[dict, str, str]:
@@ -1029,6 +1033,7 @@ async def _tool_edit_script(
     return await _execute_edit_script(args, access_key, hass, data)
 
 
+@write_boundary
 async def _execute_edit_script(
     args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData
 ) -> tuple[dict, str, str]:
@@ -1121,6 +1126,7 @@ async def _tool_delete_script(
     return await _execute_delete_script(args, access_key, hass, data)
 
 
+@write_boundary
 async def _execute_delete_script(
     args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData
 ) -> tuple[dict, str, str]:
@@ -1684,6 +1690,7 @@ async def _tool_create_scene(
     return await _execute_create_scene(args, access_key, hass, data)
 
 
+@write_boundary
 async def _execute_create_scene(
     args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData
 ) -> tuple[dict, str, str]:
@@ -1735,6 +1742,7 @@ async def _tool_edit_scene(
     return await _execute_edit_scene(args, access_key, hass, data)
 
 
+@write_boundary
 async def _execute_edit_scene(
     args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData
 ) -> tuple[dict, str, str]:
@@ -1779,6 +1787,7 @@ async def _tool_delete_scene(
     return await _execute_delete_scene(args, access_key, hass, data)
 
 
+@write_boundary
 async def _execute_delete_scene(
     args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData
 ) -> tuple[dict, str, str]:

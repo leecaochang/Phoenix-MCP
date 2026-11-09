@@ -18,7 +18,7 @@ from homeassistant.helpers import (
 from homeassistant import loader
 
 from ..access_key_store import AccessKeyRecord
-from ..const import CAP_DENY, DOMAIN, MAX_ENTITY_ALIAS_LENGTH, MAX_ENTITY_ALIASES, MESA_MODE_OFF
+from ..const import CAP_CONFIRM, CAP_DENY, DOMAIN, MAX_ENTITY_ALIAS_LENGTH, MAX_ENTITY_ALIASES, MESA_MODE_OFF
 from ..data import PhoenixData
 from ..device_semantics import (
     device_effective_area_id, device_entry_value, device_registry_snapshot,
@@ -36,7 +36,7 @@ from ..policy_engine import (
     device_cascade_entity_ids, device_config_entry_ids, device_read_check, Permission,
     resolve_device_registry_access, resolve_device_registry_write, resolve_registry_access,
 )
-from ..request_authority import AuthorityChangedError, check_request_authority
+from ..request_authority import AuthorityChangedError, check_request_authority, mark_dispatch_started
 from ..tool_common import (
     _add_mesa_advisory, _CAP_FORBIDDEN_MESSAGE, _create_registry_mesa_approval, _gate, _record_version, _restore_ctx, _tool_error, _tool_refused_before_write, _tool_success, unknown_category_message, unknown_label_message,
 )
@@ -511,14 +511,40 @@ def _registry_mesa_decision(
         )
 
 
+# An approval preview never shows MESA's dispatch warning ("proceeding because MESA is
+# in advisory mode"): the action is waiting for approval, not proceeding.
+_ADVISORY_CONFIRM_NOTE = (
+    "MESA marks this action Confirm, but MESA is in Advisory mode, so MESA is not "
+    "what asks for this approval."
+)
+# Capability labels as the panel's English catalog names them, for approval previews.
+_CAP_PREVIEW_LABELS = {
+    "cap_registry_write": "Manage entity registry",
+    "cap_integration_write": "Integration management",
+}
+
+
 def _mesa_preview(decision: RegistryMesaDecision) -> dict[str, Any]:
+    rule = decision.admin_rule or {}
+    advisory_confirm = (decision.decision == "allow" and rule.get("control_mode") == "confirm"
+                        and rule.get("enforcement_mode") == "advisory")
     return {
         "decision": decision.decision,
         "rule": decision.rule,
         "reason": decision.reason,
         "effective_rule": decision.admin_rule,
-        "warnings": decision.warnings,
+        "warnings": [] if advisory_confirm else decision.warnings,
+        **({"note": _ADVISORY_CONFIRM_NOTE} if advisory_confirm else {}),
     }
+
+
+def _approval_reason(access_key: AccessKeyRecord, cap: str, mesa_decision: Any) -> dict[str, str]:
+    """The preview's first line: what asks for this approval."""
+    if mesa_decision is not None and getattr(mesa_decision, "decision", None) == "confirm":
+        return {"approval_reason": "MESA requires approval for this action."}
+    if effective_cap(access_key, cap) == CAP_CONFIRM:
+        return {"approval_reason": f"This access key's {_CAP_PREVIEW_LABELS[cap]} capability is set to Confirm."}
+    return {}
 
 
 def _entity_mesa_actions(
@@ -1111,7 +1137,7 @@ async def _build_diff_set_device(
     device = device_registry_snapshot(hass).get(device_id)
     before = _device_meta_snapshot(device) if device is not None else {}
     fields: list[str] = []
-    preview: dict[str, Any] = {}
+    preview: dict[str, Any] = _approval_reason(access_key, "cap_registry_write", mesa_decision)
     for field in ("name", "area_id"):
         if field in args:
             fields.append(field)
@@ -1409,6 +1435,7 @@ def _commit_set_device(
         )
 
     before = _device_meta_snapshot(device)
+    mark_dispatch_started()
     try:
         updated = update_device_registry_entry(registry, device_id, updates)
     except Exception as exc:  # surface a clean tool error
@@ -1767,6 +1794,7 @@ async def _build_diff_remove_device(
         else None
     )
     preview = {
+        **_approval_reason(access_key, "cap_integration_write", mesa_decision),
         "selected_owner": _device_owner_summary(
             context.config_entry, supports_removal=True
         ),
@@ -1941,6 +1969,7 @@ async def _execute_remove_device(
     device_id = context.device.id
     selected_owner = context.config_entry.entry_id
     label = context.device.name_by_user or context.device.name or device_id
+    mark_dispatch_started()
     try:
         accepted = await context.hook(hass, context.config_entry, context.device)
     except Exception as exc:  # integration hook is third-party code
@@ -2103,7 +2132,8 @@ async def _build_diff_set_entity(
     before = _entity_meta_snapshot(entry) if entry else {}
     fields = [f for f in ("name", "icon", "area_id", "device_class") if f in args]
     preview: dict[str, Any] = {
-        f: {"before": before.get(f), "after": args.get(f)} for f in fields
+        **_approval_reason(access_key, "cap_registry_write", mesa_decision),
+        **{f: {"before": before.get(f), "after": args.get(f)} for f in fields},
     }
     if entry is not None and "use_device_name" in args:
         fields.append("use_device_name")
@@ -2222,6 +2252,7 @@ async def _build_diff_delete_entity(
     )
     data = hass.data.get(DOMAIN)
     preview: dict[str, Any] = {
+        **_approval_reason(access_key, "cap_registry_write", mesa_decision),
         "name": snap.get("name"),
         "area_id": snap.get("area_id"),
         "warning": "Removes the entity's registry entry. A live entity's integration may re-create it; an orphan stays gone. Not re-creatable through Phoenix MCP.",
@@ -2489,6 +2520,7 @@ def _commit_set_entity(
         )
 
     before = _entity_meta_snapshot(reg.async_get(entity_id))
+    mark_dispatch_started()
     try:
         reg.async_update_entity(entity_id, **updates)
     except Exception as exc:  # surface a clean tool error
@@ -2668,6 +2700,7 @@ def _commit_delete_entity(
         return _registry_mesa_error(entry.entity_id, "delete", mesa_decision)
     before = _entity_meta_snapshot(entry)
     label = entity_full_name(hass, entry)
+    mark_dispatch_started()
     try:
         reg.async_remove(entity_id)
     except Exception as exc:  # surface a clean tool error

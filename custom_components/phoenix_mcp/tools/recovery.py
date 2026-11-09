@@ -13,7 +13,7 @@ from ..helpers import content_hash
 from ..catalog_text import diff_summary_fields as _summary
 from ..capability import effective_cap
 from ..policy_engine import filter_service_response
-from ..request_authority import AuthorityChangedError, check_request_authority
+from ..request_authority import AuthorityChangedError, check_request_authority, write_boundary
 from ..template_recovery import restore_template, validate_restore_scope
 from ..template_snapshots import validate_snapshot, TEMPLATE_RECOVERY_ADAPTERS, template_snapshot
 from ..tool_common import (
@@ -631,6 +631,7 @@ async def _tool_restore_energy_configuration(
     return await _execute_restore_configuration(bound, access_key, hass, data)
 
 
+@write_boundary
 async def _execute_restore_configuration(
     args: dict, access_key, hass: HomeAssistant, data
 ) -> tuple[dict, str, str]:

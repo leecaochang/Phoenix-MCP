@@ -3,10 +3,11 @@ import type { ComponentPropsWithRef } from "react";
 /**
  * Keep the focused action mounted and focusable while its request runs (`busy`), or while it
  * is unavailable only for now (`inactive`, such as Next on the last record), so focus stays put.
+ * `data-busy` lets the stylesheet hold off dimming a busy control during a quick request.
  */
 export function BusyButton({ busy, inactive = false, disabled, onClick, ...props }: ComponentPropsWithRef<"button"> & { busy: boolean; inactive?: boolean }) {
   return <button {...props} disabled={disabled} aria-disabled={busy || inactive || disabled}
-    aria-busy={busy || undefined} onClick={(event) => {
+    aria-busy={busy || undefined} data-busy={busy ? "" : undefined} onClick={(event) => {
       if (busy || inactive || disabled) { event.preventDefault(); return; }
       onClick?.(event);
     }} />;
@@ -14,12 +15,13 @@ export function BusyButton({ busy, inactive = false, disabled, onClick, ...props
 
 export function BusyInput({ busy, disabled, readOnly, onChange, onClick, ...props }: ComponentPropsWithRef<"input"> & { busy: boolean }) {
   return <input {...props} disabled={disabled} readOnly={busy || readOnly} aria-disabled={busy || disabled}
+    data-busy={busy ? "" : undefined}
     onClick={(event) => { if (busy) event.preventDefault(); else onClick?.(event); }}
     onChange={(event) => { if (!busy && !disabled) onChange?.(event); }} />;
 }
 
 export function BusySelect({ busy, disabled, onChange, onKeyDown, onMouseDown, ...props }: ComponentPropsWithRef<"select"> & { busy: boolean }) {
-  return <select {...props} disabled={disabled} aria-disabled={busy || disabled}
+  return <select {...props} disabled={disabled} aria-disabled={busy || disabled} data-busy={busy ? "" : undefined}
     onKeyDown={(event) => { if (busy && event.key !== "Tab") event.preventDefault(); else onKeyDown?.(event); }}
     onMouseDown={(event) => { if (busy) event.preventDefault(); else onMouseDown?.(event); }}
     onChange={(event) => { if (!busy && !disabled) onChange?.(event); }} />;

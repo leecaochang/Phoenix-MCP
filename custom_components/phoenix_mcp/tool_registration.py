@@ -5,7 +5,7 @@ from __future__ import annotations
 from .const import MESA_APPROVED_EXECUTOR
 from .tool_defs import MESA_TOOL_NAMES
 from .home_companion_turn import run_request
-from .tool_catalog import _register_companion_turn, _register_executor, _register_tool
+from .tool_catalog import _freeze_executor_tracking, _register_companion_turn, _register_executor, _register_tool
 from .tools.approvals import _tool_get_approval_status, _tool_wait_for_approval
 from .tools.authoring import (
     _execute_create_automation, _execute_create_scene, _execute_create_script,
@@ -387,3 +387,4 @@ _register_executor("delete_calendar_event", _execute_delete_calendar_event)
 _register_tool("get_calendar_write", _tool_get_calendar_write)
 
 _register_companion_turn(run_request)
+_freeze_executor_tracking()

@@ -35,7 +35,7 @@ from ..data import PhoenixData
 from ..device_semantics import device_registry_snapshot, effective_entity_area_id
 from ..household_authority import household_service_kwargs
 from ..mesa import async_apply_mesa_to_call, fire_mesa_blocked_event
-from ..request_authority import check_request_authority, dispatch_request_id
+from ..request_authority import check_request_authority, dispatch_request_id, write_boundary, mark_dispatch_started
 from ..helpers import validation_error_message as _validation_error_message
 from ..tool_input import str_arg
 from ..catalog_text import diff_summary_fields as _summary
@@ -383,6 +383,7 @@ async def _tool_intent_action(
     try:
         async with asyncio.timeout(PROXY_TIMEOUT_SECONDS):
             check_request_authority()
+            mark_dispatch_started()
             await hass.services.async_call(
                 service_domain,
                 service_name,
@@ -774,6 +775,7 @@ async def _tool_hass_turn_on(
     return await _hass_turn_gate("HassTurnOn", "turn_on", args, access_key, hass, data, request_id, client_ip)
 
 
+@write_boundary
 async def _execute_hass_turn_on(
     args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData
 ) -> tuple[dict, str, str]:
@@ -791,6 +793,7 @@ async def _tool_hass_turn_off(
     return await _hass_turn_gate("HassTurnOff", "turn_off", args, access_key, hass, data, request_id, client_ip)
 
 
+@write_boundary
 async def _execute_hass_turn_off(
     args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData
 ) -> tuple[dict, str, str]:
@@ -1046,6 +1049,7 @@ def _validate_hass_set_position_args(args: dict) -> tuple[dict, str, str] | None
     return None
 
 
+@write_boundary
 async def _execute_hass_set_position(
     args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData
 ) -> tuple[dict, str, str]:
@@ -1161,6 +1165,7 @@ def _native_entity_entry(entity_id: str, hass: HomeAssistant) -> dict[str, str]:
     return {"name": name, "type": "entity", "id": entity_id}
 
 
+@write_boundary
 async def _execute_hass_set_volume_relative(
     args: dict,
     access_key: AccessKeyRecord,
@@ -1735,6 +1740,7 @@ async def _tool_hass_stop_moving(
     return await _execute_hass_stop_moving(args, access_key, hass, data)
 
 
+@write_boundary
 async def _execute_hass_stop_moving(
     args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData
 ) -> tuple[dict, str, str]:

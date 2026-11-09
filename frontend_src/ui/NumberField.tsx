@@ -80,7 +80,7 @@ export function NumberField({ busy, className = "input", ref, ...props }: Props)
   // spinner is: the field itself is the spin button, and its Up and Down keys do the same.
   return (
     <span className={`phx-number ${className}`} data-help={help} data-disabled={props.disabled ? "" : undefined}
-      aria-disabled={busy || undefined}>
+      aria-disabled={busy || undefined} data-busy={busy ? "" : undefined}>
       {input}
       <button type="button" tabIndex={-1} aria-hidden="true" className="phx-number-step phx-number-down"
         disabled={props.disabled || atMin} onPointerDown={press(-1)} onPointerLeave={stop}>

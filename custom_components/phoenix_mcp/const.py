@@ -22,7 +22,7 @@ from types import MappingProxyType
 # served to the panel by admin.settings.PhoenixAdminCatalogView.
 CATALOGS_DIR = pathlib.Path(__file__).parent / "catalogs"
 
-PHOENIX_VERSION = "2.0.0"
+PHOENIX_VERSION = "2.1.0"
 # Minimum supported HA release; runtime imports and boundaries are exercised at this floor.
 MIN_HA_VERSION = "2026.7.0"
 ASSIST_SCHEMA_DIALECT = "https://json-schema.org/draft/2020-12/schema"

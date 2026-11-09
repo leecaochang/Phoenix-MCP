@@ -62,3 +62,17 @@ it("contains a rendering failure, preserves outside navigation and can recover",
     expect(screen.getByText("Recovered")).toBeVisible();
   } finally { consoleError.mockRestore(); }
 });
+
+it("marks a busy control so the stylesheet can hold off dimming it during a quick save", () => {
+  const controls = (busy: boolean) => <>
+    <BusyButton busy={busy}>Save</BusyButton>
+    <BusyInput aria-label="Name" value="Desk" busy={busy} onChange={() => {}} />
+    <BusySelect aria-label="Mode" value="allow" busy={busy} onChange={() => {}}><option value="allow">Allow</option></BusySelect>
+  </>;
+  const { rerender } = render(controls(true));
+  const marked = () => [screen.getByRole("button", { name: "Save" }), screen.getByLabelText("Name"), screen.getByLabelText("Mode")]
+    .map((element) => element.hasAttribute("data-busy"));
+  expect(marked()).toEqual([true, true, true]);
+  rerender(controls(false));
+  expect(marked()).toEqual([false, false, false]);
+});

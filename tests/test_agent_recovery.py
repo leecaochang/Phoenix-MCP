@@ -490,3 +490,57 @@ async def test_a_record_with_no_live_turn_still_blocks_with_needs_attention():
     assert recovery.needs_attention("access_key")
     with pytest.raises(RecoveryRequired, match="Needs Attention"):
         await recovery.begin("access_key", "call_service", "b")
+
+
+class _Approvals:
+    """The approval queue as AgentRecovery reads it: rows by request id."""
+
+    def __init__(self, *rows: dict) -> None:
+        self.rows = list(rows)
+
+    def get_pending_approvals(self) -> list[dict]:
+        return self.rows
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("approval, released", [
+    ({"status": "rejected"}, True),
+    ({"status": "cancelled"}, True),
+    ({"status": "expired"}, True),
+    ({"status": "rejected", "execution_started_at": "2026-11-09T09:09:40+00:00"}, False),
+    ({"status": "approved"}, False),
+    ({"status": "pending"}, False),
+    ({"status": "rejected", "access_key_id": "another_key"}, False),
+])
+async def test_a_failed_turn_releases_only_claims_an_approval_proves_never_ran(approval, released):
+    """A rejection is a known outcome: it no longer holds the key after the turn fails."""
+    row = {"request_id": "a", "access_key_id": "access_key", **approval}
+    data = SimpleNamespace(agent_recovery=AgentRecovery(Disk()), store=_Approvals(row))
+    recovery = data.agent_recovery
+
+    @_turn
+    async def failed(_hass, data):
+        await recovery.begin("access_key", "delete_entity", "a")
+        await recovery.received("a")
+        await recovery.begin("access_key", "set_entity", "b")
+        recovery.interrupted("b")  # dispatch_agent_tool's finally: b's outcome is unknown
+        return SimpleNamespace(outcome="failed")
+
+    await failed(None, data)
+    assert [r["request_id"] for r in recovery.admin_records()] == (["b"] if released else ["a", "b"])
+    assert recovery.needs_attention("access_key")
+
+
+@pytest.mark.asyncio
+async def test_a_successful_turn_is_untouched_by_the_release():
+    data = SimpleNamespace(agent_recovery=AgentRecovery(Disk()), store=_Approvals())
+    recovery = data.agent_recovery
+
+    @_turn
+    async def ok(_hass, data):
+        await recovery.begin("access_key", "delete_entity", "a")
+        await recovery.received("a")
+        return SimpleNamespace(outcome="ok")
+
+    await ok(None, data)
+    assert recovery.admin_records() == [] and not recovery.needs_attention("access_key")

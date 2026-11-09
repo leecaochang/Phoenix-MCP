@@ -269,6 +269,7 @@ def _tool_pending(approval: Any, waited_seconds: int | None = None, *, notified:
         "approval_id": approval.id,
         "expires_at": approval.expires_at.isoformat() if approval.expires_at else None,
         "review_url": f"/phoenix-mcp/approvals/{approval.id}",
+        "review_shows": _review_outline(approval),
         "message": (
             f"{waited}This action is queued for admin approval and will be applied once approved; "
             f"{notice}Do not retry it. Continue with your remaining steps: "
@@ -281,6 +282,43 @@ def _tool_pending(approval: Any, waited_seconds: int | None = None, *, notified:
         ),
     })
     return {"content": [{"type": "text", "text": body}]}
+
+
+# The page sections an approval preview can hold, as the operator reads them.
+_REVIEW_SECTIONS = {
+    "relationships": "what uses the target (automations, scripts, dashboards)",
+    "phoenix_configuration": "Phoenix MCP settings that name the target",
+    "mesa": "the MESA safety rule for the target",
+    "warning": "a warning about the action",
+}
+
+
+def _review_outline(approval: Any, *, decided: bool = False) -> dict:
+    """What the operator's approval page shows, safe to tell the agent that asked.
+
+    Only the action's own summary, why it needs approval and which kinds of section
+    the page has: preview contents can name resources outside the key's scope.
+    """
+    stored = getattr(approval, "diff", None)
+    diff: dict = stored if isinstance(stored, dict) else {}
+    preview: dict = diff["preview"] if isinstance(diff.get("preview"), dict) else {}
+    reason = preview.get("approval_reason")
+    if not isinstance(reason, str):
+        cap = getattr(approval, "cap_name", "")
+        reason = (f"This access key's {cap} capability is set to Confirm."
+                  if isinstance(cap, str) and cap.startswith("cap_") else "Phoenix MCP requires approval for this action.")
+    outline: dict[str, Any] = {"summary": diff.get("summary") if isinstance(diff.get("summary"), str) else None,
+                               "why_approval": reason}
+    sections = [text for key, text in _REVIEW_SECTIONS.items() if key in preview]
+    if sections:
+        outline["also_shows"] = sections
+    outline["note"] = (
+        "This is what the operator saw when deciding; use it if they ask what that page was. It covered "
+        "this one action only." if decided else
+        "Tell the user what this page will show before they open it. It describes this one "
+        "action only; later steps get their own approvals."
+    )
+    return outline
 
 
 def _approval_notifies(data: Any) -> bool:

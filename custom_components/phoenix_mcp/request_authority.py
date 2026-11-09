@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from contextvars import ContextVar
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Callable
+import functools
+from typing import TYPE_CHECKING, Any, Awaitable, Callable, TypeVar
 
 from .const import DOMAIN
 
@@ -46,6 +47,24 @@ def mark_dispatch_started() -> None:
     """Latch before an external effect; later refusals cannot erase prior effects."""
     if (progress := dispatch_progress.get()) is not None:
         progress.started = True
+
+
+_Executor = TypeVar("_Executor", bound=Callable[..., Awaitable[Any]])
+
+
+def write_boundary(executor: _Executor) -> _Executor:
+    """Mark dispatch started on entering an executor, where a tool's effects begin.
+
+    Handlers only check and gate (an approval replays the executor alone), so a handler
+    error before its executor provably changed nothing.
+    """
+    @functools.wraps(executor)
+    async def marked(*args: Any, **kwargs: Any) -> Any:
+        mark_dispatch_started()
+        return await executor(*args, **kwargs)
+
+    marked.phoenix_write_boundary = True  # type: ignore[attr-defined]
+    return marked  # type: ignore[return-value]
 
 
 @dataclass(frozen=True)

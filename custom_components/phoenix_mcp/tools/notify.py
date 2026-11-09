@@ -25,7 +25,7 @@ from ..redaction import redact_diagnostics, redact_inaccessible_entity_ids_in_te
 from ..household_authority import household_service_kwargs
 from ..mesa import async_apply_mesa_to_call, fire_mesa_blocked_event
 from ..policy_engine import Permission, resolve
-from ..request_authority import check_request_authority, mark_dispatch_started
+from ..request_authority import check_request_authority, mark_dispatch_started, write_boundary
 from ..tool_common import (
     MESA_DENIED_MESSAGE, _gate, _pending_or_inline, _tool_error, _tool_refused_before_write, _tool_success, longest_fitting,
 )
@@ -115,6 +115,7 @@ async def _tool_send_notification(
     return await _execute_send_notification(args, access_key, hass, data, request_id=request_id, client_ip=client_ip)
 
 
+@write_boundary
 async def _execute_send_notification(
     args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData,
     request_id: str = "", client_ip: str | None = None,

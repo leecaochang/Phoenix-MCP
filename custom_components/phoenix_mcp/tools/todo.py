@@ -29,7 +29,7 @@ from ..const import (
 from ..data import PhoenixData
 from ..household_authority import household_service_kwargs
 from ..policy_engine import Permission, resolve_read
-from ..request_authority import AuthorityChangedError, check_request_authority
+from ..request_authority import AuthorityChangedError, check_request_authority, write_boundary
 from ..tool_common import (
     _tool_error, _tool_refused_before_write, _tool_success, _tool_uncertain, fitted_offset_page, longest_fitting,
     offset_page,
@@ -412,6 +412,7 @@ def _why_kept(row: dict, item: dict | None) -> str | None:
     return "reopened" if row.get("status") == "completed" and item.get("status") != "completed" else "changed"
 
 
+@write_boundary
 async def _execute_set_todo_item(
     args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData,
 ) -> tuple[dict, str, str]:

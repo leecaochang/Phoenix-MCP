@@ -20,7 +20,7 @@ from ..data import PhoenixData
 from ..helpers import log_internal_failure
 from ..catalog_text import diff_summary_fields as _summary
 from ..capability import effective_cap
-from ..request_authority import check_request_authority, mark_dispatch_started
+from ..request_authority import check_request_authority, mark_dispatch_started, write_boundary
 from ..tool_common import _gate, _tool_error, _tool_success
 from ..ws_dispatch import async_ws_command, WsDispatchError
 
@@ -328,6 +328,7 @@ def _backup_result(plan: _BackupPlan, backup: Any | None) -> dict:
     return body
 
 
+@write_boundary
 async def _execute_create_backup(
     args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData
 ) -> tuple[dict, str, str]:

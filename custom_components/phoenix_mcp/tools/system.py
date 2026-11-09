@@ -26,7 +26,7 @@ from ..household_authority import household_tool_access
 from ..mesa_audit import request_context
 from ..mesa_tools import async_call_mesa_tool, mesa_tool_defs
 from ..policy_engine import Permission, resolve_read, scrub_sensitive_attributes
-from ..request_authority import AuthorityChangedError, check_request_authority, mark_dispatch_started
+from ..request_authority import AuthorityChangedError, check_request_authority, mark_dispatch_started, write_boundary
 from ..template_render import async_render_template_for_access_key, TemplateRenderError
 from ..tool_catalog import (
     _EXECUTOR_REGISTRY, _tool_any_caps, _tool_required_caps, _write_gate_open,
@@ -172,6 +172,7 @@ async def _tool_restart_ha(
     return await _execute_restart_ha(args, access_key, hass, data)
 
 
+@write_boundary
 async def _execute_restart_ha(
     args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData
 ) -> tuple[dict, str, str]:

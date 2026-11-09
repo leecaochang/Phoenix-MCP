@@ -33,7 +33,7 @@ from ..capability import effective_cap, reviewed_actions
 from ..helpers import content_hash
 from ..redaction import redact_secrets_in_text
 from ..config_recovery import ConfigurationRecoveryError, safe_snapshot
-from ..request_authority import AuthorityChangedError
+from ..request_authority import AuthorityChangedError, write_boundary
 from ..access_key_store import AccessKeyRecord
 from ..tool_common import (
     _CAP_FORBIDDEN_MESSAGE,
@@ -607,6 +607,7 @@ async def _save_blueprint(
     return _tool_success(json.dumps(body, default=str)), "allowed", f"blueprint:{domain}/{rel}"
 
 
+@write_boundary
 async def _execute_create_blueprint(
     args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData
 ) -> tuple[dict, str, str]:
@@ -614,6 +615,7 @@ async def _execute_create_blueprint(
         args, access_key, hass, data, tool_name="create_blueprint", allow_override=False)
 
 
+@write_boundary
 async def _execute_edit_blueprint(
     args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData
 ) -> tuple[dict, str, str]:
@@ -621,6 +623,7 @@ async def _execute_edit_blueprint(
         args, access_key, hass, data, tool_name="edit_blueprint", allow_override=True)
 
 
+@write_boundary
 async def _execute_delete_blueprint(
     args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData
 ) -> tuple[dict, str, str]:

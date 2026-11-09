@@ -28,7 +28,7 @@ from ..policy_engine import (
     LocationRegistryContext, Permission, device_config_entry_ids,
     location_registry_context, resolve_location_registry_write,
 )
-from ..request_authority import check_request_authority
+from ..request_authority import check_request_authority, write_boundary
 from ..access_key_store import AccessKeyRecord
 from ..tool_common import (
     _create_registry_mesa_approval, _gate, _record_version, _restore_ctx, _tool_error, _tool_success, _tool_uncertain,
@@ -278,6 +278,7 @@ async def _tool_set_area_or_floor(
     return await _execute_set_area_or_floor(args, access_key, hass, data)
 
 
+@write_boundary
 async def _execute_set_area_or_floor(
     args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData,
 ) -> tuple[dict, str, str]:

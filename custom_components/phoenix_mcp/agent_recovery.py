@@ -24,6 +24,8 @@ from .tool_defs import _TOOL_ANNOTATIONS, _NATIVE_TOOL_NAMES
 # Approval outcomes that settle a dispatch claim; mirrors approvals.TERMINAL_STATUSES,
 # named here so loading this module never pulls the approval machinery in.
 TERMINAL_APPROVAL_STATUSES = frozenset({"approved", "rejected", "failed", "expired", "cancelled"})
+# Terminal statuses that apply nothing, unless execution had already started.
+_UNAPPLIED_APPROVAL_STATUSES = frozenset({"rejected", "expired", "cancelled"})
 
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
@@ -147,6 +149,35 @@ class AgentRecovery:
             except BaseException:
                 self._records.update(removed)
                 raise
+            for rid in removed:
+                ir.async_delete_issue(hass, DOMAIN, f"agent_recovery_{rid}")
+
+    async def release_unapplied(self, hass: HomeAssistant | None, store: AccessKeyStore, turn: str) -> None:
+        """Drop this ended turn's claims an approval proves never ran; keep every other one.
+
+        A rejected, cancelled or expired approval that never started executing applied
+        nothing, so a failed turn has no outcome of it left to review.
+        """
+        unapplied = {
+            (approval.get("request_id"), approval.get("access_key_id"))
+            for approval in store.get_pending_approvals()
+            if approval.get("status") in _UNAPPLIED_APPROVAL_STATUSES
+            and not approval.get("execution_started_at")
+        }
+        async with self._lock:
+            removed = {rid: r for rid, r in self._records.items()
+                       if r.get("turn_id") == turn and (rid, r["access_key_id"]) in unapplied
+                       and rid not in self._active}
+            if not removed:
+                return
+            for rid in removed:
+                del self._records[rid]
+            try:
+                await self._save()
+            except BaseException:
+                self._records.update(removed)
+                raise
+        if hass is not None:
             for rid in removed:
                 ir.async_delete_issue(hass, DOMAIN, f"agent_recovery_{rid}")
 
@@ -322,6 +353,8 @@ def recovery_turn(run: Callable) -> Callable:
             if (not failed and (delivered or not (cancel is not None and cancel.is_set()))
                     and getattr(result, "outcome", "ok") == "ok"):
                 await data.agent_recovery.complete_turn(turn)
+            elif (store := getattr(data, "store", None)) is not None:
+                await data.agent_recovery.release_unapplied(getattr(data, "hass", None), store, turn)
             return result
         except asyncio.CancelledError:
             if delivered and not failed:

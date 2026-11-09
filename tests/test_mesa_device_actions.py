@@ -26,7 +26,7 @@ from homeassistant.util.dt import utcnow
 from pytest_homeassistant.common import MockConfigEntry
 
 from custom_components.phoenix_mcp import radio as radio_backend
-from custom_components.phoenix_mcp import tool_defs, tool_dispatch
+from custom_components.phoenix_mcp import tool_catalog, tool_defs, tool_dispatch
 from custom_components.phoenix_mcp.access_key_store import (
     AccessKeyRecord,
     AccessKeyStore,
@@ -944,50 +944,103 @@ def _mutating_tools() -> dict[str, tuple[str, str | None]]:
     return _catalog_tools(read_only=False)
 
 
+# The calls that change Home Assistant from a tracked handler: a service call, a registry
+# write, and an integration's own device-removal hook.
+_EFFECT_ATTRIBUTES = frozenset({
+    "async_call", "async_update_entity", "async_remove", "async_update_device", "async_remove_device", "hook",
+})
+_EFFECT_FUNCTIONS = frozenset({"update_device_registry_entry"})
+
+
+def _is_effect(child: ast.AST) -> bool:
+    if not isinstance(child, ast.Call):
+        return False
+    func = child.func
+    if isinstance(func, ast.Attribute) and func.attr in _EFFECT_ATTRIBUTES:
+        # Phoenix deleting its own Store file changes nothing in Home Assistant.
+        return not (func.attr == "async_remove" and "store" in ast.unparse(func.value).lower())
+    return isinstance(func, ast.Name) and func.id in _EFFECT_FUNCTIONS
+
+
 def _dispatch_sites(nodes: dict[str, ast.AST]) -> set[str]:
-    """Every function holding a Home Assistant service call."""
+    """Every function holding a call that changes Home Assistant.
+
+    A helper named in _EFFECT_FUNCTIONS is the effect itself: its callers are checked.
+    """
     return {
         name for name, node in nodes.items()
-        if any(
-            isinstance(child, ast.Call) and isinstance(child.func, ast.Attribute) and child.func.attr == "async_call"
-            for child in ast.walk(node)
-        )
+        if name.rsplit(":", 1)[-1] not in _EFFECT_FUNCTIONS and any(_is_effect(child) for child in ast.walk(node))
     }
 
 
 def _tracked_handlers() -> set[str]:
-    """The handlers tool_dispatch trusts for dispatch evidence, read from where it says so."""
-    tree = ast.parse((_PACKAGE / "tool_dispatch.py").read_text())
-    call = next(
-        node for node in ast.walk(tree)
-        if isinstance(node, ast.Call) and getattr(node.func, "id", "") == "DispatchProgress"
-        and any(keyword.arg == "tracked" and isinstance(keyword.value, ast.Compare) for keyword in node.keywords)
-    )
-    compare = next(keyword.value for keyword in call.keywords if keyword.arg == "tracked")
-    return {_qualified(getattr(tool_dispatch, item.id)) for item in compare.comparators[0].elts}
+    """The handlers tool_dispatch trusts for dispatch evidence, asked the way it asks."""
+    return {
+        _qualified(handler) for name, (handler, *_rest) in _TOOL_HANDLERS.items()
+        if tool_dispatch._boundary_tracked(handler, name)
+    }
+
+
+def _write_boundaries(nodes: dict[str, ast.AST]) -> set[str]:
+    """Functions decorated @write_boundary: entering one marks dispatch started."""
+    return {
+        name for name, node in nodes.items()
+        if any(getattr(decorator, "id", "") == "write_boundary" for decorator in getattr(node, "decorator_list", ()))
+    }
+
+
+def _reachable_before_mark(start: str, edges: dict[str, set[str]], boundaries: set[str]) -> set[str]:
+    """What a handler reaches without entering a function that marks dispatch started."""
+    seen: set[str] = set()
+    queue = [start]
+    while queue:
+        name = queue.pop()
+        if name not in seen and name not in boundaries:
+            seen.add(name)
+            queue.extend(edges.get(name, ()))
+    return seen
 
 
 def _unmarked_dispatches(node: ast.AST) -> list[int]:
-    """Lines of a function's service calls with no mark_dispatch_started before them."""
+    """Lines of a function's effects with no mark_dispatch_started before them."""
     calls = [child for child in ast.walk(node) if isinstance(child, ast.Call)]
     marks = [child.lineno for child in calls if getattr(child.func, "id", "") == "mark_dispatch_started"]
-    return [
-        child.lineno for child in calls
-        if isinstance(child.func, ast.Attribute) and child.func.attr == "async_call"
-        and not any(mark <= child.lineno for mark in marks)
-    ]
+    return [child.lineno for child in calls if _is_effect(child) and not any(mark <= child.lineno for mark in marks)]
 
 
 def test_a_tracked_handler_marks_before_every_dispatch():
     """A tracked handler that never marked proves nothing ran, so one unmarked branch lies."""
     nodes, edges = _function_bodies()
     tracked = _tracked_handlers()
-    assert len(tracked) >= 2, f"the scan found only {tracked}; it is not working"
-    reached = set().union(*(_reachable(handler, edges) for handler in tracked))
+    assert len(tracked) >= 40, f"the scan found only {tracked}; it is not working"
+    boundaries = _write_boundaries(nodes)
+    reached = set().union(*(_reachable_before_mark(handler, edges, boundaries) for handler in tracked))
     sites = _dispatch_sites(nodes) & reached
     assert len(sites) >= 4, f"the scan found only {sites}; it is not working"
     unmarked = {site: lines for site in sites if (lines := _unmarked_dispatches(nodes[site]))}
     assert unmarked == {}
+
+
+def test_every_executor_marks_dispatch_or_its_handler_marks_inline():
+    """A new executor without @write_boundary would leave its handler's refusals unknown, or,
+    tracked by mistake, call a refusal after a write 'nothing written'."""
+    inline = {_qualified(handler) for handler in tool_dispatch._BOUNDARY_TRACKED_HANDLERS}
+    unmarked = sorted(
+        name for name, executor in _EXECUTOR_REGISTRY.items()
+        if getattr(executor, "phoenix_write_boundary", False) is not True
+        and (name not in _TOOL_HANDLERS or _qualified(_TOOL_HANDLERS[name][0]) not in inline)
+    )
+    assert unmarked == []
+
+
+def test_the_direct_writers_are_exactly_the_handlers_that_skip_their_executor():
+    nodes, edges = _function_bodies()
+    skipping = {
+        name for name, (handler, executor) in _mutating_tools().items()
+        if executor is not None and handler not in {_qualified(h) for h in tool_dispatch._BOUNDARY_TRACKED_HANDLERS}
+        and executor not in _reachable(handler, edges)
+    }
+    assert skipping == set(tool_catalog._HANDLER_WRITES_DIRECTLY)
 
 
 def test_the_marking_scan_catches_an_unmarked_dispatch():

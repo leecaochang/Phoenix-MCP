@@ -1427,6 +1427,12 @@ select.input:not(.agentcli-select) { flex: 0 0 auto; width: clamp(10rem, 33%, 18
   cursor: pointer;
 }
 .toggle-switch.disabled { cursor: not-allowed; opacity: 0.45; }
+/* A control busy with a save in flight is blocked at once but dims only if the save outlasts
+   0.4 s: every Settings window shares one save, so dimming at once flashed every control.
+   Disabled controls (:disabled) dim as before. */
+@keyframes phx-busy-hold { from { opacity: 1; } }
+[data-busy]:not(:disabled),
+.toggle-switch.disabled:has(> input[data-busy]:not(:disabled)) { animation: phx-busy-hold 0.4s step-end; }
 .toggle-switch input { position: absolute; opacity: 0; width: 0; height: 0; }
 .toggle-switch-track {
   position: absolute;

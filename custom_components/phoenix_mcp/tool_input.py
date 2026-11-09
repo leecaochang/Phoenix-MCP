@@ -60,7 +60,9 @@ def with_argument_notes(result: tuple[dict, _Outcome, str], notes: list[str]) ->
         items[0] = {**items[0], "text": json.dumps(body, default=str)}
     else:
         items.append({"type": "text", "text": "Arguments adjusted: " + " ".join(notes)})
-    return {**content, "content": items}, outcome, resource
+    # Keep a server-owned result type (refused before write, outcome unknown): a plain
+    # copy would turn a refusal that wrote nothing into a barrier.
+    return type(content)({**content, "content": items}), outcome, resource
 
 
 def _reject_non_finite(_value: str) -> None:

@@ -43,7 +43,7 @@ from .dashboard_search import Criteria, parse_criteria, search_layout
 from ..policy_engine import Permission, filter_service_response, is_sensitive_key, resolve_registry_access
 from ..access_key_store import AccessKeyRecord
 from ..config_recovery import ConfigurationRecoveryError, safe_snapshot
-from ..request_authority import AuthorityChangedError
+from ..request_authority import AuthorityChangedError, write_boundary
 from ..tool_common import (
     _CAP_FORBIDDEN_MESSAGE,
     _cas_conflict,
@@ -550,6 +550,7 @@ async def _tool_create_dashboard(
     return await _execute_create_dashboard(args, access_key, hass, data)
 
 
+@write_boundary
 async def _execute_create_dashboard(
     args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData
 ) -> tuple[dict, str, str]:
@@ -595,6 +596,7 @@ async def _tool_edit_dashboard(
     return await _execute_edit_dashboard(args, access_key, hass, data)
 
 
+@write_boundary
 async def _execute_edit_dashboard(
     args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData
 ) -> tuple[dict, str, str]:
@@ -640,6 +642,7 @@ async def _tool_delete_dashboard(
     return await _execute_delete_dashboard(args, access_key, hass, data)
 
 
+@write_boundary
 async def _execute_delete_dashboard(
     args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData
 ) -> tuple[dict, str, str]:
@@ -995,6 +998,7 @@ async def _tool_set_dashboard_config(
     return await _execute_set_dashboard_config(args, access_key, hass, data)
 
 
+@write_boundary
 async def _execute_set_dashboard_config(
     args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData
 ) -> tuple[dict, str, str]:
@@ -1386,18 +1390,21 @@ async def _execute_dashboard_card(
     return _tool_success(json.dumps(body, default=str)), "allowed", f"dashboard:{resource_id}"
 
 
+@write_boundary
 async def _execute_add_dashboard_card(
     args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData
 ) -> tuple[dict, str, str]:
     return await _execute_dashboard_card(args, "add", "add_dashboard_card", access_key, hass, data)
 
 
+@write_boundary
 async def _execute_edit_dashboard_card(
     args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData
 ) -> tuple[dict, str, str]:
     return await _execute_dashboard_card(args, "edit", "edit_dashboard_card", access_key, hass, data)
 
 
+@write_boundary
 async def _execute_delete_dashboard_card(
     args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData
 ) -> tuple[dict, str, str]:
@@ -1570,6 +1577,7 @@ async def _tool_patch_dashboard(
     return await _execute_patch_dashboard(args, access_key, hass, data)
 
 
+@write_boundary
 async def _execute_patch_dashboard(
     args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData
 ) -> tuple[dict, str, str]:

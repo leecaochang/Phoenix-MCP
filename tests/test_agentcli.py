@@ -6787,3 +6787,20 @@ def test_both_approval_waits_report_one_outcome(status, reason, result):
     assert (inline["status"], inline["message"]) == (interactive["status"], interactive["message"])
     if status == "failed":
         assert "not applied" not in inline["message"]
+
+
+def test_a_rejection_tells_the_agent_what_the_operator_was_looking_at():
+    """An agent that never saw the approval page could not explain it after a rejection."""
+    from types import SimpleNamespace
+    approval = SimpleNamespace(
+        closure_reason=None, result=None, cap_name="cap_registry_write",
+        diff={"summary": "Delete the registry entry for light.desk",
+              "preview": {"approval_reason": "This access key's Manage entity registry capability is set to Confirm.",
+                          "relationships": {"consumers": [{"name": "Hidden Automation"}]}}},
+    )
+    body = json.loads(agent_turn._resolved_result(STATUS_REJECTED, None, approval)["content"][0]["text"])
+    assert body["status"] == "rejected"
+    assert body["review_showed"]["summary"] == "Delete the registry entry for light.desk"
+    assert "Manage entity registry" in body["review_showed"]["why_approval"]
+    assert "Hidden Automation" not in json.dumps(body)
+    assert "saw when deciding" in body["review_showed"]["note"]

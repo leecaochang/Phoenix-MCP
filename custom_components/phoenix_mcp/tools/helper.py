@@ -45,7 +45,7 @@ from ..mesa import (
     evaluate_registry_action,
     fire_mesa_blocked_event,
 )
-from ..request_authority import AuthorityChangedError, check_request_authority
+from ..request_authority import AuthorityChangedError, check_request_authority, write_boundary, mark_dispatch_started
 from ..template_snapshots import template_snapshot, protect_template
 from ..ws_dispatch import WsCommandNotDispatchedError, WsDispatchError, async_ws_command, ws_commands_unsettled
 from ..mesa_audit import note_mesa_advisory
@@ -768,6 +768,7 @@ async def _prepare_config_flow_helper(
                 # breaks that contract the entry already exists: it is removed and
                 # reported rather than letting the preflight pass as clean.
                 entry = result.get("result")
+                mark_dispatch_started()  # the entry was created: this refusal follows a write
                 if entry is not None:
                     await hass.config_entries.async_remove(entry.entry_id)
                 return "error", "This helper flow finished before its declared final form."
@@ -1429,6 +1430,7 @@ async def _read_helper_config(hass: HomeAssistant, helper_type: str, helper_id: 
     return next((row for row in rows or [] if row.get("id") == helper_id), None)
 
 
+@write_boundary
 async def _execute_create_helper(
     args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData
 ) -> tuple[dict, str, str]:
@@ -2126,6 +2128,7 @@ async def _protected_storage_helper_write(args, access_key, hass: HomeAssistant,
             recovery.leave(rid)
 
 
+@write_boundary
 async def _execute_edit_helper(
     args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData
 ) -> tuple[dict, str, str]:
@@ -2234,6 +2237,7 @@ async def _execute_edit_helper(
                                     default=str)), "allowed", f"helper:{helper_type}:{helper_id}"
 
 
+@write_boundary
 async def _execute_delete_helper(
     args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData
 ) -> tuple[dict, str, str]:
@@ -3019,6 +3023,7 @@ async def _tool_set_helper_settings(
     return await _execute_set_config_entry_options(approval_args, access_key, hass, data)
 
 
+@write_boundary
 async def _execute_set_config_entry_options(
     args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData
 ) -> tuple[dict, str, str]:

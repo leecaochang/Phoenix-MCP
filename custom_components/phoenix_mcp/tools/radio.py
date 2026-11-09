@@ -43,7 +43,7 @@ from .discovery import _accessible_entity_ids
 from ..tool_common import (
     MESA_DENIED_MESSAGE, _CAP_FORBIDDEN_MESSAGE, _gate, _mesa_confirm_annotation, _pending_or_inline, _record_version, _set_progress_status, _tool_error, _tool_refused_before_write, _tool_reported_failure, _tool_success, _tool_uncertain, _truncate, _with_mesa_advisory,
 )
-from ..request_authority import _approved_exec_ctx
+from ..request_authority import _approved_exec_ctx, write_boundary
 from ..policy_engine import (
     Permission,
     device_cascade_entity_ids,
@@ -2004,6 +2004,7 @@ async def _tool_scan_zigbee_topology(
     return await _execute_scan_zigbee_topology(args, access_key, hass, data)
 
 
+@write_boundary
 async def _execute_scan_zigbee_topology(
     args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData
 ) -> tuple[dict, str, str]:
@@ -2198,6 +2199,7 @@ async def _tool_permit_zigbee_join(
     return await _execute_permit_zigbee_join(args, access_key, hass, data)
 
 
+@write_boundary
 async def _execute_permit_zigbee_join(
     args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData
 ) -> tuple[dict, str, str]:
@@ -2261,6 +2263,7 @@ async def _tool_reconfigure_zigbee_device(
     )
 
 
+@write_boundary
 async def _execute_reconfigure_zigbee_device(
     args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData,
     request_id: str = "", client_ip: str | None = None,
@@ -2358,6 +2361,7 @@ async def _tool_set_zigbee_device_options(
     )
 
 
+@write_boundary
 async def _execute_set_zigbee_device_options(
     args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData,
     request_id: str = "", client_ip: str | None = None,
@@ -2556,6 +2560,7 @@ async def _tool_set_zigbee_device_property(
     )
 
 
+@write_boundary
 async def _execute_set_zigbee_device_property(
     args: dict,
     access_key: AccessKeyRecord,
@@ -2696,6 +2701,7 @@ async def _tool_set_zigbee_binding(
     )
 
 
+@write_boundary
 async def _execute_set_zigbee_binding(
     args: dict,
     access_key: AccessKeyRecord,
@@ -2881,6 +2887,7 @@ async def _tool_configure_zigbee_reporting(
     )
 
 
+@write_boundary
 async def _execute_configure_zigbee_reporting(
     args: dict,
     access_key: AccessKeyRecord,
@@ -3191,6 +3198,7 @@ async def _execute_zigbee_group_change(
     return _tool_success(json.dumps(body)), "allowed", target_id
 
 
+@write_boundary
 async def _execute_create_zigbee_group(
     args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData,
     request_id: str = "", client_ip: str | None = None,
@@ -3201,6 +3209,7 @@ async def _execute_create_zigbee_group(
     )
 
 
+@write_boundary
 async def _execute_set_zigbee_group_members(
     args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData,
     request_id: str = "", client_ip: str | None = None,
@@ -3211,6 +3220,7 @@ async def _execute_set_zigbee_group_members(
     )
 
 
+@write_boundary
 async def _execute_remove_zigbee_group(
     args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData,
     request_id: str = "", client_ip: str | None = None,
@@ -3253,6 +3263,7 @@ async def _tool_remove_zigbee_device(
     )
 
 
+@write_boundary
 async def _execute_remove_zigbee_device(
     args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData,
     request_id: str = "", client_ip: str | None = None,

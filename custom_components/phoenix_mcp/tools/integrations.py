@@ -39,7 +39,7 @@ from ..template_snapshots import template_snapshot, protect_template
 from ..tool_common import (
     _add_mesa_advisory, _CAP_FORBIDDEN_MESSAGE, _create_registry_mesa_approval, _gate, _record_version, _restore_ctx, _tool_error, _tool_success, _tool_uncertain, fitted_offset_page, offset_page,
 )
-from ..request_authority import _approved_exec_ctx
+from ..request_authority import _approved_exec_ctx, write_boundary
 from ..tool_contracts import normalize_tool_args
 from .discovery import _registry_relationships_preview
 from .integration_reconfigure import (
@@ -777,6 +777,7 @@ async def _tool_reconfigure_integration(
     return await _execute_reconfigure_integration(args, access_key, hass, data)
 
 
+@write_boundary
 async def _execute_reconfigure_integration(
     args: dict,
     access_key: AccessKeyRecord,
@@ -945,6 +946,7 @@ async def _tool_set_integration_enabled(
     return await _execute_set_integration_enabled(args, access_key, hass, data)
 
 
+@write_boundary
 async def _execute_set_integration_enabled(
     args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData
 ) -> tuple[dict, str, str]:
@@ -1120,6 +1122,7 @@ async def _tool_set_integration(
     return await _execute_set_integration(args, access_key, hass, data)
 
 
+@write_boundary
 async def _execute_set_integration(
     args: dict,
     access_key: AccessKeyRecord,
@@ -1297,6 +1300,7 @@ async def _reload_integration_support_error(entry: Any, hass: HomeAssistant) -> 
     return None
 
 
+@write_boundary
 async def _execute_reload_integration(
     args: dict,
     access_key: AccessKeyRecord,
@@ -1665,6 +1669,7 @@ async def _tool_remove_integration(
     return await _execute_remove_integration(args, access_key, hass, data)
 
 
+@write_boundary
 async def _execute_remove_integration(
     args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData
 ) -> tuple[dict, str, str]:

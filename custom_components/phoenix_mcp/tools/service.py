@@ -37,7 +37,7 @@ from ..policy_engine import (
     resolve_esphome_user_service, resolve_service_targets, service_target_binding_valid,
     unreadable_group_targets, unregistered_targets,
 )
-from ..request_authority import check_request_authority, mark_dispatch_started, RequestAuthority
+from ..request_authority import check_request_authority, mark_dispatch_started, RequestAuthority, write_boundary
 from ..routing.plan_currency import service_plan_is_current, bind_service_plan
 from ..routing.command_verification import async_verify_command_state
 from ..routing.routing_tables import COMMAND_ROUTING_PLAN_KEY
@@ -697,6 +697,7 @@ def _service_call_targets(entity_ids: list[str], access_key: AccessKeyRecord, ha
     return result
 
 
+@write_boundary
 async def _execute_call_service_mesa_approved(
     args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData
 ) -> tuple[dict, str, str]:

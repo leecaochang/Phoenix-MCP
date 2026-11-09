@@ -33,7 +33,7 @@ from ..helpers import content_hash
 from ..catalog_text import diff_summary_fields
 from ..capability import effective_cap
 from ..redaction import redact_structure
-from ..request_authority import AuthorityChangedError, check_request_authority
+from ..request_authority import AuthorityChangedError, check_request_authority, write_boundary
 from ..tool_common import (
     _CAP_FORBIDDEN_MESSAGE, _check_authority_before_dispatch, _gate, _recovery_failure, _restore_ctx, _tool_error,
     _tool_success, _tool_uncertain,
@@ -341,6 +341,7 @@ async def _tool_set_dashboard_resource(
     return await _execute_set_dashboard_resource(args, access_key, hass, data)
 
 
+@write_boundary
 async def _execute_set_dashboard_resource(
     args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData,
 ) -> tuple[dict, str, str]:

@@ -67,7 +67,7 @@ from ..capability import effective_cap
 from ..redaction import (
     redact_entity_ids_outside, redact_inaccessible_entity_ids_in_text, redact_diagnostics, visible_entity_ids,
 )
-from ..request_authority import check_request_authority
+from ..request_authority import check_request_authority, write_boundary
 from ..policy_engine import (
     Permission, esphome_entry_for_entity, esphome_entry_writable, required_service_cap,
     resolve, resolve_registry_access,
@@ -2319,6 +2319,7 @@ async def _tool_install_esphome_firmware(
     )
 
 
+@write_boundary
 async def _execute_install_esphome_firmware(
     args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData,
     request_id: str = "", client_ip: str | None = None,

@@ -61,7 +61,7 @@ from .routing.routing_statistics import provider_events
 from .routing.tool_routing import create_review_state, async_review_tools, ToolReviewState, withheld_results
 from .tool_catalog import build_agent_tool_list
 from .tool_common import (
-    _operator_accepted_result, approval_outcome, execution_failure_text, _ProgressBus,
+    _operator_accepted_result, approval_outcome, execution_failure_text, _ProgressBus, _review_outline,
     _progress_ctx,
 )
 from .tool_defs import _NATIVE_TOOL_PUBLIC_TO_INTERNAL
@@ -505,10 +505,11 @@ def _resolved_result(status: str, applied_result: dict | None, approval: Any = N
         return _operator_accepted_result(applied_result)
     if status in (STATUS_FAILED, STATUS_REJECTED, STATUS_CANCELLED):
         response_status, message = approval_outcome(status, approval)
-        return {"content": [{"type": "text", "text": json.dumps({
-            "status": response_status,
-            "message": message,
-        })}], "isError": True}
+        body: dict[str, Any] = {"status": response_status, "message": message}
+        if approval is not None:
+            # What the operator was looking at when they decided, so the agent can explain it.
+            body["review_showed"] = _review_outline(approval, decided=True)
+        return {"content": [{"type": "text", "text": json.dumps(body)}], "isError": True}
     return {"content": [{"type": "text", "text": json.dumps({
         "status": "pending_approval",
         "message": "Still awaiting approval; it was not applied in this session. Do not retry.",

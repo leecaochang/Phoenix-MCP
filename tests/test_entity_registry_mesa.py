@@ -25,7 +25,8 @@ from custom_components.phoenix_mcp.tools.registry import (
     _device_mesa_preview,
     _entity_identity_references,
 )
-from custom_components.phoenix_mcp.tool_common import _tool_success
+from custom_components.phoenix_mcp.tool_common import RefusedBeforeWrite, _tool_success
+from custom_components.phoenix_mcp import tool_dispatch as tool_dispatch_module
 from custom_components.phoenix_mcp.tool_dispatch import _call_tool, async_execute_approved_tool
 from custom_components.phoenix_mcp.mesa import (
     RegistryMesaDecision,
@@ -512,6 +513,22 @@ async def test_invalid_or_occupied_rename_is_rejected_before_approval(
     assert outcome == "invalid_request"
     assert message in content["content"][0]["text"]
     gate.assert_not_awaited()
+    # Refused before the registry write, so an agent turn gets it back with no barrier.
+    assert isinstance(content, RefusedBeforeWrite)
+
+
+async def test_a_failure_after_the_registry_write_starts_is_not_typed_as_refused(
+    hass: HomeAssistant, registry_entity
+):
+    entity_id, _device_id = registry_entity
+    data = await _data(hass, "off")
+    with patch.object(er.EntityRegistry, "async_update_entity", side_effect=RuntimeError("boom")):
+        content, outcome, _ = await _call_tool(
+            "set_entity", {"entity_id": entity_id, "changes": {"name": "Renamed"}},
+            _access_key(cap="allow"), hass, data,
+        )
+    assert "Failed to update entity" in content["content"][0]["text"]
+    assert not isinstance(content, RefusedBeforeWrite)
 
 
 # --- moves out of a profiled area, and entity enable/disable --------------------
@@ -733,3 +750,84 @@ async def test_the_registry_gate_fails_closed_without_a_runtime(hass: HomeAssist
     )
 
     assert outcome == "denied"
+
+
+@pytest.mark.parametrize("mesa_mode, reason", [
+    ("advisory", "Manage entity registry capability is set to Confirm"),
+    ("enforced", "MESA requires approval"),
+])
+async def test_the_delete_approval_says_what_asks_for_it(
+    hass: HomeAssistant, registry_entity, mesa_mode, reason
+):
+    """A waiting approval never shows MESA's 'proceeding' warning, and names its cause."""
+    entity_id, _device_id = registry_entity
+    data = await _data(hass, mesa_mode)
+    data.mesa.store.set(entity_id, _profile(entity_id, "confirm"))
+    gate = AsyncMock(return_value=None)
+    with patch("custom_components.phoenix_mcp.tools.registry._gate", gate), \
+            patch("custom_components.phoenix_mcp.tools.registry._create_registry_mesa_approval",
+                  AsyncMock(return_value=({}, "pending_approval", entity_id))) as mesa_approval:
+        await _call_tool("delete_entity", {"entity_id": entity_id}, _access_key(cap="confirm"), hass, data)
+    builder = gate.call_args.kwargs["diff"]
+    preview = (await builder())["preview"]
+    assert next(iter(preview)) == "approval_reason"
+    assert reason in preview["approval_reason"]
+    assert "proceeding" not in json.dumps(preview)
+    if mesa_mode == "advisory":
+        assert "is not what asks for this approval" in preview["mesa"]["note"]
+    else:
+        mesa_approval.assert_awaited_once()
+
+
+@pytest.mark.parametrize("handler_refuses, executor_fails, refused", [
+    (True, False, True),    # the handler refused before its executor: nothing written
+    (False, True, False),   # the executor failed after entering: outcome stays unknown
+    (False, False, False),  # success is not a refusal
+])
+async def test_an_executor_boundary_decides_whether_a_refusal_wrote_nothing(
+    hass: HomeAssistant, handler_refuses, executor_fails, refused
+):
+    """Any write tool with a @write_boundary executor is tracked, not only hand-instrumented ones."""
+    from custom_components.phoenix_mcp.request_authority import write_boundary
+    from custom_components.phoenix_mcp.tool_catalog import _EXECUTOR_REGISTRY, _TOOL_HANDLERS
+    from custom_components.phoenix_mcp.tool_common import _tool_error
+
+    @write_boundary
+    async def executor(args, access_key, hass):
+        return (_tool_error("failed midway") if executor_fails else _tool_success({"ok": True})), "allowed", "x"
+
+    async def handler(args, access_key, hass):
+        if handler_refuses:
+            return _tool_error("bad input"), "invalid_request", "x"
+        return await executor(args, access_key, hass)
+
+    data = await _data(hass, "off")
+    name = "set_label_or_category"
+    from custom_components.phoenix_mcp import tool_catalog
+    with patch.dict(_TOOL_HANDLERS, {name: (handler, (), {})}), \
+            patch.dict(_EXECUTOR_REGISTRY, {name: executor}), \
+            patch.object(tool_catalog, "_EXECUTOR_TRACKED", {(name, handler)}), \
+            patch.object(tool_dispatch_module, "_tool_capability_denied", return_value=False), \
+            patch.object(tool_dispatch_module, "unknown_argument_error", return_value=None), \
+            patch.object(tool_dispatch_module, "scalar_arguments", side_effect=lambda _n, a, **_k: (a, None)):
+        content, _outcome, _ = await _call_tool(name, {}, _access_key(cap="allow"), hass, data)
+    assert isinstance(content, RefusedBeforeWrite) is refused
+
+
+async def test_the_agent_hears_what_the_delete_approval_page_shows_without_its_contents(
+    hass: HomeAssistant, registry_entity
+):
+    """The agent could not explain a page it never saw; it now gets an outline, never the names."""
+    from custom_components.phoenix_mcp.tool_common import _review_outline
+    entity_id, _device_id = registry_entity
+    data = await _data(hass, "advisory")
+    gate = AsyncMock(return_value=None)
+    with patch("custom_components.phoenix_mcp.tools.registry._gate", gate):
+        await _call_tool("delete_entity", {"entity_id": entity_id}, _access_key(cap="confirm"), hass, data)
+    diff = await gate.call_args.kwargs["diff"]()
+    diff["preview"]["relationships"]["consumers"] = [{"kind": "automation", "id": "1", "name": "Secret Vault Routine"}]
+    outline = _review_outline(SimpleNamespace(diff=diff, cap_name="cap_registry_write"))
+    assert outline["summary"] == diff["summary"]
+    assert "Manage entity registry capability is set to Confirm" in outline["why_approval"]
+    assert "what uses the target (automations, scripts, dashboards)" in outline["also_shows"]
+    assert "Secret Vault Routine" not in json.dumps(outline)

@@ -48,7 +48,7 @@ from ..tool_common import (
 )
 from ..config_recovery import ConfigurationRecoveryError, safe_snapshot
 from ..recorder_queries import parse_recorder_window, read_statistic_window
-from ..request_authority import AuthorityChangedError, check_request_authority
+from ..request_authority import AuthorityChangedError, check_request_authority, write_boundary
 from ..ws_dispatch import WsCommandNotDispatchedError, WsDispatchError, async_ws_command, validate_ws_payload
 
 _LOGGER = logging.getLogger(__name__)
@@ -847,6 +847,7 @@ async def _tool_edit_energy_config(
     return await _execute_edit_energy_config(args, access_key, hass, data)
 
 
+@write_boundary
 async def _execute_edit_energy_config(
     args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData
 ) -> tuple[dict, str, str]:
