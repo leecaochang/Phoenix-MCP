@@ -143,6 +143,66 @@ class TestCreate:
         assert record.access_key_id == "t2"
 
 
+class TestCreateRechecksAuthorityUnderTheLock:
+    """A key revoked while a gated call waits for the store lock queues nothing."""
+
+    @staticmethod
+    def _setup(store):
+        from types import SimpleNamespace
+
+        from custom_components.phoenix_mcp.access_key_store import AccessKeyRecord, PermissionTree
+
+        key = AccessKeyRecord(
+            id="t1", name="alice", access_key_hash="h1", created_at=utcnow(),
+            created_by="admin", permissions=PermissionTree(), cap_restart="confirm",
+        )
+        store.get_access_key_by_hash = lambda digest: key if digest == key.access_key_hash else None
+        data = SimpleNamespace(store=store, ready=True, shutting_down=False)
+        hass = MagicMock()
+        hass.data = {DOMAIN: data}
+        return key, data, hass
+
+    async def _evaluate(self, key, data, hass):
+        from custom_components.phoenix_mcp.approvals import async_evaluate_capability
+        from custom_components.phoenix_mcp.request_authority import RequestAuthority, request_authority
+
+        token = request_authority.set(RequestAuthority(hass, data, key.id, key.access_key_hash))
+        try:
+            return await async_evaluate_capability(
+                "cap_restart", key, hass, data, tool_name="restart_ha", args={}, request_id="rid",
+            )
+        finally:
+            request_authority.reset(token)
+
+    @pytest.mark.asyncio
+    async def test_revoked_during_the_lock_wait(self, store):
+        from custom_components.phoenix_mcp.request_authority import AuthorityChangedError
+
+        key, data, hass = self._setup(store)
+        with patch("custom_components.phoenix_mcp.approvals.create_approval_notification") as notify, \
+                patch("custom_components.phoenix_mcp.approvals.fire_approval_requested_event") as fire:
+            async with store.async_lock:
+                waiting = asyncio.ensure_future(self._evaluate(key, data, hass))
+                await asyncio.sleep(0)
+                assert not waiting.done()
+                key.revoked = True
+            with pytest.raises(AuthorityChangedError):
+                await waiting
+        assert store.get_pending_approvals() == []
+        store.async_save.assert_not_awaited()
+        notify.assert_not_called()
+        fire.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_a_valid_key_still_queues(self, store):
+        key, data, hass = self._setup(store)
+        with patch("custom_components.phoenix_mcp.approvals.create_approval_notification"), \
+                patch("custom_components.phoenix_mcp.approvals.fire_approval_requested_event"):
+            result = await self._evaluate(key, data, hass)
+        assert result.approval is not None
+        assert [entry["id"] for entry in store.get_pending_approvals()] == [result.approval.id]
+
+
 # --- get / list ---------------------------------------------------------------
 
 

@@ -306,6 +306,19 @@ async def test_stop_gates_real_http_admission_before_persistence(hass, enable_cu
     assert await hass.config_entries.async_unload(entry.entry_id)
 
 
+async def test_routes_left_behind_by_unload_refuse_with_503(hass, enable_custom_integrations, hass_client_no_auth):
+    """aiohttp cannot remove routes, so the views outlive the runtime they served."""
+    entry, data = await _setup_runtime(hass)
+    _, raw = await data.store.async_create_access_key("unloaded", "admin")
+    client = await hass_client_no_auth()
+    headers = {"Authorization": "Bearer " + raw}
+    assert (await client.get("/api/phoenix-mcp/context", headers=headers)).status == 200
+    assert await hass.config_entries.async_unload(entry.entry_id)
+    assert DOMAIN not in hass.data
+    for request_headers in (headers, {}):
+        assert (await client.get("/api/phoenix-mcp/context", headers=request_headers)).status == 503
+
+
 async def test_unload_releases_real_expiry_and_sensor_flush_timers(hass, enable_custom_integrations):
     from custom_components.phoenix_mcp.helpers import update_access_key_counter
 

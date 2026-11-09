@@ -344,6 +344,22 @@ async def test_kill_switch_yields_no_tools(hass):
 
 
 @pytest.mark.asyncio
+async def test_expired_bound_key_yields_no_tools(hass):
+    """An expired key stays in the store until archival, so the binding must check validity."""
+    from homeassistant.util.dt import utcnow
+
+    access_key = _make_access_key()
+    data = _make_data(access_key, bound_id=access_key.id)
+    api = PhoenixAssistAPI(hass, data)
+    assert (await api.async_get_api_instance(_ctx())).tools
+
+    access_key.expires_at = utcnow() - timedelta(seconds=1)
+    instance = await api.async_get_api_instance(_ctx())
+    assert instance.tools == []
+    assert "bind an access key" in instance.api_prompt.lower()
+
+
+@pytest.mark.asyncio
 async def test_bound_instance_tools_mirror_tools_list_gating(hass, hass_admin_user):
     from custom_components.phoenix_mcp.tool_catalog import build_mcp_tool_list
 

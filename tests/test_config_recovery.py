@@ -9,6 +9,7 @@ import pytest
 from homeassistant.config_entries import SOURCE_USER
 from homeassistant.data_entry_flow import FlowResultType
 from homeassistant.helpers import entity_registry as er
+from homeassistant.util.file import WriteError
 
 from tests.runtime_fixtures import mesa_off_store
 
@@ -630,7 +631,7 @@ async def test_private_atomic_store_uses_real_filesystem(hass, tmp_path):
     assert [p.name for p in path.parent.iterdir()] == [path.name]
     old = path.read_bytes()
     with patch("homeassistant.util.file.AtomicWriter.commit", side_effect=OSError):
-        with pytest.raises(Exception):
+        with pytest.raises(WriteError):
             await hass.async_add_executor_job(write_prepared, store, "w", '{"changed":true}')
     assert path.read_bytes() == old
 

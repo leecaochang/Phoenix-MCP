@@ -7,6 +7,7 @@ helper functions, Jinja2 filters or enumeration helpers.
 from __future__ import annotations
 
 import pytest
+from jinja2.exceptions import TemplateAssertionError
 from homeassistant.util.dt import utcnow
 
 from custom_components.phoenix_mcp.template_sandbox import build_permitted_states, render_template_snapshot
@@ -84,7 +85,7 @@ def test_state_helpers_as_functions_do_not_leak(two_states, template, expected):
 def test_state_helpers_as_filters_do_not_leak(two_states, template):
     """State helpers used as filters must not expose real state."""
     access_key = _scoped_access_key()
-    with pytest.raises(Exception) as exc:
+    with pytest.raises(TemplateAssertionError, match="No filter named") as exc:
         _render(template, access_key, two_states)
     assert "topsecret" not in str(exc.value)
 

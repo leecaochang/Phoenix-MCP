@@ -457,6 +457,46 @@ async def test_lovelace_save_preserves_authority_refusal(hass, monkeypatch):
     save.assert_not_awaited()
 
 
+async def test_authority_lost_during_the_admin_lookup_runs_no_handler(hass, hass_admin_user, monkeypatch):
+    """The last authority check sits after the admin-user await and before HA's handler."""
+    from custom_components.phoenix_mcp.request_authority import AuthorityChangedError, execution_guard
+    from homeassistant.components import websocket_api
+
+    ran: list[str] = []
+    revoked = False
+
+    @websocket_api.websocket_command({"type": "phx_test/authority_gap"})
+    def _handler(hass, connection, msg):
+        ran.append("handler")
+        connection.send_result(msg["id"])
+
+    websocket_api.async_register_command(hass, _handler)
+    monkeypatch.setattr(wd_module, "ALLOWED_WS_COMMANDS", wd_module.ALLOWED_WS_COMMANDS | {"phx_test/authority_gap"})
+    real_lookup = wd_module._resolve_admin_user
+
+    async def lookup_then_revoke(hass):
+        nonlocal revoked
+        user = await real_lookup(hass)
+        revoked = True
+        return user
+
+    def guard():
+        if revoked:
+            raise AuthorityChangedError("Unauthorized.")
+
+    monkeypatch.setattr(wd_module, "_resolve_admin_user", lookup_then_revoke)
+    token = execution_guard.set(guard)
+    try:
+        with pytest.raises(AuthorityChangedError):
+            await async_ws_command(hass, "phx_test/authority_gap", {})
+    finally:
+        execution_guard.reset(token)
+    assert revoked and ran == []
+
+    assert await async_ws_command(hass, "phx_test/authority_gap", {}) is None
+    assert ran == ["handler"]
+
+
 async def test_lovelace_save_wraps_storage_failure(hass, monkeypatch):
     from unittest.mock import AsyncMock
 

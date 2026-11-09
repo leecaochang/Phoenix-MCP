@@ -1464,6 +1464,25 @@ async def test_a_notification_gets_no_body_whatever_dispatch_returns(env):
     assert await response.read() == b""
 
 
+async def test_a_batched_notification_gets_no_entry_whatever_dispatch_returns(env):
+    client, data = env
+    _, raw = await _key(data)
+    opened = await client.post(ROUTE, headers=_headers(raw), json=INITIALIZE)
+    headers = _headers(raw, **{"Mcp-Session-Id": opened.headers["Mcp-Session-Id"]})
+
+    calls: list[str] = []
+
+    async def dispatch(method, *_args, **_kwargs):
+        calls.append(method)
+        return {"jsonrpc": "2.0", "id": None, "result": {}}, "initialized", "initialized", "allowed"
+
+    with patch.object(mcp_transport, "_dispatch_mcp", dispatch):
+        response = await client.post(ROUTE, headers=headers, json=[{"jsonrpc": "2.0", "method": "notifications/initialized"}])
+    assert calls == ["notifications/initialized"]
+    assert response.status == 202
+    assert await response.read() == b""
+
+
 async def test_a_reply_holding_a_value_json_cannot_write_is_stringified(env):
     client, data = env
     _, _, headers = await _session(client, data)

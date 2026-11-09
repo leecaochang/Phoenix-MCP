@@ -743,6 +743,28 @@ async def test_delete_access_key_cleans_access_key_counters():
 
 
 @pytest.mark.asyncio
+async def test_delete_access_key_cancels_its_expiry_timer():
+    """A revoked key's expiry timer is cancelled and dropped; another key's stays armed."""
+    access_key = _make_active_access_key()
+    data = _make_data([access_key])
+    data.store.get_access_key_by_id = MagicMock(return_value=access_key)
+    data.store.async_archive_access_key = AsyncMock(return_value=MagicMock())
+    cancel_mine, cancel_other = MagicMock(), MagicMock()
+    data.expiry_timers.update({access_key.id: cancel_mine, "other-access-key": cancel_other})
+    hass = _make_hass(data)
+
+    view = PhoenixAdminAccessKeyView()
+    view.hass = hass
+
+    resp = await view.delete(_make_admin_request(), access_key_id=access_key.id)
+
+    assert resp.status == 204
+    cancel_mine.assert_called_once_with()
+    cancel_other.assert_not_called()
+    assert set(data.expiry_timers) == {"other-access-key"}
+
+
+@pytest.mark.asyncio
 async def test_delete_nonexistent_access_key_returns_404():
     data = _make_data()
     data.store.get_access_key_by_id = MagicMock(return_value=None)

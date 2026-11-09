@@ -10,6 +10,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from homeassistant.config_entries import SOURCE_USER
 from homeassistant.data_entry_flow import FlowResultType
+from homeassistant.exceptions import TemplateError
 from homeassistant.helpers.template import Template
 from homeassistant.setup import async_setup_component
 from homeassistant.util.dt import utcnow
@@ -486,7 +487,7 @@ async def test_a_function_ha_lacks_is_refused_and_its_filter_is_not(hass, expres
     name = expression.split("(")[0].removeprefix("{{ ")
     with pytest.raises(HelperScopeError, match=f"the function '{name}'"):
         template_entities(expression)
-    with pytest.raises(Exception):
+    with pytest.raises(TemplateError, match=f"'{name}' is undefined"):
         Template(expression, hass).async_render()
     if name != "str":
         assert template_entities(f"{{{{ -1.5 | {name} }}}}") == set()

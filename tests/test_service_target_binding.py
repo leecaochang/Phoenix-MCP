@@ -13,6 +13,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 import voluptuous as vol
 from homeassistant.core import ServiceCall, SupportsResponse
+from homeassistant.exceptions import Unauthorized
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers import service as ha_service
@@ -160,9 +161,8 @@ async def test_household_probe_sees_the_service_home_assistant_would_run(hass):
     authority = MagicMock(is_admin=MagicMock(return_value=False), context=None)
     with patch("custom_components.phoenix_mcp.household_authority.household_authority") as current:
         current.get.return_value = authority
-        with pytest.raises(Exception) as refused:
+        with pytest.raises(Unauthorized):
             household_service_kwargs(hass, "TEST_ADMIN", "WIPE")
-    assert type(refused.value).__name__ == "Unauthorized"
 
 
 # ---- binding, against Home Assistant's own descriptions

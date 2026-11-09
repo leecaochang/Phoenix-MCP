@@ -1414,27 +1414,6 @@ class TestPresets:
         updated = await access_key_store.async_add_preset(record.id, "Baseline")
         assert updated.presets[0].confirm_inline_wait_seconds == 60
 
-    async def test_duplicate_name_case_insensitive_raises(self, access_key_store):
-        record, _ = await access_key_store.async_create_access_key("t1", "u")
-        await access_key_store.async_add_preset(record.id, "Baseline")
-        try:
-            await access_key_store.async_add_preset(record.id, "baseline")
-            raise AssertionError("expected ValueError")
-        except ValueError:
-            pass
-
-    async def test_preset_cap_enforced(self, access_key_store):
-        from custom_components.phoenix_mcp.const import MAX_PRESETS_PER_ACCESS_KEY
-
-        record, _ = await access_key_store.async_create_access_key("t1", "u")
-        for i in range(MAX_PRESETS_PER_ACCESS_KEY):
-            await access_key_store.async_add_preset(record.id, f"p{i}")
-        try:
-            await access_key_store.async_add_preset(record.id, "one-too-many")
-            raise AssertionError("expected ValueError")
-        except ValueError:
-            pass
-
     async def test_add_preset_refusals_raise_one_error_class_per_cause(self, access_key_store):
         """A taken name and a full preset list raise distinct ValueError subclasses."""
         from custom_components.phoenix_mcp.access_key_store import PresetLimitError, PresetNameTakenError
