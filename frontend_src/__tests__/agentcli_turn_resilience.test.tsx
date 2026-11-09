@@ -39,7 +39,7 @@ function serve(chat: () => Response) {
 }
 
 async function sendInWindow(text: string): Promise<HTMLTextAreaElement> {
-  render(<AgentCliWindow accessKeys={KEYS} instances={INSTANCES} scrollbackLines={100} initialAccessKeyId="k" onClose={() => {}} />);
+  render(<AgentCliWindow accessKeys={KEYS} instances={INSTANCES} memoryChars={960000} initialAccessKeyId="k" onClose={() => {}} />);
   await act(async () => {});
   const box = screen.getByRole("textbox") as HTMLTextAreaElement;
   fireEvent.change(box, { target: { value: text } });
@@ -124,24 +124,22 @@ describe("model memory within the request limit", () => {
   const userTurn = (text: string): Turn => ({
     entries: [{ kind: "user", text: "ask" }, { kind: "assistant", text: "ok", thinking: "" }],
     messages: [{ role: "user", content: text }, { role: "assistant", content: "ok" }],
-    lines: 2,
   });
   const resumedTurn = (text: string): Turn => ({
     entries: [{ kind: "assistant", text: "ok", thinking: "" }],
     messages: [{ role: "assistant", content: text }],
-    lines: 1,
   });
 
   it("sends everything that fits", () => {
     const turns = [userTurn("a"), userTurn("b")];
     expect(memoryStart(turns)).toBe(0);
-    expect(memoryMessages(turns, 100)).toHaveLength(4);
+    expect(memoryMessages(turns)).toHaveLength(4);
   });
 
   it("drops the oldest turns once the rest fill the request", () => {
     const turns = [userTurn(big("a", 600_000)), userTurn(big("b", 300_000)), userTurn(big("c", 300_000))];
     expect(memoryStart(turns)).toBe(1);
-    const sent = memoryMessages(turns, 100);
+    const sent = memoryMessages(turns);
     expect(sent).toHaveLength(4);
     expect(JSON.stringify(sent)).not.toContain("aaaa");
   });
@@ -152,7 +150,7 @@ describe("model memory within the request limit", () => {
   });
 
   it("sends nothing rather than a newest turn that cannot fit", () => {
-    expect(memoryMessages([userTurn(big("a", 2_000_000))], 100)).toEqual([]);
+    expect(memoryMessages([userTurn(big("a", 2_000_000))])).toEqual([]);
   });
 
   it("counts non-ASCII text as the escapes the server measures", () => {
@@ -179,7 +177,7 @@ describe("model memory within the request limit", () => {
       },
     });
     setSessionTurns([userTurn(big("a", 600_000)), userTurn(big("b", 500_000))]);
-    render(<AgentCliWindow accessKeys={KEYS} instances={INSTANCES} scrollbackLines={100} initialAccessKeyId="k" onClose={() => {}} />);
+    render(<AgentCliWindow accessKeys={KEYS} instances={INSTANCES} memoryChars={960000} initialAccessKeyId="k" onClose={() => {}} />);
     await act(async () => {});
     const box = screen.getByRole("textbox");
     const send = async (text: string) => {
@@ -193,6 +191,70 @@ describe("model memory within the request limit", () => {
     expect(document.querySelectorAll(".agentcli-notice")).toHaveLength(1);
     await send("and again");
     expect(document.querySelectorAll(".agentcli-notice")).toHaveLength(1);
+  });
+});
+
+describe("a message long enough to push out earlier turns", () => {
+  const big = (fill: string, size: number) => fill.repeat(size);
+  const userTurn = (text: string): Turn => ({
+    entries: [{ kind: "user", text: "ask" }, { kind: "assistant", text: "ok", thinking: "" }],
+    messages: [{ role: "user", content: text }, { role: "assistant", content: "ok" }],
+  });
+  const seen: { messages: unknown[] }[] = [];
+
+  async function open() {
+    seen.length = 0;
+    setHass({
+      user: { id: "test-admin" },
+      fetchWithAuth: async (url: string, init: RequestInit) => {
+        if (String(url).includes("/models")) return new Response(JSON.stringify({ models: ["m"] }), { status: 200 });
+        seen.push(JSON.parse(init.body as string));
+        return new Response(frame("done", {}), { status: 200 });
+      },
+    });
+    setSessionTurns([userTurn(big("a", 3000)), userTurn(big("b", 3000))]);
+    render(<AgentCliWindow accessKeys={KEYS} instances={INSTANCES} memoryChars={10000} initialAccessKeyId="k" onClose={() => {}} />);
+    await act(async () => {});
+    const box = screen.getByRole("textbox") as HTMLTextAreaElement;
+    fireEvent.change(box, { target: { value: big("p", 6000) } });
+    fireEvent.keyDown(box, { key: "Enter" });
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 10)); });
+    return box;
+  }
+  const click = async (name: string) => {
+    fireEvent.click(screen.getByRole("button", { name }));
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 10)); });
+  };
+
+  it("asks before sending, and sends nothing yet", async () => {
+    const box = await open();
+    expect(seen).toHaveLength(0);
+    expect(screen.getByText(/won't see 1 earlier message/)).toBeInTheDocument();
+    expect(box.value).toHaveLength(6000);
+  });
+
+  it("Send Anyway sends with what still fits", async () => {
+    await open();
+    await click("Send Anyway");
+    expect(seen).toHaveLength(1);
+    expect(JSON.stringify(seen[0].messages)).not.toContain("aaaa");
+    expect(JSON.stringify(seen[0].messages)).toContain("bbbb");
+  });
+
+  it("Send in New Chat clears the conversation and sends no memory", async () => {
+    await open();
+    await click("Send in New Chat");
+    expect(seen).toHaveLength(1);
+    expect(seen[0].messages).toEqual([]);
+    expect(screen.queryByText("ask")).not.toBeInTheDocument();
+  });
+
+  it("Edit Message keeps the text and closes the warning", async () => {
+    const box = await open();
+    await click("Edit Message");
+    expect(seen).toHaveLength(0);
+    expect(screen.queryByText(/won't see/)).not.toBeInTheDocument();
+    expect(box.value).toHaveLength(6000);
   });
 });
 
@@ -320,11 +382,11 @@ describe("what a screen reader hears when a turn ends early", () => {
 
   it("says the model no longer remembers the oldest messages", async () => {
     const big = "x".repeat(1_100_000);
-    setSessionTurns([{ entries: [{ kind: "user", text: "old" }], messages: [{ role: "user", content: big }], lines: 1 }, { entries: [{ kind: "user", text: "newer" }], messages: [{ role: "user", content: "b" }], lines: 1 }]);
+    setSessionTurns([{ entries: [{ kind: "user", text: "old" }], messages: [{ role: "user", content: big }] }, { entries: [{ kind: "user", text: "newer" }], messages: [{ role: "user", content: "b" }] }]);
     let release: () => void = () => {};
     serve(() => new Response(new ReadableStream({ start(controller) { release = () => controller.close(); } }), { status: 200, headers: { "content-type": "text/event-stream" } }));
     await sendInWindow("x");
-    expect(announced()).toContain("no longer remembers");
+    expect(announced()).toContain("no longer sees");
     await act(async () => { release(); });
   });
 });

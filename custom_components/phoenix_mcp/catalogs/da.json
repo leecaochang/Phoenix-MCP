@@ -465,7 +465,7 @@
         "empty_turn": "Modellen afsluttede runden uden et tekstsvar.",
         "internal": "Intern fejl.",
         "max_tokens_stop": "Modellen stoppede, fordi den nåede sin grænse for svarlængde. Bed den fortsætte, eller forøg modellens grænse for output-tokens (for Ollama: indstillingerne num_predict/context).",
-        "memory_trimmed": "Samtalen er blevet større, end én anmodning kan rumme, så modellen husker ikke længere de ældste beskeder. De bliver stående på skærmen.",
+        "memory_trimmed": "Chatten er nu længere, end Chathukommelse tillader, så modellen ser ikke længere de ældste beskeder. De bliver stående på skærmen.",
         "model_api_unsupported": "Denne model er ikke kvalificeret til OpenCode Chat Completions. Vælg en understøttet model.",
         "network": "Udbyderen er midlertidigt utilgængelig.",
         "ollama_backend": "Udbyderen er midlertidigt utilgængelig.",
@@ -574,7 +574,15 @@
       "announceReplyStart": "{text}… Hele svaret står i samtalen.",
       "authorUser": "Du skrev",
       "authorAgent": "Agenten svarede",
-      "errorLabel": "Fejl"
+      "errorLabel": "Fejl",
+      "editMessage": "Rediger besked",
+      "memoryWarningAll": "Beskeden er lang, så modellen kan ikke se noget af den tidligere chat.",
+      "sendAnyway": "Send alligevel",
+      "sendInNewChat": "Send i ny chat",
+      "memoryWarningSome": {
+        "one": "Beskeden er lang, så modellen kan ikke se {count} tidligere besked i denne chat.",
+        "other": "Beskeden er lang, så modellen kan ikke se {count} tidligere beskeder i denne chat."
+      }
     },
     "approvalSummary": {
       "action.optionalReason": "Valgfri begrundelse",
@@ -2194,8 +2202,8 @@
       "agentcliRemoveAccountFailed": "Kunne ikke fjerne kontoen.",
       "agentcliRemoveBody": "Slet {name} og dens API-nøgle; alt, der bruger den, holder op med at virke. Det kan ikke fortrydes.",
       "agentcliSaveFailed": "Kunne ikke gemme udbyderen.",
-      "agentcliScrollbackHelp": "Hvor mange chatlinjer Agent Chat beholder som kontekst, 0 til 5.000 (standard 100).",
-      "agentcliScrollbackLabel": "Grænse for chathistorik",
+      "agentcliMemoryHelp": "Hvor mange tegn af den tidligere chat Agent Chat sender med hver besked, 0 til 960.000 (standard 200.000).",
+      "agentcliMemoryLabel": "Chathukommelse",
       "agentcliSelectModel": "Vælg standardmodel:",
       "agentcliServerUrl": "Serverwebadresse",
       "agentcliSiliconValley": "Silicon Valley",

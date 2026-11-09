@@ -20,7 +20,7 @@ import de from "../../custom_components/phoenix_mcp/catalogs/de.json";
 
 const KEYS = [{ id: "k1", name: "one" }] as never;
 const INSTANCES = [{ id: "i1", kind: "claude", name: "A", model: "m" }] as never;
-const chatWindow = () => <AgentCliWindow accessKeys={KEYS} instances={INSTANCES} scrollbackLines={500} initialAccessKeyId="k1" onClose={() => {}} />;
+const chatWindow = () => <AgentCliWindow accessKeys={KEYS} instances={INSTANCES} memoryChars={960000} initialAccessKeyId="k1" onClose={() => {}} />;
 const transcript = () => document.querySelector(".agentcli-body")!.textContent;
 
 beforeEach(() => {
@@ -41,7 +41,7 @@ describe("Agent Chat transcript", () => {
       { kind: "assistant", text: "hello", thinking: "" },
       { kind: "approval", approvalId: "a1", toolName: "x", status: "rejected", reason: "" },
       { kind: "error", code: "auth", message: "m" },
-    ], messages: [], lines: 1 }]);
+    ], messages: [] }]);
     const view = render(chatWindow());
     await act(async () => {});
     expect(transcript()).toContain(en.panel.agentchat.authorAgent);
@@ -58,7 +58,7 @@ describe("Agent Chat transcript", () => {
     const ts = Date.UTC(2026, 0, 15, 15, 30);
     setFormatLocale({ locale: { language: "en", time_format: "12" } });
     patchDurable({ showTimestamps: true });
-    setSessionTurns([{ entries: [{ kind: "user", text: "hello", ts }], messages: [], lines: 1 }]);
+    setSessionTurns([{ entries: [{ kind: "user", text: "hello", ts }], messages: [] }]);
     const view = render(chatWindow());
     await act(async () => {});
     const twelve = localeClock(ts);

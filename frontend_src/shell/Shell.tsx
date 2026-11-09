@@ -962,7 +962,7 @@ export function Shell() {
               key={d.agentCliKey}
               accessKeys={d.accessKeys}
               instances={d.agentCliInstances}
-              scrollbackLines={s.agentcli_scrollback_lines}
+              memoryChars={s.agentcli_memory_chars}
               initialAccessKeyId={d.accessKeys[0]?.id ?? ""}
               onClose={d.closeAgentCli}
               hass={d.hass}

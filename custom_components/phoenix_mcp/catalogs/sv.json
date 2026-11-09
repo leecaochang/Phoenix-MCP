@@ -465,7 +465,7 @@
         "empty_turn": "Modellen avslutade turen utan ett textsvar.",
         "internal": "Internt fel.",
         "max_tokens_stop": "Modellen stoppade eftersom den nådde sin gräns för utdatalängd. Be den fortsätta, eller höj modellens gräns för utdatatokens (för Ollama dess num_predict/context-inställningar).",
-        "memory_trimmed": "Konversationen har blivit större än vad en begäran rymmer, så modellen minns inte längre de äldsta meddelandena. De finns kvar på skärmen.",
+        "memory_trimmed": "Chatten är nu längre än chattminnet tillåter, så modellen ser inte längre de äldsta meddelandena. De finns kvar på skärmen.",
         "model_api_unsupported": "Den här modellen är inte verifierad för OpenCode Chat Completions. Välj en modell som stöds.",
         "network": "Leverantören är tillfälligt otillgänglig.",
         "ollama_backend": "Leverantören är tillfälligt otillgänglig.",
@@ -574,7 +574,15 @@
       "announceReplyStart": "{text}… Hela svaret finns i konversationen.",
       "authorUser": "Du skrev",
       "authorAgent": "Agenten svarade",
-      "errorLabel": "Fel"
+      "errorLabel": "Fel",
+      "editMessage": "Redigera meddelande",
+      "memoryWarningAll": "Meddelandet är långt, så modellen ser inget av den tidigare chatten.",
+      "sendAnyway": "Skicka ändå",
+      "sendInNewChat": "Skicka i ny chatt",
+      "memoryWarningSome": {
+        "one": "Meddelandet är långt, så modellen ser inte {count} tidigare meddelande i den här chatten.",
+        "other": "Meddelandet är långt, så modellen ser inte {count} tidigare meddelanden i den här chatten."
+      }
     },
     "approvalSummary": {
       "action.optionalReason": "Valfri orsak",
@@ -2194,8 +2202,8 @@
       "agentcliRemoveAccountFailed": "Det gick inte att ta bort kontot.",
       "agentcliRemoveBody": "Radera {name} och dess API-nyckel; allt som använder det slutar fungera. Detta kan inte ångras.",
       "agentcliSaveFailed": "Det gick inte att spara leverantören.",
-      "agentcliScrollbackHelp": "Hur många chattrader Agent Chat behåller som kontext, 0 till 5 000 (standard 100).",
-      "agentcliScrollbackLabel": "Gräns för chatthistoriken",
+      "agentcliMemoryHelp": "Hur många tecken av den tidigare chatten Agent Chat skickar med varje meddelande, 0 till 960 000 (standard 200 000).",
+      "agentcliMemoryLabel": "Chattminne",
       "agentcliSelectModel": "Välj standardmodell:",
       "agentcliServerUrl": "Server-URL",
       "agentcliSiliconValley": "Silicon Valley",

@@ -68,7 +68,6 @@ describe("conversation survives a reload", () => {
         { type: "image", source: { media_type: "image/png", data: bytes } },
         { type: "image_url", image_url: { url: `data:image/png;base64,${bytes}` } },
       ] }],
-      lines: 1,
     }]);
 
     const stored = localStorage.getItem(CONV_KEY) ?? "";

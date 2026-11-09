@@ -24,7 +24,7 @@ export const BASE_SETTINGS = {
   disable_all_logging: false, log_allowed: true, log_denied: true, log_rate_limited: true, log_entity_names: true, log_client_ip: true,
   audit_flush_interval: 0, audit_log_maxlen: 1000, notify_on_approval: true, notify_on_rate_limit: false,
   conversation_log_enabled: true, conversation_log_max_entries: 100, conversation_log_max_days: 7, conversation_log_max_mb: 25,
-  agentcli_routing_mode: "off", agentcli_scrollback_lines: 200, agentcli_max_iterations: 10, agentcli_global: false,
+  agentcli_routing_mode: "off", agentcli_memory_chars: 960000, agentcli_max_iterations: 10, agentcli_global: false,
   agentcli_conversation_style: "direct", agentcli_detail_level: "balanced", agentcli_home_focused: false,
   provider_catalog_refresh_enabled: true, provider_catalog_refresh_hours: 24,
   voice_agent_enabled: false, voice_agent_pipeline_supported: true, ai_task_supported: true, assist_api_supported: true,

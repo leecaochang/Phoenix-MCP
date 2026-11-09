@@ -38,7 +38,7 @@ function prepared(name: string, data = "QUJD") {
 }
 
 async function openWindow(instance: AgentCliInstance = UNKNOWN, accessKey: AccessKeyRecord = KEY) {
-  const view = render(<AgentCliWindow accessKeys={[accessKey]} instances={[instance]} scrollbackLines={500}
+  const view = render(<AgentCliWindow accessKeys={[accessKey]} instances={[instance]} memoryChars={960000}
                                       initialAccessKeyId="t1" onClose={() => {}} />);
   await waitFor(() => expect(getAgentCliModels).toHaveBeenCalled());
   return { view, textarea: screen.getByLabelText("Message Agent Chat") as HTMLTextAreaElement };

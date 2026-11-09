@@ -21,7 +21,7 @@ const DURABLE = "phx-agentcli:test-admin";
 
 async function opens(): Promise<void> {
   const quiet = vi.spyOn(console, "error").mockImplementation(() => {});
-  render(<AgentCliWindow accessKeys={KEYS} instances={INSTANCES} scrollbackLines={500} initialAccessKeyId="k1" onClose={() => {}} />);
+  render(<AgentCliWindow accessKeys={KEYS} instances={INSTANCES} memoryChars={960000} initialAccessKeyId="k1" onClose={() => {}} />);
   await act(async () => {});
   quiet.mockRestore();
   expect(document.querySelector(".agentcli-window")).not.toBeNull();
@@ -31,11 +31,11 @@ beforeEach(() => { __resetAgentCliState(); localStorage.clear(); getAgentCliMode
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
 describe("malformed saved turns", () => {
-  const entry = (value: unknown) => [{ entries: [value], messages: [], lines: 1 }];
+  const entry = (value: unknown) => [{ entries: [value], messages: [] }];
   const shapes: [string, unknown][] = [
     ["a null turn", [null, 5, "x"]],
-    ["entries not a list", [{ entries: "x", messages: [], lines: 1 }]],
-    ["a null entry", [{ entries: [null, 5], messages: [], lines: 1 }]],
+    ["entries not a list", [{ entries: "x", messages: [] }]],
+    ["a null entry", [{ entries: [null, 5], messages: [] }]],
     ["user text a number", entry({ kind: "user", text: 5 })],
     ["assistant without thinking", entry({ kind: "assistant", text: "a" })],
     ["assistant thinking a number", entry({ kind: "assistant", text: "a", thinking: 5 })],
@@ -52,7 +52,7 @@ describe("malformed saved turns", () => {
     ["tool result summary an object", entry({ kind: "tool_result", name: "n", summary: { a: 1 }, isError: 1 })],
     ["tool image without fields", entry({ kind: "tool_image" })],
     ["progress an object", entry({ kind: "progress", message: { a: 1 } })],
-    ["messages an object", [{ entries: [], messages: { a: 1 }, lines: "x" }]],
+    ["messages an object", [{ entries: [], messages: { a: 1 }, }]],
     ["an unknown kind", entry({ kind: "zzz" })],
   ];
   for (const verbose of [false, true]) {

@@ -1214,7 +1214,7 @@
         "empty_turn": "モデルはテキスト応答を返さずにターンを終了しました。",
         "internal": "内部エラー。",
         "max_tokens_stop": "モデルは出力長の上限に達したため停止しました。続行を依頼するか、モデルの出力トークン上限を増やしてください（Ollama では num_predict/context 設定）。",
-        "memory_trimmed": "会話が一度のリクエストに収まる大きさを超えたため、モデルは最も古いメッセージをもう覚えていません。メッセージは画面に残ります。",
+        "memory_trimmed": "このチャットがチャットメモリの上限を超えたため、モデルは最も古いメッセージを参照しなくなりました。メッセージは画面に残ります。",
         "model_api_unsupported": "このモデルは OpenCode Chat Completions での動作が確認されていません。対応モデルを選択してください。",
         "network": "プロバイダーは一時的に利用できません。",
         "ollama_backend": "プロバイダーは一時的に利用できません。",
@@ -1323,7 +1323,15 @@
       "announceReplyStart": "{text}... 返答の全文は会話にあります。",
       "authorUser": "あなたの発言",
       "authorAgent": "エージェントの返答",
-      "errorLabel": "エラー"
+      "errorLabel": "エラー",
+      "editMessage": "メッセージを編集",
+      "memoryWarningAll": "このメッセージは長いため、モデルはこれまでのチャットを参照できません。",
+      "sendAnyway": "このまま送信",
+      "sendInNewChat": "新しいチャットで送信",
+      "memoryWarningSome": {
+        "one": "このメッセージは長いため、モデルはこのチャットの以前のメッセージ {count} 件を参照できません。",
+        "other": "このメッセージは長いため、モデルはこのチャットの以前のメッセージ {count} 件を参照できません。"
+      }
     },
     "diff": {
       "blueprint.create": "{domain} ブループリント「{rel}」を作成",
@@ -1480,8 +1488,8 @@
       "agentcliRemoveAccountFailed": "アカウントを削除できませんでした。",
       "agentcliRemoveBody": "{name} とその API キーを削除します。これを使うものはすべて動作しなくなります。元に戻せません。",
       "agentcliSaveFailed": "プロバイダーを保存できませんでした。",
-      "agentcliScrollbackHelp": "Agent Chat がコンテキストとして保持するチャットの行数です。0 から 5,000 (既定 100)。",
-      "agentcliScrollbackLabel": "チャット履歴の上限",
+      "agentcliMemoryHelp": "Agent Chat が各メッセージと一緒に送る、これまでのチャットの文字数です。0 から 960,000 (既定 200,000)。",
+      "agentcliMemoryLabel": "チャットメモリ",
       "agentcliSelectModel": "既定のモデルを選択:",
       "agentcliServerUrl": "サーバー URL",
       "agentcliStepsHelp": "Agent Chat が続行を確認するまでに実行するツールのステップ数です。3 から 100 (既定 20)。",

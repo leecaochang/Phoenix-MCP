@@ -158,7 +158,7 @@ export interface GlobalSettings {
   mesa_mode: MesaMode;
   mesa_inject_enabled: boolean;
   access_key_presets_enabled: boolean;
-  agentcli_scrollback_lines: number;
+  agentcli_memory_chars: number;
   agentcli_max_iterations: number;
   agentcli_global: boolean;
   agentcli_conversation_style: ConversationStyle;

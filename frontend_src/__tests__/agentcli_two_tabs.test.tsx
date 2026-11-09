@@ -18,7 +18,7 @@ import { __resetAgentCliState, patchDurable, getDurable, setSessionDraft, setSes
 const KEYS = [{ id: "k1", name: "one" }] as never;
 const INSTANCES = [{ id: "i1", kind: "claude", name: "A", model: "m" }] as never;
 const CONV = "phx-agentcli-conversation:test-admin";
-const chatWindow = () => <AgentCliWindow accessKeys={KEYS} instances={INSTANCES} scrollbackLines={500} initialAccessKeyId="k1" onClose={() => {}} />;
+const chatWindow = () => <AgentCliWindow accessKeys={KEYS} instances={INSTANCES} memoryChars={960000} initialAccessKeyId="k1" onClose={() => {}} />;
 
 /**
  * Run the real purge in a second copy of the module, standing for the other
@@ -57,7 +57,7 @@ afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
 describe("a wipe in another tab", () => {
   it("is not undone by a turn running in this tab", async () => {
-    setSessionTurns([{ entries: [{ kind: "user", text: "secret old", ts: 1 }], messages: [], lines: 1 }]);
+    setSessionTurns([{ entries: [{ kind: "user", text: "secret old", ts: 1 }], messages: [] }]);
     let emit: (name: string, payload: unknown) => void = () => {};
     let finish: () => void = () => {};
     agentCliChat.mockImplementation((_body: unknown, on: typeof emit) => { emit = on; return new Promise<void>((resolve) => { finish = resolve; }); });
@@ -78,7 +78,7 @@ describe("a wipe in another tab", () => {
   });
 
   it("empties an idle window and closes this page's storage", async () => {
-    setSessionTurns([{ entries: [{ kind: "user", text: "secret old", ts: 1 }], messages: [], lines: 1 }]);
+    setSessionTurns([{ entries: [{ kind: "user", text: "secret old", ts: 1 }], messages: [] }]);
     render(chatWindow());
     await act(async () => {});
     expect(screen.queryByText("secret old")).not.toBeNull();
@@ -88,7 +88,7 @@ describe("a wipe in another tab", () => {
     expect(screen.queryByText("secret old")).toBeNull();
 
     setSessionDraft("typed after the wipe");
-    setSessionTurns([{ entries: [], messages: [], lines: 0 }]);
+    setSessionTurns([{ entries: [], messages: [] }]);
     patchDurable({ open: true });
     await act(async () => { await new Promise((resolve) => setTimeout(resolve, 350)); });
     expect(localStorage.getItem(CONV)).toBeNull();
@@ -112,7 +112,7 @@ describe("a wipe in another tab", () => {
   it("leaves a later page free to save", async () => {
     await wipeInAnotherTab();
     __resetAgentCliState();
-    setSessionTurns([{ entries: [], messages: [], lines: 0 }]);
+    setSessionTurns([{ entries: [], messages: [] }]);
     expect(localStorage.getItem(CONV)).not.toBeNull();
   });
 });

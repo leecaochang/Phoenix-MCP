@@ -713,7 +713,7 @@
         "empty_turn": "El modelo finalizó el turno sin una respuesta de texto.",
         "internal": "Error interno.",
         "max_tokens_stop": "El modelo se detuvo porque alcanzó su límite de longitud de salida. Pídale que continúe o aumente el límite de tokens de salida del modelo (en Ollama, sus ajustes num_predict/context).",
-        "memory_trimmed": "La conversación ha superado lo que cabe en una solicitud, así que el modelo ya no recuerda los mensajes más antiguos. Siguen en pantalla.",
+        "memory_trimmed": "Este chat ya supera lo que permite la memoria del chat, así que el modelo ya no ve los mensajes más antiguos. Siguen en pantalla.",
         "model_api_unsupported": "Este modelo no está validado para OpenCode Chat Completions. Elige un modelo compatible.",
         "network": "El proveedor no está disponible temporalmente.",
         "ollama_backend": "El proveedor no está disponible temporalmente.",
@@ -822,7 +822,15 @@
       "announceReplyStart": "{text}… La respuesta completa está en la conversación.",
       "authorUser": "Usted escribió",
       "authorAgent": "El agente respondió",
-      "errorLabel": "Error"
+      "errorLabel": "Error",
+      "editMessage": "Editar mensaje",
+      "memoryWarningAll": "Este mensaje es largo, así que el modelo no verá nada del chat anterior.",
+      "sendAnyway": "Enviar de todos modos",
+      "sendInNewChat": "Enviar en un chat nuevo",
+      "memoryWarningSome": {
+        "one": "Este mensaje es largo, así que el modelo no verá {count} mensaje anterior de este chat.",
+        "other": "Este mensaje es largo, así que el modelo no verá {count} mensajes anteriores de este chat."
+      }
     },
     "diff": {
       "blueprint.create": "Crear plano de {domain} «{rel}»",
@@ -1671,8 +1679,8 @@
       "agentcliRemoveAccountFailed": "No se pudo eliminar la cuenta.",
       "agentcliRemoveBody": "Elimine {name} y su clave de API; todo lo que la use dejará de funcionar. No se puede deshacer.",
       "agentcliSaveFailed": "No se pudo guardar el proveedor.",
-      "agentcliScrollbackHelp": "Cuántas líneas de chat conserva Agent Chat como contexto, de 0 a 5.000 (100 por defecto).",
-      "agentcliScrollbackLabel": "Límite del historial de chat",
+      "agentcliMemoryHelp": "Cuántos caracteres del chat anterior envía Agent Chat con cada mensaje, de 0 a 960.000 (predeterminado 200.000).",
+      "agentcliMemoryLabel": "Memoria del chat",
       "agentcliSelectModel": "Seleccionar modelo predeterminado:",
       "agentcliServerUrl": "URL del servidor",
       "agentcliStepsHelp": "Cuántos pasos de herramientas da Agent Chat antes de preguntar si continúa, de 3 a 100 (20 por defecto).",

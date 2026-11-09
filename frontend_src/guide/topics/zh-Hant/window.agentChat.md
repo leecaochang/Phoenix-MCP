@@ -1,5 +1,5 @@
 ---
-{ "id": "window.agentChat", "title": "{{label:agentchat.title}}", "parent": "workspace.my", "order": 5, "keywords": ["聊天", "智慧體", "助理", "對話", "Shift+A"], "sectionKeywords": { "opening": ["開啟", "快速鍵", "Shift+A", "每個頁面", "彈出"], "window": ["最小化", "最大化", "移動", "調整大小", "停駐", "關閉"], "options": ["詳細", "時間戳記", "頁尾", "文字大小"], "connection": ["存取金鑰", "提供者", "模型", "思考", "溫度", "帳戶", "Anthropic", "Claude", "DeepSeek", "OpenAI", "ChatGPT", "GPT", "Gemini", "Google", "Grok", "xAI", "Groq", "Kimi", "Moonshot", "Meta", "Llama", "MiniMax", "Mistral AI", "NVIDIA NIM", "Xiaomi MiMo", "Tencent Cloud TokenHub", "OpenCode", "Ollama", "OpenRouter", "Infron", "Together AI", "Cerebras", "Fireworks AI", "Alibaba Cloud Model Studio", "Qwen", "DashScope", "Z.ai", "Zhipu", "GLM", "深度求索", "通義千問", "千問", "阿里雲百煉", "百煉", "智譜", "月之暗面", "騰訊雲", "小米"], "conversation": ["傳送", "停止", "步驟", "處理中", "複製", "token", "用量"], "check-in": ["暫停", "繼續", "簽到前步驟"], "images": ["附加", "影像", "照片", "貼上", "圖片"], "approvals": ["核准", "拒絕", "審核", "等待"], "clear": ["清除聊天記錄", "/clear", "新對話"], "privacy": ["儲存", "瀏覽器", "傳送給提供者", "歷史"] } }
+{ "id": "window.agentChat", "title": "{{label:agentchat.title}}", "parent": "workspace.my", "order": 5, "keywords": ["聊天", "智慧體", "助理", "對話", "Shift+A"], "sectionKeywords": { "opening": ["開啟", "快速鍵", "Shift+A", "每個頁面", "彈出"], "window": ["最小化", "最大化", "移動", "調整大小", "停駐", "關閉"], "options": ["詳細", "時間戳記", "頁尾", "文字大小"], "connection": ["存取金鑰", "提供者", "模型", "思考", "溫度", "帳戶", "Anthropic", "Claude", "DeepSeek", "OpenAI", "ChatGPT", "GPT", "Gemini", "Google", "Grok", "xAI", "Groq", "Kimi", "Moonshot", "Meta", "Llama", "MiniMax", "Mistral AI", "NVIDIA NIM", "Xiaomi MiMo", "Tencent Cloud TokenHub", "OpenCode", "Ollama", "OpenRouter", "Infron", "Together AI", "Cerebras", "Fireworks AI", "Alibaba Cloud Model Studio", "Qwen", "DashScope", "Z.ai", "Zhipu", "GLM", "深度求索", "通義千問", "千問", "阿里雲百煉", "百煉", "智譜", "月之暗面", "騰訊雲", "小米"], "conversation": ["傳送", "停止", "步驟", "處理中", "複製", "token", "用量"], "memory-warning": ["長訊息", "上下文", "截斷", "仍要傳送", "新聊天", "記憶"], "check-in": ["暫停", "繼續", "簽到前步驟"], "images": ["附加", "影像", "照片", "貼上", "圖片"], "approvals": ["核准", "拒絕", "審核", "等待"], "clear": ["清除聊天記錄", "/clear", "新對話"], "privacy": ["儲存", "瀏覽器", "傳送給提供者", "歷史"] } }
 ---
 與 AI 智慧體談論你的家。它會透過你的某個存取金鑰行動，因此只能做該金鑰允許的事，每個操作都會像其他操作一樣被檢查和記錄。
 
@@ -58,6 +58,16 @@
 
 核准或拒絕操作會重設計數。在[{{label:settings.agentcliStepsLabel}}](guide:window.settingsChat#chat-steps)中設定數量。
 
+## 長訊息 {#memory-warning}
+
+當傳送一則訊息會把你較早的訊息擠出[{{label:settings.agentcliMemoryLabel}}](guide:window.settingsChat#chat-memory)時，Phoenix 會先詢問，並說明模型將看不到多少則訊息。
+
+- **{{label:agentchat.sendAnyway}}** 傳送訊息。最早的訊息仍留在畫面上，但模型不再看到它們。
+- **{{label:agentchat.sendInNewChat}}** 清除目前對話，並把這則訊息作為新對話的第一則傳送。
+- **{{label:agentchat.editMessage}}** 關閉警告，以便你縮短訊息。修改訊息也會關閉它。
+
+對話慢慢超出上限時不會詢問。會有一則通知告訴你一次，最早的訊息已不再傳送。
+
 ## 影像 {#images}
 
 貼上影像、把影像拖到視窗上，或使用附加按鈕：每則訊息最多 4 張。Phoenix 會在傳送前縮小大照片。縮小後，單張影像最大 2 MiB，一則訊息的影像總計最大 4 MiB。
@@ -78,7 +88,7 @@ Home Companion 金鑰無法傳送影像，也無法傳送給只讀取文字的�
 
 ## 保留什麼，以及在哪裡 {#privacy}
 
-每個 Home Assistant 使用者在每個瀏覽器中有一個對話，儲存在此瀏覽器中，因此重新載入後仍會存在。各分頁共用它。最新的訊息（在[{{label:settings.agentcliScrollbackLabel}}](guide:window.settingsChat#chat-memory)範圍內）和工具結果會隨每則訊息傳送給提供者。除非對話記錄開啟，否則 Phoenix 不在伺服器上保留副本。
+每個 Home Assistant 使用者在每個瀏覽器中有一個對話，儲存在此瀏覽器中，因此重新載入後仍會存在。各分頁共用它。最新的訊息（在[{{label:settings.agentcliMemoryLabel}}](guide:window.settingsChat#chat-memory)範圍內）和工具結果會隨每則訊息傳送給提供者。除非對話記錄開啟，否則 Phoenix 不在伺服器上保留副本。
 
 如果兩個分頁同時執行回覆，保留最後完成的那個。另一個分頁執行回覆時，此分頁會在訊息框上方提示。
 

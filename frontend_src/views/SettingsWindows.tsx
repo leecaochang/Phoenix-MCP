@@ -133,8 +133,8 @@ export function AgentChatSettingsWindow() {
       <AgentCliSettings
         routingMode={settings.agentcli_routing_mode}
         onRoutingChange={(value) => change("agentcli_routing_mode", value)}
-        scrollback={settings.agentcli_scrollback_lines}
-        onScrollbackChange={(n) => change("agentcli_scrollback_lines", n)}
+        memoryChars={settings.agentcli_memory_chars}
+        onMemoryCharsChange={(n) => change("agentcli_memory_chars", n)}
         maxIterations={settings.agentcli_max_iterations}
         onMaxIterationsChange={(n) => change("agentcli_max_iterations", n)}
         globalVisible={settings.agentcli_global}

@@ -136,7 +136,6 @@ function providerRateLimit(value: unknown): ProviderRateLimit | undefined {
 export interface Turn {
   entries: ChatEntry[];
   messages: unknown[];
-  lines: number;
 }
 
 interface GenOptions {
@@ -186,34 +185,8 @@ export function restorableTurns(saved: unknown[]): Turn[] {
   return saved.filter(isObject).flatMap((turn) => {
     if (!Array.isArray(turn.entries)) return [];
     const entries = turn.entries.filter(renderable);
-    const lines = typeof turn.lines === "number" && Number.isFinite(turn.lines) ? turn.lines : entries.length;
-    return [{ ...turn, entries, messages: Array.isArray(turn.messages) ? turn.messages : [], lines }];
+    return [{ entries, messages: Array.isArray(turn.messages) ? turn.messages : [] }];
   });
-}
-
-function countLines(entries: ChatEntry[]): number {
-  let n = 0;
-  for (const e of entries) {
-    if (e.kind === "user" || e.kind === "assistant") {
-      const txt = e.kind === "assistant" ? e.text : e.text;
-      n += 1 + (txt.match(/\n/g)?.length ?? 0);
-    } else {
-      n += 1;
-    }
-  }
-  return n;
-}
-
-export function trimTurns(turns: Turn[], scrollback: number): Turn[] {
-  if (scrollback <= 0) return turns.slice(-1);
-  const kept: Turn[] = [];
-  let total = 0;
-  for (let i = turns.length - 1; i >= 0; i--) {
-    total += turns[i].lines;
-    if (total > scrollback && kept.length > 0) break;
-    kept.unshift(turns[i]);
-  }
-  return kept;
 }
 
 // The server refuses a request body over 1 MiB, images aside. Its count differs
@@ -252,9 +225,9 @@ export function memoryStart(turns: Turn[], budget = MEMORY_MAX_BYTES): number {
  *  those too once a new message attaches images, become a short note. The
  *  oldest turns are left out once the rest would fill the request. */
 export function memoryMessages(
-  turns: Turn[], scrollback: number, replacingImages = false, budget = MEMORY_MAX_BYTES,
+  turns: Turn[], replacingImages = false, budget = MEMORY_MAX_BYTES,
 ): unknown[] {
-  if (scrollback <= 0) return [];
+  if (budget <= 0) return [];
   const carriedImages = (turn: Turn) => turn.entries.some(
     (entry) => entry.kind === "user" && Array.isArray(entry.images) && entry.images.length > 0);
   let newest = -1;
@@ -263,6 +236,23 @@ export function memoryMessages(
   return turns.flatMap((turn, index) => (index < start ? []
     : carriedImages(turn) && (index !== newest || replacingImages)
       ? withoutSentImages(turn.messages) : turn.messages));
+}
+
+/** What earlier conversation a message of `text` leaves room for: the Chat memory
+ *  setting, never more than one request can carry, less the message itself. */
+export function memoryBudget(memoryChars: number, text: string): number {
+  return memoryChars <= 0 ? 0 : Math.min(memoryChars, MEMORY_MAX_BYTES) - requestBytes(text);
+}
+
+/** How many of your earlier messages the model stops seeing because of this
+ *  message's own length: the turns a short message would still carry and this one
+ *  would not. `all` when nothing earlier would be sent at all. */
+export function memoryDrop(turns: Turn[], memoryChars: number, text: string): { count: number; all: boolean } {
+  if (memoryChars <= 0 || !turns.length) return { count: 0, all: false };
+  const kept = memoryStart(turns, memoryBudget(memoryChars, ""));
+  const start = memoryStart(turns, memoryBudget(memoryChars, text));
+  const count = turns.slice(kept, start).filter((turn) => turn.entries[0]?.kind === "user").length;
+  return { count, all: count > 0 && start >= turns.length };
 }
 
 // Wall-clock label for a transcript entry, in the viewer's locale convention.
@@ -586,7 +576,8 @@ export function buildOptions(
 interface Props {
   accessKeys: AccessKeyRecord[];
   instances: AgentCliInstance[];
-  scrollbackLines: number;
+  /** Chat memory: request characters of earlier conversation each message may carry. */
+  memoryChars: number;
   initialAccessKeyId: string;
   onClose: () => void;
   hass?: unknown;
@@ -762,7 +753,7 @@ const MEMORY_TRIMMED = "memory_trimmed";
 const TERMINAL_APPROVAL_STATUSES: ReadonlySet<string> = new Set(["approved", "rejected", "cancelled", "expired", "failed", "resolved"]);
 
 export function AgentCliWindow({
-  accessKeys, instances, scrollbackLines, initialAccessKeyId, onClose, hass = null, getHass: getLiveHass,
+  accessKeys, instances, memoryChars, initialAccessKeyId, onClose, hass = null, getHass: getLiveHass,
   summonVersion, focusRequest = 0, dockMount = null, dock = null,
 }: Props) {
   // Restore persisted window state (survives navigation away/back and reopen).
@@ -1101,6 +1092,8 @@ export function AgentCliWindow({
     const zero = { input: 0, output: 0, context: 0, noData: false };
     setSessionUsage(zero, persistenceOwner);
     setUsage(zero);
+    // A turn started in the same handler (Send in New Chat) reads its base from here.
+    usageRef.current = zero;
   }, [persistenceOwner]);
 
   // Reset the conversation when the access key or account changes (tool scope /
@@ -1253,7 +1246,7 @@ export function AgentCliWindow({
       if (!chatEnded || !kept.some((e) => e.kind === "approval" && e.reason === "agent_chat_ended")) {
         kept.push({ kind: "notice", message: t(chatEnded ? "agentchat.chatEnded" : "agentchat.cancelledNotice") });
       }
-      const next = trimTurns([...turns, { entries: kept, messages: [], lines: countLines(kept) }], scrollbackLines);
+      const next = [...turns, { entries: kept, messages: [] }];
       // pagehide cannot rely on React effects running before the page dies.
       setSessionTurns(next, persistenceOwner);
       setTurns(next);
@@ -1266,7 +1259,7 @@ export function AgentCliWindow({
     const sentImages = lastAttachmentsRef.current;
     lastAttachmentsRef.current = [];
     if (sentImages.length) setAttachments((current) => (current.length ? current : sentImages));
-  }, [input, persistenceOwner, scrollbackLines, turns, updateLive]);
+  }, [input, persistenceOwner, turns, updateLive]);
 
 
   const endTurnRef = useRef(cancel);
@@ -1389,11 +1382,11 @@ export function AgentCliWindow({
     }]);
     setSending(true);
 
-    const memoryBudget = MEMORY_MAX_BYTES - requestBytes(text);
-    const sentMessages = stateless ? [] : memoryOverride ?? memoryMessages(turns, scrollbackLines, images.length > 0, memoryBudget);
+    const budget = memoryBudget(memoryChars, text);
+    const sentMessages = stateless ? [] : memoryOverride ?? memoryMessages(turns, images.length > 0, budget);
     const sentLen = sentMessages.length;
     // Said once: the cut moves forward with every later message while the transcript keeps them all.
-    if (!stateless && scrollbackLines > 0 && memoryStart(turns, memoryBudget) > 0
+    if (!stateless && !memoryOverride && memoryChars > 0 && memoryStart(turns, budget) > 0
         && !turns.some((turn) => turn.entries.some((e) => e.kind === "notice" && e.code === MEMORY_TRIMMED))) {
       const trimmed = t(`agentchat.notice.${MEMORY_TRIMMED}`);
       updateLive((prev) => [...prev, { kind: "notice", code: MEMORY_TRIMMED, message: trimmed }]);
@@ -1639,8 +1632,8 @@ export function AgentCliWindow({
         }
         // Finalize the turn: fold live entries into the turn history, then trim.
         const entries = stripActivity(liveRef.current);
-        const turn: Turn = { entries, messages: newMessages, lines: countLines(entries) };
-        setTurns((prev) => trimTurns([...prev, turn], scrollbackLines));
+        const turn: Turn = { entries, messages: newMessages };
+        setTurns((prev) => [...prev, turn]);
         updateLive([]);
         // Announce the completed reply now that streaming is over.
         const finals = entries.filter((e) => e.kind === "assistant" && e.text.trim());
@@ -1655,7 +1648,7 @@ export function AgentCliWindow({
         if (spoken && !endAnnounced) announce(spoken);
       }
     }
-  }, [sending, accessKeys, turns, scrollbackLines, accessKeyId, persistenceOwner, resetUsage, instanceId, model, kind, options, caps, updateLive, streamLive, announce]);
+  }, [sending, accessKeys, turns, memoryChars, accessKeyId, persistenceOwner, resetUsage, instanceId, model, kind, options, caps, updateLive, streamLive, announce]);
 
   // Why images cannot go with the next message, when they cannot. Unknown model
   // support is allowed: the composer says so, and a provider refusal is learned.
@@ -1664,7 +1657,11 @@ export function AgentCliWindow({
     : companionKey ? t("agentchat.attachCompanion")
     : declaredCaps?.vision === false ? t("agentchat.attachNoVision") : "";
 
-  const send = useCallback(async () => {
+  // A message long enough to push earlier turns out of Chat memory waits here
+  // for a choice, keyed to its text so an edit dismisses it.
+  const [memoryWarning, setMemoryWarning] = useState<{ text: string; count: number; all: boolean } | null>(null);
+
+  const send = useCallback(async (choice: "check" | "anyway" | "new" = "check") => {
     const text = input.trim();
     if ((!text && !attachments.length) || sending) return;
     // Slash commands are handled locally and never sent to the model. /clear
@@ -1678,6 +1675,15 @@ export function AgentCliWindow({
       setAttachError(attachBlocked);
       return;
     }
+    if (choice === "check" && !companionKey) {
+      const drop = memoryDrop(turns, memoryChars, text);
+      if (drop.count > 0) {
+        setMemoryWarning({ text, ...drop });
+        return;
+      }
+    }
+    setMemoryWarning(null);
+    if (choice === "new") clearHistory();
     // The onboarding wizard listens for this to auto-close once the user has
     // sent their first prompt through the window it opened.
     window.dispatchEvent(new CustomEvent("phx-agentcli-sent"));
@@ -1685,8 +1691,9 @@ export function AgentCliWindow({
     const images = attachments;
     setAttachments([]);
     setAttachError("");
-    void runTurn("user", text, undefined, images);
-  }, [input, sending, runTurn, clearHistory, attachments, attachBlocked]);
+    // A new chat sends no memory: the cleared turns are still in this render's state.
+    void runTurn("user", text, choice === "new" ? [] : undefined, images);
+  }, [input, sending, runTurn, clearHistory, attachments, attachBlocked, companionKey, turns, memoryChars]);
 
   const addFiles = useCallback(async (files: File[]) => {
     if (!files.length) return;
@@ -1795,8 +1802,6 @@ export function AgentCliWindow({
   // cancelled with an approval still pending folds its entries into `turns` and
   // clears `live`, and that card stays on screen and stays actionable. A handler
   // that only mapped `live` would silently do nothing for exactly those cards.
-  // `lines` is left alone deliberately: it bounds scrollback trimming, and a
-  // status word is not a line.
   const updateApprovalEntry = useCallback((
     approvalId: string, update: (e: Extract<ChatEntry, { kind: "approval" }>) => ChatEntry,
   ) => {
@@ -2357,6 +2362,17 @@ export function AgentCliWindow({
               </span>
               <button className="btn btn-primary btn-sm" onClick={continueTurn}>{t("agentchat.continue")}</button>
               <button className="btn btn-sm" onClick={() => setPendingContinue(null)}>{t("agentchat.stop")}</button>
+            </div>
+          )}</StatusRegion>
+
+          <StatusRegion>{memoryWarning !== null && memoryWarning.text === input.trim() && !sending && (
+            <div className="agentcli-continue agentcli-memory-warning" data-guide="window.agentChat#memory-warning">
+              <span className="agentcli-continue-text">
+                {memoryWarning.all ? t("agentchat.memoryWarningAll") : tn("agentchat.memoryWarningSome", memoryWarning.count)}
+              </span>
+              <button className="btn btn-primary btn-sm" onClick={() => void send("anyway")}><Icon name="send" size={14} />{t("agentchat.sendAnyway")}</button>
+              <button className="btn btn-sm" onClick={() => void send("new")}><Icon name="add" size={14} />{t("agentchat.sendInNewChat")}</button>
+              <button className="btn btn-sm" onClick={() => { setMemoryWarning(null); inputRef.current?.focus(); }}><Icon name="edit" size={14} />{t("agentchat.editMessage")}</button>
             </div>
           )}</StatusRegion>
 

@@ -38,8 +38,8 @@ from ..llm.accounts import (
 from ..locales import canonical_language
 from ..panel import async_sync_agentchat_inject, async_sync_mesa_inject
 from ..provider_constants import (
-    AGENT_CHAT_MAX_ITERATIONS_MAX, AGENT_CHAT_MAX_ITERATIONS_MIN, AGENT_CHAT_SCROLLBACK_MAX,
-    AGENT_CHAT_SCROLLBACK_MIN, PROVIDER_CATALOG_REFRESH_HOURS_MAX, PROVIDER_CATALOG_REFRESH_HOURS_MIN,
+    AGENT_CHAT_MAX_ITERATIONS_MAX, AGENT_CHAT_MAX_ITERATIONS_MIN, AGENT_CHAT_MEMORY_CHARS_MAX,
+    AGENT_CHAT_MEMORY_CHARS_MIN, PROVIDER_CATALOG_REFRESH_HOURS_MAX, PROVIDER_CATALOG_REFRESH_HOURS_MIN,
 )
 from ..routing.command_routing import RoutingAuthority, async_evaluate_command, routing_language
 from ..routing.decision_batch import async_preview_batch
@@ -189,7 +189,7 @@ _PATCHABLE_SETTINGS = _BOOL_SETTINGS | set(CONVERSATION_LOG_LIMITS) | {
     *TOOL_ROUTING_SETTINGS.values(),
     "voice_agent_routing_mode", "agentcli_routing_mode", "command_routing_languages", "command_routing_timeout_ms", "decision_timeout_ms", "decision_request_budget",
     "audit_flush_interval", "audit_log_maxlen", "mesa_mode",
-    "agentcli_scrollback_lines", "agentcli_max_iterations", "assist_bound_access_key_id",
+    "agentcli_memory_chars", "agentcli_max_iterations", "assist_bound_access_key_id",
     "provider_catalog_refresh_hours",
     *_NULLABLE_STRING_SETTINGS,
 } | _CONVERSATION_STYLE_SETTINGS | _DETAIL_LEVEL_SETTINGS
@@ -319,8 +319,8 @@ async def _validated_settings_patch(
     int_checks = (
         ("audit_flush_interval", {"allowed": AUDIT_FLUSH_INTERVALS}),
         ("audit_log_maxlen", {"allowed": AUDIT_LOG_MAXLENS}),
-        ("agentcli_scrollback_lines",
-         {"bounds": (AGENT_CHAT_SCROLLBACK_MIN, AGENT_CHAT_SCROLLBACK_MAX)}),
+        ("agentcli_memory_chars",
+         {"bounds": (AGENT_CHAT_MEMORY_CHARS_MIN, AGENT_CHAT_MEMORY_CHARS_MAX)}),
         ("agentcli_max_iterations",
          {"bounds": (AGENT_CHAT_MAX_ITERATIONS_MIN, AGENT_CHAT_MAX_ITERATIONS_MAX)}),
         ("provider_catalog_refresh_hours",

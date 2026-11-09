@@ -83,7 +83,7 @@ The audit log records the change with the names of the changed settings, not the
 | `mesa_inject_enabled` | boolean | `false` | Takes effect on the next full page load. See [General](guide:window.settingsGeneral#inject). |
 | `access_key_presets_enabled` | boolean | `false` | Turning it on gives every key a Default preset. See [General](guide:window.settingsGeneral#presets). |
 | `agentcli_global` | boolean | `true` | Takes effect on the next full page load. See [Agent Chat](guide:window.settingsChat#chat-global). |
-| `agentcli_scrollback_lines` | integer, 0 to 5000 | 100 | Clamped. Numeric strings are accepted. See [Agent Chat](guide:window.settingsChat#chat-memory). |
+| `agentcli_memory_chars` | integer, 0 to 960000 | 200000 | Clamped. Numeric strings are accepted. See [Agent Chat](guide:window.settingsChat#chat-memory). |
 | `agentcli_max_iterations` | integer, 3 to 100 | 20 | Clamped. See [Agent Chat](guide:window.settingsChat#chat-steps). |
 | `agentcli_conversation_style` | `direct`, `warm`, `calm_guide`, `lively` or `technical` | `direct` | See [Agent Chat](guide:window.settingsChat#chat-style). |
 | `agentcli_detail_level` | `concise`, `balanced` or `detailed` | `concise` | See [Agent Chat](guide:window.settingsChat#chat-detail). |

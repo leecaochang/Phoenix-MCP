@@ -89,7 +89,7 @@ describe("phoenix-mcp-panel full app shell", () => {
     const models = vi.spyOn(api, "getAgentCliModels").mockResolvedValue({ models: ["m"] } as never);
     delete (window as unknown as Record<string, unknown>).__phxAgentChat;
     patchAgentCliDurable({ open: true, accessKeyId: "tok-1", instanceId: "i2" });
-    setSessionTurns([{ entries: [{ kind: "user", text: "keep me" }], messages: [{ role: "user", content: "keep me" }], lines: 1 }]);
+    setSessionTurns([{ entries: [{ kind: "user", text: "keep me" }], messages: [{ role: "user", content: "keep me" }] }]);
     const el = mountPanel();
     await waitFor(() => expect(el.shadowRoot!.textContent).toContain("shell-access-key"));
     expect(el.shadowRoot!.querySelector(".agentcli-window")).toBeNull();

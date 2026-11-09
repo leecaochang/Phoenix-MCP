@@ -276,7 +276,7 @@
         "empty_turn": "Il modello ha terminato il turno senza una risposta testuale.",
         "internal": "Errore interno.",
         "max_tokens_stop": "Il modello si è fermato perché ha raggiunto il limite di lunghezza dell'output. Chiedigli di continuare oppure aumenta il limite di token di output del modello (per Ollama, le sue impostazioni num_predict/context).",
-        "memory_trimmed": "La conversazione ha superato quanto può contenere una richiesta, quindi il modello non ricorda più i messaggi più vecchi. Restano visibili sullo schermo.",
+        "memory_trimmed": "Questa chat ora supera quanto consente la memoria della chat, quindi il modello non vede più i messaggi più vecchi. Restano visibili sullo schermo.",
         "model_api_unsupported": "Questo modello non è stato verificato per OpenCode Chat Completions. Scegli un modello supportato.",
         "network": "Il provider è temporaneamente non disponibile.",
         "ollama_backend": "Il provider è temporaneamente non disponibile.",
@@ -385,7 +385,15 @@
       "announceReplyStart": "{text}… La risposta completa è nella conversazione.",
       "authorUser": "Hai scritto",
       "authorAgent": "L'agente ha risposto",
-      "errorLabel": "Errore"
+      "errorLabel": "Errore",
+      "editMessage": "Modifica messaggio",
+      "memoryWarningAll": "Questo messaggio è lungo, quindi il modello non vedrà nulla della chat precedente.",
+      "sendAnyway": "Invia comunque",
+      "sendInNewChat": "Invia in una nuova chat",
+      "memoryWarningSome": {
+        "one": "Questo messaggio è lungo, quindi il modello non vedrà {count} messaggio precedente in questa chat.",
+        "other": "Questo messaggio è lungo, quindi il modello non vedrà {count} messaggi precedenti in questa chat."
+      }
     },
     "audit": {
       "accessPassThrough": "Pass-through",
@@ -1468,8 +1476,8 @@
       "agentcliRemoveAccountFailed": "Rimozione dell'account non riuscita.",
       "agentcliRemoveBody": "Elimina {name} e la sua chiave API; tutto ciò che lo usa smette di funzionare. Non si può annullare.",
       "agentcliSaveFailed": "Salvataggio del provider non riuscito.",
-      "agentcliScrollbackHelp": "Quante righe di chat Agent Chat conserva come contesto, da 0 a 5.000 (predefinito 100).",
-      "agentcliScrollbackLabel": "Limite dello storico chat",
+      "agentcliMemoryHelp": "Quanti caratteri della chat precedente Agent Chat invia con ogni messaggio, da 0 a 960.000 (predefinito 200.000).",
+      "agentcliMemoryLabel": "Memoria della chat",
       "agentcliSelectModel": "Seleziona il modello predefinito:",
       "agentcliServerUrl": "URL del server",
       "agentcliStepsHelp": "Quanti passaggi con strumenti Agent Chat esegue prima di chiedere se continuare, da 3 a 100 (predefinito 20).",

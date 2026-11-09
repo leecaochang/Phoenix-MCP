@@ -4,7 +4,7 @@ vi.mock("../api", () => ({
   api: {
     listAccessKeys: vi.fn().mockResolvedValue([]),
     getAgentCliProviders: vi.fn().mockResolvedValue({ instances: [] }),
-    getSettings: vi.fn().mockResolvedValue({ kill_switch: false, agentcli_scrollback_lines: 500 }),
+    getSettings: vi.fn().mockResolvedValue({ kill_switch: false, agentcli_memory_chars: 960000 }),
   },
   setHass: vi.fn(),
 }));

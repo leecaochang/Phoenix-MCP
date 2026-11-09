@@ -158,7 +158,7 @@ async def test_a_cancelled_save_still_settles_before_a_later_failure(hass, first
     key, _ = await store.async_create_access_key("scoped", "admin")
     writer = _HeldWriter(asyncio.get_running_loop(), fail=first_write_fails)
     with patch.object(WRITER, WRITE, lambda owner, mode, data: writer(owner, mode, data)):
-        caller = asyncio.create_task(store.async_patch_settings(agentcli_scrollback_lines=321))
+        caller = asyncio.create_task(store.async_patch_settings(agentcli_memory_chars=321))
         await asyncio.wait_for(writer.entered.wait(), 2)
         caller.cancel()
         await asyncio.sleep(0)
@@ -173,7 +173,7 @@ async def test_a_cancelled_save_still_settles_before_a_later_failure(hass, first
     assert key.permissions.entities == {}
     reloaded = await AccessKeyStore.async_create(hass)
     assert reloaded.get_access_key_by_id(key.id).permissions.entities == {}
-    assert store.get_settings().agentcli_scrollback_lines == reloaded.get_settings().agentcli_scrollback_lines
+    assert store.get_settings().agentcli_memory_chars == reloaded.get_settings().agentcli_memory_chars
 
 
 async def test_an_older_write_cannot_land_after_a_newer_one(hass):

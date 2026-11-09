@@ -465,7 +465,7 @@
         "empty_turn": "Malli päätti vuoron ilman tekstivastausta.",
         "internal": "Sisäinen virhe.",
         "max_tokens_stop": "Malli pysähtyi, koska se saavutti tulosteen pituusrajan. Pyydä sitä jatkamaan tai suurenna mallin tulosteen token-rajaa (Ollamassa sen num_predict/context-asetuksia).",
-        "memory_trimmed": "Keskustelu on kasvanut suuremmaksi kuin yhteen pyyntöön mahtuu, joten malli ei enää muista vanhimpia viestejä. Ne pysyvät näytöllä.",
+        "memory_trimmed": "Tämä keskustelu on nyt pidempi kuin keskustelumuisti sallii, joten malli ei enää näe vanhimpia viestejä. Ne pysyvät näytöllä.",
         "model_api_unsupported": "Tätä mallia ei ole varmennettu OpenCode Chat Completions -rajapinnalle. Valitse tuettu malli.",
         "network": "Palveluntarjoaja ei ole tilapäisesti käytettävissä.",
         "ollama_backend": "Palveluntarjoaja ei ole tilapäisesti käytettävissä.",
@@ -574,7 +574,15 @@
       "announceReplyStart": "{text}… Koko vastaus on keskustelussa.",
       "authorUser": "Kirjoitit",
       "authorAgent": "Agentti vastasi",
-      "errorLabel": "Virhe"
+      "errorLabel": "Virhe",
+      "editMessage": "Muokkaa viestiä",
+      "memoryWarningAll": "Tämä viesti on pitkä, joten malli ei näe aiemmasta keskustelusta mitään.",
+      "sendAnyway": "Lähetä silti",
+      "sendInNewChat": "Lähetä uudessa keskustelussa",
+      "memoryWarningSome": {
+        "one": "Tämä viesti on pitkä, joten malli ei näe {count} aiempaa viestiä tässä keskustelussa.",
+        "other": "Tämä viesti on pitkä, joten malli ei näe {count} aiempaa viestiä tässä keskustelussa."
+      }
     },
     "approvalSummary": {
       "action.optionalReason": "Valinnainen syy",
@@ -2194,8 +2202,8 @@
       "agentcliRemoveAccountFailed": "Tilin poistaminen ei onnistunut.",
       "agentcliRemoveBody": "Poista {name} ja sen API-avain; kaikki sitä käyttävä lakkaa toimimasta. Tätä ei voi kumota.",
       "agentcliSaveFailed": "Palveluntarjoajan tallennus epäonnistui.",
-      "agentcliScrollbackHelp": "Montako keskustelun riviä Agent Chat säilyttää kontekstina, 0-5 000 (oletus 100).",
-      "agentcliScrollbackLabel": "Keskusteluhistorian raja",
+      "agentcliMemoryHelp": "Kuinka monta merkkiä aiemmasta keskustelusta Agent Chat lähettää jokaisen viestin mukana, välillä 0 ja 960 000 (oletus 200 000).",
+      "agentcliMemoryLabel": "Keskustelumuisti",
       "agentcliSelectModel": "Valitse oletusmalli:",
       "agentcliServerUrl": "Palvelimen URL-osoite",
       "agentcliSiliconValley": "Silicon Valley",

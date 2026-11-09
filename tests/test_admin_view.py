@@ -33,8 +33,8 @@ from custom_components.phoenix_mcp.const import (
     DOMAIN, MAX_CONFIRM_INLINE_WAIT_SECONDS, MIN_CONFIRM_INLINE_WAIT_SECONDS,
 )
 from custom_components.phoenix_mcp.provider_constants import (
-    AGENT_CHAT_MAX_ITERATIONS_MAX, AGENT_CHAT_MAX_ITERATIONS_MIN, AGENT_CHAT_SCROLLBACK_MAX,
-    AGENT_CHAT_SCROLLBACK_MIN,
+    AGENT_CHAT_MAX_ITERATIONS_MAX, AGENT_CHAT_MAX_ITERATIONS_MIN, AGENT_CHAT_MEMORY_CHARS_MAX,
+    AGENT_CHAT_MEMORY_CHARS_MIN,
 )
 from custom_components.phoenix_mcp.data import PhoenixData
 from custom_components.phoenix_mcp.access_key_store import (
@@ -1397,7 +1397,7 @@ async def test_access_key_patch_rejects_unknown_fields_atomically():
 
 
 @pytest.mark.asyncio
-async def test_settings_patch_agentcli_scrollback_persists_and_clamps():
+async def test_settings_patch_agentcli_memory_chars_persists_and_clamps():
     data = _make_data()
     data.store.async_patch_settings = AsyncMock(return_value=GlobalSettings())
     hass = _make_hass(data)
@@ -1406,17 +1406,17 @@ async def test_settings_patch_agentcli_scrollback_persists_and_clamps():
     view.hass = hass
 
     # A normal value reaches async_patch_settings.
-    resp = await view.patch(_make_admin_request(body=json.dumps({"agentcli_scrollback_lines": 250}).encode()))
+    resp = await view.patch(_make_admin_request(body=json.dumps({"agentcli_memory_chars": 250}).encode()))
     assert resp.status == 200
-    assert data.store.async_patch_settings.call_args.kwargs["agentcli_scrollback_lines"] == 250
+    assert data.store.async_patch_settings.call_args.kwargs["agentcli_memory_chars"] == 250
 
     # Over-range is clamped to the maximum, not rejected.
-    resp = await view.patch(_make_admin_request(body=json.dumps({"agentcli_scrollback_lines": 999999}).encode()))
+    resp = await view.patch(_make_admin_request(body=json.dumps({"agentcli_memory_chars": 9999999}).encode()))
     assert resp.status == 200
-    assert data.store.async_patch_settings.call_args.kwargs["agentcli_scrollback_lines"] == 5000
+    assert data.store.async_patch_settings.call_args.kwargs["agentcli_memory_chars"] == 960_000
 
     # A non-integer is rejected.
-    resp = await view.patch(_make_admin_request(body=json.dumps({"agentcli_scrollback_lines": "lots"}).encode()))
+    resp = await view.patch(_make_admin_request(body=json.dumps({"agentcli_memory_chars": "lots"}).encode()))
     assert resp.status == 400
 
 
@@ -3151,7 +3151,7 @@ def _patchable_hass():
         ({"audit_flush_interval": 7}, "audit_flush_interval must be one of"),
         ({"audit_log_maxlen": "big"}, "audit_log_maxlen must be an integer"),
         ({"audit_log_maxlen": 250}, "audit_log_maxlen must be one of"),
-        ({"agentcli_scrollback_lines": "many"}, "agentcli_scrollback_lines must be an integer"),
+        ({"agentcli_memory_chars": "many"}, "agentcli_memory_chars must be an integer"),
         ({"agentcli_max_iterations": "lots"}, "agentcli_max_iterations must be an integer"),
         ({"assist_bound_access_key_id": 42}, "must be an access key id string or null"),
         ({"assist_bound_access_key_id": "ghost"}, "must reference an active access key"),
@@ -3191,8 +3191,8 @@ async def test_settings_patch_blank_string_clears_to_none(key, blank):
 @pytest.mark.parametrize(
     ("key", "sent", "stored"),
     [
-        ("agentcli_scrollback_lines", 999999, AGENT_CHAT_SCROLLBACK_MAX),
-        ("agentcli_scrollback_lines", -5, AGENT_CHAT_SCROLLBACK_MIN),
+        ("agentcli_memory_chars", 9999999, AGENT_CHAT_MEMORY_CHARS_MAX),
+        ("agentcli_memory_chars", -5, AGENT_CHAT_MEMORY_CHARS_MIN),
         ("agentcli_max_iterations", 999999, AGENT_CHAT_MAX_ITERATIONS_MAX),
         ("agentcli_max_iterations", 0, AGENT_CHAT_MAX_ITERATIONS_MIN),
     ],

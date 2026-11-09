@@ -83,7 +83,7 @@ Phoenix 在写入任何内容之前检查每个值。第一个问题会拒绝整
 | `mesa_inject_enabled` | boolean | `false` | 在页面下次完整加载时生效。参见[常规](guide:window.settingsGeneral#inject)。 |
 | `access_key_presets_enabled` | boolean | `false` | 开启会给每个密钥一个“默认”预设。参见[常规](guide:window.settingsGeneral#presets)。 |
 | `agentcli_global` | boolean | `true` | 在页面下次完整加载时生效。参见[Agent Chat](guide:window.settingsChat#chat-global)。 |
-| `agentcli_scrollback_lines` | integer，0 到 5000 | 100 | 钳制。接受数字字符串。参见[Agent Chat](guide:window.settingsChat#chat-memory)。 |
+| `agentcli_memory_chars` | integer，0 到 960000 | 200000 | 钳制。接受数字字符串。参见[Agent Chat](guide:window.settingsChat#chat-memory)。 |
 | `agentcli_max_iterations` | integer，3 到 100 | 20 | 钳制。参见[Agent Chat](guide:window.settingsChat#chat-steps)。 |
 | `agentcli_conversation_style` | `direct`、`warm`、`calm_guide`、`lively` 或 `technical` | `direct` | 参见[Agent Chat](guide:window.settingsChat#chat-style)。 |
 | `agentcli_detail_level` | `concise`、`balanced` 或 `detailed` | `concise` | 参见[Agent Chat](guide:window.settingsChat#chat-detail)。 |

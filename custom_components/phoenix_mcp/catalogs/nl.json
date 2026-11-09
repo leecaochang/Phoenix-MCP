@@ -901,7 +901,7 @@
         "empty_turn": "Het model beëindigde de beurt zonder tekstuele reactie.",
         "internal": "Interne fout.",
         "max_tokens_stop": "Het model stopte omdat het zijn uitvoerlimiet had bereikt. Vraag het om verder te gaan, of verhoog de uitvoertokenlimiet van het model (voor Ollama: de instellingen num_predict/context).",
-        "memory_trimmed": "Het gesprek is groter geworden dan in één verzoek past, dus het model onthoudt de oudste berichten niet meer. Ze blijven op het scherm staan.",
+        "memory_trimmed": "Deze chat is nu langer dan het chatgeheugen toestaat, dus het model ziet de oudste berichten niet meer. Ze blijven op het scherm staan.",
         "model_api_unsupported": "Dit model is niet gevalideerd voor OpenCode Chat Completions. Kies een ondersteund model.",
         "network": "De provider is tijdelijk niet beschikbaar.",
         "ollama_backend": "De provider is tijdelijk niet beschikbaar.",
@@ -1010,7 +1010,15 @@
       "announceReplyStart": "{text}… Het volledige antwoord staat in het gesprek.",
       "authorUser": "U schreef",
       "authorAgent": "De agent antwoordde",
-      "errorLabel": "Fout"
+      "errorLabel": "Fout",
+      "editMessage": "Bericht bewerken",
+      "memoryWarningAll": "Dit bericht is lang, dus het model ziet niets van de eerdere chat.",
+      "sendAnyway": "Toch verzenden",
+      "sendInNewChat": "Verzenden in nieuwe chat",
+      "memoryWarningSome": {
+        "one": "Dit bericht is lang, dus het model ziet {count} eerder bericht in deze chat niet.",
+        "other": "Dit bericht is lang, dus het model ziet {count} eerdere berichten in deze chat niet."
+      }
     },
     "adminError": {
       "activeAccessKeyRequired": "De gekozen toegangssleutel is ingetrokken of verlopen. Kies een andere toegangssleutel.",
@@ -1857,8 +1865,8 @@
       "agentcliRemoveAccountFailed": "Account verwijderen is mislukt.",
       "agentcliRemoveBody": "Verwijder {name} en de API-sleutel; alles wat het gebruikt, stopt. Dit kan niet ongedaan worden gemaakt.",
       "agentcliSaveFailed": "Provider opslaan is mislukt.",
-      "agentcliScrollbackHelp": "Hoeveel chatregels Agent Chat als context bewaart, 0 tot 5.000 (standaard 100).",
-      "agentcliScrollbackLabel": "Chatgeschiedenislimiet",
+      "agentcliMemoryHelp": "Hoeveel tekens van de eerdere chat Agent Chat met elk bericht meestuurt, 0 tot 960.000 (standaard 200.000).",
+      "agentcliMemoryLabel": "Chatgeheugen",
       "agentcliSelectModel": "Selecteer standaardmodel:",
       "agentcliServerUrl": "Server-URL",
       "agentcliStepsHelp": "Hoeveel toolstappen Agent Chat zet voordat het vraagt om door te gaan, 3 tot 100 (standaard 20).",

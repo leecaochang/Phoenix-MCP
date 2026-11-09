@@ -173,7 +173,7 @@
         "empty_turn": "Das Modell hat die Runde ohne Textantwort beendet.",
         "internal": "Interner Fehler.",
         "max_tokens_stop": "Das Modell wurde gestoppt, weil es sein Ausgabelängenlimit erreicht hat. Bitten Sie es, fortzufahren, oder erhöhen Sie das Ausgabe-Token-Limit des Modells (bei Ollama dessen num_predict/context-Einstellungen).",
-        "memory_trimmed": "Die Unterhaltung ist größer geworden, als eine Anfrage fassen kann, daher erinnert sich das Modell nicht mehr an die ältesten Nachrichten. Sie bleiben auf dem Bildschirm sichtbar.",
+        "memory_trimmed": "Dieser Chat ist jetzt länger, als das Chat-Gedächtnis erlaubt, daher sieht das Modell die ältesten Nachrichten nicht mehr. Sie bleiben auf dem Bildschirm sichtbar.",
         "model_api_unsupported": "Dieses Modell ist nicht für OpenCode Chat Completions freigegeben. Wählen Sie ein unterstütztes Modell.",
         "network": "Der Anbieter ist vorübergehend nicht verfügbar.",
         "ollama_backend": "Der Anbieter ist vorübergehend nicht verfügbar.",
@@ -282,7 +282,15 @@
       "announceReplyStart": "{text}… Die vollständige Antwort steht in der Unterhaltung.",
       "authorUser": "Sie schrieben",
       "authorAgent": "Der Agent antwortete",
-      "errorLabel": "Fehler"
+      "errorLabel": "Fehler",
+      "editMessage": "Nachricht bearbeiten",
+      "memoryWarningAll": "Diese Nachricht ist lang, daher sieht das Modell nichts vom bisherigen Chat.",
+      "sendAnyway": "Trotzdem senden",
+      "sendInNewChat": "In neuem Chat senden",
+      "memoryWarningSome": {
+        "one": "Diese Nachricht ist lang, daher sieht das Modell {count} frühere Nachricht in diesem Chat nicht.",
+        "other": "Diese Nachricht ist lang, daher sieht das Modell {count} frühere Nachrichten in diesem Chat nicht."
+      }
     },
     "caps": {
       "cap_config_read": {
@@ -1112,8 +1120,8 @@
       "agentcliRemoveAccountFailed": "Das Konto konnte nicht entfernt werden.",
       "agentcliRemoveBody": "{name} und seinen API-Schlüssel löschen; alles, was es nutzt, funktioniert dann nicht mehr. Dies lässt sich nicht rückgängig machen.",
       "agentcliSaveFailed": "Der Anbieter konnte nicht gespeichert werden.",
-      "agentcliScrollbackHelp": "Wie viele Chatzeilen Agent Chat als Kontext behält, 0 bis 5.000 (Standard 100).",
-      "agentcliScrollbackLabel": "Chatverlaufslimit",
+      "agentcliMemoryHelp": "Wie viele Zeichen des bisherigen Chats Agent Chat mit jeder Nachricht sendet, 0 bis 960.000 (Standard 200.000).",
+      "agentcliMemoryLabel": "Chat-Gedächtnis",
       "agentcliSelectModel": "Standardmodell auswählen:",
       "agentcliServerUrl": "Server-URL",
       "agentcliStepsHelp": "Wie viele Tool-Schritte Agent Chat ausführt, bevor er fragt, ob er weitermachen soll, 3 bis 100 (Standard 20).",

@@ -21,11 +21,17 @@ Shift+A 需要你的 Home Assistant 个人资料中开启键盘快捷键。在�
 
 更改会在页面下次完整加载时生效。**{{label:settings.killSwitchCard}}** 会在所有地方关闭 Agent Chat。
 
-## {{label:settings.agentcliScrollbackLabel}} {#chat-memory}
+## {{label:settings.agentcliMemoryLabel}} {#chat-memory}
 
-Phoenix 随每条新消息发送的对话行数：0 到 5,000（默认 100）。
+Phoenix 随每条新消息发送的较早对话量，以字符计：0 到 960,000（默认 200,000）。你的新消息也计入其中。
 
-较早的轮次会整体丢弃，最新的轮次始终发送。设为 0 时不发送较早的轮次。更多历史会给模型更多上下文，但每条消息的费用也更高。
+工具结果同样计入，而且通常占比最大。较早的轮次会整体丢弃，从最早的开始。设为 0 时不发送较早的轮次。
+
+基本拉丁字母以外的字符（例如中文）每个按六个计算，因为 Phoenix 按这种方式衡量请求是否超出大小上限。
+
+更多记忆会给模型更多上下文，但每条消息的费用也更高。上下文窗口较小的模型（例如在本地运行的模型）需要更低的值。
+
+Related: [长消息](guide:window.agentChat#memory-warning)
 
 ## {{label:settings.agentcliStepsLabel}} {#chat-steps}
 

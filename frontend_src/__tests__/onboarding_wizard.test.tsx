@@ -154,7 +154,7 @@ describe("the setup wizard", () => {
 
   it("opens Agent Chat for the test with an empty conversation", async () => {
     __resetAgentCliState();
-    setSessionTurns([{ entries: [{ kind: "user", text: "old", ts: 1 }], messages: [], lines: 1 }]);
+    setSessionTurns([{ entries: [{ kind: "user", text: "old", ts: 1 }], messages: [] }]);
     mocks.getAgentCliProviders.mockResolvedValue({ instances: [{ id: "inst1", name: "My Claude", model: "claude" }], provider_types: [] });
     const opened = vi.fn();
     window.addEventListener("phx-open-agentcli", opened);

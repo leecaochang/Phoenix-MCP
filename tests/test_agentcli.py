@@ -1625,13 +1625,15 @@ def test_norm_stop_mapping():
     assert _norm_stop("tool_use") == "tool_use"
 
 
-def test_scrollback_setting_clamps():
-    assert GlobalSettings.from_dict({"agentcli_scrollback_lines": 999999}).agentcli_scrollback_lines == 5000
-    assert GlobalSettings.from_dict({"agentcli_scrollback_lines": -5}).agentcli_scrollback_lines == 0
-    assert GlobalSettings.from_dict({"agentcli_scrollback_lines": "nope"}).agentcli_scrollback_lines == 100
-    assert GlobalSettings.from_dict({}).agentcli_scrollback_lines == 100
+def test_memory_chars_setting_clamps():
+    assert GlobalSettings.from_dict({"agentcli_memory_chars": 9999999}).agentcli_memory_chars == 960_000
+    assert GlobalSettings.from_dict({"agentcli_memory_chars": -5}).agentcli_memory_chars == 0
+    assert GlobalSettings.from_dict({"agentcli_memory_chars": "nope"}).agentcli_memory_chars == 200_000
+    assert GlobalSettings.from_dict({}).agentcli_memory_chars == 200_000
+    # The retired line count is not read as characters.
+    assert GlobalSettings.from_dict({"agentcli_scrollback_lines": 300}).agentcli_memory_chars == 200_000
     # round-trips through to_dict
-    assert GlobalSettings(agentcli_scrollback_lines=1200).to_dict()["agentcli_scrollback_lines"] == 1200
+    assert GlobalSettings(agentcli_memory_chars=1200).to_dict()["agentcli_memory_chars"] == 1200
 
 
 def test_clip_display_caps_long_tool_results():

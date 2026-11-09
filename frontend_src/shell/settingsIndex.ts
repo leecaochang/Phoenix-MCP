@@ -51,7 +51,7 @@ export const SETTING_INDEX: readonly SettingEntry[] = [
 
   { id: "chatCommands", labelKey: "routing.enableChat", window: "settingsChat", selector: '[data-setting="routing-chat"]' },
   { id: "chatGlobal", labelKey: "settings.agentcliGlobalLabel", window: "settingsChat", aria: ["settings.agentcliGlobalLabel"] },
-  { id: "chatMemory", labelKey: "settings.agentcliScrollbackLabel", window: "settingsChat", aria: ["settings.agentcliScrollbackLabel"] },
+  { id: "chatMemory", labelKey: "settings.agentcliMemoryLabel", window: "settingsChat", aria: ["settings.agentcliMemoryLabel"] },
   { id: "chatSteps", labelKey: "settings.agentcliStepsLabel", window: "settingsChat", aria: ["settings.agentcliStepsLabel"] },
   { id: "chatStyle", labelKey: "settings.conversationStyleAria", window: "settingsChat", aria: ["settings.conversationStyleAria", chat] },
   { id: "chatDetail", labelKey: "settings.detailLevelAria", window: "settingsChat", aria: ["settings.detailLevelAria", chat] },

@@ -21,11 +21,17 @@ Shift+A needs keyboard shortcuts turned on in your Home Assistant profile. In th
 
 A change takes effect the next time the page fully loads. The **{{label:settings.killSwitchCard}}** closes Agent Chat everywhere.
 
-## {{label:settings.agentcliScrollbackLabel}} {#chat-memory}
+## {{label:settings.agentcliMemoryLabel}} {#chat-memory}
 
-How many lines of the conversation Phoenix sends with each new message: 0 to 5,000 (default 100).
+How much earlier conversation Phoenix sends with each new message, in characters: 0 to 960,000 (default 200,000). Your new message counts toward it.
 
-Older turns are dropped whole, and the newest turn is always sent. At 0, no earlier turns are sent. More history gives the model more context, but each message costs more.
+Tool results count too, and they're often the largest part. Older turns are dropped whole, oldest first. At 0, no earlier turns are sent.
+
+Characters outside basic Latin, such as Chinese, count as six each, because that's how Phoenix measures a request against its size limit.
+
+More memory gives the model more context, but each message costs more. A model with a small context window, such as one running locally, needs a lower value.
+
+Related: [Long messages](guide:window.agentChat#memory-warning)
 
 ## {{label:settings.agentcliStepsLabel}} {#chat-steps}
 

@@ -224,9 +224,8 @@ export function patchDurable(patch: Partial<AgentCliDurable>, owner = ownerId): 
 // and the access key / provider / model selections must survive independently.
 //
 // Conversation content, including tool results, is therefore written to browser
-// localStorage on an admin-only page. It is bounded by the scrollback-lines
-// setting, by MAX_CONV_BYTES and by MAX_CONV_AGE_MS below. Home Assistant has no
-// logout hook, so what an admin saved stays until the next identity shows up: a
+// localStorage on an admin-only page. It is bounded by MAX_CONV_BYTES and by
+// MAX_CONV_AGE_MS below. Home Assistant has no logout hook, so what an admin saved stays until the next identity shows up: a
 // non-admin session and a wipe purge it, and another admin, who can read the same
 // data through the Conversation Log, leaves it in place.
 // ---------------------------------------------------------------------------
@@ -242,8 +241,7 @@ const PURGE_MARKER_KEY = "phx-purged-agentcli";
 
 // localStorage is ~5MB per origin and shared with the window state and every
 // other Phoenix MCP key. Cap the conversation well under that: on overflow the
-// oldest turns are dropped until it fits, which mirrors what the scrollback
-// limit already does to the visible transcript.
+// oldest turns are dropped until it fits.
 const MAX_CONV_BYTES = 2_000_000;
 
 // A conversation left unused this long is deleted the next time a user signs in here.

@@ -32,7 +32,7 @@ function getHass(): any {
 interface BootData {
   accessKeys: AccessKeyRecord[];
   instances: AgentCliInstance[];
-  scrollback: number;
+  memoryChars: number;
 }
 
 /** My Workspace's Agent Chat slot and dock state, from the Phoenix MCP panel while it is open. */
@@ -66,7 +66,7 @@ function Boot({
           onClose();
           return;
         }
-        setData({ accessKeys, instances: prov.instances, scrollback: settings.agentcli_scrollback_lines });
+        setData({ accessKeys, instances: prov.instances, memoryChars: settings.agentcli_memory_chars });
       })
       .catch(() => { if (!cancelled) onClose(); });  // can't load (e.g. kill switch) -> close
     return () => { cancelled = true; };
@@ -103,7 +103,7 @@ function Boot({
     <AgentCliWindow
       accessKeys={data.accessKeys}
       instances={data.instances}
-      scrollbackLines={data.scrollback}
+      memoryChars={data.memoryChars}
       initialAccessKeyId={accessKeyId || data.accessKeys[0]?.id || ""}
       onClose={onClose}
       hass={getHass()}

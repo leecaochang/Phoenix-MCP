@@ -30,7 +30,7 @@ let emit: (name: string, payload: unknown) => void = () => {};
 let finish: () => void = () => {};
 
 async function openWindow() {
-  render(<AgentCliWindow accessKeys={KEYS} instances={INSTANCES} scrollbackLines={5000} initialAccessKeyId="k1" onClose={() => {}} />);
+  render(<AgentCliWindow accessKeys={KEYS} instances={INSTANCES} memoryChars={960000} initialAccessKeyId="k1" onClose={() => {}} />);
   await act(async () => {});
   return screen.getByRole("textbox") as HTMLTextAreaElement;
 }
@@ -59,7 +59,6 @@ describe("what redraws", () => {
   const restored = (count: number) => Array.from({ length: count }, (_, index) => ({
     entries: [{ kind: "assistant", text: `## reply ${index}\n\n${"word ".repeat(20)}`, thinking: "" }],
     messages: [],
-    lines: 1,
   }));
 
   it("parses no reply again on a keystroke", async () => {
@@ -175,7 +174,7 @@ describe("two tabs of one browser", () => {
   const savedByOtherTab = (text: string, revision: number) => {
     const value = JSON.stringify({
       logConversationId: "other", turnsRevision: revision, draft: "", usage: { input: 7, output: 3, context: 7, noData: false },
-      turns: [{ entries: [{ kind: "user", text }], messages: [{ role: "user", content: text }], lines: 1 }],
+      turns: [{ entries: [{ kind: "user", text }], messages: [{ role: "user", content: text }] }],
     });
     localStorage.setItem(CONV_KEY, value);
     window.dispatchEvent(new StorageEvent("storage", { key: CONV_KEY, newValue: value }));
@@ -191,7 +190,7 @@ describe("two tabs of one browser", () => {
   });
 
   it("does not bring the older conversation back on its next save", async () => {
-    setSessionTurns([{ entries: [{ kind: "user", text: "old" }], messages: [], lines: 1 }]);
+    setSessionTurns([{ entries: [{ kind: "user", text: "old" }], messages: [] }]);
     const box = await openWindow();
     await act(async () => { savedByOtherTab("newer", 0.5); });
     await send(box);
@@ -214,7 +213,7 @@ describe("two tabs of one browser", () => {
   });
 
   it("clears here when the other tab clears", async () => {
-    setSessionTurns([{ entries: [{ kind: "user", text: "shared" }], messages: [], lines: 1 }]);
+    setSessionTurns([{ entries: [{ kind: "user", text: "shared" }], messages: [] }]);
     await openWindow();
     await act(async () => {
       localStorage.removeItem(CONV_KEY);

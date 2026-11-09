@@ -106,8 +106,8 @@ function renderCard(settings: Partial<GlobalSettings> = {}) {
       <AgentCliSettings
         routingMode="off"
         onRoutingChange={() => {}}
-        scrollback={100}
-        onScrollbackChange={() => {}}
+        memoryChars={200000}
+        onMemoryCharsChange={() => {}}
         maxIterations={20}
         onMaxIterationsChange={() => {}}
         globalVisible={false}
@@ -346,8 +346,8 @@ describe("AgentCliSettings", () => {
       <AgentCliSettings
       routingMode="off"
       onRoutingChange={() => {}}
-        scrollback={100}
-        onScrollbackChange={() => {}}
+        memoryChars={200000}
+        onMemoryCharsChange={() => {}}
         maxIterations={20}
         onMaxIterationsChange={() => {}}
         globalVisible={false}
@@ -373,7 +373,7 @@ describe("AgentCliSettings", () => {
       <AgentCliSettings
       routingMode="off"
       onRoutingChange={() => {}}
-        scrollback={100} onScrollbackChange={() => {}}
+        memoryChars={200000} onMemoryCharsChange={() => {}}
         maxIterations={20} onMaxIterationsChange={() => {}}
         globalVisible={false} onGlobalChange={() => {}}
         conversationStyle="direct" onConversationStyleChange={onStyle}
@@ -398,13 +398,13 @@ describe("AgentCliSettings", () => {
   it("chat memory auto-saves after a change without an explicit blur (spinner fix)", () => {
     vi.useFakeTimers();
     try {
-      const onScroll = vi.fn();
+      const onMemory = vi.fn();
       render(
         <AgentCliSettings
       routingMode="off"
       onRoutingChange={() => {}}
-          scrollback={500}
-          onScrollbackChange={onScroll}
+          memoryChars={200000}
+          onMemoryCharsChange={onMemory}
           maxIterations={20}
           onMaxIterationsChange={() => {}}
           globalVisible={false}
@@ -418,11 +418,11 @@ describe("AgentCliSettings", () => {
           saving={false}
         />,
       );
-      const input = screen.getByLabelText("Chat history limit");
+      const input = screen.getByLabelText("Chat memory");
       fireEvent.change(input, { target: { value: "300" } });
-      expect(onScroll).not.toHaveBeenCalled();  // debounced, nothing yet
+      expect(onMemory).not.toHaveBeenCalled();  // debounced, nothing yet
       vi.advanceTimersByTime(700);
-      expect(onScroll).toHaveBeenCalledWith(300);
+      expect(onMemory).toHaveBeenCalledWith(300);
     } finally {
       vi.useRealTimers();
     }

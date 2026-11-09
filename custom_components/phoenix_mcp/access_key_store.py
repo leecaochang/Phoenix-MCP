@@ -36,9 +36,9 @@ from .const import (
 from .personas import detect_persona
 from .provider_constants import (
     AGENT_CHAT_MAX_ITERATIONS, AGENT_CHAT_MAX_ITERATIONS_MAX, AGENT_CHAT_MAX_ITERATIONS_MIN,
-    AGENT_CHAT_SCROLLBACK_DEFAULT, PROVIDER_CATALOG_REFRESH_HOURS_DEFAULT,
-    PROVIDER_CATALOG_REFRESH_HOURS_MAX, PROVIDER_CATALOG_REFRESH_HOURS_MIN, AGENT_CHAT_SCROLLBACK_MAX,
-    AGENT_CHAT_SCROLLBACK_MIN,
+    AGENT_CHAT_MEMORY_CHARS_DEFAULT, PROVIDER_CATALOG_REFRESH_HOURS_DEFAULT,
+    PROVIDER_CATALOG_REFRESH_HOURS_MAX, PROVIDER_CATALOG_REFRESH_HOURS_MIN, AGENT_CHAT_MEMORY_CHARS_MAX,
+    AGENT_CHAT_MEMORY_CHARS_MIN,
 )
 from .routing.routing_tables import (
     COMMAND_ROUTING_MODES, COMMAND_ROUTING_LANGUAGES, COMMAND_ROUTING_DEFAULT_LANGUAGES,
@@ -666,9 +666,8 @@ class GlobalSettings:
     # Access key settings presets: default off. Enabling seeds every access key
     # with a "Default preset" from its current state.
     access_key_presets_enabled: bool = False
-    # agentCLI transcript scrollback / conversation-memory bound (lines).
-    # 0 = keep nothing once it scrolls off; capped at AGENT_CHAT_SCROLLBACK_MAX.
-    agentcli_scrollback_lines: int = AGENT_CHAT_SCROLLBACK_DEFAULT
+    # Agent Chat memory bound in request characters; 0 sends no earlier turns.
+    agentcli_memory_chars: int = AGENT_CHAT_MEMORY_CHARS_DEFAULT
     # agentCLI per-turn tool-round cap. In the chat this is the "continue?"
     # checkpoint cadence (not a hard stop); clamped to [MIN, MAX].
     agentcli_max_iterations: int = AGENT_CHAT_MAX_ITERATIONS
@@ -750,7 +749,7 @@ class GlobalSettings:
             "mesa_mode": self.mesa_mode,
             "mesa_inject_enabled": self.mesa_inject_enabled,
             "access_key_presets_enabled": self.access_key_presets_enabled,
-            "agentcli_scrollback_lines": self.agentcli_scrollback_lines,
+            "agentcli_memory_chars": self.agentcli_memory_chars,
             "agentcli_max_iterations": self.agentcli_max_iterations,
             "agentcli_global": self.agentcli_global,
             "agentcli_conversation_style": self.agentcli_conversation_style,
@@ -813,9 +812,9 @@ class GlobalSettings:
             mesa_mode=mesa_mode if mesa_mode in MESA_MODES else MESA_MODE_ADVISORY,
             mesa_inject_enabled=bool(data.get("mesa_inject_enabled", False)),
             access_key_presets_enabled=bool(data.get("access_key_presets_enabled", False)),
-            agentcli_scrollback_lines=_clamp_range(
-                data.get("agentcli_scrollback_lines", AGENT_CHAT_SCROLLBACK_DEFAULT),
-                AGENT_CHAT_SCROLLBACK_MIN, AGENT_CHAT_SCROLLBACK_MAX, AGENT_CHAT_SCROLLBACK_DEFAULT,
+            agentcli_memory_chars=_clamp_range(
+                data.get("agentcli_memory_chars", AGENT_CHAT_MEMORY_CHARS_DEFAULT),
+                AGENT_CHAT_MEMORY_CHARS_MIN, AGENT_CHAT_MEMORY_CHARS_MAX, AGENT_CHAT_MEMORY_CHARS_DEFAULT,
             ),
             agentcli_max_iterations=_clamp_range(
                 data.get("agentcli_max_iterations", AGENT_CHAT_MAX_ITERATIONS),

@@ -21,7 +21,8 @@ vi.mock("../api", () => ({
 
 import {
   AgentCliWindow,
-  trimTurns,
+  memoryDrop,
+  memoryBudget,
   memoryMessages,
   buildOptions,
   modelCaps,
@@ -105,19 +106,19 @@ function createPopupWindow(): { popup: Window; iframe: HTMLIFrameElement } {
   return { popup, iframe };
 }
 
-function mkTurn(lines: number, msgs: unknown[]): Turn {
-  return { entries: [], messages: msgs, lines };
+function mkTurn(msgs: unknown[], opened = true): Turn {
+  return { entries: opened ? [{ kind: "user", text: "ask" }] : [], messages: msgs };
 }
 
 describe("restorableTurns", () => {
   it("drops malformed saved turns and entries and keeps the readable ones", () => {
-    const good = { entries: [{ kind: "user", text: "hi", ts: 1 }], messages: [{ role: "user", content: "hi" }], lines: 1 };
+    const good = { entries: [{ kind: "user", text: "hi", ts: 1 }], messages: [{ role: "user", content: "hi" }] };
     expect(restorableTurns([
       {}, null, "turn", { entries: null },
       { entries: [{ kind: "assistant", text: "ok", thinking: "" }, {}, null, { kind: 3 }] },
       good,
     ])).toEqual([
-      { entries: [{ kind: "assistant", text: "ok", thinking: "" }], messages: [], lines: 1 },
+      { entries: [{ kind: "assistant", text: "ok", thinking: "" }], messages: [] },
       good,
     ]);
   });
@@ -127,13 +128,13 @@ describe("restorableTurns", () => {
     expect(restorableTurns([{ entries: [
       { kind: "assistant", thinking: "" }, { kind: "user", text: 5 }, { kind: "tool_result", id: "t", name: "n" },
       { kind: "surprise", text: "x" }, ok,
-    ], messages: [], lines: 1 }])).toEqual([{ entries: [ok], messages: [], lines: 1 }]);
+    ], messages: [] }])).toEqual([{ entries: [ok], messages: [] }]);
   });
 
   it("opens the window over a corrupted saved transcript", () => {
     getAgentCliModels.mockResolvedValue({ models: ["claude-opus-4-8"] });
-    setSessionTurns([{}, { entries: [{ kind: "user", text: "kept prompt", ts: 1 }], messages: [], lines: 1 }]);
-    render(<AgentCliWindow accessKeys={ACCESS_KEYS} instances={INSTANCES} scrollbackLines={500}
+    setSessionTurns([{}, { entries: [{ kind: "user", text: "kept prompt", ts: 1 }], messages: [] }]);
+    render(<AgentCliWindow accessKeys={ACCESS_KEYS} instances={INSTANCES} memoryChars={960000}
                            initialAccessKeyId="t1" onClose={() => {}} />);
     expect(screen.getByText("kept prompt")).toBeInTheDocument();
     setSessionTurns([]);
@@ -143,7 +144,7 @@ describe("restorableTurns", () => {
 describe("a turn running in another tab", () => {
   it("is shown while it runs and clears when it ends", () => {
     getAgentCliModels.mockResolvedValue({ models: ["claude-opus-4-8"] });
-    render(<AgentCliWindow accessKeys={ACCESS_KEYS} instances={INSTANCES} scrollbackLines={500}
+    render(<AgentCliWindow accessKeys={ACCESS_KEYS} instances={INSTANCES} memoryChars={960000}
                            initialAccessKeyId="t1" onClose={() => {}} />);
     const key = `phx-agentcli-turn:${encodeURIComponent(getAgentCliOwner()!)}`;
     expect(screen.queryByText(/^Another tab is running/)).toBeNull();
@@ -212,7 +213,7 @@ describe("agentCLI pill remembers its own position", () => {
     // Window lives top-left; the pill was last left in the middle.
     patchDurable({ open: true, minimized: true, pos: { x: 8, y: 8 }, pillPos: { x: 400, y: 300 } });
     render(
-      <AgentCliWindow accessKeys={ACCESS_KEYS} instances={INSTANCES} scrollbackLines={500}
+      <AgentCliWindow accessKeys={ACCESS_KEYS} instances={INSTANCES} memoryChars={960000}
                       initialAccessKeyId="t1" onClose={() => {}} />,
     );
     const el = dialog();
@@ -224,7 +225,7 @@ describe("agentCLI pill remembers its own position", () => {
     patchDurable({ open: true, minimized: true, pos: { x: 8, y: 8 },
                    size: { w: 440, h: 560 }, pillPos: { x: 400, y: 300 } });
     render(
-      <AgentCliWindow accessKeys={ACCESS_KEYS} instances={INSTANCES} scrollbackLines={500}
+      <AgentCliWindow accessKeys={ACCESS_KEYS} instances={INSTANCES} memoryChars={960000}
                       initialAccessKeyId="t1" onClose={() => {}} />,
     );
     // Restore: the window returns to its own position (8,8), not the pill's.
@@ -249,7 +250,7 @@ describe("agentCLI pill remembers its own position", () => {
       pillPos: { x: 400, y: 300 },
     });
     const view = render(
-      <AgentCliWindow accessKeys={ACCESS_KEYS} instances={INSTANCES} scrollbackLines={500}
+      <AgentCliWindow accessKeys={ACCESS_KEYS} instances={INSTANCES} memoryChars={960000}
                       initialAccessKeyId="t1" onClose={() => {}} summonVersion={0} />,
     );
     expect(dialog()).toHaveClass("agentcli-minimized");
@@ -258,7 +259,7 @@ describe("agentCLI pill remembers its own position", () => {
     // host then bumps the signal on the already-mounted component.
     patchDurable({ minimized: false, pos: { x: 260, y: 120 } });
     view.rerender(
-      <AgentCliWindow accessKeys={ACCESS_KEYS} instances={INSTANCES} scrollbackLines={500}
+      <AgentCliWindow accessKeys={ACCESS_KEYS} instances={INSTANCES} memoryChars={960000}
                       initialAccessKeyId="t1" onClose={() => {}} summonVersion={1} />,
     );
 
@@ -273,13 +274,13 @@ describe("agentCLI pill remembers its own position", () => {
     document.body.appendChild(outside);
     outside.focus();
     const view = render(
-      <AgentCliWindow accessKeys={ACCESS_KEYS} instances={INSTANCES} scrollbackLines={500}
+      <AgentCliWindow accessKeys={ACCESS_KEYS} instances={INSTANCES} memoryChars={960000}
                       initialAccessKeyId="t1" onClose={() => {}} summonVersion={0} focusRequest={0} />,
     );
     await act(async () => { await new Promise((r) => requestAnimationFrame(() => r(null))); });
     expect(document.activeElement).toBe(outside);
     view.rerender(
-      <AgentCliWindow accessKeys={ACCESS_KEYS} instances={INSTANCES} scrollbackLines={500}
+      <AgentCliWindow accessKeys={ACCESS_KEYS} instances={INSTANCES} memoryChars={960000}
                       initialAccessKeyId="t1" onClose={() => {}} summonVersion={1} focusRequest={1} />,
     );
     await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("textbox", { name: /message/i })));
@@ -303,7 +304,6 @@ describe("AgentCliWindow latest-message scrolling", () => {
         thinking: "",
       })),
       messages: [],
-      lines: 30,
     }]);
     patchDurable({
       open: true,
@@ -323,7 +323,7 @@ describe("AgentCliWindow latest-message scrolling", () => {
     vi.spyOn(window, "open").mockReturnValue(popup);
 
     render(
-      <AgentCliWindow accessKeys={ACCESS_KEYS} instances={INSTANCES} scrollbackLines={500}
+      <AgentCliWindow accessKeys={ACCESS_KEYS} instances={INSTANCES} memoryChars={960000}
                       initialAccessKeyId="t1" onClose={() => {}} />,
     );
 
@@ -405,27 +405,40 @@ describe("agentCLI restore repositioning (clampPosToViewport)", () => {
   });
 });
 
-describe("agentCLI scrollback / memory bounds", () => {
-  it("scrollback 0 keeps only the last turn for display and sends no memory", () => {
-    const turns = [mkTurn(3, [{ a: 1 }]), mkTurn(3, [{ b: 2 }])];
-    expect(trimTurns(turns, 0)).toEqual([turns[1]]);
-    expect(memoryMessages(turns, 0)).toEqual([]);
+describe("Chat memory budget", () => {
+  const sized = (n: number) => [{ role: "user", content: "a".repeat(n) }];
+
+  it("sends nothing earlier at 0", () => {
+    const turns = [mkTurn([{ a: 1 }]), mkTurn([{ b: 2 }])];
+    expect(memoryBudget(0, "hi")).toBe(0);
+    expect(memoryMessages(turns, false, memoryBudget(0, "hi"))).toEqual([]);
   });
 
-  it("scrollback N keeps whole newest turns within the line budget", () => {
-    const turns = [mkTurn(4, [{ a: 1 }]), mkTurn(4, [{ b: 2 }]), mkTurn(4, [{ c: 3 }])];
-    // budget 6 -> only the last turn fits without exceeding (4 <= 6; +4 would be 8)
-    expect(trimTurns(turns, 6)).toEqual([turns[2]]);
-    // budget 10 -> last two turns (8 <= 10). Memory is the flattened kept turns
-    // (the component always stores turns already trimmed to budget).
-    const kept = trimTurns(turns, 10);
-    expect(kept).toEqual([turns[1], turns[2]]);
-    expect(memoryMessages(kept, 10)).toEqual([{ b: 2 }, { c: 3 }]);
+  it("counts the new message against the setting, never past the request limit", () => {
+    expect(memoryBudget(1000, "abc")).toBe(1000 - JSON.stringify("abc").length);
+    expect(memoryBudget(5_000_000, "")).toBe(memoryBudget(960_000, ""));
   });
 
-  it("always keeps at least one turn even if it exceeds the budget", () => {
-    const turns = [mkTurn(50, [{ big: true }])];
-    expect(trimTurns(turns, 10)).toEqual([turns[0]]);
+  it("keeps whole newest turns within the budget", () => {
+    const turns = [mkTurn(sized(400)), mkTurn(sized(400)), mkTurn(sized(400))];
+    expect(memoryMessages(turns, false, 1000)).toEqual([...turns[1].messages, ...turns[2].messages]);
+  });
+
+  it("names the turns a long message pushes out, and not those already gone", () => {
+    const turns = [mkTurn(sized(5000)), mkTurn(sized(400)), mkTurn(sized(400)), mkTurn(sized(400))];
+    expect(memoryDrop(turns, 2000, "short")).toEqual({ count: 0, all: false });
+    expect(memoryDrop(turns, 2000, "x".repeat(1400))).toEqual({ count: 2, all: false });
+    expect(memoryDrop(turns, 2000, "x".repeat(3000))).toEqual({ count: 3, all: true });
+  });
+
+  it("does not count a turn resumed from the round cap as a message of yours", () => {
+    const turns = [mkTurn(sized(400)), mkTurn(sized(400), false), mkTurn(sized(400))];
+    expect(memoryDrop(turns, 1400, "x".repeat(600)).count).toBe(1);
+  });
+
+  it("never warns with memory off or nothing earlier", () => {
+    expect(memoryDrop([mkTurn(sized(400))], 0, "x".repeat(9000)).count).toBe(0);
+    expect(memoryDrop([], 1000, "x".repeat(9000)).count).toBe(0);
   });
 });
 
@@ -692,7 +705,7 @@ describe("AgentCliWindow pop-out", () => {
   it("keeps narrow mobile viewports in-app with reachable maximized controls", async () => {
     vi.stubGlobal("matchMedia", vi.fn().mockReturnValue({ matches: true }));
     render(
-      <AgentCliWindow accessKeys={ACCESS_KEYS} instances={INSTANCES} scrollbackLines={500}
+      <AgentCliWindow accessKeys={ACCESS_KEYS} instances={INSTANCES} memoryChars={960000}
                       initialAccessKeyId="t1" onClose={() => {}} />,
     );
 
@@ -723,7 +736,7 @@ describe("AgentCliWindow pop-out", () => {
       pillPos: { x: -1, y: -1 },
     });
     render(
-      <AgentCliWindow accessKeys={ACCESS_KEYS} instances={INSTANCES} scrollbackLines={500}
+      <AgentCliWindow accessKeys={ACCESS_KEYS} instances={INSTANCES} memoryChars={960000}
                       initialAccessKeyId="t1" onClose={() => {}} />,
     );
     const safeTop = 47;
@@ -751,7 +764,7 @@ describe("AgentCliWindow pop-out", () => {
     const open = vi.spyOn(window, "open").mockReturnValue(popup);
     const close = vi.spyOn(popup, "close");
     render(
-      <AgentCliWindow accessKeys={ACCESS_KEYS} instances={INSTANCES} scrollbackLines={500}
+      <AgentCliWindow accessKeys={ACCESS_KEYS} instances={INSTANCES} memoryChars={960000}
                       initialAccessKeyId="t1" onClose={() => {}}
                       hass={{ enableShortcuts: true, language: "zh-Hans" }} />,
     );
@@ -813,7 +826,7 @@ describe("AgentCliWindow pop-out", () => {
       onEvent("done", {});
     });
     render(
-      <AgentCliWindow accessKeys={ACCESS_KEYS} instances={INSTANCES} scrollbackLines={500}
+      <AgentCliWindow accessKeys={ACCESS_KEYS} instances={INSTANCES} memoryChars={960000}
                       initialAccessKeyId="t1" onClose={() => {}} />,
     );
     await waitFor(() => expect(getAgentCliModels).toHaveBeenCalled());
@@ -835,7 +848,7 @@ describe("AgentCliWindow pop-out", () => {
     vi.spyOn(window, "open").mockReturnValue(popup);
     const onClose = vi.fn();
     render(
-      <AgentCliWindow accessKeys={ACCESS_KEYS} instances={INSTANCES} scrollbackLines={500}
+      <AgentCliWindow accessKeys={ACCESS_KEYS} instances={INSTANCES} memoryChars={960000}
                       initialAccessKeyId="t1" onClose={onClose} hass={{ enableShortcuts: true }} />,
     );
     fireEvent.click(screen.getByRole("button", { name: "Pop Out to a Separate Window" }));
@@ -854,7 +867,7 @@ describe("AgentCliWindow pop-out", () => {
     const onClose = vi.fn();
     let shortcutsEnabled = false;
     render(
-      <AgentCliWindow accessKeys={ACCESS_KEYS} instances={INSTANCES} scrollbackLines={500}
+      <AgentCliWindow accessKeys={ACCESS_KEYS} instances={INSTANCES} memoryChars={960000}
                       initialAccessKeyId="t1" onClose={onClose}
                       getHass={() => ({ enableShortcuts: shortcutsEnabled })} />,
     );
@@ -882,7 +895,7 @@ describe("AgentCliWindow pop-out", () => {
       return new Promise(() => {});
     });
     const view = render(
-      <AgentCliWindow accessKeys={ACCESS_KEYS} instances={INSTANCES} scrollbackLines={500}
+      <AgentCliWindow accessKeys={ACCESS_KEYS} instances={INSTANCES} memoryChars={960000}
                       initialAccessKeyId="t1" onClose={() => {}} hass={{ enableShortcuts: true }} />,
     );
 
@@ -907,7 +920,7 @@ describe("AgentCliWindow pop-out", () => {
   it("shows recovery guidance when the browser blocks the popup", () => {
     vi.spyOn(window, "open").mockReturnValue(null);
     render(
-      <AgentCliWindow accessKeys={ACCESS_KEYS} instances={INSTANCES} scrollbackLines={500}
+      <AgentCliWindow accessKeys={ACCESS_KEYS} instances={INSTANCES} memoryChars={960000}
                       initialAccessKeyId="t1" onClose={() => {}} hass={{ enableShortcuts: true }} />,
     );
 
@@ -932,7 +945,7 @@ describe("AgentCliWindow pop-out", () => {
     });
     patchDurable({ open: true });
     const onClose = vi.fn(() => patchDurable({ open: false }));
-    const props = { accessKeys: ACCESS_KEYS, instances: INSTANCES, scrollbackLines: 500,
+    const props = { accessKeys: ACCESS_KEYS, instances: INSTANCES, memoryChars: 960000,
       initialAccessKeyId: "t1", onClose };
     const view = render(<AgentCliWindow {...props} />);
     const idleUnload = new Event("beforeunload", { cancelable: true });
@@ -997,7 +1010,7 @@ describe("AgentCliWindow pop-out", () => {
     vi.spyOn(window, "open").mockReturnValue(popup);
     const close = vi.spyOn(popup, "close").mockImplementation(() => {});
     const view = render(
-      <AgentCliWindow accessKeys={ACCESS_KEYS} instances={INSTANCES} scrollbackLines={500}
+      <AgentCliWindow accessKeys={ACCESS_KEYS} instances={INSTANCES} memoryChars={960000}
                       initialAccessKeyId="t1" onClose={() => {}} />,
     );
     fireEvent.click(screen.getByRole("button", { name: "Pop Out to a Separate Window" }));
@@ -1024,10 +1037,10 @@ describe("AgentCliWindow streaming", () => {
   });
 
   it("verifies restored approvals before showing actions and replaces an ended chat card", async () => {
-    setSessionTurns([{ entries: [{ kind: "approval", approvalId: "old-chat", toolName: "create_helper", status: "pending" }], messages: [], lines: 1 }]);
+    setSessionTurns([{ entries: [{ kind: "approval", approvalId: "old-chat", toolName: "create_helper", status: "pending" }], messages: [] }]);
     let resolve: (record: unknown) => void = () => {};
     getApproval.mockImplementationOnce(() => new Promise((done) => { resolve = done; }));
-    render(<AgentCliWindow accessKeys={ACCESS_KEYS} instances={INSTANCES} scrollbackLines={500}
+    render(<AgentCliWindow accessKeys={ACCESS_KEYS} instances={INSTANCES} memoryChars={960000}
                            initialAccessKeyId="t1" onClose={() => {}} />);
     expect(getApproval).toHaveBeenCalledWith("old-chat");
     for (const name of ["Review", "Approve", "Reject"]) {
@@ -1044,10 +1057,10 @@ describe("AgentCliWindow streaming", () => {
   it("retains server-confirmed pending approvals and catches delayed disconnect cleanup", async () => {
     vi.useFakeTimers();
     try {
-      setSessionTurns([{ entries: [{ kind: "approval", approvalId: "pending-chat", toolName: "create_helper", status: "pending" }], messages: [], lines: 1 }]);
+      setSessionTurns([{ entries: [{ kind: "approval", approvalId: "pending-chat", toolName: "create_helper", status: "pending" }], messages: [] }]);
       getApproval.mockResolvedValueOnce({ id: "pending-chat", status: "pending", closure_reason: null });
       getApproval.mockResolvedValueOnce({ id: "pending-chat", status: "cancelled", closure_reason: "agent_chat_ended" });
-      const view = render(<AgentCliWindow accessKeys={ACCESS_KEYS} instances={INSTANCES} scrollbackLines={500}
+      const view = render(<AgentCliWindow accessKeys={ACCESS_KEYS} instances={INSTANCES} memoryChars={960000}
                                          initialAccessKeyId="t1" onClose={() => {}} />);
       await act(async () => {});
       expect(screen.getByRole("button", { name: /^Review/ })).toBeVisible();
@@ -1072,10 +1085,10 @@ describe("AgentCliWindow streaming", () => {
     } };
     document.body.appendChild(el);
     try {
-      setSessionTurns([{ entries: [{ kind: "approval", approvalId: "claimed-chat", toolName: "create_helper", status: "pending" }], messages: [], lines: 1 }]);
+      setSessionTurns([{ entries: [{ kind: "approval", approvalId: "claimed-chat", toolName: "create_helper", status: "pending" }], messages: [] }]);
       let resolve: (record: unknown) => void = () => {};
       getApproval.mockImplementationOnce(() => new Promise((done) => { resolve = done; }));
-      const view = render(<AgentCliWindow accessKeys={ACCESS_KEYS} instances={INSTANCES} scrollbackLines={500}
+      const view = render(<AgentCliWindow accessKeys={ACCESS_KEYS} instances={INSTANCES} memoryChars={960000}
                                          initialAccessKeyId="t1" onClose={() => {}} />);
       act(() => handlers.phoenix_mcp_approval_claimed({ data: { approval_id: "claimed-chat", claimed: true } }));
       await act(async () => resolve({ id: "claimed-chat", status: "pending", closure_reason: null }));
@@ -1088,7 +1101,7 @@ describe("AgentCliWindow streaming", () => {
 
   it("resizes only chat text in half-point steps and remembers the selection", async () => {
     const view = render(
-      <AgentCliWindow accessKeys={ACCESS_KEYS} instances={INSTANCES} scrollbackLines={500}
+      <AgentCliWindow accessKeys={ACCESS_KEYS} instances={INSTANCES} memoryChars={960000}
                       initialAccessKeyId="t1" onClose={() => {}} />,
     );
     await waitFor(() => expect(getAgentCliModels).toHaveBeenCalled());
@@ -1109,7 +1122,7 @@ describe("AgentCliWindow streaming", () => {
 
     view.unmount();
     render(
-      <AgentCliWindow accessKeys={ACCESS_KEYS} instances={INSTANCES} scrollbackLines={500}
+      <AgentCliWindow accessKeys={ACCESS_KEYS} instances={INSTANCES} memoryChars={960000}
                       initialAccessKeyId="t1" onClose={() => {}} />,
     );
     expect(screen.getByRole("dialog", { name: "Agent Chat" }).style
@@ -1123,7 +1136,7 @@ describe("AgentCliWindow streaming", () => {
       onEvent("done", { stop_reason: "end_turn" });
     });
     render(<AgentCliWindow accessKeys={[{ ...ACCESS_KEYS[0], persona } as AccessKeyRecord]} instances={INSTANCES}
-                           scrollbackLines={500} initialAccessKeyId="t1" onClose={() => {}} />);
+                           memoryChars={960000} initialAccessKeyId="t1" onClose={() => {}} />);
     await waitFor(() => expect(getAgentCliModels).toHaveBeenCalled());
     const textarea = screen.getByLabelText("Message Agent Chat");
     for (const prompt of ["first request", "second request"]) {
@@ -1153,7 +1166,7 @@ describe("AgentCliWindow streaming", () => {
       emit = onEvent;
       await new Promise<void>((r) => { finish = r; });
     });
-    const view = render(<AgentCliWindow accessKeys={ACCESS_KEYS} instances={two} scrollbackLines={500}
+    const view = render(<AgentCliWindow accessKeys={ACCESS_KEYS} instances={two} memoryChars={960000}
                                         initialAccessKeyId="t1" onClose={() => {}} />);
     await waitFor(() => expect(getAgentCliModels).toHaveBeenCalled());
     const textarea = screen.getByLabelText("Message Agent Chat");
@@ -1162,7 +1175,7 @@ describe("AgentCliWindow streaming", () => {
     await waitFor(() => expect(agentCliChat).toHaveBeenCalledTimes(1));
     expect(agentCliChat.mock.calls[0][0].instance_id).toBe("i-claude");
 
-    view.rerender(<AgentCliWindow accessKeys={ACCESS_KEYS} instances={[two[1]]} scrollbackLines={500}
+    view.rerender(<AgentCliWindow accessKeys={ACCESS_KEYS} instances={[two[1]]} memoryChars={960000}
                                   initialAccessKeyId="t1" onClose={() => {}} />);
     await act(async () => {
       emit("assistant_delta", { text: "STALE_REPLY" });
@@ -1184,7 +1197,7 @@ describe("AgentCliWindow streaming", () => {
   });
 
   it("does not send on the Enter that finishes an input method's composition", async () => {
-    render(<AgentCliWindow accessKeys={ACCESS_KEYS} instances={INSTANCES} scrollbackLines={500}
+    render(<AgentCliWindow accessKeys={ACCESS_KEYS} instances={INSTANCES} memoryChars={960000}
       initialAccessKeyId={ACCESS_KEYS[0].id} onClose={() => {}} />);
     const textarea = await screen.findByRole("textbox");
     fireEvent.change(textarea, { target: { value: "你好" } });
@@ -1199,7 +1212,7 @@ describe("AgentCliWindow streaming", () => {
     agentCliChat.mockImplementationOnce(async () => {
       throw Object.assign(new Error("The kill switch is on. Agent Chat is unavailable."), { status: 503, code: "kill_switch" });
     });
-    render(<AgentCliWindow accessKeys={ACCESS_KEYS} instances={INSTANCES} scrollbackLines={500}
+    render(<AgentCliWindow accessKeys={ACCESS_KEYS} instances={INSTANCES} memoryChars={960000}
       initialAccessKeyId={ACCESS_KEYS[0].id} onClose={() => {}} />);
     const textarea = await screen.findByRole("textbox");
     fireEvent.change(textarea, { target: { value: "hello" } });
@@ -1215,7 +1228,7 @@ describe("AgentCliWindow streaming", () => {
       onEvent("continue_required", { iterations: 10 });
       onEvent("done", { stop_reason: "tool_use" });
     });
-    const view = render(<AgentCliWindow accessKeys={ACCESS_KEYS} instances={two} scrollbackLines={500}
+    const view = render(<AgentCliWindow accessKeys={ACCESS_KEYS} instances={two} memoryChars={960000}
                                         initialAccessKeyId="t1" onClose={() => {}} />);
     await waitFor(() => expect(getAgentCliModels).toHaveBeenCalled());
     const textarea = screen.getByLabelText("Message Agent Chat");
@@ -1224,7 +1237,7 @@ describe("AgentCliWindow streaming", () => {
     expect(await screen.findByText("Paused after 10 steps. Continue?")).toBeInTheDocument();
 
     if (how === "account removed") {
-      view.rerender(<AgentCliWindow accessKeys={ACCESS_KEYS} instances={[two[1]]} scrollbackLines={500}
+      view.rerender(<AgentCliWindow accessKeys={ACCESS_KEYS} instances={[two[1]]} memoryChars={960000}
                                     initialAccessKeyId="t1" onClose={() => {}} />);
     } else {
       fireEvent.change(textarea, { target: { value: "/clear" } });
@@ -1244,7 +1257,7 @@ describe("AgentCliWindow streaming", () => {
       onEvent("messages", { messages: [{ role: "user", content: body.user }, { role: "assistant", content: "x" }] });
       onEvent("done", { stop_reason: "end_turn" });
     });
-    render(<AgentCliWindow accessKeys={ACCESS_KEYS} instances={INSTANCES} scrollbackLines={500}
+    render(<AgentCliWindow accessKeys={ACCESS_KEYS} instances={INSTANCES} memoryChars={960000}
                            initialAccessKeyId="t1" onClose={() => {}} />);
     await waitFor(() => expect(getAgentCliModels).toHaveBeenCalled());
     const textarea = screen.getByLabelText("Message Agent Chat");
@@ -1276,7 +1289,7 @@ describe("AgentCliWindow streaming", () => {
     });
 
     render(
-      <AgentCliWindow accessKeys={ACCESS_KEYS} instances={INSTANCES} scrollbackLines={500}
+      <AgentCliWindow accessKeys={ACCESS_KEYS} instances={INSTANCES} memoryChars={960000}
                       initialAccessKeyId="t1" onClose={() => {}} />,
     );
     await waitFor(() => expect(getAgentCliModels).toHaveBeenCalled());
@@ -1320,7 +1333,7 @@ describe("AgentCliWindow streaming", () => {
       });
 
     render(
-      <AgentCliWindow accessKeys={ACCESS_KEYS} instances={INSTANCES} scrollbackLines={500}
+      <AgentCliWindow accessKeys={ACCESS_KEYS} instances={INSTANCES} memoryChars={960000}
                       initialAccessKeyId="t1" onClose={() => {}} />,
     );
     await waitFor(() => expect(getAgentCliModels).toHaveBeenCalled());
@@ -1358,7 +1371,7 @@ describe("AgentCliWindow streaming", () => {
       onEvent("done", { stop_reason: "end_turn" });
     });
     render(
-      <AgentCliWindow accessKeys={ACCESS_KEYS} instances={INSTANCES} scrollbackLines={500}
+      <AgentCliWindow accessKeys={ACCESS_KEYS} instances={INSTANCES} memoryChars={960000}
                       initialAccessKeyId="t1" onClose={() => {}} />,
     );
     await waitFor(() => expect(getAgentCliModels).toHaveBeenCalled());
@@ -1387,7 +1400,7 @@ describe("AgentCliWindow streaming", () => {
     });
 
     render(
-      <AgentCliWindow accessKeys={ACCESS_KEYS} instances={INSTANCES} scrollbackLines={500}
+      <AgentCliWindow accessKeys={ACCESS_KEYS} instances={INSTANCES} memoryChars={960000}
                       initialAccessKeyId="t1" onClose={() => {}} />,
     );
     await waitFor(() => expect(getAgentCliModels).toHaveBeenCalled());
@@ -1417,7 +1430,7 @@ describe("AgentCliWindow streaming", () => {
     });
 
     render(
-      <AgentCliWindow accessKeys={ACCESS_KEYS} instances={INSTANCES} scrollbackLines={500}
+      <AgentCliWindow accessKeys={ACCESS_KEYS} instances={INSTANCES} memoryChars={960000}
                       initialAccessKeyId="t1" onClose={() => {}} />,
     );
     await waitFor(() => expect(getAgentCliModels).toHaveBeenCalled());
@@ -1449,7 +1462,7 @@ describe("AgentCliWindow streaming", () => {
     });
 
     render(
-      <AgentCliWindow accessKeys={ACCESS_KEYS} instances={INSTANCES} scrollbackLines={500}
+      <AgentCliWindow accessKeys={ACCESS_KEYS} instances={INSTANCES} memoryChars={960000}
                       initialAccessKeyId="t1" onClose={() => {}} />,
     );
     await waitFor(() => expect(getAgentCliModels).toHaveBeenCalled());
@@ -1490,7 +1503,7 @@ describe("AgentCliWindow streaming", () => {
     });
 
     render(
-      <AgentCliWindow accessKeys={ACCESS_KEYS} instances={INSTANCES} scrollbackLines={500}
+      <AgentCliWindow accessKeys={ACCESS_KEYS} instances={INSTANCES} memoryChars={960000}
                       initialAccessKeyId="t1" onClose={() => {}} />,
     );
     await waitFor(() => expect(getAgentCliModels).toHaveBeenCalled());
@@ -1521,7 +1534,7 @@ describe("AgentCliWindow streaming", () => {
     });
 
     render(
-      <AgentCliWindow accessKeys={ACCESS_KEYS} instances={INSTANCES} scrollbackLines={500}
+      <AgentCliWindow accessKeys={ACCESS_KEYS} instances={INSTANCES} memoryChars={960000}
                       initialAccessKeyId="t1" onClose={() => {}} />,
     );
     await waitFor(() => expect(getAgentCliModels).toHaveBeenCalled());
@@ -1544,7 +1557,7 @@ describe("AgentCliWindow streaming", () => {
       onEvent("done", { stop_reason: "end_turn" });
     });
     render(
-      <AgentCliWindow accessKeys={ACCESS_KEYS} instances={INSTANCES} scrollbackLines={500}
+      <AgentCliWindow accessKeys={ACCESS_KEYS} instances={INSTANCES} memoryChars={960000}
                       initialAccessKeyId="t1" onClose={() => {}} />,
     );
     await waitFor(() => expect(getAgentCliModels).toHaveBeenCalled());
@@ -1574,7 +1587,7 @@ describe("AgentCliWindow streaming", () => {
       onEvent("done", { stop_reason: "end_turn" });
     });
     render(
-      <AgentCliWindow accessKeys={ACCESS_KEYS} instances={INSTANCES} scrollbackLines={500}
+      <AgentCliWindow accessKeys={ACCESS_KEYS} instances={INSTANCES} memoryChars={960000}
                       initialAccessKeyId="t1" onClose={() => {}} />,
     );
     await waitFor(() => expect(getAgentCliModels).toHaveBeenCalled());
@@ -1619,7 +1632,7 @@ describe("AgentCliWindow streaming", () => {
       onEvent("done", { stop_reason: "end_turn" });
     });
     render(
-      <AgentCliWindow accessKeys={ACCESS_KEYS} instances={INSTANCES} scrollbackLines={500}
+      <AgentCliWindow accessKeys={ACCESS_KEYS} instances={INSTANCES} memoryChars={960000}
                       initialAccessKeyId="t1" onClose={() => {}} />,
     );
     await waitFor(() => expect(getAgentCliModels).toHaveBeenCalled());
@@ -1649,7 +1662,7 @@ describe("AgentCliWindow streaming", () => {
       onEvent("done", { stop_reason: "end_turn" });
     });
     render(
-      <AgentCliWindow accessKeys={ACCESS_KEYS} instances={INSTANCES} scrollbackLines={500}
+      <AgentCliWindow accessKeys={ACCESS_KEYS} instances={INSTANCES} memoryChars={960000}
                       initialAccessKeyId="t1" onClose={() => {}} />,
     );
     await waitFor(() => expect(getAgentCliModels).toHaveBeenCalled());
@@ -1694,7 +1707,7 @@ describe("AgentCliWindow streaming", () => {
       onEvent("done", { stop_reason: "end_turn" });
     });
     render(
-      <AgentCliWindow accessKeys={ACCESS_KEYS} instances={INSTANCES} scrollbackLines={500}
+      <AgentCliWindow accessKeys={ACCESS_KEYS} instances={INSTANCES} memoryChars={960000}
                       initialAccessKeyId="t1" onClose={() => {}} />,
     );
     await waitFor(() => expect(getAgentCliModels).toHaveBeenCalled());
@@ -1724,7 +1737,7 @@ describe("AgentCliWindow streaming", () => {
       onEvent("done", { stop_reason: "end_turn" });
     });
     render(
-      <AgentCliWindow accessKeys={ACCESS_KEYS} instances={INSTANCES} scrollbackLines={500}
+      <AgentCliWindow accessKeys={ACCESS_KEYS} instances={INSTANCES} memoryChars={960000}
                       initialAccessKeyId="t1" onClose={() => {}} />,
     );
     await waitFor(() => expect(getAgentCliModels).toHaveBeenCalled());
@@ -1761,7 +1774,7 @@ describe("AgentCliWindow streaming", () => {
       });
     });
     render(
-      <AgentCliWindow accessKeys={ACCESS_KEYS} instances={INSTANCES} scrollbackLines={500}
+      <AgentCliWindow accessKeys={ACCESS_KEYS} instances={INSTANCES} memoryChars={960000}
                       initialAccessKeyId="t1" onClose={() => {}} />,
     );
     await waitFor(() => expect(getAgentCliModels).toHaveBeenCalled());
@@ -1795,7 +1808,7 @@ describe("AgentCliWindow streaming", () => {
       return new Promise<void>((resolve) => { resolvers.push(resolve); });
     });
     render(
-      <AgentCliWindow accessKeys={ACCESS_KEYS} instances={INSTANCES} scrollbackLines={500}
+      <AgentCliWindow accessKeys={ACCESS_KEYS} instances={INSTANCES} memoryChars={960000}
                       initialAccessKeyId="t1" onClose={() => {}} />,
     );
     const textarea = await screen.findByPlaceholderText(/Message Agent Chat/i);
@@ -1828,7 +1841,7 @@ describe("AgentCliWindow streaming", () => {
       onEvent("done", { stop_reason: "end_turn" });
     });
     render(
-      <AgentCliWindow accessKeys={ACCESS_KEYS} instances={INSTANCES} scrollbackLines={500}
+      <AgentCliWindow accessKeys={ACCESS_KEYS} instances={INSTANCES} memoryChars={960000}
                       initialAccessKeyId="t1" onClose={() => {}} />,
     );
     await waitFor(() => expect(getAgentCliModels).toHaveBeenCalled());
@@ -1852,7 +1865,7 @@ describe("AgentCliWindow streaming", () => {
 
   it("Claude thinking dropdown folds on/off with effort and persists", async () => {
     render(
-      <AgentCliWindow accessKeys={ACCESS_KEYS} instances={INSTANCES} scrollbackLines={500}
+      <AgentCliWindow accessKeys={ACCESS_KEYS} instances={INSTANCES} memoryChars={960000}
                       initialAccessKeyId="t1" onClose={() => {}} />,
     );
     await waitFor(() => expect(getAgentCliModels).toHaveBeenCalled());
@@ -1877,7 +1890,7 @@ describe("AgentCliWindow streaming", () => {
     });
 
     render(
-      <AgentCliWindow accessKeys={ACCESS_KEYS} instances={INSTANCES} scrollbackLines={500}
+      <AgentCliWindow accessKeys={ACCESS_KEYS} instances={INSTANCES} memoryChars={960000}
                       initialAccessKeyId="t1" onClose={() => {}} />,
     );
     await waitFor(() => expect(getAgentCliModels).toHaveBeenCalled());
@@ -1906,7 +1919,7 @@ describe("AgentCliWindow streaming", () => {
     window.addEventListener("location-changed", locationChanged);
     try {
       render(
-        <AgentCliWindow accessKeys={ACCESS_KEYS} instances={INSTANCES} scrollbackLines={500}
+        <AgentCliWindow accessKeys={ACCESS_KEYS} instances={INSTANCES} memoryChars={960000}
                         initialAccessKeyId="t1" onClose={() => {}} />,
       );
       const textarea = await screen.findByPlaceholderText(/Message Agent Chat/i);
@@ -1946,7 +1959,7 @@ describe("AgentCliWindow streaming", () => {
     window.addEventListener(AGENTCHAT_REVIEW_OPENED_EVENT, reviewOpened);
     try {
       render(
-        <AgentCliWindow accessKeys={ACCESS_KEYS} instances={INSTANCES} scrollbackLines={500}
+        <AgentCliWindow accessKeys={ACCESS_KEYS} instances={INSTANCES} memoryChars={960000}
                         initialAccessKeyId="t1" onClose={() => {}} />,
       );
       const dialog = screen.getByRole("dialog", { name: "Agent Chat" });
@@ -1982,7 +1995,7 @@ describe("AgentCliWindow streaming", () => {
   it("comes back full screen when its phone icon is tapped", () => {
     vi.stubGlobal("matchMedia", vi.fn().mockReturnValue({ matches: true }));
     render(
-      <AgentCliWindow accessKeys={ACCESS_KEYS} instances={INSTANCES} scrollbackLines={500}
+      <AgentCliWindow accessKeys={ACCESS_KEYS} instances={INSTANCES} memoryChars={960000}
                       initialAccessKeyId="t1" onClose={() => {}} />,
     );
     const dialog = screen.getByRole("dialog", { name: "Agent Chat" });
@@ -1996,7 +2009,7 @@ describe("AgentCliWindow streaming", () => {
   it("drags the phone circle, keeps it there, and a tap still opens Chat", () => {
     vi.stubGlobal("matchMedia", vi.fn().mockReturnValue({ matches: true }));
     render(
-      <AgentCliWindow accessKeys={ACCESS_KEYS} instances={INSTANCES} scrollbackLines={500}
+      <AgentCliWindow accessKeys={ACCESS_KEYS} instances={INSTANCES} memoryChars={960000}
                       initialAccessKeyId="t1" onClose={() => {}} />,
     );
     const dialog = screen.getByRole("dialog", { name: "Agent Chat" });
@@ -2026,7 +2039,7 @@ describe("AgentCliWindow streaming", () => {
 
   it("redirects swipes from fixed controls into the transcript", async () => {
     render(
-      <AgentCliWindow accessKeys={ACCESS_KEYS} instances={INSTANCES} scrollbackLines={500}
+      <AgentCliWindow accessKeys={ACCESS_KEYS} instances={INSTANCES} memoryChars={960000}
                       initialAccessKeyId="t1" onClose={() => {}} />,
     );
     await waitFor(() => expect(getAgentCliModels).toHaveBeenCalled());
@@ -2053,7 +2066,7 @@ describe("AgentCliWindow streaming", () => {
 
   it("consumes swipes that begin in an empty transcript", async () => {
     render(
-      <AgentCliWindow accessKeys={ACCESS_KEYS} instances={INSTANCES} scrollbackLines={500}
+      <AgentCliWindow accessKeys={ACCESS_KEYS} instances={INSTANCES} memoryChars={960000}
                       initialAccessKeyId="t1" onClose={() => {}} />,
     );
     await waitFor(() => expect(getAgentCliModels).toHaveBeenCalled());
@@ -2097,7 +2110,7 @@ describe("AgentCliWindow streaming", () => {
       });
 
       render(
-        <AgentCliWindow accessKeys={ACCESS_KEYS} instances={INSTANCES} scrollbackLines={500}
+        <AgentCliWindow accessKeys={ACCESS_KEYS} instances={INSTANCES} memoryChars={960000}
                         initialAccessKeyId="t1" onClose={() => {}} />,
       );
       await waitFor(() => expect(getAgentCliModels).toHaveBeenCalled());
@@ -2140,7 +2153,7 @@ describe("AgentCliWindow streaming", () => {
       });
 
       render(
-        <AgentCliWindow accessKeys={ACCESS_KEYS} instances={INSTANCES} scrollbackLines={500}
+        <AgentCliWindow accessKeys={ACCESS_KEYS} instances={INSTANCES} memoryChars={960000}
                         initialAccessKeyId="t1" onClose={() => {}} />,
       );
       await waitFor(() => expect(getAgentCliModels).toHaveBeenCalled());
@@ -2169,7 +2182,7 @@ describe("AgentCliWindow streaming", () => {
     });
 
     render(
-      <AgentCliWindow accessKeys={ACCESS_KEYS} instances={INSTANCES} scrollbackLines={500}
+      <AgentCliWindow accessKeys={ACCESS_KEYS} instances={INSTANCES} memoryChars={960000}
                       initialAccessKeyId="t1" onClose={() => {}} />,
     );
     await waitFor(() => expect(getAgentCliModels).toHaveBeenCalled());
@@ -2194,7 +2207,7 @@ describe("AgentCliWindow streaming", () => {
     });
 
     render(
-      <AgentCliWindow accessKeys={ACCESS_KEYS} instances={INSTANCES} scrollbackLines={500}
+      <AgentCliWindow accessKeys={ACCESS_KEYS} instances={INSTANCES} memoryChars={960000}
                       initialAccessKeyId="t1" onClose={() => {}} />,
     );
     await waitFor(() => expect(getAgentCliModels).toHaveBeenCalled());
@@ -2209,7 +2222,7 @@ describe("AgentCliWindow streaming", () => {
 
   it("shows an empty-state prompt when no provider is configured", async () => {
     render(
-      <AgentCliWindow accessKeys={ACCESS_KEYS} instances={[]} scrollbackLines={500}
+      <AgentCliWindow accessKeys={ACCESS_KEYS} instances={[]} memoryChars={960000}
                       initialAccessKeyId="t1" onClose={() => {}} />,
     );
     expect(screen.getByText(/No provider account is configured/i)).toBeInTheDocument();
@@ -2226,7 +2239,7 @@ describe("AgentCliWindow streaming", () => {
       });
     });
     render(
-      <AgentCliWindow accessKeys={ACCESS_KEYS} instances={INSTANCES} scrollbackLines={500}
+      <AgentCliWindow accessKeys={ACCESS_KEYS} instances={INSTANCES} memoryChars={960000}
                       initialAccessKeyId="t1" onClose={() => {}} />,
     );
     await waitFor(() => expect(getAgentCliModels).toHaveBeenCalled());
@@ -2246,7 +2259,7 @@ describe("AgentCliWindow streaming", () => {
   it("persists selections and restores them on a fresh mount", async () => {
     getAgentCliModels.mockResolvedValue({ models: ["m-a", "m-b"] });
     const { unmount } = render(
-      <AgentCliWindow accessKeys={ACCESS_KEYS} instances={INSTANCES} scrollbackLines={500}
+      <AgentCliWindow accessKeys={ACCESS_KEYS} instances={INSTANCES} memoryChars={960000}
                       initialAccessKeyId="t1" onClose={() => {}} />,
     );
     await waitFor(() => expect((screen.getByLabelText("Model") as HTMLSelectElement).value).toBe("m-a"));
@@ -2260,7 +2273,7 @@ describe("AgentCliWindow streaming", () => {
 
     unmount();
     render(
-      <AgentCliWindow accessKeys={ACCESS_KEYS} instances={INSTANCES} scrollbackLines={500}
+      <AgentCliWindow accessKeys={ACCESS_KEYS} instances={INSTANCES} memoryChars={960000}
                       initialAccessKeyId="t1" onClose={() => {}} />,
     );
     // Restored from persistence, not reset to defaults.
@@ -2276,7 +2289,7 @@ describe("AgentCliWindow header and connection", () => {
     getAgentCliModels.mockResolvedValue({ models: ["claude-opus-4-8"] });
   });
   const mount = () => render(
-    <AgentCliWindow accessKeys={ACCESS_KEYS} instances={INSTANCES} scrollbackLines={500}
+    <AgentCliWindow accessKeys={ACCESS_KEYS} instances={INSTANCES} memoryChars={960000}
                     initialAccessKeyId="t1" onClose={() => {}} />,
   );
 
@@ -2341,7 +2354,7 @@ describe("AgentCliWindow header and connection", () => {
   });
 
   it("colours Approve green and Reject red on a request in the conversation", async () => {
-    setSessionTurns([{ entries: [{ kind: "approval", approvalId: "ap-colour", toolName: "create_helper", status: "pending" }], messages: [], lines: 1 }]);
+    setSessionTurns([{ entries: [{ kind: "approval", approvalId: "ap-colour", toolName: "create_helper", status: "pending" }], messages: [] }]);
     getApproval.mockResolvedValueOnce({ id: "ap-colour", status: "pending" });
     mount();
     expect(await screen.findByRole("button", { name: "Approve" })).toHaveClass("agentcli-approve");
@@ -2375,7 +2388,7 @@ describe("agentCLI cancellation on close/unmount", () => {
     patchDurable({ open: true });
     const onClose = vi.fn();
     const utils = render(
-      <AgentCliWindow accessKeys={ACCESS_KEYS} instances={INSTANCES} scrollbackLines={500}
+      <AgentCliWindow accessKeys={ACCESS_KEYS} instances={INSTANCES} memoryChars={960000}
                       initialAccessKeyId="t1" onClose={onClose} />,
     );
     fireEvent.change(screen.getByPlaceholderText("Message Agent Chat…"), { target: { value: "hi" } });
@@ -2387,7 +2400,7 @@ describe("agentCLI cancellation on close/unmount", () => {
 
   it("keeps the composer editable while a request runs and refuses a duplicate turn", async () => {
     patchDurable({ open: true });
-    render(<AgentCliWindow accessKeys={ACCESS_KEYS} instances={INSTANCES} scrollbackLines={500}
+    render(<AgentCliWindow accessKeys={ACCESS_KEYS} instances={INSTANCES} memoryChars={960000}
                            initialAccessKeyId="t1" onClose={() => {}} />);
     const composer = screen.getByPlaceholderText("Message Agent Chat…");
     composer.focus();
@@ -2443,7 +2456,7 @@ describe("unsent message box survives a panel remount", () => {
 
   function mount() {
     return render(
-      <AgentCliWindow accessKeys={ACCESS_KEYS} instances={INSTANCES} scrollbackLines={500}
+      <AgentCliWindow accessKeys={ACCESS_KEYS} instances={INSTANCES} memoryChars={960000}
                       initialAccessKeyId="t1" onClose={() => {}} />,
     );
   }
@@ -2510,7 +2523,7 @@ describe("unsent message box survives a panel remount", () => {
   });
 
   it("starts a new conversation once when the wizard asks for one", async () => {
-    setSessionTurns([{ entries: [{ kind: "user", text: "an earlier question", ts: 1 }], messages: [], lines: 1 }]);
+    setSessionTurns([{ entries: [{ kind: "user", text: "an earlier question", ts: 1 }], messages: [] }]);
     setSessionUsage({ input: 120, output: 40, context: 120, noData: false });
     patchDurable({ prefill: "How many lights are in my home?", freshConversation: true });
     const first = mount();
@@ -2522,7 +2535,7 @@ describe("unsent message box survives a panel remount", () => {
     first.unmount();
 
     // One-shot: a later open restores the conversation as usual.
-    setSessionTurns([{ entries: [{ kind: "user", text: "the wizard's question", ts: 2 }], messages: [], lines: 1 }]);
+    setSessionTurns([{ entries: [{ kind: "user", text: "the wizard's question", ts: 2 }], messages: [] }]);
     mount();
     expect(screen.getByText("the wizard's question")).toBeInTheDocument();
   });
@@ -2542,7 +2555,7 @@ describe("AgentCliWindow held-tool progress", () => {
       onEvent("done", { stop_reason: "end_turn" });
     });
     render(
-      <AgentCliWindow accessKeys={ACCESS_KEYS} instances={INSTANCES} scrollbackLines={500}
+      <AgentCliWindow accessKeys={ACCESS_KEYS} instances={INSTANCES} memoryChars={960000}
                       initialAccessKeyId="t1" onClose={() => {}} />,
     );
     await waitFor(() => expect(getAgentCliModels).toHaveBeenCalled());
@@ -2611,7 +2624,7 @@ describe("AgentCliWindow generic activity line", () => {
       });
     });
     render(
-      <AgentCliWindow accessKeys={ACCESS_KEYS} instances={INSTANCES} scrollbackLines={500}
+      <AgentCliWindow accessKeys={ACCESS_KEYS} instances={INSTANCES} memoryChars={960000}
                       initialAccessKeyId="t1" onClose={() => {}} />,
     );
     await waitFor(() => expect(getAgentCliModels).toHaveBeenCalled());
@@ -2667,7 +2680,7 @@ describe("AgentCliWindow generic activity line", () => {
       onEvent("done", { stop_reason: "end_turn" });
     });
     render(
-      <AgentCliWindow accessKeys={ACCESS_KEYS} instances={INSTANCES} scrollbackLines={500}
+      <AgentCliWindow accessKeys={ACCESS_KEYS} instances={INSTANCES} memoryChars={960000}
                       initialAccessKeyId="t1" onClose={() => {}} />,
     );
     await waitFor(() => expect(getAgentCliModels).toHaveBeenCalled());
@@ -2819,7 +2832,7 @@ describe("Xiaomi MiMo controls", () => {
 
 describe("Agent Chat docked in My Workspace", () => {
   beforeEach(() => { getAgentCliModels.mockResolvedValue({ models: ["claude-opus-4-8"] }); });
-  const props = { accessKeys: ACCESS_KEYS, instances: INSTANCES, scrollbackLines: 500, initialAccessKeyId: "t1", onClose: () => {} };
+  const props = { accessKeys: ACCESS_KEYS, instances: INSTANCES, memoryChars: 960000, initialAccessKeyId: "t1", onClose: () => {} };
 
   it("draws itself into the slot without its floating frame, keeping its menu and pop-out", () => {
     const slot = document.createElement("div");
@@ -2840,7 +2853,7 @@ describe("Agent Chat docked in My Workspace", () => {
   });
 
   it("keeps its draft and conversation while it moves between the slot and floating", () => {
-    setSessionTurns([{ entries: [{ kind: "user", text: "earlier prompt", ts: 1 }], messages: [], lines: 1 }]);
+    setSessionTurns([{ entries: [{ kind: "user", text: "earlier prompt", ts: 1 }], messages: [] }]);
     const slot = document.createElement("div");
     document.body.appendChild(slot);
     const { rerender, container } = render(<AgentCliWindow {...props} dockMount={slot} dock={{ docked: true, toggle: () => {} }} />);
@@ -2879,9 +2892,9 @@ describe("the access key selection", () => {
   });
 
   it("takes the first key to arrive when none was selected, the one the select shows", async () => {
-    const view = render(<AgentCliWindow accessKeys={[]} instances={INSTANCES} scrollbackLines={500} initialAccessKeyId="" onClose={() => {}} />);
+    const view = render(<AgentCliWindow accessKeys={[]} instances={INSTANCES} memoryChars={960000} initialAccessKeyId="" onClose={() => {}} />);
     await act(async () => {});
-    view.rerender(<AgentCliWindow accessKeys={ACCESS_KEYS} instances={INSTANCES} scrollbackLines={500} initialAccessKeyId="" onClose={() => {}} />);
+    view.rerender(<AgentCliWindow accessKeys={ACCESS_KEYS} instances={INSTANCES} memoryChars={960000} initialAccessKeyId="" onClose={() => {}} />);
     await act(async () => {});
     expect(getDurable().accessKeyId).toBe(ACCESS_KEYS[0].id);
   });

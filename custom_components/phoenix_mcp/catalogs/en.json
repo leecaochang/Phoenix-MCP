@@ -1591,8 +1591,8 @@
       "agentcliRemoveAccountFailed": "Failed to remove the account.",
       "agentcliRemoveBody": "Delete {name} and its API key; anything using it stops. This can't be undone.",
       "agentcliSaveFailed": "Failed to save provider.",
-      "agentcliScrollbackHelp": "How many chat lines Agent Chat keeps as context, 0 to 5,000 (default 100).",
-      "agentcliScrollbackLabel": "Chat history limit",
+      "agentcliMemoryHelp": "How many characters of earlier chat Agent Chat sends with each message, 0 to 960,000 (default 200,000).",
+      "agentcliMemoryLabel": "Chat memory",
       "agentcliSelectModel": "Select default model:",
       "agentcliServerUrl": "Server URL",
       "agentcliStepsHelp": "How many tool steps Agent Chat takes before asking to continue, 3 to 100 (default 20).",
@@ -1946,7 +1946,7 @@
         "empty_turn": "The model ended the turn without a text reply.",
         "internal": "Internal error.",
         "max_tokens_stop": "The model stopped because it reached its output length limit. Ask it to continue, or raise the model's output token limit (for Ollama, its num_predict/context settings).",
-        "memory_trimmed": "The conversation grew past what one request can carry, so the model no longer remembers the oldest messages. They stay on screen.",
+        "memory_trimmed": "This chat is now longer than Chat memory allows, so the model no longer sees the oldest messages. They stay on screen.",
         "model_api_unsupported": "This model is not qualified for OpenCode Chat Completions. Choose a supported model.",
         "network": "The provider is temporarily unavailable.",
         "ollama_backend": "The provider is temporarily unavailable.",
@@ -2055,7 +2055,15 @@
       "announceReplyStart": "{text}… The full reply is in the conversation.",
       "authorUser": "You said",
       "authorAgent": "Agent replied",
-      "errorLabel": "Error"
+      "errorLabel": "Error",
+      "editMessage": "Edit Message",
+      "memoryWarningAll": "This message is long, so the model won't see any of the earlier chat.",
+      "memoryWarningSome": {
+        "one": "This message is long, so the model won't see {count} earlier message in this chat.",
+        "other": "This message is long, so the model won't see {count} earlier messages in this chat."
+      },
+      "sendAnyway": "Send Anyway",
+      "sendInNewChat": "Send in New Chat"
     },
     "diff": {
       "blueprint.create": "Create {domain} blueprint '{rel}'",

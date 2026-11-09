@@ -282,7 +282,7 @@
         "empty_turn": "模型結束了本輪，但沒有給出文字回覆。",
         "internal": "內部錯誤。",
         "max_tokens_stop": "模型因達到輸出長度上限而停止。可以讓它繼續，或調高模型的輸出 Token 上限（Ollama 請調整 num_predict/context 設定）。",
-        "memory_trimmed": "對話已超出單次請求可容納的大小，因此模型不再記得最早的訊息。這些訊息仍保留在畫面上。",
+        "memory_trimmed": "本次聊天已超出聊天記憶的上限，因此模型不再看到最早的訊息。這些訊息仍保留在畫面上。",
         "model_api_unsupported": "此模型尚未通過 OpenCode Chat Completions 相容性驗證。請選擇受支援的模型。",
         "network": "提供者暫時無法使用。",
         "ollama_backend": "提供者暫時無法使用。",
@@ -391,7 +391,15 @@
       "announceReplyStart": "{text}…… 完整回覆請見對話。",
       "authorUser": "你說",
       "authorAgent": "代理回覆",
-      "errorLabel": "錯誤"
+      "errorLabel": "錯誤",
+      "editMessage": "編輯訊息",
+      "memoryWarningAll": "這則訊息較長，模型將看不到先前的任何聊天內容。",
+      "sendAnyway": "仍要傳送",
+      "sendInNewChat": "在新聊天中傳送",
+      "memoryWarningSome": {
+        "one": "這則訊息較長，模型將看不到本次聊天中的 {count} 則較早訊息。",
+        "other": "這則訊息較長，模型將看不到本次聊天中的 {count} 則較早訊息。"
+      }
     },
     "approvalSummary": {
       "action.optionalReason": "可選原因",
@@ -1717,8 +1725,8 @@
       "agentcliRemoveAccountFailed": "移除帳戶失敗。",
       "agentcliRemoveBody": "刪除 {name} 及其 API 金鑰；所有使用它的功能都會停止。此操作無法撤銷。",
       "agentcliSaveFailed": "儲存提供者失敗。",
-      "agentcliScrollbackHelp": "Agent Chat 保留作為上下文的聊天行數，0 到 5,000（預設 100）。",
-      "agentcliScrollbackLabel": "聊天記錄上限",
+      "agentcliMemoryHelp": "Agent Chat 每則訊息附帶的先前聊天字元數，0 到 960,000（預設 200,000）。",
+      "agentcliMemoryLabel": "聊天記憶",
       "agentcliSelectModel": "選擇預設模型：",
       "agentcliServerUrl": "伺服器 URL",
       "agentcliStepsHelp": "Agent Chat 在詢問是否繼續之前執行的工具步驟數，3 到 100（預設 20）。",

@@ -300,11 +300,13 @@ AGENT_CHAT_PROGRESS_INTERVAL_SECONDS = 2.0
 # Sentinel client_ip so agentCLI-driven tool calls are attributable in the audit
 # log without a core change to _dispatch_mcp.
 AGENT_CHAT_CLIENT_IP = "agentcli"
-# Transcript scrollback bound (also the conversation-memory bound): lines dropped
-# from the window are dropped from what the LLM is sent.
-AGENT_CHAT_SCROLLBACK_DEFAULT = 100
-AGENT_CHAT_SCROLLBACK_MIN = 0
-AGENT_CHAT_SCROLLBACK_MAX = 5000
+# Agent Chat memory: how much earlier conversation each request carries, counted as
+# the server's request size check counts it (ASCII JSON, so a non-ASCII unit is its
+# six-byte escape). The maximum stays under the 1 MiB request limit the window
+# already leaves room for.
+AGENT_CHAT_MEMORY_CHARS_DEFAULT = 200_000
+AGENT_CHAT_MEMORY_CHARS_MIN = 0
+AGENT_CHAT_MEMORY_CHARS_MAX = 960_000
 # Display-only cap on the tool-result text streamed to the verbose panel view
 # (the model always receives the full result via the message history). Large
 # enough that ordinary results are shown whole; only pathological dumps clip.

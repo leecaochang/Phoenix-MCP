@@ -1469,8 +1469,8 @@
       "agentcliRemoveAccountFailed": "移除账户失败。",
       "agentcliRemoveBody": "删除 {name} 及其 API 密钥；所有使用它的功能都会停止。此操作无法撤销。",
       "agentcliSaveFailed": "保存提供商失败。",
-      "agentcliScrollbackHelp": "Agent Chat 保留作为上下文的聊天行数，0 到 5,000（默认 100）。",
-      "agentcliScrollbackLabel": "聊天记录上限",
+      "agentcliMemoryHelp": "Agent Chat 每条消息附带的先前聊天字符数，0 到 960,000（默认 200,000）。",
+      "agentcliMemoryLabel": "聊天记忆",
       "agentcliSelectModel": "选择默认模型：",
       "agentcliServerUrl": "服务器地址",
       "agentcliStepsHelp": "Agent Chat 在询问是否继续之前执行的工具步骤数，3 到 100（默认 20）。",
@@ -1826,7 +1826,7 @@
         "empty_turn": "模型结束了本轮，但没有给出文字回复。",
         "internal": "内部错误。",
         "max_tokens_stop": "模型因达到输出长度上限而停止。可以让它继续，或调高模型的输出 Token 上限（Ollama 请调整 num_predict/context 设置）。",
-        "memory_trimmed": "对话已超出单次请求可容纳的大小，因此模型不再记得最早的消息。这些消息仍保留在屏幕上。",
+        "memory_trimmed": "本次聊天已超出聊天记忆的上限，因此模型不再看到最早的消息。这些消息仍保留在屏幕上。",
         "model_api_unsupported": "此模型尚未通过 OpenCode Chat Completions 兼容性验证。请选择受支持的模型。",
         "network": "提供商暂时不可用。",
         "ollama_backend": "提供商暂时不可用。",
@@ -1935,7 +1935,15 @@
       "announceReplyStart": "{text}…… 完整回复见对话。",
       "authorUser": "你说",
       "authorAgent": "智能体回复",
-      "errorLabel": "错误"
+      "errorLabel": "错误",
+      "editMessage": "编辑消息",
+      "memoryWarningAll": "这条消息较长，模型将看不到之前的任何聊天内容。",
+      "sendAnyway": "仍然发送",
+      "sendInNewChat": "在新聊天中发送",
+      "memoryWarningSome": {
+        "one": "这条消息较长，模型将看不到本次聊天中的 {count} 条较早消息。",
+        "other": "这条消息较长，模型将看不到本次聊天中的 {count} 条较早消息。"
+      }
     },
     "wizard": {
       "accessSub": "选择 <code>light</code> 旁边的三角形，打开灯光分组。其中列出您的灯光设备；选择设备旁边的三角形，即可查看它的实体。也可以在筛选框中输入灯的名称。然后在一个您可以亲自验证的灯上选择 <strong>W</strong>，让智能体可以读取并控制它。之后还可以添加更多权限。",

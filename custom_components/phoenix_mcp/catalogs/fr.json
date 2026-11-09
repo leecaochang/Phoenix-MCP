@@ -1222,8 +1222,8 @@
       "agentcliRemoveAccountFailed": "Échec de la suppression du compte.",
       "agentcliRemoveBody": "Supprimez {name} et sa clé d’API ; tout ce qui l’utilise cesse de fonctionner. Action irréversible.",
       "agentcliSaveFailed": "Échec de l'enregistrement du fournisseur.",
-      "agentcliScrollbackHelp": "Nombre de lignes de discussion qu’Agent Chat garde comme contexte, de 0 à 5 000 (100 par défaut).",
-      "agentcliScrollbackLabel": "Limite de l'historique du chat",
+      "agentcliMemoryHelp": "Nombre de caractères du chat précédent qu'Agent Chat envoie avec chaque message, de 0 à 960 000 (200 000 par défaut).",
+      "agentcliMemoryLabel": "Mémoire du chat",
       "agentcliSelectModel": "Sélectionner le modèle par défaut :",
       "agentcliServerUrl": "URL du serveur",
       "agentcliStepsHelp": "Nombre d’étapes d’outils qu’Agent Chat effectue avant de demander s’il doit continuer, de 3 à 100 (20 par défaut).",
@@ -1579,7 +1579,7 @@
         "empty_turn": "Le modèle a terminé le tour sans réponse textuelle.",
         "internal": "Erreur interne.",
         "max_tokens_stop": "Le modèle s'est arrêté car il a atteint sa limite de longueur de sortie. Demandez-lui de continuer, ou augmentez la limite de jetons de sortie du modèle (pour Ollama, ses paramètres num_predict/context).",
-        "memory_trimmed": "La conversation dépasse ce qu'une requête peut contenir : le modèle ne se souvient donc plus des messages les plus anciens. Ils restent affichés à l'écran.",
+        "memory_trimmed": "Ce chat dépasse maintenant ce que permet la mémoire du chat : le modèle ne voit plus les messages les plus anciens. Ils restent affichés à l'écran.",
         "model_api_unsupported": "Ce modèle n’est pas validé pour OpenCode Chat Completions. Choisissez un modèle pris en charge.",
         "network": "Le fournisseur est temporairement indisponible.",
         "ollama_backend": "Le fournisseur est temporairement indisponible.",
@@ -1688,7 +1688,15 @@
       "announceReplyStart": "{text}… La réponse complète figure dans la conversation.",
       "authorUser": "Vous avez écrit",
       "authorAgent": "L'agent a répondu",
-      "errorLabel": "Erreur"
+      "errorLabel": "Erreur",
+      "editMessage": "Modifier le message",
+      "memoryWarningAll": "Ce message est long : le modèle ne verra rien du chat précédent.",
+      "sendAnyway": "Envoyer quand même",
+      "sendInNewChat": "Envoyer dans un nouveau chat",
+      "memoryWarningSome": {
+        "one": "Ce message est long : le modèle ne verra pas {count} message précédent de ce chat.",
+        "other": "Ce message est long : le modèle ne verra pas {count} messages précédents de ce chat."
+      }
     },
     "diff": {
       "blueprint.create": "Créer le blueprint {domain} « {rel} »",

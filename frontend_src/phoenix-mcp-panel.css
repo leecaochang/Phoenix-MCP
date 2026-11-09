@@ -3213,6 +3213,9 @@ hui-card, .dash-preview-card-slot { display: block; min-width: 0; }
   background: var(--phx-accent-wash);
 }
 .agentcli-continue-text { flex: 1; font-size: 13px; color: var(--phx-text-2); }
+/* Three choices and a sentence: the buttons wrap under the text in a narrow window. */
+.agentcli-memory-warning { flex-wrap: wrap; background: var(--phx-warning-bg); }
+.agentcli-memory-warning .agentcli-continue-text { flex: 1 1 100%; color: var(--phx-text); }
 .agentcli-cancel-btn:hover { background: var(--phx-error); color: var(--phx-accent-fg); }
 .agentcli-input textarea {
   flex: 1;

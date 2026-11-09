@@ -915,7 +915,7 @@
         "empty_turn": "Model zakończył turę bez odpowiedzi tekstowej.",
         "internal": "Błąd wewnętrzny.",
         "max_tokens_stop": "Model zatrzymał się, ponieważ osiągnął limit długości danych wyjściowych. Poproś go o kontynuację lub zwiększ limit tokenów wyjściowych modelu (dla Ollama: ustawienia num_predict/context).",
-        "memory_trimmed": "Rozmowa przekroczyła rozmiar, który mieści się w jednym żądaniu, więc model nie pamięta już najstarszych wiadomości. Pozostają one na ekranie.",
+        "memory_trimmed": "Ten czat jest teraz dłuższy, niż pozwala pamięć czatu, więc model nie widzi już najstarszych wiadomości. Pozostają one na ekranie.",
         "model_api_unsupported": "Ten model nie został zweryfikowany dla OpenCode Chat Completions. Wybierz obsługiwany model.",
         "network": "Dostawca jest tymczasowo niedostępny.",
         "ollama_backend": "Dostawca jest tymczasowo niedostępny.",
@@ -1028,7 +1028,17 @@
       "announceReplyStart": "{text}… Pełna odpowiedź jest w rozmowie.",
       "authorUser": "Napisano",
       "authorAgent": "Agent odpowiedział",
-      "errorLabel": "Błąd"
+      "errorLabel": "Błąd",
+      "editMessage": "Edytuj wiadomość",
+      "memoryWarningAll": "Ta wiadomość jest długa, więc model nie zobaczy niczego z wcześniejszego czatu.",
+      "sendAnyway": "Wyślij mimo to",
+      "sendInNewChat": "Wyślij w nowym czacie",
+      "memoryWarningSome": {
+        "one": "Ta wiadomość jest długa, więc model nie zobaczy {count} wcześniejszej wiadomości w tym czacie.",
+        "other": "Ta wiadomość jest długa, więc model nie zobaczy {count} wcześniejszych wiadomości w tym czacie.",
+        "few": "Ta wiadomość jest długa, więc model nie zobaczy {count} wcześniejszych wiadomości w tym czacie.",
+        "many": "Ta wiadomość jest długa, więc model nie zobaczy {count} wcześniejszych wiadomości w tym czacie."
+      }
     },
     "adminError": {
       "activeAccessKeyRequired": "Wybrany klucz dostępu jest unieważniony lub wygasł. Wybierz inny klucz dostępu.",
@@ -1905,8 +1915,8 @@
       "agentcliRemoveAccountFailed": "Nie udało się usunąć konta.",
       "agentcliRemoveBody": "Usuń {name} i jego klucz API; wszystko, co go używa, przestanie działać. Tego nie można cofnąć.",
       "agentcliSaveFailed": "Nie udało się zapisać dostawcy.",
-      "agentcliScrollbackHelp": "Ile wierszy czatu Agent Chat zachowuje jako kontekst, od 0 do 5000 (domyślnie 100).",
-      "agentcliScrollbackLabel": "Limit historii czatu",
+      "agentcliMemoryHelp": "Ile znaków wcześniejszego czatu Agent Chat wysyła z każdą wiadomością, od 0 do 960 000 (domyślnie 200 000).",
+      "agentcliMemoryLabel": "Pamięć czatu",
       "agentcliSelectModel": "Wybierz model domyślny:",
       "agentcliServerUrl": "Adres URL serwera",
       "agentcliStepsHelp": "Ile kroków z narzędziami Agent Chat wykonuje, zanim zapyta o kontynuację, od 3 do 100 (domyślnie 20).",

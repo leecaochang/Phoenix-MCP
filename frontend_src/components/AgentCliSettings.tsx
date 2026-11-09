@@ -9,11 +9,15 @@ import { ConversationBehaviorControls } from "./ConversationBehaviorControls";
 import { isImeKey } from "../utils/ime";
 import { NumberField } from "../ui/NumberField";
 
+/** Chat memory bounds, as the server clamps them (provider_constants.py). */
+const AGENT_CHAT_MEMORY_CHARS_MIN = 0;
+const AGENT_CHAT_MEMORY_CHARS_MAX = 960_000;
+
 interface Props {
   routingMode: string | undefined;
   onRoutingChange: (mode: "auto" | "off") => void;
-  scrollback: number;
-  onScrollbackChange: (n: number) => void;
+  memoryChars: number;
+  onMemoryCharsChange: (n: number) => void;
   maxIterations: number;
   onMaxIterationsChange: (n: number) => void;
   globalVisible: boolean;
@@ -30,36 +34,36 @@ interface Props {
 }
 
 export function AgentCliSettings({
-  routingMode, onRoutingChange, scrollback, onScrollbackChange, maxIterations, onMaxIterationsChange,
+  routingMode, onRoutingChange, memoryChars, onMemoryCharsChange, maxIterations, onMaxIterationsChange,
   globalVisible, onGlobalChange, conversationStyle, onConversationStyleChange,
   detailLevel, onDetailLevelChange, homeFocused, onHomeFocusedChange, saving, statistics = <RoutingStatistics surface="chat" />,
 }: Props) {
-  const [scrollInput, setScrollInput] = useState(String(scrollback));
+  const [memoryInput, setMemoryInput] = useState(String(memoryChars));
   const [maxIterInput, setMaxIterInput] = useState(String(maxIterations));
-  useEffect(() => { setScrollInput(String(scrollback)); }, [scrollback]);
+  useEffect(() => { setMemoryInput(String(memoryChars)); }, [memoryChars]);
   useEffect(() => { setMaxIterInput(String(maxIterations)); }, [maxIterations]);
 
   // Commit the memory value. Takes the raw string explicitly so the debounced
-  // path is not subject to a stale closure over scrollInput.
-  const commitScrollback = (raw: string) => {
+  // path is not subject to a stale closure over memoryInput.
+  const commitMemory = (raw: string) => {
     let n = parseInt(raw, 10);
-    if (Number.isNaN(n)) { setScrollInput(String(scrollback)); return; }
-    n = Math.max(0, Math.min(5000, n));
-    setScrollInput(String(n));
-    if (n !== scrollback) onScrollbackChange(n);
+    if (Number.isNaN(n)) { setMemoryInput(String(memoryChars)); return; }
+    n = Math.max(AGENT_CHAT_MEMORY_CHARS_MIN, Math.min(AGENT_CHAT_MEMORY_CHARS_MAX, n));
+    setMemoryInput(String(n));
+    if (n !== memoryChars) onMemoryCharsChange(n);
   };
 
   // Auto-save shortly after the last change so number-spinner arrows persist
   // without needing an explicit blur or Enter.
   const commitTimer = useRef<number | undefined>(undefined);
-  const onScrollInput = (raw: string) => {
-    setScrollInput(raw);
+  const onMemoryInput = (raw: string) => {
+    setMemoryInput(raw);
     window.clearTimeout(commitTimer.current);
-    commitTimer.current = window.setTimeout(() => commitScrollback(raw), 600);
+    commitTimer.current = window.setTimeout(() => commitMemory(raw), 600);
   };
   const commitNow = (raw: string) => {
     window.clearTimeout(commitTimer.current);
-    commitScrollback(raw);
+    commitMemory(raw);
   };
   useEffect(() => () => window.clearTimeout(commitTimer.current), []);
 
@@ -101,16 +105,16 @@ export function AgentCliSettings({
           <span className="toggle-switch-track" />
         </label>
       </div>
-      <div className="toggle-row" {...helpRow(t("settings.agentcliScrollbackHelp"))}>
-        <SettingLabel help={t("settings.agentcliScrollbackHelp")}><span>{t("settings.agentcliScrollbackLabel")}</span></SettingLabel>
+      <div className="toggle-row" {...helpRow(t("settings.agentcliMemoryHelp"))}>
+        <SettingLabel help={t("settings.agentcliMemoryHelp")}><span>{t("settings.agentcliMemoryLabel")}</span></SettingLabel>
         <NumberField
-          className="input input-auto" min={0} max={5000} step={100}
-          aria-label={t("settings.agentcliScrollbackLabel")}
-          value={scrollInput}
+          className="input input-auto" min={AGENT_CHAT_MEMORY_CHARS_MIN} max={AGENT_CHAT_MEMORY_CHARS_MAX} step={10000}
+          aria-label={t("settings.agentcliMemoryLabel")}
+          value={memoryInput}
           busy={saving}
-          onChange={(e) => onScrollInput(e.target.value)}
-          onBlur={() => commitNow(scrollInput)}
-          onKeyDown={(e) => { if (e.key === "Enter" && !isImeKey(e)) commitNow(scrollInput); }}
+          onChange={(e) => onMemoryInput(e.target.value)}
+          onBlur={() => commitNow(memoryInput)}
+          onKeyDown={(e) => { if (e.key === "Enter" && !isImeKey(e)) commitNow(memoryInput); }}
         />
       </div>
       <div className="toggle-row" {...helpRow(t("settings.agentcliStepsHelp"))}>

@@ -1,5 +1,5 @@
 ---
-{ "id": "window.agentChat", "title": "{{label:agentchat.title}}", "parent": "workspace.my", "order": 5, "keywords": ["chat", "agent", "assistant", "conversation", "Shift+A"], "sectionKeywords": { "opening": ["open", "shortcut", "Shift+A", "every page", "pop out"], "window": ["minimize", "maximize", "move", "resize", "dock", "close"], "options": ["verbose", "timestamps", "footer", "text size"], "connection": ["access key", "provider", "model", "thinking", "temperature", "account", "Anthropic", "Claude", "DeepSeek", "OpenAI", "ChatGPT", "GPT", "Gemini", "Google", "Grok", "xAI", "Groq", "Kimi", "Moonshot", "Meta", "Llama", "MiniMax", "Mistral AI", "NVIDIA NIM", "Xiaomi MiMo", "Tencent Cloud TokenHub", "OpenCode", "Ollama", "OpenRouter", "Infron", "Together AI", "Cerebras", "Fireworks AI", "Alibaba Cloud Model Studio", "Qwen", "DashScope", "Z.ai", "Zhipu", "GLM"], "conversation": ["send", "stop", "steps", "working", "copy", "tokens", "usage"], "check-in": ["paused", "continue", "steps before check-in"], "images": ["attach", "image", "photo", "paste", "picture"], "approvals": ["approve", "reject", "review", "waiting"], "clear": ["clear chat history", "/clear", "new conversation"], "privacy": ["stored", "browser", "sent to the provider", "history"] }, "covers": ["frontend_src/components/AgentCliWindow.tsx", "frontend_src/inject/agentchat.ts", "frontend_src/utils/agentcli_state.ts", "frontend_src/utils/chat_attachments.ts", "custom_components/phoenix_mcp/agent_chat.py", "custom_components/phoenix_mcp/agent_turn.py", "custom_components/phoenix_mcp/agent_dispatch.py", "custom_components/phoenix_mcp/agent_chat_views.py", "custom_components/phoenix_mcp/llm/", "custom_components/phoenix_mcp/provider_constants.py", "frontend_src/inject/AgentChatWindow.tsx", "frontend_src/utils/agentchat_review.ts", "frontend_src/utils/agentchat_shortcut.ts", "frontend_src/utils/chat_notice.ts"] }
+{ "id": "window.agentChat", "title": "{{label:agentchat.title}}", "parent": "workspace.my", "order": 5, "keywords": ["chat", "agent", "assistant", "conversation", "Shift+A"], "sectionKeywords": { "opening": ["open", "shortcut", "Shift+A", "every page", "pop out"], "window": ["minimize", "maximize", "move", "resize", "dock", "close"], "options": ["verbose", "timestamps", "footer", "text size"], "connection": ["access key", "provider", "model", "thinking", "temperature", "account", "Anthropic", "Claude", "DeepSeek", "OpenAI", "ChatGPT", "GPT", "Gemini", "Google", "Grok", "xAI", "Groq", "Kimi", "Moonshot", "Meta", "Llama", "MiniMax", "Mistral AI", "NVIDIA NIM", "Xiaomi MiMo", "Tencent Cloud TokenHub", "OpenCode", "Ollama", "OpenRouter", "Infron", "Together AI", "Cerebras", "Fireworks AI", "Alibaba Cloud Model Studio", "Qwen", "DashScope", "Z.ai", "Zhipu", "GLM"], "conversation": ["send", "stop", "steps", "working", "copy", "tokens", "usage"], "check-in": ["paused", "continue", "steps before check-in"], "memory-warning": ["long message", "context", "cut off", "send anyway", "new chat", "memory"], "images": ["attach", "image", "photo", "paste", "picture"], "approvals": ["approve", "reject", "review", "waiting"], "clear": ["clear chat history", "/clear", "new conversation"], "privacy": ["stored", "browser", "sent to the provider", "history"] }, "covers": ["frontend_src/components/AgentCliWindow.tsx", "frontend_src/inject/agentchat.ts", "frontend_src/utils/agentcli_state.ts", "frontend_src/utils/chat_attachments.ts", "custom_components/phoenix_mcp/agent_chat.py", "custom_components/phoenix_mcp/agent_turn.py", "custom_components/phoenix_mcp/agent_dispatch.py", "custom_components/phoenix_mcp/agent_chat_views.py", "custom_components/phoenix_mcp/llm/", "custom_components/phoenix_mcp/provider_constants.py", "frontend_src/inject/AgentChatWindow.tsx", "frontend_src/utils/agentchat_review.ts", "frontend_src/utils/agentchat_shortcut.ts", "frontend_src/utils/chat_notice.ts"] }
 ---
 Talk to an AI agent about your home. It acts through one of your access keys, so it can do only what that key allows, and every action is checked and logged like any other.
 
@@ -58,6 +58,16 @@ After a number of steps without your input, the agent pauses and asks whether to
 
 Approving or rejecting an action resets the count. Set the number in [{{label:settings.agentcliStepsLabel}}](guide:window.settingsChat#chat-steps).
 
+## Long messages {#memory-warning}
+
+When sending a message would push your earlier messages out of [{{label:settings.agentcliMemoryLabel}}](guide:window.settingsChat#chat-memory), Phoenix asks first and says how many the model would stop seeing.
+
+- **{{label:agentchat.sendAnyway}}** sends it. The earliest messages stay on screen, but the model no longer sees them.
+- **{{label:agentchat.sendInNewChat}}** clears this conversation and sends the message as the first of a new one.
+- **{{label:agentchat.editMessage}}** closes the warning so you can shorten the message. Changing the message closes it too.
+
+A conversation that grows slowly past the limit doesn't ask. A notice tells you once that the oldest messages are no longer sent.
+
 ## Images {#images}
 
 Paste an image, drop it on the window, or use the attach button: up to 4 per message. Phoenix shrinks large photos before sending them. After shrinking, an image can be up to 2 MiB, and a message's images up to 4 MiB in total.
@@ -78,7 +88,7 @@ Starts a new conversation straight away, without asking. Typing /clear does the 
 
 ## What's kept, and where {#privacy}
 
-There's one conversation per browser for each Home Assistant user, kept in this browser, so it's still there after a reload. Tabs share it. The newest messages, within [{{label:settings.agentcliScrollbackLabel}}](guide:window.settingsChat#chat-memory), and tool results are sent to the provider with each message. Phoenix keeps no copy on the server, except in the Conversation Log when that's on.
+There's one conversation per browser for each Home Assistant user, kept in this browser, so it's still there after a reload. Tabs share it. The newest messages, within [{{label:settings.agentcliMemoryLabel}}](guide:window.settingsChat#chat-memory), and tool results are sent to the provider with each message. Phoenix keeps no copy on the server, except in the Conversation Log when that's on.
 
 If two tabs run a reply at the same moment, the one that finishes last is the one kept. While another tab is running a reply, this tab says so above the message box.
 
