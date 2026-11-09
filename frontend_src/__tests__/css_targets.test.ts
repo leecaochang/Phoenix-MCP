@@ -68,7 +68,7 @@ describe("pointer targets", () => {
   it("are at least 24 by 24", () => {
     expect(rule(panel, ".tree-expand")).toContain("width: 24px; height: 24px");
     expect(rule(panel, ".tree-spacer")).toContain("width: 24px");
-    expect(rule(panel, ".agentcli-copy-btn")).toContain("width: 24px; height: 24px");
+    expect(rule(panel, ".phx-copy")).toContain("width: 24px; height: 24px");
     expect(rule(panel, ".tag-chip-x")).toContain("min-width: 24px; min-height: 24px");
   });
 

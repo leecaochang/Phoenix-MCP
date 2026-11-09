@@ -7,6 +7,7 @@ import { t } from "../i18n";
 import { tRich } from "../i18n/rich";
 import { SettingLabel, helpRow } from "../ui/SettingLabel";
 import { isImeKey } from "../utils/ime";
+import { NumberField } from "../ui/NumberField";
 
 interface Props {
   settings: GlobalSettings;
@@ -78,7 +79,7 @@ export function ConversationSettings({ settings, saving, onChange }: Props) {
       <div className="phx-retention-fields">
         {LIMITS.map(([field, , min, max, key, helpKey], index) => <div className="conversation-limit" key={field}>
           <label htmlFor={`${uid}${field}`}>{t(key)}</label>
-          <BusyInput id={`${uid}${field}`} data-setting={field} className="input" type="number" min={min} max={max} step={1} value={draft[index]} busy={saving} disabled={off}
+          <NumberField id={`${uid}${field}`} data-setting={field} className="input" min={min} max={max} step={1} value={draft[index]} busy={saving} disabled={off}
             data-help={off ? "conversations.loggingDisabled" : helpKey}
             onChange={(e) => edit(index, e.target.value)}
             onBlur={(e) => commit(index, e.target.value)}

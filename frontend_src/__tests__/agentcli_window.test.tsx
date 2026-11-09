@@ -1669,11 +1669,12 @@ describe("AgentCliWindow streaming", () => {
         await Promise.resolve();
       });
       expect(writeText).toHaveBeenCalledWith("Copy this response.");
-      expect(screen.getAllByRole("button", { name: "Copied!" })).toHaveLength(1);
-
-      act(() => vi.advanceTimersByTime(1999));
-      expect(screen.getAllByRole("button", { name: "Copied!" })).toHaveLength(1);
+      // The check shows for one second, and the button keeps its name throughout.
+      expect(document.querySelectorAll(".phx-copy.is-copied")).toHaveLength(1);
+      act(() => vi.advanceTimersByTime(999));
+      expect(document.querySelectorAll(".phx-copy.is-copied")).toHaveLength(1);
       act(() => vi.advanceTimersByTime(1));
+      expect(document.querySelectorAll(".phx-copy.is-copied")).toHaveLength(0);
       expect(screen.getAllByRole("button", { name: "Copy" })).toHaveLength(2);
     } finally {
       vi.useRealTimers();

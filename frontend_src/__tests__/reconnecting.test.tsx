@@ -7,7 +7,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { act, render, screen, waitFor } from "@testing-library/react";
 import { Reconnecting } from "../shell/Reconnecting";
-import { homeAssistantReachable, noteConnection, onConnectionChange, useHomeAssistantAway, __resetConnectionState } from "../utils/connection";
+import { homeAssistantReachable, noteConnection, onConnectionChange, useHomeAssistantAway, __resetConnectionState, __setAwayGrace } from "../utils/connection";
 import { api } from "../api";
 
 vi.mock("../api", () => ({ api: { getSettings: vi.fn() } }));
@@ -19,6 +19,45 @@ describe("the connection watcher", () => {
     vi.mocked(api.getSettings).mockResolvedValue({} as never);
   });
   afterEach(() => { __resetConnectionState(); vi.useRealTimers(); });
+
+  it("waits a moment before a failure counts, so a reply that follows quickly shows nothing", () => {
+    vi.useFakeTimers();
+    __setAwayGrace();
+    const seen: boolean[] = [];
+    const stop = onConnectionChange((up) => seen.push(up));
+    noteConnection(false);
+    vi.advanceTimersByTime(500);
+    expect(seen).toEqual([]);
+    noteConnection(true);
+    vi.advanceTimersByTime(2000);
+    expect(seen).toEqual([]);
+    expect(homeAssistantReachable()).toBe(true);
+    noteConnection(false);
+    vi.advanceTimersByTime(800);
+    expect(seen).toEqual([false]);
+    stop();
+  });
+
+  it("does not count requests the browser cancels while the page reloads or closes", () => {
+    vi.useFakeTimers();
+    __setAwayGrace();
+    const seen: boolean[] = [];
+    const stop = onConnectionChange((up) => seen.push(up));
+    window.dispatchEvent(new Event("beforeunload"));
+    noteConnection(false);
+    vi.advanceTimersByTime(1000);
+    expect(seen).toEqual([]);
+    noteConnection(false);
+    window.dispatchEvent(new Event("pagehide"));
+    vi.advanceTimersByTime(1000);
+    expect(seen).toEqual([]);
+    // A page that stays after all counts a real outage again.
+    window.dispatchEvent(new Event("pageshow"));
+    noteConnection(false);
+    vi.advanceTimersByTime(800);
+    expect(seen).toEqual([false]);
+    stop();
+  });
 
   it("reports the first failure and the first reply, and nothing in between", () => {
     const seen: boolean[] = [];

@@ -198,7 +198,7 @@ export function VoiceAgentSettings({
           busy={saving}
           onChange={(e) => onChange("voice_agent_access_key_id", e.target.value)}
         >
-          <option value="">{t("settings.selectAccessKey")}</option>
+          <option value="">{t("settings.noneChoice")}</option>
           {accessKeys.map((tok) => (
             <option key={tok.id} value={tok.id}>{tok.name}</option>
           ))}
@@ -217,7 +217,7 @@ export function VoiceAgentSettings({
           busy={saving} disabled={noProviders}
           onChange={(e) => onChange("voice_agent_provider_id", e.target.value)}
         >
-          <option value="">{t("settings.selectProvider")}</option>
+          <option value="">{t("settings.noneChoice")}</option>
           {instances.map((i) => (
             <option key={i.id} value={i.id}>{i.name}</option>
           ))}
@@ -233,7 +233,7 @@ export function VoiceAgentSettings({
           busy={saving} disabled={!providerId || noProviders}
           onChange={(e) => onChange("voice_agent_model", e.target.value)}
         >
-          <option value="">{t("settings.selectModel")}</option>
+          <option value="">{t("settings.noneChoice")}</option>
           {models.map((m) => (
             <option key={m} value={m}>{m}</option>
           ))}

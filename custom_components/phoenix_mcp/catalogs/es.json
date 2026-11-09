@@ -1183,9 +1183,6 @@
       "colStatus": "Estado",
       "colUpdated": "Última actualización",
       "confirmDelete": "Confirmar eliminación",
-      "copied": "¡Copiado!",
-      "copiedToClipboard": "Copiado al portapapeles",
-      "copyToClipboard": "Copiar al portapapeles",
       "create": "Crear",
       "createFailed": "No se pudo crear la clave de acceso.",
       "createPtUnderstand": "Entiendo que esta clave de acceso tiene un acceso amplio a Home Assistant",
@@ -1796,9 +1793,6 @@
       "providerTogether": "Together",
       "providerZai": "Z.ai",
       "saveFailed": "No se pudo guardar la configuración.",
-      "selectModel": "Seleccionar un modelo...",
-      "selectProvider": "Seleccionar un proveedor...",
-      "selectAccessKey": "Seleccionar una clave de acceso...",
       "styleCalmGuide": "Guía serena",
       "styleCalmGuideHelp": "Paciente, tranquilizador, accesible y nunca condescendiente.",
       "styleDirect": "Directo",
@@ -1948,7 +1942,8 @@
         "framed": "Enmarcado",
         "mist": "Niebla",
         "office": "Oficina",
-        "aubergine": "Berenjena"
+        "aubergine": "Berenjena",
+        "autumn": "Otoño"
       },
       "showSecret": "Mostrar clave",
       "aiDecisionsHeading": "Decisiones",
@@ -1967,7 +1962,8 @@
       "aiDecisionsDisabledToast": "Decisiones deshabilitadas",
       "aiDecisionsDefaultSetToast": "Phoenix MCP Decisions es ahora la predeterminada",
       "aiDecisionsDefaultReplacedToast": "Phoenix MCP Decisions es ahora la predeterminada y sustituye a {name}",
-      "aiDecisionsDefaultClearedToast": "Phoenix MCP Decisions ya no es la predeterminada"
+      "aiDecisionsDefaultClearedToast": "Phoenix MCP Decisions ya no es la predeterminada",
+      "noneChoice": "Ninguno"
     },
     "approvalSummary": {
       "action.optionalReason": "Motivo opcional",
@@ -2433,7 +2429,6 @@
     "conversations": {
       "title": "Registro de conversaciones",
       "unknown": "Desconocido",
-      "copied": "Copiado",
       "copyFailed": "No se pudo copiar. Selecciona el texto para copiarlo.",
       "copy": "Copiar texto",
       "parameters": "Parámetros",

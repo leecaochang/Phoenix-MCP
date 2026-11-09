@@ -11,6 +11,7 @@ import { AgentCliWindow } from "../components/AgentCliWindow";
 import { ErrorBoundary } from "../components/ErrorBoundary";
 import { resolveLanguage, t } from "../i18n";
 import { ContextMenuHost, MenuRootContext, useContextMenu, type MenuEntry } from "../ui/Menu";
+import { SelectPopupHost } from "../ui/SelectPopup";
 import { Notifications, NotificationsContext, Toasts } from "../ui/notify";
 import { DisplayModeContext } from "../ui/ActionButton";
 import { WorkspaceController, layoutMembers } from "./dock/controller";
@@ -919,6 +920,7 @@ export function Shell() {
       esphomeIntegration={s ? !!s.esphome_integration : null}
       esphomeBuilder={s ? !!s.esphome_builder : null}
     >
+      <SelectPopupHost root={rootEl} />
       <div ref={attachRoot} className={`phx-shell phx-env-${env}`} data-toolbar={dock}>
         <Toolbar controller={env === "desktop" && visited.has(active) ? controllerFor(active) : null} shellRoot={root} env={env}
           state={toolbar} onChange={setToolbar} documentation={documentationMenu} onAgentChat={openChat}

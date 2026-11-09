@@ -1369,9 +1369,6 @@
       "colStatus": "Status",
       "colUpdated": "Laatst bijgewerkt",
       "confirmDelete": "Verwijderen bevestigen",
-      "copied": "Gekopieerd!",
-      "copiedToClipboard": "Naar klembord gekopieerd",
-      "copyToClipboard": "Naar klembord kopiëren",
       "create": "Maken",
       "createFailed": "Toegangssleutel aanmaken is mislukt.",
       "createPtUnderstand": "Ik begrijp dat deze toegangssleutel brede toegang tot Home Assistant heeft",
@@ -1982,9 +1979,6 @@
       "providerTogether": "Together",
       "providerZai": "Z.ai",
       "saveFailed": "Instelling opslaan is mislukt.",
-      "selectModel": "Selecteer een model...",
-      "selectProvider": "Selecteer een provider...",
-      "selectAccessKey": "Selecteer een toegangssleutel...",
       "styleCalmGuide": "Rustige gids",
       "styleCalmGuideHelp": "Geduldig, geruststellend, toegankelijk en nooit betuttelend.",
       "styleDirect": "Rechtstreeks",
@@ -2008,7 +2002,8 @@
         "framed": "Omlijst",
         "mist": "Nevel",
         "office": "Kantoor",
-        "aubergine": "Aubergine"
+        "aubergine": "Aubergine",
+        "autumn": "Herfst"
       },
       "accessKey": "Toegangssleutel",
       "voiceAssistSetup": "Assist-installatie",
@@ -2153,7 +2148,8 @@
       "aiDecisionsDisabledToast": "Beslissingen uitgeschakeld",
       "aiDecisionsDefaultSetToast": "Phoenix MCP Decisions is nu de standaard",
       "aiDecisionsDefaultReplacedToast": "Phoenix MCP Decisions is nu de standaard en vervangt {name}",
-      "aiDecisionsDefaultClearedToast": "Phoenix MCP Decisions is niet langer de standaard"
+      "aiDecisionsDefaultClearedToast": "Phoenix MCP Decisions is niet langer de standaard",
+      "noneChoice": "Geen"
     },
     "approvalSummary": {
       "action.optionalReason": "Optionele reden",
@@ -2514,7 +2510,6 @@
     "conversations": {
       "title": "Gesprekslogboek",
       "unknown": "Onbekend",
-      "copied": "Gekopieerd",
       "copyFailed": "Kopiëren mislukt. Selecteer de tekst om deze te kopiëren.",
       "copy": "Tekst kopiëren",
       "parameters": "Invoerparameters",

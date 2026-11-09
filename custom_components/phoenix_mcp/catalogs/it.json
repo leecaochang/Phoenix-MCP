@@ -1590,9 +1590,6 @@
       "providerTogether": "Together",
       "providerZai": "Z.ai",
       "saveFailed": "Salvataggio dell'impostazione non riuscito.",
-      "selectModel": "Seleziona un modello...",
-      "selectProvider": "Seleziona un provider...",
-      "selectAccessKey": "Seleziona una chiave di accesso...",
       "styleCalmGuide": "Guida calma",
       "styleCalmGuideHelp": "Paziente, rassicurante, accessibile e mai paternalistica.",
       "styleDirect": "Diretto",
@@ -1742,7 +1739,8 @@
         "framed": "Incorniciato",
         "mist": "Nebbia",
         "office": "Ufficio",
-        "aubergine": "Melanzana"
+        "aubergine": "Melanzana",
+        "autumn": "Autunno"
       },
       "showSecret": "Mostra chiave",
       "aiDecisionsHeading": "Decisioni",
@@ -1761,7 +1759,8 @@
       "aiDecisionsDisabledToast": "Decisioni disabilitate",
       "aiDecisionsDefaultSetToast": "Phoenix MCP Decisions è ora predefinita",
       "aiDecisionsDefaultReplacedToast": "Phoenix MCP Decisions è ora predefinita e sostituisce {name}",
-      "aiDecisionsDefaultClearedToast": "Phoenix MCP Decisions non è più predefinita"
+      "aiDecisionsDefaultClearedToast": "Phoenix MCP Decisions non è più predefinita",
+      "noneChoice": "Nessuno"
     },
     "version": {
       "card.added": "aggiunto {subject} ({where})",
@@ -1941,9 +1940,6 @@
       "colStatus": "Stato",
       "colUpdated": "Ultimo aggiornamento",
       "confirmDelete": "Conferma eliminazione",
-      "copied": "Copiato!",
-      "copiedToClipboard": "Copiato negli appunti",
-      "copyToClipboard": "Copia negli appunti",
       "create": "Crea",
       "createFailed": "Impossibile creare la chiave di accesso.",
       "createPtUnderstand": "Comprendo che questa chiave di accesso ha un accesso esteso a Home Assistant",
@@ -2433,7 +2429,6 @@
     "conversations": {
       "title": "Registro conversazioni",
       "unknown": "Sconosciuto",
-      "copied": "Copiato",
       "copyFailed": "Copia non riuscita. Seleziona il testo per copiarlo.",
       "copy": "Copia testo",
       "parameters": "Parametri",

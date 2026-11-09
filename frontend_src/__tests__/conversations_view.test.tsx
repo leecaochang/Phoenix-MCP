@@ -345,7 +345,7 @@ it.each(["missing", "rejected", "unavailable"])("copies through HTTP fallback an
   expect(button.querySelector("svg[aria-hidden='true']")).toBeTruthy();
   button.focus();
   fireEvent.click(button);
-  await waitFor(() => expect(evidence.querySelector("[role='status']")?.textContent).toBe(mode === "unavailable" ? "Copy failed. Select the text to copy it." : "Copied"));
+  await waitFor(() => expect(evidence.querySelector("[role='status']")?.textContent).toBe(mode === "unavailable" ? "Copy failed. Select the text to copy it." : "Copied to clipboard"));
   expect(command).toHaveBeenCalledWith("copy");
   expect(document.querySelector("textarea")).toBeNull();
   expect(document.activeElement).toBe(button);

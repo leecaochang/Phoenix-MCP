@@ -7,6 +7,7 @@ import { ActionButton } from "../ui/ActionButton";
 import { useClickAway } from "../ui/useClickAway";
 import { ProviderAddForm } from "./ProviderAddForm";
 import type { AgentCliInstance, AgentCliProviderType, GlobalSettings } from "../types";
+import { NumberField } from "../ui/NumberField";
 
 export function DecisionProviderSettings({ settings, onChange, saving }: {
   settings: GlobalSettings;
@@ -248,7 +249,7 @@ export function DecisionProviderSettings({ settings, onChange, saving }: {
       <summary data-guide="window.settingsProviders#decision-connection" data-help="routing.connectionSettingsHelp">{t("routing.connectionSettings")}</summary>
       <label className="agentcli-settings-field" htmlFor={`${uid}timeout`} {...helpRow(t("routing.timeoutHint"))}>
         <span>{t("routing.decisionBudget")}</span>
-        <BusyInput id={`${uid}timeout`} data-setting="routing-decision-timeout" className="input" type="number" min={250} max={30000} step={1}
+        <NumberField id={`${uid}timeout`} data-setting="routing-decision-timeout" className="input" min={250} max={30000} step={1}
           value={budget} busy={saving || busy} onChange={e => setBudget(e.target.value)}
           onBlur={() => {
             const value = Number(budget);
@@ -260,7 +261,7 @@ export function DecisionProviderSettings({ settings, onChange, saving }: {
       <span className="sr-only">{t("routing.timeoutHint")}</span>
       <label className="agentcli-settings-field" htmlFor={`${uid}limit`} {...helpRow(t("routing.requestLimitHint"))}>
         <span>{t("routing.requestLimit")}</span>
-        <BusyInput id={`${uid}limit`} data-setting="routing-request-limit" className="input" type="number" min={0} max={100000} step={1}
+        <NumberField id={`${uid}limit`} data-setting="routing-request-limit" className="input" min={0} max={100000} step={1}
           aria-describedby={`${uid}limit-hint`} value={requestLimit} busy={saving || busy}
           onChange={event => setRequestLimit(event.target.value)} onBlur={() => {
             const value = Number(requestLimit);

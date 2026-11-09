@@ -130,39 +130,39 @@
 
 /* Framed */
 :host([data-phx-palette="framed"]) {
-  --phx-bg: #eef0f6;
-  --phx-window-frame: #9aa5e6;
-  --phx-window-frame-active: #4656d6;
-  --phx-window-titlebar: #e7ebfb;
-  --phx-toolbar-border: #9aa5e6;
+  --phx-bg: #f0f1e8;
+  --phx-window-frame: #a8b07a;
+  --phx-window-frame-active: #5e6b23;
+  --phx-window-titlebar: #eaeed9;
+  --phx-toolbar-border: #a8b07a;
   --phx-guide-surface: #f2f8f9;
   --phx-guide-titlebar: #e6f2f4;
   --phx-guide-border: #4fa3b3;
-  --phx-chat-frame: #4656d6;
+  --phx-chat-frame: #5e6b23;
 }
 @media (prefers-color-scheme: dark) {
   :host([data-phx-palette="framed"]:not(.phx-theme-light)) {
-    --phx-bg: #0f1016;
-    --phx-window-frame: #3b4280;
-    --phx-window-frame-active: #8c99ff;
-    --phx-window-titlebar: #202338;
-    --phx-toolbar-border: #3b4280;
+    --phx-bg: #10110c;
+    --phx-window-frame: #4b5230;
+    --phx-window-frame-active: #b9c47c;
+    --phx-window-titlebar: #22251a;
+    --phx-toolbar-border: #4b5230;
     --phx-guide-surface: #161d20;
     --phx-guide-titlebar: #1a2629;
     --phx-guide-border: #2f7482;
-    --phx-chat-frame: #8c99ff;
+    --phx-chat-frame: #b9c47c;
   }
 }
 :host([data-phx-palette="framed"].phx-theme-dark) {
-  --phx-bg: #0f1016;
-  --phx-window-frame: #3b4280;
-  --phx-window-frame-active: #8c99ff;
-  --phx-window-titlebar: #202338;
-  --phx-toolbar-border: #3b4280;
+  --phx-bg: #10110c;
+  --phx-window-frame: #4b5230;
+  --phx-window-frame-active: #b9c47c;
+  --phx-window-titlebar: #22251a;
+  --phx-toolbar-border: #4b5230;
   --phx-guide-surface: #161d20;
   --phx-guide-titlebar: #1a2629;
   --phx-guide-border: #2f7482;
-  --phx-chat-frame: #8c99ff;
+  --phx-chat-frame: #b9c47c;
 }
 
 /* Mist */
@@ -179,6 +179,8 @@
   --phx-accent-fg: #ffffff;
   --phx-text: #152030;
   --phx-text-2: #4b586a;
+  /* The dropdown arrow in this theme's secondary text; an image cannot read a variable. */
+  --phx-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M3 4.75 6 7.75 9 4.75' fill='none' stroke='%234b586a' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
   --phx-border: #d2dce8;
   --phx-divider: #e3eaf2;
   --phx-line-strong: #a9bad0;
@@ -213,6 +215,8 @@
     --phx-accent-fg: #0e1520;
     --phx-text: #e2e9f2;
     --phx-text-2: #a5b3c6;
+    /* The dropdown arrow in this theme's secondary text; an image cannot read a variable. */
+    --phx-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M3 4.75 6 7.75 9 4.75' fill='none' stroke='%23a5b3c6' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
     --phx-border: #2a3a51;
     --phx-divider: #1f2c3f;
     --phx-line-strong: #40567a;
@@ -247,6 +251,8 @@
   --phx-accent-fg: #0e1520;
   --phx-text: #e2e9f2;
   --phx-text-2: #a5b3c6;
+  /* The dropdown arrow in this theme's secondary text; an image cannot read a variable. */
+  --phx-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M3 4.75 6 7.75 9 4.75' fill='none' stroke='%23a5b3c6' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
   --phx-border: #2a3a51;
   --phx-divider: #1f2c3f;
   --phx-line-strong: #40567a;
@@ -282,6 +288,8 @@
   --phx-accent-fg: #ffffff;
   --phx-text: #201f1e;
   --phx-text-2: #5d5b59;
+  /* The dropdown arrow in this theme's secondary text; an image cannot read a variable. */
+  --phx-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M3 4.75 6 7.75 9 4.75' fill='none' stroke='%235d5b59' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
   --phx-border: #e1dfdd;
   --phx-divider: #edebe9;
   --phx-line-strong: #c8c6c4;
@@ -325,6 +333,8 @@
     --phx-accent-fg: #111111;
     --phx-text: #f3f2f1;
     --phx-text-2: #b8b5b2;
+    /* The dropdown arrow in this theme's secondary text; an image cannot read a variable. */
+    --phx-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M3 4.75 6 7.75 9 4.75' fill='none' stroke='%23b8b5b2' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
     --phx-border: #3b3a39;
     --phx-divider: #2d2c2b;
     --phx-line-strong: #53514f;
@@ -368,6 +378,8 @@
   --phx-accent-fg: #111111;
   --phx-text: #f3f2f1;
   --phx-text-2: #b8b5b2;
+  /* The dropdown arrow in this theme's secondary text; an image cannot read a variable. */
+  --phx-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M3 4.75 6 7.75 9 4.75' fill='none' stroke='%23b8b5b2' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
   --phx-border: #3b3a39;
   --phx-divider: #2d2c2b;
   --phx-line-strong: #53514f;
@@ -412,6 +424,8 @@
   --phx-accent-fg: #ffffff;
   --phx-text: #1d1c1d;
   --phx-text-2: #5e5d5e;
+  /* The dropdown arrow in this theme's secondary text; an image cannot read a variable. */
+  --phx-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M3 4.75 6 7.75 9 4.75' fill='none' stroke='%235e5d5e' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
   --phx-border: #dddddd;
   --phx-divider: #ececec;
   --phx-line-strong: #c2b5c3;
@@ -452,6 +466,8 @@
     --phx-accent-fg: #1a1d21;
     --phx-text: #d1d2d3;
     --phx-text-2: #a3a4a7;
+    /* The dropdown arrow in this theme's secondary text; an image cannot read a variable. */
+    --phx-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M3 4.75 6 7.75 9 4.75' fill='none' stroke='%23a3a4a7' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
     --phx-border: #35373b;
     --phx-divider: #2b2d31;
     --phx-line-strong: #4d4f54;
@@ -492,6 +508,8 @@
   --phx-accent-fg: #1a1d21;
   --phx-text: #d1d2d3;
   --phx-text-2: #a3a4a7;
+  /* The dropdown arrow in this theme's secondary text; an image cannot read a variable. */
+  --phx-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M3 4.75 6 7.75 9 4.75' fill='none' stroke='%23a3a4a7' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
   --phx-border: #35373b;
   --phx-divider: #2b2d31;
   --phx-line-strong: #4d4f54;
@@ -519,6 +537,127 @@
   --phx-action-icon: var(--phx-accent);
 }
 
+/* Autumn: a rust-brown toolbar band over warm paper, burnt-orange buttons, apricot in the dark. */
+:host([data-phx-palette="autumn"]) {
+  --phx-bg: #f5f0e8;
+  --phx-surface: #fffdf9;
+  --phx-surface-2: #f8f2e9;
+  --phx-raised: #fffdf9;
+  --phx-hover: #f3eadf;
+  --phx-selected: #ebdccb;
+  --phx-accent: #a3401a;
+  --phx-accent-hov: #82300f;
+  --phx-accent-lt: #f6e3d5;
+  --phx-accent-fg: #ffffff;
+  --phx-text: #2a1c13;
+  --phx-text-2: #6a5243;
+  /* The dropdown arrow in this theme's secondary text; an image cannot read a variable. */
+  --phx-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M3 4.75 6 7.75 9 4.75' fill='none' stroke='%236a5243' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  --phx-border: #e5d8c9;
+  --phx-divider: #efe6db;
+  --phx-line-strong: #cbb59f;
+  --phx-field-border: #998270;
+  --phx-focus: #8a3412;
+  --phx-agentcli-surface: #fffdf9;
+  --phx-agentcli-titlebar: #f2e4d2;
+  --phx-window-titlebar: #f2e4d2;
+  --phx-toolbar-bg: #6b2d14;
+  --phx-toolbar-border: #6b2d14;
+  --phx-toolbar-btn-bg: transparent;
+  --phx-toolbar-btn-border: transparent;
+  --phx-toolbar-btn-fg: #ffffff;
+  --phx-toolbar-btn-hover: rgba(255,255,255,0.14);
+  --phx-toolbar-btn-active: rgba(255,255,255,0.22);
+  --phx-toolbar-muted: rgba(255,255,255,0.74);
+  --phx-toolbar-current-bg: #fff3e3;
+  --phx-toolbar-current-fg: #6b2d14;
+  --phx-toolbar-danger: #ffc9cc;
+  --phx-toolbar-danger-bg: transparent;
+  --phx-toolbar-focus: #ffffff;
+  --phx-chat-frame: #a3401a;
+  --phx-action-icon: var(--phx-accent);
+}
+@media (prefers-color-scheme: dark) {
+  :host([data-phx-palette="autumn"]:not(.phx-theme-light)) {
+    --phx-bg: #17120e;
+    --phx-surface: #201913;
+    --phx-surface-2: #281f18;
+    --phx-raised: #281f18;
+    --phx-hover: #30261d;
+    --phx-selected: #3e2f23;
+    --phx-accent: #eea56a;
+    --phx-accent-hov: #f6c293;
+    --phx-accent-lt: #3d2a1c;
+    --phx-accent-fg: #17120e;
+    --phx-text: #ece1d6;
+    --phx-text-2: #b9a593;
+    /* The dropdown arrow in this theme's secondary text; an image cannot read a variable. */
+    --phx-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M3 4.75 6 7.75 9 4.75' fill='none' stroke='%23b9a593' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+    --phx-border: #3a2e25;
+    --phx-divider: #2b221b;
+    --phx-line-strong: #55453a;
+    --phx-field-border: #8b7767;
+    --phx-focus: #eea56a;
+    --phx-agentcli-surface: #201913;
+    --phx-agentcli-titlebar: #2e2219;
+    --phx-window-titlebar: #2e2219;
+    --phx-toolbar-bg: #4a2111;
+    --phx-toolbar-border: #4a2111;
+    --phx-toolbar-btn-bg: transparent;
+    --phx-toolbar-btn-border: transparent;
+    --phx-toolbar-btn-fg: #ffffff;
+    --phx-toolbar-btn-hover: rgba(255,255,255,0.1);
+    --phx-toolbar-btn-active: rgba(255,255,255,0.18);
+    --phx-toolbar-muted: rgba(255,255,255,0.7);
+    --phx-toolbar-current-bg: #eea56a;
+    --phx-toolbar-current-fg: #17120e;
+    --phx-toolbar-danger: #ffb3b8;
+    --phx-toolbar-danger-bg: transparent;
+    --phx-toolbar-focus: #ffffff;
+    --phx-chat-frame: #eea56a;
+    --phx-action-icon: var(--phx-accent);
+  }
+}
+:host([data-phx-palette="autumn"].phx-theme-dark) {
+  --phx-bg: #17120e;
+  --phx-surface: #201913;
+  --phx-surface-2: #281f18;
+  --phx-raised: #281f18;
+  --phx-hover: #30261d;
+  --phx-selected: #3e2f23;
+  --phx-accent: #eea56a;
+  --phx-accent-hov: #f6c293;
+  --phx-accent-lt: #3d2a1c;
+  --phx-accent-fg: #17120e;
+  --phx-text: #ece1d6;
+  --phx-text-2: #b9a593;
+  /* The dropdown arrow in this theme's secondary text; an image cannot read a variable. */
+  --phx-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M3 4.75 6 7.75 9 4.75' fill='none' stroke='%23b9a593' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  --phx-border: #3a2e25;
+  --phx-divider: #2b221b;
+  --phx-line-strong: #55453a;
+  --phx-field-border: #8b7767;
+  --phx-focus: #eea56a;
+  --phx-agentcli-surface: #201913;
+  --phx-agentcli-titlebar: #2e2219;
+  --phx-window-titlebar: #2e2219;
+  --phx-toolbar-bg: #4a2111;
+  --phx-toolbar-border: #4a2111;
+  --phx-toolbar-btn-bg: transparent;
+  --phx-toolbar-btn-border: transparent;
+  --phx-toolbar-btn-fg: #ffffff;
+  --phx-toolbar-btn-hover: rgba(255,255,255,0.1);
+  --phx-toolbar-btn-active: rgba(255,255,255,0.18);
+  --phx-toolbar-muted: rgba(255,255,255,0.7);
+  --phx-toolbar-current-bg: #eea56a;
+  --phx-toolbar-current-fg: #17120e;
+  --phx-toolbar-danger: #ffb3b8;
+  --phx-toolbar-danger-bg: transparent;
+  --phx-toolbar-focus: #ffffff;
+  --phx-chat-frame: #eea56a;
+  --phx-action-icon: var(--phx-accent);
+}
+
 /* ============================================================
    Chrome that reads the theme tokens
    ============================================================ */
@@ -528,8 +667,8 @@
 .phx-toolbar[data-dock="floating"] { background: color-mix(in srgb, var(--phx-toolbar-bg) 90%, transparent); }
 .phx-toolbar-button { background: var(--phx-toolbar-btn-bg); border-color: var(--phx-toolbar-btn-border); color: var(--phx-toolbar-btn-fg); }
 .phx-toolbar-button:hover { background: var(--phx-toolbar-btn-hover); }
-.phx-toolbar-button.is-active,
-.phx-toolbar-button[aria-pressed="true"] { background: var(--phx-toolbar-btn-active); }
+.phx-toolbar-button.is-active { background: var(--phx-toolbar-btn-active); }
+
 .phx-toolbar-button.is-current { background: var(--phx-toolbar-current-bg); border-color: var(--phx-toolbar-current-bg); color: var(--phx-toolbar-current-fg); }
 .phx-toolbar-button.is-danger { color: var(--phx-toolbar-danger); }
 .phx-toolbar-handle,
@@ -547,6 +686,10 @@
 }
 .phx-toolbar-chat { border-color: var(--phx-toolbar-btn-fg); box-shadow: inset 0 0 0 1px var(--phx-toolbar-btn-fg); }
 .phx-toolbar-tools .phx-toolbar-button:not(.is-current) { background: var(--phx-tools-bg); }
+/* A tool that is on is filled and its icon inverted, as the current workspace is; written after the
+   tools row's own fill, which it must outrank. */
+.phx-toolbar .phx-toolbar-button[aria-pressed="true"]:not(.is-current),
+.phx-toolbar .phx-toolbar-button[aria-pressed="true"]:not(.is-current):hover { background: var(--phx-toolbar-current-bg); border-color: var(--phx-toolbar-current-bg); color: var(--phx-toolbar-current-fg); }
 
 /* Wayfinding: each workspace keeps its own hue, on its icon and when it is the current one. */
 .phx-toolbar-button[data-toolbar-workspace="accessKeys"]:not(.is-current) > svg { color: var(--phx-ws-accessKeys); }
@@ -564,6 +707,18 @@
 :host([data-phx-palette="wayfinding"]) .phx-toolbar-button.is-current[data-toolbar-workspace="settings"] { background: var(--phx-ws-settings); border-color: var(--phx-ws-settings); color: var(--phx-ws-fg); }
 :host([data-phx-palette="wayfinding"]) .phx-toolbar-button.is-current[data-toolbar-workspace="my"] { background: var(--phx-ws-my); border-color: var(--phx-ws-my); color: var(--phx-ws-fg); }
 :host([data-phx-palette="wayfinding"]) .phx-toolbar-tools .phx-toolbar-button:not(.is-current) { border-color: transparent; }
+/* The tools row under the workspaces takes the current workspace's hue on its icons, and a tool
+   that is on is filled with it; a danger tool keeps its red. */
+:host([data-phx-palette="wayfinding"]) .phx-toolbar-tools[data-workspace="accessKeys"] { --phx-action-icon: var(--phx-ws-accessKeys); }
+:host([data-phx-palette="wayfinding"]) .phx-toolbar-tools[data-workspace="approvals"] { --phx-action-icon: var(--phx-ws-approvals); }
+:host([data-phx-palette="wayfinding"]) .phx-toolbar-tools[data-workspace="changes"] { --phx-action-icon: var(--phx-ws-changes); }
+:host([data-phx-palette="wayfinding"]) .phx-toolbar-tools[data-workspace="mesa"] { --phx-action-icon: var(--phx-ws-mesa); }
+:host([data-phx-palette="wayfinding"]) .phx-toolbar-tools[data-workspace="logs"] { --phx-action-icon: var(--phx-ws-logs); }
+:host([data-phx-palette="wayfinding"]) .phx-toolbar-tools[data-workspace="settings"] { --phx-action-icon: var(--phx-ws-settings); }
+:host([data-phx-palette="wayfinding"]) .phx-toolbar-tools[data-workspace="my"] { --phx-action-icon: var(--phx-ws-my); }
+:host([data-phx-palette="wayfinding"]) .phx-toolbar-tools .phx-toolbar-button:not([aria-pressed="true"]):not(:disabled):not(.is-danger) > svg { color: var(--phx-action-icon); }
+:host([data-phx-palette="wayfinding"]) :is(.phx-toolbar-tools .phx-toolbar-button, .phx-window-body .phx-action)[aria-pressed="true"]:not(.is-danger),
+:host([data-phx-palette="wayfinding"]) :is(.phx-toolbar-tools .phx-toolbar-button, .phx-window-body .phx-action)[aria-pressed="true"]:not(.is-danger):hover { background: var(--phx-action-icon); border-color: var(--phx-action-icon); color: var(--phx-ws-fg); }
 
 /* Windows: their frame, the focused one's frame, and their title bar. */
 .phx-dock {
@@ -598,6 +753,18 @@
 :host([data-phx-palette="wayfinding"]) :is(.phx-workspace-frame, .phx-phone-stack)[data-workspace="settings"] { --phx-action-icon: var(--phx-ws-settings); }
 :host([data-phx-palette="wayfinding"]) :is(.phx-workspace-frame, .phx-phone-stack)[data-workspace="my"] { --phx-action-icon: var(--phx-ws-my); }
 .phx-window-body :is(.btn, button.phx-action):not(:disabled):not([aria-disabled="true"]):not([aria-pressed="true"]):not(.btn-primary):not(.btn-danger):not(.btn-warning):not(.btn-text-danger):not(.btn-text-warning) > svg:not(.phx-icon-delete) { color: var(--phx-action-icon); }
+/* Wayfinding also colors each window's own controls (fold, menu, float, maximize, close), its
+   column menus and icon buttons, so every control icon in a workspace wears its hue. Status icons
+   (an outcome, a warning) keep the color that carries their meaning. */
+:host([data-phx-palette="wayfinding"]) :is(.phx-workspace-frame, .phx-phone-stack) :is(.phx-window-control, .phx-th-menu, .btn-icon, .phx-copy, .phx-number-step):not(:disabled) svg { color: var(--phx-action-icon); }
+
+/* Dropdowns, number fields and segmented controls take the same action color as window icons:
+   the chosen segment's icon, the check on a dropdown's current choice, and a step or copy button
+   under the pointer. Spartan's action color is the text's own ink, so nothing changes there. */
+.phx-segmented-btn[aria-pressed="true"] > svg { color: var(--phx-action-icon); }
+.phx-select-check { color: var(--phx-action-icon); }
+.phx-number-step:hover:not(:disabled) { color: var(--phx-action-icon); }
+.phx-copy:is(:hover, .is-copied) { color: var(--phx-action-icon); }
 
 /* Personas with a character of their own, in every theme but Spartan: Home Companion gold, New User green, Custom blue,
    in a half-transparent border only, so the chosen card's frame and fill stand out. */
@@ -694,10 +861,11 @@
 .phx-swatch-dot { position: absolute; left: 2px; top: 2px; width: 8px; height: 3px; border-radius: 2px; background: var(--sw-dot); }
 .phx-swatch-spartan { --sw-bg: #f3f3f3; --sw-bar: #ffffff; --sw-frame: #d6d6d6; --sw-dot: #141414; }
 .phx-swatch-wayfinding { --sw-bg: #f3f3f3; --sw-bar: linear-gradient(90deg, #6d4bd8 0 20%, #a35200 20% 40%, #0e7490 40% 60%, #be123c 60% 80%, #4d7c0f 80%); --sw-frame: #d6d6d6; --sw-dot: #6d4bd8; }
-.phx-swatch-framed { --sw-bg: #eef0f6; --sw-bar: #ffffff; --sw-frame: #4656d6; --sw-dot: #4656d6; }
+.phx-swatch-framed { --sw-bg: #f0f1e8; --sw-bar: #ffffff; --sw-frame: #5e6b23; --sw-dot: #5e6b23; }
 .phx-swatch-mist { --sw-bg: #eef4fb; --sw-bar: #e9f0f9; --sw-frame: #c4d5ec; --sw-dot: #2a5cad; }
 .phx-swatch-office { --sw-bg: #f3f2f1; --sw-bar: #2b579a; --sw-frame: #d2d0ce; --sw-dot: #2b579a; }
 .phx-swatch-aubergine { --sw-bg: #f8f8f8; --sw-bar: #3f0e40; --sw-frame: #dddddd; --sw-dot: #611f69; }
+.phx-swatch-autumn { --sw-bg: #f5f0e8; --sw-bar: #6b2d14; --sw-frame: #e5d8c9; --sw-dot: #a3401a; }
 /* In the phone stack the page itself scrolls, so the header does not pin. */
 .phx-guide-phone .phx-welcome-hero { position: static; }
 .phx-guide-phone .phx-welcome-hero { margin-left: -12px; margin-right: -12px; padding-left: 12px; padding-right: 12px; }

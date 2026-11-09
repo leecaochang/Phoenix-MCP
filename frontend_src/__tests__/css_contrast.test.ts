@@ -130,7 +130,7 @@ it("restyles the warning button after the plain toolbar button, which would othe
 });
 
 it("ships the color themes Settings offers", () => {
-  expect(palettes).toEqual(["wayfinding", "framed", "mist", "office", "aubergine"]);
+  expect(palettes).toEqual(["wayfinding", "framed", "mist", "office", "aubergine", "autumn"]);
 });
 
 it.each(palettes)("keeps the %s theme's light and dark blocks complete and in step", (name) => {

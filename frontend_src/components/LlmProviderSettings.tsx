@@ -11,6 +11,7 @@ import { SettingLabel, helpRow } from "../ui/SettingLabel";
 import { tPlain } from "../i18n/rich";
 import { ProviderAddForm } from "./ProviderAddForm";
 import { isImeKey } from "../utils/ime";
+import { NumberField } from "../ui/NumberField";
 
 // Which account warnings the operator has closed. Persisted so a closed
 // warning stays closed across visits.
@@ -606,9 +607,8 @@ export function LlmProviderSettings({ settings, onChange, saving, adding, onAddi
             <SettingLabel help={t("settings.providerChecksHoursHelp", { min: CHECK_HOURS_MIN, max: CHECK_HOURS_MAX, default: CHECK_HOURS_DEFAULT })}>
               <span>{t("settings.providerChecksHoursLabel")}</span>
             </SettingLabel>
-            <BusyInput
-              className="input input-auto"
-              type="number" min={CHECK_HOURS_MIN} max={CHECK_HOURS_MAX} step={1}
+            <NumberField
+              className="input input-auto" min={CHECK_HOURS_MIN} max={CHECK_HOURS_MAX} step={1}
               aria-label={t("settings.providerChecksHoursLabel")}
               value={hoursInput}
               busy={saving}

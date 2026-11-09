@@ -2,28 +2,16 @@
 // prefilled commands/configs. Shared by the onboarding wizard's Connect step and
 // the standard access-key-created modal so both show identical, copy-ready instructions.
 import React, { useId, useState } from "react";
-import { copyToClipboard } from "../utils";
 import { buildAgentTabs, buildMcpUrl, buildSkillInstall, skillUrlFromMcp } from "../wizard_helpers";
 import { t } from "../i18n";
 import { tRich } from "../i18n/rich";
-import { ActionButton } from "../ui/ActionButton";
+import { CopyButton } from "../ui/CopyButton";
 
 // A full-width value box (read-only or editable) with the Copy button inside it,
 // matching the look of the command/JSON blocks.
 export function CopyCodeBox(
   { label, title, value, onChange }: { label?: string; title?: string; value: string; onChange?: (v: string) => void },
 ) {
-  const [state, setState] = useState<"idle" | "copied" | "failed">("idle");
-  const copied = state === "copied";
-  async function copy() {
-    try {
-      await copyToClipboard(value);
-      setState("copied");
-    } catch {
-      setState("failed");
-    }
-    setTimeout(() => setState("idle"), 2000);
-  }
   return (
     <div className="command-field">
       {label && <div className="command-field-label">{label}</div>}
@@ -32,11 +20,8 @@ export function CopyCodeBox(
           ? <input className="command-block-input" data-help="help.connectMcpUrl" value={value} onChange={(e) => onChange(e.target.value)} aria-label={label} />
           : <pre className="command-block-code" tabIndex={0} role="region" aria-label={label || title || t("common.codeBlock")}>{value}</pre>}
         {/* Beside the value, not over it. */}
-        <ActionButton icon={copied ? "check" : "copy"} label={copied ? t("common.copied") : t("common.copy")} help="help.connectCopy" className="btn btn-outline btn-sm command-copy"
-          name={!copied && (label || title) ? t("common.copyNamed", { item: label || title! }) : undefined}
-          onClick={() => { void copy(); }} />
-        {/* Announce the visual Copy -> Copied! swap to assistive tech. */}
-        <span className="sr-only" role="status">{copied ? t("common.copiedToClipboard") : state === "failed" ? t("conversations.copyFailed") : ""}</span>
+        <CopyButton text={value} className="command-copy" help="help.connectCopy"
+          label={label || title ? t("common.copyNamed", { item: label || title! }) : t("common.copy")} />
       </div>
     </div>
   );

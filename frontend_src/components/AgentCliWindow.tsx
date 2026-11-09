@@ -14,7 +14,7 @@ import {
   AGENT_CHAT_TEXT_SIZE_MIN_PT, AGENT_CHAT_TEXT_SIZE_MAX_PT, AGENT_CHAT_TEXT_SIZE_STEP_PT,
   normalizeAgentCliTextSize,
 } from "../utils/agentcli_state";
-import { approvalStatusLabel, copyToClipboard, effortLevelLabel } from "../utils";
+import { approvalStatusLabel, effortLevelLabel } from "../utils";
 import { clearReasonDraft, getReasonDraft } from "../utils/approval_reason_draft";
 import { localizedApprovalReason } from "../utils/approval_reason";
 import { chatNoticeText, failureDetailText } from "../utils/chat_notice";
@@ -40,9 +40,12 @@ import { registerAgentChatShortcut } from "../utils/agentchat_shortcut";
 import { openPopupWindow } from "../ui/popup";
 import { Icon } from "../ui/Icon";
 import { MenuButton, MenuRootContext, type MenuEntry } from "../ui/Menu";
+import { SelectPopupHost } from "../ui/SelectPopup";
 import { applyThemeClass, resolveThemeClass } from "../ui/theme";
 import { isImeKey } from "../utils/ime";
 import { StatusRegion } from "./common";
+import { NumberField } from "../ui/NumberField";
+import { CopyButton } from "../ui/CopyButton";
 
 // One rendered item in the transcript. ts (epoch ms, stamped at creation) is
 // optional: restored session entries may lack it, and the timestamp display
@@ -2318,7 +2321,7 @@ export function AgentCliWindow({
                 {caps.temperature && (
                   <label className="agentcli-control">
                     <span>{t("agentchat.temperature")}</span>
-                    <input className="input agentcli-select agentcli-number" type="number" step="0.1" min="0" max="2" value={options.temperature} placeholder={t("agentchat.temperatureDefault")}
+                    <NumberField className="input agentcli-select agentcli-number" step="0.1" min="0" max="2" value={options.temperature} placeholder={t("agentchat.temperatureDefault")}
                            onChange={(e) => setOptions((o) => ({ ...o, temperature: e.target.value }))} />
                   </label>
                 )}
@@ -2406,7 +2409,7 @@ export function AgentCliWindow({
               onChange={(e) => { const files = Array.from(e.target.files ?? []); e.target.value = ""; void addFiles(files); }}
             />
             <button
-              type="button" className="btn btn-sm agentcli-attach-btn"
+              type="button" className="agentcli-attach-btn"
               aria-label={t("agentchat.attachImage")} title={attachBlocked || t("agentchat.attachImage")} data-guide="window.agentChat#images"
               aria-disabled={Boolean(attachBlocked) || attachments.length >= ATTACHMENT_MAX_COUNT}
               onClick={() => {
@@ -2415,7 +2418,7 @@ export function AgentCliWindow({
                 else fileInputRef.current?.click();
               }}
             >
-              <Icon name="attach" size={18} />
+              <Icon name="attach" size={14} />
             </button>
             {/* Stays editable while a turn runs so the next message can be drafted;
                 send() and runTurn() refuse a second turn until this one ends. */}
@@ -2494,6 +2497,7 @@ export function AgentCliWindow({
           ))}
         </>
       )}
+      <SelectPopupHost root={rootEl} />
     </div>
     </MenuRootContext.Provider>
   );
@@ -2589,36 +2593,7 @@ function rateLimitDiagnostics(info?: ProviderRateLimit): string {
 }
 
 function CopyResponseButton({ text }: { text: string }) {
-  const [copied, setCopied] = useState(false);
-  const timer = useRef<number | undefined>(undefined);
-
-  useEffect(() => () => window.clearTimeout(timer.current), []);
-
-  const copy = async () => {
-    window.clearTimeout(timer.current);
-    try {
-      await copyToClipboard(text);
-      setCopied(true);
-      timer.current = window.setTimeout(() => setCopied(false), 2000);
-    } catch {
-      // A browser may deny both clipboard mechanisms, especially on HTTP. Keep
-      // the action available and do not claim the response was copied.
-      setCopied(false);
-    }
-  };
-
-  const label = copied ? t("common.copied") : t("common.copy");
-  return (
-    <button
-      type="button"
-      className={`agentcli-copy-btn${copied ? " is-copied" : ""}`}
-      aria-label={label}
-      title={label}
-      onClick={(event) => { event.stopPropagation(); void copy(); }}
-    >
-      <Icon name={copied ? "check" : "copy"} size={14} />
-    </button>
-  );
+  return <CopyButton text={text} className="agentcli-copy-btn" />;
 }
 
 /** Parsed once per text: a transcript item redraws for reasons that leave its text alone. */

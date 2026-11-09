@@ -1,4 +1,5 @@
 /** Resolve the light or dark theme class, and the color theme, for every Phoenix host element. */
+import { compareStrings, t } from "../i18n";
 
 export type ThemePreference = "light" | "dark" | "auto";
 export type ThemeClass = "phx-theme-dark" | "phx-theme-light";
@@ -28,9 +29,14 @@ export function resolveThemeClass(
   return null;
 }
 
-/** The color themes, in Settings order; "spartan" is the default and sets no attribute. */
-export const PALETTES = ["spartan", "wayfinding", "framed", "mist", "office", "aubergine"] as const;
+/** The color themes; "spartan" is the default and sets no attribute. Shown by name, see palettesByName. */
+export const PALETTES = ["spartan", "wayfinding", "framed", "mist", "office", "aubergine", "autumn"] as const;
 export type Palette = (typeof PALETTES)[number];
+
+/** The color themes in alphabetical order of their names in the panel's language, as Settings and the Guide list them. */
+export function palettesByName(): Palette[] {
+  return [...PALETTES].sort((a, b) => compareStrings(t(`settings.colorTheme.${a}`), t(`settings.colorTheme.${b}`)));
+}
 
 const PALETTE_KEY = "phx-palette";
 const CHANGED = "phx-theme-changed";

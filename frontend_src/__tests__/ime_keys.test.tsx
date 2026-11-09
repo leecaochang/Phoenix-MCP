@@ -90,7 +90,7 @@ describe.each(COMPOSING)("a key press during composition, flagged by %s", (_name
 });
 
 /** Files whose Enter and Escape handlers sit on buttons, rows and menus, where no text is composed. */
-const NO_TEXT_FIELD = new Set(["Menu.tsx", "ConfigTable.tsx", "TitleBar.tsx"]);
+const NO_TEXT_FIELD = new Set(["Menu.tsx", "ConfigTable.tsx", "TitleBar.tsx", "SelectPopup.tsx"]);
 
 function sources(dir: string): string[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap((item) => {

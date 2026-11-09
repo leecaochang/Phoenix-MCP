@@ -12,7 +12,7 @@ import type { AgentCliInstance, AgentCliProviderType, CreateAccessKeyBody, Entit
 import { api, ApiError } from "../api";
 import { PersonaPicker } from "../components/PersonaPicker";
 import { EntityTree } from "../components/EntityTree";
-import { CopyButton } from "../components/AccessKeyCreate";
+import { CopyButton } from "../ui/CopyButton";
 import { ConnectInstructions } from "../components/ConnectInstructions";
 import { ProviderAddForm } from "../components/ProviderAddForm";
 import { PERSONA_CAP_DEFAULTS } from "../personas";
@@ -24,6 +24,7 @@ import { tRich } from "../i18n/rich";
 import { WizardGuideContext } from "../shell/guide";
 import { Icon } from "../ui/Icon";
 import { ActionButton, DisplayModeContext } from "../ui/ActionButton";
+import { NumberField } from "../ui/NumberField";
 
 const NAME_REGEX = /^[A-Za-z0-9_\-]{3,32}$/;
 
@@ -316,7 +317,7 @@ export function OnboardingWizard({ onCancel, onFinish }: Props) {
                   <option value="weeks">{t("wizard.expiryWeeks")}</option>
                 </select>
                 {ttlUnit !== "none" && (
-                  <input ref={expiryInput} className={`input access-key-create-expiry-value${fieldError?.field === "expiry" ? " error" : ""}`} type="number" min={1} data-help="help.keyExpiry"
+                  <NumberField ref={expiryInput} className={`input access-key-create-expiry-value${fieldError?.field === "expiry" ? " error" : ""}`} min={1} data-help="help.keyExpiry"
                     aria-label={t("wizard.expiryAmountAria")} aria-invalid={ttlInvalid}
                     aria-describedby={fieldError?.field === "expiry" ? "wiz-expiry-error" : undefined}
                     value={ttlValue} disabled={!!accessKeyId} onChange={(e) => { setTtlValue(e.target.value); if (fieldError?.field === "expiry") setFieldError(null); }} />
@@ -399,13 +400,13 @@ export function OnboardingWizard({ onCancel, onFinish }: Props) {
             <div className="connect-field" data-guide-part>
               <span className="connect-field-label">{t("wizard.tryLabel")}</span>
               <code className="connect-field-value">{prompts.read}</code>
-              <CopyButton text={prompts.read} label={t("common.copy")} name={t("wizard.copyFirstPrompt")} help="help.wizardCopyPrompt" />
+              <CopyButton text={prompts.read} label={t("wizard.copyFirstPrompt")} help="help.wizardCopyPrompt" />
             </div>
             {prompts.action && (
               <div className="connect-field">
                 <span className="connect-field-label">{t("wizard.thenLabel")}</span>
                 <code className="connect-field-value">{prompts.action}</code>
-                <CopyButton text={prompts.action} label={t("common.copy")} name={t("wizard.copyNextPrompt")} help="help.wizardCopyPrompt" />
+                <CopyButton text={prompts.action} label={t("wizard.copyNextPrompt")} help="help.wizardCopyPrompt" />
               </div>
             )}
             {mesaEnforced && (

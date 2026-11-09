@@ -1277,9 +1277,6 @@
       "colStatus": "状态",
       "colUpdated": "最近更新",
       "confirmDelete": "确认删除",
-      "copied": "已复制！",
-      "copiedToClipboard": "已复制到剪贴板",
-      "copyToClipboard": "复制到剪贴板",
       "create": "创建",
       "createFailed": "创建访问密钥失败。",
       "createPtUnderstand": "我了解此访问密钥拥有广泛的 Home Assistant 访问权限",
@@ -1567,9 +1564,6 @@
       "presetsLabel": "启用预设",
       "providerAccount": "提供商账户",
       "saveFailed": "保存设置失败。",
-      "selectModel": "选择一个模型…",
-      "selectProvider": "选择一个提供商…",
-      "selectAccessKey": "选择一个访问密钥…",
       "styleCalmGuide": "沉稳向导",
       "styleCalmGuideHelp": "耐心、令人安心、易于理解，绝不居高临下。",
       "styleDirect": "直接",
@@ -1746,7 +1740,8 @@
         "framed": "边框",
         "mist": "薄雾",
         "office": "办公",
-        "aubergine": "茄紫"
+        "aubergine": "茄紫",
+        "autumn": "秋天"
       },
       "showSecret": "显示密钥",
       "aiDecisionsHeading": "决策",
@@ -1765,7 +1760,8 @@
       "aiDecisionsDisabledToast": "决策已停用",
       "aiDecisionsDefaultSetToast": "Phoenix MCP Decisions 现为默认",
       "aiDecisionsDefaultReplacedToast": "Phoenix MCP Decisions 现为默认，已替换 {name}",
-      "aiDecisionsDefaultClearedToast": "Phoenix MCP Decisions 不再是默认"
+      "aiDecisionsDefaultClearedToast": "Phoenix MCP Decisions 不再是默认",
+      "noneChoice": "无"
     },
     "agentchat": {
       "accessKey": "访问密钥",
@@ -2433,7 +2429,6 @@
     "conversations": {
       "title": "对话日志",
       "unknown": "未知",
-      "copied": "已复制",
       "copyFailed": "复制失败。请选中文本后复制。",
       "copy": "复制文本",
       "parameters": "参数",

@@ -365,9 +365,6 @@
       "colStatus": "Status",
       "colUpdated": "Last Updated",
       "confirmDelete": "Confirm Delete",
-      "copied": "Copied!",
-      "copiedToClipboard": "Copied to clipboard",
-      "copyToClipboard": "Copy to clipboard",
       "create": "Create",
       "createFailed": "Failed to create access key.",
       "createPtUnderstand": "I understand this access key has broad Home Assistant access",
@@ -1718,9 +1715,6 @@
       "providerTogether": "Together",
       "providerZai": "Z.ai",
       "saveFailed": "Failed to save setting.",
-      "selectModel": "Select a Model...",
-      "selectProvider": "Select a Provider...",
-      "selectAccessKey": "Select an Access Key...",
       "styleCalmGuide": "Calm Guide",
       "styleCalmGuideHelp": "Patient, reassuring, accessible, and never patronizing.",
       "styleDirect": "Direct",
@@ -1744,7 +1738,8 @@
         "framed": "Framed",
         "mist": "Mist",
         "office": "Office",
-        "aubergine": "Aubergine"
+        "aubergine": "Aubergine",
+        "autumn": "Autumn"
       },
       "accessKey": "Access key",
       "voiceAssistSetup": "Assist setup",
@@ -1883,7 +1878,8 @@
       "aiDecisionsDisabledToast": "Decisions disabled",
       "aiDecisionsDefaultSetToast": "Phoenix MCP Decisions is now the default",
       "aiDecisionsDefaultReplacedToast": "Phoenix MCP Decisions is now the default, replacing {name}",
-      "aiDecisionsDefaultClearedToast": "Phoenix MCP Decisions is no longer the default"
+      "aiDecisionsDefaultClearedToast": "Phoenix MCP Decisions is no longer the default",
+      "noneChoice": "None"
     },
     "agentchat": {
       "accessKey": "Access Key",
@@ -2803,7 +2799,6 @@
         "one": "Show Full Text ({count} Character)",
         "other": "Show Full Text ({count} Characters)"
       },
-      "copied": "Copied",
       "copyFailed": "Copy failed. Select the text to copy it.",
       "copy": "Copy text",
       "parameters": "Parameters",

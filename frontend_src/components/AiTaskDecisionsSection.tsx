@@ -131,7 +131,7 @@ export function AiTaskDecisionsSection({
           busy={saving}
           onChange={(e) => onChange("ai_task_decisions_access_key_id", e.target.value)}
         >
-          <option value="">{t("settings.selectAccessKey")}</option>
+          <option value="">{t("settings.noneChoice")}</option>
           {accessKeys.map((key) => (
             <option key={key.id} value={key.id}>{key.name}</option>
           ))}

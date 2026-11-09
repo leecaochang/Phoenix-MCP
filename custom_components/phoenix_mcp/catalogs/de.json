@@ -624,9 +624,6 @@
       "colStatus": "Status",
       "colUpdated": "Letzte Aktualisierung",
       "confirmDelete": "Löschen bestätigen",
-      "copied": "Kopiert!",
-      "copiedToClipboard": "In die Zwischenablage kopiert",
-      "copyToClipboard": "In die Zwischenablage kopieren",
       "create": "Erstellen",
       "createFailed": "Zugriffsschlüssel konnte nicht erstellt werden.",
       "createPtUnderstand": "Ich verstehe, dass dieser Zugriffsschlüssel umfassenden Zugriff auf Home Assistant hat",
@@ -1237,9 +1234,6 @@
       "providerTogether": "Together",
       "providerZai": "Z.ai",
       "saveFailed": "Einstellung konnte nicht gespeichert werden.",
-      "selectModel": "Modell auswählen...",
-      "selectProvider": "Anbieter auswählen...",
-      "selectAccessKey": "Zugriffsschlüssel auswählen...",
       "styleCalmGuide": "Ruhige Begleitung",
       "styleCalmGuideHelp": "Geduldig, beruhigend, verständlich und nie bevormundend.",
       "styleDirect": "Direkt",
@@ -1263,7 +1257,8 @@
         "framed": "Gerahmt",
         "mist": "Nebel",
         "office": "Büro",
-        "aubergine": "Aubergine"
+        "aubergine": "Aubergine",
+        "autumn": "Herbst"
       },
       "accessKey": "Zugriffsschlüssel",
       "voiceAssistSetup": "Assist-Einrichtung",
@@ -1408,7 +1403,8 @@
       "aiDecisionsDisabledToast": "Entscheidungen deaktiviert",
       "aiDecisionsDefaultSetToast": "Phoenix MCP Decisions ist jetzt der Standard",
       "aiDecisionsDefaultReplacedToast": "Phoenix MCP Decisions ist jetzt der Standard und ersetzt {name}",
-      "aiDecisionsDefaultClearedToast": "Phoenix MCP Decisions ist nicht mehr der Standard"
+      "aiDecisionsDefaultClearedToast": "Phoenix MCP Decisions ist nicht mehr der Standard",
+      "noneChoice": "Keine"
     },
     "diff": {
       "blueprint.create": "{domain}-Blueprint '{rel}' erstellen",
@@ -2433,7 +2429,6 @@
     "conversations": {
       "title": "Gesprächsprotokoll",
       "unknown": "Unbekannt",
-      "copied": "Kopiert",
       "copyFailed": "Kopieren fehlgeschlagen. Markieren Sie den Text zum Kopieren.",
       "copy": "Text kopieren",
       "parameters": "Parameter",

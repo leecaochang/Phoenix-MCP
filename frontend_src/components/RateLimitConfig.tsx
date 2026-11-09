@@ -2,6 +2,7 @@ import { useId, useState, useEffect, useRef } from "react";
 import type { AccessKeyRecord, PatchAccessKeyBody } from "../types";
 import { api } from "../api";
 import { t } from "../i18n";
+import { NumberField } from "../ui/NumberField";
 
 interface Props {
   accessKey: AccessKeyRecord;
@@ -90,10 +91,9 @@ export function RateLimitConfig({ accessKey, onUpdate }: Props) {
       <div className="rate-limit-row" data-help="accessKeys.rateLimitHelp" data-help-controls="">
         <div className="field" data-guide="window.keySettings#rate-requests">
           <label htmlFor={`${uid}requests`}>{t("accessKeys.rateRequestsLabel")}</label>
-          <input
+          <NumberField
             id={`${uid}requests`}
             className="input"
-            type="number"
             min={0}
             value={requests}
             onChange={(e) => { edits.current.requests += 1; setRequests(e.target.value); }}
@@ -102,10 +102,9 @@ export function RateLimitConfig({ accessKey, onUpdate }: Props) {
         </div>
         <div className="field" data-guide="window.keySettings#rate-burst">
           <label htmlFor={`${uid}burst`}>{t("accessKeys.rateBurstLabel")}</label>
-          <input
+          <NumberField
             id={`${uid}burst`}
             className="input"
-            type="number"
             min={0}
             value={burstDisabled ? "0" : burst}
             disabled={burstDisabled}

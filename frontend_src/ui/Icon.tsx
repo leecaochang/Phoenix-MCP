@@ -9,7 +9,7 @@ import {
   LayoutDashboard, Lightbulb, ListChecks, ListEnd, ListFilter, ListX, Maximize2, Menu, MessageSquarePlus, MessageSquareText, MessagesSquare, Minimize2, Minus, OctagonAlert, PanelBottom,
   PanelBottomClose, PanelBottomOpen, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, PanelTopClose, PanelTopOpen, PanelsTopLeft, Paperclip, Pencil, PictureInPicture2, Plus, RotateCw, Rows2, Save, ScrollText, Search, SearchCheck,
   Settings, Shield, SlidersHorizontal, StepBack, StepForward, SquareArrowDownLeft, SquareArrowOutUpRight, Square, Star, Trash2, TriangleAlert, Upload,
-  WandSparkles, X, Sun, SunMoon, Moon,
+  WandSparkles, X, Sun, MonitorCog, MoonStar,
 } from "lucide-react";
 
 // Named imports only, so each bundle carries just the glyphs it draws. Names
@@ -115,8 +115,8 @@ const ICONS = {
   clearPermissions: Eraser,
   statistics: ChartColumn,
   themeLight: Sun,
-  themeAuto: SunMoon,
-  themeDark: Moon,
+  themeAuto: MonitorCog,
+  themeDark: MoonStar,
 } satisfies Record<string, LucideIcon>;
 
 export type IconName = keyof typeof ICONS;

@@ -8,7 +8,6 @@
 import React, { useEffect, useId, useMemo, useRef, useState, type RefObject } from "react";
 import type { AccessKeyRecord, CreateAccessKeyBody } from "../types";
 import { api } from "../api";
-import { copyToClipboard } from "../utils";
 import { t } from "../i18n";
 import { tRich } from "../i18n/rich";
 import { Modal } from "./Modal";
@@ -18,6 +17,7 @@ import { Icon, type IconName } from "../ui/Icon";
 import { useClickAway } from "../ui/useClickAway";
 import { helpRow } from "../ui/SettingLabel";
 import { isImeKey } from "../utils/ime";
+import { NumberField } from "../ui/NumberField";
 
 const NAME_REGEX = /^[A-Za-z0-9_\-]{3,32}$/;
 
@@ -41,29 +41,6 @@ function addMinutes(m: number): string {
   return d.toISOString();
 }
 
-
-/** `name` says what is copied, for a screen reader's list of buttons where several read "Copy". */
-export function CopyButton({ text, label = t("accessKeys.copyToClipboard"), name, help }: { text: string; label?: string; name?: string; help?: string }) {
-  const [state, setState] = useState<"idle" | "copied" | "failed">("idle");
-  async function copy() {
-    try {
-      await copyToClipboard(text);
-      setState("copied");
-    } catch {
-      // Plain-HTTP Home Assistant has no clipboard: say so rather than nothing.
-      setState("failed");
-    }
-    setTimeout(() => setState("idle"), 2000);
-  }
-  const copied = state === "copied";
-  return (
-    <>
-      <ActionButton icon={copied ? "check" : "copy"} label={copied ? t("accessKeys.copied") : label} name={copied ? undefined : name} help={help} className="btn btn-outline btn-sm" onClick={() => void copy()} />
-      {/* Announce the visual Copy -> Copied! swap to assistive tech. */}
-      <span className="sr-only" role="status">{copied ? t("accessKeys.copiedToClipboard") : state === "failed" ? t("conversations.copyFailed") : ""}</span>
-    </>
-  );
-}
 
 // The raw-access-key reveal block (amber warning + monospace access key). Shared by the
 // post-create modal and the onboarding wizard so both look identical. The
@@ -309,11 +286,10 @@ export function AccessKeyCreateForm({ existingNames, onCreated, onClose, onOpenS
               <option value="weeks">{t("accessKeys.expiryWeeks")}</option>
             </select>
             {ttlUnit !== "none" && (
-              <input
+              <NumberField
                 aria-label={t("accessKeys.expiryAmountAria")}
                 data-help="help.keyExpiry"
                 className="input access-key-create-expiry-value"
-                type="number"
                 min={1}
                 value={ttlValue}
                 aria-invalid={ttlInvalid}
@@ -329,10 +305,9 @@ export function AccessKeyCreateForm({ existingNames, onCreated, onClose, onOpenS
           <>
             <div className="field access-key-create-number" data-guide="window.accessKeys#key-rate-limits" {...helpRow(t("help.createRateLimits"))}>
               <label htmlFor={`${uid}requests`}>{t("accessKeys.rateRequestsShort")}</label>
-              <input
+              <NumberField
                 id={`${uid}requests`}
                 className="input"
-                type="number"
                 min={0}
                 value={rateLimitRequests}
                 aria-describedby={`${uid}rate-hint`}
@@ -341,10 +316,9 @@ export function AccessKeyCreateForm({ existingNames, onCreated, onClose, onOpenS
             </div>
             <div className="field access-key-create-number" data-guide="window.accessKeys#key-rate-limits" {...helpRow(t("help.createRateLimits"))}>
               <label htmlFor={`${uid}burst`}>{t("accessKeys.rateBurstShort")}</label>
-              <input
+              <NumberField
                 id={`${uid}burst`}
                 className="input"
-                type="number"
                 min={0}
                 value={burstDisabled ? "0" : rateLimitBurst}
                 disabled={burstDisabled}

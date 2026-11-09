@@ -1954,9 +1954,6 @@
       "providerTogether": "Together",
       "providerZai": "Z.ai",
       "saveFailed": "Не удалось сохранить настройку.",
-      "selectModel": "Выберите модель...",
-      "selectProvider": "Выберите провайдера...",
-      "selectAccessKey": "Выберите ключ доступа...",
       "styleCalmGuide": "Спокойный проводник",
       "styleCalmGuideHelp": "Терпеливый, успокаивающий, понятный и никогда не снисходительный.",
       "styleDirect": "Прямой",
@@ -2108,7 +2105,8 @@
         "framed": "В рамках",
         "mist": "Туман",
         "office": "Офис",
-        "aubergine": "Баклажан"
+        "aubergine": "Баклажан",
+        "autumn": "Осень"
       },
       "showSecret": "Показать ключ",
       "aiDecisionsHeading": "Решения",
@@ -2127,7 +2125,8 @@
       "aiDecisionsDisabledToast": "Решения выключены",
       "aiDecisionsDefaultSetToast": "Phoenix MCP Decisions теперь используется по умолчанию",
       "aiDecisionsDefaultReplacedToast": "Phoenix MCP Decisions теперь используется по умолчанию вместо {name}",
-      "aiDecisionsDefaultClearedToast": "Phoenix MCP Decisions больше не используется по умолчанию"
+      "aiDecisionsDefaultClearedToast": "Phoenix MCP Decisions больше не используется по умолчанию",
+      "noneChoice": "Нет"
     },
     "shell": {
       "agentChat": "Agent Chat",
@@ -2328,9 +2327,6 @@
       "colStatus": "Статус",
       "colUpdated": "Последнее обновление",
       "confirmDelete": "Подтвердить удаление",
-      "copied": "Скопировано!",
-      "copiedToClipboard": "Скопировано в буфер обмена",
-      "copyToClipboard": "Копировать в буфер обмена",
       "create": "Создать",
       "createFailed": "Не удалось создать ключ доступа.",
       "createPtUnderstand": "Я понимаю, что этот ключ доступа имеет широкий доступ к Home Assistant",
@@ -2564,7 +2560,6 @@
     "conversations": {
       "title": "Журнал разговоров",
       "unknown": "Неизвестно",
-      "copied": "Скопировано",
       "copyFailed": "Не удалось скопировать. Выделите текст для копирования.",
       "copy": "Копировать текст",
       "parameters": "Параметры",

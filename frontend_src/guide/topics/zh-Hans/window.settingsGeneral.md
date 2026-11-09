@@ -1,5 +1,5 @@
 ---
-{ "id": "window.settingsGeneral", "title": "{{label:workspace.general}}", "parent": "workspace.settings", "order": 6, "sectionKeywords": { "language": ["翻译", "区域设置"], "theme": ["深色模式", "浅色模式"], "color-theme": ["颜色", "调色板", "外观", "Spartan", "Wayfinding", "Framed", "Mist", "Office", "Aubergine"], "presets": ["预设"], "inject": ["策略按钮", "MESA"], "about": ["版本"] } }
+{ "id": "window.settingsGeneral", "title": "{{label:workspace.general}}", "parent": "workspace.settings", "order": 6, "sectionKeywords": { "language": ["翻译", "区域设置"], "theme": ["深色模式", "浅色模式"], "color-theme": ["颜色", "调色板", "外观", "Spartan", "Wayfinding", "Framed", "Mist", "Office", "Aubergine", "Autumn"], "presets": ["预设"], "inject": ["策略按钮", "MESA"], "about": ["版本"] } }
 ---
 选择面板的语言和主题，开启或关闭可选功能，并查看你的版本。
 
@@ -17,12 +17,13 @@
 
 更改整个面板、指南和 Agent Chat 的颜色。每种配色主题都有浅色和深色版本，由 {{label:settings.themeLabel}} 决定你看到哪一个。此选择仅对当前浏览器有效，并会立即更改所有内容。
 
-- **{{label:settings.colorTheme.spartan}}**（默认）：黑白配色，只在有意义的地方使用颜色。
-- **{{label:settings.colorTheme.wayfinding}}**：类似 {{label:settings.colorTheme.spartan}}，但每个工作区在其工具栏按钮和窗口图标上有自己的颜色。
-- **{{label:settings.colorTheme.framed}}**：窗口有彩色边框和标题栏，你正在使用的窗口边框更醒目。
-- **{{label:settings.colorTheme.mist}}**：整体柔和的蓝色，配蓝色按钮和选中效果。
 - **{{label:settings.colorTheme.office}}**：蓝色工具栏带和白色窗口，类似桌面办公套件。
+- **{{label:settings.colorTheme.mist}}**：整体柔和的蓝色，配蓝色按钮和选中效果。
+- **{{label:settings.colorTheme.framed}}**：窗口有彩色边框和标题栏，你正在使用的窗口边框更醒目。
 - **{{label:settings.colorTheme.aubergine}}**：深梅色工具栏带配梅色按钮，类似流行的团队聊天应用。
+- **{{label:settings.colorTheme.spartan}}**（默认）：黑白配色，只在有意义的地方使用颜色。
+- **{{label:settings.colorTheme.autumn}}**：锈褐色工具栏带衬着暖色纸面，配棕褐色窗口标题栏和焦橙色按钮。
+- **{{label:settings.colorTheme.wayfinding}}**：类似 {{label:settings.colorTheme.spartan}}，但每个工作区在其工具栏按钮、工具和窗口图标上有自己的颜色。
 
 状态颜色在每个主题中都保持含义：绿色表示允许，红色表示拒绝访问，琥珀色表示等待你。在 {{label:settings.colorTheme.mist}} 和 {{label:settings.colorTheme.office}} 中，读取权限显示为紫色，因为蓝色已经是它们的按钮颜色。
 

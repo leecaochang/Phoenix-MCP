@@ -40,9 +40,6 @@
       "colStatus": "Tila",
       "colUpdated": "Viimeksi päivitetty",
       "confirmDelete": "Vahvista poisto",
-      "copied": "Kopioitu!",
-      "copiedToClipboard": "Kopioitu leikepöydälle",
-      "copyToClipboard": "Kopioi leikepöydälle",
       "create": "Luo",
       "createAccessKey": "Luo käyttöavain",
       "createFailed": "Käyttöavaimen luonti epäonnistui.",
@@ -1333,7 +1330,6 @@
       "clearFailed": "Historiaa ei voitu tyhjentää tallennustilasta. Yritä uudelleen.",
       "clientPromptUnavailable": "Tämä asiakasohjelma ei toimittanut käyttäjän viestiä Phoenixille.",
       "conversation": "Keskustelu",
-      "copied": "Kopioitu",
       "copy": "Kopioi teksti",
       "copyFailed": "Kopiointi epäonnistui. Valitse teksti kopioidaksesi sen.",
       "coverage": {
@@ -2333,9 +2329,6 @@
       "providersCard": "LLM-palveluntarjoajat",
       "providersIntro": "Tekoälypalveluntarjoajien tilit, joita Agent Chat, ääniagentti ja tekoälytehtävä käyttävät.",
       "saveFailed": "Asetuksen tallentaminen ei onnistunut.",
-      "selectAccessKey": "Valitse käyttöavain...",
-      "selectModel": "Valitse malli...",
-      "selectProvider": "Valitse palveluntarjoaja...",
       "styleCalmGuide": "Rauhallinen opas",
       "styleCalmGuideHelp": "Kärsivällinen, rauhoittava ja saavutettava, ei koskaan alentuvainen.",
       "styleDirect": "Suoraviivainen",
@@ -2460,7 +2453,8 @@
         "framed": "Kehystetty",
         "mist": "Usva",
         "office": "Toimisto",
-        "aubergine": "Munakoiso"
+        "aubergine": "Munakoiso",
+        "autumn": "Syksy"
       },
       "showSecret": "Näytä avain",
       "aiDecisionsHeading": "Päätökset",
@@ -2479,7 +2473,8 @@
       "aiDecisionsDisabledToast": "Päätökset poistettu käytöstä",
       "aiDecisionsDefaultSetToast": "Phoenix MCP Decisions on nyt oletus",
       "aiDecisionsDefaultReplacedToast": "Phoenix MCP Decisions on nyt oletus ja korvaa entiteetin {name}",
-      "aiDecisionsDefaultClearedToast": "Phoenix MCP Decisions ei ole enää oletus"
+      "aiDecisionsDefaultClearedToast": "Phoenix MCP Decisions ei ole enää oletus",
+      "noneChoice": "Ei mitään"
     },
     "shell": {
       "agentChat": "Agent Chat",

@@ -1504,9 +1504,6 @@
       "providerTogether": "Together",
       "providerZai": "Z.ai",
       "saveFailed": "설정을 저장하지 못했습니다.",
-      "selectModel": "모델 선택...",
-      "selectProvider": "제공업체 선택...",
-      "selectAccessKey": "액세스 키 선택...",
       "styleCalmGuide": "차분한 안내자",
       "styleCalmGuideHelp": "인내심 있고 안심시키며 이해하기 쉽고 결코 가르치려 들지 않습니다.",
       "styleDirect": "직접적",
@@ -1656,7 +1653,8 @@
         "framed": "프레임",
         "mist": "안개",
         "office": "오피스",
-        "aubergine": "가지색"
+        "aubergine": "가지색",
+        "autumn": "가을"
       },
       "showSecret": "키 표시",
       "aiDecisionsHeading": "판단",
@@ -1675,7 +1673,8 @@
       "aiDecisionsDisabledToast": "판단 사용 안 함",
       "aiDecisionsDefaultSetToast": "이제 Phoenix MCP Decisions가 기본값입니다",
       "aiDecisionsDefaultReplacedToast": "이제 {name} 대신 Phoenix MCP Decisions가 기본값입니다",
-      "aiDecisionsDefaultClearedToast": "Phoenix MCP Decisions는 더 이상 기본값이 아닙니다"
+      "aiDecisionsDefaultClearedToast": "Phoenix MCP Decisions는 더 이상 기본값이 아닙니다",
+      "noneChoice": "없음"
     },
     "approvalSummary": {
       "action.optionalReason": "선택 사유",
@@ -2211,9 +2210,6 @@
       "colStatus": "상태",
       "colUpdated": "최근 업데이트",
       "confirmDelete": "삭제 확인",
-      "copied": "복사됨!",
-      "copiedToClipboard": "클립보드에 복사됨",
-      "copyToClipboard": "클립보드에 복사",
       "create": "생성",
       "createFailed": "액세스 키를 생성하지 못했습니다.",
       "createPtUnderstand": "이 액세스 키가 Home Assistant에 광범위하게 접근할 수 있음을 이해합니다",
@@ -2439,7 +2435,6 @@
     "conversations": {
       "title": "대화 로그",
       "unknown": "알 수 없음",
-      "copied": "복사됨",
       "copyFailed": "복사하지 못했습니다. 텍스트를 선택하여 복사하세요.",
       "copy": "텍스트 복사",
       "parameters": "매개변수",

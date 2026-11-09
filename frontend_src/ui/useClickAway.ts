@@ -14,6 +14,9 @@
  * page also starts with a press, and the box it was scrolling towards closed
  * under it. A scroll ends
  * without a click, so it no longer counts as a click elsewhere.
+ *
+ * Opening and using a dropdown inside the element never counts: its list is
+ * drawn outside the element (ui/SelectPopup.tsx).
  */
 
 import { useEffect, useRef, type RefObject } from "react";
@@ -39,6 +42,10 @@ export function useClickAway(ref: RefObject<HTMLElement | null>, onAway: () => v
       // The path crosses shadow roots, so a press inside the element counts as inside from the document too.
       const path = e.composedPath();
       if (path.includes(el) || (opener?.current && path.includes(opener.current))) return;
+      // A dropdown's list draws outside the element, over its dropdown: the press that opened it
+      // ends on the list, and a choice is made there. Neither is a click elsewhere.
+      if (el.querySelector("select[data-phx-open]")) return;
+      if (path.some((n) => n instanceof Element && n.classList.contains("phx-select-list"))) return;
       const target = path[0];
       if (target instanceof Element && onScrollbar(target, e)) return;
       latest.current();

@@ -197,7 +197,8 @@ describe("model memory within the request limit", () => {
 });
 
 describe("what a screen reader hears when a turn ends early", () => {
-  const announced = () => [...document.querySelectorAll('.sr-only[role="status"]')].map((el) => el.textContent).join("|");
+  // The turn's own announcement; each message's copy button has a status of its own.
+  const announced = () => [...document.querySelectorAll('.sr-only[role="status"]:not(.phx-copy-status)')].map((el) => el.textContent).join("|");
 
   it("says the connection dropped", async () => {
     serve(() => droppingStream(frame("ready", {})));

@@ -1,5 +1,5 @@
 ---
-{ "id": "window.settingsGeneral", "title": "{{label:workspace.general}}", "parent": "workspace.settings", "order": 6, "sectionKeywords": { "language": ["translation", "locale"], "theme": ["dark mode", "light mode"], "color-theme": ["colors", "palette", "appearance", "Spartan", "Wayfinding", "Framed", "Mist", "Office", "Aubergine"], "presets": ["presets"], "inject": ["profile buttons", "MESA"], "about": ["version"] }, "covers": ["frontend_src/views/SettingsWindows.tsx", "frontend_src/i18n/index.ts", "frontend_src/inject/index.ts", "frontend_src/ui/theme.ts", "frontend_src/themes.css"] }
+{ "id": "window.settingsGeneral", "title": "{{label:workspace.general}}", "parent": "workspace.settings", "order": 6, "sectionKeywords": { "language": ["translation", "locale"], "theme": ["dark mode", "light mode"], "color-theme": ["colors", "palette", "appearance", "Spartan", "Wayfinding", "Framed", "Mist", "Office", "Aubergine", "Autumn"], "presets": ["presets"], "inject": ["profile buttons", "MESA"], "about": ["version"] }, "covers": ["frontend_src/views/SettingsWindows.tsx", "frontend_src/i18n/index.ts", "frontend_src/inject/index.ts", "frontend_src/ui/theme.ts", "frontend_src/themes.css"] }
 ---
 Choose the panel's language and theme, turn optional features on or off, and see which version you have.
 
@@ -17,12 +17,13 @@ This choice applies to this browser only, and changes the panel and Agent Chat s
 
 Changes the colors of the whole panel, the Guide and Agent Chat. Each color theme has a light and a dark version, and {{label:settings.themeLabel}} picks which one you see. This choice applies to this browser only, and changes everything straight away.
 
-- **{{label:settings.colorTheme.spartan}}** (default): black and white, with color only where it means something.
-- **{{label:settings.colorTheme.wayfinding}}**: like {{label:settings.colorTheme.spartan}}, but each workspace has its own color on its toolbar button and on the icons in its windows.
+- **{{label:settings.colorTheme.aubergine}}**: a deep plum toolbar band with plum buttons, like a popular team chat app.
+- **{{label:settings.colorTheme.autumn}}**: a rust-brown toolbar band over warm paper, with tan window title bars and burnt-orange buttons.
 - **{{label:settings.colorTheme.framed}}**: windows get a colored frame and title bar, and the window you're working in has the stronger frame.
 - **{{label:settings.colorTheme.mist}}**: soft blue throughout, with blue buttons and selection.
 - **{{label:settings.colorTheme.office}}**: a blue toolbar band and white windows, like a desktop office suite.
-- **{{label:settings.colorTheme.aubergine}}**: a deep plum toolbar band with plum buttons, like a popular team chat app.
+- **{{label:settings.colorTheme.spartan}}** (default): black and white, with color only where it means something.
+- **{{label:settings.colorTheme.wayfinding}}**: like {{label:settings.colorTheme.spartan}}, but each workspace has its own color on its toolbar button, on its tools and on the icons in its windows.
 
 Status colors keep their meaning in every theme: green for allowed, red for denied, amber for waiting on you. In {{label:settings.colorTheme.mist}} and {{label:settings.colorTheme.office}}, Read access shows in violet, because blue is already their button color.
 

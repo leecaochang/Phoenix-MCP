@@ -40,9 +40,6 @@
       "colStatus": "Status",
       "colUpdated": "Senast uppdaterad",
       "confirmDelete": "Bekräfta radering",
-      "copied": "Kopierat!",
-      "copiedToClipboard": "Kopierat till urklipp",
-      "copyToClipboard": "Kopiera till urklipp",
       "create": "Skapa",
       "createAccessKey": "Skapa åtkomstnyckel",
       "createFailed": "Det gick inte att skapa åtkomstnyckeln.",
@@ -1333,7 +1330,6 @@
       "clearFailed": "Historiken kunde inte rensas från lagringen. Försök igen.",
       "clientPromptUnavailable": "Den här klienten gav inte Phoenix användarens meddelande.",
       "conversation": "Konversation",
-      "copied": "Kopierat",
       "copy": "Kopiera text",
       "copyFailed": "Kopieringen misslyckades. Markera texten för att kopiera den.",
       "coverage": {
@@ -2333,9 +2329,6 @@
       "providersCard": "LLM-leverantörer",
       "providersIntro": "AI-leverantörskontona som Agent Chat, Röstagent och AI-uppgift använder.",
       "saveFailed": "Det gick inte att spara inställningen.",
-      "selectAccessKey": "Välj en åtkomstnyckel...",
-      "selectModel": "Välj en modell...",
-      "selectProvider": "Välj en leverantör...",
       "styleCalmGuide": "Lugn guide",
       "styleCalmGuideHelp": "Tålmodig, lugnande, tillgänglig och aldrig nedlåtande.",
       "styleDirect": "Direkt",
@@ -2359,7 +2352,8 @@
         "framed": "Inramad",
         "mist": "Dimma",
         "office": "Kontor",
-        "aubergine": "Aubergine"
+        "aubergine": "Aubergine",
+        "autumn": "Höst"
       },
       "voiceAccessKeyAria": "Röstagentens åtkomstnyckel",
       "voiceAccessKeyHelp": "Styr vilka entiteter och åtgärder den här röstagenten kan komma åt.",
@@ -2479,7 +2473,8 @@
       "aiDecisionsDisabledToast": "Beslut inaktiverade",
       "aiDecisionsDefaultSetToast": "Phoenix MCP Decisions är nu standard",
       "aiDecisionsDefaultReplacedToast": "Phoenix MCP Decisions är nu standard och ersätter {name}",
-      "aiDecisionsDefaultClearedToast": "Phoenix MCP Decisions är inte längre standard"
+      "aiDecisionsDefaultClearedToast": "Phoenix MCP Decisions är inte längre standard",
+      "noneChoice": "Ingen"
     },
     "shell": {
       "agentChat": "Agent Chat",

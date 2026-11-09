@@ -1839,9 +1839,6 @@
       "providerTogether": "Together",
       "providerZai": "Z.ai",
       "saveFailed": "儲存設定失敗。",
-      "selectModel": "選擇一個模型…",
-      "selectProvider": "選擇一個提供者…",
-      "selectAccessKey": "選擇一個存取金鑰…",
       "styleCalmGuide": "沉穩嚮導",
       "styleCalmGuideHelp": "耐心、令人安心、容易理解，絕不居高臨下。",
       "styleDirect": "直接",
@@ -1991,7 +1988,8 @@
         "framed": "邊框",
         "mist": "薄霧",
         "office": "辦公",
-        "aubergine": "茄紫"
+        "aubergine": "茄紫",
+        "autumn": "秋天"
       },
       "showSecret": "顯示金鑰",
       "aiDecisionsHeading": "決策",
@@ -2010,7 +2008,8 @@
       "aiDecisionsDisabledToast": "決策已停用",
       "aiDecisionsDefaultSetToast": "Phoenix MCP Decisions 現為預設",
       "aiDecisionsDefaultReplacedToast": "Phoenix MCP Decisions 現為預設，已取代 {name}",
-      "aiDecisionsDefaultClearedToast": "Phoenix MCP Decisions 不再是預設"
+      "aiDecisionsDefaultClearedToast": "Phoenix MCP Decisions 不再是預設",
+      "noneChoice": "無"
     },
     "shell": {
       "agentChat": "Agent Chat",
@@ -2065,9 +2064,6 @@
       "colStatus": "狀態",
       "colUpdated": "最近更新",
       "confirmDelete": "確認刪除",
-      "copied": "已複製！",
-      "copiedToClipboard": "已複製到剪貼簿",
-      "copyToClipboard": "複製到剪貼簿",
       "create": "建立",
       "createFailed": "建立存取金鑰失敗。",
       "createPtUnderstand": "我瞭解此存取金鑰擁有廣泛的 Home Assistant 存取權限",
@@ -2439,7 +2435,6 @@
     "conversations": {
       "title": "對話記錄",
       "unknown": "未知",
-      "copied": "已複製",
       "copyFailed": "複製失敗。請選取文字後複製。",
       "copy": "複製文字",
       "parameters": "參數",

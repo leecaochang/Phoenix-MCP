@@ -11,7 +11,11 @@ primeTranslations(en.panel);
 
 import { beforeEach } from "vitest";
 import { setAgentCliOwner } from "../utils/agentcli_state";
+import { __setAwayGrace } from "../utils/connection";
 beforeEach(() => setAgentCliOwner("test-admin"));
+// A failed request counts as Home Assistant being away at once here; the grace that keeps a
+// page reload from showing the notice has its own tests in reconnecting.test.tsx.
+beforeEach(() => __setAwayGrace(0));
 
 // jsdom has no ResizeObserver; Dockview and the workspace shell observe sizes.
 // Nothing resizes in jsdom, so an observer that never fires is accurate.

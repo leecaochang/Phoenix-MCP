@@ -7,6 +7,7 @@ import { t } from "../i18n";
 import { SettingLabel, helpRow } from "../ui/SettingLabel";
 import { ConversationBehaviorControls } from "./ConversationBehaviorControls";
 import { isImeKey } from "../utils/ime";
+import { NumberField } from "../ui/NumberField";
 
 interface Props {
   routingMode: string | undefined;
@@ -102,9 +103,8 @@ export function AgentCliSettings({
       </div>
       <div className="toggle-row" {...helpRow(t("settings.agentcliScrollbackHelp"))}>
         <SettingLabel help={t("settings.agentcliScrollbackHelp")}><span>{t("settings.agentcliScrollbackLabel")}</span></SettingLabel>
-        <BusyInput
-          className="input input-auto"
-          type="number" min={0} max={5000} step={100}
+        <NumberField
+          className="input input-auto" min={0} max={5000} step={100}
           aria-label={t("settings.agentcliScrollbackLabel")}
           value={scrollInput}
           busy={saving}
@@ -115,9 +115,8 @@ export function AgentCliSettings({
       </div>
       <div className="toggle-row" {...helpRow(t("settings.agentcliStepsHelp"))}>
         <SettingLabel help={t("settings.agentcliStepsHelp")}><span>{t("settings.agentcliStepsLabel")}</span></SettingLabel>
-        <BusyInput
-          className="input input-auto"
-          type="number" min={3} max={100} step={1}
+        <NumberField
+          className="input input-auto" min={3} max={100} step={1}
           aria-label={t("settings.agentcliStepsLabel")}
           value={maxIterInput}
           busy={saving}

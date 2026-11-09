@@ -193,7 +193,7 @@ describe("the Welcome page", () => {
     fireEvent.click(within(modes).getByRole("button", { name: "Dark" }));
     expect(welcome.setTheme).toHaveBeenCalledWith("dark");
     const themes = screen.getByRole("group", { name: "Color theme" });
-    expect(within(themes).getAllByRole("button").map((b) => b.getAttribute("aria-label"))).toEqual(["Spartan", "Wayfinding", "Framed", "Mist", "Office", "Aubergine"]);
+    expect(within(themes).getAllByRole("button").map((b) => b.getAttribute("aria-label"))).toEqual(["Aubergine", "Autumn", "Framed", "Mist", "Office", "Spartan", "Wayfinding"]);
     fireEvent.click(within(themes).getByRole("button", { name: "Mist" }));
     expect(readPalette()).toBe("mist");
     await waitFor(() => expect(within(themes).getByRole("button", { name: "Mist" })).toHaveAttribute("aria-pressed", "true"));

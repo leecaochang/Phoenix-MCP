@@ -22,7 +22,7 @@ import { searchGuide } from "../guide/search";
 import { t } from "../i18n";
 import { ResultCount } from "../components/common";
 import { Icon, type IconName } from "../ui/Icon";
-import { PALETTES, readPalette, setPalette, subscribeTheme } from "../ui/theme";
+import { palettesByName, readPalette, setPalette, subscribeTheme } from "../ui/theme";
 import { renderTopic, topicTitle, useSearchSections, type FoundTopic, type Guide } from "./guide";
 import type { Theme } from "./settings";
 import { WELCOME_STEPS, type WelcomeState, type WelcomeStep } from "./storage";
@@ -168,7 +168,7 @@ function MakeItYours({ welcome }: { welcome: Welcome }) {
         </div>
       )}
       <div className="phx-welcome-swatches" role="group" aria-label={t("settings.colorThemeLabel")}>
-        {PALETTES.map((p) => (
+        {palettesByName().map((p) => (
           <button key={p} type="button" className={`phx-welcome-swatch${palette === p ? " is-current" : ""}`} aria-pressed={palette === p}
             aria-label={t(`settings.colorTheme.${p}`)} title={t(`settings.colorTheme.${p}`)} onClick={() => setPalette(p)}>
             <span className={`phx-swatch phx-swatch-${p}`} aria-hidden="true">

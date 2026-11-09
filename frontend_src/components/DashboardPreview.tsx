@@ -19,12 +19,12 @@
  * replace this renderer. */
 import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { currentHass } from "../api";
-import { copyToClipboard } from "../utils";
 import { loadLovelaceResources } from "../utils/card_harvest";
 import { t, tn } from "../i18n";
 import { DisplayModeContext } from "../ui/ActionButton";
 import { Icon, type IconName } from "../ui/Icon";
 import { helpRow } from "../ui/SettingLabel";
+import { CopyButton } from "../ui/CopyButton";
 
 export type PreviewCardEntry =
   | { kind: "card"; config: Record<string, unknown> }
@@ -402,23 +402,16 @@ function layoutOrder(a: string, b: string): number {
  * copied text leads with a line naming what the list is, then one "- type:
  * message" line per error. */
 function CardErrorPanel({ errors }: { errors: { label: string; message: string }[] }) {
-  const [copyState, setCopyState] = useState<"" | "copied" | "failed">("");
-  const feedback = copyState ? t(copyState === "copied" ? "conversations.copied" : "conversations.copyFailed") : "";
   const text = [t("changes.previewErrorCopyLead"), ...errors.map((e) => `- ${e.label}: ${e.message}`)].join("\n");
   return (
     <div className="dash-preview-error-panel">
       <div className="dash-preview-error-top">
         <p className="dash-preview-error-head">{tn("changes.previewErrorHead", errors.length)}</p>
-        <button type="button" className="btn btn-icon conversation-copy" aria-label={t("changes.previewErrorCopy")} data-help="help.copyCardErrors" title={feedback || t("changes.previewErrorCopy")} onClick={async () => {
-          setCopyState("");
-          try { await copyToClipboard(text); setCopyState("copied"); }
-          catch { setCopyState("failed"); }
-        }}><Icon name={copyState === "copied" ? "check" : "copy"} size={18} /></button>
+        <CopyButton text={text} label={t("changes.previewErrorCopy")} help="help.copyCardErrors" />
       </div>
       <ul className="dash-preview-error-list">
         {errors.map((e, i) => <li key={i}><code>{e.label}</code>: <span className="dash-preview-error-msg">{e.message}</span></li>)}
       </ul>
-      <span role="status" className={copyState === "failed" ? "conversation-copy-feedback" : "sr-only"}>{feedback}</span>
     </div>
   );
 }

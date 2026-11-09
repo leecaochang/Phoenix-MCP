@@ -11,7 +11,7 @@ import { useState } from "react";
 import { Notifications, TOAST_MS, Toasts } from "../ui/notify";
 import { ResultCount } from "../components/common";
 import { replyAnnouncement } from "../components/AgentCliWindow";
-import { CopyButton } from "../components/AccessKeyCreate";
+import { CopyButton } from "../ui/CopyButton";
 import { EnergyPreview } from "../components/ApprovalChange";
 import { ConfigTable } from "../ui/table/ConfigTable";
 import * as utils from "../utils";
@@ -81,7 +81,7 @@ describe("a finished chat reply", () => {
 describe("copy buttons", () => {
   it("say what they copy and report a copy that failed", async () => {
     vi.spyOn(utils, "copyToClipboard").mockRejectedValue(new Error("Clipboard unavailable"));
-    render(<CopyButton text="hello" label="Copy" name="Copy the first prompt" />);
+    render(<CopyButton text="hello" label="Copy the first prompt" />);
     await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Copy the first prompt" })); });
     expect(screen.getByRole("status")).toHaveTextContent("Copy failed");
     vi.restoreAllMocks();

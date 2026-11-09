@@ -7,12 +7,12 @@
 
 import { useEffect, useState } from "react";
 import { api } from "../api";
-import { copyToClipboard } from "../utils";
 import type { ConversationEntry, ConversationEvent, ConversationSummary } from "../types";
 import { hasMessage, t, tn } from "../i18n";
 import { localeDateTime, localeNumber } from "../i18n/format";
 import { chatNoticeText } from "../utils/chat_notice";
 import { Icon, type IconName } from "../ui/Icon";
+import { CopyButton } from "../ui/CopyButton";
 
 const LABEL_KEYS: Record<string, Record<string, string>> = {
   "source": {
@@ -101,19 +101,11 @@ function raw(value: unknown): string {
 
 function TextEvidence({ value, code = false }: { value: unknown; code?: boolean }) {
   const text = raw(value);
-  const [copyState, setCopyState] = useState<"" | "copied" | "failed">("");
-  const feedback = copyState ? t(copyState === "copied" ? "conversations.copied" : "conversations.copyFailed") : "";
   const body = code ? <pre>{text}</pre> : <div className="conversation-prose">{text}</div>;
   return <div className="conversation-evidence">
     <div className="conversation-evidence-content">{text.length > 1200 ? <details><summary data-help="help.fullText">{tn("conversations.fullText", text.length, { count: localeNumber(text.length) })}</summary>{body}</details> : body}</div>
-    <button type="button" className="btn btn-icon conversation-copy" data-help="help.copyText" aria-label={t("conversations.copy")} title={feedback || t("conversations.copy")} onClick={async () => {
-      setCopyState("");
-      try { await copyToClipboard(text); setCopyState("copied"); }
-      catch { setCopyState("failed"); }
-    }}><Icon name={copyState === "copied" ? "check" : "copy"} size={18} /></button>
-    <span role="status" className={copyState === "failed" ? "conversation-copy-feedback" : "sr-only"}>{feedback}</span>
+    <CopyButton text={text} label={t("conversations.copy")} help="help.copyText" />
   </div>;
-
 }
 
 const OPERATION_KEYS: Record<string, string> = {

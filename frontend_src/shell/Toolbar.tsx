@@ -140,7 +140,7 @@ function ToolRow({ registry, workspace, order, groups }: { registry: ToolRegistr
     ? registry.runShared(workspace, order, tool.id)
     : registry.latest(workspace, group.id, tool.id)?.onSelect?.());
   return (
-    <div className="phx-toolbar-tools" role="group" aria-label={t("workspace.tools")}>
+    <div className="phx-toolbar-tools" role="group" aria-label={t("workspace.tools")} data-workspace={workspace}>
       {groups.map((group) => (
         <div key={group.id} className="phx-tool-group" role="group" aria-label={group.label}>
           {group.tools.map((tool) => tool.menu ? (

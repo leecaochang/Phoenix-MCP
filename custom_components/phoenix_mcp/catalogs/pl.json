@@ -1387,9 +1387,6 @@
       "colStatus": "Status",
       "colUpdated": "Ostatnia aktualizacja",
       "confirmDelete": "Potwierdź usunięcie",
-      "copied": "Skopiowano!",
-      "copiedToClipboard": "Skopiowano do schowka",
-      "copyToClipboard": "Kopiuj do schowka",
       "create": "Utwórz",
       "createFailed": "Nie udało się utworzyć klucza dostępu.",
       "createPtUnderstand": "Rozumiem, że ten klucz dostępu ma szeroki dostęp do Home Assistant",
@@ -2030,9 +2027,6 @@
       "providerTogether": "Together",
       "providerZai": "Z.ai",
       "saveFailed": "Nie udało się zapisać ustawienia.",
-      "selectModel": "Wybierz model...",
-      "selectProvider": "Wybierz dostawcę...",
-      "selectAccessKey": "Wybierz klucz dostępu...",
       "styleCalmGuide": "Spokojny przewodnik",
       "styleCalmGuideHelp": "Cierpliwy, uspokajający, przystępny i nigdy protekcjonalny.",
       "styleDirect": "Bezpośredni",
@@ -2184,7 +2178,8 @@
         "framed": "W ramkach",
         "mist": "Mgła",
         "office": "Biuro",
-        "aubergine": "Bakłażan"
+        "aubergine": "Bakłażan",
+        "autumn": "Jesień"
       },
       "showSecret": "Pokaż klucz",
       "aiDecisionsHeading": "Decyzje",
@@ -2203,7 +2198,8 @@
       "aiDecisionsDisabledToast": "Decyzje wyłączone",
       "aiDecisionsDefaultSetToast": "Phoenix MCP Decisions jest teraz domyślną encją",
       "aiDecisionsDefaultReplacedToast": "Phoenix MCP Decisions jest teraz domyślną encją i zastępuje {name}",
-      "aiDecisionsDefaultClearedToast": "Phoenix MCP Decisions nie jest już domyślną encją"
+      "aiDecisionsDefaultClearedToast": "Phoenix MCP Decisions nie jest już domyślną encją",
+      "noneChoice": "Brak"
     },
     "approvalSummary": {
       "action.optionalReason": "Opcjonalny powód",
@@ -2568,7 +2564,6 @@
     "conversations": {
       "title": "Dziennik rozmów",
       "unknown": "Nieznane",
-      "copied": "Skopiowano",
       "copyFailed": "Kopiowanie nie powiodło się. Zaznacz tekst, aby go skopiować.",
       "copy": "Kopiuj tekst",
       "parameters": "Parametry",

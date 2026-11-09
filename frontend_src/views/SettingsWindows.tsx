@@ -34,12 +34,16 @@ import { WindowPlaceContext, useToolbarTools, type Tool } from "../shell/tools";
 import { ControllerContext } from "../shell/dock/TitleBar";
 import { useWindowToggle } from "../shell/windowTools";
 import { ActionButton } from "../ui/ActionButton";
-import { PALETTES, readPalette, setPalette, subscribeTheme, type Palette } from "../ui/theme";
+import { palettesByName, readPalette, setPalette, subscribeTheme, type Palette } from "../ui/theme";
+import { Segmented } from "../ui/Segmented";
 import { SettingLabel, helpRow } from "../ui/SettingLabel";
+import type { IconName } from "../ui/Icon";
 import { JS_BUILD } from "../version";
 
 // The theme values stay lowercase internally (they are the stored setting), so
 // the button captions are a lookup rather than a capitalization of the value.
+const THEME_SEGMENTS: Theme[] = ["light", "auto", "dark"];
+const THEME_ICONS: Record<Theme, IconName> = { light: "themeLight", auto: "themeAuto", dark: "themeDark" };
 const THEME_LABEL_KEYS: Record<Theme, string> = {
   light: "settings.themeLight",
   auto: "settings.themeAuto",
@@ -53,6 +57,7 @@ const PALETTE_LABEL_KEYS: Record<Palette, string> = {
   mist: "settings.colorTheme.mist",
   office: "settings.colorTheme.office",
   aubergine: "settings.colorTheme.aubergine",
+  autumn: "settings.colorTheme.autumn",
 };
 
 /** Offer Find Setting, and any tools of the window's own, on the toolbar. */
@@ -347,19 +352,13 @@ export function GeneralSettingsWindow() {
       </div>
       <div className="toggle-row" {...helpRow(t("settings.themeHelp"))}>
         <SettingLabel help={t("settings.themeHelp")}><span>{t("settings.themeLabel")}</span></SettingLabel>
-        <div className="theme-toggle">
-          {(["light", "auto", "dark"] as Theme[]).map((mode) => (
-            <button key={mode} type="button" className={`theme-toggle-btn${s.theme === mode ? " active" : ""}`} aria-pressed={s.theme === mode}
-              onClick={() => s.onThemeChange(mode)}>
-              {t(THEME_LABEL_KEYS[mode])}
-            </button>
-          ))}
-        </div>
+        <Segmented label={t("settings.themeLabel")} value={s.theme} onChange={(mode) => s.onThemeChange(mode)}
+          segments={THEME_SEGMENTS.map((mode) => ({ value: mode, label: t(THEME_LABEL_KEYS[mode]), icon: THEME_ICONS[mode] }))} />
       </div>
       <div className="toggle-row toggle-row-stacked-control" {...helpRow(t("settings.colorThemeHelp"))}>
         <SettingLabel help={t("settings.colorThemeHelp")}><span>{t("settings.colorThemeLabel")}</span></SettingLabel>
         <select aria-label={t("settings.colorThemeLabel")} className="input input-auto" value={palette} onChange={(e) => setPalette(e.target.value as Palette)}>
-          {PALETTES.map((p) => <option key={p} value={p}>{t(PALETTE_LABEL_KEYS[p])}</option>)}
+          {palettesByName().map((p) => <option key={p} value={p}>{t(PALETTE_LABEL_KEYS[p])}</option>)}
         </select>
       </div>
       {/* A rule sets the presets and profile buttons apart; no heading names them. */}

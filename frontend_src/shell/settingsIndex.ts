@@ -106,7 +106,7 @@ export const SETTING_INDEX: readonly SettingEntry[] = [
   { id: "notifyRateLimit", labelKey: "settings.notifyRateLimitLabel", window: "settingsLogs", aria: ["settings.notifyRateLimitLabel"] },
 
   { id: "language", labelKey: "settings.languageLabel", window: "settingsGeneral", aria: ["settings.languageLabel"] },
-  { id: "theme", labelKey: "settings.themeLabel", window: "settingsGeneral", selector: ".theme-toggle button" },
+  { id: "theme", labelKey: "settings.themeLabel", window: "settingsGeneral", selector: ".phx-segmented button" },
   { id: "colorTheme", labelKey: "settings.colorThemeLabel", window: "settingsGeneral", aria: ["settings.colorThemeLabel"] },
   { id: "presets", labelKey: "settings.presetsLabel", window: "settingsGeneral", aria: ["settings.presetsLabel"] },
   { id: "inject", labelKey: "settings.injectLabel", window: "settingsGeneral", aria: ["settings.injectLabel"] },

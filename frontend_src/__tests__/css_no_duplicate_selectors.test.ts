@@ -106,15 +106,16 @@ describe("panel stylesheet", () => {
   });
 
   it("gives every dropdown one width and every number field another", () => {
-    // A third of the row within bounds, and six digits with their arrows.
+    // A third of the row within bounds, and six digits with their minus and plus buttons.
     expect(CSS).toMatch(/select\.input:not\(\.agentcli-select\)\s*\{[^}]*width:\s*clamp\(10rem,\s*33%,\s*18rem\);/s);
-    expect(CSS).toMatch(/input\.input\[type="number"\]:not\(\.agentcli-number\)\s*\{[^}]*width:\s*7rem;/s);
+    expect(CSS).toMatch(/\.phx-number:not\(\.agentcli-number\)\s*\{[^}]*width:\s*8rem;/s);
     // No other rule gives a dropdown or number field in a window a width of its own.
     const widths = [...CSS.matchAll(/([^{}]+)\{([^}]*)\}/g)]
       .filter(([, selector, body]) => /\bselect\b|type="number"|-select\b|expiry-value/.test(selector) && /(^|[;\s])width:/.test(body))
       .map(([, selector]) => selector.trim())
-      // Agent Chat's compact controls, the two rules themselves, and rules that leave number fields out.
-      .filter((selector) => !/agentcli-(select|number|control)|^select\.input:not|^input\.input\[type="number"\]:not|:not\(\[type="number"\]\)/.test(selector));
+      // Agent Chat's compact controls, the two rules themselves, rules that leave number fields
+      // out, and the parts of the list a dropdown opens.
+      .filter((selector) => !/agentcli-(select|number|control)|^select\.input:not|^\.phx-number:not|:not\(\.phx-number\)|:not\(\[type="number"\]\)|phx-select-/.test(selector));
     expect(widths).toEqual([]);
   });
 
@@ -129,8 +130,8 @@ describe("panel stylesheet", () => {
   });
 
   it("keeps localized theme choices on one line", () => {
-    expect(CSS).toMatch(/\.theme-toggle\s*\{[^}]*flex-shrink:\s*0;/s);
-    expect(CSS).toMatch(/\.theme-toggle-btn\s*\{[^}]*white-space:\s*nowrap;/s);
+    expect(CSS).toMatch(/\.phx-segmented\s*\{[^}]*flex-shrink:\s*0;/s);
+    expect(CSS).toMatch(/\.phx-segmented-btn\s*\{[^}]*white-space:\s*nowrap;/s);
   });
 
   it("keeps long localized change text inside the Changes windows", () => {
