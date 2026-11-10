@@ -26,6 +26,8 @@ async def async_recognize(
     Strict recognition is optional on older HA releases. Never silently use
     fuzzy recognition for a routing caller that requested strict recognition.
     """
+    if "conversation" not in hass.config.components:
+        raise RecognitionUnavailable
     # Local: optional component, imported only when this path runs.
     from homeassistant.components.conversation.agent_manager import async_get_agent
     from homeassistant.components.conversation.const import HOME_ASSISTANT_AGENT

@@ -17,6 +17,7 @@ from custom_components.phoenix_mcp.logger_control import (
     LoggerOverrideManager,
     async_get_logger_override_manager,
 )
+from custom_components.phoenix_mcp.debug_capture import DEBUG_CAPTURE_RUNTIME_KEY, DebugCapture
 from custom_components.phoenix_mcp.tool_dispatch import _dispatch_mcp
 from tests.runtime_fixtures import make_mcp_data as _make_data, make_mcp_hass as _make_hass, make_mcp_access_key as _make_access_key
 
@@ -85,6 +86,59 @@ async def test_noop_skips_approval_when_setting_matches():
     assert outcome == "allowed"
     assert body["changed"] is False
     gate.assert_not_awaited()
+
+
+def _same_level_manager(level: str = "DEBUG") -> MagicMock:
+    manager = MagicMock()
+    manager.adapter.declared_loggers = AsyncMock(return_value={"homeassistant.components.mqtt"})
+    manager.adapter.get_override.return_value = IntegrationOverride(level, "permanent")
+    manager.adapter.effective_levels.return_value = {"homeassistant.components.mqtt": level}
+    manager.async_set = AsyncMock()
+    manager.active.return_value = None
+    return manager
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("capturing", [False, True])
+async def test_an_unchanged_debug_level_is_a_fresh_raise_only_while_not_captured(capturing):
+    """After a restart a lasting DEBUG override outlives the in-memory capture.
+
+    Asking for the same level again resumes the capture, so it is gated like any raise;
+    with the capture already running it stays a no-op.
+    """
+    access_key = _make_access_key(cap_log_read="allow", cap_log_control="confirm")[0]
+    data = _make_data(access_key)
+    data.logger_control = _same_level_manager()
+    hass = _make_hass(data)
+    capture = DebugCapture()
+    hass.data[DEBUG_CAPTURE_RUNTIME_KEY] = capture
+    if capturing:
+        capture.domains.add("mqtt")
+    with patch("custom_components.phoenix_mcp.tools.logs._visible_logger_domains", return_value={"mqtt"}), patch(
+        "custom_components.phoenix_mcp.tools.logs.loader.async_get_integration", new=AsyncMock()
+    ), patch("custom_components.phoenix_mcp.tools.logs._gate", new=AsyncMock(return_value=None)) as gate:
+        body, _result, outcome = await _call(
+            {"integration": "mqtt", "level": "DEBUG", "persistence": "permanent"},
+            access_key=access_key, data=data, hass=hass,
+        )
+    capture.stop_all()
+    assert outcome == "allowed"
+    if capturing:
+        assert body["changed"] is False
+        gate.assert_not_awaited()
+    else:
+        gate.assert_awaited_once()
+        assert body["changed"] is False and body["capturing_debug_records"] is True
+
+
+def test_the_approval_says_an_unchanged_level_resumes_the_capture():
+    from custom_components.phoenix_mcp.tools.logs import _build_diff_set_integration_log_level
+
+    same = IntegrationOverride("DEBUG", "permanent")
+    diff = _build_diff_set_integration_log_level("mqtt", same, same, {"homeassistant.components.mqtt"}, None)
+    assert any("captures this integration's INFO and DEBUG records again" in w for w in diff["preview"]["warnings"])
+    raised = _build_diff_set_integration_log_level("mqtt", None, same, {"homeassistant.components.mqtt"}, None)
+    assert not any("again" in w for w in raised["preview"]["warnings"])
 
 
 @pytest.mark.asyncio

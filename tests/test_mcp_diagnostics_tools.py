@@ -18,6 +18,9 @@ from pytest_homeassistant.common import MockConfigEntry
 from custom_components.phoenix_mcp.tool_dispatch import _call_tool
 from custom_components.phoenix_mcp.access_key_store import PermissionNode, PermissionTree, AccessKeyRecord
 
+# These tests stand in for loaded components; see _module_loaded_components in conftest.
+LOADED_COMPONENTS = ("recorder", "system_health")
+
 
 def _access_key(permissions: PermissionTree | None = None, **caps) -> AccessKeyRecord:
     tree = permissions or PermissionTree(domains={"light": PermissionNode(state="GREEN")})
@@ -181,6 +184,7 @@ def auto_env(hass: HomeAssistant):
         config_entry=entry, suggested_object_id="morning",
     )
     hass.states.async_set(auto.entity_id, "on", {})
+    hass.config.components.add("trace")
     hass.data[DATA_TRACE] = {"automation.auto_uid_1": _trace_buckets(runs=[_FakeTrace()])}
     return {"entity_id": auto.entity_id}
 
@@ -240,6 +244,7 @@ class TestTraceOverview:
                                   ("automation", "uid_hidden", "hidden"), ("script", "uid_script", "porch"),
                                   *(("automation", f"uid_{i}", f"bulk_{i:02d}") for i in range(many))):
             registry.async_get_or_create(domain, "test_integration", uid, config_entry=entry, suggested_object_id=name)
+        hass.config.components.add("trace")
         hass.data[DATA_TRACE] = {
             "automation.uid_ok": _trace_buckets(
                 runs=[_FakeTrace("a1", "2026-01-03T00:00:00+00:00"), _FakeTrace("a2", "2026-01-01T00:00:00+00:00")],
@@ -287,6 +292,7 @@ class TestTraceOverview:
         # its trace data directly would report a restarted instance as having no runs.
         from homeassistant.components.trace.const import DATA_TRACE, DATA_TRACE_STORE
         self._setup(hass)
+        hass.config.components.add("trace")
         hass.data[DATA_TRACE] = {}
         saved = {"extended_dict": {"domain": "automation", "item_id": "uid_bad", "run_id": "old1", "last_step": "action/0",
                                    "context": {"id": "c1", "parent_id": None, "user_id": None},
@@ -426,6 +432,7 @@ class TestTraceStorageShapes:
 
     def _set_bucket(self, hass, bucket):
         from homeassistant.components.trace.const import DATA_TRACE
+        hass.config.components.add("trace")
         hass.data[DATA_TRACE] = {"automation.auto_uid_1": bucket}
 
     async def test_not_triggered_traces_are_listed_and_labeled(self, hass, auto_env):
@@ -483,6 +490,7 @@ class TestTraceStorageShapes:
 
     async def test_no_warning_when_loaded_but_automation_never_ran(self, hass, auto_env):
         from homeassistant.components.trace.const import DATA_TRACE
+        hass.config.components.add("trace")
         hass.data[DATA_TRACE] = {}
         content, outcome, _ = await _call(
             "get_automation_traces", {"automation_id": "automation.morning"}, _auto_access_key(), hass)

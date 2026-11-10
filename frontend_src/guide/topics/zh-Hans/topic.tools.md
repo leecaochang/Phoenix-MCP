@@ -180,6 +180,8 @@
 - 读取系统日志涵盖警告和错误、日志簿和通知。故障日志和捕获的调试记录还需要诊断。
 - 集成日志级别会更改集成的日志量，例如开启调试日志。更改可以在 5 到 120 分钟后结束、持续到下次重启，或一直保留到清除。
 
+代理只能读取由代理调高日志级别的集成的调试记录，直到级别调回或 Home Assistant 重启。你自己开启的调试日志，代理读取不到。
+
 需要 Home Assistant 本身的模板函数，例如区域或设备查找，不会返回任何内容。
 
 允许它的能力：[{{label:caps.cap_config_read.label}}](guide:window.capabilities#config-read)、[{{label:caps.cap_energy_write.label}}](guide:window.capabilities#energy-write)、[{{label:caps.cap_template_render.label}}](guide:window.capabilities#template-render)、[{{label:caps.cap_log_read.label}}](guide:window.capabilities#log-read)、[{{label:caps.cap_log_control.label}}](guide:window.capabilities#log-control)

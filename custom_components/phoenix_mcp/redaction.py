@@ -42,14 +42,49 @@ _URL_CRED_QUERY_RE = re.compile(
 
 _URL_CRED_USERINFO_RE = re.compile(r"://[^/\s:@]+:[^/\s:@]+@")
 
+# An HTTP authorization scheme and its credential, as in a logged request header.
+_AUTH_SCHEME_RE = re.compile(r"(?i)\b((?:bearer|basic|digest)\s+)[A-Za-z0-9._~+/=-]+")
+
+# Provider key shapes that carry no key name in front of them.
+_PROVIDER_KEY_RE = re.compile(
+    r"\b(?:sk-(?:proj-|ant-)?[A-Za-z0-9_-]{12,}|gh[pousr]_[A-Za-z0-9_]{16,}|AKIA[A-Z0-9]{16}|"
+    r"AIza[A-Za-z0-9_-]{30,}|(?:gsk_|xai-|nvapi-)[A-Za-z0-9_-]{20,})\b"
+)
+
+# A key and its value in the forms an integration logs: a Python dict or JSON
+# ('password': 'x', "token": "x"), keyword arguments (password='x') and plain text
+# (Password: x). Group 2 is the key, checked with is_sensitive_key, and group 4 the
+# value. The key is bounded and possessive, and a start inside a word is refused,
+# so a long word costs one attempt. An unclosed quote runs to the end of the line.
+_KEYED_VALUE_RE = re.compile(
+    r"(?<![\w-])([\"']?)([A-Za-z_][\w-]{0,63}+)\1(\s*[:=]\s*)"
+    r"(\"[^\"\n]*\"?|'[^'\n]*'?|[^\s,;}\])]+)"
+)
+
+
+def _redact_keyed_value(match: re.Match[str]) -> str:
+    # A !secret or !env_var reference names where the value lives, not the value itself.
+    if not is_sensitive_key(match[2]) or match[4] in ("!secret", "!env_var"):
+        return match[0]
+    return match[0][: match.start(4) - match.start(0)] + "<redacted>"
+
 
 def _scrub_log_text(text: str) -> str:
-    """Redact Phoenix MCP access keys, JWTs/LLATs, and URL-embedded credentials from a log line."""
+    """Redact access keys, tokens and credentials from a log line.
+
+    Covers Phoenix MCP access keys, JWTs and long-lived access tokens, URL
+    credentials, authorization headers, provider API keys, and the value of any
+    sensitively named key in dict, JSON, keyword or plain-text form. Over-redaction
+    is the accepted failure mode, since another integration's log line can hold
+    anything.
+    """
     text = _PHOENIX_ACCESS_KEY_SCRUB_RE.sub("<phoenix-access-key>", text)
     text = _JWT_SCRUB_RE.sub(r"\1<token>", text)
     text = _URL_CRED_QUERY_RE.sub(r"\1=<redacted>", text)
     text = _URL_CRED_USERINFO_RE.sub("://<redacted>@", text)
-    return text
+    text = _AUTH_SCHEME_RE.sub(r"\1<redacted>", text)
+    text = _PROVIDER_KEY_RE.sub("<redacted>", text)
+    return _KEYED_VALUE_RE.sub(_redact_keyed_value, text)
 
 
 # A "key: value" or "key = value" line in a YAML/config diff, capturing the

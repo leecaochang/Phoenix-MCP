@@ -56,6 +56,7 @@ from ..proxy_diagnostics import bluetooth_network, full_pass_through, serial_inv
 from ..access_key_store import AccessKeyRecord
 from ..service_targets import CallReach, visible_reach_warnings
 from .. import radio as radio_backend
+from ..component_guard import require_component
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -211,6 +212,7 @@ def _z2m_property_coverage(
     # Private MQTT runtime detail, kept lazy so a compatibility drift cannot
     # prevent Phoenix itself from loading. Any failure below becomes ambiguity.
     try:
+        require_component(hass, "mqtt")
         # Local: optional component, imported only when this path runs.
         from homeassistant.components.mqtt.const import ATTR_DISCOVERY_PAYLOAD
         from homeassistant.components.mqtt.models import DATA_MQTT
@@ -666,6 +668,7 @@ def _same_radio_network(
 def _mqtt_discovery_payload(hass: HomeAssistant, entity_id: str) -> dict[str, Any] | None:
     """Return one MQTT entity's live discovery payload, or fail closed."""
     try:
+        require_component(hass, "mqtt")
         # Local: optional component, imported only when this path runs.
         from homeassistant.components.mqtt.const import ATTR_DISCOVERY_PAYLOAD
         from homeassistant.components.mqtt.models import DATA_MQTT

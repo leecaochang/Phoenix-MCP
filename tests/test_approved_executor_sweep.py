@@ -33,6 +33,7 @@ from custom_components.phoenix_mcp.tools.todo import _items, _reviewed
 from custom_components.phoenix_mcp.ws_dispatch import async_save_lovelace_config, async_ws_command
 from tests.runtime_fixtures import schema_baseline
 
+
 APPROVE = "/api/phoenix-mcp/admin/approvals/{}/approve"
 OUTCOMES = frozenset({"allowed", "denied", "not_found", "invalid_request", "not_implemented", "pending_approval"})
 PUBLIC = {internal: public for public, internal in tool_defs._NATIVE_TOOL_PUBLIC_TO_INTERNAL.items()}
@@ -269,6 +270,10 @@ def test_every_executor_is_seeded_or_named_with_its_reason():
 
 @pytest.mark.parametrize("name", sorted(SEEDS))
 async def test_confirm_builds_a_diff_and_approve_reaches_the_executor(sweep, name):
+    if name == "create_calendar_event":
+        # The sweep fakes the calendar component; marking it for every tool would make
+        # a reloaded demo entry forward a calendar platform that was never set up.
+        sweep.hass.config.components.add("calendar")
     result, outcome, _resource = await tool_dispatch._call_tool(
         _tool_name(name), sweep.args(name), sweep.access_key, sweep.hass, sweep.data)
     assert outcome == "pending_approval", (name, result)

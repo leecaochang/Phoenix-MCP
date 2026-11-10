@@ -50,6 +50,7 @@ from ..config_recovery import ConfigurationRecoveryError, safe_snapshot
 from ..recorder_queries import parse_recorder_window, read_statistic_window
 from ..request_authority import AuthorityChangedError, check_request_authority, write_boundary
 from ..ws_dispatch import WsCommandNotDispatchedError, WsDispatchError, async_ws_command, validate_ws_payload
+from ..component_guard import require_component
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -177,6 +178,7 @@ async def _energy_usage(
     Only entities the key can read are read; the rest are named in not_read. Home use is imported,
     produced and discharged minus exported and charged, when all read in one unit.
     """
+    require_component(hass, "recorder")
     # Local: optional component, imported only when this path runs.
     from homeassistant.components.recorder import get_instance
 

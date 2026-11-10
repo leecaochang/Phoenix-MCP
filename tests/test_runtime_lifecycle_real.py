@@ -548,19 +548,26 @@ async def test_unload_ends_leases_so_their_event_still_fires(hass, enable_custom
 
 
 async def test_reload_leaves_logger_handlers_where_it_found_them(hass, enable_custom_integrations):
-    """Debug capture attaches to shared loggers, so unload must take it off again."""
-    from custom_components.phoenix_mcp.debug_capture import async_detach_debug_capture
+    """Debug capture attaches only to a raised integration's loggers, and unload takes it off.
 
-    loggers = [logging.getLogger(name) for name in ("homeassistant.components", "custom_components")]
+    Setup attaches nothing, and a reload drops the capture with the rest of Phoenix's runtime.
+    """
+    from custom_components.phoenix_mcp.debug_capture import async_detach_debug_capture, async_update_debug_capture
+
+    names = ("homeassistant.components", "custom_components", "homeassistant.components.hue", "custom_components.hue")
+    loggers = [logging.getLogger(name) for name in names]
     baseline = [list(logger.handlers) for logger in loggers]
     entry, _ = await _setup_runtime(hass)
     try:
-        attached = [len(logger.handlers) for logger in loggers]
-        assert attached == [len(handlers) + 1 for handlers in baseline]
+        assert [list(logger.handlers) for logger in loggers] == baseline
+        async_update_debug_capture(hass, "hue", "DEBUG")
+        assert [len(logger.handlers) for logger in loggers] == [
+            len(handlers) + (index >= 2) for index, handlers in enumerate(baseline)]
         for _cycle in range(2):
             assert await hass.config_entries.async_reload(entry.entry_id)
             await hass.async_block_till_done()
-            assert [len(logger.handlers) for logger in loggers] == attached
+            assert [list(logger.handlers) for logger in loggers] == baseline
+        async_update_debug_capture(hass, "hue", "DEBUG")
         assert await hass.config_entries.async_unload(entry.entry_id)
         assert [list(logger.handlers) for logger in loggers] == baseline
     finally:

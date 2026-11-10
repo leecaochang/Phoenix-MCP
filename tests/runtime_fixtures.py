@@ -217,6 +217,8 @@ def make_mcp_hass(data: PhoenixData) -> MagicMock:
     hass.components = MagicMock()
     hass.states = MagicMock()
     hass.states.async_all.return_value = []
+    # The tools these mocks drive need their component loaded; any other stays unloaded.
+    hass.config.components = {"automation", "calendar", "script"}
     return hass
 
 

@@ -80,6 +80,7 @@ from ..access_key_store import AccessKeyRecord
 from .. import yaml_includes
 from ..time_text import parse_datetime
 from .helper import _helper_config_entry
+from ..component_guard import require_component
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -2068,6 +2069,7 @@ async def _tool_get_system_health(
 
     integrations: dict = {}
     try:
+        require_component(hass, "system_health")
         # Local: optional component, imported only when this path runs.
         from homeassistant.components import system_health
         integrations = await system_health.get_info(hass)
@@ -2919,6 +2921,7 @@ async def _tool_whatif(
 
 async def _history_states(hass: HomeAssistant, start: Any, end: Any, entity_ids: list[str], *, include_start: bool = True) -> dict:
     """Recorder significant-states for a set of entities, no attributes."""
+    require_component(hass, "recorder")
     # Local: optional component, imported only when this path runs.
     from homeassistant.components.recorder import get_instance
     from homeassistant.components.recorder import history as rec_history

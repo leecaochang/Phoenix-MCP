@@ -33,6 +33,9 @@ from custom_components.phoenix_mcp.tool_dispatch import _call_tool
 from custom_components.phoenix_mcp.policy_engine import Permission, resolve_read
 from tests.runtime_fixtures import EXPOSURE_HIDDEN as HIDDEN, EXPOSURE_SHOWN as SHOWN, expose_to_assist as _expose, exposure_body as _body, exposure_data as _data, exposure_key as _key
 
+# These tests stand in for loaded components; see _module_loaded_components in conftest.
+LOADED_COMPONENTS = ("calendar", "camera", "recorder")
+
 GHOST = "light.ghost"
 
 

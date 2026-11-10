@@ -1329,6 +1329,8 @@ async def _restore_saved_traces(hass: HomeAssistant) -> None:
 
     The trace component restores them only when traces are first listed through its own API.
     """
+    if "trace" not in hass.config.components:
+        return
     # Local: optional component, imported only when this path runs.
     from homeassistant.components.trace.const import DATA_TRACE_STORE
 
@@ -1339,22 +1341,30 @@ async def _restore_saved_traces(hass: HomeAssistant) -> None:
         await async_restore_traces(hass)
 
 
+def _loaded_traces(hass: HomeAssistant) -> Any:
+    """The trace component's retained runs by trace key, or None when it is not loaded."""
+    if "trace" not in hass.config.components:
+        return None
+    # Local: optional component, imported only when this path runs.
+    from homeassistant.components.trace.const import DATA_TRACE
+
+    return hass.data.get(DATA_TRACE)
+
+
 def _trace_overview(access_key: AccessKeyRecord, hass: HomeAssistant) -> tuple[dict, str, str]:
     """Every readable automation and script with retained runs, in one call.
 
     Each row counts retained runs by ending and lists erroring ones; rows with errors come first.
     Not-triggered evaluations count apart. Runs past one result's limit are named in not_listed.
     """
-    # Local: optional component, imported only when this path runs.
-    from homeassistant.components.trace.const import DATA_TRACE
-
+    stored = _loaded_traces(hass)
     owners = {
         (entry.domain, entry.unique_id): entry.entity_id
         for entry in er.async_get(hass).entities.values()
         if entry.domain in ("automation", "script") and entry.unique_id is not None
     }
     rows: list[dict[str, Any]] = []
-    for trace_key, bucket in hass.data.get(DATA_TRACE, {}).items():
+    for trace_key, bucket in (stored or {}).items():
         domain, _, item_id = str(trace_key).partition(".")
         entity_id = owners.get((domain, item_id))
         if entity_id is None or resolve(entity_id, access_key, hass) not in (Permission.READ, Permission.WRITE):
@@ -1386,7 +1396,7 @@ def _trace_overview(access_key: AccessKeyRecord, hass: HomeAssistant) -> tuple[d
         if count < len(rows):
             body["not_listed"] = [row["entity_id"] for row in rows[count:]]
             body["warnings"] = ["The result is full: read the not_listed ones by automation_id."]
-        if DATA_TRACE not in hass.data:
+        if stored is None:
             body["warnings"] = [*body.get("warnings", []),
                                 "The trace component is not loaded; trace history is unavailable."]
         return body
@@ -1413,12 +1423,11 @@ async def _tool_get_automation_traces(
     if entity_id is None or trace_key is None or resolve(entity_id, access_key, hass) not in (Permission.READ, Permission.WRITE):
         return _tool_error("Automation or script not found."), "not_found", raw
 
-    # Local: optional component, imported only when this path runs.
-    from homeassistant.components.trace.const import DATA_TRACE
-    # An absent DATA_TRACE key means the trace component is not loaded, which would
-    # otherwise look like an automation that never ran; it is reported as a warning.
-    trace_loaded = DATA_TRACE in hass.data
-    runs: Any = hass.data.get(DATA_TRACE, {}).get(trace_key, {})
+    # A trace component that is not loaded would otherwise look like an automation that
+    # never ran; it is reported as a warning.
+    stored = _loaded_traces(hass)
+    trace_loaded = stored is not None
+    runs: Any = (stored or {}).get(trace_key, {})
     summary = bool(args.get("summary"))
     run_id = args.get("run_id")
 

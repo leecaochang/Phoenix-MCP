@@ -25,6 +25,7 @@ from ..mesa_audit import request_context
 from ..policy_engine import Permission, canonical_entity_id, resolve_read
 from ..access_key_store import AccessKeyRecord
 from ..tool_common import _CAP_FORBIDDEN_MESSAGE, _tool_error
+from ..component_guard import require_component
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -125,6 +126,7 @@ async def _tool_get_camera_image(
         return _tool_error(error), "invalid_request", entity_id
 
     try:
+        require_component(hass, "camera")
         # Local: optional component, imported only when this path runs.
         from homeassistant.components.camera import async_get_image
 

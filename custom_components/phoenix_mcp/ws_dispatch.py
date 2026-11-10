@@ -21,6 +21,7 @@ from typing import Any
 
 from .request_authority import check_request_authority
 from .const import STORAGE_HELPER_TYPES, WS_REQUEST_CONTROL_FIELDS
+from .component_guard import require_component
 
 import voluptuous as vol
 from homeassistant.components.websocket_api import const as ws_const
@@ -544,6 +545,7 @@ async def async_zha_reconfigure_device(hass: HomeAssistant, ieee: str) -> None:
     device is absent; ZHA internals moving degrades to the same per-call error.
     """
     try:
+        require_component(hass, "zha")
         # Local: optional component, imported only when this path runs.
         from homeassistant.components.zha.helpers import get_zha_gateway
     except Exception as exc:  # zha missing or restructured

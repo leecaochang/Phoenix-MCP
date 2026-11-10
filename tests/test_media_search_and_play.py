@@ -18,6 +18,9 @@ from custom_components.phoenix_mcp.access_key_store import AccessKeyRecord, Perm
 from custom_components.phoenix_mcp.tool_dispatch import _call_tool
 from custom_components.phoenix_mcp.tool_common import RefusedBeforeWrite
 
+# These tests stand in for loaded components; see _module_loaded_components in conftest.
+LOADED_COMPONENTS = ("media_player",)
+
 TOOL = "media_player__HassMediaSearchAndPlay"
 SEARCHABLE = int(MediaPlayerEntityFeature.SEARCH_MEDIA | MediaPlayerEntityFeature.PLAY_MEDIA)
 PLAIN = int(MediaPlayerEntityFeature.PLAY_MEDIA)

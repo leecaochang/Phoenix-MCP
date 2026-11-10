@@ -103,6 +103,7 @@ from ..tool_common import (
     MESA_DENIED_MESSAGE, _CAP_FORBIDDEN_MESSAGE, _gate, _pending_or_inline, _read_text_capped, _set_progress_status, _tool_error, _tool_refused_before_write, _tool_success, _usable_path_arg, _with_mesa_advisory,
 )
 from ..request_authority import _approved_exec_ctx
+from ..component_guard import require_component
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -138,6 +139,7 @@ def _esphome_dashboard(hass: HomeAssistant) -> Any:
     # in-process coordinator makes no add-on HTTP call, so no credential-resolving endpoint
     # (json-config, get_encryption_key) is reachable through it.
     try:
+        require_component(hass, "esphome")
         # Local: optional component, imported only when this path runs.
         from homeassistant.components.esphome.dashboard import (
             async_get_dashboard,

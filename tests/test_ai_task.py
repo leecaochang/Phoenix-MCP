@@ -240,6 +240,7 @@ def test_set_preferred_requires_entity(hass):
 
 async def test_set_preferred_updates_prefs_and_status(hass, phoenix_ai_task_platform):
     platform, entry = phoenix_ai_task_platform
+    hass.config.components.add("ai_task")  # the platform fixture stands in for a loaded ai_task
     data = _make_data(**_FULL)
     data.ai_task_entity = None
     hass.data[DOMAIN] = data

@@ -16,6 +16,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.event import async_call_later
 from homeassistant.helpers.storage import Store
 from homeassistant.util.dt import utcnow
+from .debug_capture import async_update_debug_capture
 from .ws_dispatch import async_ws_command
 
 _LOGGER = logging.getLogger(__name__)
@@ -309,6 +310,8 @@ class LoggerOverrideManager:
             return
         self._cancel_timer(domain)
         self.records.pop(domain, None)
+        # The level Phoenix raised is gone, whatever replaced it, so its capture ends.
+        async_update_debug_capture(self.hass, domain, None)
         await self._save()
 
     async def async_restore_all(self) -> None:

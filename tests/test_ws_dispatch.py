@@ -184,6 +184,8 @@ async def test_zha_reconfigure_dispatches_task_via_gateway(hass, monkeypatch):
 
     import custom_components.phoenix_mcp.ws_dispatch as wd
 
+    hass.config.components.add("zha")
+
     class _Device:
         ieee = "eui:known"
 

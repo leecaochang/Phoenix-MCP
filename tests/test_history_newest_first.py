@@ -20,6 +20,9 @@ from custom_components.phoenix_mcp.access_key_store import AccessKeyRecord, Perm
 from custom_components.phoenix_mcp.tool_dispatch import _call_tool
 from custom_components.phoenix_mcp.recorder_queries import newest_page
 
+# These tests stand in for loaded components; see _module_loaded_components in conftest.
+LOADED_COMPONENTS = ("recorder",)
+
 BASE = datetime(2026, 1, 1, tzinfo=timezone.utc)
 
 

@@ -29,6 +29,7 @@ from .const import (
 from .redaction import redact_diagnostics
 from .household_authority import household_admin_access
 from .policy_engine import Permission, assist_expose_check, device_config_entry_ids, resolve_device_registry_access
+from .component_guard import require_component
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -60,6 +61,7 @@ def _text(value: Any) -> str | None:
 def rf_capabilities(hass: HomeAssistant, entity_id: str) -> dict[str, Any] | None:
     """Frequency ranges (hertz) and modulations of one loaded RF transmitter, else None."""
     try:
+        require_component(hass, "radio_frequency")
         # Local: optional component, imported only when this path runs.
         from homeassistant.components.radio_frequency import DATA_COMPONENT
         from rf_protocols import ModulationType
@@ -185,6 +187,8 @@ def device_bluetooth_scanners(
 
 def bluetooth_network(hass: HomeAssistant) -> dict[str, Any] | None:
     """Pass-through Bluetooth network: every scanner plus a bounded nearby snapshot."""
+    if _BLUETOOTH not in hass.config.components:
+        return None
     scanners = _bluetooth_scanners(hass)
     if scanners is None:
         return None
@@ -255,8 +259,9 @@ async def _serial_state(hass: HomeAssistant) -> tuple[list[Any], dict[str, list[
     return ports, await async_get_serial_port_consumers(hass, ports)
 
 
-def _unscannable_schemes() -> tuple[str, ...]:
+def _unscannable_schemes(hass: HomeAssistant) -> tuple[str, ...]:
     try:
+        require_component(hass, "usb")
         # Local: optional component, imported only when this path runs.
         from homeassistant.components.usb.consumers import UNSCANNABLE_PORT_SCHEMES
     except ImportError:
@@ -287,7 +292,7 @@ async def integration_serial_ports(hass: HomeAssistant) -> dict[str, list[dict[s
         return None
     ports, consumers = state[0], state[1]
     scanned = {port.device: port for port in ports}
-    unscannable = _unscannable_schemes()
+    unscannable = _unscannable_schemes(hass)
     usage: dict[str, list[dict[str, Any]]] = {}
     for device, rows in consumers.items():
         port = scanned.get(device)
@@ -306,6 +311,8 @@ async def integration_serial_ports(hass: HomeAssistant) -> dict[str, list[dict[s
 
 async def serial_inventory(hass: HomeAssistant) -> dict[str, Any] | None:
     """Pass-through serial inventory: scanned ports plus configured ports missing from the scan."""
+    if "usb" not in hass.config.components:
+        return None
     # Local: not part of the recorded Home Assistant import floor.
     from homeassistant.helpers.service_info.usb import UsbServiceInfo
     state = await _serial_state(hass)
@@ -316,7 +323,7 @@ async def serial_inventory(hass: HomeAssistant) -> dict[str, Any] | None:
     from homeassistant.components import usb
     from homeassistant.components.usb.models import USBDevice
 
-    unscannable = _unscannable_schemes()
+    unscannable = _unscannable_schemes(hass)
     scanned = {port.device: port for port in ports}
     devices = list(scanned) + [device for device in (consumers or {}) if device not in scanned]
     rows = []

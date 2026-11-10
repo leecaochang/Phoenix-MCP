@@ -20,6 +20,9 @@ from custom_components.phoenix_mcp.rate_limiter import RateLimiter
 from custom_components.phoenix_mcp.access_key_store import AccessKeyStore
 from custom_components.phoenix_mcp.tools import calendar as tools
 
+# These tests stand in for loaded components; see _module_loaded_components in conftest.
+LOADED_COMPONENTS = ("calendar",)
+
 
 class WritableCalendar(CalendarEntity):
     """A writable calendar entity that records every create, update and delete call."""

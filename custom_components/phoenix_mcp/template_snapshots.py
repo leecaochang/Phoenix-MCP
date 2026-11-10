@@ -8,8 +8,10 @@ from typing import Any
 
 from homeassistant.const import __version__ as HA_VERSION
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.importlib import async_import_module
 from homeassistant.helpers import entity_registry as er
 
+from .component_guard import ComponentNotLoaded, imported_module
 from .config_recovery import ConfigurationRecoveryError, safe_snapshot
 from .const import TEMPLATE_RECOVERY_TYPES
 from .request_authority import check_request_authority
@@ -33,6 +35,14 @@ TEMPLATE_RECOVERY_ADAPTERS = {
     })
     for domain in TEMPLATE_RECOVERY_TYPES
 }
+
+
+TEMPLATE_CONFIG_FLOW = "homeassistant.components.template.config_flow"
+
+
+async def async_import_template_flow(hass: HomeAssistant) -> None:
+    """Import the Template config flow in the executor, so a restore can validate a snapshot."""
+    await async_import_module(hass, TEMPLATE_CONFIG_FLOW)
 
 
 def template_snapshot(hass: HomeAssistant, entry) -> dict:
@@ -67,12 +77,14 @@ def validate_snapshot(snapshot: dict) -> None:
     domain. Legacy (adapter 0) snapshots qualify only for a sensor or binary_sensor.
     """
     safe_snapshot(snapshot)
-    # Local: optional component, imported only when this path runs.
-    from homeassistant.components.template.config_flow import TemplateConfigFlowHandler
+    try:
+        flow_handler = imported_module(TEMPLATE_CONFIG_FLOW).TemplateConfigFlowHandler
+    except ComponentNotLoaded as err:
+        raise ConfigurationRecoveryError("The Template integration is not loaded; nothing was dispatched.") from err
     if (snapshot.get("snapshot_type") != "template_helper"
             or type(snapshot.get("schema")) is not int or snapshot.get("schema") != 1
-            or snapshot.get("version") != TemplateConfigFlowHandler.VERSION
-            or snapshot.get("minor_version") != TemplateConfigFlowHandler.MINOR_VERSION
+            or snapshot.get("version") != flow_handler.VERSION
+            or snapshot.get("minor_version") != flow_handler.MINOR_VERSION
             or snapshot.get("domain") != "template"
             or snapshot.get("adapter", 0) not in (0, 1)
             or snapshot.get("ha_version") != HA_VERSION

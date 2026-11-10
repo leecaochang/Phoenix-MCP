@@ -23,6 +23,7 @@ from ..capability import effective_cap
 from ..request_authority import check_request_authority, mark_dispatch_started, write_boundary
 from ..tool_common import _gate, _tool_error, _tool_success
 from ..ws_dispatch import async_ws_command, WsDispatchError
+from ..component_guard import require_component
 
 
 _LOGGER = logging.getLogger(__name__)
@@ -139,6 +140,7 @@ async def _tool_list_backups(
 def _backup_manager(hass: HomeAssistant) -> Any | None:
     """HA's backup manager, or None when the backup integration is not loaded."""
     try:
+        require_component(hass, "backup")
         # Local: optional component, imported only when this path runs.
         from homeassistant.components.backup import async_get_manager
         return async_get_manager(hass)
@@ -337,13 +339,14 @@ async def _execute_create_backup(
     HA's backup key goes straight from its stored settings into the manager call.
     It is never placed in arguments, previews, results, logs or error text.
     """
-    # Local: optional component, imported only when this path runs.
-    from homeassistant.components.backup import CreateBackupEvent
-
+    # The precheck refuses, as a result, when the backup integration is not loaded.
     try:
         manager, plan = _backup_precheck(hass, args)
     except _BackupRefused as refused:
         return refused.result
+    require_component(hass, "backup")
+    # Local: optional component, imported only when this path runs.
+    from homeassistant.components.backup import CreateBackupEvent
     name = args.get("name")
     try:
         before, _ = await manager.async_get_backups()

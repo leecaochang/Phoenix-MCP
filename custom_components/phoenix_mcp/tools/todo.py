@@ -157,6 +157,8 @@ def _clear_due_field(entity_id: str, hass: HomeAssistant) -> dict[str, None] | s
     Core checks each due field against its own supported feature, and a None in
     either one clears the item's due, so the field is the one this list supports.
     """
+    if "todo" not in hass.config.components:
+        return "This list does not support due dates, so there is none to clear."
     # Local: optional component, imported only when this path runs.
     from homeassistant.components.todo import TodoListEntityFeature
 

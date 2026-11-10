@@ -159,6 +159,8 @@ def _calendar_entity(entity_id: Any, access_key: AccessKeyRecord, hass: HomeAssi
         raise PermissionError("Calendar not found.")
     if not entity_id.startswith("calendar."):
         raise ValueError("entity_id must be a calendar entity ID.")
+    if "calendar" not in hass.config.components:
+        raise PermissionError("Calendar not found.")
     # Local: optional component, imported only when this path runs.
     from homeassistant.components.calendar import CalendarEntity, DATA_COMPONENT
 

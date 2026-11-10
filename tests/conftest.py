@@ -30,6 +30,19 @@ def loaded_catalogs():
 
 
 @pytest.fixture(autouse=True)
+def _module_loaded_components(request):
+    """Mark the components a module's LOADED_COMPONENTS names as loaded in its hass.
+
+    Phoenix skips a component that is not loaded rather than import it on the event loop,
+    so a module whose tests stand in for a loaded component, by patching its functions or
+    faking its data, declares that here instead of in every test.
+    """
+    domains = getattr(request.module, "LOADED_COMPONENTS", ())
+    if domains and "hass" in request.fixturenames:
+        request.getfixturevalue("hass").config.components.update(domains)
+
+
+@pytest.fixture(autouse=True)
 async def cleanup_mesa_policy_workers(hass):
     """Shut down mesa-core policy workers after each test.
 

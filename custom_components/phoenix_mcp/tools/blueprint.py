@@ -53,6 +53,7 @@ from ..tool_common import (
 )
 from ..ws_dispatch import WsCommandNotDispatchedError, WsDispatchError, async_ws_command
 from ..yaml_includes import load_tagged_lenient, YamlParseError
+from ..component_guard import require_component
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -64,9 +65,11 @@ async def _domain_blueprints(hass: HomeAssistant, domain: str) -> dict:
     value.
     """
     if domain == "automation":
+        require_component(hass, "automation")
         # Local: optional component, imported only when this path runs.
         from homeassistant.components.automation import async_get_blueprints as _get_bp
     else:
+        require_component(hass, "script")
         # Local: optional component, imported only when this path runs.
         from homeassistant.components.script import async_get_blueprints as _get_bp
     return await _get_bp(hass).async_get_blueprints()
@@ -159,11 +162,13 @@ def _blueprint_consumers(hass: HomeAssistant, domain: str, path: str) -> list[st
     """
     try:
         if domain == "automation":
+            require_component(hass, "automation")
             # Local: optional component, imported only when this path runs.
             from homeassistant.components.automation import (
                 automations_with_blueprint as _with_bp,
             )
         else:
+            require_component(hass, "script")
             # Local: optional component, imported only when this path runs.
             from homeassistant.components.script import (
                 scripts_with_blueprint as _with_bp,

@@ -15,6 +15,7 @@ from custom_components.phoenix_mcp.tools.discovery import _tool_recognize_intent
 from tests.runtime_fixtures import make_mcp_access_key as _make_access_key
 
 
+
 def _result(
     *,
     entities: dict[str, MatchEntity] | None = None,
@@ -51,6 +52,7 @@ async def test_config_read_alone_can_recognize_without_executing(hass):
     access_key, _ = _make_access_key(cap_config_read="allow")
     agent = SimpleNamespace(async_recognize_intent=AsyncMock(return_value=None))
 
+    hass.config.components.add("conversation")
     with patch(
         "homeassistant.components.conversation.agent_manager.async_get_agent",
         return_value=agent,
@@ -106,6 +108,7 @@ async def test_success_targets_are_intersected_with_read_scope(hass):
         captured["ids"] = [state.entity_id for state in states]
         return SimpleNamespace(is_match=True, states=states)
 
+    hass.config.components.add("conversation")
     with (
         patch(
             "homeassistant.components.conversation.agent_manager.async_get_agent",
@@ -140,6 +143,7 @@ async def test_empty_read_scope_never_falls_back_to_all_states(hass):
     })
     agent = SimpleNamespace(async_recognize_intent=AsyncMock(return_value=recognition))
 
+    hass.config.components.add("conversation")
     with (
         patch(
             "homeassistant.components.conversation.agent_manager.async_get_agent",
@@ -169,6 +173,7 @@ async def test_incomplete_recognition_returns_one_scrubbed_near_miss(hass):
     )
     agent = SimpleNamespace(async_recognize_intent=AsyncMock(return_value=recognition))
 
+    hass.config.components.add("conversation")
     with patch(
         "homeassistant.components.conversation.agent_manager.async_get_agent",
         return_value=agent,

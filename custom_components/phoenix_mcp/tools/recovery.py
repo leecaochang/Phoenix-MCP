@@ -15,7 +15,7 @@ from ..capability import effective_cap
 from ..policy_engine import filter_service_response
 from ..request_authority import AuthorityChangedError, check_request_authority, write_boundary
 from ..template_recovery import restore_template, validate_restore_scope
-from ..template_snapshots import validate_snapshot, TEMPLATE_RECOVERY_ADAPTERS, template_snapshot
+from ..template_snapshots import async_import_template_flow, validate_snapshot, TEMPLATE_RECOVERY_ADAPTERS, template_snapshot
 from ..tool_common import (
     _CAP_FORBIDDEN_MESSAGE, _check_authority_before_dispatch, _gate, _recovery_failure, _restore_ctx, _tool_error, _tool_success, _tool_uncertain,
     _record_version, _version_content_payload,
@@ -197,6 +197,7 @@ async def _tool_restore_configuration(
     try:
 
         selected = _selected_template_snapshot(record, side)
+        await async_import_template_flow(hass)
         validate_snapshot(selected)
         validate_restore_scope(selected, access_key, hass)
         digest = content_hash(selected)
@@ -689,6 +690,7 @@ async def _execute_restore_configuration(
     try:
 
         selected = _selected_template_snapshot(record, side)
+        await async_import_template_flow(hass)
         validate_snapshot(selected)
         validate_restore_scope(selected, access_key, hass)
         if content_hash(selected) != args.get("snapshot_digest"):

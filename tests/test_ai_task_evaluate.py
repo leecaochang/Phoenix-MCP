@@ -747,6 +747,7 @@ async def _added(hass, home, platform, entry):
 @requires_evaluate
 async def test_the_entity_leaves_and_clears_only_its_own_default(hass, home, phoenix_ai_task_platform):
     platform, entry = phoenix_ai_task_platform
+    hass.config.components.add("ai_task")  # the platform fixture stands in for a loaded ai_task
     entity = await _added(hass, home, platform, entry)
     entity_id = entity.entity_id
     prefs = _Prefs()
@@ -765,6 +766,7 @@ async def test_the_entity_leaves_and_clears_only_its_own_default(hass, home, pho
 @requires_evaluate
 async def test_generate_default_is_not_cleared_with_the_decisions_default(hass, home, phoenix_ai_task_platform):
     platform, entry = phoenix_ai_task_platform
+    hass.config.components.add("ai_task")  # the platform fixture stands in for a loaded ai_task
     await _added(hass, home, platform, entry)
     prefs = _Prefs()
     prefs.gen_data_entity_id = "ai_task.other"

@@ -1034,6 +1034,8 @@ class TestGetRadioDevice:
     async def test_direct_fallback_refuses_owned_property(
         self, hass, radio_env, broker
     ):
+
+        hass.config.components.add("mqtt")  # radio_env fakes MQTT runtime data
         mqtt_data = hass.data[DATA_MQTT]
         payload = mqtt_data.debug_info_entities[radio_env["z2m_bulb_eid"]][
             "discovery_data"
@@ -1053,6 +1055,8 @@ class TestGetRadioDevice:
     async def test_inaccessible_owner_blocks_without_revealing_entity_id(
         self, hass, radio_env, broker
     ):
+
+        hass.config.components.add("mqtt")  # radio_env fakes MQTT runtime data
         config_entry = hass.config_entries.async_get_entry("e_radio")
         assert config_entry is not None
         hidden = er.async_get(hass).async_get_or_create(
@@ -1748,6 +1752,8 @@ class TestSetZigbeeDeviceProperty:
         assert broker.published == []
 
     async def test_a_mesa_deny_says_mesa_not_capability(self, hass, radio_env, broker):
+
+        hass.config.components.add("mqtt")  # radio_env fakes MQTT runtime data
         # A capability text would send the agent to get_capability_summary and a
         # reconnect, neither of which can change a MESA policy.
         from custom_components.phoenix_mcp.mesa import MesaGateOutcome
@@ -1769,6 +1775,8 @@ class TestSetZigbeeDeviceProperty:
     async def test_allow_changes_and_exactly_confirms_property(
         self, hass, radio_env, broker
     ):
+
+        hass.config.components.add("mqtt")  # radio_env fakes MQTT runtime data
         access_key = _light_access_key(
             cap_diagnostics="allow",
             cap_radio_write="allow",
@@ -1805,6 +1813,8 @@ class TestSetZigbeeDeviceProperty:
     async def test_read_only_expose_cannot_be_written(
         self, hass, radio_env, broker
     ):
+
+        hass.config.components.add("mqtt")  # radio_env fakes MQTT runtime data
         access_key = _light_access_key(
             cap_diagnostics="allow",
             cap_radio_write="allow",
@@ -1829,6 +1839,8 @@ class TestSetZigbeeDeviceProperty:
         assert broker.published == []
 
     async def test_stale_hash_never_writes(self, hass, radio_env, broker):
+
+        hass.config.components.add("mqtt")  # radio_env fakes MQTT runtime data
         access_key = _light_access_key(
             cap_radio_write="allow", cap_physical_control="allow"
         )
@@ -1851,6 +1863,8 @@ class TestSetZigbeeDeviceProperty:
     async def test_capability_confirm_then_approve_executes(
         self, hass, radio_env, broker
     ):
+
+        hass.config.components.add("mqtt")  # radio_env fakes MQTT runtime data
         data, store = _appr_data()
         access_key = _light_access_key(
             cap_diagnostics="allow",
@@ -1888,6 +1902,8 @@ class TestSetZigbeeDeviceProperty:
     async def test_executor_rechecks_both_capabilities_after_approval(
         self, hass, radio_env, broker
     ):
+
+        hass.config.components.add("mqtt")  # radio_env fakes MQTT runtime data
         data, store = _appr_data()
         access_key = _light_access_key(
             cap_diagnostics="allow",
@@ -3240,6 +3256,8 @@ class TestApprovalCardNamesMesaEntities:
         return store._p[0]["diff"]["preview"]["mesa"]
 
     async def test_a_property_card_names_the_devices_entity(self, hass, radio_env, broker):
+
+        hass.config.components.add("mqtt")  # radio_env fakes MQTT runtime data
         access_key = _light_access_key(cap_diagnostics="allow", cap_radio_write="confirm", cap_physical_control="allow")
         current = await TestSetZigbeeDeviceProperty()._current(hass, radio_env, access_key)
         mesa = await self._mesa(hass, access_key, "set_zigbee_device_property", {

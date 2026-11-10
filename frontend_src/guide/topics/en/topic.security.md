@@ -31,7 +31,7 @@ Removing secrets works by name, so a secret under an ordinary name gets through,
 
 - YAML configuration hides values under names that suggest a secret, wherever they sit in the file, and comments that mention one. A password under an ordinary name is visible to the agent.
 - ESPHome files hide the same values, and any value of 8 or more characters from ESPHome's secrets.yaml, wherever it appears. A shorter password elsewhere in a file is visible.
-- Logs are free text. Phoenix removes access keys, tokens and passwords in web addresses, but other secrets in a log line can slip through.
+- Logs are free text. Phoenix removes access keys, tokens, sign-in headers and passwords in web addresses. It also hides any value under a name that suggests a secret, as above. A secret under an ordinary name can still slip through.
 
 Give these capabilities only to agents that need them.
 

@@ -46,6 +46,7 @@ from ..tool_common import _project_state, _tool_error, _tool_success, longest_fi
 from ..tool_contracts import normalize_tool_args
 from ..tool_input import note_argument_adjustment
 from .discovery import _tool_search_entities, _area_name_for_entity
+from ..component_guard import require_component
 
 
 _LOGGER = logging.getLogger(__name__)
@@ -201,6 +202,7 @@ async def _history_page(args: dict, access_key: AccessKeyRecord, hass: HomeAssis
     upper = (window.page_start if args.get("cursor") else window.end) if newest else window.end
 
     try:
+        require_component(hass, "recorder")
         # Local: optional component, imported only when this path runs.
         from homeassistant.components.recorder import get_instance
         from homeassistant.components.recorder import history as rec_history
@@ -570,6 +572,7 @@ async def _history_summary_many(
         return body
 
     try:
+        require_component(hass, "recorder")
         # Local: optional component, imported only when this path runs.
         from homeassistant.components.recorder import get_instance, is_entity_recorded
 
@@ -719,6 +722,7 @@ async def _history_rows_many(
         return body
 
     try:
+        require_component(hass, "recorder")
         # Local: optional component, imported only when this path runs.
         from homeassistant.components.recorder import get_instance, is_entity_recorded
 
@@ -787,6 +791,7 @@ async def _history_summary(
     if window.page_start >= end:
         return _tool_error("A summary needs a range that starts before the current time."), "invalid_request", entity_id
     try:
+        require_component(hass, "recorder")
         # Local: optional component, imported only when this path runs.
         from homeassistant.components.recorder import get_instance, is_entity_recorded
 
@@ -876,6 +881,7 @@ async def _statistics_summary_many(
     no_statistics: list[str] = []
     unscanned: list[str] = []
     try:
+        require_component(hass, "recorder")
         # Local: optional component, imported only when this path runs.
         from homeassistant.components.recorder import get_instance
 
@@ -1000,6 +1006,7 @@ async def _statistics_page(args: dict, access_key: AccessKeyRecord, hass: HomeAs
     page_start, page_end, effective_limit, has_more = statistic_page(window, period)
 
     try:
+        require_component(hass, "recorder")
         # Local: optional component, imported only when this path runs.
         from homeassistant.components.recorder import get_instance
 

@@ -21,6 +21,9 @@ from custom_components.phoenix_mcp.agent_recovery import AgentRecovery
 from custom_components.phoenix_mcp.tool_dispatch import _call_tool
 from custom_components.phoenix_mcp.access_key_store import PermissionNode, PermissionTree, AccessKeyRecord
 
+# These tests stand in for loaded components; see _module_loaded_components in conftest.
+LOADED_COMPONENTS = ("recorder",)
+
 
 def _access_key(**caps) -> AccessKeyRecord:
     tree = PermissionTree(domains={

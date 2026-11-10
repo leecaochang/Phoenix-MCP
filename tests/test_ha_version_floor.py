@@ -218,6 +218,7 @@ KNOWN_IMPORTS: dict[str, dict[str, str]] = {
         "async_track_state_change_event": "0.0.0",
         "async_track_time_interval": "0.0.0",
     },
+    "homeassistant.helpers.importlib": {"async_import_module": "2024.4.0"},
     "homeassistant.helpers.network": {
         "get_url": "0.0.0",
     },

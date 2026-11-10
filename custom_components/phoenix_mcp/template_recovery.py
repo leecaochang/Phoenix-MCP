@@ -15,7 +15,7 @@ from homeassistant.config_entries import SOURCE_USER
 from .config_recovery import ConfigurationRecoveryError
 from .policy_engine import Permission, resolve_registry_access
 from .request_authority import check_request_authority
-from .template_snapshots import protect_template, template_snapshot, validate_snapshot
+from .template_snapshots import async_import_template_flow, protect_template, template_snapshot, validate_snapshot
 from .tool_common import _record_version, _tool_error, _tool_success, _tool_uncertain
 from .tools.helper import (
     _HELPER_MESA_FINGERPRINT, _apply_config_entry_options, _helper_mesa_context, _helper_mesa_error,
@@ -59,6 +59,7 @@ async def restore_template(
     entry = None
     recovery = data.config_recovery
     try:
+        await async_import_template_flow(hass)
         validate_snapshot(snapshot)
         validate_restore_scope(snapshot, access_key, hass)
         original_id = snapshot["entry_id"]

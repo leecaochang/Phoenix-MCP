@@ -28,6 +28,7 @@ from .agent_chat import AiTaskError, async_run_ai_task
 from .agent_turn import _current_dispatch_access_key
 from .const import DOMAIN
 from .catalog_text import LocalizedReason
+from .component_guard import require_component
 from .redaction import _scrub_log_text
 from .helpers import instance_base_url as _base_url
 from .household_authority import household_scope
@@ -80,7 +81,7 @@ def _ai_task_entity_id(hass: HomeAssistant, entry_id: str, suffix: str = _GENERA
 
 def _loaded_ai_task_entity_id(hass: HomeAssistant, entry_id: str, suffix: str = _GENERATE_SUFFIX) -> str | None:
     """Return an entity eligible for selection, excluding registry-only leftovers."""
-    if not _AI_TASK_AVAILABLE:
+    if not _AI_TASK_AVAILABLE or "ai_task" not in hass.config.components:
         return None
     # Local: optional component, imported only when this path runs.
     from homeassistant.components.ai_task.const import DATA_COMPONENT
@@ -95,6 +96,7 @@ def _loaded_ai_task_entity_id(hass: HomeAssistant, entry_id: str, suffix: str = 
 def _ai_task_preferences(hass: HomeAssistant) -> Any:
     """HA's AITaskPreferences object (holds gen_data_entity_id), or None."""
     try:
+        require_component(hass, "ai_task")
         # Local: optional component, imported only when this path runs.
         from homeassistant.components.ai_task.const import DATA_PREFERENCES
     except ImportError:  # pragma: no cover - camera requirement not installed

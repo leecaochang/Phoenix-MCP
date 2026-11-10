@@ -6,6 +6,7 @@ from typing import Any
 
 from jinja2 import Environment, TemplateSyntaxError, nodes
 
+from .component_guard import ComponentNotLoaded, imported_module
 from .const import (
     HELPER_TEMPLATE_MAX_CHARS, HELPER_TEMPLATE_MAX_DEPTH, HELPER_TEMPLATE_MAX_NODES,
     HELPER_TEMPLATE_NODE_TYPES, HELPER_TEMPLATE_PURE_FILTERS,
@@ -220,11 +221,14 @@ def validate_template_selectors(options: Any, template_type: str) -> None:
 
     Raises HelperScopeError. Their future authority cannot be established.
     """
+    # The creation flow imported the module already; an edit has a loaded Template entry.
+    try:
+        config_schema = imported_module("homeassistant.components.template.config_flow").config_schema
+    except ComponentNotLoaded as err:
+        raise HelperScopeError("The Template integration is not loaded.") from err
     # Local: not part of the recorded Home Assistant import floor.
     from homeassistant.helpers.selector import ActionSelector
     from homeassistant.helpers.selector import DeviceSelector
-    # Local: optional component, imported only when this path runs.
-    from homeassistant.components.template.config_flow import config_schema
 
     def walk(schema: Any, values: Any) -> None:
         if not isinstance(values, dict):

@@ -25,7 +25,7 @@ from ..const import (
     MAX_SEARCH_QUERY_LEN,
 )
 from ..data import PhoenixData
-from ..debug_capture import DEBUG_CAPTURE_RUNTIME_KEY, integration_domain
+from ..debug_capture import DEBUG_CAPTURE_RUNTIME_KEY, async_update_debug_capture, integration_domain
 from ..fault_log import async_fault_log_query
 from ..helpers import parse_time_param as _parse_time_param
 from ..tool_input import str_arg
@@ -285,7 +285,9 @@ def _integration_debug_query(args: dict, access_key: AccessKeyRecord, hass: Home
     body = {
         "source": {**source, "status": "available", "retained": len(capture.records),
                    "capturing_since": capture.attached_at.isoformat(),
-                   "note": "Only records below WARNING from integrations whose level was raised appear here; "
+                   "capturing": sorted(capture.domains & domains),
+                   "note": "Only records below WARNING appear here, from integrations whose level "
+                           "set_integration_log_level raised to INFO or DEBUG since Home Assistant started. "
                            "WARNING and above are in source system_log."},
         "count": len(entries), "has_more": has_more,
         "next_cursor": str(entries[-1]["sequence"]) if has_more and entries else None,
@@ -733,6 +735,8 @@ def _build_diff_set_integration_log_level(
     duration: int | None,
 ) -> dict[str, Any]:
     warnings = _log_control_warnings(after.level if after else "NOTSET")
+    if duration is None and after is not None and before == after:
+        warnings.append("The level stays the same; Phoenix captures this integration's INFO and DEBUG records again.")
     return {
         "kind": "system_action",
         **_summary("integration.log_level", label=domain),
@@ -778,6 +782,17 @@ async def _validated_log_control_context(
     return domain, level, persistence, duration, loggers, before, fingerprint
 
 
+def _capture_resumes(hass: HomeAssistant, domain: str, after: IntegrationOverride | None) -> bool:
+    """Whether setting an unchanged INFO or DEBUG level would start capturing its records.
+
+    The capture is held in memory, so a restart or reload ends it while a lasting override
+    stays. Asking again for the same level is then a fresh raise, gated like any other.
+    """
+    capture = hass.data.get(DEBUG_CAPTURE_RUNTIME_KEY)
+    return (after is not None and after.level in ("DEBUG", "INFO")
+            and capture is not None and domain not in capture.domains)
+
+
 async def _tool_set_integration_log_level(
     args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData,
     request_id: str = "", client_ip: str | None = None,
@@ -796,7 +811,7 @@ async def _tool_set_integration_log_level(
     after = None if level == "NOTSET" else IntegrationOverride(level, persistence)
     manager = data.logger_control
     assert manager is not None
-    if duration is None and before == after and manager.active(domain) is None:
+    if duration is None and before == after and manager.active(domain) is None and not _capture_resumes(hass, domain, after):
         return _tool_success(json.dumps({
             "integration": domain, "changed": False, "setting": _override_dict(before)
         })), "allowed", f"integration:{domain}"
@@ -836,7 +851,7 @@ async def _execute_set_integration_log_level(
     after = None if level == "NOTSET" else IntegrationOverride(level, persistence)
     manager = data.logger_control
     assert manager is not None
-    if duration is None and before == after and manager.active(domain) is None:
+    if duration is None and before == after and manager.active(domain) is None and not _capture_resumes(hass, domain, after):
         return _tool_success(json.dumps({
             "integration": domain, "changed": False, "setting": _override_dict(before)
         })), "allowed", f"integration:{domain}"
@@ -854,10 +869,15 @@ async def _execute_set_integration_log_level(
     except (LoggerControlUnavailable, OSError):
         _LOGGER.exception("set_integration_log_level failed for %s", domain)
         return _tool_error("Failed to update integration log level."), "invalid_request", f"integration:{domain}"
+    # Only a level Phoenix itself raised is captured for source integration_debug.
+    async_update_debug_capture(hass, domain, current.level if current else None)
     timed = manager.active(domain)
+    capture = hass.data.get(DEBUG_CAPTURE_RUNTIME_KEY)
     return _tool_success(json.dumps({
         "integration": domain,
-        "changed": True,
+        # A same-level request that only resumed the capture leaves the level unchanged.
+        "changed": before != current or duration is not None,
+        "capturing_debug_records": capture is not None and domain in capture.domains,
         "before": _override_dict(before),
         "after": _override_dict(current),
         "affected_loggers": sorted(loggers),

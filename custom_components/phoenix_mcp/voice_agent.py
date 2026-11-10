@@ -108,6 +108,7 @@ from .routing.routing_statistics import tracked_turn, local_result
 
 
 from .conversation_log import recorded_turn, record_identity
+from .component_guard import require_component
 
 
 @recorded_turn("voice", "user_text", transform=lambda text: _speakable(text))
@@ -388,6 +389,7 @@ def _pipeline_store(hass: HomeAssistant) -> Any:
 def _resolve_pipeline_settings(hass: HomeAssistant, entry_id: str) -> dict:
     """Build pipeline settings for Phoenix MCP's agent (best-effort STT/TTS defaults)."""
     try:
+        require_component(hass, "assist_pipeline")
         # Local: optional component, imported only when this path runs.
         from homeassistant.components.assist_pipeline.pipeline import (
             _async_resolve_default_pipeline_settings,

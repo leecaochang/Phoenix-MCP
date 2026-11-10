@@ -7,6 +7,9 @@ import pytest
 
 from custom_components.phoenix_mcp.routing.intent_recognition import RecognitionUnavailable, async_recognize
 
+# These tests stand in for loaded components; see _module_loaded_components in conftest.
+LOADED_COMPONENTS = ("conversation",)
+
 
 async def test_strict_mode_is_never_downgraded(hass):
     calls = []

@@ -17,6 +17,9 @@ from custom_components.phoenix_mcp.data import PhoenixData
 from custom_components.phoenix_mcp.tool_dispatch import _call_tool
 from custom_components.phoenix_mcp.access_key_store import PermissionNode, PermissionTree, AccessKeyRecord
 
+# These tests stand in for loaded components; see _module_loaded_components in conftest.
+LOADED_COMPONENTS = ("camera",)
+
 
 def _data(*, mesa_mode: str = MESA_MODE_OFF, mesa: object | None = None) -> PhoenixData:
     store = MagicMock()

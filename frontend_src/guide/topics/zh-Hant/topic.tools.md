@@ -180,6 +180,8 @@
 - 讀取系統日誌涵蓋警告和錯誤、日誌簿和通知。故障日誌和擷取的偵錯記錄還需要診斷。
 - 整合日誌級別會變更整合的日誌量，例如開啟偵錯日誌。變更可以在 5 到 120 分鐘後結束、持續到下次重新啟動，或一直保留到清除。
 
+代理只能讀取由代理調高日誌級別的整合的偵錯記錄，直到級別調回或 Home Assistant 重新啟動。你自己開啟的偵錯日誌，代理讀取不到。
+
 需要 Home Assistant 本身的模板函式，例如分區或裝置查詢，不會傳回任何內容。
 
 允許它的能力：[{{label:caps.cap_config_read.label}}](guide:window.capabilities#config-read)、[{{label:caps.cap_energy_write.label}}](guide:window.capabilities#energy-write)、[{{label:caps.cap_template_render.label}}](guide:window.capabilities#template-render)、[{{label:caps.cap_log_read.label}}](guide:window.capabilities#log-read)、[{{label:caps.cap_log_control.label}}](guide:window.capabilities#log-control)

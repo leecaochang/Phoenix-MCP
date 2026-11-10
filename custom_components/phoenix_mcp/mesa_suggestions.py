@@ -24,6 +24,7 @@ from .const import (
 )
 from .catalog_templates import MESA_SUGGESTION_PHRASES, MESA_SUGGESTION_TEMPLATES
 from .mesa_core import ControlMode, DeploymentDefaults
+from .component_guard import require_component
 
 if TYPE_CHECKING:
     from .mesa import MesaRuntime
@@ -72,6 +73,7 @@ def _automation_refs(hass: HomeAssistant, entity_id: str) -> list[str] | None:
     Any failure, such as a moved API, skips the signal and never breaks the scan.
     """
     try:
+        require_component(hass, "automation")
         # Local: optional component, imported only when this path runs.
         from homeassistant.components.automation import entities_in_automation
         return entities_in_automation(hass, entity_id)
@@ -82,6 +84,7 @@ def _automation_refs(hass: HomeAssistant, entity_id: str) -> list[str] | None:
 def _script_refs(hass: HomeAssistant, entity_id: str) -> list[str] | None:
     """Entities referenced by a script, or None when unavailable."""
     try:
+        require_component(hass, "script")
         # Local: optional component, imported only when this path runs.
         from homeassistant.components.script import entities_in_script
         return entities_in_script(hass, entity_id)

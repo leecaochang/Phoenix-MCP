@@ -102,7 +102,7 @@ def todo_items_in_review(
 
     Read synchronously here, for the diff, only for already-resolved targets; best effort.
     """
-    if domain != "todo" or service != "remove_item":
+    if domain != "todo" or service != "remove_item" or "todo" not in hass.config.components:
         return []
     # Local: optional component, imported only when this path runs.
     from homeassistant.components.todo.const import DATA_COMPONENT

@@ -175,6 +175,8 @@ Related: [How MESA decides](guide:topic.mesaRules)
 - System log read covers warnings and errors, the logbook and notifications. The fault log and captured debug records also need Diagnostics.
 - Integration log levels changes how much an integration logs, such as turning on debug logging. A change can end after 5 to 120 minutes, last until the next restart, or stay until cleared.
 
+Agents can read debug records only from an integration an agent turned up, until its level goes back down or Home Assistant restarts. Debug logging you turned on yourself stays out of their reach.
+
 Template functions that need Home Assistant itself, such as area or device lookups, return nothing.
 
 Allowed by: [{{label:caps.cap_config_read.label}}](guide:window.capabilities#config-read), [{{label:caps.cap_energy_write.label}}](guide:window.capabilities#energy-write), [{{label:caps.cap_template_render.label}}](guide:window.capabilities#template-render), [{{label:caps.cap_log_read.label}}](guide:window.capabilities#log-read), [{{label:caps.cap_log_control.label}}](guide:window.capabilities#log-control)

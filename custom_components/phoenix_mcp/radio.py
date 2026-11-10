@@ -43,6 +43,7 @@ from .ws_dispatch import (
     async_zha_reconfigure_device,
 )
 from .policy_engine import device_registry_entries
+from .component_guard import require_component
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -216,6 +217,7 @@ def visible_zigbee_device_map(hass: HomeAssistant, accessible_entity_ids: set[st
 
 async def _mqtt_subscribe(hass: HomeAssistant, topic: str, msg_callback: Callable) -> Callable:
     """Subscribe to an MQTT topic via HA's public mqtt API; returns unsubscribe."""
+    require_component(hass, "mqtt")
     # Local: optional component, imported only when this path runs.
     from homeassistant.components import mqtt
 
@@ -224,6 +226,7 @@ async def _mqtt_subscribe(hass: HomeAssistant, topic: str, msg_callback: Callabl
 
 async def _mqtt_publish(hass: HomeAssistant, topic: str, payload: str) -> None:
     """Publish an MQTT message via HA's public mqtt API."""
+    require_component(hass, "mqtt")
     # Local: optional component, imported only when this path runs.
     from homeassistant.components import mqtt
 
@@ -1836,6 +1839,7 @@ def _zha_device_type(device: Any, coordinator: Any) -> str:
 
 def _get_zha_gateway(hass: HomeAssistant) -> Any:
     """Resolve the live ZHA gateway behind one narrow, testable HA seam."""
+    require_component(hass, "zha")
     # Local: optional component, imported only when this path runs.
     from homeassistant.components.zha.helpers import get_zha_gateway
 

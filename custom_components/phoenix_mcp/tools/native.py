@@ -1539,6 +1539,8 @@ async def _tool_hass_media_search_and_play(
 
 def _can_search_media(hass: HomeAssistant, entity_id: str) -> bool:
     """Whether a player answers media_player.search_media, as Core's intent requires."""
+    if "media_player" not in hass.config.components:
+        return False
     # Local: optional component, imported only when this path runs.
     from homeassistant.components.media_player import MediaPlayerEntityFeature
 

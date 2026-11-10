@@ -31,6 +31,7 @@ from tests.log_fixtures import attach_log_store, make_log_entry, make_log_store
 from tests.runtime_fixtures import SessionMcpView, make_mcp_access_key as _make_access_key, make_mcp_data as _make_data, make_mcp_hass as _make_hass, raw_access_key as _raw_access_key
 
 
+
 def _make_request(
     headers: dict | None = None,
     query: dict | None = None,
